@@ -7,7 +7,7 @@
     "moduleResolution": "Node16",
     "outDir": "dist-electron",
     "rootDir": "src",
-    "types": ["node", "electron"]
+    "types": ["node"]
   },
   "include": ["src/main", "src/preload"],
   "exclude": ["src/**/*.test.ts"]

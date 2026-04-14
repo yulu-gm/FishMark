@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "description": "Local-first Markdown desktop editor MVP shell.",
-  "main": "dist-electron/main.js",
+  "main": "dist-electron/main/main.js",
   "scripts": {
     "dev": "concurrently -k \"npm:dev:electron\" \"npm:dev:renderer\" \"npm:dev:main\"",
-    "dev:electron": "wait-on dist-electron/main.js dist-electron/preload.js tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .",
+    "dev:electron": "wait-on dist-electron/main/main.js dist-electron/preload/preload.js http://localhost:5173 && node ./node_modules/cross-env/dist/bin/cross-env.js VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
     "dev:main": "tsc -p tsconfig.electron.json --watch --preserveWatchOutput",
     "dev:renderer": "vite",
     "build": "npm run clean && npm run build:renderer && npm run build:electron",
