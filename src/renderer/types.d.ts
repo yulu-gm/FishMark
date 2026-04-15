@@ -18,6 +18,7 @@ declare global {
     yulora: {
       platform: NodeJS.Platform;
       runtimeMode: "editor" | "test-workbench";
+      startupOpenPath: string | null;
       openMarkdownFile: () => Promise<OpenMarkdownFileResult>;
       openMarkdownFileFromPath: (targetPath: string) => Promise<OpenMarkdownFileResult>;
       saveMarkdownFile: (input: SaveMarkdownFileInput) => Promise<SaveMarkdownFileResult>;

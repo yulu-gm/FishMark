@@ -143,6 +143,7 @@ describe("App autosave", () => {
     window.yulora = {
       platform: "win32",
       runtimeMode: "editor",
+      startupOpenPath: null,
       openMarkdownFile,
       openMarkdownFileFromPath: vi.fn().mockResolvedValue({
         status: "cancelled"
@@ -199,6 +200,32 @@ describe("App autosave", () => {
     });
 
     expect(saveMarkdownFile).not.toHaveBeenCalled();
+  });
+
+  it("opens the startup markdown file automatically when the bridge provides a launch path", async () => {
+    const openMarkdownFileFromPath = vi.fn().mockResolvedValue({
+      status: "success",
+      document: {
+        path: "C:/notes/startup.md",
+        name: "startup.md",
+        content: "# Startup\n",
+        encoding: "utf-8"
+      }
+    });
+
+    window.yulora = {
+      ...window.yulora,
+      openMarkdownFileFromPath,
+      startupOpenPath: "C:/notes/startup.md"
+    } as unknown as Window["yulora"];
+
+    await act(async () => {
+      root.render(createElement(App));
+      await Promise.resolve();
+    });
+
+    expect(openMarkdownFileFromPath).toHaveBeenCalledTimes(1);
+    expect(openMarkdownFileFromPath).toHaveBeenCalledWith("C:/notes/startup.md");
   });
 
   it("autosaves after typing stops for the idle debounce window", async () => {

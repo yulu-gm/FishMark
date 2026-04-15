@@ -15,6 +15,7 @@ const EDITOR_TEST_COMMAND_EVENT = "yulora:editor-test-command";
 const COMPLETE_EDITOR_TEST_COMMAND_CHANNEL = "yulora:complete-editor-test-command";
 const APP_MENU_COMMAND_EVENT = "yulora:app-menu-command";
 const RUNTIME_MODE_ARGUMENT_PREFIX = "--yulora-runtime-mode=";
+const STARTUP_OPEN_PATH_ARGUMENT_PREFIX = "--yulora-startup-open-path=";
 
 type AppMenuCommand = "open-markdown-file" | "save-markdown-file" | "save-markdown-file-as";
 type EditorTestCommand =
@@ -92,9 +93,25 @@ function resolveRuntimeModeFromArgv(argv: string[]): "editor" | "test-workbench"
   return runtimeValue === "test-workbench" ? "test-workbench" : "editor";
 }
 
+function resolveStartupOpenPathFromArgv(argv: string[]): string | null {
+  const startupArgument = argv.find((entry) => entry.startsWith(STARTUP_OPEN_PATH_ARGUMENT_PREFIX));
+  const encodedPath = startupArgument?.slice(STARTUP_OPEN_PATH_ARGUMENT_PREFIX.length);
+
+  if (!encodedPath) {
+    return null;
+  }
+
+  try {
+    return decodeURIComponent(encodedPath);
+  } catch {
+    return encodedPath;
+  }
+}
+
 const api = {
   platform: process.platform,
   runtimeMode: resolveRuntimeModeFromArgv(process.argv ?? []),
+  startupOpenPath: resolveStartupOpenPathFromArgv(process.argv ?? []),
   openMarkdownFile: () => ipcRenderer.invoke(OPEN_MARKDOWN_FILE_CHANNEL),
   openMarkdownFileFromPath: (targetPath: string) =>
     ipcRenderer.invoke(OPEN_MARKDOWN_FILE_FROM_PATH_CHANNEL, { targetPath }),

@@ -3,6 +3,7 @@ import { app, BrowserWindow, ipcMain, Menu, type MenuItemConstructorOptions } fr
 
 import { createApplicationMenuTemplate } from "./application-menu";
 import { createCliProcessRunner } from "./cli-process-runner";
+import { resolveMarkdownLaunchPathFromArgv } from "./launch-open-path";
 import { openMarkdownFileFromPath, showOpenMarkdownDialog } from "./open-markdown-file";
 import { saveMarkdownFileToPath, showSaveMarkdownDialog } from "./save-markdown-file";
 import { createEditorTestSessions } from "./editor-test-sessions";
@@ -32,6 +33,45 @@ import {
 } from "../shared/save-markdown-file";
 
 const OPEN_EDITOR_TEST_WINDOW_CHANNEL = "yulora:open-editor-test-window";
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+const pendingLaunchOpenPaths: string[] = [];
+
+let openEditorWindowForLaunchPath: ((targetPath: string) => void) | null = null;
+
+function enqueueLaunchOpenPath(targetPath: string): void {
+  pendingLaunchOpenPaths.push(targetPath);
+}
+
+function handleLaunchOpenFromArgv(argv: string[]): boolean {
+  const launchPath = resolveMarkdownLaunchPathFromArgv(argv);
+
+  if (!launchPath) {
+    return false;
+  }
+
+  if (openEditorWindowForLaunchPath) {
+    openEditorWindowForLaunchPath(launchPath);
+    return true;
+  }
+
+  enqueueLaunchOpenPath(launchPath);
+  return true;
+}
+
+if (!hasSingleInstanceLock) {
+  void app.quit();
+} else {
+  void handleLaunchOpenFromArgv(process.argv);
+
+  app.on("second-instance", (_event, argv) => {
+    void handleLaunchOpenFromArgv(argv);
+  });
+
+  app.on("open-file", (event, targetPath) => {
+    event.preventDefault();
+    void handleLaunchOpenFromArgv(["yulora", targetPath]);
+  });
+}
 
 function dispatchMenuCommand(command: AppMenuCommand): void {
   const targetWindow = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
@@ -73,6 +113,9 @@ app.whenReady().then(() => {
     getAllWindows: () => BrowserWindow.getAllWindows(),
     loadRenderer
   });
+  openEditorWindowForLaunchPath = (targetPath: string) => {
+    windowManager.openEditorWindow({ startupOpenPath: targetPath });
+  };
   const cliRunner = createCliProcessRunner({
     cliScriptPath: path.join(__dirname, "../../dist-cli/cli/bin.js"),
     cwd: path.join(__dirname, "../.."),
@@ -132,7 +175,18 @@ app.whenReady().then(() => {
   });
 
   installApplicationMenu();
-  windowManager.openPrimaryWindow();
+  const startupOpenPath = pendingLaunchOpenPaths.shift();
+  windowManager.openPrimaryWindow(
+    startupOpenPath
+      ? {
+          startupOpenPath
+        }
+      : undefined
+  );
+
+  for (const targetPath of pendingLaunchOpenPaths.splice(0)) {
+    openEditorWindowForLaunchPath(targetPath);
+  }
 
   app.on("activate", () => {
     windowManager.reopenPrimaryWindowIfNeeded();

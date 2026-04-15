@@ -4,6 +4,7 @@ import {
   createRuntimeWindowManager,
   resolveAppRuntimeMode,
   RUNTIME_MODE_ARGUMENT_PREFIX,
+  formatStartupOpenPathArgument,
   type RuntimeMode
 } from "./runtime-windows";
 
@@ -47,6 +48,25 @@ describe("createRuntimeWindowManager", () => {
       })
     );
     expect(harness.loadRenderer).toHaveBeenCalledWith(harness.window, "test-workbench");
+  });
+
+  it("passes the startup markdown path through additional arguments", () => {
+    const harness = createWindowHarness("editor");
+
+    harness.manager.openPrimaryWindow({
+      startupOpenPath: "C:/notes/startup.md"
+    });
+
+    expect(harness.createWindow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        webPreferences: expect.objectContaining({
+          additionalArguments: [
+            `${RUNTIME_MODE_ARGUMENT_PREFIX}editor`,
+            formatStartupOpenPathArgument("C:/notes/startup.md")
+          ]
+        })
+      })
+    );
   });
 
   it("creates an editor window when the workbench asks to open a test editor", () => {

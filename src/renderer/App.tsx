@@ -44,6 +44,7 @@ function EditorApp({ yulora }: { yulora: Window["yulora"] }) {
   const editorRef = useRef<CodeEditorHandle | null>(null);
   const editorContentRef = useRef("");
   const activeBlockStateRef = useRef<ActiveBlockState | null>(null);
+  const startupOpenPathRef = useRef(yulora.startupOpenPath);
   const stateRef = useRef(state);
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingAutosaveReplayRef = useRef(false);
@@ -184,6 +185,20 @@ function EditorApp({ yulora }: { yulora: Window["yulora"] }) {
     applyState((current) => applyOpenMarkdownResult(current, result));
   });
 
+  const handleOpenMarkdownFromPath = useEffectEvent(async (targetPath: string): Promise<void> => {
+    applyState((current) => startOpeningMarkdownFile(current));
+
+    const result = await yulora.openMarkdownFileFromPath(targetPath);
+
+    resetAutosaveRuntime();
+
+    if (result.status === "success") {
+      editorContentRef.current = result.document.content;
+    }
+
+    applyState((current) => applyOpenMarkdownResult(current, result));
+  });
+
   const handleSaveMarkdown = useEffectEvent(async (): Promise<void> => {
     const currentDocument = state.currentDocument;
 
@@ -286,6 +301,17 @@ function EditorApp({ yulora }: { yulora: Window["yulora"] }) {
       void handleEditorTestCommand(payload);
     });
   }, [yulora]);
+
+  useEffect(() => {
+    const startupOpenPath = startupOpenPathRef.current;
+
+    if (!startupOpenPath) {
+      return;
+    }
+
+    startupOpenPathRef.current = null;
+    void handleOpenMarkdownFromPath(startupOpenPath);
+  }, []);
 
   useEffect(() => () => clearAutosaveTimer(), []);
 

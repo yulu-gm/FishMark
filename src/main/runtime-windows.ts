@@ -1,4 +1,7 @@
+import { formatStartupOpenPathArgument } from "./launch-open-path";
+
 export const RUNTIME_MODE_ARGUMENT_PREFIX = "--yulora-runtime-mode=";
+export { formatStartupOpenPathArgument } from "./launch-open-path";
 
 export type RuntimeMode = "editor" | "test-workbench";
 
@@ -17,7 +20,7 @@ type CreateWindowInput = {
     preload: string;
     contextIsolation: true;
     nodeIntegration: false;
-    additionalArguments: [string];
+    additionalArguments: string[];
   };
 };
 
@@ -41,7 +44,18 @@ export function createRuntimeWindowManager<TWindow extends WindowLike>(input: {
 }) {
   const { runtimeMode, preloadPath, createWindow, getAllWindows, loadRenderer } = input;
 
-  function openWindow(nextRuntimeMode: RuntimeMode): TWindow {
+  function openWindow(
+    nextRuntimeMode: RuntimeMode,
+    options: {
+      startupOpenPath?: string;
+    } = {}
+  ): TWindow {
+    const additionalArguments = [`${RUNTIME_MODE_ARGUMENT_PREFIX}${nextRuntimeMode}`];
+
+    if (options.startupOpenPath) {
+      additionalArguments.push(formatStartupOpenPathArgument(options.startupOpenPath));
+    }
+
     const window = createWindow({
       ...(nextRuntimeMode === "test-workbench"
         ? {
@@ -62,7 +76,7 @@ export function createRuntimeWindowManager<TWindow extends WindowLike>(input: {
         preload: preloadPath,
         contextIsolation: true,
         nodeIntegration: false,
-        additionalArguments: [`${RUNTIME_MODE_ARGUMENT_PREFIX}${nextRuntimeMode}`]
+        additionalArguments
       }
     });
 
@@ -75,11 +89,11 @@ export function createRuntimeWindowManager<TWindow extends WindowLike>(input: {
   }
 
   return {
-    openPrimaryWindow() {
-      return openWindow(runtimeMode);
+    openPrimaryWindow(options?: { startupOpenPath?: string }) {
+      return openWindow(runtimeMode, options);
     },
-    openEditorWindow() {
-      return openWindow("editor");
+    openEditorWindow(options?: { startupOpenPath?: string }) {
+      return openWindow("editor", options);
     },
     reopenPrimaryWindowIfNeeded() {
       if (getAllWindows().length === 0) {

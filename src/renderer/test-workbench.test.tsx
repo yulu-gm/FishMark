@@ -100,6 +100,7 @@ describe("Test workbench shell", () => {
     window.yulora = {
       platform: "win32",
       runtimeMode: "test-workbench",
+      startupOpenPath: null,
       openMarkdownFile: vi.fn(),
       openMarkdownFileFromPath: vi.fn(),
       saveMarkdownFile: vi.fn(),
