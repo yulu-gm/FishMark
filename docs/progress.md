@@ -18,7 +18,7 @@
 - 基础目录边界已建立：`apps/desktop`、`packages/editor-core`、`packages/markdown-engine`、`tests/e2e`
 
 从源码可确认的未完成内容：
-- 尚未接入 micromark
+- 已接入 micromark，并能在 `packages/markdown-engine` 中生成最小 top-level block map
 - 尚未实现任何块级渲染
 - 尚未实现 autosave、crash recovery、image import、outline、search、export
 
@@ -49,7 +49,7 @@
 | TASK-006 | 最近文件 | TODO | 最近文档列表与失效路径清理。 |
 | TASK-007 | CodeMirror 6 接入 | DEV_DONE | 已用 CodeMirror 6 替换临时 textarea，并接入基础编辑面、快捷键与现有保存链路。 |
 | TASK-032 | 应用菜单与壳层收敛 | DEV_DONE | 已接入原生 `File` 菜单中的 `Open...`、`Save`、`Save As...`，并把 renderer 临时壳收敛为更像桌面编辑器的单栏界面。 |
-| TASK-008 | micromark block map | TODO | Markdown 块解析与测试。 |
+| TASK-008 | micromark block map | ACCEPTED | 已接入 `micromark` parser 事件流，输出 `heading` / `paragraph` / `list` / `blockquote` 的最小 block map，并通过 parser 单测与 repo 门禁验收。 |
 | TASK-009 | active block 状态 | TODO | 随光标更新的当前块跟踪。 |
 | TASK-010 | 标题渲染 | TODO | 标题的源码与渲染切换。 |
 | TASK-011 | 段落渲染 | TODO | 稳定段落显示。 |

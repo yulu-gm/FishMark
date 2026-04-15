@@ -118,6 +118,18 @@
 - 能插入缩进
 - 光标保持在代码块内
 
+### TC-013 block map 解析
+
+步骤：
+1. 在 `packages/markdown-engine/src/parse-block-map.test.ts` 中使用混合 Markdown fixture。
+2. 运行 `npm run test -- packages/markdown-engine/src/parse-block-map.test.ts`。
+3. 检查 `heading`、`paragraph`、`list`、`blockquote` 的 block 顺序与 offset 断言。
+
+预期：
+- 能输出顶层 `heading`、`paragraph`、`list`、`blockquote`
+- `startOffset` / `endOffset` 可回拿原始 Markdown 切片
+- list 或 blockquote 内部的 paragraph 不会泄漏为顶层 block
+
 ## 3. 输入法
 
 ### TC-020 中文 IME

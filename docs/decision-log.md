@@ -9,6 +9,7 @@
 
 ## 记录
 
+| 2026-04-15 | `TASK-008` 直接复用 `micromark` 公开导出的 `parse` / `preprocess` / `postprocess` 事件流，在 `packages/markdown-engine` 中只暴露最小顶层 block map。 | 这样可以满足 backlog 对 `micromark` 的要求，同时避免在 `TASK-008` 过早引入完整 AST 或 renderer 语义；后续 `TASK-009` 到 `TASK-017` 仍可基于稳定的 offset / line range 继续扩展。 | 当前仅输出 `heading`、`paragraph`、`list`、`blockquote`，并保留 deterministic `id`、offset 和 line range。 |
 | 2026-04-15 | `TASK-005` 把 autosave 保持在 renderer shell 中调度，只复用现有 `main` 保存链路，不额外新增持久化通道。 | 自动保存的核心复杂度在“何时触发”和“如何避免并发写入”，而不是文件写入本身；让 renderer 管理 idle/blur/replay，`main` 继续只负责写盘，可以最小化架构扰动并保持 Electron 三层分离。 | 对应实现位于 `src/renderer/App.tsx`、`src/renderer/document-state.ts`、`src/renderer/code-editor.ts`、`src/renderer/code-editor-view.tsx`。 |
 | 2026-04-15 | `TASK-032` 把 `Open / Save / Save As` 收敛到原生 `File` 菜单，并通过单向菜单命令事件通知 renderer。 | 菜单属于桌面应用壳职责，但文件读写边界仍应保持在 `main` 与受限 bridge 内；用主进程菜单发命令、renderer 复用现有处理函数，可以在不复制保存逻辑的前提下消除网页式按钮工具条。 | 对应实现位于 `src/main/application-menu.ts`、`src/main/main.ts`、`src/shared/menu-command.ts`、`src/preload/preload.ts`、`src/renderer/App.tsx`。 |
 | 2026-04-15 | `TASK-007` 让 CodeMirror 6 拥有当前编辑文本状态，renderer shell 只保留文档元数据、持久化快照与 dirty / save 状态。 | 这样更符合 CodeMirror 的事务与历史模型，避免把编辑器做成受控输入框，并为后续 active block、块级渲染和 IME 稳定性优化保留更干净的边界。 | 对应实现位于 `src/renderer/code-editor.ts`、`src/renderer/code-editor-view.tsx`、`src/renderer/document-state.ts`、`src/renderer/App.tsx`。 |

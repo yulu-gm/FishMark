@@ -21,6 +21,7 @@
     "@codemirror/commands": "^6.10.3",
     "@codemirror/state": "^6.6.0",
     "@codemirror/view": "^6.41.0",
+    "micromark": "^4.0.2",
     "react": "^19.2.5",
     "react-dom": "^19.2.5"
   },

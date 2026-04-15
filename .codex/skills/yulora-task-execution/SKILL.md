@@ -68,6 +68,9 @@ docs/plans/<YYYY-MM-DD>-<task>-handoff.md
 - 人工验收草稿步骤
 - 已知风险或未做项
 
+如果这一轮已经完成了 backlog 里的执行切片，必须同步更新 `MVP_BACKLOG.md` 里对应 task 的 checkbox；不要只更新
+`docs/progress.md` / `docs/test-report.md` / `reports/task-summaries/` 而把 backlog 留在未完成状态。
+
 这一步不能省。`$yulora-task-acceptance` 会读这个文件来跑验证和写总结；
 没有它，验收阶段只能反推改动，结论质量会下降。
 
@@ -82,4 +85,5 @@ docs/plans/<YYYY-MM-DD>-<task>-handoff.md
 - 实现已经落地，必要测试已补
 - 开发自检通过（最终门禁留给验收）
 - execution handoff 文件已写
+- backlog 对应执行切片已同步更新
 - 已经把控制权移交给 `$yulora-task-acceptance`

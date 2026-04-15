@@ -71,6 +71,7 @@ Next skill: $yulora-task-execution / $yulora-task-acceptance
 | 架构基线或用户可见行为基线发生变化 | `docs/design.md` |
 | 新行为或变更行为需要明确记录测试场景 | `docs/test-cases.md` |
 | task 定义、验收、依赖或任务拆分变更 | `MVP_BACKLOG.md` |
+| 完成一个 task，或执行切片 checkbox 状态变化 | `MVP_BACKLOG.md` |
 
 ## 验收门禁分级
 
