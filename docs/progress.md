@@ -52,8 +52,8 @@
 | TASK-032 | 应用菜单与壳层收敛 | DEV_DONE | 已接入原生 `File` 菜单中的 `Open...`、`Save`、`Save As...`，并把 renderer 临时壳收敛为更像桌面编辑器的单栏界面。 |
 | TASK-008 | micromark block map | ACCEPTED | 已接入 `micromark` parser 事件流，输出 `heading` / `paragraph` / `list` / `blockquote` 的最小 block map，并通过 parser 单测与 repo 门禁验收。 |
 | TASK-009 | active block 状态 | DEV_DONE | 已在 `packages/editor-core` 中落地 active block 解析，并由 CodeMirror 选择变化驱动 renderer 侧当前块状态。 |
-| TASK-010 | 标题渲染 | TODO | 标题的源码与渲染切换。 |
-| TASK-011 | 段落渲染 | TODO | 稳定段落显示。 |
+| TASK-010 | 标题渲染 | CLOSED | 标题 `#` 弱化、激活回源码态、目标测试、人工验收与合并前门禁均已完成。 |
+| TASK-011 | 段落渲染 | CLOSED | 非激活段落轻量渲染、激活回源码态、目标测试、人工验收与合并前门禁均已完成。 |
 | TASK-012 | 列表与任务列表渲染 | TODO | 列表行为与回车处理。 |
 | TASK-013 | 引用块渲染 | TODO | 引用块显示与编辑行为。 |
 | TASK-014 | 链接显示与编辑 | TODO | 链接文本渲染与浏览器打开。 |

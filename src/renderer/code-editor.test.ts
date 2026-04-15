@@ -13,6 +13,11 @@ const getEditorView = (host: HTMLElement) => {
   return editorRoot instanceof HTMLElement ? EditorView.findFromDOM(editorRoot) : null;
 };
 
+const getLineElementByText = (host: HTMLElement, text: string) => {
+  const lines = Array.from(host.querySelectorAll(".cm-line"));
+  return lines.find((line) => line.textContent?.includes(text)) ?? null;
+};
+
 const dispatchCompositionEvent = (
   target: HTMLElement,
   type: "compositionstart" | "compositionupdate" | "compositionend",
@@ -91,6 +96,244 @@ describe("createCodeEditorController", () => {
 
     view?.dispatch({ selection: { anchor: source.indexOf("> quote") } });
     expect(activeBlockTypes.at(-1)).toBe("blockquote");
+
+    controller.destroy();
+  });
+
+  it("applies inactive heading decorations when focus moves into a non-heading block", () => {
+    const host = document.createElement("div");
+    const source = ["# Title", "", "Paragraph"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    view?.dispatch({ selection: { anchor: source.indexOf("Paragraph") } });
+
+    const headingLine = getLineElementByText(host, "# Title");
+    const headingMarker = host.querySelector(".cm-inactive-heading-marker");
+
+    expect(headingLine).not.toBeNull();
+    expect(headingLine?.classList.contains("cm-inactive-heading")).toBe(true);
+    expect(headingLine?.classList.contains("cm-inactive-heading-depth-1")).toBe(true);
+    expect(headingMarker).not.toBeNull();
+    expect(headingMarker?.textContent).toBe("#");
+
+    controller.destroy();
+  });
+
+  it("removes inactive heading decorations when the heading becomes active again", () => {
+    const host = document.createElement("div");
+    const source = ["# Title", "", "Paragraph"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    view?.dispatch({ selection: { anchor: source.indexOf("Paragraph") } });
+    expect(host.querySelector(".cm-inactive-heading-marker")).not.toBeNull();
+
+    view?.dispatch({ selection: { anchor: source.indexOf("Title") } });
+
+    const headingLine = getLineElementByText(host, "# Title");
+
+    expect(headingLine).not.toBeNull();
+    expect(headingLine?.classList.contains("cm-inactive-heading")).toBe(false);
+    expect(host.querySelector(".cm-inactive-heading-marker")).toBeNull();
+
+    controller.destroy();
+  });
+
+  it("flushes inactive heading decorations once when composition ends", () => {
+    const host = document.createElement("div");
+    const source = ["# Title", "", "Paragraph"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const view = getEditorView(host);
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    view?.dispatch({ selection: { anchor: source.indexOf("Paragraph") } });
+    expect(host.querySelector(".cm-inactive-heading-marker")).not.toBeNull();
+
+    const originalDispatch = view?.dispatch.bind(view);
+    const dispatchSpy = vi.fn((spec: Parameters<NonNullable<typeof originalDispatch>>[0]) =>
+      originalDispatch?.(spec)
+    );
+
+    if (view) {
+      view.dispatch = dispatchSpy as unknown as typeof view.dispatch;
+    }
+
+    dispatchCompositionEvent(editorRoot as HTMLElement, "compositionstart", "x");
+    view?.dispatch({
+      changes: { from: source.length, insert: "x" },
+      selection: { anchor: source.length + 1 }
+    });
+
+    dispatchSpy.mockClear();
+    dispatchCompositionEvent(editorRoot as HTMLElement, "compositionend", "x");
+
+    const decorationFlushCount = dispatchSpy.mock.calls.filter(
+      ([spec]) => typeof spec === "object" && spec !== null && "effects" in spec
+    ).length;
+
+    expect(decorationFlushCount).toBe(1);
+    expect(host.querySelector(".cm-inactive-heading-marker")).not.toBeNull();
+
+    controller.destroy();
+  });
+
+  it("applies inactive paragraph decorations when another paragraph becomes active", () => {
+    const host = document.createElement("div");
+    const source = ["Paragraph one", "", "Paragraph two"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    view?.dispatch({ selection: { anchor: source.indexOf("Paragraph two") } });
+
+    const firstParagraphLine = getLineElementByText(host, "Paragraph one");
+
+    expect(firstParagraphLine).not.toBeNull();
+    expect(firstParagraphLine?.classList.contains("cm-inactive-paragraph")).toBe(true);
+    expect(firstParagraphLine?.classList.contains("cm-inactive-paragraph-leading")).toBe(
+      true
+    );
+
+    controller.destroy();
+  });
+
+  it("removes inactive paragraph decorations when that paragraph becomes active again", () => {
+    const host = document.createElement("div");
+    const source = ["Paragraph one", "", "Paragraph two"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    view?.dispatch({ selection: { anchor: source.indexOf("Paragraph two") } });
+    expect(getLineElementByText(host, "Paragraph one")?.classList.contains("cm-inactive-paragraph")).toBe(
+      true
+    );
+
+    view?.dispatch({ selection: { anchor: source.indexOf("Paragraph one") } });
+
+    const firstParagraphLine = getLineElementByText(host, "Paragraph one");
+
+    expect(firstParagraphLine).not.toBeNull();
+    expect(firstParagraphLine?.classList.contains("cm-inactive-paragraph")).toBe(false);
+
+    controller.destroy();
+  });
+
+  it("keeps heading and paragraph decorations in the same inactive-state pipeline", () => {
+    const host = document.createElement("div");
+    const source = ["# Heading", "", "Paragraph one", "", "Paragraph two"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    view?.dispatch({ selection: { anchor: source.indexOf("Paragraph two") } });
+
+    const headingLine = getLineElementByText(host, "# Heading");
+    const firstParagraphLine = getLineElementByText(host, "Paragraph one");
+
+    expect(headingLine).not.toBeNull();
+    expect(headingLine?.classList.contains("cm-inactive-heading")).toBe(true);
+    expect(host.querySelector(".cm-inactive-heading-marker")).not.toBeNull();
+    expect(firstParagraphLine).not.toBeNull();
+    expect(firstParagraphLine?.classList.contains("cm-inactive-paragraph")).toBe(true);
+
+    controller.destroy();
+  });
+
+  it("flushes inactive paragraph decorations once when composition ends", () => {
+    const host = document.createElement("div");
+    const source = ["Paragraph one", "", "Paragraph two"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const view = getEditorView(host);
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    view?.dispatch({ selection: { anchor: source.indexOf("Paragraph two") } });
+    expect(getLineElementByText(host, "Paragraph one")?.classList.contains("cm-inactive-paragraph")).toBe(
+      true
+    );
+
+    const originalDispatch = view?.dispatch.bind(view);
+    const dispatchSpy = vi.fn((spec: Parameters<NonNullable<typeof originalDispatch>>[0]) =>
+      originalDispatch?.(spec)
+    );
+
+    if (view) {
+      view.dispatch = dispatchSpy as unknown as typeof view.dispatch;
+    }
+
+    dispatchCompositionEvent(editorRoot as HTMLElement, "compositionstart", "x");
+    view?.dispatch({
+      changes: { from: source.length, insert: "x" },
+      selection: { anchor: source.length + 1 }
+    });
+
+    dispatchSpy.mockClear();
+    dispatchCompositionEvent(editorRoot as HTMLElement, "compositionend", "x");
+
+    const decorationFlushCount = dispatchSpy.mock.calls.filter(
+      ([spec]) => typeof spec === "object" && spec !== null && "effects" in spec
+    ).length;
+
+    expect(decorationFlushCount).toBe(1);
+    expect(getLineElementByText(host, "Paragraph one")?.classList.contains("cm-inactive-paragraph")).toBe(
+      true
+    );
 
     controller.destroy();
   });

@@ -1,6 +1,6 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { EditorState } from "@codemirror/state";
-import { EditorView, keymap } from "@codemirror/view";
+import { EditorState, StateEffect, StateField } from "@codemirror/state";
+import { Decoration, type DecorationSet, EditorView, keymap } from "@codemirror/view";
 
 import {
   createActiveBlockStateFromBlockMap,
@@ -22,6 +22,24 @@ export type CodeEditorController = {
   destroy: () => void;
 };
 
+const setHeadingDecorationsEffect = StateEffect.define<DecorationSet>();
+
+const headingDecorationsField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(decorations, transaction) {
+    let nextDecorations = decorations.map(transaction.changes);
+
+    for (const effect of transaction.effects) {
+      if (effect.is(setHeadingDecorationsEffect)) {
+        nextDecorations = effect.value;
+      }
+    }
+
+    return nextDecorations;
+  },
+  provide: (field) => EditorView.decorations.from(field)
+});
+
 export function createCodeEditorController(
   options: CreateCodeEditorControllerOptions
 ): CodeEditorController {
@@ -30,8 +48,10 @@ export function createCodeEditorController(
     anchor: 0,
     head: 0
   });
+  let headingDecorationSignature = "";
   let isCompositionGuardActive = false;
   let hasPendingDerivedStateFlush = false;
+  let applyHeadingDecorations: (force?: boolean) => void = () => {};
 
   const createSelectionSnapshot = (state: EditorState) => ({
     anchor: state.selection.main.anchor,
@@ -59,12 +79,60 @@ export function createCodeEditorController(
       createActiveBlockStateFromBlockMap(blockMap, createSelectionSnapshot(state)),
       force
     );
+    applyHeadingDecorations(force);
+  };
+
+  const createHeadingDecorations = (state: ActiveBlockState) => {
+    const activeBlockId = state.activeBlock?.id ?? null;
+    const ranges = [];
+    const signatures: string[] = [];
+
+    for (const block of state.blockMap.blocks) {
+      if (block.id === activeBlockId) {
+        continue;
+      }
+
+      if (block.type === "heading") {
+        signatures.push(`${block.type}:${block.id}:${block.startOffset}:${block.depth}`);
+        ranges.push(
+          Decoration.line({
+            attributes: {
+              class: `cm-inactive-heading cm-inactive-heading-depth-${block.depth}`
+            }
+          }).range(block.startOffset)
+        );
+        ranges.push(
+          Decoration.mark({
+            attributes: {
+              class: "cm-inactive-heading-marker"
+            }
+          }).range(block.startOffset, block.startOffset + block.depth)
+        );
+      }
+
+      if (block.type === "paragraph") {
+        signatures.push(`${block.type}:${block.id}:${block.startOffset}`);
+        ranges.push(
+          Decoration.line({
+            attributes: {
+              class: "cm-inactive-paragraph cm-inactive-paragraph-leading"
+            }
+          }).range(block.startOffset)
+        );
+      }
+    }
+
+    return {
+      decorationSet: Decoration.set(ranges, true),
+      signature: signatures.join("|")
+    };
   };
 
   const createState = (content: string) =>
     EditorState.create({
       doc: content,
       extensions: [
+        headingDecorationsField,
         history(),
         keymap.of([...historyKeymap, ...defaultKeymap]),
         EditorView.lineWrapping,
@@ -105,6 +173,21 @@ export function createCodeEditorController(
     state: initialState,
     parent: options.parent
   });
+
+  applyHeadingDecorations = (force = false) => {
+    const { decorationSet, signature } = createHeadingDecorations(activeBlockState);
+
+    if (!force && signature === headingDecorationSignature) {
+      return;
+    }
+
+    headingDecorationSignature = signature;
+    view.dispatch({
+      effects: setHeadingDecorationsEffect.of(decorationSet)
+    });
+  };
+
+  applyHeadingDecorations(true);
   options.onActiveBlockChange?.(activeBlockState);
 
   const handleCompositionStart = () => {
@@ -144,6 +227,7 @@ export function createCodeEditorController(
         createActiveBlockStateFromBlockMap(blockMap, createSelectionSnapshot(nextState)),
         true
       );
+      applyHeadingDecorations(true);
     },
     destroy() {
       view.dom.removeEventListener("compositionstart", handleCompositionStart);

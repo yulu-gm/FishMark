@@ -76,6 +76,14 @@
 | 2026-04-15 | BOOTSTRAP-DOCS | `npm run test` | 通过 | Vitest 报告 1 个文件、2 条测试通过。 |
 | 2026-04-15 | BOOTSTRAP-DOCS | `npm run build` | 通过 | renderer 构建和 electron TypeScript 构建完成通过。 |
 | 2026-04-15 | BOOTSTRAP-DOCS | `test -f docs/design.md && test -f docs/acceptance.md && test -f docs/test-cases.md && test -f docs/progress.md && test -f docs/decision-log.md && test -f docs/test-report.md && rg -n "^\| (BOOTSTRAP-DOCS|TASK-001|TASK-002|TASK-003|TASK-004|TASK-005|TASK-006|TASK-007|TASK-008|TASK-009|TASK-010|TASK-011|TASK-012|TASK-013|TASK-014|TASK-015|TASK-016|TASK-017|TASK-018|TASK-019|TASK-020|TASK-021|TASK-022|TASK-023|TASK-024) \|" docs/progress.md` | 通过 | 已确认 `docs/` 中的必需文件存在，且 `docs/progress.md` 包含 `BOOTSTRAP-DOCS` 与 `TASK-001` 到 `TASK-024`。 |
+| 2026-04-15 | TASK-010 | `npm run test -- src/renderer/code-editor.test.ts` | 通过 | 先补了 heading inactive/active 切换与 composition flush 回归测试，再实现标题 decoration；当前 worktree 内该目标测试共 10 项全部通过。 |
+| 2026-04-15 | TASK-010 | 人工验收（`npm run dev`，worktree: `D:\MyAgent\Yulora\Yulora\.worktrees\task-010-heading-rendering`） | 通过 | 用户已确认标题 `#` 弱化、激活回源码态和基础交互通过人工验收。仓库级 `lint` / `typecheck` / 全量 `test` / `build` 尚未在本轮执行。 |
+| 2026-04-15 | TASK-011 | `npm run test -- src/renderer/code-editor.test.ts` | 通过 | 补了 inactive paragraph 切换、heading/paragraph decoration 共存和 composition flush 回归测试；当前 worktree 内该目标测试共 14 项全部通过。 |
+| 2026-04-15 | TASK-011 | 人工验收（`npm run dev`，worktree: `D:\MyAgent\Yulora\Yulora\.worktrees\task-010-heading-rendering`） | 通过 | 用户已确认段落轻量渲染、激活回源码态、与标题 decoration 共存以及基础交互通过人工验收。仓库级 `lint` / `typecheck` / 全量 `test` / `build` 待本轮补跑。 |
+| 2026-04-15 | TASK-010 + TASK-011 | `npm run lint` | 通过 | 合并前门禁通过，无 lint 错误。 |
+| 2026-04-15 | TASK-010 + TASK-011 | `npm run typecheck` | 通过 | 合并前门禁通过，renderer / electron / vitest TypeScript 检查全部通过。 |
+| 2026-04-15 | TASK-010 + TASK-011 | `npm run test` | 通过 | 合并前门禁通过，15 个测试文件、89 个测试全部通过。 |
+| 2026-04-15 | TASK-010 + TASK-011 | `npm run build` | 通过 | 合并前门禁通过；Vite 仅报告产物 chunk 较大 warning，不阻塞构建。 |
 | 2026-04-15 | TASK-001 | `npm run lint` | 通过 | 修正 Electron 入口和开发脚本后，无 lint 错误。 |
 | 2026-04-15 | TASK-001 | `npm run typecheck` | 通过 | renderer、electron、vitest 的 TypeScript 检查完成通过。 |
 | 2026-04-15 | TASK-001 | `npm run test` | 通过 | Vitest 报告 1 个文件、2 条测试通过。 |
