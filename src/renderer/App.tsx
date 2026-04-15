@@ -2,7 +2,11 @@ import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import type { ActiveBlockState } from "../../packages/editor-core/src";
 import {
+  VISUAL_SMOKE_HEIGHT,
+  VISUAL_SMOKE_WIDTH,
+  createMemoryVisualApi,
   defaultScenarioRegistry,
+  renderSmokeGradient,
   runScenario,
   type RunErrorInfo,
   type RunnerEvent,
@@ -11,7 +15,9 @@ import {
   type StepHandlerMap,
   type StepResult,
   type StepStatus,
-  type TestScenario
+  type TestScenario,
+  type VisualApi,
+  type VisualObservation
 } from "../../packages/test-harness/src";
 import { CodeEditorView, type CodeEditorHandle } from "./code-editor-view";
 import { ScenarioCatalog } from "./scenario-catalog";
@@ -327,11 +333,14 @@ function TestWorkbenchApp({ hasBridge }: { hasBridge: boolean }) {
     ? defaultScenarioRegistry.get(selectedScenarioId)
     : scenarios[0] ?? null;
   const [runState, setRunState] = useState<DebugRunState>(() => createIdleDebugRunState(selectedScenario));
+  const [forceVisualDrift, setForceVisualDrift] = useState(false);
+  const [visualObservations, setVisualObservations] = useState<readonly VisualObservation[]>([]);
   const activeRunControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (!activeRunControllerRef.current) {
       setRunState(createIdleDebugRunState(selectedScenario));
+      setVisualObservations([]);
     }
   }, [selectedScenario]);
 
@@ -343,10 +352,20 @@ function TestWorkbenchApp({ hasBridge }: { hasBridge: boolean }) {
     const controller = new AbortController();
     activeRunControllerRef.current = controller;
     setRunState(createIdleDebugRunState(selectedScenario));
+    setVisualObservations([]);
+
+    const collectedObservations: VisualObservation[] = [];
+    const visualApi = createWorkbenchVisualApi((observation) => {
+      collectedObservations.push(observation);
+      setVisualObservations((current) => [...current, observation]);
+    });
 
     try {
       const result = await runScenario(selectedScenario, {
-        handlers: createWorkbenchStepHandlers(selectedScenario),
+        handlers: createWorkbenchStepHandlers(selectedScenario, {
+          visualApi,
+          forceVisualDrift
+        }),
         signal: controller.signal,
         stepTimeoutMs: 2_000,
         onEvent: (event) => {
@@ -453,6 +472,15 @@ function TestWorkbenchApp({ hasBridge }: { hasBridge: boolean }) {
             >
               Interrupt Active Run
             </button>
+            <label className="test-workbench-toggle">
+              <input
+                checked={forceVisualDrift}
+                disabled={Boolean(activeRunControllerRef.current)}
+                onChange={(event) => setForceVisualDrift(event.target.checked)}
+                type="checkbox"
+              />
+              Force visual drift
+            </label>
           </div>
           <dl className="debug-run-meta">
             <div>
@@ -532,8 +560,116 @@ function TestWorkbenchApp({ hasBridge }: { hasBridge: boolean }) {
             ))}
           </ul>
         </article>
+
+        {visualObservations.length > 0 ? (
+          <article className="workbench-panel workbench-panel-wide visual-results-panel">
+            <p className="workbench-panel-label">Visual Results</p>
+            <h2>
+              {visualObservations.length} visual step
+              {visualObservations.length === 1 ? "" : "s"}
+            </h2>
+            <p>
+              actual / expected / diff frames painted straight from the in-memory RGBA buffers
+              produced by the visual api. A mismatch marks the step red in the Test Process panel.
+            </p>
+            <ul className="visual-result-list">
+              {visualObservations.map((observation) => (
+                <VisualResultCard
+                  key={`${observation.scenarioId}-${observation.stepId}`}
+                  observation={observation}
+                />
+              ))}
+            </ul>
+          </article>
+        ) : null}
       </section>
     </main>
+  );
+}
+
+function VisualResultCard({ observation }: { observation: VisualObservation }) {
+  return (
+    <li className={`visual-result-card verdict-${observation.verdict}`}>
+      <header className="visual-result-header">
+        <div>
+          <p className="visual-result-step">{observation.stepId}</p>
+          <p className="visual-result-meta">
+            {observation.width} × {observation.height}
+            {" · "}
+            {observation.mismatchedPixels} px ({(observation.mismatchRatio * 100).toFixed(2)}%)
+          </p>
+        </div>
+        <span className={`visual-result-verdict verdict-${observation.verdict}`}>
+          {observation.verdict}
+        </span>
+      </header>
+      {observation.message ? (
+        <p className="visual-result-message">{observation.message}</p>
+      ) : null}
+      <div className="visual-result-frames">
+        {observation.actualRgba ? (
+          <VisualFrame
+            label="actual"
+            rgba={observation.actualRgba}
+            width={observation.width}
+            height={observation.height}
+          />
+        ) : null}
+        {observation.expectedRgba ? (
+          <VisualFrame
+            label="expected"
+            rgba={observation.expectedRgba}
+            width={observation.width}
+            height={observation.height}
+          />
+        ) : null}
+        {observation.diffRgba ? (
+          <VisualFrame
+            label="diff"
+            rgba={observation.diffRgba}
+            width={observation.width}
+            height={observation.height}
+          />
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
+function VisualFrame({
+  label,
+  rgba,
+  width,
+  height
+}: {
+  label: string;
+  rgba: Uint8Array;
+  width: number;
+  height: number;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const image = ctx.createImageData(width, height);
+    image.data.set(rgba);
+    ctx.putImageData(image, 0, 0);
+  }, [rgba, width, height]);
+
+  return (
+    <figure className="visual-frame">
+      <canvas
+        aria-label={`${label} frame`}
+        className="visual-frame-canvas"
+        ref={canvasRef}
+      />
+      <figcaption>{label}</figcaption>
+    </figure>
   );
 }
 
@@ -750,7 +886,11 @@ function createDebugEventEntry(event: RunnerEvent): DebugEventEntry {
   };
 }
 
-function createWorkbenchStepHandlers(scenario: TestScenario): StepHandlerMap {
+function createWorkbenchStepHandlers(
+  scenario: TestScenario,
+  deps: { readonly visualApi: VisualApi; readonly forceVisualDrift: boolean }
+): StepHandlerMap {
+  let capturedGradient: Uint8Array | null = null;
   return Object.fromEntries(
     scenario.steps.map((step) => [
       step.id,
@@ -760,9 +900,51 @@ function createWorkbenchStepHandlers(scenario: TestScenario): StepHandlerMap {
         if (scenario.id === "open-markdown-file-basic" && step.id === "select-fixture") {
           throw new Error("Fixture picker automation is not implemented in TASK-028.");
         }
+
+        if (scenario.id === "visual-smoke-gradient") {
+          if (step.id === "render-gradient") {
+            capturedGradient = renderSmokeGradient({ drift: deps.forceVisualDrift });
+            return;
+          }
+          if (step.id === "compare-gradient") {
+            if (!capturedGradient) {
+              throw new Error(
+                "render-gradient did not capture a gradient; cannot run compare-gradient."
+              );
+            }
+            const observation = deps.visualApi.check({
+              scenarioId: scenario.id,
+              stepId: step.id,
+              width: VISUAL_SMOKE_WIDTH,
+              height: VISUAL_SMOKE_HEIGHT,
+              actualRgba: capturedGradient
+            });
+            if (observation.verdict === "mismatch") {
+              throw new Error(
+                observation.message ?? `Visual mismatch in step ${step.id}.`
+              );
+            }
+          }
+        }
       }
     ])
   ) as StepHandlerMap;
+}
+
+/**
+ * Workbench visual api: resolves the baseline by re-rendering the same
+ * deterministic fixture. That keeps the flow self-contained (no filesystem
+ * access from the renderer) and lets the drift toggle produce a guaranteed
+ * mismatch on demand.
+ */
+function createWorkbenchVisualApi(
+  onObservation: (observation: VisualObservation) => void
+): VisualApi {
+  return createMemoryVisualApi({
+    resolveBaseline: ({ scenarioId }) =>
+      scenarioId === "visual-smoke-gradient" ? renderSmokeGradient({ drift: false }) : null,
+    onObservation
+  });
 }
 
 function waitForDebugDelay(delayMs: number, signal: AbortSignal): Promise<void> {

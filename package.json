@@ -15,10 +15,13 @@
     "build": "npm run clean && npm run build:renderer && npm run build:electron",
     "build:renderer": "vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
-    "clean": "rimraf dist dist-electron tsconfig.electron.tsbuildinfo tsconfig.renderer.tsbuildinfo tsconfig.vitest.tsbuildinfo",
+    "clean": "rimraf dist dist-electron dist-cli tsconfig.electron.tsbuildinfo tsconfig.renderer.tsbuildinfo tsconfig.vitest.tsbuildinfo tsconfig.cli.tsbuildinfo",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit -p tsconfig.renderer.json && tsc --noEmit -p tsconfig.electron.json && tsc --noEmit -p tsconfig.vitest.json",
-    "test": "vitest run"
+    "typecheck": "tsc --noEmit -p tsconfig.renderer.json && tsc --noEmit -p tsconfig.electron.json && tsc --noEmit -p tsconfig.vitest.json && tsc --noEmit -p tsconfig.cli.json",
+    "test": "vitest run",
+    "build:cli": "tsc -p tsconfig.cli.json",
+    "pretest:scenario": "npm run build:cli",
+    "test:scenario": "node dist-cli/cli/bin.js"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.3",

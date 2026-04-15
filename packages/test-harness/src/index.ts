@@ -29,9 +29,32 @@ export { runScenario } from "./runner";
 
 export { seedScenarios } from "./scenarios";
 
+export { createHeadlessStepHandlers } from "./handlers/headless";
+export type { HeadlessHandlerDeps } from "./handlers/headless";
+
+// Browser-safe visual primitives only. The PNG codec, `runVisualCheck`, and
+// the node-backed visual api live under `./node` so importing this barrel
+// from the renderer does not pull `node:zlib` / `node:fs` into Vite's browser
+// bundle (TASK-030 / TASK-029).
+export type { VisualApi, VisualCheckRequest, VisualObservation } from "./visual/api";
+export { isVisualFailure } from "./visual/api";
+export { compareRgba } from "./visual/compare";
+export type { CompareOptions, CompareResult } from "./visual/compare";
+export { createMemoryVisualApi } from "./visual/memory-api";
+export type {
+  MemoryVisualApiOptions,
+  MemoryBaselineResolver
+} from "./visual/memory-api";
+export {
+  VISUAL_SMOKE_WIDTH,
+  VISUAL_SMOKE_HEIGHT,
+  renderSmokeGradient
+} from "./visual/gradient";
+export type { GradientOptions } from "./visual/gradient";
+
 /**
  * Default module-level registry seeded with the first-party scenarios.
- * The workbench UI and the future agent CLI must both consume this
- * registry so they see the same scenario list without free-form scripts.
+ * The workbench UI and the agent CLI must both consume this registry so
+ * they see the same scenario list without free-form scripts.
  */
 export const defaultScenarioRegistry = createScenarioRegistry(seedScenarios);

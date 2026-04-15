@@ -1,6 +1,7 @@
 import type { TestScenario } from "../scenario";
 import { appShellStartupScenario } from "./app-shell-startup";
 import { openMarkdownFileBasicScenario } from "./open-markdown-file-basic";
+import { visualSmokeGradientScenario } from "./visual-smoke-gradient";
 
 /**
  * Seed scenarios registered by default. Ordering is significant: this is the
@@ -9,7 +10,12 @@ import { openMarkdownFileBasicScenario } from "./open-markdown-file-basic";
  */
 export const seedScenarios: readonly TestScenario[] = [
   appShellStartupScenario,
-  openMarkdownFileBasicScenario
+  openMarkdownFileBasicScenario,
+  visualSmokeGradientScenario
 ];
 
-export { appShellStartupScenario, openMarkdownFileBasicScenario };
+export {
+  appShellStartupScenario,
+  openMarkdownFileBasicScenario,
+  visualSmokeGradientScenario
+};

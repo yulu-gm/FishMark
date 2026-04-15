@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "target": "ES2022",
+    "outDir": "dist-cli",
+    "rootDir": "packages/test-harness/src",
+    "types": ["node"],
+    "sourceMap": true,
+    "declaration": false,
+    "ignoreDeprecations": "6.0"
+  },
+  "include": ["packages/test-harness/src/**/*.ts"],
+  "exclude": ["packages/test-harness/src/**/*.test.ts"]
+}
