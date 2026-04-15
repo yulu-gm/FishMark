@@ -1,127 +1,115 @@
 ---
 name: yulora-task-acceptance
-description: 用于对已经实现完成的 Yulora task 做验收、收尾和对外总结。适用于跑质量门禁、判断 PASS 或 FAIL、更新项目记录、或在输出任务总结时明确告诉用户怎么做人工验收。
+description: 用于在 Yulora（本地 Markdown 编辑器项目）对已经实现完成的 task 做验收、收尾和对外总结。触发场景包括：用户说"跑一下门禁 / 这个能 PASS 吗 / 帮我写下 task 总结 / 收尾这个 task / 更新 test-report 和 task-summaries"，或者代码已落地需要判 PASS/FAIL 并给出人工验收步骤。如果 task 还在写，用 $yulora-task-execution；如果范围都还没界定，用 $yulora-task-intake。
 ---
 
 # Yulora 任务验收
 
-## Overview
+## 这个 skill 的职责边界
 
-这个 skill 只负责验收和收尾，不负责主要实现。它必须基于新鲜验证证据做 PASS / FAIL 判断，并在最终总结里明确写出人工验收步骤。默认复用同一会话里前面阶段已经建立的上下文，只补读验收阶段新增需要的文档。
+只做四件事：
+1. 跑新鲜验证证据
+2. 对照 backlog + acceptance 判 PASS / FAIL
+3. 更新项目记录（test-report、task-summaries 等）
+4. 输出最终总结，**必须含人工验收步骤**
+
+不写实现代码，不补主体功能。如果验收过程中发现需要改实现，
+回到 `$yulora-task-execution`。
+
+`$skill` 的调用语义见
+[../yulora-task-intake/references/docs-map.md](../yulora-task-intake/references/docs-map.md)
+末尾。
 
 ## 验收流程
 
-### 1. 先判断是复用上下文还是单独调用
+### 1. 优先读 handoff 文件
 
-如果当前会话刚经过 `$yulora-task-intake` 或 `$yulora-task-execution`：
-- 不要全量重复读取核心文档
-- 先确认 task 范围、实现结果和验证目标已经明确
-- 只补读验收与收尾必须新增的文档
+启动时先看 `docs/plans/` 下有没有这一轮的 handoff 文件
+（命名约定见 docs-map.md 的 "Handoff 文件约定"）：
 
-如果这是一次单独调用，前面没有经过接单或执行阶段：
-- 先执行一次完整上下文重建
-- 把自己当成验收阶段的直接入口使用
+- `<YYYY-MM-DD>-<task>-intake.md` —— 范围、验收标准
+- `<YYYY-MM-DD>-<task>-handoff.md` —— 改了什么、推荐验证命令、人工验收草稿
 
-### 2. 差量补读验收上下文
+两个都在：以它们为权威输入，只补读
+[../yulora-task-intake/references/docs-map.md](../yulora-task-intake/references/docs-map.md)
+里"完成与更新矩阵"涉及的文档（要更新就要先读现状）。
 
-单独调用时至少读取：
-- `AGENTS.md`
-- `docs/acceptance.md`
-- `docs/test-cases.md`
-- `docs/test-report.md`
-- `docs/decision-log.md`
-- `docs/progress.md`
-- `MVP_BACKLOG.md`
+只有 intake 没有 execution：说明实现可能不完整，先与用户确认是不是该退回
+`$yulora-task-execution`。
 
-按需补读：
-- `docs/design.md`
-- `reports/task-summaries/TASK-xxx.md`
-- 相关设计文档和实现计划
-- 代码落点对应的 README
+两个都没有：单独调用模式。按 docs-map.md 的"核心文档"+"完成与更新矩阵"
+做一次完整重建。
 
-如果已经经过前一阶段，优先只补读：
-- `docs/test-report.md`
-- `docs/decision-log.md`
-- `docs/progress.md`
-- `reports/task-summaries/TASK-xxx.md`
-- `docs/test-cases.md`
-- 相关实现计划与代码落点 README
+### 2. 跑新鲜验证（按门禁分级）
 
-### 3. 必须跑新鲜验证
+按 docs-map.md 的"验收门禁分级"挑命令。**不要一律全跑**，也不要省略：
 
-至少确认这些门禁：
-- `npm run lint`
-- `npm run typecheck`
-- `npm run test`
-- `npm run build`
+- 代码变更 → lint + typecheck + test + build 全套
+- 仅文档 → 链接和路径手工抽查、相关 markdown 渲染
+- 仅 skill / AGENTS → 引用文件存在性检查 + 关键规则 grep 复核 + 人工 diff
+- 混合 → 取重心，再补另一类的关键项，并在总结里说明取舍
 
-如果 task 只影响局部模块，也要补充最相关的专项验证。
+重要：不能用"应该没问题 / 之前跑过"代替本轮证据。命令必须本轮真的跑过，
+输出贴在最终总结里或可追溯。
 
-不能用“应该没问题”“之前跑过”代替本轮证据。
-
-### 4. 根据项目规则判断 PASS / FAIL
+### 3. 判 PASS / FAIL
 
 必须同时对照：
-- `MVP_BACKLOG.md` 里的 task 目标、交付物和验收语句
+
+- `MVP_BACKLOG.md` 里 task 专属验收
 - `docs/acceptance.md` 的产品基线
 - `docs/test-cases.md` 的相关场景
 
-结论只能写：
-- PASS
-- FAIL
+结论只能写 `PASS` 或 `FAIL`，不要写"基本通过 / 大体 OK"。
 
-不要写模糊结论。
+### 4. 更新项目记录
 
-### 5. 更新项目记录
+至少更新（"完成与更新矩阵"的常驻项）：
 
-每次验收后至少更新：
 - `docs/test-report.md`
-- `reports/task-summaries/`
+- `reports/task-summaries/TASK-xxx.md`
 
-按需更新：
+按变更影响补充更新（条件项）：
+
 - `docs/decision-log.md`
 - `docs/progress.md`
 - `docs/design.md`
 - `docs/test-cases.md`
 - `MVP_BACKLOG.md`
 
-### 6. 输出最终总结时必须写人工验收
+判断标准见 docs-map.md 的"完成与更新矩阵"。
 
-最终对用户的总结至少包含：
-- 做了什么
-- 验证结果
-- 是否 PASS / FAIL
-- 剩余风险或未覆盖项
-- **人工验收步骤**
+### 5. 输出最终总结（必须含人工验收）
 
-人工验收步骤不能省略。
-
-如果本轮只是文档或 skill 变更，也要明确写：
-- 人工验收查看哪些文件
-- 需要确认哪些文字或规则已经生效
-
-## 总结模板
+模板：
 
 ```md
+Task: TASK-xxx
 结果：PASS / FAIL
 
 完成内容：
 - ...
 
 验证：
-- `npm run lint`
-- `npm run typecheck`
-- `npm run test`
-- `npm run build`
+- 命令 1（已运行，结果 ...）
+- 命令 2 ...
 
 人工验收：
 1. ...
 2. ...
 
-剩余风险：
+剩余风险或未覆盖项：
 - ...
 ```
 
+**人工验收步骤不能省略**，纯文档或纯 skill 变更也要写 ——
+那种情况下要明确告诉用户：看哪些文件、确认哪些文字或规则已经生效。
+
 ## 结束条件
 
-只有在验证证据完整、项目记录已更新、并且最终总结已经明确给出人工验收步骤之后，才可以报告任务结束。
+满足以下全部条件才报告任务结束：
+
+- 验证证据完整且来自本轮
+- PASS / FAIL 已写明
+- 项目记录已按矩阵更新
+- 最终总结已含人工验收步骤

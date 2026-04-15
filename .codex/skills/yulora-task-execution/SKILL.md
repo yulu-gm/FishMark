@@ -1,83 +1,85 @@
 ---
 name: yulora-task-execution
-description: 用于执行已经定界完成的 Yulora task。适用于开始实现 backlog task、继续编码、补测试、补文档落地、或在 Yulora 项目中推进一个已明确范围的完整 task。
+description: 用于在 Yulora（本地 Markdown 编辑器项目）执行已经定界完成的 backlog task。触发场景包括：用户说"开始写 / 实现 TASK-xxx / 继续昨天那个 task / 把这个改一下 / 加上这个测试"，或者范围已经明确、可以直接动代码或动文档。如果 task 范围还没界定，先用 $yulora-task-intake；如果实现已经完成只剩跑门禁和收尾，用 $yulora-task-acceptance。
 ---
 
 # Yulora 任务执行
 
-## Overview
+## 这个 skill 的职责边界
 
-这个 skill 只负责执行任务，不负责最终验收结论和对外收尾总结。任务默认目标是单轮完整完成一个 task；如果 backlog 里的 task 过大，就先回到 `MVP_BACKLOG.md` 拆成更小的完整 task，再继续实现。默认复用同一会话里由 `$yulora-task-intake` 已经建立的上下文，只补读实现阶段新增需要的文档。
+只负责实现：写代码、改文档、补测试、按计划落地。
+
+不负责最终验收结论、不负责对外总结、不负责人工验收步骤草拟。
+跑命令是为了"开发自检"，不是产出 PASS/FAIL 结论 ——
+那是 `$yulora-task-acceptance` 的事。
+
+`$skill` 的调用语义见
+[../yulora-task-intake/references/docs-map.md](../yulora-task-intake/references/docs-map.md)
+末尾。
 
 ## 执行流程
 
-### 1. 先判断是复用上下文还是单独调用
+### 1. 优先读 intake handoff，而不是全量重建
 
-如果当前会话刚经过 `$yulora-task-intake`：
-- 不要全量重复读取核心文档
-- 先确认前一阶段已经明确了 `TASK`、in-scope、out-of-scope、落点和验证要求
-- 只补读这轮实现新增需要的文档
+启动时先看 `docs/plans/` 下有没有 `<YYYY-MM-DD>-<task>-intake.md`
+（命名约定见 docs-map.md 的 "Handoff 文件约定"）。
 
-如果这是一次单独调用，前面没有经过 `$yulora-task-intake`：
-- 先执行一次完整上下文重建
-- 把自己当成实现阶段的直接入口使用
+- 找到了：以它为权威范围说明，只补读这一轮实现新增需要的文档（通常是相关
+  设计 / 计划 / 代码落点 README / `docs/decision-log.md`）。不要重复读核心文档。
+- 没找到：说明这是一次单独调用或 intake 没落盘。按
+  [../yulora-task-intake/references/docs-map.md](../yulora-task-intake/references/docs-map.md)
+  的"核心文档"做一次完整重建，然后**自己补一份简短的范围说明**写到
+  `docs/plans/<YYYY-MM-DD>-<task>-intake.md`，避免后续阶段又要重来。
 
-### 2. 差量补读实现所需文档
+### 2. 在 Yulora 约束内实现
 
-单独调用时至少读取：
-- `AGENTS.md`
-- `docs/design.md`
-- `docs/acceptance.md`
-- `MVP_BACKLOG.md`
-- `docs/agent-runbook.md`
-- `docs/test-cases.md`
+项目硬约束（技术栈、main/preload/renderer 隔离、Markdown round-trip 安全、
+保存时不重排文档、P0 UX 项等）以
+[`AGENTS.md`](../../../AGENTS.md) 为唯一事实源。
+本 skill 不复述这些规则，直接按 AGENTS.md 执行；如果发现 AGENTS.md 里没写、
+但任务要求又强约束的项，先回到 intake 阶段补充，而不是在 skill 里加一份。
 
-按需补读：
-- `docs/progress.md`
-- `docs/decision-log.md`
-- `docs/test-report.md`
-- `reports/task-summaries/TASK-xxx.md`
-- `docs/superpowers/specs/` 与 `docs/superpowers/plans/` 下的相关文档
-- 代码落点对应的 README
+任务级纪律（来自 `AGENTS.md` 的"任务规则"，这里只点几条最容易翻车的）：
+- 一次只做一个 task，diff 聚焦可回退
+- 不动无关文件
+- 行为变化要补测试或更新测试
 
-如果已经经过 `$yulora-task-intake`，优先只补读：
-- `docs/decision-log.md`
-- `docs/test-report.md`
-- `reports/task-summaries/TASK-xxx.md`
-- 相关设计、计划和代码落点 README
+### 3. 边做边自检，不要攒到最后
 
-### 3. 开始前先把任务说清楚
+实现过程中按门禁分级（见 docs-map.md 的"验收门禁分级"）对**自己改动的范围**
+跑相关命令做开发自检。例如改了 `packages/markdown-engine` 就先跑那一块的单测，
+不必每次都全量 build。
 
-开始实现前，明确这些信息：
-- 这轮要完整完成哪个 `TASK`
-- 这轮明确不做什么
-- 预计会修改哪些文件、模块、层级
-- 哪些验证命令最终必须通过
-- 哪些风险最敏感：IME、光标、undo/redo、autosave、round-trip、跨平台
+最终 PASS/FAIL 结论留给验收阶段，不要在这里宣布"任务完成"。
 
-如果 task 还不够小，先回到 `MVP_BACKLOG.md` 拆分，不要默认只做一半。
+### 4. 落地 execution handoff（必须）
 
-### 4. 在 Yulora 约束内实现
+实现告一段落、要交给验收前，把这份摘要写到：
 
-始终遵守：
-- 一次只做一个 task
-- 保持 diff 聚焦且可回退
-- 不要改动无关文件
-- 优先小模块和显式接口
-- 严格分离 `main`、`preload`、`renderer`
-- 不要向 `renderer` 暴露不受限制的 Node API
-- 不要未经批准替换固定 MVP 技术栈
-- 不要在保存时自动重排整个 Markdown 文档
+```
+docs/plans/<YYYY-MM-DD>-<task>-handoff.md
+```
 
-### 5. 为验收阶段留好输入
+至少包含：
 
-执行完成后，不要直接宣布“任务完成”。先整理好这些信息，交给 `$yulora-task-acceptance`：
-- 本轮改了什么
-- 改动落在哪些文件
-- 跑哪些命令最能证明结果
-- 哪些人工验收步骤最能验证行为
-- 还剩哪些限制、风险或未做项
+- 改了什么（按"为什么"组织，不是 git diff 的逐行复述）
+- 落点文件清单
+- 推荐的验证命令（按门禁分级裁剪过）
+- 人工验收草稿步骤
+- 已知风险或未做项
+
+这一步不能省。`$yulora-task-acceptance` 会读这个文件来跑验证和写总结；
+没有它，验收阶段只能反推改动，结论质量会下降。
+
+### 5. 分派下一步
+
+实现完成后，调用 `$yulora-task-acceptance` 进入验收阶段。
 
 ## 结束条件
 
-只有在实现已经落地、必要测试已补、并且可以把结果交给 `$yulora-task-acceptance` 继续验收时，才结束这个 skill 的工作。
+满足以下全部条件才结束本 skill 的工作：
+
+- 实现已经落地，必要测试已补
+- 开发自检通过（最终门禁留给验收）
+- execution handoff 文件已写
+- 已经把控制权移交给 `$yulora-task-acceptance`
