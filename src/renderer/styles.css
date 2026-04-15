@@ -561,6 +561,55 @@ body {
   caret-color: #1d4ed8;
 }
 
+.document-editor .cm-inactive-heading {
+  color: #111827;
+}
+
+.document-editor .cm-inactive-heading-marker {
+  color: #98a2b3;
+  opacity: 0.58;
+}
+
+.document-editor .cm-inactive-heading-depth-1 {
+  font-size: 1.85rem;
+  line-height: 1.45;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.document-editor .cm-inactive-heading-depth-2 {
+  font-size: 1.58rem;
+  line-height: 1.5;
+  font-weight: 680;
+}
+
+.document-editor .cm-inactive-heading-depth-3 {
+  font-size: 1.34rem;
+  line-height: 1.56;
+  font-weight: 640;
+}
+
+.document-editor .cm-inactive-heading-depth-4 {
+  font-size: 1.18rem;
+  line-height: 1.62;
+  font-weight: 620;
+}
+
+.document-editor .cm-inactive-heading-depth-5,
+.document-editor .cm-inactive-heading-depth-6 {
+  font-size: 1.05rem;
+  line-height: 1.72;
+  font-weight: 610;
+}
+
+.document-editor .cm-inactive-paragraph {
+  color: #344054;
+}
+
+.document-editor .cm-inactive-paragraph-leading {
+  line-height: 1.95;
+}
+
 .document-editor .cm-focused {
   outline: none;
 }
