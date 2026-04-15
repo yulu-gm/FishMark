@@ -1,0 +1,4 @@
+interface:
+  display_name: "Yulora 任务执行"
+  short_description: "指导 agent 实现一个已定界的 Yulora task。"
+  default_prompt: "使用 $yulora-task-execution 在 Yulora 项目中执行一个已明确范围的完整 task。"

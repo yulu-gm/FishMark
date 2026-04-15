@@ -12,6 +12,9 @@ describe("package scripts", () => {
     expect(packageJson.scripts?.["dev:electron"]).toContain(
       "dist-electron/shared/open-markdown-file.js"
     );
+    expect(packageJson.scripts?.["dev:electron"]).toContain(
+      "dist-electron/shared/save-markdown-file.js"
+    );
   });
 
   it("does not import local shared modules from the preload source", () => {

@@ -6,20 +6,18 @@
 
 ## 当前项目判断
 
-截至 2026-04-15，项目处于“可运行骨架 + 最小打开文件闭环”阶段，而不是“可用编辑器”阶段。
+截至 2026-04-15，项目处于“可运行骨架 + 最小 CodeMirror 编辑闭环”阶段，而不是“完整 Markdown 编辑器”阶段。
 
 从源码可确认的已完成内容：
 - Electron 主进程已能创建窗口
 - preload 已通过 `contextBridge` 暴露最小 API
 - React 渲染器已能显示最小文档界面
 - 已建立安全的 Markdown 文件打开 bridge、UTF-8 读取与错误映射
-- renderer 已具备当前文档状态，并能把已打开文档显示到临时 textarea 中
+- renderer 已具备当前文档状态，并能把已打开文档加载到 CodeMirror 6 编辑器中
 - 存在主进程文件打开测试和 renderer 文档状态测试
 - 基础目录边界已建立：`apps/desktop`、`packages/editor-core`、`packages/markdown-engine`、`tests/e2e`
 
 从源码可确认的未完成内容：
-- 尚未实现 Markdown 文件保存与另存为
-- 尚未接入 CodeMirror 6
 - 尚未接入 micromark
 - 尚未实现任何块级渲染
 - 尚未实现 autosave、crash recovery、image import、outline、search、export
@@ -28,10 +26,13 @@
 
 ## 人工验收建议
 
-如果你现在想人工验收，请验 `TASK-001`、`TASK-002` 和 `TASK-003`：
+如果你现在想人工验收，请验 `TASK-001`、`TASK-002`、`TASK-003`、`TASK-004`、`TASK-007` 和 `TASK-032`：
 - `TASK-001`：确认开发壳能启动，界面能显示占位内容和 preload 平台字段
 - `TASK-002`：确认目录边界存在且未破坏根目录当前可运行外壳
-- `TASK-003`：确认可以通过系统文件对话框打开 UTF-8 `.md`，并把内容加载到当前文档界面和临时 textarea 中
+- `TASK-003`：确认可以通过系统文件对话框打开 UTF-8 `.md`，并把内容加载到当前文档界面和 CodeMirror 编辑区中
+- `TASK-004`：确认编辑后会进入 dirty 状态，`Save` 会写回当前路径，`Save As` 会写入新路径并切换当前文档路径
+- `TASK-007`：确认 CodeMirror 编辑区可输入，undo / redo 快捷键可用，且保存链路仍与当前编辑文本保持一致
+- `TASK-032`：确认 `File` 菜单提供 `Open...`、`Save`、`Save As...`，同时页面壳层不再呈现居中 demo 卡片样式
 
 不要把当前仓库误判为“已经具备完整 Markdown 编辑器 MVP 功能”。
 
@@ -43,10 +44,11 @@
 | TASK-001 | 项目骨架 | CLOSED | 已通过独立评审；确认 Electron / Vite / React / TypeScript 开发壳可建立。 |
 | TASK-002 | 项目结构 | DEV_DONE | 已建立 `apps/desktop`、`packages/editor-core`、`packages/markdown-engine`、`tests/e2e` 目录边界，同时保持根目录开发壳可运行。 |
 | TASK-003 | 打开 Markdown 文件 | DEV_DONE | 已接入安全打开桥接、UTF-8 读取、错误提示与临时 textarea 显示。 |
-| TASK-004 | 保存与另存为 | TODO | 保存状态与另存为流程。 |
+| TASK-004 | 保存与另存为 | DEV_DONE | 已接入安全 Save / Save As bridge、主进程写入、dirty 状态与保存反馈。 |
 | TASK-005 | 自动保存 | TODO | 定时自动保存与失败安全。 |
 | TASK-006 | 最近文件 | TODO | 最近文档列表与失效路径清理。 |
-| TASK-007 | CodeMirror 6 接入 | TODO | 基础编辑面与快捷键。 |
+| TASK-007 | CodeMirror 6 接入 | DEV_DONE | 已用 CodeMirror 6 替换临时 textarea，并接入基础编辑面、快捷键与现有保存链路。 |
+| TASK-032 | 应用菜单与壳层收敛 | DEV_DONE | 已接入原生 `File` 菜单中的 `Open...`、`Save`、`Save As...`，并把 renderer 临时壳收敛为更像桌面编辑器的单栏界面。 |
 | TASK-008 | micromark block map | TODO | Markdown 块解析与测试。 |
 | TASK-009 | active block 状态 | TODO | 随光标更新的当前块跟踪。 |
 | TASK-010 | 标题渲染 | TODO | 标题的源码与渲染切换。 |

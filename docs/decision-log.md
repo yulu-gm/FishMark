@@ -9,6 +9,9 @@
 
 ## 记录
 
+| 2026-04-15 | `TASK-032` 把 `Open / Save / Save As` 收敛到原生 `File` 菜单，并通过单向菜单命令事件通知 renderer。 | 菜单属于桌面应用壳职责，但文件读写边界仍应保持在 `main` 与受限 bridge 内；用主进程菜单发命令、renderer 复用现有处理函数，可以在不复制保存逻辑的前提下消除网页式按钮工具条。 | 对应实现位于 `src/main/application-menu.ts`、`src/main/main.ts`、`src/shared/menu-command.ts`、`src/preload/preload.ts`、`src/renderer/App.tsx`。 |
+| 2026-04-15 | `TASK-007` 让 CodeMirror 6 拥有当前编辑文本状态，renderer shell 只保留文档元数据、持久化快照与 dirty / save 状态。 | 这样更符合 CodeMirror 的事务与历史模型，避免把编辑器做成受控输入框，并为后续 active block、块级渲染和 IME 稳定性优化保留更干净的边界。 | 对应实现位于 `src/renderer/code-editor.ts`、`src/renderer/code-editor-view.tsx`、`src/renderer/document-state.ts`、`src/renderer/App.tsx`。 |
+| 2026-04-15 | `TASK-004` 延续 `TASK-003` 的文件桥接边界，把 Save / Save As 都限制在 `src/main/`，renderer 只维护 `dirty` 与保存状态。 | 这样可以继续满足 Electron 三层分离约束，同时让 `TASK-005` autosave 直接复用当前保存链路，而不需要在 renderer 复制文件写入逻辑。 | 对应实现位于 `src/main/save-markdown-file.ts`、`src/preload/preload.ts`、`src/shared/save-markdown-file.ts`、`src/renderer/document-state.ts`。 |
 | 2026-04-15 | `TASK-003` 保持所有文件系统访问都在 `src/main/`，并只通过单一 `openMarkdownFile()` bridge 向 renderer 暴露打开文件能力。 | 这样可以继续满足 Electron 三层分离约束，避免把不受限制的文件系统能力泄漏给 renderer，也为后续保存能力复用统一结果结构与错误映射打下基础。 | 对应实现位于 `src/main/open-markdown-file.ts`、`src/preload/preload.ts`、`src/shared/open-markdown-file.ts`。 |
 | 2026-04-15 | `TASK-003` 在 CodeMirror 接入前，先使用临时 `<textarea>` 承载已打开文档的内存文本。 | 当前任务目标是建立“打开 Markdown 文件”的最小闭环，而不是提前引入完整编辑器。先用最小可测试界面承载当前文档状态，可以降低 diff 风险，并为 `TASK-004` 保存链路和 `TASK-007` 编辑器接入保留清晰边界。 | renderer 状态与内存编辑逻辑位于 `src/renderer/document-state.ts` 和 `src/renderer/App.tsx`。 |
 | 2026-04-15 | `TASK-002` 先创建工作区边界目录和 README 占位文件，而不迁移当前根目录开发壳。 | 当前可运行应用已经满足 `TASK-001` 的骨架目标，立刻搬迁根目录只会制造额外扰动。保留最小占位结构更容易回退，也能提前显式标出未来 monorepo 结构。 | 已创建 `apps/desktop`、`packages/editor-core`、`packages/markdown-engine`、`tests/e2e`。 |

@@ -1,0 +1,30 @@
+import { describe, expect, it, vi } from "vitest";
+
+import { createApplicationMenuTemplate } from "./application-menu";
+
+describe("createApplicationMenuTemplate", () => {
+  it("defines File commands for open, save, and save as", () => {
+    const dispatchCommand = vi.fn();
+    const template = createApplicationMenuTemplate({ dispatchCommand });
+    const fileMenu = template.find((item) => item.label === "File");
+
+    expect(fileMenu?.submenu).toBeDefined();
+
+    const commandItems = fileMenu?.submenu?.filter((item) => typeof item.click === "function") ?? [];
+
+    expect(commandItems.map((item) => item.label)).toEqual(["Open...", "Save", "Save As..."]);
+    expect(commandItems.map((item) => item.accelerator)).toEqual([
+      "CmdOrCtrl+O",
+      "CmdOrCtrl+S",
+      "Shift+CmdOrCtrl+S"
+    ]);
+
+    commandItems.forEach((item) => item.click?.());
+
+    expect(dispatchCommand.mock.calls).toEqual([
+      ["open-markdown-file"],
+      ["save-markdown-file"],
+      ["save-markdown-file-as"]
+    ]);
+  });
+});

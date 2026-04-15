@@ -2,20 +2,30 @@ import type {
   OpenMarkdownDocument,
   OpenMarkdownFileResult
 } from "../shared/open-markdown-file";
+import type { SaveMarkdownFileResult } from "../shared/save-markdown-file";
 
 export type OpenState = "idle" | "opening";
+export type SaveState = "idle" | "saving";
 
 export type AppState = {
   currentDocument: OpenMarkdownDocument | null;
+  editorLoadRevision: number;
   openState: OpenState;
+  saveState: SaveState;
+  isDirty: boolean;
   errorMessage: string | null;
+  lastSavedContent: string | null;
 };
 
 export function createInitialAppState(): AppState {
   return {
     currentDocument: null,
+    editorLoadRevision: 0,
     openState: "idle",
-    errorMessage: null
+    saveState: "idle",
+    isDirty: false,
+    errorMessage: null,
+    lastSavedContent: null
   };
 }
 
@@ -33,8 +43,12 @@ export function applyOpenMarkdownResult(
   if (result.status === "success") {
     return {
       currentDocument: result.document,
+      editorLoadRevision: currentState.editorLoadRevision + 1,
       openState: "idle",
-      errorMessage: null
+      saveState: "idle",
+      isDirty: false,
+      errorMessage: null,
+      lastSavedContent: result.document.content
     };
   }
 
@@ -53,16 +67,50 @@ export function applyOpenMarkdownResult(
   };
 }
 
-export function updateCurrentDocumentContent(currentState: AppState, nextContent: string): AppState {
+export function applyEditorContentChanged(currentState: AppState, nextContent: string): AppState {
   if (!currentState.currentDocument) {
     return currentState;
   }
 
   return {
     ...currentState,
-    currentDocument: {
-      ...currentState.currentDocument,
-      content: nextContent
-    }
+    isDirty: nextContent !== currentState.lastSavedContent
+  };
+}
+
+export function startSavingDocument(currentState: AppState): AppState {
+  return {
+    ...currentState,
+    saveState: "saving"
+  };
+}
+
+export function applySaveMarkdownResult(
+  currentState: AppState,
+  result: SaveMarkdownFileResult
+): AppState {
+  if (result.status === "success") {
+    return {
+      ...currentState,
+      currentDocument: result.document,
+      saveState: "idle",
+      isDirty: false,
+      errorMessage: null,
+      lastSavedContent: result.document.content
+    };
+  }
+
+  if (result.status === "cancelled") {
+    return {
+      ...currentState,
+      saveState: "idle",
+      errorMessage: null
+    };
+  }
+
+  return {
+    ...currentState,
+    saveState: "idle",
+    errorMessage: result.error.message
   };
 }

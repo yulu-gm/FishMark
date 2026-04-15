@@ -1,0 +1,4 @@
+interface:
+  display_name: "Yulora 任务验收"
+  short_description: "指导 agent 验收、收尾并输出人工验收步骤。"
+  default_prompt: "使用 $yulora-task-acceptance 对已实现的 Yulora task 做验收、收尾并给出人工验收步骤。"
