@@ -19,6 +19,7 @@ export type CreateCodeEditorControllerOptions = {
 export type CodeEditorController = {
   getContent: () => string;
   replaceDocument: (nextContent: string) => void;
+  insertText: (text: string) => void;
   destroy: () => void;
 };
 
@@ -228,6 +229,22 @@ export function createCodeEditorController(
         true
       );
       applyHeadingDecorations(true);
+    },
+    insertText(text: string) {
+      const selection = view.state.selection.main;
+      const nextAnchor = selection.from + text.length;
+
+      view.dispatch({
+        changes: {
+          from: selection.from,
+          to: selection.to,
+          insert: text
+        },
+        selection: {
+          anchor: nextAnchor,
+          head: nextAnchor
+        }
+      });
     },
     destroy() {
       view.dom.removeEventListener("compositionstart", handleCompositionStart);

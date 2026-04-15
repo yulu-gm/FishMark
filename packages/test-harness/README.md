@@ -8,7 +8,7 @@ Static scenario registry and (eventually) runner for the Yulora test workbench.
 - **TASK-027**: step state machine and unified runner.
 - **TASK-028**: workbench debug surface bound to `runScenario()` events.
 - **TASK-029**: agent CLI entry, standard exit codes, artifact protocol.
-- **TASK-030 (current)**: visual-test capture, baseline / diff, workbench canvas panel.
+- **TASK-030**: visual-test support is being redesigned; the first synthetic implementation was withdrawn.
 
 ## Layout
 
@@ -18,7 +18,7 @@ Static scenario registry and (eventually) runner for the Yulora test workbench.
 - `src/runner.ts` — unified `runScenario()` state machine used by the workbench and the CLI.
 - `src/handlers/headless.ts` — headless handler map used by the CLI until a real driver exists.
 - `src/cli/` — agent-facing CLI (`bin.ts`, `run.ts`, `args.ts`, `exit-codes.ts`, `artifacts.ts`).
-- `src/visual/` — visual-test primitives: pixel `compare`, PNG codec, `runVisualCheck`, `VisualApi` (node + memory backends), deterministic gradient fixture.
+- `src/visual/` — experimental visual-test primitives kept out of the default scenario flow until TASK-030 is reworked.
 - `src/index.ts` — public entry point, exports `defaultScenarioRegistry` pre-seeded with the first-party scenarios.
 
 ## CLI
@@ -34,18 +34,9 @@ Flags:
 - `--id <scenario-id>` (required) — must be registered in `defaultScenarioRegistry`.
 - `--step-timeout <ms>` — per-step wall-clock budget (default 5000).
 - `--out-dir <path>` — artifact root (default `.artifacts/test-runs`).
-- `--baseline-root <path>` — visual baseline root (default `tests/visual-baselines`).
-- `--force-visual-drift` — intentionally shift the gradient so visual compares mismatch (demo / failure-path exercise).
 - `--no-artifacts` — skip writing `result.json` / `step-trace.json`.
 
-Each run writes `<out-dir>/<iso-timestamp>-<scenario-id>/result.json` and `step-trace.json`. Visual steps additionally write `visual/<step-id>/actual.png`, `expected.png`, and `diff.png` into the same run directory. Documents carry `protocolVersion: 2`; bump it on any breaking change.
-
-## Visual tests
-
-- Baselines live at `<baseline-root>/<scenario-id>/<step-id>.png` and are auto-created on first run (verdict `baseline-created`, treated as pass).
-- On subsequent runs, actual pixels are diffed against the baseline. A match is silent; a mismatch throws from the handler so the step and scenario status flip to `failed` and the CLI exits with code 1.
-- The workbench paints actual / expected / diff frames into in-memory `<canvas>` elements. Flip the `Force visual drift` toggle to exercise the mismatch path without touching the filesystem.
-- Baseline PNGs are deliberately gitignored under `.artifacts/` and `tests/visual-baselines/`; commit them explicitly when you want a cross-agent reference.
+Each run writes `<out-dir>/<iso-timestamp>-<scenario-id>/result.json` and `step-trace.json`. Documents currently carry `protocolVersion: 2`; bump it on any breaking change.
 
 Exit codes (stable contract):
 

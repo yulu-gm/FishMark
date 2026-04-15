@@ -4,6 +4,5 @@ dist
 dist-electron
 dist-cli
 .artifacts
-tests/visual-baselines
 *.tsbuildinfo
 .DS_Store

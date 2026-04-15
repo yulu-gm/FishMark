@@ -2,24 +2,16 @@ import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import type { ActiveBlockState } from "../../packages/editor-core/src";
 import {
-  VISUAL_SMOKE_HEIGHT,
-  VISUAL_SMOKE_WIDTH,
-  createMemoryVisualApi,
   defaultScenarioRegistry,
-  renderSmokeGradient,
-  runScenario,
   type RunErrorInfo,
   type RunnerEvent,
-  type ScenarioResult,
   type ScenarioStatus,
-  type StepHandlerMap,
-  type StepResult,
   type StepStatus,
-  type TestScenario,
-  type VisualApi,
-  type VisualObservation
+  type TestScenario
 } from "../../packages/test-harness/src";
+import type { ScenarioRunTerminal } from "../shared/test-run-session";
 import { CodeEditorView, type CodeEditorHandle } from "./code-editor-view";
+import { createEditorTestDriver } from "./editor-test-driver";
 import { ScenarioCatalog } from "./scenario-catalog";
 import {
   type AppState,
@@ -35,7 +27,6 @@ import {
 const AUTOSAVE_IDLE_MS = 1000;
 const AUTOSAVE_FAILED_MESSAGE = "Autosave failed. Changes are still in memory.";
 const DEBUG_EVENT_LIMIT = 8;
-const DEBUG_STEP_DELAY_MS = 40;
 
 export default function App() {
   const runtimeMode = resolveRuntimeModeFromLocation();
@@ -223,6 +214,51 @@ function EditorApp({ yulora }: { yulora: Window["yulora"] }) {
     );
   });
 
+  const handleEditorTestCommand = useEffectEvent(async (payload: {
+    sessionId: string;
+    commandId: string;
+    command: Parameters<ReturnType<typeof createEditorTestDriver>["run"]>[0];
+  }): Promise<void> => {
+    const driver = createEditorTestDriver({
+      getState: () => stateRef.current,
+      applyState,
+      resetAutosaveRuntime,
+      editor: {
+        getContent: getEditorContent,
+        setContent: (content: string) => {
+          editorRef.current?.setContent(content);
+        },
+        insertText: (text: string) => {
+          editorRef.current?.insertText(text);
+        }
+      },
+      setEditorContentSnapshot: (content: string) => {
+        editorContentRef.current = content;
+      },
+      openMarkdownFileFromPath: (targetPath: string) => yulora.openMarkdownFileFromPath(targetPath),
+      saveMarkdownFile: (input) => yulora.saveMarkdownFile(input)
+    });
+
+    try {
+      const result = await driver.run(payload.command);
+      await yulora.completeEditorTestCommand({
+        sessionId: payload.sessionId,
+        commandId: payload.commandId,
+        result
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await yulora.completeEditorTestCommand({
+        sessionId: payload.sessionId,
+        commandId: payload.commandId,
+        result: {
+          ok: false,
+          message
+        }
+      });
+    }
+  });
+
   useEffect(() => {
     return yulora.onMenuCommand((command) => {
       if (command === "open-markdown-file") {
@@ -236,6 +272,12 @@ function EditorApp({ yulora }: { yulora: Window["yulora"] }) {
       }
 
       void handleSaveMarkdownAs();
+    });
+  }, [yulora]);
+
+  useEffect(() => {
+    return yulora.onEditorTestCommand((payload) => {
+      void handleEditorTestCommand(payload);
     });
   }, [yulora]);
 
@@ -333,67 +375,74 @@ function TestWorkbenchApp({ hasBridge }: { hasBridge: boolean }) {
     ? defaultScenarioRegistry.get(selectedScenarioId)
     : scenarios[0] ?? null;
   const [runState, setRunState] = useState<DebugRunState>(() => createIdleDebugRunState(selectedScenario));
-  const [forceVisualDrift, setForceVisualDrift] = useState(false);
-  const [visualObservations, setVisualObservations] = useState<readonly VisualObservation[]>([]);
-  const activeRunControllerRef = useRef<AbortController | null>(null);
+  const activeRunIdRef = useRef<string | null>(null);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!activeRunControllerRef.current) {
-      setRunState(createIdleDebugRunState(selectedScenario));
-      setVisualObservations([]);
-    }
-  }, [selectedScenario]);
-
-  async function handleRunSelectedScenario(): Promise<void> {
-    if (!selectedScenario || activeRunControllerRef.current) {
+    if (!hasBridge) {
       return;
     }
 
-    const controller = new AbortController();
-    activeRunControllerRef.current = controller;
-    setRunState(createIdleDebugRunState(selectedScenario));
-    setVisualObservations([]);
+    const detachEvent = window.yulora.onScenarioRunEvent((payload) => {
+      if (activeRunIdRef.current && payload.runId !== activeRunIdRef.current) {
+        return;
+      }
 
-    const collectedObservations: VisualObservation[] = [];
-    const visualApi = createWorkbenchVisualApi((observation) => {
-      collectedObservations.push(observation);
-      setVisualObservations((current) => [...current, observation]);
+      const scenario = defaultScenarioRegistry.get(payload.event.scenarioId);
+      if (!scenario) {
+        return;
+      }
+
+      setRunState((current) => applyRunnerEventToDebugState(current, scenario, payload.event));
     });
 
-    try {
-      const result = await runScenario(selectedScenario, {
-        handlers: createWorkbenchStepHandlers(selectedScenario, {
-          visualApi,
-          forceVisualDrift
-        }),
-        signal: controller.signal,
-        stepTimeoutMs: 2_000,
-        onEvent: (event) => {
-          setRunState((current) => applyRunnerEventToDebugState(current, selectedScenario, event));
-        }
-      });
+    const detachTerminal = window.yulora.onScenarioRunTerminal((payload) => {
+      if (activeRunIdRef.current && payload.runId !== activeRunIdRef.current) {
+        return;
+      }
 
-      setRunState((current) => applyScenarioResultToDebugState(current, selectedScenario, result));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setRunState((current) =>
-        applyScenarioResultToDebugState(current, selectedScenario, {
-          scenarioId: selectedScenario.id,
-          status: "failed",
-          startedAt: current.startedAt ?? Date.now(),
-          finishedAt: Date.now(),
-          durationMs: 0,
-          steps: current.steps.map((step) => ({ id: step.id, status: step.status })),
-          error: { message, kind: "step" }
-        })
-      );
-    } finally {
-      activeRunControllerRef.current = null;
+      setRunState((current) => applyScenarioRunTerminalToDebugState(current, payload));
+      activeRunIdRef.current = null;
+      setActiveRunId(null);
+    });
+
+    return () => {
+      detachEvent();
+      detachTerminal();
+    };
+  }, [hasBridge]);
+
+  async function handleRunSelectedScenario(): Promise<void> {
+    if (!selectedScenario || !hasBridge || activeRunIdRef.current) {
+      return;
     }
+
+    setRunState(createIdleDebugRunState(selectedScenario));
+
+    const { runId } = await window.yulora.startScenarioRun({ scenarioId: selectedScenario.id });
+    activeRunIdRef.current = runId;
+    setActiveRunId(runId);
   }
 
   function handleInterruptRun(): void {
-    activeRunControllerRef.current?.abort(new Error("Interrupted from workbench control."));
+    if (!activeRunIdRef.current) {
+      return;
+    }
+
+    void window.yulora.interruptScenarioRun({ runId: activeRunIdRef.current });
+  }
+
+  function handleSelectScenario(nextScenarioId: string | null): void {
+    setSelectedScenarioId(nextScenarioId);
+
+    if (activeRunIdRef.current) {
+      return;
+    }
+
+    const nextScenario = nextScenarioId
+      ? defaultScenarioRegistry.get(nextScenarioId)
+      : scenarios[0] ?? null;
+    setRunState(createIdleDebugRunState(nextScenario));
   }
 
   return (
@@ -440,7 +489,7 @@ function TestWorkbenchApp({ hasBridge }: { hasBridge: boolean }) {
             Sourced from <code>packages/test-harness</code>. Select a scenario to inspect its steps.
           </p>
           <ScenarioCatalog
-            onSelect={setSelectedScenarioId}
+            onSelect={handleSelectScenario}
             registry={defaultScenarioRegistry}
             selectedId={selectedScenario?.id ?? null}
           />
@@ -456,7 +505,7 @@ function TestWorkbenchApp({ hasBridge }: { hasBridge: boolean }) {
           <div className="workbench-action-row">
             <button
               className="test-workbench-run"
-              disabled={!selectedScenario || Boolean(activeRunControllerRef.current)}
+              disabled={!selectedScenario || !hasBridge || Boolean(activeRunId)}
               onClick={() => {
                 void handleRunSelectedScenario();
               }}
@@ -466,21 +515,12 @@ function TestWorkbenchApp({ hasBridge }: { hasBridge: boolean }) {
             </button>
             <button
               className="test-workbench-secondary"
-              disabled={!activeRunControllerRef.current}
+              disabled={!activeRunId}
               onClick={handleInterruptRun}
               type="button"
             >
               Interrupt Active Run
             </button>
-            <label className="test-workbench-toggle">
-              <input
-                checked={forceVisualDrift}
-                disabled={Boolean(activeRunControllerRef.current)}
-                onChange={(event) => setForceVisualDrift(event.target.checked)}
-                type="checkbox"
-              />
-              Force visual drift
-            </label>
           </div>
           <dl className="debug-run-meta">
             <div>
@@ -497,6 +537,10 @@ function TestWorkbenchApp({ hasBridge }: { hasBridge: boolean }) {
                 {runState.completedSteps} / {runState.totalSteps}
               </dd>
             </div>
+            <div>
+              <dt>Run ID</dt>
+              <dd>{activeRunId ?? runState.runId ?? "Waiting to start"}</dd>
+            </div>
           </dl>
           {runState.terminalError ? (
             <div
@@ -511,6 +555,13 @@ function TestWorkbenchApp({ hasBridge }: { hasBridge: boolean }) {
                 {" · "}
                 {runState.terminalError.message}
               </p>
+            </div>
+          ) : null}
+          {runState.resultPath || runState.stepTracePath ? (
+            <div className="debug-run-artifacts">
+              <p className="debug-run-error-label">Artifacts</p>
+              {runState.resultPath ? <p>{runState.resultPath}</p> : null}
+              {runState.stepTracePath ? <p>{runState.stepTracePath}</p> : null}
             </div>
           ) : null}
           <div className="debug-event-feed">
@@ -560,116 +611,8 @@ function TestWorkbenchApp({ hasBridge }: { hasBridge: boolean }) {
             ))}
           </ul>
         </article>
-
-        {visualObservations.length > 0 ? (
-          <article className="workbench-panel workbench-panel-wide visual-results-panel">
-            <p className="workbench-panel-label">Visual Results</p>
-            <h2>
-              {visualObservations.length} visual step
-              {visualObservations.length === 1 ? "" : "s"}
-            </h2>
-            <p>
-              actual / expected / diff frames painted straight from the in-memory RGBA buffers
-              produced by the visual api. A mismatch marks the step red in the Test Process panel.
-            </p>
-            <ul className="visual-result-list">
-              {visualObservations.map((observation) => (
-                <VisualResultCard
-                  key={`${observation.scenarioId}-${observation.stepId}`}
-                  observation={observation}
-                />
-              ))}
-            </ul>
-          </article>
-        ) : null}
       </section>
     </main>
-  );
-}
-
-function VisualResultCard({ observation }: { observation: VisualObservation }) {
-  return (
-    <li className={`visual-result-card verdict-${observation.verdict}`}>
-      <header className="visual-result-header">
-        <div>
-          <p className="visual-result-step">{observation.stepId}</p>
-          <p className="visual-result-meta">
-            {observation.width} × {observation.height}
-            {" · "}
-            {observation.mismatchedPixels} px ({(observation.mismatchRatio * 100).toFixed(2)}%)
-          </p>
-        </div>
-        <span className={`visual-result-verdict verdict-${observation.verdict}`}>
-          {observation.verdict}
-        </span>
-      </header>
-      {observation.message ? (
-        <p className="visual-result-message">{observation.message}</p>
-      ) : null}
-      <div className="visual-result-frames">
-        {observation.actualRgba ? (
-          <VisualFrame
-            label="actual"
-            rgba={observation.actualRgba}
-            width={observation.width}
-            height={observation.height}
-          />
-        ) : null}
-        {observation.expectedRgba ? (
-          <VisualFrame
-            label="expected"
-            rgba={observation.expectedRgba}
-            width={observation.width}
-            height={observation.height}
-          />
-        ) : null}
-        {observation.diffRgba ? (
-          <VisualFrame
-            label="diff"
-            rgba={observation.diffRgba}
-            width={observation.width}
-            height={observation.height}
-          />
-        ) : null}
-      </div>
-    </li>
-  );
-}
-
-function VisualFrame({
-  label,
-  rgba,
-  width,
-  height
-}: {
-  label: string;
-  rgba: Uint8Array;
-  width: number;
-  height: number;
-}) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    const image = ctx.createImageData(width, height);
-    image.data.set(rgba);
-    ctx.putImageData(image, 0, 0);
-  }, [rgba, width, height]);
-
-  return (
-    <figure className="visual-frame">
-      <canvas
-        aria-label={`${label} frame`}
-        className="visual-frame-canvas"
-        ref={canvasRef}
-      />
-      <figcaption>{label}</figcaption>
-    </figure>
   );
 }
 
@@ -708,6 +651,7 @@ type DebugEventEntry = {
 };
 
 type DebugRunState = {
+  readonly runId?: string;
   readonly scenarioId: string | null;
   readonly status: "idle" | ScenarioStatus;
   readonly currentStepId: string | null;
@@ -718,11 +662,14 @@ type DebugRunState = {
   readonly startedAt?: number;
   readonly finishedAt?: number;
   readonly durationMs?: number;
+  readonly resultPath?: string;
+  readonly stepTracePath?: string;
   readonly terminalError?: RunErrorInfo & { readonly stepId?: string };
 };
 
 function createIdleDebugRunState(scenario: TestScenario | null): DebugRunState {
   return {
+    runId: undefined,
     scenarioId: scenario?.id ?? null,
     status: "idle",
     currentStepId: null,
@@ -808,44 +755,19 @@ function applyRunnerEventToDebugState(
   };
 }
 
-function applyScenarioResultToDebugState(
+function applyScenarioRunTerminalToDebugState(
   current: DebugRunState,
-  scenario: TestScenario,
-  result: ScenarioResult
+  terminal: ScenarioRunTerminal
 ): DebugRunState {
-  const steps = mergeScenarioStepsWithResult(scenario, result.steps);
-
   return {
     ...current,
-    scenarioId: scenario.id,
-    status: result.status,
-    currentStepId: result.error?.stepId ?? current.currentStepId,
-    totalSteps: scenario.steps.length,
-    completedSteps: countCompletedSteps(steps),
-    steps,
-    startedAt: result.startedAt,
-    finishedAt: result.finishedAt,
-    durationMs: result.durationMs,
-    terminalError: result.error
+    runId: terminal.runId,
+    status: terminal.status,
+    currentStepId: terminal.error?.stepId ?? current.currentStepId,
+    resultPath: terminal.resultPath,
+    stepTracePath: terminal.stepTracePath,
+    terminalError: terminal.error
   };
-}
-
-function mergeScenarioStepsWithResult(
-  scenario: TestScenario,
-  stepResults: readonly StepResult[]
-): readonly DebugRunStep[] {
-  return scenario.steps.map((step) => {
-    const result = stepResults.find((item) => item.id === step.id);
-
-    return {
-      id: step.id,
-      title: step.title,
-      kind: step.kind,
-      status: result?.status ?? "pending",
-      durationMs: result?.durationMs,
-      error: result?.error
-    };
-  });
 }
 
 function countCompletedSteps(steps: readonly DebugRunStep[]): number {
@@ -884,89 +806,6 @@ function createDebugEventEntry(event: RunnerEvent): DebugEventEntry {
       event.error ? `: ${event.error.message}` : ""
     }`
   };
-}
-
-function createWorkbenchStepHandlers(
-  scenario: TestScenario,
-  deps: { readonly visualApi: VisualApi; readonly forceVisualDrift: boolean }
-): StepHandlerMap {
-  let capturedGradient: Uint8Array | null = null;
-  return Object.fromEntries(
-    scenario.steps.map((step) => [
-      step.id,
-      async ({ signal }) => {
-        await waitForDebugDelay(DEBUG_STEP_DELAY_MS, signal);
-
-        if (scenario.id === "open-markdown-file-basic" && step.id === "select-fixture") {
-          throw new Error("Fixture picker automation is not implemented in TASK-028.");
-        }
-
-        if (scenario.id === "visual-smoke-gradient") {
-          if (step.id === "render-gradient") {
-            capturedGradient = renderSmokeGradient({ drift: deps.forceVisualDrift });
-            return;
-          }
-          if (step.id === "compare-gradient") {
-            if (!capturedGradient) {
-              throw new Error(
-                "render-gradient did not capture a gradient; cannot run compare-gradient."
-              );
-            }
-            const observation = deps.visualApi.check({
-              scenarioId: scenario.id,
-              stepId: step.id,
-              width: VISUAL_SMOKE_WIDTH,
-              height: VISUAL_SMOKE_HEIGHT,
-              actualRgba: capturedGradient
-            });
-            if (observation.verdict === "mismatch") {
-              throw new Error(
-                observation.message ?? `Visual mismatch in step ${step.id}.`
-              );
-            }
-          }
-        }
-      }
-    ])
-  ) as StepHandlerMap;
-}
-
-/**
- * Workbench visual api: resolves the baseline by re-rendering the same
- * deterministic fixture. That keeps the flow self-contained (no filesystem
- * access from the renderer) and lets the drift toggle produce a guaranteed
- * mismatch on demand.
- */
-function createWorkbenchVisualApi(
-  onObservation: (observation: VisualObservation) => void
-): VisualApi {
-  return createMemoryVisualApi({
-    resolveBaseline: ({ scenarioId }) =>
-      scenarioId === "visual-smoke-gradient" ? renderSmokeGradient({ drift: false }) : null,
-    onObservation
-  });
-}
-
-function waitForDebugDelay(delayMs: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal.aborted) {
-      reject(signal.reason ?? new Error("Run aborted before the step started."));
-      return;
-    }
-
-    const timeoutId = setTimeout(() => {
-      signal.removeEventListener("abort", handleAbort);
-      resolve();
-    }, delayMs);
-
-    const handleAbort = () => {
-      clearTimeout(timeoutId);
-      signal.removeEventListener("abort", handleAbort);
-      reject(signal.reason ?? new Error("Run interrupted."));
-    };
-
-    signal.addEventListener("abort", handleAbort, { once: true });
-  });
 }
 
 function formatRunStatus(status: DebugRunState["status"] | StepStatus): string {

@@ -14,6 +14,8 @@ import type { ActiveBlockState } from "../../packages/editor-core/src";
 
 export type CodeEditorHandle = {
   getContent: () => string;
+  setContent: (content: string) => void;
+  insertText: (text: string) => void;
 };
 
 type CodeEditorViewProps = {
@@ -74,7 +76,13 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
     useImperativeHandle(
       ref,
       () => ({
-        getContent: () => controllerRef.current?.getContent() ?? initialContent
+        getContent: () => controllerRef.current?.getContent() ?? initialContent,
+        setContent: (content: string) => {
+          controllerRef.current?.replaceDocument(content);
+        },
+        insertText: (text: string) => {
+          controllerRef.current?.insertText(text);
+        }
       }),
       [initialContent]
     );

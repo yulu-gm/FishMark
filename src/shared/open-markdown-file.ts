@@ -29,6 +29,7 @@ export type OpenMarkdownFileResult =
     };
 
 export const OPEN_MARKDOWN_FILE_CHANNEL = "yulora:open-markdown-file";
+export const OPEN_MARKDOWN_FILE_FROM_PATH_CHANNEL = "yulora:open-markdown-file-from-path";
 
 export const OPEN_MARKDOWN_FILE_ERROR_MESSAGES: Record<OpenMarkdownFileErrorCode, string> = {
   "dialog-failed": "The file picker could not be opened.",

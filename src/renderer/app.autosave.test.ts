@@ -5,15 +5,20 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { OpenMarkdownFileResult } from "../shared/open-markdown-file";
+import type { EditorTestCommandEnvelope } from "../shared/editor-test-command";
 import type {
   SaveMarkdownFileAsInput,
   SaveMarkdownFileInput,
   SaveMarkdownFileResult
 } from "../shared/save-markdown-file";
+import type { RunnerEventEnvelope, ScenarioRunTerminal } from "../shared/test-run-session";
 import App from "./App";
 import * as codeEditorViewModule from "./code-editor-view";
 
 type MenuCommandListener = (command: "open-markdown-file" | "save-markdown-file" | "save-markdown-file-as") => void;
+type EditorTestCommandListener = (payload: EditorTestCommandEnvelope) => void;
+type ScenarioRunEventListener = (payload: RunnerEventEnvelope) => void;
+type ScenarioRunTerminalListener = (payload: ScenarioRunTerminal) => void;
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean;
@@ -92,6 +97,7 @@ describe("App autosave", () => {
   let container: HTMLDivElement;
   let root: Root;
   let menuCommandListener: MenuCommandListener | null;
+  let editorTestCommandListener: EditorTestCommandListener | null;
   let openMarkdownFile: ReturnType<typeof vi.fn<() => Promise<OpenMarkdownFileResult>>>;
   let saveMarkdownFile: ReturnType<
     typeof vi.fn<(input: SaveMarkdownFileInput) => Promise<SaveMarkdownFileResult>>
@@ -105,6 +111,7 @@ describe("App autosave", () => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     codeEditorMock.reset();
     menuCommandListener = null;
+    editorTestCommandListener = null;
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -137,9 +144,31 @@ describe("App autosave", () => {
       platform: "win32",
       runtimeMode: "editor",
       openMarkdownFile,
+      openMarkdownFileFromPath: vi.fn().mockResolvedValue({
+        status: "cancelled"
+      }),
       saveMarkdownFile,
       saveMarkdownFileAs,
       openEditorTestWindow: vi.fn().mockResolvedValue(undefined),
+      startScenarioRun: vi.fn().mockResolvedValue({ runId: "unused-run" }),
+      interruptScenarioRun: vi.fn().mockResolvedValue(undefined),
+      onScenarioRunEvent(listener: ScenarioRunEventListener) {
+        void listener;
+        return () => {};
+      },
+      onScenarioRunTerminal(listener: ScenarioRunTerminalListener) {
+        void listener;
+        return () => {};
+      },
+      onEditorTestCommand(listener: EditorTestCommandListener) {
+        editorTestCommandListener = listener;
+        return () => {
+          if (editorTestCommandListener === listener) {
+            editorTestCommandListener = null;
+          }
+        };
+      },
+      completeEditorTestCommand: vi.fn().mockResolvedValue(undefined),
       onMenuCommand(listener: MenuCommandListener) {
         menuCommandListener = listener;
         return () => {
@@ -303,6 +332,33 @@ describe("App autosave", () => {
     expect(saveMarkdownFile).toHaveBeenNthCalledWith(2, {
       path: "C:/notes/today.md",
       content: "# Second autosave\n"
+    });
+  });
+
+  it("executes editor test commands through the allowlist driver and completes the result", async () => {
+    await renderAndOpenDocument();
+
+    await act(async () => {
+      await editorTestCommandListener?.({
+        sessionId: "editor-session-1",
+        commandId: "command-1",
+        command: {
+          type: "assert-document-path",
+          expectedPath: "C:/notes/today.md"
+        }
+      });
+    });
+
+    expect(window.yulora.completeEditorTestCommand).toHaveBeenCalledWith({
+      sessionId: "editor-session-1",
+      commandId: "command-1",
+      result: {
+        ok: true,
+        message: "Document path matched.",
+        details: {
+          actualPath: "C:/notes/today.md"
+        }
+      }
     });
   });
 

@@ -4,14 +4,19 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { RunnerEvent, ScenarioResult, TestScenario } from "../../packages/test-harness/src";
+import type { TestScenario } from "../../packages/test-harness/src";
+import type {
+  RunnerEventEnvelope,
+  ScenarioRunTerminal,
+  ScenarioRunnerEvent
+} from "../shared/test-run-session";
 import App from "./App";
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean;
 }
 
-const { runScenarioMock, scenarios, registry } = vi.hoisted(() => {
+const { registry } = vi.hoisted(() => {
   const scenarios: TestScenario[] = [
     {
       id: "app-shell-startup",
@@ -51,8 +56,6 @@ const { runScenarioMock, scenarios, registry } = vi.hoisted(() => {
   };
 
   return {
-    runScenarioMock: vi.fn(),
-    scenarios,
     registry
   };
 });
@@ -65,36 +68,20 @@ vi.mock("../../packages/test-harness/src", async () => {
 
   return {
     ...actual,
-    defaultScenarioRegistry: registry,
-    runScenario: runScenarioMock
+    defaultScenarioRegistry: registry
   };
 });
-
-function createScenarioResult(
-  scenario: TestScenario,
-  overrides: Partial<ScenarioResult> = {}
-): ScenarioResult {
-  return {
-    scenarioId: scenario.id,
-    status: "passed",
-    startedAt: 100,
-    finishedAt: 160,
-    durationMs: 60,
-    steps: scenario.steps.map((step, index) => ({
-      id: step.id,
-      status: "passed",
-      startedAt: 100 + index * 20,
-      finishedAt: 120 + index * 20,
-      durationMs: 20
-    })),
-    ...overrides
-  };
-}
 
 describe("Test workbench shell", () => {
   let container: HTMLDivElement;
   let root: Root;
   let openEditorTestWindow: ReturnType<typeof vi.fn<() => Promise<void>>>;
+  let startScenarioRun: ReturnType<
+    typeof vi.fn<(input: { scenarioId: string }) => Promise<{ runId: string }>>
+  >;
+  let interruptScenarioRun: ReturnType<typeof vi.fn<(input: { runId: string }) => Promise<void>>>;
+  let scenarioRunEventListener: ((payload: RunnerEventEnvelope) => void) | null;
+  let scenarioRunTerminalListener: ((payload: ScenarioRunTerminal) => void) | null;
 
   beforeEach(() => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -103,15 +90,37 @@ describe("Test workbench shell", () => {
     document.body.appendChild(container);
     root = createRoot(container);
     openEditorTestWindow = vi.fn<() => Promise<void>>().mockResolvedValue();
-    runScenarioMock.mockReset();
+    startScenarioRun = vi
+      .fn<(input: { scenarioId: string }) => Promise<{ runId: string }>>()
+      .mockResolvedValue({ runId: "run-1" });
+    interruptScenarioRun = vi.fn<(input: { runId: string }) => Promise<void>>().mockResolvedValue();
+    scenarioRunEventListener = null;
+    scenarioRunTerminalListener = null;
 
     window.yulora = {
       platform: "win32",
       runtimeMode: "test-workbench",
       openMarkdownFile: vi.fn(),
+      openMarkdownFileFromPath: vi.fn(),
       saveMarkdownFile: vi.fn(),
       saveMarkdownFileAs: vi.fn(),
       openEditorTestWindow,
+      startScenarioRun,
+      interruptScenarioRun,
+      onScenarioRunEvent: vi.fn((listener) => {
+        scenarioRunEventListener = listener;
+        return () => {
+          scenarioRunEventListener = null;
+        };
+      }),
+      onScenarioRunTerminal: vi.fn((listener) => {
+        scenarioRunTerminalListener = listener;
+        return () => {
+          scenarioRunTerminalListener = null;
+        };
+      }),
+      onEditorTestCommand: vi.fn(() => () => {}),
+      completeEditorTestCommand: vi.fn().mockResolvedValue(undefined),
       onMenuCommand: vi.fn(() => () => {})
     } as Window["yulora"];
   });
@@ -161,27 +170,7 @@ describe("Test workbench shell", () => {
     expect(detail?.textContent).toContain("open-markdown-file-basic");
   });
 
-  it("shows running debug state and live events while a scenario is in progress", async () => {
-    let finishRun: (() => void) | null = null;
-
-    runScenarioMock.mockImplementation(
-      async (scenario: TestScenario, options: { onEvent?: (event: RunnerEvent) => void }) => {
-        options.onEvent?.({ type: "scenario-start", scenarioId: scenario.id, at: 100 });
-        options.onEvent?.({
-          type: "step-start",
-          scenarioId: scenario.id,
-          stepId: scenario.steps[0]!.id,
-          at: 110
-        });
-
-        await new Promise<void>((resolve) => {
-          finishRun = resolve;
-        });
-
-        return createScenarioResult(scenario);
-      }
-    );
-
+  it("starts the selected scenario through the run bridge and renders live events", async () => {
     await act(async () => {
       root.render(createElement(App));
     });
@@ -192,142 +181,95 @@ describe("Test workbench shell", () => {
 
     await act(async () => {
       runButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(startScenarioRun).toHaveBeenCalledWith({ scenarioId: "app-shell-startup" });
+
+    await act(async () => {
+      scenarioRunEventListener?.({
+        runId: "run-1",
+        event: { type: "scenario-start", scenarioId: "app-shell-startup", at: 100 } as ScenarioRunnerEvent
+      });
+      scenarioRunEventListener?.({
+        runId: "run-1",
+        event: {
+          type: "step-start",
+          scenarioId: "app-shell-startup",
+          stepId: "launch-dev-shell",
+          at: 110
+        } as ScenarioRunnerEvent
+      });
       await Promise.resolve();
     });
 
     expect(container.textContent).toContain("Running");
-    expect(container.textContent).toContain("Current step");
     expect(container.textContent).toContain("launch-dev-shell");
     expect(container.textContent).toContain("scenario-start");
     expect(container.textContent).toContain("step-start");
-
-    await act(async () => {
-      finishRun?.();
-      await Promise.resolve();
-    });
   });
 
-  it("shows the failed step and error message when a run fails", async () => {
-    runScenarioMock.mockImplementation(
-      async (scenario: TestScenario, options: { onEvent?: (event: RunnerEvent) => void }) => {
-        options.onEvent?.({ type: "scenario-start", scenarioId: scenario.id, at: 100 });
-        options.onEvent?.({
-          type: "step-start",
-          scenarioId: scenario.id,
-          stepId: scenario.steps[0]!.id,
-          at: 110
-        });
-        options.onEvent?.({
+  it("renders terminal failure details from the subscribed run stream", async () => {
+    await act(async () => {
+      root.render(createElement(App));
+    });
+
+    const runButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent?.includes("Run Selected Scenario")
+    );
+
+    await act(async () => {
+      runButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      scenarioRunEventListener?.({
+        runId: "run-1",
+        event: { type: "scenario-start", scenarioId: "app-shell-startup", at: 100 } as ScenarioRunnerEvent
+      });
+      scenarioRunEventListener?.({
+        runId: "run-1",
+        event: {
           type: "step-end",
-          scenarioId: scenario.id,
-          stepId: scenario.steps[0]!.id,
+          scenarioId: "app-shell-startup",
+          stepId: "launch-dev-shell",
           status: "failed",
           at: 125,
           durationMs: 15,
           error: { message: "boom", kind: "step" }
-        });
-        options.onEvent?.({
+        } as ScenarioRunnerEvent
+      });
+      scenarioRunEventListener?.({
+        runId: "run-1",
+        event: {
           type: "scenario-end",
-          scenarioId: scenario.id,
+          scenarioId: "app-shell-startup",
           status: "failed",
           at: 125,
-          error: { message: "boom", kind: "step", stepId: scenario.steps[0]!.id }
-        });
-
-        return createScenarioResult(scenario, {
-          status: "failed",
-          finishedAt: 125,
-          durationMs: 25,
-          steps: [
-            {
-              id: scenario.steps[0]!.id,
-              status: "failed",
-              startedAt: 110,
-              finishedAt: 125,
-              durationMs: 15,
-              error: { message: "boom", kind: "step" }
-            },
-            ...scenario.steps.slice(1).map((step) => ({ id: step.id, status: "skipped" as const }))
-          ],
-          error: { message: "boom", kind: "step", stepId: scenario.steps[0]!.id }
-        });
-      }
-    );
-
-    await act(async () => {
-      root.render(createElement(App));
-    });
-
-    const runButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
-      (button) => button.textContent?.includes("Run Selected Scenario")
-    );
-
-    await act(async () => {
-      runButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+          error: { message: "boom", kind: "step", stepId: "launch-dev-shell" }
+        } as ScenarioRunnerEvent
+      });
+      scenarioRunTerminalListener?.({
+        runId: "run-1",
+        exitCode: 1,
+        status: "failed",
+        resultPath: "out/result.json",
+        stepTracePath: "out/step-trace.json",
+        error: { message: "boom", kind: "step", stepId: "launch-dev-shell" }
+      });
       await Promise.resolve();
     });
 
     expect(container.textContent).toContain("Failed");
-    expect(container.textContent).toContain("launch-dev-shell");
     expect(container.textContent).toContain("boom");
-    expect(container.textContent).toContain("step");
+    expect(container.textContent).toContain("launch-dev-shell");
+    expect(container.textContent).toContain("out/result.json");
   });
 
-  it("shows interrupted status and abort reason when the run is aborted", async () => {
-    runScenarioMock.mockImplementation(
-      async (scenario: TestScenario, options: { onEvent?: (event: RunnerEvent) => void }) => {
-        options.onEvent?.({ type: "scenario-start", scenarioId: scenario.id, at: 100 });
-        options.onEvent?.({
-          type: "step-start",
-          scenarioId: scenario.id,
-          stepId: scenario.steps[1]!.id,
-          at: 120
-        });
-        options.onEvent?.({
-          type: "scenario-end",
-          scenarioId: scenario.id,
-          status: "interrupted",
-          at: 140,
-          error: {
-            message: "Step invoke-open-command aborted by external signal.",
-            kind: "abort",
-            stepId: scenario.steps[1]!.id
-          }
-        });
-
-        return createScenarioResult(scenario, {
-          status: "interrupted",
-          finishedAt: 140,
-          durationMs: 40,
-          steps: [
-            { id: scenario.steps[0]!.id, status: "passed", startedAt: 100, finishedAt: 120, durationMs: 20 },
-            {
-              id: scenario.steps[1]!.id,
-              status: "skipped",
-              startedAt: 120,
-              finishedAt: 140,
-              durationMs: 20,
-              error: { message: "Step invoke-open-command aborted by external signal.", kind: "abort" }
-            },
-            { id: scenario.steps[2]!.id, status: "skipped" }
-          ],
-          error: {
-            message: "Step invoke-open-command aborted by external signal.",
-            kind: "abort",
-            stepId: scenario.steps[1]!.id
-          }
-        });
-      }
-    );
-
+  it("interrupts the active run through the run bridge", async () => {
     await act(async () => {
       root.render(createElement(App));
-    });
-
-    const items = container.querySelectorAll<HTMLButtonElement>(".scenario-list-item");
-    await act(async () => {
-      items[1]!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
     });
 
     const runButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
@@ -339,14 +281,19 @@ describe("Test workbench shell", () => {
       await Promise.resolve();
     });
 
-    expect(container.textContent).toContain("Interrupted");
-    expect(container.textContent).toContain("invoke-open-command");
-    expect(container.textContent).toContain("abort");
+    const interruptButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent?.includes("Interrupt Active Run")
+    );
+
+    await act(async () => {
+      interruptButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(interruptScenarioRun).toHaveBeenCalledWith({ runId: "run-1" });
   });
 
   it("requests a dedicated editor window when the launch button is clicked", async () => {
-    runScenarioMock.mockResolvedValue(createScenarioResult(scenarios[0]!));
-
     await act(async () => {
       root.render(createElement(App));
     });
@@ -354,8 +301,6 @@ describe("Test workbench shell", () => {
     const launchButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
       (button) => button.textContent?.includes("Open Editor Test Window")
     );
-
-    expect(launchButton?.textContent).toContain("Open Editor Test Window");
 
     await act(async () => {
       launchButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));

@@ -72,7 +72,7 @@
 | TASK-027 | 测试运行器 | TODO | 统一运行器与步骤状态机。 |
 | TASK-028 | Debug 界面 | DEV_DONE | 已将 runner 事件流接入测试工作台 renderer，交付场景概览、步骤追踪、最近事件流，以及失败 / 中断原因展示。 |
 | TASK-029 | CLI 与工件协议 | TODO | agent 统一 CLI 入口、退出码与结果目录。 |
-| TASK-030 | visual-test 支持 | TODO | 截图、基线、diff 与视觉结果展示。 |
+| TASK-030 | visual-test 支持 | TODO | 首版 synthetic gradient 方案已回退；需按真实截图与真实结果来源重做。 |
 | TASK-031 | 核心场景扩充 | TODO | 首批可持续使用的核心测试场景集。 |
 | TASK-033 | 代码块渲染 | TODO | fenced code block 的源码/渲染切换与 round-trip 保真。 |
 | TASK-034 | 行内格式渲染 | TODO | bold / italic / inline code / strikethrough 的激活切换。 |

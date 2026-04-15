@@ -19,9 +19,7 @@ describe("parseCliArgs", () => {
         scenarioId: "app-shell-startup",
         stepTimeoutMs: DEFAULT_STEP_TIMEOUT_MS,
         outDir: DEFAULT_OUT_DIR,
-        writeArtifacts: true,
-        baselineRoot: "tests/visual-baselines",
-        forceVisualDrift: false
+        writeArtifacts: true
       });
     }
   });

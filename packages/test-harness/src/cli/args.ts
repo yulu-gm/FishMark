@@ -11,8 +11,6 @@ export type CliOptions = {
   readonly stepTimeoutMs: number;
   readonly outDir: string;
   readonly writeArtifacts: boolean;
-  readonly baselineRoot: string;
-  readonly forceVisualDrift: boolean;
 };
 
 export type CliParseOk = { readonly kind: "ok"; readonly options: CliOptions };
@@ -22,7 +20,6 @@ export type CliParseResult = CliParseOk | CliParseHelp | CliParseError;
 
 export const DEFAULT_STEP_TIMEOUT_MS = 5_000;
 export const DEFAULT_OUT_DIR = ".artifacts/test-runs";
-export const DEFAULT_BASELINE_ROOT = "tests/visual-baselines";
 
 export const CLI_USAGE = `Usage: npm run test:scenario -- --id <scenario-id> [options]
 
@@ -30,8 +27,6 @@ Options:
   --id <scenario-id>        Scenario id registered in defaultScenarioRegistry (required)
   --step-timeout <ms>       Per-step timeout in milliseconds (default ${DEFAULT_STEP_TIMEOUT_MS})
   --out-dir <path>          Root directory for run artifacts (default ${DEFAULT_OUT_DIR})
-  --baseline-root <path>    Root directory for visual baselines (default ${DEFAULT_BASELINE_ROOT})
-  --force-visual-drift      Force visual scenarios to drift so the mismatch path is exercised
   --no-artifacts            Do not write result.json / step-trace.json
   -h, --help                Show this help and exit
 
@@ -48,8 +43,6 @@ export function parseCliArgs(argv: readonly string[]): CliParseResult {
   let stepTimeoutMs = DEFAULT_STEP_TIMEOUT_MS;
   let outDir = DEFAULT_OUT_DIR;
   let writeArtifacts = true;
-  let baselineRoot = DEFAULT_BASELINE_ROOT;
-  let forceVisualDrift = false;
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i]!;
@@ -94,18 +87,6 @@ export function parseCliArgs(argv: readonly string[]): CliParseResult {
       case "--no-artifacts":
         writeArtifacts = false;
         break;
-      case "--baseline-root": {
-        const next = argv[i + 1];
-        if (next === undefined || next.startsWith("--")) {
-          return { kind: "error", message: "Missing value for --baseline-root." };
-        }
-        baselineRoot = next;
-        i += 1;
-        break;
-      }
-      case "--force-visual-drift":
-        forceVisualDrift = true;
-        break;
       default:
         return { kind: "error", message: `Unknown argument: ${JSON.stringify(arg)}.` };
     }
@@ -121,9 +102,7 @@ export function parseCliArgs(argv: readonly string[]): CliParseResult {
       scenarioId,
       stepTimeoutMs,
       outDir,
-      writeArtifacts,
-      baselineRoot,
-      forceVisualDrift
+      writeArtifacts
     }
   };
 }

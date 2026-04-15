@@ -9,10 +9,41 @@
 
 import { runCli, CLI_VERSION } from "./run";
 import { CLI_EXIT_CODES } from "./exit-codes";
+import { buildStreamedEventLine, buildStreamedTerminalLine } from "./stream";
+import {
+  createElectronStepHandlers
+} from "../handlers/electron";
+import {
+  createProcessEditorCommandRunner,
+  type EditorCommandRequestMessage
+} from "../handlers/electron-ipc";
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const controller = new AbortController();
+  const editorSessionId = process.env.YULORA_EDITOR_SESSION_ID;
+  const canUseElectronDriver =
+    Boolean(editorSessionId) && typeof process.send === "function";
+  const electronCommandRunner =
+    canUseElectronDriver && editorSessionId
+      ? createProcessEditorCommandRunner({
+          sessionId: editorSessionId,
+          sendMessage: (message: EditorCommandRequestMessage) => {
+            process.send?.(message);
+          },
+          subscribeMessage: (listener) => {
+            const handleMessage = (message: unknown) => {
+              listener(message);
+            };
+
+            process.on("message", handleMessage);
+
+            return () => {
+              process.off("message", handleMessage);
+            };
+          }
+        })
+      : null;
 
   const onSignal = () => {
     // First SIGINT requests graceful stop via the runner's abort path. A
@@ -30,8 +61,36 @@ async function main(): Promise<void> {
         stdout: (line) => process.stdout.write(`${line}\n`),
         stderr: (line) => process.stderr.write(`${line}\n`)
       },
+      buildHandlers:
+        electronCommandRunner === null
+          ? undefined
+          : ({ scenario, cwd }) =>
+              createElectronStepHandlers({
+                scenario,
+                cwd,
+                runCommand: electronCommandRunner
+              }),
+      onEvent: (event) => {
+        const line = buildStreamedEventLine(process.env, event);
+        if (line) {
+          process.stdout.write(`${line}\n`);
+        }
+      },
       signal: controller.signal
     });
+    const terminalLine =
+      outcome.result && outcome.options
+        ? buildStreamedTerminalLine(process.env, {
+            exitCode: outcome.exitCode,
+            status: outcome.result.status,
+            resultPath: outcome.artifacts?.resultPath,
+            stepTracePath: outcome.artifacts?.stepTracePath,
+            error: outcome.result.error
+          })
+        : null;
+    if (terminalLine) {
+      process.stdout.write(`${terminalLine}\n`);
+    }
     process.exit(outcome.exitCode);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

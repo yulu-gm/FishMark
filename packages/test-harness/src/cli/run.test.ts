@@ -175,105 +175,6 @@ describe("runCli", () => {
     expect(outcome.result?.status).toBe("interrupted");
   });
 
-  it("wires visual scenarios through the visual api and records observations", async () => {
-    const { io } = makeIo();
-    const scenario = makeScenario("visual-ok", ["snap"]);
-    const registry = createScenarioRegistry([scenario]);
-
-    const outcome = await runCli({
-      argv: ["--id", "visual-ok", "--no-artifacts"],
-      cwd: "/tmp",
-      io,
-      registry,
-      ensureDir: () => {},
-      createVisualApi: ({ onObservation }) => ({
-        check: (request) => {
-          const observation = {
-            scenarioId: request.scenarioId,
-            stepId: request.stepId,
-            verdict: "match" as const,
-            width: request.width,
-            height: request.height,
-            mismatchedPixels: 0,
-            mismatchRatio: 0,
-            baselinePath: "/fake/baseline.png"
-          };
-          onObservation(observation);
-          return observation;
-        }
-      }),
-      buildHandlers: ({ visualApi }) => ({
-        snap: () => {
-          visualApi.check({
-            scenarioId: "visual-ok",
-            stepId: "snap",
-            width: 2,
-            height: 2,
-            actualRgba: new Uint8Array(16)
-          });
-        }
-      })
-    });
-
-    expect(outcome.exitCode).toBe(CLI_EXIT_CODES.passed);
-    expect(outcome.visualResults).toHaveLength(1);
-    expect(outcome.visualResults?.[0]?.verdict).toBe("match");
-  });
-
-  it("exits 1 with visual diff paths when the visual api returns mismatch", async () => {
-    const { io } = makeIo();
-    const scenario = makeScenario("visual-fail", ["snap"]);
-    const registry = createScenarioRegistry([scenario]);
-    const { captured, writer } = captureWriter();
-
-    const outcome = await runCli({
-      argv: ["--id", "visual-fail"],
-      cwd: "/tmp",
-      io,
-      registry,
-      ensureDir: () => {},
-      writeArtifacts: writer,
-      createVisualApi: ({ onObservation }) => ({
-        check: (request) => {
-          const observation = {
-            scenarioId: request.scenarioId,
-            stepId: request.stepId,
-            verdict: "mismatch" as const,
-            width: request.width,
-            height: request.height,
-            mismatchedPixels: 4,
-            mismatchRatio: 1,
-            baselinePath: "/fake/baseline.png",
-            actualPath: "/fake/actual.png",
-            expectedPath: "/fake/expected.png",
-            diffPath: "/fake/diff.png",
-            message: "Visual mismatch: 4 of 4 pixels differ."
-          };
-          onObservation(observation);
-          return observation;
-        }
-      }),
-      buildHandlers: ({ visualApi }) => ({
-        snap: () => {
-          const obs = visualApi.check({
-            scenarioId: "visual-fail",
-            stepId: "snap",
-            width: 2,
-            height: 2,
-            actualRgba: new Uint8Array(16)
-          });
-          if (obs.verdict === "mismatch") {
-            throw new Error(obs.message ?? "visual mismatch");
-          }
-        }
-      })
-    });
-
-    expect(outcome.exitCode).toBe(CLI_EXIT_CODES.failed);
-    expect(outcome.visualResults?.[0]?.verdict).toBe("mismatch");
-    expect(captured.result?.visualResults?.[0]?.diffPath).toBe("/fake/diff.png");
-  });
-
   it("prints help without executing anything", async () => {
     const { io, out } = makeIo();
     const outcome = await runCli({
@@ -285,5 +186,45 @@ describe("runCli", () => {
     expect(outcome.exitCode).toBe(CLI_EXIT_CODES.passed);
     expect(out.join("\n")).toMatch(/Usage:/);
     expect(outcome.result).toBeUndefined();
+  });
+
+  it("forwards runner events to the optional onEvent callback", async () => {
+    const { io } = makeIo();
+    const scenario = makeScenario("emit-events", ["a"]);
+    const registry = createScenarioRegistry([scenario]);
+    const forwarded: string[] = [];
+
+    const outcome = await runCli({
+      argv: ["--id", "emit-events", "--no-artifacts"],
+      cwd: "/tmp",
+      io,
+      registry,
+      buildHandlers: () => ({ a: () => {} }),
+      onEvent: (event) => forwarded.push(event.type)
+    });
+
+    expect(outcome.exitCode).toBe(CLI_EXIT_CODES.passed);
+    expect(forwarded).toEqual(["scenario-start", "step-start", "step-end", "scenario-end"]);
+  });
+
+  it("passes cwd through to the handler factory for repo-relative fixtures", async () => {
+    const { io } = makeIo();
+    const scenario = makeScenario("cwd-aware", ["a"]);
+    const registry = createScenarioRegistry([scenario]);
+    let receivedCwd: string | null = null;
+
+    const outcome = await runCli({
+      argv: ["--id", "cwd-aware", "--no-artifacts"],
+      cwd: "D:/MyAgent/Yulora/Yulora",
+      io,
+      registry,
+      buildHandlers: ({ cwd }) => {
+        receivedCwd = cwd;
+        return { a: () => {} };
+      }
+    });
+
+    expect(outcome.exitCode).toBe(CLI_EXIT_CODES.passed);
+    expect(receivedCwd).toBe("D:/MyAgent/Yulora/Yulora");
   });
 });
