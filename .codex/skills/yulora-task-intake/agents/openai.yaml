@@ -1,0 +1,4 @@
+interface:
+  display_name: "Yulora 任务接单"
+  short_description: "指导 agent 完成 Yulora task 的接单到收尾。"
+  default_prompt: "使用 $yulora-task-intake 读取正确文档，完整完成一个 Yulora task，完成验收并更新项目记录。"

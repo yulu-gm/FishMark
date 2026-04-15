@@ -9,6 +9,8 @@
 
 ## 记录
 
+| 2026-04-15 | `TASK-003` 保持所有文件系统访问都在 `src/main/`，并只通过单一 `openMarkdownFile()` bridge 向 renderer 暴露打开文件能力。 | 这样可以继续满足 Electron 三层分离约束，避免把不受限制的文件系统能力泄漏给 renderer，也为后续保存能力复用统一结果结构与错误映射打下基础。 | 对应实现位于 `src/main/open-markdown-file.ts`、`src/preload/preload.ts`、`src/shared/open-markdown-file.ts`。 |
+| 2026-04-15 | `TASK-003` 在 CodeMirror 接入前，先使用临时 `<textarea>` 承载已打开文档的内存文本。 | 当前任务目标是建立“打开 Markdown 文件”的最小闭环，而不是提前引入完整编辑器。先用最小可测试界面承载当前文档状态，可以降低 diff 风险，并为 `TASK-004` 保存链路和 `TASK-007` 编辑器接入保留清晰边界。 | renderer 状态与内存编辑逻辑位于 `src/renderer/document-state.ts` 和 `src/renderer/App.tsx`。 |
 | 2026-04-15 | `TASK-002` 先创建工作区边界目录和 README 占位文件，而不迁移当前根目录开发壳。 | 当前可运行应用已经满足 `TASK-001` 的骨架目标，立刻搬迁根目录只会制造额外扰动。保留最小占位结构更容易回退，也能提前显式标出未来 monorepo 结构。 | 已创建 `apps/desktop`、`packages/editor-core`、`packages/markdown-engine`、`tests/e2e`。 |
 | 2026-04-15 | `TASK-001` 和 `BOOTSTRAP-DOCS` 在独立评审后被接受并关闭。 | 文档记录与已验证的开发壳行为已对齐。 | 后续工作可继续基于该骨架推进。 |
 | 2026-04-15 | Vite 与 Electron 统一固定使用 `http://localhost:5173`。 | 之前假设的 `127.0.0.1` 在当前主机环境下不稳定，统一到 `localhost` 能让开发启动更可复现。 | `vite.config.ts` 固定 `host: "localhost"`、`port: 5173`、`strictPort: true`。 |
