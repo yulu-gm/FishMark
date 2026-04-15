@@ -133,9 +133,11 @@ describe("App autosave", () => {
 
     window.yulora = {
       platform: "win32",
+      runtimeMode: "editor",
       openMarkdownFile,
       saveMarkdownFile,
       saveMarkdownFileAs,
+      openEditorTestWindow: vi.fn().mockResolvedValue(undefined),
       onMenuCommand(listener: MenuCommandListener) {
         menuCommandListener = listener;
         return () => {

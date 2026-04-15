@@ -5,6 +5,7 @@ import { createApplicationMenuTemplate } from "./application-menu";
 import { showOpenMarkdownDialog } from "./open-markdown-file";
 import { saveMarkdownFileToPath, showSaveMarkdownDialog } from "./save-markdown-file";
 import { resolveRendererEntry } from "./paths";
+import { createRuntimeWindowManager, resolveAppRuntimeMode } from "./runtime-windows";
 import { OPEN_MARKDOWN_FILE_CHANNEL } from "../shared/open-markdown-file";
 import { APP_MENU_COMMAND_EVENT, type AppMenuCommand } from "../shared/menu-command";
 import {
@@ -14,37 +15,7 @@ import {
   type SaveMarkdownFileInput
 } from "../shared/save-markdown-file";
 
-function createMainWindow(): BrowserWindow {
-  const window = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 900,
-    minHeight: 600,
-    show: false,
-    webPreferences: {
-      preload: path.join(__dirname, "../preload/preload.js"),
-      contextIsolation: true,
-      nodeIntegration: false
-    }
-  });
-
-  const rendererEntry = resolveRendererEntry(
-    path.join(__dirname, "../../dist"),
-    process.env.VITE_DEV_SERVER_URL
-  );
-
-  if (process.env.VITE_DEV_SERVER_URL) {
-    void window.loadURL(rendererEntry);
-  } else {
-    void window.loadFile(rendererEntry);
-  }
-
-  window.once("ready-to-show", () => {
-    window.show();
-  });
-
-  return window;
-}
+const OPEN_EDITOR_TEST_WINDOW_CHANNEL = "yulora:open-editor-test-window";
 
 function dispatchMenuCommand(command: AppMenuCommand): void {
   const targetWindow = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
@@ -58,7 +29,29 @@ function installApplicationMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template as MenuItemConstructorOptions[]));
 }
 
+function loadRenderer(window: BrowserWindow, runtimeMode: "editor" | "test-workbench"): void {
+  const rendererEntry = resolveRendererEntry(
+    path.join(__dirname, "../../dist"),
+    process.env.VITE_DEV_SERVER_URL,
+    runtimeMode
+  );
+
+  void window.loadURL(rendererEntry);
+}
+
 app.whenReady().then(() => {
+  const windowManager = createRuntimeWindowManager({
+    runtimeMode: resolveAppRuntimeMode(process.env),
+    preloadPath: path.join(__dirname, "../preload/preload.js"),
+    createWindow: (input) =>
+      new BrowserWindow({
+        ...input,
+        show: false
+      }),
+    getAllWindows: () => BrowserWindow.getAllWindows(),
+    loadRenderer
+  });
+
   ipcMain.handle(OPEN_MARKDOWN_FILE_CHANNEL, async () => showOpenMarkdownDialog());
   ipcMain.handle(SAVE_MARKDOWN_FILE_CHANNEL, async (_event, input: SaveMarkdownFileInput) =>
     saveMarkdownFileToPath(input)
@@ -66,14 +59,15 @@ app.whenReady().then(() => {
   ipcMain.handle(SAVE_MARKDOWN_FILE_AS_CHANNEL, async (_event, input: SaveMarkdownFileAsInput) =>
     showSaveMarkdownDialog(input)
   );
+  ipcMain.handle(OPEN_EDITOR_TEST_WINDOW_CHANNEL, async () => {
+    windowManager.openEditorWindow();
+  });
 
   installApplicationMenu();
-  createMainWindow();
+  windowManager.openPrimaryWindow();
 
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createMainWindow();
-    }
+    windowManager.reopenPrimaryWindowIfNeeded();
   });
 });
 

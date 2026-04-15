@@ -16,6 +16,17 @@ const AUTOSAVE_IDLE_MS = 1000;
 const AUTOSAVE_FAILED_MESSAGE = "Autosave failed. Changes are still in memory.";
 
 export default function App() {
+  const runtimeMode = resolveRuntimeModeFromLocation();
+  const yulora = window.yulora;
+
+  if (!yulora) {
+    return runtimeMode === "test-workbench" ? <TestWorkbenchApp hasBridge={false} /> : <BridgeUnavailableApp />;
+  }
+
+  return runtimeMode === "test-workbench" ? <TestWorkbenchApp hasBridge /> : <EditorApp yulora={yulora} />;
+}
+
+function EditorApp({ yulora }: { yulora: Window["yulora"] }) {
   const [state, setState] = useState(createInitialAppState);
   const editorRef = useRef<CodeEditorHandle | null>(null);
   const editorContentRef = useRef("");
@@ -60,7 +71,7 @@ export default function App() {
     pendingAutosaveReplayRef.current = false;
     applyState((current) => startAutosavingDocument(current));
 
-    const result = await window.yulora.saveMarkdownFile({
+    const result = await yulora.saveMarkdownFile({
       path: snapshot.currentDocument.path,
       content: getEditorContent()
     });
@@ -148,7 +159,7 @@ export default function App() {
   const handleOpenMarkdown = useEffectEvent(async (): Promise<void> => {
     applyState((current) => startOpeningMarkdownFile(current));
 
-    const result = await window.yulora.openMarkdownFile();
+    const result = await yulora.openMarkdownFile();
 
     resetAutosaveRuntime();
 
@@ -167,7 +178,7 @@ export default function App() {
     }
 
     await runManualSave(() =>
-      window.yulora.saveMarkdownFile({
+      yulora.saveMarkdownFile({
         path: currentDocument.path,
         content: getEditorContent()
       })
@@ -182,7 +193,7 @@ export default function App() {
     }
 
     await runManualSave(() =>
-      window.yulora.saveMarkdownFileAs({
+      yulora.saveMarkdownFileAs({
         currentPath: currentDocument.path,
         content: getEditorContent()
       })
@@ -190,7 +201,7 @@ export default function App() {
   });
 
   useEffect(() => {
-    return window.yulora.onMenuCommand((command) => {
+    return yulora.onMenuCommand((command) => {
       if (command === "open-markdown-file") {
         void handleOpenMarkdown();
         return;
@@ -203,7 +214,7 @@ export default function App() {
 
       void handleSaveMarkdownAs();
     });
-  }, []);
+  }, [yulora]);
 
   useEffect(() => () => clearAutosaveTimer(), []);
 
@@ -249,7 +260,7 @@ export default function App() {
                     ? "Unsaved changes"
                     : "All changes saved"}
               </p>
-              <p className="document-platform">Bridge: {window.yulora.platform}</p>
+              <p className="document-platform">Bridge: {yulora.platform}</p>
             </div>
           </div>
           <CodeEditorView
@@ -287,4 +298,89 @@ export default function App() {
       )}
     </main>
   );
+}
+
+function TestWorkbenchApp({ hasBridge }: { hasBridge: boolean }) {
+  return (
+    <main className="test-workbench-shell">
+      <header className="test-workbench-hero">
+        <div>
+          <p className="test-workbench-kicker">Agent Testing</p>
+          <h1>Yulora Test Workbench</h1>
+          <p className="test-workbench-copy">
+            Keep debug state and test process orchestration in this control window, then open
+            dedicated editor windows for the concrete test flow.
+          </p>
+        </div>
+        <button
+          className="test-workbench-launch"
+          disabled={!hasBridge}
+          onClick={() => {
+            void window.yulora.openEditorTestWindow();
+          }}
+          type="button"
+        >
+          Open Editor Test Window
+        </button>
+      </header>
+
+      {!hasBridge ? (
+        <p
+          className="error-banner"
+          role="alert"
+        >
+          Test workbench bridge unavailable. The window is running, but preload did not expose the
+          control API.
+        </p>
+      ) : null}
+
+      <section className="test-workbench-grid">
+        <article className="workbench-panel">
+          <p className="workbench-panel-label">Scenario Catalog</p>
+          <h2>No scenario registry yet</h2>
+          <p>
+            TASK-026 will connect the static scenario registry here. For now this shell only proves
+            the isolated workbench runtime and window lifecycle.
+          </p>
+        </article>
+
+        <article className="workbench-panel">
+          <p className="workbench-panel-label">Debug Stream</p>
+          <h2>Workbench-first diagnostics</h2>
+          <p>
+            Runtime events, abort reasons, and error summaries will stay here instead of leaking
+            into the editor test window.
+          </p>
+        </article>
+
+        <article className="workbench-panel workbench-panel-wide">
+          <p className="workbench-panel-label">Test Process</p>
+          <h2>Runner status placeholder</h2>
+          <p>
+            The runner and step machine are not wired yet. This area is reserved for task progress,
+            process output, and result state once TASK-027 lands.
+          </p>
+        </article>
+      </section>
+    </main>
+  );
+}
+
+function BridgeUnavailableApp() {
+  return (
+    <main className="app-shell">
+      <p
+        className="error-banner"
+        role="alert"
+      >
+        Yulora bridge unavailable. Reload the window or restart the dev shell.
+      </p>
+    </main>
+  );
+}
+
+function resolveRuntimeModeFromLocation(): "editor" | "test-workbench" {
+  return new URLSearchParams(window.location.search).get("mode") === "test-workbench"
+    ? "test-workbench"
+    : "editor";
 }

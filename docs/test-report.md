@@ -9,6 +9,11 @@
 
 ## 记录
 
+| 2026-04-15 | TASK-025 | `npm run test -- src/main/runtime-windows.test.ts src/main/package-scripts.test.ts src/renderer/test-workbench.test.tsx src/renderer/app.autosave.test.ts` | 通过 | 覆盖测试模式启动脚本、主窗口/工作台窗口分流、preload 单文件 bridge 约束、workbench 页壳，以及 workbench 拉起 editor 测试窗口的最小链路，同时确认 autosave 现有行为未回归。 |
+| 2026-04-15 | TASK-025 | `npm run lint` | 通过 | main/preload/renderer 新增测试模式分支、workbench UI 和新增测试文件均通过 ESLint 检查。 |
+| 2026-04-15 | TASK-025 | `npm run typecheck` | 通过 | Electron 窗口管理、preload runtime bridge、renderer 新接口与测试桩的 TypeScript 检查完成通过。 |
+| 2026-04-15 | TASK-025 | `npm run test` | 通过 | Vitest 报告 11 个文件、53 条测试全部通过，包括新增 runtime-windows、preload 单文件 bridge 约束与 renderer workbench 测试。 |
+| 2026-04-15 | TASK-025 | `npm run build` | 通过 | renderer 构建与 electron TypeScript 构建完成通过。 |
 | 2026-04-15 | TASK-008 | `npm run test -- packages/markdown-engine/src/parse-block-map.test.ts` | 通过 | 覆盖顶层 `heading` / `paragraph` / `list` / `blockquote` 顺序、heading depth、有序/无序列表、空输入，以及 list / blockquote 内部 paragraph 不泄漏为顶层 block。 |
 | 2026-04-15 | TASK-008 | `npm run lint` | 通过 | `packages/markdown-engine` 的新增 parser、类型定义与 Vitest 配置调整均通过 ESLint 检查。 |
 | 2026-04-15 | TASK-008 | `npm run typecheck` | 通过 | `tsconfig.vitest.json` 已纳入 `packages/**/*.ts`，新增 Markdown engine 源码和测试均通过 TypeScript 检查。 |

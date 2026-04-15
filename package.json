@@ -7,8 +7,11 @@
   "scripts": {
     "dev": "concurrently -k \"npm:dev:electron\" \"npm:dev:renderer\" \"npm:dev:main\"",
     "dev:electron": "wait-on dist-electron/main/main.js dist-electron/preload/preload.js dist-electron/shared/open-markdown-file.js dist-electron/shared/save-markdown-file.js http://localhost:5173 && node ./node_modules/cross-env/dist/bin/cross-env.js VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
+    "dev:test-workbench": "concurrently -k \"npm:dev:electron:test-workbench\" \"npm:dev:renderer:test-workbench\" \"npm:dev:main\"",
+    "dev:electron:test-workbench": "wait-on dist-electron/main/main.js dist-electron/preload/preload.js dist-electron/shared/open-markdown-file.js dist-electron/shared/save-markdown-file.js http://localhost:5174 && node ./node_modules/cross-env/dist/bin/cross-env.js YULORA_START_MODE=test-workbench VITE_DEV_SERVER_URL=http://localhost:5174 electron .",
     "dev:main": "tsc -p tsconfig.electron.json --watch --preserveWatchOutput",
     "dev:renderer": "vite",
+    "dev:renderer:test-workbench": "vite --port 5174",
     "build": "npm run clean && npm run build:renderer && npm run build:electron",
     "build:renderer": "vite build",
     "build:electron": "tsc -p tsconfig.electron.json",

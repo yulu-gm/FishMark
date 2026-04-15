@@ -12,9 +12,11 @@ declare global {
   interface Window {
     yulora: {
       platform: NodeJS.Platform;
+      runtimeMode: "editor" | "test-workbench";
       openMarkdownFile: () => Promise<OpenMarkdownFileResult>;
       saveMarkdownFile: (input: SaveMarkdownFileInput) => Promise<SaveMarkdownFileResult>;
       saveMarkdownFileAs: (input: SaveMarkdownFileAsInput) => Promise<SaveMarkdownFileResult>;
+      openEditorTestWindow: () => Promise<void>;
       onMenuCommand: (listener: (command: AppMenuCommand) => void) => () => void;
     };
   }

@@ -1,9 +1,26 @@
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
-export function resolveRendererEntry(distDir: string, devServerUrl?: string): string {
+export function resolveRendererEntry(
+  distDir: string,
+  devServerUrl?: string,
+  runtimeMode: "editor" | "test-workbench" = "editor"
+): string {
   if (devServerUrl) {
-    return devServerUrl;
+    const rendererUrl = new URL(devServerUrl);
+
+    if (runtimeMode === "test-workbench") {
+      rendererUrl.searchParams.set("mode", "test-workbench");
+    }
+
+    return rendererUrl.toString();
   }
 
-  return path.join(distDir, "index.html");
+  const rendererUrl = pathToFileURL(path.join(distDir, "index.html"));
+
+  if (runtimeMode === "test-workbench") {
+    rendererUrl.searchParams.set("mode", "test-workbench");
+  }
+
+  return rendererUrl.toString();
 }
