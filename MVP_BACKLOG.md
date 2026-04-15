@@ -387,7 +387,7 @@
 
 ### TASK-033 代码块渲染
 
-状态：未开始
+状态：开发完成
 依赖：`TASK-008`、`TASK-009`
 
 目标：为 fenced code block 提供稳定的源码/渲染切换，至少保证等宽字体、保留缩进与换行，不要求语法高亮。
@@ -406,10 +406,10 @@
 - Info string（语言标识）被保留，保存后 round-trip 不变
 
 执行切片：
-- [ ] 补足 block map 的 fenced code block 支持
-- [ ] 建立代码块基础渲染样式
-- [ ] 处理激活/非激活切换与 Enter / Tab 行为
-- [ ] 覆盖代码块 round-trip 与常见缩进场景
+- [x] 补足 block map 的 fenced code block 支持
+- [x] 建立代码块基础渲染样式
+- [x] 处理激活/非激活切换与 Enter / Tab 行为
+- [x] 覆盖代码块 round-trip 与常见缩进场景
 
 ### TASK-034 行内格式渲染
 

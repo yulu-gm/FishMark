@@ -738,6 +738,40 @@ body {
   display: none;
 }
 
+.document-editor .cm-inactive-code-block-fence {
+  display: none;
+}
+
+.document-editor .cm-inactive-code-block-fence-marker {
+  color: transparent;
+  font-size: 0;
+}
+
+.document-editor .cm-inactive-code-block {
+  color: #dbe4f0;
+  background: #17212b;
+  font:
+    400 0.96rem/1.72 "Cascadia Code", "Consolas", "SFMono-Regular", "Courier New", monospace;
+  white-space: pre !important;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+.document-editor .cm-inactive-code-block-start {
+  padding-top: 0.8rem;
+  border-top-left-radius: 0.85rem;
+  border-top-right-radius: 0.85rem;
+}
+
+.document-editor .cm-inactive-code-block-end {
+  padding-bottom: 0.8rem;
+  border-bottom-left-radius: 0.85rem;
+  border-bottom-right-radius: 0.85rem;
+  margin-bottom: 0.35rem;
+}
+
 .document-editor .cm-focused {
   outline: none;
 }

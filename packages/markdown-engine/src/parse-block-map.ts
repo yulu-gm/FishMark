@@ -4,6 +4,7 @@ import type { Event, Token } from "micromark-util-types";
 import type {
   BlockMap,
   BlockquoteBlock,
+  CodeFenceBlock,
   HeadingBlock,
   ListItemBlock,
   ListBlock,
@@ -36,6 +37,11 @@ export function parseBlockMap(source: string): BlockMap {
       }
 
       if (containerDepth > 0) {
+        continue;
+      }
+
+      if (token.type === "codeFenced") {
+        blocks.push(createCodeFenceBlock(token, source));
         continue;
       }
 
@@ -90,6 +96,15 @@ function createBlockquoteBlock(token: Token): BlockquoteBlock {
   return createBaseBlock("blockquote", token);
 }
 
+function createCodeFenceBlock(token: Token, source: string): CodeFenceBlock {
+  const base = createBaseBlock("codeFence", token);
+
+  return {
+    ...base,
+    info: getCodeFenceInfo(source.slice(base.startOffset, base.endOffset))
+  };
+}
+
 function createBaseBlock<TType extends MarkdownBlock["type"]>(
   type: TType,
   token: Token
@@ -125,6 +140,14 @@ function getHeadingDepth(token: Token, source: string): number {
   }
 
   return sequence[0] === "=" ? 1 : 2;
+}
+
+function getCodeFenceInfo(sourceSlice: string): string | null {
+  const firstLine = sourceSlice.slice(0, sourceSlice.indexOf("\n") === -1 ? sourceSlice.length : sourceSlice.indexOf("\n"));
+  const match = /^\s{0,3}(?:`{3,}|~{3,})(?:[ \t]*([^\n]*?))?[ \t]*$/.exec(firstLine);
+  const info = match?.[1]?.trim();
+
+  return info ? info : null;
 }
 
 type LineInfo = {

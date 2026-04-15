@@ -9,6 +9,13 @@
 
 ## 记录
 
+| 2026-04-16 | TASK-033 | `npm run test -- packages/markdown-engine/src/parse-block-map.test.ts` | 通过 | 先补 fenced code block 与 info string 解析的失败测试，再验证 parser 输出已覆盖 source order、exact slice 与 round-trip 关键边界。 |
+| 2026-04-16 | TASK-033 | `npm run test -- src/renderer/code-editor.test.ts` | 通过 | 覆盖代码块非激活态渲染、激活恢复 Markdown 源码态，并确认既有 heading / paragraph / list / blockquote 回归测试全部保持通过。 |
+| 2026-04-16 | TASK-033 | `npm run test -- src/renderer/code-editor.test.ts` | 通过 | 补充 closing fence 点击边界与 fence marker 隐藏回归，避免在已渲染代码块底部点击时只漏出孤立的 ``` 而上方内容仍保持渲染态。 |
+| 2026-04-16 | TASK-033 | `npm run lint` | 通过 | fenced code block parser、CodeMirror decoration 与样式、文档更新均通过 ESLint。 |
+| 2026-04-16 | TASK-033 | `npm run typecheck` | 通过 | renderer、electron、vitest、cli 四套 TypeScript 检查均通过，并覆盖了新增的 markdown-engine 代码。 |
+| 2026-04-16 | TASK-033 | `npm run test` | 通过 | Vitest 全量通过，包含新增 fenced code block parser 与 editor rendering 回归覆盖。 |
+| 2026-04-16 | TASK-033 | `npm run build` | 通过 | renderer、electron 与 cli 构建通过；保留 Vite 默认的大 bundle warning，但不阻塞本轮代码块渲染交付。 |
 | 2026-04-16 | TASK-013 | `npm run test -- src/renderer/code-editor.test.ts` | 通过 | 先补引用块非激活态装饰、激活恢复源码态、`Enter` 续写/退出与 composition flush 回归测试，再验证 `code-editor` 目标测试 26 项全部通过。 |
 | 2026-04-16 | TASK-013 | `npm run test -- src/renderer/code-editor.test.ts` | 通过 | 新增真实 CRLF 文档回归测试，确认 `replaceDocument()` 后 heading / blockquote / list decorations 在 `MVP_BACKLOG.md` 这类 Windows 文档中不会错位；目标测试更新为 27 项全部通过。 |
 | 2026-04-16 | TASK-013 | `npm run lint` | 通过 | blockquote decoration 逻辑、样式与新增测试均通过 ESLint。 |
@@ -109,3 +116,8 @@
 | 2026-04-15 | TASK-001 | `npm run test` | 通过 | Vitest 报告 1 个文件、2 条测试通过。 |
 | 2026-04-15 | TASK-001 | `npm run build` | 通过 | renderer 构建和 electron TypeScript 构建完成通过。 |
 | 2026-04-15 | TASK-001 | `node -e "const {spawn,spawnSync}=require('child_process'); const child=spawn('npm',['run','dev'],{stdio:'inherit'}); let ready=false; const deadline=Date.now()+20000; const timer=setInterval(()=>{ const curl=spawnSync('curl',['-I','-sSf','http://localhost:5173/'],{encoding:'utf8'}); const ps=spawnSync('ps',['-ax','-o','command='],{encoding:'utf8'}); const electronRunning=/Electron\\.app\\/Contents\\/MacOS\\/Electron/.test(ps.stdout); if(curl.status===0 && electronRunning){ ready=true; console.log('DEV-SHELL-READY'); clearInterval(timer); child.kill('SIGTERM'); setTimeout(()=>child.kill('SIGKILL'),2000); } else if(Date.now()>deadline){ console.error('DEV-SHELL-TIMEOUT'); clearInterval(timer); child.kill('SIGTERM'); setTimeout(()=>child.kill('SIGKILL'),2000); process.exit(1); } },500); child.on('exit',(code,signal)=>{ clearInterval(timer); if(ready){ process.exit(0); } process.exit(code ?? (signal ? 1 : 0)); });"` | 通过 | Vite 成功提供 `http://localhost:5173/`，`curl` 可访问，同步观察到了运行中的 Electron 进程，随后正常退出。 |
+| 2026-04-16 | TASK-033 | `npm run test -- src/renderer/code-editor.test.ts` | 通过 | 新增 fenced code block 下边界 Backspace 回归测试，覆盖“先整体回到源码态，再继续编辑”与第二次 Backspace 不进入半渲染状态。 |
+| 2026-04-16 | TASK-033 | `npm run lint` | 通过 | `code-editor` 新增 Backspace 边界处理与文档更新通过 ESLint 检查。 |
+| 2026-04-16 | TASK-033 | `npm run typecheck` | 通过 | CodeMirror Backspace handler、controller 暴露方法与回归测试通过 TypeScript 检查。 |
+| 2026-04-16 | TASK-033 | `npm run test` | 通过 | Vitest 报告 30 个文件、179 条测试全部通过，包含 fenced code block Enter / 点击边界 / Backspace 边界回归。 |
+| 2026-04-16 | TASK-033 | `npm run build` | 通过 | renderer 与 electron 构建通过；保留现有 Vite chunk size warning，但不阻塞本轮交付。 |

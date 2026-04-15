@@ -1,6 +1,7 @@
 export type {
   BlockMap,
   BlockquoteBlock,
+  CodeFenceBlock,
   HeadingBlock,
   ListItemBlock,
   ListBlock,

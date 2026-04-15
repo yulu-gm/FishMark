@@ -1,6 +1,6 @@
 export interface BaseBlock {
   id: string;
-  type: "heading" | "paragraph" | "list" | "blockquote";
+  type: "heading" | "paragraph" | "list" | "blockquote" | "codeFence";
   startOffset: number;
   endOffset: number;
   startLine: number;
@@ -45,7 +45,17 @@ export interface BlockquoteBlock extends BaseBlock {
   type: "blockquote";
 }
 
-export type MarkdownBlock = HeadingBlock | ParagraphBlock | ListBlock | BlockquoteBlock;
+export interface CodeFenceBlock extends BaseBlock {
+  type: "codeFence";
+  info: string | null;
+}
+
+export type MarkdownBlock =
+  | HeadingBlock
+  | ParagraphBlock
+  | ListBlock
+  | BlockquoteBlock
+  | CodeFenceBlock;
 
 export interface BlockMap {
   blocks: MarkdownBlock[];

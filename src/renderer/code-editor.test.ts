@@ -458,6 +458,161 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("renders fenced code blocks as inactive code when focus moves into another block", () => {
+    const host = document.createElement("div");
+    const source = [
+      "```ts",
+      "const answer = 42;",
+      "  console.log(answer);",
+      "```",
+      "",
+      "Paragraph"
+    ].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    view?.dispatch({ selection: { anchor: source.indexOf("Paragraph") } });
+
+    const firstCodeLine = getLineElementByText(host, "const answer = 42;");
+    const secondCodeLine = getLineElementByText(host, "console.log(answer);");
+    const openingFenceLine = getLineElementByText(host, "```ts");
+    const closingFenceLine = getLineElementByText(host, "```");
+    const fenceMarkers = host.querySelectorAll(".cm-inactive-code-block-fence-marker");
+
+    expect(firstCodeLine).not.toBeNull();
+    expect(firstCodeLine?.classList.contains("cm-inactive-code-block")).toBe(true);
+    expect(firstCodeLine?.classList.contains("cm-inactive-code-block-start")).toBe(true);
+    expect(secondCodeLine).not.toBeNull();
+    expect(secondCodeLine?.classList.contains("cm-inactive-code-block")).toBe(true);
+    expect(secondCodeLine?.classList.contains("cm-inactive-code-block-end")).toBe(true);
+    expect(openingFenceLine?.classList.contains("cm-inactive-code-block-fence")).toBe(true);
+    expect(closingFenceLine?.classList.contains("cm-inactive-code-block-fence")).toBe(true);
+    expect(fenceMarkers.length).toBe(2);
+
+    controller.destroy();
+  });
+
+  it("restores fenced code block markdown when the code block becomes active again", async () => {
+    const host = document.createElement("div");
+    const source = ["```ts", "const answer = 42;", "```", "", "Paragraph"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    view?.dispatch({ selection: { anchor: source.indexOf("Paragraph") } });
+    expect(getLineElementByText(host, "```ts")?.classList.contains("cm-inactive-code-block-fence")).toBe(
+      true
+    );
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+
+    view?.dispatch({ selection: { anchor: source.indexOf("const answer") } });
+
+    const openingFenceLine = getLineElementByText(host, "```ts");
+    const codeLine = getLineElementByText(host, "const answer = 42;");
+
+    expect(openingFenceLine).not.toBeNull();
+    expect(openingFenceLine?.classList.contains("cm-inactive-code-block-fence")).toBe(false);
+    expect(codeLine).not.toBeNull();
+    expect(codeLine?.classList.contains("cm-inactive-code-block")).toBe(false);
+
+    controller.destroy();
+  });
+
+  it("restores the whole fenced code block when the selection lands on the closing fence line", async () => {
+    const host = document.createElement("div");
+    const source = ["```ts", "const answer = 42;", "```", "", "Paragraph"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    view?.dispatch({ selection: { anchor: source.indexOf("Paragraph") } });
+    expect(getLineElementByText(host, "```ts")?.classList.contains("cm-inactive-code-block-fence")).toBe(
+      true
+    );
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+
+    view?.dispatch({ selection: { anchor: source.lastIndexOf("```") } });
+
+    const openingFenceLine = getLineElementByText(host, "```ts");
+    const codeLine = getLineElementByText(host, "const answer = 42;");
+    const closingFenceLine = getLineElementByText(host, "```");
+
+    expect(openingFenceLine?.classList.contains("cm-inactive-code-block-fence")).toBe(false);
+    expect(codeLine?.classList.contains("cm-inactive-code-block")).toBe(false);
+    expect(closingFenceLine?.classList.contains("cm-inactive-code-block-fence")).toBe(false);
+
+    controller.destroy();
+  });
+
+  it("keeps the fenced code block consistently inactive when the selection moves to the blank separator below it", async () => {
+    const host = document.createElement("div");
+    const source = ["```ts", "const answer = 42;", "```", "", "Paragraph"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    view?.dispatch({ selection: { anchor: source.indexOf("Paragraph") } });
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+
+    view?.dispatch({ selection: { anchor: source.indexOf("\n\n") + 1 } });
+
+    const openingFenceLine = getLineElementByText(host, "```ts");
+    const codeLine = getLineElementByText(host, "const answer = 42;");
+    const closingFenceLine = getLineElementByText(host, "```");
+
+    expect(openingFenceLine?.classList.contains("cm-inactive-code-block-fence")).toBe(true);
+    expect(codeLine?.classList.contains("cm-inactive-code-block")).toBe(true);
+    expect(closingFenceLine?.classList.contains("cm-inactive-code-block-fence")).toBe(true);
+
+    controller.destroy();
+  });
+
   it("flushes inactive blockquote decorations once when composition ends", () => {
     const host = document.createElement("div");
     const source = ["> Quote line", "> Still quoted", "", "Paragraph"].join("\n");
@@ -570,6 +725,121 @@ describe("createCodeEditorController", () => {
     advancedController.pressEnter();
 
     expect(controller.getContent()).toBe("- [ ] todo\n- [ ] ");
+
+    controller.destroy();
+  });
+
+  it("auto-completes a fenced code block when pressing Enter after triple backticks", () => {
+    const host = document.createElement("div");
+    const source = "```";
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+
+    advancedController.setSelection(source.length);
+    advancedController.pressEnter();
+
+    expect(controller.getContent()).toBe("```\n\n```");
+
+    controller.destroy();
+  });
+
+  it("keeps the info string and inserts subsequent text inside the new fenced code block", () => {
+    const host = document.createElement("div");
+    const source = "```ts";
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+
+    advancedController.setSelection(source.length);
+    advancedController.pressEnter();
+    controller.insertText("const answer = 42;");
+
+    expect(controller.getContent()).toBe("```ts\nconst answer = 42;\n```");
+
+    controller.destroy();
+  });
+
+  it("reveals the whole fenced code block and places the caret at the end of the last code line when Backspace is pressed from the separator below it", async () => {
+    const host = document.createElement("div");
+    const source = ["```ts", "const answer = 42;", "```", "", "Paragraph"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressBackspace: () => void;
+    };
+    const editorRoot = host.querySelector(".cm-editor");
+    const view = getEditorView(host);
+
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(source.indexOf("\n\n") + 1);
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+
+    expect(host.querySelector(".cm-inactive-code-block-fence")).not.toBeNull();
+
+    advancedController.pressBackspace();
+
+    expect(controller.getContent()).toBe(source);
+    expect(view?.state.selection.main.anchor).toBe(source.indexOf("const answer = 42;") + 18);
+    expect(host.querySelector(".cm-inactive-code-block")).toBeNull();
+    expect(host.querySelector(".cm-inactive-code-block-fence")).toBeNull();
+
+    controller.destroy();
+  });
+
+  it("deletes code content instead of the closing fence when Backspace is pressed twice from below a fenced code block", async () => {
+    const host = document.createElement("div");
+    const source = ["```", "代码块", "```", ""].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressBackspace: () => void;
+    };
+    const editorRoot = host.querySelector(".cm-editor");
+    const view = getEditorView(host);
+
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(source.length);
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+
+    advancedController.pressBackspace();
+    expect(view?.state.selection.main.anchor).toBe(source.indexOf("代码块") + 3);
+    advancedController.pressBackspace();
+
+    expect(controller.getContent()).toBe(["```", "代码", "```", ""].join("\n"));
+    expect(host.querySelector(".cm-inactive-code-block")).toBeNull();
+    expect(host.querySelector(".cm-inactive-code-block-fence")).toBeNull();
+    expect(getLineElementByText(host, "代码")).not.toBeNull();
 
     controller.destroy();
   });

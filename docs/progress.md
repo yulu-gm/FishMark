@@ -74,7 +74,7 @@
 | TASK-029 | CLI 与工件协议 | TODO | agent 统一 CLI 入口、退出码与结果目录。 |
 | TASK-030 | visual-test 支持 | TODO | 首版 synthetic gradient 方案已回退；需按真实截图与真实结果来源重做。 |
 | TASK-031 | 核心场景扩充 | TODO | 首批可持续使用的核心测试场景集。 |
-| TASK-033 | 代码块渲染 | TODO | fenced code block 的源码/渲染切换与 round-trip 保真。 |
+| TASK-033 | 代码块渲染 | DEV_DONE | 已补齐 fenced code block block map/info string、非激活态等宽渲染与源码态恢复，并覆盖 round-trip 基线回归。 |
 | TASK-034 | 行内格式渲染 | TODO | bold / italic / inline code / strikethrough 的激活切换。 |
 | TASK-035 | IME 基线保护 | ACCEPTED | 已完成 composition guard、autosave 光标回归修复与段落/标题/列表回归测试，并通过本轮中文 IME 人工验收。 |
 | TASK-036 | 外部文件变更检测 | TODO | 外部修改当前文件时的提示与冲突处理，避免 autosave 覆盖。 |

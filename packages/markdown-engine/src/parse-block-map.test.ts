@@ -267,4 +267,41 @@ describe("parseBlockMap", () => {
       }
     ]);
   });
+
+  it("captures fenced code blocks with preserved info strings and exact source slices", () => {
+    const source = [
+      "```ts",
+      "const answer = 42;",
+      "  console.log(answer);",
+      "```",
+      "",
+      "Paragraph"
+    ].join("\n");
+
+    const result = parseBlockMap(source);
+
+    expect(result.blocks).toEqual([
+      {
+        id: "codeFence:0-51",
+        type: "codeFence",
+        startOffset: 0,
+        endOffset: 51,
+        startLine: 1,
+        endLine: 4,
+        info: "ts"
+      },
+      {
+        id: "paragraph:53-62",
+        type: "paragraph",
+        startOffset: 53,
+        endOffset: 62,
+        startLine: 6,
+        endLine: 6
+      }
+    ]);
+
+    expect(source.slice(result.blocks[0]!.startOffset, result.blocks[0]!.endOffset)).toBe(
+      ["```ts", "const answer = 42;", "  console.log(answer);", "```"].join("\n")
+    );
+  });
 });

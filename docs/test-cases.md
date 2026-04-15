@@ -160,6 +160,33 @@
 - 在空引用行按 `Enter` 会退出当前引用块
 - composition 期间不会提前切换装饰，结束后只做一次 flush
 
+### TC-016 代码块渲染
+
+步骤：
+1. 输入一个 fenced code block，例如：
+   ~~~md
+   ```ts
+   const answer = 42;
+     console.log(answer);
+   ```
+   ~~~
+2. 仅输入一行 ```` ``` ```` 或 ```` ```ts ````，然后按 `Enter`。
+3. 把光标移动到代码块外的普通段落。
+4. 观察代码块在非激活态的显示。
+5. 将光标放到代码块下方紧邻的空行或下一行行首，按一次 `Backspace`。
+6. 再把光标移回代码块内部任一代码行。
+7. 如需自动化回归，运行 `npm run test -- packages/markdown-engine/src/parse-block-map.test.ts` 与 `npm run test -- src/renderer/code-editor.test.ts`。
+
+预期：
+- 在仅输入 opening fence 后按 `Enter`，编辑器会自动补全成对 closing fence，并把光标放到中间空行
+- 非激活代码块显示为等宽字体的连续代码区域，保留缩进与换行
+- opening / closing fence 在非激活态被隐藏
+- 在代码块下边界按 `Backspace` 时，编辑器会先整体切回代码块源码态，并把光标放到最后一行代码内容末尾，而不是直接落到 closing fence 上
+- 光标重新进入代码块后，完整 Markdown 源码立即恢复并可直接编辑 opening / closing fence 与 info string
+- 点击代码块底部附近或 closing fence 对应位置时，不会只漏出孤立的 ```` ``` ````；代码块要么保持完整非激活态，要么整体回到源码态
+- 保存后 fenced code block 的 info string 与原始 Markdown 结构保持不变
+- `Enter`、`Tab` 与 `Shift+Tab` 继续沿用普通 CodeMirror 文本编辑语义，不因代码块渲染额外劫持
+
 ## 3. 输入法
 
 ### TC-020 中文 IME

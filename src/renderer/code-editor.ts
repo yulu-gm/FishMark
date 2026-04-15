@@ -1,5 +1,6 @@
 import {
   defaultKeymap,
+  deleteCharBackward,
   history,
   historyKeymap,
   insertNewlineAndIndent
@@ -27,18 +28,19 @@ export type CodeEditorController = {
   insertText: (text: string) => void;
   setSelection: (anchor: number, head?: number) => void;
   pressEnter: () => void;
+  pressBackspace: () => void;
   destroy: () => void;
 };
 
-const setHeadingDecorationsEffect = StateEffect.define<DecorationSet>();
+const setBlockDecorationsEffect = StateEffect.define<DecorationSet>();
 
-const headingDecorationsField = StateField.define<DecorationSet>({
+const blockDecorationsField = StateField.define<DecorationSet>({
   create: () => Decoration.none,
   update(decorations, transaction) {
     let nextDecorations = decorations.map(transaction.changes);
 
     for (const effect of transaction.effects) {
-      if (effect.is(setHeadingDecorationsEffect)) {
+      if (effect.is(setBlockDecorationsEffect)) {
         nextDecorations = effect.value;
       }
     }
@@ -56,11 +58,11 @@ export function createCodeEditorController(
     anchor: 0,
     head: 0
   });
-  let headingDecorationSignature = "";
+  let blockDecorationSignature = "";
   let hasEditorFocus = false;
   let isCompositionGuardActive = false;
   let hasPendingDerivedStateFlush = false;
-  let applyHeadingDecorations: (force?: boolean) => void = () => {};
+  let applyBlockDecorations: (force?: boolean) => void = () => {};
 
   const createSelectionSnapshot = (state: EditorState) => ({
     anchor: state.selection.main.anchor,
@@ -88,10 +90,10 @@ export function createCodeEditorController(
       createActiveBlockStateFromBlockMap(blockMap, createSelectionSnapshot(state)),
       force
     );
-    applyHeadingDecorations(force);
+    applyBlockDecorations(force);
   };
 
-  const createHeadingDecorations = (state: ActiveBlockState, source: string) => {
+  const createBlockDecorations = (state: ActiveBlockState, source: string) => {
     const activeBlockId = hasEditorFocus ? state.activeBlock?.id ?? null : null;
     const ranges = [];
     const signatures: string[] = [];
@@ -221,6 +223,50 @@ export function createCodeEditorController(
           }
         }
       }
+
+      if (block.type === "codeFence") {
+        signatures.push(`${block.type}:${block.id}:${block.info ?? ""}`);
+
+        for (const line of getInactiveCodeFenceLines(block.startOffset, block.endOffset, source)) {
+          if (line.kind === "fence") {
+            ranges.push(
+              Decoration.line({
+                attributes: {
+                  class: "cm-inactive-code-block-fence"
+                }
+              }).range(line.lineStart)
+            );
+            if (line.lineEnd > line.lineStart) {
+              ranges.push(
+                Decoration.mark({
+                  attributes: {
+                    class: "cm-inactive-code-block-fence-marker"
+                  }
+                }).range(line.lineStart, line.lineEnd)
+              );
+            }
+            continue;
+          }
+
+          const lineClasses = ["cm-inactive-code-block"];
+
+          if (line.isFirstContentLine) {
+            lineClasses.push("cm-inactive-code-block-start");
+          }
+
+          if (line.isLastContentLine) {
+            lineClasses.push("cm-inactive-code-block-end");
+          }
+
+          ranges.push(
+            Decoration.line({
+              attributes: {
+                class: lineClasses.join(" ")
+              }
+            }).range(line.lineStart)
+          );
+        }
+      }
     }
 
     return {
@@ -233,13 +279,19 @@ export function createCodeEditorController(
     EditorState.create({
       doc: content,
       extensions: [
-        headingDecorationsField,
+        blockDecorationsField,
         history(),
         keymap.of([
+          {
+            key: "Backspace",
+            run: (editorView) =>
+              runCodeFenceBackspace(editorView, activeBlockState) || deleteCharBackward(editorView)
+          },
           {
             key: "Enter",
             run: (editorView) => {
               return (
+                runCodeFenceEnter(editorView, activeBlockState) ||
                 runListEnter(editorView) ||
                 runBlockquoteEnter(editorView) ||
                 insertNewlineAndIndent(editorView)
@@ -286,23 +338,23 @@ export function createCodeEditorController(
     parent: options.parent
   });
 
-  applyHeadingDecorations = (force = false) => {
-    const { decorationSet, signature } = createHeadingDecorations(
+  applyBlockDecorations = (force = false) => {
+    const { decorationSet, signature } = createBlockDecorations(
       activeBlockState,
       view.state.doc.toString()
     );
 
-    if (!force && signature === headingDecorationSignature) {
+    if (!force && signature === blockDecorationSignature) {
       return;
     }
 
-    headingDecorationSignature = signature;
+    blockDecorationSignature = signature;
     view.dispatch({
-      effects: setHeadingDecorationsEffect.of(decorationSet)
+      effects: setBlockDecorationsEffect.of(decorationSet)
     });
   };
 
-  applyHeadingDecorations(true);
+  applyBlockDecorations(true);
   options.onActiveBlockChange?.(activeBlockState);
 
   const handleCompositionStart = () => {
@@ -329,7 +381,7 @@ export function createCodeEditorController(
       }
 
       hasEditorFocus = nextHasEditorFocus;
-      applyHeadingDecorations(true);
+      applyBlockDecorations(true);
     });
   };
 
@@ -339,7 +391,7 @@ export function createCodeEditorController(
     }
 
     hasEditorFocus = true;
-    applyHeadingDecorations(true);
+    applyBlockDecorations(true);
   };
 
   const handleBlur = () => {
@@ -366,7 +418,7 @@ export function createCodeEditorController(
         createActiveBlockStateFromBlockMap(blockMap, createSelectionSnapshot(nextState)),
         true
       );
-      applyHeadingDecorations(true);
+      applyBlockDecorations(true);
     },
     insertText(text: string) {
       const selection = view.state.selection.main;
@@ -393,8 +445,17 @@ export function createCodeEditorController(
       });
     },
     pressEnter() {
-      if (!runListEnter(view) && !runBlockquoteEnter(view)) {
+      if (
+        !runCodeFenceEnter(view, activeBlockState) &&
+        !runListEnter(view) &&
+        !runBlockquoteEnter(view)
+      ) {
         insertNewlineAndIndent(view);
+      }
+    },
+    pressBackspace() {
+      if (!runCodeFenceBackspace(view, activeBlockState)) {
+        deleteCharBackward(view);
       }
     },
     destroy() {
@@ -429,6 +490,14 @@ type InactiveBlockquoteLine = {
   isLastLine: boolean;
 };
 
+type InactiveCodeFenceLine = {
+  lineStart: number;
+  lineEnd: number;
+  kind: "fence" | "content";
+  isFirstContentLine: boolean;
+  isLastContentLine: boolean;
+};
+
 function getInactiveBlockquoteLines(
   startOffset: number,
   endOffset: number,
@@ -460,6 +529,55 @@ function getInactiveBlockquoteLines(
   return lines;
 }
 
+function getInactiveCodeFenceLines(
+  startOffset: number,
+  endOffset: number,
+  source: string
+): InactiveCodeFenceLine[] {
+  const lines = getBlockLineInfos(startOffset, endOffset, source);
+
+  if (lines.length === 0) {
+    return [];
+  }
+
+  const lastIndex = lines.length - 1;
+
+  return lines.map((line, index) => ({
+    lineStart: line.lineStart,
+    lineEnd: line.lineEnd,
+    kind: index === 0 || index === lastIndex ? "fence" : "content",
+    isFirstContentLine: index === 1,
+    isLastContentLine: index === lastIndex - 1
+  }));
+}
+
+function getBlockLineInfos(
+  startOffset: number,
+  endOffset: number,
+  source: string
+): Array<{ lineStart: number; lineEnd: number }> {
+  const lines: Array<{ lineStart: number; lineEnd: number }> = [];
+  let cursor = startOffset;
+
+  while (cursor < endOffset) {
+    const nextBreak = source.indexOf("\n", cursor);
+    const lineEnd = nextBreak === -1 || nextBreak >= endOffset ? endOffset : nextBreak;
+
+    lines.push({
+      lineStart: cursor,
+      lineEnd
+    });
+
+    if (nextBreak === -1 || nextBreak >= endOffset) {
+      break;
+    }
+
+    cursor = nextBreak + 1;
+  }
+
+  return lines;
+}
+
 type ParsedListLine =
   | {
       indent: string;
@@ -479,6 +597,96 @@ type ParsedListLine =
 const LIST_LINE_PATTERN = /^(\s*)([*+-]|\d+[.)])(?:[ \t]+|$)(.*)$/;
 const TASK_CONTENT_PATTERN = /^\[( |x|X)\](?:[ \t]+|$)(.*)$/;
 const BLOCKQUOTE_LINE_PATTERN = /^(\s{0,3})>(?:[ \t]?)(.*)$/;
+const CODE_FENCE_LINE_PATTERN = /^(\s{0,3})(`{3,}|~{3,})([^\n]*)$/;
+
+function runCodeFenceEnter(view: EditorView, activeState: ActiveBlockState): boolean {
+  const selection = view.state.selection.main;
+  if (!selection.empty) {
+    return false;
+  }
+
+  const activeCodeFence =
+    activeState.activeBlock?.type === "codeFence" ? activeState.activeBlock : null;
+  if (activeCodeFence && isClosedCodeFenceBlock(view.state.doc.toString(), activeCodeFence)) {
+    return false;
+  }
+
+  const line = view.state.doc.lineAt(selection.head);
+  if (selection.head !== line.to) {
+    return false;
+  }
+
+  const parsed = parseCodeFenceLine(line.text);
+  if (!parsed) {
+    return false;
+  }
+
+  const closingFence = `${parsed.indent}${parsed.fence}`;
+  const insertAt = selection.head;
+  const insertText = `\n\n${closingFence}`;
+  const nextAnchor = insertAt + 1;
+
+  view.dispatch({
+    changes: {
+      from: insertAt,
+      to: insertAt,
+      insert: insertText
+    },
+    selection: {
+      anchor: nextAnchor,
+      head: nextAnchor
+    }
+  });
+
+  return true;
+}
+
+function runCodeFenceBackspace(view: EditorView, activeState: ActiveBlockState): boolean {
+  const selection = view.state.selection.main;
+  if (!selection.empty) {
+    return false;
+  }
+
+  const line = view.state.doc.lineAt(selection.head);
+  const lineStart = getBackspaceLineStart(view.state, selection.head, line.from);
+
+  if (selection.head !== lineStart) {
+    return false;
+  }
+
+  const adjacentCodeFence = getAdjacentClosedCodeFenceBlock(
+    activeState,
+    lineStart,
+    view.state.doc.toString()
+  );
+  if (!adjacentCodeFence) {
+    return false;
+  }
+
+  const source = view.state.doc.toString();
+  const nextAnchor = getCodeFenceEditableAnchor(source, adjacentCodeFence);
+
+  view.dispatch({
+    selection: {
+      anchor: nextAnchor,
+      head: nextAnchor
+    }
+  });
+
+  return true;
+}
+
+function getBackspaceLineStart(state: EditorState, selectionHead: number, lineStart: number): number {
+  if (
+    selectionHead === state.doc.length &&
+    selectionHead > 0 &&
+    state.doc.sliceString(selectionHead - 1, selectionHead) === "\n"
+  ) {
+    return selectionHead;
+  }
+
+  return lineStart;
+}
 
 function runListEnter(view: EditorView): boolean {
   const selection = view.state.selection.main;
@@ -622,6 +830,93 @@ function parseBlockquoteLine(text: string): { indent: string; content: string } 
     indent: match[1] ?? "",
     content: match[2] ?? ""
   };
+}
+
+function parseCodeFenceLine(text: string): { indent: string; fence: string } | null {
+  const match = CODE_FENCE_LINE_PATTERN.exec(text);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    indent: match[1] ?? "",
+    fence: match[2] ?? "```"
+  };
+}
+
+function getAdjacentClosedCodeFenceBlock(
+  activeState: ActiveBlockState,
+  lineStart: number,
+  source: string
+): Extract<ActiveBlockState["activeBlock"], { type: "codeFence" }> | null {
+  if (
+    activeState.activeBlock?.type === "codeFence" &&
+    activeState.activeBlock.startOffset === lineStart
+  ) {
+    return null;
+  }
+
+  for (const block of [...activeState.blockMap.blocks].reverse()) {
+    if (block.type !== "codeFence") {
+      continue;
+    }
+
+    const blockLines = getBlockLineInfos(block.startOffset, block.endOffset, source);
+    const closingFenceLine = blockLines.at(-1);
+    const separatorLineStart = closingFenceLine ? closingFenceLine.lineEnd + 1 : block.endOffset;
+
+    if (separatorLineStart !== lineStart) {
+      continue;
+    }
+
+    return isClosedCodeFenceBlock(source, block) ? block : null;
+  }
+
+  return null;
+}
+
+function getCodeFenceEditableAnchor(
+  source: string,
+  block: Extract<ActiveBlockState["activeBlock"], { type: "codeFence" }>
+): number {
+  const lines = getBlockLineInfos(block.startOffset, block.endOffset, source);
+
+  if (lines.length >= 3) {
+    return lines[lines.length - 2]!.lineEnd;
+  }
+
+  return lines[0]?.lineEnd ?? block.endOffset;
+}
+
+function isClosedCodeFenceBlock(
+  source: string,
+  block: Extract<ActiveBlockState["activeBlock"], { type: "codeFence" }>
+): boolean {
+  const blockSource = source.slice(block.startOffset, block.endOffset);
+  const lines = blockSource.split("\n");
+  const nonEmptyLines = lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => line.length > 0);
+  const firstEntry = nonEmptyLines[0];
+  const lastEntry = nonEmptyLines.at(-1);
+  const firstLine = firstEntry?.line ?? "";
+  const lastLine = lastEntry?.line ?? "";
+  const openingFence = parseCodeFenceLine(firstLine);
+  const closingFence = parseCodeFenceLine(lastLine);
+
+  if (!openingFence || !closingFence || !firstEntry || !lastEntry || firstEntry.index === lastEntry.index) {
+    return false;
+  }
+
+  if (openingFence.indent !== closingFence.indent) {
+    return false;
+  }
+
+  if (openingFence.fence[0] !== closingFence.fence[0]) {
+    return false;
+  }
+
+  return closingFence.fence.length >= openingFence.fence.length;
 }
 
 function buildContinuationPrefix(parsed: ParsedListLine): string {
