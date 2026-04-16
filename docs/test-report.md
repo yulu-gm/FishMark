@@ -9,6 +9,16 @@
 
 ## 记录
 
+| 2026-04-16 | TASK-038 | `npm run test -- src/main/package-scripts.test.ts` | 通过 | 先以失败测试锁定 `package-win.bat` 与 `package-macos.sh` 两个仓库根目录打包入口，再验证 Windows 入口调用 `npm.cmd run package:win`、macOS 入口保留清晰的预留提示。 |
+| 2026-04-16 | TASK-038 | `cmd /c package-win.bat` | 通过 | Windows 批处理入口已能从仓库根目录完成完整打包，最终产出 `release/Yulora-Setup-0.1.0.exe`。 |
+| 2026-04-16 | TASK-038 | `npm run test -- src/main/package-scripts.test.ts src/main/after-pack-win-icon.test.ts` | 通过 | 先以失败测试锁定 `afterPack` hook 配置与 `signAndEditExecutable: false` workaround，再验证独立 hook 能在当前 Windows 环境下调用 `rcedit` 补写 `Yulora.exe` 图标。 |
+| 2026-04-16 | TASK-038 | `npm run package:win` | 通过 | 当前保持 `win.signAndEditExecutable: false`，并通过 `afterPack` hook 单独补写 `release/win-unpacked/Yulora.exe` 图标；规避了 `electron-builder` 内置 `winCodeSign` 资源包在本机因符号链接权限导致的解压失败。 |
+| 2026-04-16 | TASK-038 | `npm run test -- src/main/package-scripts.test.ts src/main/generate-icons.test.ts` | 通过 | 先以失败测试锁定 `generate:icons` 入口、`win.icon` 配置，以及脚本对 `light` / `dark` 两套 PNG 与 `icon.ico` 的真实生成行为，再验证目标测试 10 项全部通过。 |
+| 2026-04-16 | TASK-038 | `npm run lint` | 通过 | 新增 `scripts/generate-icons.mjs`、打包配置与文档更新均通过 ESLint。 |
+| 2026-04-16 | TASK-038 | `npm run typecheck` | 通过 | renderer、electron、vitest、cli 四套 TypeScript 检查保持通过；本轮新增脚本未破坏现有编译边界。 |
+| 2026-04-16 | TASK-038 | `npm run test` | 通过 | Vitest 全量通过，当前共 31 个文件、181 条测试通过，包含新增图标生成回归测试。 |
+| 2026-04-16 | TASK-038 | `npm run build` | 通过 | renderer、electron 与 cli 构建通过；保留现有 Vite chunk size warning，但不阻塞本轮图标流水线交付。 |
+| 2026-04-16 | TASK-038 | `npm run package:win` | 通过 | 本地 Windows 打包成功，打包前已自动生成 `build/icons/light` 与 `build/icons/dark`，并产出 `release/Yulora-Setup-0.1.0.exe`；`package.json` 仍缺少 `author` 字段，只产生 warning，不阻塞安装器生成。 |
 | 2026-04-16 | TASK-033 | `npm run test -- packages/markdown-engine/src/parse-block-map.test.ts` | 通过 | 先补 fenced code block 与 info string 解析的失败测试，再验证 parser 输出已覆盖 source order、exact slice 与 round-trip 关键边界。 |
 | 2026-04-16 | TASK-033 | `npm run test -- src/renderer/code-editor.test.ts` | 通过 | 覆盖代码块非激活态渲染、激活恢复 Markdown 源码态，并确认既有 heading / paragraph / list / blockquote 回归测试全部保持通过。 |
 | 2026-04-16 | TASK-033 | `npm run test -- src/renderer/code-editor.test.ts` | 通过 | 补充 closing fence 点击边界与 fence marker 隐藏回归，避免在已渲染代码块底部点击时只漏出孤立的 ``` 而上方内容仍保持渲染态。 |

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/branding/yulora_logo_light.svg" alt="Yulora logo" width="160">
+</p>
+
 # Yulora
 
 Yulora 是一个面向 macOS 和 Windows 的本地优先 Markdown 桌面编辑器，目标是提供类似 Typora 的单栏写作体验，同时保持 Markdown 文本作为唯一事实来源。

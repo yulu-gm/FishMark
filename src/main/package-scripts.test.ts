@@ -65,20 +65,32 @@ describe("package scripts", () => {
     };
 
     expect(packageJson.scripts?.["package:win"]).toContain("npm run build");
+    expect(packageJson.scripts?.["package:win"]).toContain("npm run generate:icons");
     expect(packageJson.scripts?.["package:win"]).toContain("electron-builder");
     expect(packageJson.scripts?.["package:win"]).toContain("--config electron-builder.json");
     expect(packageJson.scripts?.["package:win"]).toContain("--win");
     expect(packageJson.scripts?.["package:win"]).toContain("--x64");
   });
 
+  it("defines a dedicated icon generation script", () => {
+    const packageJsonPath = path.join(process.cwd(), "package.json");
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
+      scripts?: Record<string, string>;
+    };
+
+    expect(packageJson.scripts?.["generate:icons"]).toBe("node scripts/generate-icons.mjs");
+  });
+
   it("stores the Windows installer configuration in a dedicated electron-builder config file", () => {
     const configPath = path.join(process.cwd(), "electron-builder.json");
     const config = JSON.parse(readFileSync(configPath, "utf8")) as {
       appId?: string;
+      afterPack?: string;
       productName?: string;
       directories?: { output?: string };
       files?: string[];
       win?: {
+        icon?: string;
         signAndEditExecutable?: boolean;
         target?: Array<{
           target?: string;
@@ -92,6 +104,7 @@ describe("package scripts", () => {
     };
 
     expect(config.appId).toBe("com.yulora.app");
+    expect(config.afterPack).toBe("./scripts/after-pack-win-icon.mjs");
     expect(config.productName).toBe("Yulora");
     expect(config.directories?.output).toBe("release");
     expect(config.files).toEqual(
@@ -105,6 +118,7 @@ describe("package scripts", () => {
         "!reports{,/**}"
       ])
     );
+    expect(config.win?.icon).toBe("build/icons/light/icon.ico");
     expect(config.win?.target).toEqual([
       {
         target: "nsis",
@@ -123,5 +137,25 @@ describe("package scripts", () => {
     const gitignoreSource = readFileSync(gitignorePath, "utf8");
 
     expect(gitignoreSource).toContain("release");
+  });
+
+  it("provides a Windows batch entry for packaging from the repo root", () => {
+    const batchPath = path.join(process.cwd(), "package-win.bat");
+    const batchSource = readFileSync(batchPath, "utf8");
+
+    expect(batchSource).toContain("@echo off");
+    expect(batchSource).toContain('cd /d "%~dp0"');
+    expect(batchSource).toContain("call npm.cmd run package:win");
+  });
+
+  it("provides a macOS shell entry that reserves the packaging flow with a clear message", () => {
+    const shellPath = path.join(process.cwd(), "package-macos.sh");
+    const shellSource = readFileSync(shellPath, "utf8");
+
+    expect(shellSource).toContain("#!/usr/bin/env bash");
+    expect(shellSource).toContain('cd "$(dirname "$0")"');
+    expect(shellSource).toContain('if [[ "$(uname)" != "Darwin" ]]');
+    expect(shellSource).toContain("macOS packaging is not implemented yet");
+    expect(shellSource).toContain("exit 1");
   });
 });

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Transparent background -->
+
+  <g transform="translate(512 480.5) scale(1.5) translate(-512 -480.5)">
+    <!-- Rounded square (light) -->
+    <rect x="268" y="249" width="488" height="463" rx="88" ry="88" fill="#FFFFFF" stroke="#E5E5E5" stroke-width="4"/>
+
+    <!-- Y left arm -->
+    <path d="M341 320 L435 320 L493 418 L449 494 Z" fill="#111111"/>
+
+    <!-- Y right arm -->
+    <path d="M570 320 L658 320 L536 520 L536 631 L456 631 L456 515 Z" fill="#111111"/>
+
+    <!-- Cursor -->
+    <rect x="663" y="320" width="19" height="118" rx="9.5" ry="9.5" fill="#111111"/>
+  </g>
+</svg>

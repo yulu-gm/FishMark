@@ -1,5 +1,6 @@
 {
   "appId": "com.yulora.app",
+  "afterPack": "./scripts/after-pack-win-icon.mjs",
   "productName": "Yulora",
   "artifactName": "${productName}-Setup-${version}.${ext}",
   "directories": {
@@ -19,6 +20,7 @@
     "!tmp{,/**}"
   ],
   "win": {
+    "icon": "build/icons/light/icon.ico",
     "signAndEditExecutable": false,
     "target": [
       {

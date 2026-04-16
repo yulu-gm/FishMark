@@ -21,7 +21,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.renderer.json && tsc --noEmit -p tsconfig.electron.json && tsc --noEmit -p tsconfig.vitest.json && tsc --noEmit -p tsconfig.cli.json",
     "test": "vitest run",
     "build:cli": "tsc -p tsconfig.cli.json",
-    "package:win": "npm run build && electron-builder --config electron-builder.json --win --x64",
+    "generate:icons": "node scripts/generate-icons.mjs",
+    "package:win": "npm run build && npm run generate:icons && electron-builder --config electron-builder.json --win --x64",
     "pretest:scenario": "npm run build:cli",
     "test:scenario": "node dist-cli/cli/bin.js"
   },
@@ -35,6 +36,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@resvg/resvg-js": "^2.6.2",
     "@types/node": "^25.6.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
@@ -48,6 +50,8 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.5.0",
     "jsdom": "^29.0.2",
+    "png-to-ico": "^3.0.1",
+    "rcedit": "^5.0.2",
     "rimraf": "^6.1.3",
     "typescript": "^6.0.2",
     "typescript-eslint": "^8.58.2",
