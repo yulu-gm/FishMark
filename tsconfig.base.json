@@ -1,6 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2022",
+    "paths": {
+      "@yulora/editor-core": ["./packages/editor-core/src/index.ts"],
+      "@yulora/markdown-engine": ["./packages/markdown-engine/src/index.ts"],
+      "@yulora/test-harness": ["./packages/test-harness/src/index.ts"]
+    },
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,

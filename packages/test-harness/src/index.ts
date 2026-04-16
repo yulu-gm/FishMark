@@ -14,6 +14,19 @@ export type { ScenarioQuery, ScenarioRegistry } from "./registry";
 export { createScenarioRegistry } from "./registry";
 
 export type {
+  DebugEventEntry,
+  DebugRunState,
+  DebugRunStep,
+  DebugRunTerminal,
+} from "./debug-run-state";
+export {
+  applyRunnerEventToDebugState,
+  applyScenarioRunTerminalToDebugState,
+  createIdleDebugRunState,
+  formatRunStatus
+} from "./debug-run-state";
+
+export type {
   RunContext,
   RunErrorInfo,
   RunScenarioOptions,

@@ -909,7 +909,7 @@
 
 ### TASK-029 CLI 入口、退出码与工件协议
 
-状态：TODO
+状态：已完成
 依赖：`TASK-025`、`TASK-026`、`TASK-027`
 
 目标：为 agent 提供统一 CLI 触发入口，并输出标准化工件与退出码。
@@ -935,7 +935,7 @@
 
 ### TASK-030 visual-test 截图与 diff 支持
 
-状态：DEV_DONE
+状态：TODO
 依赖：`TASK-027`、`TASK-028`、`TASK-029`
 
 目标：让测试工作台支持带界面的 visual-test，并输出截图、基线和 diff 工件。

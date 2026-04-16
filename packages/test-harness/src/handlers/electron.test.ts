@@ -8,21 +8,25 @@ import { appShellStartupScenario } from "../scenarios/app-shell-startup";
 import { listEnterBehaviorBasicScenario } from "../scenarios/list-enter-behavior-basic";
 import { openMarkdownFileBasicScenario } from "../scenarios/open-markdown-file-basic";
 
+const repoRoot = process.cwd();
+const openMarkdownFixture = resolve(repoRoot, "fixtures/test-harness/open-markdown-file-basic.md");
+const listEnterFixture = resolve(repoRoot, "fixtures/test-harness/list-enter-behavior-basic.md");
+const normalizeLineEndings = (value: string) => value.replace(/\r\n/g, "\n");
+
 describe("createElectronStepHandlers", () => {
   it("keeps the list-enter fixture aligned with the scenario assumptions", async () => {
-    const fixturePath = resolve(
-      "C:/Users/yulu/Documents/Yulora/Yulora",
-      "fixtures/test-harness/list-enter-behavior-basic.md"
-    );
+    const fixturePath = listEnterFixture;
 
-    await expect(readFile(fixturePath, "utf8")).resolves.toBe("- [ ] todo\n");
+    await expect(readFile(fixturePath, "utf8")).resolves.toSatisfy((content: string) => {
+      return normalizeLineEndings(content) === "- [ ] todo\n";
+    });
   });
 
   it("maps the startup scenario to ready, empty-workspace, and close-window commands", async () => {
     const runCommand = vi.fn().mockResolvedValue({ ok: true });
     const handlers = createElectronStepHandlers({
       scenario: appShellStartupScenario,
-      cwd: "D:/MyAgent/Yulora/Yulora",
+      cwd: repoRoot,
       runCommand
     });
 
@@ -53,7 +57,7 @@ describe("createElectronStepHandlers", () => {
     const runCommand = vi.fn().mockResolvedValue({ ok: true });
     const handlers = createElectronStepHandlers({
       scenario: openMarkdownFileBasicScenario,
-      cwd: "D:/MyAgent/Yulora/Yulora",
+      cwd: repoRoot,
       runCommand,
       readTextFile: vi.fn().mockResolvedValue("# Fixture\n")
     });
@@ -77,7 +81,7 @@ describe("createElectronStepHandlers", () => {
     expect(runCommand.mock.calls.map(([command]) => command)).toEqual([
       {
         type: "open-fixture-file",
-        fixturePath: "D:\\MyAgent\\Yulora\\Yulora\\fixtures\\test-harness\\open-markdown-file-basic.md"
+        fixturePath: openMarkdownFixture
       },
       {
         type: "assert-editor-content",
@@ -85,7 +89,7 @@ describe("createElectronStepHandlers", () => {
       },
       {
         type: "assert-document-path",
-        expectedPath: "D:\\MyAgent\\Yulora\\Yulora\\fixtures\\test-harness\\open-markdown-file-basic.md"
+        expectedPath: openMarkdownFixture
       }
     ]);
   });
@@ -93,7 +97,7 @@ describe("createElectronStepHandlers", () => {
   it("throws when the editor command reports failure", async () => {
     const handlers = createElectronStepHandlers({
       scenario: appShellStartupScenario,
-      cwd: "D:/MyAgent/Yulora/Yulora",
+      cwd: repoRoot,
       runCommand: vi.fn().mockResolvedValue({
         ok: false,
         message: "renderer failure"
@@ -113,7 +117,7 @@ describe("createElectronStepHandlers", () => {
     const runCommand = vi.fn().mockResolvedValue({ ok: true });
     const handlers = createElectronStepHandlers({
       scenario: listEnterBehaviorBasicScenario,
-      cwd: "D:/MyAgent/Yulora/Yulora",
+      cwd: repoRoot,
       runCommand
     });
 
@@ -156,7 +160,7 @@ describe("createElectronStepHandlers", () => {
     expect(runCommand.mock.calls.map(([command]) => command)).toEqual([
       {
         type: "open-fixture-file",
-        fixturePath: "D:\\MyAgent\\Yulora\\Yulora\\fixtures\\test-harness\\list-enter-behavior-basic.md"
+        fixturePath: listEnterFixture
       },
       {
         type: "set-editor-selection",

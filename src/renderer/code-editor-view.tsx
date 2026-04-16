@@ -10,7 +10,7 @@ import {
   createCodeEditorController,
   type CodeEditorController
 } from "./code-editor";
-import type { ActiveBlockState } from "../../packages/editor-core/src";
+import type { ActiveBlockState } from "@yulora/editor-core";
 
 export type CodeEditorHandle = {
   getContent: () => string;

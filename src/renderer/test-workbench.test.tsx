@@ -4,7 +4,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { TestScenario } from "../../packages/test-harness/src";
+import type { TestScenario } from "@yulora/test-harness";
 import type {
   RunnerEventEnvelope,
   ScenarioRunTerminal,
@@ -60,10 +60,10 @@ const { registry } = vi.hoisted(() => {
   };
 });
 
-vi.mock("../../packages/test-harness/src", async () => {
+vi.mock("@yulora/test-harness", async () => {
   const actual =
-    await vi.importActual<typeof import("../../packages/test-harness/src")>(
-      "../../packages/test-harness/src"
+    await vi.importActual<typeof import("@yulora/test-harness")>(
+      "@yulora/test-harness"
     );
 
   return {

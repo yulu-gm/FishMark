@@ -10,7 +10,7 @@
     "types": ["node"],
     "sourceMap": true,
     "declaration": false,
-    "ignoreDeprecations": "6.0"
+    "ignoreDeprecations": "5.0"
   },
   "include": ["packages/test-harness/src/**/*.ts"],
   "exclude": ["packages/test-harness/src/**/*.test.ts"]
