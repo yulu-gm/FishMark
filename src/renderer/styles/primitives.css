@@ -1,0 +1,143 @@
+/* =============================================================
+   YULORA PRIMITIVES  —  src/renderer/styles/primitives.css
+
+   Single source of truth for shared control shapes.
+   Feature files (app-ui.css, settings.css) only add sizing
+   and layout rules. Visual appearance + tokens live here.
+   ============================================================= */
+
+/* ── Shared behavioral base for ALL interactive controls ─────── */
+/*   display · flex · cursor · border-radius · transitions        */
+
+.settings-entry,
+.settings-back,
+.settings-reset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--yulora-radius-md);
+  cursor: pointer;
+  /* font is inherited globally from base.css */
+  transition:
+    color var(--yu-t-base),
+    border-color var(--yu-t-base),
+    background-color var(--yu-t-base),
+    box-shadow var(--yu-t-base),
+    transform var(--yu-t-base);
+}
+
+/* Focus ring — shared */
+.settings-entry:focus-visible,
+.settings-back:focus-visible,
+.settings-reset:focus-visible {
+  outline: 2px solid var(--yulora-focus-ring);
+  outline-offset: 2px;
+}
+
+/* Disabled — shared */
+.settings-entry:disabled,
+.settings-back:disabled,
+.settings-reset:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* ── Solid icon button (rail, standalone contexts) ───────────── */
+
+.settings-entry {
+  padding: 0;
+  border: 1px solid var(--yu-ctrl-solid-border);
+  background: var(--yu-ctrl-solid-bg);
+  color: var(--yu-ctrl-text);
+  box-shadow: var(--yulora-shadow-1);
+}
+
+.settings-entry:hover {
+  border-color: var(--yu-ctrl-solid-border-hover);
+  background: var(--yu-ctrl-solid-bg-hover);
+  color: var(--yu-ctrl-text-hover);
+}
+
+/* ── Glass controls (inside glass panels / drawers) ──────────── */
+/*   .settings-back  — icon button                                */
+/*   .settings-reset — text button                                */
+
+.settings-back,
+.settings-reset {
+  padding: 0;
+  border: 1px solid var(--yu-ctrl-glass-border);
+  background: var(--yu-ctrl-glass-bg);
+  color: var(--yu-ctrl-text);
+}
+
+.settings-back:hover,
+.settings-reset:hover {
+  border-color: var(--yu-ctrl-glass-border-hover);
+  background: var(--yu-ctrl-glass-bg-hover);
+  color: var(--yu-ctrl-text-hover);
+}
+
+/* ── Text input ──────────────────────────────────────────────── */
+
+.settings-input {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--yu-input-border);
+  border-radius: var(--yulora-radius-md);
+  background: var(--yu-input-bg);
+  color: var(--yulora-text-body);
+  font-size: 0.92rem;
+  transition:
+    border-color var(--yu-t-fast),
+    background-color var(--yu-t-fast),
+    box-shadow var(--yu-t-fast);
+}
+
+.settings-input:focus {
+  outline: none;
+  border-color: var(--yu-input-border-focus);
+  background: var(--yu-input-bg-focus);
+  box-shadow: 0 0 0 3px var(--yu-input-ring);
+}
+
+.settings-input:disabled {
+  color: var(--yulora-text-muted);
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+/* ── Segment / radio group ───────────────────────────────────── */
+
+.settings-radio-group {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--yu-segment-border);
+  border-radius: var(--yulora-radius-pill);
+  background: var(--yu-segment-bg);
+}
+
+.settings-radio {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: var(--yulora-radius-pill);
+  cursor: pointer;
+  color: var(--yu-ctrl-text);
+  font-size: 0.88rem;
+  user-select: none;
+  transition:
+    background-color var(--yu-t-fast),
+    color var(--yu-t-fast);
+}
+
+.settings-radio input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.settings-radio.is-selected {
+  background: var(--yu-segment-active-bg);
+  color: var(--yu-ctrl-text-hover);
+  box-shadow: var(--yulora-shadow-1);
+}
