@@ -16,6 +16,19 @@ import {
   OPEN_MARKDOWN_FILE_FROM_PATH_CHANNEL
 } from "../shared/open-markdown-file";
 import {
+  DEFAULT_PREFERENCES,
+  GET_PREFERENCES_CHANNEL,
+  PREFERENCES_CHANGED_EVENT,
+  UPDATE_PREFERENCES_CHANNEL,
+  type Preferences,
+  type PreferencesUpdate
+} from "../shared/preferences";
+import type {
+  PreloadPreferences,
+  PreloadPreferencesUpdate,
+  PreloadUpdatePreferencesResult
+} from "./preload";
+import {
   SAVE_MARKDOWN_FILE_AS_CHANNEL,
   SAVE_MARKDOWN_FILE_CHANNEL
 } from "../shared/save-markdown-file";
@@ -69,6 +82,20 @@ describe("preload contract", () => {
     void resultEnvelopeContract;
   });
 
+  it("aligns preference types with the shared contract", () => {
+    const preferencesContract: TypeEquals<Preferences, PreloadPreferences> = true;
+    const updateContract: TypeEquals<PreferencesUpdate, PreloadPreferencesUpdate> = true;
+
+    void preferencesContract;
+    void updateContract;
+
+    const sample: PreloadUpdatePreferencesResult = {
+      status: "success",
+      preferences: DEFAULT_PREFERENCES
+    };
+    expect(sample.status).toBe("success");
+  });
+
   beforeEach(() => {
     exposeInMainWorld.mockClear();
     invoke.mockClear();
@@ -95,6 +122,10 @@ describe("preload contract", () => {
         }
       }
     };
+    const updatePreferencesInput: PreferencesUpdate = {
+      autosave: { idleDelayMs: 1500 },
+      document: { fontFamily: "IBM Plex Serif", fontSize: 18 }
+    };
 
     void api.openMarkdownFile();
     void api.openMarkdownFileFromPath(openPathInput.targetPath);
@@ -104,6 +135,10 @@ describe("preload contract", () => {
     void api.startScenarioRun(startRunInput);
     void api.interruptScenarioRun(interruptInput);
     void api.completeEditorTestCommand(completeInput);
+    void api.getPreferences();
+    void api.updatePreferences(updatePreferencesInput);
+    void api.listThemes();
+    void api.refreshThemes();
 
     expect(invoke.mock.calls).toEqual([
       [OPEN_MARKDOWN_FILE_CHANNEL],
@@ -113,7 +148,11 @@ describe("preload contract", () => {
       ["yulora:open-editor-test-window"],
       [START_SCENARIO_RUN_CHANNEL, startRunInput],
       [INTERRUPT_SCENARIO_RUN_CHANNEL, interruptInput],
-      [COMPLETE_EDITOR_TEST_COMMAND_CHANNEL, completeInput]
+      [COMPLETE_EDITOR_TEST_COMMAND_CHANNEL, completeInput],
+      [GET_PREFERENCES_CHANNEL],
+      [UPDATE_PREFERENCES_CHANNEL, updatePreferencesInput],
+      ["yulora:list-themes"],
+      ["yulora:refresh-themes"]
     ]);
   });
 
@@ -123,18 +162,21 @@ describe("preload contract", () => {
     const terminalListener = vi.fn();
     const editorListener = vi.fn();
     const menuListener = vi.fn();
+    const preferencesListener = vi.fn();
 
     const detachScenario = api.onScenarioRunEvent(scenarioListener);
     const detachTerminal = api.onScenarioRunTerminal(terminalListener);
     const detachEditor = api.onEditorTestCommand(editorListener);
     const detachMenu = api.onMenuCommand(menuListener);
+    const detachPreferences = api.onPreferencesChanged(preferencesListener);
 
-    expect(on.mock.calls).toHaveLength(4);
+    expect(on.mock.calls).toHaveLength(5);
 
     const scenarioHandler = on.mock.calls[0]?.[1];
     const terminalHandler = on.mock.calls[1]?.[1];
     const editorHandler = on.mock.calls[2]?.[1];
     const menuHandler = on.mock.calls[3]?.[1];
+    const preferencesHandler = on.mock.calls[4]?.[1];
 
     const scenarioPayload: RunnerEventEnvelope = {
       runId: "run-1",
@@ -170,29 +212,34 @@ describe("preload contract", () => {
       }
     };
     const menuPayload: AppMenuCommand = "save-markdown-file-as";
+    const preferencesPayload: Preferences = DEFAULT_PREFERENCES;
 
     scenarioHandler?.({}, scenarioPayload);
     terminalHandler?.({}, terminalPayload);
     editorHandler?.({}, selectionCommandPayload);
     editorHandler?.({}, enterCommandPayload);
     menuHandler?.({}, menuPayload);
+    preferencesHandler?.({}, preferencesPayload);
 
     expect(scenarioListener).toHaveBeenCalledWith(scenarioPayload);
     expect(terminalListener).toHaveBeenCalledWith(terminalPayload);
     expect(editorListener).toHaveBeenNthCalledWith(1, selectionCommandPayload);
     expect(editorListener).toHaveBeenNthCalledWith(2, enterCommandPayload);
     expect(menuListener).toHaveBeenCalledWith(menuPayload);
+    expect(preferencesListener).toHaveBeenCalledWith(preferencesPayload);
 
     detachScenario();
     detachTerminal();
     detachEditor();
     detachMenu();
+    detachPreferences();
 
     expect(off.mock.calls).toEqual([
       [SCENARIO_RUN_EVENT, scenarioHandler],
       [SCENARIO_RUN_TERMINAL_EVENT, terminalHandler],
       [EDITOR_TEST_COMMAND_EVENT, editorHandler],
-      [APP_MENU_COMMAND_EVENT, menuHandler]
+      [APP_MENU_COMMAND_EVENT, menuHandler],
+      [PREFERENCES_CHANGED_EVENT, preferencesHandler]
     ]);
   });
 });

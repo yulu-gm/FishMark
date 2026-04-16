@@ -14,6 +14,11 @@ const SCENARIO_RUN_TERMINAL_EVENT = "yulora:scenario-run-terminal";
 const EDITOR_TEST_COMMAND_EVENT = "yulora:editor-test-command";
 const COMPLETE_EDITOR_TEST_COMMAND_CHANNEL = "yulora:complete-editor-test-command";
 const APP_MENU_COMMAND_EVENT = "yulora:app-menu-command";
+const GET_PREFERENCES_CHANNEL = "yulora:get-preferences";
+const UPDATE_PREFERENCES_CHANNEL = "yulora:update-preferences";
+const PREFERENCES_CHANGED_EVENT = "yulora:preferences-changed";
+const LIST_THEMES_CHANNEL = "yulora:list-themes";
+const REFRESH_THEMES_CHANNEL = "yulora:refresh-themes";
 const RUNTIME_MODE_ARGUMENT_PREFIX = "--yulora-runtime-mode=";
 const STARTUP_OPEN_PATH_ARGUMENT_PREFIX = "--yulora-startup-open-path=";
 
@@ -50,6 +55,59 @@ type EditorTestCommandResultEnvelope = {
 export type { EditorTestCommandEnvelope, EditorTestCommandResultEnvelope };
 
 type AppMenuCommand = "open-markdown-file" | "save-markdown-file" | "save-markdown-file-as";
+
+type ThemeMode = "system" | "light" | "dark";
+
+type Preferences = {
+  version: 2;
+  autosave: { idleDelayMs: number };
+  recentFiles: { maxEntries: number };
+  ui: { fontSize: number | null };
+  document: { fontFamily: string | null; fontSize: number | null };
+  theme: { mode: ThemeMode; selectedId: string | null };
+};
+
+type PreferencesUpdate = {
+  autosave?: Partial<Preferences["autosave"]>;
+  recentFiles?: Partial<Preferences["recentFiles"]>;
+  ui?: Partial<Preferences["ui"]>;
+  document?: Partial<Preferences["document"]>;
+  theme?: Partial<Preferences["theme"]>;
+};
+
+type ThemeDescriptor = {
+  id: string;
+  source: "builtin" | "community";
+  name: string;
+  directoryName: string;
+  availableParts: {
+    tokens: boolean;
+    ui: boolean;
+    editor: boolean;
+    markdown: boolean;
+  };
+  partUrls: Partial<{
+    tokens: string;
+    ui: string;
+    editor: string;
+    markdown: string;
+  }>;
+};
+
+type UpdatePreferencesResult =
+  | { status: "success"; preferences: Preferences }
+  | {
+      status: "error";
+      error: { code: "write-failed" | "commit-failed"; message: string };
+      preferences: Preferences;
+    };
+
+export type {
+  Preferences as PreloadPreferences,
+  PreferencesUpdate as PreloadPreferencesUpdate,
+  ThemeDescriptor as PreloadThemeDescriptor,
+  UpdatePreferencesResult as PreloadUpdatePreferencesResult
+};
 
 type ScenarioRunStatus = "idle" | "running" | "passed" | "failed" | "timed-out" | "interrupted";
 
@@ -173,6 +231,22 @@ const api = {
 
     return () => {
       ipcRenderer.off(APP_MENU_COMMAND_EVENT, handleMenuCommand);
+    };
+  },
+  getPreferences: (): Promise<Preferences> => ipcRenderer.invoke(GET_PREFERENCES_CHANNEL),
+  updatePreferences: (patch: PreferencesUpdate): Promise<UpdatePreferencesResult> =>
+    ipcRenderer.invoke(UPDATE_PREFERENCES_CHANNEL, patch),
+  listThemes: (): Promise<ThemeDescriptor[]> => ipcRenderer.invoke(LIST_THEMES_CHANNEL),
+  refreshThemes: (): Promise<ThemeDescriptor[]> => ipcRenderer.invoke(REFRESH_THEMES_CHANNEL),
+  onPreferencesChanged: (listener: (preferences: Preferences) => void) => {
+    const handlePreferencesChanged = (_event: unknown, preferences: Preferences) => {
+      listener(preferences);
+    };
+
+    ipcRenderer.on(PREFERENCES_CHANGED_EVENT, handlePreferencesChanged);
+
+    return () => {
+      ipcRenderer.off(PREFERENCES_CHANGED_EVENT, handlePreferencesChanged);
     };
   }
 };

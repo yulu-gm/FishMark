@@ -1,0 +1,8 @@
+:root[data-yulora-theme="dark"] {
+  --yulora-dirty-text: #fbbf24;
+  --yulora-clean-text: #86efac;
+  --yulora-danger-bg: #3b1217;
+  --yulora-danger-border: #7f1d1d;
+  --yulora-danger-text: #fecaca;
+  --yulora-focus-ring: #60a5fa;
+}

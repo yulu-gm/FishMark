@@ -7,6 +7,8 @@ import { resolveMarkdownLaunchPathFromArgv } from "./launch-open-path";
 import { openMarkdownFileFromPath, showOpenMarkdownDialog } from "./open-markdown-file";
 import { saveMarkdownFileToPath, showSaveMarkdownDialog } from "./save-markdown-file";
 import { createEditorTestSessions } from "./editor-test-sessions";
+import { createPreferencesService } from "./preferences-service";
+import { createThemeService } from "./theme-service";
 import { createTestRunSessions } from "./test-run-sessions";
 import { resolveRendererEntry } from "./paths";
 import { createRuntimeWindowManager, resolveAppRuntimeMode } from "./runtime-windows";
@@ -26,6 +28,12 @@ import {
 } from "../shared/open-markdown-file";
 import { APP_MENU_COMMAND_EVENT, type AppMenuCommand } from "../shared/menu-command";
 import {
+  GET_PREFERENCES_CHANNEL,
+  PREFERENCES_CHANGED_EVENT,
+  UPDATE_PREFERENCES_CHANNEL,
+  type PreferencesUpdate
+} from "../shared/preferences";
+import {
   SAVE_MARKDOWN_FILE_AS_CHANNEL,
   SAVE_MARKDOWN_FILE_CHANNEL,
   type SaveMarkdownFileAsInput,
@@ -33,6 +41,8 @@ import {
 } from "../shared/save-markdown-file";
 
 const OPEN_EDITOR_TEST_WINDOW_CHANNEL = "yulora:open-editor-test-window";
+const LIST_THEMES_CHANNEL = "yulora:list-themes";
+const REFRESH_THEMES_CHANNEL = "yulora:refresh-themes";
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 const pendingLaunchOpenPaths: string[] = [];
 
@@ -101,7 +111,34 @@ function broadcastToWindows(channel: string, payload: unknown): void {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  const preferencesService = createPreferencesService({
+    userDataDir: app.getPath("userData"),
+    onCorruptRecovery: (backupPath) => {
+      // Surface the corrupt-file recovery so it shows up in launch logs
+      // without crashing startup.
+      const target = backupPath ?? "(rename failed)";
+      console.warn(`[yulora] preferences file was corrupt; backed up to ${target}`);
+    }
+  });
+
+  const initialPreferences = await preferencesService.initialize();
+  const themeService = createThemeService({
+    builtinThemesDir: path.join(__dirname, "../../src/renderer/styles/themes"),
+    userDataDir: app.getPath("userData")
+  });
+  await themeService.listThemes();
+
+  if (initialPreferences.source === "recovered-from-corrupt") {
+    console.warn(
+      `[yulora] preferences reset to defaults due to corrupt file at ${initialPreferences.corruptBackupPath ?? "(unknown)"}`
+    );
+  }
+
+  preferencesService.onChange((preferences) => {
+    broadcastToWindows(PREFERENCES_CHANGED_EVENT, preferences);
+  });
+
   const windowManager = createRuntimeWindowManager({
     runtimeMode: resolveAppRuntimeMode(process.env),
     preloadPath: path.join(__dirname, "../preload/preload.js"),
@@ -167,6 +204,12 @@ app.whenReady().then(() => {
       editorTestSessions.completeCommand(payload);
     }
   );
+  ipcMain.handle(GET_PREFERENCES_CHANNEL, async () => preferencesService.getPreferences());
+  ipcMain.handle(UPDATE_PREFERENCES_CHANNEL, async (_event, patch: PreferencesUpdate | undefined) =>
+    preferencesService.updatePreferences(patch)
+  );
+  ipcMain.handle(LIST_THEMES_CHANNEL, async () => themeService.listThemes());
+  ipcMain.handle(REFRESH_THEMES_CHANNEL, async () => themeService.refreshThemes());
   ipcMain.handle(START_SCENARIO_RUN_CHANNEL, async (_event, input: { scenarioId: string }) =>
     testRunSessions.startScenarioRun(input)
   );

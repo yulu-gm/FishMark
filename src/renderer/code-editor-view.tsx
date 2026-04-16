@@ -15,6 +15,7 @@ import type { ActiveBlockState } from "@yulora/editor-core";
 export type CodeEditorHandle = {
   getContent: () => string;
   setContent: (content: string) => void;
+  focus: () => void;
   insertText: (text: string) => void;
   setSelection: (anchor: number, head?: number) => void;
   pressEnter: () => void;
@@ -81,6 +82,9 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
         getContent: () => controllerRef.current?.getContent() ?? initialContent,
         setContent: (content: string) => {
           controllerRef.current?.replaceDocument(content);
+        },
+        focus: () => {
+          controllerRef.current?.focus();
         },
         insertText: (text: string) => {
           controllerRef.current?.insertText(text);

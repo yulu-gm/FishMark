@@ -4,6 +4,7 @@ import type {
   EditorTestCommandEnvelope,
   EditorTestCommandResultEnvelope
 } from "../shared/editor-test-command";
+import type { Preferences, PreferencesUpdate } from "../shared/preferences";
 import type {
   SaveMarkdownFileAsInput,
   SaveMarkdownFileInput,
@@ -12,6 +13,33 @@ import type {
 import type { RunnerEventEnvelope, ScenarioRunTerminal } from "../shared/test-run-session";
 
 export {};
+
+type UpdatePreferencesResult =
+  | { status: "success"; preferences: Preferences }
+  | {
+      status: "error";
+      error: { code: "write-failed" | "commit-failed"; message: string };
+      preferences: Preferences;
+    };
+
+type ThemeDescriptor = {
+  id: string;
+  source: "builtin" | "community";
+  name: string;
+  directoryName: string;
+  availableParts: {
+    tokens: boolean;
+    ui: boolean;
+    editor: boolean;
+    markdown: boolean;
+  };
+  partUrls: Partial<{
+    tokens: string;
+    ui: string;
+    editor: string;
+    markdown: string;
+  }>;
+};
 
 declare global {
   interface Window {
@@ -24,6 +52,8 @@ declare global {
       saveMarkdownFile: (input: SaveMarkdownFileInput) => Promise<SaveMarkdownFileResult>;
       saveMarkdownFileAs: (input: SaveMarkdownFileAsInput) => Promise<SaveMarkdownFileResult>;
       openEditorTestWindow: () => Promise<void>;
+      listThemes: () => Promise<ThemeDescriptor[]>;
+      refreshThemes: () => Promise<ThemeDescriptor[]>;
       startScenarioRun: (input: { scenarioId: string }) => Promise<{ runId: string }>;
       interruptScenarioRun: (input: { runId: string }) => Promise<void>;
       onScenarioRunEvent: (listener: (payload: RunnerEventEnvelope) => void) => () => void;
@@ -31,6 +61,9 @@ declare global {
       onEditorTestCommand: (listener: (payload: EditorTestCommandEnvelope) => void) => () => void;
       completeEditorTestCommand: (payload: EditorTestCommandResultEnvelope) => Promise<void>;
       onMenuCommand: (listener: (command: AppMenuCommand) => void) => () => void;
+      getPreferences: () => Promise<Preferences>;
+      updatePreferences: (patch: PreferencesUpdate) => Promise<UpdatePreferencesResult>;
+      onPreferencesChanged: (listener: (preferences: Preferences) => void) => () => void;
     };
   }
 }

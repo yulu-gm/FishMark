@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 
-import { act, createElement } from "react";
+import { act, createElement, createRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CodeEditorView } from "./code-editor-view";
+import { CodeEditorView, type CodeEditorHandle } from "./code-editor-view";
 
 const replaceDocumentMock = vi.fn<(content: string) => void>();
+const focusMock = vi.fn<() => void>();
 const destroyMock = vi.fn<() => void>();
 const getContentMock = vi.fn<() => string>(() => "# Initial\n");
 const createCodeEditorControllerMock = vi.fn();
@@ -27,12 +28,14 @@ describe("CodeEditorView", () => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     replaceDocumentMock.mockReset();
     destroyMock.mockReset();
+    focusMock.mockReset();
     getContentMock.mockReset();
     getContentMock.mockReturnValue("# Initial\n");
     createCodeEditorControllerMock.mockReset();
     createCodeEditorControllerMock.mockReturnValue({
       getContent: getContentMock,
       replaceDocument: replaceDocumentMock,
+      focus: focusMock,
       destroy: destroyMock
     });
 
@@ -101,5 +104,25 @@ describe("CodeEditorView", () => {
 
     expect(replaceDocumentMock).toHaveBeenCalledTimes(1);
     expect(replaceDocumentMock).toHaveBeenCalledWith("# Opened from disk\n");
+  });
+
+  it("exposes focus() on handle and forwards to editor host", async () => {
+    const ref = createRef<CodeEditorHandle>();
+
+    await act(async () => {
+      root.render(
+        createElement(CodeEditorView, {
+          initialContent: "# Initial\n",
+          loadRevision: 1,
+          onChange: vi.fn(),
+          ref
+        })
+      );
+    });
+
+    expect(typeof ref.current?.focus).toBe("function");
+    ref.current?.focus();
+
+    expect(focusMock).toHaveBeenCalledTimes(1);
   });
 });

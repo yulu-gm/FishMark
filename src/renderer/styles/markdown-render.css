@@ -1,0 +1,267 @@
+.document-editor .cm-inactive-heading {
+  color: var(--yulora-text-strong);
+}
+
+.document-editor .cm-inactive-heading-marker {
+  display: none;
+}
+
+.document-editor .cm-inactive-heading-depth-1 {
+  font-size: 1.85rem;
+  line-height: 1.45;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.document-editor .cm-inactive-heading-depth-2 {
+  font-size: 1.58rem;
+  line-height: 1.5;
+  font-weight: 680;
+}
+
+.document-editor .cm-inactive-heading-depth-3 {
+  font-size: 1.34rem;
+  line-height: 1.56;
+  font-weight: 640;
+}
+
+.document-editor .cm-inactive-heading-depth-4 {
+  font-size: 1.18rem;
+  line-height: 1.62;
+  font-weight: 620;
+}
+
+.document-editor .cm-inactive-heading-depth-5,
+.document-editor .cm-inactive-heading-depth-6 {
+  font-size: 1.05rem;
+  line-height: 1.72;
+  font-weight: 610;
+}
+
+.document-editor .cm-inactive-paragraph {
+  color: var(--yulora-text-muted);
+}
+
+.document-editor .cm-inactive-paragraph-leading {
+  line-height: 1.95;
+}
+
+.document-editor .cm-inactive-inline-marker {
+  color: transparent;
+  font-size: 0;
+  line-height: 0;
+}
+
+.document-editor .cm-inactive-inline-strong {
+  color: var(--yulora-text-strong);
+  font-weight: 650;
+}
+
+.document-editor .cm-inactive-inline-emphasis {
+  color: var(--yulora-text-body);
+  font-style: italic;
+}
+
+.document-editor .cm-inactive-inline-code {
+  padding: 0.08em 0.34em;
+  border-radius: 0.38em;
+  background: var(--yulora-inline-code-bg);
+  color: var(--yulora-inline-code-text);
+  font-family:
+    "Cascadia Code",
+    "Consolas",
+    "SFMono-Regular",
+    "Courier New",
+    monospace;
+  font-size: 0.92em;
+}
+
+.document-editor .cm-inactive-inline-strikethrough {
+  color: var(--yulora-text-muted);
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+}
+
+.document-editor .cm-inactive-list {
+  color: var(--yulora-text-muted);
+}
+
+.document-editor .cm-inactive-list-unordered,
+.document-editor .cm-inactive-list-ordered {
+  line-height: 1.84;
+}
+
+.document-editor .cm-inactive-list-marker {
+  color: var(--yulora-list-marker);
+  font-weight: 500;
+  opacity: 0.82;
+}
+
+.document-editor .cm-inactive-list-unordered .cm-inactive-list-marker {
+  position: relative;
+  display: inline-block;
+  width: 0.9rem;
+  color: transparent;
+  opacity: 1;
+}
+
+.document-editor .cm-inactive-list-unordered .cm-inactive-list-marker::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0.32rem;
+  width: 0.28rem;
+  height: 0.28rem;
+  border-radius: 999px;
+  background: var(--yulora-list-marker);
+  transform: translateY(-50%);
+}
+
+.document-editor .cm-inactive-list-ordered .cm-inactive-list-marker {
+  display: inline-block;
+  min-width: 1.35rem;
+  margin-right: 0.12rem;
+  text-align: right;
+}
+
+.document-editor .cm-inactive-list-task .cm-inactive-list-marker {
+  display: inline-block;
+  width: 0;
+  min-width: 0;
+  margin-right: 0;
+  color: transparent;
+}
+
+.document-editor .cm-inactive-task-marker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  margin-right: 0.48rem;
+  color: transparent;
+  font-size: 0;
+  vertical-align: -0.12rem;
+}
+
+.document-editor .cm-inactive-task-marker-unchecked {
+  color: transparent;
+}
+
+.document-editor .cm-inactive-task-marker-checked {
+  color: transparent;
+}
+
+.document-editor .cm-inactive-task-marker::before {
+  content: "";
+  box-sizing: border-box;
+  width: 0.92rem;
+  height: 0.92rem;
+  border: 1.5px solid var(--yulora-task-border);
+  border-radius: 0.2rem;
+  background: var(--yulora-task-bg);
+}
+
+.document-editor .cm-inactive-task-marker[data-task-state="checked"]::after {
+  content: "";
+  position: absolute;
+  top: 0.23rem;
+  left: 0.35rem;
+  width: 0.22rem;
+  height: 0.42rem;
+  border-right: 2px solid var(--yulora-task-check);
+  border-bottom: 2px solid var(--yulora-task-check);
+  transform: rotate(45deg);
+}
+
+.document-editor .cm-inactive-list-task-checked {
+  color: var(--yulora-text-secondary);
+}
+
+.document-editor .cm-inactive-list-depth-1 {
+  padding-left: 0.4rem;
+}
+
+.document-editor .cm-inactive-list-depth-2 {
+  padding-left: 0.8rem;
+}
+
+.document-editor .cm-inactive-blockquote {
+  color: var(--yulora-text-secondary);
+  background: var(--yulora-surface-blockquote-bg);
+  padding-left: 1.25rem;
+  padding-right: 0.9rem;
+}
+
+.document-editor .cm-inactive-blockquote-start {
+  padding-top: 0.35rem;
+  border-top-left-radius: 0.7rem;
+  border-top-right-radius: 0.7rem;
+}
+
+.document-editor .cm-inactive-blockquote-end {
+  padding-bottom: 0.35rem;
+  border-bottom-left-radius: 0.7rem;
+  border-bottom-right-radius: 0.7rem;
+  margin-bottom: 0.2rem;
+}
+
+.document-editor .cm-inactive-blockquote-marker {
+  display: none;
+}
+
+.document-editor .cm-inactive-code-block-fence {
+  display: none;
+}
+
+.document-editor .cm-inactive-code-block-fence-marker {
+  color: transparent;
+  font-size: 0;
+}
+
+.document-editor .cm-inactive-code-block {
+  color: var(--yulora-code-block-text);
+  background: var(--yulora-code-block-bg);
+  font:
+    400 0.96rem/1.72 "Cascadia Code", "Consolas", "SFMono-Regular", "Courier New", monospace;
+  white-space: pre !important;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+.document-editor .cm-inactive-code-block-start {
+  padding-top: 0.8rem;
+  border-top-left-radius: 0.85rem;
+  border-top-right-radius: 0.85rem;
+}
+
+.document-editor .cm-inactive-code-block-end {
+  padding-bottom: 0.8rem;
+  border-bottom-left-radius: 0.85rem;
+  border-bottom-right-radius: 0.85rem;
+  margin-bottom: 0.35rem;
+}
+
+.document-editor .cm-inactive-thematic-break {
+  position: relative;
+  color: transparent;
+  font-size: 0;
+  line-height: 0;
+  padding-top: 0.95rem;
+  padding-bottom: 0.9rem;
+  margin: 0.18rem 0 0.28rem;
+}
+
+.document-editor .cm-inactive-thematic-break::before {
+  content: "";
+  display: block;
+  border-top: 1.5px solid var(--yulora-thematic-break);
+}
+
+.document-editor .cm-inactive-thematic-break-marker {
+  color: transparent;
+  font-size: 0;
+}

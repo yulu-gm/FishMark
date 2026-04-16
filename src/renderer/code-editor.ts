@@ -20,6 +20,7 @@ export type CreateCodeEditorControllerOptions = {
 export type CodeEditorController = {
   getContent: () => string;
   replaceDocument: (nextContent: string) => void;
+  focus: () => void;
   insertText: (text: string) => void;
   setSelection: (anchor: number, head?: number) => void;
   pressEnter: () => void;
@@ -64,6 +65,9 @@ export function createCodeEditorController(
     replaceDocument(nextContent: string) {
       const nextState = createState(nextContent);
       view.setState(nextState);
+    },
+    focus() {
+      view.focus();
     },
     insertText(text: string) {
       const selection = view.state.selection.main;

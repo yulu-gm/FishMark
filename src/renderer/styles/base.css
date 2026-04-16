@@ -1,0 +1,55 @@
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  color: var(--yulora-text-body, #1f2937);
+  background: var(--yulora-page-bg, #eef1f4);
+  --yulora-shell-rail-width: 88px;
+  --yulora-shell-gutter: clamp(14px, 2vw, 30px);
+  font-size: var(--yulora-ui-font-size, 16px);
+  font-family:
+    "Aptos",
+    "SF Pro Text",
+    "Segoe UI",
+    sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 4% -4%, rgba(148, 163, 184, 0.16), transparent 40%),
+    radial-gradient(circle at 96% 4%, rgba(99, 102, 241, 0.08), transparent 36%),
+    var(--yulora-page-bg, #eef1f4);
+  color: var(--yulora-text-body, #1f2937);
+  font-size: inherit;
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,17 @@
+:root[data-yulora-theme="dark"] {
+  --yulora-page-bg: #0f1720;
+  --yulora-surface-bg: #111827;
+  --yulora-surface-raised-bg: #0f172a;
+  --yulora-surface-muted-bg: #111c2d;
+  --yulora-surface-subtle-bg: #162132;
+  --yulora-surface-blockquote-bg: #172334;
+  --yulora-border-strong: #233247;
+  --yulora-border-muted: #31435d;
+  --yulora-border-subtle: #223146;
+  --yulora-border-faint: #223146;
+  --yulora-text-strong: #f3f4f6;
+  --yulora-text-body: #e5e7eb;
+  --yulora-text-muted: #cbd5e1;
+  --yulora-text-subtle: #94a3b8;
+  --yulora-text-secondary: #cbd5e1;
+}
