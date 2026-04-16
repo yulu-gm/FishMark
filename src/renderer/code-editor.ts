@@ -1,15 +1,8 @@
-import {
-  defaultKeymap,
-  history,
-  historyKeymap
-} from "@codemirror/commands";
-import { EditorState, StateEffect, StateField } from "@codemirror/state";
-import { Decoration, type DecorationSet, EditorView, keymap } from "@codemirror/view";
+import { EditorState } from "@codemirror/state";
+import { EditorView } from "@codemirror/view";
 
 import {
-  createActiveBlockStateFromBlockMap,
-  createBlockMapCache,
-  deriveInactiveBlockDecorationsState,
+  createYuloraMarkdownExtensions,
   runMarkdownBackspace,
   runMarkdownEnter,
   type ActiveBlockState
@@ -34,211 +27,43 @@ export type CodeEditorController = {
   destroy: () => void;
 };
 
-const setBlockDecorationsEffect = StateEffect.define<DecorationSet>();
-
-const blockDecorationsField = StateField.define<DecorationSet>({
-  create: () => Decoration.none,
-  update(decorations, transaction) {
-    let nextDecorations = decorations.map(transaction.changes);
-
-    for (const effect of transaction.effects) {
-      if (effect.is(setBlockDecorationsEffect)) {
-        nextDecorations = effect.value;
-      }
-    }
-
-    return nextDecorations;
-  },
-  provide: (field) => EditorView.decorations.from(field)
-});
-
 export function createCodeEditorController(
   options: CreateCodeEditorControllerOptions
 ): CodeEditorController {
-  const blockMapCache = createBlockMapCache(parseBlockMap);
-  let activeBlockState = createActiveBlockStateFromBlockMap(blockMapCache.read(""), {
-    anchor: 0,
-    head: 0
-  });
-  let blockDecorationSignature = "";
-  let hasEditorFocus = false;
-  let isCompositionGuardActive = false;
-  let hasPendingDerivedStateFlush = false;
-  let applyBlockDecorations: (
-    decorationSet: DecorationSet,
-    signature: string,
-    force?: boolean
-  ) => void = () => {};
-
-  const createSelectionSnapshot = (state: EditorState) => ({
-    anchor: state.selection.main.anchor,
-    head: state.selection.main.head
-  });
-
-  const notifyActiveBlockChange = (nextState: ActiveBlockState, force = false) => {
-    const didChange =
-      force ||
-      activeBlockState.selection.anchor !== nextState.selection.anchor ||
-      activeBlockState.selection.head !== nextState.selection.head ||
-      activeBlockState.activeBlock?.id !== nextState.activeBlock?.id ||
-      activeBlockState.blockMap !== nextState.blockMap;
-
-    activeBlockState = nextState;
-
-    if (didChange) {
-      options.onActiveBlockChange?.(nextState);
+  let activeBlockState: ActiveBlockState = {
+    blockMap: parseBlockMap(""),
+    activeBlock: null,
+    selection: {
+      anchor: 0,
+      head: 0
     }
-  };
-
-  const recomputeDerivedState = (state: EditorState, force = false) => {
-    const { activeBlockState: nextActiveBlockState, decorationSet, signature } =
-      deriveInactiveBlockDecorationsState({
-        source: state.doc.toString(),
-        selection: createSelectionSnapshot(state),
-        hasEditorFocus,
-        blockMapCache
-      });
-
-    notifyActiveBlockChange(nextActiveBlockState, force);
-    applyBlockDecorations(decorationSet, signature, force);
   };
 
   const createState = (content: string) =>
     EditorState.create({
       doc: content,
-      extensions: [
-        blockDecorationsField,
-        history(),
-        keymap.of([
-          {
-            key: "Backspace",
-            run: (editorView) => runMarkdownBackspace(editorView, activeBlockState)
-          },
-          {
-            key: "Enter",
-            run: (editorView) => runMarkdownEnter(editorView, activeBlockState)
-          },
-          ...historyKeymap,
-          ...defaultKeymap
-        ]),
-        EditorView.lineWrapping,
-        EditorView.contentAttributes.of({
-          "aria-label": "Markdown editor",
-          spellcheck: "false"
-        }),
-        EditorView.updateListener.of((update) => {
-          if (update.docChanged) {
-            options.onChange(update.state.doc.toString());
-          }
-
-          if (!update.docChanged && !update.selectionSet) {
-            return;
-          }
-
-          if (
-            isCompositionGuardActive ||
-            update.view.compositionStarted ||
-            update.view.composing
-          ) {
-            hasPendingDerivedStateFlush = true;
-            return;
-          }
-
-          recomputeDerivedState(update.state);
-        })
-      ]
+      extensions: createYuloraMarkdownExtensions({
+        parseBlockMap,
+        onContentChange: options.onChange,
+        onActiveBlockChange: (nextState) => {
+          activeBlockState = nextState;
+          options.onActiveBlockChange?.(nextState);
+        },
+        onBlur: options.onBlur
+      })
     });
 
   const initialState = createState(options.initialContent);
-  const initialDerivedState = deriveInactiveBlockDecorationsState({
-    source: initialState.doc.toString(),
-    selection: createSelectionSnapshot(initialState),
-    hasEditorFocus,
-    blockMapCache
-  });
-  activeBlockState = initialDerivedState.activeBlockState;
-
   const view = new EditorView({
     state: initialState,
     parent: options.parent
   });
 
-  applyBlockDecorations = (decorationSet, signature, force = false) => {
-    if (!force && signature === blockDecorationSignature) {
-      return;
-    }
-
-    blockDecorationSignature = signature;
-    view.dispatch({
-      effects: setBlockDecorationsEffect.of(decorationSet)
-    });
-  };
-
-  applyBlockDecorations(
-    initialDerivedState.decorationSet,
-    initialDerivedState.signature,
-    true
-  );
-  options.onActiveBlockChange?.(activeBlockState);
-
-  const handleCompositionStart = () => {
-    isCompositionGuardActive = true;
-  };
-
-  const handleCompositionEnd = () => {
-    isCompositionGuardActive = false;
-
-    if (!hasPendingDerivedStateFlush) {
-      return;
-    }
-
-    hasPendingDerivedStateFlush = false;
-    recomputeDerivedState(view.state, true);
-  };
-
-  const syncBlurDecorations = () => {
-    queueMicrotask(() => {
-      const nextHasEditorFocus = view.hasFocus;
-
-      if (hasEditorFocus === nextHasEditorFocus) {
-        return;
-      }
-
-      hasEditorFocus = nextHasEditorFocus;
-      recomputeDerivedState(view.state, true);
-    });
-  };
-
-  const handleFocusIn = () => {
-    if (hasEditorFocus) {
-      return;
-    }
-
-    hasEditorFocus = true;
-    recomputeDerivedState(view.state, true);
-  };
-
-  const handleBlur = () => {
-    syncBlurDecorations();
-    options.onBlur?.();
-  };
-
-  view.dom.addEventListener("compositionstart", handleCompositionStart);
-  view.dom.addEventListener("compositionupdate", handleCompositionStart);
-  view.dom.addEventListener("compositionend", handleCompositionEnd);
-  view.dom.addEventListener("focusin", handleFocusIn);
-  view.dom.addEventListener("focusout", handleBlur);
-
   return {
     getContent: () => view.state.doc.toString(),
     replaceDocument(nextContent: string) {
-      isCompositionGuardActive = false;
-      hasPendingDerivedStateFlush = false;
       const nextState = createState(nextContent);
-      blockMapCache.clear();
-
       view.setState(nextState);
-      recomputeDerivedState(nextState, true);
     },
     insertText(text: string) {
       const selection = view.state.selection.main;
@@ -271,11 +96,6 @@ export function createCodeEditorController(
       runMarkdownBackspace(view, activeBlockState);
     },
     destroy() {
-      view.dom.removeEventListener("compositionstart", handleCompositionStart);
-      view.dom.removeEventListener("compositionupdate", handleCompositionStart);
-      view.dom.removeEventListener("compositionend", handleCompositionEnd);
-      view.dom.removeEventListener("focusin", handleFocusIn);
-      view.dom.removeEventListener("focusout", handleBlur);
       view.destroy();
     }
   };
