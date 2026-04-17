@@ -8,3 +8,4 @@ release
 build/icons
 *.tsbuildinfo
 .DS_Store
+.claude
