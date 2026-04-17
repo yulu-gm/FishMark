@@ -29,6 +29,13 @@ function toPreviewAssetUrl(rawPath: string | undefined): string | null {
   return createPreviewAssetUrl(rawPath);
 }
 
+const LEGACY_THEME_PACKAGE_SUFFIX = /(?:-|_)(light|dark)$/u;
+
+export function resolveLegacyThemeFamilyId(themeId: string): string | null {
+  const migrated = themeId.replace(LEGACY_THEME_PACKAGE_SUFFIX, "");
+  return migrated === themeId ? null : migrated;
+}
+
 export function normalizeThemePackageDescriptor(
   entry: ThemePackageDescriptor
 ): ThemePackageRuntimeEntry {
@@ -69,11 +76,6 @@ function toRuntimePackageDescriptor(entry: ThemePackageRuntimeEntry): ThemePacka
     tokens: entry.tokens,
     styles: entry.styles
   };
-}
-
-function resolveLegacyThemeFamilyId(themeId: string): string | null {
-  const migrated = themeId.replace(/(?:-|_)(light|dark)$/u, "");
-  return migrated === themeId ? null : migrated;
 }
 
 function createBuiltinFallbackDescriptor(mode: "light" | "dark"): ThemePackageRuntimeDescriptor {

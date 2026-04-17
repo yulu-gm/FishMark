@@ -6,6 +6,7 @@ import {
   type PreferencesUpdate,
   type ThemeMode
 } from "../../shared/preferences";
+import { resolveLegacyThemeFamilyId } from "../theme-package-catalog";
 
 type UpdatePreferencesResult =
   | { status: "success"; preferences: Preferences }
@@ -53,10 +54,6 @@ const THEME_EFFECT_LABELS = {
   off: "关闭"
 } as const;
 
-function normalizeLegacyThemeId(selectedThemeId: string): string {
-  return selectedThemeId.replace(/(?:-|_)(light|dark)$/u, "");
-}
-
 function resolveThemePackageSelectionValue(
   packages: ThemePackageEntry[],
   selectedThemeId: string | null
@@ -69,12 +66,13 @@ function resolveThemePackageSelectionValue(
     return selectedThemeId;
   }
 
-  const legacyFamilyId = normalizeLegacyThemeId(selectedThemeId);
+  const legacyFamilyId = resolveLegacyThemeFamilyId(selectedThemeId);
 
-  return legacyFamilyId !== selectedThemeId &&
-    packages.some((themePackage) => themePackage.id === legacyFamilyId)
-    ? legacyFamilyId
-    : null;
+  if (!legacyFamilyId) {
+    return null;
+  }
+
+  return packages.some((themePackage) => themePackage.id === legacyFamilyId) ? legacyFamilyId : null;
 }
 
 function buildDraft(preferences: Preferences): DraftState {

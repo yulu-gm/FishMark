@@ -44,6 +44,8 @@ type SettingsDriver = {
 type RenderEditorAppOptions = {
   listThemePackagesResult?: ThemePackageDescriptor[];
   refreshThemePackagesResult?: ThemePackageDescriptor[];
+  refreshThemesResult?: ThemeDescriptor[];
+  listThemesResult?: ThemeDescriptor[];
   getPreferencesResult?: Preferences;
 };
 
@@ -455,12 +457,16 @@ describe("App autosave", () => {
     const {
       listThemePackagesResult = [],
       refreshThemePackagesResult = [],
+      listThemesResult = communityThemes,
+      refreshThemesResult = communityThemes,
       getPreferencesResult = DEFAULT_PREFERENCES
     } = options;
 
     listThemePackages = vi.fn<() => Promise<ThemePackageDescriptor[]>>().mockResolvedValue(
       listThemePackagesResult
     );
+    listThemes = vi.fn<() => Promise<ThemeDescriptor[]>>().mockResolvedValue(listThemesResult);
+    refreshThemes = vi.fn<() => Promise<ThemeDescriptor[]>>().mockResolvedValue(refreshThemesResult);
     refreshThemePackages = vi
       .fn<() => Promise<ThemePackageDescriptor[]>>()
       .mockResolvedValue(refreshThemePackagesResult);
@@ -469,6 +475,8 @@ describe("App autosave", () => {
       ...window.yulora,
       getPreferences: vi.fn().mockResolvedValue(getPreferencesResult),
       listThemePackages,
+      listThemes,
+      refreshThemes,
       refreshThemePackages
     } as Window["yulora"];
 
@@ -1148,9 +1156,21 @@ describe("App autosave", () => {
     expect(container.textContent).not.toContain("已配置主题未找到");
   });
 
-  it("renders the theme package selector and refreshes the theme catalog from settings", async () => {
+  it("syncs theme and legacy catalogs when refreshing from settings", async () => {
     const packageThemes = [makeManifestThemePackage({ id: "graphite", name: "Graphite" })];
-    const driver = await renderEditorApp({ listThemePackagesResult: packageThemes });
+    const driver = await renderEditorApp({
+      listThemePackagesResult: packageThemes,
+      refreshThemePackagesResult: [],
+      refreshThemesResult: [],
+      getPreferencesResult: {
+        ...DEFAULT_PREFERENCES,
+        theme: {
+          ...DEFAULT_PREFERENCES.theme,
+          mode: "dark",
+          selectedId: "graphite"
+        }
+      }
+    });
 
     await driver.openSettings();
 
@@ -1159,7 +1179,13 @@ describe("App autosave", () => {
       (button) => button.textContent?.includes("刷新主题")
     );
 
-    expect(themeSelect?.value).toBe("default");
+    expect(themeSelect?.value).toBe("graphite");
+    expect(
+      document
+        .head
+        .querySelector('link[data-yulora-theme-part="tokens"]')
+        ?.getAttribute("href")
+    ).toBe(createPreviewAssetUrl("/tmp/yulora/themes/graphite/tokens-dark.css"));
     expect(
       Array.from(themeSelect?.options ?? []).map((option) => ({
         value: option.value,
@@ -1173,9 +1199,18 @@ describe("App autosave", () => {
     await act(async () => {
       refreshButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await Promise.resolve();
+      await Promise.resolve();
     });
 
     expect(refreshThemePackages).toHaveBeenCalledTimes(1);
+    expect(refreshThemes).toHaveBeenCalledTimes(1);
+    expect(
+      document
+        .head
+        .querySelector('link[data-yulora-theme-part="tokens"]')
+        ?.getAttribute("href")
+    ).toContain("default/dark/tokens.css");
+    expect(themeSelect?.value).toBe("default");
   });
 
   it("persists theme effects mode changes from settings", async () => {

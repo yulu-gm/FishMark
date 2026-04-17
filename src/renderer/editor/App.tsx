@@ -499,7 +499,13 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     setIsRefreshingThemePackages(true);
 
     try {
-      setThemePackages(await yulora.refreshThemePackages());
+      const [nextThemes, nextThemePackages] = await Promise.all([
+        yulora.refreshThemes(),
+        yulora.refreshThemePackages()
+      ]);
+
+      setThemes(nextThemes);
+      setThemePackages(nextThemePackages);
     } finally {
       setIsRefreshingThemePackages(false);
     }
