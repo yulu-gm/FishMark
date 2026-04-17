@@ -41,7 +41,7 @@ describe("createPreferencesService", () => {
             autosave: { idleDelayMs: 2500 },
             ui: { fontSize: 18 },
             document: { fontFamily: "Georgia", fontSize: 17 },
-            theme: { mode: "dark", selectedId: "graphite-dark" }
+            theme: { mode: "dark", selectedId: "graphite" }
           })
         )
     });
@@ -57,7 +57,7 @@ describe("createPreferencesService", () => {
       fontSize: 17
     });
     expect(service.getPreferences().theme.mode).toBe("dark");
-    expect(service.getPreferences().theme.selectedId).toBe("graphite-dark");
+    expect(service.getPreferences().theme.selectedId).toBe("graphite");
   });
 
   it("migrates legacy editor fields when loading cached preferences from disk", async () => {
@@ -139,7 +139,7 @@ describe("createPreferencesService", () => {
       autosave: { idleDelayMs: 1500 },
       ui: { fontSize: 20 },
       document: { fontFamily: "IBM Plex Serif", fontSize: 18 },
-      theme: { mode: "dark", selectedId: "graphite-dark" }
+      theme: { mode: "dark", selectedId: "graphite" }
     });
 
     expect(result.status).toBe("success");
@@ -151,7 +151,7 @@ describe("createPreferencesService", () => {
         fontSize: 18
       });
       expect(result.preferences.theme.mode).toBe("dark");
-      expect(result.preferences.theme.selectedId).toBe("graphite-dark");
+      expect(result.preferences.theme.selectedId).toBe("graphite");
     }
     expect(listener).toHaveBeenCalledTimes(1);
     expect(service.getPreferences().autosave.idleDelayMs).toBe(1500);
@@ -214,11 +214,11 @@ describe("createPreferencesService", () => {
     service.onChange(failing);
     service.onChange(recipient);
 
-    await service.updatePreferences({ theme: { mode: "dark", selectedId: "graphite-dark" } });
+    await service.updatePreferences({ theme: { mode: "dark", selectedId: "graphite" } });
 
     expect(failing).toHaveBeenCalled();
     expect(recipient).toHaveBeenCalledWith(
-      expect.objectContaining({ theme: { mode: "dark", selectedId: "graphite-dark" } })
+      expect.objectContaining({ theme: { mode: "dark", selectedId: "graphite" } })
     );
   });
 });

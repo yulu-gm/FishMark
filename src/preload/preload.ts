@@ -84,18 +84,38 @@ type ThemeDescriptor = {
   source: "builtin" | "community";
   name: string;
   directoryName: string;
-  availableParts: {
-    tokens: boolean;
-    ui: boolean;
-    editor: boolean;
-    markdown: boolean;
+  modes: {
+    light: {
+      available: boolean;
+      availableParts: {
+        tokens: boolean;
+        ui: boolean;
+        editor: boolean;
+        markdown: boolean;
+      };
+      partUrls: Partial<{
+        tokens: string;
+        ui: string;
+        editor: string;
+        markdown: string;
+      }>;
+    };
+    dark: {
+      available: boolean;
+      availableParts: {
+        tokens: boolean;
+        ui: boolean;
+        editor: boolean;
+        markdown: boolean;
+      };
+      partUrls: Partial<{
+        tokens: string;
+        ui: string;
+        editor: string;
+        markdown: string;
+      }>;
+    };
   };
-  partUrls: Partial<{
-    tokens: string;
-    ui: string;
-    editor: string;
-    markdown: string;
-  }>;
 };
 
 type UpdatePreferencesResult =

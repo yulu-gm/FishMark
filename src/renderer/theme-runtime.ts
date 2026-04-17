@@ -1,6 +1,7 @@
 export const THEME_PARTS = ["tokens", "ui", "editor", "markdown"] as const;
 
 export type ThemePart = (typeof THEME_PARTS)[number];
+export type ThemeAppearanceMode = "light" | "dark";
 
 export type ThemeDescriptor = {
   id: string;
@@ -13,18 +14,18 @@ type ThemeRuntime = {
   clear: () => void;
 };
 
-const BUILTIN_THEME_PART_URLS: Record<"default-light" | "default-dark", Record<ThemePart, string>> = {
-  "default-light": {
-    tokens: new URL("./styles/themes/default-light/tokens.css", import.meta.url).href,
-    ui: new URL("./styles/themes/default-light/ui.css", import.meta.url).href,
-    editor: new URL("./styles/themes/default-light/editor.css", import.meta.url).href,
-    markdown: new URL("./styles/themes/default-light/markdown.css", import.meta.url).href
+const BUILTIN_THEME_PART_URLS: Record<ThemeAppearanceMode, Record<ThemePart, string>> = {
+  light: {
+    tokens: new URL("./styles/themes/default/light/tokens.css", import.meta.url).href,
+    ui: new URL("./styles/themes/default/light/ui.css", import.meta.url).href,
+    editor: new URL("./styles/themes/default/light/editor.css", import.meta.url).href,
+    markdown: new URL("./styles/themes/default/light/markdown.css", import.meta.url).href
   },
-  "default-dark": {
-    tokens: new URL("./styles/themes/default-dark/tokens.css", import.meta.url).href,
-    ui: new URL("./styles/themes/default-dark/ui.css", import.meta.url).href,
-    editor: new URL("./styles/themes/default-dark/editor.css", import.meta.url).href,
-    markdown: new URL("./styles/themes/default-dark/markdown.css", import.meta.url).href
+  dark: {
+    tokens: new URL("./styles/themes/default/dark/tokens.css", import.meta.url).href,
+    ui: new URL("./styles/themes/default/dark/ui.css", import.meta.url).href,
+    editor: new URL("./styles/themes/default/dark/editor.css", import.meta.url).href,
+    markdown: new URL("./styles/themes/default/dark/markdown.css", import.meta.url).href
   }
 };
 
@@ -37,12 +38,12 @@ function createThemeLink(document: Document, part: ThemePart): HTMLLinkElement {
 }
 
 export function resolveBuiltinThemeDescriptor(
-  id: keyof typeof BUILTIN_THEME_PART_URLS
+  mode: ThemeAppearanceMode
 ): ThemeDescriptor {
   return {
-    id,
+    id: "default",
     source: "builtin",
-    partUrls: BUILTIN_THEME_PART_URLS[id]
+    partUrls: BUILTIN_THEME_PART_URLS[mode]
   };
 }
 

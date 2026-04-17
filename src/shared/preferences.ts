@@ -171,7 +171,12 @@ function normalizeThemeSelectedId(value: unknown): string | null {
   }
 
   const trimmed = value.trim();
-  return trimmed.length === 0 ? null : trimmed;
+
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  return trimmed.replace(/(?:-|_)(light|dark)$/u, "") || trimmed;
 }
 
 /**

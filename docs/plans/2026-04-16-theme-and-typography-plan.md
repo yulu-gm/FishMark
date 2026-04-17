@@ -2,6 +2,8 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
+> **2026-04-17 update:** 当前实现已从“单目录主题包”调整为“主题家族 + `light` / `dark` mode 变体”模型。社区主题实际目录结构为 `<userData>/themes/<familyId>/<mode>/*.css`；`theme.selectedId` 表示主题家族 id；内置默认主题实际路径为 `src/renderer/styles/themes/default/light` 与 `src/renderer/styles/themes/default/dark`；当当前主题家族不支持所选颜色模式时，renderer 会回退到 `Yulora 默认` 并在设置页显示提示。
+
 **Goal:** 把当前单文件样式和最小偏好设置演进为可扩展的主题系统，并把“应用 UI 字号”“文档字号”“字体选择”拆成明确能力。
 
 **Architecture:** 保留 `Preferences` 作为唯一配置源，在 `main` 新增主题扫描服务，自动扫描 `app.getPath("userData")/themes` 下的社区主题目录并通过 preload 暴露给 renderer。renderer 不再只靠一个 `styles.css`，而是拆成基础样式 + 主题目录样式；运行时根据选中主题装配 `tokens.css / ui.css / editor.css / markdown.css` 四层样式，并把字号与字体偏好映射到 CSS variables。

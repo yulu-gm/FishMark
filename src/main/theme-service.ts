@@ -3,14 +3,20 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 type ThemePart = "tokens" | "ui" | "editor" | "markdown";
+type ThemeAppearanceMode = "light" | "dark";
 
-export type ThemeDescriptor = {
+export type ThemeVariantDescriptor = {
+  available: boolean;
+  availableParts: Record<ThemePart, boolean>;
+  partUrls: Partial<Record<ThemePart, string>>;
+};
+
+export type ThemeFamilyDescriptor = {
   id: string;
   source: "builtin" | "community";
   name: string;
   directoryName: string;
-  availableParts: Record<ThemePart, boolean>;
-  partUrls: Partial<Record<ThemePart, string>>;
+  modes: Record<ThemeAppearanceMode, ThemeVariantDescriptor>;
 };
 
 type ThemeServiceDependencies = {
@@ -20,21 +26,13 @@ type ThemeServiceDependencies = {
 };
 
 export type CreateThemeServiceInput = {
-  builtinThemesDir: string;
   userDataDir: string;
   dependencies?: ThemeServiceDependencies;
 };
 
-type ThemePartState = {
-  tokens: boolean;
-  ui: boolean;
-  editor: boolean;
-  markdown: boolean;
-};
-
 type ThemeService = {
-  listThemes: () => Promise<ThemeDescriptor[]>;
-  refreshThemes: () => Promise<ThemeDescriptor[]>;
+  listThemes: () => Promise<ThemeFamilyDescriptor[]>;
+  refreshThemes: () => Promise<ThemeFamilyDescriptor[]>;
 };
 
 const DEFAULT_THEME_PARTS = {
@@ -48,20 +46,9 @@ const defaultDependencies: ThemeServiceDependencies = {
   readdir: (targetPath, options) => readdir(targetPath, options)
 };
 
-function makeThemeName(directoryName: string): string {
-  return directoryName
-    .split(/[-_]+/)
-    .filter(Boolean)
-    .map((segment) => segment[0]!.toUpperCase() + segment.slice(1))
-    .join(" ");
-}
-
-function createThemeDescriptor(source: ThemeDescriptor["source"], directoryName: string): ThemeDescriptor {
+function createEmptyVariantDescriptor(): ThemeVariantDescriptor {
   return {
-    id: directoryName,
-    source,
-    name: makeThemeName(directoryName),
-    directoryName,
+    available: false,
     availableParts: {
       tokens: false,
       ui: false,
@@ -70,6 +57,14 @@ function createThemeDescriptor(source: ThemeDescriptor["source"], directoryName:
     },
     partUrls: {}
   };
+}
+
+function makeThemeName(directoryName: string): string {
+  return directoryName
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map((segment) => segment[0]!.toUpperCase() + segment.slice(1))
+    .join(" ");
 }
 
 function isNodeErrorWithCode(error: unknown, expectedCode: string): boolean {
@@ -86,34 +81,22 @@ function isThemeDirEntry(entry: import("node:fs").Dirent): boolean {
 }
 
 async function resolveAvailableParts(
-  themeDirectory: string,
+  variantDirectory: string,
   dependencies: ThemeServiceDependencies
-): Promise<ThemePartState> {
+): Promise<Record<ThemePart, boolean>> {
   let entries: import("node:fs").Dirent[];
 
   try {
-    entries = await dependencies.readdir(themeDirectory, { withFileTypes: true });
+    entries = await dependencies.readdir(variantDirectory, { withFileTypes: true });
   } catch (error) {
     if (isNodeErrorWithCode(error, "ENOENT")) {
-      return {
-        tokens: false,
-        ui: false,
-        editor: false,
-        markdown: false
-      };
+      return createEmptyVariantDescriptor().availableParts;
     }
 
-    return {
-      tokens: false,
-      ui: false,
-      editor: false,
-      markdown: false
-    };
+    return createEmptyVariantDescriptor().availableParts;
   }
 
-  const files = new Set(
-    entries.filter((entry) => entry.isFile()).map((entry) => entry.name)
-  );
+  const files = new Set(entries.filter((entry) => entry.isFile()).map((entry) => entry.name));
 
   return {
     tokens: files.has(DEFAULT_THEME_PARTS.tokens),
@@ -123,13 +106,13 @@ async function resolveAvailableParts(
   };
 }
 
-function shouldIncludeTheme(availableParts: ThemePartState): boolean {
+function hasAvailablePart(availableParts: Record<ThemePart, boolean>): boolean {
   return Object.values(availableParts).some(Boolean);
 }
 
 function resolvePartUrls(
-  themeDirectory: string,
-  availableParts: ThemePartState
+  variantDirectory: string,
+  availableParts: Record<ThemePart, boolean>
 ): Partial<Record<ThemePart, string>> {
   const partUrls: Partial<Record<ThemePart, string>> = {};
 
@@ -138,18 +121,39 @@ function resolvePartUrls(
       continue;
     }
 
-    partUrls[part] = pathToFileURL(path.join(themeDirectory, DEFAULT_THEME_PARTS[part])).href;
+    partUrls[part] = pathToFileURL(path.join(variantDirectory, DEFAULT_THEME_PARTS[part])).href;
   }
 
   return partUrls;
 }
 
+async function resolveVariantDescriptor(
+  variantDirectory: string,
+  dependencies: ThemeServiceDependencies
+): Promise<ThemeVariantDescriptor> {
+  const availableParts = await resolveAvailableParts(variantDirectory, dependencies);
+
+  if (!hasAvailablePart(availableParts)) {
+    return createEmptyVariantDescriptor();
+  }
+
+  return {
+    available: true,
+    availableParts,
+    partUrls: resolvePartUrls(variantDirectory, availableParts)
+  };
+}
+
+function shouldIncludeFamily(modes: Record<ThemeAppearanceMode, ThemeVariantDescriptor>): boolean {
+  return modes.light.available || modes.dark.available;
+}
+
 function resolveThemesInDirectory(
-  source: ThemeDescriptor["source"],
+  source: ThemeFamilyDescriptor["source"],
   themesDirectory: string,
   dependencies: ThemeServiceDependencies
 ) {
-  return async (): Promise<ThemeDescriptor[]> => {
+  return async (): Promise<ThemeFamilyDescriptor[]> => {
     let entries: import("node:fs").Dirent[];
 
     try {
@@ -158,23 +162,26 @@ function resolveThemesInDirectory(
       return [];
     }
 
-    const themeDirectoryEntries = entries.filter(isThemeDirEntry);
-    const descriptors: ThemeDescriptor[] = [];
+    const familyDirectoryEntries = entries.filter(isThemeDirEntry);
+    const descriptors: ThemeFamilyDescriptor[] = [];
 
-    for (const entry of themeDirectoryEntries) {
-      const themeDirectory = path.join(themesDirectory, entry.name);
-      const availableParts = await resolveAvailableParts(
-        themeDirectory,
-        dependencies
-      );
-      if (!shouldIncludeTheme(availableParts)) {
+    for (const entry of familyDirectoryEntries) {
+      const familyDirectory = path.join(themesDirectory, entry.name);
+      const modes = {
+        light: await resolveVariantDescriptor(path.join(familyDirectory, "light"), dependencies),
+        dark: await resolveVariantDescriptor(path.join(familyDirectory, "dark"), dependencies)
+      };
+
+      if (!shouldIncludeFamily(modes)) {
         continue;
       }
 
       descriptors.push({
-        ...createThemeDescriptor(source, entry.name),
-        availableParts,
-        partUrls: resolvePartUrls(themeDirectory, availableParts)
+        id: entry.name,
+        source,
+        name: makeThemeName(entry.name),
+        directoryName: entry.name,
+        modes
       });
     }
 
@@ -185,21 +192,15 @@ function resolveThemesInDirectory(
 export function createThemeService(input: CreateThemeServiceInput): ThemeService {
   const dependencies = input.dependencies ?? defaultDependencies;
   const communityThemesDir = path.join(input.userDataDir, "themes");
-  const builtinThemesDir = input.builtinThemesDir;
 
-  let themes: ThemeDescriptor[] = [];
+  let themes: ThemeFamilyDescriptor[] = [];
   let cached = false;
 
-  async function scanThemes(): Promise<ThemeDescriptor[]> {
-    const [builtinThemes, communityThemes] = await Promise.all([
-      resolveThemesInDirectory("builtin", builtinThemesDir, dependencies)(),
-      resolveThemesInDirectory("community", communityThemesDir, dependencies)()
-    ]);
-
-    return [...builtinThemes, ...communityThemes];
+  async function scanThemes(): Promise<ThemeFamilyDescriptor[]> {
+    return resolveThemesInDirectory("community", communityThemesDir, dependencies)();
   }
 
-  async function listThemes(): Promise<ThemeDescriptor[]> {
+  async function listThemes(): Promise<ThemeFamilyDescriptor[]> {
     if (!cached) {
       themes = await scanThemes();
       cached = true;
@@ -208,7 +209,7 @@ export function createThemeService(input: CreateThemeServiceInput): ThemeService
     return [...themes];
   }
 
-  async function refreshThemes(): Promise<ThemeDescriptor[]> {
+  async function refreshThemes(): Promise<ThemeFamilyDescriptor[]> {
     themes = await scanThemes();
     cached = true;
 

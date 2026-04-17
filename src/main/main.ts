@@ -129,7 +129,6 @@ app.whenReady().then(async () => {
 
   const initialPreferences = await preferencesService.initialize();
   const themeService = createThemeService({
-    builtinThemesDir: path.join(__dirname, "../../src/renderer/styles/themes"),
     userDataDir: app.getPath("userData")
   });
   await themeService.listThemes();

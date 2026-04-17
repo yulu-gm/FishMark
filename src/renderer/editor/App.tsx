@@ -30,6 +30,15 @@ import { SettingsView } from "./settings-view";
 
 type ResolvedThemeMode = Exclude<ThemeMode, "system">;
 type ThemeCatalogEntry = Awaited<ReturnType<Window["yulora"]["listThemes"]>>[number];
+type ThemeFallbackReason = "missing-theme" | "unsupported-mode" | null;
+type ActiveThemeResolution = {
+  requestedThemeId: string | null;
+  resolvedMode: ResolvedThemeMode;
+  activeThemeId: string;
+  activeThemeSource: "builtin" | "community";
+  fallbackReason: ThemeFallbackReason;
+  descriptor: RuntimeThemeDescriptor;
+};
 
 const AUTOSAVE_FAILED_MESSAGE = "Autosave failed. Changes are still in memory.";
 const DARK_MODE_MEDIA_QUERY = "(prefers-color-scheme: dark)";
@@ -91,32 +100,81 @@ function clearDocumentPreferences(root: HTMLElement): void {
   root.style.removeProperty(LEGACY_EDITOR_FONT_SIZE_CSS_VAR);
 }
 
-function toRuntimeThemeDescriptor(theme: ThemeCatalogEntry): RuntimeThemeDescriptor {
+function toRuntimeThemeDescriptorForMode(
+  theme: ThemeCatalogEntry,
+  resolvedThemeMode: ResolvedThemeMode
+): RuntimeThemeDescriptor {
   return {
     id: theme.id,
     source: theme.source,
-    partUrls: theme.partUrls
+    partUrls: theme.modes[resolvedThemeMode].partUrls
   };
 }
 
-function resolveActiveThemeDescriptor(
+function resolveActiveThemeResolution(
   preferences: Preferences,
   catalog: ThemeCatalogEntry[],
   resolvedThemeMode: ResolvedThemeMode
-): RuntimeThemeDescriptor {
+): ActiveThemeResolution {
   const selectedId = preferences.theme.selectedId;
 
-  if (selectedId) {
-    const selectedTheme = catalog.find((theme) => theme.id === selectedId);
-
-    if (selectedTheme) {
-      return toRuntimeThemeDescriptor(selectedTheme);
-    }
+  if (!selectedId) {
+    return {
+      requestedThemeId: null,
+      resolvedMode: resolvedThemeMode,
+      activeThemeId: "default",
+      activeThemeSource: "builtin",
+      fallbackReason: null,
+      descriptor: resolveBuiltinThemeDescriptor(resolvedThemeMode)
+    };
   }
 
-  return resolveBuiltinThemeDescriptor(
-    resolvedThemeMode === "dark" ? "default-dark" : "default-light"
-  );
+  const selectedTheme = catalog.find((theme) => theme.id === selectedId);
+
+  if (!selectedTheme) {
+    return {
+      requestedThemeId: selectedId,
+      resolvedMode: resolvedThemeMode,
+      activeThemeId: "default",
+      activeThemeSource: "builtin",
+      fallbackReason: "missing-theme",
+      descriptor: resolveBuiltinThemeDescriptor(resolvedThemeMode)
+    };
+  }
+
+  if (!selectedTheme.modes[resolvedThemeMode].available) {
+    return {
+      requestedThemeId: selectedId,
+      resolvedMode: resolvedThemeMode,
+      activeThemeId: "default",
+      activeThemeSource: "builtin",
+      fallbackReason: "unsupported-mode",
+      descriptor: resolveBuiltinThemeDescriptor(resolvedThemeMode)
+    };
+  }
+
+  return {
+    requestedThemeId: selectedId,
+    resolvedMode: resolvedThemeMode,
+    activeThemeId: selectedTheme.id,
+    activeThemeSource: selectedTheme.source,
+    fallbackReason: null,
+    descriptor: toRuntimeThemeDescriptorForMode(selectedTheme, resolvedThemeMode)
+  };
+}
+
+function resolveThemeWarningMessage(
+  resolution: ActiveThemeResolution
+): string | null {
+  if (resolution.fallbackReason === "unsupported-mode") {
+    return `该主题不支持${resolution.resolvedMode === "light" ? "浅色" : "深色"}模式，已回退到 Yulora 默认。`;
+  }
+
+  if (resolution.fallbackReason === "missing-theme") {
+    return "已配置主题未找到，已回退到 Yulora 默认。";
+  }
+
+  return null;
 }
 
 export default function EditorApp() {
@@ -194,6 +252,13 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
         : state.isDirty
           ? "Unsaved changes"
           : "All changes saved";
+  const resolvedThemeMode = resolveThemeMode(preferences.theme.mode);
+  const activeThemeResolution = resolveActiveThemeResolution(
+    preferences,
+    themes,
+    resolvedThemeMode
+  );
+  const themeWarningMessage = resolveThemeWarningMessage(activeThemeResolution);
 
   function applyState(updater: (current: AppState) => AppState): void {
     const next = updater(stateRef.current);
@@ -606,9 +671,14 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     const applyCurrentTheme = () => {
       const root = document.documentElement;
       const resolvedThemeMode = resolveThemeMode(preferences.theme.mode);
+      const activeThemeResolution = resolveActiveThemeResolution(
+        preferences,
+        themes,
+        resolvedThemeMode
+      );
 
       applyPreferencesToDocument(root, preferences, resolvedThemeMode);
-      themeRuntime.applyTheme(resolveActiveThemeDescriptor(preferences, themes, resolvedThemeMode));
+      themeRuntime.applyTheme(activeThemeResolution.descriptor);
     };
 
     applyCurrentTheme();
@@ -930,6 +1000,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
               surfaceState={isSettingsOpen ? "open" : "closing"}
               preferences={preferences}
               themes={themes}
+              themeWarningMessage={themeWarningMessage}
               isRefreshingThemes={isRefreshingThemes}
               onRefreshThemes={handleRefreshThemes}
               onUpdate={(patch) => yulora.updatePreferences(patch)}

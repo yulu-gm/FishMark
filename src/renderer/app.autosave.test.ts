@@ -51,11 +51,11 @@ const appUiStylesheetPath = join(process.cwd(), "src/renderer/styles/app-ui.css"
 const settingsStylesheetPath = join(process.cwd(), "src/renderer/styles/settings.css");
 const lightTokenStylesheetPath = join(
   process.cwd(),
-  "src/renderer/styles/themes/default-light/tokens.css"
+  "src/renderer/styles/themes/default/light/tokens.css"
 );
 const lightMarkdownStylesheetPath = join(
   process.cwd(),
-  "src/renderer/styles/themes/default-light/markdown.css"
+  "src/renderer/styles/themes/default/light/markdown.css"
 );
 
 vi.mock("./code-editor-view", async () => {
@@ -168,21 +168,40 @@ describe("App autosave", () => {
 
   const communityThemes: ThemeDescriptor[] = [
     {
-      id: "graphite-dark",
+      id: "graphite",
       source: "community",
-      name: "Graphite Dark",
-      directoryName: "graphite-dark",
-      availableParts: {
-        tokens: true,
-        ui: true,
-        editor: true,
-        markdown: true
-      },
-      partUrls: {
-        tokens: "file:///themes/graphite-dark/tokens.css",
-        ui: "file:///themes/graphite-dark/ui.css",
-        editor: "file:///themes/graphite-dark/editor.css",
-        markdown: "file:///themes/graphite-dark/markdown.css"
+      name: "Graphite",
+      directoryName: "graphite",
+      modes: {
+        light: {
+          available: true,
+          availableParts: {
+            tokens: true,
+            ui: true,
+            editor: false,
+            markdown: true
+          },
+          partUrls: {
+            tokens: "file:///themes/graphite/light/tokens.css",
+            ui: "file:///themes/graphite/light/ui.css",
+            markdown: "file:///themes/graphite/light/markdown.css"
+          }
+        },
+        dark: {
+          available: true,
+          availableParts: {
+            tokens: true,
+            ui: true,
+            editor: true,
+            markdown: true
+          },
+          partUrls: {
+            tokens: "file:///themes/graphite/dark/tokens.css",
+            ui: "file:///themes/graphite/dark/ui.css",
+            editor: "file:///themes/graphite/dark/editor.css",
+            markdown: "file:///themes/graphite/dark/markdown.css"
+          }
+        }
       }
     }
   ];
@@ -632,7 +651,7 @@ describe("App autosave", () => {
       document.head
         .querySelector('link[data-yulora-theme-part="tokens"]')
         ?.getAttribute("href")
-    ).toContain("default-dark/tokens.css");
+    ).toContain("default/dark/tokens.css");
   });
 
   it("updates theme variables and mounted stylesheets when preferences change", async () => {
@@ -647,7 +666,7 @@ describe("App autosave", () => {
     await act(async () => {
       preferencesChangedListener?.({
         ...DEFAULT_PREFERENCES,
-        theme: { mode: "dark", selectedId: "graphite-dark" },
+        theme: { mode: "dark", selectedId: "graphite" },
         ui: {
           fontSize: 18
         },
@@ -671,7 +690,7 @@ describe("App autosave", () => {
       document.head
         .querySelector('link[data-yulora-theme-part="tokens"]')
         ?.getAttribute("href")
-    ).toBe("file:///themes/graphite-dark/tokens.css");
+    ).toBe("file:///themes/graphite/dark/tokens.css");
   });
 
   it("renders the theme package selector and refreshes the theme catalog from settings", async () => {
@@ -702,7 +721,7 @@ describe("App autosave", () => {
       }))
     ).toEqual([
       { value: "default", label: "Yulora 默认" },
-      { value: "graphite-dark", label: "Graphite Dark" }
+      { value: "graphite", label: "Graphite" }
     ]);
 
     await act(async () => {
@@ -711,6 +730,79 @@ describe("App autosave", () => {
     });
 
     expect(refreshThemes).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to the builtin theme and shows a warning when the selected family lacks the current mode", async () => {
+    const darkOnlyThemes: ThemeDescriptor[] = [
+      {
+        id: "midnight",
+        source: "community",
+        name: "Midnight",
+        directoryName: "midnight",
+        modes: {
+          light: {
+            available: false,
+            availableParts: {
+              tokens: false,
+              ui: false,
+              editor: false,
+              markdown: false
+            },
+            partUrls: {}
+          },
+          dark: {
+            available: true,
+            availableParts: {
+              tokens: true,
+              ui: true,
+              editor: true,
+              markdown: false
+            },
+            partUrls: {
+              tokens: "file:///themes/midnight/dark/tokens.css",
+              ui: "file:///themes/midnight/dark/ui.css",
+              editor: "file:///themes/midnight/dark/editor.css"
+            }
+          }
+        }
+      }
+    ];
+
+    window.yulora = {
+      ...window.yulora,
+      listThemes: vi.fn().mockResolvedValue(darkOnlyThemes)
+    } as Window["yulora"];
+
+    await act(async () => {
+      root.render(createElement(App));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(preferencesChangedListener).not.toBeNull();
+
+    await act(async () => {
+      preferencesChangedListener?.({
+        ...DEFAULT_PREFERENCES,
+        theme: { mode: "light", selectedId: "midnight" }
+      });
+      await Promise.resolve();
+    });
+
+    const settingsButton = container.querySelector<HTMLButtonElement>(".settings-entry");
+    expect(settingsButton).not.toBeNull();
+
+    await act(async () => {
+      settingsButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(
+      document.head
+        .querySelector('link[data-yulora-theme-part="tokens"]')
+        ?.getAttribute("href")
+    ).toContain("default/light/tokens.css");
+    expect(container.textContent).toContain("该主题不支持浅色模式");
   });
 
   it("marks recent-files capacity as pending TASK-006 in settings", async () => {

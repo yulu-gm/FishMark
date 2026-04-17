@@ -81,8 +81,8 @@ describe("theme runtime", () => {
   });
 
   it("provides builtin descriptors for the default themes", () => {
-    const lightDescriptor = resolveBuiltinThemeDescriptor("default-light");
-    const darkDescriptor = resolveBuiltinThemeDescriptor("default-dark");
+    const lightDescriptor = resolveBuiltinThemeDescriptor("light");
+    const darkDescriptor = resolveBuiltinThemeDescriptor("dark");
 
     expect(lightDescriptor?.source).toBe("builtin");
     expect(darkDescriptor?.source).toBe("builtin");
@@ -94,5 +94,8 @@ describe("theme runtime", () => {
         expect(descriptor?.partUrls[part]).toMatch(/\.css$/);
       }
     }
+
+    expect(lightDescriptor.partUrls.tokens).toContain("/styles/themes/default/light/tokens.css");
+    expect(darkDescriptor.partUrls.tokens).toContain("/styles/themes/default/dark/tokens.css");
   });
 });

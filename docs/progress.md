@@ -15,7 +15,7 @@
 - 已建立安全的 Markdown 文件打开 bridge、UTF-8 读取与错误映射
 - renderer 已具备当前文档状态，并能把已打开文档加载到 CodeMirror 6 编辑器中
 - 存在主进程文件打开测试和 renderer 文档状态测试
-- 偏好设置已接入颜色模式、主题包、刷新主题、应用 UI 字号、文档字号、文档字体和 autosave idle delay，变更可实时生效
+- 偏好设置已接入颜色模式、主题家族、刷新主题、应用 UI 字号、文档字号、文档字体和 autosave idle delay，变更可实时生效
 - 基础目录边界已建立：`apps/desktop`、`packages/editor-core`、`packages/markdown-engine`、`tests/e2e`
 
 从源码可确认的未完成内容：
@@ -34,7 +34,7 @@
 - `TASK-004`：确认编辑后会进入 dirty 状态，`Save` 会写回当前路径，`Save As` 会写入新路径并切换当前文档路径
 - `TASK-007`：确认 CodeMirror 编辑区可输入，undo / redo 快捷键可用，且保存链路仍与当前编辑文本保持一致
 - `TASK-032`：确认 `File` 菜单提供 `Open...`、`Save`、`Save As...`，同时页面壳层不再呈现居中 demo 卡片样式
-- `TASK-037`：确认设置页支持颜色模式、主题包、刷新主题、应用 UI 字号、文档字号、文档字体与 autosave 间隔，且变更能持久化并即时生效
+- `TASK-037`：确认设置页支持颜色模式、主题家族、刷新主题、应用 UI 字号、文档字号、文档字体与 autosave 间隔，且变更能持久化并即时生效
 
 不要把当前仓库误判为“已经具备完整 Markdown 编辑器 MVP 功能”。
 
@@ -79,6 +79,6 @@
 | TASK-034 | 行内格式渲染 | DEV_DONE | 已在 `markdown-engine` 建立 canonical `parseMarkdownDocument()` 与完整 inline AST，并接入 `editor-core` / renderer 的非激活态行内渲染；当前支持 bold / italic / inline code / strikethrough 及常见嵌套，光标回到对应 block 后恢复 Markdown 源码态。 |
 | TASK-035 | IME 基线保护 | ACCEPTED | 已完成 composition guard、autosave 光标回归修复与段落/标题/列表回归测试，并通过本轮中文 IME 人工验收。 |
 | TASK-036 | 外部文件变更检测 | TODO | 外部修改当前文件时的提示与冲突处理，避免 autosave 覆盖。 |
-| TASK-037 | 偏好设置持久化 | DEV_DONE | 已建立 `app.getPath('userData')/preferences.json` 配置存储，覆盖 autosave 间隔、最近文件上限、文档字体与字号、主题设置；提供 schema 校验、范围 clamp、损坏文件备份恢复与原子写入；通过 `getPreferences` / `updatePreferences` / `onPreferencesChanged` bridge 对 renderer 暴露受限访问；设置页已接入颜色模式、主题包、刷新主题、应用 UI 字号、文档字号、文档字体与 autosave idle delay；变更可立即持久化且生效，autosave delay 修改会重排挂起 timer；`recentFiles.maxEntries` 仍待 `TASK-006` 接入。 |
+| TASK-037 | 偏好设置持久化 | DEV_DONE | 已建立 `app.getPath('userData')/preferences.json` 配置存储，覆盖 autosave 间隔、最近文件上限、文档字体与字号、主题设置；提供 schema 校验、范围 clamp、损坏文件备份恢复与原子写入；通过 `getPreferences` / `updatePreferences` / `onPreferencesChanged` bridge 对 renderer 暴露受限访问；设置页已接入颜色模式、主题家族、刷新主题、应用 UI 字号、文档字号、文档字体与 autosave idle delay；社区主题统一从 `<userData>/themes/<familyId>/<mode>` 扫描，当前主题不支持所选 light/dark 模式时会回退到 `Yulora 默认` 并显示提示；`recentFiles.maxEntries` 仍待 `TASK-006` 接入。 |
 | TASK-039 | 分割线渲染 | DEV_DONE | 已补齐 `thematicBreak` block map、`---` / `+++` 分割线解析、非激活态横线渲染与源码态恢复，并覆盖 CRLF 边界回归。 |
 | TASK-038 | 跨平台打包 | DEV_IN_PROGRESS | 已接入基于 `electron-builder` 的 Windows 本地 `package:win` 打包入口，并在打包前按需从 `assets/branding/*.svg` 生成 `light` / `dark` 两套 PNG 与 Windows `icon.ico`；当前通过 `afterPack + rcedit` workaround 为应用主程序补写正式图标，同时提供仓库根目录 `package-win.bat` 可用入口与 `package-macos.sh` 预留入口，macOS 产物、签名和 `.icns` 仍待后续切片完成。 |

@@ -124,12 +124,24 @@ describe("normalizePreferences", () => {
   });
 
   it("trims the selected theme id and falls back to null for invalid input", () => {
-    expect(normalizePreferences({ theme: { selectedId: "  graphite-dark  " } }).theme.selectedId).toBe(
-      "graphite-dark"
+    expect(normalizePreferences({ theme: { selectedId: "  graphite  " } }).theme.selectedId).toBe(
+      "graphite"
     );
     expect(normalizePreferences({ theme: { selectedId: "" } }).theme.selectedId).toBeNull();
     expect(normalizePreferences({ theme: { selectedId: "   " } }).theme.selectedId).toBeNull();
     expect(normalizePreferences({ theme: { selectedId: 17 } }).theme.selectedId).toBeNull();
+  });
+
+  it("migrates legacy theme package ids into theme family ids", () => {
+    expect(normalizePreferences({ theme: { selectedId: "graphite-dark" } }).theme.selectedId).toBe(
+      "graphite"
+    );
+    expect(normalizePreferences({ theme: { selectedId: "graphite_light" } }).theme.selectedId).toBe(
+      "graphite"
+    );
+    expect(normalizePreferences({ theme: { selectedId: "midnight" } }).theme.selectedId).toBe(
+      "midnight"
+    );
   });
 
   it("drops unknown extra fields at every level", () => {
@@ -162,14 +174,14 @@ describe("mergePreferences", () => {
     const next = mergePreferences(DEFAULT_PREFERENCES, {
       autosave: { idleDelayMs: 2500 },
       document: { fontFamily: "IBM Plex Serif", fontSize: 18 },
-      theme: { mode: "dark", selectedId: "graphite-dark" }
+      theme: { mode: "dark", selectedId: "graphite" }
     });
 
     expect(next).toEqual({
       ...DEFAULT_PREFERENCES,
       autosave: { idleDelayMs: 2500 },
       document: { fontFamily: "IBM Plex Serif", fontSize: 18 },
-      theme: { mode: "dark", selectedId: "graphite-dark" }
+      theme: { mode: "dark", selectedId: "graphite" }
     });
   });
 

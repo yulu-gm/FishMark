@@ -21,6 +21,7 @@ type SettingsViewProps = {
   surfaceState: "open" | "closing";
   preferences: Preferences;
   themes: ThemeCatalogEntry[];
+  themeWarningMessage: string | null;
   isRefreshingThemes: boolean;
   onRefreshThemes: () => Promise<void>;
   onUpdate: (patch: PreferencesUpdate) => Promise<UpdatePreferencesResult>;
@@ -87,6 +88,7 @@ export function SettingsView({
   surfaceState,
   preferences,
   themes,
+  themeWarningMessage,
   isRefreshingThemes,
   onRefreshThemes,
   onUpdate,
@@ -299,12 +301,12 @@ export function SettingsView({
         <section className="settings-group">
           <header className="settings-group-header">
             <h2>主题</h2>
-            <p>颜色模式控制 light / dark / system，主题包控制整套 CSS 覆写。</p>
+            <p>颜色模式控制 light / dark / system，主题家族控制整套 CSS 覆写。</p>
           </header>
           <div className="settings-row">
             <label className="settings-label">
               <span>颜色模式</span>
-              <span className="settings-hint">选择跟随系统或手动切换浅色 / 深色。</span>
+              <span className="settings-hint">选择跟随系统，或手动切换浅色 / 深色。</span>
             </label>
             <div
               className="settings-radio-group"
@@ -335,7 +337,7 @@ export function SettingsView({
               className="settings-label"
               htmlFor="settings-theme-package"
             >
-              <span>主题包</span>
+              <span>主题家族</span>
               <span className="settings-hint">默认主题使用内置 light / dark 套件，社区主题来自自动扫描目录。</span>
             </label>
             <div className="settings-input-stack">
@@ -371,6 +373,9 @@ export function SettingsView({
                 >
                   {isRefreshingThemes ? "刷新中..." : "刷新主题"}
                 </button>
+                {themeWarningMessage ? (
+                  <p className="settings-inline-note">{themeWarningMessage}</p>
+                ) : null}
                 {selectedThemeMissing ? (
                   <p className="settings-inline-note">当前主题未找到，已回退到默认主题渲染。</p>
                 ) : null}
@@ -382,7 +387,7 @@ export function SettingsView({
         <section className="settings-group">
           <header className="settings-group-header">
             <h2>排版</h2>
-            <p>应用 UI 字号影响面板和按钮，文档字号与字体影响编辑器正文与 Markdown 渲染。</p>
+            <p>应用 UI 字号影响面板和按钮，文档字号与字体影响编辑器正文和 Markdown 渲染。</p>
           </header>
           <div className="settings-row">
             <label
