@@ -37,6 +37,40 @@ describe("package scripts", () => {
     );
   });
 
+  it("uses watch-specific tsconfig files for the long-running TypeScript dev compilers", () => {
+    const packageJsonPath = path.join(process.cwd(), "package.json");
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
+      scripts?: Record<string, string>;
+    };
+
+    expect(packageJson.scripts?.["dev:main"]).toContain("tsconfig.electron.watch.json");
+    expect(packageJson.scripts?.["dev:cli"]).toContain("tsconfig.cli.watch.json");
+  });
+
+  it("stores watch-mode tsbuildinfo files separately from the clean build cache", () => {
+    const electronWatchConfigPath = path.join(process.cwd(), "tsconfig.electron.watch.json");
+    const electronWatchConfig = JSON.parse(readFileSync(electronWatchConfigPath, "utf8")) as {
+      extends?: string;
+      compilerOptions?: {
+        tsBuildInfoFile?: string;
+      };
+    };
+    const cliWatchConfigPath = path.join(process.cwd(), "tsconfig.cli.watch.json");
+    const cliWatchConfig = JSON.parse(readFileSync(cliWatchConfigPath, "utf8")) as {
+      extends?: string;
+      compilerOptions?: {
+        incremental?: boolean;
+        tsBuildInfoFile?: string;
+      };
+    };
+
+    expect(electronWatchConfig.extends).toBe("./tsconfig.electron.json");
+    expect(electronWatchConfig.compilerOptions?.tsBuildInfoFile).toBe(".tmp/tsconfig.electron.watch.tsbuildinfo");
+    expect(cliWatchConfig.extends).toBe("./tsconfig.cli.json");
+    expect(cliWatchConfig.compilerOptions?.incremental).toBe(true);
+    expect(cliWatchConfig.compilerOptions?.tsBuildInfoFile).toBe(".tmp/tsconfig.cli.watch.tsbuildinfo");
+  });
+
   it("uses cross-env via npm bin resolution instead of a hard-coded node_modules path", () => {
     const packageJsonPath = path.join(process.cwd(), "package.json");
     const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {

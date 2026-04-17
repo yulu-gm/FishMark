@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.cli.json",
+  "compilerOptions": {
+    "incremental": true,
+    "tsBuildInfoFile": ".tmp/tsconfig.cli.watch.tsbuildinfo"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.electron.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": ".tmp/tsconfig.electron.watch.tsbuildinfo"
+  }
+}
