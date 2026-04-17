@@ -340,6 +340,8 @@ describe("App autosave", () => {
       listFontFamilies,
       listThemes,
       refreshThemes,
+      listThemePackages: vi.fn().mockResolvedValue([]),
+      refreshThemePackages: vi.fn().mockResolvedValue([]),
       checkForUpdates: vi.fn().mockResolvedValue(undefined),
       onPreferencesChanged(listener: PreferencesChangedListener) {
         preferencesChangedListener = listener;

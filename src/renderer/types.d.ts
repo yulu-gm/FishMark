@@ -70,6 +70,30 @@ type ThemeDescriptor = {
   };
 };
 
+type ThemePackageDescriptor = {
+  id: string;
+  kind: "manifest-package" | "legacy-css-family";
+  source: "builtin" | "community";
+  packageRoot: string;
+  manifest: {
+    id: string;
+    name: string;
+    version: string;
+    author: string | null;
+    supports: { light: boolean; dark: boolean };
+    tokens: Partial<Record<"light" | "dark", string>>;
+    styles: Partial<Record<"ui" | "editor" | "markdown" | "titlebar", string>>;
+    layout: { titlebar: string | null };
+    scene: { id: string; sharedUniforms: Record<string, number> } | null;
+    surfaces: Partial<
+      Record<
+        "workbenchBackground" | "titlebarBackdrop" | "welcomeHero",
+        { kind: "fragment"; scene: string; shader: string }
+      >
+    >;
+  };
+};
+
 declare global {
   interface Window {
     yulora: {
@@ -89,6 +113,8 @@ declare global {
       listFontFamilies: () => Promise<string[]>;
       listThemes: () => Promise<ThemeDescriptor[]>;
       refreshThemes: () => Promise<ThemeDescriptor[]>;
+      listThemePackages: () => Promise<ThemePackageDescriptor[]>;
+      refreshThemePackages: () => Promise<ThemePackageDescriptor[]>;
       checkForUpdates: () => Promise<void>;
       startScenarioRun: (input: { scenarioId: string }) => Promise<{ runId: string }>;
       interruptScenarioRun: (input: { runId: string }) => Promise<void>;
