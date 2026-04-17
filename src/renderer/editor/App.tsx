@@ -10,13 +10,12 @@ import {
 import { CodeEditorView, type CodeEditorHandle } from "../code-editor-view";
 import { createEditorTestDriver } from "../editor-test-driver";
 import { deriveOutlineItems, type OutlineItem } from "../outline";
-import {
-  resolveBuiltinThemeDescriptor,
-  type ThemeDescriptor as RuntimeThemeDescriptor
-} from "../theme-runtime";
 import { createThemePackageRuntime } from "../theme-package-runtime";
-import { resolveActiveThemePackage } from "../theme-package-catalog";
-import { resolveThemeCatalogEntry } from "../theme-catalog";
+import {
+  normalizeThemePackageDescriptor,
+  resolveActiveThemePackage,
+  type ThemePackageRuntimeEntry
+} from "../theme-package-catalog";
 import {
   type AppState,
   applyEditorContentChanged,
@@ -37,16 +36,6 @@ const SettingsView = lazy(async () => {
 
 type ResolvedThemeMode = Exclude<ThemeMode, "system">;
 type ThemeCatalogEntry = Awaited<ReturnType<Window["yulora"]["listThemes"]>>[number];
-type ThemePackageEntry = Awaited<ReturnType<Window["yulora"]["listThemePackages"]>>[number];
-type ThemeFallbackReason = "missing-theme" | "unsupported-mode" | null;
-type ActiveThemeResolution = {
-  requestedThemeId: string | null;
-  resolvedMode: ResolvedThemeMode;
-  activeThemeId: string;
-  activeThemeSource: "builtin" | "community";
-  fallbackReason: ThemeFallbackReason;
-  descriptor: RuntimeThemeDescriptor;
-};
 
 const AUTOSAVE_FAILED_MESSAGE = "Autosave failed. Changes are still in memory.";
 const DARK_MODE_MEDIA_QUERY = "(prefers-color-scheme: dark)";
@@ -151,24 +140,13 @@ function clearDocumentPreferences(root: HTMLElement): void {
   root.style.removeProperty(DOCUMENT_FONT_SIZE_CSS_VAR);
 }
 
-function toRuntimeThemeDescriptorForMode(
+function toLegacyRuntimeThemePackageEntry(
   theme: ThemeCatalogEntry,
   resolvedThemeMode: ResolvedThemeMode
-): RuntimeThemeDescriptor {
-  return {
-    id: theme.id,
-    source: theme.source,
-    partUrls: theme.modes[resolvedThemeMode].partUrls
-  };
-}
-
-function toRuntimeThemePackageEntryForMode(
-  theme: ThemeCatalogEntry,
-  resolvedThemeMode: ResolvedThemeMode
-): ThemePackageEntry {
+): ThemePackageRuntimeEntry {
   const mode = theme.modes[resolvedThemeMode];
-  const tokens: Partial<Record<"light" | "dark", string>> = {};
-  const styles: Partial<Record<"ui" | "editor" | "markdown" | "titlebar", string>> = {};
+  const tokens: ThemePackageRuntimeEntry["tokens"] = {};
+  const styles: ThemePackageRuntimeEntry["styles"] = {};
 
   if (mode.partUrls.tokens) {
     tokens[resolvedThemeMode] = mode.partUrls.tokens;
@@ -188,81 +166,18 @@ function toRuntimeThemePackageEntryForMode(
 
   return {
     id: theme.id,
-    kind: "legacy-css-family",
     source: theme.source,
-    packageRoot: "",
-    manifest: {
-      id: theme.id,
-      name: theme.name,
-      version: "0.0.0",
-      author: null,
-      supports: {
-        light: theme.modes.light.available,
-        dark: theme.modes.dark.available
-      },
-      tokens,
-      styles,
-      layout: { titlebar: null },
-      scene: null,
-      surfaces: {}
-    }
-  };
-}
-
-function resolveActiveThemeResolution(
-  preferences: Preferences,
-  catalog: ThemeCatalogEntry[],
-  resolvedThemeMode: ResolvedThemeMode
-): ActiveThemeResolution {
-  const selectedId = preferences.theme.selectedId;
-
-  if (!selectedId) {
-    return {
-      requestedThemeId: null,
-      resolvedMode: resolvedThemeMode,
-      activeThemeId: "default",
-      activeThemeSource: "builtin",
-      fallbackReason: null,
-      descriptor: resolveBuiltinThemeDescriptor(resolvedThemeMode)
-    };
-  }
-
-  const selectedTheme = resolveThemeCatalogEntry(catalog, selectedId);
-
-  if (!selectedTheme) {
-    return {
-      requestedThemeId: selectedId,
-      resolvedMode: resolvedThemeMode,
-      activeThemeId: "default",
-      activeThemeSource: "builtin",
-      fallbackReason: "missing-theme",
-      descriptor: resolveBuiltinThemeDescriptor(resolvedThemeMode)
-    };
-  }
-
-  if (!selectedTheme.modes[resolvedThemeMode].available) {
-    return {
-      requestedThemeId: selectedId,
-      resolvedMode: resolvedThemeMode,
-      activeThemeId: "default",
-      activeThemeSource: "builtin",
-      fallbackReason: "unsupported-mode",
-      descriptor: resolveBuiltinThemeDescriptor(resolvedThemeMode)
-    };
-  }
-
-  return {
-    requestedThemeId: selectedId,
-    resolvedMode: resolvedThemeMode,
-    activeThemeId: selectedTheme.id,
-    activeThemeSource: selectedTheme.source,
-    fallbackReason: null,
-    descriptor: toRuntimeThemeDescriptorForMode(selectedTheme, resolvedThemeMode)
+    supports: {
+      light: theme.modes.light.available,
+      dark: theme.modes.dark.available
+    },
+    tokens,
+    styles
   };
 }
 
 function resolveThemeWarningMessage(
-  resolution: ActiveThemeResolution
+  resolution: ReturnType<typeof resolveActiveThemePackage>
 ): string | null {
   if (resolution.fallbackReason === "unsupported-mode") {
     return `该主题不支持${resolution.resolvedMode === "light" ? "浅色" : "深色"}模式，已回退到 Yulora 默认。`;
@@ -377,12 +292,16 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     ? `正在下载更新${Number.isFinite(appUpdateState.percent) ? ` ${Math.round(appUpdateState.percent)}%` : "…"}`
     : null;
   const resolvedThemeMode = resolveThemeMode(preferences.theme.mode);
-  const activeThemeResolution = resolveActiveThemeResolution(
-    preferences,
-    themes,
+  const activeThemePackages =
+    themePackages.length > 0
+      ? themePackages.map(normalizeThemePackageDescriptor)
+      : themes.map((theme) => toLegacyRuntimeThemePackageEntry(theme, resolvedThemeMode));
+  const activeThemePackageResolution = resolveActiveThemePackage(
+    preferences.theme.selectedId,
+    activeThemePackages,
     resolvedThemeMode
   );
-  const themeWarningMessage = resolveThemeWarningMessage(activeThemeResolution);
+  const themeWarningMessage = resolveThemeWarningMessage(activeThemePackageResolution);
 
   function applyState(updater: (current: AppState) => AppState): void {
     const next = updater(stateRef.current);
@@ -580,18 +499,13 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     setIsRefreshingThemes(true);
 
     try {
-      const [nextThemesResult, nextThemePackagesResult] = await Promise.allSettled([
+      const [nextThemes, nextThemePackages] = await Promise.all([
         yulora.refreshThemes(),
         yulora.refreshThemePackages()
       ]);
 
-      if (nextThemesResult.status === "fulfilled") {
-        setThemes(nextThemesResult.value);
-      }
-
-      if (nextThemePackagesResult.status === "fulfilled") {
-        setThemePackages(nextThemePackagesResult.value);
-      }
+      setThemes(nextThemes);
+      setThemePackages(nextThemePackages);
     } finally {
       setIsRefreshingThemes(false);
     }
@@ -952,8 +866,8 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
       const resolvedThemeMode = resolveThemeMode(preferences.theme.mode);
       const activeThemePackages =
         themePackages.length > 0
-          ? themePackages
-          : themes.map((theme) => toRuntimeThemePackageEntryForMode(theme, resolvedThemeMode));
+          ? themePackages.map(normalizeThemePackageDescriptor)
+          : themes.map((theme) => toLegacyRuntimeThemePackageEntry(theme, resolvedThemeMode));
       const activeThemePackageResolution = resolveActiveThemePackage(
         preferences.theme.selectedId,
         activeThemePackages,
@@ -1001,7 +915,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
       return;
     }
 
-    const notificationKey = `${activeThemeResolution.requestedThemeId ?? "default"}:${activeThemeResolution.resolvedMode}:${activeThemeResolution.fallbackReason ?? "none"}`;
+    const notificationKey = `${activeThemePackageResolution.requestedId ?? "default"}:${activeThemePackageResolution.resolvedMode}:${activeThemePackageResolution.fallbackReason ?? "none"}`;
 
     if (lastThemeNotificationKeyRef.current === notificationKey) {
       return;
@@ -1013,9 +927,9 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
       message: themeWarningMessage
     });
   }, [
-    activeThemeResolution.fallbackReason,
-    activeThemeResolution.requestedThemeId,
-    activeThemeResolution.resolvedMode,
+    activeThemePackageResolution.fallbackReason,
+    activeThemePackageResolution.requestedId,
+    activeThemePackageResolution.resolvedMode,
     showNotification,
     themeWarningMessage
   ]);

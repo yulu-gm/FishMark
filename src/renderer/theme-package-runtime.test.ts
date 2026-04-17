@@ -2,6 +2,7 @@
 
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { createPreviewAssetUrl } from "../shared/preview-asset-url";
 import { createThemePackageRuntime } from "./theme-package-runtime";
 
 describe("theme package runtime", () => {
@@ -16,12 +17,12 @@ describe("theme package runtime", () => {
       {
         id: "rain-glass",
         styles: {
-          ui: "file:///theme/ui.css",
-          titlebar: "file:///theme/titlebar.css",
-          editor: "file:///theme/editor.css"
+          ui: createPreviewAssetUrl("/theme/ui.css"),
+          titlebar: createPreviewAssetUrl("/theme/titlebar.css"),
+          editor: createPreviewAssetUrl("/theme/editor.css")
         },
         tokens: {
-          dark: "file:///theme/tokens-dark.css"
+          dark: createPreviewAssetUrl("/theme/tokens-dark.css")
         }
       },
       "dark"
@@ -32,10 +33,10 @@ describe("theme package runtime", () => {
         node.getAttribute("href")
       )
     ).toEqual([
-      "file:///theme/tokens-dark.css",
-      "file:///theme/ui.css",
-      "file:///theme/titlebar.css",
-      "file:///theme/editor.css"
+      createPreviewAssetUrl("/theme/tokens-dark.css"),
+      createPreviewAssetUrl("/theme/ui.css"),
+      createPreviewAssetUrl("/theme/titlebar.css"),
+      createPreviewAssetUrl("/theme/editor.css")
     ]);
   });
 });

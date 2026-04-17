@@ -15,6 +15,7 @@ import type {
   SaveMarkdownFileInput,
   SaveMarkdownFileResult
 } from "../shared/save-markdown-file";
+import { createPreviewAssetUrl } from "../shared/preview-asset-url";
 import type { RunnerEventEnvelope, ScenarioRunTerminal } from "../shared/test-run-session";
 import App from "./App";
 import * as codeEditorViewModule from "./code-editor-view";
@@ -32,6 +33,7 @@ type ScenarioRunEventListener = (payload: RunnerEventEnvelope) => void;
 type ScenarioRunTerminalListener = (payload: ScenarioRunTerminal) => void;
 type PreferencesChangedListener = (preferences: Preferences) => void;
 type ThemeDescriptor = Awaited<ReturnType<Window["yulora"]["listThemes"]>>[number];
+type ThemePackageDescriptor = Awaited<ReturnType<Window["yulora"]["listThemePackages"]>>[number];
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean;
@@ -972,6 +974,53 @@ describe("App autosave", () => {
     expect(container.textContent).not.toContain("已配置主题未找到");
   });
 
+  it("mounts non-empty theme package catalogs through preview asset urls without a missing-theme warning", async () => {
+    const packageThemes: ThemePackageDescriptor[] = [
+      {
+        id: "rain-glass",
+        kind: "manifest-package",
+        source: "community",
+        packageRoot: "/tmp/yulora/themes/rain-glass",
+        manifest: {
+          id: "rain-glass",
+          name: "Rain Glass",
+          version: "1.0.0",
+          author: null,
+          supports: { light: true, dark: true },
+          tokens: {
+            dark: "/tmp/yulora/themes/rain-glass/tokens-dark.css"
+          },
+          styles: {
+            ui: "/tmp/yulora/themes/rain-glass/ui.css",
+            editor: "/tmp/yulora/themes/rain-glass/editor.css",
+            markdown: "/tmp/yulora/themes/rain-glass/markdown.css"
+          },
+          layout: { titlebar: null },
+          scene: null,
+          surfaces: {}
+        }
+      }
+    ];
+
+    window.yulora = {
+      ...window.yulora,
+      getPreferences: vi.fn().mockResolvedValue({
+        ...DEFAULT_PREFERENCES,
+        theme: { mode: "dark", selectedId: "rain-glass", effectsMode: "auto" }
+      }),
+      listThemePackages: vi.fn().mockResolvedValue(packageThemes)
+    } as Window["yulora"];
+
+    await renderApp();
+
+    expect(
+      document.head
+        .querySelector('link[data-yulora-theme-part="tokens"]')
+        ?.getAttribute("href")
+    ).toBe(createPreviewAssetUrl("/tmp/yulora/themes/rain-glass/tokens-dark.css"));
+    expect(container.textContent).not.toContain("已配置主题未找到");
+  });
+
   it("renders the theme package selector and refreshes the theme catalog from settings", async () => {
     await renderApp();
 
@@ -1007,6 +1056,38 @@ describe("App autosave", () => {
     });
 
     expect(refreshThemes).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a refresh error banner when refreshing theme packages fails", async () => {
+    window.yulora = {
+      ...window.yulora,
+      refreshThemes: vi.fn().mockResolvedValue(communityThemes),
+      refreshThemePackages: vi.fn().mockRejectedValue(new Error("refresh failed"))
+    } as Window["yulora"];
+
+    await renderApp();
+
+    const settingsButton = container.querySelector<HTMLButtonElement>(".settings-entry");
+    expect(settingsButton).not.toBeNull();
+
+    await act(async () => {
+      settingsButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await vi.dynamicImportSettled();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const refreshButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent?.includes("刷新主题")
+    );
+
+    await act(async () => {
+      refreshButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("主题列表刷新失败。");
   });
 
   it("falls back to the builtin theme and routes the unsupported-mode warning through the top notification banner", async () => {
