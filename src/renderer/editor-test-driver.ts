@@ -111,6 +111,11 @@ export function createEditorTestDriver(input: {
         if (!currentDocument) {
           return fail("No open document to save.");
         }
+        if (!currentDocument.path) {
+          return fail("No persisted document path to save.", {
+            path: currentDocument.path
+          });
+        }
 
         const content = input.editor.getContent();
         const result = await input.saveMarkdownFile({

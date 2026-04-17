@@ -5,6 +5,7 @@ import {
   applyEditorContentChanged,
   applySaveMarkdownResult,
   applyOpenMarkdownResult,
+  createNewMarkdownDocumentState,
   createInitialAppState,
   startAutosavingDocument,
   startManualSavingDocument,
@@ -68,6 +69,20 @@ describe("applyOpenMarkdownResult", () => {
 });
 
 describe("applyEditorContentChanged", () => {
+  it("marks a new untitled document clean on creation", () => {
+    const nextState = createNewMarkdownDocumentState(createInitialAppState());
+
+    expect(nextState.currentDocument).toEqual({
+      path: null,
+      name: "Untitled.md",
+      content: "",
+      encoding: "utf-8"
+    });
+    expect(nextState.isDirty).toBe(false);
+    expect(nextState.errorMessage).toBeNull();
+    expect(nextState.editorLoadRevision).toBe(1);
+  });
+
   it("marks the document dirty when editor content diverges from the persisted snapshot", () => {
     const state: AppState = {
       currentDocument: {
@@ -220,15 +235,7 @@ describe("save document state", () => {
 
   it("updates the current path after save as succeeds", () => {
     const initialState = applyEditorContentChanged(
-      applyOpenMarkdownResult(createInitialAppState(), {
-        status: "success",
-        document: {
-          path: "C:/notes/today.md",
-          name: "today.md",
-          content: "# Today\n",
-          encoding: "utf-8"
-        }
-      }),
+      createNewMarkdownDocumentState(createInitialAppState()),
       "# Updated\n"
     );
 

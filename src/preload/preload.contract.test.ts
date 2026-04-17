@@ -211,7 +211,7 @@ describe("preload contract", () => {
         type: "press-editor-enter"
       }
     };
-    const menuPayload: AppMenuCommand = "save-markdown-file-as";
+    const menuPayload: AppMenuCommand = "new-markdown-document";
     const preferencesPayload: Preferences = DEFAULT_PREFERENCES;
 
     scenarioHandler?.({}, scenarioPayload);

@@ -19,6 +19,7 @@ import {
   applyEditorContentChanged,
   applyOpenMarkdownResult,
   applySaveMarkdownResult,
+  createNewMarkdownDocumentState,
   createInitialAppState,
   startAutosavingDocument,
   startManualSavingDocument,
@@ -169,7 +170,9 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     state.openState === "opening"
       ? "Opening document..."
       : state.currentDocument
-        ? "Use File to open, save, or save as."
+        ? state.currentDocument.path
+          ? "Use File to open, save, or save as."
+          : "Use File > Save to choose where to create this Markdown document."
         : "Use File > Open... to load a Markdown document.";
   const headerEyebrow = isDocumentOpen ? "Current document" : "Yulora";
   const headerTitle = isDocumentOpen
@@ -179,13 +182,15 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     state.openState === "opening"
       ? "Opening document..."
       : isDocumentOpen
-        ? state.currentDocument?.path ?? ""
+        ? state.currentDocument?.path ?? "Not saved yet."
         : "Markdown remains the source of truth, and the writing canvas stays calm and stable.";
   const saveStatusLabel =
     state.saveState === "manual-saving"
       ? "Saving changes..."
       : state.saveState === "autosaving"
         ? "Autosaving..."
+        : state.currentDocument && !state.currentDocument.path && !state.isDirty
+          ? "Not saved yet"
         : state.isDirty
           ? "Unsaved changes"
           : "All changes saved";
@@ -232,7 +237,12 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
 
     const snapshot = stateRef.current;
 
-    if (!snapshot.currentDocument || !snapshot.isDirty || inFlightSaveOriginRef.current) {
+    if (
+      !snapshot.currentDocument ||
+      !snapshot.currentDocument.path ||
+      !snapshot.isDirty ||
+      inFlightSaveOriginRef.current
+    ) {
       return;
     }
 
@@ -276,7 +286,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   function scheduleAutosave(nextState: AppState): void {
     clearAutosaveTimer();
 
-    if (!nextState.currentDocument || !nextState.isDirty) {
+    if (!nextState.currentDocument || !nextState.currentDocument.path || !nextState.isDirty) {
       pendingAutosaveReplayRef.current = false;
       return;
     }
@@ -419,6 +429,14 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     applyState((current) => applyOpenMarkdownResult(current, result));
   });
 
+  const handleNewMarkdown = useEffectEvent((): void => {
+    resetAutosaveRuntime();
+    editorContentRef.current = "";
+    setOutlineItems([]);
+    setActiveHeadingId(null);
+    applyState((current) => createNewMarkdownDocumentState(current));
+  });
+
   const handleOpenMarkdownFromPath = useEffectEvent(async (targetPath: string): Promise<void> => {
     applyState((current) => startOpeningMarkdownFile(current));
 
@@ -442,9 +460,21 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
       return;
     }
 
+    const currentPath = currentDocument.path;
+
+    if (!currentPath) {
+      await runManualSave(() =>
+        yulora.saveMarkdownFileAs({
+          currentPath,
+          content: getEditorContent()
+        })
+      );
+      return;
+    }
+
     await runManualSave(() =>
       yulora.saveMarkdownFile({
-        path: currentDocument.path,
+        path: currentPath,
         content: getEditorContent()
       })
     );
@@ -518,6 +548,11 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
 
   useEffect(() => {
     return yulora.onMenuCommand((command) => {
+      if (command === "new-markdown-document") {
+        handleNewMarkdown();
+        return;
+      }
+
       if (command === "open-markdown-file") {
         void handleOpenMarkdown();
         return;

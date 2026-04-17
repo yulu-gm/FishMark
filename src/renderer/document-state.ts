@@ -6,6 +6,7 @@ import type { SaveMarkdownFileResult } from "../shared/save-markdown-file";
 
 export type OpenState = "idle" | "opening";
 export type SaveState = "idle" | "manual-saving" | "autosaving";
+const UNTITLED_DOCUMENT_NAME = "Untitled.md";
 
 export type AppState = {
   currentDocument: OpenMarkdownDocument | null;
@@ -26,6 +27,23 @@ export function createInitialAppState(): AppState {
     isDirty: false,
     errorMessage: null,
     lastSavedContent: null
+  };
+}
+
+export function createNewMarkdownDocumentState(currentState: AppState): AppState {
+  return {
+    currentDocument: {
+      path: null,
+      name: UNTITLED_DOCUMENT_NAME,
+      content: "",
+      encoding: "utf-8"
+    },
+    editorLoadRevision: currentState.editorLoadRevision + 1,
+    openState: "idle",
+    saveState: "idle",
+    isDirty: false,
+    errorMessage: null,
+    lastSavedContent: ""
   };
 }
 

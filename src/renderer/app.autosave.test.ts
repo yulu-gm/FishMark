@@ -18,7 +18,13 @@ import type { RunnerEventEnvelope, ScenarioRunTerminal } from "../shared/test-ru
 import App from "./App";
 import * as codeEditorViewModule from "./code-editor-view";
 
-type MenuCommandListener = (command: "open-markdown-file" | "save-markdown-file" | "save-markdown-file-as") => void;
+type MenuCommandListener = (
+  command:
+    | "new-markdown-document"
+    | "open-markdown-file"
+    | "save-markdown-file"
+    | "save-markdown-file-as"
+) => void;
 type EditorTestCommandListener = (payload: EditorTestCommandEnvelope) => void;
 type ScenarioRunEventListener = (payload: RunnerEventEnvelope) => void;
 type ScenarioRunTerminalListener = (payload: ScenarioRunTerminal) => void;
@@ -319,6 +325,65 @@ describe("App autosave", () => {
 
     expect(openMarkdownFileFromPath).toHaveBeenCalledTimes(1);
     expect(openMarkdownFileFromPath).toHaveBeenCalledWith("C:/notes/startup.md");
+  });
+
+  it("opens a new untitled document from the File menu", async () => {
+    await act(async () => {
+      root.render(createElement(App));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(menuCommandListener).not.toBeNull();
+
+    await act(async () => {
+      menuCommandListener?.("new-markdown-document");
+      await Promise.resolve();
+    });
+
+    expect(openMarkdownFile).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Untitled.md");
+    expect(container.querySelector('[data-yulora-region="empty-state"]')).toBeNull();
+    expect(container.querySelector('[data-testid="mock-code-editor"]')).not.toBeNull();
+  });
+
+  it("routes the first save for a new untitled document through Save As", async () => {
+    saveMarkdownFileAs.mockResolvedValue({
+      status: "success",
+      document: {
+        path: "C:/notes/untitled.md",
+        name: "untitled.md",
+        content: "# Fresh draft\n",
+        encoding: "utf-8"
+      }
+    });
+
+    await act(async () => {
+      root.render(createElement(App));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(menuCommandListener).not.toBeNull();
+
+    await act(async () => {
+      menuCommandListener?.("new-markdown-document");
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      codeEditorMock.changeContent("# Fresh draft\n");
+      menuCommandListener?.("save-markdown-file");
+      await Promise.resolve();
+    });
+
+    expect(saveMarkdownFile).not.toHaveBeenCalled();
+    expect(saveMarkdownFileAs).toHaveBeenCalledTimes(1);
+    expect(saveMarkdownFileAs).toHaveBeenCalledWith({
+      currentPath: null,
+      content: "# Fresh draft\n"
+    });
+    expect(container.textContent).toContain("untitled.md");
   });
 
   it("autosaves after typing stops for the idle debounce window", async () => {

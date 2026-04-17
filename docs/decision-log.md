@@ -9,6 +9,7 @@
 
 ## 记录
 
+| 2026-04-17 | `TASK-040` 的 `File > New` 继续复用现有单窗口文档状态模型，但把“未保存文档”提升为一等状态：renderer 可持有 `path = null` 的 `Untitled.md`，首次 `Save` 自动转到现有 `Save As` 链路，而不是在 `main` 预先落临时文件。 | 这样最符合桌面 Markdown 编辑器的常见心智模型，也能继续保持“Markdown 文本为唯一事实来源”与 `main / preload / renderer` 边界：`main` 仍只负责真实文件读写，未保存草稿只存在于 renderer 内存态。 | 当前未保存文档不会参与 autosave 到磁盘，状态栏会明确显示 `Not saved yet`；对应实现位于 `src/shared/open-markdown-file.ts`、`src/shared/save-markdown-file.ts`、`src/shared/menu-command.ts`、`src/main/application-menu.ts`、`src/main/save-markdown-file.ts`、`src/preload/preload.ts`、`src/renderer/document-state.ts`、`src/renderer/editor/App.tsx`。 |
 | 2026-04-17 | `TASK-017` 的 outline 开合不再是单纯面板自身动画，而是把编辑区和右侧列宽一起纳入同一条 grid resize 过渡。 | 只给面板做 enter/exit 会让正文宽度硬切，观感仍然生硬；把 `workspace-shell` 固定为两列并过渡第二列宽度，编辑区就能和 outline 一起平滑伸缩。 | 当前关闭时 outline 仍会先走 `closing` 动画，同时 grid 右列从面板宽过渡回 `0px`，因此正文宽度会同步回弹。 |
 | 2026-04-17 | `TASK-017` 的右侧 outline 与偏好设置抽屉都采用“延迟卸载”的 enter/exit 动效：关闭时先进入 `closing` 状态完成过渡，再真正从 DOM 移除；同时把 settings header 提高不透明度，避免正文透出过多。 | 这样可以让抽屉开合更像桌面面板而不是条件渲染硬切，也能在不引入动画库的前提下保持 renderer diff 足够小；更实的 settings header 则能提升标题区可读性和层级稳定感。 | 当前两类面板都通过 `data-state="open|closing"` 驱动 CSS 动画，outline 小入口在重新出现时也有轻量回弹过渡。 |
 | 2026-04-17 | `TASK-017` 的右侧大纲面板进一步收敛为“固定 header + 独立滚动 body”的抽屉式玻璃卡片：展开/收起箭头与面板所在方向保持一致，标题栏不进入大纲列表滚动区，视觉表面复用偏好设置的毛玻璃语言。 | 这样可以把大纲的折叠心智做得更直觉，同时避免长文档目录滚动时把标题和收起入口一起带走；复用现有 settings glass tokens / blur / sheen 也能让 shell 内不同浮层保持统一。 | 当前右侧 outline 展开后仍与编辑区平级，不覆盖正文；只有标题列表区域独立滚动，header 保持固定可见。 |

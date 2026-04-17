@@ -60,7 +60,7 @@ export async function showSaveMarkdownDialog(
     showSaveDialog: () =>
       dialog.showSaveDialog({
         title: "Save Markdown As",
-        defaultPath: input.currentPath,
+        ...(input.currentPath ? { defaultPath: input.currentPath } : {}),
         filters: [{ name: "Markdown", extensions: ["md", "markdown"] }]
       })
   }

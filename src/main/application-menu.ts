@@ -33,6 +33,7 @@ export function createApplicationMenuTemplate({
     {
       label: "File",
       submenu: [
+        createCommandItem("New", "CmdOrCtrl+N", "new-markdown-document", dispatchCommand),
         createCommandItem("Open...", "CmdOrCtrl+O", "open-markdown-file", dispatchCommand),
         { type: "separator" },
         createCommandItem("Save", "CmdOrCtrl+S", "save-markdown-file", dispatchCommand),

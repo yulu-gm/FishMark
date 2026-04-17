@@ -48,6 +48,24 @@ describe("saveMarkdownFileToPath", () => {
 });
 
 describe("showSaveMarkdownDialog", () => {
+  it("supports untitled documents by allowing a missing current path", async () => {
+    const showSaveDialog = vi.fn().mockResolvedValue({ canceled: true, filePath: undefined });
+
+    const result = await showSaveMarkdownDialog(
+      {
+        currentPath: null,
+        content: ""
+      },
+      {
+        saveMarkdownFileToPath: vi.fn(),
+        showSaveDialog
+      }
+    );
+
+    expect(result).toEqual({ status: "cancelled" });
+    expect(showSaveDialog).toHaveBeenCalledTimes(1);
+  });
+
   it("returns cancelled when the user closes the save dialog", async () => {
     const result = await showSaveMarkdownDialog(
       {

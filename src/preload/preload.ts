@@ -54,7 +54,11 @@ type EditorTestCommandResultEnvelope = {
 
 export type { EditorTestCommandEnvelope, EditorTestCommandResultEnvelope };
 
-type AppMenuCommand = "open-markdown-file" | "save-markdown-file" | "save-markdown-file-as";
+type AppMenuCommand =
+  | "new-markdown-document"
+  | "open-markdown-file"
+  | "save-markdown-file"
+  | "save-markdown-file-as";
 
 type ThemeMode = "system" | "light" | "dark";
 
@@ -180,7 +184,7 @@ const api = {
     ipcRenderer.invoke(OPEN_MARKDOWN_FILE_FROM_PATH_CHANNEL, { targetPath }),
   saveMarkdownFile: (input: { path: string; content: string }) =>
     ipcRenderer.invoke(SAVE_MARKDOWN_FILE_CHANNEL, input),
-  saveMarkdownFileAs: (input: { currentPath: string; content: string }) =>
+  saveMarkdownFileAs: (input: { currentPath: string | null; content: string }) =>
     ipcRenderer.invoke(SAVE_MARKDOWN_FILE_AS_CHANNEL, input),
   openEditorTestWindow: () => ipcRenderer.invoke(OPEN_EDITOR_TEST_WINDOW_CHANNEL),
   startScenarioRun: (input: { scenarioId: string }) =>

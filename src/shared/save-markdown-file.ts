@@ -10,7 +10,7 @@ export type SaveMarkdownFileInput = {
 };
 
 export type SaveMarkdownFileAsInput = {
-  currentPath: string;
+  currentPath: string | null;
   content: string;
 };
 
