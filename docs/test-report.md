@@ -9,6 +9,9 @@
 
 ## 记录
 
+| 2026-04-17 | TASK-038 | `npm run test -- src/main/package-scripts.test.ts` | 通过 | 先以失败测试锁定 `package:mac`、`tools/package-macos.sh` 与 mac 图标配置，再验证 mac 本地打包入口会先生成 icons，并指向 `build/icons/light/icon-512.png` 作为 `electron-builder` 的 icon 源。 |
+| 2026-04-17 | TASK-038 | `npm run package:mac` | 通过 | 本地 macOS 打包成功，执行 `build` 与 `generate:icons` 后产出 `release/mac-arm64/Yulora.app`；当前仍提示 `package.json` 缺少 `author`，并在无开发者证书时回退到 ad-hoc 签名，但不阻塞 unpacked `.app` 生成。 |
+| 2026-04-17 | TASK-038 | `npm run test -- src/main/package-scripts.test.ts` | 通过 | 先以失败测试锁定 macOS 缺少 Markdown 文稿关联声明，再验证 `electron-builder.json` 已补齐 `mac.category` 与 `.md` / `.markdown` 文件关联，供 Finder “打开方式” 识别 Yulora。 |
 | 2026-04-17 | TASK-038 | `npm run test -- src/main/package-scripts.test.ts` | 通过 | 验证所有现存 bat/sh 入口已集中到 `tools/` 目录，并补齐 `tools/release-win.bat` 与 `tools/release-macos.sh` 两个发布入口；仓库根目录旧入口已移除。 |
 | 2026-04-17 | TASK-038 | `npm run lint && npm run typecheck && npm run build` | 通过 | bat/sh 工具迁移到 `tools/` 后，仓库级 lint、typecheck 与 build 继续通过；`build` 仍仅保留现有 Vite chunk size warning。 |
 | 2026-04-17 | TASK-015 | `npm.cmd run test -- src/renderer/code-editor.test.ts` | 通过 | 覆盖点击 Markdown / HTML 图片预览后，编辑器会聚焦并把光标直接跳回对应源码起点。 |

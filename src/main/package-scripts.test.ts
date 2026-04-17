@@ -122,6 +122,19 @@ describe("package scripts", () => {
     expect(packageJson.scripts?.["package:win"]).toContain("node scripts/build-win-release.mjs package");
   });
 
+  it("defines a macOS packaging entry that builds before invoking electron-builder", () => {
+    const packageJsonPath = path.join(process.cwd(), "package.json");
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
+      scripts?: Record<string, string>;
+    };
+
+    expect(packageJson.scripts?.["package:mac"]).toContain("npm run build");
+    expect(packageJson.scripts?.["package:mac"]).toContain("npm run generate:icons");
+    expect(packageJson.scripts?.["package:mac"]).toContain("electron-builder --config electron-builder.json");
+    expect(packageJson.scripts?.["package:mac"]).toContain("--mac");
+    expect(packageJson.scripts?.["package:mac"]).toContain("--dir");
+  });
+
   it("defines a Windows release entry that reuses the dedicated packaging script", () => {
     const packageJsonPath = path.join(process.cwd(), "package.json");
     const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
@@ -223,6 +236,35 @@ describe("package scripts", () => {
       oneClick: false,
       allowToChangeInstallationDirectory: true
     });
+  });
+
+  it("declares Markdown document associations for the macOS app bundle", () => {
+    const configPath = path.join(process.cwd(), "electron-builder.json");
+    const config = JSON.parse(readFileSync(configPath, "utf8")) as {
+      mac?: {
+        category?: string;
+        icon?: string;
+        fileAssociations?: Array<{
+          ext?: string[];
+          mimeType?: string;
+          name?: string;
+          role?: string;
+        }>;
+      };
+    };
+
+    expect(config.mac?.category).toBe("public.app-category.productivity");
+    expect(config.mac?.icon).toBe("build/icons/light/icon-512.png");
+    expect(config.mac?.fileAssociations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          ext: ["md", "markdown"],
+          mimeType: "text/markdown",
+          name: "Markdown Document",
+          role: "Editor"
+        })
+      ])
+    );
   });
 
   it("keeps renderer libraries as build-time dependencies while allowing required main-process runtime packages", () => {
@@ -346,7 +388,7 @@ describe("package scripts", () => {
     }
   });
 
-  it("centralizes the macOS packaging placeholder under tools/", () => {
+  it("centralizes the macOS packaging entry under tools/", () => {
     const shellPath = path.join(process.cwd(), "tools", "package-macos.sh");
     const shellSource = readFileSync(shellPath, "utf8");
     const legacyRootPath = path.join(process.cwd(), "package-macos.sh");
@@ -354,8 +396,8 @@ describe("package scripts", () => {
     expect(shellSource).toContain("#!/usr/bin/env bash");
     expect(shellSource).toContain('cd "$(dirname "$0")/.."');
     expect(shellSource).toContain('if [[ "$(uname)" != "Darwin" ]]');
-    expect(shellSource).toContain("macOS packaging is not implemented yet");
-    expect(shellSource).toContain("exit 1");
+    expect(shellSource).toContain("npm run package:mac");
+    expect(shellSource).not.toContain("macOS packaging is not implemented yet");
     expect(existsSync(legacyRootPath)).toBe(false);
   });
 

@@ -26,6 +26,7 @@
     "test": "vitest run",
     "build:cli": "tsc -p tsconfig.cli.json",
     "generate:icons": "node scripts/generate-icons.mjs",
+    "package:mac": "npm run build && npm run generate:icons && electron-builder --config electron-builder.json --mac --dir",
     "package:win": "npm run build && npm run generate:icons && node scripts/build-win-release.mjs package",
     "release:win": "npm run build && npm run generate:icons && node scripts/build-win-release.mjs release",
     "pretest:scenario": "npm run build:cli",

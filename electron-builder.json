@@ -34,6 +34,18 @@
       "releaseType": "release"
     }
   ],
+  "mac": {
+    "category": "public.app-category.productivity",
+    "icon": "build/icons/light/icon-512.png",
+    "fileAssociations": [
+      {
+        "ext": ["md", "markdown"],
+        "mimeType": "text/markdown",
+        "name": "Markdown Document",
+        "role": "Editor"
+      }
+    ]
+  },
   "win": {
     "icon": "build/icons/light/icon.ico",
     "signAndEditExecutable": false,

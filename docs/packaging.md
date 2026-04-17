@@ -110,20 +110,24 @@ tools\release-win.bat
 
 ## macOS 预留入口
 
-`tools/` 目录下还提供了两个 macOS 预留入口：
+`tools/` 目录下还提供了两个 macOS 入口：
 
 ```bash
 ./tools/package-macos.sh
 ./tools/release-macos.sh
 ```
 
-当前这两个入口会先做基础环境检查，并明确提示 macOS 打包 / 发版尚未接入正式实现。后续补上 `.dmg` / `.zip`、`.icns` 与发版链路时，会继续沿用这两个入口。
+其中：
+
+- `./tools/package-macos.sh` 会先做 Node/npm 与平台检查，再调用 `npm run package:mac`
+- `npm run package:mac` 会执行 `build`、`generate:icons`，然后用 `electron-builder --mac --dir` 产出本地调试用的 unpacked `.app`
+- `./tools/release-macos.sh` 目前仍是预留入口，后续补上 `.dmg` / `.zip`、签名、notarize 与正式发版链路时继续沿用
 
 未来 macOS 正式发版也应复用同一份 `release-metadata/release-notes.json`，避免不同平台各自维护一份 Release 正文。
 
 ### 产物输出
 
-安装器输出到：
+打包产物输出到：
 
 ```text
 release/
@@ -131,15 +135,15 @@ release/
 
 ### 当前限制
 
-- 当前只覆盖 Windows 本地打包
+- 当前 macOS 只覆盖本地 unpacked `.app`，不包含 `.dmg` / `.zip`
 - macOS `.dmg` / `.zip` 仍属于 `TASK-038` 后续切片
-- 代码签名尚未配置
+- 当前未配置正式开发者签名；本地 `package:mac` 会在可用时回退到 ad-hoc 签名
 - macOS `.icns` 仍未生成
 
 ### 后续扩展位
 
 - Windows / macOS 代码签名
-- macOS 打包产物
+- macOS `.dmg` / `.zip` 打包产物
 - `.icns` 生成与安装器视觉定制
 
 ## Package Size Guardrails

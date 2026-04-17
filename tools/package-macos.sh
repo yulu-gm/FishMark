@@ -18,6 +18,4 @@ if [[ "$(uname)" != "Darwin" ]]; then
   exit 1
 fi
 
-echo "[Yulora] macOS packaging is not implemented yet."
-echo "[Yulora] This entrypoint is reserved for the future package:mac flow."
-exit 1
+exec npm run package:mac
