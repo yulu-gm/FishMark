@@ -4,6 +4,13 @@ import path from "node:path";
 import { normalizeThemePackageManifest, type ThemePackageManifest } from "../shared/theme-package";
 
 type ThemePackageKind = "manifest-package" | "legacy-css-family";
+type LegacyThemeMode = "light" | "dark";
+type LegacyThemeModeAssets = {
+  tokens?: string;
+  ui?: string;
+  editor?: string;
+  markdown?: string;
+};
 
 export type ThemePackageDescriptor = {
   id: string;
@@ -58,35 +65,102 @@ async function safeReadDir(
   }
 }
 
-async function readManifestIfPresent(
+async function readManifestState(
   manifestPath: string,
   packageRoot: string,
   dependencies: ThemePackageServiceDependencies
-): Promise<ThemePackageManifest | null> {
+): Promise<
+  | { kind: "absent" }
+  | { kind: "invalid" }
+  | { kind: "valid"; manifest: ThemePackageManifest }
+> {
   try {
     const rawManifest = await dependencies.readFile(manifestPath, { encoding: "utf8" });
-    return normalizeThemePackageManifest(JSON.parse(rawManifest), packageRoot);
-  } catch {
-    return null;
+    const parsed = JSON.parse(rawManifest);
+    const manifest = normalizeThemePackageManifest(parsed, packageRoot);
+
+    return manifest ? { kind: "valid", manifest } : { kind: "invalid" };
+  } catch (error) {
+    if (error instanceof Error && "code" in error && (error as NodeJS.ErrnoException).code === "ENOENT") {
+      return { kind: "absent" };
+    }
+
+    return { kind: "invalid" };
   }
 }
 
 function createLegacyManifest(
   directoryName: string,
-  supports: { light: boolean; dark: boolean }
+  modeAssets: Record<LegacyThemeMode, LegacyThemeModeAssets | null>
 ): ThemePackageManifest {
+  const supports = {
+    light: modeAssets.light !== null,
+    dark: modeAssets.dark !== null
+  };
+  const tokens: Partial<Record<LegacyThemeMode, string>> = {};
+  const styles: ThemePackageManifest["styles"] = {};
+
+  for (const mode of ["light", "dark"] as const) {
+    const assets = modeAssets[mode];
+
+    if (!assets) {
+      continue;
+    }
+
+    if (assets.tokens) {
+      tokens[mode] = assets.tokens;
+    }
+  }
+
+  for (const part of ["ui", "editor", "markdown"] as const) {
+    const resolved = modeAssets.light?.[part] ?? modeAssets.dark?.[part];
+
+    if (resolved) {
+      styles[part] = resolved;
+    }
+  }
+
   return {
     id: directoryName,
     name: makeThemeName(directoryName),
     version: "1.0.0",
     author: null,
     supports,
-    tokens: {},
-    styles: {},
+    tokens,
+    styles,
     layout: { titlebar: null },
     scene: null,
     surfaces: {}
   };
+}
+
+async function resolveLegacyModeAssets(
+  modeDirectory: string,
+  packageRoot: string,
+  dependencies: ThemePackageServiceDependencies
+): Promise<LegacyThemeModeAssets | null> {
+  const modeEntries = await safeReadDir(modeDirectory, dependencies);
+  const files = new Set(modeEntries.filter((entry) => entry.isFile()).map((entry) => entry.name));
+
+  const assets: LegacyThemeModeAssets = {};
+
+  if (files.has("tokens.css")) {
+    assets.tokens = path.join(packageRoot, path.basename(modeDirectory), "tokens.css");
+  }
+
+  if (files.has("ui.css")) {
+    assets.ui = path.join(packageRoot, path.basename(modeDirectory), "ui.css");
+  }
+
+  if (files.has("editor.css")) {
+    assets.editor = path.join(packageRoot, path.basename(modeDirectory), "editor.css");
+  }
+
+  if (files.has("markdown.css")) {
+    assets.markdown = path.join(packageRoot, path.basename(modeDirectory), "markdown.css");
+  }
+
+  return Object.keys(assets).length === 0 ? null : assets;
 }
 
 async function createLegacyCssFamilyDescriptor(
@@ -94,31 +168,19 @@ async function createLegacyCssFamilyDescriptor(
   directoryName: string,
   dependencies: ThemePackageServiceDependencies
 ): Promise<ThemePackageDescriptor | null> {
-  const children = await safeReadDir(packageRoot, dependencies);
-  const modeDirectories = new Map(
-    children
-      .filter((entry) => entry.isDirectory())
-      .filter((entry) => entry.name === "light" || entry.name === "dark")
-      .map((entry) => [entry.name, path.join(packageRoot, entry.name)] as const)
-  );
-
-  const supports = {
-    light: false,
-    dark: false
+  const modeAssets: Record<LegacyThemeMode, LegacyThemeModeAssets | null> = {
+    light: null,
+    dark: null
   };
 
   for (const mode of ["light", "dark"] as const) {
-    const modeDirectory = modeDirectories.get(mode);
+    const modeDirectory = path.join(packageRoot, mode);
+    const assets = await resolveLegacyModeAssets(modeDirectory, packageRoot, dependencies);
 
-    if (!modeDirectory) {
-      continue;
-    }
-
-    const modeEntries = await safeReadDir(modeDirectory, dependencies);
-    supports[mode] = modeEntries.some((entry) => entry.isFile() && entry.name.endsWith(".css"));
+    modeAssets[mode] = assets;
   }
 
-  if (!supports.light && !supports.dark) {
+  if (modeAssets.light === null && modeAssets.dark === null) {
     return null;
   }
 
@@ -127,7 +189,7 @@ async function createLegacyCssFamilyDescriptor(
     kind: "legacy-css-family",
     source: "community",
     packageRoot,
-    manifest: createLegacyManifest(directoryName, supports)
+    manifest: createLegacyManifest(directoryName, modeAssets)
   };
 }
 
@@ -143,20 +205,24 @@ async function scanThemePackages(
       .filter((entry) => entry.isDirectory())
       .map(async (entry) => {
         const packageRoot = path.join(themesDir, entry.name);
-        const manifest = await readManifestIfPresent(
+        const manifestState = await readManifestState(
           path.join(packageRoot, "manifest.json"),
           packageRoot,
           dependencies
         );
 
-        if (manifest) {
+        if (manifestState.kind === "valid") {
           return {
-            id: manifest.id,
+            id: manifestState.manifest.id,
             kind: "manifest-package" as const,
             source: "community" as const,
             packageRoot,
-            manifest
+            manifest: manifestState.manifest
           };
+        }
+
+        if (manifestState.kind === "invalid") {
+          return null;
         }
 
         return createLegacyCssFamilyDescriptor(packageRoot, entry.name, dependencies);
