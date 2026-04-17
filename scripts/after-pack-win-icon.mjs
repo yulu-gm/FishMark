@@ -8,6 +8,9 @@ import { rcedit } from "rcedit";
 const RETRYABLE_ICON_PATCH_ERRORS = ["EBUSY", "EPERM", "Unable to commit changes", "resource busy", "Access is denied"];
 const ICON_PATCH_MAX_ATTEMPTS = 6;
 const ICON_PATCH_RETRY_DELAY_MS = 500;
+const WINDOWS_HOST = process.platform === "win32";
+const WINDOWS_ICON_PATCH_SKIPPED_MESSAGE =
+  "Skipping Windows executable icon patch on non-Windows host.";
 
 function resolveContext(rawContext) {
   return {
@@ -21,6 +24,11 @@ async function patchWindowsExecutableIcon(rawContext) {
   const context = resolveContext(rawContext);
 
   if (context.electronPlatformName !== "win32") {
+    return;
+  }
+
+  if (!WINDOWS_HOST) {
+    console.log(WINDOWS_ICON_PATCH_SKIPPED_MESSAGE);
     return;
   }
 

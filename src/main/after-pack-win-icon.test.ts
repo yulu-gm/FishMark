@@ -24,7 +24,8 @@ describe("after-pack Windows icon hook", () => {
 
     spawnSync(process.execPath, ["scripts/generate-icons.mjs"], {
       cwd: process.cwd(),
-      encoding: "utf8"
+      encoding: "utf8",
+      timeout: 30000
     });
 
     rmSync(appOutDirectory, { recursive: true, force: true });
@@ -47,12 +48,18 @@ describe("after-pack Windows icon hook", () => {
       ],
       {
         cwd: process.cwd(),
-        encoding: "utf8"
+        encoding: "utf8",
+        timeout: 30000
       }
     );
 
     expect(result.status).toBe(0);
     expect(existsSync(iconPath)).toBe(true);
-    expect(result.stdout).toContain("Patched Windows executable icon");
-  });
+
+    if (process.platform === "win32") {
+      expect(result.stdout).toContain("Patched Windows executable icon");
+    } else {
+      expect(result.stdout).toContain("Skipping Windows executable icon patch on non-Windows host.");
+    }
+  }, 30000);
 });

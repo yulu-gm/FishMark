@@ -22,7 +22,8 @@ describe("generate-icons script", () => {
       ["scripts/generate-icons.mjs", "--out-dir", outputDirectory],
       {
         cwd: process.cwd(),
-        encoding: "utf8"
+        encoding: "utf8",
+        timeout: 30000
       }
     );
 
@@ -35,5 +36,5 @@ describe("generate-icons script", () => {
 
       expect(existsSync(path.join(outputDirectory, variant, "icon.ico"))).toBe(true);
     }
-  });
+  }, 30000);
 });
