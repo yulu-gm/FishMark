@@ -52,7 +52,6 @@ const baseStylesheetPath = join(process.cwd(), "src/renderer/styles/base.css");
 const appUiStylesheetPath = join(process.cwd(), "src/renderer/styles/app-ui.css");
 const primitivesStylesheetPath = join(process.cwd(), "src/renderer/styles/primitives.css");
 const markdownRenderStylesheetPath = join(process.cwd(), "src/renderer/styles/markdown-render.css");
-const primitivesStylesheetPath = join(process.cwd(), "src/renderer/styles/primitives.css");
 const settingsStylesheetPath = join(process.cwd(), "src/renderer/styles/settings.css");
 const lightTokenStylesheetPath = join(
   process.cwd(),

@@ -248,8 +248,6 @@ export function createBlockDecorations(
   };
 }
 
-function appendActiveDecorationsForBlock(
-function appendCodeFenceDecorations(
 function appendCodeFenceDecorations(
   startOffset: number,
   endOffset: number,
