@@ -29,23 +29,136 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function normalizeSlashes(value: string): string {
+  return value.trim().replace(/\\/g, "/");
+}
+
+function normalizePackageRoot(packageRoot: string): string {
+  return normalizeSlashes(packageRoot).replace(/\/+$/, "");
+}
+
+function parseWindowsAbsolutePath(value: string):
+  | { kind: "windows"; drive: string; path: string }
+  | null {
+  const match = value.match(/^([A-Za-z]):\/(.*)$/);
+
+  if (!match) {
+    return null;
+  }
+
+  const [, drive, absolutePath] = match;
+  if (drive === undefined || absolutePath === undefined) {
+    return null;
+  }
+
+  return {
+    kind: "windows",
+    drive: drive.toUpperCase(),
+    path: `/${absolutePath}`
+  };
+}
+
+function resolvePosixRelativeParts(parts: string[]): string | null {
+  const normalized: string[] = [];
+
+  for (const part of parts) {
+    if (part === "" || part === ".") {
+      continue;
+    }
+
+    if (part === "..") {
+      if (normalized.length === 0) {
+        return null;
+      }
+
+      normalized.pop();
+      continue;
+    }
+
+    normalized.push(part);
+  }
+
+  return normalized.join("/");
+}
+
+function normalizeRelativePath(raw: string): string | null {
+  const normalized = resolvePosixRelativeParts(raw.replace(/\/+$/, "").split("/"));
+
+  return normalized === "" ? null : normalized;
+}
+
+function normalizeAbsolutePath(raw: string): { path: string; drive: string | null } | null {
+  if (raw.startsWith("/")) {
+    const normalized = resolvePosixRelativeParts(raw.slice(1).replace(/\/+$/, "").split("/"));
+
+    return normalized === null ? null : { drive: null, path: `/${normalized}` };
+  }
+
+  const windows = parseWindowsAbsolutePath(raw);
+  if (!windows) {
+    return null;
+  }
+
+  const normalized = resolvePosixRelativeParts(windows.path.slice(1).replace(/\/+$/, "").split("/"));
+
+  return normalized === null ? null : { drive: windows.drive, path: `/${normalized}` };
+}
+
+function isPathInsidePackageRoot(
+  absolutePath: { path: string; drive: string | null },
+  normalizedRoot: string
+): boolean {
+  const normalizedRootValue = normalizeSlashes(normalizedRoot);
+  if (absolutePath.drive === null) {
+    if (absolutePath.path === normalizedRootValue) {
+      return true;
+    }
+
+    if (normalizedRootValue.startsWith("/") && absolutePath.path.startsWith(`${normalizedRootValue}/`)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  const rootMatch = parseWindowsAbsolutePath(normalizedRootValue);
+  if (!rootMatch || rootMatch.drive !== absolutePath.drive) {
+    return false;
+  }
+
+  const rootPath = rootMatch.path;
+  if (absolutePath.path === rootPath) {
+    return true;
+  }
+
+  return absolutePath.path.startsWith(`${rootPath}/`);
+}
+
 function normalizePackagePath(raw: unknown, packageRoot: string): string | null {
   if (typeof raw !== "string") {
     return null;
   }
 
-  const normalized = raw.trim().replace(/\\/g, "/");
+  const normalized = normalizeSlashes(raw);
 
   if (normalized.length === 0) {
     return null;
   }
 
-  if (normalized.startsWith("/") || /^[A-Za-z]:\//.test(normalized)) {
-    return normalized;
+  const absolute = normalizeAbsolutePath(normalized);
+  if (absolute !== null) {
+    const normalizedRoot = normalizePackageRoot(packageRoot);
+    return isPathInsidePackageRoot(absolute, normalizedRoot) ? absolute.path : null;
   }
 
-  const root = packageRoot.replace(/[/\\]+$/, "");
-  return `${root}/${normalized.replace(/^\.\//, "").replace(/^\.\.\//, "")}`;
+  const normalizedRoot = normalizePackageRoot(packageRoot);
+  const relative = normalizeRelativePath(normalized);
+
+  if (relative === null) {
+    return null;
+  }
+
+  return `${normalizedRoot}/${relative}`;
 }
 
 function normalizeModePaths(raw: unknown, packageRoot: string): Partial<Record<"light" | "dark", string>> {

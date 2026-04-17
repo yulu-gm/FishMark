@@ -44,4 +44,34 @@ describe("normalizeThemePackageManifest", () => {
       }
     });
   });
+
+  it("drops paths that escape the package root", () => {
+    const manifest = normalizeThemePackageManifest(
+      {
+        id: "rain-glass",
+        name: "Rain Glass",
+        supports: { light: true, dark: true },
+        styles: { ui: "../../outside/ui.css", editor: "../up/editor.css", titlebar: "/etc/escape.css" },
+        layout: { titlebar: "../../outside/layout.json" },
+        surfaces: {
+          workbenchBackground: {
+            kind: "fragment",
+            scene: "rain-scene",
+            shader: "../../outside/workbench.glsl"
+          },
+          titlebarBackdrop: {
+            kind: "fragment",
+            scene: "rain-scene",
+            shader: "/etc/titlebar-backdrop.glsl"
+          }
+        },
+        scene: { id: "rain-scene", sharedUniforms: {} }
+      },
+      "/tmp/rain-glass"
+    );
+
+    expect(manifest?.styles).toEqual({});
+    expect(manifest?.layout?.titlebar).toBeNull();
+    expect(manifest?.surfaces).toEqual({});
+  });
 });
