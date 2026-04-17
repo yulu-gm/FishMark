@@ -1,8 +1,9 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 // Preload runs inside Electron's sandboxed environment, so local module imports
 // can prevent the bridge from loading at all. Keep the contract self-contained here.
 const OPEN_MARKDOWN_FILE_CHANNEL = "yulora:open-markdown-file";
 const OPEN_MARKDOWN_FILE_FROM_PATH_CHANNEL = "yulora:open-markdown-file-from-path";
+const HANDLE_DROPPED_MARKDOWN_FILE_CHANNEL = "yulora:handle-dropped-markdown-file";
 const SAVE_MARKDOWN_FILE_CHANNEL = "yulora:save-markdown-file";
 const SAVE_MARKDOWN_FILE_AS_CHANNEL = "yulora:save-markdown-file-as";
 const IMPORT_CLIPBOARD_IMAGE_CHANNEL = "yulora:import-clipboard-image";
@@ -244,6 +245,9 @@ const api = {
   openMarkdownFile: () => ipcRenderer.invoke(OPEN_MARKDOWN_FILE_CHANNEL),
   openMarkdownFileFromPath: (targetPath: string) =>
     ipcRenderer.invoke(OPEN_MARKDOWN_FILE_FROM_PATH_CHANNEL, { targetPath }),
+  handleDroppedMarkdownFile: (input: { targetPath: string; hasOpenDocument: boolean }) =>
+    ipcRenderer.invoke(HANDLE_DROPPED_MARKDOWN_FILE_CHANNEL, input),
+  getPathForDroppedFile: (file: File) => webUtils.getPathForFile(file),
   saveMarkdownFile: (input: { path: string; content: string }) =>
     ipcRenderer.invoke(SAVE_MARKDOWN_FILE_CHANNEL, input),
   saveMarkdownFileAs: (input: { currentPath: string | null; content: string }) =>

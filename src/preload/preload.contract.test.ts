@@ -12,6 +12,7 @@ import {
 } from "./preload";
 import { APP_MENU_COMMAND_EVENT, type AppMenuCommand } from "../shared/menu-command";
 import {
+  HANDLE_DROPPED_MARKDOWN_FILE_CHANNEL,
   OPEN_MARKDOWN_FILE_CHANNEL,
   OPEN_MARKDOWN_FILE_FROM_PATH_CHANNEL
 } from "../shared/open-markdown-file";
@@ -56,6 +57,7 @@ const exposeInMainWorld = vi.fn();
 const invoke = vi.fn();
 const on = vi.fn();
 const off = vi.fn();
+const getPathForFile = vi.fn();
 
 vi.mock("electron", () => ({
   contextBridge: {
@@ -65,6 +67,9 @@ vi.mock("electron", () => ({
     invoke,
     on,
     off
+  },
+  webUtils: {
+    getPathForFile
   }
 }));
 
@@ -112,6 +117,7 @@ describe("preload contract", () => {
     invoke.mockClear();
     on.mockClear();
     off.mockClear();
+    getPathForFile.mockClear();
     vi.resetModules();
   });
 
@@ -119,6 +125,7 @@ describe("preload contract", () => {
     const api = await loadApi();
 
     const openPathInput = { targetPath: "D:/fixtures/note.md" };
+    const droppedMarkdownInput = { targetPath: "D:/fixtures/drop.md", hasOpenDocument: true };
     const saveInput = { path: "D:/fixtures/note.md", content: "# note" };
     const saveAsInput = { currentPath: "D:/fixtures/note.md", content: "# note" };
     const importClipboardImageInput: ImportClipboardImageInput = {
@@ -143,6 +150,7 @@ describe("preload contract", () => {
 
     void api.openMarkdownFile();
     void api.openMarkdownFileFromPath(openPathInput.targetPath);
+    void api.handleDroppedMarkdownFile(droppedMarkdownInput);
     void api.saveMarkdownFile(saveInput);
     void api.saveMarkdownFileAs(saveAsInput);
     void api.importClipboardImage(importClipboardImageInput);
@@ -160,6 +168,7 @@ describe("preload contract", () => {
     expect(invoke.mock.calls).toEqual([
       [OPEN_MARKDOWN_FILE_CHANNEL],
       [OPEN_MARKDOWN_FILE_FROM_PATH_CHANNEL, openPathInput],
+      [HANDLE_DROPPED_MARKDOWN_FILE_CHANNEL, droppedMarkdownInput],
       [SAVE_MARKDOWN_FILE_CHANNEL, saveInput],
       [SAVE_MARKDOWN_FILE_AS_CHANNEL, saveAsInput],
       [IMPORT_CLIPBOARD_IMAGE_CHANNEL, importClipboardImageInput],
@@ -174,6 +183,16 @@ describe("preload contract", () => {
       ["yulora:refresh-themes"],
       [CHECK_FOR_APP_UPDATES_CHANNEL]
     ]);
+  });
+
+  it("resolves dropped file paths through Electron webUtils", async () => {
+    const api = await loadApi();
+    const droppedFile = new File(["content"], "drop.md", { type: "text/markdown" });
+    getPathForFile.mockReturnValueOnce("D:/fixtures/drop.md");
+
+    expect(api.getPathForDroppedFile(droppedFile)).toBe("D:/fixtures/drop.md");
+    expect(getPathForFile).toHaveBeenCalledTimes(1);
+    expect(getPathForFile).toHaveBeenCalledWith(droppedFile);
   });
 
   it("forwards shared event payloads without reshaping them", async () => {

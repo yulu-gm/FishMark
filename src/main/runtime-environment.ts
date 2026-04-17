@@ -10,7 +10,8 @@ type AppLike = {
 };
 
 export function shouldRequestSingleInstanceLock(env: NodeJS.ProcessEnv): boolean {
-  return !isDevRuntime(env);
+  void env;
+  return true;
 }
 
 export function configureMainProcessRuntime(app: AppLike, env: NodeJS.ProcessEnv): void {

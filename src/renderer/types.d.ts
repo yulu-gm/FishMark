@@ -1,4 +1,8 @@
-import type { OpenMarkdownFileResult } from "../shared/open-markdown-file";
+import type {
+  HandleDroppedMarkdownFileInput,
+  HandleDroppedMarkdownFileResult,
+  OpenMarkdownFileResult
+} from "../shared/open-markdown-file";
 import type { AppMenuCommand } from "../shared/menu-command";
 import type {
   EditorTestCommandEnvelope,
@@ -74,6 +78,10 @@ declare global {
       startupOpenPath: string | null;
       openMarkdownFile: () => Promise<OpenMarkdownFileResult>;
       openMarkdownFileFromPath: (targetPath: string) => Promise<OpenMarkdownFileResult>;
+      handleDroppedMarkdownFile: (
+        input: HandleDroppedMarkdownFileInput
+      ) => Promise<HandleDroppedMarkdownFileResult>;
+      getPathForDroppedFile: (file: File) => string;
       saveMarkdownFile: (input: SaveMarkdownFileInput) => Promise<SaveMarkdownFileResult>;
       saveMarkdownFileAs: (input: SaveMarkdownFileAsInput) => Promise<SaveMarkdownFileResult>;
       importClipboardImage: (input: ImportClipboardImageInput) => Promise<ImportClipboardImageResult>;

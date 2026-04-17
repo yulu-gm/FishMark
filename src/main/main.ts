@@ -38,8 +38,11 @@ import {
   START_SCENARIO_RUN_CHANNEL
 } from "../shared/test-run-session";
 import {
+  HANDLE_DROPPED_MARKDOWN_FILE_CHANNEL,
   OPEN_MARKDOWN_FILE_CHANNEL,
-  OPEN_MARKDOWN_FILE_FROM_PATH_CHANNEL
+  OPEN_MARKDOWN_FILE_FROM_PATH_CHANNEL,
+  type HandleDroppedMarkdownFileInput,
+  type HandleDroppedMarkdownFileResult
 } from "../shared/open-markdown-file";
 import { APP_MENU_COMMAND_EVENT, type AppMenuCommand } from "../shared/menu-command";
 import {
@@ -257,6 +260,24 @@ app.whenReady().then(async () => {
   ipcMain.handle(OPEN_MARKDOWN_FILE_CHANNEL, async () => showOpenMarkdownDialog());
   ipcMain.handle(OPEN_MARKDOWN_FILE_FROM_PATH_CHANNEL, async (_event, input: { targetPath: string }) =>
     openMarkdownFileFromPath(input.targetPath)
+  );
+  ipcMain.handle(
+    HANDLE_DROPPED_MARKDOWN_FILE_CHANNEL,
+    async (
+      _event,
+      input: HandleDroppedMarkdownFileInput
+    ): Promise<HandleDroppedMarkdownFileResult> => {
+      if (input.hasOpenDocument) {
+        openEditorWindowForLaunchPath?.(input.targetPath);
+        return {
+          disposition: "opened-in-new-window"
+        };
+      }
+
+      return {
+        disposition: "open-in-place"
+      };
+    }
   );
   ipcMain.handle(SAVE_MARKDOWN_FILE_CHANNEL, async (_event, input: SaveMarkdownFileInput) =>
     saveMarkdownFileToPath(input)

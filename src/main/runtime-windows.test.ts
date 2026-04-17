@@ -13,6 +13,12 @@ type TestWindow = {
   loadFile: () => void;
   once: (event: "ready-to-show", callback: () => void) => void;
   show: () => void;
+  webContents: {
+    on: (event: "will-navigate", callback: (event: { preventDefault: () => void }, url: string) => void) => void;
+    setWindowOpenHandler: (handler: (details: unknown) => { action: "deny" | "allow" }) => {
+      action: "deny" | "allow";
+    };
+  };
 };
 
 describe("resolveAppRuntimeMode", () => {
@@ -143,6 +149,28 @@ describe("createRuntimeWindowManager", () => {
 
     expect(harness.window.show).toHaveBeenCalledTimes(1);
   });
+
+  it("guards editor windows against unexpected browser-style navigations", () => {
+    const harness = createWindowHarness("editor");
+
+    harness.manager.openPrimaryWindow();
+
+    expect(harness.window.webContents.setWindowOpenHandler).toHaveBeenCalledTimes(1);
+    expect(harness.window.webContents.on).toHaveBeenCalledWith("will-navigate", expect.any(Function));
+
+    const preventDefault = vi.fn();
+    harness.willNavigateHandler?.(
+      {
+        preventDefault
+      },
+      "file:///C:/notes/dropped.md"
+    );
+
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(harness.window.webContents.setWindowOpenHandler).toHaveReturnedWith({
+      action: "deny"
+    });
+  });
 });
 
 function createWindowHarness(
@@ -153,6 +181,22 @@ function createWindowHarness(
   }
 ) {
   let readyToShowCallback: (() => void) | null = null;
+  let willNavigateHandler:
+    | ((event: { preventDefault: () => void }, url: string) => void)
+    | null = null;
+  const setWindowOpenHandler = vi.fn<
+    (handler: (details: unknown) => { action: "deny" | "allow" }) => { action: "deny" | "allow" }
+  >((handler) => handler({}));
+  const webContents = {
+    on: vi.fn<
+      (event: "will-navigate", callback: (event: { preventDefault: () => void }, url: string) => void) => void
+    >((event, callback) => {
+      if (event === "will-navigate") {
+        willNavigateHandler = callback;
+      }
+    }),
+    setWindowOpenHandler
+  };
   const window: TestWindow = {
     loadURL: vi.fn(),
     loadFile: vi.fn(),
@@ -161,7 +205,8 @@ function createWindowHarness(
         readyToShowCallback = callback;
       }
     }),
-    show: vi.fn()
+    show: vi.fn(),
+    webContents
   };
 
   const createWindow = vi.fn<(_: unknown) => TestWindow>(() => window);
@@ -183,6 +228,9 @@ function createWindowHarness(
     window,
     get readyToShowCallback() {
       return readyToShowCallback;
+    },
+    get willNavigateHandler() {
+      return willNavigateHandler;
     },
     createWindow,
     getAllWindows,

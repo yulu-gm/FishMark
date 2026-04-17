@@ -11,12 +11,12 @@ describe("shouldRequestSingleInstanceLock", () => {
     expect(shouldRequestSingleInstanceLock({})).toBe(true);
   });
 
-  it("skips the single-instance guard in dev mode so installed Yulora does not evict the dev app", () => {
+  it("keeps the single-instance guard in dev mode because the dev runtime already uses an isolated identity", () => {
     expect(
       shouldRequestSingleInstanceLock({
         VITE_DEV_SERVER_URL: "http://localhost:5173"
       })
-    ).toBe(false);
+    ).toBe(true);
   });
 });
 

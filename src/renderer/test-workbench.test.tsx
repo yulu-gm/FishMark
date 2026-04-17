@@ -103,6 +103,10 @@ describe("Test workbench shell", () => {
       startupOpenPath: null,
       openMarkdownFile: vi.fn(),
       openMarkdownFileFromPath: vi.fn(),
+      handleDroppedMarkdownFile: vi.fn().mockResolvedValue({
+        disposition: "open-in-place"
+      }),
+      getPathForDroppedFile: vi.fn().mockReturnValue(""),
       saveMarkdownFile: vi.fn(),
       saveMarkdownFileAs: vi.fn(),
       importClipboardImage: vi.fn(),

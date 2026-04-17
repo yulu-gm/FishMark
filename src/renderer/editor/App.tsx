@@ -59,6 +59,44 @@ const OUTLINE_EXIT_ANIMATION_MS = 180;
 const SETTINGS_DRAWER_EXIT_ANIMATION_MS = 180;
 const APP_NOTIFICATION_DURATION_MS = 3000;
 const APP_NOTIFICATION_EXIT_ANIMATION_MS = 180;
+const MARKDOWN_FILE_EXTENSIONS = [".md", ".markdown"] as const;
+
+function isMarkdownFilePath(targetPath: string): boolean {
+  const normalizedPath = targetPath.trim().toLowerCase();
+
+  return MARKDOWN_FILE_EXTENSIONS.some((extension) => normalizedPath.endsWith(extension));
+}
+
+function getDroppedMarkdownPath(
+  yulora: Window["yulora"],
+  dataTransfer: DataTransfer | null
+): string | null {
+  const file = dataTransfer?.files?.[0];
+
+  if (!(file instanceof File)) {
+    return null;
+  }
+
+  const filePath = yulora.getPathForDroppedFile(file);
+
+  if (typeof filePath !== "string" || !isMarkdownFilePath(filePath)) {
+    return null;
+  }
+
+  return filePath;
+}
+
+function hasFileDrag(dataTransfer: DataTransfer | null): boolean {
+  if (!dataTransfer) {
+    return false;
+  }
+
+  if ((dataTransfer.files?.length ?? 0) > 0) {
+    return true;
+  }
+
+  return Array.from(dataTransfer.types ?? []).includes("Files");
+}
 
 type AppNotificationBannerState = "hidden" | "open" | "closing";
 
@@ -615,6 +653,53 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
 
     applyState((current) => applyOpenMarkdownResult(current, result));
   });
+
+  const handleWindowDragOver = useEffectEvent((event: globalThis.DragEvent): void => {
+    if (!hasFileDrag(event.dataTransfer)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+  });
+
+  const handleWindowDrop = useEffectEvent((event: globalThis.DragEvent): void => {
+    if (!hasFileDrag(event.dataTransfer)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const targetPath = getDroppedMarkdownPath(yulora, event.dataTransfer);
+
+    if (!targetPath) {
+      return;
+    }
+
+    void yulora
+      .handleDroppedMarkdownFile({
+        targetPath,
+        hasOpenDocument: stateRef.current.currentDocument !== null
+      })
+      .then((result) => {
+        if (result.disposition === "open-in-place") {
+          return handleOpenMarkdownFromPath(targetPath);
+        }
+
+        return undefined;
+      });
+  });
+
+  useEffect(() => {
+    window.addEventListener("dragover", handleWindowDragOver, true);
+    window.addEventListener("drop", handleWindowDrop, true);
+
+    return () => {
+      window.removeEventListener("dragover", handleWindowDragOver, true);
+      window.removeEventListener("drop", handleWindowDrop, true);
+    };
+  }, []);
 
   const handleSaveMarkdown = useEffectEvent(async (): Promise<void> => {
     const currentDocument = state.currentDocument;

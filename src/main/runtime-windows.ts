@@ -8,6 +8,10 @@ export type RuntimeMode = "editor" | "test-workbench";
 type WindowLike = {
   once: (event: "ready-to-show", callback: () => void) => unknown;
   show: () => unknown;
+  webContents: {
+    on: (event: "will-navigate", callback: (event: { preventDefault: () => void }, url: string) => void) => unknown;
+    setWindowOpenHandler: (handler: (details: unknown) => { action: "deny" | "allow" }) => unknown;
+  };
 };
 
 type CreateWindowInput = {
@@ -95,6 +99,13 @@ export function createRuntimeWindowManager<TWindow extends WindowLike>(input: {
         additionalArguments
       }
     });
+
+    window.webContents.on("will-navigate", (event) => {
+      event.preventDefault();
+    });
+    window.webContents.setWindowOpenHandler(() => ({
+      action: "deny"
+    }));
 
     loadRenderer(window, nextRuntimeMode);
     let hasShown = false;

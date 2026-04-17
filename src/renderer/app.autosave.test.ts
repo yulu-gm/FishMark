@@ -163,6 +163,17 @@ describe("App autosave", () => {
   let appUpdateStateListener: ((state: AppUpdateState) => void) | null;
   let appNotificationListener: ((notification: AppNotification) => void) | null;
   let openMarkdownFile: ReturnType<typeof vi.fn<() => Promise<OpenMarkdownFileResult>>>;
+  let openMarkdownFileFromPath: ReturnType<
+    typeof vi.fn<(targetPath: string) => Promise<OpenMarkdownFileResult>>
+  >;
+  let handleDroppedMarkdownFile: ReturnType<
+    typeof vi.fn<
+      (input: { targetPath: string; hasOpenDocument: boolean }) => Promise<{
+        disposition: "open-in-place" | "opened-in-new-window";
+      }>
+    >
+  >;
+  let getPathForDroppedFile: ReturnType<typeof vi.fn<(file: File) => string>>;
   let saveMarkdownFile: ReturnType<
     typeof vi.fn<(input: SaveMarkdownFileInput) => Promise<SaveMarkdownFileResult>>
   >;
@@ -256,6 +267,18 @@ describe("App autosave", () => {
         }
       }));
 
+    openMarkdownFileFromPath = vi
+      .fn<(targetPath: string) => Promise<OpenMarkdownFileResult>>()
+      .mockResolvedValue({
+        status: "cancelled"
+      });
+    handleDroppedMarkdownFile = vi.fn().mockResolvedValue({
+      disposition: "open-in-place"
+    });
+    getPathForDroppedFile = vi.fn((file: File) => {
+      const fileWithPath = file as File & { path?: string };
+      return fileWithPath.path ?? "";
+    });
     saveMarkdownFileAs = vi.fn<(input: SaveMarkdownFileAsInput) => Promise<SaveMarkdownFileResult>>();
     importClipboardImage = vi.fn().mockResolvedValue({
       status: "error",
@@ -275,9 +298,9 @@ describe("App autosave", () => {
       runtimeMode: "editor",
       startupOpenPath: null,
       openMarkdownFile,
-      openMarkdownFileFromPath: vi.fn().mockResolvedValue({
-        status: "cancelled"
-      }),
+      openMarkdownFileFromPath,
+      handleDroppedMarkdownFile,
+      getPathForDroppedFile,
       saveMarkdownFile,
       saveMarkdownFileAs,
       importClipboardImage,
@@ -380,7 +403,7 @@ describe("App autosave", () => {
   });
 
   it("opens the startup markdown file automatically when the bridge provides a launch path", async () => {
-    const openMarkdownFileFromPath = vi.fn().mockResolvedValue({
+    openMarkdownFileFromPath = vi.fn<(targetPath: string) => Promise<OpenMarkdownFileResult>>().mockResolvedValue({
       status: "success",
       document: {
         path: "C:/notes/startup.md",
@@ -400,6 +423,172 @@ describe("App autosave", () => {
 
     expect(openMarkdownFileFromPath).toHaveBeenCalledTimes(1);
     expect(openMarkdownFileFromPath).toHaveBeenCalledWith("C:/notes/startup.md");
+  });
+
+  it("opens a Markdown document when a .md file is dropped onto the workspace", async () => {
+    openMarkdownFileFromPath = vi
+      .fn<(targetPath: string) => Promise<OpenMarkdownFileResult>>()
+      .mockResolvedValue({
+        status: "success",
+        document: {
+          path: "C:/notes/dropped.md",
+          name: "dropped.md",
+          content: "# Dropped\n",
+          encoding: "utf-8"
+        }
+      });
+
+    window.yulora = {
+      ...window.yulora,
+      handleDroppedMarkdownFile,
+      openMarkdownFileFromPath
+    } as Window["yulora"];
+
+    await renderApp();
+
+    const workspaceCanvas = container.querySelector('[data-yulora-region="workspace-canvas"]');
+    if (!workspaceCanvas) {
+      throw new Error("workspace canvas not found");
+    }
+
+    const droppedFile = new File(["content"], "dropped.md", { type: "text/markdown" });
+    Object.defineProperty(droppedFile, "path", {
+      value: "C:/notes/dropped.md"
+    });
+
+    const dropEvent = new Event("drop", { bubbles: true }) as unknown as DragEvent;
+    Object.defineProperty(dropEvent, "dataTransfer", {
+      value: {
+        files: [droppedFile] as unknown as FileList
+      }
+    });
+
+    await act(async () => {
+      workspaceCanvas.dispatchEvent(dropEvent);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(handleDroppedMarkdownFile).toHaveBeenCalledTimes(1);
+    expect(handleDroppedMarkdownFile).toHaveBeenCalledWith({
+      targetPath: "C:/notes/dropped.md",
+      hasOpenDocument: false
+    });
+    expect(openMarkdownFileFromPath).toHaveBeenCalledTimes(1);
+    expect(openMarkdownFileFromPath).toHaveBeenCalledWith("C:/notes/dropped.md");
+  });
+
+  it("opens a Markdown document when the dropped File exposes its path only through the preload bridge", async () => {
+    openMarkdownFileFromPath = vi
+      .fn<(targetPath: string) => Promise<OpenMarkdownFileResult>>()
+      .mockResolvedValue({
+        status: "success",
+        document: {
+          path: "C:/notes/bridge-drop.md",
+          name: "bridge-drop.md",
+          content: "# Bridge Drop\n",
+          encoding: "utf-8"
+        }
+      });
+    getPathForDroppedFile = vi.fn().mockReturnValue("C:/notes/bridge-drop.md");
+
+    window.yulora = {
+      ...window.yulora,
+      handleDroppedMarkdownFile,
+      getPathForDroppedFile,
+      openMarkdownFileFromPath
+    } as Window["yulora"];
+
+    await renderApp();
+
+    const workspaceCanvas = container.querySelector('[data-yulora-region="workspace-canvas"]');
+    if (!workspaceCanvas) {
+      throw new Error("workspace canvas not found");
+    }
+
+    const droppedFile = new File(["content"], "bridge-drop.md", { type: "text/markdown" });
+    const dropEvent = new Event("drop", { bubbles: true }) as unknown as DragEvent;
+    Object.defineProperty(dropEvent, "dataTransfer", {
+      value: {
+        files: [droppedFile] as unknown as FileList
+      }
+    });
+
+    await act(async () => {
+      workspaceCanvas.dispatchEvent(dropEvent);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(getPathForDroppedFile).toHaveBeenCalledTimes(1);
+    expect(handleDroppedMarkdownFile).toHaveBeenCalledWith({
+      targetPath: "C:/notes/bridge-drop.md",
+      hasOpenDocument: false
+    });
+    expect(openMarkdownFileFromPath).toHaveBeenCalledWith("C:/notes/bridge-drop.md");
+  });
+
+  it("opens a Markdown document in a new window when a .md file is dropped onto the editor surface", async () => {
+    openMarkdownFileFromPath = vi
+      .fn<(targetPath: string) => Promise<OpenMarkdownFileResult>>()
+      .mockResolvedValue({
+        status: "success",
+        document: {
+          path: "C:/notes/dropped.md",
+          name: "dropped.md",
+          content: "# Dropped\n",
+          encoding: "utf-8"
+        }
+      });
+    handleDroppedMarkdownFile = vi.fn().mockResolvedValue({
+      disposition: "opened-in-new-window"
+    });
+
+    window.yulora = {
+      ...window.yulora,
+      startupOpenPath: "C:/notes/current.md",
+      handleDroppedMarkdownFile,
+      openMarkdownFileFromPath
+    } as Window["yulora"];
+
+    await renderApp();
+
+    const editorSurface = container.querySelector('[data-testid="mock-code-editor"]');
+    if (!(editorSurface instanceof HTMLDivElement)) {
+      throw new Error("mock code editor not found");
+    }
+
+    openMarkdownFileFromPath.mockClear();
+
+    editorSurface.addEventListener("drop", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+
+    const droppedFile = new File(["content"], "dropped.md", { type: "text/markdown" });
+    Object.defineProperty(droppedFile, "path", {
+      value: "C:/notes/dropped.md"
+    });
+
+    const dropEvent = new Event("drop", { bubbles: true, cancelable: true }) as unknown as DragEvent;
+    Object.defineProperty(dropEvent, "dataTransfer", {
+      value: {
+        files: [droppedFile] as unknown as FileList
+      }
+    });
+
+    await act(async () => {
+      editorSurface.dispatchEvent(dropEvent);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(handleDroppedMarkdownFile).toHaveBeenCalledTimes(1);
+    expect(handleDroppedMarkdownFile).toHaveBeenCalledWith({
+      targetPath: "C:/notes/dropped.md",
+      hasOpenDocument: true
+    });
+    expect(openMarkdownFileFromPath).not.toHaveBeenCalled();
   });
 
   it("opens a new untitled document from the File menu", async () => {
