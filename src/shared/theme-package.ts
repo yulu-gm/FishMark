@@ -37,9 +37,18 @@ function normalizePackageRoot(packageRoot: string): string {
   return normalizeSlashes(packageRoot).replace(/\/+$/, "");
 }
 
-function parseWindowsAbsolutePath(value: string):
-  | { kind: "windows"; drive: string; path: string }
-  | null {
+type AbsolutePackagePath =
+  | {
+      kind: "posix";
+      path: string;
+    }
+  | {
+      kind: "windows";
+      drive: string;
+      path: string;
+    };
+
+function parseWindowsAbsolutePath(value: string): { drive: string; path: string } | null {
   const match = value.match(/^([A-Za-z]):\/(.*)$/);
 
   if (!match) {
@@ -52,7 +61,6 @@ function parseWindowsAbsolutePath(value: string):
   }
 
   return {
-    kind: "windows",
     drive: drive.toUpperCase(),
     path: `/${absolutePath}`
   };
@@ -87,11 +95,11 @@ function normalizeRelativePath(raw: string): string | null {
   return normalized === "" ? null : normalized;
 }
 
-function normalizeAbsolutePath(raw: string): { path: string; drive: string | null } | null {
+function normalizeAbsolutePath(raw: string): AbsolutePackagePath | null {
   if (raw.startsWith("/")) {
     const normalized = resolvePosixRelativeParts(raw.slice(1).replace(/\/+$/, "").split("/"));
 
-    return normalized === null ? null : { drive: null, path: `/${normalized}` };
+    return normalized === null ? null : { kind: "posix", path: `/${normalized}` };
   }
 
   const windows = parseWindowsAbsolutePath(raw);
@@ -101,15 +109,18 @@ function normalizeAbsolutePath(raw: string): { path: string; drive: string | nul
 
   const normalized = resolvePosixRelativeParts(windows.path.slice(1).replace(/\/+$/, "").split("/"));
 
-  return normalized === null ? null : { drive: windows.drive, path: `/${normalized}` };
+  return normalized === null
+    ? null
+    : { kind: "windows", drive: windows.drive, path: `${windows.drive}:/${normalized}` };
 }
 
 function isPathInsidePackageRoot(
-  absolutePath: { path: string; drive: string | null },
+  absolutePath: AbsolutePackagePath,
   normalizedRoot: string
 ): boolean {
   const normalizedRootValue = normalizeSlashes(normalizedRoot);
-  if (absolutePath.drive === null) {
+
+  if (absolutePath.kind === "posix") {
     if (absolutePath.path === normalizedRootValue) {
       return true;
     }
@@ -126,7 +137,7 @@ function isPathInsidePackageRoot(
     return false;
   }
 
-  const rootPath = rootMatch.path;
+  const rootPath = `${rootMatch.drive}:/${rootMatch.path.replace(/^\/+/, "")}`;
   if (absolutePath.path === rootPath) {
     return true;
   }
@@ -279,7 +290,13 @@ export function normalizeThemePackageManifest(
 ): ThemePackageManifest | null {
   const source = isRecord(raw) ? raw : null;
 
-  if (!source || typeof source.id !== "string" || typeof source.name !== "string") {
+  if (
+    !source ||
+    typeof source.id !== "string" ||
+    typeof source.name !== "string" ||
+    source.id.trim().length === 0 ||
+    source.name.trim().length === 0
+  ) {
     return null;
   }
 

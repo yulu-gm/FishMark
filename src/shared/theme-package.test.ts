@@ -74,4 +74,59 @@ describe("normalizeThemePackageManifest", () => {
     expect(manifest?.layout?.titlebar).toBeNull();
     expect(manifest?.surfaces).toEqual({});
   });
+
+  it("preserves Windows absolute paths inside the package root", () => {
+    const manifest = normalizeThemePackageManifest(
+      {
+        id: "win-theme",
+        name: "Win Theme",
+        supports: { light: true, dark: true },
+        styles: { ui: "C:/themes/win-theme/styles/ui.css" },
+        layout: { titlebar: "C:/themes/win-theme/layout/titlebar.json" },
+        scene: { id: "win-scene", sharedUniforms: {} },
+        surfaces: {
+          workbenchBackground: {
+            kind: "fragment",
+            scene: "win-scene",
+            shader: "C:/themes/win-theme/shaders/workbench-background.glsl"
+          }
+        }
+      },
+      "C:/themes/win-theme"
+    );
+
+    expect(manifest).toMatchObject({
+      styles: { ui: "C:/themes/win-theme/styles/ui.css" },
+      layout: { titlebar: "C:/themes/win-theme/layout/titlebar.json" },
+      surfaces: {
+        workbenchBackground: {
+          shader: "C:/themes/win-theme/shaders/workbench-background.glsl"
+        }
+      }
+    });
+  });
+
+  it("returns null when id or name is whitespace-only", () => {
+    const manifestByBlankId = normalizeThemePackageManifest(
+      {
+        id: "   ",
+        name: "Win Theme",
+        supports: { light: true, dark: true },
+        styles: { ui: "./styles/ui.css" }
+      },
+      "/tmp/rain-glass"
+    );
+    const manifestByBlankName = normalizeThemePackageManifest(
+      {
+        id: "rain-glass",
+        name: "\t\n",
+        supports: { light: true, dark: true },
+        styles: { ui: "./styles/ui.css" }
+      },
+      "/tmp/rain-glass"
+    );
+
+    expect(manifestByBlankId).toBeNull();
+    expect(manifestByBlankName).toBeNull();
+  });
 });
