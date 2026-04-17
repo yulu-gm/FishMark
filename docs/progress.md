@@ -60,7 +60,7 @@
 | TASK-014 | 链接显示与编辑 | TODO | 链接文本渲染与浏览器打开。 |
 | TASK-015 | 图片粘贴 | TODO | 粘贴图片落盘。 |
 | TASK-016 | 图片拖放 | TODO | 拖放图片导入。 |
-| TASK-017 | 大纲侧栏 | TODO | 基于标题的大纲导航。 |
+| TASK-017 | 大纲侧栏 | DEV_DONE | 已补齐 heading 到 outline item 的提取、右侧悬浮可折叠大纲面板、默认收起入口、独立滚动区与点击后编辑器定位/滚动，并覆盖 renderer 回归测试。 |
 | TASK-018 | 查找替换 | TODO | 文档搜索与替换。 |
 | TASK-019 | HTML 导出 | TODO | 导出当前文档为 HTML。 |
 | TASK-020 | PDF 导出 | TODO | 导出当前文档为 PDF。 |

@@ -9,6 +9,19 @@
 
 ## 记录
 
+| 2026-04-17 | TASK-017 | `npm.cmd run test -- src/renderer/app.autosave.test.ts` | 通过 | 覆盖 `workspace-shell` 两列宽度过渡约束，确保 outline 开合时编辑区会跟着一起做 resize 动画，而不是只让右侧面板自身进出。 |
+| 2026-04-17 | TASK-017 | `npm.cmd run test -- src/renderer/app.autosave.test.ts` | 通过 | 覆盖 outline 与 settings 抽屉在关闭时进入 `closing` 状态完成退出动效、outline 入口回弹，以及 settings header 降低透明度后的样式约束；目标测试当前 32 项全部通过。 |
+| 2026-04-17 | TASK-017 | `npm.cmd run test -- src/renderer/app.autosave.test.ts` | 通过 | 覆盖右侧 outline 展开/收起箭头方向、固定 header + 独立滚动 body 结构，以及面板玻璃样式约束；目标测试当前 32 项全部通过。 |
+| 2026-04-17 | TASK-017 | `npm.cmd run lint && npm.cmd run typecheck && npm.cmd run test && npm.cmd run build` | 通过 | 将大纲从左侧 rail 调整为右侧平级悬浮可折叠面板后，完整门禁重新通过；Vitest 更新为 49 个文件、329 条测试通过，构建仍仅有现有 Vite chunk size warning。 |
+| 2026-04-17 | TASK-017 | `npm.cmd run lint && npm.cmd run typecheck && npm.cmd run test && npm.cmd run build` | 通过 | 在把大纲状态更新收敛为“内容变化才重建 outline、光标移动只更新当前 heading”后，重新复跑完整门禁；Vitest 维持 48 个文件、323 条测试通过，构建仍仅有现有 Vite chunk size warning。 |
+| 2026-04-17 | TASK-017 | `npm.cmd run test -- src/renderer/outline.test.ts` | 通过 | 覆盖 heading 到 outline item 的提取、inline AST 文本拍平，以及多级标题的 label / depth / offset 输出。 |
+| 2026-04-17 | TASK-017 | `npm.cmd run test -- src/renderer/code-editor-view.test.tsx` | 通过 | 覆盖 `CodeEditorView` 对 `navigateToOffset()` 的句柄透传，确保 rail 大纲点击可以真正驱动编辑器控制器。 |
+| 2026-04-17 | TASK-017 | `npm.cmd run test -- src/renderer/code-editor.test.ts` | 通过 | 覆盖 `navigateToOffset()` 会更新编辑器选区并触发滚动定位，同时不破坏现有 CodeMirror 编辑回归。 |
+| 2026-04-17 | TASK-017 | `npm.cmd run test -- src/renderer/app.autosave.test.ts` | 通过 | 覆盖左侧 rail 内的大纲渲染、点击跳转和独立滚动区样式约束，并确认 autosave / settings drawer 现有行为未回归。 |
+| 2026-04-17 | TASK-017 | `npm.cmd run lint` | 通过 | outline model、rail UI、编辑器跳转接口与文档更新均通过 ESLint。 |
+| 2026-04-17 | TASK-017 | `npm.cmd run typecheck` | 通过 | renderer、electron、vitest、cli 四套 TypeScript 检查全部通过，新增 outline / navigateToOffset 接口未破坏现有编译边界。 |
+| 2026-04-17 | TASK-017 | `npm.cmd run test` | 通过 | Vitest 全量通过，当前共 48 个文件、323 条测试通过，包含新增 outline、rail UI 与编辑器跳转回归。 |
+| 2026-04-17 | TASK-017 | `npm.cmd run build` | 通过 | renderer、electron 与 cli 构建通过；保留现有 Vite chunk size warning，但 exit code 为 0，不阻塞本轮大纲侧栏交付。 |
 | 2026-04-16 | TASK-034 | `npm run test -- packages/markdown-engine/src/parse-inline-ast.test.ts packages/markdown-engine/src/parse-block-map.test.ts` | 通过 | 覆盖 inline AST parser、本地 `~~` extension、heading/list/blockquote 内容范围，以及 `parseMarkdownDocument()` 的 stitch 结果。 |
 | 2026-04-16 | TASK-034 | `npm run test -- packages/editor-core/src/active-block.test.ts packages/editor-core/src/decorations/block-decorations.test.ts packages/editor-core/src/derived-state/inactive-block-decorations.test.ts packages/editor-core/src/extensions/markdown.test.ts src/renderer/code-editor.test.ts` | 通过 | 覆盖 MarkdownDocument cache、inline signature、AST-to-decoration flattening，以及 renderer 中 paragraph/heading/list/blockquote 的 inline rendering 与 composition flush 回归。 |
 | 2026-04-16 | TASK-034 | `npm run test -- src/renderer/code-editor.test.ts` | 通过 | renderer 目标测试共 44 项通过，覆盖段落四类样式、`***both***`、`~~**mix**~~`、heading/list/blockquote 内 inline，以及回到 active block 后恢复 Markdown 源码。 |

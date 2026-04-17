@@ -51,6 +51,33 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("moves the selection and scroll target when navigateToOffset is requested", () => {
+    const host = document.createElement("div");
+    const source = ["# Title", "", "Paragraph"].join("\n");
+    const selectionAnchors: number[] = [];
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn(),
+      onActiveBlockChange: (state) => {
+        selectionAnchors.push(state.selection.anchor);
+      }
+    });
+
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    controller.navigateToOffset(source.indexOf("Paragraph"));
+
+    expect(view?.state.selection.main.anchor).toBe(source.indexOf("Paragraph"));
+    expect(view?.state.selection.main.head).toBe(source.indexOf("Paragraph"));
+    expect(selectionAnchors.at(-1)).toBe(source.indexOf("Paragraph"));
+
+    controller.destroy();
+  });
+
   it("calls onBlur when the editor loses focus", () => {
     const host = document.createElement("div");
     const onBlur = vi.fn();

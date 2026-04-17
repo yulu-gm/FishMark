@@ -21,6 +21,7 @@ export type CodeEditorController = {
   getContent: () => string;
   replaceDocument: (nextContent: string) => void;
   focus: () => void;
+  navigateToOffset: (offset: number) => void;
   insertText: (text: string) => void;
   setSelection: (anchor: number, head?: number) => void;
   pressEnter: () => void;
@@ -67,6 +68,21 @@ export function createCodeEditorController(
       view.setState(nextState);
     },
     focus() {
+      view.focus();
+    },
+    navigateToOffset(offset: number) {
+      const nextOffset = Math.max(0, Math.min(offset, view.state.doc.length));
+
+      view.dispatch({
+        selection: {
+          anchor: nextOffset,
+          head: nextOffset
+        },
+        effects: EditorView.scrollIntoView(nextOffset, {
+          y: "center",
+          yMargin: 24
+        })
+      });
       view.focus();
     },
     insertText(text: string) {

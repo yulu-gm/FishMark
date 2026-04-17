@@ -9,4 +9,12 @@ describe("main process window wiring", () => {
 
     expect(mainSource).toContain("windowIconPath: resolveWindowIconPath()");
   });
+
+  it("configures a dev-specific runtime identity before deciding whether to request the single-instance lock", () => {
+    const mainPath = path.join(process.cwd(), "src", "main", "main.ts");
+    const mainSource = readFileSync(mainPath, "utf8");
+
+    expect(mainSource).toContain('configureMainProcessRuntime(app, process.env)');
+    expect(mainSource).toContain('shouldRequestSingleInstanceLock(process.env)');
+  });
 });

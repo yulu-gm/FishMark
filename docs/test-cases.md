@@ -263,6 +263,30 @@
 - composition 期间不会提前抖动，`compositionend` 后只做一次 decorations flush
 - link/image 即使本轮不做专门视觉替换，也不会破坏 label/alt children 的行内 decorations
 
+### TC-040 大纲侧栏
+
+步骤：
+1. 打开一个包含多级标题的 Markdown 文档，例如依次包含 `# Title`、`## Section`、`### Detail`。
+2. 观察右侧，仅显示一个很小的展开 icon，大纲面板默认不展开。
+3. 点击展开 icon，确认右侧出现悬浮样式的大纲面板，且正文编辑区仍与其平级显示，不被遮挡。
+4. 滚动正文编辑区到文档中后部，观察右侧大纲面板是否仍固定在自己的位置。
+5. 如果标题很多，继续滚动右侧大纲面板，确认它可以独立滚动而不带动正文滚动。
+6. 点击任一大纲项，例如 `Section` 或 `Detail`。
+7. 使用面板顶部的收起按钮把大纲重新折叠，只留下右侧小型展开 icon。
+8. 编辑标题文本后，再观察重新展开的大纲是否同步更新。
+7. 如需自动化回归，运行 `npm.cmd run test -- src/renderer/outline.test.ts src/renderer/code-editor-view.test.tsx src/renderer/code-editor.test.ts src/renderer/app.autosave.test.ts`。
+
+预期：
+- 默认状态下只显示一个小型右侧展开入口，不会占用正文阅读区域
+- 展开后右侧会显示基于 heading 的悬浮大纲面板，文本内容与当前 Markdown 标题一致
+- 大纲面板与正文编辑区平级存在，不互相遮挡
+- 大纲不会随着正文滚动而移出视口
+- 大纲内容过长时，只滚动大纲区域本身，不会带动正文一起滚动
+- 点击大纲项后，编辑器光标会跳到对应 heading，并把该位置滚动到可见区域
+- 收起后恢复为小型展开入口
+- 修改标题文本或重新打开文档后，大纲会同步刷新
+- 现有 autosave、active block 与设置抽屉交互不回归
+
 ## 3. 输入法
 
 ### TC-020 中文 IME

@@ -8,6 +8,7 @@ import {
 } from "../../shared/preferences";
 import { CodeEditorView, type CodeEditorHandle } from "../code-editor-view";
 import { createEditorTestDriver } from "../editor-test-driver";
+import { deriveOutlineItems, type OutlineItem } from "../outline";
 import {
   createThemeRuntime,
   resolveBuiltinThemeDescriptor,
@@ -37,6 +38,8 @@ const DOCUMENT_FONT_FAMILY_CSS_VAR = "--yulora-document-font-family";
 const DOCUMENT_FONT_SIZE_CSS_VAR = "--yulora-document-font-size";
 const LEGACY_EDITOR_FONT_FAMILY_CSS_VAR = "--yulora-editor-font-family";
 const LEGACY_EDITOR_FONT_SIZE_CSS_VAR = "--yulora-editor-font-size";
+const OUTLINE_EXIT_ANIMATION_MS = 180;
+const SETTINGS_DRAWER_EXIT_ANIMATION_MS = 180;
 
 function resolveThemeMode(mode: ThemeMode): ResolvedThemeMode {
   if (mode === "light" || mode === "dark") {
@@ -127,7 +130,12 @@ export default function EditorApp() {
 
 function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   const [state, setState] = useState(createInitialAppState);
+  const [outlineItems, setOutlineItems] = useState<OutlineItem[]>([]);
+  const [activeHeadingId, setActiveHeadingId] = useState<string | null>(null);
+  const [isOutlineOpen, setIsOutlineOpen] = useState(false);
+  const [isOutlineClosing, setIsOutlineClosing] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isSettingsClosing, setIsSettingsClosing] = useState(false);
   const [preferences, setPreferences] = useState<Preferences>(DEFAULT_PREFERENCES);
   const [themes, setThemes] = useState<ThemeCatalogEntry[]>([]);
   const [isRefreshingThemes, setIsRefreshingThemes] = useState(false);
@@ -146,6 +154,8 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   const shouldRestoreEditorFocusRef = useRef(false);
   const pendingFocusRestoreRef = useRef<"editor" | "settings-entry" | null>(null);
   const themeRuntimeRef = useRef<ReturnType<typeof createThemeRuntime> | null>(null);
+  const outlineCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const settingsCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentDocumentContent = state.currentDocument
     ? (editorContentRef.current || state.currentDocument.content)
     : "";
@@ -153,6 +163,8 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     ? getDocumentMetrics(currentDocumentContent)
     : null;
   const isDocumentOpen = Boolean(state.currentDocument);
+  const isOutlinePanelVisible = isOutlineOpen || isOutlineClosing;
+  const isSettingsDrawerVisible = isSettingsOpen || isSettingsClosing;
   const hintText =
     state.openState === "opening"
       ? "Opening document..."
@@ -192,6 +204,20 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     if (autosaveTimerRef.current !== null) {
       clearTimeout(autosaveTimerRef.current);
       autosaveTimerRef.current = null;
+    }
+  }
+
+  function clearOutlineCloseTimer(): void {
+    if (outlineCloseTimerRef.current !== null) {
+      clearTimeout(outlineCloseTimerRef.current);
+      outlineCloseTimerRef.current = null;
+    }
+  }
+
+  function clearSettingsCloseTimer(): void {
+    if (settingsCloseTimerRef.current !== null) {
+      clearTimeout(settingsCloseTimerRef.current);
+      settingsCloseTimerRef.current = null;
     }
   }
 
@@ -326,6 +352,8 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
       settingsOpenOriginRef.current === "editor" ||
       (activeElement instanceof Node ? !!editorContainerRef.current?.contains(activeElement) : false);
     settingsOpenOriginRef.current = null;
+    clearSettingsCloseTimer();
+    setIsSettingsClosing(false);
     setIsSettingsOpen(true);
   }
 
@@ -338,15 +366,41 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   }
 
   function closeSettingsDrawer(): void {
+    clearSettingsCloseTimer();
     setIsSettingsOpen(false);
+    setIsSettingsClosing(true);
 
     if (shouldRestoreEditorFocusRef.current) {
       shouldRestoreEditorFocusRef.current = false;
       pendingFocusRestoreRef.current = "editor";
-      return;
+    } else {
+      pendingFocusRestoreRef.current = "settings-entry";
     }
 
-    pendingFocusRestoreRef.current = "settings-entry";
+    settingsCloseTimerRef.current = setTimeout(() => {
+      settingsCloseTimerRef.current = null;
+      setIsSettingsClosing(false);
+    }, SETTINGS_DRAWER_EXIT_ANIMATION_MS);
+  }
+
+  const handleEscapeCloseSettings = useEffectEvent((): void => {
+    closeSettingsDrawer();
+  });
+
+  function openOutlinePanel(): void {
+    clearOutlineCloseTimer();
+    setIsOutlineClosing(false);
+    setIsOutlineOpen(true);
+  }
+
+  function closeOutlinePanel(): void {
+    clearOutlineCloseTimer();
+    setIsOutlineOpen(false);
+    setIsOutlineClosing(true);
+    outlineCloseTimerRef.current = setTimeout(() => {
+      outlineCloseTimerRef.current = null;
+      setIsOutlineClosing(false);
+    }, OUTLINE_EXIT_ANIMATION_MS);
   }
 
   const handleOpenMarkdown = useEffectEvent(async (): Promise<void> => {
@@ -358,6 +412,8 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
 
     if (result.status === "success") {
       editorContentRef.current = result.document.content;
+      setOutlineItems(deriveOutlineItems(result.document.content));
+      setActiveHeadingId(null);
     }
 
     applyState((current) => applyOpenMarkdownResult(current, result));
@@ -372,6 +428,8 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
 
     if (result.status === "success") {
       editorContentRef.current = result.document.content;
+      setOutlineItems(deriveOutlineItems(result.document.content));
+      setActiveHeadingId(null);
     }
 
     applyState((current) => applyOpenMarkdownResult(current, result));
@@ -535,7 +593,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   }, [preferences, themes]);
 
   useEffect(() => {
-    if (isSettingsOpen || pendingFocusRestoreRef.current === null) {
+    if (isSettingsOpen || isSettingsClosing || pendingFocusRestoreRef.current === null) {
       return;
     }
 
@@ -546,7 +604,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     }
 
     pendingFocusRestoreRef.current = null;
-  }, [isSettingsOpen]);
+  }, [isSettingsClosing, isSettingsOpen]);
 
   useEffect(() => {
     if (!isSettingsOpen) {
@@ -555,7 +613,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        closeSettingsDrawer();
+        handleEscapeCloseSettings();
       }
     };
 
@@ -577,6 +635,8 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   useEffect(
     () => () => {
       clearAutosaveTimer();
+      clearOutlineCloseTimer();
+      clearSettingsCloseTimer();
       themeRuntimeRef.current?.clear();
       clearDocumentPreferences(document.documentElement);
     },
@@ -663,7 +723,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
             data-yulora-region="workspace-canvas"
           >
             {state.currentDocument ? (
-              <section className="workspace-shell">
+              <section className={`workspace-shell ${isOutlineOpen ? "is-outline-open" : ""}`}>
                 <div
                   className="document-canvas"
                   ref={editorContainerRef}
@@ -674,9 +734,15 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
                     loadRevision={state.editorLoadRevision}
                     onActiveBlockChange={(nextActiveBlockState) => {
                       activeBlockStateRef.current = nextActiveBlockState;
+                      setActiveHeadingId(
+                        nextActiveBlockState.activeBlock?.type === "heading"
+                          ? nextActiveBlockState.activeBlock.id
+                          : null
+                      );
                     }}
                     onChange={(nextContent) => {
                       editorContentRef.current = nextContent;
+                      setOutlineItems(deriveOutlineItems(nextContent));
                       let nextState: AppState = stateRef.current;
 
                       applyState((current) => {
@@ -691,6 +757,96 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
                     }}
                   />
                 </div>
+                {isOutlinePanelVisible ? (
+                  <aside
+                    className="outline-panel"
+                    data-yulora-region="outline-panel"
+                    data-state={isOutlineOpen ? "open" : "closing"}
+                    aria-label="Document outline"
+                  >
+                    <div
+                      className="outline-panel-header"
+                      data-yulora-region="outline-panel-header"
+                    >
+                      <p className="outline-panel-title">Outline</p>
+                      <button
+                        type="button"
+                        className="outline-panel-close"
+                        aria-label="Collapse outline"
+                        onClick={closeOutlinePanel}
+                      >
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          aria-hidden="true"
+                          focusable="false"
+                        >
+                          <path
+                            d="M9 6l6 6-6 6"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                    <div
+                      className="outline-panel-body"
+                      data-yulora-region="outline-panel-body"
+                    >
+                      {outlineItems.length > 0 ? (
+                        <ol className="outline-panel-list">
+                          {outlineItems.map((item) => (
+                            <li key={item.id}>
+                              <button
+                                type="button"
+                                className={`outline-panel-item ${activeHeadingId === item.id ? "is-current" : ""}`}
+                                style={{
+                                  paddingInlineStart: `${10 + Math.max(item.depth - 1, 0) * 10}px`
+                                }}
+                                onClick={() => {
+                                  editorRef.current?.navigateToOffset(item.startOffset);
+                                }}
+                              >
+                                <span className="outline-panel-item-label">{item.label}</span>
+                              </button>
+                            </li>
+                          ))}
+                        </ol>
+                      ) : (
+                        <p className="outline-panel-empty">No headings yet.</p>
+                      )}
+                    </div>
+                  </aside>
+                ) : (
+                  <button
+                    type="button"
+                    className="outline-entry"
+                    data-yulora-region="outline-toggle"
+                    aria-label="Expand outline"
+                    onClick={openOutlinePanel}
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                      focusable="false"
+                    >
+                      <path
+                        d="M15 6l-6 6 6 6"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </button>
+                )}
               </section>
             ) : (
               <section
@@ -727,14 +883,16 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
         </div>
       </div>
 
-      {isSettingsOpen ? (
+      {isSettingsDrawerVisible ? (
         <div
           data-yulora-dialog="settings-drawer"
           data-yulora-overlay-style="floating-drawer"
+          data-state={isSettingsOpen ? "open" : "closing"}
           onClick={closeSettingsDrawer}
         >
           <div onClick={(event) => event.stopPropagation()}>
             <SettingsView
+              surfaceState={isSettingsOpen ? "open" : "closing"}
               preferences={preferences}
               themes={themes}
               isRefreshingThemes={isRefreshingThemes}

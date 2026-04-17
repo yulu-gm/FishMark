@@ -5,6 +5,15 @@
   background: color-mix(in srgb, var(--yulora-surface-bg) 78%, var(--yulora-scrim) 22%);
 }
 
+[data-yulora-dialog="settings-drawer"][data-state="open"] {
+  animation: settings-overlay-enter 180ms ease-out both;
+}
+
+[data-yulora-dialog="settings-drawer"][data-state="closing"] {
+  pointer-events: none;
+  animation: settings-overlay-exit 180ms ease-in both;
+}
+
 [data-yulora-dialog="settings-drawer"] > div {
   position: relative;
   z-index: 1;
@@ -42,7 +51,15 @@
   -webkit-backdrop-filter: blur(28px) saturate(1.12);
   overflow: auto;
   isolation: isolate;
+}
+
+.settings-shell[data-state="open"] {
   animation: settings-drawer-enter 220ms cubic-bezier(0.2, 0.85, 0.2, 1) both;
+}
+
+.settings-shell[data-state="closing"] {
+  pointer-events: none;
+  animation: settings-drawer-exit 180ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 /* Subtle top-edge sheen */
@@ -83,10 +100,10 @@
   gap: var(--yulora-space-4);
   margin: 0 calc(var(--yulora-space-5) * -1) var(--yulora-space-5);
   padding: var(--yulora-space-5) var(--yulora-space-5) var(--yulora-space-4);
-  background: color-mix(in srgb, var(--yulora-surface-raised-bg) 92%, var(--yulora-surface-bg) 8%, transparent);
+  background: color-mix(in srgb, var(--yulora-surface-raised-bg) 97%, var(--yulora-surface-bg) 3%);
   border-bottom: 1px solid var(--yulora-border-subtle);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   z-index: 2;
 }
 
@@ -326,5 +343,37 @@
   to {
     transform: translateX(0);
     opacity: 1;
+  }
+}
+
+@keyframes settings-drawer-exit {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+
+  to {
+    transform: translateX(-10px);
+    opacity: 0;
+  }
+}
+
+@keyframes settings-overlay-enter {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes settings-overlay-exit {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
   }
 }

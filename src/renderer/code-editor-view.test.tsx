@@ -8,6 +8,7 @@ import { CodeEditorView, type CodeEditorHandle } from "./code-editor-view";
 
 const replaceDocumentMock = vi.fn<(content: string) => void>();
 const focusMock = vi.fn<() => void>();
+const navigateToOffsetMock = vi.fn<(offset: number) => void>();
 const destroyMock = vi.fn<() => void>();
 const getContentMock = vi.fn<() => string>(() => "# Initial\n");
 const createCodeEditorControllerMock = vi.fn();
@@ -29,6 +30,7 @@ describe("CodeEditorView", () => {
     replaceDocumentMock.mockReset();
     destroyMock.mockReset();
     focusMock.mockReset();
+    navigateToOffsetMock.mockReset();
     getContentMock.mockReset();
     getContentMock.mockReturnValue("# Initial\n");
     createCodeEditorControllerMock.mockReset();
@@ -36,6 +38,7 @@ describe("CodeEditorView", () => {
       getContent: getContentMock,
       replaceDocument: replaceDocumentMock,
       focus: focusMock,
+      navigateToOffset: navigateToOffsetMock,
       destroy: destroyMock
     });
 
@@ -124,5 +127,26 @@ describe("CodeEditorView", () => {
     ref.current?.focus();
 
     expect(focusMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("exposes navigateToOffset() on handle and forwards to the controller", async () => {
+    const ref = createRef<CodeEditorHandle>();
+
+    await act(async () => {
+      root.render(
+        createElement(CodeEditorView, {
+          initialContent: "# Initial\n",
+          loadRevision: 1,
+          onChange: vi.fn(),
+          ref
+        })
+      );
+    });
+
+    expect(typeof ref.current?.navigateToOffset).toBe("function");
+    ref.current?.navigateToOffset(12);
+
+    expect(navigateToOffsetMock).toHaveBeenCalledTimes(1);
+    expect(navigateToOffsetMock).toHaveBeenCalledWith(12);
   });
 });

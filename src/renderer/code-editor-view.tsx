@@ -16,6 +16,7 @@ export type CodeEditorHandle = {
   getContent: () => string;
   setContent: (content: string) => void;
   focus: () => void;
+  navigateToOffset: (offset: number) => void;
   insertText: (text: string) => void;
   setSelection: (anchor: number, head?: number) => void;
   pressEnter: () => void;
@@ -85,6 +86,9 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
         },
         focus: () => {
           controllerRef.current?.focus();
+        },
+        navigateToOffset: (offset: number) => {
+          controllerRef.current?.navigateToOffset(offset);
         },
         insertText: (text: string) => {
           controllerRef.current?.insertText(text);

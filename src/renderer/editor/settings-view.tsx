@@ -18,6 +18,7 @@ type UpdatePreferencesResult =
 type ThemeCatalogEntry = Awaited<ReturnType<Window["yulora"]["listThemes"]>>[number];
 
 type SettingsViewProps = {
+  surfaceState: "open" | "closing";
   preferences: Preferences;
   themes: ThemeCatalogEntry[];
   isRefreshingThemes: boolean;
@@ -83,6 +84,7 @@ function resolveFontPresetValue(fontFamily: string): string {
 }
 
 export function SettingsView({
+  surfaceState,
   preferences,
   themes,
   isRefreshingThemes,
@@ -248,6 +250,7 @@ export function SettingsView({
       className="settings-shell"
       data-yulora-panel="settings-drawer"
       data-yulora-surface="floating-drawer"
+      data-state={surfaceState}
       role="dialog"
       aria-modal="true"
       aria-labelledby="settings-heading"

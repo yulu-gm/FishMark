@@ -11,6 +11,7 @@ import { createPreferencesService } from "./preferences-service";
 import { createThemeService } from "./theme-service";
 import { createTestRunSessions } from "./test-run-sessions";
 import { resolveRendererEntry } from "./paths";
+import { configureMainProcessRuntime, shouldRequestSingleInstanceLock } from "./runtime-environment";
 import { createRuntimeWindowManager, resolveAppRuntimeMode } from "./runtime-windows";
 import { resolveWindowIconPath } from "./window-icon";
 import {
@@ -44,7 +45,10 @@ import {
 const OPEN_EDITOR_TEST_WINDOW_CHANNEL = "yulora:open-editor-test-window";
 const LIST_THEMES_CHANNEL = "yulora:list-themes";
 const REFRESH_THEMES_CHANNEL = "yulora:refresh-themes";
-const hasSingleInstanceLock = app.requestSingleInstanceLock();
+configureMainProcessRuntime(app, process.env);
+const hasSingleInstanceLock = shouldRequestSingleInstanceLock(process.env)
+  ? app.requestSingleInstanceLock()
+  : true;
 const pendingLaunchOpenPaths: string[] = [];
 
 let openEditorWindowForLaunchPath: ((targetPath: string) => void) | null = null;

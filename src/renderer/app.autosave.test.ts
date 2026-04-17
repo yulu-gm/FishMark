@@ -34,6 +34,7 @@ type MockCodeEditorModule = typeof codeEditorViewModule & {
     changeContent: (content: string) => void;
     blur: () => void;
     focus: () => void;
+    getNavigateCalls: () => number[];
     reset: () => void;
   };
 };
@@ -65,6 +66,7 @@ vi.mock("./code-editor-view", async () => {
     | undefined;
   let currentContent = "";
   let latestHostElement: HTMLDivElement | null = null;
+  let navigateCalls: number[] = [];
 
   const CodeEditorView = React.forwardRef(function MockCodeEditorView(
     props: {
@@ -74,7 +76,11 @@ vi.mock("./code-editor-view", async () => {
         onBlur?: () => void;
         onActiveBlockChange?: (state: unknown) => void;
       },
-    ref: React.ForwardedRef<{ getContent: () => string; focus: () => void }>
+    ref: React.ForwardedRef<{
+      getContent: () => string;
+      focus: () => void;
+      navigateToOffset: (offset: number) => void;
+    }>
   ) {
     const { initialContent, loadRevision } = props;
 
@@ -99,7 +105,10 @@ vi.mock("./code-editor-view", async () => {
 
     React.useImperativeHandle(ref, () => ({
       getContent: () => currentContent,
-      focus: () => latestHostElement?.focus()
+      focus: () => latestHostElement?.focus(),
+      navigateToOffset: (offset: number) => {
+        navigateCalls.push(offset);
+      }
     }));
 
     return React.createElement("div", {
@@ -122,10 +131,14 @@ vi.mock("./code-editor-view", async () => {
       focus() {
         latestHostElement?.focus();
       },
+      getNavigateCalls() {
+        return [...navigateCalls];
+      },
       reset() {
         latestProps = undefined;
         currentContent = "";
         latestHostElement = null;
+        navigateCalls = [];
       }
     }
   };
@@ -678,6 +691,18 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
+    expect(container.querySelector<HTMLElement>('[data-yulora-dialog="settings-drawer"]')?.dataset.state).toBe(
+      "closing"
+    );
+    expect(container.querySelector<HTMLElement>('[data-yulora-panel="settings-drawer"]')?.dataset.state).toBe(
+      "closing"
+    );
+
+    await act(async () => {
+      vi.advanceTimersByTime(180);
+      await Promise.resolve();
+    });
+
     expect(container.querySelector('[data-yulora-dialog="settings-drawer"]')).toBeNull();
     expect(container.querySelector('[data-testid="mock-code-editor"]')).not.toBeNull();
     expect(container.textContent).toContain("today.md");
@@ -690,9 +715,13 @@ describe("App autosave", () => {
     const workspace = container.querySelector('[data-yulora-layout="workspace"]');
     const workspaceHeader = container.querySelector('[data-yulora-region="workspace-header"]');
     const statusStrip = container.querySelector('[data-yulora-region="status-strip"]');
+    const outlineToggle = container.querySelector('[data-yulora-region="outline-toggle"]');
+    const outlinePanel = container.querySelector('[data-yulora-region="outline-panel"]');
 
     expect(rail).not.toBeNull();
     expect(workspace).not.toBeNull();
+    expect(outlineToggle).not.toBeNull();
+    expect(outlinePanel).toBeNull();
     expect(workspaceHeader?.textContent).toContain("today.md");
     expect(workspaceHeader?.textContent).toContain("C:/notes/today.md");
     expect(statusStrip?.textContent).toContain("All changes saved");
@@ -702,18 +731,94 @@ describe("App autosave", () => {
     expect(workspaceHeader?.textContent).not.toContain("All changes saved");
   });
 
-  it("uses the workspace header as the single open-document identity surface", async () => {
+  it("uses the workspace header as the single open-document identity surface while the outline stays collapsed by default", async () => {
     await renderAndOpenDocument();
 
     const rail = container.querySelector('[data-yulora-layout="rail"]');
     const workspaceHeader = container.querySelector('[data-yulora-region="workspace-header"]');
     const documentHeader = container.querySelector('[data-yulora-region="document-header"]');
+    const outlineToggle = container.querySelector('[data-yulora-region="outline-toggle"]');
+    const outlinePanel = container.querySelector('[data-yulora-region="outline-panel"]');
 
     expect(workspaceHeader?.textContent).toContain("today.md");
     expect(workspaceHeader?.textContent).toContain("C:/notes/today.md");
     expect(rail?.textContent).not.toContain("Workspace");
     expect(rail?.textContent).not.toContain("Outline");
+    expect(outlineToggle).not.toBeNull();
+    expect(outlinePanel).toBeNull();
     expect(documentHeader).toBeNull();
+  });
+
+  it("expands the floating outline panel from a compact right-side toggle and routes item clicks to editor navigation", async () => {
+    await renderAndOpenDocument();
+
+    const outlineToggle = container.querySelector<HTMLButtonElement>(
+      '[data-yulora-region="outline-toggle"]'
+    );
+
+    expect(outlineToggle).not.toBeNull();
+
+    await act(async () => {
+      outlineToggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const outlinePanel = container.querySelector('[data-yulora-region="outline-panel"]');
+    const outlineHeader = container.querySelector('[data-yulora-region="outline-panel-header"]');
+    const outlineBody = container.querySelector('[data-yulora-region="outline-panel-body"]');
+    const outlineButton = Array.from(outlinePanel?.querySelectorAll("button") ?? []).find((button) =>
+      button.textContent?.includes("Today")
+    );
+
+    expect(outlineHeader?.textContent).toContain("Outline");
+    expect(outlineBody).not.toBeNull();
+    expect(outlinePanel?.textContent).toContain("Outline");
+    expect(outlinePanel?.textContent).toContain("Today");
+    expect(outlineButton).not.toBeNull();
+
+    await act(async () => {
+      outlineButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(codeEditorMock.getNavigateCalls()).toEqual([0]);
+  });
+
+  it("collapses the floating outline panel back to a compact toggle", async () => {
+    await renderAndOpenDocument();
+
+    const outlineToggle = container.querySelector<HTMLButtonElement>(
+      '[data-yulora-region="outline-toggle"]'
+    );
+
+    await act(async () => {
+      outlineToggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const collapseButton = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Collapse outline"]'
+    );
+    expect(container.querySelector('[data-yulora-region="outline-panel"]')).not.toBeNull();
+    expect(collapseButton).not.toBeNull();
+
+    await act(async () => {
+      collapseButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector<HTMLElement>('[data-yulora-region="outline-panel"]')?.dataset.state).toBe(
+      "closing"
+    );
+    expect(container.querySelector('[data-yulora-region="outline-toggle"]')).toBeNull();
+
+    await act(async () => {
+      vi.advanceTimersByTime(180);
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-yulora-region="outline-panel"]')).toBeNull();
+    expect(container.querySelector('[data-yulora-region="outline-toggle"]')).not.toBeNull();
   });
 
   it("renders the empty state inside a shared workspace canvas", async () => {
@@ -783,6 +888,15 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
+    expect(container.querySelector<HTMLElement>('[data-yulora-dialog="settings-drawer"]')?.dataset.state).toBe(
+      "closing"
+    );
+
+    await act(async () => {
+      vi.advanceTimersByTime(180);
+      await Promise.resolve();
+    });
+
     expect(container.querySelector('[data-yulora-dialog="settings-drawer"]')).toBeNull();
     expect(document.activeElement?.getAttribute("data-testid")).toBe("mock-code-editor");
   });
@@ -843,6 +957,30 @@ describe("App autosave", () => {
     expect(appUiStylesheet).toContain(".app-rail");
     expect(appUiStylesheet).toContain("height: 100dvh;");
     expect(appUiStylesheet).toContain("align-self: start;");
+  });
+
+  it("defines a compact floating outline panel with a fixed header and glass styling", () => {
+    const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8");
+    const appSource = readFileSync(join(process.cwd(), "src/renderer/editor/App.tsx"), "utf-8");
+
+    expect(appUiStylesheet).toContain("--yulora-outline-column-width: 0px;");
+    expect(appUiStylesheet).toContain("grid-template-columns: minmax(0, 1fr) var(--yulora-outline-column-width);");
+    expect(appUiStylesheet).toContain("transition:");
+    expect(appUiStylesheet).toContain("grid-template-columns 220ms cubic-bezier(0.2, 0.85, 0.2, 1)");
+    expect(appUiStylesheet).toContain(".outline-entry");
+    expect(appUiStylesheet).toContain(".outline-panel");
+    expect(appUiStylesheet).toContain(".outline-panel-body");
+    expect(appUiStylesheet).toContain(".outline-panel::before");
+    expect(appUiStylesheet).toContain("overflow: hidden;");
+    expect(appUiStylesheet).toContain("overflow-y: auto;");
+    expect(appUiStylesheet).toContain(".outline-panel-list");
+    expect(appUiStylesheet).toContain("backdrop-filter: blur(28px) saturate(1.12);");
+    expect(appUiStylesheet).toContain(".workspace-shell.is-outline-open");
+    expect(appUiStylesheet).toContain('.outline-panel[data-state="closing"]');
+    expect(appUiStylesheet).toContain("@keyframes outline-panel-exit");
+    expect(appUiStylesheet).toContain("@keyframes outline-toggle-enter");
+    expect(appSource).toContain('d="M15 6l-6 6 6 6"');
+    expect(appSource).toContain('d="M9 6l6 6-6 6"');
   });
 
   it("defines shared scrollbar styling for the desktop shell", () => {
@@ -908,7 +1046,13 @@ describe("App autosave", () => {
     );
     expect(settingsStylesheet).toContain("backdrop-filter: blur(28px) saturate(1.12);");
     expect(settingsStylesheet).toContain(".settings-shell::before");
+    expect(settingsStylesheet).toContain('.settings-shell[data-state="closing"]');
+    expect(settingsStylesheet).toContain("@keyframes settings-drawer-exit");
+    expect(settingsStylesheet).toContain("@keyframes settings-overlay-exit");
     expect(settingsStylesheet).toContain("linear-gradient(");
+    expect(settingsStylesheet).toContain(
+      "background: color-mix(in srgb, var(--yulora-surface-raised-bg) 97%, var(--yulora-surface-bg) 3%);"
+    );
     expect(settingsStylesheet).toContain(
       "color-mix(in srgb, var(--yulora-surface-bg) 96%, var(--yulora-glass-strong-bg) 4%, transparent);"
     );
