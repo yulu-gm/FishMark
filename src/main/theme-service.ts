@@ -1,6 +1,7 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+
+import { createPreviewAssetUrl } from "../shared/preview-asset-url";
 
 type ThemePart = "tokens" | "ui" | "editor" | "markdown";
 type ThemeAppearanceMode = "light" | "dark";
@@ -121,7 +122,9 @@ function resolvePartUrls(
       continue;
     }
 
-    partUrls[part] = pathToFileURL(path.join(variantDirectory, DEFAULT_THEME_PARTS[part])).href;
+    partUrls[part] = createPreviewAssetUrl(
+      path.join(variantDirectory, DEFAULT_THEME_PARTS[part])
+    );
   }
 
   return partUrls;

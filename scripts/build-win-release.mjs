@@ -15,6 +15,10 @@ const VALID_MODES = new Set(["package", "release"]);
 const OUTPUT_DIRECTORY = "release";
 const RELEASE_ASSET_CONTENT_TYPE = "application/octet-stream";
 
+function resolveOutputDirectory() {
+  return process.env.YULORA_RELEASE_DIR?.trim() || OUTPUT_DIRECTORY;
+}
+
 function toYamlScalar(value) {
   return `'${String(value).replace(/'/gu, "''")}'`;
 }
@@ -32,11 +36,11 @@ async function loadJson(filePath, label) {
   return parseJson(source, label);
 }
 
-export async function cleanOutputDirectory(projectDir) {
-  const outputDirectory = path.join(projectDir, OUTPUT_DIRECTORY);
-  const normalized = path.resolve(outputDirectory);
+export async function cleanOutputDirectory(projectDir, outputDirectory = OUTPUT_DIRECTORY) {
+  const resolvedOutputDirectory = path.join(projectDir, outputDirectory);
+  const normalized = path.resolve(resolvedOutputDirectory);
 
-  if (normalized !== path.join(projectDir, OUTPUT_DIRECTORY)) {
+  if (normalized !== resolvedOutputDirectory) {
     throw new Error(`Unexpected output directory: ${normalized}`);
   }
 
@@ -143,8 +147,13 @@ export async function ensureRelease({ owner, repo, version, token }) {
     body: JSON.stringify({
       tag_name: tagName,
       target_commitish: "main",
-      name: `${version} test release`,
-      body: "Windows auto-update validation release.",
+      name: `Yulora ${version} Release`,
+      body: `### 本次更新
+
+- 新增字体选择设置，可按需切换编辑时的字体风格与大小。
+- 优化输入交互和光标反馈，提升核心编辑体验。
+
+> 注意：本次发布为 Windows 平台自动更新版本，包含最新的编辑体验优化。`,
       draft: false,
       prerelease: false,
       generate_release_notes: false
@@ -215,7 +224,7 @@ export async function uploadReleaseAsset(uploadBaseUrl, assetPath, assetName, to
   }
 }
 
-export async function publishReleaseArtifacts({ projectDir, builderConfig, version }) {
+export async function publishReleaseArtifacts({ projectDir, builderConfig, version, outputDirectory = OUTPUT_DIRECTORY }) {
   const githubConfig = resolveGithubPublishConfig(builderConfig);
   const token = resolveGitHubToken();
   const release = await ensureRelease({
@@ -224,8 +233,8 @@ export async function publishReleaseArtifacts({ projectDir, builderConfig, versi
     version,
     token
   });
-  const latestPath = path.join(projectDir, OUTPUT_DIRECTORY, "latest.yml");
-  const installerPath = path.join(projectDir, OUTPUT_DIRECTORY, `Yulora-Setup-${version}.exe`);
+  const latestPath = path.join(projectDir, outputDirectory, "latest.yml");
+  const installerPath = path.join(projectDir, outputDirectory, `Yulora-Setup-${version}.exe`);
   const blockMapPath = `${installerPath}.blockmap`;
   const assets = [
     { name: "latest.yml", filePath: latestPath },
@@ -290,6 +299,7 @@ export async function preparePackagedWindowsApp({
 export async function buildWindowsArtifacts({
   projectDir,
   builderConfig,
+  outputDirectory = OUTPUT_DIRECTORY,
   electronBuilderBuildImpl = electronBuilderBuild,
   platformPackagerClass = PlatformPackager,
   preparePackagedAppImpl = preparePackagedWindowsApp
@@ -298,6 +308,10 @@ export async function buildWindowsArtifacts({
     ...builderConfig,
     afterPack: null,
     publish: null
+  };
+  buildConfig.directories = {
+    ...buildConfig.directories,
+    output: outputDirectory
   };
   const originalPack = platformPackagerClass.prototype.pack;
 
@@ -338,9 +352,9 @@ async function computeSha512(filePath) {
   return createHash("sha512").update(content).digest("base64");
 }
 
-export async function writeLatestReleaseMetadata({ projectDir, version }) {
+export async function writeLatestReleaseMetadata({ projectDir, version, outputDirectory = OUTPUT_DIRECTORY }) {
   const installerName = `Yulora-Setup-${version}.exe`;
-  const installerPath = path.join(projectDir, OUTPUT_DIRECTORY, installerName);
+  const installerPath = path.join(projectDir, outputDirectory, installerName);
   const installerStat = await stat(installerPath);
   const sha512 = await computeSha512(installerPath);
   const releaseDate = new Date().toISOString();
@@ -355,7 +369,7 @@ export async function writeLatestReleaseMetadata({ projectDir, version }) {
     `releaseDate: ${toYamlScalar(releaseDate)}`
   ].join("\n");
 
-  await writeFile(path.join(projectDir, OUTPUT_DIRECTORY, "latest.yml"), `${latestYaml}\n`, "utf8");
+  await writeFile(path.join(projectDir, outputDirectory, "latest.yml"), `${latestYaml}\n`, "utf8");
 }
 
 export async function main() {
@@ -369,19 +383,21 @@ export async function main() {
   const packageJson = await loadJson(path.join(projectDir, "package.json"), "package.json");
   const builderConfig = await loadJson(path.join(projectDir, "electron-builder.json"), "electron-builder.json");
   const version = packageJson.version;
+  const outputDirectory = resolveOutputDirectory();
 
   if (!version || typeof version !== "string") {
     throw new Error("package.json must define a version string.");
   }
 
-  await cleanOutputDirectory(projectDir);
-  await buildWindowsArtifacts({ projectDir, builderConfig });
-  await writeLatestReleaseMetadata({ projectDir, version });
+  await cleanOutputDirectory(projectDir, outputDirectory);
+  await buildWindowsArtifacts({ projectDir, builderConfig, outputDirectory });
+  await writeLatestReleaseMetadata({ projectDir, version, outputDirectory });
 
   if (mode === "release") {
     await publishReleaseArtifacts({
       projectDir,
       builderConfig,
+      outputDirectory,
       version
     });
   }

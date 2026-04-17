@@ -111,6 +111,8 @@ function isAbsolutePreviewAssetPath(filePath: string): boolean {
 
 function resolvePreviewAssetContentType(filePath: string): string {
   switch (path.extname(filePath).toLowerCase()) {
+    case ".css":
+      return "text/css; charset=utf-8";
     case ".png":
       return "image/png";
     case ".jpg":

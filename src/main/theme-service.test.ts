@@ -5,6 +5,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { createThemeService } from "./theme-service";
+import { createPreviewAssetUrl, PREVIEW_ASSET_PROTOCOL } from "../shared/preview-asset-url";
 
 function createThemeVariantDir(
   basePath: string,
@@ -48,6 +49,9 @@ describe("createThemeService", () => {
 
     const service = createThemeService({ userDataDir });
     const themes = await service.listThemes();
+    const graphiteLightDirectory = path.join(userDataDir, "themes", "graphite", "light");
+    const graphiteDarkDirectory = path.join(userDataDir, "themes", "graphite", "dark");
+    const paperLightDirectory = path.join(userDataDir, "themes", "paper", "light");
 
     expect(themes).toEqual([
       {
@@ -65,9 +69,9 @@ describe("createThemeService", () => {
               markdown: true
             },
             partUrls: {
-              tokens: expect.stringContaining("/graphite/light/tokens.css"),
-              ui: expect.stringContaining("/graphite/light/ui.css"),
-              markdown: expect.stringContaining("/graphite/light/markdown.css")
+              tokens: createPreviewAssetUrl(path.join(graphiteLightDirectory, "tokens.css")),
+              ui: createPreviewAssetUrl(path.join(graphiteLightDirectory, "ui.css")),
+              markdown: createPreviewAssetUrl(path.join(graphiteLightDirectory, "markdown.css"))
             }
           },
           dark: {
@@ -79,10 +83,10 @@ describe("createThemeService", () => {
               markdown: true
             },
             partUrls: {
-              tokens: expect.stringContaining("/graphite/dark/tokens.css"),
-              ui: expect.stringContaining("/graphite/dark/ui.css"),
-              editor: expect.stringContaining("/graphite/dark/editor.css"),
-              markdown: expect.stringContaining("/graphite/dark/markdown.css")
+              tokens: createPreviewAssetUrl(path.join(graphiteDarkDirectory, "tokens.css")),
+              ui: createPreviewAssetUrl(path.join(graphiteDarkDirectory, "ui.css")),
+              editor: createPreviewAssetUrl(path.join(graphiteDarkDirectory, "editor.css")),
+              markdown: createPreviewAssetUrl(path.join(graphiteDarkDirectory, "markdown.css"))
             }
           }
         },
@@ -102,7 +106,7 @@ describe("createThemeService", () => {
               markdown: false
             },
             partUrls: {
-              tokens: expect.stringContaining("/paper/light/tokens.css")
+              tokens: createPreviewAssetUrl(path.join(paperLightDirectory, "tokens.css"))
             }
           },
           dark: {
@@ -118,6 +122,16 @@ describe("createThemeService", () => {
         }
       }
     ]);
+
+    expect(themes[0]?.modes.light.partUrls.tokens).toMatch(
+      new RegExp(`^${PREVIEW_ASSET_PROTOCOL}://`)
+    );
+    expect(themes[0]?.modes.dark.partUrls.tokens).toMatch(
+      new RegExp(`^${PREVIEW_ASSET_PROTOCOL}://`)
+    );
+    expect(themes[1]?.modes.light.partUrls.tokens).toMatch(
+      new RegExp(`^${PREVIEW_ASSET_PROTOCOL}://`)
+    );
 
     expect(themes.some((theme) => theme.directoryName === "empty-family")).toBe(false);
     expect(themes.some((theme) => theme.directoryName === "sepia")).toBe(false);
@@ -162,6 +176,7 @@ describe("createThemeService", () => {
     const [theme] = await service.listThemes();
     expect(theme).toBeDefined();
     const resolvedTheme = theme!;
+    const graphiteDarkDirectory = path.join(userDataDir, "themes", "graphite", "dark");
     const themeParts = resolvedTheme.modes.dark.availableParts;
 
     expect(themeParts).toEqual({
@@ -171,9 +186,15 @@ describe("createThemeService", () => {
       markdown: true
     });
     expect(resolvedTheme.modes.dark.partUrls).toEqual({
-      editor: expect.stringContaining("/graphite/dark/editor.css"),
-      markdown: expect.stringContaining("/graphite/dark/markdown.css")
+      editor: createPreviewAssetUrl(path.join(graphiteDarkDirectory, "editor.css")),
+      markdown: createPreviewAssetUrl(path.join(graphiteDarkDirectory, "markdown.css"))
     });
+    expect(resolvedTheme.modes.dark.partUrls.editor).toMatch(
+      new RegExp(`^${PREVIEW_ASSET_PROTOCOL}://`)
+    );
+    expect(resolvedTheme.modes.dark.partUrls.markdown).toMatch(
+      new RegExp(`^${PREVIEW_ASSET_PROTOCOL}://`)
+    );
     expect(resolvedTheme.modes.light).toEqual({
       available: false,
       availableParts: {
