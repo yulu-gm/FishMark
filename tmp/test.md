@@ -23,8 +23,10 @@
 > 这是项目唯一有效的执行计划文档。不要创建 `v01`、`v02`、`draft` 之类的计划副本；如果计划需要调整，直接修改本文件。`docs/progress.md` 只负责记录状态，不重复定义计划内容。
 
 ```
-llllll
+codex
+claude
 ```
+
 
 **Bold**
 Normal

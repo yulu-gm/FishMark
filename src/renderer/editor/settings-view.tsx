@@ -21,6 +21,7 @@ type ThemeCatalogEntry = Awaited<ReturnType<Window["yulora"]["listThemes"]>>[num
 type SettingsViewProps = {
   surfaceState: "open" | "closing";
   preferences: Preferences;
+  fontFamilies: string[];
   themes: ThemeCatalogEntry[];
   isRefreshingThemes: boolean;
   onRefreshThemes: () => Promise<void>;
@@ -31,26 +32,15 @@ type SettingsViewProps = {
 type DraftState = {
   uiFontSize: string;
   documentFontFamily: string;
+  documentCjkFontFamily: string;
   documentFontSize: string;
   idleDelayMs: string;
 };
 
-type FontPreset = {
+type FontOption = {
   label: string;
   value: string;
 };
-
-const CUSTOM_FONT_PRESET_VALUE = "__custom__";
-
-const FONT_PRESETS: FontPreset[] = [
-  { label: "系统默认", value: "" },
-  { label: "Aptos", value: "Aptos" },
-  { label: "Segoe UI", value: "Segoe UI" },
-  { label: "Georgia", value: "Georgia" },
-  { label: "Source Serif 4", value: "Source Serif 4" },
-  { label: "IBM Plex Serif", value: "IBM Plex Serif" },
-  { label: "Cascadia Code", value: "Cascadia Code" }
-];
 
 const THEME_LABELS: Record<ThemeMode, string> = {
   system: "跟随系统",
@@ -62,6 +52,7 @@ function buildDraft(preferences: Preferences): DraftState {
   return {
     uiFontSize: preferences.ui.fontSize === null ? "" : String(preferences.ui.fontSize),
     documentFontFamily: preferences.document.fontFamily ?? "",
+    documentCjkFontFamily: preferences.document.cjkFontFamily ?? "",
     documentFontSize:
       preferences.document.fontSize === null ? "" : String(preferences.document.fontSize),
     idleDelayMs: String(preferences.autosave.idleDelayMs)
@@ -79,14 +70,31 @@ function normalizeNumberInput(value: string): number | null | typeof Number.NaN 
   return Number.isFinite(parsed) ? parsed : Number.NaN;
 }
 
-function resolveFontPresetValue(fontFamily: string): string {
-  const matchedPreset = FONT_PRESETS.find((preset) => preset.value === fontFamily);
-  return matchedPreset ? matchedPreset.value : CUSTOM_FONT_PRESET_VALUE;
+function buildFontOptions(fontFamilies: string[], currentValue: string): FontOption[] {
+  const normalizedFamilies = [...new Set(fontFamilies.map((value) => value.trim()).filter((value) => value.length > 0))];
+  const options: FontOption[] = [{ label: "系统默认", value: "" }];
+
+  for (const family of normalizedFamilies) {
+    options.push({
+      label: family,
+      value: family
+    });
+  }
+
+  if (currentValue.length > 0 && !normalizedFamilies.includes(currentValue)) {
+    options.push({
+      label: `已配置字体（未找到）：${currentValue}`,
+      value: currentValue
+    });
+  }
+
+  return options;
 }
 
 export function SettingsView({
   surfaceState,
   preferences,
+  fontFamilies,
   themes,
   isRefreshingThemes,
   onRefreshThemes,
@@ -105,13 +113,20 @@ export function SettingsView({
     () => themes.filter((theme) => theme.source === "community"),
     [themes]
   );
+  const documentFontOptions = useMemo(
+    () => buildFontOptions(fontFamilies, draft.documentFontFamily.trim()),
+    [fontFamilies, draft.documentFontFamily]
+  );
+  const documentCjkFontOptions = useMemo(
+    () => buildFontOptions(fontFamilies, draft.documentCjkFontFamily.trim()),
+    [fontFamilies, draft.documentCjkFontFamily]
+  );
   const resolvedThemeSelectionValue = resolveThemeSelectionValue(
     communityThemes,
     preferences.theme.selectedId
   );
   const selectedThemeMissing =
     preferences.theme.selectedId !== null && resolvedThemeSelectionValue === preferences.theme.selectedId;
-  const fontPresetValue = resolveFontPresetValue(draft.documentFontFamily.trim());
 
   async function applyPatch(patch: PreferencesUpdate): Promise<void> {
     const result = await onUpdate(patch);
@@ -185,19 +200,10 @@ export function SettingsView({
     void applyPatch({ document: { fontSize: parsed } });
   }
 
-  function handleDocumentFontFamilyCommit(): void {
-    const trimmed = draft.documentFontFamily.trim();
-    const nextValue = trimmed.length === 0 ? null : trimmed;
+  function handleDocumentFontPresetChange(value: string): void {
+    const nextValue = value.length === 0 ? null : value;
 
     if (nextValue === preferences.document.fontFamily) {
-      return;
-    }
-
-    void applyPatch({ document: { fontFamily: nextValue } });
-  }
-
-  function handleDocumentFontPresetChange(value: string): void {
-    if (value === CUSTOM_FONT_PRESET_VALUE) {
       return;
     }
 
@@ -208,7 +214,26 @@ export function SettingsView({
 
     void applyPatch({
       document: {
-        fontFamily: value.length === 0 ? null : value
+        fontFamily: nextValue
+      }
+    });
+  }
+
+  function handleDocumentCjkFontPresetChange(value: string): void {
+    const nextValue = value.length === 0 ? null : value;
+
+    if (nextValue === preferences.document.cjkFontFamily) {
+      return;
+    }
+
+    setDraft((current) => ({
+      ...current,
+      documentCjkFontFamily: value
+    }));
+
+    void applyPatch({
+      document: {
+        cjkFontFamily: nextValue
       }
     });
   }
@@ -242,6 +267,7 @@ export function SettingsView({
       },
       document: {
         fontFamily: DEFAULT_PREFERENCES.document.fontFamily,
+        cjkFontFamily: DEFAULT_PREFERENCES.document.cjkFontFamily,
         fontSize: DEFAULT_PREFERENCES.document.fontSize
       },
       autosave: { idleDelayMs: DEFAULT_PREFERENCES.autosave.idleDelayMs },
@@ -345,7 +371,7 @@ export function SettingsView({
             <div className="settings-input-stack">
               <select
                 id="settings-theme-package"
-                className="settings-input"
+                className="settings-input settings-select"
                 value={resolvedThemeSelectionValue ?? "default"}
                 onChange={(event) => handleThemePackageChange(event.target.value)}
               >
@@ -435,40 +461,47 @@ export function SettingsView({
               htmlFor="settings-document-font-preset"
             >
               <span>文档字体预设</span>
-              <span className="settings-hint">先选预设，再按需输入自定义字体族。</span>
+              <span className="settings-hint">应用于正文中的西文、数字和未单独覆盖的字符。</span>
             </label>
-            <div className="settings-input-stack">
-              <select
-                id="settings-document-font-preset"
-                className="settings-input"
-                value={fontPresetValue}
-                onChange={(event) => handleDocumentFontPresetChange(event.target.value)}
-              >
-                {FONT_PRESETS.map((preset) => (
-                  <option
-                    key={preset.label}
-                    value={preset.value}
-                  >
-                    {preset.label}
-                  </option>
-                ))}
-                <option value={CUSTOM_FONT_PRESET_VALUE}>自定义</option>
-              </select>
-              <input
-                id="settings-document-font-family"
-                className="settings-input"
-                type="text"
-                value={draft.documentFontFamily}
-                placeholder="例如 IBM Plex Serif"
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    documentFontFamily: event.target.value
-                  }))
-                }
-                onBlur={handleDocumentFontFamilyCommit}
-              />
-            </div>
+            <select
+              id="settings-document-font-preset"
+              className="settings-input settings-select"
+              value={draft.documentFontFamily}
+              onChange={(event) => handleDocumentFontPresetChange(event.target.value)}
+            >
+              {documentFontOptions.map((option) => (
+                <option
+                  key={option.value.length === 0 ? "__default__" : option.value}
+                  value={option.value}
+                >
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="settings-row">
+            <label
+              className="settings-label"
+              htmlFor="settings-document-cjk-font-preset"
+            >
+              <span>中文字体预设</span>
+              <span className="settings-hint">仅作用于正文中文字符，代码块和行内代码不受影响。</span>
+            </label>
+            <select
+              id="settings-document-cjk-font-preset"
+              className="settings-input settings-select"
+              value={draft.documentCjkFontFamily}
+              onChange={(event) => handleDocumentCjkFontPresetChange(event.target.value)}
+            >
+              {documentCjkFontOptions.map((option) => (
+                <option
+                  key={option.value.length === 0 ? "__default__" : option.value}
+                  value={option.value}
+                >
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </div>
         </section>
 

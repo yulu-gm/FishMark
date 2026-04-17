@@ -50,6 +50,7 @@ type MockCodeEditorModule = typeof codeEditorViewModule & {
 const codeEditorMock = (codeEditorViewModule as MockCodeEditorModule).__mock;
 const baseStylesheetPath = join(process.cwd(), "src/renderer/styles/base.css");
 const appUiStylesheetPath = join(process.cwd(), "src/renderer/styles/app-ui.css");
+const primitivesStylesheetPath = join(process.cwd(), "src/renderer/styles/primitives.css");
 const settingsStylesheetPath = join(process.cwd(), "src/renderer/styles/settings.css");
 const lightTokenStylesheetPath = join(
   process.cwd(),
@@ -175,6 +176,7 @@ describe("App autosave", () => {
       >
     >
   >;
+  let listFontFamilies: ReturnType<typeof vi.fn<() => Promise<string[]>>>;
   let listThemes: ReturnType<typeof vi.fn<() => Promise<ThemeDescriptor[]>>>;
   let refreshThemes: ReturnType<typeof vi.fn<() => Promise<ThemeDescriptor[]>>>;
 
@@ -261,6 +263,9 @@ describe("App autosave", () => {
         message: "Clipboard does not contain a supported image."
       }
     });
+    listFontFamilies = vi
+      .fn<() => Promise<string[]>>()
+      .mockResolvedValue(["Segoe UI", "Source Han Sans SC", "霞鹜文楷"]);
     listThemes = vi.fn<() => Promise<ThemeDescriptor[]>>().mockResolvedValue(communityThemes);
     refreshThemes = vi.fn<() => Promise<ThemeDescriptor[]>>().mockResolvedValue(communityThemes);
 
@@ -308,6 +313,7 @@ describe("App autosave", () => {
         status: "success",
         preferences: DEFAULT_PREFERENCES
       }),
+      listFontFamilies,
       listThemes,
       refreshThemes,
       checkForUpdates: vi.fn().mockResolvedValue(undefined),
@@ -685,6 +691,7 @@ describe("App autosave", () => {
         },
         document: {
           fontFamily: "IBM Plex Serif",
+          cjkFontFamily: "Source Han Sans SC",
           fontSize: 18
         }
       })
@@ -697,13 +704,18 @@ describe("App autosave", () => {
     });
 
     expect(document.documentElement.dataset.yuloraTheme).toBe("dark");
+    expect(document.documentElement.style.colorScheme).toBe("dark");
     expect(document.documentElement.style.getPropertyValue("--yulora-ui-font-size")).toBe("17px");
     expect(document.documentElement.style.getPropertyValue("--yulora-document-font-family")).toBe(
       "IBM Plex Serif"
     );
+    expect(document.documentElement.style.getPropertyValue("--yulora-document-cjk-font-family")).toBe(
+      "Source Han Sans SC"
+    );
     expect(document.documentElement.style.getPropertyValue("--yulora-document-font-size")).toBe(
       "18px"
     );
+    expect(listFontFamilies).toHaveBeenCalledTimes(1);
     expect(
       document.head
         .querySelector('link[data-yulora-theme-part="tokens"]')
@@ -729,6 +741,7 @@ describe("App autosave", () => {
         },
         document: {
           fontFamily: "Source Serif 4",
+          cjkFontFamily: "霞鹜文楷",
           fontSize: 20
         }
       });
@@ -736,9 +749,13 @@ describe("App autosave", () => {
     });
 
     expect(document.documentElement.dataset.yuloraTheme).toBe("dark");
+    expect(document.documentElement.style.colorScheme).toBe("dark");
     expect(document.documentElement.style.getPropertyValue("--yulora-ui-font-size")).toBe("18px");
     expect(document.documentElement.style.getPropertyValue("--yulora-document-font-family")).toBe(
       "Source Serif 4"
+    );
+    expect(document.documentElement.style.getPropertyValue("--yulora-document-cjk-font-family")).toBe(
+      "霞鹜文楷"
     );
     expect(document.documentElement.style.getPropertyValue("--yulora-document-font-size")).toBe(
       "20px"
@@ -1267,6 +1284,9 @@ describe("App autosave", () => {
     const drawerPanel = container.querySelector<HTMLElement>('[data-yulora-panel="settings-drawer"]');
     const closeButton = container.querySelector<HTMLButtonElement>('[aria-label="关闭设置"]');
     const themeSelect = container.querySelector<HTMLSelectElement>("#settings-theme-package");
+    const documentFontSelect = container.querySelector<HTMLSelectElement>("#settings-document-font-preset");
+    const documentCjkFontSelect = container.querySelector<HTMLSelectElement>("#settings-document-cjk-font-preset");
+    const documentFontInput = container.querySelector<HTMLInputElement>("#settings-document-font-family");
     const recentFilesInput = container.querySelector<HTMLInputElement>("#settings-recent-max");
 
     expect(drawerPanel?.getAttribute("role")).toBe("dialog");
@@ -1274,7 +1294,59 @@ describe("App autosave", () => {
     expect(drawerPanel?.textContent).toContain("偏好设置");
     expect(closeButton).not.toBeNull();
     expect(themeSelect).not.toBeNull();
+    expect(documentFontSelect).not.toBeNull();
+    expect(documentCjkFontSelect).not.toBeNull();
+    expect(themeSelect?.className).toContain("settings-select");
+    expect(documentFontSelect?.className).toContain("settings-select");
+    expect(documentCjkFontSelect?.className).toContain("settings-select");
+    expect(documentFontInput).toBeNull();
     expect(recentFilesInput?.disabled).toBe(true);
+  });
+
+  it("updates document font presets through dropdowns only", async () => {
+    await act(async () => {
+      root.render(createElement(App));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const settingsButton = container.querySelector<HTMLButtonElement>(".settings-entry");
+    expect(settingsButton).not.toBeNull();
+
+    await act(async () => {
+      settingsButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const documentFontSelect = container.querySelector<HTMLSelectElement>("#settings-document-font-preset");
+    const documentCjkFontSelect = container.querySelector<HTMLSelectElement>("#settings-document-cjk-font-preset");
+
+    expect(documentFontSelect).not.toBeNull();
+    expect(documentCjkFontSelect).not.toBeNull();
+
+    await act(async () => {
+      if (documentFontSelect) {
+        documentFontSelect.value = "Segoe UI";
+        documentFontSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      await Promise.resolve();
+    });
+
+    expect(window.yulora.updatePreferences).toHaveBeenCalledWith({
+      document: { fontFamily: "Segoe UI" }
+    });
+
+    await act(async () => {
+      if (documentCjkFontSelect) {
+        documentCjkFontSelect.value = "霞鹜文楷";
+        documentCjkFontSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      await Promise.resolve();
+    });
+
+    expect(window.yulora.updatePreferences).toHaveBeenCalledWith({
+      document: { cjkFontFamily: "霞鹜文楷" }
+    });
   });
 
   it("marks settings as a floating drawer overlay surface", async () => {
@@ -1408,6 +1480,16 @@ describe("App autosave", () => {
     expect(lightTokenStylesheet).toContain("--yulora-glass-bg: rgba(250, 249, 245, 0.42);");
     expect(lightTokenStylesheet).toContain("--yulora-glass-strong-bg: rgba(255, 254, 250, 0.62);");
     expect(lightTokenStylesheet).toContain("--yulora-glass-sheen:");
+  });
+
+  it("defines themed option styling for settings dropdown menus", () => {
+    const primitivesStylesheet = readFileSync(primitivesStylesheetPath, "utf-8");
+
+    expect(primitivesStylesheet).toContain(".settings-select option");
+    expect(primitivesStylesheet).toContain(".settings-select optgroup");
+    expect(primitivesStylesheet).toContain("background-color: var(--yu-input-bg);");
+    expect(primitivesStylesheet).toContain("color: var(--yulora-text-body);");
+    expect(primitivesStylesheet).toContain("color: var(--yulora-text-subtle);");
   });
 
   it("uses a light code block palette in the default light theme", () => {

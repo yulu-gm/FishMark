@@ -152,6 +152,7 @@ describe("preload contract", () => {
     void api.completeEditorTestCommand(completeInput);
     void api.getPreferences();
     void api.updatePreferences(updatePreferencesInput);
+    void api.listFontFamilies();
     void api.listThemes();
     void api.refreshThemes();
     void api.checkForUpdates();
@@ -168,6 +169,7 @@ describe("preload contract", () => {
       [COMPLETE_EDITOR_TEST_COMMAND_CHANNEL, completeInput],
       [GET_PREFERENCES_CHANNEL],
       [UPDATE_PREFERENCES_CHANNEL, updatePreferencesInput],
+      ["yulora:list-font-families"],
       ["yulora:list-themes"],
       ["yulora:refresh-themes"],
       [CHECK_FOR_APP_UPDATES_CHANNEL]

@@ -66,6 +66,16 @@ describe("normalizePreferences", () => {
     expect(normalizePreferences({ document: { fontFamily: 42 } }).document.fontFamily).toBeNull();
   });
 
+  it("trims and nullifies the CJK font family", () => {
+    expect(
+      normalizePreferences({ document: { cjkFontFamily: "  Source Han Sans SC  " } }).document
+        .cjkFontFamily
+    ).toBe("Source Han Sans SC");
+    expect(normalizePreferences({ document: { cjkFontFamily: "" } }).document.cjkFontFamily).toBeNull();
+    expect(normalizePreferences({ document: { cjkFontFamily: "   " } }).document.cjkFontFamily).toBeNull();
+    expect(normalizePreferences({ document: { cjkFontFamily: 42 } }).document.cjkFontFamily).toBeNull();
+  });
+
   it("clamps and rounds the document font size and allows explicit null", () => {
     expect(normalizePreferences({ document: { fontSize: 4 } }).document.fontSize).toBe(8);
     expect(normalizePreferences({ document: { fontSize: 999 } }).document.fontSize).toBe(72);
@@ -92,6 +102,7 @@ describe("normalizePreferences", () => {
 
     expect(result.document).toEqual({
       fontFamily: "IBM Plex Serif",
+      cjkFontFamily: null,
       fontSize: 18
     });
     expect(result.ui).toEqual(DEFAULT_PREFERENCES.ui);
@@ -105,12 +116,14 @@ describe("normalizePreferences", () => {
       },
       document: {
         fontFamily: "New Serif",
+        cjkFontFamily: "Source Han Serif SC",
         fontSize: 18
       }
     });
 
     expect(result.document).toEqual({
       fontFamily: "New Serif",
+      cjkFontFamily: "Source Han Serif SC",
       fontSize: 18
     });
   });
@@ -149,7 +162,7 @@ describe("normalizePreferences", () => {
       version: 99,
       autosave: { idleDelayMs: 2000, extra: true },
       ui: { fontSize: 18, extra: true },
-      document: { fontFamily: "Mono", fontSize: null, unknown: "x" },
+      document: { fontFamily: "Mono", cjkFontFamily: "Source Han Sans SC", fontSize: null, unknown: "x" },
       editor: { fontFamily: "Legacy Mono", fontSize: 12, unknown: "x" },
       surprise: { nested: 1 }
     });
@@ -159,7 +172,7 @@ describe("normalizePreferences", () => {
       autosave: { idleDelayMs: 2000 },
       recentFiles: DEFAULT_PREFERENCES.recentFiles,
       ui: { fontSize: 18 },
-      document: { fontFamily: "Mono", fontSize: null },
+      document: { fontFamily: "Mono", cjkFontFamily: "Source Han Sans SC", fontSize: null },
       theme: DEFAULT_PREFERENCES.theme
     });
   });
@@ -173,14 +186,22 @@ describe("mergePreferences", () => {
   it("only overwrites the fields included in the patch", () => {
     const next = mergePreferences(DEFAULT_PREFERENCES, {
       autosave: { idleDelayMs: 2500 },
-      document: { fontFamily: "IBM Plex Serif", fontSize: 18 },
+      document: {
+        fontFamily: "IBM Plex Serif",
+        cjkFontFamily: "Source Han Sans SC",
+        fontSize: 18
+      },
       theme: { mode: "dark", selectedId: "graphite" }
     });
 
     expect(next).toEqual({
       ...DEFAULT_PREFERENCES,
       autosave: { idleDelayMs: 2500 },
-      document: { fontFamily: "IBM Plex Serif", fontSize: 18 },
+      document: {
+        fontFamily: "IBM Plex Serif",
+        cjkFontFamily: "Source Han Sans SC",
+        fontSize: 18
+      },
       theme: { mode: "dark", selectedId: "graphite" }
     });
   });

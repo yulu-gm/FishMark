@@ -167,6 +167,51 @@ describe("createBlockDecorations", () => {
     expectCoveredRangeClasses(imageRanges, 9, 10, ["cm-inactive-inline-marker"]);
   });
 
+  it("applies one CJK decoration for a contiguous Chinese text run", () => {
+    const source = "你好世界";
+    const ranges = createInactiveInlineDecorations(source);
+
+    expectCoveredRangeClasses(ranges, 0, source.length, ["cm-yulora-cjk-font"]);
+    expect(
+      ranges.filter((range) => range.className === "cm-yulora-cjk-font")
+    ).toHaveLength(1);
+  });
+
+  it("splits mixed Latin and CJK content into separate CJK ranges", () => {
+    const source = "Hello 中文 world 测试";
+    const ranges = createInactiveInlineDecorations(source);
+    const cjkRanges = ranges.filter((range) => range.className === "cm-yulora-cjk-font");
+    const firstStart = source.indexOf("中文");
+    const secondStart = source.indexOf("测试");
+
+    expect(cjkRanges).toEqual([
+      {
+        from: firstStart,
+        to: firstStart + "中文".length,
+        className: "cm-yulora-cjk-font",
+        text: "中文"
+      },
+      {
+        from: secondStart,
+        to: secondStart + "测试".length,
+        className: "cm-yulora-cjk-font",
+        text: "测试"
+      }
+    ]);
+  });
+
+  it("skips CJK decorations inside inline code but keeps normal Chinese text decorated", () => {
+    const source = "`中文` 普通";
+    const ranges = createInactiveInlineDecorations(source);
+
+    expect(
+      ranges.some((range) => range.className === "cm-yulora-cjk-font" && range.text === "中文")
+    ).toBe(false);
+    expect(
+      ranges.some((range) => range.className === "cm-yulora-cjk-font" && range.text === "普通")
+    ).toBe(true);
+  });
+
   it("derives inactive block decorations and a stable signature for non-active top-level blocks", () => {
     const source = [
       "# Title",
@@ -367,6 +412,47 @@ describe("createBlockDecorations", () => {
         text: ""
       }
     ]);
+  });
+
+  it("applies CJK decorations inside the active paragraph block while focused", () => {
+    const source = "中文 active";
+    const activeState = createActiveBlockStateFromBlockMap(parseMarkdownDocument(source), {
+      anchor: 0,
+      head: 0
+    });
+
+    const ranges = collectDecorations(
+      source,
+      createBlockDecorations({
+        activeBlockState: activeState,
+        hasEditorFocus: true,
+        source
+      }).decorationSet
+    );
+
+    expect(
+      ranges.some((range) => range.className === "cm-yulora-cjk-font" && range.text === "中文")
+    ).toBe(true);
+  });
+
+  it("does not apply CJK decorations inside code fences", () => {
+    const source = ["```txt", "中文", "```"].join("\n");
+    const blockMap = parseBlockMap(source);
+    const activeState = createActiveBlockStateFromBlockMap(blockMap, {
+      anchor: source.length,
+      head: source.length
+    });
+
+    const ranges = collectDecorations(
+      source,
+      createBlockDecorations({
+        activeBlockState: activeState,
+        hasEditorFocus: false,
+        source
+      }).decorationSet
+    );
+
+    expect(ranges.some((range) => range.className === "cm-yulora-cjk-font")).toBe(false);
   });
 });
 

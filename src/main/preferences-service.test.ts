@@ -40,7 +40,7 @@ describe("createPreferencesService", () => {
           JSON.stringify({
             autosave: { idleDelayMs: 2500 },
             ui: { fontSize: 18 },
-            document: { fontFamily: "Georgia", fontSize: 17 },
+            document: { fontFamily: "Georgia", cjkFontFamily: "Source Han Serif SC", fontSize: 17 },
             theme: { mode: "dark", selectedId: "graphite" }
           })
         )
@@ -54,6 +54,7 @@ describe("createPreferencesService", () => {
     expect(service.getPreferences().ui.fontSize).toBe(18);
     expect(service.getPreferences().document).toEqual({
       fontFamily: "Georgia",
+      cjkFontFamily: "Source Han Serif SC",
       fontSize: 17
     });
     expect(service.getPreferences().theme.mode).toBe("dark");
@@ -77,6 +78,7 @@ describe("createPreferencesService", () => {
     expect(loadResult.source).toBe("parsed");
     expect(service.getPreferences().document).toEqual({
       fontFamily: "Source Serif 4",
+      cjkFontFamily: null,
       fontSize: 18
     });
   });
@@ -138,7 +140,11 @@ describe("createPreferencesService", () => {
     const result = await service.updatePreferences({
       autosave: { idleDelayMs: 1500 },
       ui: { fontSize: 20 },
-      document: { fontFamily: "IBM Plex Serif", fontSize: 18 },
+      document: {
+        fontFamily: "IBM Plex Serif",
+        cjkFontFamily: "Source Han Sans SC",
+        fontSize: 18
+      },
       theme: { mode: "dark", selectedId: "graphite" }
     });
 
@@ -148,6 +154,7 @@ describe("createPreferencesService", () => {
       expect(result.preferences.ui.fontSize).toBe(20);
       expect(result.preferences.document).toEqual({
         fontFamily: "IBM Plex Serif",
+        cjkFontFamily: "Source Han Sans SC",
         fontSize: 18
       });
       expect(result.preferences.theme.mode).toBe("dark");

@@ -24,6 +24,7 @@ import {
 import { saveMarkdownFileToPath, showSaveMarkdownDialog } from "./save-markdown-file";
 import { createEditorTestSessions } from "./editor-test-sessions";
 import { createPreferencesService } from "./preferences-service";
+import { createFontCatalogService } from "./font-catalog-service";
 import { createThemeService } from "./theme-service";
 import { createTestRunSessions } from "./test-run-sessions";
 import { resolveRendererEntry } from "./paths";
@@ -68,6 +69,7 @@ import {
 } from "../shared/app-update";
 
 const OPEN_EDITOR_TEST_WINDOW_CHANNEL = "yulora:open-editor-test-window";
+const LIST_FONT_FAMILIES_CHANNEL = "yulora:list-font-families";
 const LIST_THEMES_CHANNEL = "yulora:list-themes";
 const REFRESH_THEMES_CHANNEL = "yulora:refresh-themes";
 const AUTO_UPDATE_STARTUP_DELAY_MS = 5000;
@@ -166,6 +168,9 @@ app.whenReady().then(async () => {
   const initialPreferences = await preferencesService.initialize();
   const themeService = createThemeService({
     userDataDir: app.getPath("userData")
+  });
+  const fontCatalogService = createFontCatalogService({
+    platform: process.platform
   });
   await themeService.listThemes();
 
@@ -274,6 +279,7 @@ app.whenReady().then(async () => {
   ipcMain.handle(UPDATE_PREFERENCES_CHANNEL, async (_event, patch: PreferencesUpdate | undefined) =>
     preferencesService.updatePreferences(patch)
   );
+  ipcMain.handle(LIST_FONT_FAMILIES_CHANNEL, async () => fontCatalogService.listFontFamilies());
   ipcMain.handle(CHECK_FOR_APP_UPDATES_CHANNEL, async () => appUpdater.checkForUpdates("manual"));
   ipcMain.handle(LIST_THEMES_CHANNEL, async () => themeService.listThemes());
   ipcMain.handle(REFRESH_THEMES_CHANNEL, async () => themeService.refreshThemes());

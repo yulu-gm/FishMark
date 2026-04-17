@@ -78,6 +78,7 @@ declare global {
       saveMarkdownFileAs: (input: SaveMarkdownFileAsInput) => Promise<SaveMarkdownFileResult>;
       importClipboardImage: (input: ImportClipboardImageInput) => Promise<ImportClipboardImageResult>;
       openEditorTestWindow: () => Promise<void>;
+      listFontFamilies: () => Promise<string[]>;
       listThemes: () => Promise<ThemeDescriptor[]>;
       refreshThemes: () => Promise<ThemeDescriptor[]>;
       checkForUpdates: () => Promise<void>;

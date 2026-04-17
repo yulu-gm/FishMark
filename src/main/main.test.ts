@@ -29,4 +29,14 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain('void appUpdater.checkForUpdates("auto")');
     expect(mainSource).toContain('if (command === "check-for-updates") {');
   });
+
+  it("registers IPC handlers for fonts, preferences, and themes", () => {
+    const mainPath = path.join(process.cwd(), "src", "main", "main.ts");
+    const mainSource = readFileSync(mainPath, "utf8");
+
+    expect(mainSource).toContain('ipcMain.handle(GET_PREFERENCES_CHANNEL');
+    expect(mainSource).toContain('ipcMain.handle(UPDATE_PREFERENCES_CHANNEL');
+    expect(mainSource).toContain('ipcMain.handle(LIST_FONT_FAMILIES_CHANNEL');
+    expect(mainSource).toContain('ipcMain.handle(LIST_THEMES_CHANNEL');
+  });
 });

@@ -47,6 +47,7 @@ const DARK_MODE_MEDIA_QUERY = "(prefers-color-scheme: dark)";
 const THEME_ATTRIBUTE = "data-yulora-theme";
 const UI_FONT_SIZE_CSS_VAR = "--yulora-ui-font-size";
 const DOCUMENT_FONT_FAMILY_CSS_VAR = "--yulora-document-font-family";
+const DOCUMENT_CJK_FONT_FAMILY_CSS_VAR = "--yulora-document-cjk-font-family";
 const DOCUMENT_FONT_SIZE_CSS_VAR = "--yulora-document-font-size";
 const LEGACY_EDITOR_FONT_FAMILY_CSS_VAR = "--yulora-editor-font-family";
 const LEGACY_EDITOR_FONT_SIZE_CSS_VAR = "--yulora-editor-font-size";
@@ -72,6 +73,7 @@ function applyPreferencesToDocument(
   resolvedThemeMode: ResolvedThemeMode
 ): void {
   root.setAttribute(THEME_ATTRIBUTE, resolvedThemeMode);
+  root.style.colorScheme = resolvedThemeMode;
 
   if (preferences.ui.fontSize !== null) {
     root.style.setProperty(UI_FONT_SIZE_CSS_VAR, `${preferences.ui.fontSize}px`);
@@ -87,6 +89,12 @@ function applyPreferencesToDocument(
     root.style.removeProperty(LEGACY_EDITOR_FONT_FAMILY_CSS_VAR);
   }
 
+  if (preferences.document.cjkFontFamily) {
+    root.style.setProperty(DOCUMENT_CJK_FONT_FAMILY_CSS_VAR, preferences.document.cjkFontFamily);
+  } else {
+    root.style.removeProperty(DOCUMENT_CJK_FONT_FAMILY_CSS_VAR);
+  }
+
   if (preferences.document.fontSize !== null) {
     const value = `${preferences.document.fontSize}px`;
     root.style.setProperty(DOCUMENT_FONT_SIZE_CSS_VAR, value);
@@ -99,8 +107,10 @@ function applyPreferencesToDocument(
 
 function clearDocumentPreferences(root: HTMLElement): void {
   root.removeAttribute(THEME_ATTRIBUTE);
+  root.style.removeProperty("color-scheme");
   root.style.removeProperty(UI_FONT_SIZE_CSS_VAR);
   root.style.removeProperty(DOCUMENT_FONT_FAMILY_CSS_VAR);
+  root.style.removeProperty(DOCUMENT_CJK_FONT_FAMILY_CSS_VAR);
   root.style.removeProperty(DOCUMENT_FONT_SIZE_CSS_VAR);
   root.style.removeProperty(LEGACY_EDITOR_FONT_FAMILY_CSS_VAR);
   root.style.removeProperty(LEGACY_EDITOR_FONT_SIZE_CSS_VAR);
@@ -202,6 +212,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSettingsClosing, setIsSettingsClosing] = useState(false);
   const [preferences, setPreferences] = useState<Preferences>(DEFAULT_PREFERENCES);
+  const [fontFamilies, setFontFamilies] = useState<string[]>([]);
   const [themes, setThemes] = useState<ThemeCatalogEntry[]>([]);
   const [isRefreshingThemes, setIsRefreshingThemes] = useState(false);
   const [appUpdateState, setAppUpdateState] = useState<AppUpdateState>({
@@ -714,12 +725,13 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   useEffect(() => {
     let isCancelled = false;
 
-    void Promise.all([yulora.getPreferences(), yulora.listThemes()])
-      .then(([nextPreferences, nextThemes]) => {
+    void Promise.all([yulora.getPreferences(), yulora.listFontFamilies(), yulora.listThemes()])
+      .then(([nextPreferences, nextFontFamilies, nextThemes]) => {
         if (isCancelled) {
           return;
         }
 
+        setFontFamilies(nextFontFamilies);
         handlePreferencesSync(nextPreferences);
         syncThemes(nextThemes);
       })
@@ -1132,6 +1144,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
             <SettingsView
               surfaceState={isSettingsOpen ? "open" : "closing"}
               preferences={preferences}
+              fontFamilies={fontFamilies}
               themes={themes}
               isRefreshingThemes={isRefreshingThemes}
               onRefreshThemes={handleRefreshThemes}

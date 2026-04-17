@@ -34,6 +34,8 @@ export type UiPreferences = {
 export type DocumentPreferences = {
   /** CSS font-family override, or `null` to use the platform default. */
   fontFamily: string | null;
+  /** CSS font-family override for CJK text, or `null` to use the document font. */
+  cjkFontFamily: string | null;
   /** Font size in pixels, or `null` to use the theme default. */
   fontSize: number | null;
 };
@@ -73,6 +75,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   },
   document: {
     fontFamily: null,
+    cjkFontFamily: null,
     fontSize: null
   },
   theme: {
@@ -214,6 +217,7 @@ export function normalizePreferences(raw: unknown): Preferences {
       fontFamily: normalizeFontFamily(
         resolveMigratedValue(documentSource, "fontFamily", legacyEditorSource, "fontFamily")
       ),
+      cjkFontFamily: normalizeFontFamily(documentSource.cjkFontFamily),
       fontSize: normalizeFontSize(
         resolveMigratedValue(documentSource, "fontSize", legacyEditorSource, "fontSize")
       )

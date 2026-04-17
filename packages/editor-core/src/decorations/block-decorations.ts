@@ -3,7 +3,10 @@ import { type Range } from "@codemirror/state";
 
 import type { ActiveBlockState } from "../active-block";
 import { getInactiveBlockquoteLines, getInactiveCodeFenceLines } from "./block-lines";
-import { createInactiveInlineDecorations } from "./inline-decorations";
+import {
+  createCjkTextDecorations,
+  createInactiveInlineDecorations
+} from "./inline-decorations";
 import {
   createActiveHtmlImagePreviewDecoration,
   createActiveInlineImageDecorations,
@@ -36,7 +39,7 @@ export function createBlockDecorations(
 
   for (const block of activeBlockState.blockMap.blocks) {
     if (block.id === activeBlockId) {
-      appendActiveImageDecorationsForBlock(block, source, ranges, resolveImagePreviewUrl);
+      appendActiveDecorationsForBlock(block, source, ranges, resolveImagePreviewUrl);
       continue;
     }
 
@@ -274,7 +277,7 @@ export function createBlockDecorations(
   };
 }
 
-function appendActiveImageDecorationsForBlock(
+function appendActiveDecorationsForBlock(
   block: NonNullable<ActiveBlockState["activeBlock"]>,
   source: string,
   ranges: Range<Decoration>[],
@@ -282,6 +285,7 @@ function appendActiveImageDecorationsForBlock(
 ): void {
   if (block.type === "heading" || block.type === "paragraph") {
     ranges.push(...createActiveInlineImageDecorations(block.inline, source, resolveImagePreviewUrl));
+    ranges.push(...createCjkTextDecorations(block.inline));
     return;
   }
 
@@ -293,6 +297,7 @@ function appendActiveImageDecorationsForBlock(
   if (block.type === "list") {
     for (const item of block.items) {
       ranges.push(...createActiveInlineImageDecorations(item.inline, source, resolveImagePreviewUrl));
+      ranges.push(...createCjkTextDecorations(item.inline));
     }
     return;
   }
@@ -300,6 +305,7 @@ function appendActiveImageDecorationsForBlock(
   if (block.type === "blockquote" && block.lines) {
     for (const line of block.lines) {
       ranges.push(...createActiveInlineImageDecorations(line.inline, source, resolveImagePreviewUrl));
+      ranges.push(...createCjkTextDecorations(line.inline));
     }
   }
 }

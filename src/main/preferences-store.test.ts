@@ -69,7 +69,7 @@ describe("loadPreferencesFromDisk", () => {
           autosave: { idleDelayMs: 2500 },
           recentFiles: { maxEntries: 20 },
           ui: { fontSize: 18 },
-          document: { fontFamily: "Fira Code", fontSize: 16 },
+          document: { fontFamily: "Fira Code", cjkFontFamily: "Source Han Sans SC", fontSize: 16 },
           theme: { mode: "dark", selectedId: "graphite" }
         })
       )
@@ -83,7 +83,7 @@ describe("loadPreferencesFromDisk", () => {
       autosave: { idleDelayMs: 2500 },
       recentFiles: { maxEntries: 20 },
       ui: { fontSize: 18 },
-      document: { fontFamily: "Fira Code", fontSize: 16 },
+      document: { fontFamily: "Fira Code", cjkFontFamily: "Source Han Sans SC", fontSize: 16 },
       theme: { mode: "dark", selectedId: "graphite" }
     });
   });
@@ -104,6 +104,7 @@ describe("loadPreferencesFromDisk", () => {
     expect(result.preferences.ui).toEqual(DEFAULT_PREFERENCES.ui);
     expect(result.preferences.document).toEqual({
       fontFamily: "IBM Plex Serif",
+      cjkFontFamily: null,
       fontSize: 19
     });
   });

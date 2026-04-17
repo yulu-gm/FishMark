@@ -17,6 +17,7 @@ const APP_MENU_COMMAND_EVENT = "yulora:app-menu-command";
 const GET_PREFERENCES_CHANNEL = "yulora:get-preferences";
 const UPDATE_PREFERENCES_CHANNEL = "yulora:update-preferences";
 const PREFERENCES_CHANGED_EVENT = "yulora:preferences-changed";
+const LIST_FONT_FAMILIES_CHANNEL = "yulora:list-font-families";
 const LIST_THEMES_CHANNEL = "yulora:list-themes";
 const REFRESH_THEMES_CHANNEL = "yulora:refresh-themes";
 const CHECK_FOR_APP_UPDATES_CHANNEL = "yulora:check-for-app-updates";
@@ -70,7 +71,7 @@ type Preferences = {
   autosave: { idleDelayMs: number };
   recentFiles: { maxEntries: number };
   ui: { fontSize: number | null };
-  document: { fontFamily: string | null; fontSize: number | null };
+  document: { fontFamily: string | null; cjkFontFamily: string | null; fontSize: number | null };
   theme: { mode: ThemeMode; selectedId: string | null };
 };
 
@@ -303,6 +304,7 @@ const api = {
   getPreferences: (): Promise<Preferences> => ipcRenderer.invoke(GET_PREFERENCES_CHANNEL),
   updatePreferences: (patch: PreferencesUpdate): Promise<UpdatePreferencesResult> =>
     ipcRenderer.invoke(UPDATE_PREFERENCES_CHANNEL, patch),
+  listFontFamilies: (): Promise<string[]> => ipcRenderer.invoke(LIST_FONT_FAMILIES_CHANNEL),
   listThemes: (): Promise<ThemeDescriptor[]> => ipcRenderer.invoke(LIST_THEMES_CHANNEL),
   refreshThemes: (): Promise<ThemeDescriptor[]> => ipcRenderer.invoke(REFRESH_THEMES_CHANNEL),
   checkForUpdates: (): Promise<void> => ipcRenderer.invoke(CHECK_FOR_APP_UPDATES_CHANNEL),
