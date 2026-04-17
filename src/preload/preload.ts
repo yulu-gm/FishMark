@@ -19,6 +19,9 @@ const UPDATE_PREFERENCES_CHANNEL = "yulora:update-preferences";
 const PREFERENCES_CHANGED_EVENT = "yulora:preferences-changed";
 const LIST_THEMES_CHANNEL = "yulora:list-themes";
 const REFRESH_THEMES_CHANNEL = "yulora:refresh-themes";
+const CHECK_FOR_APP_UPDATES_CHANNEL = "yulora:check-for-app-updates";
+const APP_UPDATE_STATE_EVENT = "yulora:app-update-state";
+const APP_NOTIFICATION_EVENT = "yulora:app-notification";
 const RUNTIME_MODE_ARGUMENT_PREFIX = "--yulora-runtime-mode=";
 const STARTUP_OPEN_PATH_ARGUMENT_PREFIX = "--yulora-startup-open-path=";
 
@@ -118,6 +121,18 @@ type ThemeDescriptor = {
   };
 };
 
+type AppUpdateState =
+  | { kind: "idle" }
+  | { kind: "checking" }
+  | { kind: "downloading"; version: string; percent: number }
+  | { kind: "downloaded"; version: string }
+  | { kind: "error"; message: string };
+
+type AppNotification = {
+  kind: "loading" | "info" | "success" | "warning" | "error";
+  message: string;
+};
+
 type UpdatePreferencesResult =
   | { status: "success"; preferences: Preferences }
   | {
@@ -129,6 +144,8 @@ type UpdatePreferencesResult =
 export type {
   Preferences as PreloadPreferences,
   PreferencesUpdate as PreloadPreferencesUpdate,
+  AppNotification as PreloadAppNotification,
+  AppUpdateState as PreloadAppUpdateState,
   ThemeDescriptor as PreloadThemeDescriptor,
   UpdatePreferencesResult as PreloadUpdatePreferencesResult
 };
@@ -262,6 +279,7 @@ const api = {
     ipcRenderer.invoke(UPDATE_PREFERENCES_CHANNEL, patch),
   listThemes: (): Promise<ThemeDescriptor[]> => ipcRenderer.invoke(LIST_THEMES_CHANNEL),
   refreshThemes: (): Promise<ThemeDescriptor[]> => ipcRenderer.invoke(REFRESH_THEMES_CHANNEL),
+  checkForUpdates: (): Promise<void> => ipcRenderer.invoke(CHECK_FOR_APP_UPDATES_CHANNEL),
   onPreferencesChanged: (listener: (preferences: Preferences) => void) => {
     const handlePreferencesChanged = (_event: unknown, preferences: Preferences) => {
       listener(preferences);
@@ -271,6 +289,28 @@ const api = {
 
     return () => {
       ipcRenderer.off(PREFERENCES_CHANGED_EVENT, handlePreferencesChanged);
+    };
+  },
+  onAppUpdateState: (listener: (state: AppUpdateState) => void) => {
+    const handleAppUpdateState = (_event: unknown, state: AppUpdateState) => {
+      listener(state);
+    };
+
+    ipcRenderer.on(APP_UPDATE_STATE_EVENT, handleAppUpdateState);
+
+    return () => {
+      ipcRenderer.off(APP_UPDATE_STATE_EVENT, handleAppUpdateState);
+    };
+  },
+  onAppNotification: (listener: (notification: AppNotification) => void) => {
+    const handleAppNotification = (_event: unknown, notification: AppNotification) => {
+      listener(notification);
+    };
+
+    ipcRenderer.on(APP_NOTIFICATION_EVENT, handleAppNotification);
+
+    return () => {
+      ipcRenderer.off(APP_NOTIFICATION_EVENT, handleAppNotification);
     };
   }
 };

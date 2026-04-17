@@ -17,4 +17,16 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain('configureMainProcessRuntime(app, process.env)');
     expect(mainSource).toContain('shouldRequestSingleInstanceLock(process.env)');
   });
+
+  it("wires the app updater service, update IPC, and startup auto-check", () => {
+    const mainPath = path.join(process.cwd(), "src", "main", "main.ts");
+    const mainSource = readFileSync(mainPath, "utf8");
+
+    expect(mainSource).toContain('createAppUpdater({');
+    expect(mainSource).toContain('ipcMain.handle(CHECK_FOR_APP_UPDATES_CHANNEL');
+    expect(mainSource).toContain('broadcastToWindows(APP_UPDATE_STATE_EVENT, state)');
+    expect(mainSource).toContain('setTimeout(() => {');
+    expect(mainSource).toContain('void appUpdater.checkForUpdates("auto")');
+    expect(mainSource).toContain('if (command === "check-for-updates") {');
+  });
 });

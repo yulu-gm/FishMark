@@ -1,9 +1,9 @@
 {
   "appId": "com.yulora.app",
-  "afterPack": "./scripts/after-pack-win-icon.mjs",
   "electronLanguages": ["en-US", "zh-CN", "zh-TW"],
   "productName": "Yulora",
   "artifactName": "${productName}-Setup-${version}.${ext}",
+  "electronUpdaterCompatibility": ">=2.16",
   "directories": {
     "output": "release"
   },
@@ -27,6 +27,14 @@
     "!.artifacts{,/**}",
     "!fixtures{,/**}",
     "!tmp{,/**}"
+  ],
+  "publish": [
+    {
+      "provider": "github",
+      "owner": "yulu-gm",
+      "repo": "Yulora",
+      "releaseType": "release"
+    }
   ],
   "win": {
     "icon": "build/icons/light/icon.ico",

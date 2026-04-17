@@ -1,6 +1,7 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import type { ActiveBlockState } from "@yulora/editor-core";
+import type { AppNotification, AppUpdateState } from "../../shared/app-update";
 import {
   DEFAULT_PREFERENCES,
   type Preferences,
@@ -14,6 +15,7 @@ import {
   resolveBuiltinThemeDescriptor,
   type ThemeDescriptor as RuntimeThemeDescriptor
 } from "../theme-runtime";
+import { resolveThemeCatalogEntry } from "../theme-catalog";
 import {
   type AppState,
   applyEditorContentChanged,
@@ -50,6 +52,10 @@ const LEGACY_EDITOR_FONT_FAMILY_CSS_VAR = "--yulora-editor-font-family";
 const LEGACY_EDITOR_FONT_SIZE_CSS_VAR = "--yulora-editor-font-size";
 const OUTLINE_EXIT_ANIMATION_MS = 180;
 const SETTINGS_DRAWER_EXIT_ANIMATION_MS = 180;
+const APP_NOTIFICATION_DURATION_MS = 3000;
+const APP_NOTIFICATION_EXIT_ANIMATION_MS = 180;
+
+type AppNotificationBannerState = "hidden" | "open" | "closing";
 
 function resolveThemeMode(mode: ThemeMode): ResolvedThemeMode {
   if (mode === "light" || mode === "dark") {
@@ -129,7 +135,7 @@ function resolveActiveThemeResolution(
     };
   }
 
-  const selectedTheme = catalog.find((theme) => theme.id === selectedId);
+  const selectedTheme = resolveThemeCatalogEntry(catalog, selectedId);
 
   if (!selectedTheme) {
     return {
@@ -198,6 +204,11 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   const [preferences, setPreferences] = useState<Preferences>(DEFAULT_PREFERENCES);
   const [themes, setThemes] = useState<ThemeCatalogEntry[]>([]);
   const [isRefreshingThemes, setIsRefreshingThemes] = useState(false);
+  const [appUpdateState, setAppUpdateState] = useState<AppUpdateState>({
+    kind: "idle"
+  });
+  const [notification, setNotification] = useState<AppNotification | null>(null);
+  const [notificationState, setNotificationState] = useState<AppNotificationBannerState>("hidden");
   const editorRef = useRef<CodeEditorHandle | null>(null);
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
   const editorContentRef = useRef("");
@@ -215,6 +226,9 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   const themeRuntimeRef = useRef<ReturnType<typeof createThemeRuntime> | null>(null);
   const outlineCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const settingsCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notificationHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notificationCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastThemeNotificationKeyRef = useRef<string | null>(null);
   const currentDocumentContent = state.currentDocument
     ? (editorContentRef.current || state.currentDocument.content)
     : "";
@@ -252,6 +266,9 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
         : state.isDirty
           ? "Unsaved changes"
           : "All changes saved";
+  const appUpdateStatusLabel = appUpdateState.kind === "downloading"
+    ? `正在下载更新${Number.isFinite(appUpdateState.percent) ? ` ${Math.round(appUpdateState.percent)}%` : "…"}`
+    : null;
   const resolvedThemeMode = resolveThemeMode(preferences.theme.mode);
   const activeThemeResolution = resolveActiveThemeResolution(
     preferences,
@@ -290,6 +307,38 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
       settingsCloseTimerRef.current = null;
     }
   }
+
+  function clearNotificationTimers(): void {
+    if (notificationHideTimerRef.current !== null) {
+      clearTimeout(notificationHideTimerRef.current);
+      notificationHideTimerRef.current = null;
+    }
+
+    if (notificationCloseTimerRef.current !== null) {
+      clearTimeout(notificationCloseTimerRef.current);
+      notificationCloseTimerRef.current = null;
+    }
+  }
+
+  const showNotification = useEffectEvent((nextNotification: AppNotification): void => {
+    clearNotificationTimers();
+    setNotification(nextNotification);
+    setNotificationState("open");
+
+    if (nextNotification.kind === "loading") {
+      return;
+    }
+
+    notificationHideTimerRef.current = setTimeout(() => {
+      notificationHideTimerRef.current = null;
+      setNotificationState("closing");
+      notificationCloseTimerRef.current = setTimeout(() => {
+        notificationCloseTimerRef.current = null;
+        setNotificationState("hidden");
+        setNotification(null);
+      }, APP_NOTIFICATION_EXIT_ANIMATION_MS);
+    }, APP_NOTIFICATION_DURATION_MS);
+  });
 
   function resetAutosaveRuntime(): void {
     clearAutosaveTimer();
@@ -628,7 +677,9 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
         return;
       }
 
-      void handleSaveMarkdownAs();
+      if (command === "save-markdown-file-as") {
+        void handleSaveMarkdownAs();
+      }
     });
   }, [yulora]);
 
@@ -698,6 +749,42 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   }, [preferences, themes]);
 
   useEffect(() => {
+    return yulora.onAppUpdateState((nextState) => {
+      setAppUpdateState(nextState);
+    });
+  }, [yulora]);
+
+  useEffect(() => {
+    return yulora.onAppNotification((nextNotification) => {
+      showNotification(nextNotification);
+    });
+  }, [yulora]);
+
+  useEffect(() => {
+    if (!themeWarningMessage) {
+      lastThemeNotificationKeyRef.current = null;
+      return;
+    }
+
+    const notificationKey = `${activeThemeResolution.requestedThemeId ?? "default"}:${activeThemeResolution.resolvedMode}:${activeThemeResolution.fallbackReason ?? "none"}`;
+
+    if (lastThemeNotificationKeyRef.current === notificationKey) {
+      return;
+    }
+
+    lastThemeNotificationKeyRef.current = notificationKey;
+    showNotification({
+      kind: "warning",
+      message: themeWarningMessage
+    });
+  }, [
+    activeThemeResolution.fallbackReason,
+    activeThemeResolution.requestedThemeId,
+    activeThemeResolution.resolvedMode,
+    themeWarningMessage
+  ]);
+
+  useEffect(() => {
     if (isSettingsOpen || isSettingsClosing || pendingFocusRestoreRef.current === null) {
       return;
     }
@@ -742,6 +829,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
       clearAutosaveTimer();
       clearOutlineCloseTimer();
       clearSettingsCloseTimer();
+      clearNotificationTimers();
       themeRuntimeRef.current?.clear();
       clearDocumentPreferences(document.documentElement);
     },
@@ -802,6 +890,26 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
           className="app-workspace"
           data-yulora-layout="workspace"
         >
+          {notification && notificationState !== "hidden" ? (
+            <div
+              className={`app-notification-banner is-${notification.kind}`}
+              data-yulora-region="app-notification-banner"
+              data-state={notificationState}
+              role="status"
+              aria-live="polite"
+            >
+              <p className="app-notification-message">
+                {notification.kind === "loading" ? (
+                  <span
+                    className="app-notification-spinner"
+                    data-yulora-region="app-notification-spinner"
+                    aria-hidden="true"
+                  />
+                ) : null}
+                <span>{notification.message}</span>
+              </p>
+            </div>
+          ) : null}
           <header
             className="app-header workspace-header"
             data-yulora-region="workspace-header"
@@ -976,6 +1084,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
             data-yulora-region="app-status-bar"
           >
             <div data-yulora-region="status-strip">
+              {appUpdateStatusLabel ? <p className="app-update-status">{appUpdateStatusLabel}</p> : null}
               <p className={`save-status ${state.isDirty ? "is-dirty" : "is-clean"}`}>
                 {saveStatusLabel}
               </p>
@@ -1000,7 +1109,6 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
               surfaceState={isSettingsOpen ? "open" : "closing"}
               preferences={preferences}
               themes={themes}
-              themeWarningMessage={themeWarningMessage}
               isRefreshingThemes={isRefreshingThemes}
               onRefreshThemes={handleRefreshThemes}
               onUpdate={(patch) => yulora.updatePreferences(patch)}

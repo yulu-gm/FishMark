@@ -1,8 +1,13 @@
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { rcedit } from "rcedit";
+
+const RETRYABLE_ICON_PATCH_ERRORS = ["EBUSY", "EPERM", "Unable to commit changes", "resource busy", "Access is denied"];
+const ICON_PATCH_MAX_ATTEMPTS = 6;
+const ICON_PATCH_RETRY_DELAY_MS = 500;
 
 function resolveContext(rawContext) {
   return {
@@ -30,11 +35,29 @@ async function patchWindowsExecutableIcon(rawContext) {
   const executablePath = path.join(context.appOutDir, `${context.productFilename}.exe`);
   const iconPath = path.join(process.cwd(), "build", "icons", "light", "icon.ico");
 
-  await rcedit(executablePath, {
-    icon: iconPath
-  });
+  let lastError = null;
 
-  console.log(`Patched Windows executable icon: ${executablePath}`);
+  for (let attempt = 1; attempt <= ICON_PATCH_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      await rcedit(executablePath, {
+        icon: iconPath
+      });
+      console.log(`Patched Windows executable icon: ${executablePath}`);
+      return;
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      const isRetryable = RETRYABLE_ICON_PATCH_ERRORS.some((fragment) => message.includes(fragment));
+
+      if (!isRetryable || attempt === ICON_PATCH_MAX_ATTEMPTS) {
+        throw error;
+      }
+
+      await delay(ICON_PATCH_RETRY_DELAY_MS * attempt);
+    }
+  }
+
+  throw lastError ?? new Error("Failed to patch Windows executable icon.");
 }
 
 export default patchWindowsExecutableIcon;

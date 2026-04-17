@@ -40,6 +40,13 @@ import {
   type RunnerEventEnvelope,
   type ScenarioRunTerminal
 } from "../shared/test-run-session";
+import {
+  APP_NOTIFICATION_EVENT,
+  APP_UPDATE_STATE_EVENT,
+  CHECK_FOR_APP_UPDATES_CHANNEL,
+  type AppNotification,
+  type AppUpdateState
+} from "../shared/app-update";
 
 const exposeInMainWorld = vi.fn();
 const invoke = vi.fn();
@@ -139,6 +146,7 @@ describe("preload contract", () => {
     void api.updatePreferences(updatePreferencesInput);
     void api.listThemes();
     void api.refreshThemes();
+    void api.checkForUpdates();
 
     expect(invoke.mock.calls).toEqual([
       [OPEN_MARKDOWN_FILE_CHANNEL],
@@ -152,7 +160,8 @@ describe("preload contract", () => {
       [GET_PREFERENCES_CHANNEL],
       [UPDATE_PREFERENCES_CHANNEL, updatePreferencesInput],
       ["yulora:list-themes"],
-      ["yulora:refresh-themes"]
+      ["yulora:refresh-themes"],
+      [CHECK_FOR_APP_UPDATES_CHANNEL]
     ]);
   });
 
@@ -163,20 +172,26 @@ describe("preload contract", () => {
     const editorListener = vi.fn();
     const menuListener = vi.fn();
     const preferencesListener = vi.fn();
+    const updateListener = vi.fn();
+    const notificationListener = vi.fn();
 
     const detachScenario = api.onScenarioRunEvent(scenarioListener);
     const detachTerminal = api.onScenarioRunTerminal(terminalListener);
     const detachEditor = api.onEditorTestCommand(editorListener);
     const detachMenu = api.onMenuCommand(menuListener);
     const detachPreferences = api.onPreferencesChanged(preferencesListener);
+    const detachUpdate = api.onAppUpdateState(updateListener);
+    const detachNotification = api.onAppNotification(notificationListener);
 
-    expect(on.mock.calls).toHaveLength(5);
+    expect(on.mock.calls).toHaveLength(7);
 
     const scenarioHandler = on.mock.calls[0]?.[1];
     const terminalHandler = on.mock.calls[1]?.[1];
     const editorHandler = on.mock.calls[2]?.[1];
     const menuHandler = on.mock.calls[3]?.[1];
     const preferencesHandler = on.mock.calls[4]?.[1];
+    const updateHandler = on.mock.calls[5]?.[1];
+    const notificationHandler = on.mock.calls[6]?.[1];
 
     const scenarioPayload: RunnerEventEnvelope = {
       runId: "run-1",
@@ -213,6 +228,15 @@ describe("preload contract", () => {
     };
     const menuPayload: AppMenuCommand = "new-markdown-document";
     const preferencesPayload: Preferences = DEFAULT_PREFERENCES;
+    const updatePayload: AppUpdateState = {
+      kind: "downloading",
+      version: "0.1.1",
+      percent: 42
+    };
+    const notificationPayload: AppNotification = {
+      kind: "info",
+      message: "当前已是最新版本。"
+    };
 
     scenarioHandler?.({}, scenarioPayload);
     terminalHandler?.({}, terminalPayload);
@@ -220,6 +244,8 @@ describe("preload contract", () => {
     editorHandler?.({}, enterCommandPayload);
     menuHandler?.({}, menuPayload);
     preferencesHandler?.({}, preferencesPayload);
+    updateHandler?.({}, updatePayload);
+    notificationHandler?.({}, notificationPayload);
 
     expect(scenarioListener).toHaveBeenCalledWith(scenarioPayload);
     expect(terminalListener).toHaveBeenCalledWith(terminalPayload);
@@ -227,19 +253,25 @@ describe("preload contract", () => {
     expect(editorListener).toHaveBeenNthCalledWith(2, enterCommandPayload);
     expect(menuListener).toHaveBeenCalledWith(menuPayload);
     expect(preferencesListener).toHaveBeenCalledWith(preferencesPayload);
+    expect(updateListener).toHaveBeenCalledWith(updatePayload);
+    expect(notificationListener).toHaveBeenCalledWith(notificationPayload);
 
     detachScenario();
     detachTerminal();
     detachEditor();
     detachMenu();
     detachPreferences();
+    detachUpdate();
+    detachNotification();
 
     expect(off.mock.calls).toEqual([
       [SCENARIO_RUN_EVENT, scenarioHandler],
       [SCENARIO_RUN_TERMINAL_EVENT, terminalHandler],
       [EDITOR_TEST_COMMAND_EVENT, editorHandler],
       [APP_MENU_COMMAND_EVENT, menuHandler],
-      [PREFERENCES_CHANGED_EVENT, preferencesHandler]
+      [PREFERENCES_CHANGED_EVENT, preferencesHandler],
+      [APP_UPDATE_STATE_EVENT, updateHandler],
+      [APP_NOTIFICATION_EVENT, notificationHandler]
     ]);
   });
 });

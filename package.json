@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "description": "Local-first Markdown desktop editor MVP shell.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yulu-gm/Yulora.git"
+  },
   "main": "dist-electron/main/main.js",
   "scripts": {
     "dev": "concurrently -k \"npm:dev:electron\" \"npm:dev:renderer\" \"npm:dev:main\" \"npm:dev:cli\"",
@@ -22,11 +26,14 @@
     "test": "vitest run",
     "build:cli": "tsc -p tsconfig.cli.json",
     "generate:icons": "node scripts/generate-icons.mjs",
-    "package:win": "npm run build && npm run generate:icons && electron-builder --config electron-builder.json --win --x64",
+    "package:win": "npm run build && npm run generate:icons && node scripts/build-win-release.mjs package",
+    "release:win": "npm run build && npm run generate:icons && node scripts/build-win-release.mjs release",
     "pretest:scenario": "npm run build:cli",
     "test:scenario": "node dist-cli/cli/bin.js"
   },
-  "dependencies": {},
+  "dependencies": {
+    "electron-updater": "^6.6.2"
+  },
   "devDependencies": {
     "@codemirror/commands": "^6.10.3",
     "@codemirror/state": "^6.6.0",

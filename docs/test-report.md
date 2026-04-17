@@ -9,6 +9,8 @@
 
 ## 记录
 
+| 2026-04-17 | TASK-038 | `npm run test -- src/main/package-scripts.test.ts` | 通过 | 验证所有现存 bat/sh 入口已集中到 `tools/` 目录，并补齐 `tools/release-win.bat` 与 `tools/release-macos.sh` 两个发布入口；仓库根目录旧入口已移除。 |
+| 2026-04-17 | TASK-038 | `npm run lint && npm run typecheck && npm run build` | 通过 | bat/sh 工具迁移到 `tools/` 后，仓库级 lint、typecheck 与 build 继续通过；`build` 仍仅保留现有 Vite chunk size warning。 |
 | 2026-04-17 | TASK-040 | `npm.cmd run test -- src/main/application-menu.test.ts src/main/save-markdown-file.test.ts src/preload/preload.contract.test.ts src/renderer/document-state.test.ts src/renderer/app.autosave.test.ts` | 通过 | 覆盖 `File > New` 菜单命令、untitled 文档状态、首次 `Save` 自动转到 `Save As`，以及 preload / save dialog 合同未回归。 |
 | 2026-04-17 | TASK-040 | `npm.cmd run lint && npm.cmd run typecheck && npm.cmd run build` | 通过 | 原生菜单、受限 bridge、untitled 文档状态与保存链路调整均通过仓库级门禁；`build` 仍仅保留现有 Vite chunk size warning。 |
 | 2026-04-17 | TASK-017 | `npm.cmd run test -- src/renderer/app.autosave.test.ts` | 通过 | 覆盖 `workspace-shell` 两列宽度过渡约束，确保 outline 开合时编辑区会跟着一起做 resize 动画，而不是只让右侧面板自身进出。 |

@@ -7,6 +7,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { OpenMarkdownFileResult } from "../shared/open-markdown-file";
+import type { AppNotification, AppUpdateState } from "../shared/app-update";
 import type { EditorTestCommandEnvelope } from "../shared/editor-test-command";
 import { DEFAULT_PREFERENCES, type Preferences } from "../shared/preferences";
 import type {
@@ -24,6 +25,7 @@ type MenuCommandListener = (
     | "open-markdown-file"
     | "save-markdown-file"
     | "save-markdown-file-as"
+    | "check-for-updates"
 ) => void;
 type EditorTestCommandListener = (payload: EditorTestCommandEnvelope) => void;
 type ScenarioRunEventListener = (payload: RunnerEventEnvelope) => void;
@@ -156,6 +158,8 @@ describe("App autosave", () => {
   let menuCommandListener: MenuCommandListener | null;
   let editorTestCommandListener: EditorTestCommandListener | null;
   let preferencesChangedListener: PreferencesChangedListener | null;
+  let appUpdateStateListener: ((state: AppUpdateState) => void) | null;
+  let appNotificationListener: ((notification: AppNotification) => void) | null;
   let openMarkdownFile: ReturnType<typeof vi.fn<() => Promise<OpenMarkdownFileResult>>>;
   let saveMarkdownFile: ReturnType<
     typeof vi.fn<(input: SaveMarkdownFileInput) => Promise<SaveMarkdownFileResult>>
@@ -213,6 +217,8 @@ describe("App autosave", () => {
     menuCommandListener = null;
     editorTestCommandListener = null;
     preferencesChangedListener = null;
+    appUpdateStateListener = null;
+    appNotificationListener = null;
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -288,11 +294,28 @@ describe("App autosave", () => {
       }),
       listThemes,
       refreshThemes,
+      checkForUpdates: vi.fn().mockResolvedValue(undefined),
       onPreferencesChanged(listener: PreferencesChangedListener) {
         preferencesChangedListener = listener;
         return () => {
           if (preferencesChangedListener === listener) {
             preferencesChangedListener = null;
+          }
+        };
+      },
+      onAppUpdateState(listener: (state: AppUpdateState) => void) {
+        appUpdateStateListener = listener;
+        return () => {
+          if (appUpdateStateListener === listener) {
+            appUpdateStateListener = null;
+          }
+        };
+      },
+      onAppNotification(listener: (notification: AppNotification) => void) {
+        appNotificationListener = listener;
+        return () => {
+          if (appNotificationListener === listener) {
+            appNotificationListener = null;
           }
         };
       }
@@ -403,6 +426,24 @@ describe("App autosave", () => {
       content: "# Fresh draft\n"
     });
     expect(container.textContent).toContain("untitled.md");
+  });
+
+  it("ignores the check-for-updates menu command in the renderer shell", async () => {
+    await renderAndOpenDocument();
+
+    expect(menuCommandListener).not.toBeNull();
+    const openCountBefore = openMarkdownFile.mock.calls.length;
+    const saveCountBefore = saveMarkdownFile.mock.calls.length;
+    const saveAsCountBefore = saveMarkdownFileAs.mock.calls.length;
+
+    await act(async () => {
+      menuCommandListener?.("check-for-updates");
+      await Promise.resolve();
+    });
+
+    expect(saveMarkdownFile.mock.calls.length).toBe(saveCountBefore);
+    expect(saveMarkdownFileAs.mock.calls.length).toBe(saveAsCountBefore);
+    expect(openMarkdownFile.mock.calls.length).toBe(openCountBefore);
   });
 
   it("autosaves after typing stops for the idle debounce window", async () => {
@@ -693,6 +734,29 @@ describe("App autosave", () => {
     ).toBe("file:///themes/graphite/dark/tokens.css");
   });
 
+  it("resolves legacy package ids against matching theme family ids", async () => {
+    window.yulora = {
+      ...window.yulora,
+      getPreferences: vi.fn().mockResolvedValue({
+        ...DEFAULT_PREFERENCES,
+        theme: { mode: "dark", selectedId: "graphite-dark" }
+      })
+    } as Window["yulora"];
+
+    await act(async () => {
+      root.render(createElement(App));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(
+      document.head
+        .querySelector('link[data-yulora-theme-part="tokens"]')
+        ?.getAttribute("href")
+    ).toBe("file:///themes/graphite/dark/tokens.css");
+    expect(container.textContent).not.toContain("已配置主题未找到");
+  });
+
   it("renders the theme package selector and refreshes the theme catalog from settings", async () => {
     await act(async () => {
       root.render(createElement(App));
@@ -732,7 +796,7 @@ describe("App autosave", () => {
     expect(refreshThemes).toHaveBeenCalledTimes(1);
   });
 
-  it("falls back to the builtin theme and shows a warning when the selected family lacks the current mode", async () => {
+  it("falls back to the builtin theme and routes the unsupported-mode warning through the top notification banner", async () => {
     const darkOnlyThemes: ThemeDescriptor[] = [
       {
         id: "midnight",
@@ -803,6 +867,14 @@ describe("App autosave", () => {
         ?.getAttribute("href")
     ).toContain("default/light/tokens.css");
     expect(container.textContent).toContain("该主题不支持浅色模式");
+    expect(container.querySelector('[data-yulora-region="app-notification-banner"]')?.textContent).toContain(
+      "该主题不支持浅色模式"
+    );
+    expect(
+      Array.from(container.querySelectorAll(".settings-inline-note")).some((node) =>
+        node.textContent?.includes("该主题不支持浅色模式")
+      )
+    ).toBe(false);
   });
 
   it("marks recent-files capacity as pending TASK-006 in settings", async () => {
@@ -1010,6 +1082,109 @@ describe("App autosave", () => {
     expect(appStatusBar?.textContent).toContain("All changes saved");
     expect(appStatusBar?.textContent).toContain("字数 6");
     expect(appStatusBar?.textContent).toContain("Bridge: win32");
+  });
+
+  it("does not render an update download message by default", async () => {
+    await renderAndOpenDocument();
+
+    const appStatusBar = container.querySelector('[data-yulora-region="app-status-bar"]');
+
+    expect(appStatusBar?.textContent).not.toContain("正在下载更新");
+  });
+
+  it("renders update download progress text while downloading updates", async () => {
+    await renderAndOpenDocument();
+
+    await act(async () => {
+      emitAppUpdateState({
+        kind: "downloading",
+        version: "1.1.0",
+        percent: 37
+      });
+      await Promise.resolve();
+    });
+
+    const appStatusBar = container.querySelector('[data-yulora-region="app-status-bar"]');
+
+    expect(appStatusBar?.textContent).toContain("正在下载更新 37%");
+  });
+
+  it("renders a top notification banner for transient notifications and hides it after 3 seconds", async () => {
+    await renderAndOpenDocument();
+
+    await act(async () => {
+      emitAppNotification({
+        kind: "loading",
+        message: "正在检查更新…"
+      });
+      await Promise.resolve();
+    });
+
+    const notificationBanner = container.querySelector('[data-yulora-region="app-notification-banner"]');
+    const notificationSpinner = container.querySelector('[data-yulora-region="app-notification-spinner"]');
+
+    expect(notificationBanner?.textContent).toContain("正在检查更新");
+    expect(notificationBanner?.getAttribute("data-state")).toBe("open");
+    expect(notificationSpinner).not.toBeNull();
+
+    await act(async () => {
+      emitAppNotification({
+        kind: "info",
+        message: "当前已是最新版本。"
+      });
+      await Promise.resolve();
+    });
+
+    expect(notificationBanner?.textContent).toContain("当前已是最新版本");
+    expect(container.querySelector('[data-yulora-region="app-notification-spinner"]')).toBeNull();
+
+    await act(async () => {
+      vi.advanceTimersByTime(3000);
+      await Promise.resolve();
+    });
+
+    expect(notificationBanner?.getAttribute("data-state")).toBe("closing");
+
+    await act(async () => {
+      vi.advanceTimersByTime(180);
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-yulora-region="app-notification-banner"]')).toBeNull();
+  });
+
+  it("hides the update download message after download completes", async () => {
+    await renderAndOpenDocument();
+
+    await act(async () => {
+      emitAppUpdateState({
+        kind: "downloading",
+        version: "1.1.0",
+        percent: 100
+      });
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      emitAppUpdateState({
+        kind: "downloaded",
+        version: "1.1.0"
+      });
+      await Promise.resolve();
+    });
+
+    const appStatusBar = container.querySelector('[data-yulora-region="app-status-bar"]');
+
+    expect(appStatusBar?.textContent).not.toContain("正在下载更新");
+
+    await act(async () => {
+      emitAppUpdateState({
+        kind: "idle"
+      });
+      await Promise.resolve();
+    });
+
+    expect(appStatusBar?.textContent).not.toContain("正在下载更新");
   });
 
   it("autosaves dirty content when opening settings and restores editor focus when the drawer closes", async () => {
@@ -1267,6 +1442,14 @@ describe("App autosave", () => {
     });
 
     expect(openMarkdownFile).toHaveBeenCalledTimes(1);
+  }
+
+  function emitAppUpdateState(state: AppUpdateState): void {
+    appUpdateStateListener?.(state);
+  }
+
+  function emitAppNotification(notification: AppNotification): void {
+    appNotificationListener?.(notification);
   }
 });
 

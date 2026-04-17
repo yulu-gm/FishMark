@@ -127,7 +127,10 @@ describe("Test workbench shell", () => {
       updatePreferences: vi.fn(),
       listThemes: vi.fn().mockResolvedValue([]),
       refreshThemes: vi.fn().mockResolvedValue([]),
-      onPreferencesChanged: vi.fn(() => () => {})
+      checkForUpdates: vi.fn().mockResolvedValue(undefined),
+      onPreferencesChanged: vi.fn(() => () => {}),
+      onAppUpdateState: vi.fn(() => () => {}),
+      onAppNotification: vi.fn(() => () => {})
     } as Window["yulora"];
   });
 

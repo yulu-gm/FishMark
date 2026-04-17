@@ -5,6 +5,7 @@ import type {
   EditorTestCommandResultEnvelope
 } from "../shared/editor-test-command";
 import type { Preferences, PreferencesUpdate } from "../shared/preferences";
+import type { AppNotification, AppUpdateState } from "../shared/app-update";
 import type {
   SaveMarkdownFileAsInput,
   SaveMarkdownFileInput,
@@ -74,6 +75,7 @@ declare global {
       openEditorTestWindow: () => Promise<void>;
       listThemes: () => Promise<ThemeDescriptor[]>;
       refreshThemes: () => Promise<ThemeDescriptor[]>;
+      checkForUpdates: () => Promise<void>;
       startScenarioRun: (input: { scenarioId: string }) => Promise<{ runId: string }>;
       interruptScenarioRun: (input: { runId: string }) => Promise<void>;
       onScenarioRunEvent: (listener: (payload: RunnerEventEnvelope) => void) => () => void;
@@ -84,6 +86,8 @@ declare global {
       getPreferences: () => Promise<Preferences>;
       updatePreferences: (patch: PreferencesUpdate) => Promise<UpdatePreferencesResult>;
       onPreferencesChanged: (listener: (preferences: Preferences) => void) => () => void;
+      onAppUpdateState: (listener: (state: AppUpdateState) => void) => () => void;
+      onAppNotification: (listener: (notification: AppNotification) => void) => () => void;
     };
   }
 }

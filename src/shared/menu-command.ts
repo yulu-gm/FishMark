@@ -4,7 +4,8 @@ export const APP_MENU_COMMANDS = [
   "new-markdown-document",
   "open-markdown-file",
   "save-markdown-file",
-  "save-markdown-file-as"
+  "save-markdown-file-as",
+  "check-for-updates"
 ] as const;
 
 export type AppMenuCommand = (typeof APP_MENU_COMMANDS)[number];

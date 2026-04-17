@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -82,10 +82,18 @@ describe("package scripts", () => {
 
     expect(packageJson.scripts?.["package:win"]).toContain("npm run build");
     expect(packageJson.scripts?.["package:win"]).toContain("npm run generate:icons");
-    expect(packageJson.scripts?.["package:win"]).toContain("electron-builder");
-    expect(packageJson.scripts?.["package:win"]).toContain("--config electron-builder.json");
-    expect(packageJson.scripts?.["package:win"]).toContain("--win");
-    expect(packageJson.scripts?.["package:win"]).toContain("--x64");
+    expect(packageJson.scripts?.["package:win"]).toContain("node scripts/build-win-release.mjs package");
+  });
+
+  it("defines a Windows release entry that reuses the dedicated packaging script", () => {
+    const packageJsonPath = path.join(process.cwd(), "package.json");
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
+      scripts?: Record<string, string>;
+    };
+
+    expect(packageJson.scripts?.["release:win"]).toContain("npm run build");
+    expect(packageJson.scripts?.["release:win"]).toContain("npm run generate:icons");
+    expect(packageJson.scripts?.["release:win"]).toContain("node scripts/build-win-release.mjs release");
   });
 
   it("defines a dedicated icon generation script", () => {
@@ -101,8 +109,13 @@ describe("package scripts", () => {
     const configPath = path.join(process.cwd(), "electron-builder.json");
     const config = JSON.parse(readFileSync(configPath, "utf8")) as {
       appId?: string;
-      afterPack?: string;
       electronLanguages?: string[];
+      publish?: Array<{
+        provider?: string;
+        owner?: string;
+        repo?: string;
+        releaseType?: string;
+      }>;
       productName?: string;
       directories?: { output?: string };
       files?: string[];
@@ -129,9 +142,16 @@ describe("package scripts", () => {
     };
 
     expect(config.appId).toBe("com.yulora.app");
-    expect(config.afterPack).toBe("./scripts/after-pack-win-icon.mjs");
     expect(config.electronLanguages).toEqual(["en-US", "zh-CN", "zh-TW"]);
     expect(config.productName).toBe("Yulora");
+    expect(config.publish).toEqual([
+      {
+        provider: "github",
+        owner: "yulu-gm",
+        repo: "Yulora",
+        releaseType: "release"
+      }
+    ]);
     expect(config.directories?.output).toBe("release");
     expect(config.files).toEqual(
       expect.arrayContaining([
@@ -168,14 +188,28 @@ describe("package scripts", () => {
     });
   });
 
-  it("keeps renderer libraries as build-time dependencies instead of packaged runtime dependencies", () => {
+  it("keeps renderer libraries as build-time dependencies while allowing required main-process runtime packages", () => {
     const packageJsonPath = path.join(process.cwd(), "package.json");
     const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
       dependencies?: Record<string, string>;
       devDependencies?: Record<string, string>;
     };
 
-    expect(packageJson.dependencies ?? {}).toEqual({});
+    expect(packageJson.dependencies).toEqual(
+      expect.objectContaining({
+        "electron-updater": expect.any(String)
+      })
+    );
+    expect(packageJson.dependencies).not.toEqual(
+      expect.objectContaining({
+        "@codemirror/commands": expect.any(String),
+        "@codemirror/state": expect.any(String),
+        "@codemirror/view": expect.any(String),
+        "micromark": expect.any(String),
+        "react": expect.any(String),
+        "react-dom": expect.any(String)
+      })
+    );
     expect(packageJson.devDependencies).toEqual(
       expect.objectContaining({
         "@codemirror/commands": expect.any(String),
@@ -195,23 +229,69 @@ describe("package scripts", () => {
     expect(gitignoreSource).toContain("release");
   });
 
-  it("provides a Windows batch entry for packaging from the repo root", () => {
-    const batchPath = path.join(process.cwd(), "package-win.bat");
+  it("centralizes Windows batch entries under tools/", () => {
+    const batchPath = path.join(process.cwd(), "tools", "package-win.bat");
     const batchSource = readFileSync(batchPath, "utf8");
+    const legacyRootPath = path.join(process.cwd(), "package-win.bat");
 
     expect(batchSource).toContain("@echo off");
-    expect(batchSource).toContain('cd /d "%~dp0"');
+    expect(batchSource).toContain('cd /d "%~dp0\\.."');
     expect(batchSource).toContain("call npm.cmd run package:win");
+    expect(existsSync(legacyRootPath)).toBe(false);
   });
 
-  it("provides a macOS shell entry that reserves the packaging flow with a clear message", () => {
-    const shellPath = path.join(process.cwd(), "package-macos.sh");
+  it("uses a dedicated Windows packaging script that disables the unstable asar integrity write and handles GitHub release upload", () => {
+    const scriptPath = path.join(process.cwd(), "scripts", "build-win-release.mjs");
+    const scriptSource = readFileSync(scriptPath, "utf8");
+
+    expect(scriptSource).toContain("disableAsarIntegrity: true");
+    expect(scriptSource).toContain("git credential fill");
+    expect(scriptSource).toContain("Published GitHub Release");
+    expect(scriptSource).toContain("patchWindowsExecutableIcon");
+  });
+
+  it("centralizes the Windows dev app entry under tools/", () => {
+    const batchPath = path.join(process.cwd(), "tools", "dev-app.bat");
+    const batchSource = readFileSync(batchPath, "utf8");
+    const syncScriptPath = path.join(process.cwd(), "scripts", "sync-dev-themes.mjs");
+    const syncScriptSource = readFileSync(syncScriptPath, "utf8");
+    const legacyRootPath = path.join(process.cwd(), "dev-app.bat");
+
+    expect(batchSource).toContain("@echo off");
+    expect(batchSource).toContain('cd /d "%~dp0\\.."');
+    expect(batchSource).toContain("node scripts/sync-dev-themes.mjs");
+    expect(batchSource).toContain("call npm run dev");
+    expect(syncScriptSource).toContain("Yulora-dev");
+    expect(syncScriptSource).toContain("fixtures");
+    expect(syncScriptSource).toContain("themes");
+    expect(existsSync(legacyRootPath)).toBe(false);
+  });
+
+  it("centralizes the macOS packaging placeholder under tools/", () => {
+    const shellPath = path.join(process.cwd(), "tools", "package-macos.sh");
     const shellSource = readFileSync(shellPath, "utf8");
+    const legacyRootPath = path.join(process.cwd(), "package-macos.sh");
 
     expect(shellSource).toContain("#!/usr/bin/env bash");
-    expect(shellSource).toContain('cd "$(dirname "$0")"');
+    expect(shellSource).toContain('cd "$(dirname "$0")/.."');
     expect(shellSource).toContain('if [[ "$(uname)" != "Darwin" ]]');
     expect(shellSource).toContain("macOS packaging is not implemented yet");
     expect(shellSource).toContain("exit 1");
+    expect(existsSync(legacyRootPath)).toBe(false);
+  });
+
+  it("provides release wrappers under tools/", () => {
+    const windowsReleasePath = path.join(process.cwd(), "tools", "release-win.bat");
+    const windowsReleaseSource = readFileSync(windowsReleasePath, "utf8");
+    const macosReleasePath = path.join(process.cwd(), "tools", "release-macos.sh");
+    const macosReleaseSource = readFileSync(macosReleasePath, "utf8");
+
+    expect(windowsReleaseSource).toContain("@echo off");
+    expect(windowsReleaseSource).toContain('cd /d "%~dp0\\.."');
+    expect(windowsReleaseSource).toContain("call npm.cmd run release:win");
+    expect(macosReleaseSource).toContain("#!/usr/bin/env bash");
+    expect(macosReleaseSource).toContain('cd "$(dirname "$0")/.."');
+    expect(macosReleaseSource).toContain("macOS release is not implemented yet");
+    expect(macosReleaseSource).toContain("exit 1");
   });
 });

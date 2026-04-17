@@ -6,6 +6,7 @@ import {
   type PreferencesUpdate,
   type ThemeMode
 } from "../../shared/preferences";
+import { resolveThemeSelectionValue } from "../theme-catalog";
 
 type UpdatePreferencesResult =
   | { status: "success"; preferences: Preferences }
@@ -21,7 +22,6 @@ type SettingsViewProps = {
   surfaceState: "open" | "closing";
   preferences: Preferences;
   themes: ThemeCatalogEntry[];
-  themeWarningMessage: string | null;
   isRefreshingThemes: boolean;
   onRefreshThemes: () => Promise<void>;
   onUpdate: (patch: PreferencesUpdate) => Promise<UpdatePreferencesResult>;
@@ -88,7 +88,6 @@ export function SettingsView({
   surfaceState,
   preferences,
   themes,
-  themeWarningMessage,
   isRefreshingThemes,
   onRefreshThemes,
   onUpdate,
@@ -106,9 +105,12 @@ export function SettingsView({
     () => themes.filter((theme) => theme.source === "community"),
     [themes]
   );
+  const resolvedThemeSelectionValue = resolveThemeSelectionValue(
+    communityThemes,
+    preferences.theme.selectedId
+  );
   const selectedThemeMissing =
-    preferences.theme.selectedId !== null &&
-    !communityThemes.some((theme) => theme.id === preferences.theme.selectedId);
+    preferences.theme.selectedId !== null && resolvedThemeSelectionValue === preferences.theme.selectedId;
   const fontPresetValue = resolveFontPresetValue(draft.documentFontFamily.trim());
 
   async function applyPatch(patch: PreferencesUpdate): Promise<void> {
@@ -344,7 +346,7 @@ export function SettingsView({
               <select
                 id="settings-theme-package"
                 className="settings-input"
-                value={preferences.theme.selectedId ?? "default"}
+                value={resolvedThemeSelectionValue ?? "default"}
                 onChange={(event) => handleThemePackageChange(event.target.value)}
               >
                 <option value="default">Yulora 默认</option>
@@ -373,12 +375,6 @@ export function SettingsView({
                 >
                   {isRefreshingThemes ? "刷新中..." : "刷新主题"}
                 </button>
-                {themeWarningMessage ? (
-                  <p className="settings-inline-note">{themeWarningMessage}</p>
-                ) : null}
-                {selectedThemeMissing ? (
-                  <p className="settings-inline-note">当前主题未找到，已回退到默认主题渲染。</p>
-                ) : null}
               </div>
             </div>
           </div>

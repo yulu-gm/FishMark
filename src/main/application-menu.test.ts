@@ -34,4 +34,20 @@ describe("createApplicationMenuTemplate", () => {
       ["save-markdown-file-as"]
     ]);
   });
+
+  it("adds Check for Updates command in the Help menu", () => {
+    const dispatchCommand = vi.fn();
+    const template = createApplicationMenuTemplate({ dispatchCommand });
+    const helpMenu = template.find((item) => item.label === "Help");
+
+    expect(helpMenu?.submenu).toBeDefined();
+
+    const helpItem = helpMenu?.submenu?.find((item) => item.label === "Check for Updates");
+    expect(helpItem).toBeDefined();
+    expect(typeof helpItem?.click).toBe("function");
+
+    helpItem?.click?.();
+
+    expect(dispatchCommand).toHaveBeenCalledWith("check-for-updates");
+  });
 });

@@ -15,13 +15,13 @@ type CreateApplicationMenuTemplateOptions = {
 
 function createCommandItem(
   label: string,
-  accelerator: string,
+  accelerator: string | undefined,
   command: AppMenuCommand,
   dispatchCommand: (command: AppMenuCommand) => void
 ): ApplicationMenuItem {
   return {
     label,
-    accelerator,
+    ...(accelerator === undefined ? {} : { accelerator }),
     click: () => dispatchCommand(command)
   };
 }
@@ -64,7 +64,7 @@ export function createApplicationMenuTemplate({
     },
     {
       label: "Help",
-      submenu: []
+      submenu: [createCommandItem("Check for Updates", undefined, "check-for-updates", dispatchCommand)]
     }
   ];
 }

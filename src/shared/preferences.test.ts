@@ -132,13 +132,13 @@ describe("normalizePreferences", () => {
     expect(normalizePreferences({ theme: { selectedId: 17 } }).theme.selectedId).toBeNull();
   });
 
-  it("migrates legacy theme package ids into theme family ids", () => {
+  it("preserves theme family ids even when they end with a mode suffix", () => {
     expect(normalizePreferences({ theme: { selectedId: "graphite-dark" } }).theme.selectedId).toBe(
-      "graphite"
+      "graphite-dark"
     );
-    expect(normalizePreferences({ theme: { selectedId: "graphite_light" } }).theme.selectedId).toBe(
-      "graphite"
-    );
+    expect(
+      normalizePreferences({ theme: { selectedId: "terminal_light" } }).theme.selectedId
+    ).toBe("terminal_light");
     expect(normalizePreferences({ theme: { selectedId: "midnight" } }).theme.selectedId).toBe(
       "midnight"
     );

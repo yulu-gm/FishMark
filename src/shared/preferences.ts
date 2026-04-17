@@ -176,7 +176,7 @@ function normalizeThemeSelectedId(value: unknown): string | null {
     return null;
   }
 
-  return trimmed.replace(/(?:-|_)(light|dark)$/u, "") || trimmed;
+  return trimmed;
 }
 
 /**

@@ -1,6 +1,8 @@
 import path from "node:path";
-import { app, BrowserWindow, ipcMain, Menu, type MenuItemConstructorOptions } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, type MenuItemConstructorOptions } from "electron";
+import { autoUpdater } from "electron-updater";
 
+import { createAppUpdater } from "./app-updater";
 import { createApplicationMenuTemplate } from "./application-menu";
 import { createCliProcessRunner } from "./cli-process-runner";
 import { resolveMarkdownLaunchPathFromArgv } from "./launch-open-path";
@@ -41,10 +43,16 @@ import {
   type SaveMarkdownFileAsInput,
   type SaveMarkdownFileInput
 } from "../shared/save-markdown-file";
+import {
+  APP_NOTIFICATION_EVENT,
+  APP_UPDATE_STATE_EVENT,
+  CHECK_FOR_APP_UPDATES_CHANNEL
+} from "../shared/app-update";
 
 const OPEN_EDITOR_TEST_WINDOW_CHANNEL = "yulora:open-editor-test-window";
 const LIST_THEMES_CHANNEL = "yulora:list-themes";
 const REFRESH_THEMES_CHANNEL = "yulora:refresh-themes";
+const AUTO_UPDATE_STARTUP_DELAY_MS = 5000;
 configureMainProcessRuntime(app, process.env);
 const hasSingleInstanceLock = shouldRequestSingleInstanceLock(process.env)
   ? app.requestSingleInstanceLock()
@@ -52,6 +60,7 @@ const hasSingleInstanceLock = shouldRequestSingleInstanceLock(process.env)
 const pendingLaunchOpenPaths: string[] = [];
 
 let openEditorWindowForLaunchPath: ((targetPath: string) => void) | null = null;
+let runManualAppUpdateCheck: (() => void) | null = null;
 
 function enqueueLaunchOpenPath(targetPath: string): void {
   pendingLaunchOpenPaths.push(targetPath);
@@ -89,6 +98,11 @@ if (!hasSingleInstanceLock) {
 }
 
 function dispatchMenuCommand(command: AppMenuCommand): void {
+  if (command === "check-for-updates") {
+    runManualAppUpdateCheck?.();
+    return;
+  }
+
   const targetWindow = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
 
   targetWindow?.webContents.send(APP_MENU_COMMAND_EVENT, command);
@@ -117,6 +131,7 @@ function broadcastToWindows(channel: string, payload: unknown): void {
 }
 
 app.whenReady().then(async () => {
+  const runtimeMode = resolveAppRuntimeMode(process.env);
   const preferencesService = createPreferencesService({
     userDataDir: app.getPath("userData"),
     onCorruptRecovery: (backupPath) => {
@@ -143,8 +158,30 @@ app.whenReady().then(async () => {
     broadcastToWindows(PREFERENCES_CHANGED_EVENT, preferences);
   });
 
+  const appUpdater = createAppUpdater({
+    app,
+    autoUpdater,
+    broadcast: (state) => {
+      broadcastToWindows(APP_UPDATE_STATE_EVENT, state);
+    },
+    dialog,
+    logger: {
+      info: (message) => console.info(message),
+      warn: (message) => console.warn(message),
+      error: (message) => console.error(message)
+    },
+    notify: (notification) => {
+      broadcastToWindows(APP_NOTIFICATION_EVENT, notification);
+    },
+    platform: process.platform,
+    runtimeMode
+  });
+  runManualAppUpdateCheck = () => {
+    void appUpdater.checkForUpdates("manual");
+  };
+
   const windowManager = createRuntimeWindowManager({
-    runtimeMode: resolveAppRuntimeMode(process.env),
+    runtimeMode,
     preloadPath: path.join(__dirname, "../preload/preload.js"),
     windowIconPath: resolveWindowIconPath(),
     createWindow: (input) =>
@@ -213,6 +250,7 @@ app.whenReady().then(async () => {
   ipcMain.handle(UPDATE_PREFERENCES_CHANNEL, async (_event, patch: PreferencesUpdate | undefined) =>
     preferencesService.updatePreferences(patch)
   );
+  ipcMain.handle(CHECK_FOR_APP_UPDATES_CHANNEL, async () => appUpdater.checkForUpdates("manual"));
   ipcMain.handle(LIST_THEMES_CHANNEL, async () => themeService.listThemes());
   ipcMain.handle(REFRESH_THEMES_CHANNEL, async () => themeService.refreshThemes());
   ipcMain.handle(START_SCENARIO_RUN_CHANNEL, async (_event, input: { scenarioId: string }) =>
@@ -235,6 +273,10 @@ app.whenReady().then(async () => {
   for (const targetPath of pendingLaunchOpenPaths.splice(0)) {
     openEditorWindowForLaunchPath(targetPath);
   }
+
+  setTimeout(() => {
+    void appUpdater.checkForUpdates("auto");
+  }, AUTO_UPDATE_STARTUP_DELAY_MS);
 
   app.on("activate", () => {
     windowManager.reopenPrimaryWindowIfNeeded();

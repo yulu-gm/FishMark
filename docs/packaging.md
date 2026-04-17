@@ -24,17 +24,17 @@
 npm run package:win
 ```
 
-或使用仓库根目录入口：
+或使用 `tools/` 目录下的批处理入口：
 
 ```bat
-package-win.bat
+tools\package-win.bat
 ```
 
 这条命令会依次执行：
 
 1. `npm run build`
 2. `npm run generate:icons`
-3. `electron-builder --config electron-builder.json --win --x64`
+3. `node scripts/build-win-release.mjs package`
 
 ### 图标生成产物
 
@@ -50,17 +50,49 @@ package-win.bat
 
 其中 `light` 版本会作为当前 Windows 打包默认图标。
 
-当前仓库会在 `afterPack` 阶段单独补写应用主程序 `Yulora.exe` 的图标，因此安装器和安装后的应用都会使用同一套正式图标。
+当前仓库会在专用的 Windows 打包脚本中于 `electron-builder` 完成后补写应用主程序 `Yulora.exe` 的图标，并带重试保护，因此安装器和安装后的应用都会使用同一套正式图标，同时避免 Windows 上对 `.exe` 做二次资源写入时的偶发锁文件失败。
+
+## Windows GitHub Release 发版
+
+当前仓库已经提供 Windows GitHub Release 发版入口：
+
+```bash
+npm run release:win
+```
+
+或使用 `tools/` 目录下的批处理入口：
+
+```bat
+tools\release-win.bat
+```
+
+这条命令会依次执行：
+
+1. `npm run build`
+2. `npm run generate:icons`
+3. `node scripts/build-win-release.mjs release`
+
+其中发布脚本会：
+
+1. 清理本地 `release/` 目录
+2. 用程序化 `electron-builder` 生成 NSIS 安装包与 `latest.yml`
+3. 以重试方式补写 `Yulora.exe` 图标
+4. 使用 `GH_TOKEN` / `GITHUB_TOKEN`，或回退到本机 `git credential fill` 中的 GitHub 凭据
+5. 创建或复用 `v<version>` GitHub Release，并上传：
+   - `latest.yml`
+   - `Yulora-Setup-<version>.exe`
+   - `Yulora-Setup-<version>.exe.blockmap`
 
 ## macOS 预留入口
 
-仓库根目录还提供了一个预留入口：
+`tools/` 目录下还提供了两个 macOS 预留入口：
 
 ```bash
-./package-macos.sh
+./tools/package-macos.sh
+./tools/release-macos.sh
 ```
 
-当前这个入口会先做基础环境检查，并明确提示 macOS 打包尚未接入正式实现。后续补上 `.dmg` / `.zip` 与 `.icns` 流程时，会继续沿用这个入口。
+当前这两个入口会先做基础环境检查，并明确提示 macOS 打包 / 发版尚未接入正式实现。后续补上 `.dmg` / `.zip`、`.icns` 与发版链路时，会继续沿用这两个入口。
 
 ### 产物输出
 
@@ -75,14 +107,12 @@ release/
 - 当前只覆盖 Windows 本地打包
 - macOS `.dmg` / `.zip` 仍属于 `TASK-038` 后续切片
 - 代码签名尚未配置
-- 自动更新尚未配置
 - macOS `.icns` 仍未生成
 
 ### 后续扩展位
 
 - Windows / macOS 代码签名
 - macOS 打包产物
-- 自动更新接入
 - `.icns` 生成与安装器视觉定制
 
 ## Package Size Guardrails

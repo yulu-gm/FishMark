@@ -88,6 +88,90 @@
   overflow: hidden;
 }
 
+.app-notification-banner {
+  position: fixed;
+  top: 14px;
+  left: calc(var(--yulora-shell-rail-width) + var(--yulora-shell-gutter));
+  right: var(--yulora-shell-gutter);
+  display: grid;
+  justify-items: center;
+  pointer-events: none;
+  z-index: 16;
+}
+
+.app-notification-banner[data-state="open"] {
+  animation: app-notification-enter 180ms cubic-bezier(0.2, 0.85, 0.2, 1) both;
+}
+
+.app-notification-banner[data-state="closing"] {
+  animation: app-notification-exit 180ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.app-notification-message {
+  margin: 0;
+  padding: 11px 18px;
+  border: 1px solid color-mix(in srgb, var(--yulora-border-subtle) 92%, transparent);
+  border-radius: var(--yulora-radius-pill);
+  background: color-mix(in srgb, var(--yulora-surface-raised-bg) 92%, transparent);
+  box-shadow: var(--yulora-shadow-2);
+  color: var(--yulora-text-strong);
+  font-size: 0.84rem;
+  line-height: 1.35;
+  backdrop-filter: blur(18px) saturate(1.06);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.app-notification-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid color-mix(in srgb, var(--yulora-text-subtle) 35%, transparent);
+  border-top-color: var(--yulora-text-strong);
+  border-radius: 999px;
+  animation: app-notification-spin 800ms linear infinite;
+}
+
+.app-notification-banner.is-error .app-notification-message {
+  border-color: var(--yulora-danger-border);
+  background: color-mix(in srgb, var(--yulora-danger-bg) 88%, var(--yulora-surface-raised-bg) 12%);
+  color: var(--yulora-danger-text);
+}
+
+@keyframes app-notification-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-14px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes app-notification-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.985);
+  }
+}
+
+@keyframes app-notification-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .app-header,
 .error-banner {
   width: min(100%, var(--yulora-workspace-max-width));
@@ -496,6 +580,13 @@
 .document-word-count,
 .document-platform {
   color: var(--yulora-text-subtle);
+}
+
+.app-update-status {
+  margin: 0;
+  color: var(--yulora-text-strong);
+  font-size: 0.84rem;
+  letter-spacing: 0.005em;
 }
 
 .document-platform {
