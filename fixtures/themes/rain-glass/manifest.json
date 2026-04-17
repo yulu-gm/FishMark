@@ -1,0 +1,42 @@
+{
+  "id": "rain-glass",
+  "name": "Rain Glass",
+  "version": "1.0.0",
+  "author": "Yulora",
+  "supports": {
+    "light": true,
+    "dark": true
+  },
+  "tokens": {
+    "light": "./tokens/light.css",
+    "dark": "./tokens/dark.css"
+  },
+  "styles": {
+    "ui": "./styles/ui.css",
+    "editor": "./styles/editor.css",
+    "markdown": "./styles/markdown.css",
+    "titlebar": "./styles/titlebar.css"
+  },
+  "layout": {
+    "titlebar": "./layout/titlebar.json"
+  },
+  "scene": {
+    "id": "rain-scene",
+    "sharedUniforms": {
+      "rainAmount": 0.72,
+      "glassBlur": 0.58
+    }
+  },
+  "surfaces": {
+    "workbenchBackground": {
+      "kind": "fragment",
+      "scene": "rain-scene",
+      "shader": "./shaders/workbench-background.glsl"
+    },
+    "titlebarBackdrop": {
+      "kind": "fragment",
+      "scene": "rain-scene",
+      "shader": "./shaders/titlebar-backdrop.glsl"
+    }
+  }
+}

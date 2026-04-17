@@ -1,0 +1,17 @@
+.app-titlebar {
+  border-bottom-color: color-mix(in srgb, var(--yulora-border-faint) 72%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--yulora-surface-raised-bg) 92%, transparent),
+      color-mix(in srgb, var(--yulora-surface-bg) 88%, transparent)
+    );
+}
+
+.app-titlebar .theme-surface-host {
+  opacity: 0.92;
+}
+
+.app-titlebar-slot[data-yulora-drag-region="true"] {
+  backdrop-filter: blur(18px) saturate(1.15);
+}

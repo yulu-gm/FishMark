@@ -1,6 +1,7 @@
 import type { ThemeEffectsMode } from "../../shared/theme-package";
 import { ThemeSurfaceHost, type ThemeSurfaceHostDescriptor } from "./ThemeSurfaceHost";
 import type { TitlebarItem, TitlebarLayoutDescriptor, TitlebarSlot } from "./titlebar-layout";
+import type { ThemeSurfaceRuntimeMode } from "../shader/theme-surface-runtime";
 
 type TitlebarHostProps = {
   platform: NodeJS.Platform;
@@ -9,6 +10,7 @@ type TitlebarHostProps = {
   isDirty: boolean;
   effectsMode: ThemeEffectsMode;
   titlebarSurface: ThemeSurfaceHostDescriptor | null;
+  onTitlebarSurfaceRuntimeModeChange?: (mode: ThemeSurfaceRuntimeMode | null) => void;
 };
 
 function renderTitlebarItem(
@@ -104,7 +106,8 @@ export function TitlebarHost({
   title,
   isDirty,
   effectsMode,
-  titlebarSurface
+  titlebarSurface,
+  onTitlebarSurfaceRuntimeModeChange
 }: TitlebarHostProps) {
   return (
     <header
@@ -119,6 +122,7 @@ export function TitlebarHost({
           surface="titlebarBackdrop"
           descriptor={titlebarSurface}
           effectsMode={effectsMode}
+          onRuntimeModeChange={onTitlebarSurfaceRuntimeModeChange}
         />
       ) : null}
 

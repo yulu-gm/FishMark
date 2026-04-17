@@ -1,0 +1,11 @@
+:root {
+  --yulora-inline-code-bg: rgba(93, 167, 255, 0.12);
+  --yulora-inline-code-text: #dcefff;
+  --yulora-list-marker: #8cb5d9;
+  --yulora-task-border: #87a9c4;
+  --yulora-task-bg: color-mix(in srgb, var(--yulora-surface-bg) 92%, #d7e9f5 8%);
+  --yulora-task-check: #4f8ab8;
+  --yulora-thematic-break: #345267;
+  --yulora-code-block-bg: color-mix(in srgb, var(--yulora-surface-raised-bg) 86%, #0f172a 14%);
+  --yulora-code-block-text: #d9e6f0;
+}

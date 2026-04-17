@@ -1,0 +1,26 @@
+:root {
+  --yulora-dirty-text: #d97706;
+  --yulora-clean-text: #4f8ab8;
+  --yulora-danger-bg: color-mix(in srgb, var(--yulora-surface-bg) 88%, #c94f4f 12%);
+  --yulora-danger-border: color-mix(in srgb, var(--yulora-border-subtle) 70%, #c94f4f 30%);
+  --yulora-danger-text: color-mix(in srgb, var(--yulora-text-strong) 82%, #8b1e1e 18%);
+  --yulora-focus-ring: #5da7ff;
+  --yu-ctrl-solid-bg: color-mix(in srgb, var(--yulora-surface-raised-bg) 92%, transparent);
+  --yu-ctrl-solid-bg-hover: color-mix(in srgb, var(--yulora-surface-muted-bg) 94%, transparent);
+  --yu-ctrl-solid-border: var(--yulora-border-subtle);
+  --yu-ctrl-solid-border-hover: var(--yulora-border-muted);
+  --yu-ctrl-text: var(--yulora-text-secondary);
+  --yu-ctrl-text-hover: var(--yulora-text-strong);
+  --yu-ctrl-glass-bg: color-mix(in srgb, var(--yulora-glass-strong-bg) 52%, transparent);
+  --yu-ctrl-glass-bg-hover: color-mix(in srgb, var(--yulora-glass-strong-bg) 78%, transparent);
+  --yu-ctrl-glass-border: var(--yulora-glass-border);
+  --yu-ctrl-glass-border-hover: color-mix(in srgb, var(--yulora-glass-border) 72%, var(--yulora-border-muted));
+  --yu-input-bg: color-mix(in srgb, var(--yulora-glass-strong-bg) 48%, transparent);
+  --yu-input-bg-focus: color-mix(in srgb, var(--yulora-glass-strong-bg) 74%, transparent);
+  --yu-input-border: var(--yulora-border-muted);
+  --yu-input-border-focus: var(--yulora-focus-ring);
+  --yu-input-ring: color-mix(in srgb, var(--yulora-focus-ring) 16%, transparent);
+  --yu-segment-bg: color-mix(in srgb, var(--yulora-glass-strong-bg) 40%, transparent);
+  --yu-segment-border: var(--yulora-border-muted);
+  --yu-segment-active-bg: color-mix(in srgb, var(--yulora-glass-strong-bg) 70%, transparent);
+}

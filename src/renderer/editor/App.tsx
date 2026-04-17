@@ -50,6 +50,7 @@ import {
   normalizeTitlebarLayout,
   resolveDefaultTitlebarLayout
 } from "./titlebar-layout";
+import type { ThemeSurfaceRuntimeMode } from "../shader/theme-surface-runtime";
 
 const SettingsView = lazy(async () => {
   const module = await import("./settings-view");
@@ -67,10 +68,12 @@ const UI_FONT_SIZE_CSS_VAR = "--yulora-ui-font-size";
 const DOCUMENT_FONT_FAMILY_CSS_VAR = "--yulora-document-font-family";
 const DOCUMENT_CJK_FONT_FAMILY_CSS_VAR = "--yulora-document-cjk-font-family";
 const DOCUMENT_FONT_SIZE_CSS_VAR = "--yulora-document-font-size";
+const THEME_DYNAMIC_MODE_ATTRIBUTE = "data-yulora-theme-dynamic-mode";
 const OUTLINE_EXIT_ANIMATION_MS = 180;
 const SETTINGS_DRAWER_EXIT_ANIMATION_MS = 180;
 const APP_NOTIFICATION_DURATION_MS = 3000;
 const APP_NOTIFICATION_EXIT_ANIMATION_MS = 180;
+const THEME_DYNAMIC_FALLBACK_MESSAGE = "主题动态效果已自动关闭，已回退到静态样式。";
 const MARKDOWN_FILE_EXTENSIONS = [".md", ".markdown"] as const;
 
 function isMarkdownFilePath(targetPath: string): boolean {
@@ -165,6 +168,17 @@ function clearDocumentPreferences(root: HTMLElement): void {
   root.style.removeProperty(DOCUMENT_FONT_FAMILY_CSS_VAR);
   root.style.removeProperty(DOCUMENT_CJK_FONT_FAMILY_CSS_VAR);
   root.style.removeProperty(DOCUMENT_FONT_SIZE_CSS_VAR);
+}
+
+function applyThemeDynamicModeToDocument(
+  root: HTMLElement,
+  mode: ThemeSurfaceRuntimeMode | "off"
+): void {
+  root.setAttribute(THEME_DYNAMIC_MODE_ATTRIBUTE, mode);
+}
+
+function clearThemeDynamicModeFromDocument(root: HTMLElement): void {
+  root.removeAttribute(THEME_DYNAMIC_MODE_ATTRIBUTE);
 }
 
 function toLegacyRuntimeThemePackageEntry(
@@ -300,6 +314,12 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   });
   const [notification, setNotification] = useState<AppNotification | null>(null);
   const [notificationState, setNotificationState] = useState<AppNotificationBannerState>("hidden");
+  const [workbenchSurfaceRuntimeMode, setWorkbenchSurfaceRuntimeMode] = useState<
+    ThemeSurfaceRuntimeMode | null
+  >(null);
+  const [titlebarSurfaceRuntimeMode, setTitlebarSurfaceRuntimeMode] = useState<
+    ThemeSurfaceRuntimeMode | null
+  >(null);
   const editorRef = useRef<CodeEditorHandle | null>(null);
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
   const editorContentRef = useRef("");
@@ -320,6 +340,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   const notificationHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const notificationCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastThemeNotificationKeyRef = useRef<string | null>(null);
+  const lastThemeDynamicNotificationKeyRef = useRef<string | null>(null);
   const fontFamilyLoadStateRef = useRef<"idle" | "loading" | "loaded">("idle");
   const currentDocumentContent = state.currentDocument
     ? (editorContentRef.current || state.currentDocument.content)
@@ -404,6 +425,25 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
       controlledTitlebarEnabled
     ]
   );
+  const themeDynamicMode = useMemo<ThemeSurfaceRuntimeMode | "off">(() => {
+    const mountedSurfaceModes = [workbenchSurfaceRuntimeMode, titlebarSurfaceRuntimeMode].filter(
+      (mode): mode is ThemeSurfaceRuntimeMode => mode !== null
+    );
+
+    if (mountedSurfaceModes.some((mode) => mode === "fallback")) {
+      return "fallback";
+    }
+
+    if (mountedSurfaceModes.some((mode) => mode === "full")) {
+      return "full";
+    }
+
+    if (mountedSurfaceModes.some((mode) => mode === "reduced")) {
+      return "reduced";
+    }
+
+    return "off";
+  }, [titlebarSurfaceRuntimeMode, workbenchSurfaceRuntimeMode]);
   const titlebarLayout = useMemo(
     () => normalizeTitlebarLayout(resolveDefaultTitlebarLayout(yulora.platform)),
     [yulora.platform]
@@ -418,6 +458,27 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   function getEditorContent(): string {
     return editorRef.current?.getContent() ?? editorContentRef.current;
   }
+
+  const handleWorkbenchSurfaceRuntimeModeChange = useCallback((mode: ThemeSurfaceRuntimeMode | null) => {
+    setWorkbenchSurfaceRuntimeMode((current) => (current === mode ? current : mode));
+  }, []);
+
+  const handleTitlebarSurfaceRuntimeModeChange = useCallback((mode: ThemeSurfaceRuntimeMode | null) => {
+    setTitlebarSurfaceRuntimeMode((current) => (current === mode ? current : mode));
+  }, []);
+
+  useEffect(() => {
+    setWorkbenchSurfaceRuntimeMode(null);
+  }, [activeWorkbenchSurface?.sceneId, activeWorkbenchSurface?.shaderUrl, preferences.theme.effectsMode]);
+
+  useEffect(() => {
+    setTitlebarSurfaceRuntimeMode(null);
+  }, [
+    activeTitlebarSurface?.sceneId,
+    activeTitlebarSurface?.shaderUrl,
+    controlledTitlebarEnabled,
+    preferences.theme.effectsMode
+  ]);
 
   function clearAutosaveTimer(): void {
     if (autosaveTimerRef.current !== null) {
@@ -1041,6 +1102,37 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   ]);
 
   useEffect(() => {
+    const root = document.documentElement;
+    applyThemeDynamicModeToDocument(root, themeDynamicMode);
+
+    if (themeDynamicMode !== "fallback") {
+      lastThemeDynamicNotificationKeyRef.current = null;
+      return () => {
+        clearThemeDynamicModeFromDocument(root);
+      };
+    }
+
+    const notificationKey = `${activeThemePackageResolution.requestedId ?? "default"}:${activeThemePackageResolution.resolvedMode}:${themeDynamicMode}`;
+
+    if (lastThemeDynamicNotificationKeyRef.current !== notificationKey) {
+      lastThemeDynamicNotificationKeyRef.current = notificationKey;
+      showNotification({
+        kind: "warning",
+        message: THEME_DYNAMIC_FALLBACK_MESSAGE
+      });
+    }
+
+    return () => {
+      clearThemeDynamicModeFromDocument(root);
+    };
+  }, [
+    activeThemePackageResolution.requestedId,
+    activeThemePackageResolution.resolvedMode,
+    showNotification,
+    themeDynamicMode
+  ]);
+
+  useEffect(() => {
     if (isSettingsOpen || isSettingsClosing || pendingFocusRestoreRef.current === null) {
       return;
     }
@@ -1087,6 +1179,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
       clearSettingsCloseTimer();
       clearNotificationTimers();
       themePackageRuntimeRef.current?.clear();
+      clearThemeDynamicModeFromDocument(document.documentElement);
       clearDocumentPreferences(document.documentElement);
     },
     [clearNotificationTimers]
@@ -1109,6 +1202,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
           isDirty={state.isDirty}
           effectsMode={preferences.theme.effectsMode}
           titlebarSurface={activeTitlebarSurface}
+          onTitlebarSurfaceRuntimeModeChange={handleTitlebarSurfaceRuntimeModeChange}
         />
       ) : null}
       <div className="app-layout">
@@ -1204,6 +1298,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
                 surface="workbenchBackground"
                 descriptor={activeWorkbenchSurface}
                 effectsMode={preferences.theme.effectsMode}
+                onRuntimeModeChange={handleWorkbenchSurfaceRuntimeModeChange}
               />
             ) : null}
             {state.currentDocument ? (

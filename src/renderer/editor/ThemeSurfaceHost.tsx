@@ -18,6 +18,7 @@ type ThemeSurfaceHostProps = {
   surface: ThemeSurfaceSlot;
   descriptor: ThemeSurfaceHostDescriptor;
   effectsMode: ThemeEffectsMode;
+  onRuntimeModeChange?: (mode: ThemeSurfaceRuntimeMode | null) => void;
 };
 
 function serializeSharedUniforms(sharedUniforms: Record<string, number>): string {
@@ -35,7 +36,8 @@ function parseSharedUniforms(serializedUniforms: string): Record<string, number>
 export function ThemeSurfaceHost({
   surface,
   descriptor,
-  effectsMode
+  effectsMode,
+  onRuntimeModeChange
 }: ThemeSurfaceHostProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const runtimeRef = useRef(createThemeSurfaceRuntime());
@@ -54,7 +56,7 @@ export function ThemeSurfaceHost({
     let mountedSurface: { unmount: () => void } | null = null;
     const abortController = new AbortController();
 
-    setMode("fallback");
+    onRuntimeModeChange?.(null);
 
     async function loadAndMount(): Promise<void> {
       try {
@@ -92,9 +94,11 @@ export function ThemeSurfaceHost({
 
         mountedSurface = result;
         setMode(result.mode);
+        onRuntimeModeChange?.(result.mode);
       } catch {
         if (!isDisposed) {
           setMode("fallback");
+          onRuntimeModeChange?.("fallback");
         }
       }
     }
@@ -105,13 +109,15 @@ export function ThemeSurfaceHost({
       isDisposed = true;
       abortController.abort();
       mountedSurface?.unmount();
+      onRuntimeModeChange?.(null);
     };
   }, [
     descriptor.sceneId,
     descriptor.shaderUrl,
     sharedUniforms,
     effectsMode,
-    surface
+    surface,
+    onRuntimeModeChange
   ]);
 
   return (

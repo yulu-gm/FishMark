@@ -1,0 +1,24 @@
+:root[data-yulora-theme="light"] {
+  --yulora-page-bg: #edf5f7;
+  --yulora-surface-bg: #fcfeff;
+  --yulora-surface-raised-bg: #f6fbfd;
+  --yulora-surface-muted-bg: #edf4f8;
+  --yulora-surface-subtle-bg: #e4edf2;
+  --yulora-surface-blockquote-bg: #edf5f8;
+  --yulora-border-strong: #bfd0da;
+  --yulora-border-muted: #d1e0e9;
+  --yulora-border-subtle: #dce8ee;
+  --yulora-border-faint: #ebf2f5;
+  --yulora-text-strong: #122536;
+  --yulora-text-body: #26394a;
+  --yulora-text-muted: #5c7283;
+  --yulora-text-subtle: #7f90a0;
+  --yulora-text-secondary: #3f5668;
+  --yulora-scrollbar-thumb: rgba(92, 114, 131, 0.34);
+  --yulora-scrollbar-thumb-hover: rgba(63, 86, 104, 0.48);
+  --yulora-glass-bg: rgba(236, 247, 251, 0.46);
+  --yulora-glass-strong-bg: rgba(249, 253, 255, 0.72);
+  --yulora-glass-border: rgba(255, 255, 255, 0.72);
+  --yulora-glass-sheen: rgba(255, 255, 255, 0.34);
+  --yulora-scrim: rgba(14, 22, 32, 0.12);
+}

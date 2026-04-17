@@ -1,0 +1,19 @@
+{
+  "height": 46,
+  "slots": {
+    "leading": [],
+    "center": [
+      "document-title",
+      "dirty-indicator"
+    ],
+    "trailing": [
+      "theme-toggle"
+    ]
+  },
+  "dragRegions": [
+    "leading",
+    "center",
+    "trailing"
+  ],
+  "compactWhenNarrow": true
+}

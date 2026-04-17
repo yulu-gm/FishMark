@@ -1305,6 +1305,47 @@ describe("App autosave", () => {
     expect(surfaceHost?.getAttribute("data-yulora-theme-scene")).toBe("rain-scene");
   });
 
+  it("marks the document-level dynamic mode as fallback and shows a warning when a shader surface falls back", async () => {
+    await renderEditorApp({
+      getPreferencesResult: {
+        ...DEFAULT_PREFERENCES,
+        theme: {
+          ...DEFAULT_PREFERENCES.theme,
+          mode: "dark",
+          selectedId: "rain-glass",
+          effectsMode: "auto"
+        }
+      },
+      listThemePackagesResult: [
+        makeManifestThemePackage({
+          id: "rain-glass",
+          name: "Rain Glass",
+          scene: {
+            id: "rain-scene",
+            sharedUniforms: { rainAmount: 0.7 }
+          },
+          surfaces: {
+            workbenchBackground: {
+              kind: "fragment",
+              scene: "rain-scene",
+              shader: "/tmp/yulora/themes/rain-glass/shaders/workbench-background.glsl"
+            }
+          }
+        })
+      ]
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(document.documentElement.getAttribute("data-yulora-theme-dynamic-mode")).toBe("fallback");
+    expect(container.querySelector('[data-yulora-region="app-notification-banner"]')?.textContent).toContain(
+      "主题动态效果已自动关闭，已回退到静态样式。"
+    );
+  });
+
   it("renders a controlled titlebar host with built-in items on controlled-chrome platforms", async () => {
     window.yulora = {
       ...window.yulora,
@@ -1488,6 +1529,7 @@ describe("App autosave", () => {
     });
 
     expect(container.querySelector('[data-yulora-theme-surface="workbenchBackground"]')).toBeNull();
+    expect(document.documentElement.getAttribute("data-yulora-theme-dynamic-mode")).toBe("off");
   });
 
   it("shows a refresh error banner when refreshing theme packages fails", async () => {
