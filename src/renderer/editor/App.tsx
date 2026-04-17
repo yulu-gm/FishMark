@@ -228,7 +228,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   const [themePackages, setThemePackages] = useState<
     Awaited<ReturnType<Window["yulora"]["listThemePackages"]>>
   >([]);
-  const [isRefreshingThemes, setIsRefreshingThemes] = useState(false);
+  const [isRefreshingThemePackages, setIsRefreshingThemePackages] = useState(false);
   const [appUpdateState, setAppUpdateState] = useState<AppUpdateState>({
     kind: "idle"
   });
@@ -495,21 +495,15 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     }
   });
 
-  async function handleRefreshThemes(): Promise<void> {
-    setIsRefreshingThemes(true);
+  const handleRefreshThemePackages = useEffectEvent(async (): Promise<void> => {
+    setIsRefreshingThemePackages(true);
 
     try {
-      const [nextThemes, nextThemePackages] = await Promise.all([
-        yulora.refreshThemes(),
-        yulora.refreshThemePackages()
-      ]);
-
-      setThemes(nextThemes);
-      setThemePackages(nextThemePackages);
+      setThemePackages(await yulora.refreshThemePackages());
     } finally {
-      setIsRefreshingThemes(false);
+      setIsRefreshingThemePackages(false);
     }
-  }
+  });
 
   function openSettingsDrawer(): void {
     const activeElement = document.activeElement;
@@ -1256,9 +1250,9 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
                 surfaceState={isSettingsOpen ? "open" : "closing"}
                 preferences={preferences}
                 fontFamilies={fontFamilies}
-                themes={themes}
-                isRefreshingThemes={isRefreshingThemes}
-                onRefreshThemes={handleRefreshThemes}
+                themePackages={themePackages}
+                isRefreshingThemes={isRefreshingThemePackages}
+                onRefreshThemes={handleRefreshThemePackages}
                 onUpdate={(patch) => yulora.updatePreferences(patch)}
                 onClose={closeSettingsDrawer}
               />

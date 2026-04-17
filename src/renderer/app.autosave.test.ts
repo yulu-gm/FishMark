@@ -35,6 +35,56 @@ type PreferencesChangedListener = (preferences: Preferences) => void;
 type ThemeDescriptor = Awaited<ReturnType<Window["yulora"]["listThemes"]>>[number];
 type ThemePackageDescriptor = Awaited<ReturnType<Window["yulora"]["listThemePackages"]>>[number];
 
+type SettingsDriver = {
+  openSettings: () => Promise<void>;
+  selectSettingsOption: (labelOrId: string, value: string) => Promise<void>;
+  getByLabelText: (text: string) => Element;
+};
+
+type RenderEditorAppOptions = {
+  listThemePackagesResult?: ThemePackageDescriptor[];
+  refreshThemePackagesResult?: ThemePackageDescriptor[];
+  getPreferencesResult?: Preferences;
+};
+
+function makeManifestThemePackage(
+  overrides: Partial<{ id: string; name: string }> = {}
+): ThemePackageDescriptor {
+  const id = overrides.id ?? "manifest-theme";
+
+  return {
+    id,
+    kind: "manifest-package",
+    source: "community",
+    packageRoot: `/tmp/yulora/themes/${id}`,
+    manifest: {
+      id,
+      name: overrides.name ?? "Manifest Theme",
+      version: "1.0.0",
+      author: null,
+      supports: {
+        light: true,
+        dark: true
+      },
+      tokens: {
+        dark: `/tmp/yulora/themes/${id}/tokens-dark.css`,
+        light: `/tmp/yulora/themes/${id}/tokens-light.css`
+      },
+      styles: {
+        ui: `/tmp/yulora/themes/${id}/ui.css`,
+        editor: `/tmp/yulora/themes/${id}/editor.css`,
+        markdown: `/tmp/yulora/themes/${id}/markdown.css`,
+        titlebar: null
+      },
+      layout: {
+        titlebar: null
+      },
+      scene: null,
+      surfaces: {}
+    }
+  };
+}
+
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean;
 }
@@ -193,6 +243,8 @@ describe("App autosave", () => {
   let listFontFamilies: ReturnType<typeof vi.fn<() => Promise<string[]>>>;
   let listThemes: ReturnType<typeof vi.fn<() => Promise<ThemeDescriptor[]>>>;
   let refreshThemes: ReturnType<typeof vi.fn<() => Promise<ThemeDescriptor[]>>>;
+  let listThemePackages: ReturnType<typeof vi.fn<() => Promise<ThemePackageDescriptor[]>>>;
+  let refreshThemePackages: ReturnType<typeof vi.fn<() => Promise<ThemePackageDescriptor[]>>>;
 
   const communityThemes: ThemeDescriptor[] = [
     {
@@ -294,6 +346,8 @@ describe("App autosave", () => {
       .mockResolvedValue(["Segoe UI", "Source Han Sans SC", "霞鹜文楷"]);
     listThemes = vi.fn<() => Promise<ThemeDescriptor[]>>().mockResolvedValue(communityThemes);
     refreshThemes = vi.fn<() => Promise<ThemeDescriptor[]>>().mockResolvedValue(communityThemes);
+    listThemePackages = vi.fn<() => Promise<ThemePackageDescriptor[]>>().mockResolvedValue([]);
+    refreshThemePackages = vi.fn<() => Promise<ThemePackageDescriptor[]>>().mockResolvedValue([]);
 
     window.yulora = {
       platform: "win32",
@@ -342,8 +396,8 @@ describe("App autosave", () => {
       listFontFamilies,
       listThemes,
       refreshThemes,
-      listThemePackages: vi.fn().mockResolvedValue([]),
-      refreshThemePackages: vi.fn().mockResolvedValue([]),
+      listThemePackages,
+      refreshThemePackages,
       checkForUpdates: vi.fn().mockResolvedValue(undefined),
       onPreferencesChanged(listener: PreferencesChangedListener) {
         preferencesChangedListener = listener;
@@ -393,6 +447,102 @@ describe("App autosave", () => {
       await Promise.resolve();
       await Promise.resolve();
     });
+  }
+
+  async function renderEditorApp(
+    options: RenderEditorAppOptions = {}
+  ): Promise<SettingsDriver> {
+    const {
+      listThemePackagesResult = [],
+      refreshThemePackagesResult = [],
+      getPreferencesResult = DEFAULT_PREFERENCES
+    } = options;
+
+    listThemePackages = vi.fn<() => Promise<ThemePackageDescriptor[]>>().mockResolvedValue(
+      listThemePackagesResult
+    );
+    refreshThemePackages = vi
+      .fn<() => Promise<ThemePackageDescriptor[]>>()
+      .mockResolvedValue(refreshThemePackagesResult);
+
+    window.yulora = {
+      ...window.yulora,
+      getPreferences: vi.fn().mockResolvedValue(getPreferencesResult),
+      listThemePackages,
+      refreshThemePackages
+    } as Window["yulora"];
+
+    await renderApp();
+
+    function getByLabelText(text: string): Element {
+      const normalized = text.trim().replace(/\s+/gu, " ");
+      const label = Array.from(container.querySelectorAll("label")).find((candidate) => {
+        const candidateText = candidate.textContent?.trim().replace(/\s+/gu, " ") ?? "";
+        return candidateText.includes(normalized);
+      });
+
+      if (!label) {
+        const element = container.querySelector<HTMLElement>(`#${text}`);
+        if (element) {
+          return element;
+        }
+
+        throw new Error(`No label found matching: ${text}`);
+      }
+
+      const control = (label as HTMLLabelElement).control;
+
+      if (control instanceof Element) {
+        return control;
+      }
+
+      const forId = label.getAttribute("for");
+      const fallback = forId ? container.querySelector<HTMLElement>(`#${forId}`) : null;
+      if (fallback) {
+        return fallback;
+      }
+
+      const nextControl = label.nextElementSibling;
+      if (nextControl) {
+        return nextControl;
+      }
+
+      throw new Error(`No control found for label matching: ${text}`);
+    }
+
+    async function openSettings(): Promise<void> {
+      const settingsButton = container.querySelector<HTMLButtonElement>(".settings-entry");
+
+      if (!settingsButton) {
+        throw new Error("settings button not found");
+      }
+
+      await act(async () => {
+        settingsButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        await vi.dynamicImportSettled();
+        await Promise.resolve();
+      });
+    }
+
+    async function selectSettingsOption(labelOrId: string, value: string): Promise<void> {
+      const target = getByLabelText(labelOrId);
+
+      if (!(target instanceof HTMLSelectElement)) {
+        throw new Error(`Unsupported control for settings selection: ${labelOrId}`);
+      }
+
+      await act(async () => {
+        target.value = value;
+        target.dispatchEvent(new Event("change", { bubbles: true }));
+        await Promise.resolve();
+      });
+    }
+
+    return {
+      openSettings,
+      selectSettingsOption,
+      getByLabelText
+    };
   }
 
   it("does not autosave a clean document immediately after opening", async () => {
@@ -976,30 +1126,7 @@ describe("App autosave", () => {
 
   it("mounts non-empty theme package catalogs through preview asset urls without a missing-theme warning", async () => {
     const packageThemes: ThemePackageDescriptor[] = [
-      {
-        id: "rain-glass",
-        kind: "manifest-package",
-        source: "community",
-        packageRoot: "/tmp/yulora/themes/rain-glass",
-        manifest: {
-          id: "rain-glass",
-          name: "Rain Glass",
-          version: "1.0.0",
-          author: null,
-          supports: { light: true, dark: true },
-          tokens: {
-            dark: "/tmp/yulora/themes/rain-glass/tokens-dark.css"
-          },
-          styles: {
-            ui: "/tmp/yulora/themes/rain-glass/ui.css",
-            editor: "/tmp/yulora/themes/rain-glass/editor.css",
-            markdown: "/tmp/yulora/themes/rain-glass/markdown.css"
-          },
-          layout: { titlebar: null },
-          scene: null,
-          surfaces: {}
-        }
-      }
+      makeManifestThemePackage({ id: "rain-glass", name: "Rain Glass" })
     ];
 
     window.yulora = {
@@ -1022,17 +1149,10 @@ describe("App autosave", () => {
   });
 
   it("renders the theme package selector and refreshes the theme catalog from settings", async () => {
-    await renderApp();
+    const packageThemes = [makeManifestThemePackage({ id: "graphite", name: "Graphite" })];
+    const driver = await renderEditorApp({ listThemePackagesResult: packageThemes });
 
-    const settingsButton = container.querySelector<HTMLButtonElement>(".settings-entry");
-    expect(settingsButton).not.toBeNull();
-
-    await act(async () => {
-      settingsButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await vi.dynamicImportSettled();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await driver.openSettings();
 
     const themeSelect = container.querySelector<HTMLSelectElement>("#settings-theme-package");
     const refreshButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
@@ -1055,14 +1175,47 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
-    expect(refreshThemes).toHaveBeenCalledTimes(1);
+    expect(refreshThemePackages).toHaveBeenCalledTimes(1);
+  });
+
+  it("persists theme effects mode changes from settings", async () => {
+    const driver = await renderEditorApp();
+
+    await driver.openSettings();
+    await driver.selectSettingsOption("settings-theme-effects", "off");
+
+    expect(window.yulora.updatePreferences).toHaveBeenCalledWith({
+      theme: { effectsMode: "off" }
+    });
+  });
+
+  it("shows the selected manifest package in the theme picker", async () => {
+    const driver = await renderEditorApp({
+      getPreferencesResult: {
+        ...DEFAULT_PREFERENCES,
+        theme: {
+          ...DEFAULT_PREFERENCES.theme,
+          selectedId: "rain-glass"
+        }
+      },
+      listThemePackagesResult: [makeManifestThemePackage({ id: "rain-glass", name: "Rain Glass" })]
+    });
+
+    await driver.openSettings();
+
+    const themePackageSelect = driver.getByLabelText("主题包");
+    expect((themePackageSelect as HTMLSelectElement).value).toBe("rain-glass");
   });
 
   it("shows a refresh error banner when refreshing theme packages fails", async () => {
+    refreshThemePackages = vi
+      .fn<() => Promise<ThemePackageDescriptor[]>>()
+      .mockRejectedValue(new Error("refresh failed"));
+
     window.yulora = {
       ...window.yulora,
-      refreshThemes: vi.fn().mockResolvedValue(communityThemes),
-      refreshThemePackages: vi.fn().mockRejectedValue(new Error("refresh failed"))
+      listThemePackages: vi.fn().mockResolvedValue([]),
+      refreshThemePackages
     } as Window["yulora"];
 
     await renderApp();

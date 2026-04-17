@@ -6,7 +6,6 @@ import {
   type PreferencesUpdate,
   type ThemeMode
 } from "../../shared/preferences";
-import { resolveThemeSelectionValue } from "../theme-catalog";
 
 type UpdatePreferencesResult =
   | { status: "success"; preferences: Preferences }
@@ -16,13 +15,13 @@ type UpdatePreferencesResult =
       preferences: Preferences;
     };
 
-type ThemeCatalogEntry = Awaited<ReturnType<Window["yulora"]["listThemes"]>>[number];
+type ThemePackageEntry = Awaited<ReturnType<Window["yulora"]["listThemePackages"]>>[number];
 
 type SettingsViewProps = {
   surfaceState: "open" | "closing";
   preferences: Preferences;
   fontFamilies: string[];
-  themes: ThemeCatalogEntry[];
+  themePackages: ThemePackageEntry[];
   isRefreshingThemes: boolean;
   onRefreshThemes: () => Promise<void>;
   onUpdate: (patch: PreferencesUpdate) => Promise<UpdatePreferencesResult>;
@@ -47,6 +46,36 @@ const THEME_LABELS: Record<ThemeMode, string> = {
   light: "浅色",
   dark: "深色"
 };
+
+const THEME_EFFECT_LABELS = {
+  auto: "自动",
+  full: "始终开启",
+  off: "关闭"
+} as const;
+
+function normalizeLegacyThemeId(selectedThemeId: string): string {
+  return selectedThemeId.replace(/(?:-|_)(light|dark)$/u, "");
+}
+
+function resolveThemePackageSelectionValue(
+  packages: ThemePackageEntry[],
+  selectedThemeId: string | null
+): string | null {
+  if (selectedThemeId === null) {
+    return null;
+  }
+
+  if (packages.some((themePackage) => themePackage.id === selectedThemeId)) {
+    return selectedThemeId;
+  }
+
+  const legacyFamilyId = normalizeLegacyThemeId(selectedThemeId);
+
+  return legacyFamilyId !== selectedThemeId &&
+    packages.some((themePackage) => themePackage.id === legacyFamilyId)
+    ? legacyFamilyId
+    : null;
+}
 
 function buildDraft(preferences: Preferences): DraftState {
   return {
@@ -95,7 +124,7 @@ export function SettingsView({
   surfaceState,
   preferences,
   fontFamilies,
-  themes,
+  themePackages,
   isRefreshingThemes,
   onRefreshThemes,
   onUpdate,
@@ -109,9 +138,9 @@ export function SettingsView({
     setDraft(buildDraft(preferences));
   }, [preferences]);
 
-  const communityThemes = useMemo(
-    () => themes.filter((theme) => theme.source === "community"),
-    [themes]
+  const communityThemePackages = useMemo(
+    () => themePackages.filter((themePackage) => themePackage.source === "community"),
+    [themePackages]
   );
   const documentFontOptions = useMemo(
     () => buildFontOptions(fontFamilies, draft.documentFontFamily.trim()),
@@ -121,12 +150,12 @@ export function SettingsView({
     () => buildFontOptions(fontFamilies, draft.documentCjkFontFamily.trim()),
     [fontFamilies, draft.documentCjkFontFamily]
   );
-  const resolvedThemeSelectionValue = resolveThemeSelectionValue(
-    communityThemes,
-    preferences.theme.selectedId
+  const resolvedThemeSelectionValue = useMemo(
+    () => resolveThemePackageSelectionValue(themePackages, preferences.theme.selectedId),
+    [preferences.theme.selectedId, themePackages]
   );
   const selectedThemeMissing =
-    preferences.theme.selectedId !== null && resolvedThemeSelectionValue === preferences.theme.selectedId;
+    preferences.theme.selectedId !== null && resolvedThemeSelectionValue === null;
 
   async function applyPatch(patch: PreferencesUpdate): Promise<void> {
     const result = await onUpdate(patch);
@@ -151,6 +180,10 @@ export function SettingsView({
 
   function handleThemeModeChange(mode: ThemeMode): void {
     void applyPatch({ theme: { mode } });
+  }
+
+  function handleThemeEffectsModeChange(value: "auto" | "full" | "off"): void {
+    void applyPatch({ theme: { effectsMode: value } });
   }
 
   function handleThemePackageChange(value: string): void {
@@ -260,7 +293,8 @@ export function SettingsView({
     void applyPatch({
       theme: {
         mode: DEFAULT_PREFERENCES.theme.mode,
-        selectedId: DEFAULT_PREFERENCES.theme.selectedId
+        selectedId: DEFAULT_PREFERENCES.theme.selectedId,
+        effectsMode: DEFAULT_PREFERENCES.theme.effectsMode
       },
       ui: {
         fontSize: DEFAULT_PREFERENCES.ui.fontSize
@@ -329,7 +363,7 @@ export function SettingsView({
         <section className="settings-group">
           <header className="settings-group-header">
             <h2>主题</h2>
-            <p>颜色模式控制 light / dark / system，主题家族控制整套 CSS 覆写。</p>
+            <p>颜色模式控制 light / dark / system，主题包控制整套视觉风格。</p>
           </header>
           <div className="settings-row">
             <label className="settings-label">
@@ -365,7 +399,7 @@ export function SettingsView({
               className="settings-label"
               htmlFor="settings-theme-package"
             >
-              <span>主题家族</span>
+              <span>主题包</span>
               <span className="settings-hint">默认主题使用内置 light / dark 套件，社区主题来自自动扫描目录。</span>
             </label>
             <div className="settings-input-stack">
@@ -376,12 +410,12 @@ export function SettingsView({
                 onChange={(event) => handleThemePackageChange(event.target.value)}
               >
                 <option value="default">Yulora 默认</option>
-                {communityThemes.map((theme) => (
+                {communityThemePackages.map((themePackage) => (
                   <option
-                    key={theme.id}
-                    value={theme.id}
+                    key={themePackage.id}
+                    value={themePackage.id}
                   >
-                    {theme.name}
+                    {themePackage.manifest.name}
                   </option>
                 ))}
                 {selectedThemeMissing ? (
@@ -403,6 +437,26 @@ export function SettingsView({
                 </button>
               </div>
             </div>
+          </div>
+          <div className="settings-row">
+            <label className="settings-label" htmlFor="settings-theme-effects">
+              <span>动态效果</span>
+              <span className="settings-hint">自动模式会在低性能或减少动态效果场景下自动降级。</span>
+            </label>
+            <select
+              id="settings-theme-effects"
+              className="settings-input settings-select"
+              value={preferences.theme.effectsMode}
+              onChange={(event) =>
+                handleThemeEffectsModeChange(event.target.value as "auto" | "full" | "off")
+              }
+            >
+              {(["auto", "full", "off"] as const).map((mode) => (
+                <option key={mode} value={mode}>
+                  {THEME_EFFECT_LABELS[mode]}
+                </option>
+              ))}
+            </select>
           </div>
         </section>
 
