@@ -91,6 +91,17 @@ function makeManifestThemePackage(
   };
 }
 
+function getCssRule(stylesheet: string, selector: string): string {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = stylesheet.match(new RegExp(`${escapedSelector}\\s*\\{([\\s\\S]*?)\\n\\}`, "m"));
+
+  if (!match || match[0] === undefined) {
+    throw new Error(`Missing stylesheet rule for selector: ${selector}`);
+  }
+
+  return match[0];
+}
+
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean;
 }
@@ -1294,19 +1305,42 @@ describe("App autosave", () => {
     expect(surfaceHost?.getAttribute("data-yulora-theme-scene")).toBe("rain-scene");
   });
 
-  it("renders a controlled titlebar host with built-in items", async () => {
+  it("renders a controlled titlebar host with built-in items on controlled-chrome platforms", async () => {
+    window.yulora = {
+      ...window.yulora,
+      platform: "darwin"
+    } as Window["yulora"];
+
     await renderApp();
 
     const titlebar = container.querySelector('[data-yulora-role="titlebar"]');
 
     expect(titlebar).not.toBeNull();
-    expect(titlebar?.querySelector('[data-yulora-titlebar-item="app-icon"]')).not.toBeNull();
     expect(titlebar?.querySelector('[data-yulora-titlebar-item="document-title"]')?.textContent).toContain(
       "Local-first Markdown writing"
     );
     expect(titlebar?.querySelector('[data-yulora-titlebar-item="dirty-indicator"]')).not.toBeNull();
+    expect(titlebar?.querySelector('[data-yulora-titlebar-item="app-icon"]')).toBeNull();
     expect(titlebar?.querySelector('[data-yulora-titlebar-item="theme-toggle"]')).toBeNull();
     expect(titlebar?.querySelector('[data-yulora-titlebar-item="window-actions"]')).toBeNull();
+  });
+
+  it("does not mount a renderer titlebar on Windows native-chrome platforms", async () => {
+    await renderApp();
+
+    expect(container.querySelector('[data-yulora-role="titlebar"]')).toBeNull();
+  });
+
+  it("renders the bridge-unavailable fallback inside a shell-safe container", async () => {
+    window.yulora = undefined as unknown as Window["yulora"];
+
+    await renderApp();
+
+    expect(container.querySelector('[data-yulora-role="titlebar"]')).toBeNull();
+    expect(container.querySelector(".app-shell-fallback")).not.toBeNull();
+    expect(container.querySelector(".app-shell-fallback .error-banner")?.textContent).toContain(
+      "Yulora bridge unavailable"
+    );
   });
 
   it("uses the macOS default titlebar layout without renderer window actions", async () => {
@@ -1333,6 +1367,11 @@ describe("App autosave", () => {
   });
 
   it("mounts a titlebar shader surface host for the active manifest package", async () => {
+    window.yulora = {
+      ...window.yulora,
+      platform: "darwin"
+    } as Window["yulora"];
+
     await renderEditorApp({
       getPreferencesResult: {
         ...DEFAULT_PREFERENCES,
@@ -2055,10 +2094,21 @@ describe("App autosave", () => {
 
   it("anchors the rail to the viewport so the settings trigger stays visible", () => {
     const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8");
+    const railRule = getCssRule(appUiStylesheet, ".app-rail");
 
-    expect(appUiStylesheet).toContain(".app-rail");
-    expect(appUiStylesheet).toContain("height: 100dvh;");
-    expect(appUiStylesheet).toContain("align-self: start;");
+    expect(railRule).toContain("align-self: start;");
+    expect(railRule).toContain("position: sticky;");
+    expect(railRule).toContain("top: 0;");
+    expect(railRule).toContain("height: 100%;");
+  });
+
+  it("defines a fallback shell container for bridge-unavailable rendering", () => {
+    const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8");
+    const fallbackRule = getCssRule(appUiStylesheet, ".app-shell-fallback");
+
+    expect(fallbackRule).toContain("display: grid;");
+    expect(fallbackRule).toContain("place-items: center;");
+    expect(fallbackRule).toContain("padding:");
   });
 
   it("defines a compact floating outline panel with a fixed header and glass styling", () => {
@@ -2097,11 +2147,16 @@ describe("App autosave", () => {
   it("locks shell scrolling to the editor surface", () => {
     const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8");
     const editorStylesheet = readFileSync(join(process.cwd(), "src/renderer/styles/editor-source.css"), "utf-8");
+    const shellRule = getCssRule(appUiStylesheet, ".app-shell");
+    const workspaceRule = getCssRule(appUiStylesheet, ".app-workspace");
+    const titlebarRule = getCssRule(appUiStylesheet, ".app-titlebar");
 
-    expect(appUiStylesheet).toContain(".app-shell");
-    expect(appUiStylesheet).toContain("overflow: hidden;");
-    expect(appUiStylesheet).toContain(".app-workspace");
-    expect(appUiStylesheet).toContain("height: 100dvh;");
+    expect(shellRule).toContain("overflow: hidden;");
+    expect(shellRule).toContain("display: grid;");
+    expect(shellRule).toContain("grid-template-rows: var(--yulora-titlebar-height) minmax(0, 1fr);");
+    expect(workspaceRule).toContain("height: 100%;");
+    expect(workspaceRule).toContain("overflow: hidden;");
+    expect(titlebarRule).toContain("min-height: var(--yulora-titlebar-height);");
     expect(appUiStylesheet).toContain(".workspace-canvas");
     expect(appUiStylesheet).toContain("overflow: hidden;");
     expect(appUiStylesheet).toContain(".document-editor");

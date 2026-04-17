@@ -123,6 +123,13 @@
   grid-template-columns: var(--yulora-shell-rail-width) minmax(0, 1fr);
 }
 
+.app-shell-fallback {
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--yulora-space-6);
+}
+
 .app-rail {
   align-self: start;
   position: sticky;

@@ -112,6 +112,10 @@ function hasFileDrag(dataTransfer: DataTransfer | null): boolean {
 
 type AppNotificationBannerState = "hidden" | "open" | "closing";
 
+function supportsControlledTitlebar(platform: NodeJS.Platform): boolean {
+  return platform === "darwin";
+}
+
 function resolveThemeMode(mode: ThemeMode): ResolvedThemeMode {
   if (mode === "light" || mode === "dark") {
     return mode;
@@ -353,6 +357,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   const appUpdateStatusLabel = appUpdateState.kind === "downloading"
     ? `正在下载更新${Number.isFinite(appUpdateState.percent) ? ` ${Math.round(appUpdateState.percent)}%` : "…"}`
     : null;
+  const controlledTitlebarEnabled = supportsControlledTitlebar(yulora.platform);
   const resolvedThemeMode = resolveThemeMode(preferences.theme.mode);
   const activeThemePackages =
     themePackages.length > 0
@@ -383,7 +388,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   );
   const activeTitlebarSurface = useMemo(
     () =>
-      preferences.theme.effectsMode === "off"
+      !controlledTitlebarEnabled || preferences.theme.effectsMode === "off"
         ? null
         : resolveActiveThemeSurface(
             preferences.theme.selectedId,
@@ -395,7 +400,8 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
       preferences.theme.effectsMode,
       preferences.theme.selectedId,
       resolvedThemeMode,
-      themePackages
+      themePackages,
+      controlledTitlebarEnabled
     ]
   );
   const titlebarLayout = useMemo(
@@ -1091,18 +1097,20 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
       className="app-shell"
       style={
         {
-          "--yulora-titlebar-height": `${titlebarLayout.height}px`
+          "--yulora-titlebar-height": controlledTitlebarEnabled ? `${titlebarLayout.height}px` : "0px"
         } as CSSProperties
       }
     >
-      <TitlebarHost
-        platform={yulora.platform}
-        layout={titlebarLayout}
-        title={headerTitle}
-        isDirty={state.isDirty}
-        effectsMode={preferences.theme.effectsMode}
-        titlebarSurface={activeTitlebarSurface}
-      />
+      {controlledTitlebarEnabled ? (
+        <TitlebarHost
+          platform={yulora.platform}
+          layout={titlebarLayout}
+          title={headerTitle}
+          isDirty={state.isDirty}
+          effectsMode={preferences.theme.effectsMode}
+          titlebarSurface={activeTitlebarSurface}
+        />
+      ) : null}
       <div className="app-layout">
         <aside
           className="app-rail"
@@ -1394,13 +1402,18 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
 
 function BridgeUnavailableApp() {
   return (
-    <main className="app-shell">
-      <p
-        className="error-banner"
-        role="alert"
-      >
-        Yulora bridge unavailable. Reload the window or restart the dev shell.
-      </p>
+    <main
+      className="app-shell"
+      style={{ "--yulora-titlebar-height": "0px" } as CSSProperties}
+    >
+      <div className="app-shell-fallback">
+        <p
+          className="error-banner"
+          role="alert"
+        >
+          Yulora bridge unavailable. Reload the window or restart the dev shell.
+        </p>
+      </div>
     </main>
   );
 }
