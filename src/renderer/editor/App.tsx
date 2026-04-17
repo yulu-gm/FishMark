@@ -51,6 +51,11 @@ import {
   resolveDefaultTitlebarLayout
 } from "./titlebar-layout";
 import type { ThemeSurfaceRuntimeMode } from "../shader/theme-surface-runtime";
+import {
+  resolveThemeDynamicAggregateMode,
+  shouldWarnForThemeDynamicFallback,
+  type ThemeDynamicAggregateMode
+} from "./theme-dynamic-mode";
 
 const SettingsView = lazy(async () => {
   const module = await import("./settings-view");
@@ -172,7 +177,7 @@ function clearDocumentPreferences(root: HTMLElement): void {
 
 function applyThemeDynamicModeToDocument(
   root: HTMLElement,
-  mode: ThemeSurfaceRuntimeMode | "off"
+  mode: ThemeDynamicAggregateMode
 ): void {
   root.setAttribute(THEME_DYNAMIC_MODE_ATTRIBUTE, mode);
 }
@@ -425,25 +430,25 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
       controlledTitlebarEnabled
     ]
   );
-  const themeDynamicMode = useMemo<ThemeSurfaceRuntimeMode | "off">(() => {
-    const mountedSurfaceModes = [workbenchSurfaceRuntimeMode, titlebarSurfaceRuntimeMode].filter(
-      (mode): mode is ThemeSurfaceRuntimeMode => mode !== null
-    );
-
-    if (mountedSurfaceModes.some((mode) => mode === "fallback")) {
-      return "fallback";
-    }
-
-    if (mountedSurfaceModes.some((mode) => mode === "full")) {
-      return "full";
-    }
-
-    if (mountedSurfaceModes.some((mode) => mode === "reduced")) {
-      return "reduced";
-    }
-
-    return "off";
-  }, [titlebarSurfaceRuntimeMode, workbenchSurfaceRuntimeMode]);
+  const themeDynamicMode = useMemo<ThemeDynamicAggregateMode>(
+    () =>
+      resolveThemeDynamicAggregateMode({
+        workbench: {
+          active: activeWorkbenchSurface !== null,
+          mode: workbenchSurfaceRuntimeMode
+        },
+        titlebar: {
+          active: activeTitlebarSurface !== null,
+          mode: titlebarSurfaceRuntimeMode
+        }
+      }),
+    [
+      activeTitlebarSurface,
+      activeWorkbenchSurface,
+      titlebarSurfaceRuntimeMode,
+      workbenchSurfaceRuntimeMode
+    ]
+  );
   const titlebarLayout = useMemo(
     () => normalizeTitlebarLayout(resolveDefaultTitlebarLayout(yulora.platform)),
     [yulora.platform]
@@ -459,11 +464,11 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     return editorRef.current?.getContent() ?? editorContentRef.current;
   }
 
-  const handleWorkbenchSurfaceRuntimeModeChange = useCallback((mode: ThemeSurfaceRuntimeMode | null) => {
+  const handleWorkbenchSurfaceRuntimeModeChange = useCallback((mode: ThemeSurfaceRuntimeMode) => {
     setWorkbenchSurfaceRuntimeMode((current) => (current === mode ? current : mode));
   }, []);
 
-  const handleTitlebarSurfaceRuntimeModeChange = useCallback((mode: ThemeSurfaceRuntimeMode | null) => {
+  const handleTitlebarSurfaceRuntimeModeChange = useCallback((mode: ThemeSurfaceRuntimeMode) => {
     setTitlebarSurfaceRuntimeMode((current) => (current === mode ? current : mode));
   }, []);
 
@@ -1105,7 +1110,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     const root = document.documentElement;
     applyThemeDynamicModeToDocument(root, themeDynamicMode);
 
-    if (themeDynamicMode !== "fallback") {
+    if (!shouldWarnForThemeDynamicFallback(themeDynamicMode)) {
       lastThemeDynamicNotificationKeyRef.current = null;
       return () => {
         clearThemeDynamicModeFromDocument(root);

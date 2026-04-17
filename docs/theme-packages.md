@@ -24,7 +24,7 @@ rain-glass/
     titlebar-backdrop.glsl
 ```
 
-`manifest.json` is required. Other folders are optional, but the manifest should only point to files that actually exist.
+`manifest.json` is required. Other folders are optional, and the loader only normalizes referenced paths into the package root; it does not eagerly verify that every asset exists at scan time.
 
 ## Manifest Contract
 
@@ -38,7 +38,7 @@ Use the current manifest fields supported by the loader:
 - `scene.id` and `scene.sharedUniforms`
 - `surfaces.workbenchBackground`, `surfaces.titlebarBackdrop`, `surfaces.welcomeHero`
 
-The loader resolves these values into local asset URLs and rejects malformed paths, so keep every path inside the package root.
+The loader resolves these values into local asset URLs and rejects malformed paths that escape the package root, so keep every path inside the package root.
 
 ## Tokens And Styles
 
@@ -63,7 +63,7 @@ Each surface should point at a fragment shader that compiles without extra runti
 
 ## Fallback And Performance
 
-Shader surfaces are always optional from the app’s point of view. If the runtime cannot fetch, compile, or mount a surface, Yulora falls back to static styling and records that fallback on the document element so the UI can warn the user once.
+Shader surfaces are always optional from the app’s point of view. If the runtime cannot fetch, compile, or mount a surface, Yulora falls back to static styling. The app records the aggregate dynamic mode on the document element and warns once only when every active dynamic surface has fallen back.
 
 When authoring a package:
 

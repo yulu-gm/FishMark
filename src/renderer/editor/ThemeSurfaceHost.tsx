@@ -18,7 +18,7 @@ type ThemeSurfaceHostProps = {
   surface: ThemeSurfaceSlot;
   descriptor: ThemeSurfaceHostDescriptor;
   effectsMode: ThemeEffectsMode;
-  onRuntimeModeChange?: (mode: ThemeSurfaceRuntimeMode | null) => void;
+  onRuntimeModeChange?: (mode: ThemeSurfaceRuntimeMode) => void;
 };
 
 function serializeSharedUniforms(sharedUniforms: Record<string, number>): string {
@@ -55,8 +55,6 @@ export function ThemeSurfaceHost({
     let isDisposed = false;
     let mountedSurface: { unmount: () => void } | null = null;
     const abortController = new AbortController();
-
-    onRuntimeModeChange?.(null);
 
     async function loadAndMount(): Promise<void> {
       try {
@@ -109,7 +107,6 @@ export function ThemeSurfaceHost({
       isDisposed = true;
       abortController.abort();
       mountedSurface?.unmount();
-      onRuntimeModeChange?.(null);
     };
   }, [
     descriptor.sceneId,

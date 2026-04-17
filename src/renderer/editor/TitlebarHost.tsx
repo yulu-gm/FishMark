@@ -10,7 +10,7 @@ type TitlebarHostProps = {
   isDirty: boolean;
   effectsMode: ThemeEffectsMode;
   titlebarSurface: ThemeSurfaceHostDescriptor | null;
-  onTitlebarSurfaceRuntimeModeChange?: (mode: ThemeSurfaceRuntimeMode | null) => void;
+  onTitlebarSurfaceRuntimeModeChange?: (mode: ThemeSurfaceRuntimeMode) => void;
 };
 
 function renderTitlebarItem(
