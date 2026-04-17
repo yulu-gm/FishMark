@@ -84,7 +84,7 @@ describe("loadPreferencesFromDisk", () => {
       recentFiles: { maxEntries: 20 },
       ui: { fontSize: 18 },
       document: { fontFamily: "Fira Code", cjkFontFamily: "Source Han Sans SC", fontSize: 16 },
-      theme: { mode: "dark", selectedId: "graphite" }
+      theme: { mode: "dark", selectedId: "graphite", effectsMode: "auto" }
     });
   });
 

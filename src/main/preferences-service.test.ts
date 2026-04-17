@@ -203,7 +203,9 @@ describe("createPreferencesService", () => {
 
     expect(failing).toHaveBeenCalled();
     expect(recipient).toHaveBeenCalledWith(
-      expect.objectContaining({ theme: { mode: "dark", selectedId: "graphite" } })
+      expect.objectContaining({
+        theme: { mode: "dark", selectedId: "graphite", effectsMode: "auto" }
+      })
     );
   });
 });
