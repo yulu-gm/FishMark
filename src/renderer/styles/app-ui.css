@@ -785,6 +785,23 @@
     --yulora-outline-column-width: min(220px, 44vw);
   }
 
+  .shortcut-hint-overlay {
+    top: var(--yulora-space-3);
+    left: var(--yulora-space-3);
+    max-width: min(18ch, calc(100% - var(--yulora-space-6)));
+  }
+
+  .shortcut-hint-overlay-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+    white-space: normal;
+  }
+
+  .shortcut-hint-overlay-label {
+    margin-top: 1px;
+  }
+
   .empty-inner {
     padding: var(--yulora-space-8) var(--yulora-space-4);
   }
