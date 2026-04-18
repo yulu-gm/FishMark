@@ -4,6 +4,12 @@ export { runMarkdownBackspace, runMarkdownEnter, runMarkdownTab } from "./markdo
 export { runListEnter, runListIndentOnTab } from "./list-commands";
 export { toggleEmphasis, toggleStrong } from "./toggle-inline-commands";
 export {
+  toggleBlockquote,
+  toggleBulletList,
+  toggleCodeFence,
+  toggleHeading
+} from "./toggle-block-commands";
+export {
   buildContinuationPrefix,
   getBackspaceLineStart,
   getCodeFenceEditableAnchor,
