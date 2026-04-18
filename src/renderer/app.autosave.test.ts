@@ -1967,6 +1967,19 @@ describe("App autosave", () => {
     expect(overlayHideRule.test(appUiStylesheet)).toBe(false);
   });
 
+  it("keeps shortcut hint fade animations free of horizontal drift so the measured footprint stays valid", () => {
+    const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8");
+    const overlayEnterKeyframes =
+      appUiStylesheet.match(/@keyframes shortcut-hint-overlay-enter \{[\s\S]*?\n\}/m)?.[0] ?? "";
+    const overlayExitKeyframes =
+      appUiStylesheet.match(/@keyframes shortcut-hint-overlay-exit \{[\s\S]*?\n\}/m)?.[0] ?? "";
+
+    expect(overlayEnterKeyframes).toContain("opacity:");
+    expect(overlayExitKeyframes).toContain("opacity:");
+    expect(overlayEnterKeyframes).not.toContain("translateX");
+    expect(overlayExitKeyframes).not.toContain("translateX");
+  });
+
   it("renders settings as a drawer panel with close affordance while keeping existing controls", async () => {
     await renderApp();
 

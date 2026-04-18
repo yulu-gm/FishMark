@@ -359,24 +359,20 @@
 @keyframes shortcut-hint-overlay-enter {
   from {
     opacity: 0;
-    transform: translateX(10px);
   }
 
   to {
     opacity: 1;
-    transform: translateX(0);
   }
 }
 
 @keyframes shortcut-hint-overlay-exit {
   from {
     opacity: 1;
-    transform: translateX(0);
   }
 
   to {
     opacity: 0;
-    transform: translateX(8px);
   }
 }
 
