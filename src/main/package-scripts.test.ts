@@ -94,6 +94,18 @@ describe("package scripts", () => {
     expect(viteConfigSource).toContain("YULORA_DEV_SERVER_PORT");
   });
 
+  it("copies builtin theme packages into the renderer build output", () => {
+    const packageJsonPath = path.join(process.cwd(), "package.json");
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
+      scripts?: Record<string, string>;
+    };
+
+    expect(packageJson.scripts?.["build:renderer"]).toContain("vite build");
+    expect(packageJson.scripts?.["build:renderer"]).toContain(
+      "node scripts/copy-builtin-theme-packages.mjs"
+    );
+  });
+
   it("uses relative asset URLs for the renderer build output", () => {
     const viteConfigPath = path.join(process.cwd(), "vite.config.ts");
     const viteConfigSource = readFileSync(viteConfigPath, "utf8");

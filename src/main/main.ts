@@ -20,7 +20,10 @@ import {
 import { saveMarkdownFileToPath, showSaveMarkdownDialog } from "./save-markdown-file";
 import { createPreferencesService } from "./preferences-service";
 import { createFontCatalogService } from "./font-catalog-service";
-import { createThemePackageService } from "./theme-package-service";
+import {
+  createThemePackageService,
+  resolveBuiltinThemePackagesDir
+} from "./theme-package-service";
 import { resolveRendererEntry } from "./paths";
 import { configureMainProcessRuntime, shouldRequestSingleInstanceLock } from "./runtime-environment";
 import { createRuntimeWindowManager, resolveAppRuntimeMode } from "./runtime-windows";
@@ -194,7 +197,8 @@ app.whenReady().then(async () => {
 
   const initialPreferences = await preferencesService.initialize();
   const themePackageService = createThemePackageService({
-    userDataDir: app.getPath("userData")
+    userDataDir: app.getPath("userData"),
+    builtinPackagesDir: resolveBuiltinThemePackagesDir({ isPackaged: app.isPackaged })
   });
   const fontCatalogService = createFontCatalogService({
     platform: process.platform

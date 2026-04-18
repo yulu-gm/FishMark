@@ -18,7 +18,7 @@
     "dev:renderer": "vite",
     "dev:renderer:test-workbench": "vite --port 5174",
     "build": "npm run clean && npm run build:renderer && npm run build:electron && npm run build:cli",
-    "build:renderer": "vite build",
+    "build:renderer": "vite build && node scripts/copy-builtin-theme-packages.mjs",
     "build:electron": "tsc -p tsconfig.electron.json",
     "clean": "rimraf dist dist-electron dist-cli tsconfig.electron.tsbuildinfo tsconfig.renderer.tsbuildinfo tsconfig.vitest.tsbuildinfo tsconfig.cli.tsbuildinfo",
     "lint": "eslint .",

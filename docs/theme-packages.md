@@ -3,6 +3,7 @@
 Theme packages are the only supported theme architecture in Yulora.
 
 - Builtin packages ship from `src/renderer/theme-packages/`
+- Renderer builds copy builtin packages into `dist/theme-packages/` so packaged apps can still scan them
 - External packages live under `<userData>/themes/<id>/`
 - Every package directory must contain `manifest.json`
 - Directories without `manifest.json` are ignored

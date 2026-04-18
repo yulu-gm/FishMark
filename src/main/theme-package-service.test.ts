@@ -4,9 +4,24 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { createThemePackageService } from "./theme-package-service";
+import {
+  createThemePackageService,
+  resolveBuiltinThemePackagesDir
+} from "./theme-package-service";
 
 describe("createThemePackageService", () => {
+  it("resolves packaged builtin themes from the built dist payload", () => {
+    const moduleDir = path.join(
+      "C:/Program Files/Yulora/resources/app.asar",
+      "dist-electron",
+      "main"
+    );
+
+    expect(resolveBuiltinThemePackagesDir({ isPackaged: true, moduleDir })).toBe(
+      path.join("C:/Program Files/Yulora/resources/app.asar", "dist", "theme-packages")
+    );
+  });
+
   it("ignores legacy css-family directories without a manifest", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "yulora-theme-packages-"));
     const userDataDir = path.join(root, "userdata");

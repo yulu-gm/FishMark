@@ -20,6 +20,7 @@ type ThemePackageServiceDependencies = {
 
 export type CreateThemePackageServiceInput = {
   userDataDir: string;
+  builtinPackagesDir?: string;
   dependencies?: Partial<ThemePackageServiceDependencies>;
 };
 
@@ -33,7 +34,20 @@ const defaultDependencies: ThemePackageServiceDependencies = {
   readFile: (targetPath, options) => readFile(targetPath, options)
 };
 
-const BUILTIN_THEME_PACKAGES_DIR = path.resolve(process.cwd(), "src/renderer/theme-packages");
+type ResolveBuiltinThemePackagesDirInput = {
+  isPackaged?: boolean;
+  moduleDir?: string;
+};
+
+export function resolveBuiltinThemePackagesDir(
+  input: ResolveBuiltinThemePackagesDirInput = {}
+): string {
+  const moduleDir = input.moduleDir ?? __dirname;
+
+  return input.isPackaged
+    ? path.resolve(moduleDir, "../../dist/theme-packages")
+    : path.resolve(moduleDir, "../../src/renderer/theme-packages");
+}
 
 async function safeReadDir(
   targetPath: string,
@@ -116,11 +130,12 @@ async function scanThemePackagesInDirectory(
 }
 
 async function scanThemePackages(
+  builtinPackagesDir: string,
   userDataDir: string,
   dependencies: ThemePackageServiceDependencies
 ): Promise<ThemePackageDescriptor[]> {
   const [builtinPackages, communityPackages] = await Promise.all([
-    scanThemePackagesInDirectory(BUILTIN_THEME_PACKAGES_DIR, "builtin", dependencies),
+    scanThemePackagesInDirectory(builtinPackagesDir, "builtin", dependencies),
     scanThemePackagesInDirectory(path.join(userDataDir, "themes"), "community", dependencies)
   ]);
 
@@ -146,19 +161,20 @@ export function createThemePackageService(input: CreateThemePackageServiceInput)
     ...defaultDependencies,
     ...(input.dependencies ?? {})
   };
+  const builtinPackagesDir = input.builtinPackagesDir ?? resolveBuiltinThemePackagesDir();
 
   let cache: ThemePackageDescriptor[] | null = null;
 
   return {
     async listThemePackages() {
       if (!cache) {
-        cache = await scanThemePackages(input.userDataDir, dependencies);
+        cache = await scanThemePackages(builtinPackagesDir, input.userDataDir, dependencies);
       }
 
       return [...cache];
     },
     async refreshThemePackages() {
-      cache = await scanThemePackages(input.userDataDir, dependencies);
+      cache = await scanThemePackages(builtinPackagesDir, input.userDataDir, dependencies);
       return [...cache];
     }
   };
