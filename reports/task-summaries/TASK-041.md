@@ -45,6 +45,11 @@
 - `npm run typecheck` 通过
 - `npm run build` 通过
 
+## Follow-up
+
+- Added modifier-hold shortcut hints in the left whitespace lane of the editor canvas.
+- Verified that the overlay does not change document layout and hides on blur/key release.
+
 ## 剩余风险
 
 - 本轮不支持自定义快捷键、菜单栏 accelerator 文案同步、有序列表 / 任务列表 / 链接 / 行内代码快捷键、多光标格式切换

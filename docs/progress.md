@@ -25,6 +25,8 @@
 
 当前工作区依赖已安装，并已在 2026-04-16 本地环境里实际执行并通过 `npm run lint`、`npm run typecheck`、`npm run test`、`npm run build`。若环境差异较大，可按需重跑四项门禁命令复核。
 
+2026-04-18 补充：已完成 modifier-hold shortcut hint overlay 的进展记录，提示层只在编辑器获得焦点且按住主修饰键时显示，不改变文档布局。
+
 ## 人工验收建议
 
 如果你现在想人工验收，请验 `TASK-001`、`TASK-002`、`TASK-003`、`TASK-004`、`TASK-007`、`TASK-032` 和 `TASK-037`：
