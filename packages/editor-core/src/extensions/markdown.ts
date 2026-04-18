@@ -18,7 +18,17 @@ import {
   type ActiveBlockSelection,
   type ActiveBlockState
 } from "../active-block";
-import { runMarkdownBackspace, runMarkdownEnter, runMarkdownTab } from "../commands";
+import {
+  runMarkdownBackspace,
+  runMarkdownEnter,
+  runMarkdownTab,
+  toggleBlockquote,
+  toggleBulletList,
+  toggleCodeFence,
+  toggleEmphasis,
+  toggleHeading,
+  toggleStrong
+} from "../commands";
 import { createMarkdownDocumentCache } from "../derived-state/markdown-document-cache";
 import { deriveInactiveBlockDecorationsState } from "../derived-state/inactive-block-decorations";
 
@@ -231,6 +241,42 @@ export function createYuloraMarkdownExtensions(
       {
         key: "Tab",
         run: (view) => runMarkdownTab(view, runtime.activeBlockState)
+      },
+      {
+        key: "Mod-b",
+        run: (view) => toggleStrong(view, runtime.activeBlockState)
+      },
+      {
+        key: "Mod-i",
+        run: (view) => toggleEmphasis(view, runtime.activeBlockState)
+      },
+      {
+        key: "Mod-1",
+        run: (view) => toggleHeading(1)(view, runtime.activeBlockState)
+      },
+      {
+        key: "Mod-2",
+        run: (view) => toggleHeading(2)(view, runtime.activeBlockState)
+      },
+      {
+        key: "Mod-3",
+        run: (view) => toggleHeading(3)(view, runtime.activeBlockState)
+      },
+      {
+        key: "Mod-4",
+        run: (view) => toggleHeading(4)(view, runtime.activeBlockState)
+      },
+      {
+        key: "Mod-Shift-7",
+        run: (view) => toggleBulletList(view, runtime.activeBlockState)
+      },
+      {
+        key: "Mod-Shift-9",
+        run: (view) => toggleBlockquote(view, runtime.activeBlockState)
+      },
+      {
+        key: "Mod-Alt-Shift-c",
+        run: (view) => toggleCodeFence(view, runtime.activeBlockState)
       },
       ...historyKeymap,
       ...defaultKeymap

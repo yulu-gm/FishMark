@@ -169,4 +169,42 @@ describe("createYuloraMarkdownExtensions", () => {
 
     destroy();
   });
+
+  it("toggles strong on Mod-b", () => {
+    const source = "alpha bold beta";
+    const { view, destroy } = createHarness({ source });
+    view.dispatch({ selection: { anchor: 6, head: 10 } });
+
+    const keyEvent = new KeyboardEvent("keydown", {
+      key: "b",
+      code: "KeyB",
+      bubbles: true,
+      cancelable: true,
+      ctrlKey: true
+    });
+    view.contentDOM.dispatchEvent(keyEvent);
+
+    expect(view.state.doc.toString()).toBe("alpha **bold** beta");
+
+    destroy();
+  });
+
+  it("toggles a heading on Mod-2", () => {
+    const source = "Paragraph";
+    const { view, destroy } = createHarness({ source });
+    view.dispatch({ selection: { anchor: 0 } });
+
+    const keyEvent = new KeyboardEvent("keydown", {
+      key: "2",
+      code: "Digit2",
+      bubbles: true,
+      cancelable: true,
+      ctrlKey: true
+    });
+    view.contentDOM.dispatchEvent(keyEvent);
+
+    expect(view.state.doc.toString()).toBe("## Paragraph");
+
+    destroy();
+  });
 });
