@@ -295,6 +295,79 @@
 
 .document-canvas {
   min-width: 0;
+  position: relative;
+}
+
+.shortcut-hint-overlay {
+  position: absolute;
+  top: clamp(16px, 2vw, 24px);
+  right: clamp(16px, 2vw, 24px);
+  z-index: 3;
+  pointer-events: none;
+  user-select: none;
+  color: var(--yulora-text-subtle);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+}
+
+.shortcut-hint-overlay[data-state="open"] {
+  animation: shortcut-hint-overlay-enter 180ms cubic-bezier(0.2, 0.85, 0.2, 1) both;
+}
+
+.shortcut-hint-overlay[data-state="closing"] {
+  animation: shortcut-hint-overlay-exit 180ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.shortcut-hint-overlay-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+
+.shortcut-hint-overlay-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 12px;
+  white-space: nowrap;
+}
+
+.shortcut-hint-overlay-key {
+  color: var(--yulora-text-strong);
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.shortcut-hint-overlay-label {
+  color: var(--yulora-text-muted);
+  font-weight: 500;
+}
+
+@keyframes shortcut-hint-overlay-enter {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes shortcut-hint-overlay-exit {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(8px);
+  }
 }
 
 .outline-entry {
