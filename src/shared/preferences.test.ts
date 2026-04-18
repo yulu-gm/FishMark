@@ -92,6 +92,32 @@ describe("normalizePreferences", () => {
     expect(normalizePreferences({ ui: { fontSize: "big" } }).ui.fontSize).toBeNull();
   });
 
+  it("normalizes focus trigger mode and idle delay", () => {
+    const result = normalizePreferences({
+      focus: {
+        triggerMode: "manual",
+        idleDelayMs: 3000
+      }
+    });
+
+    expect(result.focus.triggerMode).toBe("manual");
+    expect(result.focus.idleDelayMs).toBe(3000);
+  });
+
+  it("clamps focus idle delay to the supported range", () => {
+    expect(normalizePreferences({ focus: { idleDelayMs: 0 } }).focus.idleDelayMs).toBe(500);
+    expect(normalizePreferences({ focus: { idleDelayMs: 100_000 } }).focus.idleDelayMs).toBe(
+      30_000
+    );
+    expect(normalizePreferences({ focus: { idleDelayMs: 2500.6 } }).focus.idleDelayMs).toBe(2501);
+    expect(normalizePreferences({ focus: { triggerMode: "manual" } }).focus.triggerMode).toBe(
+      "manual"
+    );
+    expect(normalizePreferences({ focus: { triggerMode: "storm" } }).focus.triggerMode).toBe(
+      DEFAULT_PREFERENCES.focus.triggerMode
+    );
+  });
+
   it("only accepts known theme modes and falls back to system otherwise", () => {
     expect(normalizePreferences({ theme: { mode: "dark" } }).theme.mode).toBe("dark");
     expect(normalizePreferences({ theme: { mode: "light" } }).theme.mode).toBe("light");
@@ -140,6 +166,7 @@ describe("normalizePreferences", () => {
     expect(result).toEqual({
       version: PREFERENCES_SCHEMA_VERSION,
       autosave: { idleDelayMs: 2000 },
+      focus: DEFAULT_PREFERENCES.focus,
       recentFiles: DEFAULT_PREFERENCES.recentFiles,
       ui: { fontSize: 18 },
       document: { fontFamily: "Mono", cjkFontFamily: "Source Han Sans SC", fontSize: null },
@@ -156,6 +183,10 @@ describe("mergePreferences", () => {
   it("only overwrites the fields included in the patch", () => {
     const next = mergePreferences(DEFAULT_PREFERENCES, {
       autosave: { idleDelayMs: 2500 },
+      focus: {
+        triggerMode: "manual",
+        idleDelayMs: 3500
+      },
       document: {
         fontFamily: "IBM Plex Serif",
         cjkFontFamily: "Source Han Sans SC",
@@ -167,6 +198,10 @@ describe("mergePreferences", () => {
     expect(next).toEqual({
       ...DEFAULT_PREFERENCES,
       autosave: { idleDelayMs: 2500 },
+      focus: {
+        triggerMode: "manual",
+        idleDelayMs: 3500
+      },
       document: {
         fontFamily: "IBM Plex Serif",
         cjkFontFamily: "Source Han Sans SC",

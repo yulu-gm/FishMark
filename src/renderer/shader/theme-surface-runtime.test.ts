@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { readFileSync } from "node:fs";
+import path from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 
@@ -49,7 +50,7 @@ function createCanvas(width = 640, height = 360): TestCanvas {
 describe("theme surface runtime", () => {
   it("keeps the rain-glass workbench shader sampling an upright scene with reference-style refractive drops", () => {
     const shader = readFileSync(
-      "/Users/chenglinwu/Documents/Yulora/fixtures/themes/rain-glass/shaders/workbench-background.glsl",
+      path.join(process.cwd(), "fixtures/themes/rain-glass/shaders/workbench-background.glsl"),
       "utf8"
     );
 

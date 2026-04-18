@@ -34,6 +34,7 @@ type ScenarioRunTerminalListener = (payload: ScenarioRunTerminal) => void;
 type PreferencesChangedListener = (preferences: Preferences) => void;
 type ThemeDescriptor = Awaited<ReturnType<Window["yulora"]["listThemes"]>>[number];
 type ThemePackageDescriptor = Awaited<ReturnType<Window["yulora"]["listThemePackages"]>>[number];
+type UpdatePreferencesResult = Awaited<ReturnType<Window["yulora"]["updatePreferences"]>>;
 
 type SettingsDriver = {
   openSettings: () => Promise<void>;
@@ -47,6 +48,7 @@ type RenderEditorAppOptions = {
   refreshThemesResult?: ThemeDescriptor[];
   listThemesResult?: ThemeDescriptor[];
   getPreferencesResult?: Preferences;
+  updatePreferencesImplementation?: (patch: Partial<Preferences>) => Promise<UpdatePreferencesResult>;
 };
 
 function makeManifestThemePackage(
@@ -492,7 +494,8 @@ describe("App autosave", () => {
       refreshThemePackagesResult = [],
       listThemesResult = communityThemes,
       refreshThemesResult = communityThemes,
-      getPreferencesResult = DEFAULT_PREFERENCES
+      getPreferencesResult = DEFAULT_PREFERENCES,
+      updatePreferencesImplementation
     } = options;
 
     listThemePackages = vi.fn<() => Promise<ThemePackageDescriptor[]>>().mockResolvedValue(
@@ -507,6 +510,10 @@ describe("App autosave", () => {
     window.yulora = {
       ...window.yulora,
       getPreferences: vi.fn().mockResolvedValue(getPreferencesResult),
+      updatePreferences:
+        updatePreferencesImplementation !== undefined
+          ? vi.fn(updatePreferencesImplementation)
+          : window.yulora.updatePreferences,
       listThemePackages,
       listThemes,
       refreshThemes,
@@ -2116,6 +2123,210 @@ describe("App autosave", () => {
     expect(document.activeElement?.getAttribute("data-testid")).toBe("mock-code-editor");
   });
 
+  it("only renders the manual focus entry when the trigger mode is manual", async () => {
+    await renderAndOpenDocument();
+
+    expect(container.querySelector('[data-yulora-region="focus-toggle"]')).toBeNull();
+  });
+
+  it("enters and exits manual focus mode from the editor-corner toggle while keeping the editor mounted", async () => {
+    await renderAndOpenDocument({
+      getPreferencesResult: {
+        ...DEFAULT_PREFERENCES,
+        focus: {
+          ...DEFAULT_PREFERENCES.focus,
+          triggerMode: "manual"
+        }
+      }
+    });
+
+    const appShell = container.querySelector<HTMLElement>(".app-shell");
+    const rail = container.querySelector<HTMLElement>('[data-yulora-layout="rail"]');
+    const workspaceHeader = container.querySelector<HTMLElement>('[data-yulora-region="workspace-header"]');
+    const statusBar = container.querySelector<HTMLElement>('[data-yulora-region="app-status-bar"]');
+    const workspaceCanvas = container.querySelector<HTMLElement>('[data-yulora-region="workspace-canvas"]');
+    const focusToggle = container.querySelector<HTMLButtonElement>('[data-yulora-region="focus-toggle"]');
+
+    expect(appShell?.dataset.yuloraFocusMode).toBe("inactive");
+    expect(focusToggle).not.toBeNull();
+    expect(workspaceCanvas?.contains(focusToggle ?? null)).toBe(true);
+    expect(rail?.contains(focusToggle ?? null)).toBe(false);
+
+    await act(async () => {
+      focusToggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(appShell?.dataset.yuloraFocusMode).toBe("active");
+    expect(rail?.dataset.visibility).toBe("collapsed");
+    expect(workspaceHeader?.dataset.visibility).toBe("collapsed");
+    expect(statusBar?.dataset.visibility).toBe("collapsed");
+    expect(container.querySelector('[data-testid="mock-code-editor"]')).not.toBeNull();
+
+    await act(async () => {
+      focusToggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(appShell?.dataset.yuloraFocusMode).toBe("inactive");
+    expect(rail?.dataset.visibility).toBe("visible");
+    expect(workspaceHeader?.dataset.visibility).toBe("visible");
+    expect(statusBar?.dataset.visibility).toBe("visible");
+  });
+
+  it("auto-enters focus mode after the configured idle delay and exits on pointer activity", async () => {
+    await renderAndOpenDocument();
+
+    const appShell = container.querySelector<HTMLElement>(".app-shell");
+    expect(appShell?.dataset.yuloraFocusMode).toBe("inactive");
+
+    await act(async () => {
+      vi.advanceTimersByTime(2999);
+      await Promise.resolve();
+    });
+
+    expect(appShell?.dataset.yuloraFocusMode).toBe("inactive");
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+      await Promise.resolve();
+    });
+
+    expect(appShell?.dataset.yuloraFocusMode).toBe("active");
+
+    await act(async () => {
+      window.dispatchEvent(new MouseEvent("mousemove", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(appShell?.dataset.yuloraFocusMode).toBe("inactive");
+  });
+
+  it("enters auto focus on keyboard input in auto mode and keeps manual focus active through pointer input", async () => {
+    let currentPreferences: Preferences = DEFAULT_PREFERENCES;
+
+    await renderAndOpenDocument({
+      updatePreferencesImplementation: async (patch) => {
+        currentPreferences = {
+          ...currentPreferences,
+          ...patch,
+          focus: {
+            ...currentPreferences.focus,
+            ...(patch.focus ?? {})
+          }
+        };
+
+        return {
+          status: "success",
+          preferences: currentPreferences
+        };
+      }
+    });
+    const appShell = container.querySelector<HTMLElement>(".app-shell");
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(appShell?.dataset.yuloraFocusMode).toBe("active");
+
+    await act(async () => {
+      window.dispatchEvent(new WheelEvent("wheel", { deltaY: 10, bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(appShell?.dataset.yuloraFocusMode).toBe("inactive");
+
+    const settingsButton = container.querySelector<HTMLButtonElement>(".settings-entry");
+    expect(settingsButton).not.toBeNull();
+
+    await act(async () => {
+      settingsButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const focusTriggerMode = container.querySelector<HTMLSelectElement>("#settings-focus-trigger-mode");
+    expect(focusTriggerMode).not.toBeNull();
+
+    await act(async () => {
+      if (focusTriggerMode) {
+        focusTriggerMode.value = "manual";
+        focusTriggerMode.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(180);
+      await Promise.resolve();
+    });
+
+    const focusToggle = container.querySelector<HTMLButtonElement>('[data-yulora-region="focus-toggle"]');
+    expect(focusToggle).not.toBeNull();
+
+    await act(async () => {
+      focusToggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(appShell?.dataset.yuloraFocusMode).toBe("active");
+
+    await act(async () => {
+      window.dispatchEvent(new MouseEvent("mousemove", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(appShell?.dataset.yuloraFocusMode).toBe("active");
+  });
+
+  it("forces focus mode off when settings opens while leaving the outline state unchanged", async () => {
+    await renderAndOpenDocument({
+      getPreferencesResult: {
+        ...DEFAULT_PREFERENCES,
+        focus: {
+          ...DEFAULT_PREFERENCES.focus,
+          triggerMode: "manual"
+        }
+      }
+    });
+
+    const appShell = container.querySelector<HTMLElement>(".app-shell");
+    const focusToggle = container.querySelector<HTMLButtonElement>('[data-yulora-region="focus-toggle"]');
+    const outlineToggle = container.querySelector<HTMLButtonElement>('[data-yulora-region="outline-toggle"]');
+
+    await act(async () => {
+      outlineToggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-yulora-region="outline-panel"]')).not.toBeNull();
+
+    await act(async () => {
+      focusToggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(appShell?.dataset.yuloraFocusMode).toBe("active");
+
+    const settingsButton = container.querySelector<HTMLButtonElement>(".settings-entry");
+    expect(settingsButton).not.toBeNull();
+
+    await act(async () => {
+      settingsButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(appShell?.dataset.yuloraFocusMode).toBe("inactive");
+    expect(container.querySelector('[data-yulora-dialog="settings-drawer"]')).not.toBeNull();
+    expect(container.querySelector('[data-yulora-region="outline-panel"]')).not.toBeNull();
+  });
+
   it("renders settings as a drawer panel with close affordance while keeping existing controls", async () => {
     const driver = await renderEditorApp();
     await driver.openSettings();
@@ -2140,6 +2351,132 @@ describe("App autosave", () => {
     expect(documentCjkFontSelect?.className).toContain("settings-select");
     expect(documentFontInput).toBeNull();
     expect(recentFilesInput?.disabled).toBe(true);
+  });
+
+  it("renders focus settings controls and persists trigger mode and idle delay changes", async () => {
+    const driver = await renderEditorApp();
+    await driver.openSettings();
+
+    const focusTriggerMode = container.querySelector<HTMLSelectElement>("#settings-focus-trigger-mode");
+    const focusIdlePreset = container.querySelector<HTMLSelectElement>("#settings-focus-idle-preset");
+    const focusIdleSeconds = container.querySelector<HTMLInputElement>("#settings-focus-idle-seconds");
+
+    expect(focusTriggerMode).not.toBeNull();
+    expect(focusIdlePreset).not.toBeNull();
+    expect(focusIdleSeconds).not.toBeNull();
+
+    await act(async () => {
+      focusTriggerMode!.value = "manual";
+      focusTriggerMode!.dispatchEvent(new Event("change", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(window.yulora.updatePreferences).toHaveBeenCalledWith({
+      focus: { triggerMode: "manual" }
+    });
+
+    await act(async () => {
+      focusIdlePreset!.value = "5";
+      focusIdlePreset!.dispatchEvent(new Event("change", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(window.yulora.updatePreferences).toHaveBeenCalledWith({
+      focus: { idleDelayMs: 5000 }
+    });
+
+    await act(async () => {
+      focusIdleSeconds!.focus();
+      focusIdleSeconds!.value = "3.5";
+      focusIdleSeconds!.dispatchEvent(new Event("input", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      focusIdleSeconds!.blur();
+      await Promise.resolve();
+    });
+
+    expect(window.yulora.updatePreferences).toHaveBeenCalledWith({
+      focus: { idleDelayMs: 3500 }
+    });
+  });
+
+  it("shows the manual focus entry immediately after switching to manual mode in settings", async () => {
+    let currentPreferences: Preferences = DEFAULT_PREFERENCES;
+
+    await renderAndOpenDocument({
+      updatePreferencesImplementation: async (patch) => {
+        currentPreferences = {
+          ...currentPreferences,
+          ...patch,
+          focus: {
+            ...currentPreferences.focus,
+            ...(patch.focus ?? {})
+          }
+        };
+
+        return {
+          status: "success",
+          preferences: currentPreferences
+        };
+      }
+    });
+
+    const settingsButton = container.querySelector<HTMLButtonElement>(".settings-entry");
+    expect(settingsButton).not.toBeNull();
+
+    await act(async () => {
+      settingsButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const triggerMode = container.querySelector<HTMLSelectElement>("#settings-focus-trigger-mode");
+    expect(triggerMode).not.toBeNull();
+    expect(container.querySelector('[data-yulora-region="focus-toggle"]')).toBeNull();
+
+    await act(async () => {
+      if (triggerMode) {
+        triggerMode.value = "manual";
+        triggerMode.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(180);
+      await Promise.resolve();
+    });
+
+    const focusToggle = container.querySelector<HTMLButtonElement>('[data-yulora-region="focus-toggle"]');
+    expect(focusToggle).not.toBeNull();
+    expect(container.querySelector<HTMLElement>('[data-yulora-region="workspace-canvas"]')?.contains(focusToggle ?? null)).toBe(true);
+  });
+
+  it("defines animated shell chrome transitions for focus mode and fully retracts the rail", () => {
+    const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8");
+    const railRule = getCssRule(appUiStylesheet, ".app-rail");
+    const collapsedRailRule = getCssRule(appUiStylesheet, '.app-rail[data-visibility="collapsed"]');
+    const headerRule = getCssRule(appUiStylesheet, ".app-header");
+    const collapsedHeaderRule = getCssRule(appUiStylesheet, '.app-header[data-visibility="collapsed"]');
+    const statusBarRule = getCssRule(appUiStylesheet, ".app-status-bar");
+    const collapsedStatusBarRule = getCssRule(
+      appUiStylesheet,
+      '.app-status-bar[data-visibility="collapsed"]'
+    );
+
+    expect(railRule).toContain("transition:");
+    expect(collapsedRailRule).toContain("transform: translateX(calc(-100% - 1px));");
+    expect(collapsedRailRule).toContain("opacity: 0;");
+    expect(headerRule).toContain("transition:");
+    expect(collapsedHeaderRule).toContain("transform:");
+    expect(statusBarRule).toContain("transition:");
+    expect(collapsedStatusBarRule).toContain("transform:");
   });
 
   it("updates document font presets through dropdowns only", async () => {
@@ -2523,8 +2860,8 @@ describe("App autosave", () => {
     });
   });
 
-  async function renderAndOpenDocument(): Promise<void> {
-    await renderApp();
+  async function renderAndOpenDocument(options: RenderEditorAppOptions = {}): Promise<void> {
+    await renderEditorApp(options);
 
     expect(menuCommandListener).not.toBeNull();
 

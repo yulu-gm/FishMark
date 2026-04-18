@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   DEFAULT_PREFERENCES,
+  type FocusTriggerMode,
   type Preferences,
   type PreferencesUpdate,
   type ThemeMode
@@ -35,7 +36,8 @@ type DraftState = {
   documentFontFamily: string;
   documentCjkFontFamily: string;
   documentFontSize: string;
-  idleDelayMs: string;
+  autosaveIdleDelayMs: string;
+  focusIdleSeconds: string;
 };
 
 type FontOption = {
@@ -106,7 +108,8 @@ function buildDraft(preferences: Preferences): DraftState {
     documentCjkFontFamily: preferences.document.cjkFontFamily ?? "",
     documentFontSize:
       preferences.document.fontSize === null ? "" : String(preferences.document.fontSize),
-    idleDelayMs: String(preferences.autosave.idleDelayMs)
+    autosaveIdleDelayMs: String(preferences.autosave.idleDelayMs),
+    focusIdleSeconds: String(preferences.focus.idleDelayMs / 1000)
   };
 }
 
@@ -142,6 +145,33 @@ function buildFontOptions(fontFamilies: string[], currentValue: string): FontOpt
   return options;
 }
 
+function formatFocusIdleSeconds(seconds: number): string {
+  return Number.isInteger(seconds) ? String(seconds) : seconds.toFixed(1);
+}
+
+function buildFocusIdlePresetOptions(): FontOption[] {
+  const values = new Set<number>();
+
+  for (let value = 0.5; value <= 5; value += 0.5) {
+    values.add(Number(value.toFixed(1)));
+  }
+
+  for (let value = 5; value <= 10; value += 1) {
+    values.add(value);
+  }
+
+  for (let value = 10; value <= 30; value += 5) {
+    values.add(value);
+  }
+
+  return Array.from(values)
+    .sort((left, right) => left - right)
+    .map((value) => ({
+      value: formatFocusIdleSeconds(value),
+      label: `${formatFocusIdleSeconds(value)}s`
+    }));
+}
+
 export function SettingsView({
   surfaceState,
   preferences,
@@ -172,6 +202,7 @@ export function SettingsView({
     () => buildFontOptions(fontFamilies, draft.documentCjkFontFamily.trim()),
     [fontFamilies, draft.documentCjkFontFamily]
   );
+  const focusIdlePresetOptions = useMemo(() => buildFocusIdlePresetOptions(), []);
   const resolvedThemeSelectionValue = useMemo(
     () => resolveThemePackageSelectionValue(themePackages, preferences.theme.selectedId),
     [preferences.theme.selectedId, themePackages]
@@ -344,12 +375,12 @@ export function SettingsView({
   }
 
   function handleIdleDelayCommit(): void {
-    const parsed = Number(draft.idleDelayMs);
+    const parsed = Number(draft.autosaveIdleDelayMs);
 
     if (!Number.isFinite(parsed)) {
       setDraft((current) => ({
         ...current,
-        idleDelayMs: String(preferences.autosave.idleDelayMs)
+        autosaveIdleDelayMs: String(preferences.autosave.idleDelayMs)
       }));
       return;
     }
@@ -359,6 +390,55 @@ export function SettingsView({
     }
 
     void applyPatch({ autosave: { idleDelayMs: parsed } });
+  }
+
+  function handleFocusTriggerModeChange(nextMode: FocusTriggerMode): void {
+    if (nextMode === preferences.focus.triggerMode) {
+      return;
+    }
+
+    void applyPatch({ focus: { triggerMode: nextMode } });
+  }
+
+  function handleFocusIdlePresetChange(value: string): void {
+    const seconds = Number(value);
+
+    if (!Number.isFinite(seconds)) {
+      return;
+    }
+
+    setDraft((current) => ({
+      ...current,
+      focusIdleSeconds: value
+    }));
+
+    void applyPatch({ focus: { idleDelayMs: Math.round(seconds * 1000) } });
+  }
+
+  function handleFocusIdleSecondsCommit(): void {
+    const parsed = normalizeNumberInput(draft.focusIdleSeconds);
+
+    if (Number.isNaN(parsed) || parsed === null) {
+      setDraft((current) => ({
+        ...current,
+        focusIdleSeconds: String(preferences.focus.idleDelayMs / 1000)
+      }));
+      return;
+    }
+
+    const clampedSeconds = Math.min(Math.max(parsed, 0.5), 30);
+    const nextDelayMs = Math.round(clampedSeconds * 1000);
+
+    setDraft((current) => ({
+      ...current,
+      focusIdleSeconds: formatFocusIdleSeconds(clampedSeconds)
+    }));
+
+    if (nextDelayMs === preferences.focus.idleDelayMs) {
+      return;
+    }
+
+    void applyPatch({ focus: { idleDelayMs: nextDelayMs } });
   }
 
   function handleResetAll(): void {
@@ -375,6 +455,10 @@ export function SettingsView({
         fontFamily: DEFAULT_PREFERENCES.document.fontFamily,
         cjkFontFamily: DEFAULT_PREFERENCES.document.cjkFontFamily,
         fontSize: DEFAULT_PREFERENCES.document.fontSize
+      },
+      focus: {
+        triggerMode: DEFAULT_PREFERENCES.focus.triggerMode,
+        idleDelayMs: DEFAULT_PREFERENCES.focus.idleDelayMs
       },
       autosave: { idleDelayMs: DEFAULT_PREFERENCES.autosave.idleDelayMs },
       recentFiles: { maxEntries: DEFAULT_PREFERENCES.recentFiles.maxEntries }
@@ -432,6 +516,81 @@ export function SettingsView({
       ) : null}
 
       <div className="settings-groups">
+        <section className="settings-group">
+          <header className="settings-group-header">
+            <h2>Focus</h2>
+            <p>Collapse shell chrome for a quieter writing surface while keeping outline independent.</p>
+          </header>
+          <div className="settings-row">
+            <label className="settings-label" htmlFor="settings-focus-trigger-mode">
+              <span>Focus trigger mode</span>
+              <span className="settings-hint">
+                Manual shows the editor-corner entry. Auto hides it and enters focus from typing or idle time.
+              </span>
+            </label>
+            <select
+              id="settings-focus-trigger-mode"
+              className="settings-input settings-select"
+              value={preferences.focus.triggerMode}
+              onChange={(event) => handleFocusTriggerModeChange(event.target.value as FocusTriggerMode)}
+            >
+              <option value="manual">Manual</option>
+              <option value="auto">Auto</option>
+            </select>
+          </div>
+          <div className="settings-row">
+            <label className="settings-label" htmlFor="settings-focus-idle-preset">
+              <span>Focus after idle</span>
+              <span className="settings-hint">
+                {preferences.focus.triggerMode === "auto"
+                  ? "Choose a preset or type seconds directly."
+                  : "Only used in Auto trigger mode."}
+              </span>
+            </label>
+            <div className="settings-focus-idle-controls">
+              <select
+                id="settings-focus-idle-preset"
+                className="settings-input settings-select"
+                value={draft.focusIdleSeconds}
+                disabled={preferences.focus.triggerMode !== "auto"}
+                onChange={(event) => handleFocusIdlePresetChange(event.target.value)}
+              >
+                {focusIdlePresetOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <div className="settings-focus-idle-input">
+                <input
+                  id="settings-focus-idle-seconds"
+                  className="settings-input settings-input-narrow"
+                  type="number"
+                  min={0.5}
+                  max={30}
+                  step={0.1}
+                  disabled={preferences.focus.triggerMode !== "auto"}
+                  value={draft.focusIdleSeconds}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      focusIdleSeconds: event.target.value
+                    }))
+                  }
+                  onInput={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      focusIdleSeconds: (event.target as HTMLInputElement).value
+                    }))
+                  }
+                  onBlur={handleFocusIdleSecondsCommit}
+                />
+                <span className="settings-focus-idle-suffix">s</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section className="settings-group">
           <header className="settings-group-header">
             <h2>主题</h2>
@@ -752,9 +911,9 @@ export function SettingsView({
               type="number"
               min={100}
               max={60000}
-              value={draft.idleDelayMs}
+              value={draft.autosaveIdleDelayMs}
               onChange={(event) =>
-                setDraft((current) => ({ ...current, idleDelayMs: event.target.value }))
+                setDraft((current) => ({ ...current, autosaveIdleDelayMs: event.target.value }))
               }
               onBlur={handleIdleDelayCommit}
             />

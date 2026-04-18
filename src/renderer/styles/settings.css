@@ -279,6 +279,24 @@
   justify-items: start;
 }
 
+.settings-focus-idle-controls {
+  width: 100%;
+  display: grid;
+  gap: var(--yulora-space-2);
+}
+
+.settings-focus-idle-input {
+  display: flex;
+  align-items: center;
+  justify-self: end;
+  gap: var(--yulora-space-2);
+}
+
+.settings-focus-idle-suffix {
+  color: var(--yulora-text-subtle);
+  font-size: 0.82rem;
+}
+
 @media (max-width: 860px) {
   .settings-shell {
     left: calc(var(--yulora-shell-rail-width) + 10px);
@@ -309,6 +327,10 @@
 
   .settings-inline-actions {
     justify-items: stretch;
+  }
+
+  .settings-focus-idle-input {
+    justify-self: stretch;
   }
 }
 

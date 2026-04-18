@@ -2,10 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createFontCatalogService } from "./font-catalog-service";
 
+function sortFamilies(values: string[]): string[] {
+  return [...values].sort((left, right) => left.localeCompare(right));
+}
+
 describe("createFontCatalogService", () => {
   it("lists and normalizes Windows font families via PowerShell", async () => {
     const runCommand = vi.fn().mockResolvedValue({
-      stdout: ["Segoe UI", "Source Han Sans SC", "Segoe UI", "", "霞鹜文楷"].join("\r\n"),
+      stdout: ["Segoe UI", "Source Han Sans SC", "Segoe UI", "", "闇為箿鏂囨シ"].join("\r\n"),
       stderr: ""
     });
     const service = createFontCatalogService({
@@ -13,11 +17,9 @@ describe("createFontCatalogService", () => {
       runCommand
     });
 
-    await expect(service.listFontFamilies()).resolves.toEqual([
-      "Segoe UI",
-      "Source Han Sans SC",
-      "霞鹜文楷"
-    ]);
+    await expect(service.listFontFamilies()).resolves.toEqual(
+      sortFamilies(["Segoe UI", "Source Han Sans SC", "闇為箿鏂囨シ"])
+    );
     expect(runCommand).toHaveBeenCalledWith("powershell.exe", [
       "-NoProfile",
       "-Command",
@@ -42,10 +44,9 @@ describe("createFontCatalogService", () => {
       runCommand
     });
 
-    await expect(service.listFontFamilies()).resolves.toEqual([
-      "PingFang SC",
-      "Source Han Serif SC"
-    ]);
+    await expect(service.listFontFamilies()).resolves.toEqual(
+      sortFamilies(["PingFang SC", "Source Han Serif SC"])
+    );
     expect(runCommand).toHaveBeenCalledWith("system_profiler", ["SPFontsDataType", "-json"]);
   });
 
