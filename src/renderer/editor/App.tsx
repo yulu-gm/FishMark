@@ -78,6 +78,8 @@ const DOCUMENT_FONT_FAMILY_CSS_VAR = "--yulora-document-font-family";
 const DOCUMENT_CJK_FONT_FAMILY_CSS_VAR = "--yulora-document-cjk-font-family";
 const DOCUMENT_FONT_SIZE_CSS_VAR = "--yulora-document-font-size";
 const THEME_DYNAMIC_MODE_ATTRIBUTE = "data-yulora-theme-dynamic-mode";
+const THEME_PARAMETER_CSS_VARIABLES_ATTRIBUTE = "data-yulora-theme-parameter-css-variables";
+const THEME_PARAMETER_CSS_VAR_PREFIX = "--yulora-theme-parameter-";
 const OUTLINE_EXIT_ANIMATION_MS = 180;
 const SETTINGS_DRAWER_EXIT_ANIMATION_MS = 180;
 const APP_NOTIFICATION_DURATION_MS = 3000;
@@ -170,6 +172,30 @@ function applyPreferencesToDocument(
   }
 }
 
+function clearThemeParameterCssVariables(root: HTMLElement): void {
+  const variables = root.getAttribute(THEME_PARAMETER_CSS_VARIABLES_ATTRIBUTE);
+
+  if (!variables) {
+    return;
+  }
+
+  for (const variable of variables.split(",")) {
+    const trimmed = variable.trim();
+
+    if (trimmed.length === 0) {
+      continue;
+    }
+
+    root.style.removeProperty(trimmed);
+  }
+
+  root.removeAttribute(THEME_PARAMETER_CSS_VARIABLES_ATTRIBUTE);
+}
+
+function toThemeParameterCssVariable(parameterId: string): string {
+  return `${THEME_PARAMETER_CSS_VAR_PREFIX}${parameterId}`;
+}
+
 function clearDocumentPreferences(root: HTMLElement): void {
   root.removeAttribute(THEME_ATTRIBUTE);
   root.style.removeProperty("color-scheme");
@@ -177,6 +203,7 @@ function clearDocumentPreferences(root: HTMLElement): void {
   root.style.removeProperty(DOCUMENT_FONT_FAMILY_CSS_VAR);
   root.style.removeProperty(DOCUMENT_CJK_FONT_FAMILY_CSS_VAR);
   root.style.removeProperty(DOCUMENT_FONT_SIZE_CSS_VAR);
+  clearThemeParameterCssVariables(root);
 }
 
 function applyThemeDynamicModeToDocument(
@@ -265,12 +292,59 @@ function resolveParameterDefaultValue(parameter: ThemeParameterDescriptor): numb
   return parameter.default;
 }
 
+function resolveEffectiveThemeParameterValue(
+  parameter: ThemeParameterDescriptor,
+  parameterOverrides: Record<string, number> | undefined
+): number {
+  const overrideValue = parameterOverrides?.[parameter.id];
+
+  if (typeof overrideValue !== "number" || !Number.isFinite(overrideValue)) {
+    return resolveParameterDefaultValue(parameter);
+  }
+
+  if (parameter.type === "toggle") {
+    return overrideValue > 0.5 ? 1 : 0;
+  }
+
+  return Math.min(Math.max(overrideValue, parameter.min), parameter.max);
+}
+
+function applyThemeParameterCssVariables(
+  root: HTMLElement,
+  manifest: ThemePackageManifest | null,
+  parameterOverrides: Record<string, number> | undefined
+): void {
+  clearThemeParameterCssVariables(root);
+
+  if (!manifest) {
+    return;
+  }
+
+  const appliedVariables: string[] = [];
+
+  for (const parameter of manifest.parameters ?? []) {
+    const variableName = toThemeParameterCssVariable(parameter.id);
+    root.style.setProperty(
+      variableName,
+      String(resolveEffectiveThemeParameterValue(parameter, parameterOverrides))
+    );
+    appliedVariables.push(variableName);
+  }
+
+  if (appliedVariables.length > 0) {
+    root.setAttribute(THEME_PARAMETER_CSS_VARIABLES_ATTRIBUTE, appliedVariables.join(","));
+  }
+}
+
 /**
  * Compose the effective shader uniform map for a theme by layering:
  *   1. `scene.sharedUniforms` declared in the manifest,
- *   2. defaults from each parameter (keyed by `uniform`),
+ *   2. defaults from each shader-bound parameter (keyed by `uniform`),
  *   3. user overrides from `preferences.theme.parameters[themeId]` (keyed by
  *      parameter id, mapped to the parameter's `uniform`).
+ *
+ * Parameters without a `uniform` remain UI/CSS-only and are intentionally
+ * excluded from the shader pipeline.
  */
 function composeEffectiveUniforms(
   manifest: ThemePackageManifest,
@@ -282,28 +356,36 @@ function composeEffectiveUniforms(
 
   const parameters = manifest.parameters ?? [];
   for (const parameter of parameters) {
-    uniforms[parameter.uniform] = resolveParameterDefaultValue(parameter);
-  }
-
-  if (parameterOverrides) {
-    for (const parameter of parameters) {
-      const overrideValue = parameterOverrides[parameter.id];
-      if (typeof overrideValue !== "number" || !Number.isFinite(overrideValue)) {
-        continue;
-      }
-
-      if (parameter.type === "toggle") {
-        uniforms[parameter.uniform] = overrideValue > 0.5 ? 1 : 0;
-      } else {
-        uniforms[parameter.uniform] = Math.min(
-          Math.max(overrideValue, parameter.min),
-          parameter.max
-        );
-      }
+    if (!parameter.uniform) {
+      continue;
     }
+
+    uniforms[parameter.uniform] = resolveEffectiveThemeParameterValue(parameter, parameterOverrides);
   }
 
   return uniforms;
+}
+
+function resolveActiveThemePackageManifest(
+  selectedId: string | null,
+  themePackages: ThemePackageEntry[],
+  mode: ResolvedThemeMode
+): ThemePackageManifest | null {
+  if (!selectedId) {
+    return null;
+  }
+
+  const legacyFamilyId = resolveLegacyThemeFamilyId(selectedId);
+  const activeThemePackage =
+    themePackages.find((entry) => entry.id === selectedId) ??
+    (legacyFamilyId ? themePackages.find((entry) => entry.id === legacyFamilyId) : null) ??
+    null;
+
+  if (!activeThemePackage || !activeThemePackage.manifest.supports[mode]) {
+    return null;
+  }
+
+  return activeThemePackage.manifest;
 }
 
 function resolveActiveThemeSurface(
@@ -385,6 +467,9 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   const [themePackages, setThemePackages] = useState<
     Awaited<ReturnType<Window["yulora"]["listThemePackages"]>>
   >([]);
+  const [themePackageCatalogState, setThemePackageCatalogState] = useState<
+    "loading" | "loaded" | "failed"
+  >("loading");
   const [isRefreshingThemePackages, setIsRefreshingThemePackages] = useState(false);
   const [appUpdateState, setAppUpdateState] = useState<AppUpdateState>({
     kind: "idle"
@@ -466,7 +551,11 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     activeThemePackages,
     resolvedThemeMode
   );
-  const themeWarningMessage = resolveThemeWarningMessage(activeThemePackageResolution);
+  const themeWarningMessage =
+    activeThemePackageResolution.fallbackReason === "missing-theme" &&
+    (themePackageCatalogState !== "loaded" || isRefreshingThemePackages)
+      ? null
+      : resolveThemeWarningMessage(activeThemePackageResolution);
   const activeThemeParameterOverrides = useMemo<Record<string, number> | undefined>(() => {
     if (!preferences.theme.selectedId) {
       return undefined;
@@ -767,6 +856,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
 
       setThemes(nextThemes);
       setThemePackages(nextThemePackages);
+      setThemePackageCatalogState("loaded");
     } finally {
       setIsRefreshingThemePackages(false);
     }
@@ -1094,9 +1184,15 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
         }
 
         setThemePackages(nextThemePackages);
+        setThemePackageCatalogState("loaded");
       })
       .catch(() => {
         // Keep the builtin theme package active when the package catalog is unavailable.
+        if (isCancelled) {
+          return;
+        }
+
+        setThemePackageCatalogState("failed");
       });
 
     const detach = yulora.onPreferencesChanged((nextPreferences) => {
@@ -1134,8 +1230,14 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
         activeThemePackages,
         resolvedThemeMode
       );
+      const activeThemeManifest = resolveActiveThemePackageManifest(
+        preferences.theme.selectedId,
+        themePackages,
+        resolvedThemeMode
+      );
 
       applyPreferencesToDocument(root, preferences, resolvedThemeMode);
+      applyThemeParameterCssVariables(root, activeThemeManifest, activeThemeParameterOverrides);
       themePackageRuntime.applyPackage(
         activeThemePackageResolution.descriptor,
         resolvedThemeMode
@@ -1156,7 +1258,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
 
     mediaQuery.addEventListener("change", applyCurrentTheme);
     return () => mediaQuery.removeEventListener("change", applyCurrentTheme);
-  }, [preferences, themePackages, themes]);
+  }, [activeThemeParameterOverrides, preferences, themePackages, themes]);
 
   useEffect(() => {
     return yulora.onAppUpdateState((nextState) => {

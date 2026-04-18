@@ -71,7 +71,7 @@ type ThemeMode = "system" | "light" | "dark";
 type ThemeEffectsMode = "auto" | "full" | "off";
 type ThemeParameterOverrides = Record<string, Record<string, number>>;
 type ThemeParameterDescriptor =
-  | {
+    | {
       id: string;
       label: string;
       type: "slider";
@@ -79,7 +79,7 @@ type ThemeParameterDescriptor =
       max: number;
       step: number;
       default: number;
-      uniform: string;
+      uniform?: string;
       description?: string;
     }
   | {
@@ -87,7 +87,7 @@ type ThemeParameterDescriptor =
       label: string;
       type: "toggle";
       default: boolean;
-      uniform: string;
+      uniform?: string;
       description?: string;
     };
 

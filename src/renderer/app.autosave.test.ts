@@ -124,6 +124,10 @@ const appUiStylesheetPath = join(process.cwd(), "src/renderer/styles/app-ui.css"
 const primitivesStylesheetPath = join(process.cwd(), "src/renderer/styles/primitives.css");
 const markdownRenderStylesheetPath = join(process.cwd(), "src/renderer/styles/markdown-render.css");
 const settingsStylesheetPath = join(process.cwd(), "src/renderer/styles/settings.css");
+const rainGlassUiStylesheetPath = join(
+  process.cwd(),
+  "fixtures/themes/rain-glass/styles/ui.css"
+);
 const lightTokenStylesheetPath = join(
   process.cwd(),
   "src/renderer/styles/themes/default/light/tokens.css"
@@ -1185,6 +1189,23 @@ describe("App autosave", () => {
     expect(container.textContent).not.toContain("已配置主题未找到");
   });
 
+  it("does not warn about a missing configured theme while the theme package catalog is still loading", async () => {
+    window.yulora = {
+      ...window.yulora,
+      getPreferences: vi.fn().mockResolvedValue({
+        ...DEFAULT_PREFERENCES,
+        theme: { mode: "dark", selectedId: "rain-glass", effectsMode: "auto", parameters: {} }
+      }),
+      listThemePackages: vi.fn<() => Promise<ThemePackageDescriptor[]>>(
+        () => new Promise<ThemePackageDescriptor[]>(() => {})
+      )
+    } as Window["yulora"];
+
+    await renderApp();
+
+    expect(container.textContent).not.toContain("已配置主题未找到");
+  });
+
   it("syncs theme and legacy catalogs when refreshing from settings", async () => {
     const packageThemes = [makeManifestThemePackage({ id: "graphite", name: "Graphite" })];
     const driver = await renderEditorApp({
@@ -2195,6 +2216,95 @@ describe("App autosave", () => {
     );
   });
 
+  it("exposes active theme parameters as root CSS variables and clears them when the active theme changes", async () => {
+    await renderEditorApp({
+      getPreferencesResult: {
+        ...DEFAULT_PREFERENCES,
+        theme: {
+          ...DEFAULT_PREFERENCES.theme,
+          mode: "dark",
+          selectedId: "rain-glass",
+          effectsMode: "auto",
+          parameters: {
+            "rain-glass": {
+              workspaceGlassOpacity: 0.35,
+              rainAmount: 0.4,
+              enableLightning: 0
+            }
+          }
+        }
+      },
+      listThemePackagesResult: [
+        makeManifestThemePackage({
+          id: "rain-glass",
+          name: "Rain Glass",
+          parameters: [
+            {
+              id: "workspaceGlassOpacity",
+              label: "Workspace Glass",
+              type: "slider",
+              min: 0,
+              max: 1,
+              step: 0.05,
+              default: 0.24
+            },
+            {
+              id: "rainAmount",
+              label: "Rain Amount",
+              type: "slider",
+              min: 0,
+              max: 1,
+              step: 0.05,
+              default: 0.72,
+              uniform: "rainAmount"
+            },
+            {
+              id: "enableLightning",
+              label: "Lightning",
+              type: "toggle",
+              default: true,
+              uniform: "enableLightning"
+            }
+          ]
+        })
+      ]
+    });
+
+    expect(
+      document.documentElement.style.getPropertyValue("--yulora-theme-parameter-workspaceGlassOpacity")
+    ).toBe("0.35");
+    expect(document.documentElement.style.getPropertyValue("--yulora-theme-parameter-rainAmount")).toBe(
+      "0.4"
+    );
+    expect(
+      document.documentElement.style.getPropertyValue("--yulora-theme-parameter-enableLightning")
+    ).toBe("0");
+
+    await act(async () => {
+      preferencesChangedListener?.({
+        ...DEFAULT_PREFERENCES,
+        theme: {
+          ...DEFAULT_PREFERENCES.theme,
+          mode: "dark",
+          selectedId: null,
+          effectsMode: "auto",
+          parameters: {}
+        }
+      });
+      await Promise.resolve();
+    });
+
+    expect(
+      document.documentElement.style.getPropertyValue("--yulora-theme-parameter-workspaceGlassOpacity")
+    ).toBe("");
+    expect(document.documentElement.style.getPropertyValue("--yulora-theme-parameter-rainAmount")).toBe(
+      ""
+    );
+    expect(
+      document.documentElement.style.getPropertyValue("--yulora-theme-parameter-enableLightning")
+    ).toBe("");
+  });
+
   it("marks settings as a floating drawer overlay surface", async () => {
     const driver = await renderEditorApp();
     await driver.openSettings();
@@ -2303,6 +2413,18 @@ describe("App autosave", () => {
     expect(appUiStylesheet).toContain("pointer-events: none;");
     expect(appUiStylesheet).toContain(".theme-surface-canvas");
     expect(appUiStylesheet).toContain("display: block;");
+  });
+
+  it("keeps the integrated rain glass status strip in normal workspace flow", () => {
+    const rainGlassUiStylesheet = readFileSync(rainGlassUiStylesheetPath, "utf-8");
+
+    expect(rainGlassUiStylesheet).toContain('[data-yulora-layout="workspace"].app-workspace');
+    expect(rainGlassUiStylesheet).toContain("grid-template-rows: auto minmax(0, 1fr) auto;");
+    expect(rainGlassUiStylesheet).toContain("padding: var(--yulora-space-4) var(--yulora-space-5);");
+    expect(rainGlassUiStylesheet).toContain('[data-yulora-layout="workspace"] .app-status-bar');
+    expect(rainGlassUiStylesheet).toContain("position: static;");
+    expect(rainGlassUiStylesheet).toContain('[data-yulora-layout="workspace"] .app-status-bar [data-yulora-region="status-strip"]');
+    expect(rainGlassUiStylesheet).toContain("border-top: 1px solid");
   });
 
   it("removes border framing from the editor shell and bottom status bar", () => {

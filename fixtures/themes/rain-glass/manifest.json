@@ -50,6 +50,16 @@
       "uniform": "glassBlur"
     },
     {
+      "id": "workspaceGlassOpacity",
+      "label": "Workspace Glass",
+      "description": "Controls the opacity of the integrated workspace glass shell.",
+      "type": "slider",
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "default": 0.24
+    },
+    {
       "id": "enableLightning",
       "label": "闪电效果",
       "description": "偶发的雷电闪光。关闭后画面更加平静。",

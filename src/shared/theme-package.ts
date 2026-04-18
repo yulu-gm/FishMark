@@ -20,7 +20,7 @@ export type ThemeParameterSliderDescriptor = {
   max: number;
   step: number;
   default: number;
-  uniform: string;
+  uniform?: string;
   description?: string;
 };
 
@@ -29,7 +29,7 @@ export type ThemeParameterToggleDescriptor = {
   label: string;
   type: "toggle";
   default: boolean;
-  uniform: string;
+  uniform?: string;
   description?: string;
 };
 
@@ -379,7 +379,7 @@ function normalizeThemeParameter(raw: unknown): ThemeParameterDescriptor | null 
   }
 
   const uniform = typeof raw.uniform === "string" ? raw.uniform.trim() : "";
-  if (uniform.length === 0 || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(uniform)) {
+  if (uniform.length > 0 && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(uniform)) {
     return null;
   }
 
@@ -391,7 +391,7 @@ function normalizeThemeParameter(raw: unknown): ThemeParameterDescriptor | null 
       label,
       type: "toggle",
       default: raw.default === true,
-      uniform,
+      ...(uniform ? { uniform } : {}),
       ...(description ? { description } : {})
     };
   }
@@ -417,7 +417,7 @@ function normalizeThemeParameter(raw: unknown): ThemeParameterDescriptor | null 
       max,
       step,
       default: defaultValue,
-      uniform,
+      ...(uniform ? { uniform } : {}),
       ...(description ? { description } : {})
     };
   }

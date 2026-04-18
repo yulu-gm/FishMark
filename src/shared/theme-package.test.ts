@@ -182,6 +182,64 @@ describe("normalizeThemePackageManifest", () => {
     expect(manifest?.surfaces?.workbenchBackground?.channels).toBeUndefined();
   });
 
+  it("accepts CSS-only parameters without shader uniforms", () => {
+    const manifest = normalizeThemePackageManifest(
+      {
+        id: "rain-glass",
+        name: "Rain Glass",
+        version: "1.0.0",
+        supports: { light: false, dark: true },
+        styles: {},
+        layout: { titlebar: null },
+        scene: { id: "rain-scene", sharedUniforms: { rainAmount: 0.72 } },
+        parameters: [
+          {
+            id: "workspaceGlassOpacity",
+            label: "Workspace Glass",
+            type: "slider",
+            min: 0,
+            max: 1,
+            step: 0.05,
+            default: 0.24
+          },
+          {
+            id: "rainAmount",
+            label: "Rain Amount",
+            type: "slider",
+            min: 0,
+            max: 1,
+            step: 0.05,
+            default: 0.72,
+            uniform: "rainAmount"
+          }
+        ]
+      },
+      "/tmp/rain-glass"
+    );
+
+    expect(manifest?.parameters).toEqual([
+      {
+        id: "workspaceGlassOpacity",
+        label: "Workspace Glass",
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.05,
+        default: 0.24
+      },
+      {
+        id: "rainAmount",
+        label: "Rain Amount",
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.05,
+        default: 0.72,
+        uniform: "rainAmount"
+      }
+    ]);
+  });
+
   it("returns null when id or name is whitespace-only", () => {
     const manifestByBlankId = normalizeThemePackageManifest(
       {

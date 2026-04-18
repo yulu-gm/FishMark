@@ -3,3 +3,12 @@
   --yulora-editor-font-size: 1.04rem;
   --yulora-editor-caret: #5da7ff;
 }
+
+[data-yulora-region="workspace-canvas"] .document-editor .cm-editor,
+[data-yulora-region="workspace-canvas"] .document-editor .cm-scroller {
+  background: transparent;
+}
+
+[data-yulora-region="workspace-canvas"] .document-editor .cm-editor {
+  color: var(--yulora-text-body);
+}
