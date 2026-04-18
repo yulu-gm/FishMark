@@ -5,7 +5,12 @@ import { parseMarkdownDocument } from "@yulora/markdown-engine";
 
 import { createActiveBlockStateFromMarkdownDocument } from "../active-block";
 import { readSemanticContext } from "./semantic-context";
-import { computeEmphasisToggle, computeHeadingToggle, computeStrongToggle } from "./semantic-edits";
+import {
+  computeBulletListToggle,
+  computeEmphasisToggle,
+  computeHeadingToggle,
+  computeStrongToggle
+} from "./semantic-edits";
 
 const buildContext = (doc: string, anchor: number, head = anchor) => {
   const state = EditorState.create({ doc, selection: { anchor, head } });
@@ -123,5 +128,33 @@ describe("computeHeadingToggle", () => {
       insert: "## alpha\n## beta"
     });
     expect(result!.selection).toEqual({ anchor: 0, head: doc.length + 6 });
+  });
+});
+
+describe("computeBulletListToggle", () => {
+  it("prefixes a paragraph line with `- `", () => {
+    const doc = "alpha";
+    const result = computeBulletListToggle(buildContext(doc, 2));
+
+    expect(result!.changes).toEqual({ from: 0, to: doc.length, insert: "- alpha" });
+    expect(result!.selection).toEqual({ anchor: 4, head: 4 });
+  });
+
+  it("removes the bullet marker when every covered line already starts with one", () => {
+    const doc = ["- alpha", "- beta"].join("\n");
+    const result = computeBulletListToggle(buildContext(doc, 0, doc.length));
+
+    expect(result!.changes).toEqual({
+      from: 0,
+      to: doc.length,
+      insert: "alpha\nbeta"
+    });
+  });
+
+  it("preserves indent when adding a bullet to an indented paragraph line", () => {
+    const doc = "  alpha";
+    const result = computeBulletListToggle(buildContext(doc, doc.length));
+
+    expect(result!.changes).toEqual({ from: 0, to: doc.length, insert: "  - alpha" });
   });
 });

@@ -26,6 +26,51 @@ export function computeEmphasisToggle(ctx: SemanticContext): SemanticEdit | null
 }
 
 const HEADING_LINE_PATTERN = /^(\s{0,3})(#{1,6})(?:\s+|$)(.*)$/;
+const BULLET_LINE_PATTERN = /^(\s*)([*+-])(?:[ \t]+|$)(.*)$/;
+const INDENT_LINE_PATTERN = /^(\s*)(.*)$/;
+
+export function computeBulletListToggle(ctx: SemanticContext): SemanticEdit | null {
+  const fromLine = ctx.state.doc.lineAt(ctx.selection.from);
+  const toLine = ctx.state.doc.lineAt(ctx.selection.to);
+
+  const lines: string[] = [];
+  for (let lineNumber = fromLine.number; lineNumber <= toLine.number; lineNumber += 1) {
+    lines.push(ctx.state.doc.line(lineNumber).text);
+  }
+
+  const allBullet = lines.every((text) => BULLET_LINE_PATTERN.test(text));
+  const rewritten = lines.map((text) => {
+    if (allBullet) {
+      const match = BULLET_LINE_PATTERN.exec(text)!;
+      return `${match[1] ?? ""}${match[3] ?? ""}`;
+    }
+    const indentMatch = INDENT_LINE_PATTERN.exec(text)!;
+    const indent = indentMatch[1] ?? "";
+    const rest = indentMatch[2] ?? "";
+    return `${indent}- ${rest}`;
+  });
+
+  const insert = rewritten.join("\n");
+  const isSingleLine = fromLine.number === toLine.number;
+
+  if (isSingleLine) {
+    return {
+      changes: { from: fromLine.from, to: toLine.to, insert },
+      selection: {
+        anchor: ctx.selection.from + (allBullet ? -2 : 2),
+        head: ctx.selection.to + (allBullet ? -2 : 2)
+      }
+    };
+  }
+
+  return {
+    changes: { from: fromLine.from, to: toLine.to, insert },
+    selection: {
+      anchor: fromLine.from,
+      head: fromLine.from + insert.length
+    }
+  };
+}
 
 export function computeHeadingToggle(ctx: SemanticContext, level: number): SemanticEdit | null {
   if (level < 1 || level > 6) {
