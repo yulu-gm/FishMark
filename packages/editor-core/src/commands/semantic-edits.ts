@@ -1,6 +1,14 @@
 import type { ChangeSpec } from "@codemirror/state";
 
-import type { InlineContainerNode } from "@yulora/markdown-engine";
+import type {
+  InlineContainerNode,
+  InlineEmphasis,
+  InlineImage,
+  InlineLink,
+  InlineNode,
+  InlineStrikethrough,
+  InlineStrong
+} from "@yulora/markdown-engine";
 
 import type { SemanticContext } from "./semantic-context";
 
@@ -74,34 +82,47 @@ function findEnclosingContainer(
   if (!activeBlock || (activeBlock.type !== "heading" && activeBlock.type !== "paragraph")) {
     return null;
   }
-
   const inline = activeBlock.inline;
-  if (!inline) {
-    return null;
-  }
+  if (!inline) return null;
 
-  let found: InlineContainerNode | null = null;
+  return walkChildren(inline.children, selection, type);
+}
 
-  const walk = (node: { children?: InlineContainerNode["children"]; type: string }) => {
-    if ("children" in node && node.children) {
-      for (const child of node.children) {
-        if (
-          (child.type === "strong" || child.type === "emphasis") &&
-          child.type === type &&
-          (child as InlineContainerNode).openMarker.endOffset === selection.from &&
-          (child as InlineContainerNode).closeMarker.startOffset === selection.to
-        ) {
-          found = child as InlineContainerNode;
-          return;
-        }
-        walk(child as InlineContainerNode);
-        if (found) return;
-      }
+function walkChildren(
+  children: readonly InlineNode[],
+  selection: SemanticContext["selection"],
+  type: "strong" | "emphasis"
+): InlineContainerNode | null {
+  for (const child of children) {
+    if (!isInlineContainer(child)) continue;
+    if (
+      child.type === type &&
+      child.openMarker.endOffset === selection.from &&
+      child.closeMarker.startOffset === selection.to
+    ) {
+      return child;
     }
-  };
+    const nested = walkChildren(child.children, selection, type);
+    if (nested) return nested;
+  }
+  return null;
+}
 
-  walk(inline as unknown as { children: InlineContainerNode["children"]; type: string });
-  return found;
+type ConcreteInlineContainer =
+  | InlineStrong
+  | InlineEmphasis
+  | InlineStrikethrough
+  | InlineLink
+  | InlineImage;
+
+function isInlineContainer(node: InlineNode): node is ConcreteInlineContainer {
+  return (
+    node.type === "strong" ||
+    node.type === "emphasis" ||
+    node.type === "strikethrough" ||
+    node.type === "link" ||
+    node.type === "image"
+  );
 }
 
 function findEnclosingEmptyPair(
