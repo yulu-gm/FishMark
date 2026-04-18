@@ -61,5 +61,5 @@ describe("after-pack Windows icon hook", () => {
     } else {
       expect(result.stdout).toContain("Skipping Windows executable icon patch on non-Windows host.");
     }
-  }, 30000);
+  }, 30_000);
 });

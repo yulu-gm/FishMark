@@ -1963,4 +1963,34 @@ describe("createCodeEditorController", () => {
 
     controller.destroy();
   });
+
+  it("toggles strong via Mod-b without breaking onChange propagation", () => {
+    const host = document.createElement("div");
+    const onChange = vi.fn();
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "alpha bold beta",
+      onChange
+    });
+
+    const view = getEditorView(host);
+    expect(view).not.toBeNull();
+
+    view!.dispatch({ selection: { anchor: 6, head: 10 } });
+
+    view!.contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "b",
+        code: "KeyB",
+        bubbles: true,
+        cancelable: true,
+        ctrlKey: true
+      })
+    );
+
+    expect(controller.getContent()).toBe("alpha **bold** beta");
+    expect(onChange).toHaveBeenCalledWith("alpha **bold** beta");
+
+    controller.destroy();
+  });
 });

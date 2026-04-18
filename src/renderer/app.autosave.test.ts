@@ -117,9 +117,68 @@ type MockCodeEditorModule = typeof codeEditorViewModule & {
     blur: () => void;
     focus: () => void;
     getNavigateCalls: () => number[];
+    setLayout: (layout: { hostLeft: number; hostWidth: number; contentLeft: number; contentWidth: number }) => void;
+    triggerResize: () => void;
     reset: () => void;
   };
 };
+
+type ResizeObserverCallback = (entries: ResizeObserverEntry[], observer: ResizeObserver) => void;
+type MockEditorLayout = {
+  hostLeft: number;
+  hostWidth: number;
+  contentLeft: number;
+  contentWidth: number;
+};
+
+function createDomRect(left: number, width: number): DOMRect {
+  return {
+    x: left,
+    y: 0,
+    width,
+    height: 100,
+    top: 0,
+    right: left + width,
+    bottom: 100,
+    left,
+    toJSON() {
+      return {};
+    }
+  } as DOMRect;
+}
+
+class MockResizeObserver {
+  static instances = new Set<MockResizeObserver>();
+
+  private readonly callback: ResizeObserverCallback;
+
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback;
+    MockResizeObserver.instances.add(this);
+  }
+
+  observe(target: Element): void {
+    void target;
+  }
+
+  unobserve(target: Element): void {
+    void target;
+  }
+
+  disconnect(): void {
+    MockResizeObserver.instances.delete(this);
+  }
+
+  static reset(): void {
+    MockResizeObserver.instances.clear();
+  }
+
+  static trigger(): void {
+    for (const instance of MockResizeObserver.instances) {
+      instance.callback([], instance as unknown as ResizeObserver);
+    }
+  }
+}
 
 const codeEditorMock = (codeEditorViewModule as MockCodeEditorModule).__mock;
 const baseStylesheetPath = join(process.cwd(), "src/renderer/styles/base.css");
@@ -154,7 +213,14 @@ vi.mock("./code-editor-view", async () => {
     | undefined;
   let currentContent = "";
   let latestHostElement: HTMLDivElement | null = null;
+  let latestContentElement: HTMLDivElement | null = null;
   let navigateCalls: number[] = [];
+  let layout: MockEditorLayout = {
+    hostLeft: 0,
+    hostWidth: 880,
+    contentLeft: 240,
+    contentWidth: 520
+  };
 
   const CodeEditorView = React.forwardRef(function MockCodeEditorView(
     props: {
@@ -183,11 +249,20 @@ vi.mock("./code-editor-view", async () => {
     React.useEffect(() => {
       const hostElement = document.querySelector('[data-testid="mock-code-editor"]');
       latestHostElement = hostElement instanceof HTMLDivElement ? hostElement : null;
+      latestContentElement = latestHostElement?.querySelector(".cm-content") ?? null;
+
+      if (latestHostElement) {
+        latestHostElement.getBoundingClientRect = () => createDomRect(layout.hostLeft, layout.hostWidth);
+      }
+
+      if (latestContentElement) {
+        latestContentElement.getBoundingClientRect = () =>
+          createDomRect(layout.contentLeft, layout.contentWidth);
+      }
 
       return () => {
-        if (latestHostElement === hostElement) {
-          latestHostElement = null;
-        }
+        latestHostElement = null;
+        latestContentElement = null;
       };
     }, []);
 
@@ -199,11 +274,17 @@ vi.mock("./code-editor-view", async () => {
       }
     }));
 
-    return React.createElement("div", {
-      "data-testid": "mock-code-editor",
-      tabIndex: -1,
-      onBlur: () => props.onBlur?.()
-    });
+    return React.createElement(
+      "div",
+      {
+        "data-testid": "mock-code-editor",
+        tabIndex: -1,
+        onBlur: () => props.onBlur?.()
+      },
+      React.createElement("div", {
+        className: "cm-content"
+      })
+    );
   });
 
   return {
@@ -222,11 +303,33 @@ vi.mock("./code-editor-view", async () => {
       getNavigateCalls() {
         return [...navigateCalls];
       },
+      setLayout(nextLayout: MockEditorLayout) {
+        layout = nextLayout;
+
+        if (latestHostElement) {
+          latestHostElement.getBoundingClientRect = () => createDomRect(layout.hostLeft, layout.hostWidth);
+        }
+
+        if (latestContentElement) {
+          latestContentElement.getBoundingClientRect = () =>
+            createDomRect(layout.contentLeft, layout.contentWidth);
+        }
+      },
+      triggerResize() {
+        MockResizeObserver.trigger();
+      },
       reset() {
         latestProps = undefined;
         currentContent = "";
         latestHostElement = null;
+        latestContentElement = null;
         navigateCalls = [];
+        layout = {
+          hostLeft: 0,
+          hostWidth: 880,
+          contentLeft: 240,
+          contentWidth: 520
+        };
       }
     }
   };
@@ -294,6 +397,8 @@ describe("App autosave", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+    MockResizeObserver.reset();
     codeEditorMock.reset();
     menuCommandListener = null;
     editorTestCommandListener = null;
@@ -448,6 +553,7 @@ describe("App autosave", () => {
     canvasGetContextSpy.mockRestore();
     vi.unstubAllGlobals();
     globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+    MockResizeObserver.reset();
     vi.useRealTimers();
   });
 
@@ -2285,6 +2391,506 @@ describe("App autosave", () => {
     expect(appShell?.dataset.yuloraFocusMode).toBe("inactive");
     expect(container.querySelector('[data-yulora-dialog="settings-drawer"]')).not.toBeNull();
     expect(container.querySelector('[data-yulora-region="outline-panel"]')).not.toBeNull();
+  });
+
+  it("shows the shortcut hint overlay only after Control is held for 1 second while the editor is focused", async () => {
+    await renderAndOpenDocument();
+
+    expect(
+      container
+        .querySelector('[data-yulora-region="shortcut-hint-overlay-shell"]')
+        ?.getAttribute("data-shortcut-hint-state")
+    ).toBe("hidden");
+
+    await act(async () => {
+      codeEditorMock.focus();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Control",
+          ctrlKey: true,
+          bubbles: true
+        })
+      );
+    });
+
+    const overlay = container.querySelector('[data-yulora-region="shortcut-hint-overlay"]');
+    const overlayShell = container.querySelector('[data-yulora-region="shortcut-hint-overlay-shell"]');
+
+    expect(overlayShell?.getAttribute("data-shortcut-hint-state")).toBe("hidden");
+    expect(overlay).toBeNull();
+
+    await act(async () => {
+      vi.advanceTimersByTime(999);
+      await Promise.resolve();
+    });
+
+    expect(overlayShell?.getAttribute("data-shortcut-hint-state")).toBe("hidden");
+    expect(container.querySelector('[data-yulora-region="shortcut-hint-overlay"]')).toBeNull();
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+      await Promise.resolve();
+    });
+
+    expect(overlayShell?.getAttribute("data-shortcut-hint-state")).toBe("visible");
+    expect(container.querySelector('[data-yulora-region="shortcut-hint-overlay"]')?.textContent).toContain("Ctrl+B");
+    expect(container.querySelector('[data-yulora-region="shortcut-hint-overlay"]')?.textContent).not.toContain("Save");
+    expect(container.querySelector('[data-yulora-region="shortcut-hint-overlay"]')?.textContent).not.toContain("Open");
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keyup", {
+          key: "Control",
+          bubbles: true
+        })
+      );
+    });
+
+    expect(overlayShell?.getAttribute("data-shortcut-hint-state")).toBe("hidden");
+  });
+
+  it("does not show the shortcut hint overlay if Control is released before 1 second elapses", async () => {
+    await renderAndOpenDocument();
+
+    await act(async () => {
+      codeEditorMock.focus();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Control",
+          code: "ControlLeft",
+          ctrlKey: true,
+          bubbles: true
+        })
+      );
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(700);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keyup", {
+          key: "Control",
+          code: "ControlLeft",
+          bubbles: true
+        })
+      );
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(400);
+      await Promise.resolve();
+    });
+
+    expect(
+      container
+        .querySelector('[data-yulora-region="shortcut-hint-overlay-shell"]')
+        ?.getAttribute("data-shortcut-hint-state")
+    ).toBe("hidden");
+    expect(container.querySelector('[data-yulora-region="shortcut-hint-overlay"]')).toBeNull();
+  });
+
+  it("does not show the shortcut hint overlay when Control is held without editor focus", async () => {
+    await renderAndOpenDocument();
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Control",
+          ctrlKey: true,
+          bubbles: true
+        })
+      );
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+
+    const overlay = container.querySelector('[data-yulora-region="shortcut-hint-overlay"]');
+    const overlayShell = container.querySelector('[data-yulora-region="shortcut-hint-overlay-shell"]');
+
+    expect(overlayShell?.getAttribute("data-shortcut-hint-state")).toBe("hidden");
+    expect(overlay?.textContent ?? "").not.toContain("Ctrl+B");
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keyup", {
+          key: "Control",
+          bubbles: true
+        })
+      );
+    });
+  });
+
+  it("does not show the shortcut hint overlay when AltGraph is pressed", async () => {
+    await renderAndOpenDocument();
+
+    await act(async () => {
+      codeEditorMock.focus();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "AltGraph",
+          ctrlKey: true,
+          altKey: true,
+          bubbles: true
+        })
+      );
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+
+    expect(
+      container
+        .querySelector('[data-yulora-region="shortcut-hint-overlay-shell"]')
+        ?.getAttribute("data-shortcut-hint-state")
+    ).toBe("hidden");
+    expect(container.querySelector('[data-yulora-region="shortcut-hint-overlay"]')).toBeNull();
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keyup", {
+          key: "AltGraph",
+          bubbles: true
+        })
+      );
+    });
+  });
+
+  it("shows the shortcut hint overlay while the editor is focused and Meta is held on macOS", async () => {
+    window.yulora = {
+      ...window.yulora,
+      platform: "darwin"
+    } as Window["yulora"];
+
+    await renderAndOpenDocument();
+
+    await act(async () => {
+      codeEditorMock.focus();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Meta",
+          metaKey: true,
+          bubbles: true
+        })
+      );
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+
+    const overlay = container.querySelector('[data-yulora-region="shortcut-hint-overlay"]');
+
+    expect(
+      container
+        .querySelector('[data-yulora-region="shortcut-hint-overlay-shell"]')
+        ?.getAttribute("data-shortcut-hint-state")
+    ).toBe("visible");
+    expect(overlay?.textContent).toContain("Cmd+B");
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keyup", {
+          key: "Meta",
+          bubbles: true
+        })
+      );
+    });
+
+    expect(
+      container
+        .querySelector('[data-yulora-region="shortcut-hint-overlay-shell"]')
+        ?.getAttribute("data-shortcut-hint-state")
+    ).toBe("hidden");
+  });
+
+  it("does not show the shortcut hint overlay when Control is held on macOS", async () => {
+    window.yulora = {
+      ...window.yulora,
+      platform: "darwin"
+    } as Window["yulora"];
+
+    await renderAndOpenDocument();
+
+    await act(async () => {
+      codeEditorMock.focus();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Control",
+          ctrlKey: true,
+          bubbles: true
+        })
+      );
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+
+    expect(
+      container
+        .querySelector('[data-yulora-region="shortcut-hint-overlay-shell"]')
+        ?.getAttribute("data-shortcut-hint-state")
+    ).toBe("hidden");
+    expect(container.querySelector('[data-yulora-region="shortcut-hint-overlay"]')).toBeNull();
+  });
+
+  it("does not show the shortcut hint overlay when Meta is held on win32", async () => {
+    await renderAndOpenDocument();
+
+    await act(async () => {
+      codeEditorMock.focus();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Meta",
+          metaKey: true,
+          bubbles: true
+        })
+      );
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+
+    expect(
+      container
+        .querySelector('[data-yulora-region="shortcut-hint-overlay-shell"]')
+        ?.getAttribute("data-shortcut-hint-state")
+    ).toBe("hidden");
+    expect(container.querySelector('[data-yulora-region="shortcut-hint-overlay"]')).toBeNull();
+  });
+
+  it("shows the shortcut hint overlay even when the content column starts near the left edge", async () => {
+    codeEditorMock.setLayout({
+      hostLeft: 0,
+      hostWidth: 720,
+      contentLeft: 96,
+      contentWidth: 560
+    });
+
+    await renderAndOpenDocument();
+
+    await act(async () => {
+      codeEditorMock.focus();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      codeEditorMock.triggerResize();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Control",
+          ctrlKey: true,
+          bubbles: true
+        })
+      );
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+
+    expect(
+      container
+        .querySelector('[data-yulora-region="shortcut-hint-overlay-shell"]')
+        ?.getAttribute("data-shortcut-hint-state")
+    ).toBe("visible");
+    expect(container.querySelector('[data-yulora-region="shortcut-hint-overlay"]')).not.toBeNull();
+  });
+
+  it("keeps the shortcut hint overlay visible until every pressed primary modifier is released", async () => {
+    await renderAndOpenDocument();
+
+    await act(async () => {
+      codeEditorMock.focus();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Control",
+          code: "ControlLeft",
+          ctrlKey: true,
+          bubbles: true
+        })
+      );
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Control",
+          code: "ControlRight",
+          ctrlKey: true,
+          bubbles: true
+        })
+      );
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+
+    expect(
+      container
+        .querySelector('[data-yulora-region="shortcut-hint-overlay-shell"]')
+        ?.getAttribute("data-shortcut-hint-state")
+    ).toBe("visible");
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keyup", {
+          key: "Control",
+          code: "ControlLeft",
+          ctrlKey: true,
+          bubbles: true
+        })
+      );
+    });
+
+    expect(
+      container
+        .querySelector('[data-yulora-region="shortcut-hint-overlay-shell"]')
+        ?.getAttribute("data-shortcut-hint-state")
+    ).toBe("visible");
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keyup", {
+          key: "Control",
+          code: "ControlRight",
+          bubbles: true
+        })
+      );
+    });
+
+    expect(
+      container
+        .querySelector('[data-yulora-region="shortcut-hint-overlay-shell"]')
+        ?.getAttribute("data-shortcut-hint-state")
+    ).toBe("hidden");
+  });
+
+  it("hides the shortcut hint overlay on window blur", async () => {
+    await renderAndOpenDocument();
+
+    await act(async () => {
+      codeEditorMock.focus();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Control",
+          ctrlKey: true,
+          bubbles: true
+        })
+      );
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      window.dispatchEvent(new Event("blur"));
+      await Promise.resolve();
+    });
+
+    expect(
+      container
+        .querySelector('[data-yulora-region="shortcut-hint-overlay-shell"]')
+        ?.getAttribute("data-shortcut-hint-state")
+    ).toBe("hidden");
+  });
+
+  it("hides the shortcut hint overlay with a document-canvas container rule instead of viewport-only media queries", () => {
+    const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8");
+    const overlayHideRule = /@container editor-canvas \(max-width: 520px\)\s*\{\s*\.shortcut-hint-overlay\s*\{\s*display:\s*none;/m;
+
+    expect(appUiStylesheet).toContain(".document-canvas");
+    expect(appUiStylesheet).toContain("container-type: inline-size;");
+    expect(overlayHideRule.test(appUiStylesheet)).toBe(false);
+  });
+
+  it("keeps shortcut hint fade animations free of horizontal drift so the measured footprint stays valid", () => {
+    const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8");
+    const overlayEnterKeyframes =
+      appUiStylesheet.match(/@keyframes shortcut-hint-overlay-enter \{[\s\S]*?\n\}/m)?.[0] ?? "";
+    const overlayExitKeyframes =
+      appUiStylesheet.match(/@keyframes shortcut-hint-overlay-exit \{[\s\S]*?\n\}/m)?.[0] ?? "";
+    const overlayItemEnterRule =
+      appUiStylesheet.match(
+        /\.shortcut-hint-overlay\[data-state="open"\] \.shortcut-hint-overlay-item \{[\s\S]*?\n\}/m
+      )?.[0] ?? "";
+    const overlayItemExitRule =
+      appUiStylesheet.match(
+        /\.shortcut-hint-overlay\[data-state="closing"\] \.shortcut-hint-overlay-item \{[\s\S]*?\n\}/m
+      )?.[0] ?? "";
+    const overlayClosingRule =
+      appUiStylesheet.match(/\.shortcut-hint-overlay\[data-state="closing"\] \{[\s\S]*?\n\}/m)?.[0] ?? "";
+    const overlayShellHiddenRule =
+      appUiStylesheet.match(
+        /\.shortcut-hint-overlay-shell\[data-shortcut-hint-state="hidden"\] \{[\s\S]*?\n\}/m
+      )?.[0] ?? "";
+    const overlayItemEnterKeyframes =
+      appUiStylesheet.match(/@keyframes shortcut-hint-overlay-item-enter \{[\s\S]*?\n\}/m)?.[0] ?? "";
+    const overlayItemExitKeyframes =
+      appUiStylesheet.match(/@keyframes shortcut-hint-overlay-item-exit \{[\s\S]*?\n\}/m)?.[0] ?? "";
+
+    expect(overlayEnterKeyframes).toContain("opacity:");
+    expect(overlayExitKeyframes).toContain("opacity:");
+    expect(overlayEnterKeyframes).not.toContain("translateX");
+    expect(overlayExitKeyframes).not.toContain("translateX");
+    expect(overlayItemEnterRule).toContain("var(--shortcut-index, 0)");
+    expect(overlayItemExitRule).toContain("var(--shortcut-index, 0)");
+    expect(overlayClosingRule).not.toContain("animation:");
+    expect(overlayShellHiddenRule).not.toContain("opacity:");
+    expect(overlayItemEnterKeyframes).toContain("translateX");
+    expect(overlayItemExitKeyframes).toContain("translateX");
+    expect(overlayItemEnterKeyframes).toContain("scaleY");
+    expect(overlayItemExitKeyframes).toContain("scaleY");
   });
 
   it("renders settings as a drawer panel with close affordance while keeping existing controls", async () => {

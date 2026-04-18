@@ -1,5 +1,5 @@
 {
-  "version": "0.1.2",
-  "title": "Yulora 0.1.2 Release",
-  "body": "### 本次更新\n\n- 接入 Windows 正式发版链路，统一生成并上传安装包、`latest.yml` 与 blockmap。\n- 补齐安装包图标补写与更新元数据写入，为后续自动更新分发打基础。\n- 统一 `tools/` 下的发版入口，并为 macOS 发版保留后续接入位置。"
+  "version": "0.1.3",
+  "title": "Yulora 0.1.3 Release",
+  "body": "### 本次更新\n\n- 新增默认 Markdown 切换快捷键，可直接用 `Ctrl/Cmd+B`、`Ctrl/Cmd+I`、`Ctrl/Cmd+1..4`、`Shift+Ctrl/Cmd+7`、`Shift+Ctrl/Cmd+9`、`Alt+Shift+Ctrl/Cmd+C` 切换常用文本结构。\n- 编辑器聚焦后按住主修饰键约 1 秒，会在左侧留白显示纯文字快捷键提示，提示内容与真实编辑器绑定保持同步。\n- 补齐列表项与引用块里的行内格式切换回归覆盖，并继续沿用现有 Windows 安装包与自动更新发布链路。"
 }

@@ -472,6 +472,20 @@
   opacity: 1;
 }
 
+.workspace-canvas.is-editor-open {
+  grid-template-columns: clamp(156px, 16vw, 220px) minmax(0, 1fr);
+  column-gap: var(--yulora-space-4);
+  align-items: stretch;
+}
+
+.shortcut-hint-overlay-shell {
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  pointer-events: none;
+  overflow: visible;
+}
+
 .workspace-shell,
 .document-canvas,
 .document-editor {
@@ -537,6 +551,125 @@
 
 .document-canvas {
   min-width: 0;
+  position: relative;
+  container-type: inline-size;
+  container-name: editor-canvas;
+}
+
+.shortcut-hint-overlay {
+  position: sticky;
+  top: clamp(16px, 2vw, 24px);
+  left: 0;
+  z-index: 3;
+  pointer-events: none;
+  user-select: none;
+  color: var(--yulora-text-subtle);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+  width: 100%;
+  max-width: none;
+  padding-inline-start: clamp(8px, 1vw, 12px);
+}
+
+.shortcut-hint-overlay[data-state="open"] {
+  animation: shortcut-hint-overlay-enter var(--shortcut-hint-overlay-duration, 180ms)
+    cubic-bezier(0.2, 0.85, 0.2, 1) both;
+}
+
+.shortcut-hint-overlay[data-state="closing"] {
+  opacity: 1;
+}
+
+.shortcut-hint-overlay-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+
+.shortcut-hint-overlay-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: 12px;
+  white-space: nowrap;
+  transform-origin: left top;
+  will-change: transform, opacity;
+}
+
+.shortcut-hint-overlay[data-state="open"] .shortcut-hint-overlay-item {
+  opacity: 0;
+  animation: shortcut-hint-overlay-item-enter
+    var(--shortcut-hint-overlay-item-duration, 100ms) cubic-bezier(0.2, 0.85, 0.2, 1) both;
+  animation-delay: calc(
+    var(--shortcut-index, 0) * var(--shortcut-hint-overlay-item-stagger, 10ms)
+  );
+}
+
+.shortcut-hint-overlay[data-state="closing"] .shortcut-hint-overlay-item {
+  opacity: 1;
+  animation: shortcut-hint-overlay-item-exit
+    var(--shortcut-hint-overlay-item-duration, 100ms) cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation-delay: calc(
+    var(--shortcut-index, 0) * var(--shortcut-hint-overlay-item-stagger, 10ms)
+  );
+}
+
+.shortcut-hint-overlay-key {
+  color: var(--yulora-text-strong);
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.shortcut-hint-overlay-label {
+  color: var(--yulora-text-muted);
+  font-weight: 500;
+}
+
+@keyframes shortcut-hint-overlay-enter {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes shortcut-hint-overlay-exit {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes shortcut-hint-overlay-item-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-12px) scaleY(0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0) scaleY(1);
+  }
+}
+
+@keyframes shortcut-hint-overlay-item-exit {
+  from {
+    opacity: 1;
+    transform: translateX(0) scaleY(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(-12px) scaleY(0);
+  }
 }
 
 .outline-entry {
@@ -984,5 +1117,23 @@
 
   .empty-inner {
     padding: var(--yulora-space-8) var(--yulora-space-4);
+  }
+}
+
+@container editor-canvas (max-width: 640px) {
+  .shortcut-hint-overlay {
+    top: var(--yulora-space-3);
+    padding-inline-start: 0;
+  }
+
+  .shortcut-hint-overlay-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+    white-space: normal;
+  }
+
+  .shortcut-hint-overlay-label {
+    margin-top: 1px;
   }
 }

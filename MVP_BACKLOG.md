@@ -1051,3 +1051,35 @@
 - [x] 通过 `preload` 暴露受限菜单命令订阅
 - [x] 在 `renderer` 复用现有打开/保存链路处理菜单命令
 - [x] 收敛当前壳层布局并补验证与记录
+
+### TASK-041 默认 Markdown 切换型快捷键
+
+状态：DEV_DONE
+依赖：`TASK-007`、`TASK-009`、`TASK-034`、`TASK-035`
+
+目标：为编辑器接入一批默认“切换型”Markdown 快捷键，覆盖标题、无序列表、引用块、代码块、粗体与斜体，并保证选区优先、行为可逆、光标稳定，不破坏现有 IME / undo-redo / autosave / round-trip 基线。
+
+主要落点：`packages/editor-core/src/commands/`、`packages/editor-core/src/extensions/markdown.ts`、`src/renderer/code-editor.test.ts`
+
+交付物：
+- `Cmd/Ctrl+B`、`Cmd/Ctrl+I` 行内格式切换（包裹 / 解包 / 空选区成对插入）
+- `Cmd/Ctrl+1..4` 一到四级标题切换
+- `Shift+Cmd/Ctrl+7` 无序列表切换
+- `Shift+Cmd/Ctrl+9` 引用块切换
+- `Alt+Shift+Cmd/Ctrl+C` 代码块包裹 / 解包
+- 三层语义命令架构（`semantic-context` / `semantic-edits` / `toggle-*-commands`）
+- 命令级与扩展级单测，并补 renderer 回归测试
+
+验收：
+- 上述快捷键均能按设计触发
+- 同一快捷键再次按下可逆
+- 选区命中现有 strong/emphasis 节点时执行解包
+- 不破坏 undo / redo、IME composition guard、autosave、active block 与 inactive block decorations
+- `npm run typecheck`、`npm run test`、`npm run build` 通过
+
+执行切片：
+- [x] 落地 `SemanticContext` reader
+- [x] 实现 strong / emphasis / heading / bulletList / blockquote / codeFence 的纯计算 toggle
+- [x] 暴露 `toggle-inline-commands` 与 `toggle-block-commands` CodeMirror 命令
+- [x] 在 markdown extension keymap 中接入九条默认绑定
+- [x] 补 renderer Mod-b 回归测试与文档记录

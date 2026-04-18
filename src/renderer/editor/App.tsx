@@ -10,7 +10,7 @@ import {
   type CSSProperties
 } from "react";
 
-import type { ActiveBlockState } from "@yulora/editor-core";
+import { TEXT_EDITING_SHORTCUTS, type ActiveBlockState } from "@yulora/editor-core";
 import type { AppNotification, AppUpdateState } from "../../shared/app-update";
 import { createPreviewAssetUrl } from "../../shared/preview-asset-url";
 import type {
@@ -59,6 +59,7 @@ import {
   shouldWarnForThemeDynamicFallback,
   type ThemeDynamicAggregateMode
 } from "./theme-dynamic-mode";
+import { ShortcutHintOverlay } from "./shortcut-hint-overlay";
 
 const SettingsView = lazy(async () => {
   const module = await import("./settings-view");
@@ -83,7 +84,36 @@ const SETTINGS_DRAWER_EXIT_ANIMATION_MS = 180;
 const APP_NOTIFICATION_DURATION_MS = 3000;
 const APP_NOTIFICATION_EXIT_ANIMATION_MS = 180;
 const THEME_DYNAMIC_FALLBACK_MESSAGE = "主题动态效果已自动关闭，已回退到静态样式。";
+const SHORTCUT_HINT_HOLD_DELAY_MS = 1000;
 const MARKDOWN_FILE_EXTENSIONS = [".md", ".markdown"] as const;
+const PRIMARY_MODIFIER_LEFT_LOCATION = 1;
+const PRIMARY_MODIFIER_RIGHT_LOCATION = 2;
+
+function getPrimaryShortcutModifierId(
+  event: KeyboardEvent,
+  primaryModifierKey: "Control" | "Meta"
+): string | null {
+  if (event.key !== primaryModifierKey) {
+    return null;
+  }
+
+  if (
+    event.code === `${primaryModifierKey}Left` ||
+    event.code === `${primaryModifierKey}Right`
+  ) {
+    return event.code;
+  }
+
+  if (event.location === PRIMARY_MODIFIER_LEFT_LOCATION) {
+    return `${primaryModifierKey}Left`;
+  }
+
+  if (event.location === PRIMARY_MODIFIER_RIGHT_LOCATION) {
+    return `${primaryModifierKey}Right`;
+  }
+
+  return primaryModifierKey;
+}
 
 function isMarkdownFilePath(targetPath: string): boolean {
   const normalizedPath = targetPath.trim().toLowerCase();
@@ -455,6 +485,8 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   const [titlebarSurfaceRuntimeMode, setTitlebarSurfaceRuntimeMode] = useState<
     ThemeSurfaceRuntimeMode | null
   >(null);
+  const [isEditorFocused, setIsEditorFocused] = useState(false);
+  const [isShortcutHintArmed, setIsShortcutHintArmed] = useState(false);
   const editorRef = useRef<CodeEditorHandle | null>(null);
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
   const editorContentRef = useRef("");
@@ -475,9 +507,11 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   const focusIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const notificationHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const notificationCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const shortcutHintHoldTimerRef = useRef<number | null>(null);
   const lastThemeNotificationKeyRef = useRef<string | null>(null);
   const lastThemeDynamicNotificationKeyRef = useRef<string | null>(null);
   const fontFamilyLoadStateRef = useRef<"idle" | "loading" | "loaded">("idle");
+  const pressedShortcutModifiersRef = useRef<Set<string>>(new Set());
   const currentDocumentContent = state.currentDocument
     ? (editorContentRef.current || state.currentDocument.content)
     : "";
@@ -598,6 +632,8 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     () => normalizeTitlebarLayout(resolveDefaultTitlebarLayout(yulora.platform)),
     [yulora.platform]
   );
+  const shortcutHintModifierKey: "Control" | "Meta" = yulora.platform === "darwin" ? "Meta" : "Control";
+  const isShortcutHintVisible = isDocumentOpen && isEditorFocused && isShortcutHintArmed;
 
   function applyState(updater: (current: AppState) => AppState): void {
     const next = updater(stateRef.current);
@@ -719,6 +755,13 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     }
 
     enterFocusMode("manual");
+  }
+
+  function clearShortcutHintHoldTimer(): void {
+    if (shortcutHintHoldTimerRef.current !== null) {
+      clearTimeout(shortcutHintHoldTimerRef.current);
+      shortcutHintHoldTimerRef.current = null;
+    }
   }
 
   const showNotification = useCallback((nextNotification: AppNotification): void => {
@@ -1291,6 +1334,106 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   }, [enterFocusMode, scheduleFocusIdle]);
 
   useEffect(() => {
+    const editorContainer = editorContainerRef.current;
+
+    if (!editorContainer) {
+      return undefined;
+    }
+
+    const handleFocusIn = (event: FocusEvent) => {
+      if (event.target instanceof Node && editorContainer.contains(event.target)) {
+        setIsEditorFocused(true);
+      }
+    };
+
+    const handleFocusOut = () => {
+      const activeElement = document.activeElement;
+      setIsEditorFocused(activeElement instanceof Node && editorContainer.contains(activeElement));
+    };
+
+    editorContainer.addEventListener("focusin", handleFocusIn);
+    editorContainer.addEventListener("focusout", handleFocusOut);
+
+    return () => {
+      editorContainer.removeEventListener("focusin", handleFocusIn);
+      editorContainer.removeEventListener("focusout", handleFocusOut);
+    };
+  }, [isDocumentOpen, state.editorLoadRevision]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const modifierId = getPrimaryShortcutModifierId(event, shortcutHintModifierKey);
+
+      if (!modifierId) {
+        return;
+      }
+
+      const wasHeld = pressedShortcutModifiersRef.current.size > 0;
+      pressedShortcutModifiersRef.current.add(modifierId);
+
+      if (wasHeld || shortcutHintHoldTimerRef.current !== null) {
+        return;
+      }
+
+      shortcutHintHoldTimerRef.current = window.setTimeout(() => {
+        shortcutHintHoldTimerRef.current = null;
+
+        if (
+          pressedShortcutModifiersRef.current.size > 0 &&
+          isDocumentOpen &&
+          isEditorFocused
+        ) {
+          setIsShortcutHintArmed(true);
+        }
+      }, SHORTCUT_HINT_HOLD_DELAY_MS);
+    };
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      const modifierId = getPrimaryShortcutModifierId(event, shortcutHintModifierKey);
+
+      if (!modifierId) {
+        return;
+      }
+
+      pressedShortcutModifiersRef.current.delete(modifierId);
+
+      if (pressedShortcutModifiersRef.current.size === 0) {
+        clearShortcutHintHoldTimer();
+        setIsShortcutHintArmed(false);
+      }
+    };
+
+    const handleWindowBlur = () => {
+      clearShortcutHintHoldTimer();
+      pressedShortcutModifiersRef.current.clear();
+      setIsEditorFocused(false);
+      setIsShortcutHintArmed(false);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", handleWindowBlur);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", handleWindowBlur);
+      clearShortcutHintHoldTimer();
+    };
+  }, [isDocumentOpen, isEditorFocused, shortcutHintModifierKey]);
+
+  useEffect(() => {
+    if (isDocumentOpen) {
+      return;
+    }
+
+    clearShortcutHintHoldTimer();
+    pressedShortcutModifiersRef.current.clear();
+    setIsEditorFocused(false);
+    setIsShortcutHintArmed(false);
+  }, [isDocumentOpen]);
+
+  useEffect(() => {
     const themePackageRuntime =
       themePackageRuntimeRef.current ?? createThemePackageRuntime(document);
     themePackageRuntimeRef.current = themePackageRuntime;
@@ -1577,165 +1720,178 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
           </header>
 
           <section
-            className="workspace-canvas"
+            className={`workspace-canvas ${state.currentDocument ? "is-editor-open" : ""}`}
             data-yulora-region="workspace-canvas"
           >
             {state.currentDocument ? (
-              <section className={`workspace-shell ${isOutlineOpen ? "is-outline-open" : ""}`}>
-                {isManualFocusToggleEnabled ? (
-                  <button
-                    type="button"
-                    className="focus-toggle-entry"
-                    data-yulora-region="focus-toggle"
-                    aria-label={isFocusModeActive ? "Exit focus mode" : "Enter focus mode"}
-                    aria-pressed={isFocusModeActive}
-                    onClick={toggleManualFocusMode}
-                  >
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
-                      focusable="false"
-                    >
-                      <path
-                        d="M8 4H4v4M16 4h4v4M20 16v4h-4M4 16v4h4"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                    <span>{isFocusModeActive ? "Exit focus" : "Enter focus"}</span>
-                  </button>
-                ) : null}
+              <>
                 <div
-                  className="document-canvas"
-                  ref={editorContainerRef}
+                  data-yulora-region="shortcut-hint-overlay-shell"
+                  className="shortcut-hint-overlay-shell"
+                  data-shortcut-hint-state={isShortcutHintVisible ? "visible" : "hidden"}
                 >
-                  <CodeEditorView
-                    ref={editorRef}
-                    initialContent={state.currentDocument.content}
-                    documentPath={state.currentDocument.path}
-                    loadRevision={state.editorLoadRevision}
-                    importClipboardImage={handleImportClipboardImage}
-                    onActiveBlockChange={(nextActiveBlockState) => {
-                      activeBlockStateRef.current = nextActiveBlockState;
-                      setActiveHeadingId(
-                        nextActiveBlockState.activeBlock?.type === "heading"
-                          ? nextActiveBlockState.activeBlock.id
-                          : null
-                      );
-                    }}
-                    onChange={(nextContent) => {
-                      editorContentRef.current = nextContent;
-                      setOutlineItems(deriveOutlineItems(nextContent));
-                      let nextState: AppState = stateRef.current;
-
-                      applyState((current) => {
-                        nextState = applyEditorContentChanged(current, nextContent);
-                        return nextState;
-                      });
-
-                      scheduleAutosave(nextState);
-                    }}
-                    onBlur={() => {
-                      void runAutosave();
-                    }}
+                  <ShortcutHintOverlay
+                    visible={isShortcutHintVisible}
+                    platform={yulora.platform}
+                    shortcuts={TEXT_EDITING_SHORTCUTS}
                   />
                 </div>
-                {isOutlinePanelVisible ? (
-                  <aside
-                    className="outline-panel"
-                    data-yulora-region="outline-panel"
-                    data-state={isOutlineOpen ? "open" : "closing"}
-                    aria-label="Document outline"
-                  >
-                    <div
-                      className="outline-panel-header"
-                      data-yulora-region="outline-panel-header"
+                <section className={`workspace-shell ${isOutlineOpen ? "is-outline-open" : ""}`}>
+                  {isManualFocusToggleEnabled ? (
+                    <button
+                      type="button"
+                      className="focus-toggle-entry"
+                      data-yulora-region="focus-toggle"
+                      aria-label={isFocusModeActive ? "Exit focus mode" : "Enter focus mode"}
+                      aria-pressed={isFocusModeActive}
+                      onClick={toggleManualFocusMode}
                     >
-                      <p className="outline-panel-title">Outline</p>
-                      <button
-                        type="button"
-                        className="outline-panel-close"
-                        aria-label="Collapse outline"
-                        onClick={closeOutlinePanel}
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                        focusable="false"
                       >
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          aria-hidden="true"
-                          focusable="false"
-                        >
-                          <path
-                            d="M9 6l6 6-6 6"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </button>
-                    </div>
-                    <div
-                      className="outline-panel-body"
-                      data-yulora-region="outline-panel-body"
-                    >
-                      {outlineItems.length > 0 ? (
-                        <ol className="outline-panel-list">
-                          {outlineItems.map((item) => (
-                            <li key={item.id}>
-                              <button
-                                type="button"
-                                className={`outline-panel-item ${activeHeadingId === item.id ? "is-current" : ""}`}
-                                style={{
-                                  paddingInlineStart: `${10 + Math.max(item.depth - 1, 0) * 10}px`
-                                }}
-                                onClick={() => {
-                                  editorRef.current?.navigateToOffset(item.startOffset);
-                                }}
-                              >
-                                <span className="outline-panel-item-label">{item.label}</span>
-                              </button>
-                            </li>
-                          ))}
-                        </ol>
-                      ) : (
-                        <p className="outline-panel-empty">No headings yet.</p>
-                      )}
-                    </div>
-                  </aside>
-                ) : (
-                  <button
-                    type="button"
-                    className="outline-entry"
-                    data-yulora-region="outline-toggle"
-                    aria-label="Expand outline"
-                    onClick={openOutlinePanel}
+                        <path
+                          d="M8 4H4v4M16 4h4v4M20 16v4h-4M4 16v4h4"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                      <span>{isFocusModeActive ? "Exit focus" : "Enter focus"}</span>
+                    </button>
+                  ) : null}
+                  <div
+                    className="document-canvas"
+                    ref={editorContainerRef}
                   >
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
-                      focusable="false"
+                    <CodeEditorView
+                      ref={editorRef}
+                      initialContent={state.currentDocument.content}
+                      documentPath={state.currentDocument.path}
+                      loadRevision={state.editorLoadRevision}
+                      importClipboardImage={handleImportClipboardImage}
+                      onActiveBlockChange={(nextActiveBlockState) => {
+                        activeBlockStateRef.current = nextActiveBlockState;
+                        setActiveHeadingId(
+                          nextActiveBlockState.activeBlock?.type === "heading"
+                            ? nextActiveBlockState.activeBlock.id
+                            : null
+                        );
+                      }}
+                      onChange={(nextContent) => {
+                        editorContentRef.current = nextContent;
+                        setOutlineItems(deriveOutlineItems(nextContent));
+                        let nextState: AppState = stateRef.current;
+
+                        applyState((current) => {
+                          nextState = applyEditorContentChanged(current, nextContent);
+                          return nextState;
+                        });
+
+                        scheduleAutosave(nextState);
+                      }}
+                      onBlur={() => {
+                        void runAutosave();
+                      }}
+                    />
+                  </div>
+                  {isOutlinePanelVisible ? (
+                    <aside
+                      className="outline-panel"
+                      data-yulora-region="outline-panel"
+                      data-state={isOutlineOpen ? "open" : "closing"}
+                      aria-label="Document outline"
                     >
-                      <path
-                        d="M15 6l-6 6 6 6"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </button>
-                )}
-              </section>
+                      <div
+                        className="outline-panel-header"
+                        data-yulora-region="outline-panel-header"
+                      >
+                        <p className="outline-panel-title">Outline</p>
+                        <button
+                          type="button"
+                          className="outline-panel-close"
+                          aria-label="Collapse outline"
+                          onClick={closeOutlinePanel}
+                        >
+                          <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            aria-hidden="true"
+                            focusable="false"
+                          >
+                            <path
+                              d="M9 6l6 6-6 6"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </button>
+                      </div>
+                      <div
+                        className="outline-panel-body"
+                        data-yulora-region="outline-panel-body"
+                      >
+                        {outlineItems.length > 0 ? (
+                          <ol className="outline-panel-list">
+                            {outlineItems.map((item) => (
+                              <li key={item.id}>
+                                <button
+                                  type="button"
+                                  className={`outline-panel-item ${activeHeadingId === item.id ? "is-current" : ""}`}
+                                  style={{
+                                    paddingInlineStart: `${10 + Math.max(item.depth - 1, 0) * 10}px`
+                                  }}
+                                  onClick={() => {
+                                    editorRef.current?.navigateToOffset(item.startOffset);
+                                  }}
+                                >
+                                  <span className="outline-panel-item-label">{item.label}</span>
+                                </button>
+                              </li>
+                            ))}
+                          </ol>
+                        ) : (
+                          <p className="outline-panel-empty">No headings yet.</p>
+                        )}
+                      </div>
+                    </aside>
+                  ) : (
+                    <button
+                      type="button"
+                      className="outline-entry"
+                      data-yulora-region="outline-toggle"
+                      aria-label="Expand outline"
+                      onClick={openOutlinePanel}
+                    >
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path
+                          d="M15 6l-6 6 6 6"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </button>
+                  )}
+                </section>
+              </>
             ) : (
               <section
                 className="empty-workspace"

@@ -159,6 +159,7 @@ describe("package scripts", () => {
     const configPath = path.join(process.cwd(), "electron-builder.json");
     const config = JSON.parse(readFileSync(configPath, "utf8")) as {
       appId?: string;
+      electronVersion?: string;
       electronLanguages?: string[];
       publish?: Array<{
         provider?: string;
@@ -192,6 +193,7 @@ describe("package scripts", () => {
     };
 
     expect(config.appId).toBe("com.yulora.app");
+    expect(config.electronVersion).toBe("41.2.0");
     expect(config.electronLanguages).toEqual(["en-US", "zh-CN", "zh-TW"]);
     expect(config.productName).toBe("Yulora");
     expect(config.publish).toEqual([
