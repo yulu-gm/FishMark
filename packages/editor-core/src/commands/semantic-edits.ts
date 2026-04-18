@@ -321,3 +321,49 @@ function findEnclosingEmptyPair(
 
   return null;
 }
+
+export function computeCodeFenceToggle(ctx: SemanticContext): SemanticEdit | null {
+  const activeBlock = ctx.activeState.activeBlock;
+  if (activeBlock?.type === "codeFence") {
+    return unwrapCodeFence(ctx, activeBlock);
+  }
+
+  if (ctx.selection.empty) {
+    const cursor = ctx.selection.from;
+    const insert = "```\n\n```";
+    return {
+      changes: { from: cursor, to: cursor, insert },
+      selection: { anchor: cursor + 4, head: cursor + 4 }
+    };
+  }
+
+  const fromLine = ctx.state.doc.lineAt(ctx.selection.from);
+  const toLine = ctx.state.doc.lineAt(ctx.selection.to);
+  const inner = ctx.source.slice(fromLine.from, toLine.to);
+  const insert = `\`\`\`\n${inner}\n\`\`\``;
+
+  return {
+    changes: { from: fromLine.from, to: toLine.to, insert },
+    selection: {
+      anchor: fromLine.from + 4,
+      head: fromLine.from + 4 + inner.length
+    }
+  };
+}
+
+function unwrapCodeFence(
+  ctx: SemanticContext,
+  block: Extract<SemanticContext["activeState"]["activeBlock"], { type: "codeFence" }>
+): SemanticEdit | null {
+  const blockSource = ctx.source.slice(block.startOffset, block.endOffset);
+  const lines = blockSource.split("\n");
+  if (lines.length < 2) {
+    return null;
+  }
+
+  const inner = lines.slice(1, lines.length - 1).join("\n");
+  return {
+    changes: { from: block.startOffset, to: block.endOffset, insert: inner },
+    selection: { anchor: block.startOffset, head: block.startOffset + inner.length }
+  };
+}

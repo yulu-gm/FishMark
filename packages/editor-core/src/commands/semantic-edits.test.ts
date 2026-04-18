@@ -8,6 +8,7 @@ import { readSemanticContext } from "./semantic-context";
 import {
   computeBlockquoteToggle,
   computeBulletListToggle,
+  computeCodeFenceToggle,
   computeEmphasisToggle,
   computeHeadingToggle,
   computeStrongToggle
@@ -171,6 +172,43 @@ describe("computeBlockquoteToggle", () => {
   it("removes the blockquote marker when every covered line already starts with `> `", () => {
     const doc = ["> alpha", "> beta"].join("\n");
     const result = computeBlockquoteToggle(buildContext(doc, 0, doc.length));
+
+    expect(result!.changes).toEqual({
+      from: 0,
+      to: doc.length,
+      insert: "alpha\nbeta"
+    });
+  });
+});
+
+describe("computeCodeFenceToggle", () => {
+  it("inserts an empty fenced block at the cursor when the selection is empty", () => {
+    const doc = "alpha\n";
+    const result = computeCodeFenceToggle(buildContext(doc, doc.length));
+
+    expect(result!.changes).toEqual({
+      from: doc.length,
+      to: doc.length,
+      insert: "```\n\n```"
+    });
+    expect(result!.selection).toEqual({ anchor: doc.length + 4, head: doc.length + 4 });
+  });
+
+  it("wraps the covered lines with a code fence", () => {
+    const doc = ["alpha", "beta"].join("\n");
+    const result = computeCodeFenceToggle(buildContext(doc, 0, doc.length));
+
+    expect(result!.changes).toEqual({
+      from: 0,
+      to: doc.length,
+      insert: "```\nalpha\nbeta\n```"
+    });
+  });
+
+  it("unwraps the active code fence when the cursor sits inside it", () => {
+    const doc = "```\nalpha\nbeta\n```";
+    const inner = doc.indexOf("alpha");
+    const result = computeCodeFenceToggle(buildContext(doc, inner));
 
     expect(result!.changes).toEqual({
       from: 0,
