@@ -143,5 +143,16 @@ describe("ShortcutHintOverlay", () => {
     expect(overlay).not.toBeNull();
     expect(overlay?.getAttribute("data-state")).toBe("open");
     expect(container.textContent).toContain("Ctrl+B");
+
+    await act(async () => {
+      vi.advanceTimersByTime(180);
+    });
+
+    const overlayAfterOriginalHideTimeout = container.querySelector(
+      '[data-yulora-region="shortcut-hint-overlay"]'
+    );
+
+    expect(overlayAfterOriginalHideTimeout).not.toBeNull();
+    expect(overlayAfterOriginalHideTimeout?.getAttribute("data-state")).toBe("open");
   });
 });
