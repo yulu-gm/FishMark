@@ -1,6 +1,6 @@
 {
   "name": "yulora",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "description": "Local-first Markdown desktop editor MVP shell.",
   "repository": {
