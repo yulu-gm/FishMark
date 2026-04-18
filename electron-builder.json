@@ -1,5 +1,6 @@
 {
   "appId": "com.yulora.app",
+  "electronVersion": "41.2.0",
   "electronLanguages": ["en-US", "zh-CN", "zh-TW"],
   "productName": "Yulora",
   "artifactName": "${productName}-Setup-${version}.${ext}",
