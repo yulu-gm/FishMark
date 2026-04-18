@@ -296,6 +296,8 @@
 .document-canvas {
   min-width: 0;
   position: relative;
+  container-type: inline-size;
+  container-name: editor-canvas;
 }
 
 .shortcut-hint-overlay {
@@ -785,6 +787,12 @@
     --yulora-outline-column-width: min(220px, 44vw);
   }
 
+  .empty-inner {
+    padding: var(--yulora-space-8) var(--yulora-space-4);
+  }
+}
+
+@container editor-canvas (max-width: 640px) {
   .shortcut-hint-overlay {
     top: var(--yulora-space-3);
     left: var(--yulora-space-3);
@@ -801,13 +809,9 @@
   .shortcut-hint-overlay-label {
     margin-top: 1px;
   }
-
-  .empty-inner {
-    padding: var(--yulora-space-8) var(--yulora-space-4);
-  }
 }
 
-@media (max-width: 520px) {
+@container editor-canvas (max-width: 520px) {
   .shortcut-hint-overlay {
     display: none;
   }

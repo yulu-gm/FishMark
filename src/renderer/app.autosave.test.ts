@@ -1610,6 +1610,63 @@ describe("App autosave", () => {
     ).toBe("hidden");
   });
 
+  it("does not show the shortcut hint overlay when Control is held on macOS", async () => {
+    window.yulora = {
+      ...window.yulora,
+      platform: "darwin"
+    } as Window["yulora"];
+
+    await renderAndOpenDocument();
+
+    await act(async () => {
+      codeEditorMock.focus();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Control",
+          ctrlKey: true,
+          bubbles: true
+        })
+      );
+    });
+
+    expect(
+      container
+        .querySelector('[data-yulora-region="shortcut-hint-overlay-shell"]')
+        ?.getAttribute("data-shortcut-hint-state")
+    ).toBe("hidden");
+    expect(container.querySelector('[data-yulora-region="shortcut-hint-overlay"]')).toBeNull();
+  });
+
+  it("does not show the shortcut hint overlay when Meta is held on win32", async () => {
+    await renderAndOpenDocument();
+
+    await act(async () => {
+      codeEditorMock.focus();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Meta",
+          metaKey: true,
+          bubbles: true
+        })
+      );
+    });
+
+    expect(
+      container
+        .querySelector('[data-yulora-region="shortcut-hint-overlay-shell"]')
+        ?.getAttribute("data-shortcut-hint-state")
+    ).toBe("hidden");
+    expect(container.querySelector('[data-yulora-region="shortcut-hint-overlay"]')).toBeNull();
+  });
+
   it("hides the shortcut hint overlay on window blur", async () => {
     await renderAndOpenDocument();
 
@@ -1638,6 +1695,16 @@ describe("App autosave", () => {
         .querySelector('[data-yulora-region="shortcut-hint-overlay-shell"]')
         ?.getAttribute("data-shortcut-hint-state")
     ).toBe("hidden");
+  });
+
+  it("hides the shortcut hint overlay with a document-canvas container rule instead of viewport-only media queries", () => {
+    const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8");
+
+    expect(appUiStylesheet).toContain(".document-canvas");
+    expect(appUiStylesheet).toContain("container-type: inline-size;");
+    expect(appUiStylesheet).toContain("@container");
+    expect(appUiStylesheet).toContain(".shortcut-hint-overlay");
+    expect(appUiStylesheet).not.toContain("@media (max-width: 520px)");
   });
 
   it("renders settings as a drawer panel with close affordance while keeping existing controls", async () => {

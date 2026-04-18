@@ -335,6 +335,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     resolvedThemeMode
   );
   const themeWarningMessage = resolveThemeWarningMessage(activeThemeResolution);
+  const shortcutHintModifierKey: "Control" | "Meta" = yulora.platform === "darwin" ? "Meta" : "Control";
   const isShortcutHintVisible = isDocumentOpen && isEditorFocused && isShortcutModifierHeld;
 
   function applyState(updater: (current: AppState) => AppState): void {
@@ -897,17 +898,21 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Control" || event.key === "Meta") {
-        pressedShortcutModifiersRef.current.add(event.key);
-        syncShortcutModifierState();
+      if (event.key !== shortcutHintModifierKey) {
+        return;
       }
+
+      pressedShortcutModifiersRef.current.add(event.key);
+      syncShortcutModifierState();
     };
 
     const handleKeyUp = (event: KeyboardEvent) => {
-      if (event.key === "Control" || event.key === "Meta") {
-        pressedShortcutModifiersRef.current.delete(event.key);
-        syncShortcutModifierState();
+      if (event.key !== shortcutHintModifierKey) {
+        return;
       }
+
+      pressedShortcutModifiersRef.current.delete(event.key);
+      syncShortcutModifierState();
     };
 
     const handleWindowBlur = () => {
@@ -925,7 +930,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
       window.removeEventListener("keyup", handleKeyUp);
       window.removeEventListener("blur", handleWindowBlur);
     };
-  }, []);
+  }, [shortcutHintModifierKey]);
 
   useEffect(() => {
     if (isDocumentOpen) {
