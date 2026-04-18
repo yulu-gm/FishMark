@@ -1453,6 +1453,79 @@ describe("App autosave", () => {
     expect(document.activeElement?.getAttribute("data-testid")).toBe("mock-code-editor");
   });
 
+  it("shows the shortcut hint overlay only while the editor is focused and Control is held", async () => {
+    await renderAndOpenDocument();
+
+    expect(
+      container
+        .querySelector('[data-yulora-region="shortcut-hint-overlay"]')
+        ?.getAttribute("data-state")
+    ).toBe("hidden");
+
+    await act(async () => {
+      codeEditorMock.focus();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Control",
+          ctrlKey: true,
+          bubbles: true
+        })
+      );
+    });
+
+    const overlay = container.querySelector('[data-yulora-region="shortcut-hint-overlay"]');
+
+    expect(overlay?.getAttribute("data-state")).toBe("visible");
+    expect(overlay?.textContent).toContain("Ctrl+B");
+    expect(overlay?.textContent).not.toContain("Save");
+    expect(overlay?.textContent).not.toContain("Open");
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keyup", {
+          key: "Control",
+          bubbles: true
+        })
+      );
+    });
+
+    expect(overlay?.getAttribute("data-state")).toBe("hidden");
+  });
+
+  it("hides the shortcut hint overlay on window blur", async () => {
+    await renderAndOpenDocument();
+
+    await act(async () => {
+      codeEditorMock.focus();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Control",
+          ctrlKey: true,
+          bubbles: true
+        })
+      );
+    });
+
+    await act(async () => {
+      window.dispatchEvent(new Event("blur"));
+      await Promise.resolve();
+    });
+
+    expect(
+      container
+        .querySelector('[data-yulora-region="shortcut-hint-overlay"]')
+        ?.getAttribute("data-state")
+    ).toBe("hidden");
+  });
+
   it("renders settings as a drawer panel with close affordance while keeping existing controls", async () => {
     await renderApp();
 

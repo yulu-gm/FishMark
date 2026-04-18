@@ -1,6 +1,6 @@
-import { Suspense, lazy, useEffect, useEffectEvent, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 
-import type { ActiveBlockState } from "@yulora/editor-core";
+import { TEXT_EDITING_SHORTCUTS, type ActiveBlockState } from "@yulora/editor-core";
 import type { AppNotification, AppUpdateState } from "../../shared/app-update";
 import {
   DEFAULT_PREFERENCES,
@@ -28,6 +28,7 @@ import {
   startOpeningMarkdownFile
 } from "../document-state";
 import { getDocumentMetrics } from "../document-metrics";
+import { ShortcutHintOverlay } from "./shortcut-hint-overlay";
 
 const SettingsView = lazy(async () => {
   const module = await import("./settings-view");
@@ -267,6 +268,8 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   });
   const [notification, setNotification] = useState<AppNotification | null>(null);
   const [notificationState, setNotificationState] = useState<AppNotificationBannerState>("hidden");
+  const [isEditorFocused, setIsEditorFocused] = useState(false);
+  const [isShortcutModifierHeld, setIsShortcutModifierHeld] = useState(false);
   const editorRef = useRef<CodeEditorHandle | null>(null);
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
   const editorContentRef = useRef("");
@@ -331,6 +334,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     resolvedThemeMode
   );
   const themeWarningMessage = resolveThemeWarningMessage(activeThemeResolution);
+  const isShortcutHintVisible = isDocumentOpen && isEditorFocused && isShortcutModifierHeld;
 
   function applyState(updater: (current: AppState) => AppState): void {
     const next = updater(stateRef.current);
@@ -375,7 +379,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     }
   }
 
-  const showNotification = useEffectEvent((nextNotification: AppNotification): void => {
+  const showNotification = useCallback((nextNotification: AppNotification): void => {
     clearNotificationTimers();
     setNotification(nextNotification);
     setNotificationState("open");
@@ -393,7 +397,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
         setNotification(null);
       }, APP_NOTIFICATION_EXIT_ANIMATION_MS);
     }, APP_NOTIFICATION_DURATION_MS);
-  });
+  }, []);
 
   function resetAutosaveRuntime(): void {
     clearAutosaveTimer();
@@ -860,6 +864,71 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   }, [yulora]);
 
   useEffect(() => {
+    const editorContainer = editorContainerRef.current;
+
+    if (!editorContainer) {
+      return undefined;
+    }
+
+    const handleFocusIn = (event: FocusEvent) => {
+      if (event.target instanceof Node && editorContainer.contains(event.target)) {
+        setIsEditorFocused(true);
+      }
+    };
+
+    const handleFocusOut = () => {
+      const activeElement = document.activeElement;
+      setIsEditorFocused(activeElement instanceof Node && editorContainer.contains(activeElement));
+    };
+
+    editorContainer.addEventListener("focusin", handleFocusIn);
+    editorContainer.addEventListener("focusout", handleFocusOut);
+
+    return () => {
+      editorContainer.removeEventListener("focusin", handleFocusIn);
+      editorContainer.removeEventListener("focusout", handleFocusOut);
+    };
+  }, [isDocumentOpen, state.editorLoadRevision]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Control" || event.key === "Meta" || event.ctrlKey || event.metaKey) {
+        setIsShortcutModifierHeld(true);
+      }
+    };
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key === "Control" || event.key === "Meta") {
+        setIsShortcutModifierHeld(false);
+      }
+    };
+
+    const handleWindowBlur = () => {
+      setIsEditorFocused(false);
+      setIsShortcutModifierHeld(false);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", handleWindowBlur);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", handleWindowBlur);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isDocumentOpen) {
+      return;
+    }
+
+    setIsEditorFocused(false);
+    setIsShortcutModifierHeld(false);
+  }, [isDocumentOpen]);
+
+  useEffect(() => {
     if (!isSettingsOpen) {
       return;
     }
@@ -910,7 +979,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     return yulora.onAppNotification((nextNotification) => {
       showNotification(nextNotification);
     });
-  }, [yulora]);
+  }, [showNotification, yulora]);
 
   useEffect(() => {
     if (!themeWarningMessage) {
@@ -933,6 +1002,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     activeThemeResolution.fallbackReason,
     activeThemeResolution.requestedThemeId,
     activeThemeResolution.resolvedMode,
+    showNotification,
     themeWarningMessage
   ]);
 
@@ -1084,6 +1154,16 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
                   className="document-canvas"
                   ref={editorContainerRef}
                 >
+                  <div
+                    data-yulora-region="shortcut-hint-overlay"
+                    data-state={isShortcutHintVisible ? "visible" : "hidden"}
+                  >
+                    <ShortcutHintOverlay
+                      visible={isShortcutHintVisible}
+                      platform={yulora.platform}
+                      shortcuts={TEXT_EDITING_SHORTCUTS}
+                    />
+                  </div>
                   <CodeEditorView
                     ref={editorRef}
                     initialContent={state.currentDocument.content}
