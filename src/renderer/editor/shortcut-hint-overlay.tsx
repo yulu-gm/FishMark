@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { useEffect, useState } from "react";
 
 import { formatShortcutHintKey, type TextEditingShortcut } from "@yulora/editor-core";
 
@@ -10,12 +11,54 @@ type ShortcutHintOverlayProps = {
   shortcuts: readonly TextEditingShortcut[];
 };
 
+type OverlayState = "hidden" | "open" | "closing";
+type OverlayRenderState = {
+  phase: OverlayState;
+  visible: boolean;
+};
+
 export function ShortcutHintOverlay({ visible, platform, shortcuts }: ShortcutHintOverlayProps) {
+  const [renderState, setRenderState] = useState<OverlayRenderState>({
+    phase: visible ? "open" : "hidden",
+    visible
+  });
   const style = {
     ["--shortcut-hint-overlay-duration" as string]: HIDE_ANIMATION_DURATION
   } as CSSProperties;
 
-  if (!visible) {
+  if (visible !== renderState.visible) {
+    setRenderState({
+      visible,
+      phase: visible ? "open" : renderState.phase === "hidden" ? "hidden" : "closing"
+    });
+  }
+
+  const state = visible !== renderState.visible
+    ? visible
+      ? "open"
+      : renderState.phase === "hidden"
+        ? "hidden"
+        : "closing"
+    : renderState.phase;
+
+  useEffect(() => {
+    if (state !== "closing") {
+      return undefined;
+    }
+
+    const hideTimer = window.setTimeout(() => {
+      setRenderState({
+        visible: false,
+        phase: "hidden"
+      });
+    }, Number.parseInt(HIDE_ANIMATION_DURATION, 10));
+
+    return () => {
+      window.clearTimeout(hideTimer);
+    };
+  }, [state]);
+
+  if (state === "hidden") {
     return null;
   }
 
@@ -23,7 +66,7 @@ export function ShortcutHintOverlay({ visible, platform, shortcuts }: ShortcutHi
     <div
       className="shortcut-hint-overlay"
       data-yulora-region="shortcut-hint-overlay"
-      data-state="open"
+      data-state={state}
       aria-hidden="true"
       role="presentation"
       style={style}
