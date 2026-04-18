@@ -14,7 +14,7 @@
 
 新增（全部位于 `packages/editor-core/src/commands/`）：
 
-- `semantic-context.ts` — 上下文读取层。给定 `EditorState` + `ActiveBlockState`，输出 `SemanticContext`：选区范围、覆盖到的 doc 行范围、覆盖到的 top-level block 列表、当前光标命中的 inline AST 路径。无副作用。
+- `semantic-context.ts` — 上下文读取层。给定 `EditorState` + `ActiveBlockState`，输出 `SemanticContext`：`{ state, source, activeState, selection }`。无副作用。下游 compute 函数若需要行范围或 inline 节点，直接基于 `state.doc` 与 `activeState.activeBlock` 自取，避免预先计算未被消费的字段。
 - `semantic-context.test.ts` — context 读取的纯函数测试。
 - `semantic-edits.ts` — edits 计算层。导出按目标语义命名的 pure functions：`computeStrongToggle`、`computeEmphasisToggle`、`computeHeadingToggle`、`computeBulletListToggle`、`computeBlockquoteToggle`、`computeCodeFenceToggle`。每个函数接收 `SemanticContext` + 必要参数（如 heading level），返回 `{ changes, selection }` 或 `null`（表示不改动）。
 - `semantic-edits.test.ts` — edits 计算的纯函数测试。

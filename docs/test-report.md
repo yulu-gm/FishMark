@@ -9,6 +9,9 @@
 
 ## 记录
 
+| 2026-04-18 | TASK-041 | `npx vitest run packages/editor-core/src/commands/semantic-context.test.ts packages/editor-core/src/commands/semantic-edits.test.ts packages/editor-core/src/commands/toggle-inline-commands.test.ts packages/editor-core/src/commands/toggle-block-commands.test.ts packages/editor-core/src/extensions/markdown.test.ts src/renderer/code-editor.test.ts` | 通过 | 6 个测试文件、94 条测试通过，覆盖 SemanticContext reader、6 个 `compute*Toggle` 纯计算函数、`toggle-inline-commands`、`toggle-block-commands`、markdown 扩展 keymap 接入与 renderer 控制器 Mod-b 回归。 |
+| 2026-04-18 | TASK-041 | `npm run typecheck` | 通过 | renderer / electron / vitest / cli 四套 TypeScript 检查通过，新增三层语义切换器命令导出与 keymap 接入未引入类型回归。 |
+| 2026-04-18 | TASK-041 | `npm run build` | 通过 | renderer / electron / cli 构建均通过；仍仅保留既有 Vite chunk size warning。 |
 | 2026-04-17 | TASK-038 | `npm run test -- src/main/package-scripts.test.ts` | 通过 | 验证所有现存 bat/sh 入口已集中到 `tools/` 目录，并补齐 `tools/release-win.bat` 与 `tools/release-macos.sh` 两个发布入口；仓库根目录旧入口已移除。 |
 | 2026-04-17 | TASK-038 | `npm run lint && npm run typecheck && npm run build` | 通过 | bat/sh 工具迁移到 `tools/` 后，仓库级 lint、typecheck 与 build 继续通过；`build` 仍仅保留现有 Vite chunk size warning。 |
 | 2026-04-17 | TASK-015 | `npm.cmd run test -- src/renderer/code-editor.test.ts` | 通过 | 覆盖点击 Markdown / HTML 图片预览后，编辑器会聚焦并把光标直接跳回对应源码起点。 |
