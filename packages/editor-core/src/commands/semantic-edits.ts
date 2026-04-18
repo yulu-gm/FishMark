@@ -25,6 +25,94 @@ export function computeEmphasisToggle(ctx: SemanticContext): SemanticEdit | null
   return computeInlineToggle(ctx, { type: "emphasis", marker: "*" });
 }
 
+const HEADING_LINE_PATTERN = /^(\s{0,3})(#{1,6})(?:\s+|$)(.*)$/;
+
+export function computeHeadingToggle(ctx: SemanticContext, level: number): SemanticEdit | null {
+  if (level < 1 || level > 6) {
+    return null;
+  }
+
+  const fromLine = ctx.state.doc.lineAt(ctx.selection.from);
+  const toLine = ctx.state.doc.lineAt(ctx.selection.to);
+  const isSingleLine = fromLine.number === toLine.number;
+  const targetMarker = "#".repeat(level);
+
+  if (isSingleLine) {
+    const text = fromLine.text;
+    const match = HEADING_LINE_PATTERN.exec(text);
+    if (match && match[2] === targetMarker) {
+      const indent = match[1] ?? "";
+      const headingPrefix = `${indent}${targetMarker}`;
+      const stripLength = text.startsWith(`${headingPrefix} `)
+        ? headingPrefix.length + 1
+        : headingPrefix.length;
+      const stripFrom = fromLine.from;
+      const stripTo = fromLine.from + stripLength;
+      const newCursor = Math.max(stripFrom, ctx.selection.from - stripLength);
+      return {
+        changes: { from: stripFrom, to: stripTo, insert: "" },
+        selection: { anchor: newCursor, head: newCursor }
+      };
+    }
+    if (match) {
+      const indent = match[1] ?? "";
+      const existingMarker = match[2] ?? "";
+      const existingPrefix = `${indent}${existingMarker}`;
+      const replaceLength = text.startsWith(`${existingPrefix} `)
+        ? existingPrefix.length + 1
+        : existingPrefix.length;
+      const replaceFrom = fromLine.from;
+      const replaceTo = fromLine.from + replaceLength;
+      const insert = `${indent}${targetMarker} `;
+      const delta = insert.length - replaceLength;
+      return {
+        changes: { from: replaceFrom, to: replaceTo, insert },
+        selection: {
+          anchor: ctx.selection.from + delta,
+          head: ctx.selection.to + delta
+        }
+      };
+    }
+    const insert = `${targetMarker} `;
+    return {
+      changes: { from: fromLine.from, to: fromLine.from, insert },
+      selection: {
+        anchor: ctx.selection.from + insert.length,
+        head: ctx.selection.to + insert.length
+      }
+    };
+  }
+
+  const lines: string[] = [];
+  for (let lineNumber = fromLine.number; lineNumber <= toLine.number; lineNumber += 1) {
+    lines.push(ctx.state.doc.line(lineNumber).text);
+  }
+  const allMatchTarget = lines.every((text) => {
+    const match = HEADING_LINE_PATTERN.exec(text);
+    return match !== null && match[2] === targetMarker;
+  });
+  const rewritten = lines.map((text) => {
+    const match = HEADING_LINE_PATTERN.exec(text);
+    if (allMatchTarget && match) {
+      return `${match[1] ?? ""}${match[3] ?? ""}`;
+    }
+    if (match) {
+      const indent = match[1] ?? "";
+      const content = match[3] ?? "";
+      return `${indent}${targetMarker} ${content}`;
+    }
+    return `${targetMarker} ${text}`;
+  });
+  const insert = rewritten.join("\n");
+  return {
+    changes: { from: fromLine.from, to: toLine.to, insert },
+    selection: {
+      anchor: fromLine.from,
+      head: fromLine.from + insert.length
+    }
+  };
+}
+
 type InlineToggleSpec = {
   type: "strong" | "emphasis";
   marker: "**" | "*";

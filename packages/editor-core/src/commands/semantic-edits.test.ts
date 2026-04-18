@@ -5,7 +5,7 @@ import { parseMarkdownDocument } from "@yulora/markdown-engine";
 
 import { createActiveBlockStateFromMarkdownDocument } from "../active-block";
 import { readSemanticContext } from "./semantic-context";
-import { computeEmphasisToggle, computeStrongToggle } from "./semantic-edits";
+import { computeEmphasisToggle, computeHeadingToggle, computeStrongToggle } from "./semantic-edits";
 
 const buildContext = (doc: string, anchor: number, head = anchor) => {
   const state = EditorState.create({ doc, selection: { anchor, head } });
@@ -83,5 +83,45 @@ describe("computeEmphasisToggle", () => {
 
     expect(result!.changes).toEqual({ from: contentFrom - 1, to: contentTo + 1, insert: "word" });
     expect(result!.selection).toEqual({ anchor: contentFrom - 1, head: contentTo - 1 });
+  });
+});
+
+describe("computeHeadingToggle", () => {
+  it("turns a paragraph line into the requested heading level", () => {
+    const doc = "Paragraph";
+    const result = computeHeadingToggle(buildContext(doc, 0), 2);
+
+    expect(result!.changes).toEqual({ from: 0, to: 0, insert: "## " });
+    expect(result!.selection).toEqual({ anchor: 3, head: 3 });
+  });
+
+  it("removes the heading marker when toggling to the same level", () => {
+    const doc = "## Title";
+    const result = computeHeadingToggle(buildContext(doc, 5), 2);
+
+    expect(result!.changes).toEqual({ from: 0, to: 3, insert: "" });
+    expect(result!.selection).toEqual({ anchor: 2, head: 2 });
+  });
+
+  it("rewrites the heading marker when switching between levels", () => {
+    const doc = "# Title";
+    const result = computeHeadingToggle(buildContext(doc, 4), 3);
+
+    expect(result!.changes).toEqual({ from: 0, to: 2, insert: "### " });
+    expect(result!.selection).toEqual({ anchor: 6, head: 6 });
+  });
+
+  it("applies the heading level to every line covered by a multi-line selection", () => {
+    const doc = ["alpha", "beta"].join("\n");
+    const from = 0;
+    const to = doc.length;
+    const result = computeHeadingToggle(buildContext(doc, from, to), 2);
+
+    expect(result!.changes).toEqual({
+      from: 0,
+      to: doc.length,
+      insert: "## alpha\n## beta"
+    });
+    expect(result!.selection).toEqual({ anchor: 0, head: doc.length + 6 });
   });
 });
