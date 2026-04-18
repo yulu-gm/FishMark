@@ -17,6 +17,25 @@ type OverlayRenderState = {
   visible: boolean;
 };
 
+function ShortcutHintOverlayContent({
+  platform,
+  shortcuts
+}: Omit<ShortcutHintOverlayProps, "visible">) {
+  return (
+    <ul className="shortcut-hint-overlay-list">
+      {shortcuts.map(({ id, key, label }) => (
+        <li
+          key={id}
+          className="shortcut-hint-overlay-item"
+        >
+          <span className="shortcut-hint-overlay-key">{formatShortcutHintKey(key, platform)}</span>
+          <span className="shortcut-hint-overlay-label">{label}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function ShortcutHintOverlay({ visible, platform, shortcuts }: ShortcutHintOverlayProps) {
   const [renderState, setRenderState] = useState<OverlayRenderState>({
     phase: visible ? "open" : "hidden",
@@ -71,17 +90,29 @@ export function ShortcutHintOverlay({ visible, platform, shortcuts }: ShortcutHi
       role="presentation"
       style={style}
     >
-      <ul className="shortcut-hint-overlay-list">
-        {shortcuts.map(({ id, key, label }) => (
-          <li
-            key={id}
-            className="shortcut-hint-overlay-item"
-          >
-            <span className="shortcut-hint-overlay-key">{formatShortcutHintKey(key, platform)}</span>
-            <span className="shortcut-hint-overlay-label">{label}</span>
-          </li>
-        ))}
-      </ul>
+      <ShortcutHintOverlayContent
+        platform={platform}
+        shortcuts={shortcuts}
+      />
+    </div>
+  );
+}
+
+export function ShortcutHintOverlayMeasure({
+  platform,
+  shortcuts
+}: Omit<ShortcutHintOverlayProps, "visible">) {
+  return (
+    <div
+      className="shortcut-hint-overlay shortcut-hint-overlay-measure"
+      data-yulora-region="shortcut-hint-overlay-measure"
+      aria-hidden="true"
+      role="presentation"
+    >
+      <ShortcutHintOverlayContent
+        platform={platform}
+        shortcuts={shortcuts}
+      />
     </div>
   );
 }

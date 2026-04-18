@@ -28,7 +28,7 @@ import {
   startOpeningMarkdownFile
 } from "../document-state";
 import { getDocumentMetrics } from "../document-metrics";
-import { ShortcutHintOverlay } from "./shortcut-hint-overlay";
+import { ShortcutHintOverlay, ShortcutHintOverlayMeasure } from "./shortcut-hint-overlay";
 
 const SettingsView = lazy(async () => {
   const module = await import("./settings-view");
@@ -59,7 +59,34 @@ const SETTINGS_DRAWER_EXIT_ANIMATION_MS = 180;
 const APP_NOTIFICATION_DURATION_MS = 3000;
 const APP_NOTIFICATION_EXIT_ANIMATION_MS = 180;
 const MARKDOWN_FILE_EXTENSIONS = [".md", ".markdown"] as const;
-const SHORTCUT_HINT_SAFE_LANE_PX = 180;
+const PRIMARY_MODIFIER_LEFT_LOCATION = 1;
+const PRIMARY_MODIFIER_RIGHT_LOCATION = 2;
+
+function getPrimaryShortcutModifierId(
+  event: KeyboardEvent,
+  primaryModifierKey: "Control" | "Meta"
+): string | null {
+  if (event.key !== primaryModifierKey) {
+    return null;
+  }
+
+  if (
+    event.code === `${primaryModifierKey}Left` ||
+    event.code === `${primaryModifierKey}Right`
+  ) {
+    return event.code;
+  }
+
+  if (event.location === PRIMARY_MODIFIER_LEFT_LOCATION) {
+    return `${primaryModifierKey}Left`;
+  }
+
+  if (event.location === PRIMARY_MODIFIER_RIGHT_LOCATION) {
+    return `${primaryModifierKey}Right`;
+  }
+
+  return primaryModifierKey;
+}
 
 function isMarkdownFilePath(targetPath: string): boolean {
   const normalizedPath = targetPath.trim().toLowerCase();
@@ -293,7 +320,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   const notificationCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastThemeNotificationKeyRef = useRef<string | null>(null);
   const fontFamilyLoadStateRef = useRef<"idle" | "loading" | "loaded">("idle");
-  const pressedShortcutModifiersRef = useRef<Set<"Control" | "Meta">>(new Set());
+  const pressedShortcutModifiersRef = useRef<Set<string>>(new Set());
   const currentDocumentContent = state.currentDocument
     ? (editorContentRef.current || state.currentDocument.content)
     : "";
@@ -901,20 +928,24 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== shortcutHintModifierKey) {
+      const modifierId = getPrimaryShortcutModifierId(event, shortcutHintModifierKey);
+
+      if (!modifierId) {
         return;
       }
 
-      pressedShortcutModifiersRef.current.add(event.key);
+      pressedShortcutModifiersRef.current.add(modifierId);
       syncShortcutModifierState();
     };
 
     const handleKeyUp = (event: KeyboardEvent) => {
-      if (event.key !== shortcutHintModifierKey) {
+      const modifierId = getPrimaryShortcutModifierId(event, shortcutHintModifierKey);
+
+      if (!modifierId) {
         return;
       }
 
-      pressedShortcutModifiersRef.current.delete(event.key);
+      pressedShortcutModifiersRef.current.delete(modifierId);
       syncShortcutModifierState();
     };
 
@@ -953,8 +984,13 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
 
     const editorContainer = editorContainerRef.current;
     const contentColumn = editorContainer?.querySelector(".cm-content");
+    const measureOverlay = editorContainer?.querySelector('[data-yulora-region="shortcut-hint-overlay-measure"]');
 
-    if (!(editorContainer instanceof HTMLDivElement) || !(contentColumn instanceof HTMLElement)) {
+    if (
+      !(editorContainer instanceof HTMLDivElement) ||
+      !(contentColumn instanceof HTMLElement) ||
+      !(measureOverlay instanceof HTMLElement)
+    ) {
       setIsShortcutHintLaneSafe(false);
       return;
     }
@@ -962,9 +998,11 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     const syncShortcutHintLaneSafety = () => {
       const containerRect = editorContainer.getBoundingClientRect();
       const contentRect = contentColumn.getBoundingClientRect();
+      const measureRect = measureOverlay.getBoundingClientRect();
       const availableLeftLane = contentRect.left - containerRect.left;
+      const requiredLeftLane = Math.max(0, measureRect.right - containerRect.left);
 
-      setIsShortcutHintLaneSafe(availableLeftLane >= SHORTCUT_HINT_SAFE_LANE_PX);
+      setIsShortcutHintLaneSafe(availableLeftLane >= requiredLeftLane);
     };
 
     syncShortcutHintLaneSafety();
@@ -980,6 +1018,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
 
     resizeObserver.observe(editorContainer);
     resizeObserver.observe(contentColumn);
+    resizeObserver.observe(measureOverlay);
     window.addEventListener("resize", syncShortcutHintLaneSafety);
 
     return () => {
@@ -1217,6 +1256,10 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
                   data-shortcut-hint-state={isShortcutHintVisible ? "visible" : "hidden"}
                 >
                   <div data-shortcut-hint-shell="true">
+                    <ShortcutHintOverlayMeasure
+                      platform={yulora.platform}
+                      shortcuts={TEXT_EDITING_SHORTCUTS}
+                    />
                     <ShortcutHintOverlay
                       visible={isShortcutHintVisible}
                       platform={yulora.platform}

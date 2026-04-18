@@ -324,6 +324,11 @@
     cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
+.shortcut-hint-overlay-measure {
+  visibility: hidden;
+  opacity: 0;
+}
+
 .shortcut-hint-overlay-list {
   margin: 0;
   padding: 0;

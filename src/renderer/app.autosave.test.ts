@@ -1811,6 +1811,123 @@ describe("App autosave", () => {
     expect(container.querySelector('[data-yulora-region="shortcut-hint-overlay"]')).toBeNull();
   });
 
+  it("keeps the shortcut hint overlay hidden when the measured overlay width would intrude into the content column", async () => {
+    codeEditorMock.setLayout({
+      hostLeft: 0,
+      hostWidth: 720,
+      contentLeft: 220,
+      contentWidth: 420
+    });
+
+    await renderAndOpenDocument();
+
+    const measureOverlay = container.querySelector<HTMLElement>(
+      '[data-yulora-region="shortcut-hint-overlay-measure"]'
+    );
+    expect(measureOverlay).not.toBeNull();
+
+    if (!measureOverlay) {
+      throw new Error("shortcut hint measure overlay not found");
+    }
+
+    measureOverlay.getBoundingClientRect = () => createDomRect(24, 220);
+
+    await act(async () => {
+      codeEditorMock.focus();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      codeEditorMock.triggerResize();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Control",
+          code: "ControlLeft",
+          ctrlKey: true,
+          bubbles: true
+        })
+      );
+    });
+
+    expect(
+      container
+        .querySelector('[data-yulora-region="shortcut-hint-overlay-shell"]')
+        ?.getAttribute("data-shortcut-hint-state")
+    ).toBe("hidden");
+    expect(container.querySelector('[data-yulora-region="shortcut-hint-overlay"]')).toBeNull();
+  });
+
+  it("keeps the shortcut hint overlay visible until every pressed primary modifier is released", async () => {
+    await renderAndOpenDocument();
+
+    await act(async () => {
+      codeEditorMock.focus();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Control",
+          code: "ControlLeft",
+          ctrlKey: true,
+          bubbles: true
+        })
+      );
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Control",
+          code: "ControlRight",
+          ctrlKey: true,
+          bubbles: true
+        })
+      );
+    });
+
+    expect(
+      container
+        .querySelector('[data-yulora-region="shortcut-hint-overlay-shell"]')
+        ?.getAttribute("data-shortcut-hint-state")
+    ).toBe("visible");
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keyup", {
+          key: "Control",
+          code: "ControlLeft",
+          ctrlKey: true,
+          bubbles: true
+        })
+      );
+    });
+
+    expect(
+      container
+        .querySelector('[data-yulora-region="shortcut-hint-overlay-shell"]')
+        ?.getAttribute("data-shortcut-hint-state")
+    ).toBe("visible");
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keyup", {
+          key: "Control",
+          code: "ControlRight",
+          bubbles: true
+        })
+      );
+    });
+
+    expect(
+      container
+        .querySelector('[data-yulora-region="shortcut-hint-overlay-shell"]')
+        ?.getAttribute("data-shortcut-hint-state")
+    ).toBe("hidden");
+  });
+
   it("hides the shortcut hint overlay on window blur", async () => {
     await renderAndOpenDocument();
 
@@ -2147,6 +2264,7 @@ describe("App autosave", () => {
     });
 
     expect(openMarkdownFile).toHaveBeenCalledTimes(1);
+    setShortcutHintMeasureLayout();
   }
 
   function emitAppUpdateState(state: AppUpdateState): void {
@@ -2155,6 +2273,16 @@ describe("App autosave", () => {
 
   function emitAppNotification(notification: AppNotification): void {
     appNotificationListener?.(notification);
+  }
+
+  function setShortcutHintMeasureLayout(left = 24, width = 200): void {
+    const measureOverlay = container.querySelector<HTMLElement>(
+      '[data-yulora-region="shortcut-hint-overlay-measure"]'
+    );
+
+    if (measureOverlay) {
+      measureOverlay.getBoundingClientRect = () => createDomRect(left, width);
+    }
   }
 });
 
