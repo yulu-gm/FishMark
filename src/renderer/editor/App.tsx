@@ -59,6 +59,7 @@ const SETTINGS_DRAWER_EXIT_ANIMATION_MS = 180;
 const APP_NOTIFICATION_DURATION_MS = 3000;
 const APP_NOTIFICATION_EXIT_ANIMATION_MS = 180;
 const MARKDOWN_FILE_EXTENSIONS = [".md", ".markdown"] as const;
+const SHORTCUT_HINT_SAFE_LANE_PX = 180;
 
 function isMarkdownFilePath(targetPath: string): boolean {
   const normalizedPath = targetPath.trim().toLowerCase();
@@ -270,6 +271,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   const [notificationState, setNotificationState] = useState<AppNotificationBannerState>("hidden");
   const [isEditorFocused, setIsEditorFocused] = useState(false);
   const [isShortcutModifierHeld, setIsShortcutModifierHeld] = useState(false);
+  const [isShortcutHintLaneSafe, setIsShortcutHintLaneSafe] = useState(false);
   const editorRef = useRef<CodeEditorHandle | null>(null);
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
   const editorContentRef = useRef("");
@@ -336,7 +338,8 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   );
   const themeWarningMessage = resolveThemeWarningMessage(activeThemeResolution);
   const shortcutHintModifierKey: "Control" | "Meta" = yulora.platform === "darwin" ? "Meta" : "Control";
-  const isShortcutHintVisible = isDocumentOpen && isEditorFocused && isShortcutModifierHeld;
+  const isShortcutHintVisible =
+    isDocumentOpen && isEditorFocused && isShortcutModifierHeld && isShortcutHintLaneSafe;
 
   function applyState(updater: (current: AppState) => AppState): void {
     const next = updater(stateRef.current);
@@ -940,7 +943,50 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     pressedShortcutModifiersRef.current.clear();
     setIsEditorFocused(false);
     setIsShortcutModifierHeld(false);
+    setIsShortcutHintLaneSafe(false);
   }, [isDocumentOpen]);
+
+  useEffect(() => {
+    if (!isDocumentOpen) {
+      return;
+    }
+
+    const editorContainer = editorContainerRef.current;
+    const contentColumn = editorContainer?.querySelector(".cm-content");
+
+    if (!(editorContainer instanceof HTMLDivElement) || !(contentColumn instanceof HTMLElement)) {
+      setIsShortcutHintLaneSafe(false);
+      return;
+    }
+
+    const syncShortcutHintLaneSafety = () => {
+      const containerRect = editorContainer.getBoundingClientRect();
+      const contentRect = contentColumn.getBoundingClientRect();
+      const availableLeftLane = contentRect.left - containerRect.left;
+
+      setIsShortcutHintLaneSafe(availableLeftLane >= SHORTCUT_HINT_SAFE_LANE_PX);
+    };
+
+    syncShortcutHintLaneSafety();
+
+    if (typeof window.ResizeObserver !== "function") {
+      window.addEventListener("resize", syncShortcutHintLaneSafety);
+      return () => window.removeEventListener("resize", syncShortcutHintLaneSafety);
+    }
+
+    const resizeObserver = new window.ResizeObserver(() => {
+      syncShortcutHintLaneSafety();
+    });
+
+    resizeObserver.observe(editorContainer);
+    resizeObserver.observe(contentColumn);
+    window.addEventListener("resize", syncShortcutHintLaneSafety);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", syncShortcutHintLaneSafety);
+    };
+  }, [isDocumentOpen, state.editorLoadRevision]);
 
   useEffect(() => {
     if (!isSettingsOpen) {

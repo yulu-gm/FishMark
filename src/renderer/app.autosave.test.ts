@@ -43,9 +43,68 @@ type MockCodeEditorModule = typeof codeEditorViewModule & {
     blur: () => void;
     focus: () => void;
     getNavigateCalls: () => number[];
+    setLayout: (layout: { hostLeft: number; hostWidth: number; contentLeft: number; contentWidth: number }) => void;
+    triggerResize: () => void;
     reset: () => void;
   };
 };
+
+type ResizeObserverCallback = (entries: ResizeObserverEntry[], observer: ResizeObserver) => void;
+type MockEditorLayout = {
+  hostLeft: number;
+  hostWidth: number;
+  contentLeft: number;
+  contentWidth: number;
+};
+
+function createDomRect(left: number, width: number): DOMRect {
+  return {
+    x: left,
+    y: 0,
+    width,
+    height: 100,
+    top: 0,
+    right: left + width,
+    bottom: 100,
+    left,
+    toJSON() {
+      return {};
+    }
+  } as DOMRect;
+}
+
+class MockResizeObserver {
+  static instances = new Set<MockResizeObserver>();
+
+  private readonly callback: ResizeObserverCallback;
+
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback;
+    MockResizeObserver.instances.add(this);
+  }
+
+  observe(target: Element): void {
+    void target;
+  }
+
+  unobserve(target: Element): void {
+    void target;
+  }
+
+  disconnect(): void {
+    MockResizeObserver.instances.delete(this);
+  }
+
+  static reset(): void {
+    MockResizeObserver.instances.clear();
+  }
+
+  static trigger(): void {
+    for (const instance of MockResizeObserver.instances) {
+      instance.callback([], instance as unknown as ResizeObserver);
+    }
+  }
+}
 
 const codeEditorMock = (codeEditorViewModule as MockCodeEditorModule).__mock;
 const baseStylesheetPath = join(process.cwd(), "src/renderer/styles/base.css");
@@ -76,7 +135,14 @@ vi.mock("./code-editor-view", async () => {
     | undefined;
   let currentContent = "";
   let latestHostElement: HTMLDivElement | null = null;
+  let latestContentElement: HTMLDivElement | null = null;
   let navigateCalls: number[] = [];
+  let layout: MockEditorLayout = {
+    hostLeft: 0,
+    hostWidth: 880,
+    contentLeft: 240,
+    contentWidth: 520
+  };
 
   const CodeEditorView = React.forwardRef(function MockCodeEditorView(
     props: {
@@ -105,11 +171,20 @@ vi.mock("./code-editor-view", async () => {
     React.useEffect(() => {
       const hostElement = document.querySelector('[data-testid="mock-code-editor"]');
       latestHostElement = hostElement instanceof HTMLDivElement ? hostElement : null;
+      latestContentElement = latestHostElement?.querySelector(".cm-content") ?? null;
+
+      if (latestHostElement) {
+        latestHostElement.getBoundingClientRect = () => createDomRect(layout.hostLeft, layout.hostWidth);
+      }
+
+      if (latestContentElement) {
+        latestContentElement.getBoundingClientRect = () =>
+          createDomRect(layout.contentLeft, layout.contentWidth);
+      }
 
       return () => {
-        if (latestHostElement === hostElement) {
-          latestHostElement = null;
-        }
+        latestHostElement = null;
+        latestContentElement = null;
       };
     }, []);
 
@@ -121,11 +196,17 @@ vi.mock("./code-editor-view", async () => {
       }
     }));
 
-    return React.createElement("div", {
-      "data-testid": "mock-code-editor",
-      tabIndex: -1,
-      onBlur: () => props.onBlur?.()
-    });
+    return React.createElement(
+      "div",
+      {
+        "data-testid": "mock-code-editor",
+        tabIndex: -1,
+        onBlur: () => props.onBlur?.()
+      },
+      React.createElement("div", {
+        className: "cm-content"
+      })
+    );
   });
 
   return {
@@ -144,11 +225,33 @@ vi.mock("./code-editor-view", async () => {
       getNavigateCalls() {
         return [...navigateCalls];
       },
+      setLayout(nextLayout: MockEditorLayout) {
+        layout = nextLayout;
+
+        if (latestHostElement) {
+          latestHostElement.getBoundingClientRect = () => createDomRect(layout.hostLeft, layout.hostWidth);
+        }
+
+        if (latestContentElement) {
+          latestContentElement.getBoundingClientRect = () =>
+            createDomRect(layout.contentLeft, layout.contentWidth);
+        }
+      },
+      triggerResize() {
+        MockResizeObserver.trigger();
+      },
       reset() {
         latestProps = undefined;
         currentContent = "";
         latestHostElement = null;
+        latestContentElement = null;
         navigateCalls = [];
+        layout = {
+          hostLeft: 0,
+          hostWidth: 880,
+          contentLeft: 240,
+          contentWidth: 520
+        };
       }
     }
   };
@@ -235,6 +338,8 @@ describe("App autosave", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+    MockResizeObserver.reset();
     codeEditorMock.reset();
     menuCommandListener = null;
     editorTestCommandListener = null;
@@ -375,6 +480,7 @@ describe("App autosave", () => {
 
     container.remove();
     globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+    MockResizeObserver.reset();
     vi.useRealTimers();
   });
 
@@ -1667,6 +1773,44 @@ describe("App autosave", () => {
     expect(container.querySelector('[data-yulora-region="shortcut-hint-overlay"]')).toBeNull();
   });
 
+  it("does not show the shortcut hint overlay when the editor canvas has no safe left gutter", async () => {
+    codeEditorMock.setLayout({
+      hostLeft: 0,
+      hostWidth: 720,
+      contentLeft: 96,
+      contentWidth: 560
+    });
+
+    await renderAndOpenDocument();
+
+    await act(async () => {
+      codeEditorMock.focus();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      codeEditorMock.triggerResize();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Control",
+          ctrlKey: true,
+          bubbles: true
+        })
+      );
+    });
+
+    expect(
+      container
+        .querySelector('[data-yulora-region="shortcut-hint-overlay-shell"]')
+        ?.getAttribute("data-shortcut-hint-state")
+    ).toBe("hidden");
+    expect(container.querySelector('[data-yulora-region="shortcut-hint-overlay"]')).toBeNull();
+  });
+
   it("hides the shortcut hint overlay on window blur", async () => {
     await renderAndOpenDocument();
 
@@ -1699,12 +1843,11 @@ describe("App autosave", () => {
 
   it("hides the shortcut hint overlay with a document-canvas container rule instead of viewport-only media queries", () => {
     const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8");
+    const overlayHideRule = /@container editor-canvas \(max-width: 520px\)\s*\{\s*\.shortcut-hint-overlay\s*\{\s*display:\s*none;/m;
 
     expect(appUiStylesheet).toContain(".document-canvas");
     expect(appUiStylesheet).toContain("container-type: inline-size;");
-    expect(appUiStylesheet).toContain("@container");
-    expect(appUiStylesheet).toContain(".shortcut-hint-overlay");
-    expect(appUiStylesheet).not.toContain("@media (max-width: 520px)");
+    expect(overlayHideRule.test(appUiStylesheet)).toBe(false);
   });
 
   it("renders settings as a drawer panel with close affordance while keeping existing controls", async () => {

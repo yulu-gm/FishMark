@@ -810,9 +810,3 @@
     margin-top: 1px;
   }
 }
-
-@container editor-canvas (max-width: 520px) {
-  .shortcut-hint-overlay {
-    display: none;
-  }
-}
