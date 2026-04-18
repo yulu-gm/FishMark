@@ -1,12 +1,17 @@
 export type ThemeEffectsMode = "auto" | "full" | "off";
 export type ThemeSurfaceSlot = "workbenchBackground" | "titlebarBackdrop" | "welcomeHero";
 export type ThemeStylePart = "ui" | "editor" | "markdown" | "titlebar";
+export type ThemeSurfaceRenderSettings = {
+  renderScale?: number;
+  frameRate?: number;
+};
 
 export type ThemeSurfaceDescriptor = {
   kind: "fragment";
   scene: string;
   shader: string;
   channels?: ThemeSurfaceChannels;
+  render?: ThemeSurfaceRenderSettings;
 };
 
 type ThemeSurfaceImageDescriptor = { type: "image"; src: string };
@@ -46,7 +51,7 @@ export type ThemePackageManifest = {
   tokens: Partial<Record<"light" | "dark", string>>;
   styles: Partial<Record<ThemeStylePart, string>>;
   layout: { titlebar: string | null };
-  scene: { id: string; sharedUniforms: Record<string, number> } | null;
+  scene: { id: string; sharedUniforms: Record<string, number>; render?: ThemeSurfaceRenderSettings } | null;
   surfaces: Partial<Record<ThemeSurfaceSlot, ThemeSurfaceDescriptor>>;
   parameters: ThemeParameterDescriptor[];
 };
@@ -257,6 +262,7 @@ function normalizeSurfaceDescriptor(
   }
 
   const channels = normalizeSurfaceChannels(raw.channels, packageRoot);
+  const render = normalizeSurfaceRenderSettings(raw.render);
 
   const descriptor: ThemeSurfaceDescriptor = {
     kind: "fragment",
@@ -266,6 +272,10 @@ function normalizeSurfaceDescriptor(
 
   if (Object.keys(channels).length > 0) {
     descriptor.channels = channels;
+  }
+
+  if (render) {
+    descriptor.render = render;
   }
 
   return descriptor;
@@ -337,6 +347,29 @@ function normalizeSupports(raw: unknown): { light: boolean; dark: boolean } {
   };
 }
 
+function normalizeSurfaceRenderSettings(raw: unknown): ThemeSurfaceRenderSettings | undefined {
+  if (!isRecord(raw)) {
+    return undefined;
+  }
+
+  const render: ThemeSurfaceRenderSettings = {};
+
+  if (
+    typeof raw.renderScale === "number" &&
+    Number.isFinite(raw.renderScale) &&
+    raw.renderScale > 0 &&
+    raw.renderScale <= 1
+  ) {
+    render.renderScale = raw.renderScale;
+  }
+
+  if (typeof raw.frameRate === "number" && Number.isFinite(raw.frameRate) && raw.frameRate > 0) {
+    render.frameRate = raw.frameRate;
+  }
+
+  return Object.keys(render).length > 0 ? render : undefined;
+}
+
 function normalizeThemeScene(raw: unknown): ThemePackageManifest["scene"] {
   if (!isRecord(raw)) {
     return null;
@@ -357,9 +390,12 @@ function normalizeThemeScene(raw: unknown): ThemePackageManifest["scene"] {
     sharedUniforms[key] = sharedUniformsSource[key];
   }
 
+  const render = normalizeSurfaceRenderSettings(raw.render);
+
   return {
     id: raw.id.trim(),
-    sharedUniforms
+    sharedUniforms,
+    ...(render ? { render } : {})
   };
 }
 

@@ -394,6 +394,10 @@ function resolveActiveThemeSurface(
     sceneId: scene.id,
     shaderUrl: createPreviewAssetUrl(fragmentSurface.shader),
     channels: resolveSurfaceChannels(fragmentSurface.channels),
+    renderSettings: {
+      ...(scene.render ? { scene: scene.render } : {}),
+      ...(fragmentSurface.render ? { surface: fragmentSurface.render } : {})
+    },
     sharedUniforms: composeEffectiveUniforms(activeThemePackage.manifest, parameterOverrides)
   };
 }

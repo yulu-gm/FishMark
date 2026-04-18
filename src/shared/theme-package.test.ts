@@ -240,6 +240,127 @@ describe("normalizeThemePackageManifest", () => {
     ]);
   });
 
+  it("normalizes scene-level render defaults for shader surfaces", () => {
+    const manifest = normalizeThemePackageManifest(
+      {
+        id: "ember-ascend",
+        name: "Ember Ascend",
+        version: "1.0.0",
+        supports: { light: false, dark: true },
+        styles: {},
+        layout: { titlebar: null },
+        scene: {
+          id: "ascend-scene",
+          sharedUniforms: { glowStrength: 2.0 },
+          render: {
+            renderScale: 0.75,
+            frameRate: 24
+          }
+        },
+        surfaces: {
+          workbenchBackground: {
+            kind: "fragment",
+            scene: "ascend-scene",
+            shader: "./shaders/workbench-background.glsl"
+          }
+        }
+      },
+      "/tmp/ember-ascend"
+    );
+
+    expect(manifest?.scene).toMatchObject({
+      id: "ascend-scene",
+      sharedUniforms: { glowStrength: 2.0 },
+      render: {
+        renderScale: 0.75,
+        frameRate: 24
+      }
+    });
+  });
+
+  it("normalizes surface-level render overrides independently from scene defaults", () => {
+    const manifest = normalizeThemePackageManifest(
+      {
+        id: "dual-surface",
+        name: "Dual Surface",
+        version: "1.0.0",
+        supports: { light: false, dark: true },
+        styles: {},
+        layout: { titlebar: null },
+        scene: {
+          id: "dual-scene",
+          sharedUniforms: {},
+          render: {
+            renderScale: 0.8,
+            frameRate: 30
+          }
+        },
+        surfaces: {
+          workbenchBackground: {
+            kind: "fragment",
+            scene: "dual-scene",
+            shader: "./shaders/workbench-background.glsl",
+            render: {
+              renderScale: 0.6,
+              frameRate: 18
+            }
+          }
+        }
+      },
+      "/tmp/dual-surface"
+    );
+
+    expect(manifest?.surfaces?.workbenchBackground).toMatchObject({
+      kind: "fragment",
+      scene: "dual-scene",
+      shader: "/tmp/dual-surface/shaders/workbench-background.glsl",
+      render: {
+        renderScale: 0.6,
+        frameRate: 18
+      }
+    });
+    expect(manifest?.scene?.render).toEqual({
+      renderScale: 0.8,
+      frameRate: 30
+    });
+  });
+
+  it("drops invalid render settings instead of preserving unsafe values", () => {
+    const manifest = normalizeThemePackageManifest(
+      {
+        id: "bad-render",
+        name: "Bad Render",
+        version: "1.0.0",
+        supports: { light: false, dark: true },
+        styles: {},
+        layout: { titlebar: null },
+        scene: {
+          id: "bad-scene",
+          sharedUniforms: {},
+          render: {
+            renderScale: 0,
+            frameRate: Number.NaN
+          }
+        },
+        surfaces: {
+          workbenchBackground: {
+            kind: "fragment",
+            scene: "bad-scene",
+            shader: "./shaders/workbench-background.glsl",
+            render: {
+              renderScale: 1.2,
+              frameRate: -12
+            }
+          }
+        }
+      },
+      "/tmp/bad-render"
+    );
+
+    expect(manifest?.scene?.render).toBeUndefined();
+    expect(manifest?.surfaces?.workbenchBackground?.render).toBeUndefined();
+  });
+
   it("returns null when id or name is whitespace-only", () => {
     const manifestByBlankId = normalizeThemePackageManifest(
       {

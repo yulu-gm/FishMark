@@ -151,6 +151,27 @@ describe("theme surface runtime", () => {
     expect(source.match(/\buniform\s+float\s+u_rainAmount\s*;/gu)?.length).toBe(1);
   });
 
+  it("keeps fragment precision declarations ahead of injected uniforms when the shader already declares precision", () => {
+    const source = buildFragmentShaderSource(
+      [
+        "// comment",
+        "precision mediump float;",
+        "void mainImage(out vec4 fragColor, in vec2 fragCoord) {",
+        "  fragColor = vec4(1.0);",
+        "}"
+      ].join("\n"),
+      ["themeMode"],
+      false
+    );
+
+    const precisionIndex = source.indexOf("precision mediump float;");
+    const uniformIndex = source.indexOf("uniform float u_themeMode;");
+
+    expect(precisionIndex).toBeGreaterThanOrEqual(0);
+    expect(uniformIndex).toBeGreaterThanOrEqual(0);
+    expect(precisionIndex).toBeLessThan(uniformIndex);
+  });
+
   it("does not duplicate shadertoy uniforms declared with precision qualifiers", () => {
     const source = buildFragmentShaderSource(
       [
@@ -211,6 +232,141 @@ describe("theme surface runtime", () => {
 
     expect(result.mode).toBe("fallback");
     expect(createPresenter).not.toHaveBeenCalled();
+  });
+
+  it("scales the internal canvas resolution using theme renderScale while preserving layout viewport", async () => {
+    const render = vi.fn();
+    const destroy = vi.fn();
+    const runtime = createThemeSurfaceRuntime({
+      createPresenter: () => ({
+        render,
+        destroy
+      })
+    });
+    const canvas = createCanvas(320, 200);
+
+    const result = await runtime.mount({
+      canvas,
+      surface: "workbenchBackground",
+      shaderSource: "void main() { gl_FragColor = vec4(1.0); }",
+      effectsMode: "full",
+      renderSettings: {
+        scene: {
+          renderScale: 0.75
+        }
+      },
+      sceneState: createThemeSceneState({
+        sceneId: "ember-scene",
+        themeMode: "dark",
+        effectsMode: "full",
+        sharedUniforms: {}
+      })
+    });
+
+    expect(result.mode).toBe("full");
+    expect(canvas.width).toBe(240);
+    expect(canvas.height).toBe(150);
+    expect(render).toHaveBeenCalledWith(
+      expect.objectContaining({
+        viewport: { width: 320, height: 200 }
+      })
+    );
+
+    result.unmount();
+    expect(destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it("prefers surface render overrides over scene defaults when resolving internal resolution", async () => {
+    const render = vi.fn();
+    const destroy = vi.fn();
+    const runtime = createThemeSurfaceRuntime({
+      createPresenter: () => ({
+        render,
+        destroy
+      })
+    });
+    const canvas = createCanvas(320, 200);
+
+    const result = await runtime.mount({
+      canvas,
+      surface: "workbenchBackground",
+      shaderSource: "void main() { gl_FragColor = vec4(1.0); }",
+      effectsMode: "full",
+      renderSettings: {
+        scene: {
+          renderScale: 0.8,
+          frameRate: 30
+        },
+        surface: {
+          renderScale: 0.5
+        }
+      },
+      sceneState: createThemeSceneState({
+        sceneId: "ember-scene",
+        themeMode: "dark",
+        effectsMode: "full",
+        sharedUniforms: {}
+      })
+    });
+
+    expect(result.mode).toBe("full");
+    expect(canvas.width).toBe(160);
+    expect(canvas.height).toBe(100);
+    expect(render).toHaveBeenCalledTimes(1);
+
+    result.unmount();
+    expect(destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it("throttles full-mode animation frames according to the resolved theme frameRate", async () => {
+    const render = vi.fn();
+    const destroy = vi.fn();
+    const scheduledFrames: FrameRequestCallback[] = [];
+    const requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      scheduledFrames.push(callback);
+      return scheduledFrames.length;
+    });
+    const runtime = createThemeSurfaceRuntime({
+      now: () => 0,
+      requestAnimationFrame,
+      createPresenter: () => ({
+        render,
+        destroy
+      })
+    });
+
+    const result = await runtime.mount({
+      canvas: createCanvas(320, 200),
+      surface: "workbenchBackground",
+      shaderSource: "void main() { gl_FragColor = vec4(1.0); }",
+      effectsMode: "full",
+      renderSettings: {
+        scene: {
+          frameRate: 20
+        }
+      },
+      sceneState: createThemeSceneState({
+        sceneId: "ember-scene",
+        themeMode: "dark",
+        effectsMode: "full",
+        sharedUniforms: {}
+      })
+    });
+
+    expect(result.mode).toBe("full");
+    expect(render).toHaveBeenCalledTimes(1);
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(1);
+
+    scheduledFrames[0]?.(16);
+    expect(render).toHaveBeenCalledTimes(1);
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(2);
+
+    scheduledFrames[1]?.(60);
+    expect(render).toHaveBeenCalledTimes(2);
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(3);
+
+    result.unmount();
+    expect(destroy).toHaveBeenCalledTimes(1);
   });
 
   it("uses an animated render path for auto mode when reduced motion is not requested", async () => {

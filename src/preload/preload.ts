@@ -127,11 +127,20 @@ type ThemePackageDescriptor = {
     tokens: Partial<Record<"light" | "dark", string>>;
     styles: Partial<Record<"ui" | "editor" | "markdown" | "titlebar", string>>;
     layout: { titlebar: string | null };
-    scene: { id: string; sharedUniforms: Record<string, number> } | null;
+    scene: {
+      id: string;
+      sharedUniforms: Record<string, number>;
+      render?: { renderScale?: number; frameRate?: number };
+    } | null;
     surfaces: Partial<
       Record<
         "workbenchBackground" | "titlebarBackdrop" | "welcomeHero",
-        { kind: "fragment"; scene: string; shader: string }
+        {
+          kind: "fragment";
+          scene: string;
+          shader: string;
+          render?: { renderScale?: number; frameRate?: number };
+        }
       >
     >;
     parameters: ThemeParameterDescriptor[];

@@ -1,4 +1,8 @@
-import type { ThemeEffectsMode, ThemeSurfaceSlot } from "../../shared/theme-package";
+import type {
+  ThemeEffectsMode,
+  ThemeSurfaceRenderSettings,
+  ThemeSurfaceSlot
+} from "../../shared/theme-package";
 import type { ThemeSceneFrame, ThemeSceneState, ThemeSceneViewport } from "./theme-scene-state";
 
 export type ThemeSurfaceRuntimeMode = "full" | "reduced" | "fallback";
@@ -30,6 +34,10 @@ export type MountThemeSurfaceInput = {
   shaderSource: string | null;
   channels?: ThemeSurfaceRuntimeChannels;
   effectsMode: ThemeEffectsMode;
+  renderSettings?: {
+    scene?: ThemeSurfaceRenderSettings;
+    surface?: ThemeSurfaceRenderSettings;
+  };
   sceneState: ThemeSceneState;
 };
 
@@ -44,6 +52,12 @@ type ThemeSurfaceRuntimeDependencies = {
   cancelAnimationFrame?: (handle: number) => void;
   ResizeObserver?: typeof ResizeObserver;
   matchMedia?: (query: string) => MediaQueryList;
+  now?: () => number;
+};
+
+type ResolvedThemeSurfaceRenderSettings = {
+  renderScale: number;
+  frameRate: number | null;
 };
 
 const VERTEX_SHADER_SOURCE = `
@@ -90,11 +104,25 @@ function getViewport(canvas: HTMLCanvasElement): ThemeSceneViewport {
   };
 }
 
-function syncCanvasSize(canvas: HTMLCanvasElement, viewport: ThemeSceneViewport): void {
+function syncCanvasSize(
+  canvas: HTMLCanvasElement,
+  viewport: ThemeSceneViewport,
+  renderScale: number
+): void {
   const devicePixelRatio =
     typeof globalThis.window?.devicePixelRatio === "number" ? globalThis.window.devicePixelRatio : 1;
-  const nextWidth = Math.max(1, Math.round(viewport.width * Math.max(1, devicePixelRatio)));
-  const nextHeight = Math.max(1, Math.round(viewport.height * Math.max(1, devicePixelRatio)));
+  const effectiveScale =
+    typeof renderScale === "number" && Number.isFinite(renderScale) && renderScale > 0
+      ? renderScale
+      : 1;
+  const nextWidth = Math.max(
+    1,
+    Math.round(viewport.width * Math.max(1, devicePixelRatio) * effectiveScale)
+  );
+  const nextHeight = Math.max(
+    1,
+    Math.round(viewport.height * Math.max(1, devicePixelRatio) * effectiveScale)
+  );
 
   if (canvas.width !== nextWidth) {
     canvas.width = nextWidth;
@@ -109,6 +137,29 @@ function createFallbackMount(): MountedThemeSurface {
   return {
     mode: "fallback",
     unmount() {}
+  };
+}
+
+function resolveThemeSurfaceRenderSettings(
+  renderSettings: MountThemeSurfaceInput["renderSettings"]
+): ResolvedThemeSurfaceRenderSettings {
+  const renderScale =
+    renderSettings?.surface?.renderScale ?? renderSettings?.scene?.renderScale ?? 1;
+  const frameRate =
+    renderSettings?.surface?.frameRate ?? renderSettings?.scene?.frameRate ?? null;
+
+  return {
+    renderScale:
+      typeof renderScale === "number" &&
+      Number.isFinite(renderScale) &&
+      renderScale > 0 &&
+      renderScale <= 1
+        ? renderScale
+        : 1,
+    frameRate:
+      typeof frameRate === "number" && Number.isFinite(frameRate) && frameRate > 0
+        ? frameRate
+        : null
   };
 }
 
@@ -143,9 +194,14 @@ export function buildFragmentShaderSource(
     throw new Error("Shader source is empty.");
   }
   const declarationScanSource = stripShaderComments(trimmed);
+  const existingPrecisionMatch = trimmed.match(/\bprecision\s+(?:lowp|mediump|highp)\s+float\s*;/u);
+  const bodyWithoutPrecision =
+    existingPrecisionMatch && typeof existingPrecisionMatch.index === "number"
+      ? `${trimmed.slice(0, existingPrecisionMatch.index)}${trimmed.slice(existingPrecisionMatch.index + existingPrecisionMatch[0].length)}`.trim()
+      : trimmed;
 
   const header = [
-    /\bprecision\s+(?:lowp|mediump|highp)\s+float\s*;/u.test(trimmed) ? null : "precision mediump float;",
+    existingPrecisionMatch?.[0] ?? "precision mediump float;",
     hasUniformDeclaration(declarationScanSource, "u_resolution") ? null : "uniform vec2 u_resolution;",
     hasUniformDeclaration(declarationScanSource, "u_time") ? null : "uniform float u_time;",
     hasChannel0 && !hasUniformDeclaration(declarationScanSource, "iResolution") ? "uniform vec3 iResolution;" : null,
@@ -159,11 +215,11 @@ export function buildFragmentShaderSource(
     .filter((line): line is string => line !== null)
     .join("\n");
 
-  if (/\bvoid\s+mainImage\s*\(/u.test(trimmed)) {
-    return `${header}\n${trimmed}\nvoid main() {\n  vec4 yuloraColor = vec4(0.0);\n  mainImage(yuloraColor, gl_FragCoord.xy);\n  gl_FragColor = yuloraColor;\n}`;
+  if (/\bvoid\s+mainImage\s*\(/u.test(bodyWithoutPrecision)) {
+    return `${header}\n${bodyWithoutPrecision}\nvoid main() {\n  vec4 yuloraColor = vec4(0.0);\n  mainImage(yuloraColor, gl_FragCoord.xy);\n  gl_FragColor = yuloraColor;\n}`;
   }
 
-  return `${header}\n${trimmed}`;
+  return `${header}\n${bodyWithoutPrecision}`;
 }
 
 async function loadImageChannel(src: string): Promise<HTMLImageElement> {
@@ -449,6 +505,15 @@ export function createThemeSurfaceRuntime(
     dependencies.cancelAnimationFrame ?? globalThis.cancelAnimationFrame?.bind(globalThis);
   const ResizeObserverImpl = dependencies.ResizeObserver ?? globalThis.ResizeObserver;
   const matchMediaImpl = dependencies.matchMedia ?? globalThis.matchMedia?.bind(globalThis);
+  const nowImpl =
+    dependencies.now ??
+    (() => {
+      if (typeof globalThis.performance?.now === "function") {
+        return globalThis.performance.now();
+      }
+
+      return Date.now();
+    });
 
   async function mount(input: MountThemeSurfaceInput): Promise<MountedThemeSurface> {
     const mode = resolveRenderMode(input.effectsMode, matchMediaImpl);
@@ -484,8 +549,12 @@ export function createThemeSurfaceRuntime(
     let isUnmounted = false;
     let frameHandle: number | null = null;
     let resizeObserver: ResizeObserver | null = null;
+    let lastRenderAtMs: number | null = null;
+    const resolvedRenderSettings = resolveThemeSurfaceRenderSettings(input.renderSettings);
+    const frameIntervalMs =
+      resolvedRenderSettings.frameRate !== null ? 1_000 / resolvedRenderSettings.frameRate : null;
 
-    const renderFrame = (): void => {
+    const renderFrame = (renderedAtMs?: number): void => {
       if (isUnmounted) {
         return;
       }
@@ -493,18 +562,35 @@ export function createThemeSurfaceRuntime(
       const viewport = getViewport(canvas);
 
       if (viewport.width > 0 && viewport.height > 0) {
-        syncCanvasSize(canvas, viewport);
+        syncCanvasSize(canvas, viewport, resolvedRenderSettings.renderScale);
         presenter.render(input.sceneState.nextFrame(input.surface, viewport));
-      }
-
-      if (mode === "full" && requestAnimationFrameImpl) {
-        frameHandle = requestAnimationFrameImpl(() => {
-          renderFrame();
-        });
+        lastRenderAtMs = renderedAtMs ?? nowImpl();
       }
     };
 
     renderFrame();
+
+    const handleAnimationFrame = (timestamp: number): void => {
+      if (isUnmounted) {
+        return;
+      }
+
+      if (
+        frameIntervalMs === null ||
+        lastRenderAtMs === null ||
+        timestamp - lastRenderAtMs >= frameIntervalMs - 0.5
+      ) {
+        renderFrame(timestamp);
+      }
+
+      if (!isUnmounted && requestAnimationFrameImpl) {
+        frameHandle = requestAnimationFrameImpl(handleAnimationFrame);
+      }
+    };
+
+    if (mode === "full" && requestAnimationFrameImpl) {
+      frameHandle = requestAnimationFrameImpl(handleAnimationFrame);
+    }
 
     if (mode === "reduced" && typeof ResizeObserverImpl === "function") {
       resizeObserver = new ResizeObserverImpl(() => {

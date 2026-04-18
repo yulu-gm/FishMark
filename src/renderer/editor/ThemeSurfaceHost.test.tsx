@@ -134,6 +134,48 @@ describe("ThemeSurfaceHost", () => {
     });
   });
 
+  it("passes resolved render settings through to runtime mount", async () => {
+    await act(async () => {
+      root.render(
+        createElement(ThemeSurfaceHost, {
+          surface: "workbenchBackground",
+          descriptor: {
+            kind: "fragment",
+            sceneId: "ember-scene",
+            shaderUrl: "file:///themes/ember-ascend/shaders/workbench.glsl",
+            renderSettings: {
+              scene: {
+                renderScale: 0.75,
+                frameRate: 24
+              },
+              surface: {
+                renderScale: 0.65
+              }
+            },
+            sharedUniforms: {}
+          },
+          themeMode: "dark",
+          effectsMode: "full"
+        })
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(themeSurfaceRuntimeMock.mount).toHaveBeenCalledTimes(1);
+    expect(themeSurfaceRuntimeMock.mount.mock.calls[0]?.[0]).toMatchObject({
+      renderSettings: {
+        scene: {
+          renderScale: 0.75,
+          frameRate: 24
+        },
+        surface: {
+          renderScale: 0.65
+        }
+      }
+    });
+  });
+
   it("bridges the resolved theme mode into the scene uniforms sent to runtime", async () => {
     await act(async () => {
       root.render(

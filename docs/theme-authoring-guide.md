@@ -122,6 +122,10 @@ my-theme/
     "id": "my-scene",
     "sharedUniforms": {
       "rainAmount": 0.72
+    },
+    "render": {
+      "renderScale": 0.75,
+      "frameRate": 24
     }
   },
   "parameters": [],
@@ -129,7 +133,10 @@ my-theme/
     "workbenchBackground": {
       "kind": "fragment",
       "scene": "my-scene",
-      "shader": "./shaders/workbench-background.glsl"
+      "shader": "./shaders/workbench-background.glsl",
+      "render": {
+        "renderScale": 0.65
+      }
     }
   }
 }
@@ -172,6 +179,33 @@ manifest 中出现的所有路径都必须留在主题包根目录内部。
 - 指向主题目录外部的绝对路径
 
 如果路径逃逸出包根目录，Yulora 会直接丢弃这个字段。
+
+### 3.4 Render 默认值与覆盖
+
+动态主题现在可以声明可选的 `render` 配置：
+
+- `scene.render`
+  - 给同一 scene 下的 surface 提供默认渲染预算
+- `surfaces.<slot>.render`
+  - 只覆盖当前 surface，需要时可以只写一个字段
+
+当前支持的字段：
+
+- `renderScale`
+  - `> 0` 且 `<= 1`
+  - 控制 shader canvas 的内部渲染分辨率
+  - `1` 表示按当前 viewport × devicePixelRatio 渲染
+  - `0.75` 表示用约 75% 的内部尺寸计算，再放大铺满
+- `frameRate`
+  - `> 0`
+  - 只影响 `full` 动态模式下的动画节流
+  - 不会改变 `reduced` / `off` 的回退语义
+
+推荐做法：
+
+- 先在 `scene.render` 里写保守默认值
+- 只有某个 surface 明显更重或更轻时，再在 `surfaces.<slot>.render` 里单独覆盖
+- 背景型 shader 可先从 `renderScale: 0.7 - 0.85`、`frameRate: 18 - 30` 开始试
 
 ## 4. 当前真正可依赖的能力
 
@@ -297,6 +331,7 @@ Yulora 当前支持两种参数：
 
 - `surfaces.*.kind` 只能是 `"fragment"`
 - surface 必须引用一个存在的 `scene.id`
+- `scene.render` 和 `surfaces.*.render` 只影响渲染预算，不改变 CSS 布局尺寸
 - shader 文件要能独立编译
 - 最好只依赖 runtime 自动提供的这些内容：
   - `u_resolution`
