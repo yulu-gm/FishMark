@@ -97,9 +97,10 @@ describe("createThemePackageService", () => {
     await writeFile(path.join(userDataDir, "themes", "rain-glass", "styles", "markdown.css"), "/* markdown */", "utf8");
 
     const service = createThemePackageService({ userDataDir });
-    const [theme] = await service.listThemePackages();
+    const packageEntry = (await service.listThemePackages()).find((entry) => entry.id === "rain-glass");
+    expect(packageEntry).toBeDefined();
 
-    expect(theme).toMatchObject({
+    expect(packageEntry).toMatchObject({
       id: "rain-glass",
       kind: "manifest-package",
       manifest: {
@@ -166,10 +167,10 @@ describe("createThemePackageService", () => {
     const secondList = await service.listThemePackages();
     const refreshedList = await service.refreshThemePackages();
 
-    expect(firstList.map((entry) => entry.id)).toEqual(["paper"]);
-    expect(secondList.map((entry) => entry.id)).toEqual(["paper"]);
+    expect(firstList.map((entry) => entry.id)).toEqual(["default", "paper"]);
+    expect(secondList.map((entry) => entry.id)).toEqual(["default", "paper"]);
     expect(new Set(refreshedList.map((entry) => entry.id))).toEqual(
-      new Set(["paper", "graphite"])
+      new Set(["default", "paper", "graphite"])
     );
 
     await rm(root, { recursive: true, force: true });

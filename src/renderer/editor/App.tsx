@@ -29,9 +29,7 @@ import { deriveOutlineItems, type OutlineItem } from "../outline";
 import { createThemePackageRuntime } from "../theme-package-runtime";
 import {
   normalizeThemePackageDescriptor,
-  resolveLegacyThemeFamilyId,
-  resolveActiveThemePackage,
-  type ThemePackageRuntimeEntry
+  resolveActiveThemePackage
 } from "../theme-package-catalog";
 import {
   type AppState,
@@ -67,7 +65,6 @@ const SettingsView = lazy(async () => {
 });
 
 type ResolvedThemeMode = Exclude<ThemeMode, "system">;
-type ThemeCatalogEntry = Awaited<ReturnType<Window["yulora"]["listThemes"]>>[number];
 type ThemePackageEntry = Awaited<ReturnType<Window["yulora"]["listThemePackages"]>>[number];
 
 const AUTOSAVE_FAILED_MESSAGE = "Autosave failed. Changes are still in memory.";
@@ -217,42 +214,6 @@ function clearThemeDynamicModeFromDocument(root: HTMLElement): void {
   root.removeAttribute(THEME_DYNAMIC_MODE_ATTRIBUTE);
 }
 
-function toLegacyRuntimeThemePackageEntry(
-  theme: ThemeCatalogEntry,
-  resolvedThemeMode: ResolvedThemeMode
-): ThemePackageRuntimeEntry {
-  const mode = theme.modes[resolvedThemeMode];
-  const tokens: ThemePackageRuntimeEntry["tokens"] = {};
-  const styles: ThemePackageRuntimeEntry["styles"] = {};
-
-  if (mode.partUrls.tokens) {
-    tokens[resolvedThemeMode] = mode.partUrls.tokens;
-  }
-
-  if (mode.partUrls.ui) {
-    styles.ui = mode.partUrls.ui;
-  }
-
-  if (mode.partUrls.editor) {
-    styles.editor = mode.partUrls.editor;
-  }
-
-  if (mode.partUrls.markdown) {
-    styles.markdown = mode.partUrls.markdown;
-  }
-
-  return {
-    id: theme.id,
-    source: theme.source,
-    supports: {
-      light: theme.modes.light.available,
-      dark: theme.modes.dark.available
-    },
-    tokens,
-    styles
-  };
-}
-
 function resolveThemeWarningMessage(
   resolution: ReturnType<typeof resolveActiveThemePackage>
 ): string | null {
@@ -375,11 +336,7 @@ function resolveActiveThemePackageManifest(
     return null;
   }
 
-  const legacyFamilyId = resolveLegacyThemeFamilyId(selectedId);
-  const activeThemePackage =
-    themePackages.find((entry) => entry.id === selectedId) ??
-    (legacyFamilyId ? themePackages.find((entry) => entry.id === legacyFamilyId) : null) ??
-    null;
+  const activeThemePackage = themePackages.find((entry) => entry.id === selectedId) ?? null;
 
   if (!activeThemePackage || !activeThemePackage.manifest.supports[mode]) {
     return null;
@@ -399,11 +356,7 @@ function resolveActiveThemeSurface(
     return null;
   }
 
-  const legacyFamilyId = resolveLegacyThemeFamilyId(selectedId);
-  const activeThemePackage =
-    themePackages.find((entry) => entry.id === selectedId) ??
-    (legacyFamilyId ? themePackages.find((entry) => entry.id === legacyFamilyId) : null) ??
-    null;
+  const activeThemePackage = themePackages.find((entry) => entry.id === selectedId) ?? null;
 
   if (!activeThemePackage || !activeThemePackage.manifest.supports[mode]) {
     return null;
@@ -463,7 +416,6 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   const [isSettingsClosing, setIsSettingsClosing] = useState(false);
   const [preferences, setPreferences] = useState<Preferences>(DEFAULT_PREFERENCES);
   const [fontFamilies, setFontFamilies] = useState<string[]>([]);
-  const [themes, setThemes] = useState<ThemeCatalogEntry[]>([]);
   const [themePackages, setThemePackages] = useState<
     Awaited<ReturnType<Window["yulora"]["listThemePackages"]>>
   >([]);
@@ -542,10 +494,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     : null;
   const controlledTitlebarEnabled = supportsControlledTitlebar(yulora.platform);
   const resolvedThemeMode = resolveThemeMode(preferences.theme.mode);
-  const activeThemePackages =
-    themePackages.length > 0
-      ? themePackages.map(normalizeThemePackageDescriptor)
-      : themes.map((theme) => toLegacyRuntimeThemePackageEntry(theme, resolvedThemeMode));
+  const activeThemePackages = themePackages.map(normalizeThemePackageDescriptor);
   const activeThemePackageResolution = resolveActiveThemePackage(
     preferences.theme.selectedId,
     activeThemePackages,
@@ -849,12 +798,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     setIsRefreshingThemePackages(true);
 
     try {
-      const [nextThemes, nextThemePackages] = await Promise.all([
-        yulora.refreshThemes(),
-        yulora.refreshThemePackages()
-      ]);
-
-      setThemes(nextThemes);
+      const nextThemePackages = await yulora.refreshThemePackages();
       setThemePackages(nextThemePackages);
       setThemePackageCatalogState("loaded");
     } finally {
@@ -1164,19 +1108,6 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
       });
 
     void yulora
-      .listThemes()
-      .then((nextThemes) => {
-        if (isCancelled) {
-          return;
-        }
-
-        setThemes(nextThemes);
-      })
-      .catch(() => {
-        // Keep the builtin theme active when the catalog is unavailable.
-      });
-
-    void yulora
       .listThemePackages()
       .then((nextThemePackages) => {
         if (isCancelled) {
@@ -1221,10 +1152,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     const applyCurrentTheme = () => {
       const root = document.documentElement;
       const resolvedThemeMode = resolveThemeMode(preferences.theme.mode);
-      const activeThemePackages =
-        themePackages.length > 0
-          ? themePackages.map(normalizeThemePackageDescriptor)
-          : themes.map((theme) => toLegacyRuntimeThemePackageEntry(theme, resolvedThemeMode));
+      const activeThemePackages = themePackages.map(normalizeThemePackageDescriptor);
       const activeThemePackageResolution = resolveActiveThemePackage(
         preferences.theme.selectedId,
         activeThemePackages,
@@ -1258,7 +1186,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
 
     mediaQuery.addEventListener("change", applyCurrentTheme);
     return () => mediaQuery.removeEventListener("change", applyCurrentTheme);
-  }, [activeThemeParameterOverrides, preferences, themePackages, themes]);
+  }, [activeThemeParameterOverrides, preferences, themePackages]);
 
   useEffect(() => {
     return yulora.onAppUpdateState((nextState) => {

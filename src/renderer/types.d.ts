@@ -32,48 +32,9 @@ type UpdatePreferencesResult =
       preferences: Preferences;
     };
 
-type ThemeDescriptor = {
-  id: string;
-  source: "builtin" | "community";
-  name: string;
-  directoryName: string;
-  modes: {
-    light: {
-      available: boolean;
-      availableParts: {
-        tokens: boolean;
-        ui: boolean;
-        editor: boolean;
-        markdown: boolean;
-      };
-      partUrls: Partial<{
-        tokens: string;
-        ui: string;
-        editor: string;
-        markdown: string;
-      }>;
-    };
-    dark: {
-      available: boolean;
-      availableParts: {
-        tokens: boolean;
-        ui: boolean;
-        editor: boolean;
-        markdown: boolean;
-      };
-      partUrls: Partial<{
-        tokens: string;
-        ui: string;
-        editor: string;
-        markdown: string;
-      }>;
-    };
-  };
-};
-
 type ThemePackageDescriptor = {
   id: string;
-  kind: "manifest-package" | "legacy-css-family";
+  kind: "manifest-package";
   source: "builtin" | "community";
   packageRoot: string;
   manifest: ThemePackageManifest;
@@ -96,8 +57,6 @@ declare global {
       importClipboardImage: (input: ImportClipboardImageInput) => Promise<ImportClipboardImageResult>;
       openEditorTestWindow: () => Promise<void>;
       listFontFamilies: () => Promise<string[]>;
-      listThemes: () => Promise<ThemeDescriptor[]>;
-      refreshThemes: () => Promise<ThemeDescriptor[]>;
       listThemePackages: () => Promise<ThemePackageDescriptor[]>;
       refreshThemePackages: () => Promise<ThemePackageDescriptor[]>;
       checkForUpdates: () => Promise<void>;

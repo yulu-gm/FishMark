@@ -1,0 +1,24 @@
+{
+  "id": "default",
+  "name": "Default",
+  "version": "1.0.0",
+  "supports": {
+    "light": true,
+    "dark": true
+  },
+  "tokens": {
+    "light": "./tokens/light.css",
+    "dark": "./tokens/dark.css"
+  },
+  "styles": {
+    "ui": "./styles/ui.css",
+    "editor": "./styles/editor.css",
+    "markdown": "./styles/markdown.css"
+  },
+  "layout": {
+    "titlebar": null
+  },
+  "scene": null,
+  "surfaces": {},
+  "parameters": []
+}

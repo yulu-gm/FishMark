@@ -52,6 +52,15 @@ async function main() {
   for (const entry of themeDirectories) {
     const sourceDirectory = path.join(FIXTURE_THEMES_DIR, entry.name);
     const targetDirectory = path.join(targetThemesDirectory, entry.name);
+    const sourceEntries = await readdir(sourceDirectory, { withFileTypes: true });
+    const hasManifest = sourceEntries.some(
+      (sourceEntry) => sourceEntry.isFile() && sourceEntry.name === "manifest.json"
+    );
+
+    if (!hasManifest) {
+      continue;
+    }
+
     await cp(sourceDirectory, targetDirectory, { recursive: true, force: true });
   }
 }

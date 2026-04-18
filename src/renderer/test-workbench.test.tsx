@@ -131,8 +131,6 @@ describe("Test workbench shell", () => {
       getPreferences: vi.fn(),
       updatePreferences: vi.fn(),
       listFontFamilies: vi.fn().mockResolvedValue([]),
-      listThemes: vi.fn().mockResolvedValue([]),
-      refreshThemes: vi.fn().mockResolvedValue([]),
       listThemePackages: vi.fn().mockResolvedValue([]),
       refreshThemePackages: vi.fn().mockResolvedValue([]),
       checkForUpdates: vi.fn().mockResolvedValue(undefined),

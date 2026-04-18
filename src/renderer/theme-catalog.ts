@@ -1,11 +1,4 @@
-type ThemeCatalogEntry = Awaited<ReturnType<Window["yulora"]["listThemes"]>>[number];
-
-const LEGACY_THEME_PACKAGE_SUFFIX = /(?:-|_)(light|dark)$/u;
-
-function resolveLegacyThemeFamilyId(themeId: string): string | null {
-  const migrated = themeId.replace(LEGACY_THEME_PACKAGE_SUFFIX, "");
-  return migrated === themeId ? null : migrated;
-}
+type ThemeCatalogEntry = Awaited<ReturnType<Window["yulora"]["listThemePackages"]>>[number];
 
 export function resolveThemeCatalogEntry(
   catalog: ThemeCatalogEntry[],
@@ -15,17 +8,7 @@ export function resolveThemeCatalogEntry(
     return null;
   }
 
-  const exactMatch = catalog.find((theme) => theme.id === requestedId);
-  if (exactMatch) {
-    return exactMatch;
-  }
-
-  const legacyFamilyId = resolveLegacyThemeFamilyId(requestedId);
-  if (!legacyFamilyId) {
-    return null;
-  }
-
-  return catalog.find((theme) => theme.id === legacyFamilyId) ?? null;
+  return catalog.find((themePackage) => themePackage.id === requestedId) ?? null;
 }
 
 export function resolveThemeSelectionValue(

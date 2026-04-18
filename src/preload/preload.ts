@@ -19,8 +19,6 @@ const GET_PREFERENCES_CHANNEL = "yulora:get-preferences";
 const UPDATE_PREFERENCES_CHANNEL = "yulora:update-preferences";
 const PREFERENCES_CHANGED_EVENT = "yulora:preferences-changed";
 const LIST_FONT_FAMILIES_CHANNEL = "yulora:list-font-families";
-const LIST_THEMES_CHANNEL = "yulora:list-themes";
-const REFRESH_THEMES_CHANNEL = "yulora:refresh-themes";
 const LIST_THEME_PACKAGES_CHANNEL = "yulora:list-theme-packages";
 const REFRESH_THEME_PACKAGES_CHANNEL = "yulora:refresh-theme-packages";
 const CHECK_FOR_APP_UPDATES_CHANNEL = "yulora:check-for-app-updates";
@@ -113,48 +111,9 @@ type PreferencesUpdate = {
   theme?: Partial<Preferences["theme"]>;
 };
 
-type ThemeDescriptor = {
-  id: string;
-  source: "builtin" | "community";
-  name: string;
-  directoryName: string;
-  modes: {
-    light: {
-      available: boolean;
-      availableParts: {
-        tokens: boolean;
-        ui: boolean;
-        editor: boolean;
-        markdown: boolean;
-      };
-      partUrls: Partial<{
-        tokens: string;
-        ui: string;
-        editor: string;
-        markdown: string;
-      }>;
-    };
-    dark: {
-      available: boolean;
-      availableParts: {
-        tokens: boolean;
-        ui: boolean;
-        editor: boolean;
-        markdown: boolean;
-      };
-      partUrls: Partial<{
-        tokens: string;
-        ui: string;
-        editor: string;
-        markdown: string;
-      }>;
-    };
-  };
-};
-
 type ThemePackageDescriptor = {
   id: string;
-  kind: "manifest-package" | "legacy-css-family";
+  kind: "manifest-package";
   source: "builtin" | "community";
   packageRoot: string;
   manifest: {
@@ -222,7 +181,6 @@ export type {
   PreferencesUpdate as PreloadPreferencesUpdate,
   AppNotification as PreloadAppNotification,
   AppUpdateState as PreloadAppUpdateState,
-  ThemeDescriptor as PreloadThemeDescriptor,
   UpdatePreferencesResult as PreloadUpdatePreferencesResult
 };
 export type {
@@ -363,8 +321,6 @@ const api = {
   updatePreferences: (patch: PreferencesUpdate): Promise<UpdatePreferencesResult> =>
     ipcRenderer.invoke(UPDATE_PREFERENCES_CHANNEL, patch),
   listFontFamilies: (): Promise<string[]> => ipcRenderer.invoke(LIST_FONT_FAMILIES_CHANNEL),
-  listThemes: (): Promise<ThemeDescriptor[]> => ipcRenderer.invoke(LIST_THEMES_CHANNEL),
-  refreshThemes: (): Promise<ThemeDescriptor[]> => ipcRenderer.invoke(REFRESH_THEMES_CHANNEL),
   listThemePackages: (): Promise<ThemePackageDescriptor[]> =>
     ipcRenderer.invoke(LIST_THEME_PACKAGES_CHANNEL),
   refreshThemePackages: (): Promise<ThemePackageDescriptor[]> =>

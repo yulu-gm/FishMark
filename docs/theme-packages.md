@@ -1,13 +1,19 @@
 # Theme Packages
 
-Theme packages are local directories under `themes/<id>/` that declare styling, titlebar layout, and optional shader surfaces through a single `manifest.json`.
+Theme packages are the only supported theme architecture in Yulora.
+
+- Builtin packages ship from `src/renderer/theme-packages/`
+- External packages live under `<userData>/themes/<id>/`
+- Every package directory must contain `manifest.json`
+- Directories without `manifest.json` are ignored
+- `default` is the only builtin package and is the required fallback package
 
 ## Package Layout
 
-The current loader understands this structure:
+The loader understands this structure:
 
 ```text
-rain-glass/
+default/
   manifest.json
   tokens/
     light.css
@@ -24,11 +30,11 @@ rain-glass/
     titlebar-backdrop.glsl
 ```
 
-`manifest.json` is required. Other folders are optional, and the loader only normalizes referenced paths into the package root; it does not eagerly verify that every asset exists at scan time.
+`manifest.json` is required. Other folders are optional. The loader only normalizes referenced paths into the package root; it does not eagerly verify every referenced asset at scan time.
 
 ## Manifest Contract
 
-Use the current manifest fields supported by the loader:
+Supported manifest fields:
 
 - `id`, `name`, `version`, `author`
 - `supports.light` and `supports.dark`
@@ -38,11 +44,11 @@ Use the current manifest fields supported by the loader:
 - `scene.id` and `scene.sharedUniforms`
 - `surfaces.workbenchBackground`, `surfaces.titlebarBackdrop`, `surfaces.welcomeHero`
 
-The loader resolves these values into local asset URLs and rejects malformed paths that escape the package root, so keep every path inside the package root.
+The loader resolves these values into local asset URLs and rejects malformed paths that escape the package root, so every referenced file must stay inside the package directory.
 
 ## Tokens And Styles
 
-In the current implementation, `tokens.light` and `tokens.dark` point to CSS stylesheets, not JSON token blobs. That keeps the sample package compatible with the renderer today. If you want to experiment with a future JSON-token format, treat it as an authoring-side conversion step until the loader grows support for it.
+`tokens.light` and `tokens.dark` point to CSS stylesheets, not JSON token blobs.
 
 Theme CSS should stay focused on stable variables and host styling:
 
@@ -63,7 +69,7 @@ Each surface should point at a fragment shader that compiles without extra runti
 
 ## Fallback And Performance
 
-Shader surfaces are always optional from the app’s point of view. If the runtime cannot fetch, compile, or mount a surface, Yulora falls back to static styling. The app records the aggregate dynamic mode on the document element and dedupes the warning for the current theme and dynamic state when every active dynamic surface has fallen back.
+Shader surfaces are always optional. If the runtime cannot fetch, compile, or mount a surface, Yulora falls back to static styling. The app records the aggregate dynamic mode on the document element and dedupes the warning for the current theme and dynamic state when every active dynamic surface has fallen back.
 
 When authoring a package:
 
@@ -72,13 +78,17 @@ When authoring a package:
 - Avoid assumptions about wide compatibility or continuous animation
 - Make the static CSS layer readable on its own, because fallback is part of the contract
 
-## Sample Package Notes
+## Reference Packages
 
-The bundled `rain-glass` fixture shows the current contract end to end:
+The builtin `default` package shows the required fallback baseline:
+
+- Explicit light and dark token files
+- Shared `ui.css`, `editor.css`, and `markdown.css`
+- No compatibility bridge to legacy family directories
+
+The `rain-glass` fixture shows the current external package contract end to end:
 
 - CSS token files for light and dark modes
 - A controlled titlebar layout
 - Shared scene uniforms for both shader surfaces
 - A workbench background and a titlebar backdrop
-
-It is intentionally small so it can serve as a reference package for future theme authors.

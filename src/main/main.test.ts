@@ -39,7 +39,8 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain('ipcMain.handle(GET_PREFERENCES_CHANNEL');
     expect(mainSource).toContain('ipcMain.handle(UPDATE_PREFERENCES_CHANNEL');
     expect(mainSource).toContain('ipcMain.handle(LIST_FONT_FAMILIES_CHANNEL');
-    expect(mainSource).toContain('ipcMain.handle(LIST_THEMES_CHANNEL');
+    expect(mainSource).toContain('ipcMain.handle(LIST_THEME_PACKAGES_CHANNEL');
+    expect(mainSource).toContain('ipcMain.handle(REFRESH_THEME_PACKAGES_CHANNEL');
   });
 
   it("only initializes the scenario runner stack in test-workbench mode", () => {

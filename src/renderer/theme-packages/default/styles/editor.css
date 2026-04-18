@@ -3,3 +3,7 @@
   --yulora-editor-font-size: 1.05rem;
   --yulora-editor-caret: #1d4ed8;
 }
+
+:root[data-yulora-theme="dark"] {
+  --yulora-editor-caret: #60a5fa;
+}

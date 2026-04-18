@@ -1,5 +1,4 @@
 import { createPreviewAssetUrl } from "../shared/preview-asset-url";
-import { createBuiltinThemePackageDescriptor } from "./theme-runtime";
 import type { ThemePackageRuntimeDescriptor } from "./theme-package-runtime";
 
 export type ThemePackageDescriptor = Awaited<ReturnType<Window["yulora"]["listThemePackages"]>>[number];
@@ -17,7 +16,7 @@ export type ThemePackageFallbackReason = "missing-theme" | "unsupported-mode" | 
 export type ActiveThemePackageResolution = {
   requestedId: string | null;
   resolvedMode: "light" | "dark";
-  descriptor: ThemePackageRuntimeDescriptor;
+  descriptor: ThemePackageRuntimeDescriptor | null;
   fallbackReason: ThemePackageFallbackReason;
 };
 
@@ -27,13 +26,6 @@ function toPreviewAssetUrl(rawPath: string | undefined): string | null {
   }
 
   return createPreviewAssetUrl(rawPath);
-}
-
-const LEGACY_THEME_PACKAGE_SUFFIX = /(?:-|_)(light|dark)$/u;
-
-export function resolveLegacyThemeFamilyId(themeId: string): string | null {
-  const migrated = themeId.replace(LEGACY_THEME_PACKAGE_SUFFIX, "");
-  return migrated === themeId ? null : migrated;
 }
 
 export function normalizeThemePackageDescriptor(
@@ -78,8 +70,11 @@ function toRuntimePackageDescriptor(entry: ThemePackageRuntimeEntry): ThemePacka
   };
 }
 
-function createBuiltinFallbackDescriptor(mode: "light" | "dark"): ThemePackageRuntimeDescriptor {
-  return createBuiltinThemePackageDescriptor(mode);
+function resolveBuiltinDefaultDescriptor(
+  packages: ThemePackageRuntimeEntry[]
+): ThemePackageRuntimeDescriptor | null {
+  const builtinDefault = packages.find((entry) => entry.id === "default");
+  return builtinDefault ? toRuntimePackageDescriptor(builtinDefault) : null;
 }
 
 export function resolveActiveThemePackage(
@@ -87,19 +82,25 @@ export function resolveActiveThemePackage(
   packages: ThemePackageRuntimeEntry[],
   mode: "light" | "dark"
 ): ActiveThemePackageResolution {
-  const legacyFamilyId = selectedId ? resolveLegacyThemeFamilyId(selectedId) : null;
-  const selected = selectedId
-    ? packages.find((entry) => entry.id === selectedId) ??
-      (legacyFamilyId ? packages.find((entry) => entry.id === legacyFamilyId) : null) ??
-      null
-    : null;
+  const builtinDefaultDescriptor = resolveBuiltinDefaultDescriptor(packages);
+
+  if (!selectedId) {
+    return {
+      requestedId: selectedId,
+      resolvedMode: mode,
+      descriptor: builtinDefaultDescriptor,
+      fallbackReason: null
+    };
+  }
+
+  const selected = packages.find((entry) => entry.id === selectedId) ?? null;
 
   if (!selected) {
     return {
       requestedId: selectedId,
       resolvedMode: mode,
-      descriptor: createBuiltinFallbackDescriptor(mode),
-      fallbackReason: selectedId ? "missing-theme" : null
+      descriptor: builtinDefaultDescriptor,
+      fallbackReason: "missing-theme"
     };
   }
 
@@ -107,7 +108,7 @@ export function resolveActiveThemePackage(
     return {
       requestedId: selectedId,
       resolvedMode: mode,
-      descriptor: createBuiltinFallbackDescriptor(mode),
+      descriptor: builtinDefaultDescriptor,
       fallbackReason: "unsupported-mode"
     };
   }

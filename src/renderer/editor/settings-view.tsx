@@ -7,7 +7,6 @@ import {
   type ThemeMode
 } from "../../shared/preferences";
 import type { ThemeParameterDescriptor } from "../../shared/theme-package";
-import { resolveLegacyThemeFamilyId } from "../theme-package-catalog";
 
 type UpdatePreferencesResult =
   | { status: "success"; preferences: Preferences }
@@ -86,17 +85,9 @@ function resolveThemePackageSelectionValue(
     return null;
   }
 
-  if (packages.some((themePackage) => themePackage.id === selectedThemeId)) {
-    return selectedThemeId;
-  }
-
-  const legacyFamilyId = resolveLegacyThemeFamilyId(selectedThemeId);
-
-  if (!legacyFamilyId) {
-    return null;
-  }
-
-  return packages.some((themePackage) => themePackage.id === legacyFamilyId) ? legacyFamilyId : null;
+  return packages.some((themePackage) => themePackage.id === selectedThemeId)
+    ? selectedThemeId
+    : null;
 }
 
 function buildDraft(preferences: Preferences): DraftState {
