@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useEffectEvent, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 
 import { TEXT_EDITING_SHORTCUTS, type ActiveBlockState } from "@yulora/editor-core";
 import type { AppNotification, AppUpdateState } from "../../shared/app-update";
@@ -380,7 +380,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     }
   }
 
-  const showNotification = useEffectEvent((nextNotification: AppNotification): void => {
+  const showNotification = useCallback((nextNotification: AppNotification): void => {
     clearNotificationTimers();
     setNotification(nextNotification);
     setNotificationState("open");
@@ -398,7 +398,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
         setNotification(null);
       }, APP_NOTIFICATION_EXIT_ANIMATION_MS);
     }, APP_NOTIFICATION_DURATION_MS);
-  });
+  }, []);
 
   function resetAutosaveRuntime(): void {
     clearAutosaveTimer();
@@ -988,7 +988,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     return yulora.onAppNotification((nextNotification) => {
       showNotification(nextNotification);
     });
-  }, [yulora]);
+  }, [showNotification, yulora]);
 
   useEffect(() => {
     if (!themeWarningMessage) {
@@ -1011,6 +1011,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     activeThemeResolution.fallbackReason,
     activeThemeResolution.requestedThemeId,
     activeThemeResolution.resolvedMode,
+    showNotification,
     themeWarningMessage
   ]);
 
