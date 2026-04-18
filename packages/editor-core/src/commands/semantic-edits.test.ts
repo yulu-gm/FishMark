@@ -6,6 +6,7 @@ import { parseMarkdownDocument } from "@yulora/markdown-engine";
 import { createActiveBlockStateFromMarkdownDocument } from "../active-block";
 import { readSemanticContext } from "./semantic-context";
 import {
+  computeBlockquoteToggle,
   computeBulletListToggle,
   computeEmphasisToggle,
   computeHeadingToggle,
@@ -156,5 +157,25 @@ describe("computeBulletListToggle", () => {
     const result = computeBulletListToggle(buildContext(doc, doc.length));
 
     expect(result!.changes).toEqual({ from: 0, to: doc.length, insert: "  - alpha" });
+  });
+});
+
+describe("computeBlockquoteToggle", () => {
+  it("prefixes a paragraph line with `> `", () => {
+    const doc = "alpha";
+    const result = computeBlockquoteToggle(buildContext(doc, 2));
+
+    expect(result!.changes).toEqual({ from: 0, to: doc.length, insert: "> alpha" });
+  });
+
+  it("removes the blockquote marker when every covered line already starts with `> `", () => {
+    const doc = ["> alpha", "> beta"].join("\n");
+    const result = computeBlockquoteToggle(buildContext(doc, 0, doc.length));
+
+    expect(result!.changes).toEqual({
+      from: 0,
+      to: doc.length,
+      insert: "alpha\nbeta"
+    });
   });
 });
