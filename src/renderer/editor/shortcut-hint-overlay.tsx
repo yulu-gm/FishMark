@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 
 import { formatShortcutHintKey, type TextEditingShortcut } from "@yulora/editor-core";
 
 const HIDE_ANIMATION_MS = 180;
+const HIDE_ANIMATION_DURATION = `${HIDE_ANIMATION_MS}ms`;
 
 type ShortcutHintOverlayProps = {
   visible: boolean;
@@ -16,6 +18,9 @@ export function ShortcutHintOverlay({ visible, platform, shortcuts }: ShortcutHi
   const [isRendered, setIsRendered] = useState(visible);
   const [state, setState] = useState<OverlayState>(visible ? "open" : "closing");
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const style = {
+    ["--shortcut-hint-overlay-duration" as string]: HIDE_ANIMATION_DURATION
+  } as CSSProperties;
 
   useEffect(() => {
     if (hideTimerRef.current !== null) {
@@ -61,11 +66,13 @@ export function ShortcutHintOverlay({ visible, platform, shortcuts }: ShortcutHi
   }
 
   return (
-    <section
+    <div
       className="shortcut-hint-overlay"
       data-yulora-region="shortcut-hint-overlay"
       data-state={state}
-      aria-label="Text editing shortcuts"
+      aria-hidden="true"
+      role="presentation"
+      style={style}
     >
       <ul className="shortcut-hint-overlay-list">
         {shortcuts.map(({ id, key, label }) => (
@@ -78,6 +85,6 @@ export function ShortcutHintOverlay({ visible, platform, shortcuts }: ShortcutHi
           </li>
         ))}
       </ul>
-    </section>
+    </div>
   );
 }

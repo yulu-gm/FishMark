@@ -301,7 +301,7 @@
 .shortcut-hint-overlay {
   position: absolute;
   top: clamp(16px, 2vw, 24px);
-  right: clamp(16px, 2vw, 24px);
+  left: clamp(16px, 2vw, 24px);
   z-index: 3;
   pointer-events: none;
   user-select: none;
@@ -309,14 +309,17 @@
   font-size: 0.8rem;
   line-height: 1.45;
   letter-spacing: 0.01em;
+  max-width: min(32ch, calc(100% - clamp(16px, 2vw, 24px) * 2));
 }
 
 .shortcut-hint-overlay[data-state="open"] {
-  animation: shortcut-hint-overlay-enter 180ms cubic-bezier(0.2, 0.85, 0.2, 1) both;
+  animation: shortcut-hint-overlay-enter var(--shortcut-hint-overlay-duration, 180ms)
+    cubic-bezier(0.2, 0.85, 0.2, 1) both;
 }
 
 .shortcut-hint-overlay[data-state="closing"] {
-  animation: shortcut-hint-overlay-exit 180ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation: shortcut-hint-overlay-exit var(--shortcut-hint-overlay-duration, 180ms)
+    cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 .shortcut-hint-overlay-list {
@@ -330,7 +333,7 @@
 .shortcut-hint-overlay-item {
   display: flex;
   align-items: baseline;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 12px;
   white-space: nowrap;
 }
