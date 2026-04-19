@@ -8,8 +8,12 @@ import { parseMarkdownDocument } from "@yulora/markdown-engine";
 
 import { createActiveBlockStateFromMarkdownDocument } from "../active-block";
 import {
+  createGroupedShortcutKeymaps,
   createTextEditingShortcutKeymap,
+  DEFAULT_TEXT_SHORTCUT_GROUP,
   formatShortcutHintKey,
+  SHORTCUT_GROUPS,
+  TABLE_EDITING_SHORTCUT_GROUP,
   TEXT_EDITING_SHORTCUTS
 } from "./markdown-shortcuts";
 
@@ -40,6 +44,44 @@ const createHarness = (doc: string, selection: { anchor: number; head?: number }
 };
 
 describe("markdown shortcut metadata", () => {
+  it("exposes default and table shortcut groups in display order", () => {
+    expect(
+      SHORTCUT_GROUPS.map((group) => ({
+        id: group.id,
+        keys: group.shortcuts.map(({ key }) => key)
+      }))
+    ).toEqual([
+      {
+        id: "default-text",
+        keys: [
+          "Mod-b",
+          "Mod-i",
+          "Mod-1",
+          "Mod-2",
+          "Mod-3",
+          "Mod-4",
+          "Mod-Shift-7",
+          "Mod-Shift-9",
+          "Mod-Alt-Shift-c"
+        ]
+      },
+      {
+        id: "table-editing",
+        keys: ["Tab", "Shift-Tab", "Mod-Enter", "ArrowUp", "ArrowDown", "Enter"]
+      }
+    ]);
+
+    expect(DEFAULT_TEXT_SHORTCUT_GROUP.shortcuts).toBe(TEXT_EDITING_SHORTCUTS);
+    expect(TABLE_EDITING_SHORTCUT_GROUP.shortcuts.map(({ label }) => label)).toEqual([
+      "Next Cell",
+      "Previous Cell",
+      "Insert Row Below",
+      "Row Above",
+      "Row Below",
+      "Next Row / Exit"
+    ]);
+  });
+
   it("lists all text-editing shortcuts in display order", () => {
     expect(
       TEXT_EDITING_SHORTCUTS.map(({ id, key, label }) => ({ id, key, label }))
@@ -60,6 +102,8 @@ describe("markdown shortcut metadata", () => {
     expect(formatShortcutHintKey("Mod-Shift-7", "win32")).toBe("Ctrl+Shift+7");
     expect(formatShortcutHintKey("Mod-Shift-7", "darwin")).toBe("Cmd+Shift+7");
     expect(formatShortcutHintKey("Mod-Alt-Shift-c", "darwin")).toBe("Cmd+Alt+Shift+C");
+    expect(formatShortcutHintKey("Shift-Tab", "win32")).toBe("Shift+Tab");
+    expect(formatShortcutHintKey("Mod-Enter", "darwin")).toBe("Cmd+Enter");
   });
 
   it("derives runtime key bindings from the shortcut table", () => {
@@ -69,6 +113,25 @@ describe("markdown shortcut metadata", () => {
     expect(keymap.map(({ key }) => key)).toEqual(
       TEXT_EDITING_SHORTCUTS.map(({ key }) => key)
     );
+
+    harness.destroy();
+  });
+
+  it("derives grouped runtime key bindings from the grouped catalog", () => {
+    const harness = createHarness("| name | qty |\n| --- | --- |\n| pen | 2 |", { anchor: 2 });
+    const groupedKeymaps = createGroupedShortcutKeymaps(harness.getActiveBlockState);
+
+    expect(groupedKeymaps.defaultText.map(({ key }) => key)).toEqual(
+      TEXT_EDITING_SHORTCUTS.map(({ key }) => key)
+    );
+    expect(groupedKeymaps.tableEditing.map(({ key }) => key)).toEqual([
+      "Tab",
+      "Shift-Tab",
+      "Mod-Enter",
+      "ArrowUp",
+      "ArrowDown",
+      "Enter"
+    ]);
 
     harness.destroy();
   });

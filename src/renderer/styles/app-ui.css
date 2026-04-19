@@ -196,6 +196,73 @@
   width: 1px;
 }
 
+.app-rail-content {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  display: grid;
+}
+
+.app-rail-mode-group {
+  grid-area: 1 / 1;
+  width: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition:
+    opacity 160ms cubic-bezier(0.2, 0.85, 0.2, 1),
+    transform 180ms cubic-bezier(0.2, 0.85, 0.2, 1);
+}
+
+.app-rail-mode-group[data-state="open"] {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.app-rail-mode-group[data-state="closing"] {
+  opacity: 0;
+  transform: translateY(10px);
+  pointer-events: none;
+}
+
+.table-tool-strip {
+  width: 100%;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.table-tool-button {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--yulora-border-faint);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--yulora-surface-raised-bg) 92%, transparent);
+  color: var(--yulora-text-body);
+  font: inherit;
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.table-tool-button:hover {
+  transform: translateX(1px);
+  border-color: var(--yulora-border-strong);
+  background: color-mix(in srgb, var(--yulora-surface-raised-bg) 82%, var(--yulora-accent, #7a8f8f) 18%);
+}
+
+.table-tool-button.is-danger {
+  color: var(--yulora-text-strong);
+}
+
 /* ── Settings entry icon button ─────────────────────────────── */
 /*   Visual appearance (bg, border, color, shadow) is in          */
 /*   primitives.css. Only size lives here.                        */

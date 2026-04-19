@@ -11,9 +11,11 @@ import type {
   ListItemBlock,
   MarkdownBlock,
   ParagraphBlock,
+  TableBlock,
   ThematicBreakBlock
 } from "./block-map";
 import { parseHtmlImageData } from "./html-image";
+import { parseLoosePipeTable, parsePipeTable, splitTableLine } from "./table-model";
 
 export function parseBlockMap(source: string): BlockMap {
   return {
@@ -91,7 +93,7 @@ export function parseTopLevelBlocks(source: string): MarkdownBlock[] {
     }
   }
 
-  return blocks;
+  return mergeLoosePipeTables(blocks, source);
 }
 
 function parseEvents(source: string): Event[] {
@@ -215,7 +217,19 @@ function getCodeFenceInfo(sourceSlice: string): string | null {
 function createParagraphDerivedBlocks(
   token: Token,
   source: string
-): Array<ParagraphBlock | ThematicBreakBlock> {
+): Array<ParagraphBlock | ThematicBreakBlock | TableBlock> {
+  const tableBlock = createTableBlock(token, source);
+
+  if (tableBlock) {
+    return [tableBlock];
+  }
+
+  const looseTableBlocks = createLooseTableDerivedBlocks(token, source);
+
+  if (looseTableBlocks) {
+    return looseTableBlocks;
+  }
+
   return createDerivedTextBlocks(token, source, () => createParagraphBlock(token), true);
 }
 
@@ -229,6 +243,216 @@ function createSetextHeadingDerivedBlocks(
     () => createHeadingBlock(token, source),
     false
   );
+}
+
+function createTableBlock(token: Token, source: string): TableBlock | null {
+  return parsePipeTable({
+    source,
+    startOffset: token.start.offset,
+    endOffset: token.end.offset,
+    startLine: token.start.line,
+    endLine: token.end.line
+  });
+}
+
+function createLooseTableDerivedBlocks(
+  token: Token,
+  source: string
+): Array<ParagraphBlock | ThematicBreakBlock | TableBlock> | null {
+  const lines = createLineInfos(
+    source.slice(token.start.offset, token.end.offset),
+    token.start.offset,
+    token.start.line
+  );
+  const blocks: Array<ParagraphBlock | ThematicBreakBlock | TableBlock> = [];
+  let foundLooseTable = false;
+  let pendingTextStart = 0;
+  let cursor = 0;
+
+  while (cursor < lines.length) {
+    const columnCount = getLoosePipeColumnCount(lines[cursor]!.text);
+
+    if (columnCount === null) {
+      cursor += 1;
+      continue;
+    }
+
+    let runEnd = cursor + 1;
+
+    while (runEnd < lines.length && getLoosePipeColumnCount(lines[runEnd]!.text) === columnCount) {
+      runEnd += 1;
+    }
+
+    if (runEnd - cursor >= 2) {
+      appendParagraphDerivedBlocksFromLines(blocks, lines.slice(pendingTextStart, cursor));
+      const looseTableBlock = parseLoosePipeTable({
+        source,
+        startOffset: lines[cursor]!.startOffset,
+        endOffset: lines[runEnd - 1]!.endOffset,
+        startLine: lines[cursor]!.lineNumber,
+        endLine: lines[runEnd - 1]!.lineNumber
+      });
+
+      if (looseTableBlock) {
+        blocks.push(looseTableBlock);
+        foundLooseTable = true;
+        pendingTextStart = runEnd;
+      }
+    }
+
+    cursor = runEnd;
+  }
+
+  appendParagraphDerivedBlocksFromLines(blocks, lines.slice(pendingTextStart));
+
+  return foundLooseTable ? blocks : null;
+}
+
+function mergeLoosePipeTables(blocks: MarkdownBlock[], source: string): MarkdownBlock[] {
+  const mergedBlocks: MarkdownBlock[] = [];
+
+  for (let index = 0; index < blocks.length; index += 1) {
+    const block = blocks[index];
+
+    if (!block || block.type !== "paragraph") {
+      if (block) {
+        mergedBlocks.push(block);
+      }
+      continue;
+    }
+
+    if (!looksLikeLoosePipeParagraph(block, source)) {
+      mergedBlocks.push(block);
+      continue;
+    }
+
+    let endIndex = index;
+
+    while (endIndex + 1 < blocks.length) {
+      const nextBlock = blocks[endIndex + 1];
+      const gapSource = source.slice(blocks[endIndex]!.endOffset, nextBlock!.startOffset);
+
+      if (
+        nextBlock?.type !== "paragraph" ||
+        !/^[\s\r\n]*$/u.test(gapSource) ||
+        !looksLikeLoosePipeParagraph(nextBlock, source)
+      ) {
+        break;
+      }
+
+      endIndex += 1;
+    }
+
+    const candidate = parseLoosePipeTable({
+      source,
+      startOffset: block.startOffset,
+      endOffset: blocks[endIndex]!.endOffset,
+      startLine: block.startLine,
+      endLine: blocks[endIndex]!.endLine
+    });
+
+    if (candidate) {
+      mergedBlocks.push(candidate);
+      index = endIndex;
+      continue;
+    }
+
+    mergedBlocks.push(block);
+  }
+
+  return mergedBlocks;
+}
+
+function looksLikeLoosePipeParagraph(block: ParagraphBlock, source: string): boolean {
+  const lines = source
+    .slice(block.startOffset, block.endOffset)
+    .split(/\r?\n/u)
+    .filter((line) => line.trim().length > 0);
+
+  if (lines.length === 0) {
+    return false;
+  }
+
+  const columnCounts = lines.map((line) => splitTableLine(line).length);
+  const firstColumnCount = columnCounts[0] ?? 0;
+
+  if (firstColumnCount < 2) {
+    return false;
+  }
+
+  return lines.every((line, lineIndex) => {
+    const trimmed = line.trim();
+    return trimmed.startsWith("|") && trimmed.endsWith("|") && columnCounts[lineIndex] === firstColumnCount;
+  });
+}
+
+function getLoosePipeColumnCount(line: string): number | null {
+  const trimmed = line.trim();
+
+  if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) {
+    return null;
+  }
+
+  const columnCount = splitTableLine(line).length;
+
+  return columnCount >= 2 ? columnCount : null;
+}
+
+function appendParagraphDerivedBlocksFromLines(
+  blocks: Array<ParagraphBlock | ThematicBreakBlock | TableBlock>,
+  lines: readonly LineInfo[]
+): void {
+  if (lines.length === 0) {
+    return;
+  }
+
+  let paragraphStart: LineInfo | null = null;
+  let paragraphEnd: LineInfo | null = null;
+
+  const flushParagraph = () => {
+    if (!paragraphStart || !paragraphEnd) {
+      return;
+    }
+
+    blocks.push(
+      createBlockFromRange(
+        "paragraph",
+        paragraphStart.startOffset,
+        paragraphEnd.endOffset,
+        paragraphStart.lineNumber,
+        paragraphEnd.lineNumber
+      )
+    );
+    paragraphStart = null;
+    paragraphEnd = null;
+  };
+
+  for (const line of lines) {
+    const marker = getExplicitThematicBreakMarker(line.text);
+
+    if (marker) {
+      flushParagraph();
+      blocks.push({
+        ...createBlockFromRange(
+          "thematicBreak",
+          line.startOffset,
+          line.endOffset,
+          line.lineNumber,
+          line.lineNumber
+        ),
+        marker
+      });
+      continue;
+    }
+
+    if (!paragraphStart) {
+      paragraphStart = line;
+    }
+
+    paragraphEnd = line;
+  }
+
+  flushParagraph();
 }
 
 function createDerivedTextBlocks<TBlock extends ParagraphBlock | HeadingBlock>(

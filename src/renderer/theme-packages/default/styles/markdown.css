@@ -8,6 +8,25 @@
   --yulora-thematic-break: #d0d5dd;
   --yulora-code-block-bg: #f3f6fa;
   --yulora-code-block-text: #334155;
+  --yulora-table-margin-top: 0.35rem;
+  --yulora-table-margin-bottom: 0.75rem;
+  --yulora-table-after-break-padding-bottom: 0.42rem;
+  --yulora-table-after-break-margin-bottom: 0.08rem;
+  --yulora-table-after-break-margin-top: 0.14rem;
+  --yulora-table-bg: color-mix(in srgb, var(--yulora-surface-raised-bg) 94%, transparent);
+  --yulora-table-border-width: 1px;
+  --yulora-table-border-color: var(--yulora-border-faint);
+  --yulora-table-cell-border-width: 1px;
+  --yulora-table-cell-border-color: var(--yulora-border-faint);
+  --yulora-table-radius: 18px;
+  --yulora-table-cell-bg: transparent;
+  --yulora-table-cell-active-bg: color-mix(in srgb, var(--yulora-surface-raised-bg) 78%, var(--yulora-accent, #7a8f8f) 22%);
+  --yulora-table-cell-min-height: 42px;
+  --yulora-table-cell-padding-block: 10px;
+  --yulora-table-cell-padding-inline: 12px;
+  --yulora-table-text: var(--yulora-text-body);
+  --yulora-table-header-text: var(--yulora-text-strong);
+  --yulora-table-header-font-weight: 620;
 }
 
 :root[data-yulora-theme="dark"] {
@@ -20,4 +39,10 @@
   --yulora-thematic-break: #334155;
   --yulora-code-block-bg: #17212b;
   --yulora-code-block-text: #dbe4f0;
+  --yulora-table-bg: color-mix(in srgb, var(--yulora-surface-raised-bg) 94%, transparent);
+  --yulora-table-border-color: var(--yulora-border-faint);
+  --yulora-table-cell-border-color: var(--yulora-border-faint);
+  --yulora-table-cell-active-bg: color-mix(in srgb, var(--yulora-surface-raised-bg) 78%, var(--yulora-accent, #7a8f8f) 22%);
+  --yulora-table-text: var(--yulora-text-body);
+  --yulora-table-header-text: var(--yulora-text-strong);
 }

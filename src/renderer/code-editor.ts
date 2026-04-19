@@ -7,6 +7,15 @@ import {
   runMarkdownBackspace,
   runMarkdownEnter,
   runMarkdownTab,
+  runTableDelete,
+  runTableDeleteColumn,
+  runTableDeleteRow,
+  runTableInsertColumnLeft,
+  runTableInsertColumnRight,
+  runTableInsertRowAbove,
+  runTableInsertRowBelow,
+  runTableSelectCell,
+  runTableUpdateCell,
   type ActiveBlockState
 } from "@yulora/editor-core";
 import { parseMarkdownDocument } from "@yulora/markdown-engine";
@@ -31,6 +40,15 @@ export type CodeEditorController = {
   navigateToOffset: (offset: number) => void;
   insertText: (text: string) => void;
   setSelection: (anchor: number, head?: number) => void;
+  selectTableCell: (position: { row: number; column: number }) => void;
+  editTableCell: (input: { row: number; column: number; text: string }) => void;
+  insertTableRowAbove: () => void;
+  insertTableRowBelow: () => void;
+  insertTableColumnLeft: () => void;
+  insertTableColumnRight: () => void;
+  deleteTableRow: () => void;
+  deleteTableColumn: () => void;
+  deleteTable: () => void;
   pressEnter: () => void;
   pressBackspace: () => void;
   pressTab: () => void;
@@ -48,7 +66,8 @@ export function createCodeEditorController(
     selection: {
       anchor: 0,
       head: 0
-    }
+    },
+    tableCursor: null
   };
 
   const createState = (content: string) =>
@@ -165,6 +184,33 @@ export function createCodeEditorController(
           head
         }
       });
+    },
+    selectTableCell(position) {
+      runTableSelectCell(view, activeBlockState, position);
+    },
+    editTableCell({ row, column, text }) {
+      runTableUpdateCell(view, activeBlockState, { row, column }, text);
+    },
+    insertTableRowAbove() {
+      runTableInsertRowAbove(view, activeBlockState);
+    },
+    insertTableRowBelow() {
+      runTableInsertRowBelow(view, activeBlockState);
+    },
+    insertTableColumnLeft() {
+      runTableInsertColumnLeft(view, activeBlockState);
+    },
+    insertTableColumnRight() {
+      runTableInsertColumnRight(view, activeBlockState);
+    },
+    deleteTableRow() {
+      runTableDeleteRow(view, activeBlockState);
+    },
+    deleteTableColumn() {
+      runTableDeleteColumn(view, activeBlockState);
+    },
+    deleteTable() {
+      runTableDelete(view, activeBlockState);
     },
     pressEnter() {
       runMarkdownEnter(view, activeBlockState);

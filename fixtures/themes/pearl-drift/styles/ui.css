@@ -1,0 +1,264 @@
+:root {
+  /* Iridescent violet-periwinkle sampled from the pearl's cold shoulder —
+     keeps accent work tied to the shader without competing with body text. */
+  --yulora-pearl-accent: #6b68d4;
+  --yulora-pearl-accent-soft: #9a97ea;
+  --yulora-pearl-accent-deep: #4a47a8;
+  --yulora-pearl-mint: #6fcab5;
+  --yulora-pearl-peach: #f0a79a;
+
+  --yulora-dirty-text: #a85a6a;
+  --yulora-clean-text: #4a47a8;
+  --yulora-danger-bg: color-mix(in srgb, var(--yulora-surface-bg) 86%, #c94f4f 14%);
+  --yulora-danger-border: color-mix(in srgb, var(--yulora-border-subtle) 56%, #c94f4f 44%);
+  --yulora-danger-text: #8b1e2a;
+  --yulora-focus-ring: var(--yulora-pearl-accent);
+}
+
+/* Dark-mode accent: pull the periwinkle up so it stays legible on indigo. */
+:root[data-yulora-theme="dark"] {
+  --yulora-pearl-accent: #a19eef;
+  --yulora-pearl-accent-soft: #c4c1f7;
+  --yulora-pearl-accent-deep: #7773d8;
+  --yulora-dirty-text: #ffb1a2;
+  --yulora-clean-text: #c4c1f7;
+  --yulora-danger-bg: color-mix(in srgb, var(--yulora-surface-bg) 80%, #c94f4f 20%);
+  --yulora-danger-border: color-mix(in srgb, var(--yulora-border-subtle) 50%, #c94f4f 50%);
+  --yulora-danger-text: #ffc6cd;
+}
+
+:root {
+
+  --yu-ctrl-solid-bg: color-mix(in srgb, var(--yulora-surface-raised-bg) 94%, transparent);
+  --yu-ctrl-solid-bg-hover: color-mix(in srgb, var(--yulora-surface-muted-bg) 96%, transparent);
+  --yu-ctrl-solid-border: var(--yulora-border-subtle);
+  --yu-ctrl-solid-border-hover: var(--yulora-border-muted);
+  --yu-ctrl-text: var(--yulora-text-secondary);
+  --yu-ctrl-text-hover: var(--yulora-text-strong);
+  --yu-ctrl-glass-bg: color-mix(in srgb, var(--yulora-glass-strong-bg) 52%, var(--yulora-surface-raised-bg));
+  --yu-ctrl-glass-bg-hover: color-mix(in srgb, var(--yulora-glass-strong-bg) 74%, var(--yulora-surface-raised-bg));
+  --yu-ctrl-glass-border: var(--yulora-glass-border);
+  --yu-ctrl-glass-border-hover: color-mix(in srgb, var(--yulora-glass-border) 60%, var(--yulora-pearl-accent) 40%);
+  --yu-input-bg: color-mix(in srgb, var(--yulora-glass-strong-bg) 50%, var(--yulora-surface-raised-bg));
+  --yu-input-bg-focus: color-mix(in srgb, var(--yulora-glass-strong-bg) 72%, var(--yulora-surface-raised-bg));
+  --yu-input-border: var(--yulora-border-muted);
+  --yu-input-border-focus: var(--yulora-focus-ring);
+  --yu-input-ring: color-mix(in srgb, var(--yulora-focus-ring) 22%, transparent);
+  --yu-segment-bg: color-mix(in srgb, var(--yulora-glass-strong-bg) 44%, var(--yulora-surface-raised-bg));
+  --yu-segment-border: var(--yulora-border-muted);
+  --yu-segment-active-bg: color-mix(in srgb, var(--yulora-glass-strong-bg) 68%, var(--yulora-surface-raised-bg));
+}
+
+/* Side rail — pearly frosted glass hugging the left of the shader.
+   Soft sheen on top recalls the specular highlight on the sphere. */
+[data-yulora-layout="rail"].app-rail {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--yulora-glass-strong-bg) 58%, transparent),
+      color-mix(in srgb, var(--yulora-glass-bg) 34%, transparent)
+    );
+  border-right-color: color-mix(in srgb, var(--yulora-glass-border) 62%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--yulora-glass-sheen) 72%, transparent),
+    0 12px 26px color-mix(in srgb, var(--yulora-scrim) 26%, transparent);
+  backdrop-filter: blur(22px) saturate(1.06);
+  -webkit-backdrop-filter: blur(22px) saturate(1.06);
+}
+
+/* Workspace card — the primary reading surface. `workspaceGlassOpacity`
+   defaults to 0.72 so long-form text stays crisp even when the pearl is
+   at full strength underneath. */
+[data-yulora-layout="workspace"].app-workspace {
+  --yulora-pearl-workspace-opacity: var(--yulora-theme-parameter-workspaceGlassOpacity, 0.72);
+  width: min(100%, 1040px);
+  height: calc(100% - (var(--yulora-space-2) * 2));
+  margin: var(--yulora-space-2) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: var(--yulora-space-3);
+  padding: var(--yulora-space-4) var(--yulora-space-5);
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--yulora-glass-border) calc(var(--yulora-pearl-workspace-opacity) * 72%),
+      transparent
+    );
+  border-radius: calc(var(--yulora-radius-xl) + 4px);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(
+        in srgb,
+        var(--yulora-glass-strong-bg) calc(var(--yulora-pearl-workspace-opacity) * 100%),
+        transparent
+      ),
+      color-mix(
+        in srgb,
+        var(--yulora-glass-bg) calc(var(--yulora-pearl-workspace-opacity) * 100%),
+        transparent
+      )
+    );
+  box-shadow:
+    inset 0 1px 0
+      color-mix(
+        in srgb,
+        var(--yulora-glass-sheen) calc(var(--yulora-pearl-workspace-opacity) * 80%),
+        transparent
+      ),
+    0 26px 56px
+      color-mix(
+        in srgb,
+        var(--yulora-scrim) calc(var(--yulora-pearl-workspace-opacity) * 30%),
+        transparent
+      );
+  backdrop-filter:
+    blur(calc(var(--yulora-pearl-workspace-opacity) * 28px))
+    saturate(calc(1 + (var(--yulora-pearl-workspace-opacity) * 0.08)))
+    brightness(calc(1 + (var(--yulora-pearl-workspace-opacity) * 0.02)));
+  -webkit-backdrop-filter:
+    blur(calc(var(--yulora-pearl-workspace-opacity) * 28px))
+    saturate(calc(1 + (var(--yulora-pearl-workspace-opacity) * 0.08)))
+    brightness(calc(1 + (var(--yulora-pearl-workspace-opacity) * 0.02)));
+}
+
+[data-yulora-region="empty-state"] .empty-inner {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--yulora-glass-strong-bg) 28%, transparent),
+      color-mix(in srgb, var(--yulora-glass-bg) 14%, transparent)
+    );
+  border: 1px solid color-mix(in srgb, var(--yulora-glass-border) 58%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--yulora-glass-sheen) 72%, transparent),
+    0 12px 28px color-mix(in srgb, var(--yulora-scrim) 22%, transparent);
+  backdrop-filter: blur(26px) saturate(1.06);
+  -webkit-backdrop-filter: blur(26px) saturate(1.06);
+}
+
+[data-yulora-region="workspace-canvas"] .document-editor {
+  width: 100%;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+[data-yulora-layout="workspace"] .workspace-header {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--yulora-glass-strong-bg) 14%, transparent),
+      color-mix(in srgb, var(--yulora-glass-bg) 6%, transparent)
+    );
+  border-radius: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  margin: 0;
+  width: 100%;
+}
+
+[data-yulora-layout="workspace"] .app-status-bar {
+  position: static;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  z-index: auto;
+  min-height: auto;
+  padding: var(--yulora-space-2) 0 0;
+  border-radius: 0;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--yulora-glass-bg) 10%, transparent),
+      color-mix(in srgb, var(--yulora-glass-strong-bg) 6%, transparent)
+    );
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+[data-yulora-layout="workspace"] .app-status-bar [data-yulora-region="status-strip"] {
+  min-height: var(--yulora-status-bar-height);
+  padding-top: var(--yulora-space-2);
+  border-top: 1px solid color-mix(in srgb, var(--yulora-glass-border) 40%, transparent);
+}
+
+/* Outline drawer — nacre glass with a cooler tint. */
+.outline-panel,
+[data-yulora-region="outline-panel"] {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--yulora-glass-strong-bg) 64%, transparent),
+      color-mix(in srgb, var(--yulora-glass-bg) 42%, transparent)
+    );
+  border-color: color-mix(in srgb, var(--yulora-glass-border) 64%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--yulora-glass-sheen) 68%, transparent),
+    -12px 0 30px color-mix(in srgb, var(--yulora-scrim) 22%, transparent);
+  backdrop-filter: blur(24px) saturate(1.05);
+  -webkit-backdrop-filter: blur(24px) saturate(1.05);
+}
+
+.settings-shell,
+[data-yulora-panel="settings-drawer"] {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--yulora-glass-strong-bg) 72%, transparent),
+      color-mix(in srgb, var(--yulora-glass-bg) 48%, transparent)
+    );
+  border-color: color-mix(in srgb, var(--yulora-glass-border) 70%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--yulora-glass-sheen) 72%, transparent),
+    0 28px 62px color-mix(in srgb, var(--yulora-scrim) 34%, transparent);
+  backdrop-filter: blur(32px) saturate(1.08);
+  -webkit-backdrop-filter: blur(32px) saturate(1.08);
+}
+
+[data-yulora-dialog="settings-drawer"] {
+  background: color-mix(in srgb, var(--yulora-scrim) 28%, transparent);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+.settings-group {
+  background: color-mix(in srgb, var(--yulora-glass-bg) 28%, transparent);
+  border: 1px solid color-mix(in srgb, var(--yulora-glass-border) 52%, transparent);
+  border-radius: 14px;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--yulora-glass-sheen) 60%, transparent);
+  backdrop-filter: blur(12px) saturate(1.04);
+  -webkit-backdrop-filter: blur(12px) saturate(1.04);
+}
+
+.app-notification-banner,
+[data-yulora-region="app-notification-banner"] {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--yulora-glass-strong-bg) 70%, transparent),
+      color-mix(in srgb, var(--yulora-glass-bg) 48%, transparent)
+    );
+  border: 1px solid color-mix(in srgb, var(--yulora-glass-border) 68%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--yulora-glass-sheen) 66%, transparent),
+    0 12px 28px color-mix(in srgb, var(--yulora-scrim) 22%, transparent);
+  backdrop-filter: blur(24px) saturate(1.08);
+  -webkit-backdrop-filter: blur(24px) saturate(1.08);
+}
+
+.app-titlebar,
+[data-yulora-titlebar] {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--yulora-glass-strong-bg) 58%, transparent),
+      color-mix(in srgb, var(--yulora-glass-bg) 32%, transparent)
+    );
+  backdrop-filter: blur(22px) saturate(1.06);
+  -webkit-backdrop-filter: blur(22px) saturate(1.06);
+}

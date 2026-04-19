@@ -1,0 +1,34 @@
+:root {
+  /* Page matches the shader's bg (vec3(0.95, 0.95, 0.97) ≈ #f2f2f7) so the
+     shader blends seamlessly with static fallback. */
+  --yulora-page-bg: #f2f2f7;
+  --yulora-surface-bg: #fbfbfe;
+  --yulora-surface-raised-bg: #ffffff;
+  --yulora-surface-muted-bg: #eeeef4;
+  --yulora-surface-subtle-bg: #e8e8f0;
+  --yulora-surface-blockquote-bg: #f0eef8;
+
+  --yulora-border-strong: #cdcedc;
+  --yulora-border-muted: #d9dae6;
+  --yulora-border-subtle: #e4e5ee;
+  --yulora-border-faint: #eeeff5;
+
+  /* Ink-dark text on the bright pearl backdrop — 7:1+ contrast against
+     the page, comfortable for long reading sessions. */
+  --yulora-text-strong: #1a1b28;
+  --yulora-text-body: #2f3043;
+  --yulora-text-muted: #666878;
+  --yulora-text-subtle: #8a8c9d;
+  --yulora-text-secondary: #474a5d;
+
+  --yulora-scrollbar-thumb: rgba(110, 108, 180, 0.28);
+  --yulora-scrollbar-thumb-hover: rgba(110, 108, 180, 0.48);
+
+  /* Glass is tuned slightly cool-violet to echo the pearl's iridescent
+     shoulders without tinting body text. */
+  --yulora-glass-bg: rgba(248, 247, 253, 0.52);
+  --yulora-glass-strong-bg: rgba(253, 252, 255, 0.74);
+  --yulora-glass-border: rgba(255, 255, 255, 0.78);
+  --yulora-glass-sheen: rgba(255, 255, 255, 0.55);
+  --yulora-scrim: rgba(30, 28, 56, 0.12);
+}

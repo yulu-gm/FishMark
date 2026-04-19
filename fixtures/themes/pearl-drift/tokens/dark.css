@@ -1,0 +1,33 @@
+:root[data-yulora-theme="dark"] {
+  /* Page matches the shader's dark bg target (≈ vec3(0.045, 0.05, 0.11))
+     so static fallback lines up with the indigo night pearl. */
+  --yulora-page-bg: #0c0d1b;
+  --yulora-surface-bg: #151628;
+  --yulora-surface-raised-bg: #1c1d33;
+  --yulora-surface-muted-bg: #24253d;
+  --yulora-surface-subtle-bg: #1a1b2d;
+  --yulora-surface-blockquote-bg: #1d1b30;
+
+  --yulora-border-strong: #3a3b5a;
+  --yulora-border-muted: #2e2f49;
+  --yulora-border-subtle: #232439;
+  --yulora-border-faint: #1a1b2c;
+
+  /* Near-white text on indigo. Strong ≈ 15:1 against page, body ≈ 11:1 —
+     comfortable for long reading. */
+  --yulora-text-strong: #faf9ff;
+  --yulora-text-body: #f2f1fb;
+  --yulora-text-muted: #b8b5d4;
+  --yulora-text-subtle: #9491aa;
+  --yulora-text-secondary: #deddf5;
+
+  --yulora-scrollbar-thumb: rgba(170, 165, 240, 0.24);
+  --yulora-scrollbar-thumb-hover: rgba(170, 165, 240, 0.44);
+
+  /* Cool indigo glass — pearl iridescence reads through without losing ink. */
+  --yulora-glass-bg: rgba(22, 22, 42, 0.46);
+  --yulora-glass-strong-bg: rgba(28, 29, 52, 0.68);
+  --yulora-glass-border: rgba(170, 165, 240, 0.14);
+  --yulora-glass-sheen: rgba(200, 195, 255, 0.10);
+  --yulora-scrim: rgba(0, 0, 0, 0.4);
+}

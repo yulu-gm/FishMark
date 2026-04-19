@@ -1,4 +1,4 @@
-﻿# Yulora 测试报告
+# Yulora 测试报告
 
 用于记录各任务的验证结果。
 
@@ -8,6 +8,20 @@
 | --- | --- | --- | --- | --- |
 
 ## 记录
+
+| 2026-04-19 | TASK-table-rendering | `npx.cmd vitest run packages/editor-core/src/commands/table-commands.test.ts packages/editor-core/src/extensions/markdown.test.ts src/renderer/code-editor.test.ts` | 通过 | 覆盖从普通段落首次点击表格单元格后，active block 会切到 `table`，并且后续 `Ctrl/Cmd+Enter` 等表格快捷键可以立即生效。 |
+| 2026-04-19 | TASK-table-rendering | `npm.cmd run typecheck` | 通过 | table widget 事件额外携带 `tableStartOffset` 后，renderer / electron / vitest / cli 四套 TypeScript 检查继续通过。 |
+
+| 2026-04-19 | TASK-table-rendering | `npx.cmd vitest run src/renderer/app.autosave.test.ts` | 通过 | 覆盖默认主题 markdown stylesheet 已定义 `--yulora-table-*` token，以及基础 `markdown-render.css` 的 table widget 样式改为只消费这些主题变量。 |
+| 2026-04-19 | TASK-table-rendering | `npm.cmd run lint` | 通过 | 无新增 lint error；仓库仍保留既有 3 条 `src/renderer/editor/App.tsx` 的 `react-hooks/exhaustive-deps` warning。 |
+| 2026-04-19 | TASK-table-rendering | `npm.cmd run build` | 通过 | 默认主题与示例主题补齐表格 token 后，renderer / electron / cli 构建通过。 |
+
+| 2026-04-19 | TASK-table-rendering | `npx.cmd vitest run packages/markdown-engine/src/parse-block-map.test.ts packages/editor-core/src/commands/table-edits.test.ts packages/editor-core/src/commands/table-commands.test.ts packages/editor-core/src/extensions/markdown.test.ts src/renderer/code-editor.test.ts` | 通过 | 覆盖草稿 pipe header `Enter` 自动成表、table widget 鼠标点击输入、空白列 canonical delimiter 最小合法值，以及插入列后表格仍保持 widget 渲染。 |
+| 2026-04-19 | TASK-table-rendering | `npm.cmd run typecheck` | 通过 | renderer / electron / vitest / cli 四套 TypeScript 检查通过。 |
+| 2026-04-19 | TASK-table-rendering | `npm.cmd run build` | 通过 | renderer / electron / cli 构建通过。 |
+| 2026-04-19 | TASK-table-rendering | `npm.cmd run lint` | 通过 | 无新增 lint error；仓库仍保留既有 3 条 `src/renderer/editor/App.tsx` 的 `react-hooks/exhaustive-deps` warning。 |
+
+| 2026-04-19 | TASK-table-rendering | `npx.cmd vitest run packages/editor-core/src/extensions/markdown-shortcuts.test.ts packages/markdown-engine/src/parse-block-map.test.ts packages/editor-core/src/commands/table-context.test.ts packages/editor-core/src/commands/table-edits.test.ts packages/editor-core/src/commands/table-commands.test.ts packages/editor-core/src/extensions/markdown.test.ts packages/editor-core/src/decorations/block-decorations.test.ts src/renderer/code-editor.test.ts src/renderer/editor/shortcut-hint-overlay.test.tsx src/renderer/app.autosave.test.ts` | 通过 | 覆盖 grouped shortcut catalog、table parse/format、table context/edit planners、table key routing、persistent table widget、renderer shortcut hint 上下文切换与 rail table mode。 |
 
 | 2026-04-17 | TASK-038 | `npm run test -- src/main/package-scripts.test.ts` | 通过 | 先以失败测试锁定 `package:mac`、`tools/package-macos.sh` 与 mac 图标配置，再验证 mac 本地打包入口会先生成 icons，并指向 `build/icons/light/icon-512.png` 作为 `electron-builder` 的 icon 源。 |
 | 2026-04-17 | TASK-038 | `npm run package:mac` | 通过 | 本地 macOS 打包成功，执行 `build` 与 `generate:icons` 后产出 `release/mac-arm64/Yulora.app`；当前仍提示 `package.json` 缺少 `author`，并在无开发者证书时回退到 ad-hoc 签名，但不阻塞 unpacked `.app` 生成。 |

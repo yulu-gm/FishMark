@@ -1,6 +1,11 @@
 export { createBlockDecorations, type BlockDecorationsResult } from "./block-decorations";
 export { createInactiveInlineDecorations } from "./inline-decorations";
 export {
+  createTableWidgetDecoration,
+  type TableWidgetCallbacks,
+  type TableWidgetPosition
+} from "./table-widget";
+export {
   getBlockLineInfos,
   getInactiveBlockquoteLines,
   getInactiveCodeFenceLines,

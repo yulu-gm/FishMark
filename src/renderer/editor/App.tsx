@@ -10,7 +10,13 @@ import {
   type CSSProperties
 } from "react";
 
-import { TEXT_EDITING_SHORTCUTS, type ActiveBlockState } from "@yulora/editor-core";
+import {
+  DEFAULT_TEXT_SHORTCUT_GROUP,
+  TABLE_EDITING_SHORTCUT_GROUP,
+  type ActiveBlockState,
+  type ShortcutGroup,
+  type ShortcutGroupId
+} from "@yulora/editor-core";
 import type { AppNotification, AppUpdateState } from "../../shared/app-update";
 import { createPreviewAssetUrl } from "../../shared/preview-asset-url";
 import type {
@@ -114,6 +120,12 @@ function getPrimaryShortcutModifierId(
   }
 
   return primaryModifierKey;
+}
+
+function resolveEditorShortcutGroup(activeBlockState: ActiveBlockState | null): ShortcutGroup {
+  return activeBlockState?.tableCursor?.mode === "inside"
+    ? TABLE_EDITING_SHORTCUT_GROUP
+    : DEFAULT_TEXT_SHORTCUT_GROUP;
 }
 
 function isMarkdownFilePath(targetPath: string): boolean {
@@ -495,6 +507,8 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   >(null);
   const [isEditorFocused, setIsEditorFocused] = useState(false);
   const [isShortcutHintArmed, setIsShortcutHintArmed] = useState(false);
+  const [activeShortcutGroupId, setActiveShortcutGroupId] =
+    useState<ShortcutGroupId>("default-text");
   const editorRef = useRef<CodeEditorHandle | null>(null);
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
   const editorContentRef = useRef("");
@@ -641,6 +655,10 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     [yulora.platform]
   );
   const shortcutHintModifierKey: "Control" | "Meta" = yulora.platform === "darwin" ? "Meta" : "Control";
+  const activeShortcutGroup =
+    activeShortcutGroupId === "table-editing"
+      ? TABLE_EDITING_SHORTCUT_GROUP
+      : DEFAULT_TEXT_SHORTCUT_GROUP;
   const isShortcutHintVisible = isDocumentOpen && isEditorFocused && isShortcutHintArmed;
 
   function applyState(updater: (current: AppState) => AppState): void {
@@ -652,6 +670,34 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   function getEditorContent(): string {
     return editorRef.current?.getContent() ?? editorContentRef.current;
   }
+
+  const insertTableRowAbove = useCallback(() => {
+    editorRef.current?.insertTableRowAbove();
+  }, []);
+
+  const insertTableRowBelow = useCallback(() => {
+    editorRef.current?.insertTableRowBelow();
+  }, []);
+
+  const insertTableColumnLeft = useCallback(() => {
+    editorRef.current?.insertTableColumnLeft();
+  }, []);
+
+  const insertTableColumnRight = useCallback(() => {
+    editorRef.current?.insertTableColumnRight();
+  }, []);
+
+  const deleteTableRow = useCallback(() => {
+    editorRef.current?.deleteTableRow();
+  }, []);
+
+  const deleteTableColumn = useCallback(() => {
+    editorRef.current?.deleteTableColumn();
+  }, []);
+
+  const deleteTable = useCallback(() => {
+    editorRef.current?.deleteTable();
+  }, []);
 
   const handleWorkbenchSurfaceRuntimeModeChange = useCallback((mode: ThemeSurfaceRuntimeMode) => {
     setWorkbenchSurfaceRuntimeMode((current) => (current === mode ? current : mode));
@@ -679,6 +725,12 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     controlledTitlebarEnabled,
     preferences.theme.effectsMode
   ]);
+
+  useEffect(() => {
+    if (!state.currentDocument) {
+      setActiveShortcutGroupId("default-text");
+    }
+  }, [state.currentDocument]);
 
   function clearAutosaveTimer(): void {
     if (autosaveTimerRef.current !== null) {
@@ -1645,16 +1697,54 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
         <aside
           className="app-rail"
           data-yulora-layout="rail"
+          data-yulora-rail-mode={activeShortcutGroup.id}
           data-visibility={isFocusModeActive ? "collapsed" : "visible"}
         >
           <div className="app-rail-brand">
             <p className="app-name">Yulora</p>
             <p className="app-subtitle">Desktop editor</p>
           </div>
-          <div
-            className="app-rail-spacer"
-            aria-hidden="true"
-          />
+          <div className="app-rail-content">
+            <div
+              className="app-rail-mode-group app-rail-mode-group-default"
+              data-state={activeShortcutGroup.id === "default-text" ? "open" : "closing"}
+              aria-hidden={activeShortcutGroup.id !== "default-text"}
+            >
+              <div
+                className="app-rail-spacer"
+                aria-hidden="true"
+              />
+            </div>
+            <div
+              className="app-rail-mode-group app-rail-mode-group-table"
+              data-state={activeShortcutGroup.id === "table-editing" ? "open" : "closing"}
+              aria-hidden={activeShortcutGroup.id !== "table-editing"}
+            >
+              <div className="table-tool-strip" data-yulora-region="table-tool-strip">
+                <button type="button" className="table-tool-button" onClick={insertTableRowAbove}>
+                  Row Above
+                </button>
+                <button type="button" className="table-tool-button" onClick={insertTableRowBelow}>
+                  Row Below
+                </button>
+                <button type="button" className="table-tool-button" onClick={insertTableColumnLeft}>
+                  Column Left
+                </button>
+                <button type="button" className="table-tool-button" onClick={insertTableColumnRight}>
+                  Column Right
+                </button>
+                <button type="button" className="table-tool-button is-danger" onClick={deleteTableRow}>
+                  Delete Row
+                </button>
+                <button type="button" className="table-tool-button is-danger" onClick={deleteTableColumn}>
+                  Delete Column
+                </button>
+                <button type="button" className="table-tool-button is-danger" onClick={deleteTable}>
+                  Delete Table
+                </button>
+              </div>
+            </div>
+          </div>
           <button
             type="button"
             className="settings-entry"
@@ -1741,7 +1831,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
                   <ShortcutHintOverlay
                     visible={isShortcutHintVisible}
                     platform={yulora.platform}
-                    shortcuts={TEXT_EDITING_SHORTCUTS}
+                    group={activeShortcutGroup}
                   />
                 </div>
                 <section className={`workspace-shell ${isOutlineOpen ? "is-outline-open" : ""}`}>
@@ -1785,6 +1875,9 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
                       importClipboardImage={handleImportClipboardImage}
                       onActiveBlockChange={(nextActiveBlockState) => {
                         activeBlockStateRef.current = nextActiveBlockState;
+                        setActiveShortcutGroupId(
+                          resolveEditorShortcutGroup(nextActiveBlockState).id
+                        );
                         setActiveHeadingId(
                           nextActiveBlockState.activeBlock?.type === "heading"
                             ? nextActiveBlockState.activeBlock.id

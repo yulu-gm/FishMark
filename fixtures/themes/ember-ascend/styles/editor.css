@@ -1,0 +1,23 @@
+:root {
+  --yulora-editor-font-family: "Aptos", "Inter", "Segoe UI", sans-serif;
+  --yulora-editor-font-size: 1.05rem;
+  --yulora-editor-caret: #ff9a5c;
+}
+
+[data-yulora-region="workspace-canvas"] .document-editor .cm-editor,
+[data-yulora-region="workspace-canvas"] .document-editor .cm-scroller {
+  background: transparent;
+}
+
+[data-yulora-region="workspace-canvas"] .document-editor .cm-editor {
+  color: var(--yulora-text-body);
+}
+
+[data-yulora-region="workspace-canvas"] .document-editor .cm-selectionBackground,
+[data-yulora-region="workspace-canvas"] .document-editor .cm-editor ::selection {
+  background: color-mix(in srgb, var(--yulora-ember-accent, #ff8c52) 26%, transparent);
+}
+
+[data-yulora-region="workspace-canvas"] .document-editor .cm-activeLine {
+  background: color-mix(in srgb, var(--yulora-ember-accent, #ff8c52) 6%, transparent);
+}

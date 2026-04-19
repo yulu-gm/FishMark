@@ -7,7 +7,10 @@ import { describe, expect, it, vi } from "vitest";
 import { parseMarkdownDocument } from "@yulora/markdown-engine";
 
 import { createYuloraMarkdownExtensions } from "./markdown";
-import { TEXT_EDITING_SHORTCUTS } from "./markdown-shortcuts";
+import {
+  TABLE_EDITING_SHORTCUT_GROUP,
+  TEXT_EDITING_SHORTCUTS
+} from "./markdown-shortcuts";
 
 const dispatchCompositionEvent = (
   target: HTMLElement,
@@ -30,20 +33,21 @@ type HarnessOptions = {
 
 const createHarness = (options: HarnessOptions) => {
   const host = document.createElement("div");
+  document.body.appendChild(host);
 
-    const view = new EditorView({
-      state: EditorState.create({
-        doc: options.source,
-        extensions: createYuloraMarkdownExtensions({
-          parseMarkdownDocument,
-          onContentChange: options.onContentChange ?? vi.fn(),
-          onActiveBlockChange: (state) => {
-            options.onActiveBlockChange?.(state.activeBlock?.type ?? null, state.selection.anchor);
-          },
-          onBlur: options.onBlur
-        })
-      }),
-      parent: host
+  const view = new EditorView({
+    state: EditorState.create({
+      doc: options.source,
+      extensions: createYuloraMarkdownExtensions({
+        parseMarkdownDocument,
+        onContentChange: options.onContentChange ?? vi.fn(),
+        onActiveBlockChange: (state) => {
+          options.onActiveBlockChange?.(state.activeBlock?.type ?? null, state.selection.anchor);
+        },
+        onBlur: options.onBlur
+      })
+    }),
+    parent: host
   });
 
   return {
@@ -51,6 +55,7 @@ const createHarness = (options: HarnessOptions) => {
     view,
     destroy() {
       view.destroy();
+      host.remove();
     }
   };
 };
@@ -215,6 +220,90 @@ describe("createYuloraMarkdownExtensions", () => {
     view.contentDOM.dispatchEvent(keyEvent);
 
     expect(view.state.doc.toString()).toBe("## Paragraph");
+
+    destroy();
+  });
+
+  it("registers table shortcut bindings from the grouped catalog", () => {
+    const source = ["| name | qty |", "| --- | ---: |", "| pen | 2 |"].join("\n");
+    const { view, destroy } = createHarness({ source });
+
+    const tableShortcutKeys = TABLE_EDITING_SHORTCUT_GROUP.shortcuts.map(({ key }) => key);
+
+    tableShortcutKeys.forEach((key) => {
+      const handled = view.contentDOM.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: key === "Tab" ? "Tab" : key === "Shift-Tab" ? "Tab" : "Enter",
+          code: key === "Mod-Enter" ? "Enter" : "Tab",
+          bubbles: true,
+          cancelable: true,
+          ctrlKey: key === "Mod-Enter",
+          shiftKey: key === "Shift-Tab"
+        })
+      );
+
+      expect(handled).toBe(false);
+    });
+
+    destroy();
+  });
+
+  it("enters the adjacent table from the line above on ArrowDown", async () => {
+    const source = ["Before", "", "| name | qty |", "| --- | ---: |", "| pen | 2 |"].join("\n");
+    const activeBlocks: Array<{ blockType: string | null; anchor: number }> = [];
+    const { host, view, destroy } = createHarness({
+      source,
+      onActiveBlockChange: (blockType, anchor) => {
+        activeBlocks.push({ blockType, anchor });
+      }
+    });
+
+    view.dispatch({ selection: { anchor: source.indexOf("\n\n") + 1 } });
+
+    view.contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "ArrowDown",
+        code: "ArrowDown",
+        bubbles: true,
+        cancelable: true
+      })
+    );
+    await flushMicrotasks();
+
+    const input = host.querySelector<HTMLInputElement>('[data-table-cell="0:0"]');
+
+    expect(activeBlocks.at(-1)).toEqual({
+      blockType: "table",
+      anchor: view.state.selection.main.anchor
+    });
+    expect(document.activeElement).toBe(input);
+
+    destroy();
+  });
+
+  it("materializes a draft pipe-table header when Enter is pressed at line end", () => {
+    const source = "| a | b | c |";
+    const { view, destroy } = createHarness({ source });
+
+    view.dispatch({
+      selection: {
+        anchor: source.length
+      }
+    });
+
+    const handled = view.contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        code: "Enter",
+        bubbles: true,
+        cancelable: true
+      })
+    );
+
+    expect(handled).toBe(false);
+    expect(view.state.doc.toString()).toBe(
+      ["| a | b | c |", "| :--- | :--- | :--- |", "|   |   |   |"].join("\n")
+    );
 
     destroy();
   });

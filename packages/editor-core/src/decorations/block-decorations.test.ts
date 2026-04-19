@@ -110,6 +110,32 @@ const expectExactRangeClasses = (
 };
 
 describe("createBlockDecorations", () => {
+  it("replaces table markdown blocks with a dedicated table widget decoration", () => {
+    const source = ["| name | qty |", "| --- | ---: |", "| pen | 2 |"].join("\n");
+    const blockMap = parseMarkdownDocument(source);
+    const activeState = createActiveBlockStateFromBlockMap(blockMap, {
+      anchor: source.indexOf("pen"),
+      head: source.indexOf("pen")
+    });
+
+    const result = createBlockDecorations({
+      activeBlockState: activeState,
+      hasEditorFocus: true,
+      source
+    });
+
+    const widgets: string[] = [];
+
+    result.decorationSet.between(0, source.length, (_from, _to, value) => {
+      if (value.spec.widget) {
+        widgets.push(value.spec.widget.constructor.name);
+      }
+    });
+
+    expect(result.signature).toContain("table:");
+    expect(widgets).toContain("TableWidget");
+  });
+
   it("applies inline strong decorations to inactive paragraph content and hides bold markers", () => {
     const source = "**bold**";
     const ranges = createInactiveInlineDecorations(source);

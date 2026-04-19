@@ -5,14 +5,18 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
 
-import { TEXT_EDITING_SHORTCUTS } from "@yulora/editor-core";
+import {
+  DEFAULT_TEXT_SHORTCUT_GROUP,
+  TABLE_EDITING_SHORTCUT_GROUP
+} from "@yulora/editor-core";
 
 import { ShortcutHintOverlay } from "./shortcut-hint-overlay";
 
 const ITEM_STAGGER_DURATION_MS = 18;
 const ITEM_ANIMATION_DURATION_MS = 105;
 const TOTAL_CLOSE_DURATION_MS =
-  ITEM_ANIMATION_DURATION_MS + ITEM_STAGGER_DURATION_MS * (TEXT_EDITING_SHORTCUTS.length - 1);
+  ITEM_ANIMATION_DURATION_MS +
+  ITEM_STAGGER_DURATION_MS * (DEFAULT_TEXT_SHORTCUT_GROUP.shortcuts.length - 1);
 
 describe("ShortcutHintOverlay", () => {
   beforeEach(() => {
@@ -34,7 +38,7 @@ describe("ShortcutHintOverlay", () => {
         createElement(ShortcutHintOverlay, {
           visible: true,
           platform: "win32",
-          shortcuts: TEXT_EDITING_SHORTCUTS
+          group: DEFAULT_TEXT_SHORTCUT_GROUP
         })
       );
     });
@@ -57,17 +61,17 @@ describe("ShortcutHintOverlay", () => {
         createElement(ShortcutHintOverlay, {
           visible: true,
           platform: "win32",
-          shortcuts: TEXT_EDITING_SHORTCUTS
+          group: DEFAULT_TEXT_SHORTCUT_GROUP
         })
       );
     });
 
     const items = Array.from(container.querySelectorAll<HTMLElement>(".shortcut-hint-overlay-item"));
 
-    expect(items.length).toBe(TEXT_EDITING_SHORTCUTS.length);
+    expect(items.length).toBe(DEFAULT_TEXT_SHORTCUT_GROUP.shortcuts.length);
     expect(items[0]?.style.getPropertyValue("--shortcut-index")).toBe("0");
     expect(items.at(-1)?.style.getPropertyValue("--shortcut-index")).toBe(
-      String(TEXT_EDITING_SHORTCUTS.length - 1)
+      String(DEFAULT_TEXT_SHORTCUT_GROUP.shortcuts.length - 1)
     );
   });
 
@@ -80,7 +84,7 @@ describe("ShortcutHintOverlay", () => {
         createElement(ShortcutHintOverlay, {
           visible: false,
           platform: "win32",
-          shortcuts: TEXT_EDITING_SHORTCUTS
+          group: DEFAULT_TEXT_SHORTCUT_GROUP
         })
       );
     });
@@ -99,7 +103,7 @@ describe("ShortcutHintOverlay", () => {
         createElement(ShortcutHintOverlay, {
           visible: true,
           platform: "win32",
-          shortcuts: TEXT_EDITING_SHORTCUTS
+          group: DEFAULT_TEXT_SHORTCUT_GROUP
         })
       );
     });
@@ -109,7 +113,7 @@ describe("ShortcutHintOverlay", () => {
         createElement(ShortcutHintOverlay, {
           visible: false,
           platform: "win32",
-          shortcuts: TEXT_EDITING_SHORTCUTS
+          group: DEFAULT_TEXT_SHORTCUT_GROUP
         })
       );
     });
@@ -141,7 +145,7 @@ describe("ShortcutHintOverlay", () => {
         createElement(ShortcutHintOverlay, {
           visible: true,
           platform: "win32",
-          shortcuts: TEXT_EDITING_SHORTCUTS
+          group: DEFAULT_TEXT_SHORTCUT_GROUP
         })
       );
     });
@@ -151,7 +155,7 @@ describe("ShortcutHintOverlay", () => {
         createElement(ShortcutHintOverlay, {
           visible: false,
           platform: "win32",
-          shortcuts: TEXT_EDITING_SHORTCUTS
+          group: DEFAULT_TEXT_SHORTCUT_GROUP
         })
       );
     });
@@ -161,7 +165,7 @@ describe("ShortcutHintOverlay", () => {
         createElement(ShortcutHintOverlay, {
           visible: true,
           platform: "win32",
-          shortcuts: TEXT_EDITING_SHORTCUTS
+          group: DEFAULT_TEXT_SHORTCUT_GROUP
         })
       );
     });
@@ -182,5 +186,38 @@ describe("ShortcutHintOverlay", () => {
 
     expect(overlayAfterOriginalHideTimeout).not.toBeNull();
     expect(overlayAfterOriginalHideTimeout?.getAttribute("data-state")).toBe("open");
+  });
+
+  it("switches displayed shortcuts when the editing context group changes", async () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        createElement(ShortcutHintOverlay, {
+          visible: true,
+          platform: "win32",
+          group: DEFAULT_TEXT_SHORTCUT_GROUP
+        })
+      );
+    });
+
+    expect(container.textContent).toContain("Bold");
+
+    await act(async () => {
+      root.render(
+        createElement(ShortcutHintOverlay, {
+          visible: true,
+          platform: "win32",
+          group: TABLE_EDITING_SHORTCUT_GROUP
+        })
+      );
+    });
+
+    const overlay = container.querySelector('[data-yulora-region="shortcut-hint-overlay"]');
+
+    expect(overlay?.getAttribute("data-shortcut-group")).toBe("table-editing");
+    expect(container.textContent).toContain("Next Cell");
+    expect(container.textContent).not.toContain("Bold");
   });
 });

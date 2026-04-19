@@ -1,0 +1,79 @@
+{
+  "id": "pearl-drift",
+  "name": "Pearl Drift",
+  "version": "1.0.0",
+  "author": "Yulora",
+  "supports": {
+    "light": true,
+    "dark": true
+  },
+  "tokens": {
+    "light": "./tokens/light.css",
+    "dark": "./tokens/dark.css"
+  },
+  "styles": {
+    "ui": "./styles/ui.css",
+    "editor": "./styles/editor.css",
+    "markdown": "./styles/markdown.css"
+  },
+  "layout": {
+    "titlebar": null
+  },
+  "scene": {
+    "id": "pearl-scene",
+    "sharedUniforms": {
+      "iridescence": 1.0,
+      "animationSpeed": 0.6,
+      "enableGrain": 1.0
+    }
+  },
+  "parameters": [
+    {
+      "id": "iridescence",
+      "label": "虹彩强度",
+      "description": "控制珍珠表面的虹彩层强度。降低后整体更柔和克制。",
+      "type": "slider",
+      "min": 0,
+      "max": 1.5,
+      "step": 0.05,
+      "default": 1.0,
+      "uniform": "iridescence"
+    },
+    {
+      "id": "animationSpeed",
+      "label": "流动速度",
+      "description": "控制珍珠的呼吸与自转速度，0 表示静止，适合长时间阅读。",
+      "type": "slider",
+      "min": 0,
+      "max": 1.5,
+      "step": 0.05,
+      "default": 0.6,
+      "uniform": "animationSpeed"
+    },
+    {
+      "id": "enableGrain",
+      "label": "颗粒感",
+      "description": "加入轻微胶片颗粒，让画面更柔和；关闭后会更干净。",
+      "type": "toggle",
+      "default": true,
+      "uniform": "enableGrain"
+    },
+    {
+      "id": "workspaceGlassOpacity",
+      "label": "工作区毛玻璃",
+      "description": "控制工作区卡片相对背景的不透明度，越低越透，越高阅读越稳。",
+      "type": "slider",
+      "min": 0.3,
+      "max": 1,
+      "step": 0.05,
+      "default": 0.72
+    }
+  ],
+  "surfaces": {
+    "workbenchBackground": {
+      "kind": "fragment",
+      "scene": "pearl-scene",
+      "shader": "./shaders/workbench-background.glsl"
+    }
+  }
+}

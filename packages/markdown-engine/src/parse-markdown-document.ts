@@ -47,6 +47,10 @@ function attachInlineData(block: MarkdownBlock, source: string): MarkdownBlock {
     };
   }
 
+  if (block.type === "table") {
+    return block;
+  }
+
   return block;
 }
 

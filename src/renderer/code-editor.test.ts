@@ -36,6 +36,11 @@ const flushMicrotasks = async () => {
   await Promise.resolve();
 };
 
+const getLastEditorLine = (host: HTMLElement) => {
+  const lines = Array.from(host.querySelectorAll<HTMLElement>(".cm-line"));
+  return lines.at(-1) ?? null;
+};
+
 describe("createCodeEditorController", () => {
   it("returns the current content and can replace the loaded document", () => {
     const host = document.createElement("div");
@@ -1990,6 +1995,829 @@ describe("createCodeEditorController", () => {
 
     expect(controller.getContent()).toBe("alpha **bold** beta");
     expect(onChange).toHaveBeenCalledWith("alpha **bold** beta");
+
+    controller.destroy();
+  });
+
+  it("renders a table block as a widget instead of raw markdown lines", () => {
+    const host = document.createElement("div");
+    const source = ["| name | qty |", "| --- | ---: |", "| pen | 2 |"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const tableWidget = host.querySelector(".cm-table-widget");
+    const firstCellInput = host.querySelector<HTMLInputElement>('[data-table-cell="0:0"]');
+    const rawLine = getLineElementByText(host, "| name | qty |");
+
+    expect(tableWidget).not.toBeNull();
+    expect(firstCellInput?.value).toBe("name");
+    expect(rawLine).toBeNull();
+
+    controller.destroy();
+  });
+
+  it("renders loose headerless pipe rows as a table widget", () => {
+    const host = document.createElement("div");
+    const source = [
+      "| 2026-04-19 | TASK-table-rendering | 通过 |",
+      "",
+      "| 2026-04-18 | TASK-041 | 通过 |"
+    ].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const tableWidget = host.querySelector(".cm-table-widget");
+    const firstCellInput = host.querySelector<HTMLInputElement>('[data-table-cell="0:0"]');
+    const secondRowCellInput = host.querySelector<HTMLInputElement>('[data-table-cell="1:1"]');
+    const rawLine = getLineElementByText(host, "| 2026-04-19 | TASK-table-rendering | 通过 |");
+
+    expect(tableWidget).not.toBeNull();
+    expect(firstCellInput?.value).toBe("2026-04-19");
+    expect(secondRowCellInput?.value).toBe("TASK-041");
+    expect(rawLine).toBeNull();
+
+    controller.destroy();
+  });
+
+  it("renders contiguous loose headerless pipe rows as a single table widget", () => {
+    const host = document.createElement("div");
+    const source = [
+      "| 2026-04-17 | TASK-038 | 通过 |",
+      "| 2026-04-18 | TASK-041 | 通过 |",
+      "| 2026-04-19 | TASK-table-rendering | 通过 |"
+    ].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const tableWidget = host.querySelector(".cm-table-widget");
+    const thirdRowCellInput = host.querySelector<HTMLInputElement>('[data-table-cell="2:1"]');
+    const rawLine = getLineElementByText(host, "| 2026-04-17 | TASK-038 | 通过 |");
+
+    expect(tableWidget).not.toBeNull();
+    expect(thirdRowCellInput?.value).toBe("TASK-table-rendering");
+    expect(rawLine).toBeNull();
+
+    controller.destroy();
+  });
+
+  it("preserves the clicked caret offset while entering table editing context", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const source = ["Paragraph", "", "| name | qty |", "| --- | ---: |", "| pencil | 20 |"].join("\n");
+    const activeBlockTypes: Array<string | null> = [];
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn(),
+      onActiveBlockChange: (state) => {
+        activeBlockTypes.push(state.activeBlock?.type ?? null);
+      }
+    });
+
+    const input = host.querySelector<HTMLInputElement>('[data-table-cell="1:0"]');
+
+    expect(input).toBeInstanceOf(HTMLInputElement);
+
+    input!.focus();
+    input!.setSelectionRange(3, 3);
+    input!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    const currentInput = host.querySelector<HTMLInputElement>('[data-table-cell="1:0"]');
+
+    expect(activeBlockTypes.at(-1)).toBe("table");
+    expect(document.activeElement).toBe(currentInput);
+    expect(currentInput?.selectionStart).toBe(3);
+    expect(currentInput?.selectionEnd).toBe(3);
+
+    controller.destroy();
+    host.remove();
+  });
+
+  it("materializes a draft pipe-table header into a full table on Enter", () => {
+    const host = document.createElement("div");
+    const source = "| a | b | c |";
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+
+    advancedController.setSelection(source.length);
+    advancedController.pressEnter();
+
+    expect(controller.getContent()).toBe(
+      ["| a | b | c |", "| :--- | :--- | :--- |", "|   |   |   |"].join("\n")
+    );
+    expect(host.querySelector(".cm-table-widget")).not.toBeNull();
+
+    controller.destroy();
+  });
+
+  it("allows clicking a table cell input and typing to update the cell", async () => {
+    const host = document.createElement("div");
+    const source = ["| name | qty |", "| --- | ---: |", "| pen | 2 |"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const input = host.querySelector<HTMLInputElement>('[data-table-cell="1:0"]');
+
+    expect(input).toBeInstanceOf(HTMLInputElement);
+
+    input?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    await flushMicrotasks();
+    input!.value = "pencil";
+    input?.dispatchEvent(new Event("input", { bubbles: true }));
+    await flushMicrotasks();
+
+    expect(controller.getContent()).toBe(
+      ["| name   | qty |", "| :----- | ---: |", "| pencil |   2 |"].join("\n")
+    );
+
+    controller.destroy();
+  });
+
+  it("moves the active block into the table when a cell is clicked from another block", async () => {
+    const host = document.createElement("div");
+    const source = ["Paragraph", "", "| name | qty |", "| --- | ---: |", "| pen | 2 |"].join("\n");
+    const activeBlockTypes: Array<string | null> = [];
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn(),
+      onActiveBlockChange: (state) => {
+        activeBlockTypes.push(state.activeBlock?.type ?? null);
+      }
+    });
+
+    const input = host.querySelector<HTMLInputElement>('[data-table-cell="1:0"]');
+
+    expect(activeBlockTypes.at(-1)).toBe("paragraph");
+
+    input?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    await flushMicrotasks();
+
+    expect(activeBlockTypes.at(-1)).toBe("table");
+
+    controller.destroy();
+  });
+
+  it("supports table keyboard actions after entering the table from another block", async () => {
+    const host = document.createElement("div");
+    const source = ["Paragraph", "", "| name | qty |", "| --- | ---: |", "| pen | 2 |"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const input = host.querySelector<HTMLInputElement>('[data-table-cell="1:0"]');
+
+    expect(input).toBeInstanceOf(HTMLInputElement);
+
+    input?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    await flushMicrotasks();
+
+    input?.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        code: "Enter",
+        bubbles: true,
+        cancelable: true,
+        ctrlKey: true
+      })
+    );
+    await flushMicrotasks();
+
+    expect(controller.getContent()).toBe(
+      [
+        "Paragraph",
+        "",
+        "| name | qty |",
+        "| :--- | ---: |",
+        "| pen  |   2 |",
+        "|      |     |"
+      ].join("\n")
+    );
+
+    controller.destroy();
+  });
+
+  it("moves between table rows and exits to the next line on Enter from the last row", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const source = [
+      "Paragraph",
+      "",
+      "| name | qty |",
+      "| --- | ---: |",
+      "| pen | 2 |",
+      "| ink | 3 |",
+      "",
+      "After"
+    ].join("\n");
+    const activeBlockTypes: Array<string | null> = [];
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn(),
+      onActiveBlockChange: (state) => {
+        activeBlockTypes.push(state.activeBlock?.type ?? null);
+      }
+    });
+
+    const input = host.querySelector<HTMLInputElement>('[data-table-cell="1:1"]');
+
+    input?.focus();
+    input?.setSelectionRange(0, 0);
+    input?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", code: "ArrowDown", bubbles: true, cancelable: true }));
+    await flushMicrotasks();
+
+    const currentInput = host.querySelector<HTMLInputElement>('[data-table-cell="2:1"]');
+    expect(activeBlockTypes.at(-1)).toBe("table");
+    expect(document.activeElement).toBe(currentInput);
+
+    currentInput?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true, cancelable: true }));
+    await flushMicrotasks();
+
+    expect(activeBlockTypes.at(-1)).toBe(null);
+    expect(document.activeElement).not.toBe(currentInput);
+    expect(controller.getContent()).toBe(source);
+    expect(getEditorView(host)?.state.selection.main.anchor).toBe(source.lastIndexOf("\n\n") + 1);
+    expect(controller.getContent().indexOf("After")).toBeGreaterThan(0);
+
+    controller.destroy();
+    host.remove();
+  });
+
+  it("creates a new line after the table when Enter exits from the last row at document end", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const source = ["| name | qty |", "| --- | ---: |", "| pen | 2 |"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const input = host.querySelector<HTMLInputElement>('[data-table-cell="1:1"]');
+
+    input?.focus();
+    input?.setSelectionRange(0, 0);
+    input?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true, cancelable: true }));
+    await flushMicrotasks();
+
+    expect(controller.getContent()).toBe(`${source}\n`);
+    expect(document.activeElement).not.toBe(input);
+    expect(getEditorView(host)?.state.selection.main.anchor).toBe(controller.getContent().length);
+
+    controller.destroy();
+    host.remove();
+  });
+
+  it("exits to the line above when ArrowUp is pressed from the first table row", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const source = ["Before", "", "| name | qty |", "| --- | ---: |", "| pen | 2 |"].join("\n");
+    const activeBlockTypes: Array<string | null> = [];
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn(),
+      onActiveBlockChange: (state) => {
+        activeBlockTypes.push(state.activeBlock?.type ?? null);
+      }
+    });
+
+    const input = host.querySelector<HTMLInputElement>('[data-table-cell="0:1"]');
+
+    input?.focus();
+    input?.setSelectionRange(0, 0);
+    input?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", code: "ArrowUp", bubbles: true, cancelable: true }));
+    await flushMicrotasks();
+
+    expect(activeBlockTypes.at(-1)).toBe(null);
+    expect(document.activeElement).not.toBe(input);
+    expect(getEditorView(host)?.state.selection.main.anchor).toBe(source.indexOf("\n\n") + 1);
+
+    controller.destroy();
+    host.remove();
+  });
+
+  it("enters the first cell when ArrowDown is pressed from the line above the table", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const source = ["Before", "", "| name | qty |", "| --- | ---: |", "| pen | 2 |"].join("\n");
+    const activeBlockTypes: Array<string | null> = [];
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn(),
+      onActiveBlockChange: (state) => {
+        activeBlockTypes.push(state.activeBlock?.type ?? null);
+      }
+    });
+
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    view!.dispatch({ selection: { anchor: source.indexOf("\n\n") + 1 } });
+    view!.contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "ArrowDown",
+        code: "ArrowDown",
+        bubbles: true,
+        cancelable: true
+      })
+    );
+    await flushMicrotasks();
+
+    const input = host.querySelector<HTMLInputElement>('[data-table-cell="0:0"]');
+
+    expect(activeBlockTypes.at(-1)).toBe("table");
+    expect(document.activeElement).toBe(input);
+    expect(input?.selectionStart).toBe(0);
+
+    controller.destroy();
+    host.remove();
+  });
+
+  it("enters the last table row when ArrowUp is pressed from the line below the table", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const source = ["| name | qty |", "| --- | ---: |", "| pen | 2 |", "", "After"].join("\n");
+    const activeBlockTypes: Array<string | null> = [];
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn(),
+      onActiveBlockChange: (state) => {
+        activeBlockTypes.push(state.activeBlock?.type ?? null);
+      }
+    });
+
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    view!.dispatch({ selection: { anchor: source.lastIndexOf("\n\n") + 1 } });
+    view!.contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "ArrowUp",
+        code: "ArrowUp",
+        bubbles: true,
+        cancelable: true
+      })
+    );
+    await flushMicrotasks();
+
+    const input = host.querySelector<HTMLInputElement>('[data-table-cell="1:0"]');
+
+    expect(activeBlockTypes.at(-1)).toBe("table");
+    expect(document.activeElement).toBe(input);
+    expect(input?.selectionStart).toBe(0);
+
+    controller.destroy();
+    host.remove();
+  });
+
+  it("creates a new line above the table when ArrowUp exits from the first row at document start", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const source = ["| name | qty |", "| --- | ---: |", "| pen | 2 |"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const input = host.querySelector<HTMLInputElement>('[data-table-cell="0:0"]');
+
+    input?.focus();
+    input?.setSelectionRange(0, 0);
+    input?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", code: "ArrowUp", bubbles: true, cancelable: true }));
+    await flushMicrotasks();
+
+    expect(controller.getContent()).toBe(`\n${source}`);
+    expect(document.activeElement).not.toBe(input);
+    expect(getEditorView(host)?.state.selection.main.anchor).toBe(0);
+
+    controller.destroy();
+    host.remove();
+  });
+
+  it("clears the table cell highlight when ArrowUp exits from the first table row", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const source = ["Before", "", "| name | qty |", "| --- | ---: |", "| pen | 2 |"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const input = host.querySelector<HTMLInputElement>('[data-table-cell="0:0"]');
+
+    input?.focus();
+    input?.setSelectionRange(0, 0);
+    input?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", code: "ArrowUp", bubbles: true, cancelable: true }));
+    await flushMicrotasks();
+
+    const highlightedCell = host
+      .querySelector<HTMLInputElement>('[data-table-cell="0:0"]')
+      ?.closest<HTMLElement>(".cm-table-widget-cell");
+
+    expect(document.activeElement).not.toBe(input);
+    expect(highlightedCell?.dataset.active).toBe("false");
+
+    controller.destroy();
+    host.remove();
+  });
+
+  it("returns focus to CodeMirror when the selection moves out of a table", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const source = ["| name | qty |", "| --- | ---: |", "| pen | 2 |", "", "After"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const input = host.querySelector<HTMLInputElement>('[data-table-cell="1:0"]');
+    const view = getEditorView(host);
+
+    expect(input).toBeInstanceOf(HTMLInputElement);
+    expect(view).not.toBeNull();
+
+    input?.focus();
+    view!.dispatch({ selection: { anchor: source.indexOf("After"), head: source.indexOf("After") } });
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    expect(document.activeElement).not.toBe(input);
+
+    controller.destroy();
+    host.remove();
+  });
+
+  it("does not highlight a table cell when the selection is only on the adjacent line above the table", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const source = ["Before", "", "| name | qty |", "| --- | ---: |", "| pen | 2 |"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    view!.dispatch({ selection: { anchor: source.indexOf("\n\n") + 1, head: source.indexOf("\n\n") + 1 } });
+    await flushMicrotasks();
+
+    const highlightedCell = host.querySelector<HTMLElement>('.cm-table-widget-cell[data-active="true"]');
+
+    expect(highlightedCell).toBeNull();
+
+    controller.destroy();
+    host.remove();
+  });
+
+  it("moves focus and selection out of the table when the blank line below it is clicked", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const source = ["| header | column |", "| :--- | :--- |", "| 11 | 22 |", ""].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const input = host.querySelector<HTMLInputElement>('[data-table-cell="1:0"]');
+    const blankLine = getLastEditorLine(host);
+    const view = getEditorView(host);
+
+    expect(input).toBeInstanceOf(HTMLInputElement);
+    expect(blankLine).not.toBeNull();
+    expect(view).not.toBeNull();
+
+    input?.focus();
+    blankLine?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    blankLine?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true }));
+    blankLine?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    expect(document.activeElement).not.toBe(input);
+    expect(view!.state.selection.main.anchor).toBe(source.length);
+
+    controller.destroy();
+    host.remove();
+  });
+
+  it("does not move the cursor when clicking the blank area beside a table block", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const source = ["| header | column |", "| :--- | :--- |", "| 11 | 22 |", ""].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const input = host.querySelector<HTMLInputElement>('[data-table-cell="1:0"]');
+    const content = host.querySelector<HTMLElement>(".cm-content");
+    const view = getEditorView(host);
+
+    expect(input).toBeInstanceOf(HTMLInputElement);
+    expect(content).not.toBeNull();
+    expect(view).not.toBeNull();
+
+    input?.focus();
+    input?.setSelectionRange(1, 1);
+    const initialAnchor = view!.state.selection.main.anchor;
+
+    content?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    content?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true }));
+    content?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    expect(view!.state.selection.main.anchor).toBe(initialAnchor);
+    expect(document.activeElement).toBe(input);
+
+    controller.destroy();
+    host.remove();
+  });
+
+  it("inserts plain text below the table after clicking the blank line below it", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const source = ["| header | column |", "| :--- | :--- |", "| 11 | 22 |", ""].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const input = host.querySelector<HTMLInputElement>('[data-table-cell="1:0"]');
+    const blankLine = getLastEditorLine(host);
+
+    expect(input).toBeInstanceOf(HTMLInputElement);
+    expect(blankLine).not.toBeNull();
+
+    input?.focus();
+    blankLine?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    blankLine?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true }));
+    blankLine?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    controller.insertText("abc");
+
+    expect(controller.getContent()).toBe(`${source}abc`);
+
+    controller.destroy();
+    host.remove();
+  });
+
+  it("enters the last table row instead of skipping above the table when ArrowUp is pressed from the line below it", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const source = [
+      "1. 内容",
+      "2. 内容",
+      "3. 内容",
+      "4. ",
+      "",
+      "---",
+      "",
+      "| header | contentv | column |",
+      "| :--- | :--- | :--- |",
+      "| 11 | 嘿嘿 | |",
+      ""
+    ].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const currentInput = host.querySelector<HTMLInputElement>('[data-table-cell="1:0"]');
+    const blankLine = getLastEditorLine(host);
+    const view = getEditorView(host);
+
+    expect(currentInput).toBeInstanceOf(HTMLInputElement);
+    expect(blankLine).not.toBeNull();
+    expect(view).not.toBeNull();
+
+    currentInput?.focus();
+    blankLine?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    blankLine?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true }));
+    blankLine?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    view!.contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "ArrowUp",
+        code: "ArrowUp",
+        bubbles: true,
+        cancelable: true
+      })
+    );
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    const input = host.querySelector<HTMLInputElement>('[data-table-cell="1:0"]');
+
+    expect(document.activeElement).toBe(input);
+    expect(input?.selectionStart).toBe(0);
+
+    controller.destroy();
+    host.remove();
+  });
+
+  it("uses horizontal arrow keys to leave a cell only when the caret reaches the boundary", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const source = ["| name | qty |", "| --- | ---: |", "| pen | 2 |"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const input = host.querySelector<HTMLInputElement>('[data-table-cell="1:0"]');
+
+    input?.focus();
+    input?.setSelectionRange(1, 1);
+    input?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", code: "ArrowLeft", bubbles: true, cancelable: true }));
+    await flushMicrotasks();
+
+    let currentInput = host.querySelector<HTMLInputElement>('[data-table-cell="1:0"]');
+    expect(document.activeElement).toBe(currentInput);
+    expect(currentInput?.selectionStart).toBe(1);
+
+    currentInput?.setSelectionRange(0, 0);
+    currentInput?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", code: "ArrowLeft", bubbles: true, cancelable: true }));
+    await flushMicrotasks();
+
+    currentInput = host.querySelector<HTMLInputElement>('[data-table-cell="0:1"]');
+    expect(document.activeElement).toBe(currentInput);
+
+    controller.destroy();
+    host.remove();
+  });
+
+  it("does not re-enter a selection loop when browser focus is restored to a clicked table cell", async () => {
+    const host = document.createElement("div");
+    const source = ["Paragraph", "", "| name | qty |", "| --- | ---: |", "| pen | 2 |"].join("\n");
+    const activeBlockTypes: Array<string | null> = [];
+    const originalGetClientRects = Range.prototype.getClientRects;
+    const originalFocus = HTMLInputElement.prototype.focus;
+
+    Range.prototype.getClientRects = function getClientRects() {
+      return {
+        length: 0,
+        item: () => null,
+        [Symbol.iterator]: function* iterator() {}
+      } as unknown as DOMRectList;
+    };
+
+    HTMLInputElement.prototype.focus = function focusPatched(this: HTMLInputElement) {
+      this.dispatchEvent(new FocusEvent("focus", { bubbles: false }));
+      this.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    };
+
+    try {
+      const controller = createCodeEditorController({
+        parent: host,
+        initialContent: source,
+        onChange: vi.fn(),
+        onActiveBlockChange: (state) => {
+          activeBlockTypes.push(state.activeBlock?.type ?? null);
+        }
+      });
+
+      const input = host.querySelector<HTMLInputElement>('[data-table-cell="1:0"]');
+
+      input?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      await flushMicrotasks();
+      await flushMicrotasks();
+
+      expect(activeBlockTypes.at(-1)).toBe("table");
+      expect(activeBlockTypes.filter((type) => type === "table").length).toBeLessThanOrEqual(2);
+
+      controller.destroy();
+    } finally {
+      Range.prototype.getClientRects = originalGetClientRects;
+      HTMLInputElement.prototype.focus = originalFocus;
+    }
+  });
+
+  it("keeps the table widget visible when it follows a thematic break", () => {
+    const host = document.createElement("div");
+    const source = ["---", "| table | header | column |", "| :--- | :--- | :--- |", "| ... | ... | ... |"].join(
+      "\n"
+    );
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    expect(host.querySelector(".cm-inactive-thematic-break")).not.toBeNull();
+    expect(host.querySelector(".cm-table-widget")).not.toBeNull();
+    expect(host.querySelector<HTMLInputElement>('[data-table-cell="0:0"]')?.value).toBe("table");
+
+    controller.destroy();
+  });
+
+  it("rewrites canonical markdown after a direct cell edit", () => {
+    const host = document.createElement("div");
+    const source = ["| name | qty |", "| --- | ---: |", "| pen | 2 |"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    controller.editTableCell({
+      row: 1,
+      column: 1,
+      text: "20"
+    });
+
+    expect(controller.getContent()).toBe(
+      ["| name | qty |", "| :--- | ---: |", "| pen  |  20 |"].join("\n")
+    );
+
+    controller.destroy();
+  });
+
+  it("keeps table rendering intact after inserting a column", () => {
+    const host = document.createElement("div");
+    const source = ["| name | qty |", "| --- | ---: |", "| pen | 2 |"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    controller.insertTableColumnRight();
+
+    expect(controller.getContent()).toBe(
+      ["| name |   | qty |", "| :--- | :--- | ---: |", "| pen  |   |   2 |"].join("\n")
+    );
+    expect(host.querySelector(".cm-table-widget")).not.toBeNull();
+    expect(host.querySelectorAll("[data-table-cell]").length).toBe(6);
 
     controller.destroy();
   });

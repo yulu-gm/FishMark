@@ -17,12 +17,14 @@ import {
   createBlockDecorationSignature,
   getInactiveHeadingMarkerEnd
 } from "./signature";
+import { createTableWidgetDecoration, type TableWidgetCallbacks } from "./table-widget";
 
 export type CreateBlockDecorationsOptions = {
   activeBlockState: ActiveBlockState;
   hasEditorFocus: boolean;
   source: string;
   resolveImagePreviewUrl?: (href: string | null) => string | null;
+  tableWidgetCallbacks?: TableWidgetCallbacks | null;
 };
 
 export type BlockDecorationsResult = {
@@ -33,8 +35,9 @@ export type BlockDecorationsResult = {
 export function createBlockDecorations(
   options: CreateBlockDecorationsOptions
 ): BlockDecorationsResult {
-  const { activeBlockState, hasEditorFocus, source, resolveImagePreviewUrl } = options;
+  const { activeBlockState, hasEditorFocus, source, resolveImagePreviewUrl, tableWidgetCallbacks } = options;
   const activeBlockId = hasEditorFocus ? activeBlockState.activeBlock?.id ?? null : null;
+  const activeTableCursor = activeBlockState.tableCursor;
   const activeBlockquoteInContentEdit =
     hasEditorFocus &&
     activeBlockState.activeBlock?.type === "blockquote" &&
@@ -47,6 +50,35 @@ export function createBlockDecorations(
   const signatures: string[] = [];
 
   for (const block of activeBlockState.blockMap.blocks) {
+    if (block.type === "table") {
+      const cursorForBlock =
+        activeTableCursor?.mode === "inside" &&
+        activeTableCursor.tableStartOffset === block.startOffset
+          ? activeTableCursor
+          : null;
+
+      signatures.push(
+        cursorForBlock
+          ? `${createBlockDecorationSignature(block)}:table-cursor:${cursorForBlock.mode}:${cursorForBlock.row}:${cursorForBlock.column}`
+          : createBlockDecorationSignature(block)
+      );
+      ranges.push(
+        createTableWidgetDecoration(
+          block,
+          cursorForBlock
+            ? {
+                row: cursorForBlock.row,
+                column: cursorForBlock.column,
+                tableStartOffset: cursorForBlock.tableStartOffset,
+                offsetInCell: cursorForBlock.offsetInCell
+              }
+            : null,
+          tableWidgetCallbacks ?? null
+        )
+      );
+      continue;
+    }
+
     if (block.id === activeBlockId) {
       if (activeBlockquoteInContentEdit && block.type === "blockquote") {
         signatures.push(`${createBlockDecorationSignature(block)}:content-edit`);
