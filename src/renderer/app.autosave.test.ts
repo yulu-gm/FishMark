@@ -121,6 +121,7 @@ type MockCodeEditorModule = typeof codeEditorViewModule & {
     changeContent: (content: string) => void;
     blur: () => void;
     focus: () => void;
+    getRenderCount: () => number;
     getNavigateCalls: () => number[];
     setLayout: (layout: { hostLeft: number; hostWidth: number; contentLeft: number; contentWidth: number }) => void;
     triggerResize: () => void;
@@ -220,6 +221,7 @@ vi.mock("./code-editor-view", async () => {
   let latestHostElement: HTMLDivElement | null = null;
   let latestContentElement: HTMLDivElement | null = null;
   let navigateCalls: number[] = [];
+  let renderCount = 0;
   let layout: MockEditorLayout = {
     hostLeft: 0,
     hostWidth: 880,
@@ -242,6 +244,7 @@ vi.mock("./code-editor-view", async () => {
     }>
   ) {
     const { initialContent, loadRevision } = props;
+    renderCount += 1;
 
     React.useEffect(() => {
       latestProps = props;
@@ -305,6 +308,9 @@ vi.mock("./code-editor-view", async () => {
       focus() {
         latestHostElement?.focus();
       },
+      getRenderCount() {
+        return renderCount;
+      },
       getNavigateCalls() {
         return [...navigateCalls];
       },
@@ -329,6 +335,7 @@ vi.mock("./code-editor-view", async () => {
         latestHostElement = null;
         latestContentElement = null;
         navigateCalls = [];
+        renderCount = 0;
         layout = {
           hostLeft: 0,
           hostWidth: 880,
@@ -3283,15 +3290,53 @@ describe("App autosave", () => {
     expect(document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.wordCount)).toBe(
       "6"
     );
-    expect(document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.focusMode)).not.toBe(
-      ""
+    expect(document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.focusMode)).toBe(
+      "0"
     );
     expect(
       document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.viewportWidth)
-    ).not.toBe("");
+    ).toBe(String(window.innerWidth));
     expect(
       document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.viewportHeight)
-    ).not.toBe("");
+    ).toBe(String(window.innerHeight));
+  });
+
+  it("updates runtime env viewport vars on resize without rerendering the editor tree", async () => {
+    await renderAndOpenDocument({
+      getPreferencesResult: {
+        ...DEFAULT_PREFERENCES,
+        theme: {
+          ...DEFAULT_PREFERENCES.theme,
+          mode: "dark"
+        }
+      }
+    });
+
+    const initialRenderCount = codeEditorMock.getRenderCount();
+
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      writable: true,
+      value: 1440
+    });
+    Object.defineProperty(window, "innerHeight", {
+      configurable: true,
+      writable: true,
+      value: 900
+    });
+
+    await act(async () => {
+      window.dispatchEvent(new Event("resize"));
+      await Promise.resolve();
+    });
+
+    expect(document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.viewportWidth)).toBe(
+      "1440"
+    );
+    expect(document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.viewportHeight)).toBe(
+      "900"
+    );
+    expect(codeEditorMock.getRenderCount()).toBe(initialRenderCount);
   });
 
   it("marks settings as a floating drawer overlay surface", async () => {

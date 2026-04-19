@@ -431,9 +431,6 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   >(null);
   const [isEditorFocused, setIsEditorFocused] = useState(false);
   const [isShortcutHintArmed, setIsShortcutHintArmed] = useState(false);
-  const [themeRuntimeViewport, setThemeRuntimeViewport] = useState<ThemeRuntimeEnv["viewport"]>(
-    getWindowViewport
-  );
   const editorRef = useRef<CodeEditorHandle | null>(null);
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
   const editorContentRef = useRef("");
@@ -465,6 +462,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   const currentDocumentMetrics = state.currentDocument
     ? getDocumentMetrics(currentDocumentContent)
     : null;
+  const currentDocumentWordCount = currentDocumentMetrics?.meaningfulCharacterCount ?? 0;
   const isDocumentOpen = Boolean(state.currentDocument);
   const isFocusModeActive = focusModeSource !== null;
   const isManualFocusToggleEnabled = preferences.focus.triggerMode === "manual";
@@ -581,14 +579,14 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   );
   const shortcutHintModifierKey: "Control" | "Meta" = yulora.platform === "darwin" ? "Meta" : "Control";
   const isShortcutHintVisible = isDocumentOpen && isEditorFocused && isShortcutHintArmed;
-  const syncThemeRuntimeEnv = useEffectEvent((themeMode: ResolvedThemeMode): void => {
+  const syncThemeRuntimeEnv = useEffectEvent((themeMode: ResolvedThemeMode = resolvedThemeMode): void => {
     applyThemeRuntimeEnv(
       document.documentElement,
       buildThemeRuntimeEnv({
-        content: currentDocumentContent,
+        wordCount: currentDocumentWordCount,
         isFocusModeActive,
         themeMode,
-        viewport: themeRuntimeViewport
+        viewport: getWindowViewport()
       })
     );
   });
@@ -1263,17 +1261,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   }, [focusModeSource, preferences.focus.triggerMode, scheduleFocusIdle]);
 
   useEffect(() => {
-    const handleResize = () => {
-      setThemeRuntimeViewport((current) => {
-        const next = getWindowViewport();
-
-        if (current.width === next.width && current.height === next.height) {
-          return current;
-        }
-
-        return next;
-      });
-    };
+    const handleResize = () => syncThemeRuntimeEnv();
 
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
@@ -1281,13 +1269,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
 
   useEffect(() => {
     syncThemeRuntimeEnv(resolvedThemeMode);
-  }, [
-    currentDocumentContent,
-    isFocusModeActive,
-    resolvedThemeMode,
-    themeRuntimeViewport.height,
-    themeRuntimeViewport.width
-  ]);
+  }, [currentDocumentWordCount, isFocusModeActive, resolvedThemeMode]);
 
   useEffect(() => {
     if (preferences.theme.mode !== "system") {

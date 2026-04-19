@@ -2,7 +2,6 @@ import {
   THEME_RUNTIME_ENV_CSS_VARS,
   THEME_RUNTIME_THEME_MODE_ATTRIBUTE
 } from "../shared/theme-style-contract";
-import { getDocumentMetrics } from "./document-metrics";
 
 type ThemeMode = "light" | "dark";
 
@@ -17,13 +16,13 @@ export type ThemeRuntimeEnv = {
 };
 
 export function buildThemeRuntimeEnv(input: {
-  content: string;
+  wordCount: number;
   isFocusModeActive: boolean;
   themeMode: ThemeMode;
   viewport: ThemeRuntimeEnv["viewport"];
 }): ThemeRuntimeEnv {
   return {
-    wordCount: getDocumentMetrics(input.content).meaningfulCharacterCount,
+    wordCount: input.wordCount,
     focusMode: input.isFocusModeActive ? 1 : 0,
     themeMode: input.themeMode,
     viewport: input.viewport

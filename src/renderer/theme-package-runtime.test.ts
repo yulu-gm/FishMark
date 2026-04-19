@@ -8,7 +8,7 @@ import {
   THEME_RUNTIME_THEME_MODE_ATTRIBUTE
 } from "../shared/theme-style-contract";
 import { createThemePackageRuntime } from "./theme-package-runtime";
-import { applyThemeRuntimeEnv } from "./theme-runtime-env";
+import { applyThemeRuntimeEnv, clearThemeRuntimeEnv } from "./theme-runtime-env";
 
 describe("theme package runtime", () => {
   beforeEach(() => {
@@ -74,5 +74,33 @@ describe("theme package runtime", () => {
     expect(
       document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.viewportHeight)
     ).toBe("900");
+  });
+
+  it("clears runtime env CSS variables from the root element", () => {
+    applyThemeRuntimeEnv(document.documentElement, {
+      wordCount: 42,
+      focusMode: 1,
+      themeMode: "dark",
+      viewport: {
+        width: 1440,
+        height: 900
+      }
+    });
+
+    clearThemeRuntimeEnv(document.documentElement);
+
+    expect(document.documentElement.getAttribute(THEME_RUNTIME_THEME_MODE_ATTRIBUTE)).toBeNull();
+    expect(document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.wordCount)).toBe(
+      ""
+    );
+    expect(document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.focusMode)).toBe(
+      ""
+    );
+    expect(
+      document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.viewportWidth)
+    ).toBe("");
+    expect(
+      document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.viewportHeight)
+    ).toBe("");
   });
 });
