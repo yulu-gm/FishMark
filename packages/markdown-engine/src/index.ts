@@ -4,6 +4,11 @@ export type {
   CodeFenceBlock,
   HeadingBlock,
   HtmlImageBlock,
+  TableAlignment,
+  TableBlock,
+  TableCell,
+  TableRow,
+  TableRowSeparator,
   ListItemBlock,
   ListBlock,
   MarkdownBlock,
@@ -27,5 +32,24 @@ export type {
   InlineText
 } from "./inline-ast";
 export { parseBlockMap } from "./parse-block-map";
+export {
+  formatTableMarkdown,
+  formatTableMarkdownWithOffsets,
+  type FormattedTableWithOffsets,
+  type TableCellOffset
+} from "./format-table-markdown";
 export { parseInlineAst } from "./parse-inline-ast";
 export { parseMarkdownDocument } from "./parse-markdown-document";
+export {
+  createCanonicalTableModel,
+  isTableDelimiterLine,
+  looksLikeLoosePipeTable,
+  looksLikePipeTable,
+  parseLoosePipeTable,
+  normalizeTableCells,
+  parsePipeTable,
+  parseTableAlignment,
+  splitTableLine,
+  tableBlockToCanonicalModel,
+  type CanonicalTableModel
+} from "./table-model";

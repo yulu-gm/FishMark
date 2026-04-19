@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
 
-import { formatShortcutHintKey, type TextEditingShortcut } from "@yulora/editor-core";
+import { formatShortcutHintKey, type ShortcutGroup } from "@yulora/editor-core";
 
 const CONTAINER_FADE_DURATION_MS = 105;
 const ITEM_STAGGER_DURATION_MS = 18;
@@ -10,7 +10,7 @@ const ITEM_ANIMATION_DURATION_MS = 105;
 type ShortcutHintOverlayProps = {
   visible: boolean;
   platform: string;
-  shortcuts: readonly TextEditingShortcut[];
+  group: ShortcutGroup;
 };
 
 type OverlayState = "hidden" | "open" | "closing";
@@ -21,11 +21,15 @@ type OverlayRenderState = {
 
 function ShortcutHintOverlayContent({
   platform,
-  shortcuts
+  group
 }: Omit<ShortcutHintOverlayProps, "visible">) {
   return (
-    <ul className="shortcut-hint-overlay-list">
-      {shortcuts.map(({ id, key, label }, index) => (
+    <ul
+      key={group.id}
+      className="shortcut-hint-overlay-list"
+      data-shortcut-group={group.id}
+    >
+      {group.shortcuts.map(({ id, key, label }, index) => (
         <li
           key={id}
           className="shortcut-hint-overlay-item"
@@ -43,13 +47,14 @@ function ShortcutHintOverlayContent({
   );
 }
 
-export function ShortcutHintOverlay({ visible, platform, shortcuts }: ShortcutHintOverlayProps) {
+export function ShortcutHintOverlay({ visible, platform, group }: ShortcutHintOverlayProps) {
   const [renderState, setRenderState] = useState<OverlayRenderState>({
     phase: visible ? "open" : "hidden",
     visible
   });
   const closeAnimationDurationMs =
-    ITEM_ANIMATION_DURATION_MS + ITEM_STAGGER_DURATION_MS * Math.max(shortcuts.length - 1, 0);
+    ITEM_ANIMATION_DURATION_MS +
+    ITEM_STAGGER_DURATION_MS * Math.max(group.shortcuts.length - 1, 0);
   const style = {
     ["--shortcut-hint-overlay-duration" as string]: `${CONTAINER_FADE_DURATION_MS}ms`,
     ["--shortcut-hint-overlay-item-duration" as string]: `${ITEM_ANIMATION_DURATION_MS}ms`,
@@ -97,13 +102,14 @@ export function ShortcutHintOverlay({ visible, platform, shortcuts }: ShortcutHi
       className="shortcut-hint-overlay"
       data-yulora-region="shortcut-hint-overlay"
       data-state={state}
+      data-shortcut-group={group.id}
       aria-hidden="true"
       role="presentation"
       style={style}
     >
       <ShortcutHintOverlayContent
         platform={platform}
-        shortcuts={shortcuts}
+        group={group}
       />
     </div>
   );

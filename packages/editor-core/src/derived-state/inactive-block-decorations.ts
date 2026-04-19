@@ -1,11 +1,16 @@
 import type { MarkdownDocument } from "@yulora/markdown-engine";
 
 import { createBlockDecorations } from "../decorations";
+import type { TableWidgetCallbacks } from "../decorations";
 import {
   createActiveBlockStateFromMarkdownDocument,
   type ActiveBlockSelection,
   type ActiveBlockState
 } from "../active-block";
+import {
+  deriveTableCursorState,
+  type TableCursorState
+} from "../table-cursor-state";
 import type { BlockMapCache } from "./block-map-cache";
 import type { MarkdownDocumentCache } from "./markdown-document-cache";
 
@@ -16,6 +21,8 @@ export type DeriveInactiveBlockDecorationsStateOptions = {
   markdownDocumentCache?: MarkdownDocumentCache;
   blockMapCache?: BlockMapCache;
   resolveImagePreviewUrl?: (href: string | null) => string | null;
+  tableWidgetCallbacks?: TableWidgetCallbacks | null;
+  previousTableCursor?: TableCursorState | null;
 };
 
 export type InactiveBlockDecorationsDerivedState = {
@@ -41,16 +48,27 @@ export function deriveInactiveBlockDecorationsState(
     markdownDocument,
     options.selection
   );
+  const tableCursor = deriveTableCursorState(
+    options.source,
+    options.selection,
+    markdownDocument,
+    options.previousTableCursor ?? null
+  );
+  const nextActiveBlockState: ActiveBlockState = {
+    ...activeBlockState,
+    tableCursor
+  };
 
   const { decorationSet, signature: blockSignature } = createBlockDecorations({
-    activeBlockState,
+    activeBlockState: nextActiveBlockState,
     hasEditorFocus: options.hasEditorFocus,
     source: options.source,
-    resolveImagePreviewUrl: options.resolveImagePreviewUrl
+    resolveImagePreviewUrl: options.resolveImagePreviewUrl,
+    tableWidgetCallbacks: options.tableWidgetCallbacks
   });
 
   return {
-    activeBlockState,
+    activeBlockState: nextActiveBlockState,
     decorationSet,
     signature: blockSignature
   };

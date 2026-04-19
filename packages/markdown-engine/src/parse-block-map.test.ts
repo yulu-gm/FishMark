@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseBlockMap, parseMarkdownDocument } from "./index";
+import { formatTableMarkdown, parseBlockMap, parseMarkdownDocument } from "./index";
 import type {
   BlockquoteBlock,
   HeadingBlock,
@@ -145,6 +145,242 @@ describe("parseBlockMap", () => {
 
     expect(source.slice(result.blocks[0]!.startOffset, result.blocks[0]!.endOffset)).toBe("Heading\n===");
     expect(source.slice(result.blocks[1]!.startOffset, result.blocks[1]!.endOffset)).toBe("1. one\n2. two");
+  });
+
+  it("parses common pipe table variants into a top-level table block", () => {
+    const source = ["name | qty", "--- | ---:", "pen | 2"].join("\n");
+
+    const result = parseMarkdownDocument(source);
+
+    expect(result.blocks).toMatchObject([
+      {
+        id: `table:0-${source.length}`,
+        type: "table",
+        startOffset: 0,
+        endOffset: source.length,
+        startLine: 1,
+        endLine: 3,
+        columnCount: 2,
+        alignments: ["left", "right"],
+        header: [
+          { text: "name" },
+          { text: "qty" }
+        ],
+        rows: [[{ text: "pen" }, { text: "2" }]]
+      }
+    ]);
+  });
+
+  it("formats canonical table markdown with outer pipes and padded columns", () => {
+    expect(
+      formatTableMarkdown({
+        alignments: ["left", "right"],
+        header: ["name", "qty"],
+        rows: [["pen", "2"]]
+      })
+    ).toBe(["| name | qty |", "| :--- | ---: |", "| pen  |   2 |"].join("\n"));
+  });
+
+  it("keeps inserted blank columns parseable by emitting minimum-width delimiters", () => {
+    const source = formatTableMarkdown({
+      hasHeader: true,
+      rowSeparator: "compact",
+      alignments: ["left", "left", "right"],
+      header: ["name", "", "qty"],
+      rows: [["pen", "", "2"]]
+    });
+
+    expect(source).toBe(
+      ["| name |   | qty |", "| :--- | :--- | ---: |", "| pen  |   |   2 |"].join("\n")
+    );
+    expect(parseMarkdownDocument(source).blocks[0]?.type).toBe("table");
+  });
+
+  it("parses loose headerless pipe rows separated by blank lines into one table block", () => {
+    const source = [
+      "| 2026-04-19 | TASK-table-rendering | 通过 |",
+      "",
+      "| 2026-04-18 | TASK-041 | 通过 |"
+    ].join("\n");
+
+    const result = parseMarkdownDocument(source);
+
+    expect(result.blocks).toMatchObject([
+      {
+        id: `table:0-${source.length}`,
+        type: "table",
+        startOffset: 0,
+        endOffset: source.length,
+        startLine: 1,
+        endLine: 3,
+        columnCount: 3,
+        hasHeader: false,
+        rowSeparator: "loose",
+        alignments: ["none", "none", "none"],
+        header: [
+          { text: "2026-04-19" },
+          { text: "TASK-table-rendering" },
+          { text: "通过" }
+        ],
+        rows: [[{ text: "2026-04-18" }, { text: "TASK-041" }, { text: "通过" }]]
+      }
+    ]);
+  });
+
+  it("parses contiguous loose headerless pipe rows within one paragraph into a table block", () => {
+    const source = [
+      "| 2026-04-17 | TASK-038 | 通过 |",
+      "| 2026-04-18 | TASK-041 | 通过 |",
+      "| 2026-04-19 | TASK-table-rendering | 通过 |"
+    ].join("\n");
+
+    const result = parseMarkdownDocument(source);
+
+    expect(result.blocks).toMatchObject([
+      {
+        id: `table:0-${source.length}`,
+        type: "table",
+        startOffset: 0,
+        endOffset: source.length,
+        startLine: 1,
+        endLine: 3,
+        columnCount: 3,
+        hasHeader: false,
+        rowSeparator: "compact",
+        alignments: ["none", "none", "none"],
+        header: [
+          { text: "2026-04-17" },
+          { text: "TASK-038" },
+          { text: "通过" }
+        ],
+        rows: [
+          [{ text: "2026-04-18" }, { text: "TASK-041" }, { text: "通过" }],
+          [{ text: "2026-04-19" }, { text: "TASK-table-rendering" }, { text: "通过" }]
+        ]
+      }
+    ]);
+  });
+
+  it("parses loose pipe rows whose code-span cells contain unescaped pipes", () => {
+    const source = [
+      '| 2026-04-15 | BOOTSTRAP-DOCS | `rg -n "^\\| (TASK-001|TASK-002) \\|" docs/progress.md` | 通过 | 第一条 |',
+      "| 2026-04-19 | TASK-table-rendering | `npm.cmd run build` | 通过 | 第二条 |"
+    ].join("\n");
+
+    const result = parseMarkdownDocument(source);
+
+    expect(result.blocks).toMatchObject([
+      {
+        type: "table",
+        startLine: 1,
+        endLine: 2,
+        hasHeader: false,
+        columnCount: 5
+      }
+    ]);
+
+    const tableBlock = result.blocks[0];
+    expect(tableBlock?.type).toBe("table");
+    if (tableBlock?.type !== "table") {
+      throw new Error("expected table block");
+    }
+    expect(tableBlock.header.map((cell) => cell.text)).toEqual([
+      "2026-04-15",
+      "BOOTSTRAP-DOCS",
+      '`rg -n "^| (TASK-001|TASK-002) |" docs/progress.md`',
+      "通过",
+      "第一条"
+    ]);
+  });
+
+  it("keeps the trailing note cell when a loose row contains unmatched fence backticks in note text", () => {
+    const source = [
+      "| 2026-04-16 | TASK-033 | `npm run test -- src/renderer/code-editor.test.ts` | 通过 | 补充孤立的 ``` 片段 |",
+      "| 2026-04-16 | TASK-033 | `npm run build` | 通过 | 第二条 |"
+    ].join("\n");
+
+    const result = parseMarkdownDocument(source);
+
+    expect(result.blocks).toMatchObject([
+      {
+        type: "table",
+        startLine: 1,
+        endLine: 2,
+        hasHeader: false,
+        columnCount: 5
+      }
+    ]);
+
+    const tableBlock = result.blocks[0];
+    expect(tableBlock?.type).toBe("table");
+    if (tableBlock?.type !== "table") {
+      throw new Error("expected table block");
+    }
+    expect(tableBlock.header[4]?.text).toBe("补充孤立的 ``` 片段");
+  });
+
+  it("splits contiguous loose rows around a malformed pipe row instead of dropping the whole paragraph", () => {
+    const source = [
+      "| 2026-04-17 | TASK-038 | 通过 |",
+      "| 2026-04-18 | TASK-041 | 通过 |",
+      "| 2026-04-15 | BOOTSTRAP-DOCS | raw | extra | pipes | 通过 | 带额外 pipe 的命令 |",
+      "| 2026-04-19 | TASK-table-rendering | 通过 |",
+      "| 2026-04-20 | TASK-next | 通过 |"
+    ].join("\n");
+
+    const result = parseMarkdownDocument(source);
+
+    expect(result.blocks).toHaveLength(3);
+    expect(result.blocks[0]).toMatchObject({
+      type: "table",
+      startLine: 1,
+      endLine: 2,
+      hasHeader: false
+    });
+    expect(result.blocks[1]).toMatchObject({
+      type: "paragraph",
+      startLine: 3,
+      endLine: 3
+    });
+    expect(result.blocks[2]).toMatchObject({
+      type: "table",
+      startLine: 4,
+      endLine: 5,
+      hasHeader: false
+    });
+
+    const firstTable = result.blocks[0];
+    const secondTable = result.blocks[2];
+
+    expect(firstTable?.type).toBe("table");
+    expect(secondTable?.type).toBe("table");
+    if (firstTable?.type !== "table" || secondTable?.type !== "table") {
+      throw new Error("expected loose table blocks");
+    }
+
+    expect(firstTable.header.map((cell) => cell.text)).toEqual(["2026-04-17", "TASK-038", "通过"]);
+    expect(firstTable.rows.map((row) => row.map((cell) => cell.text))).toEqual([["2026-04-18", "TASK-041", "通过"]]);
+
+    expect(secondTable.header.map((cell) => cell.text)).toEqual(["2026-04-19", "TASK-table-rendering", "通过"]);
+    expect(secondTable.rows.map((row) => row.map((cell) => cell.text))).toEqual([["2026-04-20", "TASK-next", "通过"]]);
+  });
+
+  it("formats loose headerless pipe rows without inserting a delimiter line", () => {
+    expect(
+      formatTableMarkdown({
+        hasHeader: false,
+        rowSeparator: "loose",
+        alignments: ["none", "none", "none"],
+        header: ["2026-04-19", "TASK-table-rendering", "通过"],
+        rows: [["2026-04-18", "TASK-041", "通过"]]
+      })
+    ).toBe(
+      [
+        "| 2026-04-19 | TASK-table-rendering | 通过 |",
+        "",
+        "| 2026-04-18 | TASK-041             | 通过 |"
+      ].join("\n")
+    );
   });
 
   it("recognizes top-level HTML image flow blocks and preserves image attributes", () => {

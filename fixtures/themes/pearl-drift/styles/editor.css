@@ -1,0 +1,25 @@
+:root {
+  --yulora-editor-font-family: "Aptos", "Inter", "Segoe UI", sans-serif;
+  --yulora-editor-font-size: 1.05rem;
+  /* Periwinkle caret — resolves to the mode-aware accent set in ui.css,
+     with a fallback that still reads on either backdrop. */
+  --yulora-editor-caret: var(--yulora-pearl-accent, #6b68d4);
+}
+
+[data-yulora-region="workspace-canvas"] .document-editor .cm-editor,
+[data-yulora-region="workspace-canvas"] .document-editor .cm-scroller {
+  background: transparent;
+}
+
+[data-yulora-region="workspace-canvas"] .document-editor .cm-editor {
+  color: var(--yulora-text-body);
+}
+
+[data-yulora-region="workspace-canvas"] .document-editor .cm-selectionBackground,
+[data-yulora-region="workspace-canvas"] .document-editor .cm-editor ::selection {
+  background: color-mix(in srgb, var(--yulora-pearl-accent, #6b68d4) 22%, transparent);
+}
+
+[data-yulora-region="workspace-canvas"] .document-editor .cm-activeLine {
+  background: color-mix(in srgb, var(--yulora-pearl-accent, #6b68d4) 6%, transparent);
+}

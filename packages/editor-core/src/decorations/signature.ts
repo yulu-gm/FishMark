@@ -66,6 +66,14 @@ export function createBlockDecorationSignature(block: MarkdownBlock): string {
     )}:${JSON.stringify(block.height)}:${JSON.stringify(block.zoom)}:${JSON.stringify(block.align)}`;
   }
 
+  if (block.type === "table") {
+    return `${block.type}:${block.id}:${block.columnCount}:${block.hasHeader}:${block.rowSeparator}:${block.alignments.join(",")}:${block.header
+      .map((cell) => cell.text)
+      .join("|")}:${block.rows
+      .map((row) => row.map((cell) => cell.text).join("|"))
+      .join("||")}`;
+  }
+
   return `${block.type}:${block.id}:${block.marker}`;
 }
 

@@ -3,7 +3,8 @@ import {
   type BlockMap,
   type MarkdownBlock,
   type MarkdownDocument
-} from "../../markdown-engine/src";
+} from "@yulora/markdown-engine";
+import type { TableCursorState } from "./table-cursor-state";
 
 export type ActiveBlockSelection = {
   anchor: number;
@@ -14,6 +15,7 @@ export type ActiveBlockState = {
   blockMap: MarkdownDocument;
   activeBlock: MarkdownBlock | null;
   selection: ActiveBlockSelection;
+  tableCursor: TableCursorState | null;
 };
 
 export function createActiveBlockState(
@@ -37,7 +39,8 @@ export function createActiveBlockStateFromMarkdownDocument(
   return {
     blockMap: markdownDocument,
     activeBlock: resolveActiveBlock(markdownDocument, selection.head),
-    selection
+    selection,
+    tableCursor: null
   };
 }
 

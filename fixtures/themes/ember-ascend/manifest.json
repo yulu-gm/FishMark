@@ -1,0 +1,82 @@
+{
+  "id": "ember-ascend",
+  "name": "Ember Ascend",
+  "version": "1.0.0",
+  "author": "Yulora",
+  "supports": {
+    "light": false,
+    "dark": true
+  },
+  "tokens": {
+    "dark": "./tokens/dark.css"
+  },
+  "styles": {
+    "ui": "./styles/ui.css",
+    "editor": "./styles/editor.css",
+    "markdown": "./styles/markdown.css"
+  },
+  "layout": {
+    "titlebar": null
+  },
+  "scene": {
+    "id": "ascend-scene",
+    "sharedUniforms": {
+      "glowStrength": 2.0,
+      "colorWarmth": 0.7,
+      "enableBreathe": 1.0
+    },
+    "render": {
+      "renderScale": 0.3,
+      "frameRate": 30
+    }
+  },
+  "parameters": [
+    {
+      "id": "glowStrength",
+      "label": "余烬强度",
+      "description": "控制中心暖色火焰柱的亮度，调低可让文字更突出。",
+      "type": "slider",
+      "min": 0.3,
+      "max": 2.5,
+      "step": 0.05,
+      "default": 2.0,
+      "uniform": "glowStrength"
+    },
+    {
+      "id": "colorWarmth",
+      "label": "色温",
+      "description": "0 偏冷蓝，1 偏暖橙。",
+      "type": "slider",
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "default": 0.7,
+      "uniform": "colorWarmth"
+    },
+    {
+      "id": "enableBreathe",
+      "label": "上升呼吸",
+      "description": "关闭后烟柱将静止，适合长时间阅读。",
+      "type": "toggle",
+      "default": true,
+      "uniform": "enableBreathe"
+    },
+    {
+      "id": "workspaceGlassOpacity",
+      "label": "工作区毛玻璃",
+      "description": "工作区卡片相对背景的不透明度，0 完全透出 shader，1 接近纯静态面板。",
+      "type": "slider",
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "default": 0.62
+    }
+  ],
+  "surfaces": {
+    "workbenchBackground": {
+      "kind": "fragment",
+      "scene": "ascend-scene",
+      "shader": "./shaders/workbench-background.glsl"
+    }
+  }
+}

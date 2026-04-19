@@ -116,6 +116,7 @@ type MockCodeEditorModule = typeof codeEditorViewModule & {
     changeContent: (content: string) => void;
     blur: () => void;
     focus: () => void;
+    emitActiveBlockChange: (state: unknown) => void;
     getNavigateCalls: () => number[];
     setLayout: (layout: { hostLeft: number; hostWidth: number; contentLeft: number; contentWidth: number }) => void;
     triggerResize: () => void;
@@ -234,6 +235,15 @@ vi.mock("./code-editor-view", async () => {
       getContent: () => string;
       focus: () => void;
       navigateToOffset: (offset: number) => void;
+      selectTableCell: (position: { row: number; column: number }) => void;
+      editTableCell: (input: { row: number; column: number; text: string }) => void;
+      insertTableRowAbove: () => void;
+      insertTableRowBelow: () => void;
+      insertTableColumnLeft: () => void;
+      insertTableColumnRight: () => void;
+      deleteTableRow: () => void;
+      deleteTableColumn: () => void;
+      deleteTable: () => void;
     }>
   ) {
     const { initialContent, loadRevision } = props;
@@ -271,7 +281,16 @@ vi.mock("./code-editor-view", async () => {
       focus: () => latestHostElement?.focus(),
       navigateToOffset: (offset: number) => {
         navigateCalls.push(offset);
-      }
+      },
+      selectTableCell: () => {},
+      editTableCell: () => {},
+      insertTableRowAbove: () => {},
+      insertTableRowBelow: () => {},
+      insertTableColumnLeft: () => {},
+      insertTableColumnRight: () => {},
+      deleteTableRow: () => {},
+      deleteTableColumn: () => {},
+      deleteTable: () => {}
     }));
 
     return React.createElement(
@@ -299,6 +318,9 @@ vi.mock("./code-editor-view", async () => {
       },
       focus() {
         latestHostElement?.focus();
+      },
+      emitActiveBlockChange(state: unknown) {
+        latestProps?.onActiveBlockChange?.(state);
       },
       getNavigateCalls() {
         return [...navigateCalls];
@@ -2461,6 +2483,151 @@ describe("App autosave", () => {
     expect(overlayShell?.getAttribute("data-shortcut-hint-state")).toBe("hidden");
   });
 
+  it("switches shortcut hints and rail mode when the active editing context becomes a table", async () => {
+    await renderAndOpenDocument();
+
+    await act(async () => {
+      codeEditorMock.focus();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Control",
+          ctrlKey: true,
+          bubbles: true
+        })
+      );
+      vi.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-yulora-region="shortcut-hint-overlay"]')?.textContent).toContain(
+      "Bold"
+    );
+
+    await act(async () => {
+      codeEditorMock.emitActiveBlockChange({
+        activeBlock: {
+          id: "table:0-1",
+          type: "table"
+        },
+        blockMap: { blocks: [] },
+        selection: { anchor: 0, head: 0 },
+        tableCursor: {
+          mode: "inside",
+          tableStartOffset: 0,
+          row: 0,
+          column: 0,
+          offsetInCell: 0
+        }
+      });
+      await Promise.resolve();
+    });
+
+    const overlay = container.querySelector('[data-yulora-region="shortcut-hint-overlay"]');
+    const rail = container.querySelector<HTMLElement>(".app-rail");
+    const tableStrip = container.querySelector<HTMLElement>('[data-yulora-region="table-tool-strip"]');
+
+    expect(overlay?.getAttribute("data-shortcut-group")).toBe("table-editing");
+    expect(overlay?.textContent).toContain("Next Cell");
+    expect(overlay?.textContent).not.toContain("Bold");
+    expect(rail?.getAttribute("data-yulora-rail-mode")).toBe("table-editing");
+    expect(
+      container.querySelector('.app-rail-mode-group-table')?.getAttribute("data-state")
+    ).toBe("open");
+    expect(
+      container.querySelector('.app-rail-mode-group-default')?.getAttribute("data-state")
+    ).toBe("closing");
+    expect(tableStrip).not.toBeNull();
+  });
+
+  it("renders table rail tools as icon buttons with accessible labels", async () => {
+    await renderAndOpenDocument();
+
+    await act(async () => {
+      codeEditorMock.emitActiveBlockChange({
+        activeBlock: {
+          id: "table:0-1",
+          type: "table"
+        },
+        blockMap: { blocks: [] },
+        selection: { anchor: 0, head: 0 },
+        tableCursor: {
+          mode: "inside",
+          tableStartOffset: 0,
+          row: 0,
+          column: 0,
+          offsetInCell: 0
+        }
+      });
+      await Promise.resolve();
+    });
+
+    const tableStrip = container.querySelector<HTMLElement>('[data-yulora-region="table-tool-strip"]');
+    const toolButtons = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('[data-yulora-region="table-tool-button"]')
+    );
+
+    expect(tableStrip).not.toBeNull();
+    expect(toolButtons).toHaveLength(7);
+    expect(toolButtons.map((button) => button.getAttribute("aria-label"))).toEqual([
+      "Row Above",
+      "Row Below",
+      "Column Left",
+      "Column Right",
+      "Delete Row",
+      "Delete Column",
+      "Delete Table"
+    ]);
+    expect(toolButtons.every((button) => button.querySelector("svg") !== null)).toBe(true);
+    expect(tableStrip?.textContent?.trim()).toBe("");
+  });
+
+  it("shows a table tool tooltip on hover and hides it on mouse leave", async () => {
+    await renderAndOpenDocument();
+
+    await act(async () => {
+      codeEditorMock.emitActiveBlockChange({
+        activeBlock: {
+          id: "table:0-1",
+          type: "table"
+        },
+        blockMap: { blocks: [] },
+        selection: { anchor: 0, head: 0 },
+        tableCursor: {
+          mode: "inside",
+          tableStartOffset: 0,
+          row: 0,
+          column: 0,
+          offsetInCell: 0
+        }
+      });
+      await Promise.resolve();
+    });
+
+    const rowAboveButton = container.querySelector<HTMLButtonElement>(
+      '[data-yulora-region="table-tool-button"][aria-label="Row Above"]'
+    );
+
+    expect(container.querySelector('[data-yulora-region="table-tool-tooltip"]')).toBeNull();
+
+    await act(async () => {
+      rowAboveButton?.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-yulora-region="table-tool-tooltip"]')?.textContent).toContain("Row Above");
+
+    await act(async () => {
+      rowAboveButton?.dispatchEvent(new MouseEvent("mouseout", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-yulora-region="table-tool-tooltip"]')).toBeNull();
+  });
+
   it("does not show the shortcut hint overlay if Control is released before 1 second elapses", async () => {
     await renderAndOpenDocument();
 
@@ -2510,6 +2677,11 @@ describe("App autosave", () => {
 
   it("does not show the shortcut hint overlay when Control is held without editor focus", async () => {
     await renderAndOpenDocument();
+
+    await act(async () => {
+      (document.activeElement as HTMLElement | null)?.blur();
+      await Promise.resolve();
+    });
 
     await act(async () => {
       window.dispatchEvent(
@@ -3098,6 +3270,22 @@ describe("App autosave", () => {
     expect(collapsedStatusBarRule).toContain("transform:");
   });
 
+  it("defines compact icon rail tool styles and tooltip positioning", () => {
+    const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8");
+    const railRule = getCssRule(appUiStylesheet, ".app-rail");
+    const stripRule = getCssRule(appUiStylesheet, ".table-tool-strip");
+    const buttonRule = getCssRule(appUiStylesheet, ".table-tool-button");
+    const tooltipRule = getCssRule(appUiStylesheet, ".table-tool-tooltip");
+    const dangerRule = getCssRule(appUiStylesheet, '.table-tool-button[data-tone="danger"]');
+
+    expect(railRule).toContain("z-index: 2;");
+    expect(stripRule).toContain("justify-items: center;");
+    expect(buttonRule).toContain("inline-size: 44px;");
+    expect(buttonRule).toContain("block-size: 44px;");
+    expect(tooltipRule).toContain("left: calc(100% + 10px);");
+    expect(dangerRule).toContain("color:");
+  });
+
   it("updates document font presets through dropdowns only", async () => {
     const driver = await renderEditorApp();
     await driver.openSettings();
@@ -3449,6 +3637,17 @@ describe("App autosave", () => {
     expect(lightMarkdownRule).not.toContain("--yulora-code-block-bg: #17212b;");
   });
 
+  it("defines table theming tokens in the default markdown theme stylesheet", () => {
+    const lightMarkdownStylesheet = readFileSync(lightMarkdownStylesheetPath, "utf-8");
+    const lightMarkdownRule = getCssRule(lightMarkdownStylesheet, ":root");
+
+    expect(lightMarkdownRule).toContain("--yulora-table-bg:");
+    expect(lightMarkdownRule).toContain("--yulora-table-border-color:");
+    expect(lightMarkdownRule).toContain("--yulora-table-cell-active-bg:");
+    expect(lightMarkdownRule).toContain("--yulora-table-cell-min-height:");
+    expect(lightMarkdownRule).toContain("--yulora-table-header-font-weight:");
+  });
+
   it("renders code blocks with visual wrapping instead of a horizontal scrollbar", () => {
     const markdownRenderStylesheet = readFileSync(markdownRenderStylesheetPath, "utf-8");
 
@@ -3457,6 +3656,17 @@ describe("App autosave", () => {
     expect(markdownRenderStylesheet).toContain("overflow-x: hidden;");
     expect(markdownRenderStylesheet).not.toContain("white-space: pre !important;");
     expect(markdownRenderStylesheet).not.toContain("overflow-x: auto;");
+  });
+
+  it("renders table widgets through theme variables instead of hard-coded visual constants", () => {
+    const markdownRenderStylesheet = readFileSync(markdownRenderStylesheetPath, "utf-8");
+
+    expect(markdownRenderStylesheet).toContain("margin: var(--yulora-table-margin-top) 0 var(--yulora-table-margin-bottom);");
+    expect(markdownRenderStylesheet).toContain("background: var(--yulora-table-bg);");
+    expect(markdownRenderStylesheet).toContain("border-radius: var(--yulora-table-radius);");
+    expect(markdownRenderStylesheet).toContain("background: var(--yulora-table-cell-active-bg);");
+    expect(markdownRenderStylesheet).toContain("min-height: var(--yulora-table-cell-min-height);");
+    expect(markdownRenderStylesheet).toContain("font-weight: var(--yulora-table-header-font-weight);");
   });
 
   it("executes editor test commands through the allowlist driver and completes the result", async () => {

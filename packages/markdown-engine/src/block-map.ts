@@ -13,7 +13,15 @@ export type InlineLine = {
 
 export interface BaseBlock {
   id: string;
-  type: "heading" | "paragraph" | "list" | "blockquote" | "codeFence" | "thematicBreak" | "htmlImage";
+  type:
+    | "heading"
+    | "paragraph"
+    | "list"
+    | "blockquote"
+    | "codeFence"
+    | "thematicBreak"
+    | "htmlImage"
+    | "table";
   startOffset: number;
   endOffset: number;
   startLine: number;
@@ -86,6 +94,32 @@ export interface HtmlImageBlock extends BaseBlock {
   align: "left" | "center" | "right" | null;
 }
 
+export type TableAlignment = "none" | "left" | "center" | "right";
+export type TableRowSeparator = "compact" | "loose";
+
+export interface TableCell {
+  text: string;
+  rowIndex: number;
+  columnIndex: number;
+  isHeader: boolean;
+  startOffset: number;
+  endOffset: number;
+  contentStartOffset: number;
+  contentEndOffset: number;
+}
+
+export type TableRow = readonly TableCell[];
+
+export interface TableBlock extends BaseBlock {
+  type: "table";
+  columnCount: number;
+  hasHeader: boolean;
+  rowSeparator: TableRowSeparator;
+  alignments: readonly TableAlignment[];
+  header: readonly TableCell[];
+  rows: readonly TableRow[];
+}
+
 export type MarkdownBlock =
   | HeadingBlock
   | ParagraphBlock
@@ -93,7 +127,8 @@ export type MarkdownBlock =
   | BlockquoteBlock
   | CodeFenceBlock
   | ThematicBreakBlock
-  | HtmlImageBlock;
+  | HtmlImageBlock
+  | TableBlock;
 
 export interface BlockMap {
   blocks: MarkdownBlock[];

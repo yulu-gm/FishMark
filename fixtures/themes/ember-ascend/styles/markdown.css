@@ -1,0 +1,30 @@
+:root {
+  --yulora-inline-code-bg: rgba(255, 160, 108, 0.14);
+  --yulora-inline-code-text: #ffd9bc;
+  --yulora-list-marker: #d6a987;
+  --yulora-task-border: #a6846a;
+  --yulora-task-bg: color-mix(in srgb, var(--yulora-surface-bg) 92%, #ffb07a 8%);
+  --yulora-task-check: #ff9a5c;
+  --yulora-thematic-break: #4a3c33;
+  --yulora-code-block-bg: color-mix(in srgb, var(--yulora-surface-raised-bg) 88%, #1a0f08 12%);
+  --yulora-code-block-text: #efe1cf;
+  --yulora-table-margin-top: 0.34rem;
+  --yulora-table-margin-bottom: 0.78rem;
+  --yulora-table-after-break-padding-bottom: 0.4rem;
+  --yulora-table-after-break-margin-bottom: 0.08rem;
+  --yulora-table-after-break-margin-top: 0.14rem;
+  --yulora-table-bg: color-mix(in srgb, var(--yulora-surface-raised-bg) 90%, #22150f 10%);
+  --yulora-table-border-width: 1px;
+  --yulora-table-border-color: color-mix(in srgb, var(--yulora-border-faint) 82%, rgba(255, 154, 92, 0.14));
+  --yulora-table-cell-border-width: 1px;
+  --yulora-table-cell-border-color: color-mix(in srgb, var(--yulora-border-faint) 78%, rgba(255, 154, 92, 0.12));
+  --yulora-table-radius: 16px;
+  --yulora-table-cell-bg: transparent;
+  --yulora-table-cell-active-bg: color-mix(in srgb, var(--yulora-surface-raised-bg) 66%, rgba(255, 154, 92, 0.22));
+  --yulora-table-cell-min-height: 42px;
+  --yulora-table-cell-padding-block: 10px;
+  --yulora-table-cell-padding-inline: 12px;
+  --yulora-table-text: var(--yulora-text-body);
+  --yulora-table-header-text: color-mix(in srgb, var(--yulora-text-strong) 92%, #fff1e5 8%);
+  --yulora-table-header-font-weight: 640;
+}

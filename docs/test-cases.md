@@ -299,6 +299,38 @@
 - 修改标题文本或重新打开文档后，大纲会同步刷新
 - 现有 autosave、active block 与设置抽屉交互不回归
 
+### TC-042 表格编辑上下文
+
+步骤：
+1. 打开一个包含 pipe table 的 Markdown 文档，例如：
+   `| name | qty |`
+   `| --- | ---: |`
+   `| pen | 2 |`
+2. 把光标停在普通段落中，按住 `Ctrl/Cmd` 1 秒。
+3. 确认 shortcut hint 仍显示默认文本组，例如 `Bold`、`Italic`。
+4. 再把焦点移入表格任意单元格。
+5. 再次按住 `Ctrl/Cmd` 1 秒，观察 shortcut hint 与左侧 rail。
+6. 直接用鼠标点击一个单元格，例如 `2` 所在单元格，并输入新文本把它改为 `20`。
+7. 在另一个空白文档中只输入一行典型 pipe header，例如 `| a | b | c |`，然后在行尾按 `Enter`。
+8. 回到表格内继续使用 `Tab`、`Shift+Tab`、`ArrowUp`、`ArrowDown`、`ArrowLeft`、`ArrowRight`、`Enter`、`Ctrl/Cmd+Enter`。
+9. 使用 rail 中的表格图标 tools；分别 hover 或 focus 观察 tooltip 是否显示 `Row Above`、`Row Below`、`Column Left`、`Column Right`、`Delete Row`、`Delete Column`、`Delete Table`，并逐个触发对应动作，尤其验证插入空白列后表格仍保持渲染态。
+10. 打开 [docs/test-report.md](/C:/Users/yulu/Documents/Yulora/Yulora/docs/test-report.md)，确认 `## 记录` 下这种没有 delimiter、且记录行之间允许空一行的 pipe rows 也会被识别为表格渲染。
+
+预期：
+- 表格默认以渲染态 widget 显示，不回退到整块原始 Markdown 源码态
+- 进入表格后，shortcut hint 切换为表格组，例如 `Next Cell`、`Previous Cell`、`Row Above`、`Row Below`、`Next Row / Exit`、`Insert Row Below`
+- 左侧 rail 中段切换为表格图标工具列，并带有非硬切的过渡
+- 直接点击单元格即可进入对应 cell 的编辑态，不需要先回到原始 Markdown 源码块
+- 在仅有 header 行的典型 pipe table 草稿上按 `Enter`，会自动补出 delimiter 行和一个空白 body 行，并把光标放到第一格空白单元格
+- 单元格输入会直接改写对应 Markdown 内容，并立即把整张表重排为 canonical 对齐格式
+- `Tab` / `Shift+Tab` 在单元格之间移动，`ArrowUp` / `ArrowDown` 会在同列上下移动
+- `ArrowLeft` / `ArrowRight` 只会在 caret 到达单元格边界时跨到前后单元格；否则保留原生文本内移动
+- `Enter` 会跳到下一行同列；如果当前已经是最后一行，则退出表格并把焦点还给正文编辑区
+- `Ctrl/Cmd+Enter` 会在当前行下方插入新行
+- rail 中的图标 tools 能完成增删行列和删除整表，hover / focus 时会显示 tooltip，且焦点保持在逻辑上合理的单元格
+- 插入空白列后，formatter 会生成合法 delimiter，表格不会掉回普通段落或原始 pipe 文本
+- `docs/test-report.md` 这类 loose headerless pipe rows 会按表格渲染，而不是退回成多段普通 pipe 文本
+
 ## 3. 输入法
 
 ### TC-020 中文 IME

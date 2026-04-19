@@ -11,9 +11,11 @@
   grid-template-rows: var(--yulora-titlebar-height) minmax(0, 1fr);
 }
 
-.app-shell[data-yulora-focus-mode="active"] {
-  --yulora-shell-rail-offset: 0px;
-}
+/*
+ * Focus mode keeps the rail column reserved so the document canvas does not
+ * shift horizontally when the rail slides out. The rail itself animates with
+ * transform/opacity below.
+ */
 
 .app-titlebar {
   position: relative;
@@ -149,6 +151,7 @@
 .app-rail {
   align-self: start;
   position: sticky;
+  z-index: 2;
   top: 0;
   height: 100%;
   padding: var(--yulora-space-6) var(--yulora-space-3) var(--yulora-space-5);
@@ -194,6 +197,109 @@
 .app-rail-spacer {
   flex: 1;
   width: 1px;
+}
+
+.app-rail-content {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  display: grid;
+}
+
+.app-rail-mode-group {
+  grid-area: 1 / 1;
+  width: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition:
+    opacity 160ms cubic-bezier(0.2, 0.85, 0.2, 1),
+    transform 180ms cubic-bezier(0.2, 0.85, 0.2, 1);
+}
+
+.app-rail-mode-group[data-state="open"] {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.app-rail-mode-group[data-state="closing"] {
+  opacity: 0;
+  transform: translateY(10px);
+  pointer-events: none;
+}
+
+.table-tool-strip {
+  position: relative;
+  width: 100%;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  align-content: start;
+}
+
+.table-tool-button {
+  position: relative;
+  inline-size: 44px;
+  block-size: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--yulora-border-faint);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--yulora-surface-raised-bg) 92%, transparent);
+  color: var(--yulora-text-body);
+  cursor: pointer;
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.table-tool-button:hover {
+  transform: translateX(1px);
+  border-color: var(--yulora-border-strong);
+  background: color-mix(in srgb, var(--yulora-surface-raised-bg) 82%, var(--yulora-accent, #7a8f8f) 18%);
+}
+
+.table-tool-button:focus-visible {
+  outline: 2px solid var(--yulora-focus-ring);
+  outline-offset: 2px;
+}
+
+.table-tool-button-icon {
+  inline-size: 18px;
+  block-size: 18px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.table-tool-button[data-tone="danger"] {
+  color: var(--yulora-text-strong);
+}
+
+.table-tool-tooltip {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 10px);
+  transform: translateY(-50%);
+  padding: 8px 10px;
+  border: 1px solid var(--yulora-border-faint);
+  border-radius: 12px;
+  background: var(--yulora-surface-panel-bg, var(--yulora-surface-raised-bg));
+  color: var(--yulora-text-body);
+  font-size: 0.75rem;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: var(--yulora-shadow-1);
+  pointer-events: none;
+  z-index: 1;
 }
 
 /* ── Settings entry icon button ─────────────────────────────── */
@@ -345,20 +451,13 @@
   transform: translateY(0);
   opacity: 1;
   transition:
-    max-height var(--yulora-focus-transition-duration) var(--yulora-focus-transition-easing),
-    padding var(--yulora-focus-transition-duration) var(--yulora-focus-transition-easing),
     opacity var(--yulora-focus-transition-duration) ease,
     transform var(--yulora-focus-transition-duration) var(--yulora-focus-transition-easing);
 }
 
 .app-header[data-visibility="collapsed"] {
-  max-height: 0;
-  padding-top: 0;
-  padding-bottom: 0;
-  margin: 0 auto;
   opacity: 0;
   transform: translateY(-12px);
-  overflow: hidden;
   pointer-events: none;
 }
 

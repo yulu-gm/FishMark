@@ -20,6 +20,15 @@ export type CodeEditorHandle = {
   navigateToOffset: (offset: number) => void;
   insertText: (text: string) => void;
   setSelection: (anchor: number, head?: number) => void;
+  selectTableCell: (position: { row: number; column: number }) => void;
+  editTableCell: (input: { row: number; column: number; text: string }) => void;
+  insertTableRowAbove: () => void;
+  insertTableRowBelow: () => void;
+  insertTableColumnLeft: () => void;
+  insertTableColumnRight: () => void;
+  deleteTableRow: () => void;
+  deleteTableColumn: () => void;
+  deleteTable: () => void;
   pressEnter: () => void;
 };
 
@@ -110,6 +119,33 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
         },
         setSelection: (anchor: number, head?: number) => {
           controllerRef.current?.setSelection(anchor, head);
+        },
+        selectTableCell: (position: { row: number; column: number }) => {
+          controllerRef.current?.selectTableCell(position);
+        },
+        editTableCell: (input: { row: number; column: number; text: string }) => {
+          controllerRef.current?.editTableCell(input);
+        },
+        insertTableRowAbove: () => {
+          controllerRef.current?.insertTableRowAbove();
+        },
+        insertTableRowBelow: () => {
+          controllerRef.current?.insertTableRowBelow();
+        },
+        insertTableColumnLeft: () => {
+          controllerRef.current?.insertTableColumnLeft();
+        },
+        insertTableColumnRight: () => {
+          controllerRef.current?.insertTableColumnRight();
+        },
+        deleteTableRow: () => {
+          controllerRef.current?.deleteTableRow();
+        },
+        deleteTableColumn: () => {
+          controllerRef.current?.deleteTableColumn();
+        },
+        deleteTable: () => {
+          controllerRef.current?.deleteTable();
         },
         pressEnter: () => {
           controllerRef.current?.pressEnter();

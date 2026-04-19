@@ -2,6 +2,12 @@ import type { EditorView, KeyBinding } from "@codemirror/view";
 
 import type { ActiveBlockState } from "../active-block";
 import {
+  runTableInsertRowBelow,
+  runTableMoveDown,
+  runTableMoveDownOrExit,
+  runTableMoveUp,
+  runTableNextCell,
+  runTablePreviousCell,
   toggleBlockquote,
   toggleBulletList,
   toggleCodeFence,
@@ -20,7 +26,13 @@ export type TextEditingShortcut = {
     | "toggle-heading-4"
     | "toggle-bullet-list"
     | "toggle-blockquote"
-    | "toggle-code-fence";
+    | "toggle-code-fence"
+    | "table-next-cell"
+    | "table-previous-cell"
+    | "table-insert-row-below"
+    | "table-move-up"
+    | "table-move-down"
+    | "table-enter-next-row";
   key: string;
   label: string;
   run: TextEditingShortcutRunner;
@@ -31,7 +43,15 @@ type TextEditingShortcutRunner = (
   activeState: ActiveBlockState
 ) => boolean;
 
-export const TEXT_EDITING_SHORTCUTS: readonly TextEditingShortcut[] = [
+export type ShortcutGroupId = "default-text" | "table-editing";
+
+export type ShortcutGroup = {
+  id: ShortcutGroupId;
+  label: string;
+  shortcuts: readonly TextEditingShortcut[];
+};
+
+const defaultTextEditingShortcuts: readonly TextEditingShortcut[] = [
   { id: "toggle-strong", key: "Mod-b", label: "Bold", run: toggleStrong },
   { id: "toggle-emphasis", key: "Mod-i", label: "Italic", run: toggleEmphasis },
   {
@@ -78,6 +98,64 @@ export const TEXT_EDITING_SHORTCUTS: readonly TextEditingShortcut[] = [
   }
 ];
 
+const tableEditingShortcuts: readonly TextEditingShortcut[] = [
+  {
+    id: "table-next-cell",
+    key: "Tab",
+    label: "Next Cell",
+    run: runTableNextCell
+  },
+  {
+    id: "table-previous-cell",
+    key: "Shift-Tab",
+    label: "Previous Cell",
+    run: runTablePreviousCell
+  },
+  {
+    id: "table-insert-row-below",
+    key: "Mod-Enter",
+    label: "Insert Row Below",
+    run: runTableInsertRowBelow
+  },
+  {
+    id: "table-move-up",
+    key: "ArrowUp",
+    label: "Row Above",
+    run: runTableMoveUp
+  },
+  {
+    id: "table-move-down",
+    key: "ArrowDown",
+    label: "Row Below",
+    run: runTableMoveDown
+  },
+  {
+    id: "table-enter-next-row",
+    key: "Enter",
+    label: "Next Row / Exit",
+    run: runTableMoveDownOrExit
+  }
+];
+
+export const DEFAULT_TEXT_SHORTCUT_GROUP: ShortcutGroup = {
+  id: "default-text",
+  label: "Text",
+  shortcuts: defaultTextEditingShortcuts
+};
+
+export const TABLE_EDITING_SHORTCUT_GROUP: ShortcutGroup = {
+  id: "table-editing",
+  label: "Table",
+  shortcuts: tableEditingShortcuts
+};
+
+export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
+  DEFAULT_TEXT_SHORTCUT_GROUP,
+  TABLE_EDITING_SHORTCUT_GROUP
+];
+
+export const TEXT_EDITING_SHORTCUTS = DEFAULT_TEXT_SHORTCUT_GROUP.shortcuts;
+
 const formatShortcutHintToken = (token: string) => {
   if (token === "Mod") {
     return "";
@@ -103,7 +181,33 @@ export const formatShortcutHintKey = (key: string, platform: string) => {
 export const createTextEditingShortcutKeymap = (
   getActiveBlockState: () => ActiveBlockState
 ): KeyBinding[] =>
-  TEXT_EDITING_SHORTCUTS.map(({ key, run }) => ({
+  DEFAULT_TEXT_SHORTCUT_GROUP.shortcuts.map(({ key, run }) => ({
     key,
     run: (view) => run(view, getActiveBlockState())
   }));
+
+function createShortcutKeymap(
+  shortcuts: readonly TextEditingShortcut[],
+  getActiveBlockState: () => ActiveBlockState
+): KeyBinding[] {
+  return shortcuts.map(({ key, run }) => ({
+    key,
+    run: (view) => run(view, getActiveBlockState())
+  }));
+}
+
+export function createGroupedShortcutKeymaps(getActiveBlockState: () => ActiveBlockState): {
+  defaultText: KeyBinding[];
+  tableEditing: KeyBinding[];
+} {
+  return {
+    defaultText: createShortcutKeymap(
+      DEFAULT_TEXT_SHORTCUT_GROUP.shortcuts,
+      getActiveBlockState
+    ),
+    tableEditing: createShortcutKeymap(
+      TABLE_EDITING_SHORTCUT_GROUP.shortcuts,
+      getActiveBlockState
+    )
+  };
+}

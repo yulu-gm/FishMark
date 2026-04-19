@@ -1,0 +1,243 @@
+:root {
+  --yulora-ember-accent: #ff8c52;
+  --yulora-ember-accent-soft: #ffb07a;
+  --yulora-ember-accent-deep: #c85a2a;
+
+  --yulora-dirty-text: #ff9a5c;
+  --yulora-clean-text: #ffb07a;
+  --yulora-danger-bg: color-mix(in srgb, var(--yulora-surface-bg) 86%, #c94f4f 14%);
+  --yulora-danger-border: color-mix(in srgb, var(--yulora-border-subtle) 68%, #c94f4f 32%);
+  --yulora-danger-text: color-mix(in srgb, var(--yulora-text-strong) 80%, #8b1e1e 20%);
+  --yulora-focus-ring: var(--yulora-ember-accent);
+
+  --yu-ctrl-solid-bg: color-mix(in srgb, var(--yulora-surface-raised-bg) 92%, transparent);
+  --yu-ctrl-solid-bg-hover: color-mix(in srgb, var(--yulora-surface-muted-bg) 94%, transparent);
+  --yu-ctrl-solid-border: var(--yulora-border-subtle);
+  --yu-ctrl-solid-border-hover: var(--yulora-border-muted);
+  --yu-ctrl-text: var(--yulora-text-secondary);
+  --yu-ctrl-text-hover: var(--yulora-text-strong);
+  --yu-ctrl-glass-bg: color-mix(in srgb, var(--yulora-glass-strong-bg) 50%, var(--yulora-surface-raised-bg));
+  --yu-ctrl-glass-bg-hover: color-mix(in srgb, var(--yulora-glass-strong-bg) 72%, var(--yulora-surface-raised-bg));
+  --yu-ctrl-glass-border: var(--yulora-glass-border);
+  --yu-ctrl-glass-border-hover: color-mix(in srgb, var(--yulora-glass-border) 64%, var(--yulora-ember-accent) 36%);
+  --yu-input-bg: color-mix(in srgb, var(--yulora-glass-strong-bg) 48%, var(--yulora-surface-raised-bg));
+  --yu-input-bg-focus: color-mix(in srgb, var(--yulora-glass-strong-bg) 70%, var(--yulora-surface-raised-bg));
+  --yu-input-border: var(--yulora-border-muted);
+  --yu-input-border-focus: var(--yulora-focus-ring);
+  --yu-input-ring: color-mix(in srgb, var(--yulora-focus-ring) 18%, transparent);
+  --yu-segment-bg: color-mix(in srgb, var(--yulora-glass-strong-bg) 40%, var(--yulora-surface-raised-bg));
+  --yu-segment-border: var(--yulora-border-muted);
+  --yu-segment-active-bg: color-mix(in srgb, var(--yulora-glass-strong-bg) 66%, var(--yulora-surface-raised-bg));
+}
+
+/* Side rail — dark smoke glass that frames the ember backdrop. */
+[data-yulora-layout="rail"].app-rail {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--yulora-glass-strong-bg) 42%, transparent),
+      color-mix(in srgb, var(--yulora-glass-bg) 22%, transparent)
+    );
+  border-right-color: color-mix(in srgb, var(--yulora-glass-border) 58%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--yulora-glass-sheen) 72%, transparent),
+    0 14px 26px color-mix(in srgb, var(--yulora-scrim) 18%, transparent);
+  backdrop-filter: blur(20px) saturate(1.04);
+  -webkit-backdrop-filter: blur(20px) saturate(1.04);
+}
+
+/* Workspace card — tinted reading surface sitting over the shader.
+   `workspaceGlassOpacity` defaults to 0.62 so the text remains the focus. */
+[data-yulora-layout="workspace"].app-workspace {
+  --yulora-ember-workspace-opacity: var(--yulora-theme-parameter-workspaceGlassOpacity, 0.62);
+  width: min(100%, 1040px);
+  height: calc(100% - (var(--yulora-space-2) * 2));
+  margin: var(--yulora-space-2) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: var(--yulora-space-3);
+  padding: var(--yulora-space-4) var(--yulora-space-5);
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--yulora-glass-border) calc(var(--yulora-ember-workspace-opacity) * 64%),
+      transparent
+    );
+  border-radius: calc(var(--yulora-radius-xl) + 4px);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(
+        in srgb,
+        var(--yulora-glass-strong-bg) calc(var(--yulora-ember-workspace-opacity) * 100%),
+        transparent
+      ),
+      color-mix(
+        in srgb,
+        var(--yulora-glass-bg) calc(var(--yulora-ember-workspace-opacity) * 100%),
+        transparent
+      )
+    );
+  box-shadow:
+    inset 0 1px 0
+      color-mix(
+        in srgb,
+        var(--yulora-glass-sheen) calc(var(--yulora-ember-workspace-opacity) * 78%),
+        transparent
+      ),
+    0 24px 52px
+      color-mix(
+        in srgb,
+        var(--yulora-scrim) calc(var(--yulora-ember-workspace-opacity) * 22%),
+        transparent
+      );
+  backdrop-filter:
+    blur(calc(var(--yulora-ember-workspace-opacity) * 26px))
+    saturate(calc(1 + (var(--yulora-ember-workspace-opacity) * 0.08)))
+    brightness(calc(1 - (var(--yulora-ember-workspace-opacity) * 0.06)));
+  -webkit-backdrop-filter:
+    blur(calc(var(--yulora-ember-workspace-opacity) * 26px))
+    saturate(calc(1 + (var(--yulora-ember-workspace-opacity) * 0.08)))
+    brightness(calc(1 - (var(--yulora-ember-workspace-opacity) * 0.06)));
+}
+
+[data-yulora-region="empty-state"] .empty-inner {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--yulora-glass-strong-bg) 22%, transparent),
+      color-mix(in srgb, var(--yulora-glass-bg) 12%, transparent)
+    );
+  border: 1px solid color-mix(in srgb, var(--yulora-glass-border) 52%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--yulora-glass-sheen) 70%, transparent),
+    0 12px 28px color-mix(in srgb, var(--yulora-scrim) 18%, transparent);
+  backdrop-filter: blur(24px) saturate(1.06) brightness(0.96);
+  -webkit-backdrop-filter: blur(24px) saturate(1.06) brightness(0.96);
+}
+
+[data-yulora-region="workspace-canvas"] .document-editor {
+  width: 100%;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+[data-yulora-layout="workspace"] .workspace-header {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--yulora-glass-strong-bg) 10%, transparent),
+      color-mix(in srgb, var(--yulora-glass-bg) 4%, transparent)
+    );
+  border-radius: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  margin: 0;
+  width: 100%;
+}
+
+[data-yulora-layout="workspace"] .app-status-bar {
+  position: static;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  z-index: auto;
+  min-height: auto;
+  padding: var(--yulora-space-2) 0 0;
+  border-radius: 0;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--yulora-glass-bg) 8%, transparent),
+      color-mix(in srgb, var(--yulora-glass-strong-bg) 4%, transparent)
+    );
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+[data-yulora-layout="workspace"] .app-status-bar [data-yulora-region="status-strip"] {
+  min-height: var(--yulora-status-bar-height);
+  padding-top: var(--yulora-space-2);
+  border-top: 1px solid color-mix(in srgb, var(--yulora-glass-border) 32%, transparent);
+}
+
+/* Outline drawer — slightly warmer frosted glass to echo the ember core. */
+.outline-panel,
+[data-yulora-region="outline-panel"] {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--yulora-glass-strong-bg) 58%, transparent),
+      color-mix(in srgb, var(--yulora-glass-bg) 36%, transparent)
+    );
+  border-color: color-mix(in srgb, var(--yulora-glass-border) 66%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--yulora-glass-sheen) 68%, transparent),
+    -12px 0 30px color-mix(in srgb, var(--yulora-scrim) 20%, transparent);
+  backdrop-filter: blur(22px) saturate(1.05);
+  -webkit-backdrop-filter: blur(22px) saturate(1.05);
+}
+
+.settings-shell,
+[data-yulora-panel="settings-drawer"] {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--yulora-glass-strong-bg) 66%, transparent),
+      color-mix(in srgb, var(--yulora-glass-bg) 44%, transparent)
+    );
+  border-color: color-mix(in srgb, var(--yulora-glass-border) 70%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--yulora-glass-sheen) 72%, transparent),
+    0 26px 60px color-mix(in srgb, var(--yulora-scrim) 32%, transparent);
+  backdrop-filter: blur(30px) saturate(1.08);
+  -webkit-backdrop-filter: blur(30px) saturate(1.08);
+}
+
+[data-yulora-dialog="settings-drawer"] {
+  background: color-mix(in srgb, var(--yulora-scrim) 32%, transparent);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+.settings-group {
+  background: color-mix(in srgb, var(--yulora-glass-bg) 24%, transparent);
+  border: 1px solid color-mix(in srgb, var(--yulora-glass-border) 48%, transparent);
+  border-radius: 14px;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--yulora-glass-sheen) 58%, transparent);
+  backdrop-filter: blur(10px) saturate(1.03);
+  -webkit-backdrop-filter: blur(10px) saturate(1.03);
+}
+
+.app-notification-banner,
+[data-yulora-region="app-notification-banner"] {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--yulora-glass-strong-bg) 66%, transparent),
+      color-mix(in srgb, var(--yulora-glass-bg) 44%, transparent)
+    );
+  border: 1px solid color-mix(in srgb, var(--yulora-glass-border) 68%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--yulora-glass-sheen) 66%, transparent),
+    0 12px 28px color-mix(in srgb, var(--yulora-scrim) 20%, transparent);
+  backdrop-filter: blur(24px) saturate(1.08);
+  -webkit-backdrop-filter: blur(24px) saturate(1.08);
+}
+
+.app-titlebar,
+[data-yulora-titlebar] {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--yulora-glass-strong-bg) 50%, transparent),
+      color-mix(in srgb, var(--yulora-glass-bg) 28%, transparent)
+    );
+  backdrop-filter: blur(20px) saturate(1.05);
+  -webkit-backdrop-filter: blur(20px) saturate(1.05);
+}
