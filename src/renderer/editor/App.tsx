@@ -1724,6 +1724,18 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   ]);
 
   useEffect(() => {
+    if (!isDocumentOpen) {
+      return;
+    }
+
+    const frame = requestAnimationFrame(() => {
+      editorRef.current?.focus();
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [isDocumentOpen, state.editorLoadRevision]);
+
+  useEffect(() => {
     if (isSettingsOpen || isSettingsClosing || pendingFocusRestoreRef.current === null) {
       return;
     }
