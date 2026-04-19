@@ -1,7 +1,7 @@
 :root {
   --yulora-editor-font-family: "Aptos", "Inter", "Segoe UI", sans-serif;
   --yulora-editor-font-size: 1.04rem;
-  --yulora-editor-caret: #5da7ff;
+  --yulora-editor-caret: var(--yulora-caret-color);
 }
 
 [data-yulora-region="workspace-canvas"] .document-editor .cm-editor,
@@ -10,5 +10,31 @@
 }
 
 [data-yulora-region="workspace-canvas"] .document-editor .cm-editor {
-  color: var(--yulora-text-body);
+  color: var(--yulora-editor-fg);
+}
+
+[data-yulora-region="workspace-canvas"] .document-editor .cm-content {
+  caret-color: var(--yulora-caret-color);
+}
+
+[data-yulora-region="workspace-canvas"] .document-editor .cm-content ::selection,
+[data-yulora-region="workspace-canvas"] .document-editor .cm-line::selection,
+[data-yulora-region="workspace-canvas"] .document-editor .cm-selectionLayer .cm-selectionBackground,
+[data-yulora-region="workspace-canvas"] .document-editor .cm-selectionBackground {
+  background: var(--yulora-selection-bg);
+  color: var(--yulora-selection-fg);
+}
+
+[data-yulora-region="workspace-canvas"] .document-editor .cm-activeLine {
+  background: var(--yulora-current-line-bg);
+}
+
+[data-yulora-region="workspace-canvas"] .document-editor .cm-gutters,
+[data-yulora-region="workspace-canvas"] .document-editor .cm-gutterElement {
+  color: var(--yulora-gutter-fg);
+}
+
+[data-yulora-region="workspace-canvas"] .document-editor .cm-gutters {
+  background: transparent;
+  border-right: 0;
 }

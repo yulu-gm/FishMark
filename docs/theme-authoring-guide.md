@@ -97,6 +97,7 @@ my-theme/
 
 ```json
 {
+  "contractVersion": 2,
   "id": "my-theme",
   "name": "My Theme",
   "version": "1.0.0",
@@ -146,6 +147,7 @@ my-theme/
 
 | 字段 | 是否必须 | 当前是否真的生效 | 说明 |
 | --- | --- | --- | --- |
+| `contractVersion` | 必须 | 是 | 当前必须写 `2`，否则整包失效 |
 | `id` | 必须 | 是 | 非空字符串，建议全项目唯一 |
 | `name` | 必须 | 是 | 非空字符串 |
 | `version` | 建议 | 是 | 缺失时回落为 `1.0.0` |
@@ -230,61 +232,82 @@ manifest 中出现的所有路径都必须留在主题包根目录内部。
 
 参考 `default` 和 `rain-glass`，推荐按下面的职责写：
 
+### 5.0 先理解 formal semantic slots
+
+从 `contractVersion: 2` 开始，renderer 只把正式 `--yulora-*` semantic slots 视为公开接口。旧的 ad-hoc 变量名可以只留在主题内部做中间映射，但不要假设 app 内置样式还会直接消费它们。
+
+最低限度请覆盖这些组：
+
+- shell：`--yulora-app-bg`、`--yulora-workspace-bg`、`--yulora-rail-bg`、`--yulora-panel-bg`、`--yulora-panel-border`、`--yulora-panel-shadow`、`--yulora-statusbar-bg`、`--yulora-statusbar-border`、`--yulora-titlebar-bg`
+- text / controls：`--yulora-text-primary`、`--yulora-text-secondary`、`--yulora-text-muted`、`--yulora-text-accent`、`--yulora-text-danger`、`--yulora-text-on-accent`、`--yulora-control-bg`、`--yulora-control-bg-hover`、`--yulora-control-bg-active`、`--yulora-control-border`、`--yulora-control-fg`、`--yulora-focus-ring`
+- editor：`--yulora-editor-bg`、`--yulora-editor-fg`、`--yulora-editor-muted`、`--yulora-caret-color`、`--yulora-current-line-bg`、`--yulora-gutter-fg`、`--yulora-active-block-bg`、`--yulora-active-block-border`
+- markdown：`--yulora-markdown-body`、`--yulora-markdown-heading`、`--yulora-markdown-link`、`--yulora-markdown-strong`、`--yulora-markdown-inline-code-bg`、`--yulora-markdown-code-bg`、`--yulora-markdown-code-border`
+- 前瞻 slot：`--yulora-markdown-table-*` 与 `--yulora-markdown-code-token-*`
+
 ### `tokens/*.css`
 
-负责基础颜色与表面变量。至少覆盖这些基础变量：
+负责 foundation tokens 与 semantic slot 默认映射。优先直接定义正式 semantic slots；如果主题内部还保留旧变量做中间计算，也不要把它们当成 app 的公开接口。至少覆盖这些正式变量组：
 
 ```css
---yulora-page-bg
---yulora-surface-bg
---yulora-surface-raised-bg
---yulora-surface-muted-bg
---yulora-surface-subtle-bg
---yulora-surface-blockquote-bg
---yulora-border-strong
---yulora-border-muted
---yulora-border-subtle
---yulora-border-faint
---yulora-text-strong
---yulora-text-body
---yulora-text-muted
---yulora-text-subtle
+--yulora-app-bg
+--yulora-workspace-bg
+--yulora-rail-bg
+--yulora-panel-bg
+--yulora-panel-border
+--yulora-panel-shadow
+--yulora-statusbar-bg
+--yulora-statusbar-border
+--yulora-titlebar-bg
+--yulora-text-primary
 --yulora-text-secondary
---yulora-scrollbar-thumb
---yulora-scrollbar-thumb-hover
---yulora-glass-bg
---yulora-glass-strong-bg
---yulora-glass-border
---yulora-glass-sheen
---yulora-scrim
+--yulora-text-muted
+--yulora-text-accent
+--yulora-text-danger
+--yulora-text-on-accent
+--yulora-control-bg
+--yulora-control-bg-hover
+--yulora-control-bg-active
+--yulora-control-border
+--yulora-control-fg
+--yulora-focus-ring
 ```
 
 如果主题支持 `light`，请在 light token 文件里写在 `:root` 上。
 
-如果主题支持 `dark`，请在 dark token 文件里写在 `:root[data-yulora-theme="dark"]` 上。
+如果主题支持 `dark`，请在 dark token 文件里写在 `:root[data-yulora-theme-mode="dark"]` 上。
 
 ### `styles/ui.css`
 
-负责：
+负责把 foundation token 映射到 UI 相关 semantic slots，例如：
 
-- UI 控件 token，例如 `--yu-ctrl-*`
-- 危险态、focus ring、segment、input 等交互配色
-- 工作区壳层、侧边栏、设置抽屉、通知条等结构性视觉
+- `--yulora-app-bg`
+- `--yulora-panel-bg`
+- `--yulora-panel-border`
+- `--yulora-control-bg`
+- `--yulora-control-border`
+- `--yulora-banner-error-bg`
 
 ### `styles/editor.css`
 
-负责：
+负责编辑态 formal slots 与字体，例如：
 
 - `--yulora-editor-font-family`
 - `--yulora-editor-font-size`
-- `--yulora-editor-caret`
-- 编辑区透明度、背景、文字颜色等增强
+- `--yulora-editor-bg`
+- `--yulora-editor-fg`
+- `--yulora-caret-color`
+- `--yulora-current-line-bg`
 
 ### `styles/markdown.css`
 
-负责：
+负责 Markdown formal slots，例如：
 
-- 行内代码、任务列表、分割线、代码块等 Markdown 渲染态 token
+- `--yulora-markdown-body`
+- `--yulora-markdown-heading`
+- `--yulora-markdown-inline-code-bg`
+- `--yulora-markdown-code-bg`
+- `--yulora-markdown-table-border`
+- `--yulora-markdown-code-token-keyword`
 
 ### `styles/titlebar.css`
 
@@ -325,6 +348,20 @@ Yulora 当前支持两种参数：
 
 例如 `rain-glass` 的 `workspaceGlassOpacity` 是 CSS-only 参数，而 `rainAmount`、`glassBlur` 属于 shader 参数。
 
+## 6.5 Built-in Runtime Env
+
+除了 `parameters[]`，runtime 还会自动提供一组内建环境值，不需要也不允许在 manifest 中声明：
+
+- CSS：`--yulora-env-word-count`、`--yulora-env-focus-mode`、`--yulora-env-viewport-width`、`--yulora-env-viewport-height`
+- 属性：`:root[data-yulora-theme-mode="light|dark"]`
+- shader uniforms：`u_wordCount`、`u_focusMode`、`u_themeMode`、`u_viewportWidth`、`u_viewportHeight`
+
+推荐用途：
+
+- 用字数或 focus mode 调整动态强度
+- 用 viewport 做背景构图或密度控制
+- 用 `data-yulora-theme-mode` 写 light/dark 分支，而不是再造私有 mode 标记
+
 ## 7. Shader 主题边界
 
 如果你要做动态主题，当前必须遵守这些边界：
@@ -360,6 +397,7 @@ Yulora 当前支持两种参数：
 
 ```json
 {
+  "contractVersion": 2,
   "id": "my-theme",
   "name": "My Theme",
   "version": "1.0.0",
@@ -388,29 +426,28 @@ Yulora 当前支持两种参数：
 ### `tokens/dark.css`
 
 ```css
-:root[data-yulora-theme="dark"] {
-  --yulora-page-bg: #101318;
-  --yulora-surface-bg: #171b22;
-  --yulora-surface-raised-bg: #1d2330;
-  --yulora-surface-muted-bg: #232a36;
-  --yulora-surface-subtle-bg: #1c2230;
-  --yulora-surface-blockquote-bg: #1c2631;
-  --yulora-border-strong: #314052;
-  --yulora-border-muted: #3a4657;
-  --yulora-border-subtle: #283444;
-  --yulora-border-faint: #202937;
-  --yulora-text-strong: #f6f8fb;
-  --yulora-text-body: #e0e7ef;
-  --yulora-text-muted: #b1bfce;
-  --yulora-text-subtle: #8594a7;
+:root[data-yulora-theme-mode="dark"] {
+  --yulora-app-bg: #101318;
+  --yulora-workspace-bg: #171b22;
+  --yulora-rail-bg: #1d2330;
+  --yulora-panel-bg: rgba(23, 30, 40, 0.92);
+  --yulora-panel-border: rgba(58, 70, 87, 0.88);
+  --yulora-panel-shadow: 0 22px 54px rgba(0, 0, 0, 0.32);
+  --yulora-statusbar-bg: transparent;
+  --yulora-statusbar-border: transparent;
+  --yulora-titlebar-bg: linear-gradient(180deg, rgba(29, 35, 48, 0.94), rgba(16, 19, 24, 0.92));
+  --yulora-text-primary: #f6f8fb;
   --yulora-text-secondary: #c8d4df;
-  --yulora-scrollbar-thumb: rgba(148, 163, 184, 0.34);
-  --yulora-scrollbar-thumb-hover: rgba(148, 163, 184, 0.5);
-  --yulora-glass-bg: rgba(19, 25, 34, 0.42);
-  --yulora-glass-strong-bg: rgba(23, 30, 40, 0.6);
-  --yulora-glass-border: rgba(255, 255, 255, 0.08);
-  --yulora-glass-sheen: rgba(255, 255, 255, 0.08);
-  --yulora-scrim: rgba(3, 6, 12, 0.24);
+  --yulora-text-muted: #b1bfce;
+  --yulora-text-accent: #7dd3fc;
+  --yulora-text-danger: #fecaca;
+  --yulora-text-on-accent: #081018;
+  --yulora-control-bg: rgba(23, 30, 40, 0.78);
+  --yulora-control-bg-hover: rgba(35, 42, 54, 0.88);
+  --yulora-control-bg-active: rgba(96, 165, 250, 0.16);
+  --yulora-control-border: rgba(58, 70, 87, 0.9);
+  --yulora-control-fg: #c8d4df;
+  --yulora-focus-ring: #60a5fa;
 }
 ```
 
@@ -418,30 +455,32 @@ Yulora 当前支持两种参数：
 
 ```css
 :root {
-  --yulora-dirty-text: #f59e0b;
-  --yulora-clean-text: #7dd3fc;
-  --yulora-danger-bg: #3b1217;
-  --yulora-danger-border: #7f1d1d;
-  --yulora-danger-text: #fecaca;
+  --yulora-app-bg: #101318;
+  --yulora-workspace-bg: #171b22;
+  --yulora-rail-bg: #1d2330;
+  --yulora-panel-bg: rgba(23, 30, 40, 0.92);
+  --yulora-panel-border: rgba(255, 255, 255, 0.08);
+  --yulora-panel-shadow: 0 22px 54px rgba(0, 0, 0, 0.32);
+  --yulora-statusbar-bg: transparent;
+  --yulora-statusbar-border: transparent;
+  --yulora-titlebar-bg: linear-gradient(180deg, rgba(29, 35, 48, 0.94), rgba(16, 19, 24, 0.92));
+  --yulora-text-primary: #f6f8fb;
+  --yulora-text-secondary: #e0e7ef;
+  --yulora-text-muted: #b1bfce;
+  --yulora-text-accent: #7dd3fc;
+  --yulora-text-danger: #fecaca;
+  --yulora-text-on-accent: #081018;
+  --yulora-control-bg: rgba(23, 30, 40, 0.78);
+  --yulora-control-bg-hover: rgba(35, 42, 54, 0.88);
+  --yulora-control-bg-active: rgba(96, 165, 250, 0.16);
+  --yulora-control-border: rgba(58, 70, 87, 0.9);
+  --yulora-control-fg: #c8d4df;
   --yulora-focus-ring: #60a5fa;
-  --yu-ctrl-solid-bg: var(--yulora-surface-raised-bg);
-  --yu-ctrl-solid-bg-hover: var(--yulora-surface-muted-bg);
-  --yu-ctrl-solid-border: var(--yulora-border-subtle);
-  --yu-ctrl-solid-border-hover: var(--yulora-border-muted);
-  --yu-ctrl-glass-bg: color-mix(in srgb, var(--yulora-glass-strong-bg) 46%, transparent);
-  --yu-ctrl-glass-bg-hover: color-mix(in srgb, var(--yulora-glass-strong-bg) 72%, transparent);
-  --yu-ctrl-glass-border: var(--yulora-glass-border);
-  --yu-ctrl-glass-border-hover: var(--yulora-border-muted);
-  --yu-ctrl-text: var(--yulora-text-secondary);
-  --yu-ctrl-text-hover: var(--yulora-text-strong);
-  --yu-input-bg: color-mix(in srgb, var(--yulora-glass-strong-bg) 42%, transparent);
-  --yu-input-bg-focus: color-mix(in srgb, var(--yulora-glass-strong-bg) 64%, transparent);
-  --yu-input-border: var(--yulora-border-muted);
-  --yu-input-border-focus: var(--yulora-focus-ring);
-  --yu-input-ring: color-mix(in srgb, var(--yulora-focus-ring) 16%, transparent);
-  --yu-segment-bg: color-mix(in srgb, var(--yulora-glass-strong-bg) 36%, transparent);
-  --yu-segment-border: var(--yulora-border-muted);
-  --yu-segment-active-bg: color-mix(in srgb, var(--yulora-glass-strong-bg) 62%, transparent);
+  --yulora-selection-bg: rgba(96, 165, 250, 0.22);
+  --yulora-selection-fg: #f8fbff;
+  --yulora-banner-info-bg: rgba(23, 30, 40, 0.94);
+  --yulora-banner-warning-bg: rgba(125, 211, 252, 0.14);
+  --yulora-banner-error-bg: #3b1217;
 }
 ```
 
@@ -451,16 +490,14 @@ Yulora 当前支持两种参数：
 :root {
   --yulora-editor-font-family: "Aptos", "Segoe UI", sans-serif;
   --yulora-editor-font-size: 1.04rem;
-  --yulora-editor-caret: #60a5fa;
-}
-
-[data-yulora-region="workspace-canvas"] .document-editor .cm-editor,
-[data-yulora-region="workspace-canvas"] .document-editor .cm-scroller {
-  background: transparent;
-}
-
-[data-yulora-region="workspace-canvas"] .document-editor .cm-editor {
-  color: var(--yulora-text-body);
+  --yulora-editor-bg: transparent;
+  --yulora-editor-fg: #e0e7ef;
+  --yulora-editor-muted: #b1bfce;
+  --yulora-caret-color: #60a5fa;
+  --yulora-current-line-bg: rgba(96, 165, 250, 0.06);
+  --yulora-gutter-fg: #8594a7;
+  --yulora-active-block-bg: rgba(96, 165, 250, 0.08);
+  --yulora-active-block-border: rgba(96, 165, 250, 0.34);
 }
 ```
 
@@ -468,15 +505,35 @@ Yulora 当前支持两种参数：
 
 ```css
 :root {
-  --yulora-inline-code-bg: rgba(148, 163, 184, 0.14);
-  --yulora-inline-code-text: #f8fafc;
-  --yulora-list-marker: #94a3b8;
-  --yulora-task-border: #64748b;
-  --yulora-task-bg: #0f172a;
-  --yulora-task-check: #e2e8f0;
-  --yulora-thematic-break: #334155;
-  --yulora-code-block-bg: #17212b;
-  --yulora-code-block-text: #dbe4f0;
+  --yulora-markdown-body: #dbe4ef;
+  --yulora-markdown-heading: #f8fbff;
+  --yulora-markdown-heading-marker: rgba(248, 251, 255, 0.34);
+  --yulora-markdown-link: #7dd3fc;
+  --yulora-markdown-link-hover: #bae6fd;
+  --yulora-markdown-strong: #f8fbff;
+  --yulora-markdown-emphasis: #dbe4ef;
+  --yulora-markdown-quote-fg: #c8d4df;
+  --yulora-markdown-quote-border: rgba(96, 165, 250, 0.28);
+  --yulora-markdown-list-bullet: #94a3b8;
+  --yulora-markdown-list-text: #b1bfce;
+  --yulora-markdown-task-done: #8fb8d6;
+  --yulora-markdown-hr: #334155;
+  --yulora-markdown-inline-code-bg: rgba(148, 163, 184, 0.14);
+  --yulora-markdown-inline-code-fg: #f8fafc;
+  --yulora-markdown-code-bg: #17212b;
+  --yulora-markdown-code-fg: #dbe4f0;
+  --yulora-markdown-code-border: rgba(96, 165, 250, 0.16);
+  --yulora-markdown-table-border: rgba(96, 165, 250, 0.14);
+  --yulora-markdown-table-header-bg: rgba(17, 23, 34, 0.96);
+  --yulora-markdown-table-header-fg: #f8fbff;
+  --yulora-markdown-table-cell-bg: transparent;
+  --yulora-markdown-table-row-stripe: rgba(255, 255, 255, 0.03);
+  --yulora-markdown-code-token-keyword: #c084fc;
+  --yulora-markdown-code-token-string: #fdba74;
+  --yulora-markdown-code-token-number: #93c5fd;
+  --yulora-markdown-code-token-comment: rgba(203, 213, 225, 0.7);
+  --yulora-markdown-code-token-function: #5eead4;
+  --yulora-markdown-code-token-type: #f9a8d4;
 }
 ```
 
@@ -568,7 +625,9 @@ node scripts/sync-dev-themes.mjs
 
 5. 到设置页点“刷新主题”
 
-6. 切换到目标主题验证
+6. 如需手动安装或覆盖文件，点“打开主题目录”，确认系统直接打开 `<userData>/themes/`
+
+7. 切换到目标主题验证
 
 `scripts/sync-dev-themes.mjs` 只会复制带 `manifest.json` 的主题目录。
 
@@ -591,6 +650,7 @@ node scripts/sync-dev-themes.mjs
 - 样式挂载顺序仍为 `tokens -> ui -> titlebar -> editor -> markdown`
 - 主题缺失的样式 part 不会残留旧主题样式
 - 编辑区、设置页、状态栏、空态、侧边轨都保持可读
+- `document.documentElement` 上能看到 `--yulora-env-word-count`、`--yulora-env-focus-mode`、`--yulora-env-viewport-width`、`--yulora-env-viewport-height` 与 `data-yulora-theme-mode`
 
 ### C. 回退验收
 

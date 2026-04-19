@@ -1,39 +1,24 @@
 :root {
-  --yulora-dirty-text: #9a6700;
-  --yulora-clean-text: #285b84;
-  --yulora-danger-bg: #fff4f4;
-  --yulora-danger-border: #efc2c2;
-  --yulora-danger-text: #8b1e1e;
-  --yulora-focus-ring: #6b9df0;
-  --yu-ctrl-solid-bg: var(--yulora-surface-bg);
-  --yu-ctrl-solid-bg-hover: var(--yulora-surface-raised-bg);
-  --yu-ctrl-solid-border: var(--yulora-border-subtle);
-  --yu-ctrl-solid-border-hover: var(--yulora-border-muted);
-  --yu-ctrl-glass-bg: color-mix(in srgb, var(--yulora-glass-strong-bg) 46%, transparent);
-  --yu-ctrl-glass-bg-hover: color-mix(in srgb, var(--yulora-glass-strong-bg) 74%, transparent);
-  --yu-ctrl-glass-border: var(--yulora-border-subtle);
-  --yu-ctrl-glass-border-hover: var(--yulora-border-muted);
-  --yu-ctrl-text: var(--yulora-text-secondary);
-  --yu-ctrl-text-hover: var(--yulora-text-strong);
-  --yu-input-bg: color-mix(in srgb, var(--yulora-glass-strong-bg) 42%, transparent);
-  --yu-input-bg-focus: color-mix(in srgb, var(--yulora-glass-strong-bg) 68%, transparent);
-  --yu-input-border: var(--yulora-border-muted);
-  --yu-input-border-focus: var(--yulora-focus-ring);
-  --yu-input-ring: color-mix(in srgb, var(--yulora-focus-ring) 16%, transparent);
-  --yu-segment-bg: color-mix(in srgb, var(--yulora-glass-strong-bg) 38%, transparent);
-  --yu-segment-border: var(--yulora-border-muted);
-  --yu-segment-active-bg: color-mix(in srgb, var(--yulora-glass-strong-bg) 68%, transparent);
-}
-
-:root[data-yulora-theme="dark"] {
-  --yulora-dirty-text: #fbbf24;
-  --yulora-clean-text: #86efac;
-  --yulora-danger-bg: #3b1217;
-  --yulora-danger-border: #7f1d1d;
-  --yulora-danger-text: #fecaca;
-  --yulora-focus-ring: #60a5fa;
-  --yu-ctrl-solid-bg: var(--yulora-surface-raised-bg);
-  --yu-ctrl-solid-bg-hover: var(--yulora-surface-muted-bg);
-  --yu-ctrl-solid-border: var(--yulora-border-subtle);
-  --yu-ctrl-solid-border-hover: var(--yulora-border-muted);
+  --yulora-page-bg: var(--yulora-app-bg);
+  --yulora-surface-bg: var(--yulora-workspace-bg);
+  --yulora-surface-raised-bg: color-mix(in srgb, var(--yulora-panel-bg) 92%, var(--yulora-workspace-bg));
+  --yulora-surface-muted-bg: color-mix(in srgb, var(--yulora-control-bg-active) 58%, var(--yulora-workspace-bg));
+  --yulora-surface-subtle-bg: color-mix(in srgb, var(--yulora-panel-border) 16%, var(--yulora-workspace-bg));
+  --yulora-surface-blockquote-bg: color-mix(
+    in srgb,
+    var(--yulora-markdown-quote-border) 10%,
+    var(--yulora-workspace-bg)
+  );
+  --yulora-border-strong: var(--yulora-panel-border);
+  --yulora-border-muted: color-mix(in srgb, var(--yulora-panel-border) 88%, transparent);
+  --yulora-border-subtle: color-mix(in srgb, var(--yulora-panel-border) 72%, transparent);
+  --yulora-border-faint: color-mix(in srgb, var(--yulora-panel-border) 52%, transparent);
+  --yulora-text-strong: var(--yulora-text-primary);
+  --yulora-text-body: var(--yulora-editor-fg);
+  --yulora-text-subtle: color-mix(in srgb, var(--yulora-text-muted) 76%, var(--yulora-workspace-bg));
+  --yulora-dirty-text: color-mix(in srgb, var(--yulora-banner-warning-bg) 52%, #9a6700);
+  --yulora-clean-text: var(--yulora-text-accent);
+  --yulora-danger-bg: var(--yulora-banner-error-bg);
+  --yulora-danger-border: color-mix(in srgb, var(--yulora-text-danger) 24%, var(--yulora-panel-border));
+  --yulora-danger-text: var(--yulora-text-danger);
 }

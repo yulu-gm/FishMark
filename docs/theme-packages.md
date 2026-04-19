@@ -6,6 +6,7 @@ Theme packages are the only supported theme architecture in Yulora.
 - Renderer builds copy builtin packages into `dist/theme-packages/` so packaged apps can still scan them
 - External packages live under `<userData>/themes/<id>/`
 - Every package directory must contain `manifest.json`
+- `manifest.json` must declare `contractVersion: 2`
 - Directories without `manifest.json` are ignored
 - Invalid manifests are skipped silently
 - `default` is the required builtin fallback package
@@ -23,7 +24,8 @@ The current runtime works like this:
 5. The selected package is resolved against the active light/dark mode.
 6. If the selected package is missing or does not support that mode, renderer falls back to builtin `default`.
 7. Renderer mounts theme stylesheets in stable order: `tokens`, `ui`, `titlebar`, `editor`, `markdown`.
-8. Optional shader surfaces are mounted separately and may fall back to static CSS at runtime.
+8. Renderer exposes the built-in runtime env on `document.documentElement`: `--yulora-env-word-count`, `--yulora-env-focus-mode`, `--yulora-env-viewport-width`, `--yulora-env-viewport-height`, plus `data-yulora-theme-mode`.
+9. Optional shader surfaces are mounted separately and may fall back to static CSS at runtime.
 
 ## Package Layout
 
@@ -55,7 +57,7 @@ default/
 
 Supported manifest fields:
 
-- `id`, `name`, `version`, `author`
+- `contractVersion`, `id`, `name`, `version`, `author`
 - `supports.light` and `supports.dark`
 - `tokens.light` and `tokens.dark`
 - `styles.ui`, `styles.editor`, `styles.markdown`, `styles.titlebar`
@@ -66,6 +68,7 @@ Supported manifest fields:
 
 Normalization rules that matter to package authors:
 
+- `contractVersion` must match the app-supported version (`2` today), otherwise the package is rejected
 - `id` and `name` must be non-empty strings, otherwise the package is rejected
 - missing `version` falls back to `1.0.0`
 - missing `author` falls back to `null`
@@ -98,12 +101,20 @@ Theme authors should not depend on `layout.titlebar` or `surfaces.welcomeHero` u
 
 The effective styling contract is:
 
-- `tokens/*.css` defines the base color and surface variables
-- `styles/ui.css` defines UI-control variables and shell styling
-- `styles/editor.css` defines editor font and caret variables plus editor-specific tuning
-- `styles/markdown.css` defines rendered Markdown variables
+- `tokens/*.css` defines foundation tokens and mode differences
+- `styles/ui.css` defines formal shell/control slots such as `--yulora-app-bg`, `--yulora-panel-bg`, `--yulora-control-bg`
+- `styles/editor.css` defines formal editor slots such as `--yulora-editor-bg`, `--yulora-editor-fg`, `--yulora-caret-color`
+- `styles/markdown.css` defines formal markdown slots such as `--yulora-markdown-heading`, `--yulora-markdown-code-bg`, `--yulora-markdown-table-border`
 - `styles/titlebar.css` is optional polish for the controlled titlebar shell
 - `parameters[]` can drive both CSS variables and shader uniforms
+
+The renderer now treats the semantic slot contract as the only supported public CSS interface. Themes should define the formal `--yulora-*` slots from `src/shared/theme-style-contract.ts` for:
+
+- shell: app / workspace / rail / panel / status bar / titlebar
+- text hierarchy and controls
+- editor source
+- markdown content
+- forward-looking table and code-token slots
 
 Each active parameter is mirrored onto `document.documentElement.style` as:
 
@@ -123,7 +134,7 @@ Author expectations:
 - the shader source must compile on its own
 - `mainImage(...)` is supported and wrapped automatically
 - plain fragment entrypoints are also supported
-- the runtime injects common uniforms such as resolution, time, `u_themeMode`, and optional shared uniforms
+- the runtime injects built-in uniforms `u_wordCount`, `u_focusMode`, `u_themeMode`, `u_viewportWidth`, `u_viewportHeight`, plus the usual timing/resolution inputs and optional shared uniforms
 - `u_themeMode` is a built-in float uniform: `0` for light mode, `1` for dark mode
 - `iChannel0`, `iResolution`, and `iTime` are only injected when channel `0` is configured
 

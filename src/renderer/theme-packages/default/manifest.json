@@ -2,7 +2,8 @@
   "id": "default",
   "contractVersion": 2,
   "name": "Default",
-  "version": "1.0.0",
+  "version": "2.0.0",
+  "author": "Yulora",
   "supports": {
     "light": true,
     "dark": true

@@ -46,16 +46,16 @@
 
 .settings-entry {
   padding: 0;
-  border: 1px solid var(--yu-ctrl-solid-border);
-  background: var(--yu-ctrl-solid-bg);
-  color: var(--yu-ctrl-text);
+  border: 1px solid var(--yulora-control-border);
+  background: var(--yulora-control-bg);
+  color: var(--yulora-control-fg);
   box-shadow: var(--yulora-shadow-1);
 }
 
 .settings-entry:hover {
-  border-color: var(--yu-ctrl-solid-border-hover);
-  background: var(--yu-ctrl-solid-bg-hover);
-  color: var(--yu-ctrl-text-hover);
+  border-color: color-mix(in srgb, var(--yulora-control-border) 82%, var(--yulora-panel-border));
+  background: var(--yulora-control-bg-hover);
+  color: var(--yulora-text-primary);
 }
 
 /* ── Glass controls (inside glass panels / drawers) ──────────── */
@@ -65,16 +65,16 @@
 .settings-back,
 .settings-reset {
   padding: 0;
-  border: 1px solid var(--yu-ctrl-glass-border);
-  background: var(--yu-ctrl-glass-bg);
-  color: var(--yu-ctrl-text);
+  border: 1px solid var(--yulora-panel-border);
+  background: color-mix(in srgb, var(--yulora-panel-bg) 72%, transparent);
+  color: var(--yulora-control-fg);
 }
 
 .settings-back:hover,
 .settings-reset:hover {
-  border-color: var(--yu-ctrl-glass-border-hover);
-  background: var(--yu-ctrl-glass-bg-hover);
-  color: var(--yu-ctrl-text-hover);
+  border-color: color-mix(in srgb, var(--yulora-panel-border) 82%, transparent);
+  background: color-mix(in srgb, var(--yulora-control-bg-hover) 78%, transparent);
+  color: var(--yulora-text-primary);
 }
 
 /* ── Text input ──────────────────────────────────────────────── */
@@ -82,10 +82,10 @@
 .settings-input {
   display: block;
   width: 100%;
-  border: 1px solid var(--yu-input-border);
+  border: 1px solid var(--yulora-control-border);
   border-radius: var(--yulora-radius-md);
-  background: var(--yu-input-bg);
-  color: var(--yulora-text-body);
+  background: color-mix(in srgb, var(--yulora-panel-bg) 94%, transparent);
+  color: var(--yulora-text-secondary);
   font-size: 0.92rem;
   transition:
     border-color var(--yu-t-fast),
@@ -95,9 +95,9 @@
 
 .settings-input:focus {
   outline: none;
-  border-color: var(--yu-input-border-focus);
-  background: var(--yu-input-bg-focus);
-  box-shadow: 0 0 0 3px var(--yu-input-ring);
+  border-color: var(--yulora-focus-ring);
+  background: color-mix(in srgb, var(--yulora-control-bg-hover) 92%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--yulora-focus-ring) 16%, transparent);
 }
 
 .settings-input:disabled {
@@ -112,8 +112,8 @@
   cursor: pointer;
   padding-right: 40px;
   background-image:
-    linear-gradient(45deg, transparent 50%, var(--yulora-text-subtle) 50%),
-    linear-gradient(135deg, var(--yulora-text-subtle) 50%, transparent 50%);
+    linear-gradient(45deg, transparent 50%, var(--yulora-text-muted) 50%),
+    linear-gradient(135deg, var(--yulora-text-muted) 50%, transparent 50%);
   background-position:
     calc(100% - 18px) calc(50% - 1px),
     calc(100% - 12px) calc(50% - 1px);
@@ -126,8 +126,8 @@
 }
 
 .settings-select option {
-  background-color: var(--yu-input-bg);
-  color: var(--yulora-text-body);
+  background-color: color-mix(in srgb, var(--yulora-panel-bg) 94%, transparent);
+  color: var(--yulora-text-secondary);
 }
 
 .settings-select option:disabled {
@@ -135,8 +135,8 @@
 }
 
 .settings-select optgroup {
-  background-color: var(--yu-input-bg);
-  color: var(--yulora-text-subtle);
+  background-color: color-mix(in srgb, var(--yulora-panel-bg) 94%, transparent);
+  color: var(--yulora-text-muted);
 }
 
 /* ── Segment / radio group ───────────────────────────────────── */
@@ -144,9 +144,9 @@
 .settings-radio-group {
   display: inline-flex;
   padding: 3px;
-  border: 1px solid var(--yu-segment-border);
+  border: 1px solid var(--yulora-control-border);
   border-radius: var(--yulora-radius-pill);
-  background: var(--yu-segment-bg);
+  background: color-mix(in srgb, var(--yulora-control-bg) 92%, transparent);
 }
 
 .settings-radio {
@@ -155,7 +155,7 @@
   padding: 6px 14px;
   border-radius: var(--yulora-radius-pill);
   cursor: pointer;
-  color: var(--yu-ctrl-text);
+  color: var(--yulora-control-fg);
   font-size: 0.88rem;
   user-select: none;
   transition:
@@ -170,7 +170,7 @@
 }
 
 .settings-radio.is-selected {
-  background: var(--yu-segment-active-bg);
-  color: var(--yu-ctrl-text-hover);
+  background: var(--yulora-control-bg-active);
+  color: var(--yulora-text-primary);
   box-shadow: var(--yulora-shadow-1);
 }

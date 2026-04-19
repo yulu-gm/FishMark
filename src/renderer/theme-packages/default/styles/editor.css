@@ -1,9 +1,36 @@
 :root {
   --yulora-editor-font-family: "Aptos", "Charter", "Georgia", serif;
   --yulora-editor-font-size: 1.05rem;
-  --yulora-editor-caret: #1d4ed8;
+  --yulora-editor-caret: var(--yulora-caret-color);
 }
 
-:root[data-yulora-theme="dark"] {
-  --yulora-editor-caret: #60a5fa;
+.document-editor .cm-editor {
+  background: var(--yulora-editor-bg);
+  color: var(--yulora-editor-fg);
+}
+
+.document-editor .cm-content {
+  caret-color: var(--yulora-caret-color);
+}
+
+.document-editor .cm-content ::selection,
+.document-editor .cm-line::selection,
+.document-editor .cm-selectionLayer .cm-selectionBackground,
+.document-editor .cm-selectionBackground {
+  background: var(--yulora-selection-bg);
+  color: var(--yulora-selection-fg);
+}
+
+.document-editor .cm-activeLine {
+  background: var(--yulora-current-line-bg);
+}
+
+.document-editor .cm-gutters,
+.document-editor .cm-gutterElement {
+  color: var(--yulora-gutter-fg);
+}
+
+.document-editor .cm-gutters {
+  background: transparent;
+  border-right: 0;
 }

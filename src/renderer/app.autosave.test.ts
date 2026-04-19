@@ -199,10 +199,6 @@ const rainGlassUiStylesheetPath = join(
   process.cwd(),
   "fixtures/themes/rain-glass/styles/ui.css"
 );
-const lightTokenStylesheetPath = join(
-  process.cwd(),
-  "src/renderer/theme-packages/default/tokens/light.css"
-);
 const lightMarkdownStylesheetPath = join(
   process.cwd(),
   "src/renderer/theme-packages/default/styles/markdown.css"
@@ -247,7 +243,10 @@ vi.mock("./code-editor-view", async () => {
     }>
   ) {
     const { initialContent, loadRevision } = props;
-    renderCount += 1;
+
+    React.useEffect(() => {
+      renderCount += 1;
+    });
 
     React.useEffect(() => {
       latestProps = props;
@@ -3515,6 +3514,49 @@ describe("App autosave", () => {
     expect(codeEditorMock.getRenderCount()).toBe(initialRenderCount);
   });
 
+  it("styles shell and markdown surfaces through formal semantic slots", async () => {
+    await renderAndOpenDocument({
+      getPreferencesResult: {
+        ...DEFAULT_PREFERENCES,
+        theme: {
+          ...DEFAULT_PREFERENCES.theme,
+          mode: "dark"
+        }
+      }
+    });
+
+    const baseStylesheet = readFileSync(baseStylesheetPath, "utf-8");
+    const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8");
+    const primitivesStylesheet = readFileSync(primitivesStylesheetPath, "utf-8");
+    const editorStylesheet = readFileSync(join(process.cwd(), "src/renderer/styles/editor-source.css"), "utf-8");
+    const markdownStylesheet = readFileSync(markdownRenderStylesheetPath, "utf-8");
+    const settingsStylesheet = readFileSync(settingsStylesheetPath, "utf-8");
+
+    expect(document.documentElement.getAttribute(THEME_RUNTIME_THEME_MODE_ATTRIBUTE)).toBe("dark");
+    expect(document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.wordCount)).toBe(
+      "6"
+    );
+    expect(baseStylesheet).toContain("--yulora-app-bg");
+    expect(baseStylesheet).toContain("--yulora-markdown-table-border");
+    expect(baseStylesheet).toContain("--yulora-markdown-code-token-keyword");
+    expect(appUiStylesheet).toContain("var(--yulora-titlebar-bg");
+    expect(appUiStylesheet).toContain("var(--yulora-panel-bg");
+    expect(appUiStylesheet).toContain("var(--yulora-control-bg");
+    expect(appUiStylesheet).toContain("var(--yulora-statusbar-bg");
+    expect(appUiStylesheet).not.toContain("var(--yulora-surface-bg");
+    expect(appUiStylesheet).not.toContain("var(--yulora-text-body");
+    expect(settingsStylesheet).toContain("var(--yulora-panel-bg");
+    expect(primitivesStylesheet).not.toContain("--yu-ctrl-");
+    expect(primitivesStylesheet).not.toContain("--yu-input-");
+    expect(primitivesStylesheet).not.toContain("--yu-segment-");
+    expect(editorStylesheet).toContain("var(--yulora-editor-bg");
+    expect(editorStylesheet).toContain("var(--yulora-selection-bg");
+    expect(editorStylesheet).toContain("var(--yulora-caret-color");
+    expect(markdownStylesheet).toContain("var(--yulora-markdown-heading");
+    expect(markdownStylesheet).toContain("var(--yulora-markdown-code-bg");
+    expect(markdownStylesheet).toContain("var(--yulora-markdown-code-token-keyword");
+  });
+
   it("marks settings as a floating drawer overlay surface", async () => {
     const driver = await renderEditorApp();
     await driver.openSettings();
@@ -3649,39 +3691,45 @@ describe("App autosave", () => {
       appUiStylesheet.match(/\.document-editor \{\s+width: 100%;[\s\S]*?\n\}/m)?.[0] ?? "";
     const appStatusBarRule =
       appUiStylesheet.match(/\.app-status-bar \{\s+position: fixed;[\s\S]*?\n\}/m)?.[0] ?? "";
+    const statusStripRule =
+      appUiStylesheet.match(
+        /\.app-status-bar \[data-yulora-region="status-strip"\] \{\s+width: 100%;[\s\S]*?\n\}/m
+      )?.[0] ?? "";
 
-    expect(documentEditorRule).toContain("background: transparent;");
+    expect(documentEditorRule).toContain("background: var(--yulora-editor-bg, transparent);");
     expect(documentEditorRule).not.toContain("border:");
     expect(documentEditorRule).not.toContain("box-shadow:");
     expect(appStatusBarRule).not.toContain("border:");
     expect(appStatusBarRule).toContain("background: transparent;");
     expect(appStatusBarRule).not.toContain("box-shadow:");
     expect(appStatusBarRule).not.toContain("backdrop-filter:");
+    expect(statusStripRule).toContain("background: var(--yulora-statusbar-bg, transparent);");
+    expect(statusStripRule).toContain("border: 1px solid var(--yulora-statusbar-border, transparent);");
   });
 
   it("styles preferences as a semi-transparent glass drawer", () => {
     const settingsStylesheet = readFileSync(settingsStylesheetPath, "utf-8");
-    const lightTokenStylesheet = readFileSync(lightTokenStylesheetPath, "utf-8");
 
     expect(settingsStylesheet).toContain(
-      'background: color-mix(in srgb, var(--yulora-surface-bg) 78%, var(--yulora-scrim) 22%);'
+      'background: color-mix(in srgb, var(--yulora-app-bg, #111318) 32%, black 68%);'
     );
     expect(settingsStylesheet).toContain("backdrop-filter: blur(28px) saturate(1.12);");
     expect(settingsStylesheet).toContain(".settings-shell::before");
     expect(settingsStylesheet).toContain('.settings-shell[data-state="closing"]');
     expect(settingsStylesheet).toContain("@keyframes settings-drawer-exit");
     expect(settingsStylesheet).toContain("@keyframes settings-overlay-exit");
-    expect(settingsStylesheet).toContain("linear-gradient(");
     expect(settingsStylesheet).toContain(
-      "background: color-mix(in srgb, var(--yulora-surface-raised-bg) 97%, var(--yulora-surface-bg) 3%);"
+      "background: var(--yulora-panel-bg, rgba(255, 255, 255, 0.92));"
     );
     expect(settingsStylesheet).toContain(
-      "color-mix(in srgb, var(--yulora-surface-bg) 96%, var(--yulora-glass-strong-bg) 4%, transparent);"
+      "background: color-mix(\n    in srgb,\n    var(--yulora-panel-bg, rgba(255, 255, 255, 0.92)) 92%,"
     );
-    expect(lightTokenStylesheet).toContain("--yulora-glass-bg: rgba(");
-    expect(lightTokenStylesheet).toContain("--yulora-glass-bg: rgba(250, 249, 245, 0.42);");
-    expect(lightTokenStylesheet).toContain("--yulora-glass-strong-bg: rgba(255, 254, 250, 0.62);");
-    expect(lightTokenStylesheet).toContain("--yulora-glass-sheen:");
+    expect(settingsStylesheet).toContain(
+      "border: 1px solid var(--yulora-panel-border, rgba(15, 23, 42, 0.12));"
+    );
+    expect(settingsStylesheet).toContain(
+      "background: color-mix(\n    in srgb,\n    var(--yulora-panel-bg, rgba(255, 255, 255, 0.92)) 92%,"
+    );
   });
 
   it("defines themed option styling for settings dropdown menus", () => {
@@ -3689,18 +3737,21 @@ describe("App autosave", () => {
 
     expect(primitivesStylesheet).toContain(".settings-select option");
     expect(primitivesStylesheet).toContain(".settings-select optgroup");
-    expect(primitivesStylesheet).toContain("background-color: var(--yu-input-bg);");
-    expect(primitivesStylesheet).toContain("color: var(--yulora-text-body);");
-    expect(primitivesStylesheet).toContain("color: var(--yulora-text-subtle);");
+    expect(primitivesStylesheet).toContain(
+      "background-color: color-mix(in srgb, var(--yulora-panel-bg) 94%, transparent);"
+    );
+    expect(primitivesStylesheet).toContain("color: var(--yulora-text-secondary);");
+    expect(primitivesStylesheet).toContain("color: var(--yulora-text-muted);");
   });
 
-  it("uses a light code block palette in the default light theme", () => {
+  it("routes the default light markdown palette through formal semantic slots", () => {
     const lightMarkdownStylesheet = readFileSync(lightMarkdownStylesheetPath, "utf-8");
     const lightMarkdownRule = getCssRule(lightMarkdownStylesheet, ":root");
 
-    expect(lightMarkdownRule).toContain("--yulora-code-block-bg: #f3f6fa;");
-    expect(lightMarkdownRule).toContain("--yulora-code-block-text: #334155;");
-    expect(lightMarkdownRule).not.toContain("--yulora-code-block-bg: #17212b;");
+    expect(lightMarkdownRule).toContain("--yulora-inline-code-bg: var(--yulora-markdown-inline-code-bg);");
+    expect(lightMarkdownRule).toContain("--yulora-list-marker: var(--yulora-markdown-list-bullet);");
+    expect(lightMarkdownRule).toContain("--yulora-code-block-bg: var(--yulora-markdown-code-bg);");
+    expect(lightMarkdownRule).toContain("--yulora-code-block-text: var(--yulora-markdown-code-fg);");
   });
 
   it("renders code blocks with visual wrapping instead of a horizontal scrollbar", () => {
