@@ -165,6 +165,34 @@ function buildFocusIdlePresetOptions(): FontOption[] {
     }));
 }
 
+function ThemeFolderIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        d="M3 7a2 2 0 0 1 2-2h4.5l2 2H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M3 10h18"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 export function SettingsView({
   surfaceState,
   preferences,
@@ -237,6 +265,15 @@ export function SettingsView({
       setErrorMessage(null);
     } catch {
       setErrorMessage("主题列表刷新失败。");
+    }
+  }
+
+  async function handleOpenThemesDirectory(): Promise<void> {
+    try {
+      await window.yulora.openThemesDirectory();
+      setErrorMessage(null);
+    } catch {
+      setErrorMessage("无法打开主题目录。");
     }
   }
 
@@ -651,27 +688,47 @@ export function SettingsView({
               <span className="settings-hint">默认主题使用内置 light / dark 套件，社区主题来自自动扫描目录。</span>
             </label>
             <div className="settings-input-stack">
-              <select
-                id="settings-theme-package"
-                className="settings-input settings-select"
-                value={resolvedThemeSelectionValue ?? "default"}
-                onChange={(event) => handleThemePackageChange(event.target.value)}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "stretch",
+                  gap: "var(--yulora-space-2)"
+                }}
               >
-                <option value="default">Yulora 默认</option>
-                {communityThemePackages.map((themePackage) => (
-                  <option
-                    key={themePackage.id}
-                    value={themePackage.id}
-                  >
-                    {themePackage.manifest.name}
-                  </option>
-                ))}
-                {selectedThemeMissing ? (
-                  <option value={preferences.theme.selectedId ?? "default"}>
-                    已配置主题（未找到）：{preferences.theme.selectedId}
-                  </option>
-                ) : null}
-              </select>
+                <select
+                  id="settings-theme-package"
+                  className="settings-input settings-select"
+                  style={{ flex: 1, minWidth: 0 }}
+                  value={resolvedThemeSelectionValue ?? "default"}
+                  onChange={(event) => handleThemePackageChange(event.target.value)}
+                >
+                  <option value="default">Yulora 默认</option>
+                  {communityThemePackages.map((themePackage) => (
+                    <option
+                      key={themePackage.id}
+                      value={themePackage.id}
+                    >
+                      {themePackage.manifest.name}
+                    </option>
+                  ))}
+                  {selectedThemeMissing ? (
+                    <option value={preferences.theme.selectedId ?? "default"}>
+                      已配置主题（未找到）：{preferences.theme.selectedId}
+                    </option>
+                  ) : null}
+                </select>
+                <button
+                  type="button"
+                  className="settings-back"
+                  aria-label="打开主题目录"
+                  title="打开主题目录"
+                  onClick={() => {
+                    void handleOpenThemesDirectory();
+                  }}
+                >
+                  <ThemeFolderIcon />
+                </button>
+              </div>
               <div className="settings-inline-actions">
                 <button
                   type="button"

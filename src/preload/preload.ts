@@ -22,6 +22,7 @@ const PREFERENCES_CHANGED_EVENT = "yulora:preferences-changed";
 const LIST_FONT_FAMILIES_CHANNEL = "yulora:list-font-families";
 const LIST_THEME_PACKAGES_CHANNEL = "yulora:list-theme-packages";
 const REFRESH_THEME_PACKAGES_CHANNEL = "yulora:refresh-theme-packages";
+const OPEN_THEMES_DIRECTORY_CHANNEL = "yulora:open-themes-directory";
 const CHECK_FOR_APP_UPDATES_CHANNEL = "yulora:check-for-app-updates";
 const APP_UPDATE_STATE_EVENT = "yulora:app-update-state";
 const APP_NOTIFICATION_EVENT = "yulora:app-notification";
@@ -292,6 +293,7 @@ const api = {
     ipcRenderer.invoke(LIST_THEME_PACKAGES_CHANNEL),
   refreshThemePackages: (): Promise<ThemePackageDescriptor[]> =>
     ipcRenderer.invoke(REFRESH_THEME_PACKAGES_CHANNEL),
+  openThemesDirectory: (): Promise<void> => ipcRenderer.invoke(OPEN_THEMES_DIRECTORY_CHANNEL),
   checkForUpdates: (): Promise<void> => ipcRenderer.invoke(CHECK_FOR_APP_UPDATES_CHANNEL),
   onPreferencesChanged: (listener: (preferences: Preferences) => void) => {
     const handlePreferencesChanged = (_event: unknown, preferences: Preferences) => {

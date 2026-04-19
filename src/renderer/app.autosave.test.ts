@@ -389,6 +389,7 @@ describe("App autosave", () => {
   let listFontFamilies: ReturnType<typeof vi.fn<() => Promise<string[]>>>;
   let listThemePackages: ReturnType<typeof vi.fn<() => Promise<ThemePackageDescriptor[]>>>;
   let refreshThemePackages: ReturnType<typeof vi.fn<() => Promise<ThemePackageDescriptor[]>>>;
+  let openThemesDirectory: ReturnType<typeof vi.fn<() => Promise<void>>>;
   let colorSchemeMediaQuery: MockMediaQueryList;
 
   const builtinDefaultThemePackage = makeManifestThemePackage({
@@ -543,6 +544,7 @@ describe("App autosave", () => {
     refreshThemePackages = vi
       .fn<() => Promise<ThemePackageDescriptor[]>>()
       .mockResolvedValue(defaultThemeCatalog);
+    openThemesDirectory = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
 
     window.yulora = {
       platform: "win32",
@@ -591,6 +593,7 @@ describe("App autosave", () => {
       listFontFamilies,
       listThemePackages,
       refreshThemePackages,
+      openThemesDirectory,
       checkForUpdates: vi.fn().mockResolvedValue(undefined),
       onPreferencesChanged(listener: PreferencesChangedListener) {
         preferencesChangedListener = listener;
@@ -670,7 +673,8 @@ describe("App autosave", () => {
           ? vi.fn(updatePreferencesImplementation)
           : window.yulora.updatePreferences,
       listThemePackages,
-      refreshThemePackages
+      refreshThemePackages,
+      openThemesDirectory
     } as Window["yulora"];
 
     await renderApp();
@@ -1888,6 +1892,67 @@ describe("App autosave", () => {
     });
 
     expect(container.textContent).toContain("主题列表刷新失败。");
+  });
+
+  it("opens the themes directory from settings", async () => {
+    await renderApp();
+
+    const settingsButton = container.querySelector<HTMLButtonElement>(".settings-entry");
+    expect(settingsButton).not.toBeNull();
+
+    await act(async () => {
+      settingsButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const themesDirectoryButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="打开主题目录"]'
+    );
+
+    expect(themesDirectoryButton).not.toBeNull();
+
+    await act(async () => {
+      themesDirectoryButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(openThemesDirectory).toHaveBeenCalledTimes(1);
+    expect(container.textContent).not.toContain("无法打开主题目录。");
+  });
+
+  it("shows an error when opening the themes directory fails", async () => {
+    openThemesDirectory = vi.fn<() => Promise<void>>().mockRejectedValue(new Error("open failed"));
+
+    window.yulora = {
+      ...window.yulora,
+      openThemesDirectory
+    } as Window["yulora"];
+
+    await renderApp();
+
+    const settingsButton = container.querySelector<HTMLButtonElement>(".settings-entry");
+    expect(settingsButton).not.toBeNull();
+
+    await act(async () => {
+      settingsButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const themesDirectoryButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="打开主题目录"]'
+    );
+
+    expect(themesDirectoryButton).not.toBeNull();
+
+    await act(async () => {
+      themesDirectoryButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(openThemesDirectory).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain("无法打开主题目录。");
   });
 
   it("falls back to the builtin theme and routes the unsupported-mode warning through the top notification banner", async () => {

@@ -176,6 +176,7 @@ describe("preload contract", () => {
     void api.listFontFamilies();
     void api.listThemePackages();
     void api.refreshThemePackages();
+    void api.openThemesDirectory();
     void api.checkForUpdates();
 
     expect(invoke.mock.calls).toContainEqual([OPEN_MARKDOWN_FILE_CHANNEL]);
@@ -193,6 +194,7 @@ describe("preload contract", () => {
     expect(invoke.mock.calls).toContainEqual(["yulora:list-font-families"]);
     expect(invoke.mock.calls).toContainEqual(["yulora:list-theme-packages"]);
     expect(invoke.mock.calls).toContainEqual(["yulora:refresh-theme-packages"]);
+    expect(invoke.mock.calls).toContainEqual(["yulora:open-themes-directory"]);
     expect(invoke.mock.calls).toContainEqual([CHECK_FOR_APP_UPDATES_CHANNEL]);
 
     expect(invoke.mock.calls).not.toContainEqual(["yulora:list-themes"]);

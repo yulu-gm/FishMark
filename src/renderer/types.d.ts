@@ -59,6 +59,7 @@ declare global {
       listFontFamilies: () => Promise<string[]>;
       listThemePackages: () => Promise<ThemePackageDescriptor[]>;
       refreshThemePackages: () => Promise<ThemePackageDescriptor[]>;
+      openThemesDirectory: () => Promise<void>;
       checkForUpdates: () => Promise<void>;
       startScenarioRun: (input: { scenarioId: string }) => Promise<{ runId: string }>;
       interruptScenarioRun: (input: { runId: string }) => Promise<void>;
