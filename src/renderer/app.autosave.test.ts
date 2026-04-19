@@ -16,6 +16,10 @@ import type {
   SaveMarkdownFileResult
 } from "../shared/save-markdown-file";
 import { createPreviewAssetUrl } from "../shared/preview-asset-url";
+import {
+  THEME_RUNTIME_ENV_CSS_VARS,
+  THEME_RUNTIME_THEME_MODE_ATTRIBUTE
+} from "../shared/theme-style-contract";
 import type { RunnerEventEnvelope, ScenarioRunTerminal } from "../shared/test-run-session";
 import App from "./App";
 import * as codeEditorViewModule from "./code-editor-view";
@@ -3260,6 +3264,34 @@ describe("App autosave", () => {
     expect(
       document.documentElement.style.getPropertyValue("--yulora-theme-parameter-enableLightning")
     ).toBe("");
+  });
+
+  it("syncs runtime env CSS variables onto the document root", async () => {
+    await renderAndOpenDocument({
+      getPreferencesResult: {
+        ...DEFAULT_PREFERENCES,
+        theme: {
+          ...DEFAULT_PREFERENCES.theme,
+          mode: "dark"
+        }
+      }
+    });
+
+    expect(container.querySelector('[data-testid="mock-code-editor"]')).not.toBeNull();
+
+    expect(document.documentElement.getAttribute(THEME_RUNTIME_THEME_MODE_ATTRIBUTE)).toBe("dark");
+    expect(document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.wordCount)).toBe(
+      "6"
+    );
+    expect(document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.focusMode)).not.toBe(
+      ""
+    );
+    expect(
+      document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.viewportWidth)
+    ).not.toBe("");
+    expect(
+      document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.viewportHeight)
+    ).not.toBe("");
   });
 
   it("marks settings as a floating drawer overlay surface", async () => {

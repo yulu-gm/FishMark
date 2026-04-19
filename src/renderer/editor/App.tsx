@@ -13,11 +13,7 @@ import {
 import { TEXT_EDITING_SHORTCUTS, type ActiveBlockState } from "@yulora/editor-core";
 import type { AppNotification, AppUpdateState } from "../../shared/app-update";
 import { createPreviewAssetUrl } from "../../shared/preview-asset-url";
-import type {
-  ThemePackageManifest,
-  ThemeParameterDescriptor,
-  ThemeSurfaceSlot
-} from "../../shared/theme-package";
+import type { ThemePackageManifest, ThemeSurfaceSlot } from "../../shared/theme-package";
 import {
   DEFAULT_PREFERENCES,
   type Preferences,
@@ -44,6 +40,17 @@ import {
   startOpeningMarkdownFile
 } from "../document-state";
 import { getDocumentMetrics } from "../document-metrics";
+import {
+  applyThemeParameterCssVariables,
+  clearThemeParameterCssVariables,
+  resolveEffectiveThemeParameterValue
+} from "../theme-style-runtime";
+import {
+  applyThemeRuntimeEnv,
+  buildThemeRuntimeEnv,
+  clearThemeRuntimeEnv,
+  type ThemeRuntimeEnv
+} from "../theme-runtime-env";
 import {
   ThemeSurfaceHost,
   type ThemeSurfaceHostDescriptor
@@ -78,8 +85,6 @@ const DOCUMENT_FONT_FAMILY_CSS_VAR = "--yulora-document-font-family";
 const DOCUMENT_CJK_FONT_FAMILY_CSS_VAR = "--yulora-document-cjk-font-family";
 const DOCUMENT_FONT_SIZE_CSS_VAR = "--yulora-document-font-size";
 const THEME_DYNAMIC_MODE_ATTRIBUTE = "data-yulora-theme-dynamic-mode";
-const THEME_PARAMETER_CSS_VARIABLES_ATTRIBUTE = "data-yulora-theme-parameter-css-variables";
-const THEME_PARAMETER_CSS_VAR_PREFIX = "--yulora-theme-parameter-";
 const OUTLINE_EXIT_ANIMATION_MS = 180;
 const SETTINGS_DRAWER_EXIT_ANIMATION_MS = 180;
 const APP_NOTIFICATION_DURATION_MS = 3000;
@@ -183,6 +188,13 @@ function resolveThemeMode(mode: ThemeMode): ResolvedThemeMode {
   return mediaQuery?.matches ? "dark" : "light";
 }
 
+function getWindowViewport(): ThemeRuntimeEnv["viewport"] {
+  return {
+    width: window.innerWidth,
+    height: window.innerHeight
+  };
+}
+
 function applyPreferencesToDocument(
   root: HTMLElement,
   preferences: Preferences,
@@ -220,30 +232,6 @@ function applyPreferencesToDocument(
   } else {
     root.style.removeProperty(DOCUMENT_FONT_SIZE_CSS_VAR);
   }
-}
-
-function clearThemeParameterCssVariables(root: HTMLElement): void {
-  const variables = root.getAttribute(THEME_PARAMETER_CSS_VARIABLES_ATTRIBUTE);
-
-  if (!variables) {
-    return;
-  }
-
-  for (const variable of variables.split(",")) {
-    const trimmed = variable.trim();
-
-    if (trimmed.length === 0) {
-      continue;
-    }
-
-    root.style.removeProperty(trimmed);
-  }
-
-  root.removeAttribute(THEME_PARAMETER_CSS_VARIABLES_ATTRIBUTE);
-}
-
-function toThemeParameterCssVariable(parameterId: string): string {
-  return `${THEME_PARAMETER_CSS_VAR_PREFIX}${parameterId}`;
 }
 
 function clearDocumentPreferences(root: HTMLElement): void {
@@ -297,58 +285,6 @@ function resolveSurfaceChannels(
       src: createPreviewAssetUrl(channel0.src)
     }
   };
-}
-
-function resolveParameterDefaultValue(parameter: ThemeParameterDescriptor): number {
-  if (parameter.type === "toggle") {
-    return parameter.default ? 1 : 0;
-  }
-
-  return parameter.default;
-}
-
-function resolveEffectiveThemeParameterValue(
-  parameter: ThemeParameterDescriptor,
-  parameterOverrides: Record<string, number> | undefined
-): number {
-  const overrideValue = parameterOverrides?.[parameter.id];
-
-  if (typeof overrideValue !== "number" || !Number.isFinite(overrideValue)) {
-    return resolveParameterDefaultValue(parameter);
-  }
-
-  if (parameter.type === "toggle") {
-    return overrideValue > 0.5 ? 1 : 0;
-  }
-
-  return Math.min(Math.max(overrideValue, parameter.min), parameter.max);
-}
-
-function applyThemeParameterCssVariables(
-  root: HTMLElement,
-  manifest: ThemePackageManifest | null,
-  parameterOverrides: Record<string, number> | undefined
-): void {
-  clearThemeParameterCssVariables(root);
-
-  if (!manifest) {
-    return;
-  }
-
-  const appliedVariables: string[] = [];
-
-  for (const parameter of manifest.parameters ?? []) {
-    const variableName = toThemeParameterCssVariable(parameter.id);
-    root.style.setProperty(
-      variableName,
-      String(resolveEffectiveThemeParameterValue(parameter, parameterOverrides))
-    );
-    appliedVariables.push(variableName);
-  }
-
-  if (appliedVariables.length > 0) {
-    root.setAttribute(THEME_PARAMETER_CSS_VARIABLES_ATTRIBUTE, appliedVariables.join(","));
-  }
 }
 
 /**
@@ -495,6 +431,9 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   >(null);
   const [isEditorFocused, setIsEditorFocused] = useState(false);
   const [isShortcutHintArmed, setIsShortcutHintArmed] = useState(false);
+  const [themeRuntimeViewport, setThemeRuntimeViewport] = useState<ThemeRuntimeEnv["viewport"]>(
+    getWindowViewport
+  );
   const editorRef = useRef<CodeEditorHandle | null>(null);
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
   const editorContentRef = useRef("");
@@ -642,6 +581,17 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   );
   const shortcutHintModifierKey: "Control" | "Meta" = yulora.platform === "darwin" ? "Meta" : "Control";
   const isShortcutHintVisible = isDocumentOpen && isEditorFocused && isShortcutHintArmed;
+  const syncThemeRuntimeEnv = useEffectEvent((themeMode: ResolvedThemeMode): void => {
+    applyThemeRuntimeEnv(
+      document.documentElement,
+      buildThemeRuntimeEnv({
+        content: currentDocumentContent,
+        isFocusModeActive,
+        themeMode,
+        viewport: themeRuntimeViewport
+      })
+    );
+  });
 
   function applyState(updater: (current: AppState) => AppState): void {
     const next = updater(stateRef.current);
@@ -1313,6 +1263,52 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   }, [focusModeSource, preferences.focus.triggerMode, scheduleFocusIdle]);
 
   useEffect(() => {
+    const handleResize = () => {
+      setThemeRuntimeViewport((current) => {
+        const next = getWindowViewport();
+
+        if (current.width === next.width && current.height === next.height) {
+          return current;
+        }
+
+        return next;
+      });
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    syncThemeRuntimeEnv(resolvedThemeMode);
+  }, [
+    currentDocumentContent,
+    isFocusModeActive,
+    resolvedThemeMode,
+    themeRuntimeViewport.height,
+    themeRuntimeViewport.width
+  ]);
+
+  useEffect(() => {
+    if (preferences.theme.mode !== "system") {
+      return undefined;
+    }
+
+    const mediaQuery = window.matchMedia?.(DARK_MODE_MEDIA_QUERY);
+
+    if (!mediaQuery) {
+      return undefined;
+    }
+
+    const handleChange = () => {
+      syncThemeRuntimeEnv(mediaQuery.matches ? "dark" : "light");
+    };
+
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, [preferences.theme.mode]);
+
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (
         !isAutoFocusKeyboardEvent(event) ||
@@ -1602,6 +1598,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
       clearNotificationTimers();
       themePackageRuntimeRef.current?.clear();
       clearThemeDynamicModeFromDocument(document.documentElement);
+      clearThemeRuntimeEnv(document.documentElement);
       clearDocumentPreferences(document.documentElement);
     },
     [clearNotificationTimers]
