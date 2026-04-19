@@ -16,6 +16,10 @@ import type {
   SaveMarkdownFileResult
 } from "../shared/save-markdown-file";
 import { createPreviewAssetUrl } from "../shared/preview-asset-url";
+import {
+  THEME_RUNTIME_ENV_CSS_VARS,
+  THEME_RUNTIME_THEME_MODE_ATTRIBUTE
+} from "../shared/theme-style-contract";
 import type { RunnerEventEnvelope, ScenarioRunTerminal } from "../shared/test-run-session";
 import App from "./App";
 import * as codeEditorViewModule from "./code-editor-view";
@@ -34,6 +38,9 @@ type ScenarioRunTerminalListener = (payload: ScenarioRunTerminal) => void;
 type PreferencesChangedListener = (preferences: Preferences) => void;
 type ThemePackageDescriptor = Awaited<ReturnType<Window["yulora"]["listThemePackages"]>>[number];
 type UpdatePreferencesResult = Awaited<ReturnType<Window["yulora"]["updatePreferences"]>>;
+type MockMediaQueryList = MediaQueryList & {
+  __setMatches: (matches: boolean) => void;
+};
 
 type SettingsDriver = {
   openSettings: () => Promise<void>;
@@ -70,6 +77,7 @@ function makeManifestThemePackage(
     packageRoot: `/tmp/yulora/themes/${id}`,
     manifest: {
       id,
+      contractVersion: 2,
       name: overrides.name ?? "Manifest Theme",
       version: "1.0.0",
       author: null,
@@ -116,6 +124,7 @@ type MockCodeEditorModule = typeof codeEditorViewModule & {
     changeContent: (content: string) => void;
     blur: () => void;
     focus: () => void;
+    getRenderCount: () => number;
     emitActiveBlockChange: (state: unknown) => void;
     getNavigateCalls: () => number[];
     setLayout: (layout: { hostLeft: number; hostWidth: number; contentLeft: number; contentWidth: number }) => void;
@@ -191,10 +200,6 @@ const rainGlassUiStylesheetPath = join(
   process.cwd(),
   "fixtures/themes/rain-glass/styles/ui.css"
 );
-const lightTokenStylesheetPath = join(
-  process.cwd(),
-  "src/renderer/theme-packages/default/tokens/light.css"
-);
 const lightMarkdownStylesheetPath = join(
   process.cwd(),
   "src/renderer/theme-packages/default/styles/markdown.css"
@@ -216,6 +221,7 @@ vi.mock("./code-editor-view", async () => {
   let latestHostElement: HTMLDivElement | null = null;
   let latestContentElement: HTMLDivElement | null = null;
   let navigateCalls: number[] = [];
+  let renderCount = 0;
   let layout: MockEditorLayout = {
     hostLeft: 0,
     hostWidth: 880,
@@ -247,6 +253,10 @@ vi.mock("./code-editor-view", async () => {
     }>
   ) {
     const { initialContent, loadRevision } = props;
+
+    React.useEffect(() => {
+      renderCount += 1;
+    });
 
     React.useEffect(() => {
       latestProps = props;
@@ -319,6 +329,9 @@ vi.mock("./code-editor-view", async () => {
       focus() {
         latestHostElement?.focus();
       },
+      getRenderCount() {
+        return renderCount;
+      },
       emitActiveBlockChange(state: unknown) {
         latestProps?.onActiveBlockChange?.(state);
       },
@@ -346,6 +359,7 @@ vi.mock("./code-editor-view", async () => {
         latestHostElement = null;
         latestContentElement = null;
         navigateCalls = [];
+        renderCount = 0;
         layout = {
           hostLeft: 0,
           hostWidth: 880,
@@ -396,6 +410,8 @@ describe("App autosave", () => {
   let listFontFamilies: ReturnType<typeof vi.fn<() => Promise<string[]>>>;
   let listThemePackages: ReturnType<typeof vi.fn<() => Promise<ThemePackageDescriptor[]>>>;
   let refreshThemePackages: ReturnType<typeof vi.fn<() => Promise<ThemePackageDescriptor[]>>>;
+  let openThemesDirectory: ReturnType<typeof vi.fn<() => Promise<void>>>;
+  let colorSchemeMediaQuery: MockMediaQueryList;
 
   const builtinDefaultThemePackage = makeManifestThemePackage({
     id: "default",
@@ -414,6 +430,54 @@ describe("App autosave", () => {
     }
 
     return [builtinDefaultThemePackage, ...packages];
+  }
+
+  function createMockMediaQueryList(query: string, initialMatches = false): MockMediaQueryList {
+    const mediaQueryList = {} as MockMediaQueryList;
+    const listeners = new Map<unknown, (event: MediaQueryListEvent) => void>();
+    let matches = initialMatches;
+
+    Object.defineProperty(mediaQueryList, "matches", {
+      configurable: true,
+      get: () => matches
+    });
+
+    Object.defineProperty(mediaQueryList, "media", {
+      configurable: true,
+      get: () => query
+    });
+    mediaQueryList.onchange = null;
+    mediaQueryList.addEventListener = vi.fn(
+      (_type: string, listener: EventListenerOrEventListenerObject) => {
+        const normalizedListener =
+          typeof listener === "function"
+            ? (event: MediaQueryListEvent) => listener.call(mediaQueryList, event)
+            : (event: MediaQueryListEvent) => listener.handleEvent(event);
+        listeners.set(listener, normalizedListener);
+      }
+    ) as MediaQueryList["addEventListener"];
+    mediaQueryList.removeEventListener = vi.fn(
+      (_type: string, listener: EventListenerOrEventListenerObject) => {
+        listeners.delete(listener);
+      }
+    ) as MediaQueryList["removeEventListener"];
+    mediaQueryList.addListener = vi.fn((listener: (event: MediaQueryListEvent) => void) => {
+      listeners.set(listener, listener);
+    });
+    mediaQueryList.removeListener = vi.fn((listener: (event: MediaQueryListEvent) => void) => {
+      listeners.delete(listener);
+    });
+    mediaQueryList.dispatchEvent = vi.fn(() => true);
+    mediaQueryList.__setMatches = (nextMatches: boolean) => {
+      matches = nextMatches;
+      const event = { matches: nextMatches, media: query } as MediaQueryListEvent;
+      mediaQueryList.onchange?.call(mediaQueryList, event);
+      for (const listener of listeners.values()) {
+        listener(event);
+      }
+    };
+
+    return mediaQueryList;
   }
 
   beforeEach(() => {
@@ -438,6 +502,17 @@ describe("App autosave", () => {
       .spyOn(HTMLCanvasElement.prototype, "getContext")
       .mockReturnValue(null as ReturnType<HTMLCanvasElement["getContext"]>);
     vi.stubGlobal("fetch", fetchMock);
+    colorSchemeMediaQuery = createMockMediaQueryList("(prefers-color-scheme: dark)", false);
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((query: string) => {
+        if (query === "(prefers-color-scheme: dark)") {
+          return colorSchemeMediaQuery;
+        }
+
+        return createMockMediaQueryList(query, false);
+      })
+    );
 
     openMarkdownFile = vi.fn<() => Promise<OpenMarkdownFileResult>>().mockResolvedValue({
       status: "success",
@@ -490,6 +565,7 @@ describe("App autosave", () => {
     refreshThemePackages = vi
       .fn<() => Promise<ThemePackageDescriptor[]>>()
       .mockResolvedValue(defaultThemeCatalog);
+    openThemesDirectory = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
 
     window.yulora = {
       platform: "win32",
@@ -538,6 +614,7 @@ describe("App autosave", () => {
       listFontFamilies,
       listThemePackages,
       refreshThemePackages,
+      openThemesDirectory,
       checkForUpdates: vi.fn().mockResolvedValue(undefined),
       onPreferencesChanged(listener: PreferencesChangedListener) {
         preferencesChangedListener = listener;
@@ -617,7 +694,8 @@ describe("App autosave", () => {
           ? vi.fn(updatePreferencesImplementation)
           : window.yulora.updatePreferences,
       listThemePackages,
-      refreshThemePackages
+      refreshThemePackages,
+      openThemesDirectory
     } as Window["yulora"];
 
     await renderApp();
@@ -1753,6 +1831,54 @@ describe("App autosave", () => {
     expect(document.documentElement.getAttribute("data-yulora-theme-dynamic-mode")).toBe("off");
   });
 
+  it("re-resolves shader surfaces through React state when the system theme flips", async () => {
+    colorSchemeMediaQuery.__setMatches(true);
+
+    await renderEditorApp({
+      getPreferencesResult: {
+        ...DEFAULT_PREFERENCES,
+        theme: {
+          ...DEFAULT_PREFERENCES.theme,
+          mode: "system",
+          selectedId: "rain-glass",
+          effectsMode: "auto"
+        }
+      },
+      listThemePackagesResult: [
+        makeManifestThemePackage({
+          id: "rain-glass",
+          name: "Rain Glass",
+          supports: {
+            light: false,
+            dark: true
+          },
+          scene: {
+            id: "rain-scene",
+            sharedUniforms: { rainAmount: 0.7 }
+          },
+          surfaces: {
+            workbenchBackground: {
+              kind: "fragment",
+              scene: "rain-scene",
+              shader: "/tmp/yulora/themes/rain-glass/shaders/workbench-background.glsl"
+            }
+          }
+        })
+      ]
+    });
+
+    expect(container.querySelector('[data-yulora-theme-surface="workbenchBackground"]')).not.toBeNull();
+    expect(document.documentElement.getAttribute("data-yulora-theme")).toBe("dark");
+
+    await act(async () => {
+      colorSchemeMediaQuery.__setMatches(false);
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-yulora-theme-surface="workbenchBackground"]')).toBeNull();
+    expect(document.documentElement.getAttribute("data-yulora-theme")).toBe("light");
+  });
+
   it("shows a refresh error banner when refreshing theme packages fails", async () => {
     refreshThemePackages = vi
       .fn<() => Promise<ThemePackageDescriptor[]>>()
@@ -1787,6 +1913,67 @@ describe("App autosave", () => {
     });
 
     expect(container.textContent).toContain("主题列表刷新失败。");
+  });
+
+  it("opens the themes directory from settings", async () => {
+    await renderApp();
+
+    const settingsButton = container.querySelector<HTMLButtonElement>(".settings-entry");
+    expect(settingsButton).not.toBeNull();
+
+    await act(async () => {
+      settingsButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const themesDirectoryButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="打开主题目录"]'
+    );
+
+    expect(themesDirectoryButton).not.toBeNull();
+
+    await act(async () => {
+      themesDirectoryButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(openThemesDirectory).toHaveBeenCalledTimes(1);
+    expect(container.textContent).not.toContain("无法打开主题目录。");
+  });
+
+  it("shows an error when opening the themes directory fails", async () => {
+    openThemesDirectory = vi.fn<() => Promise<void>>().mockRejectedValue(new Error("open failed"));
+
+    window.yulora = {
+      ...window.yulora,
+      openThemesDirectory
+    } as Window["yulora"];
+
+    await renderApp();
+
+    const settingsButton = container.querySelector<HTMLButtonElement>(".settings-entry");
+    expect(settingsButton).not.toBeNull();
+
+    await act(async () => {
+      settingsButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const themesDirectoryButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="打开主题目录"]'
+    );
+
+    expect(themesDirectoryButton).not.toBeNull();
+
+    await act(async () => {
+      themesDirectoryButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(openThemesDirectory).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain("无法打开主题目录。");
   });
 
   it("falls back to the builtin theme and routes the unsupported-mode warning through the top notification banner", async () => {
@@ -3449,6 +3636,114 @@ describe("App autosave", () => {
     ).toBe("");
   });
 
+  it("syncs runtime env CSS variables onto the document root", async () => {
+    await renderAndOpenDocument({
+      getPreferencesResult: {
+        ...DEFAULT_PREFERENCES,
+        theme: {
+          ...DEFAULT_PREFERENCES.theme,
+          mode: "dark"
+        }
+      }
+    });
+
+    expect(container.querySelector('[data-testid="mock-code-editor"]')).not.toBeNull();
+
+    expect(document.documentElement.getAttribute(THEME_RUNTIME_THEME_MODE_ATTRIBUTE)).toBe("dark");
+    expect(document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.wordCount)).toBe(
+      "6"
+    );
+    expect(document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.focusMode)).toBe(
+      "0"
+    );
+    expect(
+      document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.viewportWidth)
+    ).toBe(String(window.innerWidth));
+    expect(
+      document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.viewportHeight)
+    ).toBe(String(window.innerHeight));
+  });
+
+  it("updates runtime env viewport vars on resize without rerendering the editor tree", async () => {
+    await renderAndOpenDocument({
+      getPreferencesResult: {
+        ...DEFAULT_PREFERENCES,
+        theme: {
+          ...DEFAULT_PREFERENCES.theme,
+          mode: "dark"
+        }
+      }
+    });
+
+    const initialRenderCount = codeEditorMock.getRenderCount();
+
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      writable: true,
+      value: 1440
+    });
+    Object.defineProperty(window, "innerHeight", {
+      configurable: true,
+      writable: true,
+      value: 900
+    });
+
+    await act(async () => {
+      window.dispatchEvent(new Event("resize"));
+      await Promise.resolve();
+    });
+
+    expect(document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.viewportWidth)).toBe(
+      "1440"
+    );
+    expect(document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.viewportHeight)).toBe(
+      "900"
+    );
+    expect(codeEditorMock.getRenderCount()).toBe(initialRenderCount);
+  });
+
+  it("styles shell and markdown surfaces through formal semantic slots", async () => {
+    await renderAndOpenDocument({
+      getPreferencesResult: {
+        ...DEFAULT_PREFERENCES,
+        theme: {
+          ...DEFAULT_PREFERENCES.theme,
+          mode: "dark"
+        }
+      }
+    });
+
+    const baseStylesheet = readFileSync(baseStylesheetPath, "utf-8");
+    const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8");
+    const primitivesStylesheet = readFileSync(primitivesStylesheetPath, "utf-8");
+    const editorStylesheet = readFileSync(join(process.cwd(), "src/renderer/styles/editor-source.css"), "utf-8");
+    const markdownStylesheet = readFileSync(markdownRenderStylesheetPath, "utf-8");
+    const settingsStylesheet = readFileSync(settingsStylesheetPath, "utf-8");
+
+    expect(document.documentElement.getAttribute(THEME_RUNTIME_THEME_MODE_ATTRIBUTE)).toBe("dark");
+    expect(document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.wordCount)).toBe(
+      "6"
+    );
+    expect(baseStylesheet).toContain("--yulora-app-bg");
+    expect(baseStylesheet).toContain("--yulora-markdown-table-border");
+    expect(baseStylesheet).toContain("--yulora-markdown-code-token-keyword");
+    expect(appUiStylesheet).toContain("var(--yulora-titlebar-bg");
+    expect(appUiStylesheet).toContain("var(--yulora-panel-bg");
+    expect(appUiStylesheet).toContain("var(--yulora-control-bg");
+    expect(appUiStylesheet).not.toContain("var(--yulora-surface-bg");
+    expect(appUiStylesheet).not.toContain("var(--yulora-text-body");
+    expect(settingsStylesheet).toContain("var(--yulora-panel-bg");
+    expect(primitivesStylesheet).not.toContain("--yu-ctrl-");
+    expect(primitivesStylesheet).not.toContain("--yu-input-");
+    expect(primitivesStylesheet).not.toContain("--yu-segment-");
+    expect(editorStylesheet).toContain("var(--yulora-editor-bg");
+    expect(editorStylesheet).toContain("var(--yulora-selection-bg");
+    expect(editorStylesheet).toContain("var(--yulora-caret-color");
+    expect(markdownStylesheet).toContain("var(--yulora-markdown-heading");
+    expect(markdownStylesheet).toContain("var(--yulora-markdown-code-bg");
+    expect(markdownStylesheet).toContain("var(--yulora-markdown-code-token-keyword");
+  });
+
   it("marks settings as a floating drawer overlay surface", async () => {
     const driver = await renderEditorApp();
     await driver.openSettings();
@@ -3573,8 +3868,10 @@ describe("App autosave", () => {
     expect(rainGlassUiStylesheet).toContain("padding: var(--yulora-space-4) var(--yulora-space-5);");
     expect(rainGlassUiStylesheet).toContain('[data-yulora-layout="workspace"] .app-status-bar');
     expect(rainGlassUiStylesheet).toContain("position: static;");
+    expect(rainGlassUiStylesheet).toContain("background: transparent;");
     expect(rainGlassUiStylesheet).toContain('[data-yulora-layout="workspace"] .app-status-bar [data-yulora-region="status-strip"]');
-    expect(rainGlassUiStylesheet).toContain("border-top: 1px solid");
+    expect(rainGlassUiStylesheet).not.toContain("border-top: 1px solid");
+    expect(rainGlassUiStylesheet).toContain('[data-yulora-layout="workspace"] .app-status-bar [data-yulora-region="status-strip"] {\n  min-height: var(--yulora-status-bar-height);\n  padding-top: var(--yulora-space-2);\n  background: transparent;');
   });
 
   it("removes border framing from the editor shell and bottom status bar", () => {
@@ -3583,39 +3880,54 @@ describe("App autosave", () => {
       appUiStylesheet.match(/\.document-editor \{\s+width: 100%;[\s\S]*?\n\}/m)?.[0] ?? "";
     const appStatusBarRule =
       appUiStylesheet.match(/\.app-status-bar \{\s+position: fixed;[\s\S]*?\n\}/m)?.[0] ?? "";
+    const statusStripRule =
+      appUiStylesheet.match(
+        /\.app-status-bar \[data-yulora-region="status-strip"\] \{\s+width: 100%;[\s\S]*?\n\}/m
+      )?.[0] ?? "";
 
-    expect(documentEditorRule).toContain("background: transparent;");
+    expect(documentEditorRule).toContain("background: var(--yulora-editor-bg, transparent);");
     expect(documentEditorRule).not.toContain("border:");
     expect(documentEditorRule).not.toContain("box-shadow:");
     expect(appStatusBarRule).not.toContain("border:");
     expect(appStatusBarRule).toContain("background: transparent;");
     expect(appStatusBarRule).not.toContain("box-shadow:");
     expect(appStatusBarRule).not.toContain("backdrop-filter:");
+    expect(statusStripRule).toContain("background: transparent;");
+    expect(statusStripRule).not.toContain("border:");
+  });
+
+  it("does not paint active paragraphs with block fills or accent rails", () => {
+    const markdownRenderStylesheet = readFileSync(markdownRenderStylesheetPath, "utf-8");
+    const activeParagraphRule = getCssRule(markdownRenderStylesheet, ".document-editor .cm-active-paragraph");
+
+    expect(activeParagraphRule).toContain("color: var(--yulora-editor-fg, var(--yulora-markdown-body, #31353d));");
+    expect(activeParagraphRule).not.toContain("background:");
+    expect(activeParagraphRule).not.toContain("box-shadow:");
   });
 
   it("styles preferences as a semi-transparent glass drawer", () => {
     const settingsStylesheet = readFileSync(settingsStylesheetPath, "utf-8");
-    const lightTokenStylesheet = readFileSync(lightTokenStylesheetPath, "utf-8");
 
     expect(settingsStylesheet).toContain(
-      'background: color-mix(in srgb, var(--yulora-surface-bg) 78%, var(--yulora-scrim) 22%);'
+      "background: color-mix(in srgb, var(--yulora-scrim, rgba(15, 18, 24, 0.12)) 72%, transparent);"
     );
     expect(settingsStylesheet).toContain("backdrop-filter: blur(28px) saturate(1.12);");
     expect(settingsStylesheet).toContain(".settings-shell::before");
     expect(settingsStylesheet).toContain('.settings-shell[data-state="closing"]');
     expect(settingsStylesheet).toContain("@keyframes settings-drawer-exit");
     expect(settingsStylesheet).toContain("@keyframes settings-overlay-exit");
-    expect(settingsStylesheet).toContain("linear-gradient(");
     expect(settingsStylesheet).toContain(
-      "background: color-mix(in srgb, var(--yulora-surface-raised-bg) 97%, var(--yulora-surface-bg) 3%);"
+      "background: var(--yulora-panel-bg, rgba(255, 255, 255, 0.92));"
     );
     expect(settingsStylesheet).toContain(
-      "color-mix(in srgb, var(--yulora-surface-bg) 96%, var(--yulora-glass-strong-bg) 4%, transparent);"
+      "background: color-mix(\n    in srgb,\n    var(--yulora-panel-bg, rgba(255, 255, 255, 0.92)) 92%,"
     );
-    expect(lightTokenStylesheet).toContain("--yulora-glass-bg: rgba(");
-    expect(lightTokenStylesheet).toContain("--yulora-glass-bg: rgba(250, 249, 245, 0.42);");
-    expect(lightTokenStylesheet).toContain("--yulora-glass-strong-bg: rgba(255, 254, 250, 0.62);");
-    expect(lightTokenStylesheet).toContain("--yulora-glass-sheen:");
+    expect(settingsStylesheet).toContain(
+      "border: 1px solid var(--yulora-panel-border, rgba(15, 23, 42, 0.12));"
+    );
+    expect(settingsStylesheet).toContain(
+      "background: color-mix(\n    in srgb,\n    var(--yulora-panel-bg, rgba(255, 255, 255, 0.92)) 92%,"
+    );
   });
 
   it("defines themed option styling for settings dropdown menus", () => {
@@ -3623,18 +3935,21 @@ describe("App autosave", () => {
 
     expect(primitivesStylesheet).toContain(".settings-select option");
     expect(primitivesStylesheet).toContain(".settings-select optgroup");
-    expect(primitivesStylesheet).toContain("background-color: var(--yu-input-bg);");
-    expect(primitivesStylesheet).toContain("color: var(--yulora-text-body);");
-    expect(primitivesStylesheet).toContain("color: var(--yulora-text-subtle);");
+    expect(primitivesStylesheet).toContain(
+      "background-color: color-mix(in srgb, var(--yulora-panel-bg) 94%, transparent);"
+    );
+    expect(primitivesStylesheet).toContain("color: var(--yulora-text-secondary);");
+    expect(primitivesStylesheet).toContain("color: var(--yulora-text-muted);");
   });
 
-  it("uses a light code block palette in the default light theme", () => {
+  it("routes the default light markdown palette through formal semantic slots", () => {
     const lightMarkdownStylesheet = readFileSync(lightMarkdownStylesheetPath, "utf-8");
     const lightMarkdownRule = getCssRule(lightMarkdownStylesheet, ":root");
 
-    expect(lightMarkdownRule).toContain("--yulora-code-block-bg: #f3f6fa;");
-    expect(lightMarkdownRule).toContain("--yulora-code-block-text: #334155;");
-    expect(lightMarkdownRule).not.toContain("--yulora-code-block-bg: #17212b;");
+    expect(lightMarkdownRule).toContain("--yulora-inline-code-bg: var(--yulora-markdown-inline-code-bg);");
+    expect(lightMarkdownRule).toContain("--yulora-list-marker: var(--yulora-markdown-list-bullet);");
+    expect(lightMarkdownRule).toContain("--yulora-code-block-bg: var(--yulora-markdown-code-bg);");
+    expect(lightMarkdownRule).toContain("--yulora-code-block-text: var(--yulora-markdown-code-fg);");
   });
 
   it("defines table theming tokens in the default markdown theme stylesheet", () => {

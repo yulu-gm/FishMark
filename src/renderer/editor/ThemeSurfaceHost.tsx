@@ -5,6 +5,7 @@ import type {
   ThemeSurfaceRenderSettings,
   ThemeSurfaceSlot
 } from "../../shared/theme-package";
+import type { ThemeRuntimeEnv } from "../theme-runtime-env";
 import { createThemeSceneState, type ThemeAppearanceMode } from "../shader/theme-scene-state";
 import {
   createThemeSurfaceRuntime,
@@ -28,6 +29,7 @@ type ThemeSurfaceHostProps = {
   surface: ThemeSurfaceSlot;
   descriptor: ThemeSurfaceHostDescriptor;
   themeMode: ThemeAppearanceMode;
+  runtimeEnv: ThemeRuntimeEnv;
   effectsMode: ThemeEffectsMode;
   onRuntimeModeChange?: (mode: ThemeSurfaceRuntimeMode) => void;
 };
@@ -64,15 +66,27 @@ function parseChannels(serializedChannels: string): ThemeSurfaceRuntimeChannels 
   ) as ThemeSurfaceRuntimeChannels;
 }
 
+function serializeRuntimeEnv(runtimeEnv: ThemeRuntimeEnv): string {
+  return JSON.stringify([
+    runtimeEnv.wordCount,
+    runtimeEnv.focusMode,
+    runtimeEnv.viewport.width,
+    runtimeEnv.viewport.height
+  ]);
+}
+
 export function ThemeSurfaceHost({
   surface,
   descriptor,
   themeMode,
+  runtimeEnv,
   effectsMode,
   onRuntimeModeChange
 }: ThemeSurfaceHostProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const runtimeRef = useRef(createThemeSurfaceRuntime());
+  const sceneStateRef = useRef<ReturnType<typeof createThemeSceneState> | null>(null);
+  const mountedSurfaceRef = useRef<{ invalidate: () => void; unmount: () => void } | null>(null);
   const [mode, setMode] = useState<ThemeSurfaceRuntimeMode>("fallback");
   const sharedUniformsSignature = useMemo(
     () => serializeSharedUniforms(descriptor.sharedUniforms),
@@ -89,6 +103,10 @@ export function ThemeSurfaceHost({
   const channels = useMemo(
     () => parseChannels(channelsSignature),
     [channelsSignature]
+  );
+  const runtimeEnvSignature = useMemo(
+    () => serializeRuntimeEnv(runtimeEnv),
+    [runtimeEnv]
   );
 
   useEffect(() => {
@@ -116,8 +134,14 @@ export function ThemeSurfaceHost({
           sceneId: descriptor.sceneId,
           themeMode,
           effectsMode,
-          sharedUniforms
+          sharedUniforms,
+          runtimeEnv: {
+            wordCount: runtimeEnv.wordCount,
+            focusMode: runtimeEnv.focusMode,
+            viewport: runtimeEnv.viewport
+          }
         });
+        sceneStateRef.current = sceneState;
         const result = await runtimeRef.current.mount({
           canvas: canvasRef.current,
           surface,
@@ -133,6 +157,7 @@ export function ThemeSurfaceHost({
           return;
         }
 
+        mountedSurfaceRef.current = result;
         mountedSurface = result;
         setMode(result.mode);
         onRuntimeModeChange?.(result.mode);
@@ -149,6 +174,8 @@ export function ThemeSurfaceHost({
     return () => {
       isDisposed = true;
       abortController.abort();
+      sceneStateRef.current = null;
+      mountedSurfaceRef.current = null;
       mountedSurface?.unmount();
     };
   }, [
@@ -162,6 +189,15 @@ export function ThemeSurfaceHost({
     surface,
     onRuntimeModeChange
   ]);
+
+  useEffect(() => {
+    sceneStateRef.current?.updateRuntimeEnv({
+      wordCount: runtimeEnv.wordCount,
+      focusMode: runtimeEnv.focusMode,
+      viewport: runtimeEnv.viewport
+    });
+    mountedSurfaceRef.current?.invalidate();
+  }, [runtimeEnvSignature, runtimeEnv]);
 
   return (
     <div

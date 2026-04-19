@@ -9,6 +9,8 @@
   overflow: hidden;
   display: grid;
   grid-template-rows: var(--yulora-titlebar-height) minmax(0, 1fr);
+  background: var(--yulora-app-bg, #f3f4f6);
+  color: var(--yulora-text-secondary, #31353d);
 }
 
 /*
@@ -24,13 +26,8 @@
   align-items: center;
   min-height: var(--yulora-titlebar-height);
   padding: 0 var(--yulora-shell-gutter);
-  border-bottom: 1px solid var(--yulora-border-faint);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--yulora-surface-raised-bg) 94%, transparent),
-      color-mix(in srgb, var(--yulora-surface-base-bg) 92%, transparent)
-    );
+  border-bottom: 1px solid var(--yulora-panel-border, rgba(15, 23, 42, 0.12));
+  background: var(--yulora-titlebar-bg, transparent);
   overflow: hidden;
 }
 
@@ -82,8 +79,8 @@
   display: inline-grid;
   place-items: center;
   border-radius: 8px;
-  background: color-mix(in srgb, var(--yulora-text-strong) 10%, transparent);
-  color: var(--yulora-text-strong);
+  background: color-mix(in srgb, var(--yulora-control-bg-hover, rgba(255, 255, 255, 0.9)) 72%, transparent);
+  color: var(--yulora-text-primary, #171a1f);
   font-size: 0.8rem;
   font-weight: 700;
   letter-spacing: 0.01em;
@@ -95,7 +92,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--yulora-text-strong);
+  color: var(--yulora-text-primary, #171a1f);
   font-size: 0.84rem;
   font-weight: 620;
   letter-spacing: 0.01em;
@@ -105,21 +102,21 @@
   width: 9px;
   height: 9px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--yulora-text-muted) 60%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--yulora-surface-base-bg) 72%, transparent);
+  background: color-mix(in srgb, var(--yulora-text-muted, #687180) 60%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--yulora-titlebar-bg, white) 72%, transparent);
 }
 
 .app-titlebar-dirty-indicator[data-state="dirty"] {
-  background: color-mix(in srgb, var(--yulora-accent-strong, #4f7cff) 82%, white 18%);
+  background: color-mix(in srgb, var(--yulora-text-accent, #4f7cff) 82%, white 18%);
 }
 
 .app-titlebar-theme-toggle {
   min-height: 28px;
   padding: 0 10px;
-  border: 1px solid color-mix(in srgb, var(--yulora-border-subtle) 92%, transparent);
+  border: 1px solid var(--yulora-control-border, rgba(15, 23, 42, 0.12));
   border-radius: var(--yulora-radius-pill);
-  background: color-mix(in srgb, var(--yulora-surface-raised-bg) 88%, transparent);
-  color: var(--yulora-text-subtle);
+  background: var(--yulora-control-bg, rgba(255, 255, 255, 0.9));
+  color: var(--yulora-control-fg, #31353d);
   font: inherit;
   font-size: 0.76rem;
   line-height: 1;
@@ -159,8 +156,8 @@
   flex-direction: column;
   align-items: center;
   gap: var(--yulora-space-4);
-  border-right: 1px solid var(--yulora-border-faint);
-  background: var(--yulora-surface-raised-bg);
+  border-right: 1px solid var(--yulora-panel-border, rgba(15, 23, 42, 0.12));
+  background: var(--yulora-rail-bg, rgba(255, 255, 255, 0.92));
   transform: translateX(0);
   opacity: 1;
   transition:
@@ -185,7 +182,7 @@
 .app-rail-brand .app-subtitle {
   margin: 0;
   max-width: 100%;
-  color: var(--yulora-text-subtle);
+  color: var(--yulora-text-muted, #687180);
   font-size: 0.66rem;
   font-weight: 500;
   letter-spacing: 0.06em;
@@ -247,10 +244,10 @@
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 1px solid var(--yulora-border-faint);
+  border: 1px solid color-mix(in srgb, var(--yulora-panel-border, rgba(15, 23, 42, 0.12)) 56%, transparent);
   border-radius: 14px;
-  background: color-mix(in srgb, var(--yulora-surface-raised-bg) 92%, transparent);
-  color: var(--yulora-text-body);
+  background: color-mix(in srgb, var(--yulora-panel-bg, rgba(255, 255, 255, 0.92)) 92%, transparent);
+  color: var(--yulora-text-secondary, #31353d);
   cursor: pointer;
   transition:
     transform 140ms ease,
@@ -261,8 +258,12 @@
 
 .table-tool-button:hover {
   transform: translateX(1px);
-  border-color: var(--yulora-border-strong);
-  background: color-mix(in srgb, var(--yulora-surface-raised-bg) 82%, var(--yulora-accent, #7a8f8f) 18%);
+  border-color: var(--yulora-panel-border, rgba(15, 23, 42, 0.12));
+  background: color-mix(
+    in srgb,
+    var(--yulora-panel-bg, rgba(255, 255, 255, 0.92)) 82%,
+    var(--yulora-text-accent, #7a8f8f) 18%
+  );
 }
 
 .table-tool-button:focus-visible {
@@ -281,7 +282,7 @@
 }
 
 .table-tool-button[data-tone="danger"] {
-  color: var(--yulora-text-strong);
+  color: var(--yulora-text-primary, #171a1f);
 }
 
 .table-tool-tooltip {
@@ -290,10 +291,10 @@
   left: calc(100% + 10px);
   transform: translateY(-50%);
   padding: 8px 10px;
-  border: 1px solid var(--yulora-border-faint);
+  border: 1px solid color-mix(in srgb, var(--yulora-panel-border, rgba(15, 23, 42, 0.12)) 56%, transparent);
   border-radius: 12px;
-  background: var(--yulora-surface-panel-bg, var(--yulora-surface-raised-bg));
-  color: var(--yulora-text-body);
+  background: var(--yulora-panel-bg, rgba(255, 255, 255, 0.92));
+  color: var(--yulora-text-secondary, #31353d);
   font-size: 0.75rem;
   line-height: 1;
   white-space: nowrap;
@@ -349,6 +350,7 @@
   align-content: start;
   gap: var(--yulora-space-4);
   overflow: hidden;
+  background: var(--yulora-workspace-bg, transparent);
 }
 
 .app-notification-banner {
@@ -374,11 +376,11 @@
 .app-notification-message {
   margin: 0;
   padding: 11px 18px;
-  border: 1px solid color-mix(in srgb, var(--yulora-border-subtle) 92%, transparent);
+  border: 1px solid var(--yulora-control-border, rgba(15, 23, 42, 0.12));
   border-radius: var(--yulora-radius-pill);
-  background: color-mix(in srgb, var(--yulora-surface-raised-bg) 92%, transparent);
-  box-shadow: var(--yulora-shadow-2);
-  color: var(--yulora-text-strong);
+  background: var(--yulora-banner-info-bg, rgba(255, 255, 255, 0.9));
+  box-shadow: var(--yulora-panel-shadow, var(--yulora-shadow-2));
+  color: var(--yulora-text-primary, #171a1f);
   font-size: 0.84rem;
   line-height: 1.35;
   backdrop-filter: blur(18px) saturate(1.06);
@@ -390,16 +392,16 @@
 .app-notification-spinner {
   width: 14px;
   height: 14px;
-  border: 2px solid color-mix(in srgb, var(--yulora-text-subtle) 35%, transparent);
-  border-top-color: var(--yulora-text-strong);
+  border: 2px solid color-mix(in srgb, var(--yulora-control-fg, #31353d) 30%, transparent);
+  border-top-color: var(--yulora-text-primary, #171a1f);
   border-radius: 999px;
   animation: app-notification-spin 800ms linear infinite;
 }
 
 .app-notification-banner.is-error .app-notification-message {
-  border-color: var(--yulora-danger-border);
-  background: color-mix(in srgb, var(--yulora-danger-bg) 88%, var(--yulora-surface-raised-bg) 12%);
-  color: var(--yulora-danger-text);
+  border-color: color-mix(in srgb, var(--yulora-text-danger, #8b1e1e) 30%, transparent);
+  background: var(--yulora-banner-error-bg, #fff4f4);
+  color: var(--yulora-text-danger, #8b1e1e);
 }
 
 @keyframes app-notification-enter {
@@ -479,7 +481,7 @@
 .workspace-title {
   margin: 0;
   flex-shrink: 0;
-  color: var(--yulora-text-strong);
+  color: var(--yulora-text-primary, #171a1f);
   font-size: 1.02rem;
   line-height: 1.3;
   font-weight: 640;
@@ -495,7 +497,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--yulora-text-subtle);
+  color: var(--yulora-text-muted, #687180);
   font-size: 0.74rem;
   font-family: "Cascadia Code", "Consolas", "SFMono-Regular", monospace;
   line-height: 1.5;
@@ -504,13 +506,13 @@
 
 .app-subtitle {
   margin: 0;
-  color: var(--yulora-text-muted);
+  color: var(--yulora-text-muted, #687180);
   font-size: 0.94rem;
 }
 
 .app-hint {
   margin: 0;
-  color: var(--yulora-text-muted);
+  color: var(--yulora-text-muted, #687180);
   font-size: 0.84rem;
   max-width: 28ch;
   text-align: right;
@@ -520,7 +522,7 @@
 
 .app-name {
   margin: 0;
-  color: var(--yulora-text-strong);
+  color: var(--yulora-text-primary, #171a1f);
   font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -528,10 +530,10 @@
 
 .error-banner {
   padding: var(--yulora-space-3) var(--yulora-space-4);
-  border: 1px solid var(--yulora-danger-border);
+  border: 1px solid color-mix(in srgb, var(--yulora-text-danger, #8b1e1e) 30%, transparent);
   border-radius: var(--yulora-radius-md);
-  background: var(--yulora-danger-bg);
-  color: var(--yulora-danger-text);
+  background: var(--yulora-banner-error-bg, #fff4f4);
+  color: var(--yulora-text-danger, #8b1e1e);
 }
 
 .workspace-canvas {
@@ -613,10 +615,10 @@
   display: grid;
   place-items: center;
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--yulora-border-subtle) 92%, var(--yulora-glass-strong-bg) 8%);
+  border: 1px solid var(--yulora-control-border, rgba(15, 23, 42, 0.12));
   border-radius: 14px;
-  background: color-mix(in srgb, var(--yulora-surface-bg) 82%, var(--yulora-glass-strong-bg) 18%);
-  color: color-mix(in srgb, var(--yulora-text-subtle) 94%, transparent);
+  background: color-mix(in srgb, var(--yulora-control-bg, rgba(255, 255, 255, 0.9)) 92%, transparent);
+  color: color-mix(in srgb, var(--yulora-control-fg, #31353d) 94%, transparent);
   box-shadow:
     var(--yulora-shadow-1),
     0 14px 26px -22px rgba(15, 23, 42, 0.42);
@@ -639,7 +641,7 @@
 .focus-toggle-entry:hover,
 .focus-toggle-entry[aria-pressed="true"] {
   opacity: 1;
-  color: var(--yulora-text-strong);
+  color: var(--yulora-text-primary, #171a1f);
   transform: translateY(-1px);
 }
 
@@ -662,7 +664,7 @@
   z-index: 3;
   pointer-events: none;
   user-select: none;
-  color: var(--yulora-text-subtle);
+  color: var(--yulora-text-muted, #687180);
   font-size: 0.8rem;
   line-height: 1.45;
   letter-spacing: 0.01em;
@@ -717,13 +719,13 @@
 }
 
 .shortcut-hint-overlay-key {
-  color: var(--yulora-text-strong);
+  color: var(--yulora-text-primary, #171a1f);
   font-weight: 650;
   letter-spacing: 0.02em;
 }
 
 .shortcut-hint-overlay-label {
-  color: var(--yulora-text-muted);
+  color: var(--yulora-text-muted, #687180);
   font-weight: 500;
 }
 
@@ -780,10 +782,10 @@
   display: grid;
   place-items: center;
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--yulora-border-subtle) 88%, transparent);
+  border: 1px solid var(--yulora-control-border, rgba(15, 23, 42, 0.12));
   border-radius: 14px;
-  background: color-mix(in srgb, var(--yulora-surface-bg) 76%, var(--yulora-glass-strong-bg) 24%);
-  color: var(--yulora-text-subtle);
+  background: color-mix(in srgb, var(--yulora-control-bg, rgba(255, 255, 255, 0.9)) 88%, transparent);
+  color: var(--yulora-control-fg, #31353d);
   box-shadow:
     var(--yulora-shadow-1),
     0 16px 28px -24px rgba(15, 23, 42, 0.34);
@@ -793,7 +795,7 @@
 }
 
 .outline-entry:hover {
-  color: var(--yulora-text-strong);
+  color: var(--yulora-text-primary, #171a1f);
   transform: translateX(-1px);
 }
 
@@ -806,16 +808,10 @@
   display: flex;
   flex-direction: column;
   padding: 0;
-  border: 1px solid var(--yulora-glass-border);
+  border: 1px solid var(--yulora-panel-border, rgba(15, 23, 42, 0.12));
   border-radius: var(--yulora-radius-xl);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--yulora-surface-bg) 94%, transparent) 0%,
-      color-mix(in srgb, var(--yulora-surface-bg) 84%, var(--yulora-glass-bg) 16%, transparent) 100%
-    ),
-    color-mix(in srgb, var(--yulora-surface-bg) 96%, var(--yulora-glass-strong-bg) 4%, transparent);
-  box-shadow: var(--yulora-shadow-3);
+  background: var(--yulora-panel-bg, rgba(255, 255, 255, 0.92));
+  box-shadow: var(--yulora-panel-shadow, var(--yulora-shadow-3));
   backdrop-filter: blur(28px) saturate(1.12);
   -webkit-backdrop-filter: blur(28px) saturate(1.12);
   overflow: hidden;
@@ -841,15 +837,15 @@
   background:
     linear-gradient(
       140deg,
-      color-mix(in srgb, var(--yulora-glass-sheen) 100%, transparent) 0%,
+      color-mix(in srgb, var(--yulora-panel-border, rgba(15, 23, 42, 0.12)) 45%, transparent) 0%,
       transparent 28%
     ),
     linear-gradient(
       180deg,
-      color-mix(in srgb, var(--yulora-glass-sheen) 78%, transparent) 0%,
+      color-mix(in srgb, var(--yulora-panel-border, rgba(15, 23, 42, 0.12)) 28%, transparent) 0%,
       transparent 22%,
       transparent 76%,
-      color-mix(in srgb, var(--yulora-glass-sheen) 18%, transparent) 100%
+      color-mix(in srgb, var(--yulora-panel-border, rgba(15, 23, 42, 0.12)) 12%, transparent) 100%
     );
   pointer-events: none;
   z-index: 0;
@@ -868,18 +864,18 @@
   padding: 12px 10px 10px;
   background: color-mix(
     in srgb,
-    var(--yulora-surface-raised-bg) 90%,
-    var(--yulora-surface-bg) 10%,
+    var(--yulora-panel-bg, rgba(255, 255, 255, 0.92)) 92%,
+    var(--yulora-control-bg, rgba(255, 255, 255, 0.9)) 8%,
     transparent
   );
-  border-bottom: 1px solid color-mix(in srgb, var(--yulora-border-subtle) 88%, transparent);
+  border-bottom: 1px solid var(--yulora-panel-border, rgba(15, 23, 42, 0.12));
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
 }
 
 .outline-panel-title {
   margin: 0;
-  color: var(--yulora-text-subtle);
+  color: var(--yulora-text-muted, #687180);
   font-size: 0.68rem;
   font-weight: 650;
   letter-spacing: 0.12em;
@@ -895,7 +891,7 @@
   border: 0;
   border-radius: 10px;
   background: transparent;
-  color: var(--yulora-text-subtle);
+  color: var(--yulora-control-fg, #31353d);
 }
 
 .outline-panel-body {
@@ -906,8 +902,8 @@
 }
 
 .outline-panel-close:hover {
-  background: color-mix(in srgb, var(--yulora-surface-muted-bg) 82%, transparent);
-  color: var(--yulora-text-strong);
+  background: var(--yulora-control-bg-hover, rgba(255, 255, 255, 0.94));
+  color: var(--yulora-text-primary, #171a1f);
 }
 
 .outline-panel-close svg,
@@ -929,7 +925,7 @@
   border: 0;
   border-radius: 10px;
   background: transparent;
-  color: var(--yulora-text-secondary);
+  color: var(--yulora-text-secondary, #31353d);
   text-align: left;
   cursor: pointer;
   transition:
@@ -938,13 +934,13 @@
 }
 
 .outline-panel-item:hover {
-  background: color-mix(in srgb, var(--yulora-surface-muted-bg) 84%, transparent);
-  color: var(--yulora-text-strong);
+  background: var(--yulora-control-bg-hover, rgba(255, 255, 255, 0.94));
+  color: var(--yulora-text-primary, #171a1f);
 }
 
 .outline-panel-item.is-current {
-  background: color-mix(in srgb, var(--yulora-surface-muted-bg) 86%, var(--yulora-glass-strong-bg) 14%);
-  color: var(--yulora-text-strong);
+  background: var(--yulora-control-bg-active, rgba(79, 124, 255, 0.12));
+  color: var(--yulora-text-primary, #171a1f);
 }
 
 .outline-panel-item-label {
@@ -957,7 +953,7 @@
 .outline-panel-empty {
   margin: 0;
   padding: 4px 8px;
-  color: var(--yulora-text-muted);
+  color: var(--yulora-text-muted, #687180);
   font-size: 0.8rem;
   line-height: 1.4;
 }
@@ -1004,7 +1000,7 @@
 .document-editor {
   width: 100%;
   border-radius: var(--yulora-radius-xl);
-  background: transparent;
+  background: var(--yulora-editor-bg, transparent);
   overflow: hidden;
 }
 
@@ -1040,6 +1036,9 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--yulora-space-2) var(--yulora-space-5);
+  padding: 0 var(--yulora-space-5);
+  border-radius: inherit;
+  background: transparent;
 }
 
 .save-status,
@@ -1051,25 +1050,25 @@
 }
 
 .save-status {
-  color: var(--yulora-text-muted);
+  color: var(--yulora-text-muted, #687180);
 }
 
 .save-status.is-dirty {
-  color: color-mix(in srgb, var(--yulora-dirty-text) 72%, var(--yulora-text-muted));
+  color: color-mix(in srgb, var(--yulora-text-accent, #4f7cff) 72%, var(--yulora-text-muted, #687180));
 }
 
 .save-status.is-clean {
-  color: color-mix(in srgb, var(--yulora-clean-text) 68%, var(--yulora-text-muted));
+  color: color-mix(in srgb, var(--yulora-text-primary, #171a1f) 68%, var(--yulora-text-muted, #687180));
 }
 
 .document-word-count,
 .document-platform {
-  color: var(--yulora-text-subtle);
+  color: var(--yulora-text-muted, #687180);
 }
 
 .app-update-status {
   margin: 0;
-  color: var(--yulora-text-strong);
+  color: var(--yulora-text-primary, #171a1f);
   font-size: 0.84rem;
   letter-spacing: 0.005em;
 }
@@ -1100,18 +1099,16 @@
 .empty-inner {
   width: min(100%, 56ch);
   padding: var(--yulora-space-12) clamp(24px, 5vw, 48px);
-  border: 1px solid var(--yulora-border-subtle);
+  border: 1px solid var(--yulora-panel-border, rgba(15, 23, 42, 0.12));
   border-radius: var(--yulora-radius-xl);
-  background: color-mix(in srgb, var(--yulora-surface-bg) 96%, transparent);
-  box-shadow:
-    var(--yulora-shadow-1),
-    0 12px 32px -22px rgba(15, 23, 42, 0.14);
+  background: var(--yulora-panel-bg, rgba(255, 255, 255, 0.92));
+  box-shadow: var(--yulora-panel-shadow, var(--yulora-shadow-3));
   text-align: center;
 }
 
 .empty-kicker {
   margin: 0;
-  color: var(--yulora-text-subtle);
+  color: var(--yulora-text-muted, #687180);
   font-size: 0.74rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -1120,7 +1117,7 @@
 .empty-inner h1 {
   width: 100%;
   margin: var(--yulora-space-3) auto 0;
-  color: var(--yulora-text-strong);
+  color: var(--yulora-text-primary, #171a1f);
   font-size: clamp(1.6rem, 3vw, 2.1rem);
   font-weight: 620;
   line-height: 1.18;
@@ -1130,7 +1127,7 @@
 .empty-copy {
   width: min(100%, 48ch);
   margin: var(--yulora-space-4) auto 0;
-  color: var(--yulora-text-muted);
+  color: var(--yulora-text-muted, #687180);
   font-size: 0.96rem;
   line-height: 1.6;
 }
@@ -1139,9 +1136,9 @@
   display: inline-block;
   margin: var(--yulora-space-6) auto 0;
   padding: 4px 12px;
-  border: 1px solid var(--yulora-border-faint);
+  border: 1px solid var(--yulora-panel-border, rgba(15, 23, 42, 0.12));
   border-radius: var(--yulora-radius-pill);
-  color: var(--yulora-text-subtle);
+  color: var(--yulora-text-muted, #687180);
   font-size: 0.78rem;
   font-family: "Cascadia Code", "Consolas", "SFMono-Regular", monospace;
   letter-spacing: 0.02em;

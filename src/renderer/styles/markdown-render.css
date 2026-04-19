@@ -1,5 +1,5 @@
 .document-editor .cm-inactive-heading {
-  color: var(--yulora-text-strong);
+  color: var(--yulora-markdown-heading, var(--yulora-text-primary, #171a1f));
 }
 
 .document-editor .cm-inactive-heading-marker {
@@ -7,7 +7,7 @@
 }
 
 .document-editor .cm-active-heading {
-  color: var(--yulora-text-strong);
+  color: var(--yulora-markdown-heading, var(--yulora-text-primary, #171a1f));
 }
 
 .document-editor .cm-inactive-heading-depth-1 {
@@ -75,11 +75,11 @@
 }
 
 .document-editor .cm-inactive-paragraph {
-  color: var(--yulora-text-muted);
+  color: var(--yulora-markdown-body, var(--yulora-editor-fg, #31353d));
 }
 
 .document-editor .cm-active-paragraph {
-  color: var(--yulora-text-muted);
+  color: var(--yulora-editor-fg, var(--yulora-markdown-body, #31353d));
 }
 
 .document-editor .cm-inactive-paragraph-leading {
@@ -97,20 +97,20 @@
 }
 
 .document-editor .cm-inactive-inline-strong {
-  color: var(--yulora-text-strong);
+  color: var(--yulora-markdown-strong, var(--yulora-text-primary, #171a1f));
   font-weight: 650;
 }
 
 .document-editor .cm-inactive-inline-emphasis {
-  color: var(--yulora-text-body);
+  color: var(--yulora-markdown-emphasis, var(--yulora-markdown-body, #31353d));
   font-style: italic;
 }
 
 .document-editor .cm-inactive-inline-code {
   padding: 0.08em 0.34em;
   border-radius: 0.38em;
-  background: var(--yulora-inline-code-bg);
-  color: var(--yulora-inline-code-text);
+  background: var(--yulora-markdown-inline-code-bg, rgba(17, 24, 39, 0.06));
+  color: var(--yulora-markdown-inline-code-fg, #0f172a);
   font-family:
     "Cascadia Code",
     "Consolas",
@@ -125,13 +125,13 @@
 }
 
 .document-editor .cm-inactive-inline-strikethrough {
-  color: var(--yulora-text-muted);
+  color: var(--yulora-text-muted, #687180);
   text-decoration: line-through;
   text-decoration-thickness: 1.5px;
 }
 
 .document-editor .cm-inactive-list {
-  color: var(--yulora-list-text, var(--yulora-text-muted));
+  color: var(--yulora-markdown-list-text, var(--yulora-text-muted, #687180));
 }
 
 .document-editor .cm-inactive-list-unordered,
@@ -140,7 +140,7 @@
 }
 
 .document-editor .cm-inactive-list-marker {
-  color: var(--yulora-list-marker);
+  color: var(--yulora-markdown-list-bullet, #98a2b3);
   font-weight: 500;
   opacity: 0.82;
 }
@@ -161,7 +161,7 @@
   width: 0.28rem;
   height: 0.28rem;
   border-radius: 999px;
-  background: var(--yulora-list-marker);
+  background: var(--yulora-markdown-list-bullet, #98a2b3);
   transform: translateY(-50%);
 }
 
@@ -206,9 +206,9 @@
   box-sizing: border-box;
   width: 0.92rem;
   height: 0.92rem;
-  border: 1.5px solid var(--yulora-task-border);
+  border: 1.5px solid var(--yulora-control-border, rgba(15, 23, 42, 0.12));
   border-radius: 0.2rem;
-  background: var(--yulora-task-bg);
+  background: var(--yulora-control-bg, rgba(255, 255, 255, 0.9));
 }
 
 .document-editor .cm-inactive-task-marker[data-task-state="checked"]::after {
@@ -218,13 +218,13 @@
   left: 0.35rem;
   width: 0.22rem;
   height: 0.42rem;
-  border-right: 2px solid var(--yulora-task-check);
-  border-bottom: 2px solid var(--yulora-task-check);
+  border-right: 2px solid var(--yulora-text-accent, #4f7cff);
+  border-bottom: 2px solid var(--yulora-text-accent, #4f7cff);
   transform: rotate(45deg);
 }
 
 .document-editor .cm-inactive-list-task-checked {
-  color: var(--yulora-text-secondary);
+  color: var(--yulora-markdown-task-done, var(--yulora-text-muted, #687180));
 }
 
 .document-editor .cm-inactive-list-depth-1 {
@@ -236,8 +236,13 @@
 }
 
 .document-editor .cm-inactive-blockquote {
-  color: var(--yulora-text-secondary);
-  background: var(--yulora-surface-blockquote-bg);
+  color: var(--yulora-markdown-quote-fg, var(--yulora-text-secondary, #31353d));
+  background: color-mix(
+    in srgb,
+    var(--yulora-markdown-quote-border, rgba(15, 23, 42, 0.12)) 12%,
+    transparent
+  );
+  box-shadow: inset 3px 0 0 var(--yulora-markdown-quote-border, rgba(15, 23, 42, 0.12));
   padding-left: 1.25rem;
   padding-right: 0.9rem;
 }
@@ -269,8 +274,9 @@
 }
 
 .document-editor .cm-inactive-code-block {
-  color: var(--yulora-code-block-text);
-  background: var(--yulora-code-block-bg);
+  color: var(--yulora-markdown-code-fg, #334155);
+  background: var(--yulora-markdown-code-bg, #f3f6fa);
+  box-shadow: inset 0 0 0 1px var(--yulora-markdown-code-border, rgba(15, 23, 42, 0.12));
   font:
     400 0.96rem/1.72 "Cascadia Code", "Consolas", "SFMono-Regular", "Courier New", monospace;
   white-space: pre-wrap !important;
@@ -307,7 +313,7 @@
 .document-editor .cm-inactive-thematic-break::before {
   content: "";
   display: block;
-  border-top: 1.5px solid var(--yulora-thematic-break);
+  border-top: 1.5px solid var(--yulora-markdown-hr, #d0d5dd);
 }
 
 .document-editor .cm-inactive-thematic-break-marker {
@@ -408,4 +414,58 @@
   min-height: 2.75rem;
   color: color-mix(in srgb, currentColor 72%, transparent);
   font-size: 0.94em;
+}
+
+.document-editor table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  background: var(--yulora-markdown-table-cell-bg, transparent);
+  border: 1px solid var(--yulora-markdown-table-border, rgba(15, 23, 42, 0.12));
+}
+
+.document-editor th,
+.document-editor td {
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--yulora-markdown-table-border, rgba(15, 23, 42, 0.12));
+}
+
+.document-editor th {
+  background: var(--yulora-markdown-table-header-bg, rgba(255, 255, 255, 0.92));
+  color: var(--yulora-markdown-table-header-fg, var(--yulora-text-primary, #171a1f));
+  text-align: left;
+}
+
+.document-editor tbody tr:nth-child(even) td {
+  background: var(--yulora-markdown-table-row-stripe, transparent);
+}
+
+.document-editor .cm-inactive-code-block .tok-keyword,
+.document-editor .cm-inactive-code-block .cm-keyword {
+  color: var(--yulora-markdown-code-token-keyword, #7c3aed);
+}
+
+.document-editor .cm-inactive-code-block .tok-string,
+.document-editor .cm-inactive-code-block .cm-string {
+  color: var(--yulora-markdown-code-token-string, #b45309);
+}
+
+.document-editor .cm-inactive-code-block .tok-number,
+.document-editor .cm-inactive-code-block .cm-number {
+  color: var(--yulora-markdown-code-token-number, #2563eb);
+}
+
+.document-editor .cm-inactive-code-block .tok-comment,
+.document-editor .cm-inactive-code-block .cm-comment {
+  color: var(--yulora-markdown-code-token-comment, rgba(51, 65, 85, 0.7));
+}
+
+.document-editor .cm-inactive-code-block .tok-function,
+.document-editor .cm-inactive-code-block .cm-function {
+  color: var(--yulora-markdown-code-token-function, #0f766e);
+}
+
+.document-editor .cm-inactive-code-block .tok-typeName,
+.document-editor .cm-inactive-code-block .cm-typeName {
+  color: var(--yulora-markdown-code-token-type, #be185d);
 }

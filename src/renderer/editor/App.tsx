@@ -21,11 +21,7 @@ import {
 } from "@yulora/editor-core";
 import type { AppNotification, AppUpdateState } from "../../shared/app-update";
 import { createPreviewAssetUrl } from "../../shared/preview-asset-url";
-import type {
-  ThemePackageManifest,
-  ThemeParameterDescriptor,
-  ThemeSurfaceSlot
-} from "../../shared/theme-package";
+import type { ThemePackageManifest, ThemeSurfaceSlot } from "../../shared/theme-package";
 import {
   DEFAULT_PREFERENCES,
   type Preferences,
@@ -52,6 +48,17 @@ import {
   startOpeningMarkdownFile
 } from "../document-state";
 import { getDocumentMetrics } from "../document-metrics";
+import {
+  applyThemeParameterCssVariables,
+  clearThemeParameterCssVariables,
+  resolveEffectiveThemeParameterValue
+} from "../theme-style-runtime";
+import {
+  applyThemeRuntimeEnv,
+  buildThemeRuntimeEnv,
+  clearThemeRuntimeEnv,
+  type ThemeRuntimeEnv
+} from "../theme-runtime-env";
 import {
   ThemeSurfaceHost,
   type ThemeSurfaceHostDescriptor
@@ -86,8 +93,6 @@ const DOCUMENT_FONT_FAMILY_CSS_VAR = "--yulora-document-font-family";
 const DOCUMENT_CJK_FONT_FAMILY_CSS_VAR = "--yulora-document-cjk-font-family";
 const DOCUMENT_FONT_SIZE_CSS_VAR = "--yulora-document-font-size";
 const THEME_DYNAMIC_MODE_ATTRIBUTE = "data-yulora-theme-dynamic-mode";
-const THEME_PARAMETER_CSS_VARIABLES_ATTRIBUTE = "data-yulora-theme-parameter-css-variables";
-const THEME_PARAMETER_CSS_VAR_PREFIX = "--yulora-theme-parameter-";
 const OUTLINE_EXIT_ANIMATION_MS = 180;
 const SETTINGS_DRAWER_EXIT_ANIMATION_MS = 180;
 type TableToolTone = "default" | "danger";
@@ -265,6 +270,13 @@ function resolveThemeMode(mode: ThemeMode): ResolvedThemeMode {
   return mediaQuery?.matches ? "dark" : "light";
 }
 
+function getWindowViewport(): ThemeRuntimeEnv["viewport"] {
+  return {
+    width: window.innerWidth,
+    height: window.innerHeight
+  };
+}
+
 function applyPreferencesToDocument(
   root: HTMLElement,
   preferences: Preferences,
@@ -302,30 +314,6 @@ function applyPreferencesToDocument(
   } else {
     root.style.removeProperty(DOCUMENT_FONT_SIZE_CSS_VAR);
   }
-}
-
-function clearThemeParameterCssVariables(root: HTMLElement): void {
-  const variables = root.getAttribute(THEME_PARAMETER_CSS_VARIABLES_ATTRIBUTE);
-
-  if (!variables) {
-    return;
-  }
-
-  for (const variable of variables.split(",")) {
-    const trimmed = variable.trim();
-
-    if (trimmed.length === 0) {
-      continue;
-    }
-
-    root.style.removeProperty(trimmed);
-  }
-
-  root.removeAttribute(THEME_PARAMETER_CSS_VARIABLES_ATTRIBUTE);
-}
-
-function toThemeParameterCssVariable(parameterId: string): string {
-  return `${THEME_PARAMETER_CSS_VAR_PREFIX}${parameterId}`;
 }
 
 function clearDocumentPreferences(root: HTMLElement): void {
@@ -379,58 +367,6 @@ function resolveSurfaceChannels(
       src: createPreviewAssetUrl(channel0.src)
     }
   };
-}
-
-function resolveParameterDefaultValue(parameter: ThemeParameterDescriptor): number {
-  if (parameter.type === "toggle") {
-    return parameter.default ? 1 : 0;
-  }
-
-  return parameter.default;
-}
-
-function resolveEffectiveThemeParameterValue(
-  parameter: ThemeParameterDescriptor,
-  parameterOverrides: Record<string, number> | undefined
-): number {
-  const overrideValue = parameterOverrides?.[parameter.id];
-
-  if (typeof overrideValue !== "number" || !Number.isFinite(overrideValue)) {
-    return resolveParameterDefaultValue(parameter);
-  }
-
-  if (parameter.type === "toggle") {
-    return overrideValue > 0.5 ? 1 : 0;
-  }
-
-  return Math.min(Math.max(overrideValue, parameter.min), parameter.max);
-}
-
-function applyThemeParameterCssVariables(
-  root: HTMLElement,
-  manifest: ThemePackageManifest | null,
-  parameterOverrides: Record<string, number> | undefined
-): void {
-  clearThemeParameterCssVariables(root);
-
-  if (!manifest) {
-    return;
-  }
-
-  const appliedVariables: string[] = [];
-
-  for (const parameter of manifest.parameters ?? []) {
-    const variableName = toThemeParameterCssVariable(parameter.id);
-    root.style.setProperty(
-      variableName,
-      String(resolveEffectiveThemeParameterValue(parameter, parameterOverrides))
-    );
-    appliedVariables.push(variableName);
-  }
-
-  if (appliedVariables.length > 0) {
-    root.setAttribute(THEME_PARAMETER_CSS_VARIABLES_ATTRIBUTE, appliedVariables.join(","));
-  }
 }
 
 /**
@@ -575,6 +511,9 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   const [titlebarSurfaceRuntimeMode, setTitlebarSurfaceRuntimeMode] = useState<
     ThemeSurfaceRuntimeMode | null
   >(null);
+  const [systemThemeMode, setSystemThemeMode] = useState<ResolvedThemeMode>(() =>
+    resolveThemeMode("system")
+  );
   const [isEditorFocused, setIsEditorFocused] = useState(false);
   const [isShortcutHintArmed, setIsShortcutHintArmed] = useState(false);
   const [activeShortcutGroupId, setActiveShortcutGroupId] =
@@ -611,6 +550,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   const currentDocumentMetrics = state.currentDocument
     ? getDocumentMetrics(currentDocumentContent)
     : null;
+  const currentDocumentWordCount = currentDocumentMetrics?.meaningfulCharacterCount ?? 0;
   const isDocumentOpen = Boolean(state.currentDocument);
   const isFocusModeActive = focusModeSource !== null;
   const isManualFocusToggleEnabled = preferences.focus.triggerMode === "manual";
@@ -644,7 +584,18 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     ? `正在下载更新${Number.isFinite(appUpdateState.percent) ? ` ${Math.round(appUpdateState.percent)}%` : "…"}`
     : null;
   const controlledTitlebarEnabled = supportsControlledTitlebar(yulora.platform);
-  const resolvedThemeMode = resolveThemeMode(preferences.theme.mode);
+  const resolvedThemeMode =
+    preferences.theme.mode === "system" ? systemThemeMode : preferences.theme.mode;
+  const themeRuntimeEnv = useMemo<ThemeRuntimeEnv>(
+    () =>
+      buildThemeRuntimeEnv({
+        wordCount: currentDocumentWordCount,
+        isFocusModeActive,
+        themeMode: resolvedThemeMode,
+        viewport: getWindowViewport()
+      }),
+    [currentDocumentWordCount, isFocusModeActive, resolvedThemeMode]
+  );
   const activeThemePackages = themePackages.map(normalizeThemePackageDescriptor);
   const activeThemePackageResolution = resolveActiveThemePackage(
     preferences.theme.selectedId,
@@ -731,6 +682,19 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
       ? TABLE_EDITING_SHORTCUT_GROUP
       : DEFAULT_TEXT_SHORTCUT_GROUP;
   const isShortcutHintVisible = isDocumentOpen && isEditorFocused && isShortcutHintArmed;
+
+  function createThemeRuntimeEnv(themeMode: ResolvedThemeMode = resolvedThemeMode): ThemeRuntimeEnv {
+    return buildThemeRuntimeEnv({
+      wordCount: currentDocumentWordCount,
+      isFocusModeActive,
+      themeMode,
+      viewport: getWindowViewport()
+    });
+  }
+
+  const syncThemeRuntimeEnv = useEffectEvent((themeMode: ResolvedThemeMode = resolvedThemeMode): void => {
+    applyThemeRuntimeEnv(document.documentElement, createThemeRuntimeEnv(themeMode));
+  });
 
   function applyState(updater: (current: AppState) => AppState): void {
     const next = updater(stateRef.current);
@@ -1505,6 +1469,33 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   }, [focusModeSource, preferences.focus.triggerMode, scheduleFocusIdle]);
 
   useEffect(() => {
+    const mediaQuery = window.matchMedia?.(DARK_MODE_MEDIA_QUERY);
+
+    if (!mediaQuery) {
+      return undefined;
+    }
+
+    const applySystemThemeMode = () => {
+      setSystemThemeMode(mediaQuery.matches ? "dark" : "light");
+    };
+
+    applySystemThemeMode();
+    mediaQuery.addEventListener("change", applySystemThemeMode);
+    return () => mediaQuery.removeEventListener("change", applySystemThemeMode);
+  }, []);
+
+  useEffect(() => {
+    const handleResize = () => syncThemeRuntimeEnv();
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    syncThemeRuntimeEnv(resolvedThemeMode);
+  }, [currentDocumentWordCount, isFocusModeActive, resolvedThemeMode]);
+
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (
         !isAutoFocusKeyboardEvent(event) ||
@@ -1662,20 +1653,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     };
 
     applyCurrentTheme();
-
-    if (preferences.theme.mode !== "system") {
-      return undefined;
-    }
-
-    const mediaQuery = window.matchMedia?.(DARK_MODE_MEDIA_QUERY);
-
-    if (!mediaQuery) {
-      return undefined;
-    }
-
-    mediaQuery.addEventListener("change", applyCurrentTheme);
-    return () => mediaQuery.removeEventListener("change", applyCurrentTheme);
-  }, [activeThemeParameterOverrides, preferences, themePackages]);
+  }, [activeThemeParameterOverrides, preferences, resolvedThemeMode, themePackages]);
 
   useEffect(() => {
     return yulora.onAppUpdateState((nextState) => {
@@ -1806,6 +1784,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
       clearNotificationTimers();
       themePackageRuntimeRef.current?.clear();
       clearThemeDynamicModeFromDocument(document.documentElement);
+      clearThemeRuntimeEnv(document.documentElement);
       clearDocumentPreferences(document.documentElement);
     },
     [clearNotificationTimers]
@@ -1828,6 +1807,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
           title={headerTitle}
           isDirty={state.isDirty}
           themeMode={resolvedThemeMode}
+          runtimeEnv={themeRuntimeEnv}
           effectsMode={preferences.theme.effectsMode}
           titlebarSurface={activeTitlebarSurface}
           onTitlebarSurfaceRuntimeModeChange={handleTitlebarSurfaceRuntimeModeChange}
@@ -1842,6 +1822,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
             surface="workbenchBackground"
             descriptor={activeWorkbenchSurface}
             themeMode={resolvedThemeMode}
+            runtimeEnv={themeRuntimeEnv}
             effectsMode={preferences.theme.effectsMode}
             onRuntimeModeChange={handleWorkbenchSurfaceRuntimeModeChange}
           />

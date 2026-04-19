@@ -20,6 +20,7 @@ import {
 import { saveMarkdownFileToPath, showSaveMarkdownDialog } from "./save-markdown-file";
 import { createPreferencesService } from "./preferences-service";
 import { createFontCatalogService } from "./font-catalog-service";
+import { openThemesDirectory } from "./open-themes-directory";
 import {
   createThemePackageService,
   resolveBuiltinThemePackagesDir
@@ -78,6 +79,7 @@ const OPEN_EDITOR_TEST_WINDOW_CHANNEL = "yulora:open-editor-test-window";
 const LIST_FONT_FAMILIES_CHANNEL = "yulora:list-font-families";
 const LIST_THEME_PACKAGES_CHANNEL = "yulora:list-theme-packages";
 const REFRESH_THEME_PACKAGES_CHANNEL = "yulora:refresh-theme-packages";
+const OPEN_THEMES_DIRECTORY_CHANNEL = "yulora:open-themes-directory";
 const AUTO_UPDATE_STARTUP_DELAY_MS = 5000;
 registerPreviewAssetScheme({ protocol });
 configureMainProcessRuntime(app, process.env);
@@ -316,6 +318,9 @@ app.whenReady().then(async () => {
   ipcMain.handle(LIST_THEME_PACKAGES_CHANNEL, async () => themePackageService.listThemePackages());
   ipcMain.handle(REFRESH_THEME_PACKAGES_CHANNEL, async () =>
     themePackageService.refreshThemePackages()
+  );
+  ipcMain.handle(OPEN_THEMES_DIRECTORY_CHANNEL, async () =>
+    openThemesDirectory(app.getPath("userData"))
   );
 
   if (!app.isPackaged && runtimeMode === "test-workbench") {

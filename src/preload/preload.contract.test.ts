@@ -26,6 +26,7 @@ import {
 } from "../shared/preferences";
 import type {
   PreloadPreferences,
+  PreloadThemePackageDescriptor,
   PreloadPreferencesUpdate,
   PreloadUpdatePreferencesResult
 } from "./preload";
@@ -52,6 +53,7 @@ import {
   type AppNotification,
   type AppUpdateState
 } from "../shared/app-update";
+import type { ThemePackageManifest } from "../shared/theme-package";
 
 const exposeInMainWorld = vi.fn();
 const invoke = vi.fn();
@@ -112,6 +114,15 @@ describe("preload contract", () => {
     expect(sample.status).toBe("success");
   });
 
+  it("aligns theme package manifest typing with the shared contract", () => {
+    const descriptorContract: TypeEquals<
+      ThemePackageManifest,
+      PreloadThemePackageDescriptor["manifest"]
+    > = true;
+
+    void descriptorContract;
+  });
+
   beforeEach(() => {
     exposeInMainWorld.mockClear();
     invoke.mockClear();
@@ -165,6 +176,7 @@ describe("preload contract", () => {
     void api.listFontFamilies();
     void api.listThemePackages();
     void api.refreshThemePackages();
+    void api.openThemesDirectory();
     void api.checkForUpdates();
 
     expect(invoke.mock.calls).toContainEqual([OPEN_MARKDOWN_FILE_CHANNEL]);
@@ -182,6 +194,7 @@ describe("preload contract", () => {
     expect(invoke.mock.calls).toContainEqual(["yulora:list-font-families"]);
     expect(invoke.mock.calls).toContainEqual(["yulora:list-theme-packages"]);
     expect(invoke.mock.calls).toContainEqual(["yulora:refresh-theme-packages"]);
+    expect(invoke.mock.calls).toContainEqual(["yulora:open-themes-directory"]);
     expect(invoke.mock.calls).toContainEqual([CHECK_FOR_APP_UPDATES_CHANNEL]);
 
     expect(invoke.mock.calls).not.toContainEqual(["yulora:list-themes"]);

@@ -48,10 +48,12 @@ function syncThemeLink(
     document.head.appendChild(link);
   }
 
-  const anchor = previousNode?.nextSibling ?? document.head.firstChild;
-
-  if (link.previousSibling !== previousNode || (previousNode === null && document.head.firstChild !== link)) {
-    document.head.insertBefore(link, anchor);
+  if (previousNode === null) {
+    if (document.head.lastChild !== link) {
+      document.head.appendChild(link);
+    }
+  } else if (link.previousSibling !== previousNode) {
+    document.head.insertBefore(link, previousNode.nextSibling);
   }
 
   mountedLinks.set(part, link);

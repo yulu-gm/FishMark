@@ -581,7 +581,19 @@
 - 主题缺失的 part 不会报错或持久留存旧样式
 - 当前主题包不支持所选颜色模式时，界面回退到 `Yulora 默认`，并提示“该主题不支持浅色/深色模式”
 
-### TC-095 autosave idle delay 变更重排 pending timer
+### TC-095 打开主题目录
+
+步骤：
+1. 打开设置页，定位到“主题包”所在行。
+2. 点击“打开主题目录”按钮。
+3. 观察系统文件管理器打开的位置。
+
+预期：
+- 系统会直接打开统一主题安装目录 `<userData>/themes/`
+- 即使当前选中的是 builtin 主题，也不会跳到 `src/renderer/theme-packages/`
+- 目录不存在时会先创建再打开，不会弹出错误
+
+### TC-096 autosave idle delay 变更重排 pending timer
 
 步骤：
 1. 打开任意文档并输入内容，确保出现 dirty 状态。

@@ -60,4 +60,13 @@ describe("preload bridge", () => {
     expect(invoke.mock.calls).not.toContainEqual(["yulora:list-themes"]);
     expect(invoke.mock.calls).not.toContainEqual(["yulora:refresh-themes"]);
   });
+
+  it("exposes an openThemesDirectory bridge for the native themes folder action", async () => {
+    const api = await loadApi();
+
+    expect(api).toHaveProperty("openThemesDirectory");
+    void api.openThemesDirectory();
+
+    expect(invoke.mock.calls).toContainEqual(["yulora:open-themes-directory"]);
+  });
 });

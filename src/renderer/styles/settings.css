@@ -2,7 +2,7 @@
   position: fixed;
   inset: 0;
   z-index: 30;
-  background: color-mix(in srgb, var(--yulora-surface-bg) 78%, var(--yulora-scrim) 22%);
+  background: color-mix(in srgb, var(--yulora-scrim, rgba(15, 18, 24, 0.12)) 72%, transparent);
 }
 
 [data-yulora-dialog="settings-drawer"][data-state="open"] {
@@ -30,23 +30,11 @@
   z-index: 31;
   margin: 0;
   padding: var(--yulora-space-5) var(--yulora-space-5) var(--yulora-space-6);
-  border: 1px solid var(--yulora-glass-border);
+  border: 1px solid var(--yulora-panel-border, rgba(15, 23, 42, 0.12));
   border-radius: var(--yulora-radius-2xl);
-  --yu-ctrl-glass-bg: color-mix(in srgb, var(--yulora-surface-bg) 88%, var(--yulora-glass-strong-bg) 12%, transparent);
-  --yu-ctrl-glass-bg-hover: color-mix(in srgb, var(--yulora-surface-raised-bg) 84%, var(--yulora-glass-strong-bg) 16%, transparent);
-  --yu-input-bg: color-mix(in srgb, var(--yulora-surface-bg) 94%, var(--yulora-glass-bg) 6%, transparent);
-  --yu-input-bg-focus: color-mix(in srgb, var(--yulora-surface-raised-bg) 90%, var(--yulora-glass-strong-bg) 10%, transparent);
-  --yu-segment-bg: color-mix(in srgb, var(--yulora-surface-subtle-bg) 92%, var(--yulora-glass-bg) 8%, transparent);
-  --yu-segment-active-bg: color-mix(in srgb, var(--yulora-surface-raised-bg) 86%, var(--yulora-glass-strong-bg) 14%, transparent);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--yulora-surface-bg) 94%, transparent) 0%,
-      color-mix(in srgb, var(--yulora-surface-bg) 84%, var(--yulora-glass-bg) 16%, transparent) 100%
-    ),
-    color-mix(in srgb, var(--yulora-surface-bg) 96%, var(--yulora-glass-strong-bg) 4%, transparent);
-  color: var(--yulora-text-secondary);
-  box-shadow: var(--yulora-shadow-3);
+  background: var(--yulora-panel-bg, rgba(255, 255, 255, 0.92));
+  color: var(--yulora-text-secondary, #31353d);
+  box-shadow: var(--yulora-panel-shadow, var(--yulora-shadow-3));
   backdrop-filter: blur(28px) saturate(1.12);
   -webkit-backdrop-filter: blur(28px) saturate(1.12);
   overflow: auto;
@@ -71,15 +59,15 @@
   background:
     linear-gradient(
       140deg,
-      color-mix(in srgb, var(--yulora-glass-sheen) 100%, transparent) 0%,
+      color-mix(in srgb, var(--yulora-panel-border, rgba(15, 23, 42, 0.12)) 45%, transparent) 0%,
       transparent 28%
     ),
     linear-gradient(
       180deg,
-      color-mix(in srgb, var(--yulora-glass-sheen) 82%, transparent) 0%,
+      color-mix(in srgb, var(--yulora-panel-border, rgba(15, 23, 42, 0.12)) 28%, transparent) 0%,
       transparent 22%,
       transparent 76%,
-      color-mix(in srgb, var(--yulora-glass-sheen) 18%, transparent) 100%
+      color-mix(in srgb, var(--yulora-panel-border, rgba(15, 23, 42, 0.12)) 12%, transparent) 100%
     );
   pointer-events: none;
   z-index: 0;
@@ -100,8 +88,12 @@
   gap: var(--yulora-space-4);
   margin: 0 calc(var(--yulora-space-5) * -1) var(--yulora-space-5);
   padding: var(--yulora-space-5) var(--yulora-space-5) var(--yulora-space-4);
-  background: color-mix(in srgb, var(--yulora-surface-raised-bg) 97%, var(--yulora-surface-bg) 3%);
-  border-bottom: 1px solid var(--yulora-border-subtle);
+  background: color-mix(
+    in srgb,
+    var(--yulora-panel-bg, rgba(255, 255, 255, 0.92)) 92%,
+    var(--yulora-control-bg, rgba(255, 255, 255, 0.9)) 8%
+  );
+  border-bottom: 1px solid var(--yulora-panel-border, rgba(15, 23, 42, 0.12));
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   z-index: 2;
@@ -126,7 +118,7 @@
 
 .settings-kicker {
   margin: 0;
-  color: var(--yulora-text-subtle);
+  color: var(--yulora-text-muted, #687180);
   font-size: 0.76rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -134,7 +126,7 @@
 
 .settings-title-block h1 {
   margin: var(--yulora-space-1) 0 0;
-  color: var(--yulora-text-strong);
+  color: var(--yulora-text-primary, #171a1f);
   font-size: 1.4rem;
   font-weight: 620;
 }
@@ -153,7 +145,7 @@
 
 .settings-group {
   padding-top: var(--yulora-space-5);
-  border-top: 1px solid var(--yulora-border-subtle);
+  border-top: 1px solid var(--yulora-panel-border, rgba(15, 23, 42, 0.12));
 }
 
 .settings-group:first-child {
@@ -167,14 +159,14 @@
 
 .settings-group-header h2 {
   margin: 0;
-  color: var(--yulora-text-strong);
+  color: var(--yulora-text-primary, #171a1f);
   font-size: 1rem;
   font-weight: 600;
 }
 
 .settings-group-header p {
   margin: var(--yulora-space-1) 0 0;
-  color: var(--yulora-text-muted);
+  color: var(--yulora-text-muted, #687180);
   font-size: 0.86rem;
 }
 
@@ -189,18 +181,18 @@
 }
 
 .settings-row + .settings-row {
-  border-top: 1px solid var(--yulora-border-faint);
+  border-top: 1px solid color-mix(in srgb, var(--yulora-panel-border, rgba(15, 23, 42, 0.12)) 72%, transparent);
 }
 
 .settings-label {
   display: grid;
   gap: 3px;
-  color: var(--yulora-text-body);
+  color: var(--yulora-text-secondary, #31353d);
   font-size: 0.94rem;
 }
 
 .settings-hint {
-  color: var(--yulora-text-subtle);
+  color: var(--yulora-text-muted, #687180);
   font-size: 0.8rem;
   font-weight: 400;
 }
@@ -241,7 +233,7 @@
   gap: var(--yulora-space-4);
   margin-top: var(--yulora-space-6);
   padding-top: var(--yulora-space-4);
-  border-top: 1px solid var(--yulora-border-subtle);
+  border-top: 1px solid var(--yulora-panel-border, rgba(15, 23, 42, 0.12));
 }
 
 /* ── Reset button ───────────────────────────────────────────── */
@@ -260,7 +252,7 @@
 
 .settings-save-status {
   margin: 0;
-  color: var(--yulora-text-muted);
+  color: var(--yulora-text-muted, #687180);
   font-size: 0.82rem;
   text-align: right;
 }
@@ -268,7 +260,7 @@
 .settings-inline-note {
   grid-column: 2;
   margin: calc(var(--yulora-space-2) * -1) 0 0;
-  color: var(--yulora-text-subtle);
+  color: var(--yulora-text-muted, #687180);
   font-size: 0.8rem;
   justify-self: end;
 }
@@ -293,7 +285,7 @@
 }
 
 .settings-focus-idle-suffix {
-  color: var(--yulora-text-subtle);
+  color: var(--yulora-text-muted, #687180);
   font-size: 0.82rem;
 }
 
@@ -419,7 +411,7 @@
   min-width: 3.5em;
   text-align: right;
   font-variant-numeric: tabular-nums;
-  color: var(--yulora-text-secondary);
+  color: var(--yulora-text-secondary, #31353d);
   font-size: 0.9em;
 }
 
@@ -439,7 +431,7 @@
 }
 
 .settings-toggle-label {
-  color: var(--yulora-text-secondary);
+  color: var(--yulora-text-secondary, #31353d);
   font-size: 0.9em;
 }
 

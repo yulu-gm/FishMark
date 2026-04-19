@@ -1,3 +1,5 @@
+import { THEME_CONTRACT_VERSION } from "./theme-style-contract";
+
 export type ThemeEffectsMode = "auto" | "full" | "off";
 export type ThemeSurfaceSlot = "workbenchBackground" | "titlebarBackdrop" | "welcomeHero";
 export type ThemeStylePart = "ui" | "editor" | "markdown" | "titlebar";
@@ -44,6 +46,7 @@ export type ThemeParameterDescriptor =
 
 export type ThemePackageManifest = {
   id: string;
+  contractVersion: typeof THEME_CONTRACT_VERSION;
   name: string;
   version: string;
   author: string | null;
@@ -491,6 +494,7 @@ export function normalizeThemePackageManifest(
   if (
     !source ||
     typeof source.id !== "string" ||
+    source.contractVersion !== THEME_CONTRACT_VERSION ||
     typeof source.name !== "string" ||
     source.id.trim().length === 0 ||
     source.name.trim().length === 0
@@ -500,6 +504,7 @@ export function normalizeThemePackageManifest(
 
   return {
     id: source.id.trim(),
+    contractVersion: THEME_CONTRACT_VERSION,
     name: source.name.trim(),
     version: typeof source.version === "string" ? source.version : "1.0.0",
     author: typeof source.author === "string" ? source.author : null,

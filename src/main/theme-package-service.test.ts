@@ -12,13 +12,25 @@ import {
 describe("createThemePackageService", () => {
   it("resolves packaged builtin themes from the built dist payload", () => {
     const moduleDir = path.join(
-      "C:/Program Files/Yulora/resources/app.asar",
+      path.parse(process.cwd()).root,
+      "Applications",
+      "Yulora",
+      "resources",
+      "app.asar",
       "dist-electron",
       "main"
     );
 
     expect(resolveBuiltinThemePackagesDir({ isPackaged: true, moduleDir })).toBe(
-      path.join("C:/Program Files/Yulora/resources/app.asar", "dist", "theme-packages")
+      path.join(
+        path.parse(process.cwd()).root,
+        "Applications",
+        "Yulora",
+        "resources",
+        "app.asar",
+        "dist",
+        "theme-packages"
+      )
     );
   });
 
@@ -53,6 +65,7 @@ describe("createThemePackageService", () => {
       path.join(userDataDir, "themes", "rain-glass", "manifest.json"),
       JSON.stringify({
         id: "rain-glass",
+        contractVersion: 2,
         name: "Rain Glass",
         version: "1.0.0",
         supports: { light: true, dark: true },
@@ -76,6 +89,68 @@ describe("createThemePackageService", () => {
 
     expect(packages.some((entry) => entry.id === "broken-manifest")).toBe(false);
     expect(packages.some((entry) => entry.id === "rain-glass")).toBe(true);
+    expect(packages.find((entry) => entry.id === "rain-glass")).toMatchObject({
+      manifest: {
+        contractVersion: 2
+      }
+    });
+
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it("skips theme packages that do not declare contractVersion 2", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "yulora-theme-packages-contract-"));
+    const userDataDir = path.join(root, "userdata");
+    await mkdir(path.join(userDataDir, "themes", "legacy-rain"), { recursive: true });
+    await writeFile(
+      path.join(userDataDir, "themes", "legacy-rain", "manifest.json"),
+      JSON.stringify({
+        id: "legacy-rain",
+        contractVersion: 3,
+        name: "Legacy Rain",
+        version: "1.0.0",
+        supports: { light: true, dark: true },
+        tokens: {
+          light: "./tokens/light.css",
+          dark: "./tokens/dark.css"
+        },
+        styles: {
+          ui: "./styles/ui.css",
+          editor: "./styles/editor.css",
+          markdown: "./styles/markdown.css"
+        }
+      }),
+      "utf8"
+    );
+    await mkdir(path.join(userDataDir, "themes", "legacy-rain", "tokens"), { recursive: true });
+    await mkdir(path.join(userDataDir, "themes", "legacy-rain", "styles"), { recursive: true });
+    await writeFile(
+      path.join(userDataDir, "themes", "legacy-rain", "tokens", "light.css"),
+      "/* light tokens */",
+      "utf8"
+    );
+    await writeFile(
+      path.join(userDataDir, "themes", "legacy-rain", "tokens", "dark.css"),
+      "/* dark tokens */",
+      "utf8"
+    );
+    await writeFile(path.join(userDataDir, "themes", "legacy-rain", "styles", "ui.css"), "/* ui */", "utf8");
+    await writeFile(
+      path.join(userDataDir, "themes", "legacy-rain", "styles", "editor.css"),
+      "/* editor */",
+      "utf8"
+    );
+    await writeFile(
+      path.join(userDataDir, "themes", "legacy-rain", "styles", "markdown.css"),
+      "/* markdown */",
+      "utf8"
+    );
+
+    const service = createThemePackageService({ userDataDir });
+    const packages = await service.listThemePackages();
+
+    expect(packages.find((entry) => entry.id === "legacy-rain")).toBeUndefined();
+    expect(packages.find((entry) => entry.id === "default")).toBeDefined();
 
     await rm(root, { recursive: true, force: true });
   });
@@ -88,6 +163,7 @@ describe("createThemePackageService", () => {
       path.join(userDataDir, "themes", "rain-glass", "manifest.json"),
       JSON.stringify({
         id: "rain-glass",
+        contractVersion: 2,
         name: "Rain Glass",
         version: "1.0.0",
         supports: { light: true, dark: true },
@@ -119,6 +195,7 @@ describe("createThemePackageService", () => {
       id: "rain-glass",
       kind: "manifest-package",
       manifest: {
+        contractVersion: 2,
         supports: { light: true, dark: true },
         tokens: {
           light: expect.stringContaining(path.posix.join("themes", "rain-glass", "tokens", "light.css")),
@@ -141,6 +218,7 @@ describe("createThemePackageService", () => {
     await mkdir(path.join(userDataDir, "themes", "paper"), { recursive: true });
     await writeFile(path.join(userDataDir, "themes", "paper", "manifest.json"), JSON.stringify({
       id: "paper",
+      contractVersion: 2,
       name: "Paper",
       version: "1.0.0",
       supports: { light: true, dark: true },
@@ -163,6 +241,7 @@ describe("createThemePackageService", () => {
     await mkdir(path.join(userDataDir, "themes", "graphite"), { recursive: true });
     await writeFile(path.join(userDataDir, "themes", "graphite", "manifest.json"), JSON.stringify({
       id: "graphite",
+      contractVersion: 2,
       name: "Graphite",
       version: "1.0.0",
       supports: { light: true, dark: true },
@@ -202,7 +281,10 @@ describe("createThemePackageService", () => {
     expect(defaultPackage).toMatchObject({
       id: "default",
       source: "builtin",
-      kind: "manifest-package"
+      kind: "manifest-package",
+      manifest: {
+        contractVersion: 2
+      }
     });
 
     await rm(root, { recursive: true, force: true });

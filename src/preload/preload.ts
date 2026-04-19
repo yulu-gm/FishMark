@@ -21,6 +21,7 @@ const PREFERENCES_CHANGED_EVENT = "yulora:preferences-changed";
 const LIST_FONT_FAMILIES_CHANNEL = "yulora:list-font-families";
 const LIST_THEME_PACKAGES_CHANNEL = "yulora:list-theme-packages";
 const REFRESH_THEME_PACKAGES_CHANNEL = "yulora:refresh-theme-packages";
+const OPEN_THEMES_DIRECTORY_CHANNEL = "yulora:open-themes-directory";
 const CHECK_FOR_APP_UPDATES_CHANNEL = "yulora:check-for-app-updates";
 const APP_UPDATE_STATE_EVENT = "yulora:app-update-state";
 const APP_NOTIFICATION_EVENT = "yulora:app-notification";
@@ -68,8 +69,21 @@ type AppMenuCommand =
 type ThemeMode = "system" | "light" | "dark";
 type ThemeEffectsMode = "auto" | "full" | "off";
 type ThemeParameterOverrides = Record<string, Record<string, number>>;
+type ThemeSurfaceSlot = "workbenchBackground" | "titlebarBackdrop" | "welcomeHero";
+type ThemeStylePart = "ui" | "editor" | "markdown" | "titlebar";
+type ThemeSurfaceRenderSettings = {
+  renderScale?: number;
+  frameRate?: number;
+};
+type ThemeSurfaceDescriptor = {
+  kind: "fragment";
+  scene: string;
+  shader: string;
+  channels?: Partial<Record<"0", { type: "image"; src: string }>>;
+  render?: ThemeSurfaceRenderSettings;
+};
 type ThemeParameterDescriptor =
-    | {
+  | {
       id: string;
       label: string;
       type: "slider";
@@ -88,6 +102,24 @@ type ThemeParameterDescriptor =
       uniform?: string;
       description?: string;
     };
+type ThemePackageManifest = {
+  id: string;
+  contractVersion: 2;
+  name: string;
+  version: string;
+  author: string | null;
+  supports: { light: boolean; dark: boolean };
+  tokens: Partial<Record<"light" | "dark", string>>;
+  styles: Partial<Record<ThemeStylePart, string>>;
+  layout: { titlebar: string | null };
+  scene: {
+    id: string;
+    sharedUniforms: Record<string, number>;
+    render?: ThemeSurfaceRenderSettings;
+  } | null;
+  surfaces: Partial<Record<ThemeSurfaceSlot, ThemeSurfaceDescriptor>>;
+  parameters: ThemeParameterDescriptor[];
+};
 
 type Preferences = {
   version: 2;
@@ -118,33 +150,7 @@ type ThemePackageDescriptor = {
   kind: "manifest-package";
   source: "builtin" | "community";
   packageRoot: string;
-  manifest: {
-    id: string;
-    name: string;
-    version: string;
-    author: string | null;
-    supports: { light: boolean; dark: boolean };
-    tokens: Partial<Record<"light" | "dark", string>>;
-    styles: Partial<Record<"ui" | "editor" | "markdown" | "titlebar", string>>;
-    layout: { titlebar: string | null };
-    scene: {
-      id: string;
-      sharedUniforms: Record<string, number>;
-      render?: { renderScale?: number; frameRate?: number };
-    } | null;
-    surfaces: Partial<
-      Record<
-        "workbenchBackground" | "titlebarBackdrop" | "welcomeHero",
-        {
-          kind: "fragment";
-          scene: string;
-          shader: string;
-          render?: { renderScale?: number; frameRate?: number };
-        }
-      >
-    >;
-    parameters: ThemeParameterDescriptor[];
-  };
+  manifest: ThemePackageManifest;
 };
 
 type AppUpdateState =
@@ -190,6 +196,7 @@ type UpdatePreferencesResult =
 export type {
   Preferences as PreloadPreferences,
   PreferencesUpdate as PreloadPreferencesUpdate,
+  ThemePackageDescriptor as PreloadThemePackageDescriptor,
   AppNotification as PreloadAppNotification,
   AppUpdateState as PreloadAppUpdateState,
   UpdatePreferencesResult as PreloadUpdatePreferencesResult
@@ -336,6 +343,7 @@ const api = {
     ipcRenderer.invoke(LIST_THEME_PACKAGES_CHANNEL),
   refreshThemePackages: (): Promise<ThemePackageDescriptor[]> =>
     ipcRenderer.invoke(REFRESH_THEME_PACKAGES_CHANNEL),
+  openThemesDirectory: (): Promise<void> => ipcRenderer.invoke(OPEN_THEMES_DIRECTORY_CHANNEL),
   checkForUpdates: (): Promise<void> => ipcRenderer.invoke(CHECK_FOR_APP_UPDATES_CHANNEL),
   onPreferencesChanged: (listener: (preferences: Preferences) => void) => {
     const handlePreferencesChanged = (_event: unknown, preferences: Preferences) => {

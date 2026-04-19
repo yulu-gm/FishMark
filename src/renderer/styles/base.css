@@ -3,8 +3,134 @@
 }
 
 :root {
-  color: var(--yulora-text-body, #1f2937);
-  background: var(--yulora-page-bg, #f3f4f6);
+  --yulora-app-bg: #f3f4f6;
+  --yulora-workspace-bg: #fffefb;
+  --yulora-rail-bg: #fbfaf7;
+  --yulora-panel-bg: rgba(255, 255, 255, 0.92);
+  --yulora-panel-border: rgba(15, 23, 42, 0.12);
+  --yulora-panel-shadow: var(--yulora-shadow-3, 0 22px 54px rgba(15, 23, 42, 0.14));
+  --yulora-statusbar-bg: transparent;
+  --yulora-statusbar-border: transparent;
+  --yulora-titlebar-bg: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--yulora-rail-bg, #fbfaf7) 94%, transparent),
+    color-mix(in srgb, var(--yulora-app-bg, #f3f4f6) 92%, transparent)
+  );
+  --yulora-text-primary: #171a1f;
+  --yulora-text-secondary: #48505d;
+  --yulora-text-muted: #687180;
+  --yulora-text-accent: #4f7cff;
+  --yulora-text-danger: #8b1e1e;
+  --yulora-text-on-accent: #ffffff;
+  --yulora-control-bg: rgba(255, 255, 255, 0.9);
+  --yulora-control-bg-hover: color-mix(in srgb, var(--yulora-control-bg) 88%, white 12%);
+  --yulora-control-bg-active: color-mix(
+    in srgb,
+    var(--yulora-control-bg-hover) 86%,
+    var(--yulora-text-accent) 14%
+  );
+  --yulora-control-border: rgba(15, 23, 42, 0.12);
+  --yulora-control-fg: var(--yulora-text-secondary);
+  --yulora-selection-bg: color-mix(
+    in srgb,
+    var(--yulora-text-accent) 24%,
+    transparent
+  );
+  --yulora-selection-fg: currentColor;
+  --yulora-banner-info-bg: color-mix(
+    in srgb,
+    var(--yulora-control-bg) 94%,
+    transparent
+  );
+  --yulora-banner-warning-bg: color-mix(
+    in srgb,
+    var(--yulora-text-accent) 14%,
+    var(--yulora-control-bg) 86%
+  );
+  --yulora-banner-error-bg: #fff4f4;
+  --yulora-editor-bg: transparent;
+  --yulora-editor-fg: #31353d;
+  --yulora-editor-muted: var(--yulora-text-muted);
+  --yulora-caret-color: #1d4ed8;
+  --yulora-current-line-bg: color-mix(
+    in srgb,
+    var(--yulora-panel-border) 24%,
+    transparent
+  );
+  --yulora-gutter-fg: var(--yulora-editor-muted);
+  --yulora-active-block-bg: color-mix(
+    in srgb,
+    var(--yulora-text-accent) 8%,
+    transparent
+  );
+  --yulora-active-block-border: color-mix(
+    in srgb,
+    var(--yulora-text-accent) 42%,
+    transparent
+  );
+  --yulora-markdown-body: var(--yulora-editor-fg);
+  --yulora-markdown-heading: var(--yulora-text-primary);
+  --yulora-markdown-heading-marker: color-mix(
+    in srgb,
+    var(--yulora-markdown-heading) 34%,
+    transparent
+  );
+  --yulora-markdown-link: var(--yulora-text-accent);
+  --yulora-markdown-link-hover: color-mix(
+    in srgb,
+    var(--yulora-text-accent) 82%,
+    white 18%
+  );
+  --yulora-markdown-strong: var(--yulora-text-primary);
+  --yulora-markdown-emphasis: var(--yulora-markdown-body);
+  --yulora-markdown-quote-fg: var(--yulora-text-secondary);
+  --yulora-markdown-quote-border: color-mix(
+    in srgb,
+    var(--yulora-panel-border) 82%,
+    transparent
+  );
+  --yulora-markdown-list-bullet: #98a2b3;
+  --yulora-markdown-list-text: var(--yulora-text-muted);
+  --yulora-markdown-task-done: var(--yulora-text-secondary);
+  --yulora-markdown-hr: #d0d5dd;
+  --yulora-markdown-inline-code-fg: #0f172a;
+  --yulora-markdown-inline-code-bg: rgba(17, 24, 39, 0.06);
+  --yulora-markdown-code-fg: #334155;
+  --yulora-markdown-code-bg: #f3f6fa;
+  --yulora-markdown-code-border: color-mix(
+    in srgb,
+    var(--yulora-panel-border) 86%,
+    transparent
+  );
+  --yulora-markdown-table-border: color-mix(
+    in srgb,
+    var(--yulora-panel-border) 92%,
+    transparent
+  );
+  --yulora-markdown-table-header-bg: color-mix(
+    in srgb,
+    var(--yulora-panel-bg) 96%,
+    transparent
+  );
+  --yulora-markdown-table-header-fg: var(--yulora-text-primary);
+  --yulora-markdown-table-cell-bg: transparent;
+  --yulora-markdown-table-row-stripe: color-mix(
+    in srgb,
+    var(--yulora-markdown-table-border) 12%,
+    transparent
+  );
+  --yulora-markdown-code-token-keyword: #7c3aed;
+  --yulora-markdown-code-token-string: #b45309;
+  --yulora-markdown-code-token-number: #2563eb;
+  --yulora-markdown-code-token-comment: color-mix(
+    in srgb,
+    var(--yulora-markdown-code-fg) 52%,
+    transparent
+  );
+  --yulora-markdown-code-token-function: #0f766e;
+  --yulora-markdown-code-token-type: #be185d;
+  color: var(--yulora-text-secondary, #1f2937);
+  background: var(--yulora-app-bg, #f3f4f6);
   --yulora-space-1: 4px;
   --yulora-space-2: 8px;
   --yulora-space-3: 12px;
@@ -48,8 +174,8 @@ body {
   min-width: 320px;
   min-height: 100vh;
   overflow: hidden;
-  background: var(--yulora-page-bg, #f3f4f6);
-  color: var(--yulora-text-body, #1f2937);
+  background: var(--yulora-app-bg, #f3f4f6);
+  color: var(--yulora-text-secondary, #1f2937);
   font-size: inherit;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -58,7 +184,7 @@ body {
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--yulora-scrollbar-thumb) transparent;
+  scrollbar-color: color-mix(in srgb, var(--yulora-panel-border) 80%, transparent) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -73,13 +199,18 @@ body {
 *::-webkit-scrollbar-thumb {
   border: 3px solid transparent;
   border-radius: 999px;
-  background: var(--yulora-scrollbar-thumb);
+  background: color-mix(in srgb, var(--yulora-panel-border) 78%, transparent);
   background-clip: padding-box;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: var(--yulora-scrollbar-thumb-hover);
+  background: color-mix(in srgb, var(--yulora-control-bg-hover) 76%, var(--yulora-panel-border) 24%);
   background-clip: padding-box;
+}
+
+::selection {
+  background: var(--yulora-selection-bg, rgba(79, 124, 255, 0.24));
+  color: var(--yulora-selection-fg, inherit);
 }
 
 button,

@@ -4,12 +4,70 @@ import {
   normalizeThemePackageManifest,
   type ThemePackageManifest
 } from "./theme-package";
+import {
+  THEME_RUNTIME_ENV_CSS_VARS,
+  THEME_RUNTIME_THEME_MODE_ATTRIBUTE,
+  THEME_SEMANTIC_STYLE_SLOTS
+} from "./theme-style-contract";
 
 describe("normalizeThemePackageManifest", () => {
+  it("accepts manifest contract version 2 and exposes the formal style contract constants", () => {
+    const manifest = normalizeThemePackageManifest(
+      {
+        id: "rain-glass",
+        contractVersion: 2,
+        name: "Rain Glass",
+        version: "1.0.0",
+        supports: { light: true, dark: true },
+        styles: { ui: "./styles/ui.css" }
+      },
+      "/tmp/rain-glass"
+    );
+
+    expect(manifest).toMatchObject<Partial<ThemePackageManifest>>({
+      id: "rain-glass",
+      contractVersion: 2,
+      styles: {
+        ui: "/tmp/rain-glass/styles/ui.css"
+      }
+    });
+    expect(THEME_SEMANTIC_STYLE_SLOTS).toContain("markdown.table.border");
+    expect(THEME_RUNTIME_ENV_CSS_VARS.wordCount).toBe("--yulora-env-word-count");
+    expect(THEME_RUNTIME_THEME_MODE_ATTRIBUTE).toBe("data-yulora-theme-mode");
+  });
+
+  it("rejects manifests with missing or unsupported contract versions", () => {
+    const missingContractVersion = normalizeThemePackageManifest(
+      {
+        id: "rain-glass",
+        name: "Rain Glass",
+        version: "1.0.0",
+        supports: { light: true, dark: true },
+        styles: { ui: "./styles/ui.css" }
+      },
+      "/tmp/rain-glass"
+    );
+    const unsupportedContractVersion = normalizeThemePackageManifest(
+      {
+        id: "rain-glass",
+        contractVersion: 1,
+        name: "Rain Glass",
+        version: "1.0.0",
+        supports: { light: true, dark: true },
+        styles: { ui: "./styles/ui.css" }
+      },
+      "/tmp/rain-glass"
+    );
+
+    expect(missingContractVersion).toBeNull();
+    expect(unsupportedContractVersion).toBeNull();
+  });
+
   it("keeps supported style, layout, and surface paths inside the package root", () => {
     const manifest = normalizeThemePackageManifest(
       {
         id: "rain-glass",
+        contractVersion: 2,
         name: "Rain Glass",
         version: "1.0.0",
         supports: { light: true, dark: true },
@@ -50,6 +108,7 @@ describe("normalizeThemePackageManifest", () => {
     const manifest = normalizeThemePackageManifest(
       {
         id: "rain-glass",
+        contractVersion: 2,
         name: "Rain Glass",
         supports: { light: true, dark: true },
         styles: { ui: "../../outside/ui.css", editor: "../up/editor.css", titlebar: "/etc/escape.css" },
@@ -80,6 +139,7 @@ describe("normalizeThemePackageManifest", () => {
     const manifest = normalizeThemePackageManifest(
       {
         id: "win-theme",
+        contractVersion: 2,
         name: "Win Theme",
         supports: { light: true, dark: true },
         styles: { ui: "C:/themes/win-theme/styles/ui.css" },
@@ -111,6 +171,7 @@ describe("normalizeThemePackageManifest", () => {
     const manifest = normalizeThemePackageManifest(
       {
         id: "rain-glass",
+        contractVersion: 2,
         name: "Rain Glass",
         version: "1.0.0",
         supports: { light: true, dark: true },
@@ -152,6 +213,7 @@ describe("normalizeThemePackageManifest", () => {
     const manifest = normalizeThemePackageManifest(
       {
         id: "rain-glass",
+        contractVersion: 2,
         name: "Rain Glass",
         version: "1.0.0",
         supports: { light: true, dark: true },
@@ -186,6 +248,7 @@ describe("normalizeThemePackageManifest", () => {
     const manifest = normalizeThemePackageManifest(
       {
         id: "rain-glass",
+        contractVersion: 2,
         name: "Rain Glass",
         version: "1.0.0",
         supports: { light: false, dark: true },
@@ -244,6 +307,7 @@ describe("normalizeThemePackageManifest", () => {
     const manifest = normalizeThemePackageManifest(
       {
         id: "ember-ascend",
+        contractVersion: 2,
         name: "Ember Ascend",
         version: "1.0.0",
         supports: { light: false, dark: true },
@@ -282,6 +346,7 @@ describe("normalizeThemePackageManifest", () => {
     const manifest = normalizeThemePackageManifest(
       {
         id: "dual-surface",
+        contractVersion: 2,
         name: "Dual Surface",
         version: "1.0.0",
         supports: { light: false, dark: true },
@@ -329,6 +394,7 @@ describe("normalizeThemePackageManifest", () => {
     const manifest = normalizeThemePackageManifest(
       {
         id: "bad-render",
+        contractVersion: 2,
         name: "Bad Render",
         version: "1.0.0",
         supports: { light: false, dark: true },
@@ -365,6 +431,7 @@ describe("normalizeThemePackageManifest", () => {
     const manifestByBlankId = normalizeThemePackageManifest(
       {
         id: "   ",
+        contractVersion: 2,
         name: "Win Theme",
         supports: { light: true, dark: true },
         styles: { ui: "./styles/ui.css" }
@@ -374,6 +441,7 @@ describe("normalizeThemePackageManifest", () => {
     const manifestByBlankName = normalizeThemePackageManifest(
       {
         id: "rain-glass",
+        contractVersion: 2,
         name: "\t\n",
         supports: { light: true, dark: true },
         styles: { ui: "./styles/ui.css" }

@@ -1,8 +1,8 @@
 .document-editor .cm-editor {
   height: 100%;
   min-height: 0;
-  background: transparent;
-  color: var(--yulora-text-body);
+  background: var(--yulora-editor-bg, transparent);
+  color: var(--yulora-editor-fg, #31353d);
 }
 
 .document-editor .cm-scroller {
@@ -17,17 +17,41 @@
   font-size: var(--yulora-document-font-size, var(--yulora-editor-font-size));
   font-weight: 400;
   line-height: 1.85;
+  color: inherit;
 }
 
 .document-editor .cm-content {
   max-width: 72ch;
   margin: 0 auto;
   padding: 40px 48px 56px;
-  caret-color: var(--yulora-editor-caret);
+  caret-color: var(--yulora-caret-color);
 }
 
 .document-editor .cm-focused {
   outline: none;
+}
+
+.document-editor .cm-selectionBackground,
+.document-editor .cm-focused .cm-selectionBackground,
+.document-editor .cm-content ::selection {
+  background: var(--yulora-selection-bg, rgba(79, 124, 255, 0.24));
+  color: var(--yulora-selection-fg, inherit);
+}
+
+.document-editor .cm-cursor,
+.document-editor .cm-dropCursor {
+  border-left-color: var(--yulora-caret-color);
+}
+
+.document-editor .cm-activeLine,
+.document-editor .cm-activeLineGutter {
+  background: var(--yulora-current-line-bg, transparent);
+}
+
+.document-editor .cm-gutters {
+  border: none;
+  background: transparent;
+  color: var(--yulora-gutter-fg, var(--yulora-editor-muted, #687180));
 }
 
 @media (max-width: 860px) {

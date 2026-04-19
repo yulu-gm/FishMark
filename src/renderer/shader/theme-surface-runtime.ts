@@ -43,6 +43,7 @@ export type MountThemeSurfaceInput = {
 
 export type MountedThemeSurface = {
   mode: ThemeSurfaceRuntimeMode;
+  invalidate: () => void;
   unmount: () => void;
 };
 
@@ -136,6 +137,7 @@ function syncCanvasSize(
 function createFallbackMount(): MountedThemeSurface {
   return {
     mode: "fallback",
+    invalidate() {},
     unmount() {}
   };
 }
@@ -601,6 +603,13 @@ export function createThemeSurfaceRuntime(
 
     return {
       mode,
+      invalidate() {
+        if (isUnmounted || mode !== "reduced") {
+          return;
+        }
+
+        renderFrame();
+      },
       unmount() {
         if (isUnmounted) {
           return;

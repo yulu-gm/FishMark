@@ -1,4 +1,5 @@
 import type { ThemeEffectsMode } from "../../shared/theme-package";
+import type { ThemeRuntimeEnv } from "../theme-runtime-env";
 import { ThemeSurfaceHost, type ThemeSurfaceHostDescriptor } from "./ThemeSurfaceHost";
 import type { TitlebarItem, TitlebarLayoutDescriptor, TitlebarSlot } from "./titlebar-layout";
 import type { ThemeSurfaceRuntimeMode } from "../shader/theme-surface-runtime";
@@ -10,6 +11,7 @@ type TitlebarHostProps = {
   title: string;
   isDirty: boolean;
   themeMode: ThemeAppearanceMode;
+  runtimeEnv: ThemeRuntimeEnv;
   effectsMode: ThemeEffectsMode;
   titlebarSurface: ThemeSurfaceHostDescriptor | null;
   onTitlebarSurfaceRuntimeModeChange?: (mode: ThemeSurfaceRuntimeMode) => void;
@@ -108,6 +110,7 @@ export function TitlebarHost({
   title,
   isDirty,
   themeMode,
+  runtimeEnv,
   effectsMode,
   titlebarSurface,
   onTitlebarSurfaceRuntimeModeChange
@@ -125,6 +128,7 @@ export function TitlebarHost({
           surface="titlebarBackdrop"
           descriptor={titlebarSurface}
           themeMode={themeMode}
+          runtimeEnv={runtimeEnv}
           effectsMode={effectsMode}
           onRuntimeModeChange={onTitlebarSurfaceRuntimeModeChange}
         />

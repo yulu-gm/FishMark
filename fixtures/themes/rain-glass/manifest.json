@@ -1,13 +1,15 @@
 {
   "id": "rain-glass",
+  "contractVersion": 2,
   "name": "Rain Glass",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "author": "Yulora",
   "supports": {
-    "light": false,
+    "light": true,
     "dark": true
   },
   "tokens": {
+    "light": "./tokens/light.css",
     "dark": "./tokens/dark.css"
   },
   "styles": {

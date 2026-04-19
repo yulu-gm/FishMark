@@ -3,13 +3,20 @@ import { describe, expect, it } from "vitest";
 import { createThemeSceneState } from "./theme-scene-state";
 
 describe("theme scene state", () => {
-  it("injects the resolved theme mode as a built-in shader uniform", () => {
+  it("injects built-in runtime env uniforms and lets built-ins win over shared uniform collisions", () => {
     const lightScene = createThemeSceneState(
       {
         sceneId: "pearl-scene",
         themeMode: "light",
         effectsMode: "full",
-        sharedUniforms: { iridescence: 1 }
+        sharedUniforms: {
+          iridescence: 1
+        },
+        runtimeEnv: {
+          wordCount: 24,
+          focusMode: 0,
+          viewport: { width: 800, height: 600 }
+        }
       },
       { now: () => 1_000 }
     );
@@ -18,18 +25,38 @@ describe("theme scene state", () => {
         sceneId: "pearl-scene",
         themeMode: "dark",
         effectsMode: "full",
-        sharedUniforms: { iridescence: 1, themeMode: 99 }
+        sharedUniforms: {
+          iridescence: 1,
+          themeMode: 99,
+          wordCount: -1,
+          focusMode: 0,
+          viewportWidth: 1,
+          viewportHeight: 1
+        },
+        runtimeEnv: {
+          wordCount: 512,
+          focusMode: 1,
+          viewport: { width: 1_440, height: 900 }
+        }
       },
       { now: () => 1_000 }
     );
 
     expect(lightScene.nextFrame("workbenchBackground", { width: 800, height: 600 }).uniforms).toMatchObject({
       iridescence: 1,
-      themeMode: 0
+      wordCount: 24,
+      focusMode: 0,
+      themeMode: 0,
+      viewportWidth: 800,
+      viewportHeight: 600
     });
-    expect(darkScene.nextFrame("workbenchBackground", { width: 800, height: 600 }).uniforms).toMatchObject({
+    expect(darkScene.nextFrame("workbenchBackground", { width: 1_440, height: 900 }).uniforms).toMatchObject({
       iridescence: 1,
-      themeMode: 1
+      wordCount: 512,
+      focusMode: 1,
+      themeMode: 1,
+      viewportWidth: 1_440,
+      viewportHeight: 900
     });
   });
 
@@ -40,7 +67,12 @@ describe("theme scene state", () => {
         sceneId: "rain-scene",
         themeMode: "dark",
         effectsMode: "full",
-        sharedUniforms: { rainAmount: 0.7 }
+        sharedUniforms: { rainAmount: 0.7 },
+        runtimeEnv: {
+          wordCount: 32,
+          focusMode: 1,
+          viewport: { width: 1_200, height: 800 }
+        }
       },
       { now: () => nowMs }
     );
@@ -65,7 +97,12 @@ describe("theme scene state", () => {
         sceneId: "mist-scene",
         themeMode: "light",
         effectsMode: "auto",
-        sharedUniforms: {}
+        sharedUniforms: {},
+        runtimeEnv: {
+          wordCount: 0,
+          focusMode: 0,
+          viewport: { width: 800, height: 600 }
+        }
       },
       { now: () => nowMs }
     );
@@ -77,5 +114,37 @@ describe("theme scene state", () => {
 
     expect(initialFrame.time).toBe(0);
     expect(nextFrame.time).toBeCloseTo(1.5, 5);
+  });
+
+  it("updates runtime env uniforms without recreating shared uniforms", () => {
+    const scene = createThemeSceneState(
+      {
+        sceneId: "rain-scene",
+        themeMode: "dark",
+        effectsMode: "full",
+        sharedUniforms: { rainAmount: 0.7 },
+        runtimeEnv: {
+          wordCount: 12,
+          focusMode: 0,
+          viewport: { width: 1_024, height: 768 }
+        }
+      },
+      { now: () => 1_000 }
+    );
+
+    scene.updateRuntimeEnv({
+      wordCount: 128,
+      focusMode: 1,
+      viewport: { width: 1_280, height: 720 }
+    });
+
+    expect(scene.nextFrame("workbenchBackground", { width: 1_280, height: 720 }).uniforms).toMatchObject({
+      rainAmount: 0.7,
+      wordCount: 128,
+      focusMode: 1,
+      themeMode: 1,
+      viewportWidth: 1_280,
+      viewportHeight: 720
+    });
   });
 });
