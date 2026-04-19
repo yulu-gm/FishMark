@@ -11,9 +11,11 @@
   grid-template-rows: var(--yulora-titlebar-height) minmax(0, 1fr);
 }
 
-.app-shell[data-yulora-focus-mode="active"] {
-  --yulora-shell-rail-offset: 0px;
-}
+/*
+ * Focus mode keeps the rail column reserved so the document canvas does not
+ * shift horizontally when the rail slides out. The rail itself animates with
+ * transform/opacity below.
+ */
 
 .app-titlebar {
   position: relative;
@@ -449,20 +451,13 @@
   transform: translateY(0);
   opacity: 1;
   transition:
-    max-height var(--yulora-focus-transition-duration) var(--yulora-focus-transition-easing),
-    padding var(--yulora-focus-transition-duration) var(--yulora-focus-transition-easing),
     opacity var(--yulora-focus-transition-duration) ease,
     transform var(--yulora-focus-transition-duration) var(--yulora-focus-transition-easing);
 }
 
 .app-header[data-visibility="collapsed"] {
-  max-height: 0;
-  padding-top: 0;
-  padding-bottom: 0;
-  margin: 0 auto;
   opacity: 0;
   transform: translateY(-12px);
-  overflow: hidden;
   pointer-events: none;
 }
 
