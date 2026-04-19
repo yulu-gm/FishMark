@@ -584,7 +584,7 @@
 }
 
 .workspace-canvas.is-editor-open {
-  grid-template-columns: clamp(156px, 16vw, 220px) minmax(0, 1fr);
+  grid-template-columns: clamp(56px, 6vw, 112px) minmax(0, 1fr);
   column-gap: var(--yulora-space-4);
   align-items: stretch;
 }
@@ -1033,10 +1033,15 @@
 
 .save-status,
 .document-word-count,
-.document-platform {
+.document-platform,
+.app-version-label {
   margin: 0;
   font-size: 0.84rem;
   letter-spacing: 0.005em;
+}
+
+.app-version-label {
+  color: var(--yulora-text-muted, #687180);
 }
 
 .save-status {

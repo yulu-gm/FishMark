@@ -41,6 +41,8 @@ type ThemePackageDescriptor = {
 };
 
 declare global {
+  const __YULORA_APP_VERSION__: string;
+
   interface Window {
     yulora: {
       platform: NodeJS.Platform;

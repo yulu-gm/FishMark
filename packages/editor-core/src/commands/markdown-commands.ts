@@ -18,7 +18,7 @@ export function runMarkdownEnter(view: EditorView, activeState: ActiveBlockState
     runTableMoveDownOrExit(view, activeState) ||
     runDraftTableEnter(view, activeState) ||
     runCodeFenceEnter(view, activeState) ||
-    runListEnter(view) ||
+    runListEnter(view, activeState) ||
     runBlockquoteEnter(view) ||
     insertNewlineAndIndent(view)
   );

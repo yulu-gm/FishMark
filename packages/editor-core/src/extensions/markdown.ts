@@ -21,6 +21,8 @@ import {
 import {
   runMarkdownArrowDown,
   runMarkdownArrowUp,
+  runListMoveLineDown,
+  runListMoveLineUp,
   runMarkdownBackspace,
   runMarkdownEnter,
   runMarkdownTab,
@@ -520,6 +522,14 @@ export function createYuloraMarkdownExtensions(
       {
         key: "Tab",
         run: (view) => runMarkdownTab(view, runtime.activeBlockState)
+      },
+      {
+        key: "Alt-ArrowUp",
+        run: (view) => runListMoveLineUp(view, runtime.activeBlockState)
+      },
+      {
+        key: "Alt-ArrowDown",
+        run: (view) => runListMoveLineDown(view, runtime.activeBlockState)
       },
       ...groupedShortcutKeymaps.defaultText,
       ...groupedShortcutKeymaps.tableEditing,

@@ -11,6 +11,14 @@ const collectDecorations = (source: string, decorationSet: ReturnType<typeof cre
 
   decorationSet.between(0, source.length, (from, to, value) => {
     const className = typeof value.spec.attributes?.class === "string" ? value.spec.attributes.class : "";
+    const directMarkClass = typeof value.spec.class === "string" ? value.spec.class : "";
+
+    // Skip syntax-highlight mark decorations (they set `class` directly on the spec
+    // rather than on `attributes`, and would otherwise add language-parser-specific
+    // entries that would make these structural assertions fragile).
+    if (!className && directMarkClass) {
+      return;
+    }
 
     ranges.push({
       from,

@@ -3,6 +3,7 @@ import { type Range } from "@codemirror/state";
 
 import type { ActiveBlockState } from "../active-block";
 import { getInactiveBlockquoteLines, getInactiveCodeFenceLines } from "./block-lines";
+import { appendCodeHighlightRanges } from "./code-highlight";
 import {
   createCjkTextDecorations,
   createActiveInlineDecorations,
@@ -88,7 +89,13 @@ export function createBlockDecorations(
 
       if (activeCodeFenceInContentEdit && block.type === "codeFence") {
         signatures.push(`${createBlockDecorationSignature(block)}:content-edit`);
-        appendCodeFenceDecorations(block.startOffset, block.endOffset, source, ranges);
+        appendCodeFenceDecorations(block.startOffset, block.endOffset, source, ranges, block.info);
+        continue;
+      }
+
+      if (block.type === "list") {
+        signatures.push(`${createBlockDecorationSignature(block)}:content-edit`);
+        appendInactiveListDecorations(block, ranges, resolveImagePreviewUrl);
         continue;
       }
 
@@ -136,57 +143,7 @@ export function createBlockDecorations(
     }
 
     if (block.type === "list") {
-      for (const item of block.items) {
-        const lineClasses = [
-          "cm-inactive-list",
-          block.ordered ? "cm-inactive-list-ordered" : "cm-inactive-list-unordered",
-          `cm-inactive-list-depth-${Math.floor(item.indent / 2)}`
-        ];
-
-        if (item.task) {
-          lineClasses.push(
-            "cm-inactive-list-task",
-            item.task.checked
-              ? "cm-inactive-list-task-checked"
-              : "cm-inactive-list-task-unchecked"
-          );
-        }
-
-        ranges.push(
-          Decoration.line({
-            attributes: {
-              class: lineClasses.join(" ")
-            }
-          }).range(item.startOffset)
-        );
-
-        ranges.push(
-          Decoration.mark({
-            attributes: {
-              class: "cm-inactive-list-marker"
-            }
-          }).range(item.markerStart, item.markerEnd)
-        );
-
-        if (item.task) {
-          ranges.push(
-            Decoration.mark({
-              attributes: {
-                class: [
-                  "cm-inactive-task-marker",
-                  item.task.checked
-                    ? "cm-inactive-task-marker-checked"
-                    : "cm-inactive-task-marker-unchecked"
-                ].join(" "),
-                "data-task-state": item.task.checked ? "checked" : "unchecked"
-              }
-            }).range(item.task.markerStart, item.task.markerEnd)
-          );
-        }
-
-        ranges.push(...createInactiveInlineDecorations(item.inline, { resolveImagePreviewUrl }));
-      }
-
+      appendInactiveListDecorations(block, ranges, resolveImagePreviewUrl);
       continue;
     }
 
@@ -197,7 +154,7 @@ export function createBlockDecorations(
     }
 
     if (block.type === "codeFence") {
-      appendCodeFenceDecorations(block.startOffset, block.endOffset, source, ranges);
+      appendCodeFenceDecorations(block.startOffset, block.endOffset, source, ranges, block.info);
       continue;
     }
 
@@ -230,8 +187,13 @@ function appendCodeFenceDecorations(
   startOffset: number,
   endOffset: number,
   source: string,
-  ranges: Range<Decoration>[]
+  ranges: Range<Decoration>[],
+  info: string | null = null
 ): void {
+  let contentStart: number | null = null;
+  let contentEnd: number | null = null;
+  const languageLabel = formatLanguageLabel(info);
+
   for (const line of getInactiveCodeFenceLines(startOffset, endOffset, source)) {
     if (line.kind === "fence") {
       ranges.push(
@@ -263,14 +225,35 @@ function appendCodeFenceDecorations(
       lineClasses.push("cm-inactive-code-block-end");
     }
 
+    const attributes: Record<string, string> = {
+      class: lineClasses.join(" ")
+    };
+    if (line.isLastContentLine && languageLabel) {
+      attributes["data-language"] = languageLabel;
+    }
+
     ranges.push(
       Decoration.line({
-        attributes: {
-          class: lineClasses.join(" ")
-        }
+        attributes
       }).range(line.lineStart)
     );
+
+    if (contentStart === null) {
+      contentStart = line.lineStart;
+    }
+    contentEnd = line.lineEnd;
   }
+
+  if (contentStart !== null && contentEnd !== null && contentEnd > contentStart) {
+    appendCodeHighlightRanges(source, contentStart, contentEnd, info, ranges);
+  }
+}
+
+function formatLanguageLabel(info: string | null): string {
+  if (!info) return "";
+  const token = info.trim().split(/\s+/)[0];
+  if (!token) return "";
+  return token.length > 16 ? token.slice(0, 16) : token;
 }
 
 function appendBlockquoteDecorations(
@@ -410,6 +393,63 @@ function isCodeFenceContentSelection(
   return line?.kind === "content";
 }
 
+function appendInactiveListDecorations(
+  block: Extract<NonNullable<ActiveBlockState["activeBlock"]>, { type: "list" }>,
+  ranges: Range<Decoration>[],
+  resolveImagePreviewUrl?: (href: string | null) => string | null
+): void {
+  for (const item of block.items) {
+    const lineClasses = [
+      "cm-inactive-list",
+      block.ordered ? "cm-inactive-list-ordered" : "cm-inactive-list-unordered",
+      `cm-inactive-list-depth-${Math.floor(item.indent / 2)}`
+    ];
+
+    if (item.task) {
+      lineClasses.push(
+        "cm-inactive-list-task",
+        item.task.checked
+          ? "cm-inactive-list-task-checked"
+          : "cm-inactive-list-task-unchecked"
+      );
+    }
+
+    ranges.push(
+      Decoration.line({
+        attributes: {
+          class: lineClasses.join(" ")
+        }
+      }).range(item.startOffset)
+    );
+
+    ranges.push(
+      Decoration.mark({
+        attributes: {
+          class: "cm-inactive-list-marker"
+        }
+      }).range(item.markerStart, item.markerEnd)
+    );
+
+    if (item.task) {
+      ranges.push(
+        Decoration.mark({
+          attributes: {
+            class: [
+              "cm-inactive-task-marker",
+              item.task.checked
+                ? "cm-inactive-task-marker-checked"
+                : "cm-inactive-task-marker-unchecked"
+            ].join(" "),
+            "data-task-state": item.task.checked ? "checked" : "unchecked"
+          }
+        }).range(item.task.markerStart, item.task.markerEnd)
+      );
+    }
+
+    ranges.push(...createInactiveInlineDecorations(item.inline, { resolveImagePreviewUrl }));
+  }
+}
+
 function appendActiveDecorationsForBlock(
   block: NonNullable<ActiveBlockState["activeBlock"]>,
   source: string,
@@ -446,15 +486,6 @@ function appendActiveDecorationsForBlock(
 
   if (block.type === "htmlImage") {
     ranges.push(createActiveHtmlImagePreviewDecoration(block, source, resolveImagePreviewUrl));
-    return;
-  }
-
-  if (block.type === "list") {
-    for (const item of block.items) {
-      ranges.push(...createActiveInlineImageDecorations(item.inline, source, resolveImagePreviewUrl));
-      ranges.push(...createActiveInlineDecorations(item.inline));
-      ranges.push(...createCjkTextDecorations(item.inline));
-    }
     return;
   }
 

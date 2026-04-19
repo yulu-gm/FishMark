@@ -1,11 +1,18 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath, URL } from "node:url";
+import { readFileSync } from "node:fs";
 
 const devServerPort = Number(process.env.YULORA_DEV_SERVER_PORT ?? "5173");
+const packageJson = JSON.parse(
+  readFileSync(fileURLToPath(new URL("./package.json", import.meta.url)), "utf8")
+) as { version: string };
 
 export default defineConfig({
   base: "./",
+  define: {
+    __YULORA_APP_VERSION__: JSON.stringify(packageJson.version)
+  },
   plugins: [react()],
   resolve: {
     alias: {

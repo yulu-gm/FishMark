@@ -609,6 +609,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
   const appUpdateStatusLabel = appUpdateState.kind === "downloading"
     ? `正在下载更新${Number.isFinite(appUpdateState.percent) ? ` ${Math.round(appUpdateState.percent)}%` : "…"}`
     : null;
+  const appVersionLabel = `Yulora v${__YULORA_APP_VERSION__}`;
   const controlledTitlebarEnabled = supportsControlledTitlebar(yulora.platform);
   const resolvedThemeMode =
     preferences.theme.mode === "system" ? systemThemeMode : preferences.theme.mode;
@@ -2170,16 +2171,29 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
           <footer
             className="app-status-bar"
             data-yulora-region="app-status-bar"
-            data-visibility={isReadingMode ? "collapsed" : "visible"}
+            data-visibility={isReadingMode && isDocumentOpen ? "collapsed" : "visible"}
           >
             <div data-yulora-region="status-strip">
-              {appUpdateStatusLabel ? <p className="app-update-status">{appUpdateStatusLabel}</p> : null}
-              <p className={`save-status ${state.isDirty ? "is-dirty" : "is-clean"}`}>
-                {saveStatusLabel}
-              </p>
-              <p className="document-word-count">
-                字数 {currentDocumentMetrics?.meaningfulCharacterCount ?? 0}
-              </p>
+              {isDocumentOpen ? (
+                <>
+                  {appUpdateStatusLabel ? (
+                    <p className="app-update-status">{appUpdateStatusLabel}</p>
+                  ) : null}
+                  <p className={`save-status ${state.isDirty ? "is-dirty" : "is-clean"}`}>
+                    {saveStatusLabel}
+                  </p>
+                  <p className="document-word-count">
+                    字数 {currentDocumentMetrics?.meaningfulCharacterCount ?? 0}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="app-version-label">{appVersionLabel}</p>
+                  {appUpdateStatusLabel ? (
+                    <p className="app-update-status">{appUpdateStatusLabel}</p>
+                  ) : null}
+                </>
+              )}
             </div>
           </footer>
         </div>

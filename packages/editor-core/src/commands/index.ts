@@ -27,7 +27,12 @@ export {
   runTableSelectCell,
   runTableUpdateCell
 } from "./table-commands";
-export { runListEnter, runListIndentOnTab } from "./list-commands";
+export {
+  runListEnter,
+  runListIndentOnTab,
+  runListMoveLineDown,
+  runListMoveLineUp
+} from "./list-commands";
 export { toggleEmphasis, toggleStrong } from "./toggle-inline-commands";
 export {
   toggleBlockquote,
