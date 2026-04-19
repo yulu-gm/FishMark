@@ -1,27 +1,81 @@
 import type { TableAlignment } from "./block-map";
 import { createCanonicalTableModel, type CanonicalTableModel } from "./table-model";
 
-export function formatTableMarkdown(model: {
+export type TableCellOffset = {
+  contentStartOffset: number;
+  contentEndOffset: number;
+};
+
+export type FormattedTableWithOffsets = {
+  text: string;
+  cells: {
+    header: TableCellOffset[];
+    rows: TableCellOffset[][];
+  };
+};
+
+type TableModelInput = {
   hasHeader?: boolean;
   rowSeparator?: "compact" | "loose";
   alignments: readonly TableAlignment[];
   header: readonly string[];
   rows: readonly (readonly string[])[];
-}): string {
+};
+
+export function formatTableMarkdown(model: TableModelInput): string {
+  return formatTableMarkdownWithOffsets(model).text;
+}
+
+/**
+ * Serialise a canonical table model to markdown and emit per-cell content offsets in a single
+ * pass. Offsets are relative to the start of the returned `text` and point at the first
+ * non-padding character of each cell — callers can add an absolute base offset to resolve a
+ * document anchor without re-parsing the generated markdown.
+ */
+export function formatTableMarkdownWithOffsets(model: TableModelInput): FormattedTableWithOffsets {
   const canonicalModel = createCanonicalTableModel(model);
   const widths = computeColumnWidths(canonicalModel);
 
-  if (!canonicalModel.hasHeader) {
-    return [canonicalModel.header, ...canonicalModel.rows]
-      .map((row) => formatRow(row, widths, canonicalModel.alignments))
-      .join(canonicalModel.rowSeparator === "loose" ? "\n\n" : "\n");
+  const pieces: string[] = [];
+  const headerCells: TableCellOffset[] = [];
+  const rowCells: TableCellOffset[][] = [];
+
+  let cursor = 0;
+
+  const appendRow = (cells: readonly string[], collector: TableCellOffset[]): void => {
+    const rendered = renderRowWithOffsets(cells, widths, canonicalModel.alignments, cursor);
+    pieces.push(rendered.text);
+    collector.push(...rendered.cells);
+    cursor += rendered.text.length;
+  };
+
+  const appendSeparator = (separator: string): void => {
+    pieces.push(separator);
+    cursor += separator.length;
+  };
+
+  appendRow(canonicalModel.header, headerCells);
+
+  if (canonicalModel.hasHeader) {
+    appendSeparator("\n");
+    const delimiter = renderDelimiter(canonicalModel.alignments, widths);
+    pieces.push(delimiter);
+    cursor += delimiter.length;
   }
 
-  return [
-    formatRow(canonicalModel.header, widths, canonicalModel.alignments),
-    formatDelimiter(canonicalModel.alignments, widths),
-    ...canonicalModel.rows.map((row) => formatRow(row, widths, canonicalModel.alignments))
-  ].join("\n");
+  const bodySeparator = canonicalModel.hasHeader || canonicalModel.rowSeparator !== "loose" ? "\n" : "\n\n";
+
+  for (const row of canonicalModel.rows) {
+    appendSeparator(bodySeparator);
+    const rowOffsets: TableCellOffset[] = [];
+    appendRow(row, rowOffsets);
+    rowCells.push(rowOffsets);
+  }
+
+  return {
+    text: pieces.join(""),
+    cells: { header: headerCells, rows: rowCells }
+  };
 }
 
 function computeColumnWidths(model: CanonicalTableModel): number[] {
@@ -36,33 +90,67 @@ function computeColumnWidths(model: CanonicalTableModel): number[] {
   return widths.map((width) => Math.max(width, 1));
 }
 
-function formatRow(
+function renderRowWithOffsets(
   cells: readonly string[],
   widths: readonly number[],
-  alignments: readonly TableAlignment[]
-): string {
-  const padded = cells.map((cell, index) => {
+  alignments: readonly TableAlignment[],
+  baseOffset: number
+): { text: string; cells: TableCellOffset[] } {
+  const offsets: TableCellOffset[] = [];
+  let text = "| ";
+  let cursor = baseOffset + text.length;
+
+  cells.forEach((cell, index) => {
     const width = widths[index] ?? cell.length;
     const alignment = alignments[index] ?? "left";
+    const padded = padCell(cell, width, alignment);
 
-    if (alignment === "right") {
-      return cell.padStart(width, " ");
+    const contentStart = cursor + padded.contentStartWithinCell;
+    const contentEnd = contentStart + cell.length;
+    offsets.push({ contentStartOffset: contentStart, contentEndOffset: contentEnd });
+
+    text += padded.text;
+    cursor += padded.text.length;
+
+    if (index < cells.length - 1) {
+      text += " | ";
+      cursor += 3;
     }
-
-    if (alignment === "center") {
-      const totalPadding = Math.max(width - cell.length, 0);
-      const leftPadding = Math.floor(totalPadding / 2);
-      const rightPadding = totalPadding - leftPadding;
-      return `${" ".repeat(leftPadding)}${cell}${" ".repeat(rightPadding)}`;
-    }
-
-    return cell.padEnd(width, " ");
   });
 
-  return `| ${padded.join(" | ")} |`;
+  text += " |";
+  return { text, cells: offsets };
 }
 
-function formatDelimiter(
+function padCell(
+  cell: string,
+  width: number,
+  alignment: TableAlignment
+): { text: string; contentStartWithinCell: number } {
+  if (alignment === "right") {
+    return {
+      text: cell.padStart(width, " "),
+      contentStartWithinCell: Math.max(width - cell.length, 0)
+    };
+  }
+
+  if (alignment === "center") {
+    const totalPadding = Math.max(width - cell.length, 0);
+    const leftPadding = Math.floor(totalPadding / 2);
+    const rightPadding = totalPadding - leftPadding;
+    return {
+      text: `${" ".repeat(leftPadding)}${cell}${" ".repeat(rightPadding)}`,
+      contentStartWithinCell: leftPadding
+    };
+  }
+
+  return {
+    text: cell.padEnd(width, " "),
+    contentStartWithinCell: 0
+  };
+}
+
+function renderDelimiter(
   alignments: readonly TableAlignment[],
   widths: readonly number[]
 ): string {

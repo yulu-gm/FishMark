@@ -37,9 +37,9 @@ import {
 } from "../commands";
 import { createMarkdownDocumentCache } from "../derived-state/markdown-document-cache";
 import { deriveInactiveBlockDecorationsState } from "../derived-state/inactive-block-decorations";
-import { readTableContext } from "../commands/table-context";
+import { readTableContext, type TablePosition } from "../commands/table-context";
 import { createGroupedShortcutKeymaps } from "./markdown-shortcuts";
-import type { TableWidgetCallbacks, TableWidgetPosition } from "../decorations";
+import type { TableWidgetCallbacks } from "../decorations";
 
 export type ParseMarkdownDocument = (source: string) => MarkdownDocument;
 
@@ -143,7 +143,7 @@ export function createYuloraMarkdownExtensions(
     }
   };
 
-  const focusTableCellInput = (view: EditorView, target: TableWidgetPosition) => {
+  const focusTableCellInput = (view: EditorView, target: TablePosition) => {
     queueMicrotask(() => {
       const input = view.dom.querySelector<HTMLInputElement>(
         `[data-table-cell="${target.row}:${target.column}"]`
@@ -178,7 +178,7 @@ export function createYuloraMarkdownExtensions(
     focusTableCellInput(view, tableContext.position);
   };
 
-  const selectTablePosition = (view: EditorView, position: TableWidgetPosition) =>
+  const selectTablePosition = (view: EditorView, position: TablePosition) =>
     runTableSelectCell(view, createLiveActiveBlockState(view.state), position);
 
   const syncTableInteractionFocus = (
@@ -208,7 +208,7 @@ export function createYuloraMarkdownExtensions(
   };
 
   const runTableCallbackAction = (
-    position: TableWidgetPosition,
+    position: TablePosition,
     action: (view: EditorView, activeState: ActiveBlockState) => boolean,
     options?: {
       reseatSelection?: boolean;
@@ -242,8 +242,16 @@ export function createYuloraMarkdownExtensions(
         return;
       }
 
-      if (selectTablePosition(tableInteractionView, position) && options?.restoreDomFocus !== false) {
-        focusTableCellInput(tableInteractionView, position);
+      if (!selectTablePosition(tableInteractionView, position)) {
+        return;
+      }
+
+      if (options?.restoreDomFocus !== false) {
+        syncTableInteractionFocus(
+          tableInteractionView,
+          createLiveActiveBlockState(tableInteractionView.state),
+          { force: true }
+        );
       }
     },
     updateCell(position, text) {

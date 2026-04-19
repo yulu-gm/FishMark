@@ -3,30 +3,25 @@ import type { Range } from "@codemirror/state";
 
 import type { TableBlock } from "@yulora/markdown-engine";
 
-export type TableWidgetPosition = {
-  row: number;
-  column: number;
-  tableStartOffset?: number;
-  offsetInCell?: number;
-};
+import type { TablePosition } from "../commands/table-context";
 
 export type TableWidgetCallbacks = {
-  selectCell: (position: TableWidgetPosition, options?: { restoreDomFocus?: boolean }) => void;
-  updateCell: (position: TableWidgetPosition, text: string) => void;
-  moveToNextCell: (position: TableWidgetPosition) => void;
-  moveToPreviousCell: (position: TableWidgetPosition) => void;
-  moveUp: (position: TableWidgetPosition) => void;
-  moveDown: (position: TableWidgetPosition) => void;
-  moveLeft: (position: TableWidgetPosition) => void;
-  moveRight: (position: TableWidgetPosition) => void;
-  moveDownOrExit: (position: TableWidgetPosition) => void;
-  insertRowBelow: (position: TableWidgetPosition) => void;
+  selectCell: (position: TablePosition, options?: { restoreDomFocus?: boolean }) => void;
+  updateCell: (position: TablePosition, text: string) => void;
+  moveToNextCell: (position: TablePosition) => void;
+  moveToPreviousCell: (position: TablePosition) => void;
+  moveUp: (position: TablePosition) => void;
+  moveDown: (position: TablePosition) => void;
+  moveLeft: (position: TablePosition) => void;
+  moveRight: (position: TablePosition) => void;
+  moveDownOrExit: (position: TablePosition) => void;
+  insertRowBelow: (position: TablePosition) => void;
 };
 
 export class TableWidget extends WidgetType {
   constructor(
     private readonly block: TableBlock,
-    private readonly activePosition: TableWidgetPosition | null,
+    private readonly activePosition: TablePosition | null,
     private readonly callbacks: TableWidgetCallbacks | null
   ) {
     super();
@@ -54,6 +49,7 @@ export class TableWidget extends WidgetType {
     const root = document.createElement("div");
     root.className = "cm-table-widget";
     root.dataset.tableColumns = String(this.block.columnCount);
+    root.dataset.tableStartOffset = String(this.block.startOffset);
 
     const table = document.createElement("table");
     table.className = "cm-table-widget-table";
@@ -107,16 +103,16 @@ export class TableWidget extends WidgetType {
         this.callbacks?.selectCell({
           row: cell.rowIndex,
           column: cell.columnIndex,
-          tableStartOffset: this.block.startOffset,
+          tableStartOffset: resolveWidgetTableStartOffset(input, this.block.startOffset),
           offsetInCell: input.selectionStart ?? input.value.length
-        }, { restoreDomFocus: false });
+        });
       });
 
       input.addEventListener("focus", () => {
         this.callbacks?.selectCell({
           row: cell.rowIndex,
           column: cell.columnIndex,
-          tableStartOffset: this.block.startOffset,
+          tableStartOffset: resolveWidgetTableStartOffset(input, this.block.startOffset),
           offsetInCell: input.selectionStart ?? input.value.length
         }, { restoreDomFocus: false });
       });
@@ -125,9 +121,9 @@ export class TableWidget extends WidgetType {
         this.callbacks?.selectCell({
           row: cell.rowIndex,
           column: cell.columnIndex,
-          tableStartOffset: this.block.startOffset,
+          tableStartOffset: resolveWidgetTableStartOffset(input, this.block.startOffset),
           offsetInCell: input.selectionStart ?? input.value.length
-        }, { restoreDomFocus: false });
+        });
       });
 
       input.addEventListener("input", () => {
@@ -135,7 +131,7 @@ export class TableWidget extends WidgetType {
           {
             row: cell.rowIndex,
             column: cell.columnIndex,
-            tableStartOffset: this.block.startOffset,
+            tableStartOffset: resolveWidgetTableStartOffset(input, this.block.startOffset),
             offsetInCell: input.selectionStart ?? input.value.length
           },
           input.value
@@ -148,7 +144,7 @@ export class TableWidget extends WidgetType {
           this.callbacks?.moveUp({
             row: cell.rowIndex,
             column: cell.columnIndex,
-            tableStartOffset: this.block.startOffset,
+            tableStartOffset: resolveWidgetTableStartOffset(input, this.block.startOffset),
             offsetInCell: input.selectionStart ?? 0
           });
           return;
@@ -159,7 +155,7 @@ export class TableWidget extends WidgetType {
           this.callbacks?.moveDown({
             row: cell.rowIndex,
             column: cell.columnIndex,
-            tableStartOffset: this.block.startOffset,
+            tableStartOffset: resolveWidgetTableStartOffset(input, this.block.startOffset),
             offsetInCell: input.selectionStart ?? 0
           });
           return;
@@ -174,7 +170,7 @@ export class TableWidget extends WidgetType {
           this.callbacks?.moveLeft({
             row: cell.rowIndex,
             column: cell.columnIndex,
-            tableStartOffset: this.block.startOffset,
+            tableStartOffset: resolveWidgetTableStartOffset(input, this.block.startOffset),
             offsetInCell: 0
           });
           return;
@@ -189,7 +185,7 @@ export class TableWidget extends WidgetType {
           this.callbacks?.moveRight({
             row: cell.rowIndex,
             column: cell.columnIndex,
-            tableStartOffset: this.block.startOffset,
+            tableStartOffset: resolveWidgetTableStartOffset(input, this.block.startOffset),
             offsetInCell: input.value.length
           });
           return;
@@ -201,13 +197,13 @@ export class TableWidget extends WidgetType {
             this.callbacks?.moveToPreviousCell({
               row: cell.rowIndex,
               column: cell.columnIndex,
-              tableStartOffset: this.block.startOffset
+              tableStartOffset: resolveWidgetTableStartOffset(input, this.block.startOffset)
             });
           } else {
             this.callbacks?.moveToNextCell({
               row: cell.rowIndex,
               column: cell.columnIndex,
-              tableStartOffset: this.block.startOffset
+              tableStartOffset: resolveWidgetTableStartOffset(input, this.block.startOffset)
             });
           }
           return;
@@ -218,7 +214,7 @@ export class TableWidget extends WidgetType {
           this.callbacks?.moveDownOrExit({
             row: cell.rowIndex,
             column: cell.columnIndex,
-            tableStartOffset: this.block.startOffset,
+            tableStartOffset: resolveWidgetTableStartOffset(input, this.block.startOffset),
             offsetInCell: input.selectionStart ?? 0
           });
           return;
@@ -229,7 +225,7 @@ export class TableWidget extends WidgetType {
           this.callbacks?.insertRowBelow({
             row: cell.rowIndex,
             column: cell.columnIndex,
-            tableStartOffset: this.block.startOffset
+            tableStartOffset: resolveWidgetTableStartOffset(input, this.block.startOffset)
           });
         }
       });
@@ -268,6 +264,7 @@ export class TableWidget extends WidgetType {
 
   private syncDOM(root: HTMLElement): void {
     root.dataset.tableColumns = String(this.block.columnCount);
+    root.dataset.tableStartOffset = String(this.block.startOffset);
 
     [this.block.header, ...this.block.rows].forEach((cells) => {
       cells.forEach((cell) => {
@@ -294,9 +291,17 @@ export class TableWidget extends WidgetType {
   }
 }
 
+function resolveWidgetTableStartOffset(input: HTMLInputElement, fallback: number): number {
+  const root = input.closest<HTMLElement>(".cm-table-widget");
+  const value = root?.dataset.tableStartOffset;
+  const parsed = value ? Number(value) : Number.NaN;
+
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 export function createTableWidgetDecoration(
   block: TableBlock,
-  activePosition: TableWidgetPosition | null,
+  activePosition: TablePosition | null,
   callbacks: TableWidgetCallbacks | null
 ): Range<Decoration> {
   return Decoration.replace({

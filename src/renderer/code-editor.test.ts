@@ -41,6 +41,28 @@ const getLastEditorLine = (host: HTMLElement) => {
   return lines.at(-1) ?? null;
 };
 
+const getLineStartOffset = (source: string, lineNumber: number) => {
+  if (lineNumber <= 1) {
+    return 0;
+  }
+
+  let currentLine = 1;
+
+  for (let index = 0; index < source.length; index += 1) {
+    if (source[index] !== "\n") {
+      continue;
+    }
+
+    currentLine += 1;
+
+    if (currentLine === lineNumber) {
+      return index + 1;
+    }
+  }
+
+  return source.length;
+};
+
 describe("createCodeEditorController", () => {
   it("returns the current content and can replace the loaded document", () => {
     const host = document.createElement("div");
@@ -2186,6 +2208,101 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("focuses and highlights the clicked table cell when entering from another block", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const source = ["Paragraph", "", "| name | qty |", "| --- | ---: |", "| pen | 2 |"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const input = host.querySelector<HTMLInputElement>('[data-table-cell="1:0"]');
+
+    expect(input).toBeInstanceOf(HTMLInputElement);
+
+    input?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    const highlightedCell = host.querySelector<HTMLElement>('.cm-table-widget-cell[data-active="true"]');
+
+    expect(document.activeElement).toBe(input);
+    expect(highlightedCell).toBe(input?.closest(".cm-table-widget-cell"));
+
+    controller.destroy();
+    host.remove();
+  });
+
+  it("moves focus and highlight together when a different table cell is clicked", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const source = ["| name | qty |", "| --- | ---: |", "| pen | 2 |", "| ink | 3 |"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const firstInput = host.querySelector<HTMLInputElement>('[data-table-cell="1:0"]');
+    const secondInput = host.querySelector<HTMLInputElement>('[data-table-cell="2:1"]');
+
+    expect(firstInput).toBeInstanceOf(HTMLInputElement);
+    expect(secondInput).toBeInstanceOf(HTMLInputElement);
+
+    firstInput?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    await flushMicrotasks();
+    await flushMicrotasks();
+    secondInput?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    const highlightedCell = host.querySelector<HTMLElement>('.cm-table-widget-cell[data-active="true"]');
+
+    expect(document.activeElement).toBe(secondInput);
+    expect(highlightedCell).toBe(secondInput?.closest(".cm-table-widget-cell"));
+    expect(firstInput?.closest<HTMLElement>(".cm-table-widget-cell")?.dataset.active).toBe("false");
+
+    controller.destroy();
+    host.remove();
+  });
+
+  it("keeps table cell interactions working after content is inserted before the table", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const source = ["| name | qty |", "| --- | ---: |", "| pen | 2 |", "| ink | 3 |"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    controller.setSelection(0);
+    controller.insertText("Paragraph above\n\n");
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    const shiftedInput = host.querySelector<HTMLInputElement>('[data-table-cell="2:1"]');
+
+    expect(shiftedInput).toBeInstanceOf(HTMLInputElement);
+
+    shiftedInput?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    const highlightedCell = host.querySelector<HTMLElement>('.cm-table-widget-cell[data-active="true"]');
+
+    expect(document.activeElement).toBe(shiftedInput);
+    expect(highlightedCell).toBe(shiftedInput?.closest(".cm-table-widget-cell"));
+
+    controller.destroy();
+    host.remove();
+  });
+
   it("supports table keyboard actions after entering the table from another block", async () => {
     const host = document.createElement("div");
     const source = ["Paragraph", "", "| name | qty |", "| --- | ---: |", "| pen | 2 |"].join("\n");
@@ -2675,6 +2792,131 @@ describe("createCodeEditorController", () => {
 
     expect(document.activeElement).toBe(input);
     expect(input?.selectionStart).toBe(0);
+
+    controller.destroy();
+    host.remove();
+  });
+
+  it("moves upward through blank lines above a table without jumping to earlier content", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const source = [
+      "## 一级标题",
+      "- todo",
+      "1. 内容",
+      "2. 内容",
+      "3. 内容",
+      "哇哇哇哇哇",
+      "",
+      "+++",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "| header | contentww |   |   |   | column |",
+      "| :----- | :-------- | :--- | :--- | :--- | :----- |",
+      "|        | 22        |   |   |   |        |",
+      "| 11     |           |   |   |   |        |",
+      "|        | 嘿嘿        |   |   |   |        |",
+      "|        |           |   |   |   |        |",
+      "",
+      "",
+      ""
+    ].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    const tableAdjacentBlankLineStart = getLineStartOffset(source, 14);
+    const previousBlankLineStart = getLineStartOffset(source, 13);
+
+    view!.dispatch({
+      selection: {
+        anchor: tableAdjacentBlankLineStart,
+        head: tableAdjacentBlankLineStart
+      }
+    });
+    view!.contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "ArrowUp",
+        code: "ArrowUp",
+        bubbles: true,
+        cancelable: true
+      })
+    );
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    expect(view!.state.selection.main.anchor).toBe(previousBlankLineStart);
+
+    controller.destroy();
+    host.remove();
+  });
+
+  it("moves upward through trailing blank lines below a table without jumping above the table", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const source = [
+      "## 一级标题",
+      "- todo",
+      "1. 内容",
+      "2. 内容",
+      "3. 内容",
+      "哇哇哇哇哇",
+      "",
+      "+++",
+      "",
+      "| header | contentww |   |   |   | column |",
+      "| :----- | :-------- | :--- | :--- | :--- | :----- |",
+      "|        | 22        |   |   |   |        |",
+      "| 11     |           |   |   |   |        |",
+      "|        | 嘿嘿        |   |   |   |        |",
+      "|        |           |   |   |   |        |",
+      "",
+      "",
+      ""
+    ].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    const lastBlankLineStart = getLineStartOffset(source, 18);
+    const previousBlankLineStart = getLineStartOffset(source, 17);
+
+    view!.dispatch({
+      selection: {
+        anchor: lastBlankLineStart,
+        head: lastBlankLineStart
+      }
+    });
+    view!.contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "ArrowUp",
+        code: "ArrowUp",
+        bubbles: true,
+        cancelable: true
+      })
+    );
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    expect(view!.state.selection.main.anchor).toBe(previousBlankLineStart);
 
     controller.destroy();
     host.remove();

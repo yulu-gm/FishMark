@@ -1,7 +1,5 @@
 import type { EditorView } from "@codemirror/view";
 
-import { parseMarkdownDocument } from "@yulora/markdown-engine";
-
 import type { ActiveBlockState } from "../active-block";
 import {
   findTableBlockByStartOffset,
@@ -13,6 +11,8 @@ import {
   computeDeleteTable,
   computeDeleteTableColumn,
   computeDeleteTableRow,
+  computeExitTableAbove,
+  computeExitTableBelow,
   computeInsertTableColumnLeft,
   computeInsertTableColumnRight,
   computeInsertTableRowAbove,
@@ -24,6 +24,8 @@ import {
   computeMoveToTableRowAbove,
   computeMoveToTableRowBelow,
   computeUpdateTableCell,
+  isExitSelectionTarget,
+  type TableExitTarget,
   type TableSemanticEdit
 } from "./table-edits";
 
@@ -46,79 +48,13 @@ export function runTablePreviousCell(view: EditorView, activeState: ActiveBlockS
 export function runTableMoveUp(view: EditorView, activeState: ActiveBlockState): boolean {
   const ctx = readTableContext(view.state, activeState);
 
-  if (!ctx) {
-    return false;
-  }
-
-  const moveUpEdit = computeMoveToTableRowAbove(ctx);
-
-  if (moveUpEdit) {
-    return applyTableSemanticEdit(view, activeState, moveUpEdit);
-  }
-
-  const exitTarget = resolveTableExitAboveTarget(view, ctx.block.startOffset);
-
-  view.dispatch(
-    exitTarget.insert === null
-      ? {
-          selection: {
-            anchor: exitTarget.anchor,
-            head: exitTarget.anchor
-          }
-        }
-      : {
-          changes: {
-            from: exitTarget.insert.from,
-            to: exitTarget.insert.to,
-            insert: exitTarget.insert.text
-          },
-          selection: {
-            anchor: exitTarget.anchor,
-            head: exitTarget.anchor
-          }
-        }
-  );
-
-  return true;
+  return applyTableSemanticEdit(view, activeState, computeMoveToTableRowAbove(ctx) ?? computeExitTableAbove(ctx));
 }
 
 export function runTableMoveDown(view: EditorView, activeState: ActiveBlockState): boolean {
   const ctx = readTableContext(view.state, activeState);
 
-  if (!ctx) {
-    return false;
-  }
-
-  const moveDownEdit = computeMoveToTableRowBelow(ctx);
-
-  if (moveDownEdit) {
-    return applyTableSemanticEdit(view, activeState, moveDownEdit);
-  }
-
-  const exitTarget = resolveTableExitTarget(view, ctx.block.endOffset);
-
-  view.dispatch(
-    exitTarget.insert === null
-      ? {
-          selection: {
-            anchor: exitTarget.anchor,
-            head: exitTarget.anchor
-          }
-        }
-      : {
-          changes: {
-            from: exitTarget.insert.from,
-            to: exitTarget.insert.to,
-            insert: exitTarget.insert.text
-          },
-          selection: {
-            anchor: exitTarget.anchor,
-            head: exitTarget.anchor
-          }
-        }
-  );
-
-  return true;
+  return applyTableSemanticEdit(view, activeState, computeMoveToTableRowBelow(ctx) ?? computeExitTableBelow(ctx));
 }
 
 export function runTableEnterFromLineAbove(view: EditorView, activeState: ActiveBlockState): boolean {
@@ -267,13 +203,17 @@ function applyTableSemanticEdit(
   activeState: ActiveBlockState,
   edit: TableSemanticEdit | null
 ): boolean {
-  const tableBlock = findTableBlockByStartOffset(activeState, activeState.tableCursor?.tableStartOffset);
-
-  if (!tableBlock || !edit) {
+  if (!edit) {
     return false;
   }
 
-  const selectionAnchor = resolveSelectionAnchor(tableBlock, edit);
+  // Exit edits can target a location outside any table and may carry their own insert payload,
+  // so they short-circuit the cell-lookup path entirely.
+  if (isExitSelectionTarget(edit.selectionTarget)) {
+    return dispatchExit(view, edit.selectionTarget);
+  }
+
+  const selectionAnchor = resolveSelectionAnchor(activeState, edit);
 
   if (selectionAnchor === null) {
     return false;
@@ -283,118 +223,54 @@ function applyTableSemanticEdit(
     edit.changes
       ? {
           changes: edit.changes,
-          selection: {
-            anchor: selectionAnchor,
-            head: selectionAnchor
-          }
+          selection: { anchor: selectionAnchor, head: selectionAnchor }
         }
       : {
-          selection: {
-            anchor: selectionAnchor,
-            head: selectionAnchor
-          }
+          selection: { anchor: selectionAnchor, head: selectionAnchor }
         }
   );
 
   return true;
 }
 
-function resolveSelectionAnchor(
-  tableBlock: Extract<NonNullable<ActiveBlockState["activeBlock"]>, { type: "table" }>,
-  edit: TableSemanticEdit
-): number | null {
-  if (!edit.changes) {
-    const targetCell = getTableCell(tableBlock, edit.selectionTarget);
-    if (!targetCell) {
-      return null;
-    }
-
-    const cellLength = Math.max(targetCell.contentEndOffset - targetCell.contentStartOffset, 0);
-    const offsetInCell = Math.max(0, Math.min(edit.selectionTarget.offsetInCell ?? 0, cellLength));
-
-    return targetCell.contentStartOffset + offsetInCell;
-  }
-
-  const replacementSource = typeof edit.changes.insert === "string" ? edit.changes.insert : null;
-
-  return resolveSelectionAnchorFromSource(
-    tableBlock.startOffset,
-    edit.selectionTarget,
-    replacementSource
+function dispatchExit(view: EditorView, target: TableExitTarget): boolean {
+  view.dispatch(
+    target.insert
+      ? {
+          changes: target.insert,
+          selection: { anchor: target.anchor, head: target.anchor }
+        }
+      : {
+          selection: { anchor: target.anchor, head: target.anchor }
+        }
   );
+
+  return true;
 }
 
-function resolveSelectionAnchorFromSource(
-  baseOffset: number,
-  selectionTarget: TablePosition,
-  source: string | null
-): number | null {
-  const parsedTable =
-    source === null ? null : parseMarkdownDocument(source).blocks.find((block) => block.type === "table");
-
-  if (source !== null && parsedTable?.type === "table") {
-    const targetCell = getTableCell(parsedTable, selectionTarget);
-    if (!targetCell) {
-      return baseOffset;
-    }
-
-    const cellLength = Math.max(targetCell.contentEndOffset - targetCell.contentStartOffset, 0);
-    const offsetInCell = Math.max(0, Math.min(selectionTarget.offsetInCell ?? 0, cellLength));
-
-    return baseOffset + targetCell.contentStartOffset + offsetInCell;
+function resolveSelectionAnchor(activeState: ActiveBlockState, edit: TableSemanticEdit): number | null {
+  // Mutating edits pre-compute the caret offset while they format the new table markdown, so we
+  // never need to re-parse the inserted text to resolve a cell location.
+  if (edit.resolvedAnchor !== undefined) {
+    return edit.resolvedAnchor;
   }
 
-  return baseOffset;
-}
+  // Navigation-only edits resolve against the tableBlock already cached on the active state.
+  const tableBlock = findTableBlockByStartOffset(activeState, activeState.tableCursor?.tableStartOffset);
 
-function resolveTableExitTarget(
-  view: EditorView,
-  tableEndOffset: number
-): {
-  anchor: number;
-  insert: { from: number; to: number; text: string } | null;
-} {
-  const currentLine = view.state.doc.lineAt(tableEndOffset);
-
-  if (currentLine.number < view.state.doc.lines) {
-    return {
-      anchor: view.state.doc.line(currentLine.number + 1).from,
-      insert: null
-    };
+  if (!tableBlock) {
+    return null;
   }
 
-  return {
-    anchor: view.state.doc.length + 1,
-    insert: {
-      from: view.state.doc.length,
-      to: view.state.doc.length,
-      text: "\n"
-    }
-  };
-}
+  const selectionTarget = edit.selectionTarget as TablePosition;
+  const targetCell = getTableCell(tableBlock, selectionTarget);
 
-function resolveTableExitAboveTarget(
-  view: EditorView,
-  tableStartOffset: number
-): {
-  anchor: number;
-  insert: { from: number; to: number; text: string } | null;
-} {
-  const currentLine = view.state.doc.lineAt(tableStartOffset);
-
-  if (currentLine.number > 1) {
-    return {
-      anchor: view.state.doc.line(currentLine.number - 1).from,
-      insert: null
-    };
+  if (!targetCell) {
+    return null;
   }
 
-  return {
-    anchor: 0,
-    insert: {
-      from: 0,
-      to: 0,
-      text: "\n"
-    }
-  };
+  const cellLength = Math.max(targetCell.contentEndOffset - targetCell.contentStartOffset, 0);
+  const offsetInCell = Math.max(0, Math.min(selectionTarget.offsetInCell ?? 0, cellLength));
+
+  return targetCell.contentStartOffset + offsetInCell;
 }

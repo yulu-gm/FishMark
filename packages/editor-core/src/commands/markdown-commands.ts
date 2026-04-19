@@ -41,7 +41,7 @@ export function runMarkdownArrowDown(view: EditorView, activeState: ActiveBlockS
 }
 
 export function runMarkdownArrowUp(view: EditorView, activeState: ActiveBlockState): boolean {
-  return runTableEnterFromLineBelow(view, activeState);
+  return runTableEnterFromLineBelow(view, activeState) || runBlankLineArrowUp(view);
 }
 
 function runDraftTableEnter(view: EditorView, activeState: ActiveBlockState): boolean {
@@ -123,4 +123,29 @@ function looksLikeCommittedTableDelimiter(line: string): boolean {
   const segments = splitTableLine(line);
 
   return segments.length >= 2 && segments.every((segment) => /^:?-{3,}:?$/u.test(segment.text));
+}
+
+function runBlankLineArrowUp(view: EditorView): boolean {
+  const selection = view.state.selection.main;
+
+  if (!selection.empty) {
+    return false;
+  }
+
+  const currentLine = view.state.doc.lineAt(selection.head);
+
+  if (currentLine.number <= 1 || currentLine.text.trim().length !== 0) {
+    return false;
+  }
+
+  const previousLine = view.state.doc.line(currentLine.number - 1);
+
+  view.dispatch({
+    selection: {
+      anchor: previousLine.from,
+      head: previousLine.from
+    }
+  });
+
+  return true;
 }
