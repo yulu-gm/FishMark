@@ -1,5 +1,6 @@
 {
   "id": "rain-glass",
+  "contractVersion": 2,
   "name": "Rain Glass",
   "version": "1.0.0",
   "author": "Yulora",

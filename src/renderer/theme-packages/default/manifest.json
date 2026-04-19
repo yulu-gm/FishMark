@@ -1,5 +1,6 @@
 {
   "id": "default",
+  "contractVersion": 2,
   "name": "Default",
   "version": "1.0.0",
   "supports": {
