@@ -2,6 +2,7 @@ import type {
   BlockquoteBlock,
   HeadingBlock,
   InlineLine,
+  ListBlock,
   ListItemBlock,
   MarkdownBlock
 } from "./block-map";
@@ -34,10 +35,7 @@ function attachInlineData(block: MarkdownBlock, source: string): MarkdownBlock {
   }
 
   if (block.type === "list") {
-    return {
-      ...block,
-      items: block.items.map((item) => enrichListItem(item, source))
-    };
+    return enrichListBlock(block, source);
   }
 
   if (block.type === "blockquote") {
@@ -52,6 +50,13 @@ function attachInlineData(block: MarkdownBlock, source: string): MarkdownBlock {
   }
 
   return block;
+}
+
+function enrichListBlock(block: ListBlock, source: string): ListBlock {
+  return {
+    ...block,
+    items: block.items.map((item) => enrichListItem(item, source))
+  };
 }
 
 type HeadingContentRange = {
@@ -96,7 +101,8 @@ function enrichListItem(item: ListItemBlock, source: string): ListItemBlock {
     ...item,
     contentStartOffset: contentRange.contentStartOffset,
     contentEndOffset: contentRange.contentEndOffset,
-    inline: parseInlineAst(source, contentRange.contentStartOffset, contentRange.contentEndOffset)
+    inline: parseInlineAst(source, contentRange.contentStartOffset, contentRange.contentEndOffset),
+    children: item.children.map((child) => enrichListBlock(child, source))
   };
 }
 
@@ -106,7 +112,9 @@ type ListItemContentRange = {
 };
 
 function getListItemContentRange(item: ListItemBlock, source: string): ListItemContentRange {
-  const firstLineEndOffset = findLineEndOffset(source, item.startOffset, item.endOffset);
+  const firstChildStartOffset = item.children[0]?.startOffset ?? item.endOffset;
+  const contentUpperBound = Math.min(firstChildStartOffset, item.endOffset);
+  const firstLineEndOffset = findLineEndOffset(source, item.startOffset, contentUpperBound);
   const firstLineContentEndOffset = trimTrailingCarriageReturn(source, item.startOffset, firstLineEndOffset);
 
   let contentStartOffset = item.markerEnd;
@@ -117,13 +125,29 @@ function getListItemContentRange(item: ListItemBlock, source: string): ListItemC
     contentStartOffset = consumeHorizontalSpace(source, contentStartOffset, firstLineContentEndOffset);
   }
 
-  const boundedContentStartOffset = Math.min(contentStartOffset, item.endOffset);
-  const contentEndOffset = trimTrailingCarriageReturn(source, boundedContentStartOffset, item.endOffset);
+  const boundedContentStartOffset = Math.min(contentStartOffset, contentUpperBound);
+  const contentEndOffset = trimTrailingListItemContent(source, boundedContentStartOffset, contentUpperBound);
 
   return {
     contentStartOffset: boundedContentStartOffset,
     contentEndOffset
   };
+}
+
+function trimTrailingListItemContent(source: string, startOffset: number, endOffset: number): number {
+  let cursor = trimTrailingCarriageReturn(source, startOffset, endOffset);
+
+  while (cursor > startOffset) {
+    const character = source[cursor - 1];
+
+    if (character !== " " && character !== "\t" && character !== "\r" && character !== "\n") {
+      break;
+    }
+
+    cursor -= 1;
+  }
+
+  return cursor;
 }
 
 function createBlockquoteLines(blockquote: BlockquoteBlock, source: string): InlineLine[] {

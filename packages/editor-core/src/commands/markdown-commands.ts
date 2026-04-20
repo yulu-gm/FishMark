@@ -5,12 +5,13 @@ import { formatTableMarkdown, parseMarkdownDocument, splitTableLine } from "@yul
 import type { ActiveBlockState } from "../active-block";
 import { runBlockquoteBackspace, runBlockquoteEnter } from "./blockquote-commands";
 import { runCodeFenceBackspace, runCodeFenceEnter } from "./code-fence-commands";
-import { runListEnter, runListIndentOnTab } from "./list-commands";
+import { runListEnter, runListIndentOnTab, runListOutdentOnShiftTab } from "./list-commands";
 import {
   runTableEnterFromLineAbove,
   runTableEnterFromLineBelow,
   runTableMoveDownOrExit,
-  runTableNextCell
+  runTableNextCell,
+  runTablePreviousCell
 } from "./table-commands";
 
 export function runMarkdownEnter(view: EditorView, activeState: ActiveBlockState): boolean {
@@ -34,6 +35,10 @@ export function runMarkdownBackspace(view: EditorView, activeState: ActiveBlockS
 
 export function runMarkdownTab(view: EditorView, activeState: ActiveBlockState): boolean {
   return runTableNextCell(view, activeState) || runListIndentOnTab(view, activeState);
+}
+
+export function runMarkdownShiftTab(view: EditorView, activeState: ActiveBlockState): boolean {
+  return runTablePreviousCell(view, activeState) || runListOutdentOnShiftTab(view, activeState);
 }
 
 export function runMarkdownArrowDown(view: EditorView, activeState: ActiveBlockState): boolean {

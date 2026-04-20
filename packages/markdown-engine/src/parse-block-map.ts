@@ -10,6 +10,7 @@ import type {
   ListBlock,
   ListItemBlock,
   MarkdownBlock,
+  OrderedListDelimiter,
   ParagraphBlock,
   TableBlock,
   ThematicBreakBlock
@@ -31,7 +32,7 @@ export function parseTopLevelBlocks(source: string): MarkdownBlock[] {
     if (kind === "enter") {
       if (token.type === "listOrdered" || token.type === "listUnordered") {
         if (containerDepth === 0) {
-          blocks.push(createListBlock(token, token.type === "listOrdered", source));
+          blocks.push(...createListBlocks(token, token.type === "listOrdered", source));
         }
 
         containerDepth += 1;
@@ -93,7 +94,7 @@ export function parseTopLevelBlocks(source: string): MarkdownBlock[] {
     }
   }
 
-  return mergeLoosePipeTables(blocks, source);
+  return mergeLoosePipeTables(mergeContiguousListBlocks(blocks, source), source);
 }
 
 function parseEvents(source: string): Event[] {
@@ -113,14 +114,19 @@ function createParagraphBlock(token: Token): ParagraphBlock {
   return createBlockFromRange("paragraph", token.start.offset, token.end.offset, token.start.line, token.end.line);
 }
 
-function createListBlock(token: Token, ordered: boolean, source: string): ListBlock {
+function createListBlocks(token: Token, ordered: boolean, source: string): ListBlock[] {
   const base = createBaseBlock("list", token);
+  const listScopes = parseListScopes(
+    source.slice(base.startOffset, base.endOffset),
+    base.startOffset,
+    base.startLine
+  );
 
-  return {
-    ...base,
-    ordered,
-    items: parseListItems(source.slice(base.startOffset, base.endOffset), base.startOffset, base.startLine)
-  };
+  if (listScopes === null || listScopes.length === 0 || listScopes.some((scope) => scope.ordered !== ordered)) {
+    return [createFallbackListBlock(base, ordered, source)];
+  }
+
+  return listScopes.map((scope) => materializeListScope(scope));
 }
 
 function createBlockquoteBlock(token: Token): BlockquoteBlock {
@@ -571,23 +577,146 @@ type DraftListItem = {
   task: ListItemBlock["task"];
   endOffset: number;
   endLine: number;
+  children: DraftListScope[];
 };
+
+type DraftListScope =
+  | {
+      ordered: false;
+      indent: number;
+      items: DraftListItem[];
+    }
+  | {
+      ordered: true;
+      indent: number;
+      startOrdinal: number;
+      delimiter: OrderedListDelimiter;
+      items: DraftListItem[];
+    };
 
 const LIST_ITEM_PATTERN = /^(\s*)([*+-]|\d+[.)])(?:[ \t]+|$)/;
 const TASK_MARKER_PATTERN = /^\[( |x|X)\](?=[ \t]|$)/;
 
-function parseListItems(sourceSlice: string, baseOffset: number, baseLine: number): ListItemBlock[] {
+function parseListScopes(sourceSlice: string, baseOffset: number, baseLine: number): DraftListScope[] | null {
+  const lines = createLineInfos(sourceSlice, baseOffset, baseLine);
+  const rootScopes: DraftListScope[] = [];
+  const openItems: DraftListItem[] = [];
+  let forceNewRootScope = false;
+
+  for (const line of lines) {
+    const match = LIST_ITEM_PATTERN.exec(line.text);
+    if (!match) {
+      if (line.text.trim().length === 0) {
+        openItems.length = 0;
+        forceNewRootScope = rootScopes.length > 0;
+        continue;
+      }
+
+      for (const item of openItems) {
+        item.endOffset = line.endOffset;
+        item.endLine = line.lineNumber;
+      }
+      continue;
+    }
+
+    const indent = match[1]?.length ?? 0;
+    const marker = match[2] ?? "-";
+    const metadata = parseListMarker(marker);
+
+    while (openItems.length > 0 && openItems.at(-1)!.indent >= indent) {
+      openItems.pop();
+    }
+
+    const markerStart = line.startOffset + indent;
+    const markerEnd = markerStart + marker.length;
+    const remainder = line.text.slice(match[0].length);
+    const task = parseTaskMarker(remainder, markerEnd + (match[0].length - indent - marker.length));
+    const item: DraftListItem = {
+      startOffset: line.startOffset,
+      startLine: line.lineNumber,
+      indent,
+      marker,
+      markerStart,
+      markerEnd,
+      task,
+      endOffset: line.endOffset,
+      endLine: line.lineNumber,
+      children: []
+    };
+
+    for (const ancestor of openItems) {
+      ancestor.endOffset = line.endOffset;
+      ancestor.endLine = line.lineNumber;
+    }
+
+    const parent = openItems.at(-1);
+    if (parent) {
+      appendDraftItemToNestedScope(parent, item, metadata, indent);
+    } else {
+      const currentRootScope = forceNewRootScope ? null : rootScopes.at(-1) ?? null;
+
+      if (currentRootScope && draftListScopeMatches(currentRootScope, metadata, indent)) {
+        currentRootScope.items.push(item);
+      } else if (rootScopes.length === 0 || canStartNewRootScope(rootScopes.at(-1) ?? null, indent)) {
+        rootScopes.push(createDraftListScope(metadata, indent, item, rootScopes.length > 0));
+      } else {
+        return null;
+      }
+
+      forceNewRootScope = false;
+    }
+
+    openItems.push(item);
+  }
+
+  return rootScopes;
+}
+
+function createFallbackListBlock(
+  base: Pick<ListBlock, "id" | "type" | "startOffset" | "endOffset" | "startLine" | "endLine">,
+  ordered: boolean,
+  source: string
+): ListBlock {
+  const items = parseFlatListItems(
+    source.slice(base.startOffset, base.endOffset),
+    base.startOffset,
+    base.startLine
+  );
+
+  if (!ordered) {
+    return {
+      ...base,
+      ordered: false,
+      items
+    };
+  }
+
+  const firstMarkerMetadata = parseListMarker(items[0]?.marker ?? "1.");
+
+  return {
+    ...base,
+    ordered: true,
+    startOrdinal: firstMarkerMetadata.ordered ? firstMarkerMetadata.startOrdinal : 1,
+    delimiter: firstMarkerMetadata.ordered ? firstMarkerMetadata.delimiter : ".",
+    items
+  };
+}
+
+function parseFlatListItems(sourceSlice: string, baseOffset: number, baseLine: number): ListItemBlock[] {
   const lines = createLineInfos(sourceSlice, baseOffset, baseLine);
   const items: DraftListItem[] = [];
 
   for (const line of lines) {
     const match = LIST_ITEM_PATTERN.exec(line.text);
+
     if (!match) {
       const current = items.at(-1);
+
       if (current) {
         current.endOffset = line.endOffset;
         current.endLine = line.lineNumber;
       }
+
       continue;
     }
 
@@ -607,11 +736,197 @@ function parseListItems(sourceSlice: string, baseOffset: number, baseLine: numbe
       markerEnd,
       task,
       endOffset: line.endOffset,
-      endLine: line.lineNumber
+      endLine: line.lineNumber,
+      children: []
     });
   }
 
-  return items.map((item) => ({
+  return items.map((item) => materializeListItem(item));
+}
+
+function mergeContiguousListBlocks(blocks: MarkdownBlock[], source: string): MarkdownBlock[] {
+  const mergedBlocks: MarkdownBlock[] = [];
+
+  for (let index = 0; index < blocks.length; index += 1) {
+    const block = blocks[index];
+
+    if (!block || block.type !== "list") {
+      if (block) {
+        mergedBlocks.push(block);
+      }
+      continue;
+    }
+
+    let mergedList: ListBlock = block;
+    let endIndex = index;
+
+    while (endIndex + 1 < blocks.length) {
+      const nextBlock = blocks[endIndex + 1];
+      const gapSource = source.slice(blocks[endIndex]!.endOffset, nextBlock!.startOffset);
+
+      if (nextBlock?.type !== "list" || !/^\s*$/u.test(gapSource)) {
+        break;
+      }
+
+      const candidate = tryMergeListRun(blocks.slice(index, endIndex + 2) as ListBlock[], source);
+
+      if (!candidate) {
+        break;
+      }
+
+      mergedList = candidate;
+      endIndex += 1;
+    }
+
+    mergedBlocks.push(mergedList);
+    index = endIndex;
+  }
+
+  return mergedBlocks;
+}
+
+function tryMergeListRun(blocks: ListBlock[], source: string): ListBlock | null {
+  const firstBlock = blocks[0];
+  const lastBlock = blocks.at(-1);
+
+  if (!firstBlock || !lastBlock) {
+    return null;
+  }
+
+  try {
+    const scopes = parseListScopes(
+      source.slice(firstBlock.startOffset, lastBlock.endOffset),
+      firstBlock.startOffset,
+      firstBlock.startLine
+    );
+
+    if (scopes === null || scopes.length !== 1) {
+      return null;
+    }
+
+    return materializeListScope(
+      scopes[0]!,
+      createBlockFromRange("list", firstBlock.startOffset, lastBlock.endOffset, firstBlock.startLine, lastBlock.endLine)
+    );
+  } catch {
+    return null;
+  }
+}
+
+function parseListMarker(marker: string):
+  | { ordered: false }
+  | { ordered: true; startOrdinal: number; delimiter: OrderedListDelimiter } {
+  const orderedMatch = /^(\d+)([.)])$/.exec(marker);
+
+  if (!orderedMatch) {
+    return { ordered: false };
+  }
+
+  return {
+    ordered: true,
+    startOrdinal: Number.parseInt(orderedMatch[1] ?? "1", 10),
+    delimiter: (orderedMatch[2] ?? ".") as OrderedListDelimiter
+  };
+}
+
+function createDraftListScope(
+  metadata: ReturnType<typeof parseListMarker>,
+  indent: number,
+  firstItem: DraftListItem,
+  resetOrderedStartOrdinal = false
+): DraftListScope {
+  if (!metadata.ordered) {
+    return {
+      ordered: false,
+      indent,
+      items: [firstItem]
+    };
+  }
+
+  return {
+    ordered: true,
+    indent,
+    startOrdinal: resetOrderedStartOrdinal ? 1 : metadata.startOrdinal,
+    delimiter: metadata.delimiter,
+    items: [firstItem]
+  };
+}
+
+function canStartNewRootScope(previousScope: DraftListScope | null, indent: number): boolean {
+  if (!previousScope) {
+    return true;
+  }
+
+  return previousScope.indent === indent;
+}
+
+function appendDraftItemToNestedScope(
+  parent: DraftListItem,
+  item: DraftListItem,
+  metadata: ReturnType<typeof parseListMarker>,
+  indent: number
+): void {
+  const currentScope = parent.children.at(-1);
+
+  if (currentScope && draftListScopeMatches(currentScope, metadata, indent)) {
+    currentScope.items.push(item);
+    return;
+  }
+
+  parent.children.push(createDraftListScope(metadata, indent, item));
+}
+
+function draftListScopeMatches(
+  scope: DraftListScope,
+  metadata: ReturnType<typeof parseListMarker>,
+  indent: number
+): boolean {
+  if (scope.indent !== indent || scope.ordered !== metadata.ordered) {
+    return false;
+  }
+
+  if (!scope.ordered || !metadata.ordered) {
+    return true;
+  }
+
+  return scope.delimiter === metadata.delimiter;
+}
+
+function materializeListScope(
+  scope: DraftListScope,
+  base?: Pick<ListBlock, "id" | "type" | "startOffset" | "endOffset" | "startLine" | "endLine">
+): ListBlock {
+  const firstItem = scope.items[0];
+  const lastItem = scope.items.at(-1);
+
+  if (!firstItem || !lastItem) {
+    throw new Error("Cannot materialize an empty list scope.");
+  }
+
+  const range =
+    base ??
+    createBlockFromRange("list", firstItem.startOffset, lastItem.endOffset, firstItem.startLine, lastItem.endLine);
+  const items = scope.items.map((item) => materializeListItem(item));
+
+  if (!scope.ordered) {
+    return {
+      ...range,
+      ordered: false,
+      items
+    };
+  }
+
+  return {
+    ...range,
+    ordered: true,
+    startOrdinal: scope.startOrdinal,
+    delimiter: scope.delimiter,
+    items
+  };
+}
+
+function materializeListItem(item: DraftListItem): ListItemBlock {
+  return {
     id: `list-item:${item.startOffset}-${item.endOffset}`,
     startOffset: item.startOffset,
     endOffset: item.endOffset,
@@ -621,8 +936,9 @@ function parseListItems(sourceSlice: string, baseOffset: number, baseLine: numbe
     marker: item.marker,
     markerStart: item.markerStart,
     markerEnd: item.markerEnd,
-    task: item.task
-  }));
+    task: item.task,
+    children: item.children.map((scope) => materializeListScope(scope))
+  };
 }
 
 function createLineInfos(sourceSlice: string, baseOffset: number, baseLine: number): LineInfo[] {

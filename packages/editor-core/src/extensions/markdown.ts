@@ -3,7 +3,13 @@ import {
   history,
   historyKeymap
 } from "@codemirror/commands";
-import { StateEffect, StateField, type EditorState, type Extension } from "@codemirror/state";
+import {
+  Annotation,
+  EditorState,
+  StateEffect,
+  StateField,
+  type Extension
+} from "@codemirror/state";
 import {
   type DecorationSet,
   EditorView,
@@ -25,6 +31,7 @@ import {
   runListMoveLineUp,
   runMarkdownBackspace,
   runMarkdownEnter,
+  runMarkdownShiftTab,
   runMarkdownTab,
   runTableInsertRowBelow,
   runTableMoveDown,
@@ -40,6 +47,10 @@ import {
 import { createMarkdownDocumentCache } from "../derived-state/markdown-document-cache";
 import { deriveInactiveBlockDecorationsState } from "../derived-state/inactive-block-decorations";
 import { readTableContext, type TablePosition } from "../commands/table-context";
+import {
+  computeNormalizedOrderedListDocument,
+  mapTextOffsetThroughChanges
+} from "../commands/list-edits";
 import { createGroupedShortcutKeymaps } from "./markdown-shortcuts";
 import type { TableWidgetCallbacks } from "../decorations";
 
@@ -68,6 +79,7 @@ const createSelectionSnapshot = (state: EditorState): ActiveBlockSelection => ({
 });
 
 const forceRefreshMarkdownDecorationsEffect = StateEffect.define<null>();
+const orderedListNormalizationAnnotation = Annotation.define<boolean>();
 
 export function createYuloraMarkdownExtensions(
   options: CreateYuloraMarkdownExtensionsOptions
@@ -485,6 +497,31 @@ export function createYuloraMarkdownExtensions(
   return [
     blockDecorationsField,
     lifecyclePlugin,
+    EditorState.transactionFilter.of((transaction) => {
+      if (!transaction.docChanged || transaction.annotation(orderedListNormalizationAnnotation)) {
+        return transaction;
+      }
+
+      const normalization = computeNormalizedOrderedListDocument(transaction.newDoc.toString());
+
+      if (!normalization) {
+        return transaction;
+      }
+      const selection = transaction.newSelection.main;
+
+      return {
+        changes: {
+          from: 0,
+          to: transaction.startState.doc.length,
+          insert: normalization.source
+        },
+        selection: {
+          anchor: mapTextOffsetThroughChanges(selection.anchor, normalization.changes),
+          head: mapTextOffsetThroughChanges(selection.head, normalization.changes)
+        },
+        annotations: orderedListNormalizationAnnotation.of(true)
+      };
+    }),
     history(),
     keymap.of([
       {
@@ -522,6 +559,10 @@ export function createYuloraMarkdownExtensions(
       {
         key: "Tab",
         run: (view) => runMarkdownTab(view, runtime.activeBlockState)
+      },
+      {
+        key: "Shift-Tab",
+        run: (view) => runMarkdownShiftTab(view, runtime.activeBlockState)
       },
       {
         key: "Alt-ArrowUp",

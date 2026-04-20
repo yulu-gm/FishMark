@@ -3,6 +3,7 @@ import type {
   InlineASTNode,
   InlineCodeSpan,
   InlineRoot,
+  ListBlock,
   ListItemBlock,
   MarkdownBlock
 } from "@yulora/markdown-engine";
@@ -45,7 +46,7 @@ export function createBlockDecorationSignature(block: MarkdownBlock): string {
   }
 
   if (block.type === "list") {
-    return `${block.type}:${block.id}:${block.startOffset}:${block.ordered}:${block.items
+    return `${block.type}:${block.id}:${block.startOffset}:${getListBlockMetadataSignature(block)}:${block.items
       .map((item) => `${createListItemSignature(item)}`)
       .join(",")}`;
   }
@@ -78,7 +79,22 @@ export function createBlockDecorationSignature(block: MarkdownBlock): string {
 }
 
 function createListItemSignature(item: ListItemBlock): string {
-  return `${item.id}:${item.indent}:${item.task?.checked ?? "none"}${getInlineSignature(item)}`;
+  const childSignature = item.children.map((child) => createNestedListSignature(child)).join("|");
+  return `${item.id}:${item.indent}:${item.task?.checked ?? "none"}${getInlineSignature(item)}${
+    childSignature ? `:children(${childSignature})` : ""
+  }`;
+}
+
+function createNestedListSignature(block: ListBlock): string {
+  return `${getListBlockMetadataSignature(block)}:[${block.items.map((item) => createListItemSignature(item)).join(",")}]`;
+}
+
+function getListBlockMetadataSignature(block: ListBlock): string {
+  if (!block.ordered) {
+    return "false";
+  }
+
+  return `true:${block.startOrdinal}:${block.delimiter}`;
 }
 
 function createBlockquoteLineSignature(line: BlockquoteLine): string {

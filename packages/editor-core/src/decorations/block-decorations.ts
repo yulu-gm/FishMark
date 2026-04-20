@@ -398,6 +398,14 @@ function appendInactiveListDecorations(
   ranges: Range<Decoration>[],
   resolveImagePreviewUrl?: (href: string | null) => string | null
 ): void {
+  appendInactiveListScopeDecorations(block, ranges, resolveImagePreviewUrl);
+}
+
+function appendInactiveListScopeDecorations(
+  block: Extract<NonNullable<ActiveBlockState["activeBlock"]>, { type: "list" }>,
+  ranges: Range<Decoration>[],
+  resolveImagePreviewUrl?: (href: string | null) => string | null
+): void {
   for (const item of block.items) {
     const lineClasses = [
       "cm-inactive-list",
@@ -447,6 +455,10 @@ function appendInactiveListDecorations(
     }
 
     ranges.push(...createInactiveInlineDecorations(item.inline, { resolveImagePreviewUrl }));
+
+    for (const child of item.children) {
+      appendInactiveListScopeDecorations(child, ranges, resolveImagePreviewUrl);
+    }
   }
 }
 

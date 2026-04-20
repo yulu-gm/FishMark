@@ -9,6 +9,8 @@
 
 ## 记录
 
+| 2026-04-20 | `TASK-012` 的有序列表编辑改为统一的“语义列表编辑 + transaction 归一化”架构：`markdown-engine` 显式保留 `startOrdinal` / `delimiter`，列表项允许携带 `children` 子列表；`editor-core` 则通过 `list-edits` 以 item subtree 为单位处理插入、删除、缩进、反缩进、上下移动与重编号。 | 之前把有序列表修复散落在 `Enter`、`Backspace`、`Tab`、`Alt+Arrow` 等按键分支里，会导致相同结构变更因入口不同而得到不同编号结果，也无法安全处理显式起始序号和嵌套子树。把列表当成结构化语义对象统一编辑，才能从根上消除“文本补丁式”修复。 | 当前任意文档事务结束后都会走同一轮 ordered-list canonical normalization，因此粘贴、替换选区等非特定键位编辑也会得到一致结果；同层 mixed delimiter 与空白行断开的 ordered run 会被视为独立 scope，并默认从 `1` 重新开始。 |
+
 | 2026-04-19 | `TASK-006` 把 renderer 基础样式正式切到 theme style contract v2：`base.css` 先提供 formal semantic slot fallback，`app-ui.css` / `settings.css` / `editor-source.css` / `markdown-render.css` 只消费 `theme-style-contract.ts` 定义的 shell、panel、control、editor、markdown slot，并补上 table / code-token 前瞻位。 | 这样可以把用户可见视觉决策统一收口到正式 `--yulora-*` 协议，避免 renderer 继续依赖零散的 `surface-*`、`text-*`、`code-block-*` 等 ad-hoc 变量；同时通过 fallback 维持主题迁移期可读性，runtime env 也能在 CSS / shader 两侧共享同一组内建值。 | 当前 renderer 已接入 built-in runtime env：`--yulora-env-word-count`、`--yulora-env-reading-mode`、`--yulora-env-viewport-*` 与 `data-yulora-theme-mode`；默认主题/fixture 的具体 slot 值仍由主题包文件继续维护。 |
 | 2026-04-19 | `TASK-table-rendering` 的表格键盘导航继续收敛在共享 `table-context -> table-edits -> table-commands` 命令链：widget 只在边界上把 `ArrowLeft / ArrowRight / ArrowUp / ArrowDown / Enter` 翻译成语义命令，真实 caret 仍由单元格 input 承载；命令执行后统一按“仍在表格内则回焦对应 cell，否则把焦点还给 CodeMirror”同步 DOM 焦点。 | 这样可以避免再用散落在 widget 里的临时字符串改写或焦点补丁，确保“移动单元格 caret”“切换 active block / shortcut context / rail”“退出表格回到正文”三件事始终走同一条状态路径；同时保留浏览器原生输入体验，不牺牲点击落点与 IME 稳定性。 | 当前语义为：`Tab / Shift+Tab` 继续跨 cell，`ArrowUp / ArrowDown` 在同列上下移动，`ArrowLeft / ArrowRight` 只在 caret 到达 cell 边界时跨格，`Enter` 跳到下一行同列，若已是最后一行则退出表格。 |
 

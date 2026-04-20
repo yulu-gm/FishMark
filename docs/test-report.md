@@ -9,6 +9,12 @@
 
 ## 记录
 
+| 2026-04-20 | TASK-012 | `npm run test -- packages/markdown-engine/src/parse-block-map.test.ts packages/editor-core/src/commands/list-edits.test.ts packages/editor-core/src/decorations/block-decorations.test.ts packages/editor-core/src/extensions/markdown.test.ts src/renderer/code-editor.test.ts` | 通过 | 覆盖 ordered list 的 `startOrdinal` / `delimiter` 保真、列表 item subtree 级插入/删除/缩进/反缩进/上下移动，以及 transaction 级 canonical normalization 与 renderer 交互回归。 |
+| 2026-04-20 | TASK-012 | `npm run test -- packages/markdown-engine/src/parse-block-map.test.ts packages/editor-core/src/commands/list-edits.test.ts packages/editor-core/src/extensions/markdown.test.ts src/renderer/code-editor.test.ts` | 通过 | 补充覆盖同层 mixed delimiter 断 scope、空白行断开的 ordered run 从 `1` 重启，以及文档级 normalization 会在真实编辑路径里把下半段 `3. 4.` 重写为 `1. 2.`。 |
+| 2026-04-20 | TASK-012 | `npm run typecheck` | 通过 | `ListBlock`/`ListItemBlock` 结构升级、`list-edits` 语义编辑层、markdown extension transaction filter 与 renderer 测试辅助调整后，renderer / electron / vitest / cli 四套 TypeScript 检查继续通过。 |
+| 2026-04-20 | TASK-012 | `npm run lint` | 通过 | 语义化列表编辑重构后未引入新的 ESLint 错误。 |
+| 2026-04-20 | TASK-012 | `npm run build` | 通过 | renderer / electron / cli 构建通过；仍仅保留既有 Vite chunk size warning，不阻塞本轮交付。 |
+
 | 2026-04-19 | TASK-table-rendering | `npx.cmd vitest run packages/editor-core/src/commands/table-commands.test.ts packages/editor-core/src/extensions/markdown.test.ts src/renderer/code-editor.test.ts` | 通过 | 覆盖从普通段落首次点击表格单元格后，active block 会切到 `table`，并且后续 `Ctrl/Cmd+Enter` 等表格快捷键可以立即生效。 |
 | 2026-04-19 | TASK-table-rendering | `npm.cmd run typecheck` | 通过 | table widget 事件额外携带 `tableStartOffset` 后，renderer / electron / vitest / cli 四套 TypeScript 检查继续通过。 |
 

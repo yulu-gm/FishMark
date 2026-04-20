@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { EditorView } from "@codemirror/view";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { createCodeEditorController } from "./code-editor";
 
@@ -32,6 +32,14 @@ const dispatchCompositionEvent = (
   target.dispatchEvent(new CompositionEvent(type, { bubbles: true, data }));
 };
 
+const dispatchEditorKeydown = (
+  view: EditorView | null,
+  key: string,
+  options: Pick<KeyboardEventInit, "altKey" | "ctrlKey" | "metaKey" | "shiftKey"> = {}
+) => {
+  view?.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key, ...options }));
+};
+
 const flushMicrotasks = async () => {
   await Promise.resolve();
 };
@@ -39,6 +47,35 @@ const flushMicrotasks = async () => {
 const getLastEditorLine = (host: HTMLElement) => {
   const lines = Array.from(host.querySelectorAll<HTMLElement>(".cm-line"));
   return lines.at(-1) ?? null;
+};
+
+const installPatchedRangeClientRects = () => {
+  const originalDescriptor = typeof Range === "undefined"
+    ? null
+    : Object.getOwnPropertyDescriptor(Range.prototype, "getClientRects");
+
+  if (typeof Range === "undefined" || originalDescriptor?.value) {
+    return null;
+  }
+  const emptyRectList = {
+    length: 0,
+    item: () => null,
+    [Symbol.iterator]: function* iterator() {}
+  } as unknown as DOMRectList;
+
+  Object.defineProperty(Range.prototype, "getClientRects", {
+    configurable: true,
+    value: (() => emptyRectList) as unknown as typeof Range.prototype.getClientRects,
+    writable: true
+  });
+
+  return () => {
+    if (originalDescriptor) {
+      Object.defineProperty(Range.prototype, "getClientRects", originalDescriptor);
+    } else {
+      delete (Range.prototype as Partial<Range>).getClientRects;
+    }
+  };
 };
 
 const getLineStartOffset = (source: string, lineNumber: number) => {
@@ -1734,6 +1771,209 @@ describe("createCodeEditorController", () => {
     expect(controller.getContent()).toBe(source);
 
     controller.destroy();
+  });
+
+  it("renumbers later ordered siblings when deleting a middle item", () => {
+    const host = document.createElement("div");
+    const source = ["5. first", "6. second", "7. third"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      insertText: (text: string) => void;
+    };
+
+    const secondLineStart = getLineStartOffset(source, 2);
+    const thirdLineStart = getLineStartOffset(source, 3);
+
+    advancedController.setSelection(secondLineStart, thirdLineStart);
+    advancedController.insertText("");
+
+    expect(controller.getContent()).toBe(["5. first", "6. third"].join("\n"));
+
+    controller.destroy();
+  });
+
+  it("renumbers later ordered siblings when inserting a new item in the middle", () => {
+    const host = document.createElement("div");
+    const source = ["5. first", "6. second"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+
+    advancedController.setSelection("5. first".length);
+    advancedController.pressEnter();
+
+    expect(controller.getContent()).toBe(["5. first", "6. ", "7. second"].join("\n"));
+
+    controller.destroy();
+  });
+
+  it("restarts numbering after a blank line created inside an ordered run", () => {
+    const host = document.createElement("div");
+    const source = ["1. one", "2. two", "3. three", "4. four"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      insertText: (text: string) => void;
+    };
+
+    advancedController.setSelection("1. one\n2. two".length);
+    advancedController.insertText("\n");
+
+    expect(controller.getContent()).toBe(["1. one", "2. two", "", "1. three", "2. four"].join("\n"));
+
+    controller.destroy();
+  });
+
+  it("restarts numbering after deleting a middle ordered item into a blank line", () => {
+    const host = document.createElement("div");
+    const source = ["1. one", "2. two", "3. three", "4. four", "5. five", "6. six"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      insertText: (text: string) => void;
+    };
+
+    const fourthLineStart = getLineStartOffset(source, 4);
+    const fourthLineEnd = getLineStartOffset(source, 5) - 1;
+
+    advancedController.setSelection(fourthLineStart, fourthLineEnd);
+    advancedController.insertText("");
+
+    expect(controller.getContent()).toBe(
+      ["1. one", "2. two", "3. three", "", "1. five", "2. six"].join("\n")
+    );
+
+    controller.destroy();
+  });
+
+  it("renumbers source and target ordered-list scopes when Tab indents an item", () => {
+    const host = document.createElement("div");
+    const source = ["5. parent", "6. child", "7. sibling"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressTab: () => void;
+    };
+
+    advancedController.setSelection(source.indexOf("child"));
+    advancedController.pressTab();
+
+    expect(controller.getContent()).toBe(["5. parent", "  6. child", "6. sibling"].join("\n"));
+
+    controller.destroy();
+  });
+
+  it("renumbers parent and child ordered-list scopes when Shift-Tab outdents an item", () => {
+    const host = document.createElement("div");
+    const source = ["5. parent", "  1. child", "6. sibling"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    view?.dispatch({ selection: { anchor: source.indexOf("child") } });
+    dispatchEditorKeydown(view, "Tab", { shiftKey: true });
+
+    expect(controller.getContent()).toBe(["5. parent", "6. child", "7. sibling"].join("\n"));
+
+    controller.destroy();
+  });
+
+  describe("ordered-list Alt-Arrow subtree", () => {
+    let restoreRangeClientRects: (() => void) | null = null;
+
+    beforeAll(() => {
+      restoreRangeClientRects = installPatchedRangeClientRects();
+    });
+
+    afterAll(async () => {
+      if (restoreRangeClientRects) {
+        await new Promise((resolve) => {
+          setTimeout(resolve, 50);
+        });
+        restoreRangeClientRects();
+        restoreRangeClientRects = null;
+      }
+    });
+
+    it("moves an ordered list item subtree together on Alt-ArrowDown", () => {
+      const host = document.createElement("div");
+      const source = ["5. parent", "6. child", "  continuation", "  - nested", "7. sibling"].join("\n");
+
+      const controller = createCodeEditorController({
+        parent: host,
+        initialContent: source,
+        onChange: vi.fn()
+      });
+      const view = getEditorView(host);
+
+      expect(view).not.toBeNull();
+
+      view?.dispatch({ selection: { anchor: source.indexOf("child") } });
+      dispatchEditorKeydown(view, "ArrowDown", { altKey: true });
+
+      expect(controller.getContent()).toBe(
+        ["5. parent", "6. sibling", "7. child", "  continuation", "  - nested"].join("\n")
+      );
+
+      controller.destroy();
+    });
+
+    it("moves an ordered list item subtree together on Alt-ArrowUp", () => {
+      const host = document.createElement("div");
+      const source = ["5. parent", "6. sibling", "7. child", "  continuation", "  - nested"].join("\n");
+
+      const controller = createCodeEditorController({
+        parent: host,
+        initialContent: source,
+        onChange: vi.fn()
+      });
+      const view = getEditorView(host);
+
+      expect(view).not.toBeNull();
+
+      view?.dispatch({ selection: { anchor: source.indexOf("child") } });
+      dispatchEditorKeydown(view, "ArrowUp", { altKey: true });
+
+      expect(controller.getContent()).toBe(
+        ["5. parent", "6. child", "  continuation", "  - nested", "7. sibling"].join("\n")
+      );
+
+      controller.destroy();
+    });
   });
 
   it("removes the trailing newline when exiting an empty task item at EOF", () => {

@@ -60,13 +60,27 @@ export interface ListItemBlock {
   contentEndOffset?: number;
   inline?: InlineRoot;
   task: ListItemTaskMarker | null;
+  children: readonly ListBlock[];
 }
 
-export interface ListBlock extends BaseBlock {
+export type OrderedListDelimiter = "." | ")";
+
+interface BaseListBlock extends BaseBlock {
   type: "list";
-  ordered: boolean;
   items: readonly ListItemBlock[];
 }
+
+export interface UnorderedListBlock extends BaseListBlock {
+  ordered: false;
+}
+
+export interface OrderedListBlock extends BaseListBlock {
+  ordered: true;
+  startOrdinal: number;
+  delimiter: OrderedListDelimiter;
+}
+
+export type ListBlock = UnorderedListBlock | OrderedListBlock;
 
 export interface BlockquoteBlock extends BaseBlock {
   type: "blockquote";

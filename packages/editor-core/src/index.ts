@@ -5,6 +5,7 @@ export {
   runMarkdownArrowUp,
   runMarkdownBackspace,
   runMarkdownEnter,
+  runMarkdownShiftTab,
   runMarkdownTab,
   runTableDelete,
   runTableDeleteColumn,

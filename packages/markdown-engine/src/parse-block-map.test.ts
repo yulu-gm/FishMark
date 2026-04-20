@@ -485,32 +485,46 @@ describe("parseBlockMap", () => {
         ordered: false,
         items: [
           {
-            id: "list-item:0-5",
+            id: "list-item:0-18",
             startOffset: 0,
-            endOffset: 5,
+            endOffset: 18,
             startLine: 1,
-            endLine: 1,
+            endLine: 2,
             indent: 0,
             marker: "-",
             markerStart: 0,
             markerEnd: 1,
-            task: null
-          },
-          {
-            id: "list-item:6-18",
-            startOffset: 6,
-            endOffset: 18,
-            startLine: 2,
-            endLine: 2,
-            indent: 2,
-            marker: "-",
-            markerStart: 8,
-            markerEnd: 9,
-            task: {
-              checked: true,
-              markerStart: 10,
-              markerEnd: 13
-            }
+            task: null,
+            children: [
+              {
+                id: "list:6-18",
+                type: "list",
+                startOffset: 6,
+                endOffset: 18,
+                startLine: 2,
+                endLine: 2,
+                ordered: false,
+                items: [
+                  {
+                    id: "list-item:6-18",
+                    startOffset: 6,
+                    endOffset: 18,
+                    startLine: 2,
+                    endLine: 2,
+                    indent: 2,
+                    marker: "-",
+                    markerStart: 8,
+                    markerEnd: 9,
+                    task: {
+                      checked: true,
+                      markerStart: 10,
+                      markerEnd: 13
+                    },
+                    children: []
+                  }
+                ]
+              }
+            ]
           }
         ]
       },
@@ -522,6 +536,8 @@ describe("parseBlockMap", () => {
         startLine: 3,
         endLine: 4,
         ordered: true,
+        startOrdinal: 1,
+        delimiter: ".",
         items: [
           {
             id: "list-item:19-27",
@@ -533,7 +549,8 @@ describe("parseBlockMap", () => {
             marker: "1.",
             markerStart: 19,
             markerEnd: 21,
-            task: null
+            task: null,
+            children: []
           },
           {
             id: "list-item:28-41",
@@ -549,7 +566,8 @@ describe("parseBlockMap", () => {
               checked: false,
               markerStart: 31,
               markerEnd: 34
-            }
+            },
+            children: []
           }
         ]
       }
@@ -766,6 +784,153 @@ describe("parseBlockMap", () => {
             children: [{ type: "text", value: "mix" }]
           }
         ]
+      }
+    ]);
+  });
+
+  it("preserves the starting ordinal of an ordered list block", () => {
+    const source = ["5. first", "6. second"].join("\n");
+
+    const result = parseBlockMap(source);
+
+    expect(result.blocks).toMatchObject([
+      {
+        type: "list",
+        ordered: true,
+        startOrdinal: 5,
+        delimiter: ".",
+        items: [
+          {
+            marker: "5.",
+            markerStart: 0,
+            markerEnd: 2
+          },
+          {
+            marker: "6.",
+            markerStart: 9,
+            markerEnd: 11
+          }
+        ]
+      }
+    ]);
+  });
+
+  it("preserves the ordered-list delimiter on parenthesized list blocks", () => {
+    const source = ["5) first", "6) second"].join("\n");
+
+    const result = parseBlockMap(source);
+
+    expect(result.blocks).toMatchObject([
+      {
+        type: "list",
+        ordered: true,
+        startOrdinal: 5,
+        delimiter: ")",
+        items: [
+          {
+            marker: "5)",
+            markerStart: 0,
+            markerEnd: 2
+          },
+          {
+            marker: "6)",
+            markerStart: 9,
+            markerEnd: 11
+          }
+        ]
+      }
+    ]);
+  });
+
+  it("exposes nested ordered list scopes as children on list items", () => {
+    const source = ["5. parent", "  3) nested one", "  4) nested two", "6. sibling"].join("\n");
+
+    const result = parseBlockMap(source);
+
+    expect(result.blocks).toMatchObject([
+      {
+        type: "list",
+        ordered: true,
+        startOrdinal: 5,
+        delimiter: ".",
+        items: [
+          {
+            marker: "5.",
+            children: [
+              {
+                type: "list",
+                ordered: true,
+                startOrdinal: 3,
+                delimiter: ")",
+                items: [
+                  {
+                    marker: "3)"
+                  },
+                  {
+                    marker: "4)"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            marker: "6."
+          }
+        ]
+      }
+    ]);
+  });
+
+  it("splits top-level ordered lists when the delimiter changes mid-run", () => {
+    const source = ["1. one", "2. two", "1) three", "2) four"].join("\n");
+
+    const result = parseBlockMap(source);
+
+    expect(result.blocks).toMatchObject([
+      {
+        type: "list",
+        startOffset: 0,
+        endOffset: 13,
+        ordered: true,
+        startOrdinal: 1,
+        delimiter: ".",
+        items: [{ marker: "1." }, { marker: "2." }]
+      },
+      {
+        type: "list",
+        startOffset: 14,
+        endOffset: source.length,
+        ordered: true,
+        startOrdinal: 1,
+        delimiter: ")",
+        items: [{ marker: "1)" }, { marker: "2)" }]
+      }
+    ]);
+  });
+
+  it("splits blank-line-separated ordered runs into independent scopes that restart from one", () => {
+    const source = ["1. one", "2. two", "", "3. three", "4. four"].join("\n");
+
+    const result = parseBlockMap(source);
+
+    expect(result.blocks).toMatchObject([
+      {
+        type: "list",
+        startOffset: 0,
+        endOffset: 13,
+        ordered: true,
+        startOrdinal: 1,
+        delimiter: ".",
+        items: [{ marker: "1." }, { marker: "2." }]
+      },
+      {
+        type: "list",
+        startOffset: 15,
+        endOffset: source.length,
+        ordered: true,
+        startOrdinal: 1,
+        delimiter: ".",
+        items: [{ marker: "3." }, { marker: "4." }]
       }
     ]);
   });

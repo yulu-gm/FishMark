@@ -5,6 +5,7 @@ export {
   runMarkdownArrowUp,
   runMarkdownBackspace,
   runMarkdownEnter,
+  runMarkdownShiftTab,
   runMarkdownTab
 } from "./markdown-commands";
 export {
@@ -31,7 +32,8 @@ export {
   runListEnter,
   runListIndentOnTab,
   runListMoveLineDown,
-  runListMoveLineUp
+  runListMoveLineUp,
+  runListOutdentOnShiftTab
 } from "./list-commands";
 export { toggleEmphasis, toggleStrong } from "./toggle-inline-commands";
 export {
