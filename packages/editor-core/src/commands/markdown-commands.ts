@@ -4,7 +4,11 @@ import { formatTableMarkdown, parseMarkdownDocument, splitTableLine } from "@yul
 
 import type { ActiveBlockState } from "../active-block";
 import { runBlockquoteBackspace, runBlockquoteEnter } from "./blockquote-commands";
-import { runCodeFenceBackspace, runCodeFenceEnter } from "./code-fence-commands";
+import {
+  runCodeFenceArrowUp,
+  runCodeFenceBackspace,
+  runCodeFenceEnter
+} from "./code-fence-commands";
 import {
   runListBackspace,
   runListEnter,
@@ -52,7 +56,7 @@ export function runMarkdownArrowDown(view: EditorView, activeState: ActiveBlockS
 }
 
 export function runMarkdownArrowUp(view: EditorView, activeState: ActiveBlockState): boolean {
-  return runTableEnterFromLineBelow(view, activeState) || runBlankLineArrowUp(view);
+  return runCodeFenceArrowUp(view, activeState) || runTableEnterFromLineBelow(view, activeState) || runBlankLineArrowUp(view);
 }
 
 function runDraftTableEnter(view: EditorView, activeState: ActiveBlockState): boolean {

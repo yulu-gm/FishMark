@@ -227,6 +227,21 @@ describe("parseBlockMap", () => {
     ]);
   });
 
+  it("parses draft-table materialization output as a headed table instead of a loose table", () => {
+    const source = ["| a | b |", "| :--- | :--- |", "|   |   |"].join("\n");
+
+    const result = parseMarkdownDocument(source);
+    const table = result.blocks[0];
+
+    expect(table?.type).toBe("table");
+    expect(table).toMatchObject({
+      type: "table",
+      hasHeader: true,
+      header: [{ text: "a" }, { text: "b" }],
+      rows: [[{ text: "" }, { text: "" }]]
+    });
+  });
+
   it("parses contiguous loose headerless pipe rows within one paragraph into a table block", () => {
     const source = [
       "| 2026-04-17 | TASK-038 | 通过 |",

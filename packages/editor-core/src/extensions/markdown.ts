@@ -53,7 +53,10 @@ import {
   mapTextOffsetThroughChanges
 } from "../commands/list-edits";
 import { createGroupedShortcutKeymaps } from "./markdown-shortcuts";
-import type { TableWidgetCallbacks } from "../decorations";
+import {
+  getInactiveCodeFenceLines,
+  type TableWidgetCallbacks
+} from "../decorations";
 
 export type ParseMarkdownDocument = (source: string) => MarkdownDocument;
 
@@ -195,6 +198,65 @@ export function createYuloraMarkdownExtensions(
 
   const selectTablePosition = (view: EditorView, position: TablePosition) =>
     runTableSelectCell(view, createLiveActiveBlockState(view.state), position);
+
+  const resolveCodeFenceBoundarySelectionAnchor = (
+    view: EditorView,
+    activeState: ActiveBlockState,
+    target: EventTarget | null,
+    event: MouseEvent
+  ): number | null => {
+    if (activeState.activeBlock?.type !== "codeFence") {
+      return null;
+    }
+
+    const targetElement = target instanceof Element ? target : null;
+
+    if (!targetElement || !view.dom.contains(targetElement)) {
+      return null;
+    }
+
+    const lineElement = targetElement.closest(".cm-line");
+
+    if (!(lineElement instanceof HTMLElement) || !lineElement.classList.contains("cm-inactive-code-block-start")) {
+      return null;
+    }
+
+    const firstContentLine = getInactiveCodeFenceLines(
+      activeState.activeBlock.startOffset,
+      activeState.activeBlock.endOffset,
+      view.state.doc.toString()
+    ).find((line) => line.kind === "content" && line.isFirstContentLine);
+
+    if (!firstContentLine) {
+      return null;
+    }
+
+    let lineStart = -1;
+
+    try {
+      lineStart = view.posAtDOM(lineElement, 0);
+    } catch {
+      return null;
+    }
+
+    if (lineStart !== firstContentLine.lineStart) {
+      return null;
+    }
+
+    const paddingTop = Number.parseFloat(window.getComputedStyle(lineElement).paddingTop || "0");
+
+    if (!(paddingTop > 0)) {
+      return null;
+    }
+
+    const rect = lineElement.getBoundingClientRect();
+
+    if (event.clientY < rect.top || event.clientY > rect.bottom || event.clientY > rect.top + paddingTop) {
+      return null;
+    }
+
+    return activeState.activeBlock.startOffset;
+  };
 
   const syncTableInteractionFocus = (
     view: EditorView,
@@ -448,12 +510,37 @@ export function createYuloraMarkdownExtensions(
       recomputeDerivedState(this.view, this.view.state, true);
     };
 
-    handleFocusOut = () => {
+    handleFocusOut = (event: FocusEvent) => {
+      const nextTarget = event.relatedTarget;
+
+      if (nextTarget instanceof Node && this.view.dom.contains(nextTarget)) {
+        return;
+      }
+
       syncBlurDecorations(this.view);
       options.onBlur?.();
     };
 
     handleMouseDown = (event: MouseEvent) => {
+      const codeFenceAnchor = resolveCodeFenceBoundarySelectionAnchor(
+        this.view,
+        runtime.activeBlockState,
+        event.target,
+        event
+      );
+
+      if (codeFenceAnchor !== null) {
+        event.preventDefault();
+        this.view.dispatch({
+          selection: {
+            anchor: codeFenceAnchor,
+            head: codeFenceAnchor
+          }
+        });
+        this.view.focus();
+        return;
+      }
+
       const activeElement = document.activeElement;
       const eventTarget = event.target instanceof Element ? event.target : null;
 

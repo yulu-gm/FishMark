@@ -14,6 +14,7 @@ import {
   computeInsertOrderedListItemBelow,
   computeMoveListItemDown,
   computeMoveListItemUp,
+  computeOrderedListEnter,
   computeOutdentListItem,
   type ListEdit,
   normalizeOrderedListScopes
@@ -76,12 +77,12 @@ describe("list-edits", () => {
     expect(result?.selection).toEqual({ anchor: 9, head: 9 });
   });
 
-  it("indents an ordered item into a child scope without losing the ordered marker", () => {
+  it("indents an ordered item into a child scope and restarts child numbering from 1", () => {
     const doc = ["5. parent", "6. child", "7. sibling"].join("\n");
     const context = buildContext(doc, doc.indexOf("child"));
     const result = computeIndentListItem(context);
 
-    expect(applyEdit(doc, result)).toBe(["5. parent", "  6. child", "6. sibling"].join("\n"));
+    expect(applyEdit(doc, result)).toBe(["5. parent", "  1. child", "6. sibling"].join("\n"));
     expect(result?.selection).toEqual({ anchor: 15, head: 15 });
   });
 
@@ -91,6 +92,15 @@ describe("list-edits", () => {
     const result = computeOutdentListItem(context);
 
     expect(applyEdit(doc, result)).toBe(["5. parent", "6. child", "7. sibling"].join("\n"));
+    expect(result?.selection).toEqual({ anchor: 13, head: 13 });
+  });
+
+  it("pressing Enter on an empty ordered child item creates an empty parent sibling item", () => {
+    const doc = ["5. parent", "  1. "].join("\n");
+    const context = buildContext(doc, doc.length);
+    const result = computeOrderedListEnter(context, true);
+
+    expect(applyEdit(doc, result)).toBe(["5. parent", "6. "].join("\n"));
     expect(result?.selection).toEqual({ anchor: 13, head: 13 });
   });
 

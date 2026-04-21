@@ -176,6 +176,44 @@ describe("createYuloraMarkdownExtensions", () => {
     destroy();
   });
 
+  it("does not fire onBlur when focus moves between table cells inside the editor", async () => {
+    const onBlur = vi.fn();
+    const source = ["| name | qty |", "| --- | ---: |", "| pen | 2 |"].join("\n");
+    const { host, view, destroy } = createHarness({
+      source,
+      onBlur
+    });
+
+    const firstInput = host.querySelector<HTMLInputElement>('[data-table-cell="1:0"]');
+    const secondInput = host.querySelector<HTMLInputElement>('[data-table-cell="1:1"]');
+
+    expect(firstInput).toBeInstanceOf(HTMLInputElement);
+    expect(secondInput).toBeInstanceOf(HTMLInputElement);
+
+    firstInput?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    firstInput?.dispatchEvent(
+      new FocusEvent("focusout", {
+        bubbles: true,
+        relatedTarget: secondInput
+      })
+    );
+    secondInput?.dispatchEvent(
+      new FocusEvent("focusin", {
+        bubbles: true,
+        relatedTarget: firstInput
+      })
+    );
+    await flushMicrotasks();
+
+    expect(onBlur).not.toHaveBeenCalled();
+
+    view.dom.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    await flushMicrotasks();
+    expect(onBlur).toHaveBeenCalledTimes(1);
+
+    destroy();
+  });
+
   it("toggles strong on Mod-b", () => {
     const source = "alpha bold beta";
     const { view, destroy } = createHarness({ source });
@@ -303,6 +341,33 @@ describe("createYuloraMarkdownExtensions", () => {
     expect(handled).toBe(false);
     expect(view.state.doc.toString()).toBe(
       ["| a | b | c |", "| :--- | :--- | :--- |", "|   |   |   |"].join("\n")
+    );
+
+    destroy();
+  });
+
+  it("materializes a compact draft pipe-table header without spaces when Enter is pressed", () => {
+    const source = "|A|B|C|";
+    const { view, destroy } = createHarness({ source });
+
+    view.dispatch({
+      selection: {
+        anchor: source.length
+      }
+    });
+
+    const handled = view.contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        code: "Enter",
+        bubbles: true,
+        cancelable: true
+      })
+    );
+
+    expect(handled).toBe(false);
+    expect(view.state.doc.toString()).toBe(
+      ["| A | B | C |", "| :--- | :--- | :--- |", "|   |   |   |"].join("\n")
     );
 
     destroy();

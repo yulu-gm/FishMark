@@ -69,6 +69,12 @@ export function computeOrderedListEnter(
     return computeInsertOrderedListItemBelow(ctx);
   }
 
+  const nestedExitEdit = computeExitEmptyNestedListItem(ctx);
+
+  if (nestedExitEdit) {
+    return nestedExitEdit;
+  }
+
   if (current.itemIndex < current.scope.items.length - 1) {
     const insertAt = toBlockOffset(current.rootList, current.item.endOffset);
     const nextOrdinal = current.scope.startOrdinal + current.itemIndex + 1;
@@ -95,6 +101,55 @@ export function computeOrderedListEnter(
   );
 
   return finalizeListEdit(current.rootList, tentativeSource, toBlockOffset(current.rootList, current.item.startOffset));
+}
+
+export function computeExitEmptyNestedListItem(ctx: SemanticContext): ListEdit | null {
+  if (ctx.selection.empty === false) {
+    return null;
+  }
+
+  const rootList = readActiveListRoot(ctx);
+
+  if (!rootList) {
+    return null;
+  }
+
+  const current = findListItemContext(rootList, ctx.selection.from, rootList, null, null);
+
+  if (
+    !current ||
+    current.parentItem === null ||
+    current.parentScope === null ||
+    current.item.children.length > 0 ||
+    current.item.endLine > current.item.startLine
+  ) {
+    return null;
+  }
+
+  const replacementPrefix = buildParentEmptyListItemPrefix(current.parentScope, current.parentItem);
+
+  if (!replacementPrefix) {
+    return null;
+  }
+
+  const blockSource = readBlockSource(ctx, rootList);
+  const itemFrom = toBlockOffset(rootList, current.item.startOffset);
+  let deleteTo = current.item.endOffset;
+
+  if (deleteTo < ctx.source.length && ctx.source[deleteTo] === "\n") {
+    deleteTo += 1;
+  }
+
+  const itemTo = toBlockOffset(rootList, deleteTo);
+  const sourceWithoutCurrent = replaceRange(blockSource, itemFrom, itemTo, "");
+  const removedLength = itemTo - itemFrom;
+  const insertAt = Math.max(0, toBlockOffset(rootList, current.parentItem.endOffset) - removedLength);
+  const needsLeadingNewline = insertAt > 0 && sourceWithoutCurrent[insertAt - 1] !== "\n";
+  const insert = `${needsLeadingNewline ? "\n" : ""}${replacementPrefix}`;
+  const tentativeSource = replaceRange(sourceWithoutCurrent, insertAt, insertAt, insert);
+  const tentativeCursor = insertAt + insert.length;
+
+  return finalizeListEdit(rootList, tentativeSource, tentativeCursor);
 }
 
 export function computeDeleteOrderedListRange(ctx: SemanticContext): ListEdit | null {
@@ -175,7 +230,7 @@ export function computeIndentListItem(ctx: SemanticContext): ListEdit | null {
     return null;
   }
 
-  const subtree = readItemSubtreeSource(ctx, current.item);
+  const subtree = resetOrderedListSubtreeRootMarker(readItemSubtreeSource(ctx, current.item));
   const indentedSubtree = subtree
     .split("\n")
     .map((line) => `  ${line}`)
@@ -669,6 +724,38 @@ function readBlockSource(ctx: SemanticContext, list: ListBlock): string {
 
 function readItemSubtreeSource(ctx: SemanticContext, item: ListItemBlock): string {
   return ctx.source.slice(item.startOffset, item.endOffset);
+}
+
+function buildParentEmptyListItemPrefix(scope: ListBlock, parentItem: ListItemBlock): string | null {
+  if (scope.ordered) {
+    const parentItemIndex = scope.items.findIndex((item) => item === parentItem);
+
+    if (parentItemIndex === -1) {
+      return null;
+    }
+
+    return `${" ".repeat(parentItem.indent)}${scope.startOrdinal + parentItemIndex + 1}${scope.delimiter} `;
+  }
+
+  return `${" ".repeat(parentItem.indent)}${parentItem.marker} ${parentItem.task ? "[ ] " : ""}`;
+}
+
+function resetOrderedListSubtreeRootMarker(subtree: string): string {
+  const [firstLine, ...restLines] = subtree.split("\n");
+
+  if (!firstLine) {
+    return subtree;
+  }
+
+  const parsed = parseListLine(firstLine);
+
+  if (!parsed || !/^\d+[.)]$/u.test(parsed.marker)) {
+    return subtree;
+  }
+
+  const delimiter = parsed.marker.endsWith(")") ? ")" : ".";
+  const suffix = firstLine.slice(parsed.indent.length + parsed.marker.length);
+  return [`${parsed.indent}1${delimiter}${suffix}`, ...restLines].join("\n");
 }
 
 function containsOrderedScope(list: ListBlock): boolean {

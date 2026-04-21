@@ -1133,6 +1133,97 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("moves to the opening fence when ArrowUp is pressed from the first code line", async () => {
+    const host = document.createElement("div");
+    const source = ["```ts", "const answer = 42;", "```", "", "Paragraph"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+    };
+    const view = getEditorView(host);
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+
+    advancedController.setSelection(source.indexOf("const"));
+
+    expect(getLineElementByText(host, "```ts")?.classList.contains("cm-inactive-code-block-fence")).toBe(true);
+
+    dispatchEditorKeydown(view, "ArrowUp");
+
+    expect(view?.state.selection.main.anchor).toBe(0);
+    expect(getLineElementByText(host, "```ts")?.classList.contains("cm-inactive-code-block-fence")).toBe(false);
+
+    controller.destroy();
+  });
+
+  it("moves to the opening fence when the first code line top padding is clicked", async () => {
+    const host = document.createElement("div");
+    const source = ["```ts", "const answer = 42;", "```", "", "Paragraph"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+    };
+    const view = getEditorView(host);
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+
+    advancedController.setSelection(source.indexOf("const"));
+
+    const firstCodeLine = getLineElementByText(host, "const answer = 42;");
+
+    expect(firstCodeLine).toBeInstanceOf(HTMLElement);
+
+    if (firstCodeLine instanceof HTMLElement) {
+      firstCodeLine.style.paddingTop = "16px";
+      firstCodeLine.getBoundingClientRect = () =>
+        ({
+          top: 100,
+          right: 400,
+          bottom: 140,
+          left: 0,
+          width: 400,
+          height: 40,
+          x: 0,
+          y: 100,
+          toJSON: () => ({})
+        }) as DOMRect;
+
+      firstCodeLine.dispatchEvent(
+        new MouseEvent("mousedown", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 24,
+          clientY: 108
+        })
+      );
+    }
+
+    expect(view?.state.selection.main.anchor).toBe(0);
+    expect(getLineElementByText(host, "```ts")?.classList.contains("cm-inactive-code-block-fence")).toBe(false);
+
+    controller.destroy();
+  });
+
   it("keeps the fenced code block consistently inactive when the selection moves to the blank separator below it", async () => {
     const host = document.createElement("div");
     const source = ["```ts", "const answer = 42;", "```", "", "Paragraph"].join("\n");
@@ -1502,6 +1593,28 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("pressing Enter on an empty nested task item creates an empty parent task item", () => {
+    const host = document.createElement("div");
+    const source = ["- [ ] parent", "  - [ ] "].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+
+    advancedController.setSelection(source.length);
+    advancedController.pressEnter();
+
+    expect(controller.getContent()).toBe(["- [ ] parent", "- [ ] "].join("\n"));
+
+    controller.destroy();
+  });
+
   it("auto-completes a fenced code block when pressing Enter after triple backticks", () => {
     const host = document.createElement("div");
     const source = "```";
@@ -1807,6 +1920,10 @@ describe("createCodeEditorController", () => {
     advancedController.setSelection(source.length);
     advancedController.pressEnter();
 
+    expect(controller.getContent()).toBe(["- parent", "- "].join("\n"));
+
+    advancedController.pressEnter();
+
     expect(controller.getContent()).toBe("- parent\n");
 
     controller.destroy();
@@ -2033,7 +2150,7 @@ describe("createCodeEditorController", () => {
     advancedController.setSelection(source.indexOf("child"));
     advancedController.pressTab();
 
-    expect(controller.getContent()).toBe(["5. parent", "  6. child", "6. sibling"].join("\n"));
+    expect(controller.getContent()).toBe(["5. parent", "  1. child", "6. sibling"].join("\n"));
 
     controller.destroy();
   });

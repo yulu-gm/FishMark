@@ -1,5 +1,9 @@
 export { runBlockquoteEnter } from "./blockquote-commands";
-export { runCodeFenceBackspace, runCodeFenceEnter } from "./code-fence-commands";
+export {
+  runCodeFenceArrowUp,
+  runCodeFenceBackspace,
+  runCodeFenceEnter
+} from "./code-fence-commands";
 export {
   runMarkdownArrowDown,
   runMarkdownArrowUp,

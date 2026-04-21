@@ -5,6 +5,7 @@ import type { ActiveBlockState } from "../active-block";
 import { buildContinuationPrefix, parseListLine } from "./line-parsers";
 import {
   computeBackspaceOrderedListMarker,
+  computeExitEmptyNestedListItem,
   computeIndentListItem,
   computeMoveListItemDown,
   computeMoveListItemUp,
@@ -32,6 +33,15 @@ export function runListEnter(view: EditorView, activeState: ActiveBlockState): b
 
     if (orderedEdit) {
       applyListEdit(view, orderedEdit);
+      return true;
+    }
+  }
+
+  if (activeState.activeBlock?.type === "list" && parsed.content.trim().length === 0 && selection.head === line.to) {
+    const nestedExitEdit = computeExitEmptyNestedListItem(semanticContext);
+
+    if (nestedExitEdit) {
+      applyListEdit(view, nestedExitEdit);
       return true;
     }
   }
