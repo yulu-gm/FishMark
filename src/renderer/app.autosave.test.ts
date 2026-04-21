@@ -2571,6 +2571,24 @@ describe("App autosave", () => {
     expect(appShell?.dataset.yuloraShellMode).toBe("reading");
   });
 
+  it("exits editing mode when the user clicks app-workspace blank area outside the canvas", async () => {
+    await renderAndOpenDocument();
+
+    const appShell = container.querySelector<HTMLElement>(".app-shell");
+    const appWorkspace = container.querySelector<HTMLElement>(".app-workspace");
+
+    await clickEditorContent();
+
+    expect(appShell?.dataset.yuloraShellMode).toBe("editing");
+
+    await act(async () => {
+      appWorkspace?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0, clientX: 24 }));
+      await Promise.resolve();
+    });
+
+    expect(appShell?.dataset.yuloraShellMode).toBe("reading");
+  });
+
   it("collapses the rail in document reading mode while keeping it available on the welcome screen", async () => {
     await renderAndOpenDocument();
 
@@ -3386,6 +3404,21 @@ describe("App autosave", () => {
     expect(collapsedHeaderRule).toContain("transform:");
     expect(statusBarRule).toContain("transition:");
     expect(collapsedStatusBarRule).toContain("transform:");
+  });
+
+  it("removes collapsed reading-mode chrome from workspace flow so the canvas stays pinned to the top", () => {
+    const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8");
+    const collapsedReadingHeaderRule = getCssRule(
+      appUiStylesheet,
+      '.app-workspace[data-yulora-shell-mode="reading"][data-yulora-has-document="true"] > .app-header[data-yulora-region="workspace-header"][data-visibility="collapsed"]'
+    );
+    const collapsedReadingStatusBarRule = getCssRule(
+      appUiStylesheet,
+      '.app-workspace[data-yulora-shell-mode="reading"][data-yulora-has-document="true"] > .app-status-bar[data-yulora-region="app-status-bar"][data-visibility="collapsed"]'
+    );
+
+    expect(collapsedReadingHeaderRule).toContain("display: none;");
+    expect(collapsedReadingStatusBarRule).toContain("display: none;");
   });
 
   it("defines compact icon rail tool styles and tooltip positioning", () => {

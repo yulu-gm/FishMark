@@ -473,6 +473,14 @@
   pointer-events: none;
 }
 
+.app-workspace[data-yulora-shell-mode="reading"][data-yulora-has-document="true"] > .app-header[data-yulora-region="workspace-header"][data-visibility="collapsed"] {
+  display: none;
+}
+
+.app-workspace[data-yulora-shell-mode="reading"][data-yulora-has-document="true"] > .app-status-bar[data-yulora-region="app-status-bar"][data-visibility="collapsed"] {
+  display: none;
+}
+
 .workspace-title-group {
   flex: 1;
   min-width: 0;

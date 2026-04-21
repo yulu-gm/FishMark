@@ -910,7 +910,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
     }
   }, [isSettingsClosing, isSettingsOpen]);
 
-  const handleWorkspaceCanvasMouseDownCapture = useCallback(
+  const handleAppWorkspaceMouseDownCapture = useCallback(
     (event: React.MouseEvent<HTMLElement>): void => {
       if (event.button !== 0 || !stateRef.current.currentDocument) {
         return;
@@ -1965,6 +1965,7 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
           data-yulora-layout="workspace"
           data-yulora-shell-mode={shellMode}
           data-yulora-has-document={isDocumentOpen ? "true" : "false"}
+          onMouseDownCapture={handleAppWorkspaceMouseDownCapture}
         >
           {notification && notificationState !== "hidden" ? (
             <div
@@ -2004,7 +2005,6 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
             data-yulora-region="workspace-canvas"
             data-yulora-shell-mode={shellMode}
             data-yulora-has-document={isDocumentOpen ? "true" : "false"}
-            onMouseDownCapture={handleWorkspaceCanvasMouseDownCapture}
           >
             {state.currentDocument ? (
               <>
