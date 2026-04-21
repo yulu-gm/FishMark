@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { EditorView } from "@codemirror/view";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -43,6 +46,19 @@ const dispatchEditorKeydown = (
 const flushMicrotasks = async () => {
   await Promise.resolve();
 };
+
+const createDomRect = (left: number, top: number, width: number, height: number): DOMRect =>
+  ({
+    top,
+    right: left + width,
+    bottom: top + height,
+    left,
+    width,
+    height,
+    x: left,
+    y: top,
+    toJSON: () => ({})
+  }) as DOMRect;
 
 const getLastEditorLine = (host: HTMLElement) => {
   const lines = Array.from(host.querySelectorAll<HTMLElement>(".cm-line"));
@@ -99,6 +115,11 @@ const getLineStartOffset = (source: string, lineNumber: number) => {
 
   return source.length;
 };
+
+const complexEditorFixtureSource = readFileSync(
+  resolve(process.cwd(), "fixtures/test-harness/complex-editor-navigation.md"),
+  "utf8"
+).replace(/\r\n/g, "\n");
 
 describe("createCodeEditorController", () => {
   it("returns the current content and can replace the loaded document", () => {
@@ -876,6 +897,48 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("moves the cursor to a list item content start when its left padding is clicked", async () => {
+    const host = document.createElement("div");
+    const source = ["- one", "- [ ] todo", "", "Paragraph"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const view = getEditorView(host);
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    view?.dispatch({ selection: { anchor: source.indexOf("Paragraph") } });
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+
+    const listLine = getLineElementByText(host, "- [ ] todo");
+
+    expect(listLine).toBeInstanceOf(HTMLElement);
+
+    if (listLine instanceof HTMLElement) {
+      listLine.style.paddingLeft = "20px";
+      listLine.getBoundingClientRect = () => createDomRect(0, 100, 320, 32);
+      listLine.dispatchEvent(
+        new MouseEvent("mousedown", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 8,
+          clientY: 112
+        })
+      );
+    }
+
+    expect(view?.state.selection.main.anchor).toBe(source.indexOf("todo"));
+
+    controller.destroy();
+  });
+
   it("applies inactive blockquote decorations when focus moves into a non-blockquote block", () => {
     const host = document.createElement("div");
     const source = ["> Quote line", "> Still quoted", "", "Paragraph"].join("\n");
@@ -943,6 +1006,331 @@ describe("createCodeEditorController", () => {
     expect(secondQuoteLine).not.toBeNull();
     expect(secondQuoteLine?.classList.contains("cm-inactive-blockquote")).toBe(true);
     expect(host.querySelectorAll(".cm-inactive-blockquote-marker")).toHaveLength(2);
+
+    controller.destroy();
+  });
+
+  it("moves the cursor to a blockquote line content start when its left padding is clicked", async () => {
+    const host = document.createElement("div");
+    const source = ["> Quote line", "> Still quoted", "", "Paragraph"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const view = getEditorView(host);
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    view?.dispatch({ selection: { anchor: source.indexOf("Paragraph") } });
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+
+    const quoteLine = getLineElementByText(host, "> Quote line");
+
+    expect(quoteLine).toBeInstanceOf(HTMLElement);
+
+    if (quoteLine instanceof HTMLElement) {
+      quoteLine.style.paddingLeft = "18px";
+      quoteLine.getBoundingClientRect = () => createDomRect(0, 100, 320, 32);
+      quoteLine.dispatchEvent(
+        new MouseEvent("mousedown", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 6,
+          clientY: 112
+        })
+      );
+    }
+
+    expect(view?.state.selection.main.anchor).toBe(source.indexOf("Quote line"));
+
+    controller.destroy();
+  });
+
+  it("enters the last visible blockquote line instead of its hidden marker when ArrowUp is pressed from the blank line below", async () => {
+    const host = document.createElement("div");
+    const source = ["> Quote line", "> Still quoted", "", "Paragraph"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const view = getEditorView(host);
+    const blankLineStart = source.indexOf("\n\n") + 1;
+    const expectedAnchor = source.indexOf("Still quoted");
+
+    expect(view).not.toBeNull();
+
+    view?.dispatch({
+      selection: {
+        anchor: blankLineStart,
+        head: blankLineStart
+      }
+    });
+
+    dispatchEditorKeydown(view, "ArrowUp");
+
+    expect(view?.state.selection.main.anchor).toBe(expectedAnchor);
+
+    controller.destroy();
+  });
+
+  it("normalizes blockquote inline code edge selections away from hidden backtick markers", async () => {
+    const host = document.createElement("div");
+    const source = ["> ``inline``", "", "Paragraph"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+    };
+    const view = getEditorView(host);
+    const editorRoot = host.querySelector(".cm-editor");
+    const openMarkerStart = source.indexOf("``inline``");
+    const openMarkerEnd = openMarkerStart + 2;
+    const closeMarkerStart = source.indexOf("``", openMarkerEnd + "inline".length);
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+
+    advancedController.setSelection(openMarkerStart + 1);
+    await flushMicrotasks();
+
+    expect(view?.state.selection.main.anchor).toBe(openMarkerEnd);
+
+    advancedController.setSelection(closeMarkerStart + 1);
+    await flushMicrotasks();
+
+    expect(view?.state.selection.main.anchor).toBe(closeMarkerStart);
+
+    controller.destroy();
+  });
+
+  it("normalizes list strikethrough edge selections away from hidden closing markers", async () => {
+    const host = document.createElement("div");
+    const source = ["- ~~todo~~", "", "Paragraph"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+    };
+    const view = getEditorView(host);
+    const editorRoot = host.querySelector(".cm-editor");
+    const closeMarkerStart = source.lastIndexOf("~~");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+
+    advancedController.setSelection(closeMarkerStart + 1);
+    await flushMicrotasks();
+
+    expect(view?.state.selection.main.anchor).toBe(closeMarkerStart);
+
+    controller.destroy();
+  });
+
+  it("normalizes paragraph and heading hidden markers away from invisible cursor positions", async () => {
+    const host = document.createElement("div");
+    const source = [
+      "**Bold**",
+      "Normal",
+      "*斜体*",
+      "## **加粗标题**",
+      "## 正常标题",
+      "## ***加粗倾斜标题***"
+    ].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+    };
+    const view = getEditorView(host);
+    const editorRoot = host.querySelector(".cm-editor");
+    const strongOpenMarker = source.indexOf("**Bold**");
+    const emphasisOpenMarker = source.indexOf("*斜体*");
+    const headingMarker = source.indexOf("## **加粗标题**");
+    const headingStrongOpenMarker = source.indexOf("**加粗标题**");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+
+    advancedController.setSelection(strongOpenMarker + 1);
+    await flushMicrotasks();
+    expect(view?.state.selection.main.anchor).toBe(source.indexOf("Bold"));
+
+    advancedController.setSelection(emphasisOpenMarker);
+    await flushMicrotasks();
+    expect(view?.state.selection.main.anchor).toBe(source.indexOf("斜体"));
+
+    advancedController.setSelection(headingMarker + 1);
+    await flushMicrotasks();
+    expect(view?.state.selection.main.anchor).toBe(source.indexOf("加粗标题"));
+
+    advancedController.setSelection(headingStrongOpenMarker + 1);
+    await flushMicrotasks();
+    expect(view?.state.selection.main.anchor).toBe(source.indexOf("加粗标题"));
+
+    controller.destroy();
+  });
+
+  it("reactivates a heading line after hidden marker normalization moves the cursor into visible heading content", async () => {
+    const host = document.createElement("div");
+    const source = ["## **加粗标题**", "", "Paragraph"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+    };
+    const view = getEditorView(host);
+    const editorRoot = host.querySelector(".cm-editor");
+    const headingLine = () => getLineElementByText(host, "加粗标题");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    view?.dispatch({ selection: { anchor: source.indexOf("Paragraph") } });
+    expect(headingLine()?.classList.contains("cm-inactive-heading")).toBe(true);
+    expect(host.querySelector(".cm-inactive-heading-marker")).not.toBeNull();
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+
+    advancedController.setSelection(source.indexOf("## **加粗标题**") + 1);
+    await flushMicrotasks();
+
+    expect(view?.state.selection.main.anchor).toBe(source.indexOf("加粗标题"));
+    expect(headingLine()?.classList.contains("cm-inactive-heading")).toBe(false);
+    expect(host.querySelector(".cm-inactive-heading-marker")).toBeNull();
+
+    controller.destroy();
+  });
+
+  it("reactivates inline-code and strikethrough paragraph lines after hidden marker normalization", async () => {
+    const host = document.createElement("div");
+    const source = ["`内联代码`", "~~todo~~", "", "Paragraph"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+    };
+    const view = getEditorView(host);
+    const editorRoot = host.querySelector(".cm-editor");
+    const codeLine = () => getLineElementByText(host, "`内联代码`");
+    const strikeLine = () => getLineElementByText(host, "~~todo~~");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    view?.dispatch({ selection: { anchor: source.indexOf("Paragraph") } });
+    expect(getInlineDecorationCount(codeLine(), "cm-inactive-inline-marker")).toBeGreaterThan(0);
+    expect(getInlineDecorationCount(strikeLine(), "cm-inactive-inline-marker")).toBeGreaterThan(0);
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+
+    advancedController.setSelection(source.indexOf("`内联代码`"));
+    await flushMicrotasks();
+
+    expect(view?.state.selection.main.anchor).toBe(source.indexOf("内联代码"));
+    expect(getInlineDecorationCount(codeLine(), "cm-inactive-inline-marker")).toBe(0);
+
+    advancedController.setSelection(source.indexOf("~~todo~~"));
+    await flushMicrotasks();
+
+    expect(view?.state.selection.main.anchor).toBe(source.indexOf("todo"));
+    expect(getInlineDecorationCount(strikeLine(), "cm-inactive-inline-marker")).toBe(0);
+
+    controller.destroy();
+  });
+
+  it("moves upward through hidden-inline paragraph and heading lines without skipping visible content", async () => {
+    const host = document.createElement("div");
+    const source = [
+      "**Bold**",
+      "Normal",
+      "*斜体*",
+      "## **加粗标题**",
+      "## 正常标题",
+      "## ***加粗倾斜标题***",
+      "- ~~Todo~~",
+      "`内联代码`",
+      "~~todo~~",
+      "+++"
+    ].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+    };
+    const view = getEditorView(host);
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+
+    advancedController.setSelection(source.lastIndexOf("+++"));
+    await flushMicrotasks();
+
+    const expectedAnchors = [
+      source.indexOf("todo", source.indexOf("~~todo~~")),
+      source.indexOf("内联代码"),
+      source.indexOf("Todo"),
+      source.indexOf("加粗倾斜标题"),
+      source.indexOf("正常标题"),
+      source.indexOf("加粗标题"),
+      source.indexOf("斜体"),
+      source.indexOf("Normal"),
+      source.indexOf("Bold")
+    ];
+
+    for (const expectedAnchor of expectedAnchors) {
+      dispatchEditorKeydown(view, "ArrowUp");
+      await flushMicrotasks();
+
+      expect(view?.state.selection.main.anchor).toBe(expectedAnchor);
+    }
 
     controller.destroy();
   });
@@ -1259,6 +1647,81 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("moves to the closing fence when ArrowDown is pressed from the last code line", async () => {
+    const host = document.createElement("div");
+    const source = ["```ts", "const answer = 42;", "```", "", "Paragraph"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+    };
+    const view = getEditorView(host);
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+
+    advancedController.setSelection(source.indexOf("42"));
+
+    dispatchEditorKeydown(view, "ArrowDown");
+
+    expect(view?.state.selection.main.anchor).toBe(source.lastIndexOf("```"));
+
+    controller.destroy();
+  });
+
+  it("moves to the closing fence when the last code line bottom padding is clicked", async () => {
+    const host = document.createElement("div");
+    const source = ["```ts", "const answer = 42;", "```", "", "Paragraph"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+    };
+    const view = getEditorView(host);
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+
+    advancedController.setSelection(source.indexOf("42"));
+
+    const codeLine = getLineElementByText(host, "const answer = 42;");
+
+    expect(codeLine).toBeInstanceOf(HTMLElement);
+
+    if (codeLine instanceof HTMLElement) {
+      codeLine.style.paddingBottom = "16px";
+      codeLine.getBoundingClientRect = () => createDomRect(0, 100, 400, 40);
+      codeLine.dispatchEvent(
+        new MouseEvent("mousedown", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 24,
+          clientY: 136
+        })
+      );
+    }
+
+    expect(view?.state.selection.main.anchor).toBe(source.lastIndexOf("```"));
+
+    controller.destroy();
+  });
+
   it("renders thematic breaks as inactive separators when focus moves into another block", () => {
     const host = document.createElement("div");
     const source = ["---", "", "+++", "", "Paragraph"].join("\n");
@@ -1319,6 +1782,49 @@ describe("createCodeEditorController", () => {
     expect(dashRuleLine).not.toBeNull();
     expect(dashRuleLine?.classList.contains("cm-inactive-thematic-break")).toBe(false);
     expect(host.querySelector(".cm-inactive-thematic-break-marker")).toBeNull();
+
+    controller.destroy();
+  });
+
+  it("moves the cursor to a thematic break when the rule line is clicked", async () => {
+    const host = document.createElement("div");
+    const source = ["---", "", "Paragraph"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const view = getEditorView(host);
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    view?.dispatch({ selection: { anchor: source.indexOf("Paragraph") } });
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+
+    const ruleLine = getLineElementByText(host, "---");
+
+    expect(ruleLine).toBeInstanceOf(HTMLElement);
+
+    if (ruleLine instanceof HTMLElement) {
+      ruleLine.style.paddingTop = "10px";
+      ruleLine.style.paddingBottom = "10px";
+      ruleLine.getBoundingClientRect = () => createDomRect(0, 100, 320, 28);
+      ruleLine.dispatchEvent(
+        new MouseEvent("mousedown", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 24,
+          clientY: 114
+        })
+      );
+    }
+
+    expect(view?.state.selection.main.anchor).toBe(0);
 
     controller.destroy();
   });
@@ -1785,7 +2291,7 @@ describe("createCodeEditorController", () => {
     advancedController.pressBackspace();
 
     expect(controller.getContent()).toBe(expected);
-    expect(view?.state.selection.main.anchor).toBe(quoteOpenOffset - 1);
+    expect(view?.state.selection.main.anchor).toBe(expected.indexOf("quote one"));
 
     controller.destroy();
   });
@@ -3564,6 +4070,277 @@ describe("createCodeEditorController", () => {
     );
     expect(host.querySelector(".cm-table-widget")).not.toBeNull();
     expect(host.querySelectorAll("[data-table-cell]").length).toBe(6);
+
+    controller.destroy();
+  });
+
+  it("reactivates each hidden-inline line while ArrowUp moves through the reproduced sequence", async () => {
+    const host = document.createElement("div");
+    const source = [
+      "**Bold**",
+      "Normal",
+      "*斜体*",
+      "## **加粗标题**",
+      "## 正常标题",
+      "## ***加粗倾斜标题***",
+      "- ~~Todo~~",
+      "`内联代码`",
+      "~~todo~~",
+      "+++"
+    ].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+    };
+    const view = getEditorView(host);
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+
+    advancedController.setSelection(source.lastIndexOf("+++"));
+    await flushMicrotasks();
+
+    dispatchEditorKeydown(view, "ArrowUp");
+    await flushMicrotasks();
+
+    const strikeLine = getLineElementByText(host, "~~todo~~");
+    expect(view?.state.selection.main.anchor).toBe(source.indexOf("todo", source.indexOf("~~todo~~")));
+    expect(getInlineDecorationCount(strikeLine, "cm-inactive-inline-marker")).toBe(0);
+
+    dispatchEditorKeydown(view, "ArrowUp");
+    await flushMicrotasks();
+
+    const codeLine = getLineElementByText(host, "`内联代码`");
+    expect(view?.state.selection.main.anchor).toBe(source.indexOf("内联代码"));
+    expect(getInlineDecorationCount(codeLine, "cm-inactive-inline-marker")).toBe(0);
+
+    dispatchEditorKeydown(view, "ArrowUp");
+    await flushMicrotasks();
+
+    const listLine = getLineElementByText(host, "- ~~Todo~~");
+    expect(view?.state.selection.main.anchor).toBe(source.indexOf("Todo"));
+    expect(listLine?.classList.contains("cm-inactive-list")).toBe(false);
+    expect(getInlineDecorationCount(listLine, "cm-inactive-inline-marker")).toBe(0);
+
+    dispatchEditorKeydown(view, "ArrowUp");
+    await flushMicrotasks();
+
+    const headingLine = getLineElementByText(host, "加粗倾斜标题");
+    expect(view?.state.selection.main.anchor).toBe(source.indexOf("加粗倾斜标题"));
+    expect(headingLine?.classList.contains("cm-inactive-heading")).toBe(false);
+
+    controller.destroy();
+  });
+
+  it("does not skip from an active list item to a distant heading when ArrowUp is pressed", async () => {
+    const host = document.createElement("div");
+    const source = [
+      "Normal",
+      "*斜体*",
+      "## **加粗标题**",
+      "## 正常标题",
+      "## ***加粗倾斜标题***",
+      "- ~~Todo~~",
+      "`内联代码`",
+      "~~todo~~",
+      "+++"
+    ].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+    };
+    const view = getEditorView(host);
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+
+    advancedController.setSelection(source.indexOf("Todo") + "Todo".length);
+    await flushMicrotasks();
+
+    dispatchEditorKeydown(view, "ArrowUp");
+    await flushMicrotasks();
+
+    const selectionAnchor = view?.state.selection.main.anchor ?? -1;
+    const headingStart = source.indexOf("加粗倾斜标题");
+    const headingEnd = headingStart + "加粗倾斜标题".length;
+
+    expect(selectionAnchor).toBeGreaterThanOrEqual(headingStart);
+    expect(selectionAnchor).toBeLessThanOrEqual(headingEnd);
+
+    controller.destroy();
+  });
+
+  it("keeps lazy continuation lines rendered when the active cursor stays on the list item line", async () => {
+    const host = document.createElement("div");
+    const source = [
+      "## 正常标题",
+      "## ***加粗倾斜标题***",
+      "- ~~Todo~~",
+      "`内联代码`",
+      "~~todo~~",
+      "+++",
+      "## 一级标题"
+    ].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+    };
+    const view = getEditorView(host);
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+
+    advancedController.setSelection(source.indexOf("Todo"));
+    await flushMicrotasks();
+
+    const listLine = getLineElementByText(host, "- ~~Todo~~");
+    const codeLine = getLineElementByText(host, "`内联代码`");
+    const strikeLine = getLineElementByText(host, "~~todo~~");
+    const thematicBreakLine = getLineElementByText(host, "+++");
+
+    expect(listLine?.classList.contains("cm-inactive-list")).toBe(false);
+    expect(getInlineDecorationCount(listLine, "cm-inactive-inline-marker")).toBe(0);
+
+    expect(getInlineDecorationCount(codeLine, "cm-inactive-inline-marker")).toBeGreaterThan(0);
+    expect(getInlineDecorationCount(strikeLine, "cm-inactive-inline-marker")).toBeGreaterThan(0);
+    expect(thematicBreakLine?.classList.contains("cm-inactive-thematic-break")).toBe(true);
+
+    controller.destroy();
+  });
+
+  it("uses the official complex fixture for blockquote and table vertical navigation", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const source = complexEditorFixtureSource;
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    const blockquoteBlankLineStart = source.indexOf("\n\n```ts") + 1;
+    const blockquoteTailAnchor = source.indexOf("第三条引用内容");
+    const tableAboveBlankLineStart = source.indexOf("\n\n| name | qty | note |") + 1;
+    const tableHeadAnchor = source.indexOf("name") + "name".length;
+    const tableBelowBlankLineStart = source.indexOf("\n\n表格下方的普通段落第一行。") + 1;
+    const tableTailAnchor = source.indexOf("ink") + "ink".length;
+
+    view!.dispatch({
+      selection: {
+        anchor: blockquoteBlankLineStart,
+        head: blockquoteBlankLineStart
+      }
+    });
+    dispatchEditorKeydown(view, "ArrowUp");
+    await flushMicrotasks();
+
+    expect(view!.state.selection.main.anchor).toBe(blockquoteTailAnchor);
+
+    view!.dispatch({
+      selection: {
+        anchor: tableAboveBlankLineStart,
+        head: tableAboveBlankLineStart
+      }
+    });
+    dispatchEditorKeydown(view, "ArrowDown");
+    await flushMicrotasks();
+
+    expect(view!.state.selection.main.anchor).toBe(tableHeadAnchor);
+
+    view!.dispatch({
+      selection: {
+        anchor: tableBelowBlankLineStart,
+        head: tableBelowBlankLineStart
+      }
+    });
+    dispatchEditorKeydown(view, "ArrowUp");
+    await flushMicrotasks();
+
+    expect(view!.state.selection.main.anchor).toBe(tableTailAnchor);
+
+    controller.destroy();
+    host.remove();
+  });
+
+  it("uses the official complex fixture for Tab, Shift-Tab, Enter, and Backspace structure edits", async () => {
+    const host = document.createElement("div");
+    const source = complexEditorFixtureSource;
+    const indentedSource = source.replace(
+      "1. 有序列表第一项\n2. 有序列表第二项\n3. \n4. 有序列表第四项",
+      "1. 有序列表第一项\n  1. 有序列表第二项\n2. \n3. 有序列表第四项"
+    );
+    const orderedContinuationSource = source.replace(
+      "3. \n4. 有序列表第四项",
+      "3. \n4. \n5. 有序列表第四项"
+    );
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressBackspace: () => void;
+      pressEnter: () => void;
+      pressTab: (shiftKey?: boolean) => void;
+    };
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(source.indexOf("有序列表第二项"));
+    advancedController.pressTab();
+    expect(controller.getContent()).toBe(indentedSource);
+
+    advancedController.setSelection(indentedSource.indexOf("有序列表第二项"));
+    advancedController.pressTab(true);
+    expect(controller.getContent()).toBe(source);
+
+    advancedController.setSelection(source.indexOf("3. \n4. 有序列表第四项") + "3. ".length);
+    advancedController.pressEnter();
+    expect(controller.getContent()).toBe(orderedContinuationSource);
+    expect(view!.state.selection.main.anchor).toBe(
+      orderedContinuationSource.indexOf("4. \n5. 有序列表第四项") + "4. ".length
+    );
+
+    controller.replaceDocument(source);
+    advancedController.setSelection(source.indexOf("第三条引用内容"));
+    advancedController.pressBackspace();
+    expect(controller.getContent()).toBe(source);
+    expect(view!.state.selection.main.anchor).toBe(source.indexOf("> 第三条引用内容") - 1);
 
     controller.destroy();
   });

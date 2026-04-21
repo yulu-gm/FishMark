@@ -66,10 +66,6 @@ export function runBlockquoteBackspace(view: EditorView, activeState: ActiveBloc
   const line = view.state.doc.lineAt(selection.head);
   const lineStart = getBackspaceLineStart(source, selection.head, line.from);
 
-  if (selection.head !== lineStart) {
-    return false;
-  }
-
   const activeBlockquote = getActiveBlockquote(activeState, lineStart);
   if (!activeBlockquote) {
     return false;
@@ -80,8 +76,31 @@ export function runBlockquoteBackspace(view: EditorView, activeState: ActiveBloc
     return false;
   }
 
-  if (activeBlockquote.startOffset === lineStart) {
+  const contentStart = getActiveBlockquoteContentStart(activeBlockquote, lineStart);
+
+  if (selection.head !== lineStart && selection.head !== contentStart) {
     return false;
+  }
+
+  if (activeBlockquote.startOffset === lineStart) {
+    const previousLineEnd = getPreviousLineEnd(lineStart);
+    if (previousLineEnd === null) {
+      return false;
+    }
+
+    view.dispatch({
+      changes: {
+        from: previousLineEnd,
+        to: lineStart,
+        insert: ""
+      },
+      selection: {
+        anchor: previousLineEnd,
+        head: previousLineEnd
+      }
+    });
+
+    return true;
   }
 
   const previousLineEnd = getPreviousLineEnd(lineStart);
@@ -99,20 +118,30 @@ export function runBlockquoteBackspace(view: EditorView, activeState: ActiveBloc
   return true;
 }
 
+function getActiveBlockquoteContentStart(
+  activeBlockquote: BlockquoteBlock,
+  lineStart: number
+): number {
+  const line = activeBlockquote.lines?.find((entry) => entry.startOffset === lineStart);
+
+  return line?.contentStartOffset ?? lineStart;
+}
+
 function getActiveBlockquote(
   activeState: ActiveBlockState,
   lineStart: number
 ): BlockquoteBlock | null {
-  const activeBlock = activeState.activeBlock;
-  if (activeBlock?.type !== "blockquote") {
-    return null;
+  for (const block of activeState.blockMap.blocks) {
+    if (block.type !== "blockquote") {
+      continue;
+    }
+
+    if (lineStart >= block.startOffset && lineStart <= block.endOffset) {
+      return block;
+    }
   }
 
-  if (lineStart <= activeBlock.startOffset || lineStart > activeBlock.endOffset) {
-    return null;
-  }
-
-  return activeBlock;
+  return null;
 }
 
 function getPreviousLineEnd(lineStart: number): number | null {

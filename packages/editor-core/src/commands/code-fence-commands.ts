@@ -1,7 +1,7 @@
 import type { EditorView } from "@codemirror/view";
 
 import type { ActiveBlockState } from "../active-block";
-import { getBlockLineInfos, getInactiveCodeFenceLines } from "../decorations";
+import { getBlockLineInfos } from "../decorations";
 import {
   getBackspaceLineStart,
   getCodeFenceEditableAnchor,
@@ -9,46 +9,6 @@ import {
 } from "./line-parsers";
 
 type CodeFenceBlock = Extract<ActiveBlockState["activeBlock"], { type: "codeFence" }>;
-
-export function runCodeFenceArrowUp(view: EditorView, activeState: ActiveBlockState): boolean {
-  const selection = view.state.selection.main;
-  const activeCodeFence = activeState.activeBlock?.type === "codeFence" ? activeState.activeBlock : null;
-
-  if (!selection.empty || !activeCodeFence) {
-    return false;
-  }
-
-  const firstContentLine = getInactiveCodeFenceLines(
-    activeCodeFence.startOffset,
-    activeCodeFence.endOffset,
-    view.state.doc.toString()
-  ).find((line) => line.kind === "content" && line.isFirstContentLine);
-
-  if (!firstContentLine) {
-    return false;
-  }
-
-  const currentLine = view.state.doc.lineAt(selection.head);
-
-  if (currentLine.from !== firstContentLine.lineStart) {
-    return false;
-  }
-
-  const openingFenceLine = view.state.doc.lineAt(activeCodeFence.startOffset);
-  const nextAnchor = Math.min(
-    openingFenceLine.to,
-    openingFenceLine.from + (selection.head - currentLine.from)
-  );
-
-  view.dispatch({
-    selection: {
-      anchor: nextAnchor,
-      head: nextAnchor
-    }
-  });
-
-  return true;
-}
 
 export function runCodeFenceEnter(view: EditorView, activeState: ActiveBlockState): boolean {
   const selection = view.state.selection.main;

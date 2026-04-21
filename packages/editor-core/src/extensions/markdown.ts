@@ -9,6 +9,7 @@ import {
   StateEffect,
   StateField,
   Transaction,
+  type TransactionSpec,
   type Extension
 } from "@codemirror/state";
 import {
@@ -18,7 +19,10 @@ import {
   keymap
 } from "@codemirror/view";
 
-import type { MarkdownDocument } from "@yulora/markdown-engine";
+import type {
+  MarkdownBlock,
+  MarkdownDocument
+} from "@yulora/markdown-engine";
 
 import {
   createActiveBlockStateFromMarkdownDocument,
@@ -54,9 +58,10 @@ import {
 } from "../commands/list-edits";
 import { createGroupedShortcutKeymaps } from "./markdown-shortcuts";
 import {
-  getInactiveCodeFenceLines,
   type TableWidgetCallbacks
 } from "../decorations";
+import { normalizeHiddenLineSelectionAnchor } from "../line-visibility";
+import { resolvePointerSelectionAnchor as resolveBlockPointerSelectionAnchor } from "../interactions";
 
 export type ParseMarkdownDocument = (source: string) => MarkdownDocument;
 
@@ -84,6 +89,45 @@ const createSelectionSnapshot = (state: EditorState): ActiveBlockSelection => ({
 
 const forceRefreshMarkdownDecorationsEffect = StateEffect.define<null>();
 const orderedListNormalizationAnnotation = Annotation.define<boolean>();
+const hiddenSelectionNormalizationAnnotation = Annotation.define<boolean>();
+
+function normalizeHiddenSelectionAnchor(
+  source: string,
+  activeBlock: MarkdownBlock | null,
+  anchor: number
+): number | null {
+  if (!activeBlock) {
+    return null;
+  }
+
+  const line = resolveSourceLineAt(source, anchor);
+
+  switch (activeBlock.type) {
+    case "paragraph":
+    case "heading":
+    case "list":
+    case "blockquote":
+      return normalizeHiddenLineSelectionAnchor({
+        source,
+        block: activeBlock,
+        lineStart: line.from,
+        lineEnd: line.to,
+        anchor
+      });
+    default:
+      return null;
+  }
+}
+
+function resolveSourceLineAt(source: string, offset: number): { from: number; to: number } {
+  const boundedOffset = Math.max(0, Math.min(offset, source.length));
+  const lineStartOffset = source.lastIndexOf("\n", Math.max(0, boundedOffset - 1));
+  const from = lineStartOffset === -1 ? 0 : lineStartOffset + 1;
+  const lineBreakOffset = source.indexOf("\n", boundedOffset);
+  const to = lineBreakOffset === -1 ? source.length : lineBreakOffset;
+
+  return { from, to };
+}
 
 export function createYuloraMarkdownExtensions(
   options: CreateYuloraMarkdownExtensionsOptions
@@ -126,7 +170,7 @@ export function createYuloraMarkdownExtensions(
   const isTableCellInput = (element: Element | null): element is HTMLInputElement =>
     element instanceof HTMLInputElement && element.classList.contains("cm-table-widget-input");
 
-  const resolvePointerSelectionAnchor = (
+  const resolveFallbackPointerSelectionAnchor = (
     view: EditorView,
     target: EventTarget | null,
     event: MouseEvent
@@ -198,65 +242,6 @@ export function createYuloraMarkdownExtensions(
 
   const selectTablePosition = (view: EditorView, position: TablePosition) =>
     runTableSelectCell(view, createLiveActiveBlockState(view.state), position);
-
-  const resolveCodeFenceBoundarySelectionAnchor = (
-    view: EditorView,
-    activeState: ActiveBlockState,
-    target: EventTarget | null,
-    event: MouseEvent
-  ): number | null => {
-    if (activeState.activeBlock?.type !== "codeFence") {
-      return null;
-    }
-
-    const targetElement = target instanceof Element ? target : null;
-
-    if (!targetElement || !view.dom.contains(targetElement)) {
-      return null;
-    }
-
-    const lineElement = targetElement.closest(".cm-line");
-
-    if (!(lineElement instanceof HTMLElement) || !lineElement.classList.contains("cm-inactive-code-block-start")) {
-      return null;
-    }
-
-    const firstContentLine = getInactiveCodeFenceLines(
-      activeState.activeBlock.startOffset,
-      activeState.activeBlock.endOffset,
-      view.state.doc.toString()
-    ).find((line) => line.kind === "content" && line.isFirstContentLine);
-
-    if (!firstContentLine) {
-      return null;
-    }
-
-    let lineStart = -1;
-
-    try {
-      lineStart = view.posAtDOM(lineElement, 0);
-    } catch {
-      return null;
-    }
-
-    if (lineStart !== firstContentLine.lineStart) {
-      return null;
-    }
-
-    const paddingTop = Number.parseFloat(window.getComputedStyle(lineElement).paddingTop || "0");
-
-    if (!(paddingTop > 0)) {
-      return null;
-    }
-
-    const rect = lineElement.getBoundingClientRect();
-
-    if (event.clientY < rect.top || event.clientY > rect.bottom || event.clientY > rect.top + paddingTop) {
-      return null;
-    }
-
-    return activeState.activeBlock.startOffset;
-  };
 
   const syncTableInteractionFocus = (
     view: EditorView,
@@ -522,19 +507,14 @@ export function createYuloraMarkdownExtensions(
     };
 
     handleMouseDown = (event: MouseEvent) => {
-      const codeFenceAnchor = resolveCodeFenceBoundarySelectionAnchor(
-        this.view,
-        runtime.activeBlockState,
-        event.target,
-        event
-      );
+      const interactionAnchor = resolveBlockPointerSelectionAnchor(this.view, runtime.activeBlockState, event);
 
-      if (codeFenceAnchor !== null) {
+      if (interactionAnchor !== null) {
         event.preventDefault();
         this.view.dispatch({
           selection: {
-            anchor: codeFenceAnchor,
-            head: codeFenceAnchor
+            anchor: interactionAnchor,
+            head: interactionAnchor
           }
         });
         this.view.focus();
@@ -552,7 +532,7 @@ export function createYuloraMarkdownExtensions(
         return;
       }
 
-      const nextAnchor = resolvePointerSelectionAnchor(this.view, event.target, event);
+      const nextAnchor = resolveFallbackPointerSelectionAnchor(this.view, event.target, event);
 
       if (nextAnchor === null) {
         event.preventDefault();
@@ -586,16 +566,68 @@ export function createYuloraMarkdownExtensions(
     blockDecorationsField,
     lifecyclePlugin,
     EditorState.transactionFilter.of((transaction) => {
-      if (!transaction.docChanged || transaction.annotation(orderedListNormalizationAnnotation)) {
+      const shouldNormalizeOrderedLists =
+        transaction.docChanged && !transaction.annotation(orderedListNormalizationAnnotation);
+      const shouldNormalizeHiddenSelection = !transaction.annotation(hiddenSelectionNormalizationAnnotation);
+
+      if (!shouldNormalizeOrderedLists && !shouldNormalizeHiddenSelection) {
         return transaction;
       }
 
-      const normalization = computeNormalizedOrderedListDocument(transaction.newDoc.toString());
+      let effectiveSource = transaction.newDoc.toString();
+      let effectiveAnchor = transaction.newSelection.main.anchor;
+      let effectiveHead = transaction.newSelection.main.head;
+      const followUpTransactions: TransactionSpec[] = [];
 
-      if (!normalization) {
+      if (shouldNormalizeOrderedLists) {
+        const normalization = computeNormalizedOrderedListDocument(effectiveSource);
+
+        if (normalization) {
+          effectiveSource = normalization.source;
+          effectiveAnchor = mapTextOffsetThroughChanges(effectiveAnchor, normalization.changes);
+          effectiveHead = mapTextOffsetThroughChanges(effectiveHead, normalization.changes);
+          followUpTransactions.push({
+            changes: normalization.changes,
+            selection: {
+              anchor: effectiveAnchor,
+              head: effectiveHead
+            },
+            annotations: orderedListNormalizationAnnotation.of(true),
+            sequential: true
+          });
+        }
+      }
+
+      if (
+        shouldNormalizeHiddenSelection &&
+        effectiveAnchor === effectiveHead
+      ) {
+        const markdownDocument = markdownDocumentCache.read(effectiveSource);
+        const nextAnchor = normalizeHiddenSelectionAnchor(
+          effectiveSource,
+          createActiveBlockStateFromMarkdownDocument(markdownDocument, {
+            anchor: effectiveAnchor,
+            head: effectiveHead
+          }).activeBlock,
+          effectiveAnchor
+        );
+
+        if (nextAnchor !== null && nextAnchor !== effectiveAnchor) {
+          followUpTransactions.push({
+            selection: {
+              anchor: nextAnchor,
+              head: nextAnchor
+            },
+            annotations: hiddenSelectionNormalizationAnnotation.of(true),
+            sequential: true
+          });
+        }
+      }
+
+      if (followUpTransactions.length === 0) {
         return transaction;
       }
-      const selection = transaction.newSelection.main;
+
       const userEvent = transaction.annotation(Transaction.userEvent);
       const addToHistory = transaction.annotation(Transaction.addToHistory);
 
@@ -608,15 +640,7 @@ export function createYuloraMarkdownExtensions(
           userEvent,
           scrollIntoView: transaction.scrollIntoView
         },
-        {
-          changes: normalization.changes,
-          selection: {
-            anchor: mapTextOffsetThroughChanges(selection.anchor, normalization.changes),
-            head: mapTextOffsetThroughChanges(selection.head, normalization.changes)
-          },
-          annotations: orderedListNormalizationAnnotation.of(true),
-          sequential: true
-        }
+        ...followUpTransactions
       ];
     }),
     history(),

@@ -4,9 +4,6 @@ import { EditorView } from "@codemirror/view";
 import {
   createYuloraMarkdownExtensions,
   refreshMarkdownDecorations,
-  runMarkdownBackspace,
-  runMarkdownEnter,
-  runMarkdownTab,
   runTableDelete,
   runTableDeleteColumn,
   runTableDeleteRow,
@@ -34,6 +31,7 @@ export type CreateCodeEditorControllerOptions = {
 
 export type CodeEditorController = {
   getContent: () => string;
+  getSelection: () => { anchor: number; head: number };
   replaceDocument: (nextContent: string) => void;
   setDocumentPath: (nextDocumentPath: string | null) => void;
   focus: () => void;
@@ -51,7 +49,9 @@ export type CodeEditorController = {
   deleteTable: () => void;
   pressEnter: () => void;
   pressBackspace: () => void;
-  pressTab: () => void;
+  pressTab: (shiftKey?: boolean) => void;
+  pressArrowUp: () => void;
+  pressArrowDown: () => void;
   destroy: () => void;
 };
 
@@ -133,8 +133,26 @@ export function createCodeEditorController(
 
   view.dom.addEventListener("paste", handlePaste);
 
+  const dispatchEditorKeydown = (
+    key: string,
+    options: Pick<KeyboardEventInit, "shiftKey"> = {}
+  ) => {
+    view.contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key,
+        bubbles: true,
+        cancelable: true,
+        ...options
+      })
+    );
+  };
+
   return {
     getContent: () => view.state.doc.toString(),
+    getSelection: () => ({
+      anchor: view.state.selection.main.anchor,
+      head: view.state.selection.main.head
+    }),
     replaceDocument(nextContent: string) {
       const nextState = createState(nextContent);
       view.setState(nextState);
@@ -213,13 +231,19 @@ export function createCodeEditorController(
       runTableDelete(view, activeBlockState);
     },
     pressEnter() {
-      runMarkdownEnter(view, activeBlockState);
+      dispatchEditorKeydown("Enter");
     },
     pressBackspace() {
-      runMarkdownBackspace(view, activeBlockState);
+      dispatchEditorKeydown("Backspace");
     },
-    pressTab() {
-      runMarkdownTab(view, activeBlockState);
+    pressTab(shiftKey = false) {
+      dispatchEditorKeydown("Tab", { shiftKey });
+    },
+    pressArrowUp() {
+      dispatchEditorKeydown("ArrowUp");
+    },
+    pressArrowDown() {
+      dispatchEditorKeydown("ArrowDown");
     },
     destroy() {
       isDestroyed = true;

@@ -1354,6 +1354,11 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
       resetAutosaveRuntime,
       editor: {
         getContent: getEditorContent,
+        getSelection: () =>
+          editorRef.current?.getSelection() ?? {
+            anchor: 0,
+            head: 0
+          },
         setContent: (content: string) => {
           editorRef.current?.setContent(content);
         },
@@ -1365,6 +1370,18 @@ function EditorShell({ yulora }: { yulora: Window["yulora"] }) {
         },
         pressEnter: () => {
           editorRef.current?.pressEnter();
+        },
+        pressBackspace: () => {
+          editorRef.current?.pressBackspace();
+        },
+        pressTab: (shiftKey?: boolean) => {
+          editorRef.current?.pressTab(shiftKey);
+        },
+        pressArrowUp: () => {
+          editorRef.current?.pressArrowUp();
+        },
+        pressArrowDown: () => {
+          editorRef.current?.pressArrowDown();
         }
       },
       setEditorContentSnapshot: (content: string) => {

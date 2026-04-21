@@ -22,10 +22,15 @@ function createHarness() {
       insertText: (text: string) => {
         editorContent += text;
       },
+      getSelection: vi.fn(() => ({ anchor: 0, head: 0 })),
       setSelection: vi.fn(),
       pressEnter: vi.fn(() => {
         editorContent += "\n";
-      })
+      }),
+      pressBackspace: vi.fn(),
+      pressTab: vi.fn(),
+      pressArrowUp: vi.fn(),
+      pressArrowDown: vi.fn()
     },
     setEditorContentSnapshot: (content: string) => {
       editorContent = content;
@@ -188,5 +193,84 @@ describe("createEditorTestDriver", () => {
     expect(harness.editor.pressEnter).toHaveBeenCalledTimes(1);
     expect(harness.readEditorContent()).toBe("- [ ] todo\n- [ ] ");
     expect(harness.readState().isDirty).toBe(true);
+  });
+
+  it("can execute navigation and indentation commands through the driver", async () => {
+    const harness = createHarness();
+    harness.openMarkdownFileFromPath.mockResolvedValue({
+      status: "success",
+      document: {
+        path: "C:/fixtures/nav.md",
+        name: "nav.md",
+        content: "# Title\nParagraph",
+        encoding: "utf-8"
+      }
+    });
+
+    await harness.driver.run({
+      type: "open-fixture-file",
+      fixturePath: "C:/fixtures/nav.md"
+    });
+
+    await expect(harness.driver.run({ type: "press-editor-arrow-up" })).resolves.toMatchObject({
+      ok: true,
+      message: "Editor ArrowUp executed."
+    });
+    await expect(harness.driver.run({ type: "press-editor-arrow-down" })).resolves.toMatchObject({
+      ok: true,
+      message: "Editor ArrowDown executed."
+    });
+    await expect(
+      harness.driver.run({ type: "press-editor-tab", shiftKey: true })
+    ).resolves.toMatchObject({
+      ok: true,
+      message: "Editor Shift-Tab executed."
+    });
+    await expect(harness.driver.run({ type: "press-editor-backspace" })).resolves.toMatchObject({
+      ok: true,
+      message: "Editor Backspace executed."
+    });
+
+    expect(harness.editor.pressArrowUp).toHaveBeenCalledTimes(1);
+    expect(harness.editor.pressArrowDown).toHaveBeenCalledTimes(1);
+    expect(harness.editor.pressTab).toHaveBeenCalledWith(true);
+    expect(harness.editor.pressBackspace).toHaveBeenCalledTimes(1);
+  });
+
+  it("can assert the current editor selection", async () => {
+    const harness = createHarness();
+    harness.openMarkdownFileFromPath.mockResolvedValue({
+      status: "success",
+      document: {
+        path: "C:/fixtures/selection.md",
+        name: "selection.md",
+        content: "Paragraph",
+        encoding: "utf-8"
+      }
+    });
+    harness.editor.getSelection.mockReturnValue({ anchor: 12, head: 12 });
+
+    await harness.driver.run({
+      type: "open-fixture-file",
+      fixturePath: "C:/fixtures/selection.md"
+    });
+
+    await expect(
+      harness.driver.run({
+        type: "assert-editor-selection",
+        expectedAnchor: 12
+      })
+    ).resolves.toMatchObject({ ok: true, message: "Editor selection matched." });
+
+    await expect(
+      harness.driver.run({
+        type: "assert-editor-selection",
+        expectedAnchor: 7,
+        expectedHead: 9
+      })
+    ).resolves.toMatchObject({
+      ok: false,
+      message: "Editor selection mismatch."
+    });
   });
 });

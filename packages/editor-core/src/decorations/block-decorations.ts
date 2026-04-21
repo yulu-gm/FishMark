@@ -1,6 +1,8 @@
 import { Decoration, type DecorationSet } from "@codemirror/view";
 import { type Range } from "@codemirror/state";
 
+import { parseInlineAst, type ListItemBlock } from "@yulora/markdown-engine";
+
 import type { ActiveBlockState } from "../active-block";
 import { getInactiveBlockquoteLines, getInactiveCodeFenceLines } from "./block-lines";
 import { appendCodeHighlightRanges } from "./code-highlight";
@@ -47,8 +49,12 @@ export function createBlockDecorations(
     hasEditorFocus &&
     activeBlockState.activeBlock?.type === "codeFence" &&
     isCodeFenceContentSelection(activeBlockState.activeBlock, activeBlockState.selection.head, source);
+  const activeListLineStart =
+    hasEditorFocus && activeBlockState.activeBlock?.type === "list"
+      ? resolveLineStartOffset(source, activeBlockState.selection.head)
+      : null;
   const ranges: Range<Decoration>[] = [];
-  const signatures: string[] = [];
+  const signatures: string[] = [`active:${activeBlockId ?? "none"}`];
 
   for (const block of activeBlockState.blockMap.blocks) {
     if (block.type === "table") {
@@ -94,8 +100,8 @@ export function createBlockDecorations(
       }
 
       if (block.type === "list") {
-        signatures.push(`${createBlockDecorationSignature(block)}:content-edit`);
-        appendInactiveListDecorations(block, ranges, resolveImagePreviewUrl);
+        signatures.push(`${createBlockDecorationSignature(block)}:line-edit:${activeListLineStart ?? "none"}`);
+        appendActiveListDecorations(block, source, activeListLineStart, ranges, resolveImagePreviewUrl);
         continue;
       }
 
@@ -460,6 +466,225 @@ function appendInactiveListScopeDecorations(
       appendInactiveListScopeDecorations(child, ranges, resolveImagePreviewUrl);
     }
   }
+}
+
+function appendActiveListDecorations(
+  block: Extract<NonNullable<ActiveBlockState["activeBlock"]>, { type: "list" }>,
+  source: string,
+  activeLineStart: number | null,
+  ranges: Range<Decoration>[],
+  resolveImagePreviewUrl?: (href: string | null) => string | null
+): void {
+  appendActiveListScopeDecorations(block, source, activeLineStart, ranges, resolveImagePreviewUrl);
+}
+
+function appendActiveListScopeDecorations(
+  block: Extract<NonNullable<ActiveBlockState["activeBlock"]>, { type: "list" }>,
+  source: string,
+  activeLineStart: number | null,
+  ranges: Range<Decoration>[],
+  resolveImagePreviewUrl?: (href: string | null) => string | null
+): void {
+  for (const item of block.items) {
+    appendListItemDecorations(item, source, activeLineStart, block.ordered, ranges, resolveImagePreviewUrl);
+
+    for (const child of item.children) {
+      appendActiveListScopeDecorations(child, source, activeLineStart, ranges, resolveImagePreviewUrl);
+    }
+  }
+}
+
+function appendListItemDecorations(
+  item: ListItemBlock,
+  source: string,
+  activeLineStart: number | null,
+  ordered: boolean,
+  ranges: Range<Decoration>[],
+  resolveImagePreviewUrl?: (href: string | null) => string | null
+): void {
+  const contentEndOffset = item.children[0]?.startOffset ?? item.endOffset;
+  const lines = createLineInfosInRange(source, item.startOffset, contentEndOffset);
+
+  for (const line of lines) {
+    const isFirstLine = line.startOffset === item.startOffset;
+    const isActiveLine = activeLineStart === line.startOffset;
+
+    if (isFirstLine) {
+      if (!isActiveLine) {
+        appendInactiveListItemFirstLineDecorations(item, ordered, ranges);
+        appendInlineDecorationsForLine(
+          source,
+          item.contentStartOffset ?? item.markerEnd,
+          line.endOffset,
+          false,
+          ranges,
+          resolveImagePreviewUrl
+        );
+      }
+
+      continue;
+    }
+
+    if (isActiveLine) {
+      continue;
+    }
+
+    if (isExplicitThematicBreakLine(line.text)) {
+      appendThematicBreakLineDecorations(line.startOffset, line.endOffset, ranges);
+      continue;
+    }
+
+    appendInlineDecorationsForLine(
+      source,
+      line.startOffset,
+      line.endOffset,
+      false,
+      ranges,
+      resolveImagePreviewUrl
+    );
+  }
+}
+
+function appendInactiveListItemFirstLineDecorations(
+  item: ListItemBlock,
+  ordered: boolean,
+  ranges: Range<Decoration>[]
+): void {
+  const lineClasses = [
+    "cm-inactive-list",
+    ordered ? "cm-inactive-list-ordered" : "cm-inactive-list-unordered",
+    `cm-inactive-list-depth-${Math.floor(item.indent / 2)}`
+  ];
+
+  if (item.task) {
+    lineClasses.push(
+      "cm-inactive-list-task",
+      item.task.checked ? "cm-inactive-list-task-checked" : "cm-inactive-list-task-unchecked"
+    );
+  }
+
+  ranges.push(
+    Decoration.line({
+      attributes: {
+        class: lineClasses.join(" ")
+      }
+    }).range(item.startOffset)
+  );
+
+  ranges.push(
+    Decoration.mark({
+      attributes: {
+        class: "cm-inactive-list-marker"
+      }
+    }).range(item.markerStart, item.markerEnd)
+  );
+
+  if (!item.task) {
+    return;
+  }
+
+  ranges.push(
+    Decoration.mark({
+      attributes: {
+        class: [
+          "cm-inactive-task-marker",
+          item.task.checked ? "cm-inactive-task-marker-checked" : "cm-inactive-task-marker-unchecked"
+        ].join(" "),
+        "data-task-state": item.task.checked ? "checked" : "unchecked"
+      }
+    }).range(item.task.markerStart, item.task.markerEnd)
+  );
+}
+
+function appendInlineDecorationsForLine(
+  source: string,
+  contentStartOffset: number,
+  lineEndOffset: number,
+  active: boolean,
+  ranges: Range<Decoration>[],
+  resolveImagePreviewUrl?: (href: string | null) => string | null
+): void {
+  const contentEndOffset = trimTrailingCarriageReturnInSource(source, contentStartOffset, lineEndOffset);
+
+  if (contentEndOffset <= contentStartOffset) {
+    return;
+  }
+
+  const inline = parseInlineAst(source, contentStartOffset, contentEndOffset);
+  if (active) {
+    ranges.push(...createActiveInlineImageDecorations(inline, source, resolveImagePreviewUrl));
+    ranges.push(...createActiveInlineDecorations(inline));
+  } else {
+    ranges.push(...createInactiveInlineDecorations(inline, { resolveImagePreviewUrl }));
+  }
+  ranges.push(...createCjkTextDecorations(inline));
+}
+
+function appendThematicBreakLineDecorations(
+  startOffset: number,
+  endOffset: number,
+  ranges: Range<Decoration>[]
+): void {
+  ranges.push(
+    Decoration.line({
+      attributes: {
+        class: "cm-inactive-thematic-break"
+      }
+    }).range(startOffset)
+  );
+
+  if (endOffset > startOffset) {
+    ranges.push(
+      Decoration.mark({
+        attributes: {
+          class: "cm-inactive-thematic-break-marker"
+        }
+      }).range(startOffset, endOffset)
+    );
+  }
+}
+
+function createLineInfosInRange(
+  source: string,
+  startOffset: number,
+  endOffset: number
+): Array<{ text: string; startOffset: number; endOffset: number }> {
+  const lines: Array<{ text: string; startOffset: number; endOffset: number }> = [];
+  let cursor = startOffset;
+
+  while (cursor < endOffset) {
+    const nextBreakOffset = source.indexOf("\n", cursor);
+    const lineEndOffset = nextBreakOffset === -1 || nextBreakOffset > endOffset ? endOffset : nextBreakOffset;
+
+    lines.push({
+      text: source.slice(cursor, lineEndOffset),
+      startOffset: cursor,
+      endOffset: lineEndOffset
+    });
+
+    if (nextBreakOffset === -1 || nextBreakOffset >= endOffset) {
+      break;
+    }
+
+    cursor = nextBreakOffset + 1;
+  }
+
+  return lines;
+}
+
+function resolveLineStartOffset(source: string, offset: number): number {
+  const boundedOffset = Math.max(0, Math.min(offset, source.length));
+  const lineBreakOffset = source.lastIndexOf("\n", Math.max(0, boundedOffset - 1));
+
+  return lineBreakOffset === -1 ? 0 : lineBreakOffset + 1;
+}
+
+function trimTrailingCarriageReturnInSource(source: string, startOffset: number, endOffset: number): number {
+  return endOffset > startOffset && source[endOffset - 1] === "\r" ? endOffset - 1 : endOffset;
+}
+
+function isExplicitThematicBreakLine(text: string): boolean {
+  return /^\s{0,3}(?:\+(?:[ \t]*\+){2,}|-(?:[ \t]*-){2,})[ \t]*$/u.test(text);
 }
 
 function appendActiveDecorationsForBlock(

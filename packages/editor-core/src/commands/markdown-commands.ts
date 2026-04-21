@@ -3,9 +3,9 @@ import type { EditorView } from "@codemirror/view";
 import { formatTableMarkdown, parseMarkdownDocument, splitTableLine } from "@yulora/markdown-engine";
 
 import type { ActiveBlockState } from "../active-block";
+import { resolveArrowDownAnchor, resolveArrowUpAnchor } from "../interactions";
 import { runBlockquoteBackspace, runBlockquoteEnter } from "./blockquote-commands";
 import {
-  runCodeFenceArrowUp,
   runCodeFenceBackspace,
   runCodeFenceEnter
 } from "./code-fence-commands";
@@ -16,8 +16,6 @@ import {
   runListOutdentOnShiftTab
 } from "./list-commands";
 import {
-  runTableEnterFromLineAbove,
-  runTableEnterFromLineBelow,
   runTableMoveDownOrExit,
   runTableNextCell,
   runTablePreviousCell
@@ -52,11 +50,37 @@ export function runMarkdownShiftTab(view: EditorView, activeState: ActiveBlockSt
 }
 
 export function runMarkdownArrowDown(view: EditorView, activeState: ActiveBlockState): boolean {
-  return runTableEnterFromLineAbove(view, activeState);
+  const nextAnchor = resolveArrowDownAnchor(view, activeState);
+
+  if (nextAnchor === null) {
+    return false;
+  }
+
+  view.dispatch({
+    selection: {
+      anchor: nextAnchor,
+      head: nextAnchor
+    }
+  });
+
+  return true;
 }
 
 export function runMarkdownArrowUp(view: EditorView, activeState: ActiveBlockState): boolean {
-  return runCodeFenceArrowUp(view, activeState) || runTableEnterFromLineBelow(view, activeState) || runBlankLineArrowUp(view);
+  const nextAnchor = resolveArrowUpAnchor(view, activeState);
+
+  if (nextAnchor === null) {
+    return runBlankLineArrowUp(view);
+  }
+
+  view.dispatch({
+    selection: {
+      anchor: nextAnchor,
+      head: nextAnchor
+    }
+  });
+
+  return true;
 }
 
 function runDraftTableEnter(view: EditorView, activeState: ActiveBlockState): boolean {
@@ -155,6 +179,10 @@ function runBlankLineArrowUp(view: EditorView): boolean {
 
   const previousLine = view.state.doc.line(currentLine.number - 1);
 
+  if (previousLine.text.trim().length !== 0) {
+    return false;
+  }
+
   view.dispatch({
     selection: {
       anchor: previousLine.from,
@@ -164,3 +192,4 @@ function runBlankLineArrowUp(view: EditorView): boolean {
 
   return true;
 }
+

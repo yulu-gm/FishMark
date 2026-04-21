@@ -5,9 +5,14 @@ export type ElectronEditorTestCommand =
   | { type: "insert-editor-text"; text: string }
   | { type: "set-editor-selection"; anchor: number; head?: number }
   | { type: "press-editor-enter" }
+  | { type: "press-editor-backspace" }
+  | { type: "press-editor-tab"; shiftKey?: boolean }
+  | { type: "press-editor-arrow-up" }
+  | { type: "press-editor-arrow-down" }
   | { type: "save-document" }
   | { type: "assert-document-path"; expectedPath: string }
   | { type: "assert-editor-content"; expectedContent: string }
+  | { type: "assert-editor-selection"; expectedAnchor: number; expectedHead?: number }
   | { type: "assert-dirty-state"; expectedDirty: boolean }
   | { type: "assert-empty-workspace" }
   | { type: "close-editor-window" };

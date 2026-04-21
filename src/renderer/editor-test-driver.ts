@@ -12,8 +12,13 @@ type EditorHandle = {
   getContent: () => string;
   setContent: (content: string) => void;
   insertText: (text: string) => void;
+  getSelection: () => { anchor: number; head: number };
   setSelection: (anchor: number, head?: number) => void;
   pressEnter: () => void;
+  pressBackspace: () => void;
+  pressTab: (shiftKey?: boolean) => void;
+  pressArrowUp: () => void;
+  pressArrowDown: () => void;
 };
 
 export function createEditorTestDriver(input: {
@@ -106,6 +111,52 @@ export function createEditorTestDriver(input: {
         return ok("Editor Enter executed.");
       }
 
+      if (command.type === "press-editor-backspace") {
+        const currentDocument = input.getState().currentDocument;
+        if (!currentDocument) {
+          return fail("No open document to edit.");
+        }
+
+        input.editor.pressBackspace();
+        const nextContent = input.editor.getContent();
+        input.setEditorContentSnapshot(nextContent);
+        input.applyState((current) => applyEditorContentChanged(current, nextContent));
+        return ok("Editor Backspace executed.");
+      }
+
+      if (command.type === "press-editor-tab") {
+        const currentDocument = input.getState().currentDocument;
+        if (!currentDocument) {
+          return fail("No open document to edit.");
+        }
+
+        input.editor.pressTab(command.shiftKey);
+        const nextContent = input.editor.getContent();
+        input.setEditorContentSnapshot(nextContent);
+        input.applyState((current) => applyEditorContentChanged(current, nextContent));
+        return ok(command.shiftKey ? "Editor Shift-Tab executed." : "Editor Tab executed.");
+      }
+
+      if (command.type === "press-editor-arrow-up") {
+        const currentDocument = input.getState().currentDocument;
+        if (!currentDocument) {
+          return fail("No open document to navigate.");
+        }
+
+        input.editor.pressArrowUp();
+        return ok("Editor ArrowUp executed.");
+      }
+
+      if (command.type === "press-editor-arrow-down") {
+        const currentDocument = input.getState().currentDocument;
+        if (!currentDocument) {
+          return fail("No open document to navigate.");
+        }
+
+        input.editor.pressArrowDown();
+        return ok("Editor ArrowDown executed.");
+      }
+
       if (command.type === "save-document") {
         const currentDocument = input.getState().currentDocument;
         if (!currentDocument) {
@@ -152,7 +203,21 @@ export function createEditorTestDriver(input: {
           ? ok("Editor content matched.")
           : fail("Editor content mismatch.", {
               expectedContent: command.expectedContent,
-              actualContent
+            actualContent
+            });
+      }
+
+      if (command.type === "assert-editor-selection") {
+        const actualSelection = input.editor.getSelection();
+        const expectedHead = command.expectedHead ?? command.expectedAnchor;
+
+        return actualSelection.anchor === command.expectedAnchor && actualSelection.head === expectedHead
+          ? ok("Editor selection matched.")
+          : fail("Editor selection mismatch.", {
+              expectedAnchor: command.expectedAnchor,
+              expectedHead,
+              actualAnchor: actualSelection.anchor,
+              actualHead: actualSelection.head
             });
       }
 

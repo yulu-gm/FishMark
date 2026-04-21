@@ -14,6 +14,7 @@ import type { ActiveBlockState } from "@yulora/editor-core";
 
 export type CodeEditorHandle = {
   getContent: () => string;
+  getSelection: () => { anchor: number; head: number };
   setContent: (content: string) => void;
   setDocumentPath: (documentPath: string | null) => void;
   focus: () => void;
@@ -30,6 +31,10 @@ export type CodeEditorHandle = {
   deleteTableColumn: () => void;
   deleteTable: () => void;
   pressEnter: () => void;
+  pressBackspace: () => void;
+  pressTab: (shiftKey?: boolean) => void;
+  pressArrowUp: () => void;
+  pressArrowDown: () => void;
 };
 
 type CodeEditorViewProps = {
@@ -102,6 +107,11 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
       ref,
       () => ({
         getContent: () => controllerRef.current?.getContent() ?? initialContent,
+        getSelection: () =>
+          controllerRef.current?.getSelection() ?? {
+            anchor: 0,
+            head: 0
+          },
         setContent: (content: string) => {
           controllerRef.current?.replaceDocument(content);
         },
@@ -149,6 +159,18 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
         },
         pressEnter: () => {
           controllerRef.current?.pressEnter();
+        },
+        pressBackspace: () => {
+          controllerRef.current?.pressBackspace();
+        },
+        pressTab: (shiftKey?: boolean) => {
+          controllerRef.current?.pressTab(shiftKey);
+        },
+        pressArrowUp: () => {
+          controllerRef.current?.pressArrowUp();
+        },
+        pressArrowDown: () => {
+          controllerRef.current?.pressArrowDown();
         }
       }),
       [initialContent]
