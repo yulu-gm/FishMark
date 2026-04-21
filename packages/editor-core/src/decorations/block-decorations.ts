@@ -21,6 +21,11 @@ import {
   getInactiveHeadingMarkerEnd
 } from "./signature";
 import { createTableWidgetDecoration, type TableWidgetCallbacks } from "./table-widget";
+import {
+  createLineInfosInRange,
+  resolveLineStartOffset,
+  trimTrailingCarriageReturn
+} from "../source-utils";
 
 export type CreateBlockDecorationsOptions = {
   activeBlockState: ActiveBlockState;
@@ -149,7 +154,7 @@ export function createBlockDecorations(
     }
 
     if (block.type === "list") {
-      appendInactiveListDecorations(block, ranges, resolveImagePreviewUrl);
+      appendInactiveListDecorations(block, source, ranges, resolveImagePreviewUrl);
       continue;
     }
 
@@ -401,69 +406,24 @@ function isCodeFenceContentSelection(
 
 function appendInactiveListDecorations(
   block: Extract<NonNullable<ActiveBlockState["activeBlock"]>, { type: "list" }>,
+  source: string,
   ranges: Range<Decoration>[],
   resolveImagePreviewUrl?: (href: string | null) => string | null
 ): void {
-  appendInactiveListScopeDecorations(block, ranges, resolveImagePreviewUrl);
+  appendInactiveListScopeDecorations(block, source, ranges, resolveImagePreviewUrl);
 }
 
 function appendInactiveListScopeDecorations(
   block: Extract<NonNullable<ActiveBlockState["activeBlock"]>, { type: "list" }>,
+  source: string,
   ranges: Range<Decoration>[],
   resolveImagePreviewUrl?: (href: string | null) => string | null
 ): void {
   for (const item of block.items) {
-    const lineClasses = [
-      "cm-inactive-list",
-      block.ordered ? "cm-inactive-list-ordered" : "cm-inactive-list-unordered",
-      `cm-inactive-list-depth-${Math.floor(item.indent / 2)}`
-    ];
-
-    if (item.task) {
-      lineClasses.push(
-        "cm-inactive-list-task",
-        item.task.checked
-          ? "cm-inactive-list-task-checked"
-          : "cm-inactive-list-task-unchecked"
-      );
-    }
-
-    ranges.push(
-      Decoration.line({
-        attributes: {
-          class: lineClasses.join(" ")
-        }
-      }).range(item.startOffset)
-    );
-
-    ranges.push(
-      Decoration.mark({
-        attributes: {
-          class: "cm-inactive-list-marker"
-        }
-      }).range(item.markerStart, item.markerEnd)
-    );
-
-    if (item.task) {
-      ranges.push(
-        Decoration.mark({
-          attributes: {
-            class: [
-              "cm-inactive-task-marker",
-              item.task.checked
-                ? "cm-inactive-task-marker-checked"
-                : "cm-inactive-task-marker-unchecked"
-            ].join(" "),
-            "data-task-state": item.task.checked ? "checked" : "unchecked"
-          }
-        }).range(item.task.markerStart, item.task.markerEnd)
-      );
-    }
-
-    ranges.push(...createInactiveInlineDecorations(item.inline, { resolveImagePreviewUrl }));
+    appendListItemDecorations(item, source, null, block.ordered, ranges, resolveImagePreviewUrl);
 
     for (const child of item.children) {
-      appendInactiveListScopeDecorations(child, ranges, resolveImagePreviewUrl);
+      appendInactiveListScopeDecorations(child, source, ranges, resolveImagePreviewUrl);
     }
   }
 }
@@ -604,7 +564,7 @@ function appendInlineDecorationsForLine(
   ranges: Range<Decoration>[],
   resolveImagePreviewUrl?: (href: string | null) => string | null
 ): void {
-  const contentEndOffset = trimTrailingCarriageReturnInSource(source, contentStartOffset, lineEndOffset);
+  const contentEndOffset = trimTrailingCarriageReturn(source, contentStartOffset, lineEndOffset);
 
   if (contentEndOffset <= contentStartOffset) {
     return;
@@ -642,45 +602,6 @@ function appendThematicBreakLineDecorations(
       }).range(startOffset, endOffset)
     );
   }
-}
-
-function createLineInfosInRange(
-  source: string,
-  startOffset: number,
-  endOffset: number
-): Array<{ text: string; startOffset: number; endOffset: number }> {
-  const lines: Array<{ text: string; startOffset: number; endOffset: number }> = [];
-  let cursor = startOffset;
-
-  while (cursor < endOffset) {
-    const nextBreakOffset = source.indexOf("\n", cursor);
-    const lineEndOffset = nextBreakOffset === -1 || nextBreakOffset > endOffset ? endOffset : nextBreakOffset;
-
-    lines.push({
-      text: source.slice(cursor, lineEndOffset),
-      startOffset: cursor,
-      endOffset: lineEndOffset
-    });
-
-    if (nextBreakOffset === -1 || nextBreakOffset >= endOffset) {
-      break;
-    }
-
-    cursor = nextBreakOffset + 1;
-  }
-
-  return lines;
-}
-
-function resolveLineStartOffset(source: string, offset: number): number {
-  const boundedOffset = Math.max(0, Math.min(offset, source.length));
-  const lineBreakOffset = source.lastIndexOf("\n", Math.max(0, boundedOffset - 1));
-
-  return lineBreakOffset === -1 ? 0 : lineBreakOffset + 1;
-}
-
-function trimTrailingCarriageReturnInSource(source: string, startOffset: number, endOffset: number): number {
-  return endOffset > startOffset && source[endOffset - 1] === "\r" ? endOffset - 1 : endOffset;
 }
 
 function isExplicitThematicBreakLine(text: string): boolean {

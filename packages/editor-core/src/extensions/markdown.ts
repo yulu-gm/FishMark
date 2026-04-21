@@ -20,7 +20,6 @@ import {
 } from "@codemirror/view";
 
 import type {
-  MarkdownBlock,
   MarkdownDocument
 } from "@yulora/markdown-engine";
 
@@ -60,7 +59,7 @@ import { createGroupedShortcutKeymaps } from "./markdown-shortcuts";
 import {
   type TableWidgetCallbacks
 } from "../decorations";
-import { normalizeHiddenLineSelectionAnchor } from "../line-visibility";
+import { normalizeHiddenSelectionAnchor } from "../line-visibility";
 import { resolvePointerSelectionAnchor as resolveBlockPointerSelectionAnchor } from "../interactions";
 
 export type ParseMarkdownDocument = (source: string) => MarkdownDocument;
@@ -90,44 +89,6 @@ const createSelectionSnapshot = (state: EditorState): ActiveBlockSelection => ({
 const forceRefreshMarkdownDecorationsEffect = StateEffect.define<null>();
 const orderedListNormalizationAnnotation = Annotation.define<boolean>();
 const hiddenSelectionNormalizationAnnotation = Annotation.define<boolean>();
-
-function normalizeHiddenSelectionAnchor(
-  source: string,
-  activeBlock: MarkdownBlock | null,
-  anchor: number
-): number | null {
-  if (!activeBlock) {
-    return null;
-  }
-
-  const line = resolveSourceLineAt(source, anchor);
-
-  switch (activeBlock.type) {
-    case "paragraph":
-    case "heading":
-    case "list":
-    case "blockquote":
-      return normalizeHiddenLineSelectionAnchor({
-        source,
-        block: activeBlock,
-        lineStart: line.from,
-        lineEnd: line.to,
-        anchor
-      });
-    default:
-      return null;
-  }
-}
-
-function resolveSourceLineAt(source: string, offset: number): { from: number; to: number } {
-  const boundedOffset = Math.max(0, Math.min(offset, source.length));
-  const lineStartOffset = source.lastIndexOf("\n", Math.max(0, boundedOffset - 1));
-  const from = lineStartOffset === -1 ? 0 : lineStartOffset + 1;
-  const lineBreakOffset = source.indexOf("\n", boundedOffset);
-  const to = lineBreakOffset === -1 ? source.length : lineBreakOffset;
-
-  return { from, to };
-}
 
 export function createYuloraMarkdownExtensions(
   options: CreateYuloraMarkdownExtensionsOptions
@@ -603,13 +564,24 @@ export function createYuloraMarkdownExtensions(
         effectiveAnchor === effectiveHead
       ) {
         const markdownDocument = markdownDocumentCache.read(effectiveSource);
+        const previousAnchor = transaction.startState.selection.main.anchor;
+        const anchorDelta = effectiveAnchor - previousAnchor;
+        const userEvent = transaction.annotation(Transaction.userEvent);
+        // Only use direction-aware normalization for single-step keyboard navigation
+        // (e.g. arrow keys). Programmatic jumps and mouse clicks use direction=0 so
+        // hidden close markers still snap to their left edge as expected.
+        const navigationDirection =
+          userEvent === "select" && Math.abs(anchorDelta) <= 2
+            ? Math.sign(anchorDelta)
+            : 0;
         const nextAnchor = normalizeHiddenSelectionAnchor(
           effectiveSource,
           createActiveBlockStateFromMarkdownDocument(markdownDocument, {
             anchor: effectiveAnchor,
             head: effectiveHead
           }).activeBlock,
-          effectiveAnchor
+          effectiveAnchor,
+          navigationDirection
         );
 
         if (nextAnchor !== null && nextAnchor !== effectiveAnchor) {

@@ -4141,6 +4141,59 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("restores thematic break rendering after ArrowDown leaves the active separator", async () => {
+    const host = document.createElement("div");
+    const source = [
+      "正常标题",
+      "## ***加粗倾斜标题***",
+      "- ~~Todo~~",
+      "`内联代码`",
+      "~~todo~~",
+      "+++",
+      "# 一级标题",
+      "- todo"
+    ].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+    };
+    const view = getEditorView(host);
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+
+    advancedController.setSelection(source.indexOf("+++") + "+++".length);
+    await flushMicrotasks();
+
+    const thematicBreakLine = getLineElementByText(host, "+++");
+    expect(thematicBreakLine?.classList.contains("cm-inactive-thematic-break")).toBe(false);
+
+    dispatchEditorKeydown(view, "ArrowDown");
+    await flushMicrotasks();
+
+    const headingLine = getLineElementByText(host, "# 一级标题");
+    const nextThematicBreakLine = getLineElementByText(host, "+++");
+    const selectionAnchor = view?.state.selection.main.anchor ?? -1;
+    const headingStart = source.indexOf("一级标题");
+    const headingEnd = headingStart + "一级标题".length;
+
+    expect(selectionAnchor).toBeGreaterThanOrEqual(headingStart);
+    expect(selectionAnchor).toBeLessThanOrEqual(headingEnd);
+    expect(headingLine?.classList.contains("cm-inactive-heading")).toBe(false);
+    expect(nextThematicBreakLine?.classList.contains("cm-inactive-thematic-break")).toBe(true);
+
+    controller.destroy();
+  });
+
   it("does not skip from an active list item to a distant heading when ArrowUp is pressed", async () => {
     const host = document.createElement("div");
     const source = [

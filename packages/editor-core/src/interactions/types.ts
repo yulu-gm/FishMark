@@ -29,10 +29,16 @@ export type VerticalInteractionContext = {
   activeBlock: MarkdownBlock | null;
   lineStart: number;
   lineEnd: number;
+  goalColumn: number | undefined;
+};
+
+export type VerticalNavigationResult = {
+  anchor: number;
+  goalColumn: number | undefined;
 };
 
 export type BlockInteractionAdapter = {
   resolvePointerSelection?: (context: PointerInteractionContext) => number | null;
-  resolveArrowUp?: (context: VerticalInteractionContext) => number | null;
-  resolveArrowDown?: (context: VerticalInteractionContext) => number | null;
+  resolveArrowUp?: (context: VerticalInteractionContext) => VerticalNavigationResult | number | null;
+  resolveArrowDown?: (context: VerticalInteractionContext) => VerticalNavigationResult | number | null;
 };

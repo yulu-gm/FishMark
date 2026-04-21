@@ -1,9 +1,10 @@
 import { deleteCharBackward, insertNewlineAndIndent } from "@codemirror/commands";
+import { EditorSelection } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import { formatTableMarkdown, parseMarkdownDocument, splitTableLine } from "@yulora/markdown-engine";
 
 import type { ActiveBlockState } from "../active-block";
-import { resolveArrowDownAnchor, resolveArrowUpAnchor } from "../interactions";
+import { resolveArrowDown, resolveArrowUp } from "../interactions";
 import { runBlockquoteBackspace, runBlockquoteEnter } from "./blockquote-commands";
 import {
   runCodeFenceBackspace,
@@ -50,34 +51,28 @@ export function runMarkdownShiftTab(view: EditorView, activeState: ActiveBlockSt
 }
 
 export function runMarkdownArrowDown(view: EditorView, activeState: ActiveBlockState): boolean {
-  const nextAnchor = resolveArrowDownAnchor(view, activeState);
+  const result = resolveArrowDown(view, activeState);
 
-  if (nextAnchor === null) {
+  if (result === null) {
     return false;
   }
 
   view.dispatch({
-    selection: {
-      anchor: nextAnchor,
-      head: nextAnchor
-    }
+    selection: EditorSelection.cursor(result.anchor, 0, undefined, result.goalColumn)
   });
 
   return true;
 }
 
 export function runMarkdownArrowUp(view: EditorView, activeState: ActiveBlockState): boolean {
-  const nextAnchor = resolveArrowUpAnchor(view, activeState);
+  const result = resolveArrowUp(view, activeState);
 
-  if (nextAnchor === null) {
+  if (result === null) {
     return runBlankLineArrowUp(view);
   }
 
   view.dispatch({
-    selection: {
-      anchor: nextAnchor,
-      head: nextAnchor
-    }
+    selection: EditorSelection.cursor(result.anchor, 0, undefined, result.goalColumn)
   });
 
   return true;

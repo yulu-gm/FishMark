@@ -305,6 +305,7 @@ describe("createBlockDecorations", () => {
 
     expect(result.signature).toBe(
       [
+        "active:paragraph:86-95",
         "heading:heading:0-7:0:1",
         "list:list:9-25:9:false:list-item:9-14:0:none,list-item:15-25:0:true",
         "blockquote:blockquote:27-49:27:49",
@@ -429,6 +430,38 @@ describe("createBlockDecorations", () => {
         text: ""
       }
     ]);
+  });
+
+  it("keeps thematic-break continuation lines rendered when a list becomes inactive", () => {
+    const source = ["- item", "continued", "+++", "# Heading"].join("\n");
+    const blockMap = parseMarkdownDocument(source);
+    const activeState = createActiveBlockStateFromBlockMap(blockMap, {
+      anchor: source.indexOf("Heading"),
+      head: source.indexOf("Heading")
+    });
+
+    const ranges = collectDecorations(
+      source,
+      createBlockDecorations({
+        activeBlockState: activeState,
+        hasEditorFocus: true,
+        source
+      }).decorationSet
+    );
+
+    expect(
+      ranges.find(
+        (range) => range.from === source.indexOf("+++") && range.className === "cm-inactive-thematic-break"
+      )
+    ).toBeDefined();
+    expect(
+      ranges.find(
+        (range) =>
+          range.from === source.indexOf("+++") &&
+          range.to === source.indexOf("+++") + "+++".length &&
+          range.className === "cm-inactive-thematic-break-marker"
+      )
+    ).toBeDefined();
   });
 
   it("applies active paragraph line classes to keep body typography consistent", () => {

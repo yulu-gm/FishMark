@@ -2,9 +2,23 @@ import { createPointerInteractionContext, createVerticalInteractionContext } fro
 import { codeFenceAdapter } from "./adapters/code-fence-adapter";
 import { lineBlockAdapter } from "./adapters/line-block-adapter";
 import { tableAdapter } from "./adapters/table-adapter";
-import type { BlockInteractionAdapter } from "./types";
+import type { BlockInteractionAdapter, VerticalNavigationResult } from "./types";
 
 const adapters: readonly BlockInteractionAdapter[] = [tableAdapter, codeFenceAdapter, lineBlockAdapter];
+
+function normalizeAdapterResult(
+  result: VerticalNavigationResult | number | null
+): VerticalNavigationResult | null {
+  if (result === null) {
+    return null;
+  }
+
+  if (typeof result === "number") {
+    return { anchor: result, goalColumn: undefined };
+  }
+
+  return result;
+}
 
 export function resolvePointerSelectionAnchor(
   view: Parameters<typeof createPointerInteractionContext>[0],
@@ -28,34 +42,36 @@ export function resolvePointerSelectionAnchor(
   return null;
 }
 
-export function resolveArrowUpAnchor(
+export function resolveArrowUp(
   view: Parameters<typeof createVerticalInteractionContext>[0],
-  activeState: Parameters<typeof createVerticalInteractionContext>[1]
-): number | null {
-  const context = createVerticalInteractionContext(view, activeState);
+  activeState: Parameters<typeof createVerticalInteractionContext>[1],
+  goalColumn?: number
+): VerticalNavigationResult | null {
+  const context = createVerticalInteractionContext(view, activeState, goalColumn);
 
   for (const adapter of adapters) {
-    const nextAnchor = adapter.resolveArrowUp?.(context);
+    const result = normalizeAdapterResult(adapter.resolveArrowUp?.(context) ?? null);
 
-    if (typeof nextAnchor === "number") {
-      return nextAnchor;
+    if (result) {
+      return result;
     }
   }
 
   return null;
 }
 
-export function resolveArrowDownAnchor(
+export function resolveArrowDown(
   view: Parameters<typeof createVerticalInteractionContext>[0],
-  activeState: Parameters<typeof createVerticalInteractionContext>[1]
-): number | null {
-  const context = createVerticalInteractionContext(view, activeState);
+  activeState: Parameters<typeof createVerticalInteractionContext>[1],
+  goalColumn?: number
+): VerticalNavigationResult | null {
+  const context = createVerticalInteractionContext(view, activeState, goalColumn);
 
   for (const adapter of adapters) {
-    const nextAnchor = adapter.resolveArrowDown?.(context);
+    const result = normalizeAdapterResult(adapter.resolveArrowDown?.(context) ?? null);
 
-    if (typeof nextAnchor === "number") {
-      return nextAnchor;
+    if (result) {
+      return result;
     }
   }
 

@@ -71,7 +71,8 @@ export function createPointerInteractionContext(
 
 export function createVerticalInteractionContext(
   view: EditorView,
-  activeState: ActiveBlockState
+  activeState: ActiveBlockState,
+  goalColumn?: number
 ): VerticalInteractionContext {
   const selection = view.state.selection.main;
   const line = view.state.doc.lineAt(selection.head);
@@ -83,6 +84,7 @@ export function createVerticalInteractionContext(
     document: activeState.blockMap,
     activeBlock: activeState.activeBlock,
     lineStart: line.from,
-    lineEnd: line.to
+    lineEnd: line.to,
+    goalColumn: goalColumn ?? selection.goalColumn
   };
 }

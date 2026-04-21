@@ -8,14 +8,16 @@ import type {
 } from "@yulora/markdown-engine";
 
 import {
-  hasTransformedLinePresentation,
-  resolveAnchorForVisibleLineColumn,
-  resolveVisibleLineColumn
+  anchorForVisibleLineColumn,
+  createVisibleLine,
+  visibleLineColumn
 } from "../../line-visibility";
+import { findListItemAtLineStart } from "../../list-utils";
 import type {
   BlockInteractionAdapter,
   PointerInteractionContext,
-  VerticalInteractionContext
+  VerticalInteractionContext,
+  VerticalNavigationResult
 } from "../types";
 
 function isPointerWithinLeftPadding(context: PointerInteractionContext): boolean {
@@ -23,16 +25,6 @@ function isPointerWithinLeftPadding(context: PointerInteractionContext): boolean
     context.event.clientX >= context.rect.left &&
     context.event.clientX <= context.rect.left + context.paddingLeft
   );
-}
-
-function findListItemAtLineStart(block: ListBlock, lineStart: number): ListItemBlock | null {
-  for (const item of block.items) {
-    if (item.startOffset === lineStart) {
-      return item;
-    }
-  }
-
-  return null;
 }
 
 function findLastListItem(block: ListBlock): ListItemBlock | null {
@@ -100,7 +92,7 @@ function resolveVisibleBlockEntryAnchor(block: MarkdownBlock, direction: "start"
   }
 }
 
-function resolveSourceLineArrowUp(context: VerticalInteractionContext): number | null {
+function resolveSourceLineArrowUp(context: VerticalInteractionContext): VerticalNavigationResult | null {
   const selection = context.view.state.selection.main;
 
   if (!selection.empty) {
@@ -121,40 +113,33 @@ function resolveSourceLineArrowUp(context: VerticalInteractionContext): number |
   }
 
   const previousBlock = findBlockForLine(context.document.blocks, previousLine.number);
-  const currentLineParams = {
-    source: context.source,
-    block: currentBlock,
-    lineStart: currentLine.from,
-    lineEnd: currentLine.to
-  } as const;
 
   if (!previousBlock) {
     return null;
   }
 
-  const previousLineParams = {
-    source: context.source,
-    block: previousBlock,
-    lineStart: previousLine.from,
-    lineEnd: previousLine.to
-  } as const;
+  const currentVisible = createVisibleLine({
+    source: context.source, block: currentBlock,
+    lineStart: currentLine.from, lineEnd: currentLine.to
+  });
+  const previousVisible = createVisibleLine({
+    source: context.source, block: previousBlock,
+    lineStart: previousLine.from, lineEnd: previousLine.to
+  });
 
-  if (
-    !hasTransformedLinePresentation(currentLineParams) &&
-    !hasTransformedLinePresentation(previousLineParams)
-  ) {
+  if (!currentVisible.hasTransformedPresentation && !previousVisible.hasTransformedPresentation) {
     return null;
   }
 
-  const visibleColumn = resolveVisibleLineColumn({
-    ...currentLineParams,
-    anchor: selection.anchor
-  });
+  const column = context.goalColumn ?? visibleLineColumn(currentVisible, selection.anchor);
 
-  return resolveAnchorForVisibleLineColumn(previousLineParams, visibleColumn);
+  return {
+    anchor: anchorForVisibleLineColumn(previousVisible, column),
+    goalColumn: column
+  };
 }
 
-function resolveSourceLineArrowDown(context: VerticalInteractionContext): number | null {
+function resolveSourceLineArrowDown(context: VerticalInteractionContext): VerticalNavigationResult | null {
   const selection = context.view.state.selection.main;
 
   if (!selection.empty) {
@@ -175,37 +160,30 @@ function resolveSourceLineArrowDown(context: VerticalInteractionContext): number
   }
 
   const nextBlock = findBlockForLine(context.document.blocks, nextLine.number);
-  const currentLineParams = {
-    source: context.source,
-    block: currentBlock,
-    lineStart: currentLine.from,
-    lineEnd: currentLine.to
-  } as const;
 
   if (!nextBlock) {
     return null;
   }
 
-  const nextLineParams = {
-    source: context.source,
-    block: nextBlock,
-    lineStart: nextLine.from,
-    lineEnd: nextLine.to
-  } as const;
+  const currentVisible = createVisibleLine({
+    source: context.source, block: currentBlock,
+    lineStart: currentLine.from, lineEnd: currentLine.to
+  });
+  const nextVisible = createVisibleLine({
+    source: context.source, block: nextBlock,
+    lineStart: nextLine.from, lineEnd: nextLine.to
+  });
 
-  if (
-    !hasTransformedLinePresentation(currentLineParams) &&
-    !hasTransformedLinePresentation(nextLineParams)
-  ) {
+  if (!currentVisible.hasTransformedPresentation && !nextVisible.hasTransformedPresentation) {
     return null;
   }
 
-  const visibleColumn = resolveVisibleLineColumn({
-    ...currentLineParams,
-    anchor: selection.anchor
-  });
+  const column = context.goalColumn ?? visibleLineColumn(currentVisible, selection.anchor);
 
-  return resolveAnchorForVisibleLineColumn(nextLineParams, visibleColumn);
+  return {
+    anchor: anchorForVisibleLineColumn(nextVisible, column),
+    goalColumn: column
+  };
 }
 
 function resolveAdjacentBlockArrowUp(context: VerticalInteractionContext): number | null {
