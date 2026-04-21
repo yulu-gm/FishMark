@@ -21,9 +21,9 @@
 }
 
 .document-editor .cm-content {
-  max-width: 72ch;
-  margin: 0 auto;
-  padding: 40px 48px 56px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 40px clamp(64px, 12vw, 220px) 56px;
   caret-color: var(--yulora-caret-color);
 }
 

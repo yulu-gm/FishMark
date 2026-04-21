@@ -3770,7 +3770,7 @@ describe("App autosave", () => {
   });
 
   it("keeps the reading shell full width so the scrollbar and outline controls stay on the far right", () => {
-    const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8");
+    const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8").replace(/\r\n/g, "\n");
 
     expect(appUiStylesheet).toContain(
       '.workspace-canvas[data-yulora-shell-mode="reading"][data-yulora-has-document="true"] {\n  width: 100%;\n  max-width: none;\n  margin: 0;\n}'
@@ -3823,12 +3823,18 @@ describe("App autosave", () => {
   it("lets the document stage occupy most of the workspace width", () => {
     const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8");
     const editorStylesheet = readFileSync(join(process.cwd(), "src/renderer/styles/editor-source.css"), "utf-8");
+    const editorContentRule = getCssRule(editorStylesheet, ".document-editor .cm-content");
 
     expect(appUiStylesheet).toContain(".workspace-canvas");
     expect(appUiStylesheet).toContain("width: 100%;");
     expect(appUiStylesheet).toContain("max-width: none;");
     expect(editorStylesheet).toContain(".document-editor .cm-content");
-    expect(editorStylesheet).toContain("padding: 40px 48px 56px;");
+    expect(editorContentRule).toContain("width: 100%;");
+    expect(editorContentRule).toContain("box-sizing: border-box;");
+    expect(editorContentRule).toContain("padding: 40px clamp(64px, 12vw, 220px) 56px;");
+    expect(editorContentRule).not.toContain("padding: 40px clamp(48px, 9vw, 160px) 56px;");
+    expect(editorContentRule).not.toContain("padding: 40px 48px 56px;");
+    expect(editorContentRule).not.toContain("max-width: 72ch;");
   });
 
   it("keeps the reading-mode scroll surface full width so the scrollbar and outline stay pinned right", () => {
