@@ -1954,6 +1954,68 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("keeps the caret on the current empty ordered item when Backspace deletes within its marker line", () => {
+    const host = document.createElement("div");
+    const source = ["1. 1", "2. 2", "3. 4", "4. ", "5. 6", "6. 7"].join("\n");
+    const expected = ["1. 1", "2. 2", "3. 4", "4.", "5. 6", "6. 7"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressBackspace: () => void;
+    };
+    const view = getEditorView(host);
+    const lineFourStart = getLineStartOffset(source, 4);
+    const cursorOffset = lineFourStart + "4. ".length;
+    const expectedCursor = getLineStartOffset(expected, 4) + "4.".length;
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(cursorOffset);
+    advancedController.pressBackspace();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(view?.state.selection.main.anchor).toBe(expectedCursor);
+    expect(view?.state.selection.main.head).toBe(expectedCursor);
+
+    controller.destroy();
+  });
+
+  it("keeps the caret on the current line when Backspace removes the dot from an empty ordered item", () => {
+    const host = document.createElement("div");
+    const source = ["1. 1", "2. 2", "3. 4", "4.", "5. 6", "6. 7"].join("\n");
+    const expected = ["1. 1", "2. 2", "3. 4", "4", "1. 6", "2. 7"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressBackspace: () => void;
+    };
+    const view = getEditorView(host);
+    const lineFourStart = getLineStartOffset(source, 4);
+    const cursorOffset = lineFourStart + "4.".length;
+    const expectedCursor = getLineStartOffset(expected, 4) + "4".length;
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(cursorOffset);
+    advancedController.pressBackspace();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(view?.state.selection.main.anchor).toBe(expectedCursor);
+    expect(view?.state.selection.main.head).toBe(expectedCursor);
+
+    controller.destroy();
+  });
+
   it("renumbers source and target ordered-list scopes when Tab indents an item", () => {
     const host = document.createElement("div");
     const source = ["5. parent", "6. child", "7. sibling"].join("\n");

@@ -1,6 +1,7 @@
 import { parseBlockMap, type ListBlock, type ListItemBlock } from "@yulora/markdown-engine";
 
 import type { SemanticContext } from "./semantic-context";
+import { parseListLine } from "./line-parsers";
 
 export type TextChange = {
   from: number;
@@ -123,6 +124,48 @@ export function computeDeleteOrderedListRange(ctx: SemanticContext): ListEdit | 
   );
 
   return finalizeListEdit(rootList, tentativeSource, toBlockOffset(rootList, deleteFrom));
+}
+
+export function computeBackspaceOrderedListMarker(ctx: SemanticContext): ListEdit | null {
+  const current = findOrderedListItemContext(ctx);
+
+  if (
+    !current ||
+    ctx.selection.empty === false ||
+    current.item.children.length > 0 ||
+    current.item.endLine > current.item.startLine
+  ) {
+    return null;
+  }
+
+  const line = ctx.state.doc.lineAt(ctx.selection.from);
+
+  if (ctx.selection.from !== line.to) {
+    return null;
+  }
+
+  const parsed = parseListLine(line.text);
+
+  if (
+    !parsed ||
+    !/^\d+[.)]$/u.test(parsed.marker) ||
+    parsed.content.length > 0 ||
+    line.text !== `${parsed.indent}${parsed.marker}`
+  ) {
+    return null;
+  }
+
+  const markerDeleteFrom = current.item.markerEnd - 1;
+  const markerDeleteTo = current.item.markerEnd;
+  const blockSource = readBlockSource(ctx, current.rootList);
+  const tentativeSource = replaceRange(
+    blockSource,
+    toBlockOffset(current.rootList, markerDeleteFrom),
+    toBlockOffset(current.rootList, markerDeleteTo),
+    ""
+  );
+
+  return finalizeListEdit(current.rootList, tentativeSource, toBlockOffset(current.rootList, markerDeleteFrom));
 }
 
 export function computeIndentListItem(ctx: SemanticContext): ListEdit | null {
@@ -370,11 +413,11 @@ function appendOrderedListScopeChanges(
   startOrdinalOverride?: number
 ): void {
   if (list.ordered) {
-    const nextStartOrdinal = startOrdinalOverride ?? list.startOrdinal;
+    let nextOrdinal = startOrdinalOverride ?? list.startOrdinal;
 
     for (let index = 0; index < list.items.length; index += 1) {
       const item = list.items[index]!;
-      const desiredMarker = `${nextStartOrdinal + index}${list.delimiter}`;
+      const desiredMarker = `${nextOrdinal}${list.delimiter}`;
       const markerStart = item.markerStart - baseOffset;
       const markerEnd = item.markerEnd - baseOffset;
       const currentMarker = source.slice(markerStart, markerEnd);
@@ -386,6 +429,8 @@ function appendOrderedListScopeChanges(
           insert: desiredMarker
         });
       }
+
+      nextOrdinal = hasTopLevelPlainTextTail(item, source, baseOffset) ? 1 : nextOrdinal + 1;
     }
   }
 
@@ -424,6 +469,31 @@ function getDocumentOrderedListStartOrdinal(
   }
 
   return 1;
+}
+
+function hasTopLevelPlainTextTail(item: ListItemBlock, source: string, baseOffset: number): boolean {
+  const itemSource = source.slice(item.startOffset - baseOffset, item.endOffset - baseOffset);
+  const lines = itemSource.split("\n");
+
+  if (lines.length <= 1) {
+    return false;
+  }
+
+  for (let index = 1; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+
+    if (line.trim().length === 0) {
+      continue;
+    }
+
+    if (/^\s+/u.test(line)) {
+      continue;
+    }
+
+    return true;
+  }
+
+  return false;
 }
 
 function findOrderedListItemContext(ctx: SemanticContext): OrderedListItemContext | null {

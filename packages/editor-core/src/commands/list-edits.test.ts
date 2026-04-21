@@ -7,6 +7,7 @@ import { createActiveBlockStateFromMarkdownDocument } from "../active-block";
 import type { SemanticContext } from "./semantic-context";
 import { readSemanticContext } from "./semantic-context";
 import {
+  computeBackspaceOrderedListMarker,
   computeNormalizedOrderedListDocument,
   computeDeleteOrderedListRange,
   computeIndentListItem,
@@ -139,6 +140,26 @@ describe("list-edits", () => {
 
     expect(computeNormalizedOrderedListDocument(doc)).toMatchObject({
       source: ["1. one", "2. two", "1) three", "2) four"].join("\n")
+    });
+  });
+
+  it("restarts numbering after a top-level plain-text line interrupts an ordered run", () => {
+    const doc = ["1. one", "2. two", "3. four", "4", "5. six", "6. seven"].join("\n");
+
+    expect(computeNormalizedOrderedListDocument(doc)).toMatchObject({
+      source: ["1. one", "2. two", "3. four", "4", "1. six", "2. seven"].join("\n")
+    });
+  });
+
+  it("keeps selection on the current line when backspacing the marker of an empty ordered item", () => {
+    const doc = ["1. one", "2. two", "3. four", "4.", "5. six", "6. seven"].join("\n");
+    const context = buildContext(doc, ["1. one", "2. two", "3. four", "4."].join("\n").length);
+    const result = computeBackspaceOrderedListMarker(context);
+
+    expect(applyEdit(doc, result)).toBe(["1. one", "2. two", "3. four", "4", "1. six", "2. seven"].join("\n"));
+    expect(result?.selection).toEqual({
+      anchor: ["1. one", "2. two", "3. four", "4"].join("\n").length,
+      head: ["1. one", "2. two", "3. four", "4"].join("\n").length
     });
   });
 });

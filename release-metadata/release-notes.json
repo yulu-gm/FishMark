@@ -1,0 +1,5 @@
+{
+  "version": "0.1.7",
+  "title": "Yulora 0.1.7 Release",
+  "body": "### 本次更新\n\n- 修复阅读模式下编辑有序列表时页面会跳回顶部的问题。\n- 修复有序列表在中间删除、空白行断开、mixed delimiter 等场景下的重编号异常。\n- 优化空有序列表项的 Backspace / Enter 行为，光标位置和后续编号保持稳定。"
+}

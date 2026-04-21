@@ -55,7 +55,7 @@
 | TASK-009 | active block 状态 | DEV_DONE | 已在 `packages/editor-core` 中落地 active block 解析，并由 CodeMirror 选择变化驱动 renderer 侧当前块状态。 |
 | TASK-010 | 标题渲染 | CLOSED | 标题 `#` 弱化、激活回源码态、目标测试、人工验收与合并前门禁均已完成。 |
 | TASK-011 | 段落渲染 | CLOSED | 非激活段落轻量渲染、激活回源码态、目标测试、人工验收与合并前门禁均已完成。 |
-| TASK-012 | 列表与任务列表渲染 | DEV_DONE | 已补齐列表项 block metadata、非激活态列表/任务列表渲染、Enter 续项与空项退出规则；2026-04-20 又把有序列表编辑重构为统一语义层：`markdown-engine` 显式保留 `startOrdinal` / `delimiter` 与嵌套 `children`，`editor-core` 通过 `list-edits` 处理插入、删除、缩进、反缩进、上下移动与 transaction 级归一化，不再依赖分散的按键补丁逻辑；同层 mixed delimiter 与空白行断开的 ordered run 现在会拆成独立 scope，并在归一化时从 `1` 重新开始。 |
+| TASK-012 | 列表与任务列表渲染 | DEV_DONE | 已补齐列表项 block metadata、非激活态列表/任务列表渲染、Enter 续项与空项退出规则；2026-04-20 起有序列表编辑重构为统一语义层：`markdown-engine` 显式保留 `startOrdinal` / `delimiter` 与嵌套 `children`，`editor-core` 通过 `list-edits` 处理插入、删除、缩进、反缩进、上下移动与 transaction 级归一化，不再依赖分散的按键补丁逻辑；2026-04-21 又把 ordered-list normalization 从“全文替换”收敛成增量 `sequential` 事务，只修正必要 marker diff，彻底修复阅读模式下回删有序列表时页面跳顶的问题。 |
 | TASK-013 | 引用块渲染 | DEV_DONE | 已为 top-level 引用块补上非激活态淡色背景与缩进显示，隐藏 `>` 前缀，并在激活时恢复完整 Markdown 源码态；新增 blockquote 交互与 composition flush 回归测试。 |
 | TASK-014 | 链接显示与编辑 | TODO | 链接文本渲染与浏览器打开。 |
 | TASK-015 | 图片粘贴 | DEV_DONE | 已接入剪贴板图片导入、本地 `assets/` 落盘、相对路径 Markdown 插入，以及 Markdown 图片与 HTML `<img>` 在激活态源码 + 预览 / 非激活态图片预览下的统一渲染。 |

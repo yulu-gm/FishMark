@@ -4,6 +4,7 @@ import type { ListItemBlock } from "@yulora/markdown-engine";
 import type { ActiveBlockState } from "../active-block";
 import { buildContinuationPrefix, parseListLine } from "./line-parsers";
 import {
+  computeBackspaceOrderedListMarker,
   computeIndentListItem,
   computeMoveListItemDown,
   computeMoveListItemUp,
@@ -75,6 +76,10 @@ export function runListEnter(view: EditorView, activeState: ActiveBlockState): b
 }
 export function runListMoveLineUp(view: EditorView, activeState: ActiveBlockState): boolean {
   return runOrderedListEdit(view, activeState, computeMoveListItemUp);
+}
+
+export function runListBackspace(view: EditorView, activeState: ActiveBlockState): boolean {
+  return runOrderedListEdit(view, activeState, computeBackspaceOrderedListMarker);
 }
 
 export function runListMoveLineDown(view: EditorView, activeState: ActiveBlockState): boolean {

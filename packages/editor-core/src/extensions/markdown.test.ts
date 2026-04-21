@@ -307,4 +307,54 @@ describe("createYuloraMarkdownExtensions", () => {
 
     destroy();
   });
+
+  it("normalizes ordered-list numbering through minimal document changes instead of replacing the whole document", () => {
+    const source = ["1. one", "2. two", "", "3. three", "4. four"].join("\n");
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const transactions: import("@codemirror/state").Transaction[] = [];
+
+    const view = new EditorView({
+      state: EditorState.create({
+        doc: source,
+        extensions: createYuloraMarkdownExtensions({
+          parseMarkdownDocument,
+          onContentChange: vi.fn()
+        })
+      }),
+      parent: host,
+      dispatchTransactions: (trs, editorView) => {
+        transactions.push(...trs);
+        editorView.update(trs);
+      }
+    });
+
+    view.dispatch({
+      changes: {
+        from: source.indexOf("three"),
+        to: source.indexOf("three") + "three".length,
+        insert: "third"
+      }
+    });
+
+    const changedRanges: Array<{ fromA: number; toA: number; fromB: number; toB: number }> = [];
+    const normalizationTransaction = [...transactions].reverse().find((transaction) => transaction.docChanged);
+
+    normalizationTransaction?.changes.iterChangedRanges((fromA, toA, fromB, toB) => {
+      changedRanges.push({ fromA, toA, fromB, toB });
+    }, true);
+
+    expect(view.state.doc.toString()).toBe(["1. one", "2. two", "", "1. third", "2. four"].join("\n"));
+    expect(changedRanges).not.toEqual([
+      {
+        fromA: 0,
+        toA: normalizationTransaction?.startState.doc.length ?? source.length,
+        fromB: 0,
+        toB: normalizationTransaction?.newDoc.length ?? view.state.doc.length
+      }
+    ]);
+
+    view.destroy();
+    host.remove();
+  });
 });

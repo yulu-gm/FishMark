@@ -5,7 +5,12 @@ import { formatTableMarkdown, parseMarkdownDocument, splitTableLine } from "@yul
 import type { ActiveBlockState } from "../active-block";
 import { runBlockquoteBackspace, runBlockquoteEnter } from "./blockquote-commands";
 import { runCodeFenceBackspace, runCodeFenceEnter } from "./code-fence-commands";
-import { runListEnter, runListIndentOnTab, runListOutdentOnShiftTab } from "./list-commands";
+import {
+  runListBackspace,
+  runListEnter,
+  runListIndentOnTab,
+  runListOutdentOnShiftTab
+} from "./list-commands";
 import {
   runTableEnterFromLineAbove,
   runTableEnterFromLineBelow,
@@ -29,6 +34,7 @@ export function runMarkdownBackspace(view: EditorView, activeState: ActiveBlockS
   return (
     runCodeFenceBackspace(view, activeState) ||
     runBlockquoteBackspace(view, activeState) ||
+    runListBackspace(view, activeState) ||
     deleteCharBackward(view)
   );
 }

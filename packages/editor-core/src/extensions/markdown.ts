@@ -8,6 +8,7 @@ import {
   EditorState,
   StateEffect,
   StateField,
+  Transaction,
   type Extension
 } from "@codemirror/state";
 import {
@@ -508,19 +509,28 @@ export function createYuloraMarkdownExtensions(
         return transaction;
       }
       const selection = transaction.newSelection.main;
+      const userEvent = transaction.annotation(Transaction.userEvent);
+      const addToHistory = transaction.annotation(Transaction.addToHistory);
 
-      return {
-        changes: {
-          from: 0,
-          to: transaction.startState.doc.length,
-          insert: normalization.source
+      return [
+        {
+          changes: transaction.changes,
+          selection: transaction.selection ?? undefined,
+          effects: transaction.effects,
+          annotations: addToHistory === undefined ? undefined : Transaction.addToHistory.of(addToHistory),
+          userEvent,
+          scrollIntoView: transaction.scrollIntoView
         },
-        selection: {
-          anchor: mapTextOffsetThroughChanges(selection.anchor, normalization.changes),
-          head: mapTextOffsetThroughChanges(selection.head, normalization.changes)
-        },
-        annotations: orderedListNormalizationAnnotation.of(true)
-      };
+        {
+          changes: normalization.changes,
+          selection: {
+            anchor: mapTextOffsetThroughChanges(selection.anchor, normalization.changes),
+            head: mapTextOffsetThroughChanges(selection.head, normalization.changes)
+          },
+          annotations: orderedListNormalizationAnnotation.of(true),
+          sequential: true
+        }
+      ];
     }),
     history(),
     keymap.of([
