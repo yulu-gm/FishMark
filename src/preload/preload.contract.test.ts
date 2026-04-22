@@ -39,6 +39,12 @@ import {
   type ImportClipboardImageInput
 } from "../shared/clipboard-image-import";
 import {
+  EXTERNAL_MARKDOWN_FILE_CHANGED_EVENT,
+  SYNC_WATCHED_MARKDOWN_FILE_CHANNEL,
+  type ExternalMarkdownFileChangedEvent,
+  type SyncWatchedMarkdownFileInput
+} from "../shared/external-file-change";
+import {
   INTERRUPT_SCENARIO_RUN_CHANNEL,
   SCENARIO_RUN_EVENT,
   SCENARIO_RUN_TERMINAL_EVENT,
@@ -139,6 +145,9 @@ describe("preload contract", () => {
     const droppedMarkdownInput = { targetPath: "D:/fixtures/drop.md", hasOpenDocument: true };
     const saveInput = { path: "D:/fixtures/note.md", content: "# note" };
     const saveAsInput = { currentPath: "D:/fixtures/note.md", content: "# note" };
+    const syncWatchedFileInput: SyncWatchedMarkdownFileInput = {
+      path: "D:/fixtures/note.md"
+    };
     const importClipboardImageInput: ImportClipboardImageInput = {
       documentPath: "D:/fixtures/note.md"
     };
@@ -163,6 +172,7 @@ describe("preload contract", () => {
     void api.handleDroppedMarkdownFile(droppedMarkdownInput);
     void api.saveMarkdownFile(saveInput);
     void api.saveMarkdownFileAs(saveAsInput);
+    void api.syncWatchedMarkdownFile(syncWatchedFileInput);
     void api.importClipboardImage(importClipboardImageInput);
     void api.openEditorTestWindow();
     void api.startScenarioRun(startRunInput);
@@ -184,6 +194,7 @@ describe("preload contract", () => {
     expect(invoke.mock.calls).toContainEqual([HANDLE_DROPPED_MARKDOWN_FILE_CHANNEL, droppedMarkdownInput]);
     expect(invoke.mock.calls).toContainEqual([SAVE_MARKDOWN_FILE_CHANNEL, saveInput]);
     expect(invoke.mock.calls).toContainEqual([SAVE_MARKDOWN_FILE_AS_CHANNEL, saveAsInput]);
+    expect(invoke.mock.calls).toContainEqual([SYNC_WATCHED_MARKDOWN_FILE_CHANNEL, syncWatchedFileInput]);
     expect(invoke.mock.calls).toContainEqual([IMPORT_CLIPBOARD_IMAGE_CHANNEL, importClipboardImageInput]);
     expect(invoke.mock.calls).toContainEqual(["fishmark:open-editor-test-window"]);
     expect(invoke.mock.calls).toContainEqual([START_SCENARIO_RUN_CHANNEL, startRunInput]);
@@ -220,6 +231,7 @@ describe("preload contract", () => {
     const preferencesListener = vi.fn();
     const updateListener = vi.fn();
     const notificationListener = vi.fn();
+    const externalFileListener = vi.fn();
 
     const detachScenario = api.onScenarioRunEvent(scenarioListener);
     const detachTerminal = api.onScenarioRunTerminal(terminalListener);
@@ -228,8 +240,9 @@ describe("preload contract", () => {
     const detachPreferences = api.onPreferencesChanged(preferencesListener);
     const detachUpdate = api.onAppUpdateState(updateListener);
     const detachNotification = api.onAppNotification(notificationListener);
+    const detachExternalFile = api.onExternalMarkdownFileChanged(externalFileListener);
 
-    expect(on.mock.calls).toHaveLength(7);
+    expect(on.mock.calls).toHaveLength(8);
 
     const scenarioHandler = on.mock.calls[0]?.[1];
     const terminalHandler = on.mock.calls[1]?.[1];
@@ -238,6 +251,7 @@ describe("preload contract", () => {
     const preferencesHandler = on.mock.calls[4]?.[1];
     const updateHandler = on.mock.calls[5]?.[1];
     const notificationHandler = on.mock.calls[6]?.[1];
+    const externalFileHandler = on.mock.calls[7]?.[1];
 
     const scenarioPayload: RunnerEventEnvelope = {
       runId: "run-1",
@@ -283,6 +297,10 @@ describe("preload contract", () => {
       kind: "info",
       message: "当前已是最新版本。"
     };
+    const externalFilePayload: ExternalMarkdownFileChangedEvent = {
+      path: "D:/fixtures/note.md",
+      kind: "modified"
+    };
 
     scenarioHandler?.({}, scenarioPayload);
     terminalHandler?.({}, terminalPayload);
@@ -292,6 +310,7 @@ describe("preload contract", () => {
     preferencesHandler?.({}, preferencesPayload);
     updateHandler?.({}, updatePayload);
     notificationHandler?.({}, notificationPayload);
+    externalFileHandler?.({}, externalFilePayload);
 
     expect(scenarioListener).toHaveBeenCalledWith(scenarioPayload);
     expect(terminalListener).toHaveBeenCalledWith(terminalPayload);
@@ -301,6 +320,7 @@ describe("preload contract", () => {
     expect(preferencesListener).toHaveBeenCalledWith(preferencesPayload);
     expect(updateListener).toHaveBeenCalledWith(updatePayload);
     expect(notificationListener).toHaveBeenCalledWith(notificationPayload);
+    expect(externalFileListener).toHaveBeenCalledWith(externalFilePayload);
 
     detachScenario();
     detachTerminal();
@@ -309,6 +329,7 @@ describe("preload contract", () => {
     detachPreferences();
     detachUpdate();
     detachNotification();
+    detachExternalFile();
 
     expect(off.mock.calls).toEqual([
       [SCENARIO_RUN_EVENT, scenarioHandler],
@@ -317,7 +338,8 @@ describe("preload contract", () => {
       [APP_MENU_COMMAND_EVENT, menuHandler],
       [PREFERENCES_CHANGED_EVENT, preferencesHandler],
       [APP_UPDATE_STATE_EVENT, updateHandler],
-      [APP_NOTIFICATION_EVENT, notificationHandler]
+      [APP_NOTIFICATION_EVENT, notificationHandler],
+      [EXTERNAL_MARKDOWN_FILE_CHANGED_EVENT, externalFileHandler]
     ]);
   });
 });

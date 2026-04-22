@@ -6,6 +6,7 @@ const OPEN_MARKDOWN_FILE_FROM_PATH_CHANNEL = "fishmark:open-markdown-file-from-p
 const HANDLE_DROPPED_MARKDOWN_FILE_CHANNEL = "fishmark:handle-dropped-markdown-file";
 const SAVE_MARKDOWN_FILE_CHANNEL = "fishmark:save-markdown-file";
 const SAVE_MARKDOWN_FILE_AS_CHANNEL = "fishmark:save-markdown-file-as";
+const SYNC_WATCHED_MARKDOWN_FILE_CHANNEL = "fishmark:sync-watched-markdown-file";
 const IMPORT_CLIPBOARD_IMAGE_CHANNEL = "fishmark:import-clipboard-image";
 const OPEN_EDITOR_TEST_WINDOW_CHANNEL = "fishmark:open-editor-test-window";
 const START_SCENARIO_RUN_CHANNEL = "fishmark:start-scenario-run";
@@ -25,6 +26,7 @@ const OPEN_THEMES_DIRECTORY_CHANNEL = "fishmark:open-themes-directory";
 const CHECK_FOR_APP_UPDATES_CHANNEL = "fishmark:check-for-app-updates";
 const APP_UPDATE_STATE_EVENT = "fishmark:app-update-state";
 const APP_NOTIFICATION_EVENT = "fishmark:app-notification";
+const EXTERNAL_MARKDOWN_FILE_CHANGED_EVENT = "fishmark:external-markdown-file-changed";
 const RUNTIME_MODE_ARGUMENT_PREFIX = "--fishmark-runtime-mode=";
 const STARTUP_OPEN_PATH_ARGUMENT_PREFIX = "--fishmark-startup-open-path=";
 
@@ -167,6 +169,13 @@ type AppNotification = {
   kind: "loading" | "info" | "success" | "warning" | "error";
   message: string;
 };
+type ExternalMarkdownFileChangedEvent = {
+  path: string;
+  kind: "modified" | "deleted";
+};
+type SyncWatchedMarkdownFileInput = {
+  path: string | null;
+};
 type ImportClipboardImageInput = {
   documentPath: string;
 };
@@ -207,6 +216,10 @@ export type {
 export type {
   ImportClipboardImageInput as PreloadImportClipboardImageInput,
   ImportClipboardImageResult as PreloadImportClipboardImageResult
+};
+export type {
+  ExternalMarkdownFileChangedEvent as PreloadExternalMarkdownFileChangedEvent,
+  SyncWatchedMarkdownFileInput as PreloadSyncWatchedMarkdownFileInput
 };
 
 type ScenarioRunStatus = "idle" | "running" | "passed" | "failed" | "timed-out" | "interrupted";
@@ -285,6 +298,8 @@ const api = {
     ipcRenderer.invoke(SAVE_MARKDOWN_FILE_CHANNEL, input),
   saveMarkdownFileAs: (input: { currentPath: string | null; content: string }) =>
     ipcRenderer.invoke(SAVE_MARKDOWN_FILE_AS_CHANNEL, input),
+  syncWatchedMarkdownFile: (input: SyncWatchedMarkdownFileInput): Promise<void> =>
+    ipcRenderer.invoke(SYNC_WATCHED_MARKDOWN_FILE_CHANNEL, input),
   importClipboardImage: (input: ImportClipboardImageInput): Promise<ImportClipboardImageResult> =>
     ipcRenderer.invoke(IMPORT_CLIPBOARD_IMAGE_CHANNEL, input),
   openEditorTestWindow: () => ipcRenderer.invoke(OPEN_EDITOR_TEST_WINDOW_CHANNEL),
@@ -379,6 +394,20 @@ const api = {
 
     return () => {
       ipcRenderer.off(APP_NOTIFICATION_EVENT, handleAppNotification);
+    };
+  },
+  onExternalMarkdownFileChanged: (listener: (event: ExternalMarkdownFileChangedEvent) => void) => {
+    const handleExternalMarkdownFileChanged = (
+      _event: unknown,
+      payload: ExternalMarkdownFileChangedEvent
+    ) => {
+      listener(payload);
+    };
+
+    ipcRenderer.on(EXTERNAL_MARKDOWN_FILE_CHANGED_EVENT, handleExternalMarkdownFileChanged);
+
+    return () => {
+      ipcRenderer.off(EXTERNAL_MARKDOWN_FILE_CHANGED_EVENT, handleExternalMarkdownFileChanged);
     };
   }
 };

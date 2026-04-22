@@ -1,0 +1,190 @@
+<h2>FishMark 标签页架构路径</h2>
+<p class="subtitle">目标基线：默认单窗口多标签页；只有明确选择 New Window 才打开新窗口。本轮还要支持标签排序和拖出成新窗口，但不做会话恢复。</p>
+
+<style>
+  .cards {
+    align-items: stretch;
+  }
+
+  .card {
+    min-height: 100%;
+  }
+
+  .mini-shell {
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 14px;
+    overflow: hidden;
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.06), rgba(255, 255, 255, 0.82));
+  }
+
+  .mini-titlebar {
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+    font-size: 12px;
+    color: #475569;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .mini-tabs {
+    display: flex;
+    gap: 6px;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+    background: rgba(248, 250, 252, 0.82);
+  }
+
+  .mini-tab {
+    padding: 6px 10px;
+    border-radius: 10px 10px 0 0;
+    font-size: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    background: rgba(226, 232, 240, 0.48);
+    color: #475569;
+  }
+
+  .mini-tab.active {
+    background: white;
+    color: #0f172a;
+    border-bottom-color: white;
+    font-weight: 600;
+  }
+
+  .mini-body {
+    padding: 12px;
+    display: grid;
+    gap: 8px;
+    background: white;
+  }
+
+  .lane {
+    border: 1px dashed rgba(148, 163, 184, 0.35);
+    border-radius: 10px;
+    padding: 8px 10px;
+    font-size: 12px;
+    color: #334155;
+    background: rgba(248, 250, 252, 0.8);
+  }
+
+  .lane strong {
+    display: block;
+    margin-bottom: 4px;
+    color: #0f172a;
+  }
+
+  .badge {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    background: rgba(14, 165, 233, 0.12);
+    color: #0c4a6e;
+  }
+</style>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mini-shell">
+        <div class="mini-titlebar">
+          <span>Window</span>
+          <span>renderer 自己拼完整工作区</span>
+        </div>
+        <div class="mini-tabs">
+          <div class="mini-tab active">a.md</div>
+          <div class="mini-tab">b.md</div>
+          <div class="mini-tab">Untitled</div>
+        </div>
+        <div class="mini-body">
+          <div class="lane">
+            <strong>单个超大 AppState</strong>
+            每个 tab 都复制 open/save/dirty/watch 状态
+          </div>
+          <div class="lane">
+            <strong>拖出新窗口</strong>
+            renderer 发请求，main 只负责开壳
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. Renderer 直接扩成多标签页</h3>
+      <p>改动看起来最少，但会把现在围绕 <code>currentDocument</code> 的逻辑全部塞进更大的 renderer 状态树里。</p>
+      <div class="badge">优点：起步快</div>
+      <div class="badge">风险：App.tsx 会继续膨胀</div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mini-shell">
+        <div class="mini-titlebar">
+          <span>Window</span>
+          <span>窗口级工作区 + 标签页级文档会话</span>
+        </div>
+        <div class="mini-tabs">
+          <div class="mini-tab active">a.md</div>
+          <div class="mini-tab">b.md *</div>
+          <div class="mini-tab">Untitled</div>
+        </div>
+        <div class="mini-body">
+          <div class="lane">
+            <strong>WorkspaceState</strong>
+            activeTabId、tabOrder、drag session、窗口级命令路由
+          </div>
+          <div class="lane">
+            <strong>DocumentSession</strong>
+            path、content、dirty、autosave、external-watch
+          </div>
+          <div class="lane">
+            <strong>Main</strong>
+            只管 New Window、窗口创建、标签拖出/接收
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. 窗口工作区模型</h3>
+      <p>把“窗口”和“标签页”拆成两层状态，保留现有文件 IO 边界；新窗口只处理窗口壳，文档会话仍主要在 renderer 内。</p>
+      <div class="badge">推荐：边界最清晰</div>
+      <div class="badge">适合先做完整多标签 + 拖出新窗口</div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mini-shell">
+        <div class="mini-titlebar">
+          <span>Main Session Manager</span>
+          <span>主进程掌控所有窗口与标签</span>
+        </div>
+        <div class="mini-body">
+          <div class="lane">
+            <strong>Main 维护全局 workspace graph</strong>
+            窗口、tab、最近焦点、拖拽迁移全在主进程
+          </div>
+          <div class="lane">
+            <strong>Renderer</strong>
+            更像 tab 的视图层和编辑宿主
+          </div>
+          <div class="lane">
+            <strong>IPC</strong>
+            需要大量增量协议和同步事件
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C. Main 拥有全局工作区图</h3>
+      <p>最适合未来会话恢复、多窗口编排和复杂恢复逻辑，但这轮会引入明显更大的 IPC 和主进程状态复杂度。</p>
+      <div class="badge">优点：长期扩展性最好</div>
+      <div class="badge">代价：这轮实现面过大</div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>我的当前建议</h3>
+  <p>优先走 <strong>B</strong>。它能把现有单文档模型自然演进成“窗口工作区 + 多个文档会话”，同时不把文件系统、保存、外部变更监听重新上提到主进程。这样最容易保住现有架构边界，也足够支撑你要的排序和拖出成新窗口。</p>
+</div>

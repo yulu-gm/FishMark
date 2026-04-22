@@ -1,0 +1,73 @@
+<h2 style="font-size:32px; color:#111827; margin-bottom:12px;">FishMark 标签页设计：架构总览</h2>
+<p style="font-size:18px; line-height:1.7; color:#1f2937; margin-bottom:24px;">
+  已选方向：<strong>C. 主进程拥有全局工作区图</strong>。这一页只确认职责边界和主数据流，不展开菜单细节。
+</p>
+
+<div style="display:grid; gap:18px;">
+  <section style="background:#ffffff; color:#111827; border:2px solid #cbd5e1; border-radius:16px; padding:20px;">
+    <div style="font-size:13px; font-weight:700; letter-spacing:0.08em; color:#475569; text-transform:uppercase; margin-bottom:14px;">核心分层</div>
+    <div style="display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:14px;">
+      <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:14px; padding:16px;">
+        <div style="font-size:20px; font-weight:700; margin-bottom:10px; color:#0f172a;">main: WorkspaceGraph</div>
+        <div style="font-size:16px; line-height:1.7; color:#1f2937;">
+          持有全局窗口、标签页、标签顺序、活动标签、标签归属窗口、拖拽迁移状态。<br><br>
+          这里是“FishMark 当前打开了哪些文档，它们在哪个窗口里”的唯一事实源。
+        </div>
+      </div>
+      <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:14px; padding:16px;">
+        <div style="font-size:20px; font-weight:700; margin-bottom:10px; color:#0f172a;">main: TabSession Registry</div>
+        <div style="font-size:16px; line-height:1.7; color:#1f2937;">
+          每个标签页一条 session：路径、标题、当前草稿内容、上次已保存内容、dirty、保存状态、外部文件变更状态。<br><br>
+          关闭标签、拖到别的窗口、切换活动标签，都不丢会话。
+        </div>
+      </div>
+      <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:14px; padding:16px;">
+        <div style="font-size:20px; font-weight:700; margin-bottom:10px; color:#0f172a;">renderer: Window Shell + Editor Host</div>
+        <div style="font-size:16px; line-height:1.7; color:#1f2937;">
+          只负责渲染当前窗口的标签栏、活动标签、编辑器视图和提示 UI。<br><br>
+          CodeMirror 仍留在 renderer，本地处理输入和 IME；通过受限 IPC 把变更提交给 main session。
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section style="background:#ffffff; color:#111827; border:2px solid #cbd5e1; border-radius:16px; padding:20px;">
+    <div style="font-size:13px; font-weight:700; letter-spacing:0.08em; color:#475569; text-transform:uppercase; margin-bottom:14px;">主数据流</div>
+    <div style="display:grid; gap:12px;">
+      <div style="background:#f8fafc; border-left:6px solid #0284c7; border-radius:0 12px 12px 0; padding:14px 16px;">
+        <div style="font-size:18px; font-weight:700; color:#0f172a; margin-bottom:6px;">1. 所有“打开 / 新建 / 关闭 / 拖出成新窗口”命令先到 main</div>
+        <div style="font-size:16px; line-height:1.7; color:#1f2937;">main 决定是复用当前窗口、往某个窗口插入标签，还是新建窗口承接标签。</div>
+      </div>
+      <div style="background:#f8fafc; border-left:6px solid #0284c7; border-radius:0 12px 12px 0; padding:14px 16px;">
+        <div style="font-size:18px; font-weight:700; color:#0f172a; margin-bottom:6px;">2. main 更新 WorkspaceGraph 和 TabSession</div>
+        <div style="font-size:16px; line-height:1.7; color:#1f2937;">然后把“某窗口当前有哪些标签、活动标签是谁、每个标签的轻量状态”同步给对应 renderer。</div>
+      </div>
+      <div style="background:#f8fafc; border-left:6px solid #0284c7; border-radius:0 12px 12px 0; padding:14px 16px;">
+        <div style="font-size:18px; font-weight:700; color:#0f172a; margin-bottom:6px;">3. renderer 只挂载当前活动标签的编辑器</div>
+        <div style="font-size:16px; line-height:1.7; color:#1f2937;">切换标签时，renderer 请求 main 给出该标签 session 的最新草稿内容和元数据，再重载编辑器。</div>
+      </div>
+      <div style="background:#f8fafc; border-left:6px solid #0284c7; border-radius:0 12px 12px 0; padding:14px 16px;">
+        <div style="font-size:18px; font-weight:700; color:#0f172a; margin-bottom:6px;">4. 编辑器内容变化回写到 main</div>
+        <div style="font-size:16px; line-height:1.7; color:#1f2937;">renderer 产生内容变化、dirty 状态、保存请求后，通过受限 IPC 更新对应标签 session；main 再广播标签栏所需的标题 / dirty / save 状态。</div>
+      </div>
+    </div>
+  </section>
+
+  <section style="background:#ffffff; color:#111827; border:2px solid #cbd5e1; border-radius:16px; padding:20px;">
+    <div style="font-size:13px; font-weight:700; letter-spacing:0.08em; color:#475569; text-transform:uppercase; margin-bottom:14px;">这条路的取舍</div>
+    <div style="display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:14px;">
+      <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:14px; padding:16px;">
+        <div style="font-size:20px; font-weight:700; margin-bottom:10px; color:#0f172a;">好处</div>
+        <div style="font-size:16px; line-height:1.7; color:#1f2937;">标签拖出成新窗口、后续会话恢复、最近焦点窗口、跨窗口移动标签都会有统一模型，不需要再从单窗口逻辑里硬拆。</div>
+      </div>
+      <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:14px; padding:16px;">
+        <div style="font-size:20px; font-weight:700; margin-bottom:10px; color:#0f172a;">代价</div>
+        <div style="font-size:16px; line-height:1.7; color:#1f2937;">这轮必须正式引入 workspace / tab IPC 协议，`currentDocument` 心智模型会升级成 `window -> tabs -> active tab session`。</div>
+      </div>
+      <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:14px; padding:16px;">
+        <div style="font-size:20px; font-weight:700; margin-bottom:10px; color:#0f172a;">保留边界</div>
+        <div style="font-size:16px; line-height:1.7; color:#1f2937;">不把原始文件系统能力下放给 renderer；不把 CodeMirror 挪到 main；不在本轮加入启动恢复。</div>
+      </div>
+    </div>
+  </section>
+</div>

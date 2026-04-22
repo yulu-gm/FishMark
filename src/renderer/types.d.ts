@@ -11,6 +11,10 @@ import type {
 import type { Preferences, PreferencesUpdate } from "../shared/preferences";
 import type { AppNotification, AppUpdateState } from "../shared/app-update";
 import type {
+  ExternalMarkdownFileChangedEvent,
+  SyncWatchedMarkdownFileInput
+} from "../shared/external-file-change";
+import type {
   SaveMarkdownFileAsInput,
   SaveMarkdownFileInput,
   SaveMarkdownFileResult
@@ -56,6 +60,7 @@ declare global {
       getPathForDroppedFile: (file: File) => string;
       saveMarkdownFile: (input: SaveMarkdownFileInput) => Promise<SaveMarkdownFileResult>;
       saveMarkdownFileAs: (input: SaveMarkdownFileAsInput) => Promise<SaveMarkdownFileResult>;
+      syncWatchedMarkdownFile: (input: SyncWatchedMarkdownFileInput) => Promise<void>;
       importClipboardImage: (input: ImportClipboardImageInput) => Promise<ImportClipboardImageResult>;
       openEditorTestWindow: () => Promise<void>;
       listFontFamilies: () => Promise<string[]>;
@@ -75,6 +80,9 @@ declare global {
       onPreferencesChanged: (listener: (preferences: Preferences) => void) => () => void;
       onAppUpdateState: (listener: (state: AppUpdateState) => void) => () => void;
       onAppNotification: (listener: (notification: AppNotification) => void) => () => void;
+      onExternalMarkdownFileChanged: (
+        listener: (event: ExternalMarkdownFileChangedEvent) => void
+      ) => () => void;
     };
   }
 }

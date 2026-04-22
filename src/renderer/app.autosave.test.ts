@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OpenMarkdownFileResult } from "../shared/open-markdown-file";
 import type { AppNotification, AppUpdateState } from "../shared/app-update";
 import type { EditorTestCommandEnvelope } from "../shared/editor-test-command";
+import type { ExternalMarkdownFileChangedEvent } from "../shared/external-file-change";
 import { DEFAULT_PREFERENCES, type Preferences } from "../shared/preferences";
 import type {
   SaveMarkdownFileAsInput,
@@ -36,6 +37,7 @@ type EditorTestCommandListener = (payload: EditorTestCommandEnvelope) => void;
 type ScenarioRunEventListener = (payload: RunnerEventEnvelope) => void;
 type ScenarioRunTerminalListener = (payload: ScenarioRunTerminal) => void;
 type PreferencesChangedListener = (preferences: Preferences) => void;
+type ExternalMarkdownFileChangedListener = (event: ExternalMarkdownFileChangedEvent) => void;
 type ThemePackageDescriptor = Awaited<ReturnType<Window["fishmark"]["listThemePackages"]>>[number];
 type UpdatePreferencesResult = Awaited<ReturnType<Window["fishmark"]["updatePreferences"]>>;
 type MockMediaQueryList = MediaQueryList & {
@@ -396,6 +398,7 @@ describe("App autosave", () => {
   let preferencesChangedListener: PreferencesChangedListener | null;
   let appUpdateStateListener: ((state: AppUpdateState) => void) | null;
   let appNotificationListener: ((notification: AppNotification) => void) | null;
+  let externalMarkdownFileChangedListener: ExternalMarkdownFileChangedListener | null;
   let fetchMock: ReturnType<typeof vi.fn>;
   let canvasGetContextSpy: { mockRestore: () => void };
   let openMarkdownFile: ReturnType<typeof vi.fn<() => Promise<OpenMarkdownFileResult>>>;
@@ -415,6 +418,9 @@ describe("App autosave", () => {
   >;
   let saveMarkdownFileAs: ReturnType<
     typeof vi.fn<(input: SaveMarkdownFileAsInput) => Promise<SaveMarkdownFileResult>>
+  >;
+  let syncWatchedMarkdownFile: ReturnType<
+    typeof vi.fn<(input: { path: string | null }) => Promise<void>>
   >;
   let importClipboardImage: ReturnType<
     typeof vi.fn<
@@ -508,6 +514,7 @@ describe("App autosave", () => {
     preferencesChangedListener = null;
     appUpdateStateListener = null;
     appNotificationListener = null;
+    externalMarkdownFileChangedListener = null;
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -566,6 +573,9 @@ describe("App autosave", () => {
       return fileWithPath.path ?? "";
     });
     saveMarkdownFileAs = vi.fn<(input: SaveMarkdownFileAsInput) => Promise<SaveMarkdownFileResult>>();
+    syncWatchedMarkdownFile = vi.fn<(input: { path: string | null }) => Promise<void>>().mockResolvedValue(
+      undefined
+    );
     importClipboardImage = vi.fn().mockResolvedValue({
       status: "error",
       error: {
@@ -594,6 +604,7 @@ describe("App autosave", () => {
       getPathForDroppedFile,
       saveMarkdownFile,
       saveMarkdownFileAs,
+      syncWatchedMarkdownFile,
       importClipboardImage,
       openEditorTestWindow: vi.fn().mockResolvedValue(undefined),
       startScenarioRun: vi.fn().mockResolvedValue({ runId: "unused-run" }),
@@ -654,6 +665,14 @@ describe("App autosave", () => {
         return () => {
           if (appNotificationListener === listener) {
             appNotificationListener = null;
+          }
+        };
+      },
+      onExternalMarkdownFileChanged(listener: ExternalMarkdownFileChangedListener) {
+        externalMarkdownFileChangedListener = listener;
+        return () => {
+          if (externalMarkdownFileChangedListener === listener) {
+            externalMarkdownFileChangedListener = null;
           }
         };
       }
@@ -1270,6 +1289,113 @@ describe("App autosave", () => {
       path: "C:/notes/today.md",
       content: "# Pending autosave\n"
     });
+  });
+
+  it("pauses autosave and shows recovery actions after an external modification", async () => {
+    await renderAndOpenDocument();
+
+    expect(syncWatchedMarkdownFile).toHaveBeenCalledWith({ path: "C:/notes/today.md" });
+    expect(externalMarkdownFileChangedListener).not.toBeNull();
+
+    await act(async () => {
+      codeEditorMock.changeContent("# Local draft\n");
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      externalMarkdownFileChangedListener?.({
+        path: "C:/notes/today.md",
+        kind: "modified"
+      });
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+
+    expect(saveMarkdownFile).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("当前文件已被外部修改");
+    expect(findButtonByText("重载磁盘版本")).not.toBeNull();
+    expect(findButtonByText("保留当前编辑")).not.toBeNull();
+    expect(findButtonByText("另存为新文件")).not.toBeNull();
+  });
+
+  it("routes Save to Save As after keeping the in-memory version during an external conflict", async () => {
+    saveMarkdownFileAs.mockResolvedValue({
+      status: "success",
+      document: {
+        path: "C:/notes/conflict-copy.md",
+        name: "conflict-copy.md",
+        content: "# Local draft\n",
+        encoding: "utf-8"
+      }
+    });
+
+    await renderAndOpenDocument();
+
+    await act(async () => {
+      codeEditorMock.changeContent("# Local draft\n");
+      externalMarkdownFileChangedListener?.({
+        path: "C:/notes/today.md",
+        kind: "modified"
+      });
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      findButtonByText("保留当前编辑")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    saveMarkdownFile.mockClear();
+    saveMarkdownFileAs.mockClear();
+
+    await act(async () => {
+      menuCommandListener?.("save-markdown-file");
+      await Promise.resolve();
+    });
+
+    expect(saveMarkdownFile).not.toHaveBeenCalled();
+    expect(saveMarkdownFileAs).toHaveBeenCalledWith({
+      currentPath: "C:/notes/today.md",
+      content: "# Local draft\n"
+    });
+  });
+
+  it("reloads the disk version when the user accepts the external-change prompt", async () => {
+    openMarkdownFileFromPath = vi.fn<(targetPath: string) => Promise<OpenMarkdownFileResult>>().mockResolvedValue({
+      status: "success",
+      document: {
+        path: "C:/notes/today.md",
+        name: "today.md",
+        content: "# Disk update\n",
+        encoding: "utf-8"
+      }
+    });
+    window.fishmark = {
+      ...window.fishmark,
+      openMarkdownFileFromPath
+    } as Window["fishmark"];
+
+    await renderAndOpenDocument();
+
+    await act(async () => {
+      externalMarkdownFileChangedListener?.({
+        path: "C:/notes/today.md",
+        kind: "modified"
+      });
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      findButtonByText("重载磁盘版本")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(openMarkdownFileFromPath).toHaveBeenCalledWith("C:/notes/today.md");
+    expect(container.textContent).not.toContain("当前文件已被外部修改");
   });
 
   it("applies initial theme and typography preferences to the document root", async () => {
@@ -3867,18 +3993,62 @@ describe("App autosave", () => {
     expect(appUiStylesheet).toContain("display: block;");
   });
 
-  it("keeps the integrated rain glass status strip in normal workspace flow", () => {
-    const rainGlassUiStylesheet = readFileSync(rainGlassUiStylesheetPath, "utf-8").replace(/\r\n/g, "\n");
+  it("keeps bundled shader themes aligned to the shared workspace shell layout", () => {
+    const themeUiStylesheets = [
+      readFileSync(rainGlassUiStylesheetPath, "utf-8").replace(/\r\n/g, "\n"),
+      readFileSync(emberAscendUiStylesheetPath, "utf-8").replace(/\r\n/g, "\n"),
+      readFileSync(pearlDriftUiStylesheetPath, "utf-8").replace(/\r\n/g, "\n")
+    ] as const;
 
-    expect(rainGlassUiStylesheet).toContain('[data-fishmark-layout="workspace"].app-workspace');
-    expect(rainGlassUiStylesheet).toContain("grid-template-rows: auto minmax(0, 1fr) auto;");
-    expect(rainGlassUiStylesheet).toContain("padding: var(--fishmark-space-4) var(--fishmark-space-5);");
-    expect(rainGlassUiStylesheet).toContain('[data-fishmark-layout="workspace"] .app-status-bar');
-    expect(rainGlassUiStylesheet).toContain("position: static;");
-    expect(rainGlassUiStylesheet).toContain("background: transparent;");
-    expect(rainGlassUiStylesheet).toContain('[data-fishmark-layout="workspace"] .app-status-bar [data-fishmark-region="status-strip"]');
-    expect(rainGlassUiStylesheet).not.toContain("border-top: 1px solid");
-    expect(rainGlassUiStylesheet).toContain('[data-fishmark-layout="workspace"] .app-status-bar [data-fishmark-region="status-strip"] {\n  min-height: var(--fishmark-status-bar-height);\n  padding-top: var(--fishmark-space-2);\n  background: transparent;');
+    const [rainGlassUiStylesheet, emberAscendUiStylesheet, pearlDriftUiStylesheet] = themeUiStylesheets;
+
+    for (const stylesheet of themeUiStylesheets) {
+      expect(stylesheet).not.toContain('[data-fishmark-layout="workspace"].app-workspace');
+      expect(stylesheet).not.toContain('[data-fishmark-layout="workspace"] .app-status-bar');
+      expect(stylesheet).toContain(".document-editor {");
+      expect(stylesheet).toContain("backdrop-filter:");
+    }
+
+    const rainGlassHeaderRule = getCssRule(
+      rainGlassUiStylesheet,
+      '[data-fishmark-layout="workspace"] .workspace-header'
+    );
+    const rainGlassEditorRule = getCssRule(rainGlassUiStylesheet, ".document-editor");
+    const emberHeaderRule = getCssRule(
+      emberAscendUiStylesheet,
+      '[data-fishmark-layout="workspace"] .workspace-header'
+    );
+    const emberEditorRule = getCssRule(emberAscendUiStylesheet, ".document-editor");
+    const pearlHeaderRule = getCssRule(
+      pearlDriftUiStylesheet,
+      '[data-fishmark-layout="workspace"] .workspace-header'
+    );
+    const pearlEditorRule = getCssRule(pearlDriftUiStylesheet, ".document-editor");
+
+    expect(rainGlassHeaderRule).not.toContain("width:");
+    expect(rainGlassHeaderRule).not.toContain("margin:");
+    expect(rainGlassEditorRule).not.toContain("width:");
+    expect(rainGlassEditorRule).not.toContain("height:");
+    expect(rainGlassEditorRule).not.toContain("margin:");
+    expect(rainGlassEditorRule).not.toContain("padding:");
+    expect(rainGlassEditorRule).not.toContain("grid-template-rows:");
+    expect(rainGlassEditorRule).not.toContain("gap:");
+    expect(emberHeaderRule).not.toContain("width:");
+    expect(emberHeaderRule).not.toContain("margin:");
+    expect(emberEditorRule).not.toContain("width:");
+    expect(emberEditorRule).not.toContain("height:");
+    expect(emberEditorRule).not.toContain("margin:");
+    expect(emberEditorRule).not.toContain("padding:");
+    expect(emberEditorRule).not.toContain("grid-template-rows:");
+    expect(emberEditorRule).not.toContain("gap:");
+    expect(pearlHeaderRule).not.toContain("width:");
+    expect(pearlHeaderRule).not.toContain("margin:");
+    expect(pearlEditorRule).not.toContain("width:");
+    expect(pearlEditorRule).not.toContain("height:");
+    expect(pearlEditorRule).not.toContain("margin:");
+    expect(pearlEditorRule).not.toContain("padding:");
+    expect(pearlEditorRule).not.toContain("grid-template-rows:");
+    expect(pearlEditorRule).not.toContain("gap:");
   });
 
   it("removes border framing from the editor shell and bottom status bar", () => {
@@ -4227,6 +4397,14 @@ describe("App autosave", () => {
 
   function emitAppNotification(notification: AppNotification): void {
     appNotificationListener?.(notification);
+  }
+
+  function findButtonByText(text: string): HTMLButtonElement | null {
+    return (
+      [...container.querySelectorAll("button")].find(
+        (element): element is HTMLButtonElement => element.textContent?.includes(text) ?? false
+      ) ?? null
+    );
   }
 });
 

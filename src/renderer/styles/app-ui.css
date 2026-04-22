@@ -425,6 +425,50 @@
   color: var(--fishmark-text-danger, #8b1e1e);
 }
 
+.external-file-conflict-banner {
+  display: grid;
+  gap: 12px;
+  margin: 0 var(--fishmark-shell-gutter) 16px;
+  padding: 16px 18px;
+  border: 1px solid color-mix(in srgb, var(--fishmark-banner-warning-border, #d9b75d) 55%, transparent);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--fishmark-banner-warning-bg, #fff7e0) 92%, white) 0%, transparent 100%),
+    var(--fishmark-panel-bg, rgba(255, 255, 255, 0.94));
+  box-shadow: 0 18px 38px rgba(15, 23, 42, 0.08);
+}
+
+.external-file-conflict-banner[data-status="keeping-memory"] {
+  border-color: color-mix(in srgb, var(--fishmark-text-info, #3155a6) 26%, transparent);
+}
+
+.external-file-conflict-message {
+  margin: 0;
+  color: var(--fishmark-text-primary, #171a1f);
+  font-size: 0.94rem;
+  line-height: 1.55;
+}
+
+.external-file-conflict-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.external-file-conflict-button {
+  border: 1px solid color-mix(in srgb, var(--fishmark-control-border, rgba(15, 23, 42, 0.12)) 85%, transparent);
+  border-radius: 999px;
+  background: var(--fishmark-control-bg, rgba(255, 255, 255, 0.92));
+  color: var(--fishmark-text-primary, #171a1f);
+  padding: 9px 14px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.external-file-conflict-button.is-secondary {
+  opacity: 0.78;
+}
+
 @keyframes app-notification-enter {
   from {
     opacity: 0;

@@ -1,0 +1,96 @@
+<h2 style="font-size:32px; color:#111827; margin-bottom:12px;">FishMark 标签页设计：状态边界</h2>
+<p style="font-size:18px; line-height:1.7; color:#1f2937; margin-bottom:24px;">
+  第二段设计：明确 <strong>main</strong> 和 <strong>renderer</strong> 分别持有什么状态，以及标签切换 / 拖到新窗口时怎样保持未保存内容、光标和编辑器体验。
+</p>
+
+<div style="display:grid; gap:18px;">
+  <section style="background:#ffffff; border:2px solid #cbd5e1; border-radius:16px; padding:20px;">
+    <div style="font-size:13px; font-weight:700; letter-spacing:0.08em; color:#475569; text-transform:uppercase; margin-bottom:14px;">main 持有的状态</div>
+    <div style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:14px;">
+      <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:14px; padding:16px;">
+        <div style="font-size:20px; font-weight:700; color:#0f172a; margin-bottom:10px;">WorkspaceGraph</div>
+        <div style="font-size:16px; line-height:1.7; color:#1f2937;">
+          <code>windowId -> tabIds -> activeTabId</code><br>
+          还包括标签顺序、拖拽中的源窗口 / 目标窗口、最近焦点窗口。
+        </div>
+      </div>
+      <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:14px; padding:16px;">
+        <div style="font-size:20px; font-weight:700; color:#0f172a; margin-bottom:10px;">TabSession</div>
+        <div style="font-size:16px; line-height:1.7; color:#1f2937;">
+          <code>path</code>、<code>name</code>、<code>draftContent</code>、<code>lastSavedContent</code>、<code>dirty</code>、<code>saveState</code>、<code>externalFileState</code>。<br>
+          未保存内容在这里是稳定真值。
+        </div>
+      </div>
+      <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:14px; padding:16px;">
+        <div style="font-size:20px; font-weight:700; color:#0f172a; margin-bottom:10px;">TabViewSnapshot</div>
+        <div style="font-size:16px; line-height:1.7; color:#1f2937;">
+          轻量视图快照：当前 selection、滚动锚点、阅读/编辑模式。<br>
+          用于切回标签或拖到新窗口后尽量恢复现场。
+        </div>
+      </div>
+      <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:14px; padding:16px;">
+        <div style="font-size:20px; font-weight:700; color:#0f172a; margin-bottom:10px;">Watcher / Close Flow</div>
+        <div style="font-size:16px; line-height:1.7; color:#1f2937;">
+          外部文件监听、保存/放弃/取消关闭的决策流程都由 main 编排，避免窗口关闭和标签关闭走两套逻辑。
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section style="background:#ffffff; border:2px solid #cbd5e1; border-radius:16px; padding:20px;">
+    <div style="font-size:13px; font-weight:700; letter-spacing:0.08em; color:#475569; text-transform:uppercase; margin-bottom:14px;">renderer 持有的状态</div>
+    <div style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:14px;">
+      <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:14px; padding:16px;">
+        <div style="font-size:20px; font-weight:700; color:#0f172a; margin-bottom:10px;">CodeMirror 实例</div>
+        <div style="font-size:16px; line-height:1.7; color:#1f2937;">
+          真实输入、撤销重做、IME 组合输入、DOM focus 都仍在 renderer。<br>
+          我们不把编辑器搬到 main。
+        </div>
+      </div>
+      <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:14px; padding:16px;">
+        <div style="font-size:20px; font-weight:700; color:#0f172a; margin-bottom:10px;">窗口级 UI 状态</div>
+        <div style="font-size:16px; line-height:1.7; color:#1f2937;">
+          设置页开关、拖拽 hover 样式、局部 toast、当前 DOM 布局细节。<br>
+          这些不需要成为全局工作区真值。
+        </div>
+      </div>
+      <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:14px; padding:16px;">
+        <div style="font-size:20px; font-weight:700; color:#0f172a; margin-bottom:10px;">组合输入中的临时态</div>
+        <div style="font-size:16px; line-height:1.7; color:#1f2937;">
+          composition 中间态不上传到 main 做复杂协调。<br>
+          renderer 只在稳定变更点把最新文本快照推送给 main。
+        </div>
+      </div>
+      <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:14px; padding:16px;">
+        <div style="font-size:20px; font-weight:700; color:#0f172a; margin-bottom:10px;">标签栏视图</div>
+        <div style="font-size:16px; line-height:1.7; color:#1f2937;">
+          renderer 只消费 main 发来的窗口快照来渲染 tab strip，不自己推导全局工作区结构。
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section style="background:#ffffff; border:2px solid #cbd5e1; border-radius:16px; padding:20px;">
+    <div style="font-size:13px; font-weight:700; letter-spacing:0.08em; color:#475569; text-transform:uppercase; margin-bottom:14px;">同步策略</div>
+    <div style="display:grid; gap:12px;">
+      <div style="background:#f8fafc; border-left:6px solid #0284c7; border-radius:0 12px 12px 0; padding:14px 16px;">
+        <div style="font-size:18px; font-weight:700; color:#0f172a; margin-bottom:6px;">1. 不做 patch 协议，先做版本化文本快照同步</div>
+        <div style="font-size:16px; line-height:1.7; color:#1f2937;">
+          renderer 在文档变化后把完整文本和版本号推给 main。这样先保住实现清晰度，不引入操作流重放。
+        </div>
+      </div>
+      <div style="background:#f8fafc; border-left:6px solid #0284c7; border-radius:0 12px 12px 0; padding:14px 16px;">
+        <div style="font-size:18px; font-weight:700; color:#0f172a; margin-bottom:6px;">2. 发送节奏是“微批量”，不是每个按键都立即 round-trip</div>
+        <div style="font-size:16px; line-height:1.7; color:#1f2937;">
+          renderer 本地即时更新编辑器；main 接收经过短节流的最新草稿快照。这样拖标签、关标签、保存时都能拿到近实时真值。
+        </div>
+      </div>
+      <div style="background:#f8fafc; border-left:6px solid #0284c7; border-radius:0 12px 12px 0; padding:14px 16px;">
+        <div style="font-size:18px; font-weight:700; color:#0f172a; margin-bottom:6px;">3. 标签切换前先 flush 当前标签快照</div>
+        <div style="font-size:16px; line-height:1.7; color:#1f2937;">
+          切换标签、拖出到新窗口、关闭窗口前，renderer 先把当前标签的最新文本和 view snapshot 同步到 main，再执行结构变更。
+        </div>
+      </div>
+    </div>
+  </section>
+</div>

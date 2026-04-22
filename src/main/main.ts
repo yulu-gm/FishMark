@@ -31,6 +31,7 @@ import { createRuntimeWindowManager, resolveAppRuntimeMode } from "./runtime-win
 import { resolveWindowIconPath } from "./window-icon";
 import { createAppUpdateCheckRunner } from "./app-update-check-runner";
 import { resolveAutoUpdaterModule } from "./resolve-auto-updater-module";
+import { createExternalFileWatchService } from "./external-file-watch-service";
 import {
   COMPLETE_EDITOR_TEST_COMMAND_CHANNEL,
   type EditorTestCommandResultEnvelope
@@ -67,6 +68,10 @@ import {
   type SaveMarkdownFileAsInput,
   type SaveMarkdownFileInput
 } from "../shared/save-markdown-file";
+import {
+  SYNC_WATCHED_MARKDOWN_FILE_CHANNEL,
+  type SyncWatchedMarkdownFileInput
+} from "../shared/external-file-change";
 import {
   APP_NOTIFICATION_EVENT,
   APP_UPDATE_STATE_EVENT,
@@ -205,6 +210,7 @@ app.whenReady().then(async () => {
   const fontCatalogService = createFontCatalogService({
     platform: process.platform
   });
+  const externalFileWatchService = createExternalFileWatchService();
   let appUpdaterPromise: Promise<AppUpdaterController> | null = null;
 
   if (initialPreferences.source === "recovered-from-corrupt") {
@@ -278,10 +284,24 @@ app.whenReady().then(async () => {
   openEditorWindowForLaunchPath = (targetPath: string) => {
     windowManager.openEditorWindow({ startupOpenPath: targetPath });
   };
-  ipcMain.handle(OPEN_MARKDOWN_FILE_CHANNEL, async () => showOpenMarkdownDialog());
-  ipcMain.handle(OPEN_MARKDOWN_FILE_FROM_PATH_CHANNEL, async (_event, input: { targetPath: string }) =>
-    openMarkdownFileFromPath(input.targetPath)
-  );
+  ipcMain.handle(OPEN_MARKDOWN_FILE_CHANNEL, async (event) => {
+    const result = await showOpenMarkdownDialog();
+
+    if (result.status === "success") {
+      await externalFileWatchService.syncDocumentPath(event.sender, result.document.path);
+    }
+
+    return result;
+  });
+  ipcMain.handle(OPEN_MARKDOWN_FILE_FROM_PATH_CHANNEL, async (event, input: { targetPath: string }) => {
+    const result = await openMarkdownFileFromPath(input.targetPath);
+
+    if (result.status === "success") {
+      await externalFileWatchService.syncDocumentPath(event.sender, result.document.path);
+    }
+
+    return result;
+  });
   ipcMain.handle(
     HANDLE_DROPPED_MARKDOWN_FILE_CHANNEL,
     async (
@@ -300,11 +320,28 @@ app.whenReady().then(async () => {
       };
     }
   );
-  ipcMain.handle(SAVE_MARKDOWN_FILE_CHANNEL, async (_event, input: SaveMarkdownFileInput) =>
-    saveMarkdownFileToPath(input)
-  );
-  ipcMain.handle(SAVE_MARKDOWN_FILE_AS_CHANNEL, async (_event, input: SaveMarkdownFileAsInput) =>
-    showSaveMarkdownDialog(input)
+  ipcMain.handle(SAVE_MARKDOWN_FILE_CHANNEL, async (event, input: SaveMarkdownFileInput) => {
+    const result = await saveMarkdownFileToPath(input);
+
+    if (result.status === "success") {
+      await externalFileWatchService.syncDocumentPath(event.sender, result.document.path);
+    }
+
+    return result;
+  });
+  ipcMain.handle(SAVE_MARKDOWN_FILE_AS_CHANNEL, async (event, input: SaveMarkdownFileAsInput) => {
+    const result = await showSaveMarkdownDialog(input);
+
+    if (result.status === "success") {
+      await externalFileWatchService.syncDocumentPath(event.sender, result.document.path);
+    }
+
+    return result;
+  });
+  ipcMain.handle(
+    SYNC_WATCHED_MARKDOWN_FILE_CHANNEL,
+    async (event, input: SyncWatchedMarkdownFileInput) =>
+      externalFileWatchService.syncDocumentPath(event.sender, input.path)
   );
   ipcMain.handle(IMPORT_CLIPBOARD_IMAGE_CHANNEL, async (_event, input: ImportClipboardImageInput) =>
     importClipboardImage(input, { clipboard })

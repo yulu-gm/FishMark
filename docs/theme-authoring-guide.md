@@ -287,6 +287,12 @@ manifest 中出现的所有路径都必须留在主题包根目录内部。
 - `--fishmark-control-border`
 - `--fishmark-banner-error-bg`
 
+同时请把它当成“视觉层”，不要拿来接管 app 自己的壳层几何：
+
+- 可以改颜色、材质、边框、阴影、滤镜
+- 不要给 `.app-workspace`、`.workspace-header`、`.workspace-canvas`、`.app-status-bar` 这类 app-owned 容器写 `width`、`height`、`margin`、`padding`、`position`、`grid-template-*`
+- 如果想做玻璃或卡片感，优先挂在 `.document-editor`、`.empty-inner`、`.app-rail` 或正式 `--fishmark-*` semantic slots 上
+
 ### `styles/editor.css`
 
 负责编辑态 formal slots 与字体，例如：
@@ -693,6 +699,7 @@ npm run test -- src/shared/theme-package.test.ts src/main/theme-package-service.
 - 不要依赖 `layout.titlebar`
 - 不要依赖 `welcomeHero`
 - 静态 CSS 层必须独立可读
+- 不要覆盖 app-owned workspace 布局容器的几何规则
 - 所有资源路径必须留在主题包根目录内
 
 只要按这份指南做，主题即使将来继续扩展 shader 或参数，也不会先在“加载阶段”或“回退阶段”把应用搞坏。

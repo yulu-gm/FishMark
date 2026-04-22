@@ -20,6 +20,8 @@ import {
   type ShortcutGroupId
 } from "@fishmark/editor-core";
 import type { AppNotification, AppUpdateState } from "../../shared/app-update";
+import type { ExternalMarkdownFileChangedEvent } from "../../shared/external-file-change";
+import type { AppMenuCommand } from "../../shared/menu-command";
 import { createPreviewAssetUrl } from "../../shared/preview-asset-url";
 import type { ThemePackageManifest, ThemeSurfaceSlot } from "../../shared/theme-package";
 import {
@@ -38,11 +40,15 @@ import {
 } from "../theme-package-catalog";
 import {
   type AppState,
+  type ExternalMarkdownFileState,
+  applyExternalMarkdownFileChanged,
   applyEditorContentChanged,
   applyOpenMarkdownResult,
   applySaveMarkdownResult,
+  clearExternalMarkdownFileState,
   createNewMarkdownDocumentState,
   createInitialAppState,
+  keepExternalMarkdownMemoryVersion,
   startAutosavingDocument,
   startManualSavingDocument,
   startOpeningMarkdownFile
@@ -85,6 +91,12 @@ type ResolvedThemeMode = Exclude<ThemeMode, "system">;
 type ThemePackageEntry = Awaited<ReturnType<Window["fishmark"]["listThemePackages"]>>[number];
 
 const AUTOSAVE_FAILED_MESSAGE = "Autosave failed. Changes are still in memory.";
+const EXTERNAL_FILE_MODIFIED_PENDING_MESSAGE =
+  "当前文件已被外部修改。请先决定是重载磁盘版本，还是保留当前编辑并另存为。";
+const EXTERNAL_FILE_DELETED_PENDING_MESSAGE =
+  "当前文件已在磁盘上被删除或移走。你可以重载、保留当前编辑，或另存为新文件。";
+const EXTERNAL_FILE_KEEPING_MEMORY_MESSAGE =
+  "正在保留当前内存版本，autosave 已暂停。请另存为新文件，避免覆盖外部变化。";
 const DARK_MODE_MEDIA_QUERY = "(prefers-color-scheme: dark)";
 const THEME_ATTRIBUTE = "data-fishmark-theme";
 const UI_FONT_FAMILY_CSS_VAR = "--fishmark-ui-font-family";
@@ -104,6 +116,24 @@ type TableToolAction = {
   icon: TableToolIconComponent;
   onClick: () => void;
 };
+
+function isExternalFileConflictActive(state: AppState): boolean {
+  return state.externalFileState.status !== "idle";
+}
+
+function getExternalFileConflictMessage(externalFileState: ExternalMarkdownFileState): string {
+  if (externalFileState.status === "idle") {
+    return "";
+  }
+
+  if (externalFileState.status === "keeping-memory") {
+    return EXTERNAL_FILE_KEEPING_MEMORY_MESSAGE;
+  }
+
+  return externalFileState.kind === "deleted"
+    ? EXTERNAL_FILE_DELETED_PENDING_MESSAGE
+    : EXTERNAL_FILE_MODIFIED_PENDING_MESSAGE;
+}
 
 function RowAboveIcon(props: SVGProps<SVGSVGElement>) {
   return (
@@ -606,6 +636,7 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
         : state.isDirty
           ? "Unsaved changes"
           : "All changes saved";
+  const externalFileConflictMessage = getExternalFileConflictMessage(state.externalFileState);
   const appUpdateStatusLabel = appUpdateState.kind === "downloading"
     ? `正在下载更新${Number.isFinite(appUpdateState.percent) ? ` ${Math.round(appUpdateState.percent)}%` : "…"}`
     : null;
@@ -992,6 +1023,7 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
       !snapshot.currentDocument ||
       !snapshot.currentDocument.path ||
       !snapshot.isDirty ||
+      isExternalFileConflictActive(snapshot) ||
       inFlightSaveOriginRef.current
     ) {
       return;
@@ -1030,7 +1062,12 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
   function scheduleAutosave(nextState: AppState): void {
     clearAutosaveTimer();
 
-    if (!nextState.currentDocument || !nextState.currentDocument.path || !nextState.isDirty) {
+    if (
+      !nextState.currentDocument ||
+      !nextState.currentDocument.path ||
+      !nextState.isDirty ||
+      isExternalFileConflictActive(nextState)
+    ) {
       pendingAutosaveReplayRef.current = false;
       return;
     }
@@ -1087,6 +1124,31 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
     preferencesRef.current = nextPreferences;
     setPreferences(nextPreferences);
     scheduleAutosave(stateRef.current);
+  });
+
+  const handleAppMenuCommand = useEffectEvent((command: AppMenuCommand): void => {
+    if (command === "new-markdown-document") {
+      handleNewMarkdown();
+      return;
+    }
+
+    if (command === "open-markdown-file") {
+      void handleOpenMarkdown();
+      return;
+    }
+
+    if (command === "save-markdown-file") {
+      void handleSaveMarkdown();
+      return;
+    }
+
+    if (command === "save-markdown-file-as") {
+      void handleSaveMarkdownAs();
+    }
+  });
+
+  const handleStartupOpenPath = useEffectEvent((targetPath: string): void => {
+    void handleOpenMarkdownFromPath(targetPath);
   });
 
   const handleLoadFontFamilies = useEffectEvent(async (): Promise<void> => {
@@ -1188,7 +1250,7 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
     }, OUTLINE_EXIT_ANIMATION_MS);
   }
 
-  const handleOpenMarkdown = useEffectEvent(async (): Promise<void> => {
+  async function handleOpenMarkdown(): Promise<void> {
     applyState((current) => startOpeningMarkdownFile(current));
 
     const result = await fishmark.openMarkdownFile();
@@ -1207,18 +1269,18 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
     if (result.status === "success") {
       setShellMode("reading");
     }
-  });
+  }
 
-  const handleNewMarkdown = useEffectEvent((): void => {
+  function handleNewMarkdown(): void {
     resetAutosaveRuntime();
     editorContentRef.current = "";
     setOutlineItems([]);
     setActiveHeadingId(null);
     applyState((current) => createNewMarkdownDocumentState(current));
     setShellMode("editing");
-  });
+  }
 
-  const handleOpenMarkdownFromPath = useEffectEvent(async (targetPath: string): Promise<void> => {
+  async function handleOpenMarkdownFromPath(targetPath: string): Promise<void> {
     applyState((current) => startOpeningMarkdownFile(current));
 
     const result = await fishmark.openMarkdownFileFromPath(targetPath);
@@ -1237,7 +1299,36 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
     if (result.status === "success") {
       setShellMode("reading");
     }
-  });
+  }
+
+  const handleExternalMarkdownFileChanged = useEffectEvent(
+    (event: ExternalMarkdownFileChangedEvent): void => {
+      clearAutosaveTimer();
+      pendingAutosaveReplayRef.current = false;
+
+      applyState((current) => applyExternalMarkdownFileChanged(current, event));
+    }
+  );
+
+  function handleKeepExternalFileMemoryVersion(): void {
+    clearAutosaveTimer();
+    pendingAutosaveReplayRef.current = false;
+    applyState((current) => keepExternalMarkdownMemoryVersion(current));
+  }
+
+  function handleDismissExternalFileConflict(): void {
+    applyState((current) => clearExternalMarkdownFileState(current));
+  }
+
+  async function handleReloadExternalFile(): Promise<void> {
+    const currentPath = stateRef.current.currentDocument?.path;
+
+    if (!currentPath) {
+      return;
+    }
+
+    await handleOpenMarkdownFromPath(currentPath);
+  }
 
   const handleWindowDragOver = useEffectEvent((event: globalThis.DragEvent): void => {
     if (!hasFileDrag(event.dataTransfer)) {
@@ -1286,16 +1377,17 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
     };
   }, []);
 
-  const handleSaveMarkdown = useEffectEvent(async (): Promise<void> => {
-    const currentDocument = state.currentDocument;
+  async function handleSaveMarkdown(): Promise<void> {
+    const currentDocument = stateRef.current.currentDocument;
 
     if (!currentDocument) {
       return;
     }
 
     const currentPath = currentDocument.path;
+    const shouldForceSaveAs = isExternalFileConflictActive(stateRef.current);
 
-    if (!currentPath) {
+    if (!currentPath || shouldForceSaveAs) {
       await runManualSave(() =>
         fishmark.saveMarkdownFileAs({
           currentPath,
@@ -1311,10 +1403,10 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
         content: getEditorContent()
       })
     );
-  });
+  }
 
-  const handleSaveMarkdownAs = useEffectEvent(async (): Promise<void> => {
-    const currentDocument = state.currentDocument;
+  async function handleSaveMarkdownAs(): Promise<void> {
+    const currentDocument = stateRef.current.currentDocument;
 
     if (!currentDocument) {
       return;
@@ -1326,7 +1418,7 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
         content: getEditorContent()
       })
     );
-  });
+  }
 
   async function handleImportClipboardImage(
     input: { documentPath: string | null }
@@ -1413,24 +1505,7 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
 
   useEffect(() => {
     return fishmark.onMenuCommand((command) => {
-      if (command === "new-markdown-document") {
-        handleNewMarkdown();
-        return;
-      }
-
-      if (command === "open-markdown-file") {
-        void handleOpenMarkdown();
-        return;
-      }
-
-      if (command === "save-markdown-file") {
-        void handleSaveMarkdown();
-        return;
-      }
-
-      if (command === "save-markdown-file-as") {
-        void handleSaveMarkdownAs();
-      }
+      handleAppMenuCommand(command);
     });
   }, [fishmark]);
 
@@ -1439,6 +1514,18 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
       void handleEditorTestCommand(payload);
     });
   }, [fishmark]);
+
+  useEffect(() => {
+    return fishmark.onExternalMarkdownFileChanged((event) => {
+      handleExternalMarkdownFileChanged(event);
+    });
+  }, [fishmark]);
+
+  useEffect(() => {
+    void fishmark.syncWatchedMarkdownFile({
+      path: state.currentDocument?.path ?? null
+    });
+  }, [fishmark, state.currentDocument?.path]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -1822,7 +1909,7 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
     }
 
     startupOpenPathRef.current = null;
-    void handleOpenMarkdownFromPath(startupOpenPath);
+    handleStartupOpenPath(startupOpenPath);
   }, []);
 
   useEffect(
@@ -2003,6 +2090,55 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
                 <span>{notification.message}</span>
               </p>
             </div>
+          ) : null}
+          {state.externalFileState.status !== "idle" ? (
+            <section
+              className="external-file-conflict-banner"
+              data-fishmark-region="external-file-conflict-banner"
+              data-status={state.externalFileState.status}
+              role="status"
+              aria-live="polite"
+            >
+              <p className="external-file-conflict-message">{externalFileConflictMessage}</p>
+              <div className="external-file-conflict-actions">
+                <button
+                  type="button"
+                  className="external-file-conflict-button"
+                  onClick={() => {
+                    void handleReloadExternalFile();
+                  }}
+                >
+                  重载磁盘版本
+                </button>
+                {state.externalFileState.status === "pending" ? (
+                  <button
+                    type="button"
+                    className="external-file-conflict-button"
+                    onClick={handleKeepExternalFileMemoryVersion}
+                  >
+                    保留当前编辑
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="external-file-conflict-button"
+                  onClick={() => {
+                    void handleSaveMarkdownAs();
+                  }}
+                >
+                  另存为新文件
+                </button>
+                {state.externalFileState.status === "keeping-memory" ? (
+                  <button
+                    type="button"
+                    className="external-file-conflict-button is-secondary"
+                    onClick={handleDismissExternalFileConflict}
+                  >
+                    关闭提示
+                  </button>
+                ) : null}
+              </div>
+            </section>
           ) : null}
           <header
             className="app-header workspace-header"

@@ -1,0 +1,124 @@
+<h2>FishMark 标签页设计 · 架构总览</h2>
+<p class="subtitle">已选方向：C. 主进程拥有全局工作区图。这里先确认职责边界和主数据流，不展开菜单和关闭弹窗细节。</p>
+
+<style>
+  .diagram {
+    display: grid;
+    gap: 16px;
+  }
+
+  .band {
+    border: 1px solid rgba(148, 163, 184, 0.26);
+    border-radius: 16px;
+    padding: 16px;
+    background: rgba(255, 255, 255, 0.9);
+  }
+
+  .band h3 {
+    margin: 0 0 10px;
+  }
+
+  .columns {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .node {
+    border-radius: 14px;
+    padding: 12px;
+    background: linear-gradient(180deg, rgba(248, 250, 252, 0.95), rgba(241, 245, 249, 0.86));
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    min-height: 120px;
+  }
+
+  .node strong {
+    display: block;
+    margin-bottom: 8px;
+    color: #0f172a;
+  }
+
+  .flow {
+    display: grid;
+    gap: 10px;
+  }
+
+  .step {
+    border-left: 4px solid rgba(14, 165, 233, 0.6);
+    padding: 10px 12px;
+    background: rgba(248, 250, 252, 0.82);
+    border-radius: 0 12px 12px 0;
+  }
+
+  .step strong {
+    display: block;
+    margin-bottom: 4px;
+  }
+
+  .label {
+    margin-bottom: 8px;
+  }
+</style>
+
+<div class="diagram">
+  <div class="band">
+    <div class="label">核心分层</div>
+    <div class="columns">
+      <div class="node">
+        <strong>main: WorkspaceGraph</strong>
+        持有全局窗口、标签页、标签顺序、活动标签、标签归属窗口、拖拽迁移状态。<br><br>
+        这里是“FishMark 当前打开了哪些文档、它们在哪个窗口里”的唯一事实源。
+      </div>
+      <div class="node">
+        <strong>main: TabSession Registry</strong>
+        每个标签页一条 session：路径、标题、当前草稿内容、上次已保存内容、dirty、保存状态、外部文件变更状态。<br><br>
+        关闭标签、拖到别的窗口、切换活动标签，都不丢会话。
+      </div>
+      <div class="node">
+        <strong>renderer: Window Shell + Editor Host</strong>
+        只负责把当前窗口的 tab strip、active tab、编辑器视图和提示 UI 渲染出来。<br><br>
+        CodeMirror 仍在 renderer，本地处理输入和 IME；通过受限 IPC 把变更提交给 main session。
+      </div>
+    </div>
+  </div>
+
+  <div class="band">
+    <div class="label">主数据流</div>
+    <div class="flow">
+      <div class="step">
+        <strong>1. 任何“打开 / 新建 / 关闭 / 拖出成新窗口”命令先到 main</strong>
+        main 决定是复用当前窗口、往某个窗口插入标签、还是新建窗口承接标签。
+      </div>
+      <div class="step">
+        <strong>2. main 更新 WorkspaceGraph 与 TabSession</strong>
+        然后把“某窗口当前有哪些标签、活动标签是谁、每个标签的轻量状态”同步给对应 renderer。
+      </div>
+      <div class="step">
+        <strong>3. renderer 只挂载当前活动标签的编辑器</strong>
+        切换标签时，renderer 请求 main 给出该 tab session 的最新草稿内容和元数据，再重载编辑器。
+      </div>
+      <div class="step">
+        <strong>4. 编辑器内容变化回写到 main</strong>
+        renderer 产生内容变化、dirty 状态、保存请求后，通过受限 IPC 更新对应 tab session；main 再广播 tab strip 所需的标题/dirty/save 状态。
+      </div>
+    </div>
+  </div>
+
+  <div class="band">
+    <div class="label">这条路的取舍</div>
+    <div class="columns">
+      <div class="node">
+        <strong>好处</strong>
+        标签拖出成新窗口、后续会话恢复、最近焦点窗口、跨窗口移动标签都会有统一模型，不需要再从单窗口逻辑里硬拆。
+      </div>
+      <div class="node">
+        <strong>代价</strong>
+        这轮必须正式引入 workspace / tab IPC 协议，`currentDocument` 心智模型会升级成 `window -> tabs -> active tab session`。
+      </div>
+      <div class="node">
+        <strong>我建议保留的边界</strong>
+        不把原始文件系统能力下放给 renderer；不把 CodeMirror 挪到 main；不在本轮加入启动恢复。
+      </div>
+    </div>
+  </div>
+</div>

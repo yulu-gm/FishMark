@@ -16,24 +16,26 @@
 - renderer 已具备当前文档状态，并能把已打开文档加载到 CodeMirror 6 编辑器中
 - 存在主进程文件打开测试和 renderer 文档状态测试
 - 偏好设置已接入颜色模式、主题家族、刷新主题、应用 UI 字体、应用 UI 字号、文档字号、文档字体和 autosave idle delay，变更可实时生效
+- 当前文档已支持外部修改 / 删除冲突检测，冲突发生时会暂停 autosave 并提供重载 / 保留当前编辑 / 另存为三条路径
 - 基础目录边界已建立：`apps/desktop`、`packages/editor-core`、`packages/markdown-engine`、`tests/e2e`
 
 从源码可确认的未完成内容：
 - 图片粘贴与拖入还未接入完整链路
-- 最近文件列表、崩溃恢复与外部文件变更冲突处理尚未打通
+- 最近文件列表与崩溃恢复尚未打通
 - 轮廓大纲、搜索替换、HTML/PDF 导出与图片导入仍待完善
 
 当前工作区依赖已安装，并已在 2026-04-16 本地环境里实际执行并通过 `npm run lint`、`npm run typecheck`、`npm run test`、`npm run build`。若环境差异较大，可按需重跑四项门禁命令复核。
 
 ## 人工验收建议
 
-如果你现在想人工验收，请验 `TASK-001`、`TASK-002`、`TASK-003`、`TASK-004`、`TASK-007`、`TASK-032` 和 `TASK-037`：
+如果你现在想人工验收，请验 `TASK-001`、`TASK-002`、`TASK-003`、`TASK-004`、`TASK-007`、`TASK-032`、`TASK-036` 和 `TASK-037`：
 - `TASK-001`：确认开发壳能启动，界面能显示占位内容和 preload 平台字段
 - `TASK-002`：确认目录边界存在且未破坏根目录当前可运行外壳
 - `TASK-003`：确认可以通过系统文件对话框打开 UTF-8 `.md`，并把内容加载到当前文档界面和 CodeMirror 编辑区中
 - `TASK-004`：确认编辑后会进入 dirty 状态，`Save` 会写回当前路径，`Save As` 会写入新路径并切换当前文档路径
 - `TASK-007`：确认 CodeMirror 编辑区可输入，undo / redo 快捷键可用，且保存链路仍与当前编辑文本保持一致
 - `TASK-032`：确认 `File` 菜单提供 `Open...`、`Save`、`Save As...`，同时页面壳层不再呈现居中 demo 卡片样式
+- `TASK-036`：确认当前文件在系统外部被修改或删除后，会出现重载 / 保留当前编辑 / 另存为提示，并且 autosave 不会静默覆盖外部变化
 - `TASK-037`：确认设置页支持颜色模式、主题家族、刷新主题、应用 UI 字体、应用 UI 字号、文档字号、文档字体与 autosave 间隔，且变更能持久化并即时生效
 
 不要把当前仓库误判为“已经具备完整 Markdown 编辑器 MVP 功能”。
@@ -78,7 +80,7 @@
 | TASK-033 | 代码块渲染 | DEV_DONE | 已补齐 fenced code block block map/info string、非激活态等宽渲染与源码态恢复，并覆盖 round-trip 基线回归。 |
 | TASK-034 | 行内格式渲染 | DEV_DONE | 已在 `markdown-engine` 建立 canonical `parseMarkdownDocument()` 与完整 inline AST，并接入 `editor-core` / renderer 的非激活态行内渲染；当前支持 bold / italic / inline code / strikethrough 及常见嵌套，光标回到对应 block 后恢复 Markdown 源码态。 |
 | TASK-035 | IME 基线保护 | ACCEPTED | 已完成 composition guard、autosave 光标回归修复与段落/标题/列表回归测试，并通过本轮中文 IME 人工验收。 |
-| TASK-036 | 外部文件变更检测 | TODO | 外部修改当前文件时的提示与冲突处理，避免 autosave 覆盖。 |
+| TASK-036 | 外部文件变更检测 | DEV_DONE | 已接入按窗口绑定的当前文档 watcher、外部修改/删除提示、重载 / 保留当前编辑 / 另存为三条路径，以及冲突期间 autosave/Save 的保护规则。 |
 | TASK-037 | 偏好设置持久化 | DEV_DONE | 已建立 `app.getPath('userData')/preferences.json` 配置存储，覆盖 autosave 间隔、最近文件上限、应用 UI 字体与字号、文档字体与字号、主题设置；提供 schema 校验、范围 clamp、损坏文件备份恢复与原子写入；通过 `getPreferences` / `updatePreferences` / `onPreferencesChanged` bridge 对 renderer 暴露受限访问；设置页已接入颜色模式、主题家族、刷新主题、应用 UI 字体、应用 UI 字号、文档字号、文档字体与 autosave idle delay；社区主题统一从 `<userData>/themes/<familyId>/<mode>` 扫描，当前主题不支持所选 light/dark 模式时会回退到 `FishMark 默认` 并显示提示；`recentFiles.maxEntries` 仍待 `TASK-006` 接入。 |
 | TASK-039 | 分割线渲染 | DEV_DONE | 已补齐 `thematicBreak` block map、`---` / `+++` 分割线解析、非激活态横线渲染与源码态恢复，并覆盖 CRLF 边界回归。 |
 | TASK-038 | 跨平台打包 | DEV_IN_PROGRESS | 已接入基于 `electron-builder` 的 Windows 本地 `package:win` 打包入口，并在打包前按需从 `assets/branding/*.svg` 生成 `light` / `dark` 两套 PNG 与 Windows `icon.ico`；当前通过 `afterPack + rcedit` workaround 为应用主程序补写正式图标，同时将 `package` / `release` / `dev` 的 bat/sh 工具统一收口到 `tools/` 目录，并补齐 macOS `CFBundleDocumentTypes` 所需的 `.md` / `.markdown` 文件关联声明；现已提供本地 `package:mac` / `tools/package-macos.sh` 入口，可产出 unpacked `FishMark.app`，但 macOS `.dmg` / `.zip`、正式签名和 `.icns` 仍待后续切片完成。 |

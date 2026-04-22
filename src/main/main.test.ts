@@ -39,12 +39,15 @@ describe("main process window wiring", () => {
     const mainPath = path.join(process.cwd(), "src", "main", "main.ts");
     const mainSource = readFileSync(mainPath, "utf8");
 
+    expect(mainSource).toContain('import { createExternalFileWatchService } from "./external-file-watch-service"');
     expect(mainSource).toContain('ipcMain.handle(GET_PREFERENCES_CHANNEL');
     expect(mainSource).toContain('ipcMain.handle(UPDATE_PREFERENCES_CHANNEL');
+    expect(mainSource).toContain('SYNC_WATCHED_MARKDOWN_FILE_CHANNEL');
     expect(mainSource).toContain('ipcMain.handle(LIST_FONT_FAMILIES_CHANNEL');
     expect(mainSource).toContain('ipcMain.handle(LIST_THEME_PACKAGES_CHANNEL');
     expect(mainSource).toContain('ipcMain.handle(REFRESH_THEME_PACKAGES_CHANNEL');
     expect(mainSource).toContain('ipcMain.handle(OPEN_THEMES_DIRECTORY_CHANNEL');
+    expect(mainSource).toContain('externalFileWatchService.syncDocumentPath(event.sender');
   });
 
   it("only initializes the scenario runner stack in test-workbench mode", () => {

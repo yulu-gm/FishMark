@@ -109,6 +109,7 @@ describe("Test workbench shell", () => {
       getPathForDroppedFile: vi.fn().mockReturnValue(""),
       saveMarkdownFile: vi.fn(),
       saveMarkdownFileAs: vi.fn(),
+      syncWatchedMarkdownFile: vi.fn().mockResolvedValue(undefined),
       importClipboardImage: vi.fn(),
       openEditorTestWindow,
       startScenarioRun,
@@ -137,7 +138,8 @@ describe("Test workbench shell", () => {
       checkForUpdates: vi.fn().mockResolvedValue(undefined),
       onPreferencesChanged: vi.fn(() => () => {}),
       onAppUpdateState: vi.fn(() => () => {}),
-      onAppNotification: vi.fn(() => () => {})
+      onAppNotification: vi.fn(() => () => {}),
+      onExternalMarkdownFileChanged: vi.fn(() => () => {})
     } as Window["fishmark"];
   });
 

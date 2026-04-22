@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 
+import type { ExternalMarkdownFileChangedEvent } from "../shared/external-file-change";
 import type { SaveMarkdownFileResult } from "../shared/save-markdown-file";
 import {
+  applyExternalMarkdownFileChanged,
   applyEditorContentChanged,
   applySaveMarkdownResult,
   applyOpenMarkdownResult,
+  clearExternalMarkdownFileState,
   createNewMarkdownDocumentState,
   createInitialAppState,
+  keepExternalMarkdownMemoryVersion,
   startAutosavingDocument,
   startManualSavingDocument,
   type AppState
@@ -41,7 +45,8 @@ describe("applyOpenMarkdownResult", () => {
       openState: "opening",
       saveState: "idle",
       isDirty: false,
-      lastSavedContent: "draft"
+      lastSavedContent: "draft",
+      externalFileState: { status: "idle" }
     };
 
     const nextState = applyOpenMarkdownResult(initialState, { status: "cancelled" });
@@ -90,7 +95,8 @@ describe("applyEditorContentChanged", () => {
       openState: "idle",
       saveState: "idle",
       isDirty: false,
-      lastSavedContent: "# Today\n"
+      lastSavedContent: "# Today\n",
+      externalFileState: { status: "idle" }
     };
 
     const nextState = applyEditorContentChanged(state, "# Updated\n");
@@ -240,6 +246,128 @@ describe("save document state", () => {
     expect(nextState.isDirty).toBe(true);
     expect(nextState.saveState).toBe("idle");
   });
+
+  it("clears external file conflict state after a successful save as", () => {
+    const initialState = keepExternalMarkdownMemoryVersion(
+      applyExternalMarkdownFileChanged(
+        applyEditorContentChanged(
+          applyOpenMarkdownResult(createInitialAppState(), {
+            status: "success",
+            document: {
+              path: "C:/notes/today.md",
+              name: "today.md",
+              content: "# Today\n",
+              encoding: "utf-8"
+            }
+          }),
+          "# Updated\n"
+        ),
+        createExternalFileEvent("modified")
+      )
+    );
+
+    const nextState = applySaveMarkdownResult(initialState, {
+      status: "success",
+      document: {
+        path: "C:/archive/conflict-copy.md",
+        name: "conflict-copy.md",
+        content: "# Updated\n",
+        encoding: "utf-8"
+      }
+    });
+
+    expect(nextState.externalFileState).toEqual({ status: "idle" });
+    expect(nextState.currentDocument?.path).toBe("C:/archive/conflict-copy.md");
+    expect(nextState.isDirty).toBe(false);
+  });
+});
+
+describe("external markdown file state", () => {
+  it("enters a pending conflict state when the current file changes externally", () => {
+    const initialState = applyOpenMarkdownResult(createInitialAppState(), {
+      status: "success",
+      document: {
+        path: "C:/notes/today.md",
+        name: "today.md",
+        content: "# Today\n",
+        encoding: "utf-8"
+      }
+    });
+
+    const nextState = applyExternalMarkdownFileChanged(
+      initialState,
+      createExternalFileEvent("modified")
+    );
+
+    expect(nextState.externalFileState).toEqual({
+      status: "pending",
+      path: "C:/notes/today.md",
+      kind: "modified"
+    });
+  });
+
+  it("keeps the conflict state idle when the changed path is not the current document", () => {
+    const initialState = applyOpenMarkdownResult(createInitialAppState(), {
+      status: "success",
+      document: {
+        path: "C:/notes/today.md",
+        name: "today.md",
+        content: "# Today\n",
+        encoding: "utf-8"
+      }
+    });
+
+    const nextState = applyExternalMarkdownFileChanged(initialState, {
+      path: "C:/notes/other.md",
+      kind: "modified"
+    });
+
+    expect(nextState.externalFileState).toEqual({ status: "idle" });
+  });
+
+  it("keeps the in-memory version when the user chooses to preserve current edits", () => {
+    const initialState = applyExternalMarkdownFileChanged(
+      applyOpenMarkdownResult(createInitialAppState(), {
+        status: "success",
+        document: {
+          path: "C:/notes/today.md",
+          name: "today.md",
+          content: "# Today\n",
+          encoding: "utf-8"
+        }
+      }),
+      createExternalFileEvent("deleted")
+    );
+
+    const nextState = keepExternalMarkdownMemoryVersion(initialState);
+
+    expect(nextState.externalFileState).toEqual({
+      status: "keeping-memory",
+      path: "C:/notes/today.md",
+      kind: "deleted"
+    });
+  });
+
+  it("clears the conflict state when explicitly dismissed", () => {
+    const initialState = keepExternalMarkdownMemoryVersion(
+      applyExternalMarkdownFileChanged(
+        applyOpenMarkdownResult(createInitialAppState(), {
+          status: "success",
+          document: {
+            path: "C:/notes/today.md",
+            name: "today.md",
+            content: "# Today\n",
+            encoding: "utf-8"
+          }
+        }),
+        createExternalFileEvent("modified")
+      )
+    );
+
+    const nextState = clearExternalMarkdownFileState(initialState);
+
+    expect(nextState.externalFileState).toEqual({ status: "idle" });
+  });
 });
 
 function createSaveResult(status: "success"): SaveMarkdownFileResult {
@@ -251,5 +379,14 @@ function createSaveResult(status: "success"): SaveMarkdownFileResult {
       content: "# Updated\n",
       encoding: "utf-8"
     }
+  };
+}
+
+function createExternalFileEvent(
+  kind: ExternalMarkdownFileChangedEvent["kind"]
+): ExternalMarkdownFileChangedEvent {
+  return {
+    path: "C:/notes/today.md",
+    kind
   };
 }
