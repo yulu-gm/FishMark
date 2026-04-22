@@ -14,6 +14,7 @@ const REORDER_WORKSPACE_TAB_CHANNEL = "fishmark:reorder-workspace-tab";
 const MOVE_WORKSPACE_TAB_TO_WINDOW_CHANNEL = "fishmark:move-workspace-tab-to-window";
 const DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL = "fishmark:detach-workspace-tab-to-new-window";
 const UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL = "fishmark:update-workspace-tab-draft";
+const RELOAD_WORKSPACE_TAB_FROM_PATH_CHANNEL = "fishmark:reload-workspace-tab-from-path";
 const OPEN_WORKSPACE_PATH_EVENT = "fishmark:open-workspace-path";
 const SAVE_MARKDOWN_FILE_CHANNEL = "fishmark:save-markdown-file";
 const SAVE_MARKDOWN_FILE_AS_CHANNEL = "fishmark:save-markdown-file-as";
@@ -234,6 +235,10 @@ type UpdateWorkspaceTabDraftInput = {
   tabId: string;
   content: string;
 };
+type ReloadWorkspaceTabFromPathInput = {
+  tabId: string;
+  targetPath: string;
+};
 type WorkspaceMoveTabResult = {
   sourceWindowSnapshot: WorkspaceWindowSnapshot;
   targetWindowSnapshot: WorkspaceWindowSnapshot;
@@ -359,7 +364,7 @@ const api = {
   openMarkdownFile: () => ipcRenderer.invoke(OPEN_MARKDOWN_FILE_CHANNEL),
   openMarkdownFileFromPath: (targetPath: string) =>
     ipcRenderer.invoke(OPEN_MARKDOWN_FILE_FROM_PATH_CHANNEL, { targetPath }),
-  handleDroppedMarkdownFile: (input: { targetPath: string; hasOpenDocument: boolean }) =>
+  handleDroppedMarkdownFile: (input: { targetPaths: string[]; hasOpenDocument: boolean }) =>
     ipcRenderer.invoke(HANDLE_DROPPED_MARKDOWN_FILE_CHANNEL, input),
   getWorkspaceSnapshot: (): Promise<WorkspaceWindowSnapshot> =>
     ipcRenderer.invoke(GET_WORKSPACE_SNAPSHOT_CHANNEL),
@@ -369,6 +374,9 @@ const api = {
     ipcRenderer.invoke(OPEN_WORKSPACE_FILE_CHANNEL),
   openWorkspaceFileFromPath: (targetPath: string): Promise<WorkspaceWindowSnapshot> =>
     ipcRenderer.invoke(OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL, { targetPath }),
+  reloadWorkspaceTabFromPath: (
+    input: ReloadWorkspaceTabFromPathInput
+  ): Promise<WorkspaceWindowSnapshot> => ipcRenderer.invoke(RELOAD_WORKSPACE_TAB_FROM_PATH_CHANNEL, input),
   activateWorkspaceTab: (input: ActivateWorkspaceTabInput): Promise<WorkspaceWindowSnapshot> =>
     ipcRenderer.invoke(ACTIVATE_WORKSPACE_TAB_CHANNEL, input),
   closeWorkspaceTab: (input: CloseWorkspaceTabInput): Promise<WorkspaceWindowSnapshot> =>

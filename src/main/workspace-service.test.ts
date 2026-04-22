@@ -275,4 +275,40 @@ describe("createWorkspaceService", () => {
       saveState: "idle"
     });
   });
+
+  it("replaces the current tab document in place when reloading from disk", () => {
+    const workspace = createWorkspaceService();
+
+    workspace.registerWindow("window-1");
+    const opened = workspace.openDocument(
+      "window-1",
+      createDocument({
+        path: "C:/notes/today.md",
+        name: "today.md",
+        content: "# Today\n"
+      })
+    );
+
+    workspace.updateTabDraft(opened.activeTabId!, "# Unsaved change\n");
+
+    const reloaded = workspace.replaceTabDocument(
+      opened.activeTabId!,
+      createDocument({
+        path: "C:/notes/today.md",
+        name: "today.md",
+        content: "# Disk version\n"
+      })
+    );
+
+    expect(reloaded.tabs).toHaveLength(1);
+    expect(reloaded.activeTabId).toBe(opened.activeTabId);
+    expect(reloaded.activeDocument).toMatchObject({
+      tabId: opened.activeTabId,
+      path: "C:/notes/today.md",
+      name: "today.md",
+      content: "# Disk version\n",
+      isDirty: false,
+      saveState: "idle"
+    });
+  });
 });

@@ -29,7 +29,7 @@ export type OpenMarkdownFileResult =
     };
 
 export type HandleDroppedMarkdownFileInput = {
-  targetPath: string;
+  targetPaths: string[];
   hasOpenDocument: boolean;
 };
 

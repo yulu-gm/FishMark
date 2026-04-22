@@ -88,6 +88,30 @@ describe("createExternalFileWatchService", () => {
     expect(firstClose).toHaveBeenCalledTimes(1);
     expect(secondClose).not.toHaveBeenCalled();
   });
+
+  it("suppresses watch callbacks triggered by the app's own save for the active file", async () => {
+    const watchCallbacks = new Map<string, WatchCallback>();
+    const stat = vi
+      .fn<(targetPath: string) => Promise<Stats>>()
+      .mockResolvedValueOnce(createStats({ mtimeMs: 1, size: 10 }))
+      .mockResolvedValueOnce(createStats({ mtimeMs: 2, size: 18 }))
+      .mockResolvedValueOnce(createStats({ mtimeMs: 2, size: 18 }));
+    const webContents = createWebContents();
+    const service = createExternalFileWatchService({
+      watch: vi.fn((targetPath: string, listener: WatchCallback) => {
+        watchCallbacks.set(targetPath, listener);
+        return { close: vi.fn() } as { close: () => void };
+      }),
+      stat
+    });
+
+    await service.syncDocumentPath(webContents, "C:/notes/today.md");
+    service.beginInternalWrite(webContents, "C:/notes/today.md");
+    await watchCallbacks.get("C:/notes/today.md")?.("change");
+    await service.completeInternalWrite(webContents, "C:/notes/today.md");
+
+    expect(webContents.send).not.toHaveBeenCalled();
+  });
 });
 
 function createWebContents(): {

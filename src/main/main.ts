@@ -91,6 +91,7 @@ import {
   OPEN_WORKSPACE_FILE_CHANNEL,
   OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL,
   OPEN_WORKSPACE_PATH_EVENT,
+  RELOAD_WORKSPACE_TAB_FROM_PATH_CHANNEL,
   REORDER_WORKSPACE_TAB_CHANNEL,
   UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL,
   type ActivateWorkspaceTabInput,
@@ -99,6 +100,7 @@ import {
   type DetachWorkspaceTabToNewWindowInput,
   type MoveWorkspaceTabToWindowInput,
   type OpenWorkspacePathRequest,
+  type ReloadWorkspaceTabFromPathInput,
   type ReorderWorkspaceTabInput,
   type UpdateWorkspaceTabDraftInput,
   type WorkspaceWindowSnapshot
@@ -502,6 +504,29 @@ app.whenReady().then(async () => {
 
     return syncWorkspaceWatch(event.sender, workspaceService.openDocument(windowId, result.document));
   });
+  ipcMain.handle(
+    RELOAD_WORKSPACE_TAB_FROM_PATH_CHANNEL,
+    async (event, input: ReloadWorkspaceTabFromPathInput) => {
+      const windowId = ensureWorkspaceWindow(event.sender);
+      const tabSession = workspaceService.getTabSession(input.tabId);
+
+      if (tabSession.windowId !== windowId) {
+        throw new Error(`Workspace tab '${input.tabId}' does not belong to window '${windowId}'.`);
+      }
+
+      const result = await openMarkdownFileFromPath(input.targetPath);
+
+      if (result.status !== "success") {
+        if (result.status === "error") {
+          throw new Error(result.error.message);
+        }
+
+        throw new Error(`Unable to reload Markdown file '${input.targetPath}'.`);
+      }
+
+      return syncWorkspaceWatch(event.sender, workspaceService.replaceTabDocument(input.tabId, result.document));
+    }
+  );
   ipcMain.handle(ACTIVATE_WORKSPACE_TAB_CHANNEL, async (event, input: ActivateWorkspaceTabInput) => {
     const windowId = ensureWorkspaceWindow(event.sender);
     return syncWorkspaceWatch(event.sender, workspaceService.activateTab(windowId, input.tabId));
@@ -568,7 +593,9 @@ app.whenReady().then(async () => {
       _event,
       input: HandleDroppedMarkdownFileInput
     ): Promise<HandleDroppedMarkdownFileResult> => {
-      void input;
+      if (input.targetPaths.length === 0) {
+        throw new Error("Dropped Markdown payload did not include any file paths.");
+      }
 
       return {
         disposition: "open-in-place"
@@ -576,16 +603,20 @@ app.whenReady().then(async () => {
     }
   );
   ipcMain.handle(SAVE_MARKDOWN_FILE_CHANNEL, async (event, input: SaveMarkdownFileInput) => {
+    externalFileWatchService.beginInternalWrite(event.sender, input.path);
     const result = await saveMarkdownFileToPath(input);
 
     if (result.status === "success") {
       workspaceService.saveTabDocument(input.tabId, result.document);
+      await externalFileWatchService.completeInternalWrite(event.sender, input.path);
       await externalFileWatchService.syncDocumentPath(
         event.sender,
         workspaceService.getTabPath(input.tabId)
       );
+      return result;
     }
 
+    await externalFileWatchService.completeInternalWrite(event.sender, input.path);
     return result;
   });
   ipcMain.handle(SAVE_MARKDOWN_FILE_AS_CHANNEL, async (event, input: SaveMarkdownFileAsInput) => {

@@ -32,6 +32,7 @@ import type {
   DetachWorkspaceTabToNewWindowInput,
   MoveWorkspaceTabToWindowInput,
   OpenWorkspacePathRequest,
+  ReloadWorkspaceTabFromPathInput,
   ReorderWorkspaceTabInput,
   UpdateWorkspaceTabDraftInput,
   WorkspaceMoveTabResult,
@@ -81,6 +82,9 @@ declare global {
       ) => Promise<WorkspaceWindowSnapshot>;
       updateWorkspaceTabDraft: (
         input: UpdateWorkspaceTabDraftInput
+      ) => Promise<WorkspaceWindowSnapshot>;
+      reloadWorkspaceTabFromPath: (
+        input: ReloadWorkspaceTabFromPathInput
       ) => Promise<WorkspaceWindowSnapshot>;
       handleDroppedMarkdownFile: (
         input: HandleDroppedMarkdownFileInput

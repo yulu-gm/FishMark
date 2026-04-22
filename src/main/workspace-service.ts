@@ -126,7 +126,7 @@ export function createWorkspaceService() {
     return getWindowSnapshot(getWindowIdForTab(tabId));
   }
 
-  function saveTabDocument(
+  function replaceTabDocument(
     tabId: string,
     document: OpenMarkdownDocument
   ): WorkspaceWindowSnapshot {
@@ -139,6 +139,10 @@ export function createWorkspaceService() {
     tab.isDirty = false;
     tab.saveState = "idle";
     return getWindowSnapshot(getWindowIdForTab(tabId));
+  }
+
+  function saveTabDocument(tabId: string, document: OpenMarkdownDocument): WorkspaceWindowSnapshot {
+    return replaceTabDocument(tabId, document);
   }
 
   function closeTab(tabId: string): WorkspaceWindowSnapshot {
@@ -351,6 +355,7 @@ export function createWorkspaceService() {
     openDocument,
     activateTab,
     updateTabDraft,
+    replaceTabDocument,
     saveTabDocument,
     closeTab,
     reorderTab,

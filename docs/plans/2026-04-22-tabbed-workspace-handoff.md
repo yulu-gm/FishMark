@@ -8,6 +8,8 @@
 - `src/main/main.ts`、`src/shared/workspace.ts` 与 `src/main/workspace-service.ts` 已补齐标签关闭、排序、跨窗口 move 与拖出成新窗口的 workspace 原语；已有 workspace 窗口时，外部打开 / 拖入文件默认走当前窗口标签流，不再走“已有文档就新开窗口”的旧分支。
 - `src/renderer/document-state.ts` 与 `src/renderer/editor/App.tsx` 已从单一 `currentDocument` 迁移到“标签栏 + 活动标签编辑器”主链，当前支持多标签新建 / 打开 / 切换 / 关闭、标签排序与拖出成新窗口，以及活动标签草稿同步回 `main`。
 - `autosave`、手动保存与外部文件冲突当前先继续围绕活动标签工作；已补齐 main / preload / renderer / test-workbench 相关测试，并同步更新 backlog、progress、test-report、decision-log、test-cases 与 task summary。
+- follow-up 修补：外部文件冲突 banner 的“重载磁盘版本”改为复用当前 `tabId` 就地换入磁盘内容，不再额外追加同路径标签；窗口外一次拖入多个 Markdown 文件时会按顺序追加多个标签页。
+- follow-up 修补：主进程文件 watcher 现在会屏蔽当前活动文件由应用自身保存触发的写回事件，避免一编辑或 autosave 后立刻误报“当前文件已被外部修改”。
 
 ## 落点文件
 
@@ -41,6 +43,8 @@
 ## 本轮验证
 
 - `npm run test -- src/main/workspace-service.test.ts src/preload/preload.contract.test.ts src/preload/preload.test.ts src/main/application-menu.test.ts src/main/main.test.ts src/renderer/document-state.test.ts src/renderer/editor-test-driver.test.ts src/renderer/app.autosave.test.ts src/renderer/test-workbench.test.tsx`
+- `npm run test -- src/renderer/app.autosave.test.ts src/main/workspace-service.test.ts src/preload/preload.contract.test.ts src/renderer/test-workbench.test.tsx`
+- `npm run test -- src/main/external-file-watch-service.test.ts src/renderer/app.autosave.test.ts src/main/workspace-service.test.ts src/preload/preload.contract.test.ts src/renderer/test-workbench.test.tsx`
 - `npm run typecheck`
 - `npm run lint`
 - `npm run build`
@@ -51,6 +55,9 @@
 - `File > New` 会在当前窗口创建新的未保存标签页。
 - `File > Open...`、拖入文件与外部打开文件会在当前窗口追加新标签，而不是替换已有文档或默认新开窗口。
 - 活动标签编辑后的 dirty 状态会同步到标签栏；保存、另存为、autosave 与外部文件 watcher 都已按活动 `tabId` 工作。
+- 当前活动文件由应用自身保存或 autosave 触发的写盘，不会再被 watcher 误判成外部修改并弹冲突提示。
+- 外部文件冲突时，“重载磁盘版本”会在当前标签内就地换入磁盘内容，不会再复制出同路径新标签。
+- 从系统资源管理器一次拖入多个 Markdown 文件时，会在当前窗口按顺序追加多个标签页。
 - 标签可以在当前窗口内排序、关闭，并可拖出成新窗口；关闭单个标签与关闭窗口时都会按窗口标签序列处理未保存状态。
 - 同路径 reload 成功后会清掉外部文件冲突提示；已加载过的非活动标签 payload 不会被后续 strip-only snapshot 错误清空。
 

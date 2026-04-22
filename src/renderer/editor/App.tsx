@@ -247,23 +247,27 @@ function isMarkdownFilePath(targetPath: string): boolean {
   return MARKDOWN_FILE_EXTENSIONS.some((extension) => normalizedPath.endsWith(extension));
 }
 
-function getDroppedMarkdownPath(
+function getDroppedMarkdownPaths(
   fishmark: Window["fishmark"],
   dataTransfer: DataTransfer | null
-): string | null {
-  const file = dataTransfer?.files?.[0];
+): string[] {
+  const resolvedPaths = new Set<string>();
 
-  if (!(file instanceof File)) {
-    return null;
+  for (const file of Array.from(dataTransfer?.files ?? [])) {
+    if (!(file instanceof File)) {
+      continue;
+    }
+
+    const filePath = fishmark.getPathForDroppedFile(file);
+
+    if (typeof filePath !== "string" || !isMarkdownFilePath(filePath)) {
+      continue;
+    }
+
+    resolvedPaths.add(filePath);
   }
 
-  const filePath = fishmark.getPathForDroppedFile(file);
-
-  if (typeof filePath !== "string" || !isMarkdownFilePath(filePath)) {
-    return null;
-  }
-
-  return filePath;
+  return [...resolvedPaths];
 }
 
 function hasFileDrag(dataTransfer: DataTransfer | null): boolean {
@@ -1553,13 +1557,32 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
   }
 
   async function handleReloadExternalFile(): Promise<void> {
-    const currentPath = getActiveDocument(stateRef.current)?.path;
+    const activeDocument = getActiveDocument(stateRef.current);
 
-    if (!currentPath) {
+    if (!activeDocument?.path) {
       return;
     }
 
-    await handleOpenMarkdownFromPath(currentPath);
+    applyState((current) => startOpeningMarkdownFile(current));
+    resetAutosaveRuntime();
+
+    try {
+      const snapshot = await fishmark.reloadWorkspaceTabFromPath({
+        tabId: activeDocument.tabId,
+        targetPath: activeDocument.path
+      });
+      applyWorkspaceWindowSnapshot(snapshot, { clearExternalFileConflict: true });
+      setShellMode("reading");
+    } catch (error) {
+      applyState((current) => ({
+        ...current,
+        openState: "idle"
+      }));
+      showNotification({
+        kind: "error",
+        message: error instanceof Error ? error.message : String(error)
+      });
+    }
   }
 
   const handleWindowDragOver = useEffectEvent((event: globalThis.DragEvent): void => {
@@ -1579,23 +1602,23 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
     event.preventDefault();
     event.stopPropagation();
 
-    const targetPath = getDroppedMarkdownPath(fishmark, event.dataTransfer);
+    const targetPaths = getDroppedMarkdownPaths(fishmark, event.dataTransfer);
 
-    if (!targetPath) {
+    if (targetPaths.length === 0) {
       return;
     }
 
     void fishmark
       .handleDroppedMarkdownFile({
-        targetPath,
+        targetPaths,
         hasOpenDocument: getActiveDocument(stateRef.current) !== null
       })
-      .then((result) => {
+      .then(async (result) => {
         if (result.disposition === "open-in-place") {
-          return handleOpenMarkdownFromPath(targetPath);
+          for (const targetPath of targetPaths) {
+            await handleOpenMarkdownFromPath(targetPath);
+          }
         }
-
-        return undefined;
       });
   });
 

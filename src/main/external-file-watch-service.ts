@@ -29,6 +29,8 @@ type WatchEntry = {
   path: string | null;
   watcher: FSWatcherLike | null;
   baseline: FileSnapshot | null;
+  internalWritePath: string | null;
+  deferredSnapshot: FileSnapshot | null | undefined;
 };
 
 const defaultDependencies: WatchDependencies = {
@@ -43,6 +45,8 @@ export function createExternalFileWatchService(
   dependencies: WatchDependencies = defaultDependencies
 ): {
   syncDocumentPath: (webContents: WatchedWebContents, targetPath: string | null) => Promise<void>;
+  beginInternalWrite: (webContents: WatchedWebContents, targetPath: string) => void;
+  completeInternalWrite: (webContents: WatchedWebContents, targetPath: string) => Promise<void>;
 } {
   const entries = new Map<number, WatchEntry>();
 
@@ -53,7 +57,9 @@ export function createExternalFileWatchService(
     const currentEntry = entries.get(webContents.id) ?? {
       path: null,
       watcher: null,
-      baseline: null
+      baseline: null,
+      internalWritePath: null,
+      deferredSnapshot: undefined
     };
 
     if (!entries.has(webContents.id) && webContents.once) {
@@ -68,7 +74,9 @@ export function createExternalFileWatchService(
       entries.set(webContents.id, {
         path: null,
         watcher: null,
-        baseline: null
+        baseline: null,
+        internalWritePath: null,
+        deferredSnapshot: undefined
       });
       return;
     }
@@ -99,6 +107,11 @@ export function createExternalFileWatchService(
 
     const nextSnapshot = await readSnapshot(expectedPath, dependencies.stat);
 
+    if (entry.internalWritePath === expectedPath) {
+      entry.deferredSnapshot = nextSnapshot;
+      return;
+    }
+
     if (snapshotsEqual(entry.baseline, nextSnapshot)) {
       return;
     }
@@ -110,8 +123,49 @@ export function createExternalFileWatchService(
     });
   }
 
+  function beginInternalWrite(webContents: WatchedWebContents, targetPath: string): void {
+    const entry = entries.get(webContents.id);
+
+    if (!entry || entry.path !== targetPath) {
+      return;
+    }
+
+    entry.internalWritePath = targetPath;
+    entry.deferredSnapshot = undefined;
+  }
+
+  async function completeInternalWrite(
+    webContents: WatchedWebContents,
+    targetPath: string
+  ): Promise<void> {
+    const entry = entries.get(webContents.id);
+
+    if (!entry || entry.path !== targetPath || entry.internalWritePath !== targetPath) {
+      return;
+    }
+
+    const currentSnapshot = await readSnapshot(targetPath, dependencies.stat);
+    const deferredSnapshot = entry.deferredSnapshot;
+
+    entry.baseline = currentSnapshot;
+    entry.internalWritePath = null;
+    entry.deferredSnapshot = undefined;
+
+    if (
+      deferredSnapshot !== undefined &&
+      !snapshotsEqual(deferredSnapshot, currentSnapshot)
+    ) {
+      webContents.send(EXTERNAL_MARKDOWN_FILE_CHANGED_EVENT, {
+        path: targetPath,
+        kind: currentSnapshot === null ? "deleted" : "modified"
+      });
+    }
+  }
+
   return {
-    syncDocumentPath
+    syncDocumentPath,
+    beginInternalWrite,
+    completeInternalWrite
   };
 }
 

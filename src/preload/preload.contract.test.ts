@@ -70,6 +70,7 @@ import {
   OPEN_WORKSPACE_PATH_EVENT,
   OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL,
   OPEN_WORKSPACE_FILE_CHANNEL,
+  RELOAD_WORKSPACE_TAB_FROM_PATH_CHANNEL,
   REORDER_WORKSPACE_TAB_CHANNEL,
   UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL,
   type OpenWorkspacePathRequest
@@ -156,7 +157,10 @@ describe("preload contract", () => {
     const api = await loadApi();
 
     const openPathInput = { targetPath: "D:/fixtures/note.md" };
-    const droppedMarkdownInput = { targetPath: "D:/fixtures/drop.md", hasOpenDocument: true };
+    const droppedMarkdownInput = {
+      targetPaths: ["D:/fixtures/drop.md", "D:/fixtures/second-drop.md"],
+      hasOpenDocument: true
+    };
     const saveInput = { tabId: "tab-2", path: "D:/fixtures/note.md", content: "# note" };
     const saveAsInput = { tabId: "tab-2", currentPath: "D:/fixtures/note.md", content: "# note" };
     const createWorkspaceTabInput = { kind: "untitled" } as const;
@@ -171,6 +175,10 @@ describe("preload contract", () => {
     const updateWorkspaceTabDraftInput = {
       tabId: "tab-2",
       content: "# Updated note\n"
+    };
+    const reloadWorkspaceTabFromPathInput = {
+      tabId: "tab-2",
+      targetPath: "D:/fixtures/reload.md"
     };
     const syncWatchedFileInput: SyncWatchedMarkdownFileInput = {
       tabId: "tab-2"
@@ -201,6 +209,7 @@ describe("preload contract", () => {
     void api.createWorkspaceTab(createWorkspaceTabInput);
     void api.openWorkspaceFile();
     void api.openWorkspaceFileFromPath(openPathInput.targetPath);
+    void api.reloadWorkspaceTabFromPath(reloadWorkspaceTabFromPathInput);
     void api.activateWorkspaceTab(activateWorkspaceTabInput);
     void api.closeWorkspaceTab(closeWorkspaceTabInput);
     void api.reorderWorkspaceTab(reorderWorkspaceTabInput);
@@ -233,6 +242,10 @@ describe("preload contract", () => {
     expect(invoke.mock.calls).toContainEqual([CREATE_WORKSPACE_TAB_CHANNEL, createWorkspaceTabInput]);
     expect(invoke.mock.calls).toContainEqual([OPEN_WORKSPACE_FILE_CHANNEL]);
     expect(invoke.mock.calls).toContainEqual([OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL, openPathInput]);
+    expect(invoke.mock.calls).toContainEqual([
+      RELOAD_WORKSPACE_TAB_FROM_PATH_CHANNEL,
+      reloadWorkspaceTabFromPathInput
+    ]);
     expect(invoke.mock.calls).toContainEqual([ACTIVATE_WORKSPACE_TAB_CHANNEL, activateWorkspaceTabInput]);
     expect(invoke.mock.calls).toContainEqual([CLOSE_WORKSPACE_TAB_CHANNEL, closeWorkspaceTabInput]);
     expect(invoke.mock.calls).toContainEqual([REORDER_WORKSPACE_TAB_CHANNEL, reorderWorkspaceTabInput]);
