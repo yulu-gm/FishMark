@@ -25,6 +25,18 @@ import type {
 } from "../shared/clipboard-image-import";
 import type { RunnerEventEnvelope, ScenarioRunTerminal } from "../shared/test-run-session";
 import type { ThemePackageManifest } from "../shared/theme-package";
+import type {
+  ActivateWorkspaceTabInput,
+  CloseWorkspaceTabInput,
+  CreateWorkspaceTabInput,
+  DetachWorkspaceTabToNewWindowInput,
+  MoveWorkspaceTabToWindowInput,
+  OpenWorkspacePathRequest,
+  ReorderWorkspaceTabInput,
+  UpdateWorkspaceTabDraftInput,
+  WorkspaceMoveTabResult,
+  WorkspaceWindowSnapshot
+} from "../shared/workspace";
 
 export {};
 
@@ -54,6 +66,22 @@ declare global {
       startupOpenPath: string | null;
       openMarkdownFile: () => Promise<OpenMarkdownFileResult>;
       openMarkdownFileFromPath: (targetPath: string) => Promise<OpenMarkdownFileResult>;
+      getWorkspaceSnapshot: () => Promise<WorkspaceWindowSnapshot>;
+      createWorkspaceTab: (input: CreateWorkspaceTabInput) => Promise<WorkspaceWindowSnapshot>;
+      openWorkspaceFile: () => Promise<WorkspaceWindowSnapshot | { status: "cancelled" }>;
+      openWorkspaceFileFromPath: (targetPath: string) => Promise<WorkspaceWindowSnapshot>;
+      activateWorkspaceTab: (input: ActivateWorkspaceTabInput) => Promise<WorkspaceWindowSnapshot>;
+      closeWorkspaceTab: (input: CloseWorkspaceTabInput) => Promise<WorkspaceWindowSnapshot>;
+      reorderWorkspaceTab: (input: ReorderWorkspaceTabInput) => Promise<WorkspaceWindowSnapshot>;
+      moveWorkspaceTabToWindow: (
+        input: MoveWorkspaceTabToWindowInput
+      ) => Promise<WorkspaceMoveTabResult>;
+      detachWorkspaceTabToNewWindow: (
+        input: DetachWorkspaceTabToNewWindowInput
+      ) => Promise<WorkspaceWindowSnapshot>;
+      updateWorkspaceTabDraft: (
+        input: UpdateWorkspaceTabDraftInput
+      ) => Promise<WorkspaceWindowSnapshot>;
       handleDroppedMarkdownFile: (
         input: HandleDroppedMarkdownFileInput
       ) => Promise<HandleDroppedMarkdownFileResult>;
@@ -75,6 +103,7 @@ declare global {
       onEditorTestCommand: (listener: (payload: EditorTestCommandEnvelope) => void) => () => void;
       completeEditorTestCommand: (payload: EditorTestCommandResultEnvelope) => Promise<void>;
       onMenuCommand: (listener: (command: AppMenuCommand) => void) => () => void;
+      onOpenWorkspacePath: (listener: (payload: OpenWorkspacePathRequest) => void) => () => void;
       getPreferences: () => Promise<Preferences>;
       updatePreferences: (patch: PreferencesUpdate) => Promise<UpdatePreferencesResult>;
       onPreferencesChanged: (listener: (preferences: Preferences) => void) => () => void;

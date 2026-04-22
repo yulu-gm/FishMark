@@ -9,6 +9,10 @@
 
 ## 记录
 
+| 2026-04-22 | TASK-043 | `npm run test -- src/main/workspace-service.test.ts src/main/workspace-close-coordinator.test.ts src/main/save-markdown-file.test.ts src/main/application-menu.test.ts src/main/main.test.ts src/preload/preload.contract.test.ts src/preload/preload.test.ts src/renderer/document-state.test.ts src/renderer/editor-test-driver.test.ts src/renderer/app.autosave.test.ts src/renderer/test-workbench.test.tsx` | 通过 | 覆盖 workspace service、workspace close coordinator、tabId 维度保存链路、preload 合同、renderer 标签栏交互与 autosave / watcher 回归；当前 11 个文件、198 条测试通过。 |
+| 2026-04-22 | TASK-043 | `npm run typecheck` | 通过 | renderer / electron / vitest / cli 四套 TypeScript 检查通过，workspace close coordinator、tabId 保存 / watcher bridge 与 renderer 关闭流程未破坏编译边界。 |
+| 2026-04-22 | TASK-043 | `npm run lint` | 通过 | 标签页工作区完整四条执行切片相关改动通过 ESLint。 |
+| 2026-04-22 | TASK-043 | `npm run build` | 通过 | renderer / electron / cli 构建通过；仍仅保留现有 Vite chunk size warning，不阻塞本轮 Task-043 验收。 |
 | 2026-04-22 | TASK-036 | `npm run lint` | 通过 | 外部文件 watcher、preload bridge、renderer 冲突状态机与新增文档更新均通过 ESLint。 |
 | 2026-04-22 | TASK-036 | `npm run typecheck` | 通过 | renderer、electron、vitest、cli 四套 TypeScript 检查全部通过，新增外部文件变更 contract 与 watcher service 未破坏编译边界。 |
 | 2026-04-22 | TASK-036 | `npm run test` | 通过 | Vitest 全量通过，当前共 75 个文件、749 条测试通过，包含新增 document-state、main watcher、preload contract 与 renderer 冲突交互回归。 |

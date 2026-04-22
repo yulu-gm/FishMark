@@ -35,6 +35,7 @@ export function createApplicationMenuTemplate({
       submenu: [
         createCommandItem("New", "CmdOrCtrl+N", "new-markdown-document", dispatchCommand),
         createCommandItem("Open...", "CmdOrCtrl+O", "open-markdown-file", dispatchCommand),
+        createCommandItem("New Window", "Shift+CmdOrCtrl+N", "new-editor-window", dispatchCommand),
         { type: "separator" },
         createCommandItem("Save", "CmdOrCtrl+S", "save-markdown-file", dispatchCommand),
         createCommandItem("Save As...", "Shift+CmdOrCtrl+S", "save-markdown-file-as", dispatchCommand),

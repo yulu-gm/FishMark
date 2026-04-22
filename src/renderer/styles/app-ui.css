@@ -536,6 +536,192 @@
   display: none;
 }
 
+.workspace-tab-strip {
+  width: 100%;
+  min-width: 0;
+  margin: calc(var(--fishmark-space-4) * -1) calc(var(--fishmark-shell-gutter) * -1) 0;
+  padding: 0;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--fishmark-panel-border, rgba(15, 23, 42, 0.12)) 60%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--fishmark-panel-bg, rgba(255, 255, 255, 0.92)) 55%,
+    transparent
+  );
+  transform: translateY(0);
+  opacity: 1;
+  max-height: 44px;
+  overflow: hidden;
+  transition:
+    opacity var(--fishmark-focus-transition-duration) ease,
+    transform var(--fishmark-focus-transition-duration) var(--fishmark-focus-transition-easing),
+    max-height var(--fishmark-focus-transition-duration) var(--fishmark-focus-transition-easing),
+    border-color var(--fishmark-focus-transition-duration) ease;
+}
+
+.workspace-tab-strip[data-visibility="collapsed"] {
+  opacity: 0;
+  transform: translateY(-8px);
+  max-height: 0;
+  border-bottom-color: transparent;
+  pointer-events: none;
+}
+
+.workspace-tab-strip-scroll {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  padding: 0 var(--fishmark-shell-gutter);
+}
+
+.workspace-tab-shell {
+  position: relative;
+  flex: 0 1 220px;
+  min-width: 96px;
+  max-width: 240px;
+  display: inline-flex;
+  align-items: stretch;
+  gap: 0;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-right: 1px solid
+    color-mix(in srgb, var(--fishmark-panel-border, rgba(15, 23, 42, 0.12)) 45%, transparent);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  transition: background var(--fishmark-focus-transition-duration) ease;
+}
+
+.workspace-tab-shell:hover {
+  background: color-mix(
+    in srgb,
+    var(--fishmark-control-bg-hover, rgba(255, 255, 255, 0.94)) 50%,
+    transparent
+  );
+}
+
+.workspace-tab-shell.is-active {
+  background: var(--fishmark-workspace-bg, var(--fishmark-panel-bg, rgba(255, 255, 255, 0.92)));
+}
+
+.workspace-tab-shell.is-active::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--fishmark-text-accent, #4f7cff);
+}
+
+.workspace-tab-shell.is-active::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--fishmark-workspace-bg, var(--fishmark-panel-bg, rgba(255, 255, 255, 0.92)));
+}
+
+.workspace-tab {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px 0 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--fishmark-text-secondary, #31353d);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.workspace-tab[data-active="true"] {
+  color: var(--fishmark-text-primary, #171a1f);
+}
+
+.workspace-tab:focus-visible,
+.workspace-tab-close:focus-visible {
+  outline: 2px solid var(--fishmark-focus-ring);
+  outline-offset: -2px;
+}
+
+.workspace-tab-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-tab-dirty-indicator {
+  flex: 0 0 auto;
+  font-size: 0.95rem;
+  line-height: 1;
+  color: color-mix(in srgb, var(--fishmark-text-accent, #4f7cff) 72%, var(--fishmark-text-muted, #687180));
+}
+
+.workspace-tab-dirty-indicator[data-visibility="hidden"] {
+  visibility: hidden;
+}
+
+.workspace-tab-shell[data-dirty="true"]:not(:hover) .workspace-tab-close {
+  opacity: 0;
+}
+
+.workspace-tab-shell[data-dirty="true"]:not(:hover) .workspace-tab-dirty-indicator[data-visibility="visible"] {
+  visibility: visible;
+}
+
+.workspace-tab-shell:not([data-active="true"]):not(:hover) .workspace-tab-close {
+  opacity: 0;
+}
+
+.workspace-tab-close {
+  flex: 0 0 auto;
+  inline-size: 22px;
+  block-size: 22px;
+  align-self: center;
+  margin-right: 6px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fishmark-text-muted, #687180);
+  font: inherit;
+  cursor: pointer;
+  opacity: 1;
+  transition:
+    opacity var(--fishmark-focus-transition-duration) ease,
+    background var(--fishmark-focus-transition-duration) ease,
+    color var(--fishmark-focus-transition-duration) ease;
+}
+
+.workspace-tab-shell:hover .workspace-tab-close,
+.workspace-tab-close:focus-visible {
+  opacity: 1;
+}
+
+.workspace-tab-close:hover {
+  background: color-mix(
+    in srgb,
+    var(--fishmark-control-bg-hover, rgba(255, 255, 255, 0.94)) 80%,
+    transparent
+  );
+  color: var(--fishmark-text-primary, #171a1f);
+}
+
 .workspace-title-group {
   flex: 1;
   min-width: 0;

@@ -155,7 +155,7 @@
 
 ### TASK-006 最近文件
 
-状态：TODO
+状态：已完成
 依赖：`TASK-003`、`TASK-004`
 
 目标：记录最近成功打开或保存的文档路径，并支持重新打开和清理失效项。
@@ -950,7 +950,7 @@
 
 ### TASK-030 visual-test 截图与 diff 支持
 
-状态：TODO
+状态：DEV_IN_PROGRESS
 依赖：`TASK-027`、`TASK-028`、`TASK-029`
 
 目标：让测试工作台支持带界面的 visual-test，并输出截图、基线和 diff 工件。
@@ -1090,7 +1090,7 @@
 
 ### TASK-043 标签页工作区
 
-状态：TODO
+状态：已完成
 依赖：`TASK-003`、`TASK-004`、`TASK-005`、`TASK-032`、`TASK-036`
 
 目标：为 FishMark 引入默认单窗口多标签页工作区，让应用可以在同一窗口内打开、切换、关闭多个 Markdown 文档；只有用户明确通过 `File > New Window` 时才打开新窗口。本轮同时支持标签排序、拖出成新窗口，以及逐标签未保存关闭流程，但不包含应用重启后的会话恢复。
@@ -1116,7 +1116,7 @@
 - 不破坏现有保存、autosave、外部文件变更、IME 与 Markdown round-trip 基线
 
 执行切片：
-- [ ] 在 `src/main/` 中建立 `WorkspaceGraph`、`TabSession`、`TabViewSnapshot` 与对应 IPC 协议
-- [ ] 在 `src/renderer/` 中把单一 `currentDocument` 模型迁移为标签栏 + 活动标签编辑器工作流
-- [ ] 接通 `New` / `Open...` / `New Window`、拖入文件、外部打开文件、标签排序与拖出成新窗口
-- [ ] 将保存、另存为、autosave、外部文件变更、关闭确认迁移到 `tabId` 维度并补回归测试
+- [x] 在 `src/main/` 中建立 `WorkspaceGraph`、`TabSession`、`TabViewSnapshot` 与对应 IPC 协议
+- [x] 在 `src/renderer/` 中把单一 `currentDocument` 模型迁移为标签栏 + 活动标签编辑器工作流
+- [x] 接通 `New` / `Open...` / `New Window`、拖入文件、外部打开文件、标签排序与拖出成新窗口
+- [x] 将保存、另存为、autosave、外部文件变更、关闭确认迁移到 `tabId` 维度并补回归测试

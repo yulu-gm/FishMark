@@ -4,6 +4,17 @@ import { contextBridge, ipcRenderer, webUtils } from "electron";
 const OPEN_MARKDOWN_FILE_CHANNEL = "fishmark:open-markdown-file";
 const OPEN_MARKDOWN_FILE_FROM_PATH_CHANNEL = "fishmark:open-markdown-file-from-path";
 const HANDLE_DROPPED_MARKDOWN_FILE_CHANNEL = "fishmark:handle-dropped-markdown-file";
+const GET_WORKSPACE_SNAPSHOT_CHANNEL = "fishmark:get-workspace-snapshot";
+const CREATE_WORKSPACE_TAB_CHANNEL = "fishmark:create-workspace-tab";
+const OPEN_WORKSPACE_FILE_CHANNEL = "fishmark:open-workspace-file";
+const OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL = "fishmark:open-workspace-file-from-path";
+const ACTIVATE_WORKSPACE_TAB_CHANNEL = "fishmark:activate-workspace-tab";
+const CLOSE_WORKSPACE_TAB_CHANNEL = "fishmark:close-workspace-tab";
+const REORDER_WORKSPACE_TAB_CHANNEL = "fishmark:reorder-workspace-tab";
+const MOVE_WORKSPACE_TAB_TO_WINDOW_CHANNEL = "fishmark:move-workspace-tab-to-window";
+const DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL = "fishmark:detach-workspace-tab-to-new-window";
+const UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL = "fishmark:update-workspace-tab-draft";
+const OPEN_WORKSPACE_PATH_EVENT = "fishmark:open-workspace-path";
 const SAVE_MARKDOWN_FILE_CHANNEL = "fishmark:save-markdown-file";
 const SAVE_MARKDOWN_FILE_AS_CHANNEL = "fishmark:save-markdown-file-as";
 const SYNC_WATCHED_MARKDOWN_FILE_CHANNEL = "fishmark:sync-watched-markdown-file";
@@ -70,8 +81,10 @@ export type { EditorTestCommandEnvelope, EditorTestCommandResultEnvelope };
 type AppMenuCommand =
   | "new-markdown-document"
   | "open-markdown-file"
+  | "new-editor-window"
   | "save-markdown-file"
-  | "save-markdown-file-as";
+  | "save-markdown-file-as"
+  | "check-for-updates";
 
 type ThemeMode = "system" | "light" | "dark";
 type ThemeEffectsMode = "auto" | "full" | "off";
@@ -173,8 +186,63 @@ type ExternalMarkdownFileChangedEvent = {
   path: string;
   kind: "modified" | "deleted";
 };
-type SyncWatchedMarkdownFileInput = {
+type WorkspaceTabSaveState = "idle" | "manual-saving" | "autosaving";
+type WorkspaceTabStripItem = {
+  tabId: string;
   path: string | null;
+  name: string;
+  isDirty: boolean;
+  saveState: WorkspaceTabSaveState;
+};
+type WorkspaceDocumentSnapshot = {
+  tabId: string;
+  path: string | null;
+  name: string;
+  content: string;
+  encoding: "utf-8";
+  isDirty: boolean;
+  saveState: WorkspaceTabSaveState;
+};
+type WorkspaceWindowSnapshot = {
+  windowId: string;
+  activeTabId: string | null;
+  tabs: WorkspaceTabStripItem[];
+  activeDocument: WorkspaceDocumentSnapshot | null;
+};
+type CreateWorkspaceTabInput = {
+  kind: "untitled";
+};
+type ActivateWorkspaceTabInput = {
+  tabId: string;
+};
+type CloseWorkspaceTabInput = {
+  tabId: string;
+};
+type ReorderWorkspaceTabInput = {
+  tabId: string;
+  toIndex: number;
+};
+type MoveWorkspaceTabToWindowInput = {
+  tabId: string;
+  targetWindowId: string;
+  targetIndex?: number;
+};
+type DetachWorkspaceTabToNewWindowInput = {
+  tabId: string;
+};
+type UpdateWorkspaceTabDraftInput = {
+  tabId: string;
+  content: string;
+};
+type WorkspaceMoveTabResult = {
+  sourceWindowSnapshot: WorkspaceWindowSnapshot;
+  targetWindowSnapshot: WorkspaceWindowSnapshot;
+};
+type OpenWorkspacePathRequest = {
+  targetPath: string;
+};
+type SyncWatchedMarkdownFileInput = {
+  tabId: string | null;
 };
 type ImportClipboardImageInput = {
   documentPath: string;
@@ -293,10 +361,31 @@ const api = {
     ipcRenderer.invoke(OPEN_MARKDOWN_FILE_FROM_PATH_CHANNEL, { targetPath }),
   handleDroppedMarkdownFile: (input: { targetPath: string; hasOpenDocument: boolean }) =>
     ipcRenderer.invoke(HANDLE_DROPPED_MARKDOWN_FILE_CHANNEL, input),
+  getWorkspaceSnapshot: (): Promise<WorkspaceWindowSnapshot> =>
+    ipcRenderer.invoke(GET_WORKSPACE_SNAPSHOT_CHANNEL),
+  createWorkspaceTab: (input: CreateWorkspaceTabInput): Promise<WorkspaceWindowSnapshot> =>
+    ipcRenderer.invoke(CREATE_WORKSPACE_TAB_CHANNEL, input),
+  openWorkspaceFile: (): Promise<WorkspaceWindowSnapshot | { status: "cancelled" }> =>
+    ipcRenderer.invoke(OPEN_WORKSPACE_FILE_CHANNEL),
+  openWorkspaceFileFromPath: (targetPath: string): Promise<WorkspaceWindowSnapshot> =>
+    ipcRenderer.invoke(OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL, { targetPath }),
+  activateWorkspaceTab: (input: ActivateWorkspaceTabInput): Promise<WorkspaceWindowSnapshot> =>
+    ipcRenderer.invoke(ACTIVATE_WORKSPACE_TAB_CHANNEL, input),
+  closeWorkspaceTab: (input: CloseWorkspaceTabInput): Promise<WorkspaceWindowSnapshot> =>
+    ipcRenderer.invoke(CLOSE_WORKSPACE_TAB_CHANNEL, input),
+  reorderWorkspaceTab: (input: ReorderWorkspaceTabInput): Promise<WorkspaceWindowSnapshot> =>
+    ipcRenderer.invoke(REORDER_WORKSPACE_TAB_CHANNEL, input),
+  moveWorkspaceTabToWindow: (input: MoveWorkspaceTabToWindowInput): Promise<WorkspaceMoveTabResult> =>
+    ipcRenderer.invoke(MOVE_WORKSPACE_TAB_TO_WINDOW_CHANNEL, input),
+  detachWorkspaceTabToNewWindow: (
+    input: DetachWorkspaceTabToNewWindowInput
+  ): Promise<WorkspaceWindowSnapshot> => ipcRenderer.invoke(DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL, input),
+  updateWorkspaceTabDraft: (input: UpdateWorkspaceTabDraftInput): Promise<WorkspaceWindowSnapshot> =>
+    ipcRenderer.invoke(UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL, input),
   getPathForDroppedFile: (file: File) => webUtils.getPathForFile(file),
-  saveMarkdownFile: (input: { path: string; content: string }) =>
+  saveMarkdownFile: (input: { tabId: string; path: string; content: string }) =>
     ipcRenderer.invoke(SAVE_MARKDOWN_FILE_CHANNEL, input),
-  saveMarkdownFileAs: (input: { currentPath: string | null; content: string }) =>
+  saveMarkdownFileAs: (input: { tabId: string; currentPath: string | null; content: string }) =>
     ipcRenderer.invoke(SAVE_MARKDOWN_FILE_AS_CHANNEL, input),
   syncWatchedMarkdownFile: (input: SyncWatchedMarkdownFileInput): Promise<void> =>
     ipcRenderer.invoke(SYNC_WATCHED_MARKDOWN_FILE_CHANNEL, input),
@@ -351,6 +440,17 @@ const api = {
 
     return () => {
       ipcRenderer.off(APP_MENU_COMMAND_EVENT, handleMenuCommand);
+    };
+  },
+  onOpenWorkspacePath: (listener: (payload: OpenWorkspacePathRequest) => void) => {
+    const handleOpenWorkspacePath = (_event: unknown, payload: OpenWorkspacePathRequest) => {
+      listener(payload);
+    };
+
+    ipcRenderer.on(OPEN_WORKSPACE_PATH_EVENT, handleOpenWorkspacePath);
+
+    return () => {
+      ipcRenderer.off(OPEN_WORKSPACE_PATH_EVENT, handleOpenWorkspacePath);
     };
   },
   getPreferences: (): Promise<Preferences> => ipcRenderer.invoke(GET_PREFERENCES_CHANNEL),

@@ -6,7 +6,7 @@ export type ExternalMarkdownFileChangedEvent = {
 };
 
 export type SyncWatchedMarkdownFileInput = {
-  path: string | null;
+  tabId: string | null;
 };
 
 export const SYNC_WATCHED_MARKDOWN_FILE_CHANNEL = "fishmark:sync-watched-markdown-file";

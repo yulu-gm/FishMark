@@ -24,6 +24,7 @@ import type { ExternalMarkdownFileChangedEvent } from "../../shared/external-fil
 import type { AppMenuCommand } from "../../shared/menu-command";
 import { createPreviewAssetUrl } from "../../shared/preview-asset-url";
 import type { ThemePackageManifest, ThemeSurfaceSlot } from "../../shared/theme-package";
+import type { WorkspaceWindowSnapshot } from "../../shared/workspace";
 import {
   DEFAULT_PREFERENCES,
   type Preferences,
@@ -43,11 +44,11 @@ import {
   type ExternalMarkdownFileState,
   applyExternalMarkdownFileChanged,
   applyEditorContentChanged,
-  applyOpenMarkdownResult,
   applySaveMarkdownResult,
+  applyWorkspaceSnapshot,
   clearExternalMarkdownFileState,
-  createNewMarkdownDocumentState,
   createInitialAppState,
+  getActiveDocument,
   keepExternalMarkdownMemoryVersion,
   startAutosavingDocument,
   startManualSavingDocument,
@@ -89,6 +90,7 @@ const SettingsView = lazy(async () => {
 
 type ResolvedThemeMode = Exclude<ThemeMode, "system">;
 type ThemePackageEntry = Awaited<ReturnType<Window["fishmark"]["listThemePackages"]>>[number];
+type OpenWorkspaceFileResult = Awaited<ReturnType<Window["fishmark"]["openWorkspaceFile"]>>;
 
 const AUTOSAVE_FAILED_MESSAGE = "Autosave failed. Changes are still in memory.";
 const EXTERNAL_FILE_MODIFIED_PENDING_MESSAGE =
@@ -133,6 +135,12 @@ function getExternalFileConflictMessage(externalFileState: ExternalMarkdownFileS
   return externalFileState.kind === "deleted"
     ? EXTERNAL_FILE_DELETED_PENDING_MESSAGE
     : EXTERNAL_FILE_MODIFIED_PENDING_MESSAGE;
+}
+
+function isCancelledWorkspaceOpenResult(
+  result: OpenWorkspaceFileResult
+): result is Extract<OpenWorkspaceFileResult, { status: "cancelled" }> {
+  return "status" in result && result.status === "cancelled";
 }
 
 function RowAboveIcon(props: SVGProps<SVGSVGElement>) {
@@ -600,14 +608,17 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
   const lastThemeDynamicNotificationKeyRef = useRef<string | null>(null);
   const fontFamilyLoadStateRef = useRef<"idle" | "loading" | "loaded">("idle");
   const pressedShortcutModifiersRef = useRef<Set<string>>(new Set());
-  const currentDocumentContent = state.currentDocument
-    ? (editorContentRef.current || state.currentDocument.content)
+  const draggedWorkspaceTabIdRef = useRef<string | null>(null);
+  const handledWorkspaceTabDropRef = useRef(false);
+  const activeDocument = getActiveDocument(state);
+  const workspaceTabs = state.workspace.tabs;
+  const activeTabId = state.workspace.activeTabId;
+  const currentDocumentContent = activeDocument
+    ? (editorContentRef.current || activeDocument.content)
     : "";
-  const currentDocumentMetrics = state.currentDocument
-    ? getDocumentMetrics(currentDocumentContent)
-    : null;
+  const currentDocumentMetrics = activeDocument ? getDocumentMetrics(currentDocumentContent) : null;
   const currentDocumentWordCount = currentDocumentMetrics?.meaningfulCharacterCount ?? 0;
-  const isDocumentOpen = Boolean(state.currentDocument);
+  const isDocumentOpen = activeDocument !== null;
   const isReadingMode = shellMode === "reading";
   const isDocumentReadingMode = isDocumentOpen && isReadingMode;
   const isOutlinePanelVisible = isOutlineOpen || isOutlineClosing;
@@ -618,22 +629,22 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
       : "Use File > Open... to load a Markdown document.";
   const headerEyebrow = isDocumentOpen ? "Current document" : "FishMark";
   const headerTitle = isDocumentOpen
-    ? state.currentDocument?.name ?? "Untitled"
+    ? activeDocument?.name ?? "Untitled"
     : "Local-first Markdown writing";
   const headerDetail =
     state.openState === "opening"
       ? "Opening document..."
       : isDocumentOpen
-        ? state.currentDocument?.path ?? "Not saved yet."
+        ? activeDocument?.path ?? "Not saved yet."
         : "Markdown remains the source of truth, and the writing canvas stays calm and stable.";
   const saveStatusLabel =
-    state.saveState === "manual-saving"
+    activeDocument?.saveState === "manual-saving"
       ? "Saving changes..."
-      : state.saveState === "autosaving"
+      : activeDocument?.saveState === "autosaving"
         ? "Autosaving..."
-        : state.currentDocument && !state.currentDocument.path && !state.isDirty
+        : activeDocument && !activeDocument.path && !activeDocument.isDirty
           ? "Not saved yet"
-        : state.isDirty
+        : activeDocument?.isDirty
           ? "Unsaved changes"
           : "All changes saved";
   const externalFileConflictMessage = getExternalFileConflictMessage(state.externalFileState);
@@ -756,15 +767,72 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
     applyThemeRuntimeEnv(document.documentElement, createThemeRuntimeEnv(themeMode));
   });
 
-  function applyState(updater: (current: AppState) => AppState): void {
+  const applyState = useCallback((updater: (current: AppState) => AppState): void => {
     const next = updater(stateRef.current);
     stateRef.current = next;
     setState(next);
-  }
+  }, []);
 
-  function getEditorContent(): string {
+  const syncActiveDocumentUi = useCallback((nextState: AppState): void => {
+    const nextActiveDocument = getActiveDocument(nextState);
+
+    editorContentRef.current = nextActiveDocument?.content ?? "";
+    activeBlockStateRef.current = null;
+    setOutlineItems(nextActiveDocument ? deriveOutlineItems(nextActiveDocument.content) : []);
+    setActiveHeadingId(null);
+    setActiveShortcutGroupId("default-text");
+    setActiveTableToolId(null);
+  }, []);
+
+  const applyWorkspaceWindowSnapshot = useCallback((
+    snapshot: WorkspaceWindowSnapshot,
+    options: { syncUi?: boolean; clearExternalFileConflict?: boolean } = {}
+  ): AppState => {
+    let nextState = stateRef.current;
+    const previousState = stateRef.current;
+    const shouldSyncUi = options.syncUi ?? true;
+
+    applyState((current) => {
+      nextState = {
+        ...applyWorkspaceSnapshot(current, snapshot, {
+          clearExternalFileState: options.clearExternalFileConflict ?? false
+        }),
+        openState: "idle"
+      };
+      return nextState;
+    });
+
+    if (shouldSyncUi && previousState.editorLoadRevision !== nextState.editorLoadRevision) {
+      syncActiveDocumentUi(nextState);
+    }
+
+    return nextState;
+  }, [applyState, syncActiveDocumentUi]);
+
+  const getEditorContent = useCallback((): string => {
     return editorRef.current?.getContent() ?? editorContentRef.current;
-  }
+  }, []);
+
+  const flushActiveWorkspaceDraft = useCallback(async (): Promise<void> => {
+    const activeDocument = getActiveDocument(stateRef.current);
+
+    if (!activeDocument) {
+      return;
+    }
+
+    const currentContent = getEditorContent();
+
+    if (currentContent === activeDocument.content) {
+      return;
+    }
+
+    const snapshot = await fishmark.updateWorkspaceTabDraft({
+      tabId: activeDocument.tabId,
+      content: currentContent
+    });
+
+    applyWorkspaceWindowSnapshot(snapshot, { syncUi: false });
+  }, [applyWorkspaceWindowSnapshot, fishmark, getEditorContent]);
 
   const insertTableRowAbove = useCallback(() => {
     editorRef.current?.insertTableRowAbove();
@@ -880,10 +948,10 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
   ]);
 
   useEffect(() => {
-    if (!state.currentDocument) {
+    if (!activeDocument) {
       setActiveShortcutGroupId("default-text");
     }
-  }, [state.currentDocument]);
+  }, [activeDocument]);
 
   useEffect(() => {
     if (activeShortcutGroup.id !== "table-editing") {
@@ -891,12 +959,12 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
     }
   }, [activeShortcutGroup.id]);
 
-  function clearAutosaveTimer(): void {
+  const clearAutosaveTimer = useCallback((): void => {
     if (autosaveTimerRef.current !== null) {
       clearTimeout(autosaveTimerRef.current);
       autosaveTimerRef.current = null;
     }
-  }
+  }, []);
 
   function clearOutlineCloseTimer(): void {
     if (outlineCloseTimerRef.current !== null) {
@@ -929,7 +997,7 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
   }, []);
 
   const enterReadingMode = useCallback((): void => {
-    if (!stateRef.current.currentDocument || isSettingsOpen || isSettingsClosing) {
+    if (!getActiveDocument(stateRef.current) || isSettingsOpen || isSettingsClosing) {
       return;
     }
 
@@ -943,7 +1011,7 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
 
   const handleAppWorkspaceMouseDownCapture = useCallback(
     (event: React.MouseEvent<HTMLElement>): void => {
-      if (event.button !== 0 || !stateRef.current.currentDocument) {
+      if (event.button !== 0 || !getActiveDocument(stateRef.current)) {
         return;
       }
 
@@ -1008,21 +1076,22 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
       }, APP_NOTIFICATION_DURATION_MS);
   }, [clearNotificationTimers]);
 
-  function resetAutosaveRuntime(): void {
+  const resetAutosaveRuntime = useCallback((): void => {
     clearAutosaveTimer();
     pendingAutosaveReplayRef.current = false;
     inFlightSaveOriginRef.current = null;
-  }
+  }, [clearAutosaveTimer]);
 
-  async function runAutosave(): Promise<void> {
+  const runAutosave = useCallback(async (): Promise<void> => {
     clearAutosaveTimer();
 
     const snapshot = stateRef.current;
+    const currentDocument = getActiveDocument(snapshot);
 
     if (
-      !snapshot.currentDocument ||
-      !snapshot.currentDocument.path ||
-      !snapshot.isDirty ||
+      !currentDocument ||
+      !currentDocument.path ||
+      !currentDocument.isDirty ||
       isExternalFileConflictActive(snapshot) ||
       inFlightSaveOriginRef.current
     ) {
@@ -1034,7 +1103,8 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
     applyState((current) => startAutosavingDocument(current));
 
     const result = await fishmark.saveMarkdownFile({
-      path: snapshot.currentDocument.path,
+      tabId: currentDocument.tabId,
+      path: currentDocument.path,
       content: getEditorContent()
     });
 
@@ -1057,15 +1127,16 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
       pendingAutosaveReplayRef.current = false;
       void runAutosave();
     }
-  }
+  }, [applyState, clearAutosaveTimer, fishmark, getEditorContent, showNotification]);
 
-  function scheduleAutosave(nextState: AppState): void {
+  const scheduleAutosave = useCallback((nextState: AppState): void => {
     clearAutosaveTimer();
+    const activeDocument = getActiveDocument(nextState);
 
     if (
-      !nextState.currentDocument ||
-      !nextState.currentDocument.path ||
-      !nextState.isDirty ||
+      !activeDocument ||
+      !activeDocument.path ||
+      !activeDocument.isDirty ||
       isExternalFileConflictActive(nextState)
     ) {
       pendingAutosaveReplayRef.current = false;
@@ -1081,14 +1152,15 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
       autosaveTimerRef.current = null;
       void runAutosave();
     }, preferencesRef.current.autosave.idleDelayMs);
-  }
+  }, [clearAutosaveTimer, runAutosave]);
 
   async function runManualSave(
     request: () => ReturnType<typeof window.fishmark.saveMarkdownFile>
   ): Promise<void> {
     const snapshot = stateRef.current;
+    const currentDocument = getActiveDocument(snapshot);
 
-    if (!snapshot.currentDocument || inFlightSaveOriginRef.current) {
+    if (!currentDocument || inFlightSaveOriginRef.current) {
       return;
     }
 
@@ -1128,7 +1200,7 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
 
   const handleAppMenuCommand = useEffectEvent((command: AppMenuCommand): void => {
     if (command === "new-markdown-document") {
-      handleNewMarkdown();
+      void handleNewMarkdown();
       return;
     }
 
@@ -1145,10 +1217,6 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
     if (command === "save-markdown-file-as") {
       void handleSaveMarkdownAs();
     }
-  });
-
-  const handleStartupOpenPath = useEffectEvent((targetPath: string): void => {
-    void handleOpenMarkdownFromPath(targetPath);
   });
 
   const handleLoadFontFamilies = useEffectEvent(async (): Promise<void> => {
@@ -1191,7 +1259,7 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
   }
 
   function openSettingsDrawer(): void {
-    if (stateRef.current.currentDocument) {
+    if (getActiveDocument(stateRef.current)) {
       setShellMode("editing");
     }
     const activeElement = document.activeElement;
@@ -1252,54 +1320,218 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
 
   async function handleOpenMarkdown(): Promise<void> {
     applyState((current) => startOpeningMarkdownFile(current));
-
-    const result = await fishmark.openMarkdownFile();
-
     resetAutosaveRuntime();
 
-    if (result.status === "success") {
-      editorContentRef.current = result.document.content;
-      setOutlineItems(deriveOutlineItems(result.document.content));
-      setActiveHeadingId(null);
-    } else if (result.status === "error") {
-      showNotification({ kind: "error", message: result.error.message });
-    }
+    try {
+      const result = await fishmark.openWorkspaceFile();
 
-    applyState((current) => applyOpenMarkdownResult(current, result));
-    if (result.status === "success") {
+      if (isCancelledWorkspaceOpenResult(result)) {
+        applyState((current) => ({
+          ...current,
+          openState: "idle"
+        }));
+        return;
+      }
+
+      applyWorkspaceWindowSnapshot(result, { clearExternalFileConflict: true });
       setShellMode("reading");
+    } catch (error) {
+      applyState((current) => ({
+        ...current,
+        openState: "idle"
+      }));
+      showNotification({
+        kind: "error",
+        message: error instanceof Error ? error.message : String(error)
+      });
     }
   }
 
-  function handleNewMarkdown(): void {
+  async function handleNewMarkdown(): Promise<void> {
     resetAutosaveRuntime();
-    editorContentRef.current = "";
-    setOutlineItems([]);
-    setActiveHeadingId(null);
-    applyState((current) => createNewMarkdownDocumentState(current));
+
+    const snapshot = await fishmark.createWorkspaceTab({
+      kind: "untitled"
+    });
+
+    applyWorkspaceWindowSnapshot(snapshot, { clearExternalFileConflict: true });
     setShellMode("editing");
   }
 
-  async function handleOpenMarkdownFromPath(targetPath: string): Promise<void> {
+  const handleOpenMarkdownFromPath = useCallback(async (targetPath: string): Promise<void> => {
     applyState((current) => startOpeningMarkdownFile(current));
-
-    const result = await fishmark.openMarkdownFileFromPath(targetPath);
-
     resetAutosaveRuntime();
 
-    if (result.status === "success") {
-      editorContentRef.current = result.document.content;
-      setOutlineItems(deriveOutlineItems(result.document.content));
-      setActiveHeadingId(null);
-    } else if (result.status === "error") {
-      showNotification({ kind: "error", message: result.error.message });
+    try {
+      const snapshot = await fishmark.openWorkspaceFileFromPath(targetPath);
+      applyWorkspaceWindowSnapshot(snapshot, { clearExternalFileConflict: true });
+      setShellMode("reading");
+      // Drag-drop on the editor container can leave the editor focused after
+      // the drop event resolves, even though we requested reading mode. Blur
+      // any lingering focus inside the editor on the next frames so the
+      // caret does not appear in reading mode.
+      const blurEditorIfFocused = (): void => {
+        const activeElement = document.activeElement;
+        if (
+          activeElement instanceof HTMLElement &&
+          editorContainerRef.current?.contains(activeElement)
+        ) {
+          activeElement.blur();
+        }
+      };
+      blurEditorIfFocused();
+      requestAnimationFrame(() => {
+        blurEditorIfFocused();
+        requestAnimationFrame(blurEditorIfFocused);
+      });
+    } catch (error) {
+      applyState((current) => ({
+        ...current,
+        openState: "idle"
+      }));
+      showNotification({
+        kind: "error",
+        message: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }, [applyState, applyWorkspaceWindowSnapshot, fishmark, resetAutosaveRuntime, showNotification]);
+
+  async function handleActivateWorkspaceTab(tabId: string): Promise<void> {
+    if (stateRef.current.workspace.activeTabId === tabId) {
+      return;
     }
 
-    applyState((current) => applyOpenMarkdownResult(current, result));
-    if (result.status === "success") {
-      setShellMode("reading");
+    await flushActiveWorkspaceDraft();
+    resetAutosaveRuntime();
+
+    try {
+      const snapshot = await fishmark.activateWorkspaceTab({ tabId });
+      const nextState = applyWorkspaceWindowSnapshot(snapshot);
+      scheduleAutosave(nextState);
+    } catch (error) {
+      showNotification({
+        kind: "error",
+        message: error instanceof Error ? error.message : String(error)
+      });
     }
   }
+
+  const handleCloseWorkspaceTab = useCallback(async (tabId: string): Promise<void> => {
+    await flushActiveWorkspaceDraft();
+    const isClosingActiveTab = stateRef.current.workspace.activeTabId === tabId;
+
+    if (isClosingActiveTab) {
+      resetAutosaveRuntime();
+    }
+
+    try {
+      const snapshot = await fishmark.closeWorkspaceTab({ tabId });
+      const nextState = applyWorkspaceWindowSnapshot(snapshot);
+      if (isClosingActiveTab) {
+        scheduleAutosave(nextState);
+      }
+    } catch (error) {
+      showNotification({
+        kind: "error",
+        message: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }, [
+    applyWorkspaceWindowSnapshot,
+    fishmark,
+    flushActiveWorkspaceDraft,
+    resetAutosaveRuntime,
+    scheduleAutosave,
+    showNotification
+  ]);
+
+  const handleReorderWorkspaceTab = useCallback(
+    async (tabId: string, toIndex: number): Promise<void> => {
+      await flushActiveWorkspaceDraft();
+
+      try {
+        const snapshot = await fishmark.reorderWorkspaceTab({ tabId, toIndex });
+        applyWorkspaceWindowSnapshot(snapshot, { syncUi: false });
+      } catch (error) {
+        showNotification({
+          kind: "error",
+          message: error instanceof Error ? error.message : String(error)
+        });
+      }
+    },
+    [applyWorkspaceWindowSnapshot, fishmark, flushActiveWorkspaceDraft, showNotification]
+  );
+
+  const handleDetachWorkspaceTab = useCallback(async (tabId: string): Promise<void> => {
+    await flushActiveWorkspaceDraft();
+    resetAutosaveRuntime();
+
+    try {
+      const snapshot = await fishmark.detachWorkspaceTabToNewWindow({ tabId });
+      const nextState = applyWorkspaceWindowSnapshot(snapshot);
+      scheduleAutosave(nextState);
+    } catch (error) {
+      showNotification({
+        kind: "error",
+        message: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }, [applyWorkspaceWindowSnapshot, fishmark, flushActiveWorkspaceDraft, resetAutosaveRuntime, scheduleAutosave, showNotification]);
+
+  const handleWorkspaceTabDragStart = useCallback(
+    (tabId: string, event: React.DragEvent<HTMLElement>): void => {
+      draggedWorkspaceTabIdRef.current = tabId;
+      handledWorkspaceTabDropRef.current = false;
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", tabId);
+    },
+    []
+  );
+
+  const handleWorkspaceTabDragOver = useCallback((event: React.DragEvent<HTMLElement>): void => {
+    if (!draggedWorkspaceTabIdRef.current) {
+      return;
+    }
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  }, []);
+
+  const handleWorkspaceTabDrop = useCallback(
+    (targetTabId: string, targetIndex: number, event: React.DragEvent<HTMLElement>): void => {
+      const draggedTabId = draggedWorkspaceTabIdRef.current;
+
+      if (!draggedTabId) {
+        return;
+      }
+
+      event.preventDefault();
+      handledWorkspaceTabDropRef.current = true;
+      draggedWorkspaceTabIdRef.current = null;
+
+      if (draggedTabId === targetTabId) {
+        return;
+      }
+
+      void handleReorderWorkspaceTab(draggedTabId, targetIndex);
+    },
+    [handleReorderWorkspaceTab]
+  );
+
+  const handleWorkspaceTabDragEnd = useCallback(
+    (tabId: string): void => {
+      const shouldDetach =
+        draggedWorkspaceTabIdRef.current === tabId && !handledWorkspaceTabDropRef.current;
+
+      draggedWorkspaceTabIdRef.current = null;
+      handledWorkspaceTabDropRef.current = false;
+
+      if (shouldDetach) {
+        void handleDetachWorkspaceTab(tabId);
+      }
+    },
+    [handleDetachWorkspaceTab]
+  );
 
   const handleExternalMarkdownFileChanged = useEffectEvent(
     (event: ExternalMarkdownFileChangedEvent): void => {
@@ -1321,7 +1553,7 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
   }
 
   async function handleReloadExternalFile(): Promise<void> {
-    const currentPath = stateRef.current.currentDocument?.path;
+    const currentPath = getActiveDocument(stateRef.current)?.path;
 
     if (!currentPath) {
       return;
@@ -1356,7 +1588,7 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
     void fishmark
       .handleDroppedMarkdownFile({
         targetPath,
-        hasOpenDocument: stateRef.current.currentDocument !== null
+        hasOpenDocument: getActiveDocument(stateRef.current) !== null
       })
       .then((result) => {
         if (result.disposition === "open-in-place") {
@@ -1378,7 +1610,7 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
   }, []);
 
   async function handleSaveMarkdown(): Promise<void> {
-    const currentDocument = stateRef.current.currentDocument;
+    const currentDocument = getActiveDocument(stateRef.current);
 
     if (!currentDocument) {
       return;
@@ -1390,6 +1622,7 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
     if (!currentPath || shouldForceSaveAs) {
       await runManualSave(() =>
         fishmark.saveMarkdownFileAs({
+          tabId: currentDocument.tabId,
           currentPath,
           content: getEditorContent()
         })
@@ -1399,6 +1632,7 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
 
     await runManualSave(() =>
       fishmark.saveMarkdownFile({
+        tabId: currentDocument.tabId,
         path: currentPath,
         content: getEditorContent()
       })
@@ -1406,7 +1640,7 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
   }
 
   async function handleSaveMarkdownAs(): Promise<void> {
-    const currentDocument = stateRef.current.currentDocument;
+    const currentDocument = getActiveDocument(stateRef.current);
 
     if (!currentDocument) {
       return;
@@ -1414,6 +1648,7 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
 
     await runManualSave(() =>
       fishmark.saveMarkdownFileAs({
+        tabId: currentDocument.tabId,
         currentPath: currentDocument.path,
         content: getEditorContent()
       })
@@ -1479,7 +1714,7 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
       setEditorContentSnapshot: (content: string) => {
         editorContentRef.current = content;
       },
-      openMarkdownFileFromPath: (targetPath: string) => fishmark.openMarkdownFileFromPath(targetPath),
+      openWorkspaceFileFromPath: (targetPath: string) => fishmark.openWorkspaceFileFromPath(targetPath),
       saveMarkdownFile: (input) => fishmark.saveMarkdownFile(input)
     });
 
@@ -1510,6 +1745,12 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
   }, [fishmark]);
 
   useEffect(() => {
+    return fishmark.onOpenWorkspacePath((payload) => {
+      void handleOpenMarkdownFromPath(payload.targetPath);
+    });
+  }, [fishmark, handleOpenMarkdownFromPath]);
+
+  useEffect(() => {
     return fishmark.onEditorTestCommand((payload) => {
       void handleEditorTestCommand(payload);
     });
@@ -1523,9 +1764,39 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
 
   useEffect(() => {
     void fishmark.syncWatchedMarkdownFile({
-      path: state.currentDocument?.path ?? null
+      tabId: activeDocument?.tabId ?? null
     });
-  }, [fishmark, state.currentDocument?.path]);
+  }, [activeDocument?.path, activeDocument?.tabId, fishmark]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    void fishmark
+      .getWorkspaceSnapshot()
+      .then(async (snapshot) => {
+        if (isCancelled) {
+          return;
+        }
+
+        applyWorkspaceWindowSnapshot(snapshot);
+
+        const startupOpenPath = startupOpenPathRef.current;
+
+        if (!startupOpenPath) {
+          return;
+        }
+
+        startupOpenPathRef.current = null;
+        await handleOpenMarkdownFromPath(startupOpenPath);
+      })
+      .catch(() => {
+        // Keep the local empty state if the workspace snapshot is temporarily unavailable.
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [applyWorkspaceWindowSnapshot, fishmark, handleOpenMarkdownFromPath]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -1645,7 +1916,7 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
           return;
         }
 
-        if (stateRef.current.currentDocument) {
+        if (getActiveDocument(stateRef.current)) {
           enterEditingMode();
         }
       }
@@ -1855,7 +2126,7 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
     });
 
     return () => cancelAnimationFrame(frame);
-  }, [isDocumentOpen, shellMode, state.currentDocument?.path, state.editorLoadRevision]);
+  }, [activeDocument?.path, isDocumentOpen, shellMode, state.editorLoadRevision]);
 
   useEffect(() => {
     if (isSettingsOpen || isSettingsClosing || pendingFocusRestoreRef.current === null) {
@@ -1901,17 +2172,6 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [enterReadingMode, isDocumentOpen, isSettingsClosing, isSettingsOpen, shellMode]);
 
-  useEffect(() => {
-    const startupOpenPath = startupOpenPathRef.current;
-
-    if (!startupOpenPath) {
-      return;
-    }
-
-    startupOpenPathRef.current = null;
-    handleStartupOpenPath(startupOpenPath);
-  }, []);
-
   useEffect(
     () => () => {
       clearAutosaveTimer();
@@ -1923,7 +2183,7 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
       clearThemeRuntimeEnv(document.documentElement);
       clearDocumentPreferences(document.documentElement);
     },
-    [clearNotificationTimers]
+    [clearAutosaveTimer, clearNotificationTimers]
   );
 
   return (
@@ -1941,7 +2201,7 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
           platform={fishmark.platform}
           layout={titlebarLayout}
           title={headerTitle}
-          isDirty={state.isDirty}
+          isDirty={activeDocument?.isDirty ?? false}
           themeMode={resolvedThemeMode}
           runtimeEnv={themeRuntimeEnv}
           effectsMode={preferences.theme.effectsMode}
@@ -2140,6 +2400,96 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
               </div>
             </section>
           ) : null}
+          {workspaceTabs.length > 0 ? (
+            <nav
+              className="workspace-tab-strip"
+              data-fishmark-region="workspace-tab-strip"
+              data-visibility={isReadingMode && isDocumentOpen ? "collapsed" : "visible"}
+              aria-label="Open documents"
+            >
+              <div className="workspace-tab-strip-scroll">
+                {workspaceTabs.map((tab, index) => {
+                  const isActive = tab.tabId === activeTabId;
+                  const tooltip = tab.path ?? tab.name;
+
+                  return (
+                    <div
+                      key={tab.tabId}
+                      className={`workspace-tab-shell ${isActive ? "is-active" : ""}`}
+                      data-fishmark-region="workspace-tab-shell"
+                      data-active={isActive ? "true" : "false"}
+                      data-dirty={tab.isDirty ? "true" : "false"}
+                    >
+                      <button
+                        type="button"
+                        className={`workspace-tab ${isActive ? "is-active" : ""}`}
+                        data-fishmark-region="workspace-tab"
+                        data-active={isActive ? "true" : "false"}
+                        data-dirty={tab.isDirty ? "true" : "false"}
+                        title={tooltip}
+                        draggable
+                        onClick={() => {
+                          void handleActivateWorkspaceTab(tab.tabId);
+                        }}
+                        onAuxClick={(event) => {
+                          if (event.button === 1) {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            void handleCloseWorkspaceTab(tab.tabId);
+                          }
+                        }}
+                        onDragStart={(event) => {
+                          handleWorkspaceTabDragStart(tab.tabId, event);
+                        }}
+                        onDragOver={handleWorkspaceTabDragOver}
+                        onDrop={(event) => {
+                          handleWorkspaceTabDrop(tab.tabId, index, event);
+                        }}
+                        onDragEnd={() => {
+                          handleWorkspaceTabDragEnd(tab.tabId);
+                        }}
+                      >
+                        <span className="workspace-tab-label">{tab.name}</span>
+                        <span
+                          className="workspace-tab-dirty-indicator"
+                          data-visibility={tab.isDirty ? "visible" : "hidden"}
+                          aria-hidden="true"
+                        >
+                          •
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="workspace-tab-close"
+                        data-fishmark-region="workspace-tab-close"
+                        aria-label={`Close ${tab.name}`}
+                        title={`Close ${tab.name}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleCloseWorkspaceTab(tab.tabId);
+                        }}
+                      >
+                        <svg
+                          width="12"
+                          height="12"
+                          viewBox="0 0 12 12"
+                          aria-hidden="true"
+                          focusable="false"
+                        >
+                          <path
+                            d="M3 3 L9 9 M9 3 L3 9"
+                            stroke="currentColor"
+                            strokeWidth="1.4"
+                            strokeLinecap="round"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </nav>
+          ) : null}
           <header
             className="app-header workspace-header"
             data-fishmark-region="workspace-header"
@@ -2154,12 +2504,12 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
           </header>
 
           <section
-            className={`workspace-canvas ${state.currentDocument ? "is-editor-open" : ""}`}
+            className={`workspace-canvas ${activeDocument ? "is-editor-open" : ""}`}
             data-fishmark-region="workspace-canvas"
             data-fishmark-shell-mode={shellMode}
             data-fishmark-has-document={isDocumentOpen ? "true" : "false"}
           >
-            {state.currentDocument ? (
+            {activeDocument ? (
               <>
                 <div
                   data-fishmark-region="shortcut-hint-overlay-shell"
@@ -2179,8 +2529,8 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
                   >
                     <CodeEditorView
                       ref={editorRef}
-                      initialContent={state.currentDocument.content}
-                      documentPath={state.currentDocument.path}
+                      initialContent={activeDocument.content}
+                      documentPath={activeDocument.path}
                       loadRevision={state.editorLoadRevision}
                       importClipboardImage={handleImportClipboardImage}
                       onActiveBlockChange={(nextActiveBlockState) => {
@@ -2203,6 +2553,22 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
                           nextState = applyEditorContentChanged(current, nextContent);
                           return nextState;
                         });
+
+                        const draftTabId = nextState.workspace.activeTabId;
+
+                        if (draftTabId) {
+                          void fishmark
+                            .updateWorkspaceTabDraft({
+                              tabId: draftTabId,
+                              content: nextContent
+                            })
+                            .then((snapshot) => {
+                              applyWorkspaceWindowSnapshot(snapshot, { syncUi: false });
+                            })
+                            .catch(() => {
+                              // Keep the renderer draft responsive even if workspace sync lags briefly.
+                            });
+                        }
 
                         scheduleAutosave(nextState);
                       }}
@@ -2332,7 +2698,9 @@ function EditorShell({ fishmark }: { fishmark: Window["fishmark"] }) {
                   {appUpdateStatusLabel ? (
                     <p className="app-update-status">{appUpdateStatusLabel}</p>
                   ) : null}
-                  <p className={`save-status ${state.isDirty ? "is-dirty" : "is-clean"}`}>
+                  <p
+                    className={`save-status ${activeDocument?.isDirty ? "is-dirty" : "is-clean"}`}
+                  >
                     {saveStatusLabel}
                   </p>
                   <p className="document-word-count">

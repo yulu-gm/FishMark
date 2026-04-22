@@ -17,6 +17,7 @@
 - 存在主进程文件打开测试和 renderer 文档状态测试
 - 偏好设置已接入颜色模式、主题家族、刷新主题、应用 UI 字体、应用 UI 字号、文档字号、文档字体和 autosave idle delay，变更可实时生效
 - 当前文档已支持外部修改 / 删除冲突检测，冲突发生时会暂停 autosave 并提供重载 / 保留当前编辑 / 另存为三条路径
+- 已建立主进程持有的标签页工作区真值与 renderer 标签栏主链：当前窗口已支持创建 / 打开 / 切换 / 关闭多个 Markdown 标签页，`Open...` / 拖入 / 外部打开默认进入当前窗口标签流，标签可排序并拖出成新窗口；保存、另存为、autosave、外部文件 watcher 与关闭确认已按活动 `tabId` / 窗口标签序列工作，活动标签继续复用单个 CodeMirror 编辑器实例
 - 基础目录边界已建立：`apps/desktop`、`packages/editor-core`、`packages/markdown-engine`、`tests/e2e`
 
 从源码可确认的未完成内容：
@@ -85,3 +86,4 @@
 | TASK-039 | 分割线渲染 | DEV_DONE | 已补齐 `thematicBreak` block map、`---` / `+++` 分割线解析、非激活态横线渲染与源码态恢复，并覆盖 CRLF 边界回归。 |
 | TASK-038 | 跨平台打包 | DEV_IN_PROGRESS | 已接入基于 `electron-builder` 的 Windows 本地 `package:win` 打包入口，并在打包前按需从 `assets/branding/*.svg` 生成 `light` / `dark` 两套 PNG 与 Windows `icon.ico`；当前通过 `afterPack + rcedit` workaround 为应用主程序补写正式图标，同时将 `package` / `release` / `dev` 的 bat/sh 工具统一收口到 `tools/` 目录，并补齐 macOS `CFBundleDocumentTypes` 所需的 `.md` / `.markdown` 文件关联声明；现已提供本地 `package:mac` / `tools/package-macos.sh` 入口，可产出 unpacked `FishMark.app`，但 macOS `.dmg` / `.zip`、正式签名和 `.icns` 仍待后续切片完成。 |
 | TASK-041 | 默认 Markdown 切换型快捷键 | DEV_DONE | 已在 `packages/editor-core/src/commands/` 落地三层语义切换器（`semantic-context` / `semantic-edits` / `toggle-*-commands`），并在 markdown extension keymap 中接入 `Cmd/Ctrl+B`、`Cmd/Ctrl+I`、`Cmd/Ctrl+1..4`、`Shift+Cmd/Ctrl+7`、`Shift+Cmd/Ctrl+9`、`Alt+Shift+Cmd/Ctrl+C`；命令级、扩展级与 renderer 回归测试均覆盖到位，对应 IME composition guard、autosave、active block 与 inactive block decorations 未回归。 |
+| TASK-043 | 标签页工作区 | ACCEPTED | 已完成 `main` 持有的 workspace snapshot / tab IPC、renderer 标签栏与活动编辑器主链、多标签新建 / 打开 / 切换 / 关闭、`Open...` / 拖入 / 外部打开默认进标签流、标签排序 / 拖出成新窗口，以及 `tabId` 维度的保存 / 另存为 / autosave / 外部文件 watcher / 关闭确认；本轮验收命令已全部通过。 |

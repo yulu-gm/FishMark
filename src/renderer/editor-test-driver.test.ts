@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
+import type { WorkspaceDocumentSnapshot, WorkspaceWindowSnapshot } from "../shared/workspace";
 import type { AppState } from "./document-state";
-import { createInitialAppState } from "./document-state";
+import { createInitialAppState, getActiveDocument } from "./document-state";
 import { createEditorTestDriver } from "./editor-test-driver";
 
 function createHarness() {
@@ -35,7 +36,7 @@ function createHarness() {
     setEditorContentSnapshot: (content: string) => {
       editorContent = content;
     },
-    openMarkdownFileFromPath: vi.fn(),
+    openWorkspaceFileFromPath: vi.fn(),
     saveMarkdownFile: vi.fn()
   };
 
@@ -50,17 +51,21 @@ function createHarness() {
 }
 
 describe("createEditorTestDriver", () => {
-  it("opens a fixture file into app state and the editor snapshot", async () => {
+  it("opens a fixture file into the active workspace tab and editor snapshot", async () => {
     const harness = createHarness();
-    harness.openMarkdownFileFromPath.mockResolvedValue({
-      status: "success",
-      document: {
-        path: "C:/fixtures/open.md",
-        name: "open.md",
-        content: "# Fixture\n",
-        encoding: "utf-8"
-      }
-    });
+    harness.openWorkspaceFileFromPath.mockResolvedValue(
+      createWorkspaceSnapshot({
+        tabs: [
+          createWorkspaceDocument({
+            tabId: "tab-1",
+            path: "C:/fixtures/open.md",
+            name: "open.md",
+            content: "# Fixture\n"
+          })
+        ],
+        activeTabId: "tab-1"
+      })
+    );
 
     await expect(
       harness.driver.run({
@@ -75,21 +80,80 @@ describe("createEditorTestDriver", () => {
       }
     });
 
-    expect(harness.readState().currentDocument?.path).toBe("C:/fixtures/open.md");
+    expect(harness.readState().workspace.tabs).toHaveLength(1);
+    expect(getActiveDocument(harness.readState())?.path).toBe("C:/fixtures/open.md");
     expect(harness.readEditorContent()).toBe("# Fixture\n");
   });
 
-  it("marks the document dirty after replacing editor content", async () => {
+  it("opens a second fixture file as a second tab instead of replacing the first one", async () => {
     const harness = createHarness();
-    harness.openMarkdownFileFromPath.mockResolvedValue({
-      status: "success",
-      document: {
-        path: "C:/fixtures/open.md",
-        name: "open.md",
-        content: "# Fixture\n",
-        encoding: "utf-8"
-      }
+    harness.openWorkspaceFileFromPath
+      .mockResolvedValueOnce(
+        createWorkspaceSnapshot({
+          tabs: [
+            createWorkspaceDocument({
+              tabId: "tab-1",
+              path: "C:/fixtures/first.md",
+              name: "first.md",
+              content: "# First\n"
+            })
+          ],
+          activeTabId: "tab-1"
+        })
+      )
+      .mockResolvedValueOnce(
+        createWorkspaceSnapshot({
+          tabs: [
+            createWorkspaceDocument({
+              tabId: "tab-1",
+              path: "C:/fixtures/first.md",
+              name: "first.md",
+              content: "# First\n"
+            }),
+            createWorkspaceDocument({
+              tabId: "tab-2",
+              path: "C:/fixtures/second.md",
+              name: "second.md",
+              content: "# Second\n"
+            })
+          ],
+          activeTabId: "tab-2"
+        })
+      );
+
+    await harness.driver.run({
+      type: "open-fixture-file",
+      fixturePath: "C:/fixtures/first.md"
     });
+    await harness.driver.run({
+      type: "open-fixture-file",
+      fixturePath: "C:/fixtures/second.md"
+    });
+
+    expect(harness.readState().workspace.tabs).toHaveLength(2);
+    expect(harness.readState().workspace.tabs.map((tab) => tab.path)).toEqual([
+      "C:/fixtures/first.md",
+      "C:/fixtures/second.md"
+    ]);
+    expect(getActiveDocument(harness.readState())?.path).toBe("C:/fixtures/second.md");
+    expect(harness.readEditorContent()).toBe("# Second\n");
+  });
+
+  it("marks the active tab dirty after replacing editor content", async () => {
+    const harness = createHarness();
+    harness.openWorkspaceFileFromPath.mockResolvedValue(
+      createWorkspaceSnapshot({
+        tabs: [
+          createWorkspaceDocument({
+            tabId: "tab-1",
+            path: "C:/fixtures/open.md",
+            name: "open.md",
+            content: "# Fixture\n"
+          })
+        ],
+        activeTabId: "tab-1"
+      })
+    );
 
     await harness.driver.run({
       type: "open-fixture-file",
@@ -104,20 +168,24 @@ describe("createEditorTestDriver", () => {
     ).resolves.toMatchObject({ ok: true });
 
     expect(harness.readEditorContent()).toBe("# Updated\n");
-    expect(harness.readState().isDirty).toBe(true);
+    expect(getActiveDocument(harness.readState())?.isDirty).toBe(true);
   });
 
-  it("can assert document path, content, and dirty state", async () => {
+  it("can assert document path, content, and dirty state against the active tab", async () => {
     const harness = createHarness();
-    harness.openMarkdownFileFromPath.mockResolvedValue({
-      status: "success",
-      document: {
-        path: "C:/fixtures/open.md",
-        name: "open.md",
-        content: "# Fixture\n",
-        encoding: "utf-8"
-      }
-    });
+    harness.openWorkspaceFileFromPath.mockResolvedValue(
+      createWorkspaceSnapshot({
+        tabs: [
+          createWorkspaceDocument({
+            tabId: "tab-1",
+            path: "C:/fixtures/open.md",
+            name: "open.md",
+            content: "# Fixture\n"
+          })
+        ],
+        activeTabId: "tab-1"
+      })
+    );
 
     await harness.driver.run({
       type: "open-fixture-file",
@@ -158,15 +226,19 @@ describe("createEditorTestDriver", () => {
 
   it("can set selection and press Enter through the driver", async () => {
     const harness = createHarness();
-    harness.openMarkdownFileFromPath.mockResolvedValue({
-      status: "success",
-      document: {
-        path: "C:/fixtures/list.md",
-        name: "list.md",
-        content: "- [ ] todo",
-        encoding: "utf-8"
-      }
-    });
+    harness.openWorkspaceFileFromPath.mockResolvedValue(
+      createWorkspaceSnapshot({
+        tabs: [
+          createWorkspaceDocument({
+            tabId: "tab-1",
+            path: "C:/fixtures/list.md",
+            name: "list.md",
+            content: "- [ ] todo"
+          })
+        ],
+        activeTabId: "tab-1"
+      })
+    );
     harness.editor.pressEnter = vi.fn(() => {
       harness.setEditorContentSnapshot("- [ ] todo\n- [ ] ");
     });
@@ -192,20 +264,24 @@ describe("createEditorTestDriver", () => {
     expect(harness.editor.setSelection).toHaveBeenCalledWith(10, 10);
     expect(harness.editor.pressEnter).toHaveBeenCalledTimes(1);
     expect(harness.readEditorContent()).toBe("- [ ] todo\n- [ ] ");
-    expect(harness.readState().isDirty).toBe(true);
+    expect(getActiveDocument(harness.readState())?.isDirty).toBe(true);
   });
 
   it("can execute navigation and indentation commands through the driver", async () => {
     const harness = createHarness();
-    harness.openMarkdownFileFromPath.mockResolvedValue({
-      status: "success",
-      document: {
-        path: "C:/fixtures/nav.md",
-        name: "nav.md",
-        content: "# Title\nParagraph",
-        encoding: "utf-8"
-      }
-    });
+    harness.openWorkspaceFileFromPath.mockResolvedValue(
+      createWorkspaceSnapshot({
+        tabs: [
+          createWorkspaceDocument({
+            tabId: "tab-1",
+            path: "C:/fixtures/nav.md",
+            name: "nav.md",
+            content: "# Title\nParagraph"
+          })
+        ],
+        activeTabId: "tab-1"
+      })
+    );
 
     await harness.driver.run({
       type: "open-fixture-file",
@@ -239,15 +315,19 @@ describe("createEditorTestDriver", () => {
 
   it("can assert the current editor selection", async () => {
     const harness = createHarness();
-    harness.openMarkdownFileFromPath.mockResolvedValue({
-      status: "success",
-      document: {
-        path: "C:/fixtures/selection.md",
-        name: "selection.md",
-        content: "Paragraph",
-        encoding: "utf-8"
-      }
-    });
+    harness.openWorkspaceFileFromPath.mockResolvedValue(
+      createWorkspaceSnapshot({
+        tabs: [
+          createWorkspaceDocument({
+            tabId: "tab-1",
+            path: "C:/fixtures/selection.md",
+            name: "selection.md",
+            content: "Paragraph"
+          })
+        ],
+        activeTabId: "tab-1"
+      })
+    );
     harness.editor.getSelection.mockReturnValue({ anchor: 12, head: 12 });
 
     await harness.driver.run({
@@ -274,3 +354,44 @@ describe("createEditorTestDriver", () => {
     });
   });
 });
+
+function createWorkspaceSnapshot(input: {
+  tabs: WorkspaceDocumentSnapshot[];
+  activeTabId: string | null;
+}): WorkspaceWindowSnapshot {
+  const activeDocument =
+    input.activeTabId === null
+      ? null
+      : (input.tabs.find((tab) => tab.tabId === input.activeTabId) ?? null);
+
+  return {
+    windowId: "window-1",
+    activeTabId: input.activeTabId,
+    tabs: input.tabs.map((tab) => ({
+      tabId: tab.tabId,
+      path: tab.path,
+      name: tab.name,
+      isDirty: tab.isDirty,
+      saveState: tab.saveState
+    })),
+    activeDocument
+  };
+}
+
+function createWorkspaceDocument(input: {
+  tabId: string;
+  path: string | null;
+  name: string;
+  content: string;
+  isDirty?: boolean;
+}): WorkspaceDocumentSnapshot {
+  return {
+    tabId: input.tabId,
+    path: input.path,
+    name: input.name,
+    content: input.content,
+    encoding: "utf-8",
+    isDirty: input.isDirty ?? false,
+    saveState: "idle"
+  };
+}

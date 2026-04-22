@@ -1,210 +1,160 @@
 import { describe, expect, it } from "vitest";
 
 import type { ExternalMarkdownFileChangedEvent } from "../shared/external-file-change";
-import type { SaveMarkdownFileResult } from "../shared/save-markdown-file";
+import type { WorkspaceDocumentSnapshot, WorkspaceWindowSnapshot } from "../shared/workspace";
 import {
-  applyExternalMarkdownFileChanged,
   applyEditorContentChanged,
+  applyExternalMarkdownFileChanged,
   applySaveMarkdownResult,
-  applyOpenMarkdownResult,
+  applyWorkspaceSnapshot,
   clearExternalMarkdownFileState,
-  createNewMarkdownDocumentState,
   createInitialAppState,
+  getActiveDocument,
   keepExternalMarkdownMemoryVersion,
   startAutosavingDocument,
   startManualSavingDocument,
   type AppState
 } from "./document-state";
 
-describe("applyOpenMarkdownResult", () => {
-  it("loads the returned document on success", () => {
-    const nextState = applyOpenMarkdownResult(createInitialAppState(), {
-      status: "success",
-      document: {
-        path: "C:/notes/today.md",
-        name: "today.md",
-        content: "# Today\n",
-        encoding: "utf-8"
-      }
-    });
+describe("applyWorkspaceSnapshot", () => {
+  it("creates a second untitled tab without replacing the first one", () => {
+    const firstState = applyWorkspaceSnapshot(
+      createInitialAppState(),
+      createWorkspaceSnapshot({
+        tabs: [
+          createWorkspaceDocument({
+            tabId: "tab-1",
+            path: null,
+            name: "Untitled.md",
+            content: ""
+          })
+        ],
+        activeTabId: "tab-1"
+      })
+    );
 
-    expect(nextState.currentDocument?.name).toBe("today.md");
-    expect(nextState.currentDocument?.content).toBe("# Today\n");
-    expect(nextState.openState).toBe("idle");
-  });
+    const nextState = applyWorkspaceSnapshot(
+      firstState,
+      createWorkspaceSnapshot({
+        tabs: [
+          createWorkspaceDocument({
+            tabId: "tab-1",
+            path: null,
+            name: "Untitled.md",
+            content: ""
+          }),
+          createWorkspaceDocument({
+            tabId: "tab-2",
+            path: null,
+            name: "Untitled.md",
+            content: ""
+          })
+        ],
+        activeTabId: "tab-2"
+      })
+    );
 
-  it("keeps the current document on cancelled results", () => {
-    const initialState: AppState = {
-      currentDocument: {
-        path: "C:/notes/existing.md",
-        name: "existing.md",
-        content: "draft",
-        encoding: "utf-8"
-      },
-      editorLoadRevision: 0,
-      openState: "opening",
-      saveState: "idle",
-      isDirty: false,
-      lastSavedContent: "draft",
-      externalFileState: { status: "idle" }
-    };
-
-    const nextState = applyOpenMarkdownResult(initialState, { status: "cancelled" });
-
-    expect(nextState.currentDocument?.name).toBe("existing.md");
-    expect(nextState.openState).toBe("idle");
-  });
-
-  it("keeps the current document when opening fails", () => {
-    const nextState = applyOpenMarkdownResult(createInitialAppState(), {
-      status: "error",
-      error: {
-        code: "read-failed",
-        message: "The Markdown file could not be read."
-      }
-    });
-
-    expect(nextState.currentDocument).toBeNull();
-    expect(nextState.openState).toBe("idle");
-  });
-});
-
-describe("applyEditorContentChanged", () => {
-  it("marks a new untitled document clean on creation", () => {
-    const nextState = createNewMarkdownDocumentState(createInitialAppState());
-
-    expect(nextState.currentDocument).toEqual({
+    expect(nextState.workspace.tabs).toHaveLength(2);
+    expect(nextState.workspace.tabs.map((tab) => tab.tabId)).toEqual(["tab-1", "tab-2"]);
+    expect(nextState.workspace.activeTabId).toBe("tab-2");
+    expect(getActiveDocument(nextState)).toMatchObject({
+      tabId: "tab-2",
       path: null,
       name: "Untitled.md",
       content: "",
-      encoding: "utf-8"
+      isDirty: false
     });
-    expect(nextState.isDirty).toBe(false);
-    expect(nextState.editorLoadRevision).toBe(1);
+    expect(nextState.editorLoadRevision).toBe(2);
   });
 
-  it("marks the document dirty when editor content diverges from the persisted snapshot", () => {
-    const state: AppState = {
-      currentDocument: {
-        path: "C:/notes/today.md",
-        name: "today.md",
-        content: "# Today\n",
-        encoding: "utf-8"
-      },
-      editorLoadRevision: 1,
-      openState: "idle",
-      saveState: "idle",
-      isDirty: false,
-      lastSavedContent: "# Today\n",
-      externalFileState: { status: "idle" }
-    };
+  it("keeps inactive tab payload intact when the active tab draft changes", () => {
+    const firstState = applyWorkspaceSnapshot(
+      createInitialAppState(),
+      createWorkspaceSnapshot({
+        tabs: [
+          createWorkspaceDocument({
+            tabId: "tab-1",
+            path: "C:/notes/first.md",
+            name: "first.md",
+            content: "# First\n"
+          })
+        ],
+        activeTabId: "tab-1"
+      })
+    );
 
-    const nextState = applyEditorContentChanged(state, "# Updated\n");
+    const state = applyWorkspaceSnapshot(
+      firstState,
+      createWorkspaceSnapshot({
+        tabs: [
+          createWorkspaceDocument({
+            tabId: "tab-1",
+            path: "C:/notes/first.md",
+            name: "first.md",
+            content: "# First\n"
+          }),
+          createWorkspaceDocument({
+            tabId: "tab-2",
+            path: "C:/notes/second.md",
+            name: "second.md",
+            content: "# Second\n"
+          })
+        ],
+        activeTabId: "tab-2"
+      })
+    );
 
-    expect(nextState.currentDocument?.content).toBe("# Today\n");
-    expect(nextState.isDirty).toBe(true);
+    const nextState = applyEditorContentChanged(state, "# Second updated\n");
+
+    expect(nextState.workspace.tabs.find((tab) => tab.tabId === "tab-1")).toMatchObject({
+      path: "C:/notes/first.md",
+      name: "first.md",
+      content: "# First\n",
+      isDirty: false
+    });
+    expect(nextState.workspace.tabs.find((tab) => tab.tabId === "tab-2")).toMatchObject({
+      path: "C:/notes/second.md",
+      name: "second.md",
+      content: "# Second updated\n",
+      isDirty: true
+    });
+    expect(getActiveDocument(nextState)?.content).toBe("# Second updated\n");
   });
 });
 
 describe("save document state", () => {
-  it("marks a newly opened document as clean", () => {
-    const nextState = applyOpenMarkdownResult(createInitialAppState(), {
-      status: "success",
-      document: {
-        path: "C:/notes/today.md",
-        name: "today.md",
-        content: "# Today\n",
-        encoding: "utf-8"
-      }
-    });
-
-    expect(nextState.isDirty).toBe(false);
-    expect(nextState.saveState).toBe("idle");
-    expect(nextState.editorLoadRevision).toBe(1);
-  });
-
-  it("marks the document as manual-saving when a manual save starts", () => {
-    const initialState = applyOpenMarkdownResult(createInitialAppState(), {
-      status: "success",
-      document: {
-        path: "C:/notes/today.md",
-        name: "today.md",
-        content: "# Today\n",
-        encoding: "utf-8"
-      }
-    });
+  it("marks the active tab as manual-saving when a manual save starts", () => {
+    const initialState = openWorkspaceDocument();
 
     const nextState = startManualSavingDocument(initialState);
 
-    expect(nextState.saveState).toBe("manual-saving");
+    expect(getActiveDocument(nextState)?.saveState).toBe("manual-saving");
   });
 
-  it("marks the document as autosaving when autosave starts", () => {
-    const initialState = applyOpenMarkdownResult(createInitialAppState(), {
-      status: "success",
-      document: {
-        path: "C:/notes/today.md",
-        name: "today.md",
-        content: "# Today\n",
-        encoding: "utf-8"
-      }
-    });
+  it("marks the active tab as autosaving when autosave starts", () => {
+    const initialState = openWorkspaceDocument();
 
     const nextState = startAutosavingDocument(initialState);
 
-    expect(nextState.saveState).toBe("autosaving");
+    expect(getActiveDocument(nextState)?.saveState).toBe("autosaving");
   });
 
-  it("clears dirty state after a successful save", () => {
+  it("updates the active tab path after save as succeeds", () => {
     const initialState = applyEditorContentChanged(
-      applyOpenMarkdownResult(createInitialAppState(), {
-        status: "success",
-        document: {
-          path: "C:/notes/today.md",
-          name: "today.md",
-          content: "# Today\n",
-          encoding: "utf-8"
-        }
-      }),
-      "# Updated\n"
-    );
-
-    const nextState = applySaveMarkdownResult(initialState, createSaveResult("success"));
-
-    expect(nextState.currentDocument?.content).toBe("# Updated\n");
-    expect(nextState.isDirty).toBe(false);
-    expect(nextState.saveState).toBe("idle");
-  });
-
-  it("resets save state when save fails", () => {
-    const initialState = applyEditorContentChanged(
-      applyOpenMarkdownResult(createInitialAppState(), {
-        status: "success",
-        document: {
-          path: "C:/notes/today.md",
-          name: "today.md",
-          content: "# Today\n",
-          encoding: "utf-8"
-        }
-      }),
-      "# Updated\n"
-    );
-
-    const nextState = applySaveMarkdownResult(initialState, {
-      status: "error",
-      error: {
-        code: "write-failed",
-        message: "The Markdown file could not be saved."
-      }
-    });
-
-    expect(nextState.isDirty).toBe(true);
-    expect(nextState.saveState).toBe("idle");
-  });
-
-  it("updates the current path after save as succeeds", () => {
-    const initialState = applyEditorContentChanged(
-      createNewMarkdownDocumentState(createInitialAppState()),
+      applyWorkspaceSnapshot(
+        createInitialAppState(),
+        createWorkspaceSnapshot({
+          tabs: [
+            createWorkspaceDocument({
+              tabId: "tab-1",
+              path: null,
+              name: "Untitled.md",
+              content: ""
+            })
+          ],
+          activeTabId: "tab-1"
+        })
+      ),
       "# Updated\n"
     );
 
@@ -218,50 +168,38 @@ describe("save document state", () => {
       }
     });
 
-    expect(nextState.currentDocument?.path).toBe("C:/archive/renamed.md");
-    expect(nextState.currentDocument?.name).toBe("renamed.md");
-    expect(nextState.currentDocument?.content).toBe("# Updated\n");
-    expect(nextState.isDirty).toBe(false);
-    expect(nextState.editorLoadRevision).toBe(1);
+    expect(getActiveDocument(nextState)).toMatchObject({
+      path: "C:/archive/renamed.md",
+      name: "renamed.md",
+      content: "# Updated\n",
+      isDirty: false,
+      saveState: "idle"
+    });
+    expect(nextState.workspace.tabs[0]).toMatchObject({
+      path: "C:/archive/renamed.md",
+      name: "renamed.md",
+      isDirty: false
+    });
   });
 
-  it("keeps the current document when save as is cancelled", () => {
-    const initialState = applyEditorContentChanged(
-      applyOpenMarkdownResult(createInitialAppState(), {
-        status: "success",
-        document: {
-          path: "C:/notes/today.md",
-          name: "today.md",
-          content: "# Today\n",
-          encoding: "utf-8"
-        }
-      }),
-      "# Updated\n"
-    );
+  it("keeps the active tab dirty when save as is cancelled", () => {
+    const initialState = applyEditorContentChanged(openWorkspaceDocument(), "# Updated\n");
 
     const nextState = applySaveMarkdownResult(initialState, { status: "cancelled" });
 
-    expect(nextState.currentDocument?.path).toBe("C:/notes/today.md");
-    expect(nextState.currentDocument?.content).toBe("# Today\n");
-    expect(nextState.isDirty).toBe(true);
-    expect(nextState.saveState).toBe("idle");
+    expect(getActiveDocument(nextState)).toMatchObject({
+      path: "C:/notes/today.md",
+      name: "today.md",
+      content: "# Updated\n",
+      isDirty: true,
+      saveState: "idle"
+    });
   });
 
   it("clears external file conflict state after a successful save as", () => {
     const initialState = keepExternalMarkdownMemoryVersion(
       applyExternalMarkdownFileChanged(
-        applyEditorContentChanged(
-          applyOpenMarkdownResult(createInitialAppState(), {
-            status: "success",
-            document: {
-              path: "C:/notes/today.md",
-              name: "today.md",
-              content: "# Today\n",
-              encoding: "utf-8"
-            }
-          }),
-          "# Updated\n"
-        ),
+        applyEditorContentChanged(openWorkspaceDocument(), "# Updated\n"),
         createExternalFileEvent("modified")
       )
     );
@@ -277,25 +215,15 @@ describe("save document state", () => {
     });
 
     expect(nextState.externalFileState).toEqual({ status: "idle" });
-    expect(nextState.currentDocument?.path).toBe("C:/archive/conflict-copy.md");
-    expect(nextState.isDirty).toBe(false);
+    expect(getActiveDocument(nextState)?.path).toBe("C:/archive/conflict-copy.md");
+    expect(getActiveDocument(nextState)?.isDirty).toBe(false);
   });
 });
 
 describe("external markdown file state", () => {
-  it("enters a pending conflict state when the current file changes externally", () => {
-    const initialState = applyOpenMarkdownResult(createInitialAppState(), {
-      status: "success",
-      document: {
-        path: "C:/notes/today.md",
-        name: "today.md",
-        content: "# Today\n",
-        encoding: "utf-8"
-      }
-    });
-
+  it("enters a pending conflict state when the active file changes externally", () => {
     const nextState = applyExternalMarkdownFileChanged(
-      initialState,
+      openWorkspaceDocument(),
       createExternalFileEvent("modified")
     );
 
@@ -306,18 +234,8 @@ describe("external markdown file state", () => {
     });
   });
 
-  it("keeps the conflict state idle when the changed path is not the current document", () => {
-    const initialState = applyOpenMarkdownResult(createInitialAppState(), {
-      status: "success",
-      document: {
-        path: "C:/notes/today.md",
-        name: "today.md",
-        content: "# Today\n",
-        encoding: "utf-8"
-      }
-    });
-
-    const nextState = applyExternalMarkdownFileChanged(initialState, {
+  it("keeps the conflict state idle when the changed path is not the active document", () => {
+    const nextState = applyExternalMarkdownFileChanged(openWorkspaceDocument(), {
       path: "C:/notes/other.md",
       kind: "modified"
     });
@@ -327,15 +245,7 @@ describe("external markdown file state", () => {
 
   it("keeps the in-memory version when the user chooses to preserve current edits", () => {
     const initialState = applyExternalMarkdownFileChanged(
-      applyOpenMarkdownResult(createInitialAppState(), {
-        status: "success",
-        document: {
-          path: "C:/notes/today.md",
-          name: "today.md",
-          content: "# Today\n",
-          encoding: "utf-8"
-        }
-      }),
+      openWorkspaceDocument(),
       createExternalFileEvent("deleted")
     );
 
@@ -350,35 +260,98 @@ describe("external markdown file state", () => {
 
   it("clears the conflict state when explicitly dismissed", () => {
     const initialState = keepExternalMarkdownMemoryVersion(
-      applyExternalMarkdownFileChanged(
-        applyOpenMarkdownResult(createInitialAppState(), {
-          status: "success",
-          document: {
-            path: "C:/notes/today.md",
-            name: "today.md",
-            content: "# Today\n",
-            encoding: "utf-8"
-          }
-        }),
-        createExternalFileEvent("modified")
-      )
+      applyExternalMarkdownFileChanged(openWorkspaceDocument(), createExternalFileEvent("modified"))
     );
 
     const nextState = clearExternalMarkdownFileState(initialState);
 
     expect(nextState.externalFileState).toEqual({ status: "idle" });
   });
+
+  it("clears the conflict state when a same-path snapshot is explicitly applied as a reload", () => {
+    const conflictedState = applyExternalMarkdownFileChanged(
+      openWorkspaceDocument(),
+      createExternalFileEvent("modified")
+    );
+
+    const nextState = applyWorkspaceSnapshot(
+      conflictedState,
+      createWorkspaceSnapshot({
+        tabs: [
+          createWorkspaceDocument({
+            tabId: "tab-1",
+            path: "C:/notes/today.md",
+            name: "today.md",
+            content: "# Disk update\n"
+          })
+        ],
+        activeTabId: "tab-1"
+      }),
+      {
+        clearExternalFileState: true
+      }
+    );
+
+    expect(nextState.externalFileState).toEqual({ status: "idle" });
+    expect(getActiveDocument(nextState)?.content).toBe("# Disk update\n");
+  });
 });
 
-function createSaveResult(status: "success"): SaveMarkdownFileResult {
+function openWorkspaceDocument(): AppState {
+  return applyWorkspaceSnapshot(
+    createInitialAppState(),
+    createWorkspaceSnapshot({
+      tabs: [
+        createWorkspaceDocument({
+          tabId: "tab-1",
+          path: "C:/notes/today.md",
+          name: "today.md",
+          content: "# Today\n"
+        })
+      ],
+      activeTabId: "tab-1"
+    })
+  );
+}
+
+function createWorkspaceSnapshot(input: {
+  tabs: WorkspaceDocumentSnapshot[];
+  activeTabId: string | null;
+}): WorkspaceWindowSnapshot {
+  const activeDocument =
+    input.activeTabId === null
+      ? null
+      : (input.tabs.find((tab) => tab.tabId === input.activeTabId) ?? null);
+
   return {
-    status,
-    document: {
-      path: "C:/notes/today.md",
-      name: "today.md",
-      content: "# Updated\n",
-      encoding: "utf-8"
-    }
+    windowId: "window-1",
+    activeTabId: input.activeTabId,
+    tabs: input.tabs.map((tab) => ({
+      tabId: tab.tabId,
+      path: tab.path,
+      name: tab.name,
+      isDirty: tab.isDirty,
+      saveState: tab.saveState
+    })),
+    activeDocument
+  };
+}
+
+function createWorkspaceDocument(input: {
+  tabId: string;
+  path: string | null;
+  name: string;
+  content: string;
+  isDirty?: boolean;
+}): WorkspaceDocumentSnapshot {
+  return {
+    tabId: input.tabId,
+    path: input.path,
+    name: input.name,
+    content: input.content,
+    encoding: "utf-8",
+    isDirty: input.isDirty ?? false,
+    saveState: "idle"
   };
 }
 

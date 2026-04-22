@@ -8,6 +8,7 @@ describe("saveMarkdownFileToPath", () => {
 
     const result = await saveMarkdownFileToPath(
       {
+        tabId: "tab-1",
         path: "C:/notes/today.md",
         content: "# Updated\n"
       },
@@ -29,6 +30,7 @@ describe("saveMarkdownFileToPath", () => {
   it("returns write-failed when the file cannot be saved", async () => {
     const result = await saveMarkdownFileToPath(
       {
+        tabId: "tab-1",
         path: "C:/notes/today.md",
         content: "# Updated\n"
       },
@@ -53,6 +55,7 @@ describe("showSaveMarkdownDialog", () => {
 
     const result = await showSaveMarkdownDialog(
       {
+        tabId: "tab-1",
         currentPath: null,
         content: ""
       },
@@ -69,6 +72,7 @@ describe("showSaveMarkdownDialog", () => {
   it("returns cancelled when the user closes the save dialog", async () => {
     const result = await showSaveMarkdownDialog(
       {
+        tabId: "tab-1",
         currentPath: "C:/notes/today.md",
         content: "# Updated\n"
       },
@@ -84,6 +88,7 @@ describe("showSaveMarkdownDialog", () => {
   it("writes the selected path and returns the updated metadata", async () => {
     const result = await showSaveMarkdownDialog(
       {
+        tabId: "tab-1",
         currentPath: "C:/notes/today.md",
         content: "# Updated\n"
       },

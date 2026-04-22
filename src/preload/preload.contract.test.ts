@@ -60,6 +60,20 @@ import {
   type AppUpdateState
 } from "../shared/app-update";
 import type { ThemePackageManifest } from "../shared/theme-package";
+import {
+  ACTIVATE_WORKSPACE_TAB_CHANNEL,
+  CLOSE_WORKSPACE_TAB_CHANNEL,
+  CREATE_WORKSPACE_TAB_CHANNEL,
+  DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL,
+  GET_WORKSPACE_SNAPSHOT_CHANNEL,
+  MOVE_WORKSPACE_TAB_TO_WINDOW_CHANNEL,
+  OPEN_WORKSPACE_PATH_EVENT,
+  OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL,
+  OPEN_WORKSPACE_FILE_CHANNEL,
+  REORDER_WORKSPACE_TAB_CHANNEL,
+  UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL,
+  type OpenWorkspacePathRequest
+} from "../shared/workspace";
 
 const exposeInMainWorld = vi.fn();
 const invoke = vi.fn();
@@ -143,10 +157,23 @@ describe("preload contract", () => {
 
     const openPathInput = { targetPath: "D:/fixtures/note.md" };
     const droppedMarkdownInput = { targetPath: "D:/fixtures/drop.md", hasOpenDocument: true };
-    const saveInput = { path: "D:/fixtures/note.md", content: "# note" };
-    const saveAsInput = { currentPath: "D:/fixtures/note.md", content: "# note" };
+    const saveInput = { tabId: "tab-2", path: "D:/fixtures/note.md", content: "# note" };
+    const saveAsInput = { tabId: "tab-2", currentPath: "D:/fixtures/note.md", content: "# note" };
+    const createWorkspaceTabInput = { kind: "untitled" } as const;
+    const activateWorkspaceTabInput = { tabId: "tab-2" };
+    const closeWorkspaceTabInput = { tabId: "tab-2" };
+    const reorderWorkspaceTabInput = { tabId: "tab-2", toIndex: 0 };
+    const moveWorkspaceTabToWindowInput = {
+      tabId: "tab-2",
+      targetWindowId: "window-2"
+    };
+    const detachWorkspaceTabToNewWindowInput = { tabId: "tab-2" };
+    const updateWorkspaceTabDraftInput = {
+      tabId: "tab-2",
+      content: "# Updated note\n"
+    };
     const syncWatchedFileInput: SyncWatchedMarkdownFileInput = {
-      path: "D:/fixtures/note.md"
+      tabId: "tab-2"
     };
     const importClipboardImageInput: ImportClipboardImageInput = {
       documentPath: "D:/fixtures/note.md"
@@ -170,6 +197,16 @@ describe("preload contract", () => {
     void api.openMarkdownFile();
     void api.openMarkdownFileFromPath(openPathInput.targetPath);
     void api.handleDroppedMarkdownFile(droppedMarkdownInput);
+    void api.getWorkspaceSnapshot();
+    void api.createWorkspaceTab(createWorkspaceTabInput);
+    void api.openWorkspaceFile();
+    void api.openWorkspaceFileFromPath(openPathInput.targetPath);
+    void api.activateWorkspaceTab(activateWorkspaceTabInput);
+    void api.closeWorkspaceTab(closeWorkspaceTabInput);
+    void api.reorderWorkspaceTab(reorderWorkspaceTabInput);
+    void api.moveWorkspaceTabToWindow(moveWorkspaceTabToWindowInput);
+    void api.detachWorkspaceTabToNewWindow(detachWorkspaceTabToNewWindowInput);
+    void api.updateWorkspaceTabDraft(updateWorkspaceTabDraftInput);
     void api.saveMarkdownFile(saveInput);
     void api.saveMarkdownFileAs(saveAsInput);
     void api.syncWatchedMarkdownFile(syncWatchedFileInput);
@@ -192,6 +229,25 @@ describe("preload contract", () => {
     expect(invoke.mock.calls).toContainEqual([OPEN_MARKDOWN_FILE_CHANNEL]);
     expect(invoke.mock.calls).toContainEqual([OPEN_MARKDOWN_FILE_FROM_PATH_CHANNEL, openPathInput]);
     expect(invoke.mock.calls).toContainEqual([HANDLE_DROPPED_MARKDOWN_FILE_CHANNEL, droppedMarkdownInput]);
+    expect(invoke.mock.calls).toContainEqual([GET_WORKSPACE_SNAPSHOT_CHANNEL]);
+    expect(invoke.mock.calls).toContainEqual([CREATE_WORKSPACE_TAB_CHANNEL, createWorkspaceTabInput]);
+    expect(invoke.mock.calls).toContainEqual([OPEN_WORKSPACE_FILE_CHANNEL]);
+    expect(invoke.mock.calls).toContainEqual([OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL, openPathInput]);
+    expect(invoke.mock.calls).toContainEqual([ACTIVATE_WORKSPACE_TAB_CHANNEL, activateWorkspaceTabInput]);
+    expect(invoke.mock.calls).toContainEqual([CLOSE_WORKSPACE_TAB_CHANNEL, closeWorkspaceTabInput]);
+    expect(invoke.mock.calls).toContainEqual([REORDER_WORKSPACE_TAB_CHANNEL, reorderWorkspaceTabInput]);
+    expect(invoke.mock.calls).toContainEqual([
+      MOVE_WORKSPACE_TAB_TO_WINDOW_CHANNEL,
+      moveWorkspaceTabToWindowInput
+    ]);
+    expect(invoke.mock.calls).toContainEqual([
+      DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL,
+      detachWorkspaceTabToNewWindowInput
+    ]);
+    expect(invoke.mock.calls).toContainEqual([
+      UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL,
+      updateWorkspaceTabDraftInput
+    ]);
     expect(invoke.mock.calls).toContainEqual([SAVE_MARKDOWN_FILE_CHANNEL, saveInput]);
     expect(invoke.mock.calls).toContainEqual([SAVE_MARKDOWN_FILE_AS_CHANNEL, saveAsInput]);
     expect(invoke.mock.calls).toContainEqual([SYNC_WATCHED_MARKDOWN_FILE_CHANNEL, syncWatchedFileInput]);
@@ -232,26 +288,29 @@ describe("preload contract", () => {
     const updateListener = vi.fn();
     const notificationListener = vi.fn();
     const externalFileListener = vi.fn();
+    const openWorkspacePathListener = vi.fn();
 
     const detachScenario = api.onScenarioRunEvent(scenarioListener);
     const detachTerminal = api.onScenarioRunTerminal(terminalListener);
     const detachEditor = api.onEditorTestCommand(editorListener);
     const detachMenu = api.onMenuCommand(menuListener);
+    const detachOpenWorkspacePath = api.onOpenWorkspacePath(openWorkspacePathListener);
     const detachPreferences = api.onPreferencesChanged(preferencesListener);
     const detachUpdate = api.onAppUpdateState(updateListener);
     const detachNotification = api.onAppNotification(notificationListener);
     const detachExternalFile = api.onExternalMarkdownFileChanged(externalFileListener);
 
-    expect(on.mock.calls).toHaveLength(8);
+    expect(on.mock.calls).toHaveLength(9);
 
     const scenarioHandler = on.mock.calls[0]?.[1];
     const terminalHandler = on.mock.calls[1]?.[1];
     const editorHandler = on.mock.calls[2]?.[1];
     const menuHandler = on.mock.calls[3]?.[1];
-    const preferencesHandler = on.mock.calls[4]?.[1];
-    const updateHandler = on.mock.calls[5]?.[1];
-    const notificationHandler = on.mock.calls[6]?.[1];
-    const externalFileHandler = on.mock.calls[7]?.[1];
+    const openWorkspacePathHandler = on.mock.calls[4]?.[1];
+    const preferencesHandler = on.mock.calls[5]?.[1];
+    const updateHandler = on.mock.calls[6]?.[1];
+    const notificationHandler = on.mock.calls[7]?.[1];
+    const externalFileHandler = on.mock.calls[8]?.[1];
 
     const scenarioPayload: RunnerEventEnvelope = {
       runId: "run-1",
@@ -287,6 +346,9 @@ describe("preload contract", () => {
       }
     };
     const menuPayload: AppMenuCommand = "new-markdown-document";
+    const openWorkspacePathPayload: OpenWorkspacePathRequest = {
+      targetPath: "D:/fixtures/external.md"
+    };
     const preferencesPayload: Preferences = DEFAULT_PREFERENCES;
     const updatePayload: AppUpdateState = {
       kind: "downloading",
@@ -307,6 +369,7 @@ describe("preload contract", () => {
     editorHandler?.({}, selectionCommandPayload);
     editorHandler?.({}, enterCommandPayload);
     menuHandler?.({}, menuPayload);
+    openWorkspacePathHandler?.({}, openWorkspacePathPayload);
     preferencesHandler?.({}, preferencesPayload);
     updateHandler?.({}, updatePayload);
     notificationHandler?.({}, notificationPayload);
@@ -317,6 +380,7 @@ describe("preload contract", () => {
     expect(editorListener).toHaveBeenNthCalledWith(1, selectionCommandPayload);
     expect(editorListener).toHaveBeenNthCalledWith(2, enterCommandPayload);
     expect(menuListener).toHaveBeenCalledWith(menuPayload);
+    expect(openWorkspacePathListener).toHaveBeenCalledWith(openWorkspacePathPayload);
     expect(preferencesListener).toHaveBeenCalledWith(preferencesPayload);
     expect(updateListener).toHaveBeenCalledWith(updatePayload);
     expect(notificationListener).toHaveBeenCalledWith(notificationPayload);
@@ -326,6 +390,7 @@ describe("preload contract", () => {
     detachTerminal();
     detachEditor();
     detachMenu();
+    detachOpenWorkspacePath();
     detachPreferences();
     detachUpdate();
     detachNotification();
@@ -336,6 +401,7 @@ describe("preload contract", () => {
       [SCENARIO_RUN_TERMINAL_EVENT, terminalHandler],
       [EDITOR_TEST_COMMAND_EVENT, editorHandler],
       [APP_MENU_COMMAND_EVENT, menuHandler],
+      [OPEN_WORKSPACE_PATH_EVENT, openWorkspacePathHandler],
       [PREFERENCES_CHANGED_EVENT, preferencesHandler],
       [APP_UPDATE_STATE_EVENT, updateHandler],
       [APP_NOTIFICATION_EVENT, notificationHandler],

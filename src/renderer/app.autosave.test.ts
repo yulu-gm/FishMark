@@ -22,6 +22,18 @@ import {
   THEME_RUNTIME_THEME_MODE_ATTRIBUTE
 } from "../shared/theme-style-contract";
 import type { RunnerEventEnvelope, ScenarioRunTerminal } from "../shared/test-run-session";
+import type {
+  ActivateWorkspaceTabInput,
+  CloseWorkspaceTabInput,
+  CreateWorkspaceTabInput,
+  DetachWorkspaceTabToNewWindowInput,
+  MoveWorkspaceTabToWindowInput,
+  OpenWorkspacePathRequest,
+  ReorderWorkspaceTabInput,
+  UpdateWorkspaceTabDraftInput,
+  WorkspaceDocumentSnapshot,
+  WorkspaceWindowSnapshot
+} from "../shared/workspace";
 import App from "./App";
 import * as codeEditorViewModule from "./code-editor-view";
 
@@ -29,6 +41,7 @@ type MenuCommandListener = (
   command:
     | "new-markdown-document"
     | "open-markdown-file"
+    | "new-editor-window"
     | "save-markdown-file"
     | "save-markdown-file-as"
     | "check-for-updates"
@@ -38,6 +51,7 @@ type ScenarioRunEventListener = (payload: RunnerEventEnvelope) => void;
 type ScenarioRunTerminalListener = (payload: ScenarioRunTerminal) => void;
 type PreferencesChangedListener = (preferences: Preferences) => void;
 type ExternalMarkdownFileChangedListener = (event: ExternalMarkdownFileChangedEvent) => void;
+type OpenWorkspacePathListener = (payload: OpenWorkspacePathRequest) => void;
 type ThemePackageDescriptor = Awaited<ReturnType<Window["fishmark"]["listThemePackages"]>>[number];
 type UpdatePreferencesResult = Awaited<ReturnType<Window["fishmark"]["updatePreferences"]>>;
 type MockMediaQueryList = MediaQueryList & {
@@ -55,6 +69,10 @@ type RenderEditorAppOptions = {
   refreshThemePackagesResult?: ThemePackageDescriptor[];
   getPreferencesResult?: Preferences;
   updatePreferencesImplementation?: (patch: Partial<Preferences>) => Promise<UpdatePreferencesResult>;
+};
+
+type WorkspaceTabRecord = WorkspaceDocumentSnapshot & {
+  lastSavedContent: string;
 };
 
 function makeManifestThemePackage(
@@ -117,6 +135,35 @@ function getCssRule(stylesheet: string, selector: string): string {
   return match[0];
 }
 
+function cloneWorkspaceSnapshot(snapshot: WorkspaceWindowSnapshot): WorkspaceWindowSnapshot {
+  return {
+    windowId: snapshot.windowId,
+    activeTabId: snapshot.activeTabId,
+    tabs: snapshot.tabs.map((tab) => ({ ...tab })),
+    activeDocument: snapshot.activeDocument ? { ...snapshot.activeDocument } : null
+  };
+}
+
+function createWorkspaceTabRecord(input: {
+  tabId: string;
+  path: string | null;
+  name: string;
+  content: string;
+  isDirty?: boolean;
+  saveState?: WorkspaceDocumentSnapshot["saveState"];
+}): WorkspaceTabRecord {
+  return {
+    tabId: input.tabId,
+    path: input.path,
+    name: input.name,
+    content: input.content,
+    encoding: "utf-8",
+    isDirty: input.isDirty ?? false,
+    saveState: input.saveState ?? "idle",
+    lastSavedContent: input.content
+  };
+}
+
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean;
 }
@@ -126,6 +173,7 @@ type MockCodeEditorModule = typeof codeEditorViewModule & {
     changeContent: (content: string) => void;
     blur: () => void;
     focus: () => void;
+    getCurrentContent: () => string;
     getRenderCount: () => number;
     emitActiveBlockChange: (state: unknown) => void;
     getNavigateCalls: () => number[];
@@ -348,6 +396,9 @@ vi.mock("./code-editor-view", async () => {
       focus() {
         latestHostElement?.focus();
       },
+      getCurrentContent() {
+        return currentContent;
+      },
       getRenderCount() {
         return renderCount;
       },
@@ -399,11 +450,45 @@ describe("App autosave", () => {
   let appUpdateStateListener: ((state: AppUpdateState) => void) | null;
   let appNotificationListener: ((notification: AppNotification) => void) | null;
   let externalMarkdownFileChangedListener: ExternalMarkdownFileChangedListener | null;
+  let openWorkspacePathListener: OpenWorkspacePathListener | null;
   let fetchMock: ReturnType<typeof vi.fn>;
   let canvasGetContextSpy: { mockRestore: () => void };
   let openMarkdownFile: ReturnType<typeof vi.fn<() => Promise<OpenMarkdownFileResult>>>;
   let openMarkdownFileFromPath: ReturnType<
     typeof vi.fn<(targetPath: string) => Promise<OpenMarkdownFileResult>>
+  >;
+  let getWorkspaceSnapshot: ReturnType<typeof vi.fn<() => Promise<WorkspaceWindowSnapshot>>>;
+  let createWorkspaceTab: ReturnType<
+    typeof vi.fn<(input: CreateWorkspaceTabInput) => Promise<WorkspaceWindowSnapshot>>
+  >;
+  let openWorkspaceFile: ReturnType<
+    typeof vi.fn<() => Promise<WorkspaceWindowSnapshot | { status: "cancelled" }>>
+  >;
+  let openWorkspaceFileFromPath: ReturnType<
+    typeof vi.fn<(targetPath: string) => Promise<WorkspaceWindowSnapshot>>
+  >;
+  let activateWorkspaceTab: ReturnType<
+    typeof vi.fn<(input: ActivateWorkspaceTabInput) => Promise<WorkspaceWindowSnapshot>>
+  >;
+  let closeWorkspaceTab: ReturnType<
+    typeof vi.fn<(input: CloseWorkspaceTabInput) => Promise<WorkspaceWindowSnapshot>>
+  >;
+  let reorderWorkspaceTab: ReturnType<
+    typeof vi.fn<(input: ReorderWorkspaceTabInput) => Promise<WorkspaceWindowSnapshot>>
+  >;
+  let moveWorkspaceTabToWindow: ReturnType<
+    typeof vi.fn<
+      (input: MoveWorkspaceTabToWindowInput) => Promise<{
+        sourceWindowSnapshot: WorkspaceWindowSnapshot;
+        targetWindowSnapshot: WorkspaceWindowSnapshot;
+      }>
+    >
+  >;
+  let detachWorkspaceTabToNewWindow: ReturnType<
+    typeof vi.fn<(input: DetachWorkspaceTabToNewWindowInput) => Promise<WorkspaceWindowSnapshot>>
+  >;
+  let updateWorkspaceTabDraft: ReturnType<
+    typeof vi.fn<(input: UpdateWorkspaceTabDraftInput) => Promise<WorkspaceWindowSnapshot>>
   >;
   let handleDroppedMarkdownFile: ReturnType<
     typeof vi.fn<
@@ -420,7 +505,7 @@ describe("App autosave", () => {
     typeof vi.fn<(input: SaveMarkdownFileAsInput) => Promise<SaveMarkdownFileResult>>
   >;
   let syncWatchedMarkdownFile: ReturnType<
-    typeof vi.fn<(input: { path: string | null }) => Promise<void>>
+    typeof vi.fn<(input: { tabId: string | null }) => Promise<void>>
   >;
   let importClipboardImage: ReturnType<
     typeof vi.fn<
@@ -435,6 +520,11 @@ describe("App autosave", () => {
   let refreshThemePackages: ReturnType<typeof vi.fn<() => Promise<ThemePackageDescriptor[]>>>;
   let openThemesDirectory: ReturnType<typeof vi.fn<() => Promise<void>>>;
   let colorSchemeMediaQuery: MockMediaQueryList;
+  let workspaceWindowId: string;
+  let workspaceTabs: WorkspaceTabRecord[];
+  let workspaceActiveTabId: string | null;
+  let nextWorkspaceTabId: number;
+  let queuedWorkspaceOpenDocuments: Array<{ path: string; name: string; content: string }>;
 
   const builtinDefaultThemePackage = makeManifestThemePackage({
     id: "default",
@@ -453,6 +543,172 @@ describe("App autosave", () => {
     }
 
     return [builtinDefaultThemePackage, ...packages];
+  }
+
+  function buildWorkspaceSnapshot(): WorkspaceWindowSnapshot {
+    const activeDocument =
+      workspaceActiveTabId === null
+        ? null
+        : (workspaceTabs.find((tab) => tab.tabId === workspaceActiveTabId) ?? null);
+
+    return {
+      windowId: workspaceWindowId,
+      activeTabId: workspaceActiveTabId,
+      tabs: workspaceTabs.map((tab) => ({
+        tabId: tab.tabId,
+        path: tab.path,
+        name: tab.name,
+        isDirty: tab.isDirty,
+        saveState: tab.saveState
+      })),
+      activeDocument: activeDocument
+        ? {
+            tabId: activeDocument.tabId,
+            path: activeDocument.path,
+            name: activeDocument.name,
+            content: activeDocument.content,
+            encoding: activeDocument.encoding,
+            isDirty: activeDocument.isDirty,
+            saveState: activeDocument.saveState
+          }
+        : null
+    };
+  }
+
+  function queueWorkspaceOpenDocuments(...documents: Array<{ path: string; name: string; content: string }>): void {
+    queuedWorkspaceOpenDocuments = documents.map((document) => ({ ...document }));
+  }
+
+  function appendWorkspaceDocument(document: {
+    path: string | null;
+    name: string;
+    content: string;
+  }): WorkspaceWindowSnapshot {
+    const tabId = `tab-${nextWorkspaceTabId++}`;
+    workspaceTabs = [
+      ...workspaceTabs,
+      createWorkspaceTabRecord({
+        tabId,
+        path: document.path,
+        name: document.name,
+        content: document.content
+      })
+    ];
+    workspaceActiveTabId = tabId;
+    return cloneWorkspaceSnapshot(buildWorkspaceSnapshot());
+  }
+
+  function getQueuedWorkspaceDocument(targetPath?: string): {
+    path: string | null;
+    name: string;
+    content: string;
+  } {
+    const queuedDocument = queuedWorkspaceOpenDocuments.shift();
+
+    if (queuedDocument) {
+      return queuedDocument;
+    }
+
+    if (!targetPath) {
+      return {
+        path: "C:/notes/today.md",
+        name: "today.md",
+        content: "# Today\n"
+      };
+    }
+
+    const normalizedPath = targetPath.replace(/\\/g, "/");
+    const segments = normalizedPath.split("/");
+    const name = segments[segments.length - 1] ?? "opened.md";
+    const stem = name.replace(/\.[^.]+$/, "");
+
+    return {
+      path: targetPath,
+      name,
+      content: `# ${stem}\n`
+    };
+  }
+
+  function setWorkspaceActiveTab(tabId: string): WorkspaceWindowSnapshot {
+    workspaceActiveTabId = tabId;
+    return cloneWorkspaceSnapshot(buildWorkspaceSnapshot());
+  }
+
+  function updateWorkspaceDraft(tabId: string, content: string): WorkspaceWindowSnapshot {
+    workspaceTabs = workspaceTabs.map((tab) =>
+      tab.tabId === tabId
+        ? {
+            ...tab,
+            content,
+            isDirty: content !== tab.lastSavedContent
+          }
+        : tab
+    );
+
+    return cloneWorkspaceSnapshot(buildWorkspaceSnapshot());
+  }
+
+  function closeWorkspaceSession(tabId: string): WorkspaceWindowSnapshot {
+    const closingIndex = workspaceTabs.findIndex((tab) => tab.tabId === tabId);
+
+    if (closingIndex < 0) {
+      throw new Error(`Unknown workspace tab '${tabId}'`);
+    }
+
+    workspaceTabs = workspaceTabs.filter((tab) => tab.tabId !== tabId);
+
+    if (workspaceTabs.length === 0) {
+      workspaceActiveTabId = null;
+      return cloneWorkspaceSnapshot(buildWorkspaceSnapshot());
+    }
+
+    if (workspaceActiveTabId === tabId) {
+      const fallbackIndex = Math.max(0, closingIndex - 1);
+      workspaceActiveTabId = workspaceTabs[fallbackIndex]?.tabId ?? workspaceTabs[0]?.tabId ?? null;
+    }
+
+    return cloneWorkspaceSnapshot(buildWorkspaceSnapshot());
+  }
+
+  function reorderWorkspaceSession(tabId: string, toIndex: number): WorkspaceWindowSnapshot {
+    const fromIndex = workspaceTabs.findIndex((tab) => tab.tabId === tabId);
+
+    if (fromIndex < 0) {
+      throw new Error(`Unknown workspace tab '${tabId}'`);
+    }
+
+    const clampedIndex = Math.max(0, Math.min(toIndex, workspaceTabs.length - 1));
+
+    if (fromIndex === clampedIndex) {
+      return cloneWorkspaceSnapshot(buildWorkspaceSnapshot());
+    }
+
+    const [movedTab] = workspaceTabs.splice(fromIndex, 1);
+
+    if (!movedTab) {
+      throw new Error(`Unable to move workspace tab '${tabId}'`);
+    }
+
+    workspaceTabs.splice(clampedIndex, 0, movedTab);
+    return cloneWorkspaceSnapshot(buildWorkspaceSnapshot());
+  }
+
+  function detachWorkspaceSession(tabId: string): WorkspaceWindowSnapshot {
+    return closeWorkspaceSession(tabId);
+  }
+
+  function commitWorkspaceSave(input: { tabId: string; path: string; content: string }): void {
+    workspaceTabs = workspaceTabs.map((tab) =>
+      tab.tabId === input.tabId
+        ? {
+            ...tab,
+            path: input.path,
+            content: input.content,
+            isDirty: false,
+            lastSavedContent: input.content
+          }
+        : tab
+    );
   }
 
   function createMockMediaQueryList(query: string, initialMatches = false): MockMediaQueryList {
@@ -515,6 +771,7 @@ describe("App autosave", () => {
     appUpdateStateListener = null;
     appNotificationListener = null;
     externalMarkdownFileChangedListener = null;
+    openWorkspacePathListener = null;
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -548,17 +805,80 @@ describe("App autosave", () => {
       }
     });
 
+    workspaceWindowId = "window-1";
+    workspaceTabs = [];
+    workspaceActiveTabId = null;
+    nextWorkspaceTabId = 1;
+    queueWorkspaceOpenDocuments({
+      path: "C:/notes/today.md",
+      name: "today.md",
+      content: "# Today\n"
+    });
+
+    getWorkspaceSnapshot = vi
+      .fn<() => Promise<WorkspaceWindowSnapshot>>()
+      .mockImplementation(async () => cloneWorkspaceSnapshot(buildWorkspaceSnapshot()));
+    createWorkspaceTab = vi
+      .fn<(input: CreateWorkspaceTabInput) => Promise<WorkspaceWindowSnapshot>>()
+      .mockImplementation(async (input) => {
+        expect(input).toEqual({ kind: "untitled" });
+        return appendWorkspaceDocument({
+          path: null,
+          name: "Untitled.md",
+          content: ""
+        });
+      });
+    openWorkspaceFile = vi
+      .fn<() => Promise<WorkspaceWindowSnapshot | { status: "cancelled" }>>()
+      .mockImplementation(async () => appendWorkspaceDocument(getQueuedWorkspaceDocument()));
+    openWorkspaceFileFromPath = vi
+      .fn<(targetPath: string) => Promise<WorkspaceWindowSnapshot>>()
+      .mockImplementation(async (targetPath) =>
+        appendWorkspaceDocument(getQueuedWorkspaceDocument(targetPath))
+      );
+    activateWorkspaceTab = vi
+      .fn<(input: ActivateWorkspaceTabInput) => Promise<WorkspaceWindowSnapshot>>()
+      .mockImplementation(async (input) => setWorkspaceActiveTab(input.tabId));
+    closeWorkspaceTab = vi
+      .fn<(input: CloseWorkspaceTabInput) => Promise<WorkspaceWindowSnapshot>>()
+      .mockImplementation(async (input) => closeWorkspaceSession(input.tabId));
+    reorderWorkspaceTab = vi
+      .fn<(input: ReorderWorkspaceTabInput) => Promise<WorkspaceWindowSnapshot>>()
+      .mockImplementation(async (input) => reorderWorkspaceSession(input.tabId, input.toIndex));
+    moveWorkspaceTabToWindow = vi
+      .fn<
+        (input: MoveWorkspaceTabToWindowInput) => Promise<{
+          sourceWindowSnapshot: WorkspaceWindowSnapshot;
+          targetWindowSnapshot: WorkspaceWindowSnapshot;
+        }>
+      >()
+      .mockImplementation(async () => ({
+        sourceWindowSnapshot: cloneWorkspaceSnapshot(buildWorkspaceSnapshot()),
+        targetWindowSnapshot: cloneWorkspaceSnapshot(buildWorkspaceSnapshot())
+      }));
+    detachWorkspaceTabToNewWindow = vi
+      .fn<(input: DetachWorkspaceTabToNewWindowInput) => Promise<WorkspaceWindowSnapshot>>()
+      .mockImplementation(async (input) => detachWorkspaceSession(input.tabId));
+    updateWorkspaceTabDraft = vi
+      .fn<(input: UpdateWorkspaceTabDraftInput) => Promise<WorkspaceWindowSnapshot>>()
+      .mockImplementation(async (input) => updateWorkspaceDraft(input.tabId, input.content));
+
     saveMarkdownFile = vi
       .fn<(input: SaveMarkdownFileInput) => Promise<SaveMarkdownFileResult>>()
-      .mockImplementation(async (input) => ({
-        status: "success",
-        document: {
-          path: input.path,
-          name: "today.md",
-          content: input.content,
-          encoding: "utf-8"
-        }
-      }));
+      .mockImplementation(async (input) => {
+        commitWorkspaceSave(input);
+        const activeTab = workspaceTabs.find((tab) => tab.tabId === workspaceActiveTabId) ?? null;
+
+        return {
+          status: "success",
+          document: {
+            path: input.path,
+            name: activeTab?.name ?? "today.md",
+            content: input.content,
+            encoding: "utf-8"
+          }
+        };
+      });
 
     openMarkdownFileFromPath = vi
       .fn<(targetPath: string) => Promise<OpenMarkdownFileResult>>()
@@ -573,7 +893,7 @@ describe("App autosave", () => {
       return fileWithPath.path ?? "";
     });
     saveMarkdownFileAs = vi.fn<(input: SaveMarkdownFileAsInput) => Promise<SaveMarkdownFileResult>>();
-    syncWatchedMarkdownFile = vi.fn<(input: { path: string | null }) => Promise<void>>().mockResolvedValue(
+    syncWatchedMarkdownFile = vi.fn<(input: { tabId: string | null }) => Promise<void>>().mockResolvedValue(
       undefined
     );
     importClipboardImage = vi.fn().mockResolvedValue({
@@ -600,6 +920,16 @@ describe("App autosave", () => {
       startupOpenPath: null,
       openMarkdownFile,
       openMarkdownFileFromPath,
+      getWorkspaceSnapshot,
+      createWorkspaceTab,
+      openWorkspaceFile,
+      openWorkspaceFileFromPath,
+      activateWorkspaceTab,
+      closeWorkspaceTab,
+      reorderWorkspaceTab,
+      moveWorkspaceTabToWindow,
+      detachWorkspaceTabToNewWindow,
+      updateWorkspaceTabDraft,
       handleDroppedMarkdownFile,
       getPathForDroppedFile,
       saveMarkdownFile,
@@ -673,6 +1003,14 @@ describe("App autosave", () => {
         return () => {
           if (externalMarkdownFileChangedListener === listener) {
             externalMarkdownFileChangedListener = null;
+          }
+        };
+      },
+      onOpenWorkspacePath(listener: OpenWorkspacePathListener) {
+        openWorkspacePathListener = listener;
+        return () => {
+          if (openWorkspacePathListener === listener) {
+            openWorkspacePathListener = null;
           }
         };
       }
@@ -819,45 +1157,35 @@ describe("App autosave", () => {
   });
 
   it("opens the startup markdown file automatically when the bridge provides a launch path", async () => {
-    openMarkdownFileFromPath = vi.fn<(targetPath: string) => Promise<OpenMarkdownFileResult>>().mockResolvedValue({
-      status: "success",
-      document: {
-        path: "C:/notes/startup.md",
-        name: "startup.md",
-        content: "# Startup\n",
-        encoding: "utf-8"
-      }
+    queueWorkspaceOpenDocuments({
+      path: "C:/notes/startup.md",
+      name: "startup.md",
+      content: "# Startup\n"
     });
 
     window.fishmark = {
       ...window.fishmark,
-      openMarkdownFileFromPath,
+      openWorkspaceFileFromPath,
       startupOpenPath: "C:/notes/startup.md"
     } as unknown as Window["fishmark"];
 
     await renderApp();
 
-    expect(openMarkdownFileFromPath).toHaveBeenCalledTimes(1);
-    expect(openMarkdownFileFromPath).toHaveBeenCalledWith("C:/notes/startup.md");
+    expect(openWorkspaceFileFromPath).toHaveBeenCalledTimes(1);
+    expect(openWorkspaceFileFromPath).toHaveBeenCalledWith("C:/notes/startup.md");
   });
 
   it("opens a Markdown document when a .md file is dropped onto the workspace", async () => {
-    openMarkdownFileFromPath = vi
-      .fn<(targetPath: string) => Promise<OpenMarkdownFileResult>>()
-      .mockResolvedValue({
-        status: "success",
-        document: {
-          path: "C:/notes/dropped.md",
-          name: "dropped.md",
-          content: "# Dropped\n",
-          encoding: "utf-8"
-        }
-      });
+    queueWorkspaceOpenDocuments({
+      path: "C:/notes/dropped.md",
+      name: "dropped.md",
+      content: "# Dropped\n"
+    });
 
     window.fishmark = {
       ...window.fishmark,
       handleDroppedMarkdownFile,
-      openMarkdownFileFromPath
+      openWorkspaceFileFromPath
     } as Window["fishmark"];
 
     await renderApp();
@@ -890,29 +1218,23 @@ describe("App autosave", () => {
       targetPath: "C:/notes/dropped.md",
       hasOpenDocument: false
     });
-    expect(openMarkdownFileFromPath).toHaveBeenCalledTimes(1);
-    expect(openMarkdownFileFromPath).toHaveBeenCalledWith("C:/notes/dropped.md");
+    expect(openWorkspaceFileFromPath).toHaveBeenCalledTimes(1);
+    expect(openWorkspaceFileFromPath).toHaveBeenCalledWith("C:/notes/dropped.md");
   });
 
   it("opens a Markdown document when the dropped File exposes its path only through the preload bridge", async () => {
-    openMarkdownFileFromPath = vi
-      .fn<(targetPath: string) => Promise<OpenMarkdownFileResult>>()
-      .mockResolvedValue({
-        status: "success",
-        document: {
-          path: "C:/notes/bridge-drop.md",
-          name: "bridge-drop.md",
-          content: "# Bridge Drop\n",
-          encoding: "utf-8"
-        }
-      });
+    queueWorkspaceOpenDocuments({
+      path: "C:/notes/bridge-drop.md",
+      name: "bridge-drop.md",
+      content: "# Bridge Drop\n"
+    });
     getPathForDroppedFile = vi.fn().mockReturnValue("C:/notes/bridge-drop.md");
 
     window.fishmark = {
       ...window.fishmark,
       handleDroppedMarkdownFile,
       getPathForDroppedFile,
-      openMarkdownFileFromPath
+      openWorkspaceFileFromPath
     } as Window["fishmark"];
 
     await renderApp();
@@ -941,30 +1263,26 @@ describe("App autosave", () => {
       targetPath: "C:/notes/bridge-drop.md",
       hasOpenDocument: false
     });
-    expect(openMarkdownFileFromPath).toHaveBeenCalledWith("C:/notes/bridge-drop.md");
+    expect(openWorkspaceFileFromPath).toHaveBeenCalledWith("C:/notes/bridge-drop.md");
   });
 
-  it("opens a Markdown document in a new window when a .md file is dropped onto the editor surface", async () => {
-    openMarkdownFileFromPath = vi
-      .fn<(targetPath: string) => Promise<OpenMarkdownFileResult>>()
-      .mockResolvedValue({
-        status: "success",
-        document: {
-          path: "C:/notes/dropped.md",
-          name: "dropped.md",
-          content: "# Dropped\n",
-          encoding: "utf-8"
-        }
-      });
-    handleDroppedMarkdownFile = vi.fn().mockResolvedValue({
-      disposition: "opened-in-new-window"
+  it("appends a dropped Markdown document as a new tab when the editor is already open", async () => {
+    queueWorkspaceOpenDocuments({
+      path: "C:/notes/current.md",
+      name: "current.md",
+      content: "# Current\n"
+    });
+    queueWorkspaceOpenDocuments({
+      path: "C:/notes/dropped.md",
+      name: "dropped.md",
+      content: "# Dropped\n"
     });
 
     window.fishmark = {
       ...window.fishmark,
       startupOpenPath: "C:/notes/current.md",
       handleDroppedMarkdownFile,
-      openMarkdownFileFromPath
+      openWorkspaceFileFromPath
     } as Window["fishmark"];
 
     await renderApp();
@@ -974,7 +1292,7 @@ describe("App autosave", () => {
       throw new Error("mock code editor not found");
     }
 
-    openMarkdownFileFromPath.mockClear();
+    openWorkspaceFileFromPath.mockClear();
 
     editorSurface.addEventListener("drop", (event) => {
       event.preventDefault();
@@ -999,12 +1317,20 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
+    const workspaceTabs = container.querySelectorAll<HTMLElement>(
+      '[data-fishmark-region="workspace-tab"]'
+    );
+
     expect(handleDroppedMarkdownFile).toHaveBeenCalledTimes(1);
     expect(handleDroppedMarkdownFile).toHaveBeenCalledWith({
       targetPath: "C:/notes/dropped.md",
       hasOpenDocument: true
     });
-    expect(openMarkdownFileFromPath).not.toHaveBeenCalled();
+    expect(openWorkspaceFileFromPath).toHaveBeenCalledTimes(1);
+    expect(openWorkspaceFileFromPath).toHaveBeenCalledWith("C:/notes/dropped.md");
+    expect(workspaceTabs).toHaveLength(2);
+    expect(workspaceTabs[1]?.textContent).toContain("dropped.md");
+    expect(container.querySelectorAll('[data-testid="mock-code-editor"]')).toHaveLength(1);
   });
 
   it("opens a new untitled document from the File menu", async () => {
@@ -1017,13 +1343,43 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
-    expect(openMarkdownFile).not.toHaveBeenCalled();
+    expect(createWorkspaceTab).toHaveBeenCalledTimes(1);
+    expect(createWorkspaceTab).toHaveBeenCalledWith({ kind: "untitled" });
     expect(container.textContent).toContain("Untitled.md");
     expect(container.querySelector('[data-fishmark-region="empty-state"]')).toBeNull();
     expect(container.querySelector('[data-testid="mock-code-editor"]')).not.toBeNull();
     expect(container.querySelector<HTMLElement>(".app-shell")?.dataset.fishmarkShellMode).toBe(
       "editing"
     );
+  });
+
+  it("creates a second untitled tab without replacing the first one", async () => {
+    await renderApp();
+
+    await act(async () => {
+      menuCommandListener?.("new-markdown-document");
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      codeEditorMock.changeContent("# First untitled\n");
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      menuCommandListener?.("new-markdown-document");
+      await Promise.resolve();
+    });
+
+    const workspaceTabs = container.querySelectorAll<HTMLElement>(
+      '[data-fishmark-region="workspace-tab"]'
+    );
+
+    expect(createWorkspaceTab).toHaveBeenCalledTimes(2);
+    expect(workspaceTabs).toHaveLength(2);
+    expect(workspaceTabs[0]?.textContent).toContain("Untitled.md");
+    expect(workspaceTabs[1]?.dataset.active).toBe("true");
+    expect(container.querySelectorAll('[data-testid="mock-code-editor"]')).toHaveLength(1);
   });
 
   it("routes the first save for a new untitled document through Save As", async () => {
@@ -1055,17 +1411,392 @@ describe("App autosave", () => {
     expect(saveMarkdownFile).not.toHaveBeenCalled();
     expect(saveMarkdownFileAs).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFileAs).toHaveBeenCalledWith({
+      tabId: "tab-1",
       currentPath: null,
       content: "# Fresh draft\n"
     });
     expect(container.textContent).toContain("untitled.md");
   });
 
+  it("saves the currently active workspace tab by tab id after switching tabs", async () => {
+    queueWorkspaceOpenDocuments(
+      {
+        path: "C:/notes/first.md",
+        name: "first.md",
+        content: "# First\n"
+      },
+      {
+        path: "C:/notes/second.md",
+        name: "second.md",
+        content: "# Second\n"
+      }
+    );
+
+    await renderAndOpenDocument();
+
+    expect(menuCommandListener).not.toBeNull();
+
+    await act(async () => {
+      menuCommandListener?.("open-markdown-file");
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      codeEditorMock.changeContent("# Second updated\n");
+      menuCommandListener?.("save-markdown-file");
+      await Promise.resolve();
+    });
+
+    expect(saveMarkdownFile).toHaveBeenCalledWith({
+      tabId: "tab-2",
+      path: "C:/notes/second.md",
+      content: "# Second updated\n"
+    });
+  });
+
+  it("opens a second document into a second workspace tab instead of replacing the first one", async () => {
+    queueWorkspaceOpenDocuments(
+      {
+        path: "C:/notes/first.md",
+        name: "first.md",
+        content: "# First\n"
+      },
+      {
+        path: "C:/notes/second.md",
+        name: "second.md",
+        content: "# Second\n"
+      }
+    );
+
+    await renderApp();
+
+    await act(async () => {
+      menuCommandListener?.("open-markdown-file");
+      await Promise.resolve();
+    });
+    await act(async () => {
+      menuCommandListener?.("open-markdown-file");
+      await Promise.resolve();
+    });
+
+    const workspaceTabs = container.querySelectorAll<HTMLElement>(
+      '[data-fishmark-region="workspace-tab"]'
+    );
+
+    expect(openWorkspaceFile).toHaveBeenCalledTimes(2);
+    expect(workspaceTabs).toHaveLength(2);
+    expect(workspaceTabs[0]?.textContent).toContain("first.md");
+    expect(workspaceTabs[1]?.textContent).toContain("second.md");
+    expect(workspaceTabs[1]?.dataset.active).toBe("true");
+    expect(container.querySelectorAll('[data-testid="mock-code-editor"]')).toHaveLength(1);
+  });
+
+  it("switches the active editor payload when the user clicks another workspace tab", async () => {
+    queueWorkspaceOpenDocuments(
+      {
+        path: "C:/notes/first.md",
+        name: "first.md",
+        content: "# First\n"
+      },
+      {
+        path: "C:/notes/second.md",
+        name: "second.md",
+        content: "# Second\n"
+      }
+    );
+
+    await renderApp();
+
+    await act(async () => {
+      menuCommandListener?.("open-markdown-file");
+      await Promise.resolve();
+    });
+    await act(async () => {
+      menuCommandListener?.("open-markdown-file");
+      await Promise.resolve();
+    });
+
+    const firstTab = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('[data-fishmark-region="workspace-tab"]')
+    ).find((element) => element.textContent?.includes("first.md"));
+
+    await act(async () => {
+      firstTab?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const activeTab = container.querySelector<HTMLElement>(
+      '[data-fishmark-region="workspace-tab"][data-active="true"]'
+    );
+
+    expect(activateWorkspaceTab).toHaveBeenCalledWith({ tabId: "tab-1" });
+    expect(activeTab?.textContent).toContain("first.md");
+    expect(codeEditorMock.getCurrentContent()).toBe("# First\n");
+    expect(container.querySelectorAll('[data-testid="mock-code-editor"]')).toHaveLength(1);
+  });
+
+  it("surfaces active-tab dirty state in the workspace tab strip", async () => {
+    queueWorkspaceOpenDocuments(
+      {
+        path: "C:/notes/first.md",
+        name: "first.md",
+        content: "# First\n"
+      },
+      {
+        path: "C:/notes/second.md",
+        name: "second.md",
+        content: "# Second\n"
+      }
+    );
+
+    await renderApp();
+
+    await act(async () => {
+      menuCommandListener?.("open-markdown-file");
+      await Promise.resolve();
+    });
+    await act(async () => {
+      menuCommandListener?.("open-markdown-file");
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      codeEditorMock.changeContent("# Second dirty\n");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const activeTab = container.querySelector<HTMLElement>(
+      '[data-fishmark-region="workspace-tab"][data-active="true"]'
+    );
+
+    expect(updateWorkspaceTabDraft).toHaveBeenLastCalledWith({
+      tabId: "tab-2",
+      content: "# Second dirty\n"
+    });
+    expect(activeTab?.textContent).toContain("second.md");
+    expect(activeTab?.dataset.dirty).toBe("true");
+  });
+
+  it("appends an externally opened Markdown path as a new workspace tab in the current window", async () => {
+    queueWorkspaceOpenDocuments({
+      path: "C:/notes/current.md",
+      name: "current.md",
+      content: "# Current\n"
+    });
+    queueWorkspaceOpenDocuments({
+      path: "C:/notes/external.md",
+      name: "external.md",
+      content: "# External\n"
+    });
+
+    window.fishmark = {
+      ...window.fishmark,
+      startupOpenPath: "C:/notes/current.md",
+      openWorkspaceFileFromPath
+    } as Window["fishmark"];
+
+    await renderApp();
+
+    expect(openWorkspacePathListener).not.toBeNull();
+
+    await act(async () => {
+      openWorkspacePathListener?.({ targetPath: "C:/notes/external.md" });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const workspaceTabs = container.querySelectorAll<HTMLElement>(
+      '[data-fishmark-region="workspace-tab"]'
+    );
+
+    expect(openWorkspaceFileFromPath).toHaveBeenCalledWith("C:/notes/external.md");
+    expect(workspaceTabs).toHaveLength(2);
+    expect(workspaceTabs[1]?.dataset.active).toBe("true");
+    expect(workspaceTabs[1]?.textContent).toContain("external.md");
+  });
+
+  it("closes a workspace tab from the tab strip without replacing the editor instance", async () => {
+    queueWorkspaceOpenDocuments(
+      {
+        path: "C:/notes/first.md",
+        name: "first.md",
+        content: "# First\n"
+      },
+      {
+        path: "C:/notes/second.md",
+        name: "second.md",
+        content: "# Second\n"
+      }
+    );
+
+    await renderApp();
+
+    await act(async () => {
+      menuCommandListener?.("open-markdown-file");
+      await Promise.resolve();
+    });
+    await act(async () => {
+      menuCommandListener?.("open-markdown-file");
+      await Promise.resolve();
+    });
+
+    const closeButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('[data-fishmark-region="workspace-tab-close"]')
+    ).find((element) =>
+      element.closest('[data-fishmark-region="workspace-tab-shell"]')?.textContent?.includes("first.md")
+    );
+
+    await act(async () => {
+      closeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const workspaceTabs = container.querySelectorAll<HTMLElement>(
+      '[data-fishmark-region="workspace-tab"]'
+    );
+
+    expect(closeWorkspaceTab).toHaveBeenCalledWith({ tabId: "tab-1" });
+    expect(workspaceTabs).toHaveLength(1);
+    expect(workspaceTabs[0]?.textContent).toContain("second.md");
+    expect(container.querySelectorAll('[data-testid="mock-code-editor"]')).toHaveLength(1);
+  });
+
+  it("reorders workspace tabs when the user drops a dragged tab on another tab", async () => {
+    queueWorkspaceOpenDocuments(
+      {
+        path: "C:/notes/first.md",
+        name: "first.md",
+        content: "# First\n"
+      },
+      {
+        path: "C:/notes/second.md",
+        name: "second.md",
+        content: "# Second\n"
+      },
+      {
+        path: "C:/notes/third.md",
+        name: "third.md",
+        content: "# Third\n"
+      }
+    );
+
+    await renderApp();
+
+    await act(async () => {
+      menuCommandListener?.("open-markdown-file");
+      await Promise.resolve();
+    });
+    await act(async () => {
+      menuCommandListener?.("open-markdown-file");
+      await Promise.resolve();
+    });
+    await act(async () => {
+      menuCommandListener?.("open-markdown-file");
+      await Promise.resolve();
+    });
+
+    const workspaceTabs = container.querySelectorAll<HTMLButtonElement>(
+      '[data-fishmark-region="workspace-tab"]'
+    );
+    const firstTab = Array.from(workspaceTabs).find((element) => element.textContent?.includes("first.md"));
+    const thirdTab = Array.from(workspaceTabs).find((element) => element.textContent?.includes("third.md"));
+
+    const dataTransfer = {
+      setData: vi.fn(),
+      getData: vi.fn()
+    };
+
+    await act(async () => {
+      const dragStartEvent = new Event("dragstart", { bubbles: true }) as DragEvent;
+      Object.defineProperty(dragStartEvent, "dataTransfer", { value: dataTransfer });
+      firstTab?.dispatchEvent(dragStartEvent);
+
+      const dragOverEvent = new Event("dragover", { bubbles: true, cancelable: true }) as DragEvent;
+      Object.defineProperty(dragOverEvent, "dataTransfer", { value: dataTransfer });
+      thirdTab?.dispatchEvent(dragOverEvent);
+
+      const dropEvent = new Event("drop", { bubbles: true, cancelable: true }) as DragEvent;
+      Object.defineProperty(dropEvent, "dataTransfer", { value: dataTransfer });
+      thirdTab?.dispatchEvent(dropEvent);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const reorderedLabels = Array.from(
+      container.querySelectorAll<HTMLElement>('[data-fishmark-region="workspace-tab"]')
+    ).map((element) => element.textContent ?? "");
+
+    expect(reorderWorkspaceTab).toHaveBeenCalledWith({
+      tabId: "tab-1",
+      toIndex: 2
+    });
+    expect(reorderedLabels[0]).toContain("second.md");
+    expect(reorderedLabels[2]).toContain("first.md");
+  });
+
+  it("detaches a dragged tab into a new window when the drag ends outside the tab strip", async () => {
+    queueWorkspaceOpenDocuments(
+      {
+        path: "C:/notes/first.md",
+        name: "first.md",
+        content: "# First\n"
+      },
+      {
+        path: "C:/notes/second.md",
+        name: "second.md",
+        content: "# Second\n"
+      }
+    );
+
+    await renderApp();
+
+    await act(async () => {
+      menuCommandListener?.("open-markdown-file");
+      await Promise.resolve();
+    });
+    await act(async () => {
+      menuCommandListener?.("open-markdown-file");
+      await Promise.resolve();
+    });
+
+    const secondTab = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('[data-fishmark-region="workspace-tab"]')
+    ).find((element) => element.textContent?.includes("second.md"));
+
+    const dataTransfer = {
+      setData: vi.fn(),
+      getData: vi.fn()
+    };
+
+    await act(async () => {
+      const dragStartEvent = new Event("dragstart", { bubbles: true }) as DragEvent;
+      Object.defineProperty(dragStartEvent, "dataTransfer", { value: dataTransfer });
+      secondTab?.dispatchEvent(dragStartEvent);
+
+      const dragEndEvent = new Event("dragend", { bubbles: true }) as DragEvent;
+      Object.defineProperty(dragEndEvent, "dataTransfer", { value: dataTransfer });
+      secondTab?.dispatchEvent(dragEndEvent);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const workspaceTabs = container.querySelectorAll<HTMLElement>(
+      '[data-fishmark-region="workspace-tab"]'
+    );
+
+    expect(detachWorkspaceTabToNewWindow).toHaveBeenCalledWith({ tabId: "tab-2" });
+    expect(workspaceTabs).toHaveLength(1);
+    expect(workspaceTabs[0]?.textContent).toContain("first.md");
+  });
+
   it("ignores the check-for-updates menu command in the renderer shell", async () => {
     await renderAndOpenDocument();
 
     expect(menuCommandListener).not.toBeNull();
-    const openCountBefore = openMarkdownFile.mock.calls.length;
+    const openCountBefore = openWorkspaceFile.mock.calls.length;
     const saveCountBefore = saveMarkdownFile.mock.calls.length;
     const saveAsCountBefore = saveMarkdownFileAs.mock.calls.length;
 
@@ -1076,7 +1807,7 @@ describe("App autosave", () => {
 
     expect(saveMarkdownFile.mock.calls.length).toBe(saveCountBefore);
     expect(saveMarkdownFileAs.mock.calls.length).toBe(saveAsCountBefore);
-    expect(openMarkdownFile.mock.calls.length).toBe(openCountBefore);
+    expect(openWorkspaceFile.mock.calls.length).toBe(openCountBefore);
   });
 
   it("autosaves after typing stops for the idle debounce window", async () => {
@@ -1090,6 +1821,7 @@ describe("App autosave", () => {
 
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
+      tabId: "tab-1",
       path: "C:/notes/today.md",
       content: "# Updated once\n"
     });
@@ -1115,6 +1847,7 @@ describe("App autosave", () => {
 
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
+      tabId: "tab-1",
       path: "C:/notes/today.md",
       content: "# Second update\n"
     });
@@ -1131,6 +1864,7 @@ describe("App autosave", () => {
 
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
+      tabId: "tab-1",
       path: "C:/notes/today.md",
       content: "# Blur update\n"
     });
@@ -1147,6 +1881,7 @@ describe("App autosave", () => {
 
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
+      tabId: "tab-1",
       path: "C:/notes/today.md",
       content: "# Manual save wins\n"
     });
@@ -1182,6 +1917,7 @@ describe("App autosave", () => {
 
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenNthCalledWith(1, {
+      tabId: "tab-1",
       path: "C:/notes/today.md",
       content: "# First autosave\n"
     });
@@ -1208,6 +1944,7 @@ describe("App autosave", () => {
 
     expect(saveMarkdownFile).toHaveBeenCalledTimes(2);
     expect(saveMarkdownFile).toHaveBeenNthCalledWith(2, {
+      tabId: "tab-1",
       path: "C:/notes/today.md",
       content: "# Second autosave\n"
     });
@@ -1241,6 +1978,7 @@ describe("App autosave", () => {
 
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
+      tabId: "tab-1",
       path: "C:/notes/today.md",
       content: "# Slow autosave\n"
     });
@@ -1286,6 +2024,7 @@ describe("App autosave", () => {
 
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
+      tabId: "tab-1",
       path: "C:/notes/today.md",
       content: "# Pending autosave\n"
     });
@@ -1294,7 +2033,7 @@ describe("App autosave", () => {
   it("pauses autosave and shows recovery actions after an external modification", async () => {
     await renderAndOpenDocument();
 
-    expect(syncWatchedMarkdownFile).toHaveBeenCalledWith({ path: "C:/notes/today.md" });
+    expect(syncWatchedMarkdownFile).toHaveBeenCalledWith({ tabId: "tab-1" });
     expect(externalMarkdownFileChangedListener).not.toBeNull();
 
     await act(async () => {
@@ -1359,24 +2098,58 @@ describe("App autosave", () => {
 
     expect(saveMarkdownFile).not.toHaveBeenCalled();
     expect(saveMarkdownFileAs).toHaveBeenCalledWith({
+      tabId: "tab-1",
       currentPath: "C:/notes/today.md",
       content: "# Local draft\n"
     });
   });
 
-  it("reloads the disk version when the user accepts the external-change prompt", async () => {
-    openMarkdownFileFromPath = vi.fn<(targetPath: string) => Promise<OpenMarkdownFileResult>>().mockResolvedValue({
-      status: "success",
-      document: {
-        path: "C:/notes/today.md",
-        name: "today.md",
-        content: "# Disk update\n",
-        encoding: "utf-8"
+  it("retargets the external watcher when the active workspace tab changes", async () => {
+    queueWorkspaceOpenDocuments(
+      {
+        path: "C:/notes/first.md",
+        name: "first.md",
+        content: "# First\n"
+      },
+      {
+        path: "C:/notes/second.md",
+        name: "second.md",
+        content: "# Second\n"
       }
+    );
+
+    await renderAndOpenDocument();
+
+    expect(menuCommandListener).not.toBeNull();
+
+    await act(async () => {
+      menuCommandListener?.("open-markdown-file");
+      await Promise.resolve();
+    });
+
+    syncWatchedMarkdownFile.mockClear();
+
+    const workspaceTabs = container.querySelectorAll<HTMLElement>(
+      '[data-fishmark-region="workspace-tab"]'
+    );
+
+    await act(async () => {
+      workspaceTabs[0]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(syncWatchedMarkdownFile).toHaveBeenCalledWith({ tabId: "tab-1" });
+  });
+
+  it("reloads the disk version when the user accepts the external-change prompt", async () => {
+    queueWorkspaceOpenDocuments({
+      path: "C:/notes/today.md",
+      name: "today.md",
+      content: "# Disk update\n"
     });
     window.fishmark = {
       ...window.fishmark,
-      openMarkdownFileFromPath
+      openWorkspaceFileFromPath
     } as Window["fishmark"];
 
     await renderAndOpenDocument();
@@ -1394,7 +2167,7 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
-    expect(openMarkdownFileFromPath).toHaveBeenCalledWith("C:/notes/today.md");
+    expect(openWorkspaceFileFromPath).toHaveBeenCalledWith("C:/notes/today.md");
     expect(container.textContent).not.toContain("当前文件已被外部修改");
   });
 
@@ -2572,6 +3345,7 @@ describe("App autosave", () => {
 
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
+      tabId: "tab-1",
       path: "C:/notes/today.md",
       content: "# Blur restore\n"
     });
@@ -4393,7 +5167,7 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
-    expect(openMarkdownFile).toHaveBeenCalledTimes(1);
+    expect(openWorkspaceFile).toHaveBeenCalledTimes(1);
   }
 
   async function clickEditorContent(): Promise<void> {

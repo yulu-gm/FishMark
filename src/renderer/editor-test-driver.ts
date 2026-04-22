@@ -1,10 +1,11 @@
-import type { OpenMarkdownFileResult } from "../shared/open-markdown-file";
 import type { EditorTestCommand, EditorTestCommandResult } from "../shared/editor-test-command";
 import type { SaveMarkdownFileResult } from "../shared/save-markdown-file";
+import type { WorkspaceWindowSnapshot } from "../shared/workspace";
 import {
   applyEditorContentChanged,
-  applyOpenMarkdownResult,
   applySaveMarkdownResult,
+  applyWorkspaceSnapshot,
+  getActiveDocument,
   type AppState
 } from "./document-state";
 
@@ -27,15 +28,30 @@ export function createEditorTestDriver(input: {
   resetAutosaveRuntime: () => void;
   editor: EditorHandle;
   setEditorContentSnapshot: (content: string) => void;
-  openMarkdownFileFromPath: (targetPath: string) => Promise<OpenMarkdownFileResult>;
-  saveMarkdownFile: (args: { path: string; content: string }) => Promise<SaveMarkdownFileResult>;
+  openWorkspaceFileFromPath: (targetPath: string) => Promise<WorkspaceWindowSnapshot>;
+  saveMarkdownFile: (args: { tabId: string; path: string; content: string }) => Promise<SaveMarkdownFileResult>;
 }) {
+  type ActiveDocument = NonNullable<ReturnType<typeof getActiveDocument>>;
+
   function ok(message?: string, details?: Record<string, unknown>): EditorTestCommandResult {
     return { ok: true, message, details };
   }
 
   function fail(message: string, details?: Record<string, unknown>): EditorTestCommandResult {
     return { ok: false, message, details };
+  }
+
+  function getRequiredActiveDocument(
+    message: string,
+    details?: Record<string, unknown>
+  ): ActiveDocument | EditorTestCommandResult {
+    const activeDocument = getActiveDocument(input.getState());
+
+    if (!activeDocument) {
+      return fail(message, details);
+    }
+
+    return activeDocument;
   }
 
   return {
@@ -45,28 +61,26 @@ export function createEditorTestDriver(input: {
       }
 
       if (command.type === "open-fixture-file") {
-        const result = await input.openMarkdownFileFromPath(command.fixturePath);
+        const snapshot = await input.openWorkspaceFileFromPath(command.fixturePath);
+        const activeDocument =
+          snapshot.activeDocument ??
+          (() => {
+            throw new Error(`Workspace snapshot for '${command.fixturePath}' is missing an active document.`);
+          })();
+
         input.resetAutosaveRuntime();
-
-        if (result.status !== "success") {
-          return fail(
-            result.status === "error" ? result.error.message : "Fixture file open was cancelled.",
-            { status: result.status, fixturePath: command.fixturePath }
-          );
-        }
-
-        input.setEditorContentSnapshot(result.document.content);
-        input.applyState((current) => applyOpenMarkdownResult(current, result));
+        input.setEditorContentSnapshot(activeDocument.content);
+        input.applyState((current) => applyWorkspaceSnapshot(current, snapshot));
 
         return ok("Fixture file opened.", {
-          path: result.document.path
+          path: activeDocument.path
         });
       }
 
       if (command.type === "set-editor-content") {
-        const currentDocument = input.getState().currentDocument;
-        if (!currentDocument) {
-          return fail("No open document to replace.");
+        const activeDocument = getRequiredActiveDocument("No open document to replace.");
+        if ("ok" in activeDocument) {
+          return activeDocument;
         }
 
         input.editor.setContent(command.content);
@@ -76,9 +90,9 @@ export function createEditorTestDriver(input: {
       }
 
       if (command.type === "insert-editor-text") {
-        const currentDocument = input.getState().currentDocument;
-        if (!currentDocument) {
-          return fail("No open document to edit.");
+        const activeDocument = getRequiredActiveDocument("No open document to edit.");
+        if ("ok" in activeDocument) {
+          return activeDocument;
         }
 
         input.editor.insertText(command.text);
@@ -89,9 +103,9 @@ export function createEditorTestDriver(input: {
       }
 
       if (command.type === "set-editor-selection") {
-        const currentDocument = input.getState().currentDocument;
-        if (!currentDocument) {
-          return fail("No open document to select.");
+        const activeDocument = getRequiredActiveDocument("No open document to select.");
+        if ("ok" in activeDocument) {
+          return activeDocument;
         }
 
         input.editor.setSelection(command.anchor, command.head ?? command.anchor);
@@ -99,9 +113,9 @@ export function createEditorTestDriver(input: {
       }
 
       if (command.type === "press-editor-enter") {
-        const currentDocument = input.getState().currentDocument;
-        if (!currentDocument) {
-          return fail("No open document to edit.");
+        const activeDocument = getRequiredActiveDocument("No open document to edit.");
+        if ("ok" in activeDocument) {
+          return activeDocument;
         }
 
         input.editor.pressEnter();
@@ -112,9 +126,9 @@ export function createEditorTestDriver(input: {
       }
 
       if (command.type === "press-editor-backspace") {
-        const currentDocument = input.getState().currentDocument;
-        if (!currentDocument) {
-          return fail("No open document to edit.");
+        const activeDocument = getRequiredActiveDocument("No open document to edit.");
+        if ("ok" in activeDocument) {
+          return activeDocument;
         }
 
         input.editor.pressBackspace();
@@ -125,9 +139,9 @@ export function createEditorTestDriver(input: {
       }
 
       if (command.type === "press-editor-tab") {
-        const currentDocument = input.getState().currentDocument;
-        if (!currentDocument) {
-          return fail("No open document to edit.");
+        const activeDocument = getRequiredActiveDocument("No open document to edit.");
+        if ("ok" in activeDocument) {
+          return activeDocument;
         }
 
         input.editor.pressTab(command.shiftKey);
@@ -138,9 +152,9 @@ export function createEditorTestDriver(input: {
       }
 
       if (command.type === "press-editor-arrow-up") {
-        const currentDocument = input.getState().currentDocument;
-        if (!currentDocument) {
-          return fail("No open document to navigate.");
+        const activeDocument = getRequiredActiveDocument("No open document to navigate.");
+        if ("ok" in activeDocument) {
+          return activeDocument;
         }
 
         input.editor.pressArrowUp();
@@ -148,9 +162,9 @@ export function createEditorTestDriver(input: {
       }
 
       if (command.type === "press-editor-arrow-down") {
-        const currentDocument = input.getState().currentDocument;
-        if (!currentDocument) {
-          return fail("No open document to navigate.");
+        const activeDocument = getRequiredActiveDocument("No open document to navigate.");
+        if ("ok" in activeDocument) {
+          return activeDocument;
         }
 
         input.editor.pressArrowDown();
@@ -158,19 +172,20 @@ export function createEditorTestDriver(input: {
       }
 
       if (command.type === "save-document") {
-        const currentDocument = input.getState().currentDocument;
-        if (!currentDocument) {
-          return fail("No open document to save.");
+        const activeDocument = getRequiredActiveDocument("No open document to save.");
+        if ("ok" in activeDocument) {
+          return activeDocument;
         }
-        if (!currentDocument.path) {
+        if (!activeDocument.path) {
           return fail("No persisted document path to save.", {
-            path: currentDocument.path
+            path: activeDocument.path
           });
         }
 
         const content = input.editor.getContent();
         const result = await input.saveMarkdownFile({
-          path: currentDocument.path,
+          tabId: activeDocument.tabId,
+          path: activeDocument.path,
           content
         });
         input.applyState((current) => applySaveMarkdownResult(current, result));
@@ -178,7 +193,7 @@ export function createEditorTestDriver(input: {
         if (result.status !== "success") {
           return fail(result.status === "error" ? result.error.message : "Save was cancelled.", {
             status: result.status,
-            path: currentDocument.path
+            path: activeDocument.path
           });
         }
 
@@ -188,7 +203,7 @@ export function createEditorTestDriver(input: {
       }
 
       if (command.type === "assert-document-path") {
-        const actualPath = input.getState().currentDocument?.path ?? null;
+        const actualPath = getActiveDocument(input.getState())?.path ?? null;
         return actualPath === command.expectedPath
           ? ok("Document path matched.", { actualPath })
           : fail("Document path mismatch.", {
@@ -203,7 +218,7 @@ export function createEditorTestDriver(input: {
           ? ok("Editor content matched.")
           : fail("Editor content mismatch.", {
               expectedContent: command.expectedContent,
-            actualContent
+              actualContent
             });
       }
 
@@ -222,7 +237,7 @@ export function createEditorTestDriver(input: {
       }
 
       if (command.type === "assert-dirty-state") {
-        const actualDirty = input.getState().isDirty;
+        const actualDirty = getActiveDocument(input.getState())?.isDirty ?? false;
         return actualDirty === command.expectedDirty
           ? ok("Dirty state matched.", { actualDirty })
           : fail("Dirty state mismatch.", {
@@ -232,10 +247,10 @@ export function createEditorTestDriver(input: {
       }
 
       if (command.type === "assert-empty-workspace") {
-        const hasDocument = Boolean(input.getState().currentDocument);
-        return hasDocument
+        const activeDocument = getActiveDocument(input.getState());
+        return activeDocument
           ? fail("Workspace is not empty.", {
-              documentPath: input.getState().currentDocument?.path ?? null
+              documentPath: activeDocument.path
             })
           : ok("Workspace is empty.");
       }

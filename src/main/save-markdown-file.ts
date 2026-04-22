@@ -77,6 +77,7 @@ export async function showSaveMarkdownDialog(
     }
 
     return dependencies.saveMarkdownFileToPath({
+      tabId: input.tabId,
       path: dialogResult.filePath,
       content: input.content
     });

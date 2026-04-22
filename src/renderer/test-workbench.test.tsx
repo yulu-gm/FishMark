@@ -10,6 +10,7 @@ import type {
   ScenarioRunTerminal,
   ScenarioRunnerEvent
 } from "../shared/test-run-session";
+import type { WorkspaceWindowSnapshot } from "../shared/workspace";
 import App from "./App";
 
 declare global {
@@ -72,6 +73,13 @@ vi.mock("@fishmark/test-harness", async () => {
   };
 });
 
+const EMPTY_WORKSPACE_SNAPSHOT: WorkspaceWindowSnapshot = {
+  windowId: "window-1",
+  activeTabId: null,
+  tabs: [],
+  activeDocument: null
+};
+
 describe("Test workbench shell", () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -103,6 +111,19 @@ describe("Test workbench shell", () => {
       startupOpenPath: null,
       openMarkdownFile: vi.fn(),
       openMarkdownFileFromPath: vi.fn(),
+      getWorkspaceSnapshot: vi.fn().mockResolvedValue(EMPTY_WORKSPACE_SNAPSHOT),
+      createWorkspaceTab: vi.fn().mockResolvedValue(EMPTY_WORKSPACE_SNAPSHOT),
+      openWorkspaceFile: vi.fn().mockResolvedValue({ status: "cancelled" }),
+      openWorkspaceFileFromPath: vi.fn().mockResolvedValue(EMPTY_WORKSPACE_SNAPSHOT),
+      activateWorkspaceTab: vi.fn().mockResolvedValue(EMPTY_WORKSPACE_SNAPSHOT),
+      closeWorkspaceTab: vi.fn().mockResolvedValue(EMPTY_WORKSPACE_SNAPSHOT),
+      reorderWorkspaceTab: vi.fn().mockResolvedValue(EMPTY_WORKSPACE_SNAPSHOT),
+      moveWorkspaceTabToWindow: vi.fn().mockResolvedValue({
+        sourceWindowSnapshot: EMPTY_WORKSPACE_SNAPSHOT,
+        targetWindowSnapshot: EMPTY_WORKSPACE_SNAPSHOT
+      }),
+      detachWorkspaceTabToNewWindow: vi.fn().mockResolvedValue(EMPTY_WORKSPACE_SNAPSHOT),
+      updateWorkspaceTabDraft: vi.fn().mockResolvedValue(EMPTY_WORKSPACE_SNAPSHOT),
       handleDroppedMarkdownFile: vi.fn().mockResolvedValue({
         disposition: "open-in-place"
       }),
@@ -129,6 +150,7 @@ describe("Test workbench shell", () => {
       onEditorTestCommand: vi.fn(() => () => {}),
       completeEditorTestCommand: vi.fn().mockResolvedValue(undefined),
       onMenuCommand: vi.fn(() => () => {}),
+      onOpenWorkspacePath: vi.fn(() => () => {}),
       getPreferences: vi.fn(),
       updatePreferences: vi.fn(),
       listFontFamilies: vi.fn().mockResolvedValue([]),

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createApplicationMenuTemplate } from "./application-menu";
 
 describe("createApplicationMenuTemplate", () => {
-  it("defines File commands for new, open, save, and save as", () => {
+  it("defines File commands for new, open, new window, save, and save as", () => {
     const dispatchCommand = vi.fn();
     const template = createApplicationMenuTemplate({ dispatchCommand });
     const fileMenu = template.find((item) => item.label === "File");
@@ -15,12 +15,14 @@ describe("createApplicationMenuTemplate", () => {
     expect(commandItems.map((item) => item.label)).toEqual([
       "New",
       "Open...",
+      "New Window",
       "Save",
       "Save As..."
     ]);
     expect(commandItems.map((item) => item.accelerator)).toEqual([
       "CmdOrCtrl+N",
       "CmdOrCtrl+O",
+      "Shift+CmdOrCtrl+N",
       "CmdOrCtrl+S",
       "Shift+CmdOrCtrl+S"
     ]);
@@ -30,6 +32,7 @@ describe("createApplicationMenuTemplate", () => {
     expect(dispatchCommand.mock.calls).toEqual([
       ["new-markdown-document"],
       ["open-markdown-file"],
+      ["new-editor-window"],
       ["save-markdown-file"],
       ["save-markdown-file-as"]
     ]);

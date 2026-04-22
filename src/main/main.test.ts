@@ -47,7 +47,55 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain('ipcMain.handle(LIST_THEME_PACKAGES_CHANNEL');
     expect(mainSource).toContain('ipcMain.handle(REFRESH_THEME_PACKAGES_CHANNEL');
     expect(mainSource).toContain('ipcMain.handle(OPEN_THEMES_DIRECTORY_CHANNEL');
-    expect(mainSource).toContain('externalFileWatchService.syncDocumentPath(event.sender');
+    expect(mainSource).toContain('workspaceService.getTabPath(input.tabId)');
+    expect(mainSource).toContain('externalFileWatchService.syncDocumentPath(');
+  });
+
+  it("wires the tabbed workspace service and its IPC handlers", () => {
+    const mainPath = path.join(process.cwd(), "src", "main", "main.ts");
+    const mainSource = readFileSync(mainPath, "utf8");
+
+    expect(mainSource).toContain('import { createWorkspaceCloseCoordinator } from "./workspace-close-coordinator"');
+    expect(mainSource).toContain('import { createWorkspaceService } from "./workspace-service"');
+    expect(mainSource).toContain("GET_WORKSPACE_SNAPSHOT_CHANNEL");
+    expect(mainSource).toContain("CREATE_WORKSPACE_TAB_CHANNEL");
+    expect(mainSource).toContain("OPEN_WORKSPACE_FILE_CHANNEL");
+    expect(mainSource).toContain("OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL");
+    expect(mainSource).toContain("ACTIVATE_WORKSPACE_TAB_CHANNEL");
+    expect(mainSource).toContain("CLOSE_WORKSPACE_TAB_CHANNEL");
+    expect(mainSource).toContain("UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL");
+    expect(mainSource).toContain("const workspaceService = createWorkspaceService()");
+    expect(mainSource).toContain("const workspaceCloseCoordinator = createWorkspaceCloseCoordinator({");
+    expect(mainSource).toContain("ipcMain.handle(GET_WORKSPACE_SNAPSHOT_CHANNEL");
+    expect(mainSource).toContain("ipcMain.handle(CREATE_WORKSPACE_TAB_CHANNEL");
+    expect(mainSource).toContain("ipcMain.handle(OPEN_WORKSPACE_FILE_CHANNEL");
+    expect(mainSource).toContain("ipcMain.handle(OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL");
+    expect(mainSource).toContain("ipcMain.handle(ACTIVATE_WORKSPACE_TAB_CHANNEL");
+    expect(mainSource).toContain("ipcMain.handle(CLOSE_WORKSPACE_TAB_CHANNEL");
+    expect(mainSource).toContain("ipcMain.handle(UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL");
+    expect(mainSource).toContain('ownerWindow.on("close", (event) => {');
+    expect(mainSource).toContain("workspaceCloseCoordinator.confirmWindowClose(windowId)");
+    expect(mainSource).toContain("workspaceCloseCoordinator.closeTab(input.tabId)");
+    expect(mainSource).toContain("workspaceService.saveTabDocument(input.tabId, result.document)");
+  });
+
+  it("keeps File > New Window as an explicit main-process window action", () => {
+    const mainPath = path.join(process.cwd(), "src", "main", "main.ts");
+    const mainSource = readFileSync(mainPath, "utf8");
+
+    expect(mainSource).toContain('if (command === "new-editor-window") {');
+    expect(mainSource).toContain("openEmptyEditorWindow?.();");
+    expect(mainSource).toContain("targetWindow?.webContents.send(APP_MENU_COMMAND_EVENT, command)");
+  });
+
+  it("routes external opens back into the workspace flow and keeps dropped files in place", () => {
+    const mainPath = path.join(process.cwd(), "src", "main", "main.ts");
+    const mainSource = readFileSync(mainPath, "utf8");
+
+    expect(mainSource).toContain("OPEN_WORKSPACE_PATH_EVENT");
+    expect(mainSource).toContain("window.webContents.send(OPEN_WORKSPACE_PATH_EVENT");
+    expect(mainSource).toContain('disposition: "open-in-place"');
+    expect(mainSource).not.toContain('disposition: "opened-in-new-window"');
   });
 
   it("only initializes the scenario runner stack in test-workbench mode", () => {

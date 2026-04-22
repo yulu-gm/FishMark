@@ -32,6 +32,8 @@ import { resolveWindowIconPath } from "./window-icon";
 import { createAppUpdateCheckRunner } from "./app-update-check-runner";
 import { resolveAutoUpdaterModule } from "./resolve-auto-updater-module";
 import { createExternalFileWatchService } from "./external-file-watch-service";
+import { createWorkspaceCloseCoordinator } from "./workspace-close-coordinator";
+import { createWorkspaceService } from "./workspace-service";
 import {
   COMPLETE_EDITOR_TEST_COMMAND_CHANNEL,
   type EditorTestCommandResultEnvelope
@@ -79,6 +81,28 @@ import {
   type AppNotification,
   type AppUpdateState
 } from "../shared/app-update";
+import {
+  ACTIVATE_WORKSPACE_TAB_CHANNEL,
+  CLOSE_WORKSPACE_TAB_CHANNEL,
+  CREATE_WORKSPACE_TAB_CHANNEL,
+  DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL,
+  GET_WORKSPACE_SNAPSHOT_CHANNEL,
+  MOVE_WORKSPACE_TAB_TO_WINDOW_CHANNEL,
+  OPEN_WORKSPACE_FILE_CHANNEL,
+  OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL,
+  OPEN_WORKSPACE_PATH_EVENT,
+  REORDER_WORKSPACE_TAB_CHANNEL,
+  UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL,
+  type ActivateWorkspaceTabInput,
+  type CloseWorkspaceTabInput,
+  type CreateWorkspaceTabInput,
+  type DetachWorkspaceTabToNewWindowInput,
+  type MoveWorkspaceTabToWindowInput,
+  type OpenWorkspacePathRequest,
+  type ReorderWorkspaceTabInput,
+  type UpdateWorkspaceTabDraftInput,
+  type WorkspaceWindowSnapshot
+} from "../shared/workspace";
 
 const OPEN_EDITOR_TEST_WINDOW_CHANNEL = "fishmark:open-editor-test-window";
 const LIST_FONT_FAMILIES_CHANNEL = "fishmark:list-font-families";
@@ -94,6 +118,7 @@ const hasSingleInstanceLock = shouldRequestSingleInstanceLock(process.env)
 const pendingLaunchOpenPaths: string[] = [];
 
 let openEditorWindowForLaunchPath: ((targetPath: string) => void) | null = null;
+let openEmptyEditorWindow: (() => void) | null = null;
 let runManualAppUpdateCheck: (() => void) | null = null;
 
 type AppUpdaterController = {
@@ -162,6 +187,11 @@ function dispatchMenuCommand(command: AppMenuCommand): void {
     return;
   }
 
+  if (command === "new-editor-window") {
+    openEmptyEditorWindow?.();
+    return;
+  }
+
   const targetWindow = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
 
   targetWindow?.webContents.send(APP_MENU_COMMAND_EVENT, command);
@@ -211,6 +241,35 @@ app.whenReady().then(async () => {
     platform: process.platform
   });
   const externalFileWatchService = createExternalFileWatchService();
+  const workspaceService = createWorkspaceService();
+  const workspaceCloseCoordinator = createWorkspaceCloseCoordinator({
+    workspaceService,
+    promptToSaveWorkspaceTab: async (tab) => {
+      const result = await dialog.showMessageBox({
+        type: "warning",
+        buttons: ["Save", "Don't Save", "Cancel"],
+        defaultId: 0,
+        cancelId: 2,
+        noLink: true,
+        title: "Unsaved Changes",
+        message: `${tab.name} has unsaved changes.`,
+        detail: "Do you want to save your changes before closing?"
+      });
+
+      switch (result.response) {
+        case 0:
+          return "save";
+        case 1:
+          return "discard";
+        default:
+          return "cancel";
+      }
+    },
+    saveMarkdownFileToPath,
+    showSaveMarkdownDialog
+  });
+  const workspaceWindowBindings = new Set<string>();
+  const pendingWorkspaceWindowCloseIds = new Set<string>();
   let appUpdaterPromise: Promise<AppUpdaterController> | null = null;
 
   if (initialPreferences.source === "recovered-from-corrupt") {
@@ -281,9 +340,210 @@ app.whenReady().then(async () => {
     getAllWindows: () => BrowserWindow.getAllWindows(),
     loadRenderer
   });
-  openEditorWindowForLaunchPath = (targetPath: string) => {
-    windowManager.openEditorWindow({ startupOpenPath: targetPath });
+  openEmptyEditorWindow = () => {
+    windowManager.openEditorWindow();
   };
+
+  function resolveWorkspaceWindowId(sender: Electron.WebContents): string {
+    const ownerWindow = BrowserWindow.fromWebContents(sender);
+    return String(ownerWindow?.id ?? sender.id);
+  }
+
+  function ensureWorkspaceWindow(sender: Electron.WebContents): string {
+    const windowId = resolveWorkspaceWindowId(sender);
+    workspaceService.registerWindow(windowId);
+
+    if (!workspaceWindowBindings.has(windowId)) {
+      const ownerWindow = BrowserWindow.fromWebContents(sender);
+      if (!ownerWindow) {
+        workspaceWindowBindings.add(windowId);
+        return windowId;
+      }
+
+      ownerWindow.on("focus", () => {
+        workspaceService.focusWindow(windowId);
+      });
+      ownerWindow.on("close", (event) => {
+        if (pendingWorkspaceWindowCloseIds.has(windowId)) {
+          pendingWorkspaceWindowCloseIds.delete(windowId);
+          return;
+        }
+
+        event.preventDefault();
+
+        void (async () => {
+          try {
+            const shouldClose = await workspaceCloseCoordinator.confirmWindowClose(windowId);
+
+            if (!shouldClose) {
+              return;
+            }
+
+            pendingWorkspaceWindowCloseIds.add(windowId);
+            ownerWindow.close();
+          } catch (error) {
+            await dialog.showMessageBox({
+              type: "error",
+              buttons: ["OK"],
+              defaultId: 0,
+              title: "Unable to close window",
+              message: error instanceof Error ? error.message : String(error)
+            });
+          }
+        })();
+      });
+      ownerWindow.once("closed", () => {
+        pendingWorkspaceWindowCloseIds.delete(windowId);
+        workspaceWindowBindings.delete(windowId);
+        workspaceService.unregisterWindow(windowId);
+      });
+      workspaceWindowBindings.add(windowId);
+    }
+
+    workspaceService.focusWindow(windowId);
+    return windowId;
+  }
+
+  function getWorkspaceWindowById(windowId: string): BrowserWindow | null {
+    return BrowserWindow.getAllWindows().find((window) => String(window.id) === windowId) ?? null;
+  }
+
+  function getPreferredWorkspaceWindow(): BrowserWindow | null {
+    const focusedWindow = BrowserWindow.getFocusedWindow();
+
+    if (focusedWindow && workspaceWindowBindings.has(String(focusedWindow.id))) {
+      return focusedWindow;
+    }
+
+    const lastFocusedWindowId = workspaceService.getLastFocusedWindowId();
+
+    if (lastFocusedWindowId) {
+      const lastFocusedWindow = getWorkspaceWindowById(lastFocusedWindowId);
+
+      if (lastFocusedWindow) {
+        return lastFocusedWindow;
+      }
+    }
+
+    for (const windowId of workspaceWindowBindings) {
+      const window = getWorkspaceWindowById(windowId);
+
+      if (window) {
+        return window;
+      }
+    }
+
+    return null;
+  }
+
+  function requestWorkspacePathOpen(window: BrowserWindow, targetPath: string): void {
+    window.webContents.send(OPEN_WORKSPACE_PATH_EVENT, {
+      targetPath
+    } satisfies OpenWorkspacePathRequest);
+    window.focus();
+  }
+
+  function openPathInWorkspace(targetPath: string): void {
+    const existingWindow = getPreferredWorkspaceWindow();
+
+    if (existingWindow) {
+      requestWorkspacePathOpen(existingWindow, targetPath);
+      return;
+    }
+
+    windowManager.openEditorWindow({ startupOpenPath: targetPath });
+  }
+
+  openEditorWindowForLaunchPath = (targetPath: string) => {
+    openPathInWorkspace(targetPath);
+  };
+
+  async function syncWorkspaceWatch(
+    sender: Electron.WebContents,
+    snapshot: WorkspaceWindowSnapshot
+  ): Promise<WorkspaceWindowSnapshot> {
+    await externalFileWatchService.syncDocumentPath(
+      sender,
+      workspaceService.getTabPath(snapshot.activeTabId)
+    );
+    return snapshot;
+  }
+
+  ipcMain.handle(GET_WORKSPACE_SNAPSHOT_CHANNEL, async (event) => {
+    const windowId = ensureWorkspaceWindow(event.sender);
+    return syncWorkspaceWatch(event.sender, workspaceService.getWindowSnapshot(windowId));
+  });
+  ipcMain.handle(CREATE_WORKSPACE_TAB_CHANNEL, async (event, input: CreateWorkspaceTabInput) => {
+    const windowId = ensureWorkspaceWindow(event.sender);
+
+    if (input.kind !== "untitled") {
+      throw new Error(`Unsupported workspace tab kind: ${String((input as { kind?: unknown }).kind)}`);
+    }
+
+    return syncWorkspaceWatch(event.sender, workspaceService.createUntitledTab(windowId));
+  });
+  ipcMain.handle(OPEN_WORKSPACE_FILE_CHANNEL, async (event) => {
+    const windowId = ensureWorkspaceWindow(event.sender);
+    const result = await showOpenMarkdownDialog();
+
+    if (result.status !== "success") {
+      return result;
+    }
+
+    return syncWorkspaceWatch(event.sender, workspaceService.openDocument(windowId, result.document));
+  });
+  ipcMain.handle(OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL, async (event, input: { targetPath: string }) => {
+    const windowId = ensureWorkspaceWindow(event.sender);
+    const result = await openMarkdownFileFromPath(input.targetPath);
+
+    if (result.status !== "success") {
+      return result;
+    }
+
+    return syncWorkspaceWatch(event.sender, workspaceService.openDocument(windowId, result.document));
+  });
+  ipcMain.handle(ACTIVATE_WORKSPACE_TAB_CHANNEL, async (event, input: ActivateWorkspaceTabInput) => {
+    const windowId = ensureWorkspaceWindow(event.sender);
+    return syncWorkspaceWatch(event.sender, workspaceService.activateTab(windowId, input.tabId));
+  });
+  ipcMain.handle(CLOSE_WORKSPACE_TAB_CHANNEL, async (event, input: CloseWorkspaceTabInput) => {
+    ensureWorkspaceWindow(event.sender);
+    const windowId = workspaceService.getTabSession(input.tabId).windowId;
+    const result = await workspaceCloseCoordinator.closeTab(input.tabId);
+
+    if (result.status === "cancelled") {
+      return syncWorkspaceWatch(event.sender, workspaceService.getWindowSnapshot(windowId));
+    }
+
+    return syncWorkspaceWatch(event.sender, result.snapshot);
+  });
+  ipcMain.handle(REORDER_WORKSPACE_TAB_CHANNEL, async (event, input: ReorderWorkspaceTabInput) => {
+    ensureWorkspaceWindow(event.sender);
+    return syncWorkspaceWatch(event.sender, workspaceService.reorderTab(input.tabId, input.toIndex));
+  });
+  ipcMain.handle(
+    MOVE_WORKSPACE_TAB_TO_WINDOW_CHANNEL,
+    async (_event, input: MoveWorkspaceTabToWindowInput) => workspaceService.moveTabToWindow(input)
+  );
+  ipcMain.handle(
+    DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL,
+    async (event, input: DetachWorkspaceTabToNewWindowInput) => {
+      ensureWorkspaceWindow(event.sender);
+      const detachedWindow = windowManager.openEditorWindow();
+      const detachedWindowId = String(detachedWindow.id);
+      workspaceService.registerWindow(detachedWindowId);
+      return syncWorkspaceWatch(
+        event.sender,
+        workspaceService.moveTabToWindow({
+          tabId: input.tabId,
+          targetWindowId: detachedWindowId
+        }).sourceWindowSnapshot
+      );
+    }
+  );
+  ipcMain.handle(UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL, async (_event, input: UpdateWorkspaceTabDraftInput) =>
+    workspaceService.updateTabDraft(input.tabId, input.content)
+  );
   ipcMain.handle(OPEN_MARKDOWN_FILE_CHANNEL, async (event) => {
     const result = await showOpenMarkdownDialog();
 
@@ -308,12 +568,7 @@ app.whenReady().then(async () => {
       _event,
       input: HandleDroppedMarkdownFileInput
     ): Promise<HandleDroppedMarkdownFileResult> => {
-      if (input.hasOpenDocument) {
-        openEditorWindowForLaunchPath?.(input.targetPath);
-        return {
-          disposition: "opened-in-new-window"
-        };
-      }
+      void input;
 
       return {
         disposition: "open-in-place"
@@ -324,7 +579,11 @@ app.whenReady().then(async () => {
     const result = await saveMarkdownFileToPath(input);
 
     if (result.status === "success") {
-      await externalFileWatchService.syncDocumentPath(event.sender, result.document.path);
+      workspaceService.saveTabDocument(input.tabId, result.document);
+      await externalFileWatchService.syncDocumentPath(
+        event.sender,
+        workspaceService.getTabPath(input.tabId)
+      );
     }
 
     return result;
@@ -333,7 +592,11 @@ app.whenReady().then(async () => {
     const result = await showSaveMarkdownDialog(input);
 
     if (result.status === "success") {
-      await externalFileWatchService.syncDocumentPath(event.sender, result.document.path);
+      workspaceService.saveTabDocument(input.tabId, result.document);
+      await externalFileWatchService.syncDocumentPath(
+        event.sender,
+        workspaceService.getTabPath(input.tabId)
+      );
     }
 
     return result;
@@ -341,7 +604,10 @@ app.whenReady().then(async () => {
   ipcMain.handle(
     SYNC_WATCHED_MARKDOWN_FILE_CHANNEL,
     async (event, input: SyncWatchedMarkdownFileInput) =>
-      externalFileWatchService.syncDocumentPath(event.sender, input.path)
+      externalFileWatchService.syncDocumentPath(
+        event.sender,
+        workspaceService.getTabPath(input.tabId)
+      )
   );
   ipcMain.handle(IMPORT_CLIPBOARD_IMAGE_CHANNEL, async (_event, input: ImportClipboardImageInput) =>
     importClipboardImage(input, { clipboard })
