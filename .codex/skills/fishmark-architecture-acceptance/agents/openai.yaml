@@ -1,0 +1,4 @@
+interface:
+  display_name: "FishMark 架构验收"
+  short_description: "按理想 Markdown 编辑器范式审查本轮改动与受影响模块。"
+  default_prompt: "使用 $fishmark-architecture-acceptance 对 FishMark 本轮改动做架构与规范验收。"
