@@ -363,8 +363,8 @@ describe("Test workbench shell", () => {
   });
 
   it("shows a diagnostic banner instead of crashing when the bridge is unavailable", async () => {
-    // @ts-expect-error test intentionally removes the preload bridge
-    delete window.fishmark;
+    // @ts-expect-error test intentionally removes the test-workbench bridge
+    delete window.fishmarkTest;
 
     await renderApp();
 

@@ -1556,8 +1556,7 @@ describe("App autosave", () => {
     expect(saveMarkdownFileAs).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFileAs).toHaveBeenCalledWith({
       tabId: "tab-1",
-      currentPath: null,
-      content: "# Fresh draft\n"
+      currentPath: null
     });
     expect(container.textContent).toContain("untitled.md");
   });
@@ -1593,8 +1592,7 @@ describe("App autosave", () => {
 
     expect(saveMarkdownFile).toHaveBeenCalledWith({
       tabId: "tab-2",
-      path: "C:/notes/second.md",
-      content: "# Second updated\n"
+      path: "C:/notes/second.md"
     });
   });
 
@@ -1966,8 +1964,7 @@ describe("App autosave", () => {
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
       tabId: "tab-1",
-      path: "C:/notes/today.md",
-      content: "# Updated once\n"
+      path: "C:/notes/today.md"
     });
   });
 
@@ -1992,8 +1989,7 @@ describe("App autosave", () => {
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
       tabId: "tab-1",
-      path: "C:/notes/today.md",
-      content: "# Second update\n"
+      path: "C:/notes/today.md"
     });
   });
 
@@ -2009,8 +2005,7 @@ describe("App autosave", () => {
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
       tabId: "tab-1",
-      path: "C:/notes/today.md",
-      content: "# Blur update\n"
+      path: "C:/notes/today.md"
     });
   });
 
@@ -2026,8 +2021,7 @@ describe("App autosave", () => {
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
       tabId: "tab-1",
-      path: "C:/notes/today.md",
-      content: "# Manual save wins\n"
+      path: "C:/notes/today.md"
     });
 
     await act(async () => {
@@ -2062,8 +2056,7 @@ describe("App autosave", () => {
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenNthCalledWith(1, {
       tabId: "tab-1",
-      path: "C:/notes/today.md",
-      content: "# First autosave\n"
+      path: "C:/notes/today.md"
     });
 
     await act(async () => {
@@ -2089,8 +2082,7 @@ describe("App autosave", () => {
     expect(saveMarkdownFile).toHaveBeenCalledTimes(2);
     expect(saveMarkdownFile).toHaveBeenNthCalledWith(2, {
       tabId: "tab-1",
-      path: "C:/notes/today.md",
-      content: "# Second autosave\n"
+      path: "C:/notes/today.md"
     });
   });
 
@@ -2123,8 +2115,7 @@ describe("App autosave", () => {
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
       tabId: "tab-1",
-      path: "C:/notes/today.md",
-      content: "# Slow autosave\n"
+      path: "C:/notes/today.md"
     });
   });
 
@@ -2169,8 +2160,7 @@ describe("App autosave", () => {
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
       tabId: "tab-1",
-      path: "C:/notes/today.md",
-      content: "# Pending autosave\n"
+      path: "C:/notes/today.md"
     });
   });
 
@@ -2243,8 +2233,7 @@ describe("App autosave", () => {
     expect(saveMarkdownFile).not.toHaveBeenCalled();
     expect(saveMarkdownFileAs).toHaveBeenCalledWith({
       tabId: "tab-1",
-      currentPath: "C:/notes/today.md",
-      content: "# Local draft\n"
+      currentPath: "C:/notes/today.md"
     });
   });
 
@@ -3494,8 +3483,7 @@ describe("App autosave", () => {
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
       tabId: "tab-1",
-      path: "C:/notes/today.md",
-      content: "# Blur restore\n"
+      path: "C:/notes/today.md"
     });
     expect(container.querySelector('[data-fishmark-dialog="settings-drawer"]')).not.toBeNull();
 
