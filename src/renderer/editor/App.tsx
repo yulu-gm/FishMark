@@ -552,16 +552,15 @@ function SettingsDrawerFallback({ surfaceState }: { surfaceState: "open" | "clos
 
 export default function EditorApp() {
   const fishmark = window.fishmark;
-  const fishmarkTest = window.fishmarkTest;
 
-  if (!fishmark || !fishmarkTest) {
+  if (!fishmark) {
     return <BridgeUnavailableApp />;
   }
 
   return (
     <EditorShell
       fishmark={fishmark}
-      fishmarkTest={fishmarkTest}
+      fishmarkTest={window.fishmarkTest}
     />
   );
 }
@@ -571,7 +570,7 @@ function EditorShell({
   fishmarkTest
 }: {
   fishmark: Window["fishmark"];
-  fishmarkTest: Window["fishmarkTest"];
+  fishmarkTest?: Window["fishmarkTest"];
 }) {
   const [state, setState] = useState(createInitialAppState);
   const [outlineItems, setOutlineItems] = useState<OutlineItem[]>([]);
@@ -1786,6 +1785,10 @@ function EditorShell({
       saveMarkdownFile: (input) => fishmark.saveMarkdownFile(input)
     });
 
+    if (!fishmarkTest) {
+      return;
+    }
+
     try {
       const result = await driver.run(payload.command);
       await fishmarkTest.completeEditorTestCommand({
@@ -1819,6 +1822,10 @@ function EditorShell({
   }, [fishmark, handleOpenMarkdownFromPath]);
 
   useEffect(() => {
+    if (!fishmarkTest) {
+      return;
+    }
+
     return fishmarkTest.onEditorTestCommand((payload) => {
       void handleEditorTestCommand(payload);
     });

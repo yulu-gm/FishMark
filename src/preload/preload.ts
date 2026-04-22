@@ -1,4 +1,14 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
+import type { ProductBridge } from "../shared/product-bridge";
+import type { TestBridge } from "../shared/test-bridge";
+import type {
+  SaveMarkdownFileAsInput,
+  SaveMarkdownFileInput
+} from "../shared/save-markdown-file";
+import type {
+  OpenWorkspaceFileFromPathResult,
+  OpenWorkspaceFileResult
+} from "../shared/workspace";
 // Preload runs inside Electron's sandboxed environment, so local module imports
 // can prevent the bridge from loading at all. Keep the contract self-contained here.
 const OPEN_MARKDOWN_FILE_CHANNEL = "fishmark:open-markdown-file";
@@ -246,36 +256,6 @@ type WorkspaceMoveTabResult = {
 type OpenWorkspacePathRequest = {
   targetPath: string;
 };
-type SaveMarkdownFileInput = {
-  tabId: string;
-  path: string;
-};
-type SaveMarkdownFileAsInput = {
-  tabId: string;
-  currentPath: string | null;
-};
-type WorkspaceResultError = {
-  code: "dialog-failed" | "file-not-found" | "not-a-file" | "read-failed" | "non-utf8" | "unknown-window" | "unknown-tab";
-  message: string;
-};
-type WorkspaceCommandSuccess<TSnapshot> = {
-  kind: "success";
-  snapshot: TSnapshot;
-};
-type WorkspaceCommandCancelled = {
-  kind: "cancelled";
-};
-type WorkspaceCommandError = {
-  kind: "error";
-  error: WorkspaceResultError;
-};
-type OpenWorkspaceFileResult =
-  | WorkspaceCommandSuccess<WorkspaceWindowSnapshot>
-  | WorkspaceCommandCancelled
-  | WorkspaceCommandError;
-type OpenWorkspaceFileFromPathResult =
-  | WorkspaceCommandSuccess<WorkspaceWindowSnapshot>
-  | WorkspaceCommandError;
 type SyncWatchedMarkdownFileInput = {
   tabId: string | null;
 };
@@ -387,7 +367,7 @@ function resolveStartupOpenPathFromArgv(argv: string[]): string | null {
   }
 }
 
-const productApi = {
+const productApi: ProductBridge = {
   platform: process.platform,
   runtimeMode: resolveRuntimeModeFromArgv(process.argv ?? []),
   startupOpenPath: resolveStartupOpenPathFromArgv(process.argv ?? []),
@@ -510,7 +490,7 @@ const productApi = {
   }
 };
 
-const testApi = {
+const testApi: TestBridge = {
   openEditorTestWindow: () => ipcRenderer.invoke(OPEN_EDITOR_TEST_WINDOW_CHANNEL),
   startScenarioRun: (input: { scenarioId: string }) =>
     ipcRenderer.invoke(START_SCENARIO_RUN_CHANNEL, input),
