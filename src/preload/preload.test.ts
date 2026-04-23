@@ -5,6 +5,18 @@ import {
   OPEN_THEMES_DIRECTORY_CHANNEL,
   REFRESH_THEME_PACKAGES_CHANNEL
 } from "../shared/theme-package";
+import {
+  ACTIVATE_WORKSPACE_TAB_CHANNEL,
+  CLOSE_WORKSPACE_TAB_CHANNEL,
+  CREATE_WORKSPACE_TAB_CHANNEL,
+  DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL,
+  GET_WORKSPACE_SNAPSHOT_CHANNEL,
+  MOVE_WORKSPACE_TAB_TO_WINDOW_CHANNEL,
+  OPEN_WORKSPACE_FILE_CHANNEL,
+  OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL,
+  REORDER_WORKSPACE_TAB_CHANNEL,
+  UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL
+} from "../shared/workspace";
 
 const exposeInMainWorld = vi.fn();
 const invoke = vi.fn();
@@ -118,29 +130,29 @@ describe("preload bridge", () => {
     void api.onOpenWorkspacePath(() => {});
     void api.updateWorkspaceTabDraft({ tabId: "tab-1", content: "# Updated\n" });
 
-    expect(invoke.mock.calls).toContainEqual(["fishmark:get-workspace-snapshot"]);
-    expect(invoke.mock.calls).toContainEqual(["fishmark:create-workspace-tab", { kind: "untitled" }]);
-    expect(invoke.mock.calls).toContainEqual(["fishmark:open-workspace-file"]);
+    expect(invoke.mock.calls).toContainEqual([GET_WORKSPACE_SNAPSHOT_CHANNEL]);
+    expect(invoke.mock.calls).toContainEqual([CREATE_WORKSPACE_TAB_CHANNEL, { kind: "untitled" }]);
+    expect(invoke.mock.calls).toContainEqual([OPEN_WORKSPACE_FILE_CHANNEL]);
     expect(invoke.mock.calls).toContainEqual([
-      "fishmark:open-workspace-file-from-path",
+      OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL,
       { targetPath: "D:/fixtures/tabbed.md" }
     ]);
-    expect(invoke.mock.calls).toContainEqual(["fishmark:activate-workspace-tab", { tabId: "tab-1" }]);
-    expect(invoke.mock.calls).toContainEqual(["fishmark:close-workspace-tab", { tabId: "tab-1" }]);
+    expect(invoke.mock.calls).toContainEqual([ACTIVATE_WORKSPACE_TAB_CHANNEL, { tabId: "tab-1" }]);
+    expect(invoke.mock.calls).toContainEqual([CLOSE_WORKSPACE_TAB_CHANNEL, { tabId: "tab-1" }]);
     expect(invoke.mock.calls).toContainEqual([
-      "fishmark:reorder-workspace-tab",
+      REORDER_WORKSPACE_TAB_CHANNEL,
       { tabId: "tab-1", toIndex: 0 }
     ]);
     expect(invoke.mock.calls).toContainEqual([
-      "fishmark:move-workspace-tab-to-window",
+      MOVE_WORKSPACE_TAB_TO_WINDOW_CHANNEL,
       { tabId: "tab-1", targetWindowId: "window-2" }
     ]);
     expect(invoke.mock.calls).toContainEqual([
-      "fishmark:detach-workspace-tab-to-new-window",
+      DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL,
       { tabId: "tab-1" }
     ]);
     expect(invoke.mock.calls).toContainEqual([
-      "fishmark:update-workspace-tab-draft",
+      UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL,
       { tabId: "tab-1", content: "# Updated\n" }
     ]);
   });
