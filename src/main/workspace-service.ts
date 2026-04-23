@@ -130,27 +130,14 @@ export function createWorkspaceService() {
     tabId: string,
     document: OpenMarkdownDocument
   ): WorkspaceWindowSnapshot {
-    const tab = getTab(tabId);
-    tab.path = document.path;
-    tab.name = document.name;
-    tab.draftContent = document.content;
-    tab.lastSavedContent = document.content;
-    tab.encoding = document.encoding;
-    tab.isDirty = false;
-    tab.saveState = "idle";
-    return getWindowSnapshot(getWindowIdForTab(tabId));
+    return applyTabDocument(tabId, document);
   }
 
   function saveTabDocument(tabId: string, document: OpenMarkdownDocument): WorkspaceWindowSnapshot {
     const tab = getTab(tabId);
-    tab.path = document.path;
-    tab.name = document.name;
-    tab.draftContent = document.content;
-    tab.lastSavedContent = document.content;
-    tab.encoding = document.encoding;
-    tab.isDirty = false;
-    tab.saveState = "idle";
-    return getWindowSnapshot(getWindowIdForTab(tabId));
+    return applyTabDocument(tabId, document, {
+      preserveDraftContent: tab.draftContent !== document.content
+    });
   }
 
   function closeTab(tabId: string): WorkspaceWindowSnapshot {
@@ -292,6 +279,26 @@ export function createWorkspaceService() {
       isDirty: false,
       saveState: "idle"
     };
+  }
+
+  function applyTabDocument(
+    tabId: string,
+    document: OpenMarkdownDocument,
+    options: { preserveDraftContent?: boolean } = {}
+  ): WorkspaceWindowSnapshot {
+    const tab = getTab(tabId);
+    tab.path = document.path;
+    tab.name = document.name;
+    tab.encoding = document.encoding;
+    tab.lastSavedContent = document.content;
+
+    if (!options.preserveDraftContent) {
+      tab.draftContent = document.content;
+    }
+
+    tab.isDirty = tab.draftContent !== tab.lastSavedContent;
+    tab.saveState = "idle";
+    return getWindowSnapshot(getWindowIdForTab(tabId));
   }
 
   function appendTab(windowId: string, session: TabSession): WorkspaceWindowSnapshot {
