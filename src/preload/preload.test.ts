@@ -34,22 +34,33 @@ vi.mock("electron", () => ({
   }
 }));
 
-async function loadApi(): Promise<{ api: Window["fishmark"]; testApi: Window["fishmarkTest"] }> {
-  await import("./preload");
+async function loadApi(runtimeMode: "editor" | "test-workbench" = "editor"): Promise<{
+  api: Window["fishmark"];
+  testApi: Window["fishmarkTest"] | null;
+}> {
+  const originalArgv = process.argv;
+  process.argv =
+    runtimeMode === "test-workbench"
+      ? [...originalArgv, "--fishmark-runtime-mode=test-workbench"]
+      : originalArgv.filter((entry) => !entry.startsWith("--fishmark-runtime-mode="));
 
-  expect(exposeInMainWorld).toHaveBeenCalledTimes(2);
+  try {
+    await import("./preload");
+  } finally {
+    process.argv = originalArgv;
+  }
+
   const apiCall = exposeInMainWorld.mock.calls.find(([name]) => name === "fishmark");
   const testApiCall = exposeInMainWorld.mock.calls.find(([name]) => name === "fishmarkTest");
 
-  if (!apiCall || !testApiCall) {
-    throw new Error("Expected both fishmark bridges to be exposed.");
+  if (!apiCall) {
+    throw new Error("Expected fishmark bridge to be exposed.");
   }
 
   const [, api] = apiCall;
-  const [, testBridgeApi] = testApiCall;
   return {
     api: api as Window["fishmark"],
-    testApi: testBridgeApi as Window["fishmarkTest"]
+    testApi: testApiCall ? (testApiCall[1] as Window["fishmarkTest"]) : null
   };
 }
 
@@ -62,17 +73,19 @@ describe("preload bridge", () => {
     vi.resetModules();
   });
 
-  it("exposes task-030 scenario run controls for the workbench", async () => {
-    await import("./preload");
+  it("exposes only the product bridge in editor runtime", async () => {
+    const { api, testApi } = await loadApi();
+
+    expect(exposeInMainWorld).toHaveBeenCalledTimes(1);
+    expect(exposeInMainWorld).toHaveBeenCalledWith("fishmark", api);
+    expect(testApi).toBeNull();
+  });
+
+  it("exposes the test bridge in test-workbench runtime", async () => {
+    const { testApi } = await loadApi("test-workbench");
 
     expect(exposeInMainWorld).toHaveBeenCalledTimes(2);
-    const apiCall = exposeInMainWorld.mock.calls.find(([name]) => name === "fishmarkTest");
-    if (!apiCall) {
-      throw new Error("Expected fishmarkTest bridge to be exposed.");
-    }
-    const [, api] = apiCall;
-
-    expect(api).toMatchObject({
+    expect(testApi).toMatchObject({
       startScenarioRun: expect.any(Function),
       interruptScenarioRun: expect.any(Function),
       onScenarioRunEvent: expect.any(Function),
@@ -80,8 +93,8 @@ describe("preload bridge", () => {
     });
   });
 
-  it("keeps test bridge APIs off the product bridge and exposes the split bridge globally", async () => {
-    const { api, testApi } = await loadApi();
+  it("keeps test bridge APIs off the product bridge", async () => {
+    const { api, testApi } = await loadApi("test-workbench");
 
     expect(api).not.toHaveProperty("startScenarioRun");
     expect(api).not.toHaveProperty("onEditorTestCommand");

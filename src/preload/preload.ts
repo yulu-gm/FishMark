@@ -305,4 +305,7 @@ const testApi: TestBridge = {
 };
 
 contextBridge.exposeInMainWorld("fishmark", productApi);
-contextBridge.exposeInMainWorld("fishmarkTest", testApi);
+
+if (productApi.runtimeMode === "test-workbench") {
+  contextBridge.exposeInMainWorld("fishmarkTest", testApi);
+}

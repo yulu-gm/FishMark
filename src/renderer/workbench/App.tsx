@@ -11,7 +11,8 @@ import {
 import { ScenarioCatalog } from "../scenario-catalog";
 
 export default function WorkbenchApp() {
-  const hasBridge = Boolean(window.fishmarkTest);
+  const fishmarkTest = window.fishmarkTest;
+  const hasBridge = Boolean(fishmarkTest);
   const scenarios = defaultScenarioRegistry.list();
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(scenarios[0]?.id ?? null);
   const selectedScenario = selectedScenarioId
@@ -22,11 +23,11 @@ export default function WorkbenchApp() {
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!hasBridge || !window.fishmarkTest) {
+    if (!hasBridge || !fishmarkTest) {
       return;
     }
 
-    const detachEvent = window.fishmarkTest.onScenarioRunEvent((payload) => {
+    const detachEvent = fishmarkTest.onScenarioRunEvent((payload) => {
       if (activeRunIdRef.current && payload.runId !== activeRunIdRef.current) {
         return;
       }
@@ -39,7 +40,7 @@ export default function WorkbenchApp() {
       setRunState((current) => applyRunnerEventToDebugState(current, scenario, payload.event));
     });
 
-    const detachTerminal = window.fishmarkTest.onScenarioRunTerminal((payload) => {
+    const detachTerminal = fishmarkTest.onScenarioRunTerminal((payload) => {
       if (activeRunIdRef.current && payload.runId !== activeRunIdRef.current) {
         return;
       }
@@ -53,26 +54,26 @@ export default function WorkbenchApp() {
       detachEvent();
       detachTerminal();
     };
-  }, [hasBridge]);
+  }, [fishmarkTest, hasBridge]);
 
   async function handleRunSelectedScenario(): Promise<void> {
-    if (!selectedScenario || !window.fishmarkTest || activeRunIdRef.current) {
+    if (!selectedScenario || !fishmarkTest || activeRunIdRef.current) {
       return;
     }
 
     setRunState(createIdleDebugRunState(selectedScenario));
 
-    const { runId } = await window.fishmarkTest.startScenarioRun({ scenarioId: selectedScenario.id });
+    const { runId } = await fishmarkTest.startScenarioRun({ scenarioId: selectedScenario.id });
     activeRunIdRef.current = runId;
     setActiveRunId(runId);
   }
 
   function handleInterruptRun(): void {
-    if (!activeRunIdRef.current || !window.fishmarkTest) {
+    if (!activeRunIdRef.current || !fishmarkTest) {
       return;
     }
 
-    void window.fishmarkTest.interruptScenarioRun({ runId: activeRunIdRef.current });
+    void fishmarkTest.interruptScenarioRun({ runId: activeRunIdRef.current });
   }
 
   function handleSelectScenario(nextScenarioId: string | null): void {
@@ -103,7 +104,7 @@ export default function WorkbenchApp() {
           className="test-workbench-launch"
           disabled={!hasBridge}
           onClick={() => {
-            void window.fishmarkTest?.openEditorTestWindow();
+            void fishmarkTest?.openEditorTestWindow();
           }}
           type="button"
         >

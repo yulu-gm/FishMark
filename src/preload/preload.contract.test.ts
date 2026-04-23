@@ -109,22 +109,33 @@ vi.mock("electron", () => ({
   }
 }));
 
-async function loadApi(): Promise<{ api: Window["fishmark"]; testApi: Window["fishmarkTest"] }> {
-  await import("./preload");
+async function loadApi(runtimeMode: "editor" | "test-workbench" = "editor"): Promise<{
+  api: Window["fishmark"];
+  testApi: Window["fishmarkTest"] | null;
+}> {
+  const originalArgv = process.argv;
+  process.argv =
+    runtimeMode === "test-workbench"
+      ? [...originalArgv, "--fishmark-runtime-mode=test-workbench"]
+      : originalArgv.filter((entry) => !entry.startsWith("--fishmark-runtime-mode="));
 
-  expect(exposeInMainWorld).toHaveBeenCalledTimes(2);
+  try {
+    await import("./preload");
+  } finally {
+    process.argv = originalArgv;
+  }
+
   const apiCall = exposeInMainWorld.mock.calls.find(([name]) => name === "fishmark");
   const testApiCall = exposeInMainWorld.mock.calls.find(([name]) => name === "fishmarkTest");
 
-  if (!apiCall || !testApiCall) {
-    throw new Error("Expected both fishmark bridges to be exposed.");
+  if (!apiCall) {
+    throw new Error("Expected fishmark bridge to be exposed.");
   }
 
   const [, api] = apiCall;
-  const [, testApi] = testApiCall;
   return {
     api: api as Window["fishmark"],
-    testApi: testApi as Window["fishmarkTest"]
+    testApi: testApiCall ? (testApiCall[1] as Window["fishmarkTest"]) : null
   };
 }
 
@@ -137,6 +148,22 @@ describe("preload contract", () => {
 
     void productBridgeContract;
     void testBridgeContract;
+  });
+
+  it("exposes only the product bridge in the editor runtime", async () => {
+    const { api, testApi } = await loadApi();
+
+    expect(exposeInMainWorld).toHaveBeenCalledTimes(1);
+    expect(exposeInMainWorld).toHaveBeenCalledWith("fishmark", api);
+    expect(testApi).toBeNull();
+  });
+
+  it("exposes the test bridge in the test-workbench runtime", async () => {
+    const { api, testApi } = await loadApi("test-workbench");
+
+    expect(exposeInMainWorld).toHaveBeenCalledTimes(2);
+    expect(exposeInMainWorld).toHaveBeenCalledWith("fishmark", api);
+    expect(testApi).not.toBeNull();
   });
 
   it("treats workspace open APIs as explicit result unions", () => {
@@ -205,7 +232,10 @@ describe("preload contract", () => {
   });
 
   it("uses shared IPC channel constants for invoke-based APIs", async () => {
-    const { api, testApi } = await loadApi();
+    const { api, testApi } = await loadApi("test-workbench");
+    if (!testApi) {
+      throw new Error("Expected fishmarkTest bridge to be exposed.");
+    }
 
     const openPathInput = { targetPath: "D:/fixtures/note.md" };
     const droppedMarkdownInput = {
@@ -343,7 +373,10 @@ describe("preload contract", () => {
   });
 
   it("forwards shared event payloads without reshaping them", async () => {
-    const { api, testApi } = await loadApi();
+    const { api, testApi } = await loadApi("test-workbench");
+    if (!testApi) {
+      throw new Error("Expected fishmarkTest bridge to be exposed.");
+    }
     const scenarioListener = vi.fn();
     const terminalListener = vi.fn();
     const editorListener = vi.fn();
