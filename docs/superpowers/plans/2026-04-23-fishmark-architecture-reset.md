@@ -493,7 +493,7 @@ git commit -m "refactor: converge workspace truth in main"
 - Modify: `src/renderer/editor-test-driver.ts`
 - Modify: `src/main/main.ts`
 
-- [ ] **Step 1: Add failing tests that require `window.fishmark` to be product-only**
+- [x] **Step 1: Add failing tests that require `window.fishmark` to be product-only**
 
 ```ts
 // src/preload/preload.test.ts
@@ -513,12 +513,12 @@ it("exposes the test-only controls on window.fishmarkTest", async () => {
 });
 ```
 
-- [ ] **Step 2: Run the preload/workbench tests to verify they fail**
+- [x] **Step 2: Run the preload/workbench tests to verify they fail**
 
 Run: `npm run test -- src/preload/preload.test.ts src/preload/preload.contract.test.ts`
 Expected: FAIL because `preload.ts` still exposes test controls on `window.fishmark`.
 
-- [ ] **Step 3: Expose separate product and test bridges in preload**
+- [x] **Step 3: Expose separate product and test bridges in preload**
 
 ```ts
 // src/preload/preload.ts
@@ -550,7 +550,7 @@ contextBridge.exposeInMainWorld("fishmark", productBridge);
 contextBridge.exposeInMainWorld("fishmarkTest", testBridge);
 ```
 
-- [ ] **Step 4: Move workbench and editor-test driver code to `window.fishmarkTest`**
+- [x] **Step 4: Move workbench and editor-test driver code to `window.fishmarkTest`**
 
 ```ts
 // src/renderer/workbench/App.tsx
@@ -573,12 +573,12 @@ ipcMain.handle(COMPLETE_EDITOR_TEST_COMMAND_CHANNEL, async (_event, payload) =>
 );
 ```
 
-- [ ] **Step 5: Run the preload and workbench tests to verify bridge isolation passes**
+- [x] **Step 5: Run the preload and workbench tests to verify bridge isolation passes**
 
 Run: `npm run test -- src/preload/preload.test.ts src/preload/preload.contract.test.ts src/renderer/test-workbench.test.tsx src/renderer/editor-test-driver.test.ts`
 Expected: PASS with product/test bridge responsibilities separated.
 
-- [ ] **Step 6: Commit the preload/test bridge split**
+- [x] **Step 6: Commit the preload/test bridge split**
 
 ```bash
 git add src/preload/preload.ts src/preload/preload.contract.test.ts src/preload/preload.test.ts src/renderer/workbench/App.tsx src/renderer/test-workbench.test.tsx src/renderer/editor-test-driver.ts src/main/main.ts

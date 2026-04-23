@@ -1,9 +1,11 @@
 import { formatStartupOpenPathArgument } from "./launch-open-path";
 
 export const RUNTIME_MODE_ARGUMENT_PREFIX = "--fishmark-runtime-mode=";
+export const PRELOAD_BRIDGE_MODE_ARGUMENT_PREFIX = "--fishmark-preload-bridge-mode=";
 export { formatStartupOpenPathArgument } from "./launch-open-path";
 
 export type RuntimeMode = "editor" | "test-workbench";
+export type PreloadBridgeMode = "product" | "editor-test" | "test-workbench";
 
 type WindowLike = {
   once: (event: "ready-to-show", callback: () => void) => unknown;
@@ -78,12 +80,19 @@ export function createRuntimeWindowManager<TWindow extends WindowLike>(input: {
     nextRuntimeMode: RuntimeMode,
     options: {
       startupOpenPath?: string;
+      preloadBridgeMode?: PreloadBridgeMode;
     } = {}
   ): TWindow {
     const additionalArguments = [`${RUNTIME_MODE_ARGUMENT_PREFIX}${nextRuntimeMode}`];
+    const preloadBridgeMode =
+      options.preloadBridgeMode ?? (nextRuntimeMode === "test-workbench" ? "test-workbench" : "product");
 
     if (options.startupOpenPath) {
       additionalArguments.push(formatStartupOpenPathArgument(options.startupOpenPath));
+    }
+
+    if (preloadBridgeMode !== "product") {
+      additionalArguments.push(`${PRELOAD_BRIDGE_MODE_ARGUMENT_PREFIX}${preloadBridgeMode}`);
     }
 
     const window = createWindow({
@@ -147,7 +156,7 @@ export function createRuntimeWindowManager<TWindow extends WindowLike>(input: {
     openPrimaryWindow(options?: { startupOpenPath?: string }) {
       return openWindow(runtimeMode, options);
     },
-    openEditorWindow(options?: { startupOpenPath?: string }) {
+    openEditorWindow(options?: { startupOpenPath?: string; preloadBridgeMode?: PreloadBridgeMode }) {
       return openWindow("editor", options);
     },
     reopenPrimaryWindowIfNeeded() {

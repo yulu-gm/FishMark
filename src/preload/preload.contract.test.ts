@@ -109,15 +109,28 @@ vi.mock("electron", () => ({
   }
 }));
 
-async function loadApi(runtimeMode: "editor" | "test-workbench" = "editor"): Promise<{
+async function loadApi(input: {
+  runtimeMode?: "editor" | "test-workbench";
+  preloadBridgeMode?: "editor-test" | "test-workbench";
+} = {}): Promise<{
   api: Window["fishmark"];
   testApi: Window["fishmarkTest"] | null;
 }> {
+  const runtimeMode = input.runtimeMode ?? "editor";
   const originalArgv = process.argv;
-  process.argv =
-    runtimeMode === "test-workbench"
-      ? [...originalArgv, "--fishmark-runtime-mode=test-workbench"]
-      : originalArgv.filter((entry) => !entry.startsWith("--fishmark-runtime-mode="));
+  const nextArgv = originalArgv.filter(
+    (entry) =>
+      !entry.startsWith("--fishmark-runtime-mode=") &&
+      !entry.startsWith("--fishmark-preload-bridge-mode=")
+  );
+
+  nextArgv.push(`--fishmark-runtime-mode=${runtimeMode}`);
+
+  if (input.preloadBridgeMode) {
+    nextArgv.push(`--fishmark-preload-bridge-mode=${input.preloadBridgeMode}`);
+  }
+
+  process.argv = nextArgv;
 
   try {
     await import("./preload");
@@ -144,7 +157,7 @@ describe("preload contract", () => {
 
   it("aligns renderer globals to the shared product and test bridges", () => {
     const productBridgeContract: TypeEquals<Window["fishmark"], ProductBridge> = true;
-    const testBridgeContract: TypeEquals<Window["fishmarkTest"], TestBridge> = true;
+    const testBridgeContract: TypeEquals<Window["fishmarkTest"], TestBridge | undefined> = true;
 
     void productBridgeContract;
     void testBridgeContract;
@@ -158,8 +171,21 @@ describe("preload contract", () => {
     expect(testApi).toBeNull();
   });
 
+  it("exposes the test bridge in the editor-test runtime", async () => {
+    const { api, testApi } = await loadApi({
+      runtimeMode: "editor",
+      preloadBridgeMode: "editor-test"
+    });
+
+    expect(exposeInMainWorld).toHaveBeenCalledTimes(2);
+    expect(exposeInMainWorld).toHaveBeenCalledWith("fishmark", api);
+    expect(testApi).not.toBeNull();
+  });
+
   it("exposes the test bridge in the test-workbench runtime", async () => {
-    const { api, testApi } = await loadApi("test-workbench");
+    const { api, testApi } = await loadApi({
+      runtimeMode: "test-workbench"
+    });
 
     expect(exposeInMainWorld).toHaveBeenCalledTimes(2);
     expect(exposeInMainWorld).toHaveBeenCalledWith("fishmark", api);
@@ -232,7 +258,10 @@ describe("preload contract", () => {
   });
 
   it("uses shared IPC channel constants for invoke-based APIs", async () => {
-    const { api, testApi } = await loadApi("test-workbench");
+    const { api, testApi } = await loadApi({
+      runtimeMode: "editor",
+      preloadBridgeMode: "editor-test"
+    });
     if (!testApi) {
       throw new Error("Expected fishmarkTest bridge to be exposed.");
     }
@@ -373,7 +402,10 @@ describe("preload contract", () => {
   });
 
   it("forwards shared event payloads without reshaping them", async () => {
-    const { api, testApi } = await loadApi("test-workbench");
+    const { api, testApi } = await loadApi({
+      runtimeMode: "editor",
+      preloadBridgeMode: "editor-test"
+    });
     if (!testApi) {
       throw new Error("Expected fishmarkTest bridge to be exposed.");
     }

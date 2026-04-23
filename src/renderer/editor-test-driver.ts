@@ -1,9 +1,6 @@
 import type { EditorTestCommand, EditorTestCommandResult } from "../shared/editor-test-command";
 import type { SaveMarkdownFileResult } from "../shared/save-markdown-file";
-import type {
-  OpenWorkspaceFileFromPathResult,
-  WorkspaceWindowSnapshot
-} from "../shared/workspace";
+import type { OpenWorkspaceFileFromPathResult } from "../shared/workspace";
 import {
   applyEditorContentChanged,
   applySaveMarkdownResult,
@@ -25,21 +22,13 @@ type EditorHandle = {
   pressArrowDown: () => void;
 };
 
-type OpenWorkspaceFileFromPathResponse = OpenWorkspaceFileFromPathResult | WorkspaceWindowSnapshot;
-
-function isOpenWorkspaceFileFromPathResult(
-  response: OpenWorkspaceFileFromPathResponse
-): response is OpenWorkspaceFileFromPathResult {
-  return "kind" in response;
-}
-
 export function createEditorTestDriver(input: {
   getState: () => AppState;
   applyState: (updater: (current: AppState) => AppState) => void;
   resetAutosaveRuntime: () => void;
   editor: EditorHandle;
   setEditorContentSnapshot: (content: string) => void;
-  openWorkspaceFileFromPath: (targetPath: string) => Promise<OpenWorkspaceFileFromPathResponse>;
+  openWorkspaceFileFromPath: (targetPath: string) => Promise<OpenWorkspaceFileFromPathResult>;
   saveMarkdownFile: (args: { tabId: string; path: string }) => Promise<SaveMarkdownFileResult>;
 }) {
   type ActiveDocument = NonNullable<ReturnType<typeof getActiveDocument>>;
@@ -73,39 +62,21 @@ export function createEditorTestDriver(input: {
 
       if (command.type === "open-fixture-file") {
         const response = await input.openWorkspaceFileFromPath(command.fixturePath);
-        if (isOpenWorkspaceFileFromPathResult(response)) {
-          if (response.kind === "error") {
-            return fail(response.error.message, {
-              path: command.fixturePath
-            });
-          }
-
-          const activeDocument =
-            response.snapshot.activeDocument ??
-            (() => {
-              throw new Error(
-                `Workspace snapshot for '${command.fixturePath}' is missing an active document.`
-              );
-            })();
-
-          input.resetAutosaveRuntime();
-          input.setEditorContentSnapshot(activeDocument.content);
-          input.applyState((current) => applyWorkspaceSnapshot(current, response.snapshot));
-
-          return ok("Fixture file opened.", {
-            path: activeDocument.path
+        if (response.kind === "error") {
+          return fail(response.error.message, {
+            path: command.fixturePath
           });
         }
 
         const activeDocument =
-          response.activeDocument ??
+          response.snapshot.activeDocument ??
           (() => {
             throw new Error(`Workspace snapshot for '${command.fixturePath}' is missing an active document.`);
           })();
 
         input.resetAutosaveRuntime();
         input.setEditorContentSnapshot(activeDocument.content);
-        input.applyState((current) => applyWorkspaceSnapshot(current, response));
+        input.applyState((current) => applyWorkspaceSnapshot(current, response.snapshot));
 
         return ok("Fixture file opened.", {
           path: activeDocument.path

@@ -4,6 +4,7 @@ import {
   createRuntimeWindowManager,
   resolveAppRuntimeMode,
   RUNTIME_MODE_ARGUMENT_PREFIX,
+  PRELOAD_BRIDGE_MODE_ARGUMENT_PREFIX,
   formatStartupOpenPathArgument,
   type RuntimeMode
 } from "./runtime-windows";
@@ -49,7 +50,10 @@ describe("createRuntimeWindowManager", () => {
           preload: "D:/app/dist-electron/preload/preload.js",
           contextIsolation: true,
           nodeIntegration: false,
-          additionalArguments: [`${RUNTIME_MODE_ARGUMENT_PREFIX}test-workbench`]
+          additionalArguments: [
+            `${RUNTIME_MODE_ARGUMENT_PREFIX}test-workbench`,
+            `${PRELOAD_BRIDGE_MODE_ARGUMENT_PREFIX}test-workbench`
+          ]
         })
       })
     );
@@ -92,7 +96,9 @@ describe("createRuntimeWindowManager", () => {
   it("creates an editor window when the workbench asks to open a test editor", () => {
     const harness = createWindowHarness("test-workbench");
 
-    harness.manager.openEditorWindow();
+    harness.manager.openEditorWindow({
+      preloadBridgeMode: "editor-test"
+    });
 
     expect(harness.createWindow).toHaveBeenCalledTimes(1);
     expect(harness.createWindow).toHaveBeenCalledWith(
@@ -103,7 +109,10 @@ describe("createRuntimeWindowManager", () => {
         minWidth: 900,
         minHeight: 600,
         webPreferences: expect.objectContaining({
-          additionalArguments: [`${RUNTIME_MODE_ARGUMENT_PREFIX}editor`]
+          additionalArguments: [
+            `${RUNTIME_MODE_ARGUMENT_PREFIX}editor`,
+            `${PRELOAD_BRIDGE_MODE_ARGUMENT_PREFIX}editor-test`
+          ]
         })
       })
     );

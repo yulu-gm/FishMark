@@ -5421,7 +5421,7 @@ describe("App autosave", () => {
       });
     });
 
-    expect(window.fishmarkTest.completeEditorTestCommand).toHaveBeenCalledWith({
+    expect(window.fishmarkTest?.completeEditorTestCommand).toHaveBeenCalledWith({
       sessionId: "editor-session-1",
       commandId: "command-1",
       result: {

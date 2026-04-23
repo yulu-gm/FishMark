@@ -8,6 +8,6 @@ declare global {
 
   interface Window {
     fishmark: ProductBridge;
-    fishmarkTest: TestBridge;
+    fishmarkTest?: TestBridge;
   }
 }

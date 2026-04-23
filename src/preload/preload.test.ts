@@ -34,15 +34,28 @@ vi.mock("electron", () => ({
   }
 }));
 
-async function loadApi(runtimeMode: "editor" | "test-workbench" = "editor"): Promise<{
+async function loadApi(input: {
+  runtimeMode?: "editor" | "test-workbench";
+  preloadBridgeMode?: "editor-test" | "test-workbench";
+} = {}): Promise<{
   api: Window["fishmark"];
   testApi: Window["fishmarkTest"] | null;
 }> {
+  const runtimeMode = input.runtimeMode ?? "editor";
   const originalArgv = process.argv;
-  process.argv =
-    runtimeMode === "test-workbench"
-      ? [...originalArgv, "--fishmark-runtime-mode=test-workbench"]
-      : originalArgv.filter((entry) => !entry.startsWith("--fishmark-runtime-mode="));
+  const nextArgv = originalArgv.filter(
+    (entry) =>
+      !entry.startsWith("--fishmark-runtime-mode=") &&
+      !entry.startsWith("--fishmark-preload-bridge-mode=")
+  );
+
+  nextArgv.push(`--fishmark-runtime-mode=${runtimeMode}`);
+
+  if (input.preloadBridgeMode) {
+    nextArgv.push(`--fishmark-preload-bridge-mode=${input.preloadBridgeMode}`);
+  }
+
+  process.argv = nextArgv;
 
   try {
     await import("./preload");
@@ -81,8 +94,25 @@ describe("preload bridge", () => {
     expect(testApi).toBeNull();
   });
 
+  it("exposes the test bridge in editor-test runtime", async () => {
+    const { testApi } = await loadApi({
+      runtimeMode: "editor",
+      preloadBridgeMode: "editor-test"
+    });
+
+    expect(exposeInMainWorld).toHaveBeenCalledTimes(2);
+    expect(testApi).toMatchObject({
+      startScenarioRun: expect.any(Function),
+      interruptScenarioRun: expect.any(Function),
+      onScenarioRunEvent: expect.any(Function),
+      onScenarioRunTerminal: expect.any(Function)
+    });
+  });
+
   it("exposes the test bridge in test-workbench runtime", async () => {
-    const { testApi } = await loadApi("test-workbench");
+    const { testApi } = await loadApi({
+      runtimeMode: "test-workbench"
+    });
 
     expect(exposeInMainWorld).toHaveBeenCalledTimes(2);
     expect(testApi).toMatchObject({
@@ -94,7 +124,10 @@ describe("preload bridge", () => {
   });
 
   it("keeps test bridge APIs off the product bridge", async () => {
-    const { api, testApi } = await loadApi("test-workbench");
+    const { api, testApi } = await loadApi({
+      runtimeMode: "editor",
+      preloadBridgeMode: "editor-test"
+    });
 
     expect(api).not.toHaveProperty("startScenarioRun");
     expect(api).not.toHaveProperty("onEditorTestCommand");

@@ -114,13 +114,26 @@ import { SAVE_MARKDOWN_FILE_AS_CHANNEL, SAVE_MARKDOWN_FILE_CHANNEL } from "../sh
 // Preload runs inside Electron's sandboxed environment, so only preload-local
 // runtime helpers stay here. Contract shapes and IPC names come from shared modules.
 const RUNTIME_MODE_ARGUMENT_PREFIX = "--fishmark-runtime-mode=";
+const PRELOAD_BRIDGE_MODE_ARGUMENT_PREFIX = "--fishmark-preload-bridge-mode=";
 const STARTUP_OPEN_PATH_ARGUMENT_PREFIX = "--fishmark-startup-open-path=";
+type PreloadBridgeMode = "product" | "editor-test" | "test-workbench";
 
 function resolveRuntimeModeFromArgv(argv: string[]): "editor" | "test-workbench" {
   const runtimeArgument = argv.find((entry) => entry.startsWith(RUNTIME_MODE_ARGUMENT_PREFIX));
   const runtimeValue = runtimeArgument?.slice(RUNTIME_MODE_ARGUMENT_PREFIX.length);
 
   return runtimeValue === "test-workbench" ? "test-workbench" : "editor";
+}
+
+function resolvePreloadBridgeModeFromArgv(argv: string[]): PreloadBridgeMode {
+  const bridgeArgument = argv.find((entry) => entry.startsWith(PRELOAD_BRIDGE_MODE_ARGUMENT_PREFIX));
+  const bridgeValue = bridgeArgument?.slice(PRELOAD_BRIDGE_MODE_ARGUMENT_PREFIX.length);
+
+  if (bridgeValue === "editor-test" || bridgeValue === "test-workbench") {
+    return bridgeValue;
+  }
+
+  return resolveRuntimeModeFromArgv(argv) === "test-workbench" ? "test-workbench" : "product";
 }
 
 function resolveStartupOpenPathFromArgv(argv: string[]): string | null {
@@ -306,6 +319,6 @@ const testApi: TestBridge = {
 
 contextBridge.exposeInMainWorld("fishmark", productApi);
 
-if (productApi.runtimeMode === "test-workbench") {
+if (resolvePreloadBridgeModeFromArgv(process.argv ?? []) !== "product") {
   contextBridge.exposeInMainWorld("fishmarkTest", testApi);
 }

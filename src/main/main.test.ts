@@ -109,5 +109,6 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain('import("./cli-process-runner.js")');
     expect(mainSource).toContain('import("./editor-test-sessions.js")');
     expect(mainSource).toContain('import("./test-run-sessions.js")');
+    expect(mainSource).toContain('windowManager.openEditorWindow({ preloadBridgeMode: "editor-test" })');
   });
 });

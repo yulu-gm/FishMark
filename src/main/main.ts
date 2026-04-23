@@ -719,7 +719,8 @@ app.whenReady().then(async () => {
     ]);
 
     const editorTestSessions: EditorTestSessionsController = createEditorTestSessions({
-      openEditorWindow: () => windowManager.openEditorWindow()
+      openEditorWindow: () =>
+        windowManager.openEditorWindow({ preloadBridgeMode: "editor-test" })
     });
 
     const cliRunner = createCliProcessRunner({
