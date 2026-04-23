@@ -32,7 +32,6 @@ import {
   type ThemeMode
 } from "../../shared/preferences";
 import { CodeEditorView, type CodeEditorHandle } from "../code-editor-view";
-import { createEditorTestDriver } from "../editor-test-driver";
 import { deriveOutlineItems, type OutlineItem } from "../outline";
 import { createThemePackageRuntime } from "../theme-package-runtime";
 import {
@@ -70,6 +69,7 @@ import {
   ThemeSurfaceHost,
   type ThemeSurfaceHostDescriptor
 } from "./ThemeSurfaceHost";
+import { EditorTestBridgeHost } from "./editor-test-bridge-host";
 import { TitlebarHost } from "./TitlebarHost";
 import {
   normalizeTitlebarLayout,
@@ -617,6 +617,7 @@ function EditorShell({
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingAutosaveReplayRef = useRef(false);
   const inFlightSaveOriginRef = useRef<"manual" | "autosave" | null>(null);
+  const workspaceDraftSyncQueueRef = useRef(Promise.resolve());
   const preferencesRef = useRef<Preferences>(DEFAULT_PREFERENCES);
   const settingsEntryRef = useRef<HTMLButtonElement | null>(null);
   const settingsOpenOriginRef = useRef<"editor" | null>(null);
@@ -839,26 +840,64 @@ function EditorShell({
     return editorRef.current?.getContent() ?? editorContentRef.current;
   }, []);
 
+  const syncActiveWorkspaceDraft = useCallback(
+    async (tabId: string, content: string): Promise<void> => {
+      const snapshot = await fishmark.updateWorkspaceTabDraft({
+        tabId,
+        content
+      });
+
+      applyWorkspaceWindowSnapshot(snapshot, { syncUi: false });
+    },
+    [applyWorkspaceWindowSnapshot, fishmark]
+  );
+
+  const queueWorkspaceDraftSync = useCallback(
+    (tabId: string, content: string): Promise<void> => {
+      const nextSync = workspaceDraftSyncQueueRef.current.then(() =>
+        syncActiveWorkspaceDraft(tabId, content)
+      );
+
+      workspaceDraftSyncQueueRef.current = nextSync.then(
+        () => undefined,
+        () => undefined
+      );
+
+      return nextSync;
+    },
+    [syncActiveWorkspaceDraft]
+  );
+
   const flushActiveWorkspaceDraft = useCallback(async (): Promise<void> => {
-    const activeDocument = getActiveDocument(stateRef.current);
+    while (true) {
+      const activeDocument = getActiveDocument(stateRef.current);
 
-    if (!activeDocument) {
-      return;
+      if (!activeDocument) {
+        await workspaceDraftSyncQueueRef.current;
+        return;
+      }
+
+      const currentContent = getEditorContent();
+
+      if (currentContent === activeDocument.content) {
+        await workspaceDraftSyncQueueRef.current;
+
+        const latestDocument = getActiveDocument(stateRef.current);
+
+        if (!latestDocument) {
+          return;
+        }
+
+        if (getEditorContent() === latestDocument.content) {
+          return;
+        }
+
+        continue;
+      }
+
+      await queueWorkspaceDraftSync(activeDocument.tabId, currentContent);
     }
-
-    const currentContent = getEditorContent();
-
-    if (currentContent === activeDocument.content) {
-      return;
-    }
-
-    const snapshot = await fishmark.updateWorkspaceTabDraft({
-      tabId: activeDocument.tabId,
-      content: currentContent
-    });
-
-    applyWorkspaceWindowSnapshot(snapshot, { syncUi: false });
-  }, [applyWorkspaceWindowSnapshot, fishmark, getEditorContent]);
+  }, [getEditorContent, queueWorkspaceDraftSync]);
 
   const insertTableRowAbove = useCallback(() => {
     editorRef.current?.insertTableRowAbove();
@@ -1138,6 +1177,7 @@ function EditorShell({
 
   const runAutosave = useCallback(async (): Promise<void> => {
     clearAutosaveTimer();
+    await flushActiveWorkspaceDraft();
 
     const snapshot = stateRef.current;
     const currentDocument = getActiveDocument(snapshot);
@@ -1180,7 +1220,7 @@ function EditorShell({
       pendingAutosaveReplayRef.current = false;
       void runAutosave();
     }
-  }, [applyState, clearAutosaveTimer, fishmark, getEditorContent, showNotification]);
+  }, [applyState, clearAutosaveTimer, fishmark, flushActiveWorkspaceDraft, getEditorContent, showNotification]);
 
   const scheduleAutosave = useCallback((nextState: AppState): void => {
     clearAutosaveTimer();
@@ -1210,6 +1250,8 @@ function EditorShell({
   async function runManualSave(
     request: () => ReturnType<typeof window.fishmark.saveMarkdownFile>
   ): Promise<void> {
+    await flushActiveWorkspaceDraft();
+
     const snapshot = stateRef.current;
     const currentDocument = getActiveDocument(snapshot);
 
@@ -1737,28 +1779,24 @@ function EditorShell({
     return null;
   }
 
-  const handleEditorTestCommand = useEffectEvent(async (payload: {
-    sessionId: string;
-    commandId: string;
-    command: Parameters<ReturnType<typeof createEditorTestDriver>["run"]>[0];
-  }): Promise<void> => {
-    const driver = createEditorTestDriver({
+  const editorTestBridge = useMemo(
+    () => ({
       getState: () => stateRef.current,
       applyState,
       resetAutosaveRuntime,
       editor: {
         getContent: getEditorContent,
-        getSelection: () =>
-          editorRef.current?.getSelection() ?? {
-            anchor: 0,
-            head: 0
-          },
         setContent: (content: string) => {
           editorRef.current?.setContent(content);
         },
         insertText: (text: string) => {
           editorRef.current?.insertText(text);
         },
+        getSelection: () =>
+          editorRef.current?.getSelection() ?? {
+            anchor: 0,
+            head: 0
+          },
         setSelection: (anchor: number, head?: number) => {
           editorRef.current?.setSelection(anchor, head);
         },
@@ -1781,33 +1819,12 @@ function EditorShell({
       setEditorContentSnapshot: (content: string) => {
         editorContentRef.current = content;
       },
-      openWorkspaceFileFromPath: (targetPath: string) => fishmark.openWorkspaceFileFromPath(targetPath),
-      saveMarkdownFile: (input) => fishmark.saveMarkdownFile(input)
-    });
-
-    if (!fishmarkTest) {
-      return;
-    }
-
-    try {
-      const result = await driver.run(payload.command);
-      await fishmarkTest.completeEditorTestCommand({
-        sessionId: payload.sessionId,
-        commandId: payload.commandId,
-        result
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      await fishmarkTest.completeEditorTestCommand({
-        sessionId: payload.sessionId,
-        commandId: payload.commandId,
-        result: {
-          ok: false,
-          message
-        }
-      });
-    }
-  });
+      openWorkspaceFileFromPath: (targetPath: string) =>
+        fishmark.openWorkspaceFileFromPath(targetPath),
+      saveMarkdownFile: (input: { tabId: string; path: string }) => fishmark.saveMarkdownFile(input)
+    }),
+    [applyState, fishmark, getEditorContent, resetAutosaveRuntime]
+  );
 
   useEffect(() => {
     return fishmark.onMenuCommand((command) => {
@@ -1820,16 +1837,6 @@ function EditorShell({
       void handleOpenMarkdownFromPath(payload.targetPath);
     });
   }, [fishmark, handleOpenMarkdownFromPath]);
-
-  useEffect(() => {
-    if (!fishmarkTest) {
-      return;
-    }
-
-    return fishmarkTest.onEditorTestCommand((payload) => {
-      void handleEditorTestCommand(payload);
-    });
-  }, [fishmarkTest]);
 
   useEffect(() => {
     return fishmark.onExternalMarkdownFileChanged((event) => {
@@ -2281,6 +2288,16 @@ function EditorShell({
         } as CSSProperties
       }
     >
+      <EditorTestBridgeHost
+        fishmarkTest={fishmarkTest}
+        getState={editorTestBridge.getState}
+        applyState={editorTestBridge.applyState}
+        resetAutosaveRuntime={editorTestBridge.resetAutosaveRuntime}
+        editor={editorTestBridge.editor}
+        setEditorContentSnapshot={editorTestBridge.setEditorContentSnapshot}
+        openWorkspaceFileFromPath={editorTestBridge.openWorkspaceFileFromPath}
+        saveMarkdownFile={editorTestBridge.saveMarkdownFile}
+      />
       {controlledTitlebarEnabled ? (
         <TitlebarHost
           platform={fishmark.platform}
@@ -2642,17 +2659,9 @@ function EditorShell({
                         const draftTabId = nextState.workspace.activeTabId;
 
                         if (draftTabId) {
-                          void fishmark
-                            .updateWorkspaceTabDraft({
-                              tabId: draftTabId,
-                              content: nextContent
-                            })
-                            .then((snapshot) => {
-                              applyWorkspaceWindowSnapshot(snapshot, { syncUi: false });
-                            })
-                            .catch(() => {
-                              // Keep the renderer draft responsive even if workspace sync lags briefly.
-                            });
+                          void queueWorkspaceDraftSync(draftTabId, nextContent).catch(() => {
+                            // Keep the renderer draft responsive even if workspace sync lags briefly.
+                          });
                         }
 
                         scheduleAutosave(nextState);

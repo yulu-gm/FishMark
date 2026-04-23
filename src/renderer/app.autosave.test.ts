@@ -2009,6 +2009,34 @@ describe("App autosave", () => {
     });
   });
 
+  it("waits for the latest draft sync before autosaving on blur", async () => {
+    await renderAndOpenDocument();
+
+    const draftSync = createDeferred<WorkspaceWindowSnapshot>();
+    updateWorkspaceTabDraft.mockImplementationOnce(() => draftSync.promise);
+
+    await act(async () => {
+      codeEditorMock.changeContent("# Blur update\n");
+      codeEditorMock.blur();
+      await Promise.resolve();
+    });
+
+    expect(updateWorkspaceTabDraft).toHaveBeenCalledTimes(1);
+    expect(saveMarkdownFile).not.toHaveBeenCalled();
+
+    await act(async () => {
+      draftSync.resolve(updateWorkspaceDraft("tab-1", "# Blur update\n"));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
+    expect(saveMarkdownFile).toHaveBeenCalledWith({
+      tabId: "tab-1",
+      path: "C:/notes/today.md"
+    });
+  });
+
   it("does not run an extra autosave after a pending manual save", async () => {
     await renderAndOpenDocument();
 

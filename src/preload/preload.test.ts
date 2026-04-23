@@ -38,10 +38,15 @@ async function loadApi(): Promise<{ api: Window["fishmark"]; testApi: Window["fi
   await import("./preload");
 
   expect(exposeInMainWorld).toHaveBeenCalledTimes(2);
-  const [, api] = exposeInMainWorld.mock.calls[0] ?? [];
-  const [testBridgeName, testBridgeApi] = exposeInMainWorld.mock.calls[1] ?? [];
+  const apiCall = exposeInMainWorld.mock.calls.find(([name]) => name === "fishmark");
+  const testApiCall = exposeInMainWorld.mock.calls.find(([name]) => name === "fishmarkTest");
 
-  expect(testBridgeName).toBe("fishmarkTest");
+  if (!apiCall || !testApiCall) {
+    throw new Error("Expected both fishmark bridges to be exposed.");
+  }
+
+  const [, api] = apiCall;
+  const [, testBridgeApi] = testApiCall;
   return {
     api: api as Window["fishmark"],
     testApi: testBridgeApi as Window["fishmarkTest"]
@@ -61,7 +66,11 @@ describe("preload bridge", () => {
     await import("./preload");
 
     expect(exposeInMainWorld).toHaveBeenCalledTimes(2);
-    const [, api] = exposeInMainWorld.mock.calls[1] ?? [];
+    const apiCall = exposeInMainWorld.mock.calls.find(([name]) => name === "fishmarkTest");
+    if (!apiCall) {
+      throw new Error("Expected fishmarkTest bridge to be exposed.");
+    }
+    const [, api] = apiCall;
 
     expect(api).toMatchObject({
       startScenarioRun: expect.any(Function),

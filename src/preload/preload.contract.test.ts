@@ -113,8 +113,15 @@ async function loadApi(): Promise<{ api: Window["fishmark"]; testApi: Window["fi
   await import("./preload");
 
   expect(exposeInMainWorld).toHaveBeenCalledTimes(2);
-  const [, api] = exposeInMainWorld.mock.calls[0] ?? [];
-  const [, testApi] = exposeInMainWorld.mock.calls[1] ?? [];
+  const apiCall = exposeInMainWorld.mock.calls.find(([name]) => name === "fishmark");
+  const testApiCall = exposeInMainWorld.mock.calls.find(([name]) => name === "fishmarkTest");
+
+  if (!apiCall || !testApiCall) {
+    throw new Error("Expected both fishmark bridges to be exposed.");
+  }
+
+  const [, api] = apiCall;
+  const [, testApi] = testApiCall;
   return {
     api: api as Window["fishmark"],
     testApi: testApi as Window["fishmarkTest"]
