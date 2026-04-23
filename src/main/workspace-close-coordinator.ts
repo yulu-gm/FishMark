@@ -110,7 +110,7 @@ export function createWorkspaceCloseCoordinator(
     }
 
     dependencies.workspaceService.saveTabDocument(latestTab.tabId, result.document);
-    return true;
+    return !dependencies.workspaceService.getTabSession(tabId).isDirty;
   }
 
   return {

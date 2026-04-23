@@ -329,4 +329,65 @@ describe("createWorkspaceCloseCoordinator", () => {
       content: "# Dirty from main, latest\n"
     });
   });
+
+  it("does not close the tab when a newer canonical draft arrives during save-on-close", async () => {
+    const workspace = createWorkspaceService();
+    workspace.registerWindow("window-1");
+    const snapshot = workspace.openDocument(
+      "window-1",
+      createDocument({
+        path: "C:/notes/race.md",
+        name: "race.md",
+        content: "# Saved\n"
+      })
+    );
+    const tabId = snapshot.activeTabId!;
+    workspace.updateTabDraft(tabId, "# Dirty before close\n");
+
+    let resolveSave!: (value: {
+      status: "success";
+      document: {
+        path: string;
+        name: string;
+        content: string;
+        encoding: "utf-8";
+      };
+    }) => void;
+
+    const coordinator = createWorkspaceCloseCoordinator({
+      workspaceService: workspace,
+      promptToSaveWorkspaceTab: async () => "save",
+      saveMarkdownFileToPath: ({ content, path }) =>
+        new Promise((resolve) => {
+          resolveSave = resolve;
+          expect(content).toBe("# Dirty before close\n");
+          expect(path).toBe("C:/notes/race.md");
+        }),
+      showSaveMarkdownDialog: vi.fn()
+    });
+
+    const closePromise = coordinator.closeTab(tabId);
+    await Promise.resolve();
+
+    workspace.updateTabDraft(tabId, "# Dirty after save started\n");
+    resolveSave({
+      status: "success",
+      document: {
+        path: "C:/notes/race.md",
+        name: "race.md",
+        content: "# Dirty before close\n",
+        encoding: "utf-8"
+      }
+    });
+
+    await expect(closePromise).resolves.toEqual({
+      status: "cancelled"
+    });
+    expect(workspace.getWindowSnapshot("window-1").tabs.map((tab) => tab.tabId)).toEqual([tabId]);
+    expect(workspace.getTabSession(tabId)).toMatchObject({
+      content: "# Dirty after save started\n",
+      lastSavedContent: "# Dirty before close\n",
+      isDirty: true
+    });
+  });
 });
