@@ -246,8 +246,8 @@ describe("useWorkspaceController", () => {
       tabs: [
         {
           tabId: "tab-1",
-          path: "C:/notes/note.md",
-          name: "note.md",
+          path: "C:/notes/saved-as.md",
+          name: "saved-as.md",
           content: "# Saved draft\n",
           isDirty: false
         }
@@ -294,7 +294,14 @@ describe("useWorkspaceController", () => {
     expect(getWorkspaceSnapshot).toHaveBeenCalledTimes(1);
     expect(latestRef.current?.editorLoadRevision).toBe(draftRevision);
     expect(latestRef.current?.workspaceSnapshot?.activeDocument).toMatchObject({
+      path: "C:/notes/saved-as.md",
+      name: "saved-as.md",
       content: "# Newer draft\n",
+      isDirty: true
+    });
+    expect(latestRef.current?.workspaceSnapshot?.tabs[0]).toMatchObject({
+      path: "C:/notes/saved-as.md",
+      name: "saved-as.md",
       isDirty: true
     });
 

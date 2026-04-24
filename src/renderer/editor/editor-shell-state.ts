@@ -105,14 +105,17 @@ function preserveCurrentActiveDocumentDraft(
       tab.tabId === currentActiveDocument.tabId
         ? {
             ...tab,
-            path: currentActiveDocument.path,
-            name: currentActiveDocument.name,
-            isDirty: currentActiveDocument.isDirty,
-            saveState: currentActiveDocument.saveState
+            isDirty: true,
+            saveState: tab.saveState === "idle" ? "idle" : tab.saveState
           }
         : tab
     ),
-    activeDocument: currentActiveDocument
+    activeDocument: {
+      ...nextActiveDocument,
+      content: currentEditorContent,
+      isDirty: true,
+      saveState: nextActiveDocument.saveState === "idle" ? "idle" : nextActiveDocument.saveState
+    }
   };
 }
 
