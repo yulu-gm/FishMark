@@ -14,15 +14,15 @@
 - Task 1：shared workspace contract 与 product/test bridge 类型边界已收口。
 - Task 2：workspace canonical truth 已收敛到 main，save / close 的 in-flight draft race 已修复并补测试。
 - Task 3：`window.fishmark` 已收缩为 product bridge，`window.fishmarkTest` 已隔离到 test-workbench / editor-test runtime；preload bridge mode contract 已提到 shared 层。
+- Task 4：renderer workflow orchestration 已拆到 `useWorkspaceController` / `useSaveController` / `useExternalConflictController` / `useEditorWorkflowController`，`document-state.ts` 已删除；save-success refresh、in-flight draft、Save As replay 等竞态已通过 spec + quality review。
 
 当前进行中：
-- Task 4：renderer workflow controller 拆分已完成首轮实现并提交 `312cae757406d2f0a001c73e3027f5d350349f38`，但 spec review 未通过。
-- 剩余阻断点：`editor-shell-state.ts` 的 save-success 路径仍会在 renderer 本地合成 `WorkspaceWindowSnapshot`；`App.tsx` 的 editor `onChange` 主链仍在组件内串联 buffer、outline、autosave、draft sync。
-- 下一步：修复 Task 4，使 save 成功后只消费 main canonical snapshot / 非 canonical projection，不在 renderer 伪造 workspace truth；把 edit pipeline 编排下沉到 controller，并补 controller 边界测试。
+- Task 5：继续把 `src/renderer/editor/App.tsx` 瘦身为 composition root + presentation components。
+- 下一步：拆出 workspace chrome、editor canvas、notification/conflict/sidebar 等展示组件，保持 controller 边界不回流；不要再引入 renderer-local workspace truth。
 
 接手注意：
 - `package-lock.json` 在 worktree 中有既有无关脏变更，不要回滚也不要纳入本轮提交。
-- 每个任务继续执行 spec review -> code quality review 两段验收；Task 4 过线后再进入 Task 5。
+- 每个任务继续执行 spec review -> code quality review 两段验收；Task 5 过线后再进入 Task 6。
 
 截至 2026-04-16，项目处于“可运行编辑器 + 偏好设置与主题运行时基础能力”阶段，而不是“完整 Markdown 编辑器”阶段。
 
