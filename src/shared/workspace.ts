@@ -97,6 +97,15 @@ export type OpenWorkspacePathRequest = {
   targetPath: string;
 };
 
+export type WorkspaceWindowCloseRequest = {
+  requestId: string;
+};
+
+export type CompleteWorkspaceWindowCloseInput = {
+  requestId: string;
+  shouldClose: boolean;
+};
+
 export const GET_WORKSPACE_SNAPSHOT_CHANNEL = "fishmark:get-workspace-snapshot";
 export const CREATE_WORKSPACE_TAB_CHANNEL = "fishmark:create-workspace-tab";
 export const OPEN_WORKSPACE_FILE_CHANNEL = "fishmark:open-workspace-file";
@@ -109,3 +118,6 @@ export const DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL = "fishmark:detach-works
 export const UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL = "fishmark:update-workspace-tab-draft";
 export const RELOAD_WORKSPACE_TAB_FROM_PATH_CHANNEL = "fishmark:reload-workspace-tab-from-path";
 export const OPEN_WORKSPACE_PATH_EVENT = "fishmark:open-workspace-path";
+export const REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT = "fishmark:request-workspace-window-close";
+export const CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL = "fishmark:confirm-workspace-window-close";
+export const COMPLETE_WORKSPACE_WINDOW_CLOSE_CHANNEL = "fishmark:complete-workspace-window-close";

@@ -92,6 +92,8 @@ import {
 import {
   ACTIVATE_WORKSPACE_TAB_CHANNEL,
   CLOSE_WORKSPACE_TAB_CHANNEL,
+  COMPLETE_WORKSPACE_WINDOW_CLOSE_CHANNEL,
+  CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL,
   CREATE_WORKSPACE_TAB_CHANNEL,
   DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL,
   GET_WORKSPACE_SNAPSHOT_CHANNEL,
@@ -101,9 +103,11 @@ import {
   OPEN_WORKSPACE_PATH_EVENT,
   RELOAD_WORKSPACE_TAB_FROM_PATH_CHANNEL,
   REORDER_WORKSPACE_TAB_CHANNEL,
+  REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT,
   UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL,
   type ActivateWorkspaceTabInput,
   type CloseWorkspaceTabInput,
+  type CompleteWorkspaceWindowCloseInput,
   type CreateWorkspaceTabInput,
   type DetachWorkspaceTabToNewWindowInput,
   type MoveWorkspaceTabToWindowInput,
@@ -113,6 +117,7 @@ import {
   type ReloadWorkspaceTabFromPathInput,
   type ReorderWorkspaceTabInput,
   type UpdateWorkspaceTabDraftInput,
+  type WorkspaceWindowCloseRequest,
   type WorkspaceWindowSnapshot
 } from "../shared/workspace";
 
@@ -281,6 +286,8 @@ app.whenReady().then(async () => {
   });
   const workspaceWindowBindings = new Set<string>();
   const pendingWorkspaceWindowCloseIds = new Set<string>();
+  const pendingWorkspaceWindowCloseResponses = new Map<string, (shouldClose: boolean) => void>();
+  let nextWorkspaceWindowCloseRequestId = 0;
   let appUpdaterPromise: Promise<AppUpdaterController> | null = null;
 
   if (initialPreferences.source === "recovered-from-corrupt") {
@@ -382,9 +389,13 @@ app.whenReady().then(async () => {
 
         event.preventDefault();
 
+        if (hasPendingWorkspaceWindowCloseRequest(windowId)) {
+          return;
+        }
+
         void (async () => {
           try {
-            const shouldClose = await workspaceCloseCoordinator.confirmWindowClose(windowId);
+            const shouldClose = await requestWorkspaceWindowClose(ownerWindow);
 
             if (!shouldClose) {
               return;
@@ -405,6 +416,12 @@ app.whenReady().then(async () => {
       });
       ownerWindow.once("closed", () => {
         pendingWorkspaceWindowCloseIds.delete(windowId);
+        for (const [requestId, resolve] of pendingWorkspaceWindowCloseResponses) {
+          if (requestId.startsWith(`${windowId}:`)) {
+            pendingWorkspaceWindowCloseResponses.delete(requestId);
+            resolve(false);
+          }
+        }
         workspaceWindowBindings.delete(windowId);
         workspaceService.unregisterWindow(windowId);
       });
@@ -413,6 +430,31 @@ app.whenReady().then(async () => {
 
     workspaceService.focusWindow(windowId);
     return windowId;
+  }
+
+  function requestWorkspaceWindowClose(ownerWindow: BrowserWindow): Promise<boolean> {
+    if (ownerWindow.webContents.isDestroyed()) {
+      return Promise.resolve(false);
+    }
+
+    const requestId = `${ownerWindow.id}:${++nextWorkspaceWindowCloseRequestId}`;
+
+    return new Promise((resolve) => {
+      pendingWorkspaceWindowCloseResponses.set(requestId, resolve);
+      ownerWindow.webContents.send(REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT, {
+        requestId
+      } satisfies WorkspaceWindowCloseRequest);
+    });
+  }
+
+  function hasPendingWorkspaceWindowCloseRequest(windowId: string): boolean {
+    for (const requestId of pendingWorkspaceWindowCloseResponses.keys()) {
+      if (requestId.startsWith(`${windowId}:`)) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   function getWorkspaceWindowById(windowId: string): BrowserWindow | null {
@@ -484,6 +526,29 @@ app.whenReady().then(async () => {
     const windowId = ensureWorkspaceWindow(event.sender);
     return syncWorkspaceWatch(event.sender, workspaceService.getWindowSnapshot(windowId));
   });
+  ipcMain.handle(CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL, async (event) => {
+    const windowId = ensureWorkspaceWindow(event.sender);
+    return workspaceCloseCoordinator.confirmWindowClose(windowId);
+  });
+  ipcMain.handle(
+    COMPLETE_WORKSPACE_WINDOW_CLOSE_CHANNEL,
+    async (event, input: CompleteWorkspaceWindowCloseInput) => {
+      const windowId = ensureWorkspaceWindow(event.sender);
+
+      if (!input.requestId.startsWith(`${windowId}:`)) {
+        return;
+      }
+
+      const resolve = pendingWorkspaceWindowCloseResponses.get(input.requestId);
+
+      if (!resolve) {
+        return;
+      }
+
+      pendingWorkspaceWindowCloseResponses.delete(input.requestId);
+      resolve(input.shouldClose);
+    }
+  );
   ipcMain.handle(CREATE_WORKSPACE_TAB_CHANNEL, async (event, input: CreateWorkspaceTabInput) => {
     const windowId = ensureWorkspaceWindow(event.sender);
 

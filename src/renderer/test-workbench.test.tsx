@@ -140,6 +140,8 @@ describe("Test workbench shell", () => {
       importClipboardImage: vi.fn(),
       onMenuCommand: vi.fn(() => () => {}),
       onOpenWorkspacePath: vi.fn(() => () => {}),
+      confirmWorkspaceWindowClose: vi.fn().mockResolvedValue(true),
+      onWorkspaceWindowCloseRequest: vi.fn(() => () => {}),
       getPreferences: vi.fn(),
       updatePreferences: vi.fn(),
       listFontFamilies: vi.fn().mockResolvedValue([]),

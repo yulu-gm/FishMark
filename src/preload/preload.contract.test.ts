@@ -70,6 +70,8 @@ import { LIST_FONT_FAMILIES_CHANNEL } from "../shared/font-families";
 import {
   ACTIVATE_WORKSPACE_TAB_CHANNEL,
   CLOSE_WORKSPACE_TAB_CHANNEL,
+  COMPLETE_WORKSPACE_WINDOW_CLOSE_CHANNEL,
+  CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL,
   CREATE_WORKSPACE_TAB_CHANNEL,
   DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL,
   GET_WORKSPACE_SNAPSHOT_CHANNEL,
@@ -78,6 +80,7 @@ import {
   OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL,
   OPEN_WORKSPACE_FILE_CHANNEL,
   RELOAD_WORKSPACE_TAB_FROM_PATH_CHANNEL,
+  REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT,
   REORDER_WORKSPACE_TAB_CHANNEL,
   UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL,
   type OpenWorkspacePathRequest
@@ -326,6 +329,7 @@ describe("preload contract", () => {
     void api.moveWorkspaceTabToWindow(moveWorkspaceTabToWindowInput);
     void api.detachWorkspaceTabToNewWindow(detachWorkspaceTabToNewWindowInput);
     void api.updateWorkspaceTabDraft(updateWorkspaceTabDraftInput);
+    void api.confirmWorkspaceWindowClose();
     void api.saveMarkdownFile(saveInput);
     void api.saveMarkdownFileAs(saveAsInput);
     void api.syncWatchedMarkdownFile(syncWatchedFileInput);
@@ -371,6 +375,7 @@ describe("preload contract", () => {
       UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL,
       updateWorkspaceTabDraftInput
     ]);
+    expect(invoke.mock.calls).toContainEqual([CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL]);
     expect(invoke.mock.calls).toContainEqual([SAVE_MARKDOWN_FILE_CHANNEL, saveInput]);
     expect(invoke.mock.calls).toContainEqual([SAVE_MARKDOWN_FILE_AS_CHANNEL, saveAsInput]);
     expect(invoke.mock.calls).toContainEqual([SYNC_WATCHED_MARKDOWN_FILE_CHANNEL, syncWatchedFileInput]);
@@ -418,6 +423,7 @@ describe("preload contract", () => {
     const notificationListener = vi.fn();
     const externalFileListener = vi.fn();
     const openWorkspacePathListener = vi.fn();
+    const workspaceWindowCloseListener = vi.fn(async () => true);
 
     const detachScenario = testApi.onScenarioRunEvent(scenarioListener);
     const detachTerminal = testApi.onScenarioRunTerminal(terminalListener);
@@ -428,8 +434,9 @@ describe("preload contract", () => {
     const detachUpdate = api.onAppUpdateState(updateListener);
     const detachNotification = api.onAppNotification(notificationListener);
     const detachExternalFile = api.onExternalMarkdownFileChanged(externalFileListener);
+    const detachWorkspaceWindowClose = api.onWorkspaceWindowCloseRequest(workspaceWindowCloseListener);
 
-    expect(on.mock.calls).toHaveLength(9);
+    expect(on.mock.calls).toHaveLength(10);
 
     const scenarioHandler = on.mock.calls[0]?.[1];
     const terminalHandler = on.mock.calls[1]?.[1];
@@ -440,6 +447,7 @@ describe("preload contract", () => {
     const updateHandler = on.mock.calls[6]?.[1];
     const notificationHandler = on.mock.calls[7]?.[1];
     const externalFileHandler = on.mock.calls[8]?.[1];
+    const workspaceWindowCloseHandler = on.mock.calls[9]?.[1];
 
     const scenarioPayload: RunnerEventEnvelope = {
       runId: "run-1",
@@ -503,6 +511,7 @@ describe("preload contract", () => {
     updateHandler?.({}, updatePayload);
     notificationHandler?.({}, notificationPayload);
     externalFileHandler?.({}, externalFilePayload);
+    await workspaceWindowCloseHandler?.({}, { requestId: "window-1:close-1" });
 
     expect(scenarioListener).toHaveBeenCalledWith(scenarioPayload);
     expect(terminalListener).toHaveBeenCalledWith(terminalPayload);
@@ -514,6 +523,11 @@ describe("preload contract", () => {
     expect(updateListener).toHaveBeenCalledWith(updatePayload);
     expect(notificationListener).toHaveBeenCalledWith(notificationPayload);
     expect(externalFileListener).toHaveBeenCalledWith(externalFilePayload);
+    expect(workspaceWindowCloseListener).toHaveBeenCalledTimes(1);
+    expect(invoke.mock.calls).toContainEqual([
+      COMPLETE_WORKSPACE_WINDOW_CLOSE_CHANNEL,
+      { requestId: "window-1:close-1", shouldClose: true }
+    ]);
 
     detachScenario();
     detachTerminal();
@@ -524,6 +538,7 @@ describe("preload contract", () => {
     detachUpdate();
     detachNotification();
     detachExternalFile();
+    detachWorkspaceWindowClose();
 
     expect(off.mock.calls).toEqual([
       [SCENARIO_RUN_EVENT, scenarioHandler],
@@ -534,7 +549,8 @@ describe("preload contract", () => {
       [PREFERENCES_CHANGED_EVENT, preferencesHandler],
       [APP_UPDATE_STATE_EVENT, updateHandler],
       [APP_NOTIFICATION_EVENT, notificationHandler],
-      [EXTERNAL_MARKDOWN_FILE_CHANGED_EVENT, externalFileHandler]
+      [EXTERNAL_MARKDOWN_FILE_CHANGED_EVENT, externalFileHandler],
+      [REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT, workspaceWindowCloseHandler]
     ]);
   });
 });

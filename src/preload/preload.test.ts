@@ -8,12 +8,15 @@ import {
 import {
   ACTIVATE_WORKSPACE_TAB_CHANNEL,
   CLOSE_WORKSPACE_TAB_CHANNEL,
+  COMPLETE_WORKSPACE_WINDOW_CLOSE_CHANNEL,
+  CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL,
   CREATE_WORKSPACE_TAB_CHANNEL,
   DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL,
   GET_WORKSPACE_SNAPSHOT_CHANNEL,
   MOVE_WORKSPACE_TAB_TO_WINDOW_CHANNEL,
   OPEN_WORKSPACE_FILE_CHANNEL,
   OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL,
+  REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT,
   REORDER_WORKSPACE_TAB_CHANNEL,
   UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL
 } from "../shared/workspace";
@@ -170,7 +173,9 @@ describe("preload bridge", () => {
       moveWorkspaceTabToWindow: expect.any(Function),
       detachWorkspaceTabToNewWindow: expect.any(Function),
       onOpenWorkspacePath: expect.any(Function),
-      updateWorkspaceTabDraft: expect.any(Function)
+      updateWorkspaceTabDraft: expect.any(Function),
+      confirmWorkspaceWindowClose: expect.any(Function),
+      onWorkspaceWindowCloseRequest: expect.any(Function)
     });
 
     void api.getWorkspaceSnapshot();
@@ -184,6 +189,8 @@ describe("preload bridge", () => {
     void api.detachWorkspaceTabToNewWindow({ tabId: "tab-1" });
     void api.onOpenWorkspacePath(() => {});
     void api.updateWorkspaceTabDraft({ tabId: "tab-1", content: "# Updated\n" });
+    void api.confirmWorkspaceWindowClose();
+    void api.onWorkspaceWindowCloseRequest(async () => false);
 
     expect(invoke.mock.calls).toContainEqual([GET_WORKSPACE_SNAPSHOT_CHANNEL]);
     expect(invoke.mock.calls).toContainEqual([CREATE_WORKSPACE_TAB_CHANNEL, { kind: "untitled" }]);
@@ -210,6 +217,42 @@ describe("preload bridge", () => {
       UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL,
       { tabId: "tab-1", content: "# Updated\n" }
     ]);
+    expect(invoke.mock.calls).toContainEqual([CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL]);
+    expect(on.mock.calls.some(([channel]) => channel === REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT)).toBe(true);
+  });
+
+  it("routes native workspace close requests through the renderer before confirming close", async () => {
+    const { api } = await loadApi();
+    const closeListener = vi.fn(async () => true);
+
+    (api as unknown as {
+      onWorkspaceWindowCloseRequest: (listener: () => Promise<boolean>) => () => void;
+      confirmWorkspaceWindowClose: () => Promise<boolean>;
+    }).onWorkspaceWindowCloseRequest(closeListener);
+
+    const closeRequestCall = on.mock.calls.find(
+      ([channel]) => channel === REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT
+    );
+    expect(closeRequestCall).toBeDefined();
+
+    const [, handleCloseRequest] = closeRequestCall as [
+      string,
+      (_event: unknown, payload: { requestId: string }) => Promise<void>
+    ];
+
+    await handleCloseRequest({}, { requestId: "close-1" });
+
+    expect(closeListener).toHaveBeenCalledTimes(1);
+    expect(invoke.mock.calls).toContainEqual([
+      COMPLETE_WORKSPACE_WINDOW_CLOSE_CHANNEL,
+      { requestId: "close-1", shouldClose: true }
+    ]);
+
+    void (api as unknown as {
+      confirmWorkspaceWindowClose: () => Promise<boolean>;
+    }).confirmWorkspaceWindowClose();
+
+    expect(invoke.mock.calls).toContainEqual([CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL]);
   });
 
   it("exposes an openThemesDirectory bridge for the native themes folder action", async () => {

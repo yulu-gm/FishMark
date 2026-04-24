@@ -25,6 +25,7 @@ import {
 import type {
   ActivateWorkspaceTabInput,
   CloseWorkspaceTabInput,
+  CompleteWorkspaceWindowCloseInput,
   CreateWorkspaceTabInput,
   DetachWorkspaceTabToNewWindowInput,
   MoveWorkspaceTabToWindowInput,
@@ -35,6 +36,7 @@ import type {
   ReorderWorkspaceTabInput,
   UpdateWorkspaceTabDraftInput,
   WorkspaceMoveTabResult,
+  WorkspaceWindowCloseRequest,
   WorkspaceWindowSnapshot
 } from "../shared/workspace";
 import type { HandleDroppedMarkdownFileInput } from "../shared/open-markdown-file";
@@ -77,6 +79,8 @@ export type {
 import {
   ACTIVATE_WORKSPACE_TAB_CHANNEL,
   CLOSE_WORKSPACE_TAB_CHANNEL,
+  COMPLETE_WORKSPACE_WINDOW_CLOSE_CHANNEL,
+  CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL,
   CREATE_WORKSPACE_TAB_CHANNEL,
   DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL,
   GET_WORKSPACE_SNAPSHOT_CHANNEL,
@@ -85,6 +89,7 @@ import {
   OPEN_WORKSPACE_PATH_EVENT,
   RELOAD_WORKSPACE_TAB_FROM_PATH_CHANNEL,
   REORDER_WORKSPACE_TAB_CHANNEL,
+  REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT,
   UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL,
   MOVE_WORKSPACE_TAB_TO_WINDOW_CHANNEL
 } from "../shared/workspace";
@@ -119,6 +124,10 @@ import { SAVE_MARKDOWN_FILE_AS_CHANNEL, SAVE_MARKDOWN_FILE_CHANNEL } from "../sh
 // runtime helpers stay here. Contract shapes and IPC names come from shared modules.
 const RUNTIME_MODE_ARGUMENT_PREFIX = "--fishmark-runtime-mode=";
 const STARTUP_OPEN_PATH_ARGUMENT_PREFIX = "--fishmark-startup-open-path=";
+
+function completeWorkspaceWindowClose(input: CompleteWorkspaceWindowCloseInput): Promise<void> {
+  return ipcRenderer.invoke(COMPLETE_WORKSPACE_WINDOW_CLOSE_CHANNEL, input);
+}
 
 function resolveRuntimeModeFromArgv(argv: string[]): "editor" | "test-workbench" {
   const runtimeArgument = argv.find((entry) => entry.startsWith(RUNTIME_MODE_ARGUMENT_PREFIX));
@@ -204,6 +213,31 @@ const productApi: ProductBridge = {
 
     return () => {
       ipcRenderer.off(OPEN_WORKSPACE_PATH_EVENT, handleOpenWorkspacePath);
+    };
+  },
+  confirmWorkspaceWindowClose: (): Promise<boolean> =>
+    ipcRenderer.invoke(CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL),
+  onWorkspaceWindowCloseRequest: (listener: () => Promise<boolean>) => {
+    const handleWorkspaceWindowCloseRequest = async (
+      _event: unknown,
+      payload: WorkspaceWindowCloseRequest
+    ) => {
+      let shouldClose = false;
+
+      try {
+        shouldClose = await listener();
+      } finally {
+        await completeWorkspaceWindowClose({
+          requestId: payload.requestId,
+          shouldClose
+        });
+      }
+    };
+
+    ipcRenderer.on(REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT, handleWorkspaceWindowCloseRequest);
+
+    return () => {
+      ipcRenderer.off(REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT, handleWorkspaceWindowCloseRequest);
     };
   },
   getPreferences: (): Promise<Preferences> => ipcRenderer.invoke(GET_PREFERENCES_CHANNEL),

@@ -460,6 +460,7 @@ function EditorShell({
     createUntitledMarkdown,
     openMarkdownFromPath,
     reorderWorkspaceTab,
+    flushActiveWorkspaceDraft,
     loadInitialWorkspaceSnapshot,
     applyState: applyWorkspaceState,
     getState: getWorkspaceState
@@ -752,6 +753,19 @@ function EditorShell({
     preferencesRef.current = nextPreferences;
     setPreferences(nextPreferences);
     scheduleAutosave();
+  });
+
+  const handleWorkspaceWindowCloseRequest = useEffectEvent(async (): Promise<boolean> => {
+    try {
+      await flushActiveWorkspaceDraft();
+      return await fishmark.confirmWorkspaceWindowClose();
+    } catch (error) {
+      showNotification({
+        kind: "error",
+        message: error instanceof Error ? error.message : String(error)
+      });
+      return false;
+    }
   });
 
   const handleAppMenuCommand = useEffectEvent((command: AppMenuCommand): void => {
@@ -1094,6 +1108,10 @@ function EditorShell({
       void handleOpenMarkdownFromPath(payload.targetPath);
     });
   }, [fishmark, handleOpenMarkdownFromPath]);
+
+  useEffect(() => {
+    return fishmark.onWorkspaceWindowCloseRequest(() => handleWorkspaceWindowCloseRequest());
+  }, [fishmark]);
 
   useEffect(() => {
     void fishmark.syncWatchedMarkdownFile({

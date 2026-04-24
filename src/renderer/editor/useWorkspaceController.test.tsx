@@ -241,6 +241,198 @@ describe("useWorkspaceController", () => {
     });
   });
 
+  it("flushes the active draft before opening a workspace file", async () => {
+    const updateWorkspaceTabDraft = vi.fn(async () =>
+      createWorkspaceSnapshot({
+        tabs: [
+          {
+            tabId: "tab-1",
+            path: "C:/notes/current.md",
+            name: "current.md",
+            content: "# Unsynced current\n",
+            isDirty: true
+          }
+        ]
+      })
+    );
+    const openWorkspaceFile = vi.fn(async () => ({
+      kind: "success" as const,
+      snapshot: createWorkspaceSnapshot({
+        tabs: [
+          {
+            tabId: "tab-2",
+            path: "C:/notes/opened.md",
+            name: "opened.md",
+            content: "# Opened\n"
+          }
+        ]
+      })
+    }));
+
+    const { latestRef, root } = renderController({
+      fishmark: {
+        updateWorkspaceTabDraft,
+        openWorkspaceFile
+      } as unknown as Window["fishmark"],
+      initialSnapshot: createWorkspaceSnapshot({
+        tabs: [
+          {
+            tabId: "tab-1",
+            path: "C:/notes/current.md",
+            name: "current.md",
+            content: "# Current\n"
+          }
+        ]
+      }),
+      getEditorContent: () => "# Unsynced current\n",
+      showNotification: vi.fn()
+    });
+
+    await act(async () => {
+      await latestRef.current?.openMarkdown();
+    });
+
+    expect(updateWorkspaceTabDraft).toHaveBeenCalledWith({
+      tabId: "tab-1",
+      content: "# Unsynced current\n"
+    });
+    expect(openWorkspaceFile).toHaveBeenCalledTimes(1);
+    expect(updateWorkspaceTabDraft.mock.invocationCallOrder[0]).toBeLessThan(
+      openWorkspaceFile.mock.invocationCallOrder[0]!
+    );
+    expect(latestRef.current?.workspaceSnapshot?.activeTabId).toBe("tab-2");
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it("does not replace the workspace when the active draft cannot flush before opening", async () => {
+    const showNotification = vi.fn();
+    const updateWorkspaceTabDraft = vi.fn(async () => {
+      throw new Error("Draft sync failed");
+    });
+    const openWorkspaceFileFromPath = vi.fn(async () => ({
+      kind: "success" as const,
+      snapshot: createWorkspaceSnapshot({
+        tabs: [
+          {
+            tabId: "tab-2",
+            path: "C:/notes/opened.md",
+            name: "opened.md",
+            content: "# Opened\n"
+          }
+        ]
+      })
+    }));
+
+    const { latestRef, root } = renderController({
+      fishmark: {
+        updateWorkspaceTabDraft,
+        openWorkspaceFileFromPath
+      } as unknown as Window["fishmark"],
+      initialSnapshot: createWorkspaceSnapshot({
+        tabs: [
+          {
+            tabId: "tab-1",
+            path: "C:/notes/current.md",
+            name: "current.md",
+            content: "# Current\n"
+          }
+        ]
+      }),
+      getEditorContent: () => "# Unsynced current\n",
+      showNotification
+    });
+
+    await act(async () => {
+      await latestRef.current?.openMarkdownFromPath("C:/notes/opened.md");
+    });
+
+    expect(openWorkspaceFileFromPath).not.toHaveBeenCalled();
+    expect(latestRef.current?.workspaceSnapshot?.activeTabId).toBe("tab-1");
+    expect(showNotification).toHaveBeenCalledWith({
+      kind: "error",
+      message: "Draft sync failed"
+    });
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it("flushes the active draft before creating an untitled workspace tab", async () => {
+    const updateWorkspaceTabDraft = vi.fn(async () =>
+      createWorkspaceSnapshot({
+        tabs: [
+          {
+            tabId: "tab-1",
+            path: "C:/notes/current.md",
+            name: "current.md",
+            content: "# Current draft\n",
+            isDirty: true
+          }
+        ]
+      })
+    );
+    const createWorkspaceTab = vi.fn(async () =>
+      createWorkspaceSnapshot({
+        tabs: [
+          {
+            tabId: "tab-1",
+            path: "C:/notes/current.md",
+            name: "current.md",
+            content: "# Current draft\n"
+          },
+          {
+            tabId: "tab-2",
+            path: null,
+            name: "Untitled.md",
+            content: ""
+          }
+        ],
+        activeTabId: "tab-2"
+      })
+    );
+
+    const { latestRef, root } = renderController({
+      fishmark: {
+        updateWorkspaceTabDraft,
+        createWorkspaceTab
+      } as unknown as Window["fishmark"],
+      initialSnapshot: createWorkspaceSnapshot({
+        tabs: [
+          {
+            tabId: "tab-1",
+            path: "C:/notes/current.md",
+            name: "current.md",
+            content: "# Current\n"
+          }
+        ]
+      }),
+      getEditorContent: () => "# Current draft\n",
+      showNotification: vi.fn()
+    });
+
+    await act(async () => {
+      await latestRef.current?.createUntitledMarkdown();
+    });
+
+    expect(updateWorkspaceTabDraft).toHaveBeenCalledWith({
+      tabId: "tab-1",
+      content: "# Current draft\n"
+    });
+    expect(createWorkspaceTab).toHaveBeenCalledWith({ kind: "untitled" });
+    expect(updateWorkspaceTabDraft.mock.invocationCallOrder[0]).toBeLessThan(
+      createWorkspaceTab.mock.invocationCallOrder[0]!
+    );
+    expect(latestRef.current?.workspaceSnapshot?.activeTabId).toBe("tab-2");
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
   it("does not reload the editor when a refresh returns an older snapshot while the editor has a newer draft", async () => {
     const savedSnapshot = createWorkspaceSnapshot({
       tabs: [

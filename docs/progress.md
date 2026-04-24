@@ -19,13 +19,16 @@
 - Task 6：`docs/design.md` 已同步为 tabbed workspace + main canonical workspace truth，崩溃恢复 / workspace session restore 已明确回到 backlog；`docs/theme-authoring-guide.md`、renderer markup 与 bundled theme fixtures 已统一到公开 `data-fishmark-surface` / `data-fishmark-theme-surface` hook，不再把 shell-private class selectors 当作主题 API。Task 6 已通过 spec review + code quality re-review。
 
 当前进行中：
-- Task 7：最终全量验证已完成，并已创建 `docs/plans/2026-04-23-architecture-reset-handoff.md`。
+- Task 7：最终全量验证与 handoff 文档已完成；最终架构 review 发现的关闭 / 打开前 draft flush 缺口正在本分支内收口。
+- 已修复：File Open / startup open / drag/drop open / New tab 现在会先 flush 活动 tab draft，避免切换 workspace snapshot 前丢失 renderer 最新编辑内容。
+- 已修复：原生窗口关闭不再由 main 直接读取旧 workspace snapshot；main 先向 renderer 发送 typed close request，renderer flush 最新 draft 后再调用 main 的统一 close-confirm use case。
+- 已修复：`dev:electron` / `dev:electron:test-workbench` 等待 preload 实际 runtime shared 输出，避免 clean watch 启动时共享模块未编译完成就启动 Electron。
 - 下一步：对 `codex/architecture-reset` 做最终 code review，然后选择 merge / PR / 继续开后续 cleanup slice。
 
 接手注意：
 - `package-lock.json` 在 worktree 中有既有无关脏变更，不要回滚也不要纳入本轮提交。
 - `WorkspaceShellProps` 仍然偏宽，这是 Task 5 code-quality review 留下的非阻塞 P2；后续如果继续拆 renderer shell，可以优先按 workspace chrome / editor canvas / settings drawer / theme surface host 分组收口 props。
-- 最终验证结果：focused architecture-reset tests 通过 10 files / 190 tests；`npm run lint` 通过但保留既有 Fast Refresh warning；`npm run typecheck` 通过；`npm run build` 通过但保留既有 Vite chunk-size warning；`npm run test` 通过 84 files / 802 tests。
+- 最新验证结果：focused close/open tests 通过 2 files / 151 tests；`npm run lint` 通过但保留既有 Fast Refresh warning；`npm run typecheck` 通过；`npm run build` 通过但保留既有 Vite chunk-size warning；`npm run test` 通过 84 files / 808 tests。
 - 每个任务继续执行 spec review -> code quality review 两段验收；当前架构重构实现阶段已完成，下一步是最终 code review / release-branch 收尾选择。
 
 截至 2026-04-16，项目处于“可运行编辑器 + 偏好设置与主题运行时基础能力”阶段，而不是“完整 Markdown 编辑器”阶段。

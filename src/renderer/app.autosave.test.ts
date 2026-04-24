@@ -54,6 +54,7 @@ type ScenarioRunTerminalListener = (payload: ScenarioRunTerminal) => void;
 type PreferencesChangedListener = (preferences: Preferences) => void;
 type ExternalMarkdownFileChangedListener = (event: ExternalMarkdownFileChangedEvent) => void;
 type OpenWorkspacePathListener = (payload: OpenWorkspacePathRequest) => void;
+type WorkspaceWindowCloseRequestListener = () => Promise<boolean>;
 type ThemePackageDescriptor = Awaited<ReturnType<Window["fishmark"]["listThemePackages"]>>[number];
 type UpdatePreferencesResult = Awaited<ReturnType<Window["fishmark"]["updatePreferences"]>>;
 type MockMediaQueryList = MediaQueryList & {
@@ -457,6 +458,7 @@ describe("App autosave", () => {
   let appNotificationListener: ((notification: AppNotification) => void) | null;
   let externalMarkdownFileChangedListener: ExternalMarkdownFileChangedListener | null;
   let openWorkspacePathListener: OpenWorkspacePathListener | null;
+  let workspaceWindowCloseRequestListener: WorkspaceWindowCloseRequestListener | null;
   let fetchMock: ReturnType<typeof vi.fn>;
   let canvasGetContextSpy: { mockRestore: () => void };
   let openMarkdownFile: ReturnType<typeof vi.fn<() => Promise<OpenMarkdownFileResult>>>;
@@ -530,6 +532,7 @@ describe("App autosave", () => {
   let listThemePackages: ReturnType<typeof vi.fn<() => Promise<ThemePackageDescriptor[]>>>;
   let refreshThemePackages: ReturnType<typeof vi.fn<() => Promise<ThemePackageDescriptor[]>>>;
   let openThemesDirectory: ReturnType<typeof vi.fn<() => Promise<void>>>;
+  let confirmWorkspaceWindowClose: ReturnType<typeof vi.fn<() => Promise<boolean>>>;
   let colorSchemeMediaQuery: MockMediaQueryList;
   let workspaceWindowId: string;
   let workspaceTabs: WorkspaceTabRecord[];
@@ -818,6 +821,7 @@ describe("App autosave", () => {
     appNotificationListener = null;
     externalMarkdownFileChangedListener = null;
     openWorkspacePathListener = null;
+    workspaceWindowCloseRequestListener = null;
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -975,6 +979,7 @@ describe("App autosave", () => {
       .fn<() => Promise<ThemePackageDescriptor[]>>()
       .mockResolvedValue(defaultThemeCatalog);
     openThemesDirectory = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    confirmWorkspaceWindowClose = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
 
     window.fishmark = {
       platform: "win32",
@@ -1017,6 +1022,7 @@ describe("App autosave", () => {
       refreshThemePackages,
       openThemesDirectory,
       checkForUpdates: vi.fn().mockResolvedValue(undefined),
+      confirmWorkspaceWindowClose,
       onPreferencesChanged(listener: PreferencesChangedListener) {
         preferencesChangedListener = listener;
         return () => {
@@ -1054,6 +1060,14 @@ describe("App autosave", () => {
         return () => {
           if (openWorkspacePathListener === listener) {
             openWorkspacePathListener = null;
+          }
+        };
+      },
+      onWorkspaceWindowCloseRequest(listener: WorkspaceWindowCloseRequestListener) {
+        workspaceWindowCloseRequestListener = listener;
+        return () => {
+          if (workspaceWindowCloseRequestListener === listener) {
+            workspaceWindowCloseRequestListener = null;
           }
         };
       }
@@ -2088,6 +2102,69 @@ describe("App autosave", () => {
       tabId: "tab-1",
       path: "C:/notes/today.md"
     });
+  });
+
+  it("waits for the latest draft sync before confirming native window close", async () => {
+    await renderAndOpenDocument();
+
+    const draftSync = createDeferred<WorkspaceWindowSnapshot>();
+    updateWorkspaceTabDraft.mockImplementationOnce(() => draftSync.promise);
+
+    await act(async () => {
+      codeEditorMock.changeContent("# Close update\n");
+      await Promise.resolve();
+    });
+
+    expect(workspaceWindowCloseRequestListener).not.toBeNull();
+
+    let closeResult: Promise<boolean> | null = null;
+
+    await act(async () => {
+      closeResult = workspaceWindowCloseRequestListener?.() ?? Promise.resolve(false);
+      await Promise.resolve();
+    });
+
+    expect(updateWorkspaceTabDraft).toHaveBeenCalledWith({
+      tabId: "tab-1",
+      content: "# Close update\n"
+    });
+    expect(confirmWorkspaceWindowClose).not.toHaveBeenCalled();
+
+    await act(async () => {
+      draftSync.resolve(updateWorkspaceDraft("tab-1", "# Close update\n"));
+      await closeResult;
+      await Promise.resolve();
+    });
+
+    await expect(closeResult).resolves.toBe(true);
+    expect(confirmWorkspaceWindowClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels native window close when the latest draft cannot be synced", async () => {
+    await renderAndOpenDocument();
+
+    updateWorkspaceTabDraft.mockRejectedValueOnce(new Error("draft sync failed"));
+
+    await act(async () => {
+      codeEditorMock.changeContent("# Close sync failure\n");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(workspaceWindowCloseRequestListener).not.toBeNull();
+
+    let shouldClose = true;
+
+    await act(async () => {
+      shouldClose = await (workspaceWindowCloseRequestListener?.() ?? Promise.resolve(true));
+      await Promise.resolve();
+    });
+
+    expect(shouldClose).toBe(false);
+    expect(confirmWorkspaceWindowClose).not.toHaveBeenCalled();
+    expect(container.querySelector('[data-fishmark-region="app-notification-banner"]')?.textContent).toContain(
+      "draft sync failed"
+    );
   });
 
   it("shows an autosave error banner when the pre-save draft sync fails", async () => {

@@ -76,6 +76,11 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain("ipcMain.handle(CLOSE_WORKSPACE_TAB_CHANNEL");
     expect(mainSource).toContain("ipcMain.handle(UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL");
     expect(mainSource).toContain('ownerWindow.on("close", (event) => {');
+    expect(mainSource).toContain("hasPendingWorkspaceWindowCloseRequest(windowId)");
+    expect(mainSource).toContain("requestWorkspaceWindowClose(ownerWindow)");
+    expect(mainSource).toContain("ownerWindow.webContents.send(REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT");
+    expect(mainSource).toContain("ipcMain.handle(CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL");
+    expect(mainSource).toContain("ipcMain.handle(\n    COMPLETE_WORKSPACE_WINDOW_CLOSE_CHANNEL");
     expect(mainSource).toContain("workspaceCloseCoordinator.confirmWindowClose(windowId)");
     expect(mainSource).toContain("workspaceCloseCoordinator.closeTab(input.tabId)");
     expect(mainSource).toContain("workspaceApplication.updateDraft(input)");

@@ -196,9 +196,9 @@ export function useWorkspaceController(input: {
   );
 
   const openMarkdown = useCallback(async (): Promise<OpenResult> => {
-    setWorkspaceOpenState("opening");
-
     try {
+      await flushActiveWorkspaceDraft();
+      setWorkspaceOpenState("opening");
       const result = await fishmark.openWorkspaceFile();
 
       if (result.kind === "cancelled") {
@@ -220,13 +220,19 @@ export function useWorkspaceController(input: {
       });
       return "failed";
     }
-  }, [applyWorkspaceWindowSnapshot, fishmark, setWorkspaceOpenState, showNotification]);
+  }, [
+    applyWorkspaceWindowSnapshot,
+    fishmark,
+    flushActiveWorkspaceDraft,
+    setWorkspaceOpenState,
+    showNotification
+  ]);
 
   const openMarkdownFromPath = useCallback(
     async (targetPath: string): Promise<boolean> => {
-      setWorkspaceOpenState("opening");
-
       try {
+        await flushActiveWorkspaceDraft();
+        setWorkspaceOpenState("opening");
         const result = await fishmark.openWorkspaceFileFromPath(targetPath);
 
         if (result.kind === "error") {
@@ -244,11 +250,18 @@ export function useWorkspaceController(input: {
         return false;
       }
     },
-    [applyWorkspaceWindowSnapshot, fishmark, setWorkspaceOpenState, showNotification]
+    [
+      applyWorkspaceWindowSnapshot,
+      fishmark,
+      flushActiveWorkspaceDraft,
+      setWorkspaceOpenState,
+      showNotification
+    ]
   );
 
   const createUntitledMarkdown = useCallback(async (): Promise<boolean> => {
     try {
+      await flushActiveWorkspaceDraft();
       const snapshot = await fishmark.createWorkspaceTab({
         kind: "untitled"
       });
@@ -261,7 +274,7 @@ export function useWorkspaceController(input: {
       });
       return false;
     }
-  }, [applyWorkspaceWindowSnapshot, fishmark, showNotification]);
+  }, [applyWorkspaceWindowSnapshot, fishmark, flushActiveWorkspaceDraft, showNotification]);
 
   const activateWorkspaceTab = useCallback(
     async (tabId: string): Promise<void> => {

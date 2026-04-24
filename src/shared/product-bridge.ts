@@ -69,6 +69,8 @@ export interface ProductBridge {
   importClipboardImage: (input: ImportClipboardImageInput) => Promise<ImportClipboardImageResult>;
   onMenuCommand: (listener: (command: AppMenuCommand) => void) => () => void;
   onOpenWorkspacePath: (listener: (payload: OpenWorkspacePathRequest) => void) => () => void;
+  confirmWorkspaceWindowClose: () => Promise<boolean>;
+  onWorkspaceWindowCloseRequest: (listener: () => Promise<boolean>) => () => void;
   getPreferences: () => Promise<Preferences>;
   updatePreferences: (patch: PreferencesUpdate) => Promise<UpdatePreferencesResult>;
   onPreferencesChanged: (listener: (preferences: Preferences) => void) => () => void;

@@ -18,6 +18,18 @@ describe("package scripts", () => {
     expect(packageJson.scripts?.["dev:electron"]).toContain(
       "dist-electron/shared/save-markdown-file.js"
     );
+    expect(packageJson.scripts?.["dev:electron"]).toContain(
+      "dist-electron/shared/preload-bridge-mode.js"
+    );
+    expect(packageJson.scripts?.["dev:electron"]).toContain(
+      "dist-electron/shared/theme-package.js"
+    );
+    expect(packageJson.scripts?.["dev:electron"]).toContain(
+      "dist-electron/shared/workspace.js"
+    );
+    expect(packageJson.scripts?.["dev:electron:test-workbench"]).toContain(
+      "dist-electron/shared/workspace.js"
+    );
   });
 
   it("defines a dedicated dev entry for the test workbench mode", () => {
