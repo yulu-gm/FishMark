@@ -240,6 +240,43 @@ describe("useWorkspaceController", () => {
       root.unmount();
     });
   });
+
+  it("does not reload the editor when a refresh returns an older snapshot while the editor has a newer draft", async () => {
+    const savedSnapshot = createWorkspaceSnapshot({
+      tabs: [
+        {
+          tabId: "tab-1",
+          path: "C:/notes/note.md",
+          name: "note.md",
+          content: "# Saved draft\n",
+          isDirty: false
+        }
+      ]
+    });
+    const getWorkspaceSnapshot = vi.fn(async () => savedSnapshot);
+
+    const { latestRef, root } = renderController({
+      fishmark: {
+        getWorkspaceSnapshot
+      } as unknown as Window["fishmark"],
+      initialSnapshot: savedSnapshot,
+      getEditorContent: () => "# Newer draft\n",
+      showNotification: vi.fn()
+    });
+
+    const initialRevision = latestRef.current?.editorLoadRevision;
+
+    await act(async () => {
+      await latestRef.current?.refreshWorkspaceSnapshot();
+    });
+
+    expect(getWorkspaceSnapshot).toHaveBeenCalledTimes(1);
+    expect(latestRef.current?.editorLoadRevision).toBe(initialRevision);
+
+    act(() => {
+      root.unmount();
+    });
+  });
 });
 
 describe("useEditorWorkflowController", () => {

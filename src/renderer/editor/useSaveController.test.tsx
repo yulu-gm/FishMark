@@ -110,7 +110,7 @@ describe("useSaveController", () => {
       await latestRef.current?.runManualSave();
     });
 
-    expect(flushActiveWorkspaceDraft).toHaveBeenCalledTimes(1);
+    expect(flushActiveWorkspaceDraft).toHaveBeenCalledTimes(2);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
       tabId: "tab-1",
       path: "C:/notes/note.md"
@@ -118,6 +118,80 @@ describe("useSaveController", () => {
     expect(refreshWorkspaceSnapshot).toHaveBeenCalledTimes(1);
     expect(refreshWorkspaceSnapshot.mock.invocationCallOrder[0]).toBeGreaterThan(
       saveMarkdownFile.mock.invocationCallOrder[0]!
+    );
+    expect(refreshWorkspaceSnapshot.mock.invocationCallOrder[0]).toBeGreaterThan(
+      flushActiveWorkspaceDraft.mock.invocationCallOrder[1]!
+    );
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it("flushes edits made during an in-flight save before refreshing the canonical snapshot", async () => {
+    let resolveSave!: (value: {
+      status: "success";
+      document: {
+        path: string;
+        name: string;
+        content: string;
+        encoding: "utf-8";
+      };
+    }) => void;
+    const saveResultPromise = new Promise<{
+      status: "success";
+      document: {
+        path: string;
+        name: string;
+        content: string;
+        encoding: "utf-8";
+      };
+    }>((resolve) => {
+      resolveSave = resolve;
+    });
+    const flushActiveWorkspaceDraft = vi.fn(async () => {});
+    const saveMarkdownFile = vi.fn(() => saveResultPromise);
+    const refreshWorkspaceSnapshot = vi.fn(async () => null);
+    let editorContent = "# Saved draft\n";
+
+    const { latestRef, root } = renderController({
+      fishmark: {
+        saveMarkdownFile
+      } as unknown as Window["fishmark"],
+      getActiveDocument: () => createActiveDocument({ content: "# Saved draft\n" }),
+      getEditorContent: () => editorContent,
+      flushActiveWorkspaceDraft,
+      refreshWorkspaceSnapshot,
+      hasExternalFileConflict: () => false,
+      autosaveDelayMs: 10,
+      showNotification: vi.fn()
+    });
+
+    const savePromise = act(async () => {
+      await latestRef.current?.runManualSave();
+    });
+
+    await vi.waitFor(() => {
+      expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
+    });
+
+    editorContent = "# Newer draft\n";
+    resolveSave({
+      status: "success",
+      document: {
+        path: "C:/notes/note.md",
+        name: "note.md",
+        content: "# Saved draft\n",
+        encoding: "utf-8"
+      }
+    });
+
+    await savePromise;
+
+    expect(flushActiveWorkspaceDraft).toHaveBeenCalledTimes(2);
+    expect(refreshWorkspaceSnapshot).toHaveBeenCalledTimes(1);
+    expect(refreshWorkspaceSnapshot.mock.invocationCallOrder[0]).toBeGreaterThan(
+      flushActiveWorkspaceDraft.mock.invocationCallOrder[1]!
     );
 
     act(() => {
@@ -222,7 +296,7 @@ describe("useSaveController", () => {
       await vi.advanceTimersByTimeAsync(25);
     });
 
-    expect(flushActiveWorkspaceDraft).toHaveBeenCalledTimes(1);
+    expect(flushActiveWorkspaceDraft).toHaveBeenCalledTimes(2);
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
       tabId: "tab-1",

@@ -81,6 +81,7 @@ export function useSaveController(input: {
   const refreshMainWorkspaceSnapshotAfterSave = useCallback(
     async (saveKind: "manual" | "autosave"): Promise<void> => {
       try {
+        await flushActiveWorkspaceDraft();
         await refreshWorkspaceSnapshot();
       } catch (error) {
         showNotification({
@@ -94,7 +95,7 @@ export function useSaveController(input: {
         });
       }
     },
-    [refreshWorkspaceSnapshot, showNotification]
+    [flushActiveWorkspaceDraft, refreshWorkspaceSnapshot, showNotification]
   );
 
   const runAutosave = useCallback(async (): Promise<void> => {

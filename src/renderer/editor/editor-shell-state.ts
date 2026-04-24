@@ -54,8 +54,11 @@ export function applyWorkspaceSnapshot(
   const nextActiveDocument = snapshot.activeDocument;
   const activeDocumentChanged =
     currentActiveDocument?.tabId !== nextActiveDocument?.tabId ||
-    resolveEditorComparisonContent(currentActiveDocument, options.currentEditorContent) !==
-      nextActiveDocument?.content;
+    shouldReloadActiveDocumentFromSnapshot({
+      currentActiveDocument,
+      nextActiveDocument,
+      currentEditorContent: options.currentEditorContent
+    });
 
   return {
     workspaceSnapshot: snapshot,
@@ -110,13 +113,22 @@ export function clearExternalMarkdownFileState(): ExternalMarkdownFileState {
   return { status: "idle" };
 }
 
-function resolveEditorComparisonContent(
-  activeDocument: WorkspaceDocumentSnapshot | null,
-  currentEditorContent: string | undefined
-): string | undefined {
-  if (currentEditorContent !== undefined) {
-    return currentEditorContent;
+function shouldReloadActiveDocumentFromSnapshot(input: {
+  currentActiveDocument: WorkspaceDocumentSnapshot | null;
+  nextActiveDocument: WorkspaceDocumentSnapshot | null;
+  currentEditorContent: string | undefined;
+}): boolean {
+  if (input.currentActiveDocument?.content === input.nextActiveDocument?.content) {
+    return false;
   }
 
-  return activeDocument?.content;
+  if (
+    input.currentEditorContent !== undefined &&
+    input.currentActiveDocument?.tabId === input.nextActiveDocument?.tabId &&
+    input.currentEditorContent !== input.currentActiveDocument?.content
+  ) {
+    return false;
+  }
+
+  return true;
 }
