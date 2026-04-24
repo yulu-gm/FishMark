@@ -5,9 +5,11 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { WorkspaceWindowSnapshot } from "../../shared/workspace";
+import { useEditorWorkflowController } from "./useEditorWorkflowController";
 import { useWorkspaceController } from "./useWorkspaceController";
 
 type WorkspaceControllerValue = ReturnType<typeof useWorkspaceController>;
+type EditorWorkflowControllerValue = ReturnType<typeof useEditorWorkflowController>;
 
 function createWorkspaceSnapshot(input: {
   activeTabId?: string | null;
@@ -71,6 +73,32 @@ function renderController(input: Parameters<typeof useWorkspaceController>[0]): 
   });
 
   return { latestRef, root, container };
+}
+
+function renderEditorWorkflowController(
+  input: Parameters<typeof useEditorWorkflowController>[0]
+): {
+  latestRef: { current: EditorWorkflowControllerValue | null };
+  root: Root;
+} {
+  const latestRef = createRef<EditorWorkflowControllerValue>();
+  const root = createRoot(document.createElement("div"));
+
+  function Probe(): null {
+    const controller = useEditorWorkflowController(input);
+
+    useEffect(() => {
+      latestRef.current = controller;
+    }, [controller]);
+
+    return null;
+  }
+
+  act(() => {
+    root.render(createElement(Probe));
+  });
+
+  return { latestRef, root };
 }
 
 afterEach(() => {
@@ -207,6 +235,82 @@ describe("useWorkspaceController", () => {
       activateWorkspaceTab.mock.invocationCallOrder[0]!
     );
     expect(latestRef.current?.workspaceSnapshot?.activeTabId).toBe("tab-2");
+
+    act(() => {
+      root.unmount();
+    });
+  });
+});
+
+describe("useEditorWorkflowController", () => {
+  it("keeps editor change autosave and draft sync orchestration inside the controller boundary", async () => {
+    const setEditorContentSnapshot = vi.fn();
+    const updateOutline = vi.fn();
+    const scheduleAutosave = vi.fn();
+    const updateDraft = vi.fn(async () => {});
+
+    const { latestRef, root } = renderEditorWorkflowController({
+      setEditorContentSnapshot,
+      updateOutline,
+      scheduleAutosave,
+      runAutosave: vi.fn(async () => {}),
+      resetAutosaveRuntime: vi.fn(),
+      getActiveTabId: () => "tab-1",
+      updateDraft,
+      activateWorkspaceTab: vi.fn(async () => {}),
+      closeWorkspaceTab: vi.fn(async () => {}),
+      detachWorkspaceTab: vi.fn(async () => {})
+    });
+
+    await act(async () => {
+      latestRef.current?.handleEditorContentChange("# Draft\n");
+      await Promise.resolve();
+    });
+
+    expect(setEditorContentSnapshot).toHaveBeenCalledWith("# Draft\n");
+    expect(updateOutline).toHaveBeenCalledWith("# Draft\n");
+    expect(scheduleAutosave).toHaveBeenCalledTimes(1);
+    expect(updateDraft).toHaveBeenCalledWith("# Draft\n");
+    expect(scheduleAutosave.mock.invocationCallOrder[0]).toBeLessThan(
+      updateDraft.mock.invocationCallOrder[0]!
+    );
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it("keeps active tab autosave reset and reschedule orchestration inside the controller boundary", async () => {
+    const resetAutosaveRuntime = vi.fn();
+    const scheduleAutosave = vi.fn();
+    const activateWorkspaceTab = vi.fn(async () => {});
+
+    const { latestRef, root } = renderEditorWorkflowController({
+      setEditorContentSnapshot: vi.fn(),
+      updateOutline: vi.fn(),
+      scheduleAutosave,
+      runAutosave: vi.fn(async () => {}),
+      resetAutosaveRuntime,
+      getActiveTabId: () => "tab-1",
+      updateDraft: vi.fn(async () => {}),
+      activateWorkspaceTab,
+      closeWorkspaceTab: vi.fn(async () => {}),
+      detachWorkspaceTab: vi.fn(async () => {})
+    });
+
+    await act(async () => {
+      await latestRef.current?.activateWorkspaceTab("tab-2");
+    });
+
+    expect(resetAutosaveRuntime).toHaveBeenCalledTimes(1);
+    expect(activateWorkspaceTab).toHaveBeenCalledWith("tab-2");
+    expect(scheduleAutosave).toHaveBeenCalledTimes(1);
+    expect(resetAutosaveRuntime.mock.invocationCallOrder[0]).toBeLessThan(
+      activateWorkspaceTab.mock.invocationCallOrder[0]!
+    );
+    expect(scheduleAutosave.mock.invocationCallOrder[0]).toBeGreaterThan(
+      activateWorkspaceTab.mock.invocationCallOrder[0]!
+    );
 
     act(() => {
       root.unmount();

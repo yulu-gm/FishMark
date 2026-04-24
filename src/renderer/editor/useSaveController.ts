@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 
 import type { AppNotification } from "../../shared/app-update";
-import type { SaveMarkdownDocument } from "../../shared/save-markdown-file";
-import type { WorkspaceDocumentSnapshot } from "../../shared/workspace";
+import type { WorkspaceDocumentSnapshot, WorkspaceWindowSnapshot } from "../../shared/workspace";
 
 const AUTOSAVE_FAILED_MESSAGE = "Autosave failed. Changes are still in memory.";
 const MANUAL_SAVE_FAILED_MESSAGE = "Save failed. Changes are still in memory.";
@@ -12,7 +11,7 @@ export function useSaveController(input: {
   getActiveDocument: () => WorkspaceDocumentSnapshot | null;
   getEditorContent: () => string;
   flushActiveWorkspaceDraft: () => Promise<void>;
-  applySuccessfulSaveResult: (document: SaveMarkdownDocument, currentEditorContent: string) => void;
+  refreshWorkspaceSnapshot: () => Promise<WorkspaceWindowSnapshot | null>;
   hasExternalFileConflict: () => boolean;
   autosaveDelayMs: number;
   showNotification: (notification: AppNotification) => void;
@@ -22,7 +21,7 @@ export function useSaveController(input: {
     getActiveDocument,
     getEditorContent,
     flushActiveWorkspaceDraft,
-    applySuccessfulSaveResult,
+    refreshWorkspaceSnapshot,
     hasExternalFileConflict,
     autosaveDelayMs,
     showNotification
@@ -79,6 +78,25 @@ export function useSaveController(input: {
     [flushActiveWorkspaceDraft, showNotification]
   );
 
+  const refreshMainWorkspaceSnapshotAfterSave = useCallback(
+    async (saveKind: "manual" | "autosave"): Promise<void> => {
+      try {
+        await refreshWorkspaceSnapshot();
+      } catch (error) {
+        showNotification({
+          kind: "error",
+          message:
+            saveKind === "autosave"
+              ? AUTOSAVE_FAILED_MESSAGE
+              : error instanceof Error && error.message.trim().length > 0
+                ? error.message
+                : MANUAL_SAVE_FAILED_MESSAGE
+        });
+      }
+    },
+    [refreshWorkspaceSnapshot, showNotification]
+  );
+
   const runAutosave = useCallback(async (): Promise<void> => {
     clearAutosaveTimer();
 
@@ -101,33 +119,34 @@ export function useSaveController(input: {
     inFlightSaveOriginRef.current = "autosave";
     pendingAutosaveReplayRef.current = false;
 
-    const result = await fishmark.saveMarkdownFile({
-      tabId: currentDocument.tabId,
-      path: currentDocument.path
-    });
+    try {
+      const result = await fishmark.saveMarkdownFile({
+        tabId: currentDocument.tabId,
+        path: currentDocument.path
+      });
 
-    if (result.status === "error") {
-      showNotification({ kind: "error", message: AUTOSAVE_FAILED_MESSAGE });
-    }
+      if (result.status === "error") {
+        showNotification({ kind: "error", message: AUTOSAVE_FAILED_MESSAGE });
+      }
 
-    if (result.status === "success") {
-      applySuccessfulSaveResult(result.document, getEditorContent());
-    }
+      if (result.status === "success") {
+        await refreshMainWorkspaceSnapshotAfterSave("autosave");
+      }
+    } finally {
+      inFlightSaveOriginRef.current = null;
 
-    inFlightSaveOriginRef.current = null;
-
-    if (pendingAutosaveReplayRef.current) {
-      pendingAutosaveReplayRef.current = false;
-      void runAutosaveRef.current();
+      if (pendingAutosaveReplayRef.current) {
+        pendingAutosaveReplayRef.current = false;
+        void runAutosaveRef.current();
+      }
     }
   }, [
     clearAutosaveTimer,
     ensureActiveWorkspaceDraftSynced,
-    applySuccessfulSaveResult,
     fishmark,
     getActiveDocument,
-    getEditorContent,
     hasPendingChanges,
+    refreshMainWorkspaceSnapshotAfterSave,
     showNotification
   ]);
 
@@ -178,40 +197,41 @@ export function useSaveController(input: {
 
       const shouldForceSaveAs =
         options.forceSaveAs ?? (!currentDocument.path || hasExternalFileConflictRef.current());
-      const result = shouldForceSaveAs
-        ? await fishmark.saveMarkdownFileAs({
-            tabId: currentDocument.tabId,
-            currentPath: currentDocument.path
-          })
-        : currentDocument.path
-          ? await fishmark.saveMarkdownFile({
+      try {
+        const result = shouldForceSaveAs
+          ? await fishmark.saveMarkdownFileAs({
               tabId: currentDocument.tabId,
-              path: currentDocument.path
+              currentPath: currentDocument.path
             })
-          : { status: "cancelled" as const };
+          : currentDocument.path
+            ? await fishmark.saveMarkdownFile({
+                tabId: currentDocument.tabId,
+                path: currentDocument.path
+              })
+            : { status: "cancelled" as const };
 
-      if (result.status === "error") {
-        showNotification({ kind: "error", message: result.error.message });
-      }
+        if (result.status === "error") {
+          showNotification({ kind: "error", message: result.error.message });
+        }
 
-      if (result.status === "success") {
-        applySuccessfulSaveResult(result.document, getEditorContent());
-      }
+        if (result.status === "success") {
+          await refreshMainWorkspaceSnapshotAfterSave("manual");
+        }
+      } finally {
+        inFlightSaveOriginRef.current = null;
 
-      inFlightSaveOriginRef.current = null;
-
-      if (pendingAutosaveReplayRef.current) {
-        pendingAutosaveReplayRef.current = false;
-        scheduleAutosave();
+        if (pendingAutosaveReplayRef.current) {
+          pendingAutosaveReplayRef.current = false;
+          scheduleAutosave();
+        }
       }
     },
     [
       clearAutosaveTimer,
       ensureActiveWorkspaceDraftSynced,
-      applySuccessfulSaveResult,
       fishmark,
       getActiveDocument,
-      getEditorContent,
+      refreshMainWorkspaceSnapshotAfterSave,
       scheduleAutosave,
       showNotification
     ]

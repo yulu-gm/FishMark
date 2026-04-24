@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { AppNotification } from "../../shared/app-update";
-import type { SaveMarkdownDocument } from "../../shared/save-markdown-file";
 import type { WorkspaceWindowSnapshot } from "../../shared/workspace";
 import {
-  applySavedActiveDocument,
   applyWorkspaceSnapshot,
   createInitialEditorShellState,
   getActiveDocument,
@@ -193,13 +191,6 @@ export function useWorkspaceController(input: {
     [applyState]
   );
 
-  const applySuccessfulSaveResult = useCallback(
-    (document: SaveMarkdownDocument, currentEditorContent: string): void => {
-      applyState((current) => applySavedActiveDocument(current, document, currentEditorContent));
-    },
-    [applyState]
-  );
-
   const openMarkdown = useCallback(async (): Promise<OpenResult> => {
     setWorkspaceOpenState("opening");
 
@@ -374,7 +365,6 @@ export function useWorkspaceController(input: {
     refreshWorkspaceSnapshot,
     loadInitialWorkspaceSnapshot,
     setWorkspaceOpenState,
-    applySuccessfulSaveResult,
     openMarkdown,
     openMarkdownFromPath,
     createUntitledMarkdown,

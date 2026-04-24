@@ -4,7 +4,7 @@ import { act, createElement, createRef, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { WorkspaceDocumentSnapshot } from "../../shared/workspace";
+import type { WorkspaceDocumentSnapshot, WorkspaceWindowSnapshot } from "../../shared/workspace";
 import { useSaveController } from "./useSaveController";
 
 type SaveControllerValue = ReturnType<typeof useSaveController>;
@@ -58,7 +58,7 @@ afterEach(() => {
 });
 
 describe("useSaveController", () => {
-  it("runs manual saves from the canonical active document and refreshes workspace projection after success", async () => {
+  it("runs manual saves from the canonical active document and refreshes the main-owned workspace snapshot after success", async () => {
     const flushActiveWorkspaceDraft = vi.fn(async () => {});
     const saveMarkdownFile = vi.fn(async () => ({
       status: "success" as const,
@@ -69,7 +69,28 @@ describe("useSaveController", () => {
         encoding: "utf-8" as const
       }
     }));
-    const applySuccessfulSaveResult = vi.fn();
+    const refreshWorkspaceSnapshot = vi.fn(async (): Promise<WorkspaceWindowSnapshot> => ({
+      windowId: "window-1",
+      activeTabId: "tab-1",
+      tabs: [
+        {
+          tabId: "tab-1",
+          path: "C:/notes/note.md",
+          name: "note.md",
+          isDirty: false,
+          saveState: "idle"
+        }
+      ],
+      activeDocument: {
+        tabId: "tab-1",
+        path: "C:/notes/note.md",
+        name: "note.md",
+        content: "# Canonical\n",
+        encoding: "utf-8",
+        isDirty: false,
+        saveState: "idle"
+      }
+    }));
     const getActiveDocument = vi.fn(() => createActiveDocument({ content: "# Canonical\n" }));
 
     const { latestRef, root } = renderController({
@@ -79,7 +100,7 @@ describe("useSaveController", () => {
       getActiveDocument,
       getEditorContent: () => "# Canonical\n",
       flushActiveWorkspaceDraft,
-      applySuccessfulSaveResult,
+      refreshWorkspaceSnapshot,
       hasExternalFileConflict: () => false,
       autosaveDelayMs: 10,
       showNotification: vi.fn()
@@ -94,15 +115,9 @@ describe("useSaveController", () => {
       tabId: "tab-1",
       path: "C:/notes/note.md"
     });
-    expect(applySuccessfulSaveResult).toHaveBeenCalledTimes(1);
-    expect(applySuccessfulSaveResult).toHaveBeenCalledWith(
-      {
-        path: "C:/notes/note.md",
-        name: "note.md",
-        content: "# Canonical\n",
-        encoding: "utf-8"
-      },
-      "# Canonical\n"
+    expect(refreshWorkspaceSnapshot).toHaveBeenCalledTimes(1);
+    expect(refreshWorkspaceSnapshot.mock.invocationCallOrder[0]).toBeGreaterThan(
+      saveMarkdownFile.mock.invocationCallOrder[0]!
     );
 
     act(() => {
@@ -123,7 +138,7 @@ describe("useSaveController", () => {
         encoding: "utf-8" as const
       }
     }));
-    const applySuccessfulSaveResult = vi.fn();
+    const refreshWorkspaceSnapshot = vi.fn(async () => null);
     const getActiveDocument = vi.fn(() => createActiveDocument({ content: "# Draft\n" }));
     let hasConflict = false;
 
@@ -134,7 +149,7 @@ describe("useSaveController", () => {
       getActiveDocument,
       getEditorContent: () => "# Draft\n",
       flushActiveWorkspaceDraft,
-      applySuccessfulSaveResult,
+      refreshWorkspaceSnapshot,
       hasExternalFileConflict: () => hasConflict,
       autosaveDelayMs: 25,
       showNotification: vi.fn()
@@ -181,7 +196,7 @@ describe("useSaveController", () => {
         encoding: "utf-8" as const
       }
     }));
-    const applySuccessfulSaveResult = vi.fn();
+    const refreshWorkspaceSnapshot = vi.fn(async () => null);
     const getActiveDocument = vi.fn(() =>
       createActiveDocument({ content: "# Canonical\n", isDirty: false })
     );
@@ -193,7 +208,7 @@ describe("useSaveController", () => {
       getActiveDocument,
       getEditorContent: () => "# Draft\n",
       flushActiveWorkspaceDraft,
-      applySuccessfulSaveResult,
+      refreshWorkspaceSnapshot,
       hasExternalFileConflict: () => false,
       autosaveDelayMs: 25,
       showNotification: vi.fn()

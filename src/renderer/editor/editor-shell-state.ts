@@ -1,5 +1,4 @@
 import type { ExternalMarkdownFileChangedEvent } from "../../shared/external-file-change";
-import type { SaveMarkdownDocument } from "../../shared/save-markdown-file";
 import type {
   WorkspaceDocumentSnapshot,
   WorkspaceTabStripItem,
@@ -65,49 +64,6 @@ export function applyWorkspaceSnapshot(
       : currentState.editorLoadRevision,
     openState: currentState.openState
   };
-}
-
-export function applySavedActiveDocument(
-  currentState: EditorShellState,
-  document: SaveMarkdownDocument,
-  currentEditorContent: string
-): EditorShellState {
-  const workspaceSnapshot = currentState.workspaceSnapshot;
-  const activeDocument = getActiveDocument(currentState);
-
-  if (!workspaceSnapshot || !activeDocument) {
-    return currentState;
-  }
-
-  const isDirty = currentEditorContent !== document.content;
-  const nextSnapshot: WorkspaceWindowSnapshot = {
-    windowId: workspaceSnapshot.windowId,
-    activeTabId: workspaceSnapshot.activeTabId,
-    tabs: workspaceSnapshot.tabs.map((tab) =>
-      tab.tabId === activeDocument.tabId
-        ? {
-            ...tab,
-            path: document.path,
-            name: document.name,
-            isDirty,
-            saveState: "idle"
-          }
-        : tab
-    ),
-    activeDocument: {
-      ...activeDocument,
-      path: document.path,
-      name: document.name,
-      content: isDirty ? currentEditorContent : document.content,
-      encoding: document.encoding,
-      isDirty,
-      saveState: "idle"
-    }
-  };
-
-  return applyWorkspaceSnapshot(currentState, nextSnapshot, {
-    currentEditorContent
-  });
 }
 
 export function setOpenState(currentState: EditorShellState, openState: OpenState): EditorShellState {

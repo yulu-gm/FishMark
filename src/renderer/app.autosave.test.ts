@@ -1527,14 +1527,23 @@ describe("App autosave", () => {
   });
 
   it("routes the first save for a new untitled document through Save As", async () => {
-    saveMarkdownFileAs.mockResolvedValue({
-      status: "success",
-      document: {
+    saveMarkdownFileAs.mockImplementationOnce(async (input) => {
+      const document = {
         path: "C:/notes/untitled.md",
         name: "untitled.md",
         content: "# Fresh draft\n",
         encoding: "utf-8"
-      }
+      } as const;
+      replaceWorkspaceDocument({
+        tabId: input.tabId,
+        path: document.path,
+        name: document.name,
+        content: document.content
+      });
+      return {
+        status: "success",
+        document
+      };
     });
 
     await renderApp();
@@ -2300,14 +2309,23 @@ describe("App autosave", () => {
   });
 
   it("routes Save to Save As after keeping the in-memory version during an external conflict", async () => {
-    saveMarkdownFileAs.mockResolvedValue({
-      status: "success",
-      document: {
+    saveMarkdownFileAs.mockImplementationOnce(async (input) => {
+      const document = {
         path: "C:/notes/conflict-copy.md",
         name: "conflict-copy.md",
         content: "# Local draft\n",
         encoding: "utf-8"
-      }
+      } as const;
+      replaceWorkspaceDocument({
+        tabId: input.tabId,
+        path: document.path,
+        name: document.name,
+        content: document.content
+      });
+      return {
+        status: "success",
+        document
+      };
     });
 
     await renderAndOpenDocument();

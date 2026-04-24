@@ -66,6 +66,7 @@ import {
 } from "./theme-dynamic-mode";
 import { type ExternalMarkdownFileState } from "./editor-shell-state";
 import { ShortcutHintOverlay } from "./shortcut-hint-overlay";
+import { useEditorWorkflowController } from "./useEditorWorkflowController";
 import { useExternalConflictController } from "./useExternalConflictController";
 import { useSaveController } from "./useSaveController";
 import { useWorkspaceController } from "./useWorkspaceController";
@@ -651,7 +652,7 @@ function EditorShell({
     getActiveDocument: workspaceController.getActiveDocument,
     getEditorContent,
     flushActiveWorkspaceDraft: workspaceController.flushActiveWorkspaceDraft,
-    applySuccessfulSaveResult: workspaceController.applySuccessfulSaveResult,
+    refreshWorkspaceSnapshot: workspaceController.refreshWorkspaceSnapshot,
     hasExternalFileConflict: () => externalConflictController.hasExternalFileConflict(),
     autosaveDelayMs: preferences.autosave.idleDelayMs,
     showNotification
@@ -674,11 +675,52 @@ function EditorShell({
     resetAutosaveRuntime: saveController.resetAutosaveRuntime,
     showNotification
   });
-  const state = workspaceController.state;
-  const activeDocument = workspaceController.activeDocument;
-  const workspaceTabs = workspaceController.workspaceTabs;
-  const activeTabId = workspaceController.activeTabId;
-  const effectiveSaveState = saveController.getEffectiveSaveState(activeDocument);
+  const editorWorkflowController = useEditorWorkflowController({
+    setEditorContentSnapshot: (content) => {
+      editorContentRef.current = content;
+    },
+    updateOutline: (content) => {
+      setOutlineItems(deriveOutlineItems(content));
+    },
+    scheduleAutosave: saveController.scheduleAutosave,
+    runAutosave: saveController.runAutosave,
+    resetAutosaveRuntime: saveController.resetAutosaveRuntime,
+    getActiveTabId: workspaceController.getActiveTabId,
+    updateDraft: workspaceController.updateDraft,
+    activateWorkspaceTab: workspaceController.activateWorkspaceTab,
+    closeWorkspaceTab: workspaceController.closeWorkspaceTab,
+    detachWorkspaceTab: workspaceController.detachWorkspaceTab
+  });
+  const {
+    handleEditorContentChange,
+    handleEditorBlur,
+    activateWorkspaceTab: activateWorkspaceTabWorkflow,
+    closeWorkspaceTab: closeWorkspaceTabWorkflow,
+    detachWorkspaceTab: detachWorkspaceTabWorkflow
+  } = editorWorkflowController;
+  const {
+    state,
+    activeDocument,
+    workspaceTabs,
+    activeTabId,
+    openState,
+    editorLoadRevision,
+    getActiveDocument: getWorkspaceActiveDocument,
+    openMarkdown,
+    createUntitledMarkdown,
+    openMarkdownFromPath,
+    reorderWorkspaceTab,
+    loadInitialWorkspaceSnapshot,
+    applyState: applyWorkspaceState,
+    getState: getWorkspaceState
+  } = workspaceController;
+  const {
+    resetAutosaveRuntime,
+    scheduleAutosave,
+    runManualSave,
+    getEffectiveSaveState
+  } = saveController;
+  const effectiveSaveState = getEffectiveSaveState(activeDocument);
   const currentDocumentContent = activeDocument
     ? (editorContentRef.current || activeDocument.content)
     : "";
@@ -690,7 +732,7 @@ function EditorShell({
   const isOutlinePanelVisible = isOutlineOpen || isOutlineClosing;
   const isSettingsDrawerVisible = isSettingsOpen || isSettingsClosing;
   const hintText =
-    workspaceController.openState === "opening"
+    openState === "opening"
       ? "Opening document..."
       : "Use File > Open... to load a Markdown document.";
   const headerEyebrow = isDocumentOpen ? "Current document" : "FishMark";
@@ -698,7 +740,7 @@ function EditorShell({
     ? activeDocument?.name ?? "Untitled"
     : "Local-first Markdown writing";
   const headerDetail =
-    workspaceController.openState === "opening"
+    openState === "opening"
       ? "Opening document..."
       : isDocumentOpen
         ? activeDocument?.path ?? "Not saved yet."
@@ -842,7 +884,7 @@ function EditorShell({
     setActiveHeadingId(null);
     setActiveShortcutGroupId("default-text");
     setActiveTableToolId(null);
-  }, [activeDocument, workspaceController.editorLoadRevision]);
+  }, [activeDocument, editorLoadRevision]);
 
   const insertTableRowAbove = useCallback(() => {
     editorRef.current?.insertTableRowAbove();
@@ -1020,7 +1062,7 @@ function EditorShell({
   }, [blurFocusedEditorElement]);
 
   const enterReadingMode = useCallback((): void => {
-    if (!workspaceController.getActiveDocument() || isSettingsOpen || isSettingsClosing) {
+    if (!activeDocument || isSettingsOpen || isSettingsClosing) {
       return;
     }
 
@@ -1030,12 +1072,12 @@ function EditorShell({
     blurFocusedEditorElement,
     isSettingsClosing,
     isSettingsOpen,
-    workspaceController.getActiveDocument
+    activeDocument
   ]);
 
   const handleAppWorkspaceMouseDownCapture = useCallback(
     (event: React.MouseEvent<HTMLElement>): void => {
-      if (event.button !== 0 || !workspaceController.getActiveDocument()) {
+      if (event.button !== 0 || !activeDocument) {
         return;
       }
 
@@ -1070,7 +1112,7 @@ function EditorShell({
       event.stopPropagation();
       enterReadingMode();
     },
-    [enterReadingMode, workspaceController.getActiveDocument]
+    [activeDocument, enterReadingMode]
   );
 
   function clearShortcutHintHoldTimer(): void {
@@ -1083,7 +1125,7 @@ function EditorShell({
   const handlePreferencesSync = useEffectEvent((nextPreferences: Preferences): void => {
     preferencesRef.current = nextPreferences;
     setPreferences(nextPreferences);
-    saveController.scheduleAutosave();
+    scheduleAutosave();
   });
 
   const handleAppMenuCommand = useEffectEvent((command: AppMenuCommand): void => {
@@ -1142,12 +1184,12 @@ function EditorShell({
     const result = await fishmark.updatePreferences(patch);
     preferencesRef.current = result.preferences;
     setPreferences(result.preferences);
-    saveController.scheduleAutosave();
+    scheduleAutosave();
     return result;
   }
 
   function openSettingsDrawer(): void {
-    if (workspaceController.getActiveDocument()) {
+    if (activeDocument) {
       setShellMode("editing");
     }
     const activeElement = document.activeElement;
@@ -1207,8 +1249,8 @@ function EditorShell({
   }
 
   async function handleOpenMarkdown(): Promise<void> {
-    saveController.resetAutosaveRuntime();
-    const result = await workspaceController.openMarkdown();
+    resetAutosaveRuntime();
+    const result = await openMarkdown();
 
     if (result === "opened") {
       setShellMode("reading");
@@ -1217,8 +1259,8 @@ function EditorShell({
   }
 
   async function handleNewMarkdown(): Promise<void> {
-    saveController.resetAutosaveRuntime();
-    const created = await workspaceController.createUntitledMarkdown();
+    resetAutosaveRuntime();
+    const created = await createUntitledMarkdown();
 
     if (created) {
       setShellMode("editing");
@@ -1226,8 +1268,8 @@ function EditorShell({
   }
 
   const handleOpenMarkdownFromPath = useCallback(async (targetPath: string): Promise<void> => {
-    saveController.resetAutosaveRuntime();
-    const opened = await workspaceController.openMarkdownFromPath(targetPath);
+    resetAutosaveRuntime();
+    const opened = await openMarkdownFromPath(targetPath);
 
     if (opened) {
       setShellMode("reading");
@@ -1235,54 +1277,31 @@ function EditorShell({
     }
   }, [
     blurFocusedEditorElementAfterOpen,
-    saveController.resetAutosaveRuntime,
-    workspaceController.openMarkdownFromPath
+    openMarkdownFromPath,
+    resetAutosaveRuntime
   ]);
 
   async function handleActivateWorkspaceTab(tabId: string): Promise<void> {
-    if (workspaceController.getActiveTabId() === tabId) {
-      return;
-    }
-
-    saveController.resetAutosaveRuntime();
-    await workspaceController.activateWorkspaceTab(tabId);
-    saveController.scheduleAutosave();
+    await activateWorkspaceTabWorkflow(tabId);
   }
 
   const handleCloseWorkspaceTab = useCallback(async (tabId: string): Promise<void> => {
-    const isClosingActiveTab = workspaceController.getActiveTabId() === tabId;
-
-    if (isClosingActiveTab) {
-      saveController.resetAutosaveRuntime();
-    }
-
-    await workspaceController.closeWorkspaceTab(tabId);
-
-    if (isClosingActiveTab) {
-      saveController.scheduleAutosave();
-    }
+    await closeWorkspaceTabWorkflow(tabId);
   }, [
-    saveController.resetAutosaveRuntime,
-    saveController.scheduleAutosave,
-    workspaceController.closeWorkspaceTab,
-    workspaceController.getActiveTabId
+    closeWorkspaceTabWorkflow
   ]);
 
   const handleReorderWorkspaceTab = useCallback(
     async (tabId: string, toIndex: number): Promise<void> => {
-      await workspaceController.reorderWorkspaceTab(tabId, toIndex);
+      await reorderWorkspaceTab(tabId, toIndex);
     },
-    [workspaceController.reorderWorkspaceTab]
+    [reorderWorkspaceTab]
   );
 
   const handleDetachWorkspaceTab = useCallback(async (tabId: string): Promise<void> => {
-    saveController.resetAutosaveRuntime();
-    await workspaceController.detachWorkspaceTab(tabId);
-    saveController.scheduleAutosave();
+    await detachWorkspaceTabWorkflow(tabId);
   }, [
-    saveController.resetAutosaveRuntime,
-    saveController.scheduleAutosave,
-    workspaceController.detachWorkspaceTab
+    detachWorkspaceTabWorkflow
   ]);
 
   const handleWorkspaceTabDragStart = useCallback(
@@ -1366,7 +1385,7 @@ function EditorShell({
     void fishmark
       .handleDroppedMarkdownFile({
         targetPaths,
-        hasOpenDocument: workspaceController.getActiveDocument() !== null
+        hasOpenDocument: getWorkspaceActiveDocument() !== null
       })
       .then(async (result) => {
         if (result.disposition === "open-in-place") {
@@ -1388,23 +1407,23 @@ function EditorShell({
   }, []);
 
   async function handleSaveMarkdown(): Promise<void> {
-    const currentDocument = workspaceController.getActiveDocument();
+    const currentDocument = getWorkspaceActiveDocument();
 
     if (!currentDocument) {
       return;
     }
 
-    await saveController.runManualSave();
+    await runManualSave();
   }
 
   async function handleSaveMarkdownAs(): Promise<void> {
-    const currentDocument = workspaceController.getActiveDocument();
+    const currentDocument = getWorkspaceActiveDocument();
 
     if (!currentDocument) {
       return;
     }
 
-    await saveController.runManualSave({ forceSaveAs: true });
+    await runManualSave({ forceSaveAs: true });
   }
 
   async function handleImportClipboardImage(
@@ -1424,9 +1443,9 @@ function EditorShell({
 
   const editorTestBridge = useMemo(
     () => ({
-      getState: workspaceController.getState,
-      applyState: workspaceController.applyState,
-      resetAutosaveRuntime: saveController.resetAutosaveRuntime,
+      getState: getWorkspaceState,
+      applyState: applyWorkspaceState,
+      resetAutosaveRuntime,
       editor: {
         getContent: getEditorContent,
         setContent: (content: string) => {
@@ -1472,9 +1491,9 @@ function EditorShell({
     [
       fishmark,
       getEditorContent,
-      saveController.resetAutosaveRuntime,
-      workspaceController.applyState,
-      workspaceController.getState
+      applyWorkspaceState,
+      getWorkspaceState,
+      resetAutosaveRuntime
     ]
   );
 
@@ -1499,7 +1518,7 @@ function EditorShell({
   useEffect(() => {
     let isCancelled = false;
 
-    void workspaceController.loadInitialWorkspaceSnapshot().then(async () => {
+    void loadInitialWorkspaceSnapshot().then(async () => {
       if (isCancelled) {
         return;
       }
@@ -1517,7 +1536,7 @@ function EditorShell({
     return () => {
       isCancelled = true;
     };
-  }, [handleOpenMarkdownFromPath, workspaceController.loadInitialWorkspaceSnapshot]);
+  }, [handleOpenMarkdownFromPath, loadInitialWorkspaceSnapshot]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -1617,7 +1636,7 @@ function EditorShell({
         lastEditorPointerIntentRef.current = isEditingContentClick ? "editing" : "blank";
 
         if (isEditingContentClick) {
-          if (workspaceController.getActiveDocument()) {
+          if (getWorkspaceActiveDocument()) {
             enterEditingMode();
           }
           return;
@@ -1643,7 +1662,7 @@ function EditorShell({
           return;
         }
 
-        if (workspaceController.getActiveDocument()) {
+        if (getWorkspaceActiveDocument()) {
           enterEditingMode();
         }
       }
@@ -1665,7 +1684,14 @@ function EditorShell({
       editorContainer.removeEventListener("focusout", handleFocusOut);
       window.removeEventListener("mouseup", clearLastPointerIntent);
     };
-  }, [cancelPendingEditorOpenBlur, enterEditingMode, enterReadingMode, isDocumentOpen, state.editorLoadRevision]);
+  }, [
+    cancelPendingEditorOpenBlur,
+    enterEditingMode,
+    enterReadingMode,
+    getWorkspaceActiveDocument,
+    isDocumentOpen,
+    state.editorLoadRevision
+  ]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1905,7 +1931,7 @@ function EditorShell({
 
   useEffect(
     () => () => {
-      saveController.resetAutosaveRuntime();
+      resetAutosaveRuntime();
       clearOutlineCloseTimer();
       clearSettingsCloseTimer();
       clearNotificationTimers();
@@ -1914,7 +1940,7 @@ function EditorShell({
       clearThemeRuntimeEnv(document.documentElement);
       clearDocumentPreferences(document.documentElement);
     },
-    [clearNotificationTimers, saveController.resetAutosaveRuntime]
+    [clearNotificationTimers, resetAutosaveRuntime]
   );
 
   return (
@@ -2289,20 +2315,8 @@ function EditorShell({
                             : null
                         );
                       }}
-                      onChange={(nextContent) => {
-                        editorContentRef.current = nextContent;
-                        setOutlineItems(deriveOutlineItems(nextContent));
-                        saveController.scheduleAutosave();
-
-                        void workspaceController
-                          .updateDraft(nextContent)
-                          .catch(() => {
-                            // Keep the renderer draft responsive even if workspace sync lags briefly.
-                          });
-                      }}
-                      onBlur={() => {
-                        void saveController.runAutosave();
-                      }}
+                      onChange={handleEditorContentChange}
+                      onBlur={handleEditorBlur}
                     />
                   </div>
                   {isOutlinePanelVisible ? (
