@@ -49,9 +49,9 @@ afterEach(async () => {
 });
 
 it("renders workspace tabs and delegates commands without owning persistence logic", async () => {
-  const onSave = vi.fn();
   const onTabActivate = vi.fn();
   const onDraftChange = vi.fn();
+  const onNavigateToOutlineItem = vi.fn();
   container = document.createElement("div");
   root = createRoot(container);
 
@@ -103,8 +103,8 @@ it("renders workspace tabs and delegates commands without owning persistence log
         headerTitle: "note.md",
         hintText: "Use File > Open...",
         isDocumentOpen: true,
-        isOutlineOpen: false,
-        isOutlinePanelVisible: false,
+        isOutlineOpen: true,
+        isOutlinePanelVisible: true,
         isReadingMode: false,
         isRefreshingThemePackages: false,
         isSettingsDrawerVisible: false,
@@ -112,7 +112,15 @@ it("renders workspace tabs and delegates commands without owning persistence log
         isShortcutHintVisible: false,
         notification: null,
         notificationState: "hidden",
-        outlineItems: [],
+        outlineItems: [
+          {
+            id: "heading-1",
+            label: "A heading",
+            depth: 1,
+            startOffset: 3,
+            startLine: 1
+          }
+        ],
         preferences: DEFAULT_PREFERENCES,
         saveStatusLabel: "Unsaved changes",
         shellMode: "editing",
@@ -162,7 +170,6 @@ it("renders workspace tabs and delegates commands without owning persistence log
         onReloadExternalFile: vi.fn(),
         onKeepMemoryVersion: vi.fn(),
         onDismissExternalFileConflict: vi.fn(),
-        onSave,
         onSaveAs: vi.fn(),
         onSettingsOpen: vi.fn(),
         onTableToolHoverChange: vi.fn(),
@@ -175,6 +182,7 @@ it("renders workspace tabs and delegates commands without owning persistence log
         onUpdatePreferences: vi.fn(),
         onRefreshThemePackages: vi.fn(),
         onWorkbenchSurfaceRuntimeModeChange: vi.fn(),
+        onNavigateToOutlineItem,
         onDraftChange
       })
     );
@@ -187,14 +195,14 @@ it("renders workspace tabs and delegates commands without owning persistence log
   });
 
   await act(async () => {
-    buttons.find((button) => button.textContent === "Save")?.click();
-  });
-
-  await act(async () => {
     buttons.find((button) => button.textContent === "Change draft")?.click();
   });
 
+  await act(async () => {
+    buttons.find((button) => button.textContent === "A heading")?.click();
+  });
+
   expect(onTabActivate).toHaveBeenCalledWith("tab-2");
-  expect(onSave).toHaveBeenCalledTimes(1);
   expect(onDraftChange).toHaveBeenCalledWith("# Changed\n");
+  expect(onNavigateToOutlineItem).toHaveBeenCalledWith(3);
 });

@@ -181,9 +181,9 @@ export type WorkspaceShellProps = {
   onDeleteTableColumn: () => void;
   onDeleteTableRow: () => void;
   onKeepMemoryVersion: () => void;
+  onNavigateToOutlineItem: (startOffset: number) => void;
   onOpenOutlinePanel: () => void;
   onReloadExternalFile: () => void;
-  onSave: () => void;
   onSaveAs: () => void;
   onSettingsOpen: () => void;
   onTableToolHoverChange: (toolId: string | null) => void;
@@ -332,10 +332,10 @@ export function WorkspaceShell({
   onInsertTableRowAbove,
   onInsertTableRowBelow,
   onKeepMemoryVersion,
+  onNavigateToOutlineItem,
   onOpenOutlinePanel,
   onReloadExternalFile,
   onRefreshThemePackages,
-  onSave,
   onSaveAs,
   onSettingsOpen,
   onTableToolHoverChange,
@@ -661,17 +661,7 @@ export function WorkspaceShell({
               <h1 className="workspace-title">{headerTitle}</h1>
               <p className="workspace-detail">{headerDetail}</p>
             </div>
-            {isDocumentOpen ? (
-              <button
-                type="button"
-                className="workspace-save-command"
-                onClick={onSave}
-              >
-                Save
-              </button>
-            ) : (
-              <p className="app-hint">{hintText}</p>
-            )}
+            {!isDocumentOpen ? <p className="app-hint">{hintText}</p> : null}
           </header>
 
           <section
@@ -759,9 +749,7 @@ export function WorkspaceShell({
                                   style={{
                                     paddingInlineStart: `${10 + Math.max(item.depth - 1, 0) * 10}px`
                                   }}
-                                  onClick={() => {
-                                    editorRef.current?.navigateToOffset(item.startOffset);
-                                  }}
+                                  onClick={() => onNavigateToOutlineItem(item.startOffset)}
                                 >
                                   <span className="outline-panel-item-label">{item.label}</span>
                                 </button>

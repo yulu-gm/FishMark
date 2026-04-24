@@ -1528,6 +1528,10 @@ function EditorShell({
     void handleSaveMarkdownAs();
   }
 
+  const handleNavigateToOutlineItem = useCallback((startOffset: number): void => {
+    editorRef.current?.navigateToOffset(startOffset);
+  }, []);
+
   const handleTableToolHoverChange = useCallback((toolId: string | null): void => {
     setActiveTableToolId((current) => (current === toolId ? current : toolId));
   }, []);
@@ -1610,12 +1614,10 @@ function EditorShell({
         onDeleteTableColumn={deleteTableColumn}
         onDeleteTableRow={deleteTableRow}
         onKeepMemoryVersion={externalConflictController.keepMemoryVersion}
+        onNavigateToOutlineItem={handleNavigateToOutlineItem}
         onOpenOutlinePanel={openOutlinePanel}
         onReloadExternalFile={handleReloadExternalFile}
         onRefreshThemePackages={handleRefreshThemePackages}
-        onSave={() => {
-          void handleSaveMarkdown();
-        }}
         onSaveAs={handleSaveMarkdownAsCommand}
         onSettingsOpen={openSettingsDrawer}
         onTableToolHoverChange={handleTableToolHoverChange}
