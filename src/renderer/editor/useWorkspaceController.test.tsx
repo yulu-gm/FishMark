@@ -253,10 +253,23 @@ describe("useWorkspaceController", () => {
         }
       ]
     });
+    const newerDraftSnapshot = createWorkspaceSnapshot({
+      tabs: [
+        {
+          tabId: "tab-1",
+          path: "C:/notes/note.md",
+          name: "note.md",
+          content: "# Newer draft\n",
+          isDirty: true
+        }
+      ]
+    });
+    const updateWorkspaceTabDraft = vi.fn(async () => newerDraftSnapshot);
     const getWorkspaceSnapshot = vi.fn(async () => savedSnapshot);
 
     const { latestRef, root } = renderController({
       fishmark: {
+        updateWorkspaceTabDraft,
         getWorkspaceSnapshot
       } as unknown as Window["fishmark"],
       initialSnapshot: savedSnapshot,
@@ -264,14 +277,26 @@ describe("useWorkspaceController", () => {
       showNotification: vi.fn()
     });
 
-    const initialRevision = latestRef.current?.editorLoadRevision;
+    await act(async () => {
+      await latestRef.current?.updateDraft("# Newer draft\n");
+    });
+
+    const draftRevision = latestRef.current?.editorLoadRevision;
 
     await act(async () => {
       await latestRef.current?.refreshWorkspaceSnapshot();
     });
 
+    expect(updateWorkspaceTabDraft).toHaveBeenCalledWith({
+      tabId: "tab-1",
+      content: "# Newer draft\n"
+    });
     expect(getWorkspaceSnapshot).toHaveBeenCalledTimes(1);
-    expect(latestRef.current?.editorLoadRevision).toBe(initialRevision);
+    expect(latestRef.current?.editorLoadRevision).toBe(draftRevision);
+    expect(latestRef.current?.workspaceSnapshot?.activeDocument).toMatchObject({
+      content: "# Newer draft\n",
+      isDirty: true
+    });
 
     act(() => {
       root.unmount();

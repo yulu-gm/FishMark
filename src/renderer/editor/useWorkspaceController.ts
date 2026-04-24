@@ -52,13 +52,17 @@ export function useWorkspaceController(input: {
   const getCurrentActiveTabId = useCallback(() => getActiveTabId(stateRef.current), []);
 
   const applyWorkspaceWindowSnapshot = useCallback(
-    (snapshot: WorkspaceWindowSnapshot): EditorShellState => {
+    (
+      snapshot: WorkspaceWindowSnapshot,
+      options: { preserveActiveDocumentDraft?: boolean } = {}
+    ): EditorShellState => {
       let nextState = stateRef.current;
 
       applyState((current) => {
         nextState = setOpenState(
           applyWorkspaceSnapshot(current, snapshot, {
-            currentEditorContent: getEditorContent()
+            currentEditorContent: getEditorContent(),
+            preserveActiveDocumentDraft: options.preserveActiveDocumentDraft ?? false
           }),
           "idle"
         );
@@ -172,7 +176,7 @@ export function useWorkspaceController(input: {
 
   const refreshWorkspaceSnapshot = useCallback(async (): Promise<WorkspaceWindowSnapshot | null> => {
     const snapshot = await fishmark.getWorkspaceSnapshot();
-    applyWorkspaceWindowSnapshot(snapshot);
+    applyWorkspaceWindowSnapshot(snapshot, { preserveActiveDocumentDraft: true });
     return snapshot;
   }, [applyWorkspaceWindowSnapshot, fishmark]);
 
