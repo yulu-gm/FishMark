@@ -32,6 +32,7 @@ type CreateWindowInput = {
     preload: string;
     contextIsolation: true;
     nodeIntegration: false;
+    sandbox: false;
     additionalArguments: string[];
   };
 };
@@ -123,6 +124,7 @@ export function createRuntimeWindowManager<TWindow extends WindowLike>(input: {
         preload: preloadPath,
         contextIsolation: true,
         nodeIntegration: false,
+        sandbox: false,
         additionalArguments
       }
     });

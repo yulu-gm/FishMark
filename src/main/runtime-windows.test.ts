@@ -60,6 +60,22 @@ describe("createRuntimeWindowManager", () => {
     expect(harness.loadRenderer).toHaveBeenCalledWith(harness.window, "test-workbench");
   });
 
+  it("keeps preload modules loadable in packaged windows without exposing Node to the renderer", () => {
+    const harness = createWindowHarness("editor");
+
+    harness.manager.openPrimaryWindow();
+
+    expect(harness.createWindow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        webPreferences: expect.objectContaining({
+          contextIsolation: true,
+          nodeIntegration: false,
+          sandbox: false
+        })
+      })
+    );
+  });
+
   it("passes the configured window icon path into BrowserWindow creation", () => {
     const harness = createWindowHarness("editor", {
       windowIconPath: "C:/Program Files/FishMark/resources/icons/icon.ico"
