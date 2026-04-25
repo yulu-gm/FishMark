@@ -1,101 +1,144 @@
-import { deleteCharBackward, insertNewlineAndIndent } from "@codemirror/commands";
-import { EditorSelection } from "@codemirror/state";
-import type { EditorView } from "@codemirror/view";
 import { formatTableMarkdown, parseMarkdownDocument, splitTableLine } from "@fishmark/markdown-engine";
 
 import type { ActiveBlockState } from "../active-block";
-import { resolveArrowDown, resolveArrowUp } from "../interactions";
-import { runBlockquoteBackspace, runBlockquoteEnter } from "./blockquote-commands";
-import {
-  runCodeFenceBackspace,
-  runCodeFenceEnter
-} from "./code-fence-commands";
-import {
-  runListBackspace,
-  runListEnter,
-  runListIndentOnTab,
-  runListOutdentOnShiftTab
-} from "./list-commands";
-import {
-  runTableMoveDownOrExit,
-  runTableNextCell,
-  runTablePreviousCell
-} from "./table-commands";
 
-export function runMarkdownEnter(view: EditorView, activeState: ActiveBlockState): boolean {
+export type MarkdownCommandLine = {
+  from: number;
+  number: number;
+  text: string;
+  to: number;
+};
+
+export type MarkdownCommandSelection = {
+  anchor: number;
+  empty: boolean;
+  head: number;
+};
+
+export type MarkdownCommandSelectionUpdate = {
+  anchor: number;
+  goalColumn?: number;
+  head?: number;
+};
+
+export type MarkdownCommandTarget = {
+  deleteCharBackward: () => boolean;
+  dispatchChange: (input: {
+    from: number;
+    insert: string;
+    selection?: MarkdownCommandSelectionUpdate;
+    to: number;
+  }) => void;
+  dispatchSelection: (selection: MarkdownCommandSelectionUpdate) => void;
+  getLineCount: () => number;
+  getSelection: () => MarkdownCommandSelection;
+  insertNewlineAndIndent: () => boolean;
+  line: (lineNumber: number) => MarkdownCommandLine;
+  lineAt: (position: number) => MarkdownCommandLine;
+  resolveArrowDown: (activeState: ActiveBlockState) => MarkdownCommandSelectionUpdate | null;
+  resolveArrowUp: (activeState: ActiveBlockState) => MarkdownCommandSelectionUpdate | null;
+  runBlockquoteBackspace: (activeState: ActiveBlockState) => boolean;
+  runBlockquoteEnter: () => boolean;
+  runCodeFenceBackspace: (activeState: ActiveBlockState) => boolean;
+  runCodeFenceEnter: (activeState: ActiveBlockState) => boolean;
+  runListBackspace: (activeState: ActiveBlockState) => boolean;
+  runListEnter: (activeState: ActiveBlockState) => boolean;
+  runListIndentOnTab: (activeState: ActiveBlockState) => boolean;
+  runListOutdentOnShiftTab: (activeState: ActiveBlockState) => boolean;
+  runTableMoveDownOrExit: (activeState: ActiveBlockState) => boolean;
+  runTableNextCell: (activeState: ActiveBlockState) => boolean;
+  runTablePreviousCell: (activeState: ActiveBlockState) => boolean;
+};
+
+export function runMarkdownEnterCommand(
+  target: MarkdownCommandTarget,
+  activeState: ActiveBlockState
+): boolean {
   return (
-    runTableMoveDownOrExit(view, activeState) ||
-    runDraftTableEnter(view, activeState) ||
-    runCodeFenceEnter(view, activeState) ||
-    runListEnter(view, activeState) ||
-    runBlockquoteEnter(view) ||
-    insertNewlineAndIndent(view)
+    target.runTableMoveDownOrExit(activeState) ||
+    runDraftTableEnterCommand(target, activeState) ||
+    target.runCodeFenceEnter(activeState) ||
+    target.runListEnter(activeState) ||
+    target.runBlockquoteEnter() ||
+    target.insertNewlineAndIndent()
   );
 }
 
-export function runMarkdownBackspace(view: EditorView, activeState: ActiveBlockState): boolean {
+export function runMarkdownBackspaceCommand(
+  target: MarkdownCommandTarget,
+  activeState: ActiveBlockState
+): boolean {
   return (
-    runCodeFenceBackspace(view, activeState) ||
-    runBlockquoteBackspace(view, activeState) ||
-    runListBackspace(view, activeState) ||
-    deleteCharBackward(view)
+    target.runCodeFenceBackspace(activeState) ||
+    target.runBlockquoteBackspace(activeState) ||
+    target.runListBackspace(activeState) ||
+    target.deleteCharBackward()
   );
 }
 
-export function runMarkdownTab(view: EditorView, activeState: ActiveBlockState): boolean {
-  return runTableNextCell(view, activeState) || runListIndentOnTab(view, activeState);
+export function runMarkdownTabCommand(
+  target: MarkdownCommandTarget,
+  activeState: ActiveBlockState
+): boolean {
+  return target.runTableNextCell(activeState) || target.runListIndentOnTab(activeState);
 }
 
-export function runMarkdownShiftTab(view: EditorView, activeState: ActiveBlockState): boolean {
-  return runTablePreviousCell(view, activeState) || runListOutdentOnShiftTab(view, activeState);
+export function runMarkdownShiftTabCommand(
+  target: MarkdownCommandTarget,
+  activeState: ActiveBlockState
+): boolean {
+  return target.runTablePreviousCell(activeState) || target.runListOutdentOnShiftTab(activeState);
 }
 
-export function runMarkdownArrowDown(view: EditorView, activeState: ActiveBlockState): boolean {
-  const result = resolveArrowDown(view, activeState);
+export function runMarkdownArrowDownCommand(
+  target: MarkdownCommandTarget,
+  activeState: ActiveBlockState
+): boolean {
+  const result = target.resolveArrowDown(activeState);
 
   if (result === null) {
     return false;
   }
 
-  view.dispatch({
-    selection: EditorSelection.cursor(result.anchor, 0, undefined, result.goalColumn)
-  });
-
+  target.dispatchSelection(result);
   return true;
 }
 
-export function runMarkdownArrowUp(view: EditorView, activeState: ActiveBlockState): boolean {
-  const result = resolveArrowUp(view, activeState);
+export function runMarkdownArrowUpCommand(
+  target: MarkdownCommandTarget,
+  activeState: ActiveBlockState
+): boolean {
+  const result = target.resolveArrowUp(activeState);
 
   if (result === null) {
-    return runBlankLineArrowUp(view);
+    return runBlankLineArrowUpCommand(target);
   }
 
-  view.dispatch({
-    selection: EditorSelection.cursor(result.anchor, 0, undefined, result.goalColumn)
-  });
-
+  target.dispatchSelection(result);
   return true;
 }
 
-function runDraftTableEnter(view: EditorView, activeState: ActiveBlockState): boolean {
+function runDraftTableEnterCommand(
+  target: MarkdownCommandTarget,
+  activeState: ActiveBlockState
+): boolean {
   if (activeState.activeBlock?.type !== "paragraph") {
     return false;
   }
 
-  const selection = view.state.selection.main;
+  const selection = target.getSelection();
 
   if (!selection.empty) {
     return false;
   }
 
-  const line = view.state.doc.lineAt(selection.head);
+  const line = target.lineAt(selection.head);
 
   if (selection.head !== line.to) {
     return false;
   }
 
-  const nextLine = line.number < view.state.doc.lines ? view.state.doc.line(line.number + 1) : null;
+  const nextLine = line.number < target.getLineCount() ? target.line(line.number + 1) : null;
 
   if (nextLine && looksLikeCommittedTableDelimiter(nextLine.text)) {
     return false;
@@ -116,12 +159,10 @@ function runDraftTableEnter(view: EditorView, activeState: ActiveBlockState): bo
   const selectionAnchor =
     parsedTable?.type === "table" ? parsedTable.rows[0]?.[0]?.contentStartOffset ?? tableMarkdown.length : tableMarkdown.length;
 
-  view.dispatch({
-    changes: {
-      from: line.from,
-      to: line.to,
-      insert: tableMarkdown
-    },
+  target.dispatchChange({
+    from: line.from,
+    to: line.to,
+    insert: tableMarkdown,
     selection: {
       anchor: line.from + selectionAnchor,
       head: line.from + selectionAnchor
@@ -159,32 +200,29 @@ function looksLikeCommittedTableDelimiter(line: string): boolean {
   return segments.length >= 2 && segments.every((segment) => /^:?-{3,}:?$/u.test(segment.text));
 }
 
-function runBlankLineArrowUp(view: EditorView): boolean {
-  const selection = view.state.selection.main;
+function runBlankLineArrowUpCommand(target: MarkdownCommandTarget): boolean {
+  const selection = target.getSelection();
 
   if (!selection.empty) {
     return false;
   }
 
-  const currentLine = view.state.doc.lineAt(selection.head);
+  const currentLine = target.lineAt(selection.head);
 
   if (currentLine.number <= 1 || currentLine.text.trim().length !== 0) {
     return false;
   }
 
-  const previousLine = view.state.doc.line(currentLine.number - 1);
+  const previousLine = target.line(currentLine.number - 1);
 
   if (previousLine.text.trim().length !== 0) {
     return false;
   }
 
-  view.dispatch({
-    selection: {
-      anchor: previousLine.from,
-      head: previousLine.from
-    }
+  target.dispatchSelection({
+    anchor: previousLine.from,
+    head: previousLine.from
   });
 
   return true;
 }
-

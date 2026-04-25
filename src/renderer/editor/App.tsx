@@ -46,16 +46,13 @@ import {
 import { type ExternalMarkdownFileState } from "./editor-shell-state";
 import type { ThemeSurfaceRuntimeMode } from "../shader/theme-surface-runtime";
 import { WorkspaceShell } from "./WorkspaceShell";
-import { useEditorWorkflowController } from "./useEditorWorkflowController";
-import { useExternalConflictController } from "./useExternalConflictController";
-import { useSaveController } from "./useSaveController";
+import { useEditorApplicationController } from "./useEditorApplicationController";
 import { useSettingsController } from "./useSettingsController";
 import {
   resolveActiveThemePackageManifest,
   useThemeController,
   type ResolvedThemeMode
 } from "./useThemeController";
-import { useWorkspaceController } from "./useWorkspaceController";
 
 const EXTERNAL_FILE_MODIFIED_PENDING_MESSAGE =
   "当前文件已被外部修改。请先决定是重载磁盘版本，还是保留当前编辑并另存为。";
@@ -394,55 +391,23 @@ function EditorShell({
     return editorRef.current?.getContent() ?? editorContentRef.current;
   }, []);
 
-  const workspaceController = useWorkspaceController({
+  const editorApplicationController = useEditorApplicationController({
     fishmark,
     getEditorContent,
-    showNotification
-  });
-  const saveController = useSaveController({
-    fishmark,
-    getActiveDocument: workspaceController.getActiveDocument,
-    getEditorContent,
-    flushActiveWorkspaceDraft: workspaceController.flushActiveWorkspaceDraft,
-    refreshWorkspaceSnapshot: workspaceController.refreshWorkspaceSnapshot,
-    hasExternalFileConflict: () => externalConflictController.hasExternalFileConflict(),
-    autosaveDelayMs: preferences.autosave.idleDelayMs,
-    showNotification
-  });
-  const externalConflictController = useExternalConflictController({
-    fishmark,
-    getActiveDocument: workspaceController.getActiveDocument,
-    reloadActiveDocument: async () => {
-      const activeDocument = workspaceController.getActiveDocument();
-
-      if (!activeDocument?.path) {
-        return false;
-      }
-
-      return workspaceController.reloadWorkspaceTabFromPath({
-        tabId: activeDocument.tabId,
-        targetPath: activeDocument.path
-      });
-    },
-    resetAutosaveRuntime: saveController.resetAutosaveRuntime,
-    showNotification
-  });
-  const editorWorkflowController = useEditorWorkflowController({
     setEditorContentSnapshot: (content) => {
       editorContentRef.current = content;
     },
     updateOutline: (content) => {
       setOutlineItems(deriveOutlineItems(content));
     },
-    scheduleAutosave: saveController.scheduleAutosave,
-    runAutosave: saveController.runAutosave,
-    resetAutosaveRuntime: saveController.resetAutosaveRuntime,
-    getActiveTabId: workspaceController.getActiveTabId,
-    updateDraft: workspaceController.updateDraft,
-    activateWorkspaceTab: workspaceController.activateWorkspaceTab,
-    closeWorkspaceTab: workspaceController.closeWorkspaceTab,
-    detachWorkspaceTab: workspaceController.detachWorkspaceTab
+    autosaveDelayMs: preferences.autosave.idleDelayMs,
+    showNotification
   });
+  const workspaceController = editorApplicationController.workspace;
+  const saveController = editorApplicationController.save;
+  const externalConflictController = editorApplicationController.externalConflict;
+  const editorWorkflowController = editorApplicationController.editorWorkflow;
+  const editorCommands = editorApplicationController.commands;
   const {
     handleEditorContentChange,
     handleEditorBlur,
@@ -456,11 +421,7 @@ function EditorShell({
     openState,
     editorLoadRevision,
     getActiveDocument: getWorkspaceActiveDocument,
-    openMarkdown,
-    createUntitledMarkdown,
-    openMarkdownFromPath,
     reorderWorkspaceTab,
-    flushActiveWorkspaceDraft,
     loadInitialWorkspaceSnapshot,
     applyState: applyWorkspaceState,
     getState: getWorkspaceState
@@ -468,7 +429,6 @@ function EditorShell({
   const {
     resetAutosaveRuntime,
     scheduleAutosave,
-    runManualSave,
     getEffectiveSaveState
   } = saveController;
   const effectiveSaveState = getEffectiveSaveState(activeDocument);
@@ -756,16 +716,7 @@ function EditorShell({
   });
 
   const handleWorkspaceWindowCloseRequest = useEffectEvent(async (): Promise<boolean> => {
-    try {
-      await flushActiveWorkspaceDraft();
-      return await fishmark.confirmWorkspaceWindowClose();
-    } catch (error) {
-      showNotification({
-        kind: "error",
-        message: error instanceof Error ? error.message : String(error)
-      });
-      return false;
-    }
+    return editorCommands.confirmWorkspaceWindowClose();
   });
 
   const handleAppMenuCommand = useEffectEvent((command: AppMenuCommand): void => {
@@ -849,8 +800,7 @@ function EditorShell({
   }
 
   async function handleOpenMarkdown(): Promise<void> {
-    resetAutosaveRuntime();
-    const result = await openMarkdown();
+    const result = await editorCommands.openMarkdown();
 
     if (result === "opened") {
       setShellMode("reading");
@@ -859,8 +809,7 @@ function EditorShell({
   }
 
   async function handleNewMarkdown(): Promise<void> {
-    resetAutosaveRuntime();
-    const created = await createUntitledMarkdown();
+    const created = await editorCommands.createUntitledMarkdown();
 
     if (created) {
       setShellMode("editing");
@@ -868,8 +817,7 @@ function EditorShell({
   }
 
   const handleOpenMarkdownFromPath = useCallback(async (targetPath: string): Promise<void> => {
-    resetAutosaveRuntime();
-    const opened = await openMarkdownFromPath(targetPath);
+    const opened = await editorCommands.openMarkdownFromPath(targetPath);
 
     if (opened) {
       setShellMode("reading");
@@ -877,8 +825,7 @@ function EditorShell({
     }
   }, [
     blurFocusedEditorElementAfterOpen,
-    openMarkdownFromPath,
-    resetAutosaveRuntime
+    editorCommands
   ]);
 
   async function handleActivateWorkspaceTab(tabId: string): Promise<void> {
@@ -1007,23 +954,11 @@ function EditorShell({
   }, []);
 
   async function handleSaveMarkdown(): Promise<void> {
-    const currentDocument = getWorkspaceActiveDocument();
-
-    if (!currentDocument) {
-      return;
-    }
-
-    await runManualSave();
+    await editorCommands.saveMarkdown();
   }
 
   async function handleSaveMarkdownAs(): Promise<void> {
-    const currentDocument = getWorkspaceActiveDocument();
-
-    if (!currentDocument) {
-      return;
-    }
-
-    await runManualSave({ forceSaveAs: true });
+    await editorCommands.saveMarkdownAs();
   }
 
   async function handleImportClipboardImage(

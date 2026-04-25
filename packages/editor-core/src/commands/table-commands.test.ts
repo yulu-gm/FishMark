@@ -8,7 +8,7 @@ import { parseMarkdownDocument } from "@fishmark/markdown-engine";
 
 import { createActiveBlockStateFromMarkdownDocument } from "../active-block";
 import { deriveTableCursorState } from "../table-cursor-state";
-import { runMarkdownTab } from "./markdown-commands";
+import { runMarkdownTab } from "./codemirror-markdown-commands";
 import {
   runTableEnterFromLineBelow,
   runTableInsertRowBelow,

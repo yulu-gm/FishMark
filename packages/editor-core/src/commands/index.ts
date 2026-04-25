@@ -10,6 +10,15 @@ export {
   runMarkdownEnter,
   runMarkdownShiftTab,
   runMarkdownTab
+} from "./codemirror-markdown-commands";
+export {
+  runMarkdownArrowDownCommand,
+  runMarkdownArrowUpCommand,
+  runMarkdownBackspaceCommand,
+  runMarkdownEnterCommand,
+  runMarkdownShiftTabCommand,
+  runMarkdownTabCommand,
+  type MarkdownCommandTarget
 } from "./markdown-commands";
 export {
   runTableDelete,
