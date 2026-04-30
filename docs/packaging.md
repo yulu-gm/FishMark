@@ -202,6 +202,31 @@ npm run release:mac:beta
 
 beta DMG 是测试分发包，不接入自动更新，也不标记为 GitHub latest。它不做 Apple notarization，用户首次打开时可能需要在 macOS System Settings 中手动允许。
 
+### 通过 GitHub Actions 发布 macOS Beta
+
+Windows 开发机可以通过 GitHub Actions 的 macOS runner 发布 beta DMG，不需要 Apple Developer ID 证书或 notarization 凭据。
+
+仓库提供手动触发的 workflow：
+
+```text
+.github/workflows/release-macos-beta.yml
+```
+
+使用步骤：
+
+1. 在 Windows 上先同步 `package.json` 与 `release-metadata/release-notes.json` 的版本号，并推送到 `main`。
+2. 打开 GitHub 仓库的 Actions 页面。
+3. 选择 `Release macOS Beta`。
+4. 点击 `Run workflow`，分支选择 `main`。
+
+该 workflow 会在 `macos-latest` 上执行：
+
+1. `npm ci`
+2. release metadata 版本一致性校验
+3. `npm run release:mac:beta`
+
+发布结果会写入 `v<version>-mac-beta` prerelease，并上传 Apple Silicon beta DMG 及 `.dmg.blockmap`（若 `electron-builder` 生成）。
+
 ### 产物输出
 
 打包产物输出到：

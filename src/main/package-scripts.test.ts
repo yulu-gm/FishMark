@@ -194,6 +194,24 @@ describe("package scripts", () => {
     expect(packageJson.scripts?.["release:mac:beta"]).toContain("node scripts/build-mac-release.mjs beta");
   });
 
+  it("provides a manual GitHub Actions macOS beta release runner", () => {
+    const workflowPath = path.join(process.cwd(), ".github", "workflows", "release-macos-beta.yml");
+
+    expect(existsSync(workflowPath)).toBe(true);
+
+    const workflowSource = readFileSync(workflowPath, "utf8");
+
+    expect(workflowSource).toContain("workflow_dispatch");
+    expect(workflowSource).toContain("contents: write");
+    expect(workflowSource).toContain("runs-on: macos-latest");
+    expect(workflowSource).toContain("actions/setup-node@v4");
+    expect(workflowSource).toContain("node-version: 22");
+    expect(workflowSource).toContain("npm ci");
+    expect(workflowSource).toContain("npm run release:mac:beta");
+    expect(workflowSource).toContain("GITHUB_TOKEN: ${{ github.token }}");
+    expect(workflowSource).toContain('"main"');
+  });
+
   it("declares macOS distributable release targets for dmg, zip, and updater metadata", () => {
     const configPath = path.join(process.cwd(), "electron-builder.json");
     const config = JSON.parse(readFileSync(configPath, "utf8")) as {

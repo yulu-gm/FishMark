@@ -1,0 +1,46 @@
+name: Release macOS Beta
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: macos-beta-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-macos-beta:
+    name: Build and publish macOS beta DMG
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify release branch
+        run: |
+          if [ "${GITHUB_REF_NAME}" != "main" ]; then
+            echo "macOS beta releases must be triggered from main because the release tag targets main."
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate release metadata
+        run: |
+          node -e 'const p=require("./package.json"); const r=require("./release-metadata/release-notes.json"); if (p.version !== r.version) { console.error("Version mismatch: package.json=" + p.version + ", release-notes.json=" + r.version); process.exit(1); } console.log("Preparing macOS beta release " + p.version);'
+
+      - name: Release macOS beta DMG
+        run: npm run release:mac:beta
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
