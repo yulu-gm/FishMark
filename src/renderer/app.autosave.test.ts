@@ -3308,6 +3308,8 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
+    await clickSettingsNavigationButton("最近文件");
+
     const recentFilesInput = container.querySelector<HTMLInputElement>("#settings-recent-max");
 
     expect(recentFilesInput?.disabled).toBe(true);
@@ -4631,34 +4633,158 @@ describe("App autosave", () => {
     expect(overlayItemExitKeyframes).toContain("scaleY");
   });
 
-  it("renders settings as a drawer panel with close affordance while keeping existing controls", async () => {
+  function getSettingsDrawerPanel(): HTMLElement {
+    const drawerPanel = container.querySelector<HTMLElement>('[data-fishmark-panel="settings-drawer"]');
+    if (!drawerPanel) {
+      throw new Error("settings drawer panel not found");
+    }
+    return drawerPanel;
+  }
+
+  function getSettingsNavigationButton(name: string): HTMLButtonElement {
+    const button = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('[data-fishmark-region="settings-navigation"] button')
+    ).find((candidate) => candidate.textContent?.trim() === name);
+
+    if (!button) {
+      throw new Error(`settings navigation button not found: ${name}`);
+    }
+
+    return button;
+  }
+
+  async function clickSettingsNavigationButton(name: string): Promise<void> {
+    const button = getSettingsNavigationButton(name);
+
+    await act(async () => {
+      button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+  }
+
+  it("opens settings on the appearance theme section with nested navigation", async () => {
     const driver = await renderEditorApp();
     await driver.openSettings();
 
-    const drawerPanel = container.querySelector<HTMLElement>('[data-fishmark-panel="settings-drawer"]');
+    const drawerPanel = getSettingsDrawerPanel();
     const closeButton = container.querySelector<HTMLButtonElement>('[aria-label="关闭设置"]');
+    const navigation = container.querySelector<HTMLElement>('[data-fishmark-region="settings-navigation"]');
+    const activeSection = container.querySelector<HTMLElement>('[data-fishmark-settings-section="theme"]');
     const themeSelect = container.querySelector<HTMLSelectElement>("#settings-theme-package");
+    const uiFontSelect = container.querySelector<HTMLSelectElement>("#settings-ui-font-preset");
     const documentFontSelect = container.querySelector<HTMLSelectElement>("#settings-document-font-preset");
     const documentCjkFontSelect = container.querySelector<HTMLSelectElement>("#settings-document-cjk-font-preset");
-    const documentFontInput = container.querySelector<HTMLInputElement>("#settings-document-font-family");
+    const documentFontSizeInput = container.querySelector<HTMLInputElement>("#settings-document-font-size");
+    const autosaveInput = container.querySelector<HTMLInputElement>("#settings-autosave-delay");
     const recentFilesInput = container.querySelector<HTMLInputElement>("#settings-recent-max");
 
-    const uiFontSelect = container.querySelector<HTMLSelectElement>("#settings-ui-font-preset");
-
-    expect(drawerPanel?.getAttribute("role")).toBe("dialog");
-    expect(drawerPanel?.getAttribute("aria-modal")).toBe("true");
-    expect(drawerPanel?.textContent).toContain("偏好设置");
+    expect(drawerPanel.getAttribute("role")).toBe("dialog");
+    expect(drawerPanel.getAttribute("aria-modal")).toBe("true");
+    expect(drawerPanel.textContent).toContain("偏好设置");
     expect(closeButton).not.toBeNull();
+    expect(navigation?.getAttribute("aria-label")).toBe("设置分类");
+    expect(getSettingsNavigationButton("外观").getAttribute("aria-expanded")).toBe("true");
+    expect(getSettingsNavigationButton("文件").getAttribute("aria-expanded")).toBe("true");
+    expect(getSettingsNavigationButton("主题").getAttribute("aria-current")).toBe("page");
+    expect(activeSection?.textContent).toContain("主题");
     expect(themeSelect).not.toBeNull();
+    expect(themeSelect?.className).toContain("settings-select");
+    expect(uiFontSelect).toBeNull();
+    expect(documentFontSelect).toBeNull();
+    expect(documentCjkFontSelect).toBeNull();
+    expect(documentFontSizeInput).toBeNull();
+    expect(autosaveInput).toBeNull();
+    expect(recentFilesInput).toBeNull();
+  });
+
+  it("switches settings to typography without changing preference patch semantics", async () => {
+    const driver = await renderEditorApp();
+    await driver.openSettings();
+
+    await clickSettingsNavigationButton("排版");
+
+    const activeSection = container.querySelector<HTMLElement>('[data-fishmark-settings-section="typography"]');
+    const themeSelect = container.querySelector<HTMLSelectElement>("#settings-theme-package");
+    const uiFontSelect = container.querySelector<HTMLSelectElement>("#settings-ui-font-preset");
+    const documentFontSelect = container.querySelector<HTMLSelectElement>("#settings-document-font-preset");
+    const documentCjkFontSelect = container.querySelector<HTMLSelectElement>("#settings-document-cjk-font-preset");
+
+    expect(getSettingsNavigationButton("排版").getAttribute("aria-current")).toBe("page");
+    expect(activeSection?.textContent).toContain("排版");
+    expect(themeSelect).toBeNull();
     expect(uiFontSelect).not.toBeNull();
     expect(documentFontSelect).not.toBeNull();
     expect(documentCjkFontSelect).not.toBeNull();
-    expect(themeSelect?.className).toContain("settings-select");
-    expect(uiFontSelect?.className).toContain("settings-select");
-    expect(documentFontSelect?.className).toContain("settings-select");
-    expect(documentCjkFontSelect?.className).toContain("settings-select");
-    expect(documentFontInput).toBeNull();
+
+    await act(async () => {
+      if (uiFontSelect) {
+        uiFontSelect.value = "Segoe UI";
+        uiFontSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      await Promise.resolve();
+    });
+
+    expect(window.fishmark.updatePreferences).toHaveBeenCalledWith({
+      ui: { fontFamily: "Segoe UI" }
+    });
+  });
+
+  it("switches settings to autosave under the file category", async () => {
+    const driver = await renderEditorApp();
+    await driver.openSettings();
+
+    await clickSettingsNavigationButton("自动保存");
+
+    const activeSection = container.querySelector<HTMLElement>('[data-fishmark-settings-section="autosave"]');
+    const autosaveInput = container.querySelector<HTMLInputElement>("#settings-autosave-delay");
+    const themeSelect = container.querySelector<HTMLSelectElement>("#settings-theme-package");
+    const uiFontSelect = container.querySelector<HTMLSelectElement>("#settings-ui-font-preset");
+
+    expect(getSettingsNavigationButton("自动保存").getAttribute("aria-current")).toBe("page");
+    expect(activeSection?.textContent).toContain("自动保存");
+    expect(autosaveInput).not.toBeNull();
+    expect(themeSelect).toBeNull();
+    expect(uiFontSelect).toBeNull();
+  });
+
+  it("switches settings to recent files while keeping the existing disabled pending control", async () => {
+    const driver = await renderEditorApp();
+    await driver.openSettings();
+
+    await clickSettingsNavigationButton("最近文件");
+
+    const activeSection = container.querySelector<HTMLElement>('[data-fishmark-settings-section="recent-files"]');
+    const recentFilesInput = container.querySelector<HTMLInputElement>("#settings-recent-max");
+    const themeSelect = container.querySelector<HTMLSelectElement>("#settings-theme-package");
+
+    expect(getSettingsNavigationButton("最近文件").getAttribute("aria-current")).toBe("page");
+    expect(activeSection?.textContent).toContain("最近文件");
     expect(recentFilesInput?.disabled).toBe(true);
+    expect(activeSection?.textContent).toContain("将在 TASK-006 接入后开放");
+    expect(themeSelect).toBeNull();
+  });
+
+  it("lets parent settings categories expand and collapse without hiding the active branch", async () => {
+    const driver = await renderEditorApp();
+    await driver.openSettings();
+
+    await clickSettingsNavigationButton("文件");
+
+    expect(getSettingsNavigationButton("文件").getAttribute("aria-expanded")).toBe("false");
+    expect(getSettingsNavigationButton("外观").getAttribute("aria-expanded")).toBe("true");
+    expect(getSettingsNavigationButton("主题").getAttribute("aria-current")).toBe("page");
+
+    await clickSettingsNavigationButton("文件");
+    await clickSettingsNavigationButton("自动保存");
+
+    expect(getSettingsNavigationButton("文件").getAttribute("aria-expanded")).toBe("true");
+    expect(getSettingsNavigationButton("自动保存").getAttribute("aria-current")).toBe("page");
+
+    await clickSettingsNavigationButton("文件");
+
+    expect(getSettingsNavigationButton("文件").getAttribute("aria-expanded")).toBe("true");
+    expect(getSettingsNavigationButton("自动保存").getAttribute("aria-current")).toBe("page");
+    expect(container.querySelector<HTMLElement>('[data-fishmark-settings-section="autosave"]')).not.toBeNull();
   });
 
   it("does not render removed focus settings controls", async () => {
@@ -4694,6 +4820,7 @@ describe("App autosave", () => {
       }
     });
     await driver.openSettings();
+    await clickSettingsNavigationButton("排版");
 
     const uiFontSelect = container.querySelector<HTMLSelectElement>("#settings-ui-font-preset");
 
@@ -4795,6 +4922,7 @@ describe("App autosave", () => {
   it("updates document font presets through dropdowns only", async () => {
     const driver = await renderEditorApp();
     await driver.openSettings();
+    await clickSettingsNavigationButton("排版");
 
     const documentFontSelect = container.querySelector<HTMLSelectElement>("#settings-document-font-preset");
     const documentCjkFontSelect = container.querySelector<HTMLSelectElement>("#settings-document-cjk-font-preset");
@@ -4834,6 +4962,8 @@ describe("App autosave", () => {
     await driver.openSettings();
 
     expect(listFontFamilies).toHaveBeenCalledTimes(1);
+
+    await clickSettingsNavigationButton("排版");
 
     const documentFontSelect = container.querySelector<HTMLSelectElement>("#settings-document-font-preset");
     const documentCjkFontSelect = container.querySelector<HTMLSelectElement>("#settings-document-cjk-font-preset");
