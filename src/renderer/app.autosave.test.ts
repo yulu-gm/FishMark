@@ -5516,6 +5516,27 @@ describe("App autosave", () => {
     );
   });
 
+  it("styles preferences as a nested navigation drawer with stable chrome", () => {
+    const settingsStylesheet = readFileSync(settingsStylesheetPath, "utf-8").replace(/\r\n/g, "\n");
+    const settingsErrorRule = getCssRule(settingsStylesheet, ".settings-error");
+    const settingsBodyRule = getCssRule(settingsStylesheet, ".settings-body");
+    const settingsFooterRule = getCssRule(settingsStylesheet, ".settings-footer");
+
+    expect(settingsStylesheet).toContain("grid-template-rows: auto auto minmax(0, 1fr) auto;");
+    expect(settingsErrorRule).toContain("grid-row: 2;");
+    expect(settingsStylesheet).toContain(".settings-body");
+    expect(settingsBodyRule).toContain("grid-row: 3;");
+    expect(settingsStylesheet).toContain("grid-template-columns: 184px minmax(0, 1fr);");
+    expect(settingsStylesheet).toContain(".settings-navigation");
+    expect(settingsStylesheet).toContain(".settings-navigation-parent");
+    expect(settingsStylesheet).toContain(".settings-navigation-child");
+    expect(settingsStylesheet).toContain(".settings-navigation-child.is-active");
+    expect(settingsStylesheet).toContain(".settings-content");
+    expect(settingsStylesheet).toContain("overflow-y: auto;");
+    expect(settingsStylesheet).toContain("@media (max-width: 860px)");
+    expect(settingsFooterRule).toContain("grid-row: 4;");
+  });
+
   it("defines themed option styling for settings dropdown menus", () => {
     const primitivesStylesheet = readFileSync(primitivesStylesheetPath, "utf-8");
 

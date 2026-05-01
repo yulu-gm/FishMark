@@ -26,10 +26,12 @@
   top: var(--fishmark-shell-edge);
   bottom: var(--fishmark-shell-edge);
   left: calc(var(--fishmark-shell-rail-width) + var(--fishmark-shell-edge));
-  width: min(480px, calc(100vw - var(--fishmark-shell-rail-width) - (var(--fishmark-shell-edge) * 3)));
+  width: min(760px, calc(100vw - var(--fishmark-shell-rail-width) - (var(--fishmark-shell-edge) * 3)));
   z-index: 31;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   margin: 0;
-  padding: var(--fishmark-space-5) var(--fishmark-space-5) var(--fishmark-space-6);
+  padding: 0;
   border: 1px solid var(--fishmark-panel-border, rgba(15, 23, 42, 0.12));
   border-radius: var(--fishmark-radius-2xl);
   background: var(--fishmark-panel-bg, rgba(255, 255, 255, 0.92));
@@ -37,7 +39,7 @@
   box-shadow: var(--fishmark-panel-shadow, var(--fishmark-shadow-3));
   backdrop-filter: blur(28px) saturate(1.12);
   -webkit-backdrop-filter: blur(28px) saturate(1.12);
-  overflow: auto;
+  overflow: hidden;
   isolation: isolate;
 }
 
@@ -78,15 +80,13 @@
   z-index: 1;
 }
 
-/* ── Sticky header ──────────────────────────────────────────── */
+/* ── Header ─────────────────────────────────────────────────── */
 
 .settings-header {
-  position: sticky;
-  top: calc(var(--fishmark-space-5) * -1);
+  grid-row: 1;
   display: flex;
   align-items: center;
   gap: var(--fishmark-space-4);
-  margin: 0 calc(var(--fishmark-space-5) * -1) var(--fishmark-space-5);
   padding: var(--fishmark-space-5) var(--fishmark-space-5) var(--fishmark-space-4);
   background: color-mix(
     in srgb,
@@ -134,8 +134,112 @@
 /* ── Content groups ─────────────────────────────────────────── */
 
 .settings-error {
+  grid-row: 2;
+  align-self: start;
+  width: auto;
+  margin: var(--fishmark-space-4) var(--fishmark-space-5) 0;
+  z-index: 2;
+}
+
+.settings-body {
+  grid-row: 3;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 184px minmax(0, 1fr);
+  gap: var(--fishmark-space-5);
+  padding: var(--fishmark-space-5);
+  overflow: hidden;
+}
+
+.settings-navigation {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: var(--fishmark-space-3);
+  padding: var(--fishmark-space-1) 0;
+  overflow-y: auto;
+}
+
+.settings-navigation-group {
+  display: grid;
+  gap: var(--fishmark-space-1);
+}
+
+.settings-navigation-parent,
+.settings-navigation-child {
+  appearance: none;
   width: 100%;
-  margin: 0 0 var(--fishmark-space-4);
+  border: 0;
+  color: var(--fishmark-text-secondary, #31353d);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-navigation-parent {
+  display: grid;
+  grid-template-columns: 16px 22px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--fishmark-space-2);
+  min-height: 36px;
+  padding: 0 var(--fishmark-space-3);
+  border-radius: var(--fishmark-radius-lg);
+  background: transparent;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.settings-navigation-parent:hover,
+.settings-navigation-parent.is-active {
+  background: color-mix(in srgb, var(--fishmark-control-bg, rgba(255, 255, 255, 0.9)) 72%, transparent);
+  color: var(--fishmark-text-primary, #171a1f);
+}
+
+.settings-navigation-chevron,
+.settings-navigation-icon {
+  display: inline-grid;
+  place-items: center;
+  color: var(--fishmark-text-muted, #687180);
+}
+
+.settings-navigation-chevron {
+  font-size: 0.88rem;
+}
+
+.settings-navigation-icon {
+  font-size: 0.95rem;
+}
+
+.settings-navigation-children {
+  display: grid;
+  gap: 2px;
+  padding-left: calc(16px + var(--fishmark-space-2));
+}
+
+.settings-navigation-child {
+  min-height: 32px;
+  padding: 0 var(--fishmark-space-3) 0 calc(22px + var(--fishmark-space-2));
+  border-radius: var(--fishmark-radius-md);
+  background: transparent;
+  font-size: 0.86rem;
+}
+
+.settings-navigation-child:hover {
+  background: color-mix(in srgb, var(--fishmark-control-bg, rgba(255, 255, 255, 0.9)) 56%, transparent);
+  color: var(--fishmark-text-primary, #171a1f);
+}
+
+.settings-navigation-child.is-active {
+  background: color-mix(in srgb, var(--fishmark-focus-ring, #5da7ff) 16%, transparent);
+  color: var(--fishmark-text-primary, #171a1f);
+  font-weight: 600;
+}
+
+.settings-content {
+  min-width: 0;
+  min-height: 0;
+  padding: var(--fishmark-space-1) var(--fishmark-space-1) var(--fishmark-space-2);
+  overflow-y: auto;
 }
 
 .settings-groups {
@@ -227,12 +331,12 @@
 /* ── Footer ─────────────────────────────────────────────────── */
 
 .settings-footer {
+  grid-row: 4;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--fishmark-space-4);
-  margin-top: var(--fishmark-space-6);
-  padding-top: var(--fishmark-space-4);
+  padding: var(--fishmark-space-4) var(--fishmark-space-5);
   border-top: 1px solid var(--fishmark-panel-border, rgba(15, 23, 42, 0.12));
 }
 
@@ -274,13 +378,48 @@
 @media (max-width: 860px) {
   .settings-shell {
     left: calc(var(--fishmark-shell-rail-width) + 10px);
-    width: min(460px, calc(100vw - var(--fishmark-shell-rail-width) - 22px));
-    padding-inline: var(--fishmark-space-4);
+    width: min(560px, calc(100vw - var(--fishmark-shell-rail-width) - 22px));
   }
 
   .settings-header {
-    margin-inline: calc(var(--fishmark-space-4) * -1);
     padding-inline: var(--fishmark-space-4);
+  }
+
+  .settings-error {
+    margin: var(--fishmark-space-4) var(--fishmark-space-4) 0;
+  }
+
+  .settings-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: var(--fishmark-space-4);
+    padding: var(--fishmark-space-4);
+  }
+
+  .settings-navigation {
+    display: flex;
+    gap: var(--fishmark-space-2);
+    padding: 0 0 var(--fishmark-space-2);
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .settings-navigation-group {
+    min-width: max-content;
+  }
+
+  .settings-navigation-parent {
+    grid-template-columns: 16px 22px max-content;
+    padding-inline: var(--fishmark-space-2);
+  }
+
+  .settings-navigation-children {
+    padding-left: 0;
+  }
+
+  .settings-navigation-child {
+    white-space: nowrap;
+    padding: 0 var(--fishmark-space-3);
   }
 
   .settings-row {
@@ -310,6 +449,12 @@
     right: 12px;
     width: auto;
     border-radius: var(--fishmark-radius-xl);
+  }
+
+  .settings-header,
+  .settings-body,
+  .settings-footer {
+    padding-inline: var(--fishmark-space-4);
   }
 
   .settings-title-block h1 {
