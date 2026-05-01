@@ -5091,6 +5091,14 @@ describe("App autosave", () => {
     );
   });
 
+  it("anchors the workspace header to the left edge instead of centering it at wide zoomed widths", () => {
+    const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8");
+    const headerRule = getCssRule(appUiStylesheet, ".app-header");
+
+    expect(headerRule).toContain("justify-self: start;");
+    expect(headerRule).toContain("margin: 0;");
+  });
+
   it("defines shared scrollbar styling for the desktop shell", () => {
     const baseStylesheet = readFileSync(baseStylesheetPath, "utf-8");
 
