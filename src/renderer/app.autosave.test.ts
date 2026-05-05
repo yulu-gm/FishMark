@@ -5625,6 +5625,7 @@ describe("App autosave", () => {
 
     expect(rainGlassRootRule).toContain("--fishmark-list-marker:");
     expect(rainGlassRootRule).not.toContain("--fishmark-list-marker-size:");
+    expect(rainGlassRootRule).not.toContain("--fishmark-list-marker-column-width:");
     expect(rainGlassRootRule).not.toContain("--fishmark-list-ordered-marker-width:");
     expect(rainGlassRootRule).not.toContain("--fishmark-task-size:");
     expect(rainGlassRootRule).not.toContain("--fishmark-table-cell-padding-inline:");
@@ -5717,9 +5718,11 @@ describe("App autosave", () => {
     const appRootRule = getCssRule(markdownRenderStylesheet, ":root");
 
     expect(appRootRule).toContain("--fishmark-list-marker-size:");
+    expect(appRootRule).toContain("--fishmark-list-marker-column-width:");
     expect(appRootRule).toContain("--fishmark-list-ordered-marker-width:");
     expect(appRootRule).toContain("--fishmark-task-size:");
     expect(lightMarkdownRule).not.toContain("--fishmark-list-marker-size:");
+    expect(lightMarkdownRule).not.toContain("--fishmark-list-marker-column-width:");
     expect(lightMarkdownRule).not.toContain("--fishmark-list-ordered-marker-width:");
     expect(lightMarkdownRule).not.toContain("--fishmark-task-size:");
     expect(lightMarkdownRule).toContain("--fishmark-task-toggle-border:");
@@ -5865,7 +5868,7 @@ describe("App autosave", () => {
     expect(activeOrderedListMarkerRule).toContain("position: absolute;");
     expect(activeOrderedListMarkerRule).toContain("left: var(--fishmark-list-depth-offset);");
     expect(activeOrderedListMarkerRule).toContain("min-width: var(--fishmark-list-ordered-marker-width);");
-    expect(activeOrderedListMarkerRule).toContain("text-align: right;");
+    expect(activeOrderedListMarkerRule).toContain("text-align: left;");
     expect(markdownRenderStylesheet).toContain(".document-editor .cm-line.cm-inactive-list-depth-1,");
     expect(markdownRenderStylesheet).toContain(".document-editor .cm-line.cm-active-list-depth-1");
     expect(markdownRenderStylesheet).toContain(".document-editor .cm-line.cm-inactive-list-depth-2,");

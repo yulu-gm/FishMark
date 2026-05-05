@@ -1,15 +1,16 @@
 :root {
   --fishmark-list-marker-size: 0.3em;
+  --fishmark-list-marker-column-width: 0.78em;
   --fishmark-list-marker-text-gap: 0.62em;
-  --fishmark-list-unordered-marker-left: 0.24em;
-  --fishmark-list-ordered-marker-width: 2.4em;
+  --fishmark-list-unordered-marker-left: 0em;
+  --fishmark-list-ordered-marker-width: 0.78em;
   --fishmark-list-unordered-content-offset: calc(
-    var(--fishmark-list-unordered-marker-left) + var(--fishmark-list-marker-size) + var(--fishmark-list-marker-text-gap)
+    var(--fishmark-list-marker-column-width) + var(--fishmark-list-marker-text-gap)
   );
   --fishmark-list-ordered-content-offset: calc(
     var(--fishmark-list-ordered-marker-width) + var(--fishmark-list-marker-text-gap)
   );
-  --fishmark-list-task-marker-left: 0.24em;
+  --fishmark-list-task-marker-left: 0em;
   --fishmark-list-task-content-offset: calc(
     var(--fishmark-list-task-marker-left) + var(--fishmark-task-size) + var(--fishmark-list-marker-text-gap)
   );
@@ -252,6 +253,9 @@
   color: currentColor;
   font-weight: 500;
   opacity: 0.9;
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .document-editor .cm-active-list-unordered .cm-active-list-marker {
@@ -261,7 +265,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--fishmark-list-marker-size);
+  width: var(--fishmark-list-marker-column-width);
   height: 1.84em;
 }
 
@@ -271,7 +275,7 @@
   left: var(--fishmark-list-depth-offset);
   display: inline-block;
   min-width: var(--fishmark-list-ordered-marker-width);
-  text-align: right;
+  text-align: left;
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
 }
@@ -298,7 +302,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--fishmark-list-marker-size);
+  width: var(--fishmark-list-marker-column-width);
   height: 1.84em;
   color: transparent;
   opacity: 1;
@@ -322,7 +326,7 @@
   left: var(--fishmark-list-depth-offset);
   display: inline-block;
   min-width: var(--fishmark-list-ordered-marker-width);
-  text-align: right;
+  text-align: left;
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
 }

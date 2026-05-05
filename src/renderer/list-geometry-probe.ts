@@ -22,15 +22,38 @@ type RowGeometry = {
 
 type ProbeResult = {
   active: RowGeometry;
+  activeTask: {
+    checkbox: SerializableRect;
+    dash: SerializableRect;
+    marker: SerializableRect;
+  };
+  blockAnchors: {
+    heading: SerializableRect;
+    paragraph: SerializableRect;
+  };
   deltas: Record<string, number>;
   failures: string[];
   inactive: RowGeometry;
+  inactiveTopLevel: {
+    ordered: RowGeometry;
+    task: RowGeometry;
+    unordered: RowGeometry;
+  };
+  inactiveSiblings: {
+    ordered: RowGeometry;
+    unordered: RowGeometry;
+  };
   pass: boolean;
 };
 
 const CONTENT = [
-  "- Todo",
-  "  1. Todo",
+  "# Heading",
+  "Paragraph text",
+  "- root",
+  "1. root numbered",
+  "- [x] root task",
+  "  - bullet child",
+  "  1. numbered child",
   "  2. 11111",
   "  3. 333333",
   "    1. 1111",
@@ -115,6 +138,23 @@ function measureRow(root: ParentNode, targetText: string, markerText: string): R
   };
 }
 
+function measureRowWithMarkerElement(root: ParentNode, targetText: string): RowGeometry {
+  const line = findLineByText(root, targetText);
+  const marker =
+    line.querySelector<HTMLElement>(".cm-inactive-task-marker") ??
+    line.querySelector<HTMLElement>(".cm-inactive-list-marker, .cm-active-list-marker");
+
+  if (!marker) {
+    throw new Error(`Could not find list marker element for ${JSON.stringify(targetText)}.`);
+  }
+
+  return {
+    line: toSerializableRect(line.getBoundingClientRect()),
+    marker: toSerializableRect(marker.getBoundingClientRect()),
+    content: firstRangeRect(line, targetText)
+  };
+}
+
 function assertNear(failures: string[], name: string, actual: number, expected = 0): void {
   if (Math.abs(actual - expected) > TOLERANCE_PX) {
     failures.push(`${name}: expected ${expected}px +/- ${TOLERANCE_PX}px, got ${actual.toFixed(3)}px`);
@@ -161,10 +201,37 @@ export async function runListGeometryProbe(): Promise<ProbeResult> {
   controller.setSelection(CONTENT.indexOf("after"));
   await nextFrame();
   const inactive = measureRow(root, "333333", "3.");
+  const blockAnchors = {
+    heading: firstRangeRect(root, "Heading"),
+    paragraph: firstRangeRect(root, "Paragraph text")
+  };
+  const inactiveTopLevel = {
+    unordered: measureRowWithMarkerElement(root, "root"),
+    ordered: measureRowWithMarkerElement(root, "root numbered"),
+    task: measureRowWithMarkerElement(root, "root task")
+  };
+  const inactiveSiblings = {
+    unordered: measureRowWithMarkerElement(root, "bullet child"),
+    ordered: measureRowWithMarkerElement(root, "numbered child")
+  };
 
   controller.setSelection(CONTENT.indexOf("333333") + "333333".length);
   await nextFrame();
   const active = measureRow(root, "333333", "3.");
+  controller.setSelection(CONTENT.indexOf("root task") + "root task".length);
+  await nextFrame();
+  const activeTaskLine = findLineByText(root, "root task");
+  const activeTaskMarker = activeTaskLine.querySelector<HTMLElement>(".cm-active-list-marker");
+
+  if (!activeTaskMarker) {
+    throw new Error("Could not find active task list marker.");
+  }
+
+  const activeTask = {
+    marker: toSerializableRect(activeTaskMarker.getBoundingClientRect()),
+    dash: firstRangeRect(activeTaskMarker, "-"),
+    checkbox: firstRangeRect(activeTaskMarker, "[x]")
+  };
 
   controller.destroy();
 
@@ -174,7 +241,20 @@ export async function runListGeometryProbe(): Promise<ProbeResult> {
     markerRight: active.marker.right - inactive.marker.right,
     markerTop: active.marker.top - inactive.marker.top,
     activeMarkerContentTop: active.marker.top - active.content.top,
-    activeMarkerContentBaseline: active.marker.bottom - active.content.bottom
+    activeMarkerContentBaseline: active.marker.bottom - active.content.bottom,
+    activeTaskCheckboxTopMinusDashTop: activeTask.checkbox.top - activeTask.dash.top,
+    activeTaskCheckboxLeftMinusDashRight: activeTask.checkbox.left - activeTask.dash.right,
+    inactiveHeadingMinusParagraphLeft: blockAnchors.heading.left - blockAnchors.paragraph.left,
+    inactiveTopUnorderedMarkerLeftMinusParagraphLeft:
+      inactiveTopLevel.unordered.marker.left - blockAnchors.paragraph.left,
+    inactiveTopOrderedMarkerLeftMinusParagraphLeft:
+      inactiveTopLevel.ordered.marker.left - blockAnchors.paragraph.left,
+    inactiveTopTaskMarkerLeftMinusParagraphLeft:
+      inactiveTopLevel.task.marker.left - blockAnchors.paragraph.left,
+    inactiveOrderedMinusUnorderedContentLeft:
+      inactiveSiblings.ordered.content.left - inactiveSiblings.unordered.content.left,
+    inactiveOrderedMinusUnorderedMarkerLeft:
+      inactiveSiblings.ordered.marker.left - inactiveSiblings.unordered.marker.left
   };
   const failures: string[] = [];
 
@@ -188,12 +268,58 @@ export async function runListGeometryProbe(): Promise<ProbeResult> {
     "active marker bottom minus active content bottom",
     deltas.activeMarkerContentBaseline
   );
+  assertNear(
+    failures,
+    "active task checkbox top minus dash top",
+    deltas.activeTaskCheckboxTopMinusDashTop
+  );
+  if (deltas.activeTaskCheckboxLeftMinusDashRight < -TOLERANCE_PX) {
+    failures.push(
+      `active task checkbox must stay after dash on the same visual row, got left-right delta ${deltas.activeTaskCheckboxLeftMinusDashRight.toFixed(
+        3
+      )}px`
+    );
+  }
+  assertNear(
+    failures,
+    "inactive ordered content left minus unordered content left",
+    deltas.inactiveOrderedMinusUnorderedContentLeft
+  );
+  assertNear(
+    failures,
+    "inactive heading left minus paragraph left",
+    deltas.inactiveHeadingMinusParagraphLeft
+  );
+  assertNear(
+    failures,
+    "inactive top unordered marker left minus paragraph left",
+    deltas.inactiveTopUnorderedMarkerLeftMinusParagraphLeft
+  );
+  assertNear(
+    failures,
+    "inactive top ordered marker left minus paragraph left",
+    deltas.inactiveTopOrderedMarkerLeftMinusParagraphLeft
+  );
+  assertNear(
+    failures,
+    "inactive top task marker left minus paragraph left",
+    deltas.inactiveTopTaskMarkerLeftMinusParagraphLeft
+  );
+  assertNear(
+    failures,
+    "inactive ordered marker left minus unordered marker left",
+    deltas.inactiveOrderedMinusUnorderedMarkerLeft
+  );
 
   return {
     active,
+    activeTask,
+    blockAnchors,
     deltas,
     failures,
     inactive,
+    inactiveTopLevel,
+    inactiveSiblings,
     pass: failures.length === 0
   };
 }

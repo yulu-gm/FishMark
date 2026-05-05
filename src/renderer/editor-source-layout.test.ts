@@ -13,6 +13,7 @@ function getCssRule(stylesheet: string, selector: string): string {
 
 const forbiddenListGeometryVariables = [
   "--fishmark-list-marker-size",
+  "--fishmark-list-marker-column-width",
   "--fishmark-list-marker-text-gap",
   "--fishmark-list-unordered-marker-left",
   "--fishmark-list-ordered-marker-width",
@@ -60,6 +61,7 @@ type MarkdownTextRenderingStandard = {
       value: number;
     };
     unordered: {
+      markerColumnWidthEm: number;
       markerGlyphLeftFromDepthEm: number;
       markerGlyphSizeEm: number;
       contentStartOffsetEm: number;
@@ -165,6 +167,9 @@ describe("editor source layout stylesheet", () => {
 
     expect(scrollerRule).toContain("align-items: flex-start !important;");
     expect(contentRule).toContain("min-height: 100%;");
+    expect(stylesheet).toContain(
+      [".document-editor .cm-line {", "  padding-left: 0;", "  padding-right: 0;", "}"].join("\n")
+    );
   });
 
   it("keeps active list content anchored to the inactive content start", async () => {
@@ -204,13 +209,17 @@ describe("editor source layout stylesheet", () => {
     expect(activeContinuationRule).not.toContain("text-indent:");
     expect(activeSourcePrefixRule).toContain("font-size: 0;");
     expect(activeMarkerRule).toContain("color: currentColor;");
+    expect(activeMarkerRule).toContain("white-space: pre;");
+    expect(activeMarkerRule).toContain("word-break: normal;");
+    expect(activeMarkerRule).toContain("overflow-wrap: normal;");
     expect(activeOrderedMarkerRule).toContain("position: absolute;");
     expect(activeOrderedMarkerRule).toContain("left: var(--fishmark-list-depth-offset);");
     expect(activeOrderedMarkerRule).toContain("min-width: var(--fishmark-list-ordered-marker-width);");
-    expect(activeOrderedMarkerRule).toContain("text-align: right;");
+    expect(activeOrderedMarkerRule).toContain("text-align: left;");
 
-    const depthStepEm = 1.4;
-    const unorderedContentOffsetEm = 1.16;
+    const standard = await readMarkdownTextStandard();
+    const depthStepEm = standard.lists.geometry.indentStepEm;
+    const unorderedContentOffsetEm = standard.lists.unordered.contentStartOffsetEm;
 
     for (const depth of [0, 1, 2]) {
       const inactiveContentStart = depth * depthStepEm + unorderedContentOffsetEm;
@@ -252,31 +261,36 @@ describe("editor source layout stylesheet", () => {
     const stylesheet = await readFile(resolve(process.cwd(), "src/renderer/styles/markdown-render.css"), "utf8");
     const values = getNumericCssVariables(stylesheet, [
       "--fishmark-list-marker-size",
+      "--fishmark-list-marker-column-width",
       "--fishmark-list-marker-text-gap",
       "--fishmark-list-unordered-marker-left",
       "--fishmark-list-ordered-marker-width",
+      "--fishmark-list-task-marker-left",
       "--fishmark-list-nested-indent",
       "--fishmark-task-size"
     ]);
     const pxPerEm = standard.units.remBaselineForExamplesPx;
     const listNestedIndent = readNumericCssVariable(values, "--fishmark-list-nested-indent");
     const listMarkerSize = readNumericCssVariable(values, "--fishmark-list-marker-size");
+    const listMarkerColumnWidth = readNumericCssVariable(values, "--fishmark-list-marker-column-width");
     const listMarkerTextGap = readNumericCssVariable(values, "--fishmark-list-marker-text-gap");
     const unorderedMarkerLeft = readNumericCssVariable(values, "--fishmark-list-unordered-marker-left");
     const orderedMarkerWidth = readNumericCssVariable(values, "--fishmark-list-ordered-marker-width");
+    const taskMarkerLeft = readNumericCssVariable(values, "--fishmark-list-task-marker-left");
     const taskSize = readNumericCssVariable(values, "--fishmark-task-size");
     const depthOffsetPx = (depth: number) => depth * listNestedIndent * pxPerEm;
-    const unorderedMarkerRightPx =
-      (unorderedMarkerLeft + listMarkerSize) * pxPerEm;
+    const unorderedMarkerRightPx = listMarkerColumnWidth * pxPerEm;
     const orderedMarkerRightPx = orderedMarkerWidth * pxPerEm;
-    const taskMarkerRightPx = (unorderedMarkerLeft + taskSize) * pxPerEm;
+    const taskMarkerRightPx = (taskMarkerLeft + taskSize) * pxPerEm;
     const gapPx = listMarkerTextGap * pxPerEm;
 
     expect(listMarkerTextGap).toBe(standard.lists.markerToTextGapRem.value);
     expect(listNestedIndent).toBe(standard.lists.geometry.indentStepEm);
+    expect(listMarkerColumnWidth).toBe(standard.lists.unordered.markerColumnWidthEm);
     expect(unorderedMarkerLeft).toBe(standard.lists.unordered.markerGlyphLeftFromDepthEm);
     expect(listMarkerSize).toBe(standard.lists.unordered.markerGlyphSizeEm);
     expect(orderedMarkerWidth).toBe(standard.lists.ordered.markerColumnWidthEm);
+    expect(taskMarkerLeft).toBe(standard.lists.task.checkboxLeftFromDepthEm);
     expect(taskSize).toBe(standard.lists.task.checkboxSizeEm);
 
     const cases = [
@@ -351,6 +365,70 @@ describe("editor source layout stylesheet", () => {
         standard.units.alignmentPxTolerance
       );
     }
+  });
+
+  it("keeps ordered and unordered list text on the same content column", async () => {
+    const standard = await readMarkdownTextStandard();
+    const stylesheet = await readFile(resolve(process.cwd(), "src/renderer/styles/markdown-render.css"), "utf8");
+    const values = getNumericCssVariables(stylesheet, [
+      "--fishmark-list-marker-column-width",
+      "--fishmark-list-marker-text-gap",
+      "--fishmark-list-ordered-marker-width",
+      "--fishmark-list-nested-indent"
+    ]);
+    const pxPerEm = standard.units.remBaselineForExamplesPx;
+    const listNestedIndent = readNumericCssVariable(values, "--fishmark-list-nested-indent");
+    const listMarkerColumnWidth = readNumericCssVariable(values, "--fishmark-list-marker-column-width");
+    const listMarkerTextGap = readNumericCssVariable(values, "--fishmark-list-marker-text-gap");
+    const orderedMarkerWidth = readNumericCssVariable(values, "--fishmark-list-ordered-marker-width");
+
+    expect(standard.lists.unordered.contentStartOffsetEm).toBe(
+      standard.lists.ordered.contentStartOffsetEm
+    );
+
+    for (const depth of [0, 1, 2]) {
+      const depthOffsetPx = depth * listNestedIndent * pxPerEm;
+      const unorderedMarkerRightPx = depthOffsetPx + listMarkerColumnWidth * pxPerEm;
+      const orderedMarkerRightPx = depthOffsetPx + orderedMarkerWidth * pxPerEm;
+      const unorderedContentLeftPx =
+        depthOffsetPx + standard.lists.unordered.contentStartOffsetEm * pxPerEm;
+      const orderedContentLeftPx =
+        depthOffsetPx + standard.lists.ordered.contentStartOffsetEm * pxPerEm;
+
+      expect(orderedContentLeftPx - unorderedContentLeftPx).toBeCloseTo(0, 5);
+      expect(unorderedContentLeftPx - unorderedMarkerRightPx).toBeCloseTo(
+        listMarkerTextGap * pxPerEm,
+        5
+      );
+      expect(orderedContentLeftPx - orderedMarkerRightPx).toBeCloseTo(
+        listMarkerTextGap * pxPerEm,
+        5
+      );
+    }
+  });
+
+  it("keeps top-level list markers aligned with normal block text", async () => {
+    const standard = await readMarkdownTextStandard();
+    const stylesheet = await readFile(resolve(process.cwd(), "src/renderer/styles/markdown-render.css"), "utf8");
+    const values = getNumericCssVariables(stylesheet, [
+      "--fishmark-list-unordered-marker-left",
+      "--fishmark-list-task-marker-left"
+    ]);
+    const activeOrderedMarkerRule = getCssRule(
+      stylesheet,
+      ".document-editor .cm-active-list-ordered .cm-active-list-marker"
+    );
+    const inactiveOrderedMarkerRule = getCssRule(
+      stylesheet,
+      ".document-editor .cm-inactive-list-ordered .cm-inactive-list-marker"
+    );
+
+    expect(readNumericCssVariable(values, "--fishmark-list-unordered-marker-left")).toBe(0);
+    expect(readNumericCssVariable(values, "--fishmark-list-task-marker-left")).toBe(0);
+    expect(standard.lists.unordered.markerGlyphLeftFromDepthEm).toBe(0);
+    expect(standard.lists.task.checkboxLeftFromDepthEm).toBe(0);
+    expect(activeOrderedMarkerRule).toContain("left: var(--fishmark-list-depth-offset);");
+    expect(inactiveOrderedMarkerRule).toContain("left: var(--fishmark-list-depth-offset);");
   });
 
   it("keeps task checkbox rendering on a themeable widget contract without changing list geometry", async () => {

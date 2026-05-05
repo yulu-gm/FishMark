@@ -281,12 +281,13 @@
    ```md
    - parent
      - child
-       - grandchild
+     1. numbered child
+     - grandchild
    ```
 2. 把光标分别放到 `child` 和 `grandchild` 内容中，观察 active 编辑态。
 3. 再把光标移到列表外普通段落，观察 inactive 阅读态。
 4. 在窄窗口下重复上述步骤，确认软换行仍对齐正文起点。
-5. 如需自动化回归，运行 `npm run test -- src/shared/markdown-text-rendering-standard.test.ts src/renderer/editor-source-layout.test.ts packages/editor-core/src/decorations/block-decorations.test.ts src/renderer/code-editor.test.ts`。
+5. 如需自动化回归，运行 `npm run test -- src/renderer/editor-source-layout.test.ts packages/editor-core/src/decorations/block-decorations.test.ts src/renderer/code-editor.test.ts` 和 `npm run test:list-geometry`。
 
 预期：
 - 子列表从阅读态切到编辑态时，同一层级正文起点不能产生任何水平位移
@@ -294,6 +295,8 @@
 - 位移容忍度为 `0px`，不允许随着列表层级变深而扩大
 - active 行可以显示 Markdown marker，但源码缩进字符不能参与子列表视觉深度计算
 - continuation 行和软换行都必须对齐所属列表项正文起点
+- 顶级无序列表、有序列表和任务列表的 marker 左边界必须与标题、正文左边界一致，不额外内缩
+- 同一层级的无序列表和有序列表 marker 左边界、正文起点必须一致；子列表只通过 depth offset 增加缩进
 
 ### TC-012 代码块
 

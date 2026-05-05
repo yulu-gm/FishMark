@@ -9,6 +9,13 @@
 
 ## 记录
 
+| 2026-05-05 | list-indent-consistency | `npm.cmd run test -- src/renderer/editor-source-layout.test.ts` | 通过 | 先以失败测试复现顶级无序 marker left 为 `2.1em`，会相对正文额外内缩；修复后 8 项通过。 |
+| 2026-05-05 | list-indent-consistency | `npm.cmd run test -- src/renderer/editor-source-layout.test.ts src/renderer/code-editor.test.ts src/renderer/app.autosave.test.ts packages/editor-core/src/decorations/block-decorations.test.ts packages/markdown-engine/src/parse-block-map.test.ts` | 通过 | 覆盖 CSS 契约、renderer 列表装饰、autosave 主题约束、editor-core decoration 和 markdown-engine list block 回归；5 个文件、348 项通过。 |
+| 2026-05-05 | list-indent-consistency | `npm.cmd run test:list-geometry` | 通过 | Electron/Chromium 几何探针通过；heading/paragraph left、顶级 unordered/ordered/task marker left、同 depth ordered/unordered marker left 与 content left delta 均为 `0px`；active task marker 中 `[x]` 相对 `-` 的 top delta 为 `0px`，未再拆到下一行。 |
+| 2026-05-05 | list-indent-consistency | `npm.cmd run typecheck` | 通过 | renderer / electron / vitest / cli 四套 TypeScript 检查通过。 |
+| 2026-05-05 | list-indent-consistency | `npm.cmd run lint` | 通过 | ESLint 退出码 0；保留既有 `src/renderer/editor/App.tsx:215` Fast Refresh warning。 |
+| 2026-05-05 | list-indent-consistency | `npm.cmd run build` | 通过 | renderer / electron / cli build 通过；保留既有 Vite chunk size warning。 |
+| 2026-05-05 | list-indent-consistency | `git diff --check` | 通过 | 本轮改动无 whitespace error；仅输出 Git 的 CRLF 归一化提示和既有脏文件 `tmp/test.md` 提示。 |
 | 2026-05-05 | TASK-043 multi-drag-open-overwrite | `npm.cmd run test -- src/renderer/editor/useWorkspaceController.test.tsx` | 通过 | 新增回归先复现批量路径打开之间会把旧 CodeMirror 内容 flush 到新 tab 的缺口，再通过批量 open 原语修复；1 个文件、9 项通过。 |
 | 2026-05-05 | TASK-043 multi-drag-open-overwrite | `npm.cmd run test -- src/renderer/app.autosave.test.ts -t "multiple files"` | 通过 | App 侧多文件拖入仍会按顺序调用两次 path open，并追加多个标签；1 个相关场景通过。 |
 | 2026-05-05 | TASK-043 multi-drag-open-overwrite | `npm.cmd run lint` | 通过 | ESLint 退出码 0；保留既有 `src/renderer/editor/App.tsx` Fast Refresh warning。 |
