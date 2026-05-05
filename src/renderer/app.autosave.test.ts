@@ -5863,7 +5863,13 @@ describe("App autosave", () => {
     expect(orderedListRule).toContain("--fishmark-list-content-offset: var(--fishmark-list-ordered-content-offset);");
     expect(taskListRule).toContain("--fishmark-list-content-offset: var(--fishmark-list-task-content-offset);");
     expect(listSourcePrefixRule).toContain("font-size: 0;");
-    expect(activeListSourcePrefixRule).toContain("font-size: 0;");
+    expect(activeListSourcePrefixRule).not.toContain("font-size: 0;");
+    expect(activeListSourcePrefixRule).toContain("position: absolute;");
+    expect(activeListSourcePrefixRule).toContain("left: calc(var(--fishmark-list-depth-offset) + var(--fishmark-list-content-offset));");
+    expect(activeListSourcePrefixRule).toContain("width: 0;");
+    expect(activeListSourcePrefixRule).toContain("overflow: hidden;");
+    expect(activeListSourcePrefixRule).toContain("font-size: inherit;");
+    expect(activeListSourcePrefixRule).toContain("line-height: inherit;");
     expect(activeListMarkerRule).toContain("color: currentColor;");
     expect(activeOrderedListMarkerRule).toContain("position: absolute;");
     expect(activeOrderedListMarkerRule).toContain("left: var(--fishmark-list-depth-offset);");

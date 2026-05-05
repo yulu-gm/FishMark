@@ -16,6 +16,7 @@ import {
   computeMoveListItemUp,
   computeOrderedListEnter,
   computeOutdentListItem,
+  computeUpgradeEmptyLeftListItemEnter,
   type ListEdit,
   normalizeOrderedListScopes
 } from "./list-edits";
@@ -176,6 +177,42 @@ describe("list-edits", () => {
 
     expect(applyEdit(doc, result)).toBe(["5. parent", "6. "].join("\n"));
     expect(result?.selection).toEqual({ anchor: 13, head: 13 });
+  });
+
+  it("upgrades a top-level list item to body text when its left split content is empty", () => {
+    const doc = ["1. one", "2. two", "3. tail"].join("\n");
+    const context = buildContext(doc, doc.indexOf("tail"));
+    const result = computeUpgradeEmptyLeftListItemEnter(context, doc.indexOf("tail"));
+
+    expect(applyEdit(doc, result)).toBe(["1. one", "2. two", "", "tail"].join("\n"));
+    expect(result?.selection).toEqual({
+      anchor: ["1. one", "2. two", "", ""].join("\n").length,
+      head: ["1. one", "2. two", "", ""].join("\n").length
+    });
+  });
+
+  it("upgrades a single top-level list item to body text without a leading separator", () => {
+    const doc = "1. tail";
+    const context = buildContext(doc, doc.indexOf("tail"));
+    const result = computeUpgradeEmptyLeftListItemEnter(context, doc.indexOf("tail"));
+
+    expect(applyEdit(doc, result)).toBe("tail");
+    expect(result?.selection).toEqual({
+      anchor: 0,
+      head: 0
+    });
+  });
+
+  it("upgrades a nested item to the parent list when its left split content is empty", () => {
+    const doc = ["- parent", "  - child"].join("\n");
+    const context = buildContext(doc, doc.indexOf("child"));
+    const result = computeUpgradeEmptyLeftListItemEnter(context, doc.indexOf("child"));
+
+    expect(applyEdit(doc, result)).toBe(["- parent", "- child"].join("\n"));
+    expect(result?.selection).toEqual({
+      anchor: ["- parent", "- "].join("\n").length,
+      head: ["- parent", "- "].join("\n").length
+    });
   });
 
   it("moves an ordered subtree down together with its continuation lines", () => {

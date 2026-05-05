@@ -2158,6 +2158,34 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("inserts an inline hard break on Shift+Enter", () => {
+    const host = document.createElement("div");
+    const source = "AlphaBeta";
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    view!.dispatch({
+      selection: {
+        anchor: "Alpha".length,
+        head: "Alpha".length
+      }
+    });
+    dispatchEditorKeydown(view, "Enter", { shiftKey: true });
+
+    expect(controller.getContent()).toBe("Alpha<br>Beta");
+    expect(view?.state.selection.main.anchor).toBe("Alpha<br>".length);
+    expect(view?.state.selection.main.head).toBe("Alpha<br>".length);
+
+    controller.destroy();
+  });
+
   it("does not render a blockquote until a space is typed after the marker", async () => {
     const host = document.createElement("div");
 
@@ -2489,6 +2517,68 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("joins body text after a list boundary into the previous item on Backspace", () => {
+    const host = document.createElement("div");
+    const source = ["1. Tail", "", "Body"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressBackspace: () => void;
+    };
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(source.indexOf("Body"));
+    advancedController.pressBackspace();
+
+    expect(controller.getContent()).toBe("1. TailBody");
+    expect(view?.state.selection.main.anchor).toBe("1. Tail".length);
+    expect(view?.state.selection.main.head).toBe("1. Tail".length);
+
+    controller.destroy();
+  });
+
+  it("keeps non-tail empty list items visible while one empty item is active", async () => {
+    const host = document.createElement("div");
+    const source = ["1. 内容", "2. ", "3. ", "4. 111"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const view = getEditorView(host);
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    view!.dispatch({
+      selection: {
+        anchor: getLineStartOffset(source, 2) + "2. ".length,
+        head: getLineStartOffset(source, 2) + "2. ".length
+      }
+    });
+    await flushMicrotasks();
+
+    const emptyListLines = Array.from(host.querySelectorAll<HTMLElement>(".cm-line")).filter(
+      (line) => line.textContent === "2. " || line.textContent === "3. "
+    );
+
+    expect(emptyListLines.map((line) => line.textContent)).toEqual(["2. ", "3. "]);
+    expect(emptyListLines[0]?.classList.contains("cm-active-list")).toBe(true);
+    expect(emptyListLines[1]?.classList.contains("cm-inactive-list")).toBe(true);
+
+    controller.destroy();
+  });
+
   it("continues an empty ordered list item when later siblings still exist", () => {
     const host = document.createElement("div");
     const source = ["1. Todo", "2. ", "3. Todo2", "4. Todo3"].join("\n");
@@ -2547,6 +2637,65 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("upgrades a trailing ordered list item to body text when Enter is pressed before its content", () => {
+    const host = document.createElement("div");
+    const source = ["1. Todo", "2. Todo2", "3. Todo3", "4. Tail"].join("\n");
+    const expected = ["1. Todo", "2. Todo2", "3. Todo3", "", "Tail"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+    const view = getEditorView(host);
+    const cursor = source.indexOf("Tail");
+    const expectedCursor = expected.indexOf("Tail");
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(cursor);
+    advancedController.pressEnter();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(view?.state.selection.main.anchor).toBe(expectedCursor);
+    expect(view?.state.selection.main.head).toBe(expectedCursor);
+
+    controller.destroy();
+  });
+
+  it("upgrades a single top-level list item to body text without leaving a leading blank line", () => {
+    const host = document.createElement("div");
+    const source = "1. Tail";
+    const expected = "Tail";
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+    const view = getEditorView(host);
+    const cursor = source.indexOf("Tail");
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(cursor);
+    advancedController.pressEnter();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(view?.state.selection.main.anchor).toBe(0);
+    expect(view?.state.selection.main.head).toBe(0);
+
+    controller.destroy();
+  });
+
   it("exits an empty nested list item on Enter", () => {
     const host = document.createElement("div");
     const source = ["- parent", "  - "].join("\n");
@@ -2568,10 +2717,48 @@ describe("createCodeEditorController", () => {
     advancedController.pressEnter();
 
     expect(controller.getContent()).toBe(["- parent", "- "].join("\n"));
+    expect(controller.getSelection()).toEqual({
+      anchor: ["- parent", "- "].join("\n").length,
+      head: ["- parent", "- "].join("\n").length
+    });
 
     advancedController.pressEnter();
 
     expect(controller.getContent()).toBe("- parent\n");
+    expect(controller.getSelection()).toEqual({
+      anchor: "- parent\n".length,
+      head: "- parent\n".length
+    });
+
+    controller.destroy();
+  });
+
+  it("upgrades a nested list item to a parent item when Enter is pressed before its content", () => {
+    const host = document.createElement("div");
+    const source = ["- parent", "  - child"].join("\n");
+    const expected = ["- parent", "- child"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+    const view = getEditorView(host);
+    const cursor = source.indexOf("child");
+    const expectedCursor = expected.indexOf("child");
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(cursor);
+    advancedController.pressEnter();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(view?.state.selection.main.anchor).toBe(expectedCursor);
+    expect(view?.state.selection.main.head).toBe(expectedCursor);
 
     controller.destroy();
   });
@@ -3707,6 +3894,44 @@ describe("createCodeEditorController", () => {
     );
 
     controller.destroy();
+  });
+
+  it("inserts an inline hard break inside a table cell on Shift+Enter", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const source = ["| name | qty |", "| --- | ---: |", "| pen | 2 |"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const input = host.querySelector<HTMLInputElement>('[data-table-cell="1:0"]');
+
+    expect(input).toBeInstanceOf(HTMLElement);
+
+    input?.focus();
+    input?.setSelectionRange(1, 1);
+    input?.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        code: "Enter",
+        bubbles: true,
+        cancelable: true,
+        shiftKey: true
+      })
+    );
+    await flushMicrotasks();
+
+    const currentInput = host.querySelector<HTMLInputElement>('[data-table-cell="1:0"]');
+
+    expect(controller.getContent()).toContain("p<br>en");
+    expect(document.activeElement).toBe(currentInput);
+    expect(currentInput?.selectionStart).toBe("p<br>".length);
+
+    controller.destroy();
+    host.remove();
   });
 
   it("moves between table rows and exits to the next line on Enter from the last row", async () => {

@@ -6,7 +6,9 @@ import type { ActiveBlockState } from "../active-block";
 import {
   runMarkdownArrowDownCommand,
   runMarkdownArrowUpCommand,
+  runMarkdownBackspaceCommand,
   runMarkdownEnterCommand,
+  runMarkdownHardBreakCommand,
   type MarkdownCommandTarget
 } from "./markdown-commands";
 
@@ -135,6 +137,41 @@ describe("semantic markdown commands", () => {
         anchor: "Alpha\n".length,
         head: "Alpha\n".length,
         scrollIntoView: true
+      }
+    ]);
+  });
+
+  it("inserts an inline hard break on Shift+Enter without creating a structural line", () => {
+    const target = createCommandTarget({ doc: "AlphaBeta", anchor: "Alpha".length });
+
+    expect(runMarkdownHardBreakCommand(target)).toBe(true);
+    expect(target.getDispatchedChanges()).toEqual([
+      {
+        from: "Alpha".length,
+        to: "Alpha".length,
+        insert: "<br>",
+        selection: {
+          anchor: "Alpha<br>".length,
+          head: "Alpha<br>".length
+        }
+      }
+    ]);
+  });
+
+  it("joins body text into the previous list item on Backspace without creating lazy continuation", () => {
+    const source = ["1. Tail", "", "Body"].join("\n");
+    const target = createCommandTarget({ doc: source, anchor: source.indexOf("Body") });
+
+    expect(runMarkdownBackspaceCommand(target, paragraphActiveState)).toBe(true);
+    expect(target.getDispatchedChanges()).toEqual([
+      {
+        from: "1. Tail".length,
+        to: "1. Tail\n\n".length,
+        insert: "",
+        selection: {
+          anchor: "1. Tail".length,
+          head: "1. Tail".length
+        }
       }
     ]);
   });

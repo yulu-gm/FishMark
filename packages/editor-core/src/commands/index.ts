@@ -8,6 +8,7 @@ export {
   runMarkdownArrowUp,
   runMarkdownBackspace,
   runMarkdownEnter,
+  runMarkdownHardBreak,
   runMarkdownShiftTab,
   runMarkdownTab
 } from "./codemirror-markdown-commands";
@@ -16,6 +17,7 @@ export {
   runMarkdownArrowUpCommand,
   runMarkdownBackspaceCommand,
   runMarkdownEnterCommand,
+  runMarkdownHardBreakCommand,
   runMarkdownShiftTabCommand,
   runMarkdownTabCommand,
   type MarkdownCommandTarget

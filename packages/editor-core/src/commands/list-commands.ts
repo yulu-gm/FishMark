@@ -9,6 +9,7 @@ import {
   computeMoveListItemDown,
   computeMoveListItemUp,
   computeOrderedListEnter,
+  computeUpgradeEmptyLeftListItemEnter,
   computeOutdentListItem,
   type ListEdit
 } from "./list-edits";
@@ -27,6 +28,18 @@ export function runListEnter(view: EditorView, activeState: ActiveBlockState): b
   }
 
   const semanticContext = readSemanticContext(view.state, activeState);
+  const contentStartOffset = line.to - parsed.content.length;
+  const leftContent = view.state.doc.sliceString(contentStartOffset, selection.head);
+
+  if (activeState.activeBlock?.type === "list" && leftContent.trim().length === 0) {
+    const splitUpgradeEdit = computeUpgradeEmptyLeftListItemEnter(semanticContext, contentStartOffset);
+
+    if (splitUpgradeEdit) {
+      applyListEdit(view, splitUpgradeEdit);
+      return true;
+    }
+  }
+
   if (activeState.activeBlock?.type === "list" && /^\d+[.)]$/.test(parsed.marker) && selection.head === line.to) {
     const orderedEdit = computeOrderedListEnter(semanticContext, parsed.content.trim().length === 0);
 

@@ -260,6 +260,25 @@ export class TableWidget extends WidgetType {
           return;
         }
 
+        if (event.key === "Enter" && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
+          event.preventDefault();
+          const text = readTableCellText(editor);
+          const insert = "<br>";
+          const from = Math.min(selection.start, selection.end);
+          const to = Math.max(selection.start, selection.end);
+
+          this.callbacks?.updateCell(
+            {
+              row: cell.rowIndex,
+              column: cell.columnIndex,
+              tableStartOffset: resolveWidgetTableStartOffset(editor, this.block.startOffset),
+              offsetInCell: from + insert.length
+            },
+            `${text.slice(0, from)}${insert}${text.slice(to)}`
+          );
+          return;
+        }
+
         if (event.key === "Enter" && !event.ctrlKey && !event.metaKey && !event.altKey) {
           event.preventDefault();
           this.callbacks?.moveDownOrExit({

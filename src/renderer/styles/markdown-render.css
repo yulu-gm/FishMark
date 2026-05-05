@@ -185,6 +185,7 @@
   color: var(--fishmark-markdown-list-text, var(--fishmark-text-muted, #687180));
   position: relative;
   padding-left: calc(var(--fishmark-list-depth-offset) + var(--fishmark-list-content-offset));
+  min-height: 1.84em;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-all;
@@ -196,6 +197,7 @@
   --fishmark-list-content-offset: var(--fishmark-list-unordered-content-offset);
   position: relative;
   padding-left: calc(var(--fishmark-list-depth-offset) + var(--fishmark-list-content-offset));
+  min-height: 1.84em;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-all;
@@ -244,9 +246,14 @@
 }
 
 .document-editor .cm-active-list-source-prefix {
+  position: absolute;
+  top: 0;
+  left: calc(var(--fishmark-list-depth-offset) + var(--fishmark-list-content-offset));
   color: transparent;
-  font-size: 0;
-  line-height: 0;
+  width: 0;
+  overflow: hidden;
+  font-size: inherit;
+  line-height: inherit;
 }
 
 .document-editor .cm-active-list-marker {

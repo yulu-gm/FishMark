@@ -1,6 +1,7 @@
 import { formatTableMarkdown, parseMarkdownDocument, splitTableLine } from "@fishmark/markdown-engine";
 
 import type { ActiveBlockState } from "../active-block";
+import { parseListLine } from "./line-parsers";
 
 export type MarkdownCommandLine = {
   from: number;
@@ -73,8 +74,28 @@ export function runMarkdownBackspaceCommand(
     target.runCodeFenceBackspace(activeState) ||
     target.runBlockquoteBackspace(activeState) ||
     target.runListBackspace(activeState) ||
+    runBackspaceAcrossListBoundaryCommand(target, activeState) ||
     target.deleteCharBackward()
   );
+}
+
+export function runMarkdownHardBreakCommand(target: MarkdownCommandTarget): boolean {
+  const selection = target.getSelection();
+  const from = Math.min(selection.anchor, selection.head);
+  const to = Math.max(selection.anchor, selection.head);
+  const insert = "<br>";
+
+  target.dispatchChange({
+    from,
+    to,
+    insert,
+    selection: {
+      anchor: from + insert.length,
+      head: from + insert.length
+    }
+  });
+
+  return true;
 }
 
 export function runMarkdownTabCommand(
@@ -205,6 +226,51 @@ function looksLikeCommittedTableDelimiter(line: string): boolean {
   const segments = splitTableLine(line);
 
   return segments.length >= 2 && segments.every((segment) => /^:?-{3,}:?$/u.test(segment.text));
+}
+
+function runBackspaceAcrossListBoundaryCommand(
+  target: MarkdownCommandTarget,
+  activeState: ActiveBlockState
+): boolean {
+  if (activeState.activeBlock?.type !== "paragraph") {
+    return false;
+  }
+
+  const selection = target.getSelection();
+
+  if (!selection.empty) {
+    return false;
+  }
+
+  const currentLine = target.lineAt(selection.head);
+
+  if (selection.head !== currentLine.from || currentLine.number <= 2 || currentLine.text.length === 0) {
+    return false;
+  }
+
+  const boundaryLine = target.line(currentLine.number - 1);
+
+  if (boundaryLine.text.trim().length !== 0) {
+    return false;
+  }
+
+  const listLine = target.line(currentLine.number - 2);
+
+  if (!parseListLine(listLine.text)) {
+    return false;
+  }
+
+  target.dispatchChange({
+    from: listLine.to,
+    to: currentLine.from,
+    insert: "",
+    selection: {
+      anchor: listLine.to,
+      head: listLine.to
+    }
+  });
+
+  return true;
 }
 
 function runBlankLineArrowUpCommand(target: MarkdownCommandTarget): boolean {

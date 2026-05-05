@@ -108,6 +108,62 @@ export function computeOrderedListEnter(
   );
 }
 
+export function computeUpgradeEmptyLeftListItemEnter(
+  ctx: SemanticContext,
+  contentStartOffset: number
+): ListEdit | null {
+  if (ctx.selection.empty === false || ctx.selection.from < contentStartOffset) {
+    return null;
+  }
+
+  const rootList = readActiveListRoot(ctx);
+  if (!rootList) {
+    return null;
+  }
+
+  const current = findListItemContext(rootList, ctx.selection.from, rootList, null, null);
+
+  if (
+    !current ||
+    current.item.children.length > 0 ||
+    current.item.endLine > current.item.startLine
+  ) {
+    return null;
+  }
+
+  const line = ctx.state.doc.lineAt(ctx.selection.from);
+  const leftContent = ctx.source.slice(contentStartOffset, ctx.selection.from);
+
+  if (leftContent.trim().length > 0 || ctx.selection.from > line.to) {
+    return null;
+  }
+
+  const rightContent = ctx.source.slice(ctx.selection.from, line.to);
+  if (rightContent.trim().length === 0) {
+    return null;
+  }
+
+  const replacementPrefix =
+    current.parentScope && current.parentItem
+      ? buildParentEmptyListItemPrefix(current.parentScope, current.parentItem)
+      : toBlockOffset(rootList, current.item.startOffset) > 0
+        ? "\n"
+        : "";
+
+  if (replacementPrefix === null) {
+    return null;
+  }
+
+  const blockSource = readBlockSource(ctx, rootList);
+  const replaceFrom = toBlockOffset(rootList, current.item.startOffset);
+  const replaceTo = toBlockOffset(rootList, line.to);
+  const replacement = `${replacementPrefix}${rightContent}`;
+  const tentativeSource = replaceRange(blockSource, replaceFrom, replaceTo, replacement);
+  const tentativeCursor = replaceFrom + replacementPrefix.length;
+
+  return finalizeListEdit(rootList, blockSource, tentativeSource, tentativeCursor);
+}
+
 export function computeExitEmptyNestedListItem(ctx: SemanticContext): ListEdit | null {
   if (ctx.selection.empty === false) {
     return null;

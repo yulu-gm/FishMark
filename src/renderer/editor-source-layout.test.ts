@@ -174,6 +174,7 @@ describe("editor source layout stylesheet", () => {
 
   it("keeps active list content anchored to the inactive content start", async () => {
     const stylesheet = await readFile(resolve(process.cwd(), "src/renderer/styles/markdown-render.css"), "utf8");
+    const inactiveListRule = getCssRule(stylesheet, ".document-editor .cm-line.cm-inactive-list");
     const activeListRule = getCssRule(stylesheet, ".document-editor .cm-line.cm-active-list");
     const activeContinuationRule = getCssRule(
       stylesheet,
@@ -199,6 +200,8 @@ describe("editor source layout stylesheet", () => {
       "padding-left: calc(var(--fishmark-list-depth-offset) + var(--fishmark-list-content-offset));"
     );
     expect(activeListRule).toContain("position: relative;");
+    expect(activeListRule).toContain("min-height: 1.84em;");
+    expect(inactiveListRule).toContain("min-height: 1.84em;");
     expect(activeListRule).not.toContain("text-indent:");
     expect(activeListRule).not.toContain("0ch");
     expect(activeListRule).not.toContain("ch;");
@@ -207,7 +210,13 @@ describe("editor source layout stylesheet", () => {
       "padding-left: calc(var(--fishmark-list-depth-offset) + var(--fishmark-list-content-offset));"
     );
     expect(activeContinuationRule).not.toContain("text-indent:");
-    expect(activeSourcePrefixRule).toContain("font-size: 0;");
+    expect(activeSourcePrefixRule).not.toContain("font-size: 0;");
+    expect(activeSourcePrefixRule).toContain("position: absolute;");
+    expect(activeSourcePrefixRule).toContain("left: calc(var(--fishmark-list-depth-offset) + var(--fishmark-list-content-offset));");
+    expect(activeSourcePrefixRule).toContain("width: 0;");
+    expect(activeSourcePrefixRule).toContain("overflow: hidden;");
+    expect(activeSourcePrefixRule).toContain("font-size: inherit;");
+    expect(activeSourcePrefixRule).toContain("line-height: inherit;");
     expect(activeMarkerRule).toContain("color: currentColor;");
     expect(activeMarkerRule).toContain("white-space: pre;");
     expect(activeMarkerRule).toContain("word-break: normal;");

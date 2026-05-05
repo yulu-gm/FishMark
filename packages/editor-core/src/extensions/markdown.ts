@@ -35,6 +35,7 @@ import {
   runListMoveLineUp,
   runMarkdownBackspace,
   runMarkdownEnter,
+  runMarkdownHardBreak,
   runMarkdownShiftTab,
   runMarkdownTab,
   runTableInsertRowBelow,
@@ -690,6 +691,10 @@ export function createFishMarkMarkdownExtensions(
       {
         key: "Backspace",
         run: (view) => runMarkdownBackspace(view, runtime.activeBlockState)
+      },
+      {
+        key: "Shift-Enter",
+        run: (view) => runMarkdownHardBreak(view)
       },
       {
         key: "Enter",

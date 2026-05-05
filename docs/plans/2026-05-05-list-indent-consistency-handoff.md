@@ -43,3 +43,17 @@
 
 - 本轮未启动完整交互式 Electron app 手动点击验收；已使用 Electron geometry probe 做真实 Chromium 渲染测量。
 - 本轮是无 backlog 编号的 ad-hoc bugfix，因此没有更新 `MVP_BACKLOG.md`、`docs/progress.md` 或 `reports/task-summaries/TASK-xxx.md`。
+
+## 追加修复：空列表升级与 active caret
+
+- 明确空列表项 Enter 行为：空子列表项只升级一层到父列表，顶级空列表项再升级到正文；补充 `code-editor.test.ts` 断言升级后的 selection 落点。
+- 修复 active list 内容最左侧 caret 消失：不再用 `font-size: 0` 隐藏 active source prefix，改为绝对定位零宽隐藏层，保留继承字号与行高供浏览器绘制 caret。
+- 已复跑 `npm.cmd run test -- src/renderer/editor-source-layout.test.ts src/renderer/code-editor.test.ts src/renderer/app.autosave.test.ts packages/editor-core/src/decorations/block-decorations.test.ts packages/markdown-engine/src/parse-block-map.test.ts packages/editor-core/src/commands/list-edits.test.ts`，374 tests passed。
+- 已复跑 `npm.cmd run test:list-geometry`，Chromium 探针 `pass: true`，active/inactive content left/top 与 marker right/top deltas 均为 `0px`。
+
+## 追加修复：行内空左侧拆分升级
+
+- 增加 Enter 行为：光标左侧内容保留在当前列表项，光标右侧内容默认成为新列表项；如果光标左侧内容为空且右侧仍有内容，则直接触发空列表项升级行为。
+- 顶级列表项在 marker 后、正文前按 Enter 时，右侧内容升级为正文；如果前面仍有列表内容，则插入一个空行断开 Markdown list block，避免正文被解析为前一项 continuation；嵌套列表项在 marker 后、正文前按 Enter 时，右侧内容升级为父级列表项。
+- 落点文件：`packages/editor-core/src/commands/list-edits.ts`、`packages/editor-core/src/commands/list-commands.ts`、`packages/editor-core/src/commands/list-edits.test.ts`、`src/renderer/code-editor.test.ts`。
+- 已复跑 `npm.cmd run test -- src/renderer/editor-source-layout.test.ts src/renderer/code-editor.test.ts src/renderer/app.autosave.test.ts packages/editor-core/src/decorations/block-decorations.test.ts packages/markdown-engine/src/parse-block-map.test.ts packages/editor-core/src/commands/list-edits.test.ts`，380 tests passed。
