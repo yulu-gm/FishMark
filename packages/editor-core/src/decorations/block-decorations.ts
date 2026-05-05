@@ -813,12 +813,23 @@ function appendInactiveBlankLineDecorationsInRange(
   const contentStartOffset = skipLeadingLineBreak
     ? skipSingleLeadingLineBreak(source, startOffset, endOffset)
     : startOffset;
+  let hasConsumedStructuralBlankLine = false;
 
   for (const line of createLineInfosInRange(source, contentStartOffset, endOffset)) {
     const lineEndOffset = trimTrailingCarriageReturn(source, line.startOffset, line.endOffset);
     const lineText = source.slice(line.startOffset, lineEndOffset);
 
-    if (lineText.trim().length > 0 || line.startOffset === activeSelectionLineStart) {
+    if (lineText.trim().length > 0) {
+      continue;
+    }
+
+    if (hasConsumedStructuralBlankLine) {
+      continue;
+    }
+
+    hasConsumedStructuralBlankLine = true;
+
+    if (line.startOffset === activeSelectionLineStart) {
       continue;
     }
 

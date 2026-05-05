@@ -224,16 +224,30 @@ describe("createBlockDecorations", () => {
     ]);
   });
 
+  it("keeps extra blank lines visible when a block gap contains more than one blank row", () => {
+    const source = ["Paragraph one", "", "", "Paragraph two"].join("\n");
+    const firstBlankLineStart = source.indexOf("\n\n\n") + 1;
+    const extraBlankLineStart = firstBlankLineStart + 1;
+    const ranges = createDecorationsForSelection(source, { anchor: 0, head: 0 }, false);
+
+    expectExactRangeClasses(ranges, firstBlankLineStart, firstBlankLineStart, [
+      "cm-inactive-blank-line"
+    ]);
+    expectExactRangeClasses(ranges, extraBlankLineStart, extraBlankLineStart, []);
+  });
+
   it("marks only the structural blank row as inactive when the document uses CRLF", () => {
-    const source = ["Paragraph one", "", "Paragraph two"].join("\r\n");
+    const source = ["Paragraph one", "", "", "Paragraph two"].join("\r\n");
     const ranges = createDecorationsForSelection(source, { anchor: 0, head: 0 }, false);
     const firstLineCarriageReturn = source.indexOf("\r\n");
-    const blankLineStart = source.indexOf("\r\n\r\n") + "\r\n".length;
+    const blankLineStart = source.indexOf("\r\n\r\n\r\n") + "\r\n".length;
+    const extraBlankLineStart = blankLineStart + "\r\n".length;
 
     expectExactRangeClasses(ranges, firstLineCarriageReturn, firstLineCarriageReturn, []);
     expectExactRangeClasses(ranges, blankLineStart, blankLineStart, [
       "cm-inactive-blank-line"
     ]);
+    expectExactRangeClasses(ranges, extraBlankLineStart, extraBlankLineStart, []);
   });
 
   it("does not mark the focused blank line as inactive reading content", () => {

@@ -69,13 +69,24 @@ describe("createFishmarkExportHtml", () => {
     expect(html).toContain('<div class="cm-line cm-inactive-blank-line"><br></div>');
   });
 
-  it("marks only the structural source blank row when exporting CRLF Markdown", () => {
+  it("exports only the first blank row in a block gap as the collapsed structural separator", () => {
     const html = createFishmarkExportHtml({
-      markdown: ["Paragraph one", "", "Paragraph two"].join("\r\n"),
+      markdown: ["Paragraph one", "", "", "Paragraph two"].join("\n"),
       title: "note.md"
     });
 
     expect(html.match(/class="cm-line cm-inactive-blank-line"/gu)).toHaveLength(1);
+    expect(html).toContain('<div class="cm-line"><br></div>');
+  });
+
+  it("marks only the structural source blank row when exporting CRLF Markdown", () => {
+    const html = createFishmarkExportHtml({
+      markdown: ["Paragraph one", "", "", "Paragraph two"].join("\r\n"),
+      title: "note.md"
+    });
+
+    expect(html.match(/class="cm-line cm-inactive-blank-line"/gu)).toHaveLength(1);
+    expect(html).toContain('<div class="cm-line"><br></div>');
   });
 
   it("escapes title, Markdown text, and inline CSS terminators", () => {

@@ -239,10 +239,26 @@
 2. 按 Enter。
 3. 输入第二项。
 4. 连续按两次 Enter。
+5. 输入以下有序列表与后续段落：
+   ```md
+   Ordered
+
+   1. Lorem ipsum dolor sit amet
+   2. Consectetur adipiscing elit
+   3. Integer molestie lorem at massa
+
+   You can use sequential numbers...
+   2. ...or keep all the numbers as `1.`
+   ```
+6. 将光标放在 `You can use sequential numbers...` 开头，按 `Backspace`。
+7. 将光标放在 `4. You can use sequential numbers...` 的 `can` 前，按 `Enter`。
 
 预期：
 - 列表可以正确续项
 - 空项时可以退出列表
+- `Backspace` 将段落接回上一条有序列表项后，光标停在接入文本 `You` 之前，不跳到列表末尾
+- 有序列表项中间按 `Enter` 分裂当前项后，光标停在新列表项正文开头，不跳到列表末尾
+- 后续有序列表 marker 会继续自动归一编号，但归一化不能用整段 list replacement 吞掉光标位置
 
 ### TC-011A 列表层级快捷键
 
@@ -307,18 +323,31 @@
 
    Paragraph two
    ```
-2. 将光标放到 `Paragraph two`，让 `Paragraph one` 和两段之间的空白源码行进入 inactive 阅读态。
-3. 观察两段之间是否出现额外空白行。
-4. 将光标放到 `Paragraph one` 末尾，按 `ArrowDown`。
-5. 将光标放到 `Paragraph two` 开头，按 `ArrowUp`。
-6. 使用 CRLF 换行的同样内容重复步骤 2-5。
-7. 直接将光标定位到两段之间的空白源码行。
-8. 导出 HTML 并用浏览器打开导出文件。
+2. 再输入一个包含多个空白源码行的版本：
+   ```md
+   Paragraph one
+
+
+   Paragraph two
+   ```
+3. 将光标放到 `Paragraph two`，让 `Paragraph one` 和两段之间的空白源码行进入 inactive 阅读态。
+4. 观察两段之间是否出现额外空白行。
+5. 将光标放到 `Paragraph one` 末尾，按 `ArrowDown`。
+6. 将光标放到 `Paragraph two` 开头，按 `ArrowUp`。
+7. 将光标继续放到 `Paragraph two` 开头，按 `Backspace`。
+8. 在普通段落文本中间按 `Enter`，再将光标放到 `Paragraph two` 的块开头按 `Enter`。
+9. 使用 CRLF 换行的同样内容重复步骤 3-7。
+10. 直接将光标定位到两段之间的空白源码行。
+11. 导出 HTML 并用浏览器打开导出文件。
 
 预期：
-- inactive 阅读态下，两段之间的 Markdown 空白源码行不产生可见空行，高度为 `0`
-- `ArrowDown` 从上一块内容末尾跳到下一块首行，不进入未渲染的分隔空白行
-- `ArrowUp` 从下一块内容开头跳到上一块末行，不进入未渲染的分隔空白行
+- inactive 阅读态下，每个块间空白 run 只有第一行作为结构性分隔行折叠为 `0` 高度
+- 如果块间有 `n(n>1)` 个空白源码行，剩余 `n-1` 行在编辑态和导出 HTML 中保持可见
+- 单个分隔行场景中，`ArrowDown` 从上一块内容末尾跳到下一块首行，不进入未渲染的分隔空白行
+- 多个空白行场景中，`ArrowDown` / `ArrowUp` 会落到可见的额外空白行，不跳过用户刻意输入的空行
+- `Backspace` 从下一块内容开头优先删除上方可见额外空白行；只剩结构性分隔行时，再删除分隔行并把当前内容接到上一块末尾
+- 普通段落内按 `Enter` 会创建新块边界，即插入一个结构性空白分隔行后把光标放到下一块起点
+- 如果光标已经处在现有块开头，`Enter` 只插入普通换行，不再额外创建新的结构性空白分隔行
 - CRLF 文档只折叠真正的结构性空白行，不会把上一行的 `\r` 位置误判成空白行
 - 直接定位到空白源码行时，该行不再应用 inactive 空白行折叠规则，仍可放置光标并继续编辑
 - 导出 HTML 使用同样的 `cm-inactive-blank-line` 规则，视觉间距与编辑器 inactive 阅读态一致

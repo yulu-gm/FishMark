@@ -973,7 +973,7 @@ describe("parseBlockMap", () => {
     ]);
   });
 
-  it("splits blank-line-separated ordered runs into independent scopes that restart from one", () => {
+  it("splits blank-line-separated ordered runs into independent scopes that preserve their offsets", () => {
     const source = ["1. one", "2. two", "", "3. three", "4. four"].join("\n");
 
     const result = parseBlockMap(source);
@@ -993,7 +993,7 @@ describe("parseBlockMap", () => {
         startOffset: 15,
         endOffset: source.length,
         ordered: true,
-        startOrdinal: 1,
+        startOrdinal: 3,
         delimiter: ".",
         items: [{ marker: "3." }, { marker: "4." }]
       }

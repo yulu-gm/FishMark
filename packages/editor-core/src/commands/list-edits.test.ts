@@ -1,4 +1,4 @@
-import { EditorState } from "@codemirror/state";
+import { EditorState, type Text } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
 
 import { parseMarkdownDocument } from "@fishmark/markdown-engine";
@@ -17,6 +17,7 @@ import {
   computeOrderedListEnter,
   computeOutdentListItem,
   computeUpgradeEmptyLeftListItemEnter,
+  mapTextOffsetThroughChanges,
   type ListEdit,
   normalizeOrderedListScopes
 } from "./list-edits";
@@ -37,6 +38,22 @@ const applyEdit = (doc: string, result: ListEdit | null) => {
   }
 
   return `${doc.slice(0, result.changes.from)}${result.changes.insert}${doc.slice(result.changes.to)}`;
+};
+
+const applyChanges = (
+  doc: string,
+  changes: readonly { from: number; to: number; insert: string | Text }[]
+) => {
+  let cursor = 0;
+  let result = "";
+
+  for (const change of [...changes].sort((left, right) => left.from - right.from)) {
+    result += doc.slice(cursor, change.from);
+    result += change.insert.toString();
+    cursor = change.to;
+  }
+
+  return `${result}${doc.slice(cursor)}`;
 };
 
 describe("list-edits", () => {
@@ -249,18 +266,18 @@ describe("list-edits", () => {
   });
 
   it("normalizes blank-line-separated ordered runs independently", () => {
-    const doc = ["1. one", "2. two", "", "3. three", "4. four"].join("\n");
+    const doc = ["1. one", "9. two", "", "3. three", "9. four"].join("\n");
 
     expect(computeNormalizedOrderedListDocument(doc)).toMatchObject({
-      source: ["1. one", "2. two", "", "1. three", "2. four"].join("\n")
+      source: ["1. one", "2. two", "", "3. three", "4. four"].join("\n")
     });
   });
 
   it("normalizes mixed-delimiter ordered runs as separate scopes", () => {
-    const doc = ["1. one", "2. two", "5) three", "6) four"].join("\n");
+    const doc = ["1. one", "9. two", "5) three", "9) four"].join("\n");
 
     expect(computeNormalizedOrderedListDocument(doc)).toMatchObject({
-      source: ["1. one", "2. two", "1) three", "2) four"].join("\n")
+      source: ["1. one", "2. two", "5) three", "6) four"].join("\n")
     });
   });
 
@@ -272,6 +289,66 @@ describe("list-edits", () => {
     });
   });
 
+  it("keeps offsets inside unchanged ordered-list content when normalizing document markers", () => {
+    const doc = [
+      "Ordered",
+      "",
+      "1. Lorem ipsum dolor sit amet",
+      "2. Consectetur adipiscing elit",
+      "3. Integer molestie lorem at massaYou can use sequential numbers...",
+      "2. ...or keep all the numbers as `1.`",
+      "",
+      "Start numbering with offset:"
+    ].join("\n");
+    const expected = [
+      "Ordered",
+      "",
+      "1. Lorem ipsum dolor sit amet",
+      "2. Consectetur adipiscing elit",
+      "3. Integer molestie lorem at massaYou can use sequential numbers...",
+      "4. ...or keep all the numbers as `1.`",
+      "",
+      "Start numbering with offset:"
+    ].join("\n");
+    const cursor = doc.indexOf("You can");
+    const result = computeNormalizedOrderedListDocument(doc);
+
+    expect(result).not.toBeNull();
+    expect(result?.source).toBe(expected);
+    expect(applyChanges(doc, result?.changes ?? [])).toBe(expected);
+    expect(mapTextOffsetThroughChanges(cursor, result?.changes ?? [])).toBe(cursor);
+  });
+
+  it("keeps offsets at split ordered item content when normalizing document markers", () => {
+    const doc = [
+      "Ordered",
+      "",
+      "1. Lorem ipsum dolor sit amet",
+      "2. Consectetur adipiscing elit",
+      "3. Integer molestie lorem at massa",
+      "4. You ",
+      "5. can use sequential numbers...",
+      "5. ...or keep all the numbers as `1.`"
+    ].join("\n");
+    const expected = [
+      "Ordered",
+      "",
+      "1. Lorem ipsum dolor sit amet",
+      "2. Consectetur adipiscing elit",
+      "3. Integer molestie lorem at massa",
+      "4. You ",
+      "5. can use sequential numbers...",
+      "6. ...or keep all the numbers as `1.`"
+    ].join("\n");
+    const cursor = doc.indexOf("can use");
+    const result = computeNormalizedOrderedListDocument(doc);
+
+    expect(result).not.toBeNull();
+    expect(result?.source).toBe(expected);
+    expect(applyChanges(doc, result?.changes ?? [])).toBe(expected);
+    expect(mapTextOffsetThroughChanges(cursor, result?.changes ?? [])).toBe(cursor);
+  });
+
   it("keeps selection on the current line when backspacing the marker of an empty ordered item", () => {
     const doc = ["1. one", "2. two", "3. four", "4.", "5. six", "6. seven"].join("\n");
     const context = buildContext(doc, ["1. one", "2. two", "3. four", "4."].join("\n").length);
@@ -281,6 +358,20 @@ describe("list-edits", () => {
     expect(result?.selection).toEqual({
       anchor: ["1. one", "2. two", "3. four", "4"].join("\n").length,
       head: ["1. one", "2. two", "3. four", "4"].join("\n").length
+    });
+  });
+
+  it("breaks ordered list rendering at the current item content start on Backspace", () => {
+    const doc = ["1. 内容", "2. 内容2", "3. 内容3"].join("\n");
+    const cursor = doc.indexOf("内容2");
+    const context = buildContext(doc, cursor);
+    const result = computeBackspaceOrderedListMarker(context);
+    const expected = ["1. 内容", "", "2.内容2", "3. 内容3"].join("\n");
+
+    expect(applyEdit(doc, result)).toBe(expected);
+    expect(result?.selection).toEqual({
+      anchor: expected.indexOf("2.") + "2.".length,
+      head: expected.indexOf("2.") + "2.".length
     });
   });
 });

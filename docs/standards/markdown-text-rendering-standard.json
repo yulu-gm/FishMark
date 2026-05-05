@@ -85,7 +85,7 @@
     },
     "blankLine": {
       "inactiveCollapsedHeightPx": 0,
-      "rule": "Structural Markdown blank source lines between rendered blocks collapse in inactive reading state. The active blank line remains editable and must not be removed from source."
+      "rule": "Only the first blank source line in a block gap collapses as the structural separator in inactive reading state. Extra blank source lines remain visible and editable. The active blank line remains editable, and blank lines must not be removed from source."
     },
     "list": {
       "betweenItemsRem": 0,

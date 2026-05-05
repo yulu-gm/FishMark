@@ -825,6 +825,34 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("keeps extra blank rows visible when a paragraph gap contains multiple blank lines", async () => {
+    const host = document.createElement("div");
+    const source = ["Paragraph one", "", "", "Paragraph two"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    view?.dispatch({ selection: { anchor: source.indexOf("Paragraph two") } });
+    await flushMicrotasks();
+
+    const blankLines = Array.from(host.querySelectorAll<HTMLElement>(".cm-line")).filter(
+      (line) => line.textContent === ""
+    );
+
+    expect(blankLines).toHaveLength(2);
+    expect(blankLines[0]?.classList.contains("cm-inactive-blank-line")).toBe(true);
+    expect(blankLines[1]?.classList.contains("cm-inactive-blank-line")).toBe(false);
+
+    controller.destroy();
+  });
+
   it("skips the collapsed structural blank row on ArrowDown from the previous block", async () => {
     const host = document.createElement("div");
     const source = ["Paragraph one", "", "Paragraph two"].join("\n");
@@ -855,11 +883,41 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("skips collapsed structural blank rows on ArrowUp from the next block", async () => {
+  it("lands on the visible extra blank row on ArrowDown when a gap has multiple blank lines", async () => {
     const host = document.createElement("div");
     const source = ["Paragraph one", "", "", "Paragraph two"].join("\n");
-    const firstBlankLineStart = source.indexOf("\n\n\n") + 1;
-    const previousBlockEnd = "Paragraph one".length;
+    const hiddenBlankLineStart = source.indexOf("\n\n\n") + 1;
+    const visibleExtraBlankLineStart = hiddenBlankLineStart + 1;
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const view = getEditorView(host);
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+    controller.setSelection("Paragraph one".length);
+    controller.pressArrowDown();
+    await flushMicrotasks();
+
+    expect(view?.state.selection.main.anchor).toBe(visibleExtraBlankLineStart);
+    expect(view?.state.selection.main.anchor).not.toBe(hiddenBlankLineStart);
+
+    controller.destroy();
+  });
+
+  it("lands on the visible extra blank row on ArrowUp when a gap has multiple blank lines", async () => {
+    const host = document.createElement("div");
+    const source = ["Paragraph one", "", "", "Paragraph two"].join("\n");
+    const hiddenBlankLineStart = source.indexOf("\n\n\n") + 1;
+    const visibleExtraBlankLineStart = hiddenBlankLineStart + 1;
 
     const controller = createCodeEditorController({
       parent: host,
@@ -879,8 +937,39 @@ describe("createCodeEditorController", () => {
     controller.pressArrowUp();
     await flushMicrotasks();
 
+    expect(view?.state.selection.main.anchor).toBe(visibleExtraBlankLineStart);
+    expect(view?.state.selection.main.anchor).not.toBe(hiddenBlankLineStart);
+
+    controller.destroy();
+  });
+
+  it("skips only the collapsed separator above a visible extra blank row on ArrowUp", async () => {
+    const host = document.createElement("div");
+    const source = ["Paragraph one", "", "", "Paragraph two"].join("\n");
+    const hiddenBlankLineStart = source.indexOf("\n\n\n") + 1;
+    const visibleExtraBlankLineStart = hiddenBlankLineStart + 1;
+    const previousBlockEnd = "Paragraph one".length;
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const view = getEditorView(host);
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+    controller.setSelection(visibleExtraBlankLineStart);
+    controller.pressArrowUp();
+    await flushMicrotasks();
+
     expect(view?.state.selection.main.anchor).toBe(previousBlockEnd);
-    expect(view?.state.selection.main.anchor).not.toBe(firstBlankLineStart);
+    expect(view?.state.selection.main.anchor).not.toBe(hiddenBlankLineStart);
 
     controller.destroy();
   });
@@ -2284,6 +2373,60 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("creates a new paragraph block separator on Enter in plain paragraph text", () => {
+    const host = document.createElement("div");
+    const source = "AlphaBeta";
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection("Alpha".length);
+    advancedController.pressEnter();
+
+    expect(controller.getContent()).toBe("Alpha\n\nBeta");
+    expect(view?.state.selection.main.anchor).toBe("Alpha\n\n".length);
+    expect(view?.state.selection.main.head).toBe("Alpha\n\n".length);
+
+    controller.destroy();
+  });
+
+  it("does not create another structural separator on Enter at an existing block start", () => {
+    const host = document.createElement("div");
+    const source = ["Alpha", "", "Beta"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(source.indexOf("Beta"));
+    advancedController.pressEnter();
+
+    expect(controller.getContent()).toBe(["Alpha", "", "", "Beta"].join("\n"));
+    expect(view?.state.selection.main.anchor).toBe("Alpha\n\n\n".length);
+    expect(view?.state.selection.main.head).toBe("Alpha\n\n\n".length);
+
+    controller.destroy();
+  });
+
   it("does not render a blockquote until a space is typed after the marker", async () => {
     const host = document.createElement("div");
 
@@ -2615,6 +2758,34 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("breaks ordered list rendering from the current item when Backspace is pressed at content start", () => {
+    const host = document.createElement("div");
+    const source = ["1. 内容", "2. 内容2", "3. 内容3"].join("\n");
+    const expected = ["1. 内容", "", "2.内容2", "3. 内容3"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressBackspace: () => void;
+    };
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(source.indexOf("内容2"));
+    advancedController.pressBackspace();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(view?.state.selection.main.anchor).toBe(expected.indexOf("2.") + "2.".length);
+    expect(view?.state.selection.main.head).toBe(expected.indexOf("2.") + "2.".length);
+
+    controller.destroy();
+  });
+
   it("joins body text after a list boundary into the previous item on Backspace", () => {
     const host = document.createElement("div");
     const source = ["1. Tail", "", "Body"].join("\n");
@@ -2638,6 +2809,155 @@ describe("createCodeEditorController", () => {
     expect(controller.getContent()).toBe("1. TailBody");
     expect(view?.state.selection.main.anchor).toBe("1. Tail".length);
     expect(view?.state.selection.main.head).toBe("1. Tail".length);
+
+    controller.destroy();
+  });
+
+  it("keeps the caret at joined paragraph text when Backspace joins after an ordered list boundary", () => {
+    const host = document.createElement("div");
+    const source = [
+      "Ordered",
+      "",
+      "1. Lorem ipsum dolor sit amet",
+      "2. Consectetur adipiscing elit",
+      "3. Integer molestie lorem at massa",
+      "",
+      "You can use sequential numbers...",
+      "2. ...or keep all the numbers as `1.`",
+      "",
+      "Start numbering with offset:"
+    ].join("\n");
+    const expected = [
+      "Ordered",
+      "",
+      "1. Lorem ipsum dolor sit amet",
+      "2. Consectetur adipiscing elit",
+      "3. Integer molestie lorem at massaYou can use sequential numbers...",
+      "4. ...or keep all the numbers as `1.`",
+      "",
+      "Start numbering with offset:"
+    ].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressBackspace: () => void;
+    };
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(source.indexOf("You can"));
+    advancedController.pressBackspace();
+
+    const expectedCursor = controller.getContent().indexOf("You can");
+    expect(controller.getContent()).toBe(expected);
+    expect(view?.state.selection.main.anchor).toBe(expectedCursor);
+    expect(view?.state.selection.main.head).toBe(expectedCursor);
+
+    controller.destroy();
+  });
+
+  it("keeps the caret at split ordered item content when Enter splits a middle ordered item", () => {
+    const host = document.createElement("div");
+    const source = [
+      "Ordered",
+      "",
+      "1. Lorem ipsum dolor sit amet",
+      "2. Consectetur adipiscing elit",
+      "3. Integer molestie lorem at massa",
+      "4. You can use sequential numbers...",
+      "5. ...or keep all the numbers as `1.`"
+    ].join("\n");
+    const expected = [
+      "Ordered",
+      "",
+      "1. Lorem ipsum dolor sit amet",
+      "2. Consectetur adipiscing elit",
+      "3. Integer molestie lorem at massa",
+      "4. You ",
+      "5. can use sequential numbers...",
+      "6. ...or keep all the numbers as `1.`"
+    ].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(source.indexOf("can use"));
+    advancedController.pressEnter();
+
+    const expectedCursor = controller.getContent().indexOf("can use");
+    expect(controller.getContent()).toBe(expected);
+    expect(view?.state.selection.main.anchor).toBe(expectedCursor);
+    expect(view?.state.selection.main.head).toBe(expectedCursor);
+
+    controller.destroy();
+  });
+
+  it("joins paragraph text across a structural blank separator on Backspace", () => {
+    const host = document.createElement("div");
+    const source = ["Alpha", "", "Beta"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressBackspace: () => void;
+    };
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(source.indexOf("Beta"));
+    advancedController.pressBackspace();
+
+    expect(controller.getContent()).toBe("AlphaBeta");
+    expect(view?.state.selection.main.anchor).toBe("Alpha".length);
+    expect(view?.state.selection.main.head).toBe("Alpha".length);
+
+    controller.destroy();
+  });
+
+  it("removes a visible extra blank row before joining across the structural separator on Backspace", () => {
+    const host = document.createElement("div");
+    const source = ["Alpha", "", "", "Beta"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressBackspace: () => void;
+    };
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(source.indexOf("Beta"));
+    advancedController.pressBackspace();
+
+    expect(controller.getContent()).toBe(["Alpha", "", "Beta"].join("\n"));
+    expect(view?.state.selection.main.anchor).toBe("Alpha\n\n".length);
+    expect(view?.state.selection.main.head).toBe("Alpha\n\n".length);
 
     controller.destroy();
   });
@@ -3006,7 +3326,7 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("restarts numbering after a blank line created inside an ordered run", () => {
+  it("preserves the ordered offset after a blank line created inside an ordered run", () => {
     const host = document.createElement("div");
     const source = ["1. one", "2. two", "3. three", "4. four"].join("\n");
 
@@ -3023,12 +3343,12 @@ describe("createCodeEditorController", () => {
     advancedController.setSelection("1. one\n2. two".length);
     advancedController.insertText("\n");
 
-    expect(controller.getContent()).toBe(["1. one", "2. two", "", "1. three", "2. four"].join("\n"));
+    expect(controller.getContent()).toBe(["1. one", "2. two", "", "3. three", "4. four"].join("\n"));
 
     controller.destroy();
   });
 
-  it("restarts numbering after deleting a middle ordered item into a blank line", () => {
+  it("preserves the ordered offset after deleting a middle ordered item into a blank line", () => {
     const host = document.createElement("div");
     const source = ["1. one", "2. two", "3. three", "4. four", "5. five", "6. six"].join("\n");
 
@@ -3049,7 +3369,7 @@ describe("createCodeEditorController", () => {
     advancedController.insertText("");
 
     expect(controller.getContent()).toBe(
-      ["1. one", "2. two", "3. three", "", "1. five", "2. six"].join("\n")
+      ["1. one", "2. two", "3. three", "", "5. five", "6. six"].join("\n")
     );
 
     controller.destroy();
@@ -4484,7 +4804,7 @@ describe("createCodeEditorController", () => {
     host.remove();
   });
 
-  it("skips blank separator rows above a table on ArrowUp", async () => {
+  it("moves through visible extra blank rows above a table on ArrowUp", async () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
     const source = [
@@ -4524,7 +4844,7 @@ describe("createCodeEditorController", () => {
     expect(view).not.toBeNull();
 
     const tableAdjacentBlankLineStart = getLineStartOffset(source, 14);
-    const previousVisibleBlockStart = getLineStartOffset(source, 8);
+    const previousExtraBlankLineStart = getLineStartOffset(source, 13);
 
     view!.dispatch({
       selection: {
@@ -4543,7 +4863,7 @@ describe("createCodeEditorController", () => {
     await flushMicrotasks();
     await flushMicrotasks();
 
-    expect(view!.state.selection.main.anchor).toBe(previousVisibleBlockStart);
+    expect(view!.state.selection.main.anchor).toBe(previousExtraBlankLineStart);
 
     controller.destroy();
     host.remove();

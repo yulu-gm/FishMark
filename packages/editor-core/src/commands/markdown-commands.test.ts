@@ -123,6 +123,42 @@ describe("semantic markdown commands", () => {
     ]);
   });
 
+  it("creates a new paragraph block separator when Enter is pressed in plain paragraph text", () => {
+    const target = createCommandTarget({ doc: "AlphaBeta", anchor: "Alpha".length });
+
+    expect(runMarkdownEnterCommand(target, paragraphActiveState)).toBe(true);
+    expect(target.getDispatchedChanges()).toEqual([
+      {
+        from: "Alpha".length,
+        to: "Alpha".length,
+        insert: "\n\n",
+        selection: {
+          anchor: "Alpha\n\n".length,
+          head: "Alpha\n\n".length
+        }
+      }
+    ]);
+  });
+
+  it("does not create another structural separator when Enter is pressed at an existing block start", () => {
+    const source = ["Alpha", "", "Beta"].join("\n");
+    const blockStart = source.indexOf("Beta");
+    const target = createCommandTarget({ doc: source, anchor: blockStart });
+
+    expect(runMarkdownEnterCommand(target, paragraphActiveState)).toBe(true);
+    expect(target.getDispatchedChanges()).toEqual([
+      {
+        from: blockStart,
+        to: blockStart,
+        insert: "\n",
+        selection: {
+          anchor: blockStart + 1,
+          head: blockStart + 1
+        }
+      }
+    ]);
+  });
+
   it("requests cursor scrolling when a custom ArrowDown navigation is handled", () => {
     const target = createCommandTarget({ doc: "Alpha\nBeta", anchor: 0 });
 
@@ -171,6 +207,42 @@ describe("semantic markdown commands", () => {
         selection: {
           anchor: "1. Tail".length,
           head: "1. Tail".length
+        }
+      }
+    ]);
+  });
+
+  it("joins paragraph text into the previous paragraph on Backspace across a structural blank separator", () => {
+    const source = ["Alpha", "", "Beta"].join("\n");
+    const target = createCommandTarget({ doc: source, anchor: source.indexOf("Beta") });
+
+    expect(runMarkdownBackspaceCommand(target, paragraphActiveState)).toBe(true);
+    expect(target.getDispatchedChanges()).toEqual([
+      {
+        from: "Alpha".length,
+        to: "Alpha\n\n".length,
+        insert: "",
+        selection: {
+          anchor: "Alpha".length,
+          head: "Alpha".length
+        }
+      }
+    ]);
+  });
+
+  it("removes only the visible extra blank row on Backspace before crossing the structural separator", () => {
+    const source = ["Alpha", "", "", "Beta"].join("\n");
+    const target = createCommandTarget({ doc: source, anchor: source.indexOf("Beta") });
+
+    expect(runMarkdownBackspaceCommand(target, paragraphActiveState)).toBe(true);
+    expect(target.getDispatchedChanges()).toEqual([
+      {
+        from: "Alpha\n\n".length,
+        to: "Alpha\n\n\n".length,
+        insert: "",
+        selection: {
+          anchor: "Alpha\n\n".length,
+          head: "Alpha\n\n".length
         }
       }
     ]);

@@ -445,14 +445,19 @@ function renderTableCell(cell: TableCell, isHeader: boolean): string {
 
 function renderPlainLines(source: string, startOffset: number, endOffset: number): string {
   const contentStartOffset = skipSingleLeadingLineBreak(source, startOffset, endOffset);
+  let hasRenderedStructuralBlankLine = false;
 
   return createSourceLines(source, contentStartOffset, endOffset)
-    .map((line) =>
-      renderLine(
-        line.text.trim().length === 0 ? "cm-inactive-blank-line" : "",
-        renderDecoratedPlainText(line.text) || "<br>"
-      )
-    )
+    .map((line) => {
+      const isBlankLine = line.text.trim().length === 0;
+      const className = isBlankLine && !hasRenderedStructuralBlankLine ? "cm-inactive-blank-line" : "";
+
+      if (isBlankLine) {
+        hasRenderedStructuralBlankLine = true;
+      }
+
+      return renderLine(className, renderDecoratedPlainText(line.text) || "<br>");
+    })
     .join("");
 }
 

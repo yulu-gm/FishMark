@@ -255,12 +255,42 @@ export function computeBackspaceOrderedListMarker(ctx: SemanticContext): ListEdi
   }
 
   const line = ctx.state.doc.lineAt(ctx.selection.from);
+  const parsed = parseListLine(line.text);
+
+  if (
+    parsed &&
+    /^\d+[.)]$/u.test(parsed.marker) &&
+    parsed.content.length > 0
+  ) {
+    const separatorStart = line.from + parsed.indent.length + parsed.marker.length;
+    const contentStart = line.to - parsed.content.length;
+
+    if (
+      ctx.selection.from === contentStart &&
+      separatorStart < contentStart &&
+      current.parentItem === null &&
+      current.itemIndex > 0
+    ) {
+      const blockSource = readBlockSource(ctx, current.rootList);
+      const replaceFrom = toBlockOffset(current.rootList, current.item.startOffset);
+      const replaceTo = toBlockOffset(current.rootList, contentStart);
+      const insert = `\n${parsed.indent}${parsed.marker}`;
+      const tentativeSource = replaceRange(blockSource, replaceFrom, replaceTo, insert);
+      const tentativeCursor = replaceFrom + insert.length;
+
+      return {
+        changes: createMinimalTextChange(blockSource, tentativeSource, current.rootList.startOffset),
+        selection: {
+          anchor: current.rootList.startOffset + tentativeCursor,
+          head: current.rootList.startOffset + tentativeCursor
+        }
+      };
+    }
+  }
 
   if (ctx.selection.from !== line.to) {
     return null;
   }
-
-  const parsed = parseListLine(line.text);
 
   if (
     !parsed ||
@@ -411,18 +441,20 @@ export function computeNormalizedOrderedListDocument(source: string): OrderedLis
     const normalization = normalizeOrderedListBlock(
       blockSource,
       block,
-      getDocumentOrderedListStartOrdinal(document.blocks, block, source)
+      getDocumentOrderedListStartOrdinal(block)
     );
 
     if (normalization.changes.length === 0) {
       continue;
     }
 
-    changes.push({
-      from: block.startOffset,
-      to: block.endOffset,
-      insert: normalization.source
-    });
+    changes.push(
+      ...normalization.changes.map((change) => ({
+        from: block.startOffset + change.from,
+        to: block.startOffset + change.to,
+        insert: change.insert
+      }))
+    );
   }
 
   if (changes.length === 0) {
@@ -558,34 +590,8 @@ function appendOrderedListScopeChanges(
   }
 }
 
-function getDocumentOrderedListStartOrdinal(
-  blocks: ReturnType<typeof parseBlockMap>["blocks"],
-  currentBlock: ListBlock,
-  source: string
-): number | undefined {
-  if (!currentBlock.ordered) {
-    return undefined;
-  }
-
-  const currentIndex = blocks.findIndex((block) => block === currentBlock);
-
-  if (currentIndex <= 0) {
-    return currentBlock.startOrdinal;
-  }
-
-  const previousBlock = blocks[currentIndex - 1];
-
-  if (previousBlock?.type !== "list" || !previousBlock.ordered) {
-    return 1;
-  }
-
-  const gapSource = source.slice(previousBlock.endOffset, currentBlock.startOffset);
-
-  if (gapSource === "\n" && previousBlock.delimiter === currentBlock.delimiter) {
-    return currentBlock.startOrdinal;
-  }
-
-  return 1;
+function getDocumentOrderedListStartOrdinal(currentBlock: ListBlock): number | undefined {
+  return currentBlock.ordered ? currentBlock.startOrdinal : undefined;
 }
 
 function hasTopLevelPlainTextTail(item: ListItemBlock, source: string, baseOffset: number): boolean {

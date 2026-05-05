@@ -728,7 +728,7 @@ function parseListScopes(sourceSlice: string, baseOffset: number, baseLine: numb
       if (currentRootScope && draftListScopeMatches(currentRootScope, metadata, indent)) {
         currentRootScope.items.push(item);
       } else if (rootScopes.length === 0 || canStartNewRootScope(rootScopes.at(-1) ?? null, indent)) {
-        rootScopes.push(createDraftListScope(metadata, indent, item, rootScopes.length > 0));
+        rootScopes.push(createDraftListScope(metadata, indent, item));
       } else {
         return null;
       }
@@ -902,8 +902,7 @@ function parseListMarker(marker: string):
 function createDraftListScope(
   metadata: ReturnType<typeof parseListMarker>,
   indent: number,
-  firstItem: DraftListItem,
-  resetOrderedStartOrdinal = false
+  firstItem: DraftListItem
 ): DraftListScope {
   if (!metadata.ordered) {
     return {
@@ -916,7 +915,7 @@ function createDraftListScope(
   return {
     ordered: true,
     indent,
-    startOrdinal: resetOrderedStartOrdinal ? 1 : metadata.startOrdinal,
+    startOrdinal: metadata.startOrdinal,
     delimiter: metadata.delimiter,
     items: [firstItem]
   };
