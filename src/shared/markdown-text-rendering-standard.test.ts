@@ -22,6 +22,7 @@ type ListStandard = {
     mustBeEqualAcross: string[];
   };
   unordered: {
+    markerColumnWidthEm: number;
     markerGlyphSizeRem: number;
     markerGlyphSizeEm: number;
     markerGlyphLeftFromDepthRem: number;
@@ -69,6 +70,12 @@ type MarkdownTextRenderingStandard = {
     };
   };
   lists: ListStandard;
+  blockSpacing: {
+    blankLine: {
+      inactiveCollapsedHeightPx: number;
+      rule: string;
+    };
+  };
   themeCompliance: {
     themesMustNotOverride: string[];
   };
@@ -96,6 +103,8 @@ describe("markdown text rendering standard", () => {
     expect(standard.typography.base.letterSpacing.value).toBe(0);
     expect(standard.typography.lineHeight.paragraph).toBeGreaterThan(standard.typography.lineHeight.list);
     expect(standard.typography.lineHeight.listContinuation).toBe(standard.typography.lineHeight.list);
+    expect(standard.blockSpacing.blankLine.inactiveCollapsedHeightPx).toBe(0);
+    expect(standard.blockSpacing.blankLine.rule).toContain("active blank line remains editable");
   });
 
   it("keeps list depth, marker gap, and content offsets as separate constraints", () => {
@@ -106,8 +115,8 @@ describe("markdown text rendering standard", () => {
     expect(lists.geometry.indentStepEm).toBe(1.4);
     expect(gap).toBe(0.62);
     expect(lists.markerToTextGapRem.unit).toBe("em");
-    expect(lists.ordered.markerColumnWidthRem).toBe(2.4);
-    expect(lists.ordered.markerColumnWidthEm).toBe(2.4);
+    expect(lists.ordered.markerColumnWidthRem).toBe(0.78);
+    expect(lists.ordered.markerColumnWidthEm).toBe(0.78);
     expect(lists.geometry.depthOffsetFormula).toBe("depth * indentStepRem");
     expect(lists.geometry.contentStartFormula).toContain("markerToTextGapRem");
     expect(lists.geometry.activeInactiveContentStartFormula).toBe(
@@ -121,7 +130,7 @@ describe("markdown text rendering standard", () => {
     expect(lists.activeRows.sourcePrefixGeometryRule).toContain("not character-count or ch-based geometry");
     expect(lists.markerToTextGapRem.mustBeEqualAcross).toContain("child unordered item");
     expect(lists.unordered.contentStartOffsetEm).toBeCloseTo(
-      lists.unordered.markerGlyphLeftFromDepthEm + lists.unordered.markerGlyphSizeEm + gap
+      lists.unordered.markerColumnWidthEm + gap
     );
     expect(lists.ordered.contentStartOffsetEm).toBeCloseTo(lists.ordered.markerColumnWidthEm + gap);
     expect(lists.task.contentStartOffsetEm).toBeCloseTo(

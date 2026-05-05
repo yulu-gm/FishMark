@@ -99,6 +99,24 @@ const createActiveParagraphInlineDecorations = (source: string) => {
   );
 };
 
+const createDecorationsForSelection = (
+  source: string,
+  selection: { anchor: number; head: number },
+  hasEditorFocus: boolean
+) => {
+  const blockMap = parseMarkdownDocument(source);
+  const activeState = createActiveBlockStateFromBlockMap(blockMap, selection);
+
+  return collectDecorations(
+    source,
+    createBlockDecorations({
+      activeBlockState: activeState,
+      hasEditorFocus,
+      source
+    }).decorationSet
+  );
+};
+
 const getCoveredClassesAtRange = (
   ranges: Array<{ from: number; to: number; className: string; text: string }>,
   from: number,
@@ -195,6 +213,39 @@ describe("createBlockDecorations", () => {
     expectCoveredRangeClasses(ranges, 0, 2, ["cm-inactive-inline-marker"]);
     expectCoveredRangeClasses(ranges, 2, 6, ["cm-inactive-inline-strong"]);
     expectCoveredRangeClasses(ranges, 6, 8, ["cm-inactive-inline-marker"]);
+  });
+
+  it("marks structural blank lines as inactive reading blanks", () => {
+    const source = ["Paragraph one", "", "Paragraph two"].join("\n");
+    const ranges = createDecorationsForSelection(source, { anchor: 0, head: 0 }, false);
+
+    expectExactRangeClasses(ranges, source.indexOf("\n\n") + 1, source.indexOf("\n\n") + 1, [
+      "cm-inactive-blank-line"
+    ]);
+  });
+
+  it("marks only the structural blank row as inactive when the document uses CRLF", () => {
+    const source = ["Paragraph one", "", "Paragraph two"].join("\r\n");
+    const ranges = createDecorationsForSelection(source, { anchor: 0, head: 0 }, false);
+    const firstLineCarriageReturn = source.indexOf("\r\n");
+    const blankLineStart = source.indexOf("\r\n\r\n") + "\r\n".length;
+
+    expectExactRangeClasses(ranges, firstLineCarriageReturn, firstLineCarriageReturn, []);
+    expectExactRangeClasses(ranges, blankLineStart, blankLineStart, [
+      "cm-inactive-blank-line"
+    ]);
+  });
+
+  it("does not mark the focused blank line as inactive reading content", () => {
+    const source = ["Paragraph one", "", "Paragraph two"].join("\n");
+    const blankLineStart = source.indexOf("\n\n") + 1;
+    const ranges = createDecorationsForSelection(
+      source,
+      { anchor: blankLineStart, head: blankLineStart },
+      true
+    );
+
+    expectExactRangeClasses(ranges, blankLineStart, blankLineStart, []);
   });
 
   it("stacks strong and emphasis classes for triple-marker inline content", () => {
@@ -348,7 +399,7 @@ describe("createBlockDecorations", () => {
 
     expect(result.signature).toBe(
       [
-        "active:paragraph:86-95",
+        "active:paragraph:86-95:blank-line:86",
         "heading:heading:0-7:0:1",
         "list:list:9-25:9:false:list-item:9-14:0:none,list-item:15-25:0:true",
         "blockquote:blockquote:27-49:27:49",
@@ -369,6 +420,12 @@ describe("createBlockDecorations", () => {
         to: 2,
         className: "cm-inactive-heading-marker",
         text: "# "
+      },
+      {
+        from: 8,
+        to: 8,
+        className: "cm-inactive-blank-line",
+        text: ""
       },
       {
         from: 9,
@@ -413,6 +470,12 @@ describe("createBlockDecorations", () => {
         text: " "
       },
       {
+        from: 26,
+        to: 26,
+        className: "cm-inactive-blank-line",
+        text: ""
+      },
+      {
         from: 27,
         to: 27,
         className: "cm-inactive-blockquote cm-inactive-blockquote-start",
@@ -435,6 +498,12 @@ describe("createBlockDecorations", () => {
         to: 37,
         className: "cm-inactive-blockquote-marker",
         text: "> "
+      },
+      {
+        from: 50,
+        to: 50,
+        className: "cm-inactive-blank-line",
+        text: ""
       },
       {
         from: 51,
@@ -467,6 +536,12 @@ describe("createBlockDecorations", () => {
         text: "```"
       },
       {
+        from: 80,
+        to: 80,
+        className: "cm-inactive-blank-line",
+        text: ""
+      },
+      {
         from: 81,
         to: 81,
         className: "cm-inactive-thematic-break",
@@ -477,6 +552,12 @@ describe("createBlockDecorations", () => {
         to: 84,
         className: "cm-inactive-thematic-break-marker",
         text: "---"
+      },
+      {
+        from: 85,
+        to: 85,
+        className: "cm-inactive-blank-line",
+        text: ""
       },
       {
         from: 86,
@@ -752,6 +833,12 @@ describe("createBlockDecorations", () => {
         text: ""
       },
       {
+        from: 8,
+        to: 8,
+        className: "cm-inactive-blank-line",
+        text: ""
+      },
+      {
         from: 9,
         to: 9,
         className: "cm-inactive-paragraph cm-inactive-paragraph-leading",
@@ -770,6 +857,12 @@ describe("createBlockDecorations", () => {
         to: 2,
         className: "cm-inactive-heading-marker",
         text: "# "
+      },
+      {
+        from: 8,
+        to: 8,
+        className: "cm-inactive-blank-line",
+        text: ""
       },
       {
         from: 9,

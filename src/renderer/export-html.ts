@@ -90,6 +90,13 @@ const EXPORT_RUNTIME_CSS = `
   display: block;
 }
 
+.fishmark-html-export .document-editor .cm-line.cm-inactive-blank-line {
+  height: 0;
+  min-height: 0;
+  line-height: 0;
+  overflow: hidden;
+}
+
 .fishmark-html-export .cm-table-widget-input {
   caret-color: transparent;
 }
@@ -440,7 +447,12 @@ function renderPlainLines(source: string, startOffset: number, endOffset: number
   const contentStartOffset = skipSingleLeadingLineBreak(source, startOffset, endOffset);
 
   return createSourceLines(source, contentStartOffset, endOffset)
-    .map((line) => renderLine("", renderDecoratedPlainText(line.text) || "<br>"))
+    .map((line) =>
+      renderLine(
+        line.text.trim().length === 0 ? "cm-inactive-blank-line" : "",
+        renderDecoratedPlainText(line.text) || "<br>"
+      )
+    )
     .join("");
 }
 

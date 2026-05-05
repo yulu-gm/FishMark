@@ -60,6 +60,24 @@ describe("createFishmarkExportHtml", () => {
     expect(html).toContain("height: auto;");
   });
 
+  it("marks structural source blank lines with the inactive blank-line reading class", () => {
+    const html = createFishmarkExportHtml({
+      markdown: ["Paragraph one", "", "Paragraph two"].join("\n"),
+      title: "note.md"
+    });
+
+    expect(html).toContain('<div class="cm-line cm-inactive-blank-line"><br></div>');
+  });
+
+  it("marks only the structural source blank row when exporting CRLF Markdown", () => {
+    const html = createFishmarkExportHtml({
+      markdown: ["Paragraph one", "", "Paragraph two"].join("\r\n"),
+      title: "note.md"
+    });
+
+    expect(html.match(/class="cm-line cm-inactive-blank-line"/gu)).toHaveLength(1);
+  });
+
   it("escapes title, Markdown text, and inline CSS terminators", () => {
     const html = createFishmarkExportHtml({
       markdown: "# 1 < 2 & 3",

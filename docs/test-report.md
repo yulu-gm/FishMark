@@ -9,6 +9,17 @@
 
 ## 记录
 
+| 2026-05-05 | typora-blank-line-rendering | `npm.cmd run test -- packages/editor-core/src/decorations/block-decorations.test.ts src/renderer/code-editor.test.ts src/renderer/export-html.test.ts` | 通过 | 先以失败测试覆盖 CRLF 空白行定位、上下键跳过未渲染分隔空白行、HTML 导出 CRLF 结构；3 个文件、174 项通过。 |
+| 2026-05-05 | typora-blank-line-rendering | `npm.cmd run test -- packages/editor-core/src/decorations/block-decorations.test.ts src/renderer/code-editor.test.ts src/renderer/export-html.test.ts src/renderer/editor-source-layout.test.ts` | 通过 | 覆盖 editor-core blank-line decoration、CodeMirror DOM 切换、HTML 导出 class 与 CSS/标准契约；4 个文件、183 项通过。 |
+| 2026-05-05 | typora-blank-line-rendering | `npm.cmd run test -- src/renderer/code-editor.test.ts src/renderer/app.autosave.test.ts packages/editor-core/src/decorations/block-decorations.test.ts packages/markdown-engine/src/parse-block-map.test.ts src/renderer/export-html.test.ts src/renderer/editor-source-layout.test.ts` | 通过 | 覆盖 editor-core blank-line decoration、CodeMirror DOM 切换、HTML 导出 class、CSS/标准契约、autosave 主题约束和 parser 回归；6 个文件、368 项通过。 |
+| 2026-05-05 | typora-blank-line-rendering | `npm.cmd run test -- src/renderer/code-editor.test.ts src/renderer/app.autosave.test.ts packages/editor-core/src/decorations/block-decorations.test.ts packages/editor-core/src/extensions/markdown.test.ts packages/editor-core/src/commands/markdown-commands.test.ts packages/markdown-engine/src/parse-block-map.test.ts src/renderer/export-html.test.ts src/renderer/editor-source-layout.test.ts` | 通过 | 补充覆盖 editor-core extension/keymap、semantic markdown command fallback、表格相邻空白行导航回归；8 个文件、385 项通过。 |
+| 2026-05-05 | typora-blank-line-rendering | Electron blank-line geometry probe | 通过 | 当前 CSS 在 Chromium 中测得 inactive blank row `height: 0`、`lineHeight: "0px"`、`overflow: hidden`；普通 paragraph row height 为 `35.094px`。 |
+| 2026-05-05 | typora-blank-line-rendering | `npm.cmd run test` | 通过 | Vitest 全量通过：94 个测试文件、911 项测试通过。 |
+| 2026-05-05 | typora-blank-line-rendering | `npm.cmd run typecheck` | 通过 | renderer / electron / vitest / cli 四套 TypeScript 检查通过。 |
+| 2026-05-05 | typora-blank-line-rendering | `npm.cmd run lint` | 通过 | ESLint 退出码 0；保留既有 `src/renderer/editor/App.tsx:215` Fast Refresh warning。 |
+| 2026-05-05 | typora-blank-line-rendering | `npm.cmd run build` | 通过 | renderer / electron / cli build 通过；保留既有 Vite chunk size warning。 |
+| 2026-05-05 | typora-blank-line-rendering | `npm.cmd run test:list-geometry` | 通过 | 既有 Electron/Chromium 列表几何探针通过，active/inactive 列表 marker 和正文起点未回归。 |
+| 2026-05-05 | typora-blank-line-rendering | `git diff --check` | 通过 | 本轮改动无 whitespace error；仅输出 Git 的 CRLF 归一化提示和既有脏文件 `tmp/test.md` 提示。 |
 | 2026-05-05 | list-indent-consistency | `npm.cmd run test -- src/renderer/editor-source-layout.test.ts` | 通过 | 先以失败测试复现顶级无序 marker left 为 `2.1em`，会相对正文额外内缩；修复后 8 项通过。 |
 | 2026-05-05 | list-indent-consistency | `npm.cmd run test -- src/renderer/editor-source-layout.test.ts src/renderer/code-editor.test.ts src/renderer/app.autosave.test.ts packages/editor-core/src/decorations/block-decorations.test.ts packages/markdown-engine/src/parse-block-map.test.ts` | 通过 | 覆盖 CSS 契约、renderer 列表装饰、autosave 主题约束、editor-core decoration 和 markdown-engine list block 回归；5 个文件、348 项通过。 |
 | 2026-05-05 | list-indent-consistency | `npm.cmd run test:list-geometry` | 通过 | Electron/Chromium 几何探针通过；heading/paragraph left、顶级 unordered/ordered/task marker left、同 depth ordered/unordered marker left 与 content left delta 均为 `0px`；active task marker 中 `[x]` 相对 `-` 的 top delta 为 `0px`，未再拆到下一行。 |

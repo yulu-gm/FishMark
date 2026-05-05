@@ -4,6 +4,7 @@ import type {
   HeadingBlock,
   ListBlock,
   ListItemBlock,
+  TableBlock,
   ThematicBreakBlock
 } from "@fishmark/markdown-engine";
 
@@ -87,9 +88,137 @@ function resolveVisibleBlockEntryAnchor(block: MarkdownBlock, direction: "start"
 
       return resolveVisibleListItemStartAnchor(item);
     }
+    case "table": {
+      const tableBlock = block as TableBlock;
+      const lastRow = tableBlock.rows.at(-1) ?? null;
+      const cell =
+        direction === "start"
+          ? (tableBlock.header[0] ?? tableBlock.rows[0]?.[0] ?? null)
+          : (lastRow?.at(-1) ?? tableBlock.header.at(-1) ?? null);
+
+      return direction === "start"
+        ? cell?.contentStartOffset ?? block.startOffset
+        : cell?.contentEndOffset ?? block.endOffset;
+    }
+    case "htmlImage":
+      return direction === "start" ? block.startOffset : block.endOffset;
     default:
       return null;
   }
+}
+
+function isBlankLineText(text: string): boolean {
+  return text.trim().length === 0;
+}
+
+function isStructuralBlankLine(context: VerticalInteractionContext, lineNumber: number): boolean {
+  if (lineNumber < 1 || lineNumber > context.view.state.doc.lines) {
+    return false;
+  }
+
+  const line = context.view.state.doc.line(lineNumber);
+
+  return isBlankLineText(line.text) && !findBlockForLine(context.document.blocks, lineNumber);
+}
+
+function findBlockAboveStructuralBlankRun(
+  context: VerticalInteractionContext,
+  firstBlankLineNumber: number
+): MarkdownBlock | null {
+  let lineNumber = firstBlankLineNumber;
+  let hasStructuralBlankLine = false;
+
+  while (isStructuralBlankLine(context, lineNumber)) {
+    hasStructuralBlankLine = true;
+    lineNumber -= 1;
+  }
+
+  if (!hasStructuralBlankLine || lineNumber < 1) {
+    return null;
+  }
+
+  return findBlockForLine(context.document.blocks, lineNumber);
+}
+
+function findBlockBelowStructuralBlankRun(
+  context: VerticalInteractionContext,
+  firstBlankLineNumber: number
+): MarkdownBlock | null {
+  let lineNumber = firstBlankLineNumber;
+  let hasStructuralBlankLine = false;
+
+  while (isStructuralBlankLine(context, lineNumber)) {
+    hasStructuralBlankLine = true;
+    lineNumber += 1;
+  }
+
+  if (!hasStructuralBlankLine || lineNumber > context.view.state.doc.lines) {
+    return null;
+  }
+
+  return findBlockForLine(context.document.blocks, lineNumber);
+}
+
+function resolveCollapsedSeparatorArrowUp(context: VerticalInteractionContext): number | null {
+  const selection = context.view.state.selection.main;
+
+  if (!selection.empty) {
+    return null;
+  }
+
+  const currentLine = context.view.state.doc.lineAt(context.lineStart);
+
+  if (isStructuralBlankLine(context, currentLine.number)) {
+    const blockAbove = findBlockAboveStructuralBlankRun(context, currentLine.number);
+    const blockBelow = findBlockBelowStructuralBlankRun(context, currentLine.number);
+
+    if (!blockAbove || !blockBelow) {
+      return null;
+    }
+
+    return resolveVisibleBlockEntryAnchor(blockAbove, "end");
+  }
+
+  const currentBlock = findBlockForLine(context.document.blocks, currentLine.number);
+
+  if (!currentBlock || currentLine.number !== currentBlock.startLine) {
+    return null;
+  }
+
+  const blockAbove = findBlockAboveStructuralBlankRun(context, currentLine.number - 1);
+
+  return blockAbove ? resolveVisibleBlockEntryAnchor(blockAbove, "end") : null;
+}
+
+function resolveCollapsedSeparatorArrowDown(context: VerticalInteractionContext): number | null {
+  const selection = context.view.state.selection.main;
+
+  if (!selection.empty) {
+    return null;
+  }
+
+  const currentLine = context.view.state.doc.lineAt(context.lineStart);
+
+  if (isStructuralBlankLine(context, currentLine.number)) {
+    const blockAbove = findBlockAboveStructuralBlankRun(context, currentLine.number);
+    const blockBelow = findBlockBelowStructuralBlankRun(context, currentLine.number);
+
+    if (!blockAbove || !blockBelow) {
+      return null;
+    }
+
+    return resolveVisibleBlockEntryAnchor(blockBelow, "start");
+  }
+
+  const currentBlock = findBlockForLine(context.document.blocks, currentLine.number);
+
+  if (!currentBlock || currentLine.number !== currentBlock.endLine) {
+    return null;
+  }
+
+  const blockBelow = findBlockBelowStructuralBlankRun(context, currentLine.number + 1);
+
+  return blockBelow ? resolveVisibleBlockEntryAnchor(blockBelow, "start") : null;
 }
 
 function resolveSourceLineArrowUp(context: VerticalInteractionContext): VerticalNavigationResult | null {
@@ -108,7 +237,7 @@ function resolveSourceLineArrowUp(context: VerticalInteractionContext): Vertical
   const currentBlock = findBlockForLine(context.document.blocks, currentLine.number);
   const previousLine = context.view.state.doc.line(currentLine.number - 1);
 
-  if (previousLine.text.trim().length === 0 || !currentBlock) {
+  if (isBlankLineText(previousLine.text) || !currentBlock) {
     return null;
   }
 
@@ -148,14 +277,14 @@ function resolveSourceLineArrowDown(context: VerticalInteractionContext): Vertic
 
   const currentLine = context.view.state.doc.lineAt(context.lineStart);
 
-  if (currentLine.number >= context.view.state.doc.lines || currentLine.text.trim().length === 0) {
+  if (currentLine.number >= context.view.state.doc.lines || isBlankLineText(currentLine.text)) {
     return null;
   }
 
   const currentBlock = findBlockForLine(context.document.blocks, currentLine.number);
   const nextLine = context.view.state.doc.line(currentLine.number + 1);
 
-  if (nextLine.text.trim().length === 0 || !currentBlock) {
+  if (isBlankLineText(nextLine.text) || !currentBlock) {
     return null;
   }
 
@@ -189,7 +318,7 @@ function resolveSourceLineArrowDown(context: VerticalInteractionContext): Vertic
 function resolveAdjacentBlockArrowUp(context: VerticalInteractionContext): number | null {
   const currentLine = context.view.state.doc.lineAt(context.lineStart);
 
-  if (currentLine.text.trim().length !== 0) {
+  if (!isBlankLineText(currentLine.text)) {
     return null;
   }
 
@@ -206,7 +335,7 @@ function resolveAdjacentBlockArrowUp(context: VerticalInteractionContext): numbe
 function resolveAdjacentBlockArrowDown(context: VerticalInteractionContext): number | null {
   const currentLine = context.view.state.doc.lineAt(context.lineStart);
 
-  if (currentLine.text.trim().length !== 0) {
+  if (!isBlankLineText(currentLine.text)) {
     return null;
   }
 
@@ -309,9 +438,17 @@ export const lineBlockAdapter: BlockInteractionAdapter = {
     );
   },
   resolveArrowUp(context) {
-    return resolveSourceLineArrowUp(context) ?? resolveAdjacentBlockArrowUp(context);
+    return (
+      resolveCollapsedSeparatorArrowUp(context) ??
+      resolveSourceLineArrowUp(context) ??
+      resolveAdjacentBlockArrowUp(context)
+    );
   },
   resolveArrowDown(context) {
-    return resolveSourceLineArrowDown(context) ?? resolveAdjacentBlockArrowDown(context);
+    return (
+      resolveCollapsedSeparatorArrowDown(context) ??
+      resolveSourceLineArrowDown(context) ??
+      resolveAdjacentBlockArrowDown(context)
+    );
   }
 };

@@ -138,6 +138,13 @@
   line-height: 1.95;
 }
 
+.document-editor .cm-line.cm-inactive-blank-line {
+  height: 0;
+  min-height: 0;
+  line-height: 0;
+  overflow: hidden;
+}
+
 .document-editor .cm-inactive-inline-marker {
   color: transparent;
   font-size: 0;

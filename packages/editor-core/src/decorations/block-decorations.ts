@@ -58,8 +58,20 @@ export function createBlockDecorations(
     hasEditorFocus && activeBlockState.activeBlock?.type === "list"
       ? resolveLineStartOffset(source, activeBlockState.selection.head)
       : null;
+  const activeSelectionLineStart = hasEditorFocus
+    ? resolveLineStartOffset(source, activeBlockState.selection.head)
+    : null;
   const ranges: Range<Decoration>[] = [];
-  const signatures: string[] = [`active:${activeBlockId ?? "none"}`];
+  const signatures: string[] = [
+    `active:${activeBlockId ?? "none"}:blank-line:${activeSelectionLineStart ?? "none"}`
+  ];
+
+  appendInactiveBlankLineDecorations(
+    source,
+    activeBlockState.blockMap.blocks,
+    activeSelectionLineStart,
+    ranges
+  );
 
   for (const block of activeBlockState.blockMap.blocks) {
     if (block.type === "table") {
@@ -758,6 +770,86 @@ function createListItemLineAttributes(
       sourcePrefixLength ?? getListItemSourcePrefixLength(item, source)
     )};`
   };
+}
+
+function appendInactiveBlankLineDecorations(
+  source: string,
+  blocks: ActiveBlockState["blockMap"]["blocks"],
+  activeSelectionLineStart: number | null,
+  ranges: Range<Decoration>[]
+): void {
+  let cursor = 0;
+
+  for (const block of blocks) {
+    appendInactiveBlankLineDecorationsInRange(
+      source,
+      cursor,
+      block.startOffset,
+      cursor > 0,
+      activeSelectionLineStart,
+      ranges
+    );
+    cursor = Math.max(cursor, block.endOffset);
+  }
+
+  appendInactiveBlankLineDecorationsInRange(
+    source,
+    cursor,
+    source.length,
+    cursor > 0,
+    activeSelectionLineStart,
+    ranges
+  );
+}
+
+function appendInactiveBlankLineDecorationsInRange(
+  source: string,
+  startOffset: number,
+  endOffset: number,
+  skipLeadingLineBreak: boolean,
+  activeSelectionLineStart: number | null,
+  ranges: Range<Decoration>[]
+): void {
+  const contentStartOffset = skipLeadingLineBreak
+    ? skipSingleLeadingLineBreak(source, startOffset, endOffset)
+    : startOffset;
+
+  for (const line of createLineInfosInRange(source, contentStartOffset, endOffset)) {
+    const lineEndOffset = trimTrailingCarriageReturn(source, line.startOffset, line.endOffset);
+    const lineText = source.slice(line.startOffset, lineEndOffset);
+
+    if (lineText.trim().length > 0 || line.startOffset === activeSelectionLineStart) {
+      continue;
+    }
+
+    ranges.push(
+      Decoration.line({
+        attributes: {
+          class: "cm-inactive-blank-line"
+        }
+      }).range(line.startOffset)
+    );
+  }
+}
+
+function skipSingleLeadingLineBreak(source: string, startOffset: number, endOffset: number): number {
+  if (startOffset >= endOffset) {
+    return startOffset;
+  }
+
+  if (
+    source[startOffset] === "\r" &&
+    startOffset + 1 < endOffset &&
+    source[startOffset + 1] === "\n"
+  ) {
+    return startOffset + 2;
+  }
+
+  if (source[startOffset] !== "\n") {
+    return startOffset;
+  }
+
+  return startOffset + 1;
 }
 
 function getListSourcePrefixOffsetStyle(

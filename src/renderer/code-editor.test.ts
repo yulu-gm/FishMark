@@ -787,6 +787,104 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("collapses structural blank lines only while they are inactive reading rows", async () => {
+    const host = document.createElement("div");
+    const source = ["Paragraph one", "", "Paragraph two"].join("\n");
+    const blankLineStart = source.indexOf("\n\n") + 1;
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    view?.dispatch({ selection: { anchor: source.indexOf("Paragraph two") } });
+
+    const blankLine = Array.from(host.querySelectorAll<HTMLElement>(".cm-line")).find(
+      (line) => line.textContent === ""
+    );
+
+    expect(blankLine).not.toBeNull();
+    expect(blankLine?.classList.contains("cm-inactive-blank-line")).toBe(true);
+
+    host.querySelector(".cm-editor")?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+    view?.dispatch({ selection: { anchor: blankLineStart } });
+
+    const activeBlankLine = Array.from(host.querySelectorAll<HTMLElement>(".cm-line")).find(
+      (line) => line.textContent === ""
+    );
+
+    expect(activeBlankLine).not.toBeNull();
+    expect(activeBlankLine?.classList.contains("cm-inactive-blank-line")).toBe(false);
+
+    controller.destroy();
+  });
+
+  it("skips the collapsed structural blank row on ArrowDown from the previous block", async () => {
+    const host = document.createElement("div");
+    const source = ["Paragraph one", "", "Paragraph two"].join("\n");
+    const blankLineStart = source.indexOf("\n\n") + 1;
+    const nextBlockStart = source.indexOf("Paragraph two");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const view = getEditorView(host);
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+    controller.setSelection("Paragraph one".length);
+    controller.pressArrowDown();
+    await flushMicrotasks();
+
+    expect(view?.state.selection.main.anchor).toBe(nextBlockStart);
+    expect(view?.state.selection.main.anchor).not.toBe(blankLineStart);
+
+    controller.destroy();
+  });
+
+  it("skips collapsed structural blank rows on ArrowUp from the next block", async () => {
+    const host = document.createElement("div");
+    const source = ["Paragraph one", "", "", "Paragraph two"].join("\n");
+    const firstBlankLineStart = source.indexOf("\n\n\n") + 1;
+    const previousBlockEnd = "Paragraph one".length;
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const view = getEditorView(host);
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+    controller.setSelection(source.indexOf("Paragraph two"));
+    controller.pressArrowUp();
+    await flushMicrotasks();
+
+    expect(view?.state.selection.main.anchor).toBe(previousBlockEnd);
+    expect(view?.state.selection.main.anchor).not.toBe(firstBlankLineStart);
+
+    controller.destroy();
+  });
+
   it("keeps paragraph visual style consistent when it becomes active", async () => {
     const host = document.createElement("div");
     const source = ["Paragraph one", "", "Paragraph two"].join("\n");
@@ -4386,7 +4484,7 @@ describe("createCodeEditorController", () => {
     host.remove();
   });
 
-  it("moves upward through blank lines above a table without jumping to earlier content", async () => {
+  it("skips blank separator rows above a table on ArrowUp", async () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
     const source = [
@@ -4426,7 +4524,7 @@ describe("createCodeEditorController", () => {
     expect(view).not.toBeNull();
 
     const tableAdjacentBlankLineStart = getLineStartOffset(source, 14);
-    const previousBlankLineStart = getLineStartOffset(source, 13);
+    const previousVisibleBlockStart = getLineStartOffset(source, 8);
 
     view!.dispatch({
       selection: {
@@ -4445,7 +4543,7 @@ describe("createCodeEditorController", () => {
     await flushMicrotasks();
     await flushMicrotasks();
 
-    expect(view!.state.selection.main.anchor).toBe(previousBlankLineStart);
+    expect(view!.state.selection.main.anchor).toBe(previousVisibleBlockStart);
 
     controller.destroy();
     host.remove();

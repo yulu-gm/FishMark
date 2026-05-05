@@ -53,6 +53,11 @@ type MarkdownTextRenderingStandard = {
       };
     };
   };
+  blockSpacing: {
+    blankLine: {
+      inactiveCollapsedHeightPx: number;
+    };
+  };
   lists: {
     geometry: {
       indentStepEm: number;
@@ -263,6 +268,18 @@ describe("editor source layout stylesheet", () => {
 
     expect(standard.typography.base.letterSpacing.value).toBe(0);
     expect(violations).toEqual([]);
+  });
+
+  it("collapses inactive structural blank lines so Markdown spacing is not double-counted", async () => {
+    const standard = await readMarkdownTextStandard();
+    const stylesheet = await readFile(resolve(process.cwd(), "src/renderer/styles/markdown-render.css"), "utf8");
+    const blankLineRule = getCssRule(stylesheet, ".document-editor .cm-line.cm-inactive-blank-line");
+
+    expect(standard.blockSpacing.blankLine.inactiveCollapsedHeightPx).toBe(0);
+    expect(blankLineRule).toContain("height: 0;");
+    expect(blankLineRule).toContain("min-height: 0;");
+    expect(blankLineRule).toContain("line-height: 0;");
+    expect(blankLineRule).toContain("overflow: hidden;");
   });
 
   it("measures list marker gaps and wrapped line alignment in a DOM geometry fixture", async () => {

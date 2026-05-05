@@ -298,6 +298,32 @@
 - 顶级无序列表、有序列表和任务列表的 marker 左边界必须与标题、正文左边界一致，不额外内缩
 - 同一层级的无序列表和有序列表 marker 左边界、正文起点必须一致；子列表只通过 depth offset 增加缩进
 
+### TC-011C Typora 式空白行折叠
+
+步骤：
+1. 输入以下 Markdown：
+   ```md
+   Paragraph one
+
+   Paragraph two
+   ```
+2. 将光标放到 `Paragraph two`，让 `Paragraph one` 和两段之间的空白源码行进入 inactive 阅读态。
+3. 观察两段之间是否出现额外空白行。
+4. 将光标放到 `Paragraph one` 末尾，按 `ArrowDown`。
+5. 将光标放到 `Paragraph two` 开头，按 `ArrowUp`。
+6. 使用 CRLF 换行的同样内容重复步骤 2-5。
+7. 直接将光标定位到两段之间的空白源码行。
+8. 导出 HTML 并用浏览器打开导出文件。
+
+预期：
+- inactive 阅读态下，两段之间的 Markdown 空白源码行不产生可见空行，高度为 `0`
+- `ArrowDown` 从上一块内容末尾跳到下一块首行，不进入未渲染的分隔空白行
+- `ArrowUp` 从下一块内容开头跳到上一块末行，不进入未渲染的分隔空白行
+- CRLF 文档只折叠真正的结构性空白行，不会把上一行的 `\r` 位置误判成空白行
+- 直接定位到空白源码行时，该行不再应用 inactive 空白行折叠规则，仍可放置光标并继续编辑
+- 导出 HTML 使用同样的 `cm-inactive-blank-line` 规则，视觉间距与编辑器 inactive 阅读态一致
+- 保存或导出不会删除 Markdown 源码中的空白行
+
 ### TC-012 代码块
 
 步骤：

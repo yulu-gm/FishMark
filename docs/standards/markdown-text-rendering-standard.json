@@ -83,6 +83,10 @@
       "beforeAfterBlockGapRem": 0.35,
       "rule": "Paragraph spacing is visual only; it must not insert or remove blank Markdown source lines."
     },
+    "blankLine": {
+      "inactiveCollapsedHeightPx": 0,
+      "rule": "Structural Markdown blank source lines between rendered blocks collapse in inactive reading state. The active blank line remains editable and must not be removed from source."
+    },
     "list": {
       "betweenItemsRem": 0,
       "betweenListAndParagraphRem": 0.35,
