@@ -1,5 +1,5 @@
 {
-  "version": "0.2.3",
-  "title": "FishMark 0.2.3 Release",
-  "body": "### 本次更新\n\n- 新增 FishMark GitHub Pages 主页与部署 workflow，提供项目介绍、文档和 Releases 入口。\n- 改进 Markdown 列表软换行与嵌套缩进显示，长内容换行后会继续对齐到当前列表项正文起点。\n- 修复无序列表和任务列表的 `Tab` / `Shift+Tab` 层级操作，二级项可继续缩进到三级，且不会把焦点泄漏到外层 UI。\n- 将列表层级编辑收敛为最小文本 diff，降低缩进或反缩进时页面滚动跳动的概率。\n- 优化任务列表 checkbox 视觉，未完成态为空框，完成态勾选居中并保持主题颜色能力。\n- 收紧主题文本渲染边界，默认主题与 fixture 主题不再覆盖 app-owned 的列表几何和表格结构变量。\n- 补齐 macOS 发布脚本：支持正式 arm64 发布资产入口和无 Apple 凭据时的 beta DMG 发布入口，并复用统一 GitHub Release 上传逻辑。"
+  "version": "0.2.4",
+  "title": "FishMark 0.2.4 Release",
+  "body": "### 本次更新\n\n- 新增 `Export HTML...` 菜单入口，可把当前 Markdown 导出为带 FishMark 阅读样式的独立 HTML 文件，且不会改变当前文档保存路径或清除 dirty 状态。\n- 新增最近文件空工作区入口与可配置上限，欢迎页的最近文件列表在小窗口或长列表下会在自身区域滚动。\n- 改进 Markdown 阅读态空白行、列表、有序列表和嵌套引用块表现：结构性空白行更接近 Typora，列表缩进与编号变更更稳定，嵌套引用可正确隐藏完整源码前缀并参与 HTML 导出。\n- 修复打开文件、保存收尾、autosave 和多文件拖入之间的覆盖风险，降低旧编辑器缓冲区写入新标签页或新文件的概率。\n- 修复分割线、表格等块级内容后点击文字时的光标命中偏移，并新增真实 Electron 几何探针覆盖点击落点。\n- 修复编辑模式下拖动编辑器滚动条会误退出阅读态的问题，保留正文点击、空白区点击和 `Esc` 的既有模式切换语义。\n- 优化桌面壳层布局与偏好设置：移除旧 workspace header、调整欢迎页最近文件布局、加入嵌套设置导航，并统一部分 UI 圆角与紧凑设置抽屉样式。\n- 新增 FishMark GitHub Pages 主页与部署 workflow，并保留 macOS beta 发布 workflow 入口；Windows 正式安装包继续作为本次 release 的主发布产物。"
 }
