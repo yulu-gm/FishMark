@@ -214,7 +214,12 @@
       "borderWidthPx": 2,
       "paddingInlineStartRem": 1.1,
       "paddingInlineEndRem": 0.85,
-      "markerVisibilityInactive": "hidden",
+      "nestedIndentStepRem": 0.9,
+      "maxStyledDepth": 4,
+      "depthClassRule": "Inactive blockquote rows must include cm-inactive-blockquote-depth-N where N is the parser-owned quote depth capped to 4.",
+      "markerVisibilityInactive": "hidden through the parser-owned contentStartOffset, including every legal nested quote marker and its consumed source padding.",
+      "nestedRailRule": "Depth 1 shows the existing outer rail. Depth 2 through 4 add readable inner rails and increase content padding by one nestedIndentStepRem per extra depth level.",
+      "sourcePrefixRule": "Renderer decorations must use block map line metadata for quoteDepth and contentStartOffset. Fallback parsing, when needed for lean block maps, must call the markdown-engine blockquote prefix parser instead of duplicating Markdown regex logic.",
       "lineHeight": "typography.lineHeight.blockquote"
     },
     "codeBlock": {
@@ -311,6 +316,7 @@
         "ordered parent and child list",
         "checked and unchecked task list",
         "blockquote with two lines",
+        "nested blockquote using > >, >>, and >    > source prefixes",
         "inline code and fenced code block",
         "table with header and body"
       ],
@@ -330,6 +336,8 @@
       "Any active child list content-start displacement from its inactive row above 0px is FAIL.",
       "Any active marker displacement from its inactive marker column above 0px is FAIL.",
       "Any wrapped list rect left difference above 2px is FAIL.",
+      "Any inactive nested blockquote row that exposes a legal quote prefix before its content is FAIL.",
+      "Any inactive blockquote row missing the parser-owned depth class, capped at depth 4, is FAIL.",
       "Any theme markdown.css override of forbidden geometry is FAIL.",
       "Any negative letter spacing in Markdown text is FAIL.",
       "Any screenshot-only approval without DOM geometry evidence is incomplete."

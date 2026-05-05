@@ -1,11 +1,19 @@
 import type { InlineRoot } from "./inline-ast";
 
+export interface BlockquoteMarker {
+  markerStart: number;
+  markerEnd: number;
+}
+
 export type InlineLine = {
   text: string;
   startOffset: number;
   endOffset: number;
   lineNumber: number;
+  quoteDepth: number;
+  markers: readonly BlockquoteMarker[];
   markerEnd: number;
+  sourcePrefixEndOffset: number;
   contentStartOffset: number;
   contentEndOffset: number;
   inline: InlineRoot;

@@ -321,7 +321,10 @@ function renderBlockquoteBlock(block: BlockquoteBlock, source: string): string {
 
   return renderableLines
     .map((line, index) => {
-      const lineClasses = ["cm-inactive-blockquote"];
+      const lineClasses = [
+        "cm-inactive-blockquote",
+        createInactiveBlockquoteDepthClass(line.quoteDepth)
+      ];
       if (index === 0) {
         lineClasses.push("cm-inactive-blockquote-start");
       }
@@ -330,14 +333,17 @@ function renderBlockquoteBlock(block: BlockquoteBlock, source: string): string {
       }
 
       const innerHtml = [
-        renderSpan("cm-inactive-blockquote-marker", source.slice(line.startOffset, line.markerEnd)),
-        renderDecoratedPlainText(source.slice(line.markerEnd, line.contentStartOffset)),
+        renderSpan("cm-inactive-blockquote-marker", source.slice(line.startOffset, line.contentStartOffset)),
         renderInlineRoot(line.inline, source)
       ].join("");
 
       return renderLine(lineClasses.join(" "), innerHtml || "<br>");
     })
     .join("");
+}
+
+function createInactiveBlockquoteDepthClass(depth: number): string {
+  return `cm-inactive-blockquote-depth-${Math.max(1, Math.min(depth, 4))}`;
 }
 
 function renderCodeFenceBlock(block: CodeFenceBlock, source: string): string {

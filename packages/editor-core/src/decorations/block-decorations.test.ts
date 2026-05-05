@@ -478,7 +478,7 @@ describe("createBlockDecorations", () => {
       {
         from: 27,
         to: 27,
-        className: "cm-inactive-blockquote cm-inactive-blockquote-start",
+        className: "cm-inactive-blockquote cm-inactive-blockquote-depth-1 cm-inactive-blockquote-start",
         text: ""
       },
       {
@@ -490,7 +490,7 @@ describe("createBlockDecorations", () => {
       {
         from: 35,
         to: 35,
-        className: "cm-inactive-blockquote cm-inactive-blockquote-end",
+        className: "cm-inactive-blockquote cm-inactive-blockquote-depth-1 cm-inactive-blockquote-end",
         text: ""
       },
       {
@@ -764,27 +764,79 @@ describe("createBlockDecorations", () => {
       {
         from: 0,
         to: 0,
-        className: "cm-inactive-blockquote cm-inactive-blockquote-start",
+        className: "cm-inactive-blockquote cm-inactive-blockquote-depth-1 cm-inactive-blockquote-start",
         text: ""
       },
       {
         from: 0,
-        to: 1,
+        to: 2,
         className: "cm-inactive-blockquote-marker",
-        text: ">"
+        text: "> "
       },
       {
         from: 13,
         to: 13,
-        className: "cm-inactive-blockquote cm-inactive-blockquote-end",
+        className: "cm-inactive-blockquote cm-inactive-blockquote-depth-1 cm-inactive-blockquote-end",
         text: ""
       },
       {
         from: 13,
-        to: 14,
+        to: 15,
         className: "cm-inactive-blockquote-marker",
-        text: ">"
+        text: "> "
       }
+    ]);
+  });
+
+  it("hides the full nested blockquote source prefix and adds capped depth classes", () => {
+    const source = [
+      "> top",
+      "> > spaced",
+      ">> compact",
+      ">    > indented",
+      ">>>>> capped",
+      "",
+      "Paragraph"
+    ].join("\n");
+    const blockMap = parseMarkdownDocument(source);
+    const activeState = createActiveBlockStateFromBlockMap(blockMap, {
+      anchor: source.indexOf("Paragraph"),
+      head: source.indexOf("Paragraph")
+    });
+
+    const ranges = collectDecorations(
+      source,
+      createBlockDecorations({
+        activeBlockState: activeState,
+        hasEditorFocus: true,
+        source
+      }).decorationSet
+    );
+    const spacedLineStart = source.indexOf("> > spaced");
+    const compactLineStart = source.indexOf(">> compact");
+    const indentedLineStart = source.indexOf(">    > indented");
+    const cappedLineStart = source.indexOf(">>>>> capped");
+
+    expectExactRangeClasses(ranges, spacedLineStart, spacedLineStart, [
+      "cm-inactive-blockquote cm-inactive-blockquote-depth-2"
+    ]);
+    expectExactRangeClasses(ranges, compactLineStart, compactLineStart, [
+      "cm-inactive-blockquote cm-inactive-blockquote-depth-2"
+    ]);
+    expectExactRangeClasses(ranges, indentedLineStart, indentedLineStart, [
+      "cm-inactive-blockquote cm-inactive-blockquote-depth-2"
+    ]);
+    expectExactRangeClasses(ranges, cappedLineStart, cappedLineStart, [
+      "cm-inactive-blockquote cm-inactive-blockquote-depth-4 cm-inactive-blockquote-end"
+    ]);
+    expectExactRangeClasses(ranges, spacedLineStart, spacedLineStart + "> > ".length, [
+      "cm-inactive-blockquote-marker"
+    ]);
+    expectExactRangeClasses(ranges, compactLineStart, compactLineStart + ">> ".length, [
+      "cm-inactive-blockquote-marker"
+    ]);
+    expectExactRangeClasses(ranges, indentedLineStart, indentedLineStart + ">    > ".length, [
+      "cm-inactive-blockquote-marker"
     ]);
   });
 
@@ -922,13 +974,19 @@ describe("block decoration line helpers", () => {
     expect(getInactiveBlockquoteLines(0, source.length, source)).toEqual([
       {
         lineStart: 0,
-        markerEnd: 2,
+        markerEnd: 1,
+        sourcePrefixEndOffset: 2,
+        contentStartOffset: 2,
+        quoteDepth: 1,
         isFirstLine: true,
         isLastLine: false
       },
       {
         lineStart: 8,
-        markerEnd: 12,
+        markerEnd: 11,
+        sourcePrefixEndOffset: 12,
+        contentStartOffset: 12,
+        quoteDepth: 1,
         isFirstLine: false,
         isLastLine: true
       }

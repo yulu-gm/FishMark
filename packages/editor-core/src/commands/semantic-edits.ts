@@ -12,6 +12,7 @@ import type {
 } from "@fishmark/markdown-engine";
 
 import type { SemanticContext } from "./semantic-context";
+import { parseBlockquoteLine } from "./line-parsers";
 
 export type SemanticEdit = {
   changes: ChangeSpec;
@@ -29,7 +30,6 @@ export function computeEmphasisToggle(ctx: SemanticContext): SemanticEdit | null
 const HEADING_LINE_PATTERN = /^(\s{0,3})(#{1,6})(?:\s+|$)(.*)$/;
 const BULLET_LINE_PATTERN = /^(\s*)([*+-])(?:[ \t]+|$)(.*)$/;
 const INDENT_LINE_PATTERN = /^(\s*)(.*)$/;
-const BLOCKQUOTE_LINE_PATTERN = /^(\s{0,3})>[ \t]+(.*)$/;
 
 export function computeBulletListToggle(ctx: SemanticContext): SemanticEdit | null {
   const fromLine = ctx.state.doc.lineAt(ctx.selection.from);
@@ -83,28 +83,27 @@ export function computeBlockquoteToggle(ctx: SemanticContext): SemanticEdit | nu
     lines.push(ctx.state.doc.line(lineNumber).text);
   }
 
-  const allQuoted = lines.every((text) => BLOCKQUOTE_LINE_PATTERN.test(text));
-  const rewritten = lines.map((text) => {
+  const isSingleLine = fromLine.number === toLine.number;
+  const targetLines = lines.filter((text) => isSingleLine || text.trim().length > 0);
+  const allQuoted =
+    targetLines.length > 0 && targetLines.every((text) => parseBlockquoteLine(text) !== null);
+  const lineEdits = lines.map((text) => {
     if (allQuoted) {
-      const match = BLOCKQUOTE_LINE_PATTERN.exec(text)!;
-      return `${match[1] ?? ""}${match[2] ?? ""}`;
+      return text.trim().length === 0 && !isSingleLine
+        ? { text, edit: null }
+        : removeOneBlockquoteLayer(text);
     }
-    const indentMatch = INDENT_LINE_PATTERN.exec(text)!;
-    const indent = indentMatch[1] ?? "";
-    const rest = indentMatch[2] ?? "";
-    return `${indent}> ${rest}`;
+    return addOneBlockquoteLayer(text);
   });
+  const rewritten = lineEdits.map((lineEdit) => lineEdit.text);
 
   const insert = rewritten.join("\n");
-  const isSingleLine = fromLine.number === toLine.number;
 
   if (isSingleLine) {
+    const lineEdit = lineEdits[0]!;
     return {
       changes: { from: fromLine.from, to: toLine.to, insert },
-      selection: {
-        anchor: ctx.selection.from + (allQuoted ? -2 : 2),
-        head: ctx.selection.to + (allQuoted ? -2 : 2)
-      }
+      selection: transformSelection(ctx.selection, fromLine.from, lineEdit.edit)
     };
   }
 
@@ -115,6 +114,84 @@ export function computeBlockquoteToggle(ctx: SemanticContext): SemanticEdit | nu
       head: fromLine.from + insert.length
     }
   };
+}
+
+type LinePrefixEdit = {
+  from: number;
+  to: number;
+  insert: string;
+};
+
+function addOneBlockquoteLayer(text: string): { text: string; edit: LinePrefixEdit } {
+  const indentMatch = INDENT_LINE_PATTERN.exec(text)!;
+  const indent = indentMatch[1] ?? "";
+  const insert = "> ";
+  const insertAt = indent.length;
+
+  return {
+    text: `${text.slice(0, insertAt)}${insert}${text.slice(insertAt)}`,
+    edit: {
+      from: insertAt,
+      to: insertAt,
+      insert
+    }
+  };
+}
+
+function removeOneBlockquoteLayer(text: string): { text: string; edit: LinePrefixEdit | null } {
+  const parsed = parseBlockquoteLine(text);
+  if (!parsed) {
+    return {
+      text,
+      edit: null
+    };
+  }
+
+  const firstMarker = parsed.markers[0]!;
+  const removeFrom = firstMarker.markerStart;
+  const removeTo =
+    text[firstMarker.markerEnd] === " " || text[firstMarker.markerEnd] === "\t"
+      ? firstMarker.markerEnd + 1
+      : firstMarker.markerEnd;
+
+  return {
+    text: `${text.slice(0, removeFrom)}${text.slice(removeTo)}`,
+    edit: {
+      from: removeFrom,
+      to: removeTo,
+      insert: ""
+    }
+  };
+}
+
+function transformSelection(
+  selection: SemanticContext["selection"],
+  lineFrom: number,
+  edit: LinePrefixEdit | null
+): { anchor: number; head: number } {
+  if (!edit) {
+    return {
+      anchor: selection.from,
+      head: selection.to
+    };
+  }
+
+  return {
+    anchor: lineFrom + transformLineOffset(selection.from - lineFrom, edit),
+    head: lineFrom + transformLineOffset(selection.to - lineFrom, edit)
+  };
+}
+
+function transformLineOffset(offset: number, edit: LinePrefixEdit): number {
+  if (offset <= edit.from) {
+    return offset;
+  }
+
+  if (offset >= edit.to) {
+    return offset + edit.insert.length - (edit.to - edit.from);
+  }
+
+  return edit.from + edit.insert.length;
 }
 
 export function computeHeadingToggle(ctx: SemanticContext, level: number): SemanticEdit | null {

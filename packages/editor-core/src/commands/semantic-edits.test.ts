@@ -199,6 +199,28 @@ describe("computeBlockquoteToggle", () => {
       insert: "alpha\nbeta"
     });
   });
+
+  it("removes only one blockquote layer from every covered nested line", () => {
+    const doc = ["> > alpha", ">> beta"].join("\n");
+    const result = computeBlockquoteToggle(buildContext(doc, 0, doc.length));
+
+    expect(result!.changes).toEqual({
+      from: 0,
+      to: doc.length,
+      insert: "> alpha\n> beta"
+    });
+  });
+
+  it("adds one blockquote layer to already quoted lines when the selection is mixed", () => {
+    const doc = ["> alpha", "beta"].join("\n");
+    const result = computeBlockquoteToggle(buildContext(doc, 0, doc.length));
+
+    expect(result!.changes).toEqual({
+      from: 0,
+      to: doc.length,
+      insert: "> > alpha\n> beta"
+    });
+  });
 });
 
 describe("computeCodeFenceToggle", () => {

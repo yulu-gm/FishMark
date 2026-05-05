@@ -68,6 +68,13 @@ describe("toggleBlockquote", () => {
     expect(harness.text()).toBe("> alpha");
     harness.destroy();
   });
+
+  it("removes only one layer from compact nested blockquote lines", () => {
+    const harness = createHarness({ doc: ">> alpha", anchor: 4 });
+    expect(harness.runQuote()).toBe(true);
+    expect(harness.text()).toBe("> alpha");
+    harness.destroy();
+  });
 });
 
 describe("toggleCodeFence", () => {

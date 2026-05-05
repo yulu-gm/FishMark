@@ -1,3 +1,5 @@
+import { parseBlockquoteLinePrefix, type BlockquoteMarker } from "@fishmark/markdown-engine";
+
 import { getBlockLineInfos } from "../decorations";
 
 export type ParsedListLine =
@@ -16,9 +18,19 @@ export type ParsedListLine =
       content: string;
     };
 
+export type ParsedBlockquoteLine = {
+  indent: string;
+  content: string;
+  quoteDepth: number;
+  markers: readonly BlockquoteMarker[];
+  markerEnd: number;
+  sourcePrefix: string;
+  sourcePrefixEndOffset: number;
+  contentStartOffset: number;
+};
+
 const LIST_LINE_PATTERN = /^(\s*)([*+-]|\d+[.)])(?:[ \t]+|$)(.*)$/;
 const TASK_CONTENT_PATTERN = /^\[( |x|X)\](?:[ \t]+|$)(.*)$/;
-const BLOCKQUOTE_LINE_PATTERN = /^(\s{0,3})>[ \t]+(.*)$/;
 const CODE_FENCE_LINE_PATTERN = /^(\s{0,3})(`{3,}|~{3,})([^\n]*)$/;
 
 export function parseListLine(text: string): ParsedListLine | null {
@@ -51,15 +63,23 @@ export function parseListLine(text: string): ParsedListLine | null {
   };
 }
 
-export function parseBlockquoteLine(text: string): { indent: string; content: string } | null {
-  const match = BLOCKQUOTE_LINE_PATTERN.exec(text);
-  if (!match) {
+export function parseBlockquoteLine(text: string): ParsedBlockquoteLine | null {
+  const prefix = parseBlockquoteLinePrefix(text, 0, text.length);
+  if (prefix.markers.length === 0) {
     return null;
   }
 
+  const firstMarker = prefix.markers[0]!;
+
   return {
-    indent: match[1] ?? "",
-    content: match[2] ?? ""
+    indent: text.slice(0, firstMarker.markerStart),
+    content: text.slice(prefix.contentStartOffset),
+    quoteDepth: prefix.markers.length,
+    markers: prefix.markers,
+    markerEnd: prefix.markerEnd,
+    sourcePrefix: text.slice(0, prefix.contentStartOffset),
+    sourcePrefixEndOffset: prefix.sourcePrefixEndOffset,
+    contentStartOffset: prefix.contentStartOffset
   };
 }
 

@@ -37,7 +37,7 @@ export function runBlockquoteEnter(view: EditorView): boolean {
     return true;
   }
 
-  const continuationPrefix = `${parsed.indent}> `;
+  const continuationPrefix = buildBlockquoteContinuationPrefix(parsed.sourcePrefix);
   const insertAt = selection.head;
   const nextAnchor = insertAt + 1 + continuationPrefix.length;
 
@@ -150,4 +150,12 @@ function getPreviousLineEnd(lineStart: number): number | null {
   }
 
   return lineStart - 1;
+}
+
+function buildBlockquoteContinuationPrefix(sourcePrefix: string): string {
+  if (sourcePrefix.endsWith(" ") || sourcePrefix.endsWith("\t")) {
+    return sourcePrefix;
+  }
+
+  return `${sourcePrefix} `;
 }

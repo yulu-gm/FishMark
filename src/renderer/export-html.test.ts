@@ -78,6 +78,28 @@ describe("createFishmarkExportHtml", () => {
     expect(html.match(/class="cm-line cm-inactive-blank-line"/gu)).toHaveLength(1);
   });
 
+  it("exports nested blockquote prefixes as hidden source markers with depth classes", () => {
+    const html = createFishmarkExportHtml({
+      markdown: ["> outer", "> > **nested**", "Paragraph"].join("\n"),
+      title: "quote.md"
+    });
+    const exported = new DOMParser().parseFromString(html, "text/html");
+    const quoteLines = Array.from(exported.querySelectorAll<HTMLElement>(".cm-inactive-blockquote"));
+
+    expect(quoteLines).toHaveLength(2);
+    expect(quoteLines[0]?.classList.contains("cm-inactive-blockquote-depth-1")).toBe(true);
+    expect(quoteLines[1]?.classList.contains("cm-inactive-blockquote-depth-2")).toBe(true);
+
+    const nestedMarker = quoteLines[1]?.querySelector(".cm-inactive-blockquote-marker");
+
+    expect(nestedMarker?.textContent).toBe("> > ");
+    expect(quoteLines[1]?.querySelector(".cm-inactive-inline-strong")?.textContent).toBe("nested");
+    expect(nestedMarker?.nextSibling?.nodeType).toBe(Node.ELEMENT_NODE);
+    expect((nestedMarker?.nextSibling as HTMLElement | null)?.classList.contains("cm-inactive-inline-marker")).toBe(
+      true
+    );
+  });
+
   it("escapes title, Markdown text, and inline CSS terminators", () => {
     const html = createFishmarkExportHtml({
       markdown: "# 1 < 2 & 3",

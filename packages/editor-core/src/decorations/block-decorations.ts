@@ -296,7 +296,10 @@ function appendBlockquoteDecorations(
         return;
       }
 
-      const lineClasses = ["cm-inactive-blockquote"];
+      const lineClasses = [
+        "cm-inactive-blockquote",
+        createInactiveBlockquoteDepthClass(line.quoteDepth)
+      ];
 
       if (index === 0) {
         lineClasses.push("cm-inactive-blockquote-start");
@@ -314,13 +317,13 @@ function appendBlockquoteDecorations(
         }).range(line.startOffset)
       );
 
-      if (line.markerEnd > line.startOffset) {
+      if (line.contentStartOffset > line.startOffset) {
         ranges.push(
           Decoration.mark({
             attributes: {
               class: "cm-inactive-blockquote-marker"
             }
-          }).range(line.startOffset, line.markerEnd)
+          }).range(line.startOffset, line.contentStartOffset)
         );
       }
 
@@ -330,7 +333,7 @@ function appendBlockquoteDecorations(
   }
 
   const renderableLines = getInactiveBlockquoteLines(block.startOffset, block.endOffset, source).filter((line) =>
-    hasCommittedLeanBlockquoteMarker(line.lineStart, line.markerEnd, source)
+    hasCommittedRichBlockquoteMarker(line.markerEnd, line.contentStartOffset)
   );
   const lineCount = renderableLines.length;
 
@@ -339,7 +342,10 @@ function appendBlockquoteDecorations(
       continue;
     }
 
-    const lineClasses = ["cm-inactive-blockquote"];
+    const lineClasses = [
+      "cm-inactive-blockquote",
+      createInactiveBlockquoteDepthClass(line.quoteDepth)
+    ];
 
     if (index === 0) {
       lineClasses.push("cm-inactive-blockquote-start");
@@ -357,16 +363,20 @@ function appendBlockquoteDecorations(
       }).range(line.lineStart)
     );
 
-    if (line.markerEnd > line.lineStart) {
+    if (line.contentStartOffset > line.lineStart) {
       ranges.push(
         Decoration.mark({
           attributes: {
             class: "cm-inactive-blockquote-marker"
           }
-        }).range(line.lineStart, line.markerEnd)
+        }).range(line.lineStart, line.contentStartOffset)
       );
     }
   }
+}
+
+function createInactiveBlockquoteDepthClass(depth: number): string {
+  return `cm-inactive-blockquote-depth-${Math.max(1, Math.min(depth, 4))}`;
 }
 
 function hasRenderableBlockquotePresentation(
@@ -380,7 +390,7 @@ function hasRenderableBlockquotePresentation(
   }
 
   return getInactiveBlockquoteLines(block.startOffset, block.endOffset, source).some((line) =>
-    hasCommittedLeanBlockquoteMarker(line.lineStart, line.markerEnd, source)
+    hasCommittedRichBlockquoteMarker(line.markerEnd, line.contentStartOffset)
   );
 }
 
@@ -389,19 +399,6 @@ function hasCommittedRichBlockquoteMarker(
   contentStartOffset: number
 ): boolean {
   return contentStartOffset > markerEnd;
-}
-
-function hasCommittedLeanBlockquoteMarker(
-  lineStart: number,
-  markerEnd: number,
-  source: string
-): boolean {
-  if (markerEnd <= lineStart || markerEnd > source.length) {
-    return false;
-  }
-
-  const markerPadding = source[markerEnd - 1];
-  return markerPadding === " " || markerPadding === "\t";
 }
 
 function isCodeFenceContentSelection(

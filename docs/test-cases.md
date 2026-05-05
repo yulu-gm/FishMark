@@ -377,6 +377,36 @@
 - 在空引用行按 `Enter` 会退出当前引用块
 - composition 期间不会提前切换装饰，结束后只做一次 flush
 
+### TC-015A 嵌套引用块渲染与编辑
+
+步骤：
+1. 输入以下 Markdown：
+   ```md
+   > outer
+   > > **nested**
+   >> compact
+   >    > spaced
+
+   Paragraph
+   ```
+2. 把光标移动到 `Paragraph`。
+3. 观察四行引用块的非激活态显示。
+4. 把光标移回 `nested`、`compact` 和 `spaced` 三行，确认源码前缀可直接编辑。
+5. 把光标放在 `> > **nested**` 行末，按 `Enter`。
+6. 选中 `> > **nested**` 与新续出的嵌套引用行，触发 `Shift+Ctrl/Cmd+9`。
+7. 导出 HTML，并检查导出的引用块行 class 与隐藏 marker。
+8. 如需自动化回归，运行 `npm.cmd run test -- packages/markdown-engine/src/parse-block-map.test.ts packages/editor-core/src/decorations/block-decorations.test.ts packages/editor-core/src/commands/line-parsers.test.ts packages/editor-core/src/commands/semantic-edits.test.ts packages/editor-core/src/commands/toggle-block-commands.test.ts src/renderer/code-editor.test.ts src/renderer/export-html.test.ts`。
+
+预期：
+- 非激活态不会暴露任何合法嵌套引用源码前缀，包括 `> > `、`>> ` 和 `>    > `
+- 非激活态按引用深度显示多层 quote rail，并带有 `cm-inactive-blockquote-depth-N` class，深度超过 4 时按 4 样式显示
+- 行内格式从最深层引用前缀后开始渲染，`**nested**` 显示为加粗内容
+- 光标重新进入对应引用行后，原始 Markdown 前缀完整恢复并可编辑
+- 非空嵌套引用行按 `Enter` 会续出同一层源码前缀，例如 `> > `
+- 空嵌套引用行按 `Enter` 会退出引用块，不留下半截 marker
+- blockquote toggle 对已引用行只移除一层引用，`> > text` 变为 `> text`，`>> text` 变为 `> text`
+- HTML 导出使用同样的隐藏前缀和深度 class，不把嵌套 marker padding 漏成可见文本
+
 ### TC-016 代码块渲染
 
 步骤：

@@ -35,20 +35,48 @@ describe("line-parsers", () => {
   });
 
   it("parses blockquote and code fence markers", () => {
-    expect(parseBlockquoteLine("  > quote")).toEqual({
+    expect(parseBlockquoteLine("  > quote")).toEqual(expect.objectContaining({
       indent: "  ",
       content: "quote"
-    });
-    expect(parseBlockquoteLine(">")).toBeNull();
-    expect(parseBlockquoteLine(">quote")).toBeNull();
-    expect(parseBlockquoteLine("> ")).toEqual({
+    }));
+    expect(parseBlockquoteLine(">")).toEqual(expect.objectContaining({
       indent: "",
       content: ""
-    });
+    }));
+    expect(parseBlockquoteLine(">quote")).toEqual(expect.objectContaining({
+      indent: "",
+      content: "quote",
+      sourcePrefix: ">"
+    }));
+    expect(parseBlockquoteLine("> ")).toEqual(expect.objectContaining({
+      indent: "",
+      content: ""
+    }));
     expect(parseCodeFenceLine(" ```ts")).toEqual({
       indent: " ",
       fence: "```"
     });
+  });
+
+  it("parses nested blockquote source prefixes through the markdown engine parser", () => {
+    expect(parseBlockquoteLine("> > quote")).toEqual(expect.objectContaining({
+      indent: "",
+      content: "quote",
+      quoteDepth: 2,
+      sourcePrefix: "> > "
+    }));
+    expect(parseBlockquoteLine(">> quote")).toEqual(expect.objectContaining({
+      indent: "",
+      content: "quote",
+      quoteDepth: 2,
+      sourcePrefix: ">> "
+    }));
+    expect(parseBlockquoteLine(">    > quote")).toEqual(expect.objectContaining({
+      indent: "",
+      content: "quote",
+      quoteDepth: 2,
+      sourcePrefix: ">    > "
+    }));
   });
 
   it("treats the EOF position after a trailing newline as its own backspace line start", () => {

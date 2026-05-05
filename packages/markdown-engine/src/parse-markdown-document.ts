@@ -6,6 +6,7 @@ import type {
   ListItemBlock,
   MarkdownBlock
 } from "./block-map";
+import { parseBlockquoteLinePrefix } from "./blockquote";
 import type { MarkdownDocument } from "./markdown-document";
 import { parseBlockMap } from "./parse-block-map";
 import { parseInlineAst } from "./parse-inline-ast";
@@ -159,53 +160,21 @@ function createBlockquoteLines(blockquote: BlockquoteBlock, source: string): Inl
 
   return lines.map((line) => {
     const contentLineEndOffset = trimTrailingCarriageReturn(source, line.startOffset, line.endOffset);
-    const markerInfo = parseBlockquoteMarker(source, line.startOffset, contentLineEndOffset);
+    const prefix = parseBlockquoteLinePrefix(source, line.startOffset, contentLineEndOffset);
     return {
       text: source.slice(line.startOffset, contentLineEndOffset),
       startOffset: line.startOffset,
       endOffset: line.endOffset,
       lineNumber: line.lineNumber,
-      markerEnd: markerInfo.markerEnd,
-      contentStartOffset: markerInfo.contentStartOffset,
+      quoteDepth: prefix.markers.length,
+      markers: prefix.markers,
+      markerEnd: prefix.markerEnd,
+      sourcePrefixEndOffset: prefix.sourcePrefixEndOffset,
+      contentStartOffset: prefix.contentStartOffset,
       contentEndOffset: contentLineEndOffset,
-      inline: parseInlineAst(source, markerInfo.contentStartOffset, contentLineEndOffset)
+      inline: parseInlineAst(source, prefix.contentStartOffset, contentLineEndOffset)
     };
   });
-}
-
-type BlockquoteMarkerInfo = {
-  markerEnd: number;
-  contentStartOffset: number;
-};
-
-function parseBlockquoteMarker(
-  source: string,
-  lineStartOffset: number,
-  lineEndOffset: number
-): BlockquoteMarkerInfo {
-  const lineText = source.slice(lineStartOffset, lineEndOffset);
-  const markerMatch = /^([ \t]{0,3})>/.exec(lineText);
-  if (!markerMatch) {
-    return {
-      markerEnd: lineStartOffset,
-      contentStartOffset: lineStartOffset
-    };
-  }
-
-  const markerEnd = lineStartOffset + markerMatch[0].length;
-  let contentStartOffset = markerEnd;
-
-  if (contentStartOffset < lineEndOffset) {
-    const markerPadding = source[contentStartOffset];
-    if (markerPadding === " " || markerPadding === "\t") {
-      contentStartOffset += 1;
-    }
-  }
-
-  return {
-    markerEnd,
-    contentStartOffset
-  };
 }
 
 function consumeHorizontalSpace(source: string, offset: number, endOffset: number): number {

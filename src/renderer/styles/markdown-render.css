@@ -33,6 +33,13 @@
     transparent
   );
   --fishmark-blockquote-border: var(--fishmark-markdown-quote-border, rgba(15, 23, 42, 0.12));
+  --fishmark-blockquote-nested-indent: 0.9rem;
+  --fishmark-blockquote-rail-width: 2px;
+  --fishmark-blockquote-nested-rail: color-mix(
+    in srgb,
+    var(--fishmark-blockquote-border) 72%,
+    transparent
+  );
   --fishmark-table-margin-top: 0.35rem;
   --fishmark-table-margin-bottom: 0.75rem;
   --fishmark-table-after-break-padding-bottom: 0.42rem;
@@ -448,11 +455,55 @@
 }
 
 .document-editor .cm-inactive-blockquote {
+  --fishmark-blockquote-depth-offset: 0rem;
   color: var(--fishmark-markdown-quote-fg, var(--fishmark-text-secondary, #31353d));
   background: var(--fishmark-blockquote-bg);
   box-shadow: inset 2px 0 0 var(--fishmark-blockquote-border);
-  padding-left: 1.1rem;
+  position: relative;
+  line-height: 1.78;
+  padding-left: calc(1.1rem + var(--fishmark-blockquote-depth-offset));
   padding-right: 0.85rem;
+}
+
+.document-editor .cm-inactive-blockquote::before {
+  content: "";
+  position: absolute;
+  top: 0.1rem;
+  bottom: 0.1rem;
+  left: var(--fishmark-blockquote-nested-indent);
+  width: var(--fishmark-blockquote-rail-width);
+  border-radius: 999px;
+  background: var(--fishmark-blockquote-nested-rail);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.document-editor .cm-line.cm-inactive-blockquote-depth-2 {
+  --fishmark-blockquote-depth-offset: var(--fishmark-blockquote-nested-indent);
+}
+
+.document-editor .cm-line.cm-inactive-blockquote-depth-3 {
+  --fishmark-blockquote-depth-offset: calc(var(--fishmark-blockquote-nested-indent) * 2);
+}
+
+.document-editor .cm-line.cm-inactive-blockquote-depth-4 {
+  --fishmark-blockquote-depth-offset: calc(var(--fishmark-blockquote-nested-indent) * 3);
+}
+
+.document-editor .cm-inactive-blockquote-depth-2::before,
+.document-editor .cm-inactive-blockquote-depth-3::before,
+.document-editor .cm-inactive-blockquote-depth-4::before {
+  opacity: 0.62;
+}
+
+.document-editor .cm-inactive-blockquote-depth-3::before {
+  box-shadow: var(--fishmark-blockquote-nested-indent) 0 0 0 var(--fishmark-blockquote-nested-rail);
+}
+
+.document-editor .cm-inactive-blockquote-depth-4::before {
+  box-shadow:
+    var(--fishmark-blockquote-nested-indent) 0 0 0 var(--fishmark-blockquote-nested-rail),
+    calc(var(--fishmark-blockquote-nested-indent) * 2) 0 0 0 var(--fishmark-blockquote-nested-rail);
 }
 
 .document-editor .cm-inactive-blockquote-start {

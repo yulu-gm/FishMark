@@ -1057,6 +1057,125 @@ describe("parseBlockMap", () => {
     });
   });
 
+  it("stitches nested blockquote markers and inline content from the deepest quote prefix", () => {
+    const source = ["> outer", "> > **nested**", ">> `compact`", ">   > nested"].join("\n");
+    const result = parseMarkdownDocument(source);
+    const blockquote = result.blocks[0] as BlockquoteBlock;
+
+    expect(blockquote.lines?.[0]).toMatchObject({
+      quoteDepth: 1,
+      markerEnd: 1,
+      contentStartOffset: 2,
+      sourcePrefixEndOffset: 2,
+      markers: [{ markerStart: 0, markerEnd: 1 }]
+    });
+    expect(blockquote.lines?.[1]).toMatchObject({
+      quoteDepth: 2,
+      markerEnd: source.indexOf("**nested**") - 1,
+      contentStartOffset: source.indexOf("**nested**"),
+      sourcePrefixEndOffset: source.indexOf("**nested**"),
+      markers: [
+        { markerStart: source.indexOf("> >"), markerEnd: source.indexOf("> >") + 1 },
+        { markerStart: source.indexOf("> >") + 2, markerEnd: source.indexOf("> >") + 3 }
+      ],
+      inline: { children: [{ type: "strong" }] }
+    });
+    expect(blockquote.lines?.[2]).toMatchObject({
+      quoteDepth: 2,
+      markerEnd: source.indexOf("`compact`") - 1,
+      contentStartOffset: source.indexOf("`compact`"),
+      sourcePrefixEndOffset: source.indexOf("`compact`"),
+      inline: { children: [{ type: "codeSpan", text: "compact" }] }
+    });
+    expect(blockquote.lines?.[3]).toMatchObject({
+      quoteDepth: 2,
+      markerEnd: source.lastIndexOf("> nested") + 1,
+      contentStartOffset: source.indexOf("nested", source.lastIndexOf("> nested")),
+      sourcePrefixEndOffset: source.indexOf("nested", source.lastIndexOf("> nested")),
+      inline: { children: [{ type: "text", value: "nested" }] }
+    });
+  });
+
+  it("keeps CRLF offsets correct for nested blockquote inline content", () => {
+    const source = ["> first", "> > **second**"].join("\r\n");
+    const result = parseMarkdownDocument(source);
+    const blockquote = result.blocks[0] as BlockquoteBlock;
+
+    expect(blockquote.lines?.[1]).toMatchObject({
+      quoteDepth: 2,
+      contentStartOffset: source.indexOf("**second**"),
+      sourcePrefixEndOffset: source.indexOf("**second**"),
+      contentEndOffset: source.length,
+      inline: { startOffset: source.indexOf("**second**") }
+    });
+  });
+
+  it("treats a tab-indented quote marker after space padding as nested blockquote prefix", () => {
+    const source = "> \t> x";
+    const result = parseMarkdownDocument(source);
+    const blockquote = result.blocks[0] as BlockquoteBlock;
+
+    expect(blockquote.lines?.[0]).toMatchObject({
+      quoteDepth: 2,
+      markers: [
+        { markerStart: 0, markerEnd: 1 },
+        { markerStart: source.indexOf("> x"), markerEnd: source.indexOf("> x") + 1 }
+      ],
+      markerEnd: source.indexOf("> x") + 1,
+      sourcePrefixEndOffset: source.indexOf("x"),
+      contentStartOffset: source.indexOf("x"),
+      inline: { children: [{ type: "text", value: "x" }] }
+    });
+  });
+
+  it("keeps a quote marker after tab padding and extra spaces in blockquote content", () => {
+    const source = ">\t  > x";
+    const result = parseMarkdownDocument(source);
+    const blockquote = result.blocks[0] as BlockquoteBlock;
+
+    expect(blockquote.lines?.[0]).toMatchObject({
+      quoteDepth: 1,
+      markers: [{ markerStart: 0, markerEnd: 1 }],
+      markerEnd: 1,
+      sourcePrefixEndOffset: 2,
+      contentStartOffset: 2,
+      inline: { children: [{ type: "text", value: "  > x" }] }
+    });
+  });
+
+  it("continues nested marker scanning from consumed space padding", () => {
+    const source = ">    > x";
+    const result = parseMarkdownDocument(source);
+    const blockquote = result.blocks[0] as BlockquoteBlock;
+
+    expect(blockquote.lines?.[0]).toMatchObject({
+      quoteDepth: 2,
+      markers: [
+        { markerStart: 0, markerEnd: 1 },
+        { markerStart: source.indexOf("> x"), markerEnd: source.indexOf("> x") + 1 }
+      ],
+      markerEnd: source.indexOf("> x") + 1,
+      sourcePrefixEndOffset: source.indexOf("x"),
+      contentStartOffset: source.indexOf("x"),
+      inline: { children: [{ type: "text", value: "x" }] }
+    });
+  });
+
+  it("keeps a quote marker after too much normal-space padding in blockquote content", () => {
+    const source = ">     > x";
+    const result = parseMarkdownDocument(source);
+    const blockquote = result.blocks[0] as BlockquoteBlock;
+
+    expect(blockquote.lines?.[0]).toMatchObject({
+      quoteDepth: 1,
+      markers: [{ markerStart: 0, markerEnd: 1 }],
+      markerEnd: 1,
+      sourcePrefixEndOffset: 2,
+      contentStartOffset: 2,
+      inline: { children: [{ type: "text", value: "    > x" }] }
+    });
+  });
+
   it("keeps wrapped HTML image blocks rich under MarkdownDocument parsing", () => {
     const source = [
       '<p align="center">',

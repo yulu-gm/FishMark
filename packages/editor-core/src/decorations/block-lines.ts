@@ -1,3 +1,5 @@
+import { parseBlockquoteLinePrefix } from "@fishmark/markdown-engine";
+
 export type BlockLineInfo = {
   lineStart: number;
   lineEnd: number;
@@ -6,6 +8,9 @@ export type BlockLineInfo = {
 export type InactiveBlockquoteLine = {
   lineStart: number;
   markerEnd: number;
+  sourcePrefixEndOffset: number;
+  contentStartOffset: number;
+  quoteDepth: number;
   isFirstLine: boolean;
   isLastLine: boolean;
 };
@@ -57,14 +62,15 @@ export function getInactiveBlockquoteLines(
   while (cursor < endOffset) {
     const nextBreak = source.indexOf("\n", cursor);
     const lineEnd = nextBreak === -1 || nextBreak >= endOffset ? endOffset : nextBreak;
-    const lineText = source.slice(cursor, lineEnd);
-    const markerMatch = /^\s{0,3}>\s?/.exec(lineText);
-    const markerEnd = cursor + (markerMatch?.[0].length ?? 0);
+    const prefix = parseBlockquoteLinePrefix(source, cursor, lineEnd);
     const nextCursor = nextBreak === -1 || nextBreak >= endOffset ? endOffset : nextBreak + 1;
 
     lines.push({
       lineStart: cursor,
-      markerEnd,
+      markerEnd: prefix.markerEnd,
+      sourcePrefixEndOffset: prefix.sourcePrefixEndOffset,
+      contentStartOffset: prefix.contentStartOffset,
+      quoteDepth: prefix.markers.length,
       isFirstLine,
       isLastLine: nextCursor >= endOffset
     });

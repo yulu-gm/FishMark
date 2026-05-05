@@ -1,9 +1,11 @@
 export type {
   BlockMap,
   BlockquoteBlock,
+  BlockquoteMarker,
   CodeFenceBlock,
   HeadingBlock,
   HtmlImageBlock,
+  InlineLine,
   TableAlignment,
   TableBlock,
   TableCell,
@@ -31,6 +33,7 @@ export type {
   InlineStrikethrough,
   InlineText
 } from "./inline-ast";
+export { parseBlockquoteLinePrefix, type BlockquoteLinePrefix } from "./blockquote";
 export { parseBlockMap } from "./parse-block-map";
 export {
   formatTableMarkdown,
