@@ -85,7 +85,7 @@
     },
     "blankLine": {
       "inactiveCollapsedHeightPx": 0,
-      "rule": "Only the first blank source line in a block gap collapses as the structural separator in inactive reading state. Extra blank source lines remain visible and editable. The active blank line remains editable, and blank lines must not be removed from source."
+      "rule": "Only the first blank source line in a block gap collapses as the structural separator in both inactive reading state and active editing state. Extra blank source lines remain visible and editable. The structural separator is never editable, and cursor normalization must not enter the structural separator. Plain paragraph Enter must insert one line break. When that break forms a structural separator before an existing next block, the caret must move across the separator to the next block start rather than staying before or inside the separator. Blank lines must not be removed from source."
     },
     "list": {
       "betweenItemsRem": 0,

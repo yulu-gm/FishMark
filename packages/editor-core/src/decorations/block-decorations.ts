@@ -75,7 +75,6 @@ export function createBlockDecorations(
   appendInactiveBlankLineDecorations(
     source,
     activeBlockState.blockMap.blocks,
-    activeSelectionLineStart,
     ranges
   );
 
@@ -838,7 +837,6 @@ function createListItemLineAttributes(
 function appendInactiveBlankLineDecorations(
   source: string,
   blocks: ActiveBlockState["blockMap"]["blocks"],
-  activeSelectionLineStart: number | null,
   ranges: Range<Decoration>[]
 ): void {
   let cursor = 0;
@@ -849,7 +847,6 @@ function appendInactiveBlankLineDecorations(
       cursor,
       block.startOffset,
       cursor > 0,
-      activeSelectionLineStart,
       ranges
     );
     cursor = Math.max(cursor, block.endOffset);
@@ -860,7 +857,6 @@ function appendInactiveBlankLineDecorations(
     cursor,
     source.length,
     cursor > 0,
-    activeSelectionLineStart,
     ranges
   );
 }
@@ -870,7 +866,6 @@ function appendInactiveBlankLineDecorationsInRange(
   startOffset: number,
   endOffset: number,
   skipLeadingLineBreak: boolean,
-  activeSelectionLineStart: number | null,
   ranges: Range<Decoration>[]
 ): void {
   const contentStartOffset = skipLeadingLineBreak
@@ -891,10 +886,6 @@ function appendInactiveBlankLineDecorationsInRange(
     }
 
     hasConsumedStructuralBlankLine = true;
-
-    if (line.startOffset === activeSelectionLineStart) {
-      continue;
-    }
 
     ranges.push(
       Decoration.line({

@@ -95,18 +95,24 @@ export function computeMoveToTableRowBelow(ctx: TableContext | null): TableSeman
 /**
  * Plan a caret move that leaves the table upward.
  *
- * If the table is the very first line of the document, the edit prepends a newline and parks
- * the caret at the document start. A single structural blank separator above the table is
- * skipped; user-authored extra blank rows remain reachable.
+ * If the table is the very first line of the document, there is no editable line above it.
+ * A single structural blank separator above the table is skipped; user-authored extra blank
+ * rows remain reachable.
  */
 export function computeExitTableAbove(ctx: TableContext | null): TableSemanticEdit | null {
   if (!ctx) {
     return null;
   }
 
+  const selectionTarget = resolveExitAboveTarget(ctx.source, ctx.block.startOffset);
+
+  if (!selectionTarget) {
+    return null;
+  }
+
   return {
     changes: null,
-    selectionTarget: resolveExitAboveTarget(ctx.source, ctx.block.startOffset)
+    selectionTarget
   };
 }
 
@@ -128,7 +134,7 @@ export function computeExitTableBelow(ctx: TableContext | null): TableSemanticEd
   };
 }
 
-function resolveExitAboveTarget(source: string, tableStartOffset: number): TableExitTarget {
+function resolveExitAboveTarget(source: string, tableStartOffset: number): TableExitTarget | null {
   const lineStart = findLineStartAt(source, tableStartOffset);
 
   if (lineStart > 0) {
@@ -141,11 +147,7 @@ function resolveExitAboveTarget(source: string, tableStartOffset: number): Table
     return { kind: "outside", anchor: previousLineStart };
   }
 
-  return {
-    kind: "outside",
-    anchor: 0,
-    insert: { from: 0, to: 0, insert: "\n" }
-  };
+  return null;
 }
 
 function resolveExitBelowTarget(source: string, tableEndOffset: number): TableExitTarget {

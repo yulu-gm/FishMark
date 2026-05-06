@@ -30,7 +30,11 @@ export function deriveTableCursorState(
   }
 
   const lineNumber = resolveLineNumberAtOffset(source, selection.head);
-  const tableBelow = tableBlocks.find((block) => block.startLine === lineNumber + 1);
+  const tableBelow = tableBlocks.find(
+    (block) =>
+      block.startLine === lineNumber + 1 ||
+      (block.startLine === lineNumber + 2 && isBlankSourceLine(source, lineNumber + 1))
+  );
 
   if (tableBelow) {
     return {
@@ -42,7 +46,11 @@ export function deriveTableCursorState(
     };
   }
 
-  const tableAbove = tableBlocks.find((block) => block.endLine === lineNumber - 1);
+  const tableAbove = tableBlocks.find(
+    (block) =>
+      block.endLine === lineNumber - 1 ||
+      (block.endLine === lineNumber - 2 && isBlankSourceLine(source, lineNumber - 1))
+  );
 
   if (tableAbove) {
     return {
@@ -139,4 +147,33 @@ function resolveLineNumberAtOffset(source: string, offset: number): number {
   }
 
   return lineNumber;
+}
+
+function isBlankSourceLine(source: string, lineNumber: number): boolean {
+  if (lineNumber < 1) {
+    return false;
+  }
+
+  let currentLineNumber = 1;
+  let cursor = 0;
+
+  while (cursor <= source.length) {
+    const lineEnd = source.indexOf("\n", cursor);
+    const endOffset = lineEnd === -1 ? source.length : lineEnd;
+
+    if (currentLineNumber === lineNumber) {
+      const contentEnd = endOffset > cursor && source[endOffset - 1] === "\r" ? endOffset - 1 : endOffset;
+
+      return source.slice(cursor, contentEnd).trim().length === 0;
+    }
+
+    if (lineEnd === -1) {
+      break;
+    }
+
+    cursor = lineEnd + 1;
+    currentLineNumber += 1;
+  }
+
+  return false;
 }

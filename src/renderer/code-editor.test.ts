@@ -787,10 +787,11 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("collapses structural blank lines only while they are inactive reading rows", async () => {
+  it("keeps structural blank separators collapsed and unreachable while editing", async () => {
     const host = document.createElement("div");
     const source = ["Paragraph one", "", "Paragraph two"].join("\n");
     const blankLineStart = source.indexOf("\n\n") + 1;
+    const previousBlockEnd = "Paragraph one".length;
 
     const controller = createCodeEditorController({
       parent: host,
@@ -814,13 +815,15 @@ describe("createCodeEditorController", () => {
     host.querySelector(".cm-editor")?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
     await flushMicrotasks();
     view?.dispatch({ selection: { anchor: blankLineStart } });
+    await flushMicrotasks();
 
     const activeBlankLine = Array.from(host.querySelectorAll<HTMLElement>(".cm-line")).find(
       (line) => line.textContent === ""
     );
 
     expect(activeBlankLine).not.toBeNull();
-    expect(activeBlankLine?.classList.contains("cm-inactive-blank-line")).toBe(false);
+    expect(activeBlankLine?.classList.contains("cm-inactive-blank-line")).toBe(true);
+    expect(view?.state.selection.main.anchor).toBe(previousBlockEnd);
 
     controller.destroy();
   });
@@ -1380,7 +1383,7 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("enters the last visible blockquote line instead of its hidden marker when ArrowUp is pressed from the blank line below", async () => {
+  it("enters the last visible blockquote line instead of its hidden marker when ArrowUp crosses a hidden separator", async () => {
     const host = document.createElement("div");
     const source = ["> Quote line", "> Still quoted", "", "Paragraph"].join("\n");
 
@@ -1391,15 +1394,14 @@ describe("createCodeEditorController", () => {
     });
 
     const view = getEditorView(host);
-    const blankLineStart = source.indexOf("\n\n") + 1;
     const expectedAnchor = source.indexOf("Still quoted");
 
     expect(view).not.toBeNull();
 
     view?.dispatch({
       selection: {
-        anchor: blankLineStart,
-        head: blankLineStart
+        anchor: source.indexOf("Paragraph"),
+        head: source.indexOf("Paragraph")
       }
     });
 
@@ -2002,8 +2004,6 @@ describe("createCodeEditorController", () => {
     editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
     await flushMicrotasks();
 
-    view?.dispatch({ selection: { anchor: source.indexOf("\n\n") + 1 } });
-
     const openingFenceLine = getLineElementByText(host, "```ts");
     const codeLine = getLineElementByText(host, "const answer = 42;");
     const closingFenceLine = getLineElementByText(host, "```");
@@ -2435,9 +2435,44 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("creates a new paragraph block separator on Enter in plain paragraph text", () => {
+  it("uses a single editable line break for plain paragraph Enter and removes it with one Backspace", () => {
     const host = document.createElement("div");
-    const source = "AlphaBeta";
+    const source = "Alpha";
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+      pressBackspace: () => void;
+    };
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(source.length);
+    advancedController.pressEnter();
+
+    expect(controller.getContent()).toBe("Alpha\n");
+    expect(view?.state.selection.main.anchor).toBe("Alpha\n".length);
+    expect(view?.state.selection.main.head).toBe("Alpha\n".length);
+
+    advancedController.pressBackspace();
+
+    expect(controller.getContent()).toBe("Alpha");
+    expect(view?.state.selection.main.anchor).toBe("Alpha".length);
+    expect(view?.state.selection.main.head).toBe("Alpha".length);
+
+    controller.destroy();
+  });
+
+  it("does not create two blank source rows when Enter is pressed before an existing next line", () => {
+    const host = document.createElement("div");
+    const source = ["AAAAA", "BBBBB"].join("\n");
+    const nextBlockStartAfterInsert = "AAAAA\n\n".length;
 
     const controller = createCodeEditorController({
       parent: host,
@@ -2452,12 +2487,12 @@ describe("createCodeEditorController", () => {
 
     expect(view).not.toBeNull();
 
-    advancedController.setSelection("Alpha".length);
+    advancedController.setSelection("AAAAA".length);
     advancedController.pressEnter();
 
-    expect(controller.getContent()).toBe("Alpha\n\nBeta");
-    expect(view?.state.selection.main.anchor).toBe("Alpha\n\n".length);
-    expect(view?.state.selection.main.head).toBe("Alpha\n\n".length);
+    expect(controller.getContent()).toBe(["AAAAA", "", "BBBBB"].join("\n"));
+    expect(view?.state.selection.main.anchor).toBe(nextBlockStartAfterInsert);
+    expect(view?.state.selection.main.head).toBe(nextBlockStartAfterInsert);
 
     controller.destroy();
   });
@@ -2660,7 +2695,7 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("keeps the code block presentation while placing the caret at the end of the last code line when Backspace is pressed from the separator below it", async () => {
+  it("normalizes attempts to place the caret on the separator below a code block", async () => {
     const host = document.createElement("div");
     const source = ["```ts", "const answer = 42;", "```", "", "Paragraph"].join("\n");
 
@@ -2683,14 +2718,8 @@ describe("createCodeEditorController", () => {
     editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
     await flushMicrotasks();
 
-    expect(host.querySelector(".cm-inactive-code-block-fence")).not.toBeNull();
-
-    advancedController.pressBackspace();
-
     expect(controller.getContent()).toBe(source);
-    expect(view?.state.selection.main.anchor).toBe(source.indexOf("const answer = 42;") + 18);
-    expect(host.querySelector(".cm-inactive-code-block")).not.toBeNull();
-    expect(host.querySelector(".cm-inactive-code-block-fence")).not.toBeNull();
+    expect(view?.state.selection.main.anchor).toBe(source.indexOf("\n\n"));
 
     controller.destroy();
   });
@@ -4679,7 +4708,7 @@ describe("createCodeEditorController", () => {
 
     expect(view).not.toBeNull();
 
-    view!.dispatch({ selection: { anchor: source.indexOf("\n\n") + 1 } });
+    view!.dispatch({ selection: { anchor: "Before".length } });
     view!.contentDOM.dispatchEvent(
       new KeyboardEvent("keydown", {
         key: "ArrowDown",
@@ -4719,7 +4748,7 @@ describe("createCodeEditorController", () => {
 
     expect(view).not.toBeNull();
 
-    view!.dispatch({ selection: { anchor: source.lastIndexOf("\n\n") + 1 } });
+    view!.dispatch({ selection: { anchor: source.indexOf("After") } });
     view!.contentDOM.dispatchEvent(
       new KeyboardEvent("keydown", {
         key: "ArrowUp",
@@ -4740,7 +4769,7 @@ describe("createCodeEditorController", () => {
     host.remove();
   });
 
-  it("creates a new line above the table when ArrowUp exits from the first row at document start", async () => {
+  it("does not create an unreachable hidden separator above a table at document start", async () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
     const source = ["| name | qty |", "| --- | ---: |", "| pen | 2 |"].join("\n");
@@ -4758,9 +4787,8 @@ describe("createCodeEditorController", () => {
     input?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", code: "ArrowUp", bubbles: true, cancelable: true }));
     await flushMicrotasks();
 
-    expect(controller.getContent()).toBe(`\n${source}`);
-    expect(document.activeElement).not.toBe(input);
-    expect(getEditorView(host)?.state.selection.main.anchor).toBe(0);
+    expect(controller.getContent()).toBe(source);
+    expect(document.activeElement).toBe(input);
 
     controller.destroy();
     host.remove();
@@ -5788,17 +5816,15 @@ describe("createCodeEditorController", () => {
 
     expect(view).not.toBeNull();
 
-    const blockquoteBlankLineStart = source.indexOf("\n\n```ts") + 1;
     const blockquoteTailAnchor = source.indexOf("第三条引用内容");
     const tableAboveBlankLineStart = source.indexOf("\n\n| name | qty | note |") + 1;
     const tableHeadAnchor = source.indexOf("name");
-    const tableBelowBlankLineStart = source.indexOf("\n\n表格下方的普通段落第一行。") + 1;
     const tableTailAnchor = source.indexOf("ink");
 
     view!.dispatch({
       selection: {
-        anchor: blockquoteBlankLineStart,
-        head: blockquoteBlankLineStart
+        anchor: source.indexOf("```ts"),
+        head: source.indexOf("```ts")
       }
     });
     dispatchEditorKeydown(view, "ArrowUp");
@@ -5808,8 +5834,8 @@ describe("createCodeEditorController", () => {
 
     view!.dispatch({
       selection: {
-        anchor: tableAboveBlankLineStart,
-        head: tableAboveBlankLineStart
+        anchor: tableAboveBlankLineStart - 1,
+        head: tableAboveBlankLineStart - 1
       }
     });
     dispatchEditorKeydown(view, "ArrowDown");
@@ -5819,8 +5845,8 @@ describe("createCodeEditorController", () => {
 
     view!.dispatch({
       selection: {
-        anchor: tableBelowBlankLineStart,
-        head: tableBelowBlankLineStart
+        anchor: source.indexOf("表格下方的普通段落第一行。"),
+        head: source.indexOf("表格下方的普通段落第一行。")
       }
     });
     dispatchEditorKeydown(view, "ArrowUp");

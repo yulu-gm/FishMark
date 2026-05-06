@@ -5,7 +5,8 @@ import {
   type InlineASTNode,
   type InlineRoot,
   type ListBlock,
-  type MarkdownBlock
+  type MarkdownBlock,
+  type MarkdownDocument
 } from "@fishmark/markdown-engine";
 
 import {
@@ -239,6 +240,122 @@ export function normalizeHiddenSelectionAnchor(
     default:
       return null;
   }
+}
+
+export function normalizeStructuralBlankSelectionAnchor(
+  source: string,
+  markdownDocument: MarkdownDocument,
+  anchor: number,
+  direction = 0
+): number | null {
+  const separator = findStructuralBlankLineAt(source, markdownDocument.blocks, anchor);
+
+  if (!separator) {
+    return null;
+  }
+
+  if (direction > 0 && separator.nextBlockStart !== null) {
+    return separator.nextBlockStart;
+  }
+
+  if (separator.previousBlockEnd !== null) {
+    return separator.previousBlockEnd;
+  }
+
+  return separator.nextBlockStart;
+}
+
+type StructuralBlankLine = {
+  previousBlockEnd: number | null;
+  nextBlockStart: number | null;
+};
+
+function findStructuralBlankLineAt(
+  source: string,
+  blocks: readonly MarkdownBlock[],
+  anchor: number
+): StructuralBlankLine | null {
+  let cursor = 0;
+
+  for (const block of blocks) {
+    if (isStructuralBlankLineAnchor(source, cursor, block.startOffset, cursor > 0, anchor)) {
+      return {
+        previousBlockEnd: cursor > 0 ? cursor : null,
+        nextBlockStart: block.startOffset
+      };
+    }
+
+    cursor = Math.max(cursor, block.endOffset);
+  }
+
+  if (isStructuralBlankLineAnchor(source, cursor, source.length, cursor > 0, anchor)) {
+    return {
+      previousBlockEnd: cursor > 0 ? cursor : null,
+      nextBlockStart: null
+    };
+  }
+
+  return null;
+}
+
+function isStructuralBlankLineAnchor(
+  source: string,
+  startOffset: number,
+  endOffset: number,
+  skipLeadingLineBreak: boolean,
+  anchor: number
+): boolean {
+  const contentStartOffset = skipLeadingLineBreak
+    ? skipSingleLeadingLineBreak(source, startOffset, endOffset)
+    : startOffset;
+  let hasConsumedStructuralBlankLine = false;
+  let cursor = contentStartOffset;
+
+  while (cursor < endOffset) {
+    const nextBreakOffset = source.indexOf("\n", cursor);
+    const lineEndOffset = nextBreakOffset === -1 || nextBreakOffset > endOffset ? endOffset : nextBreakOffset;
+    const contentEndOffset = trimTrailingCarriageReturn(source, cursor, lineEndOffset);
+    const lineText = source.slice(cursor, contentEndOffset);
+
+    if (lineText.trim().length > 0) {
+      if (nextBreakOffset === -1 || nextBreakOffset >= endOffset) {
+        break;
+      }
+
+      cursor = nextBreakOffset + 1;
+      continue;
+    }
+
+    if (hasConsumedStructuralBlankLine) {
+      return false;
+    }
+
+    hasConsumedStructuralBlankLine = true;
+
+    return anchor >= cursor && anchor <= contentEndOffset;
+  }
+
+  return false;
+}
+
+function skipSingleLeadingLineBreak(source: string, startOffset: number, endOffset: number): number {
+  if (startOffset >= endOffset) {
+    return startOffset;
+  }
+
+  if (
+    source[startOffset] === "\r" &&
+    startOffset + 1 < endOffset &&
+    source[startOffset + 1] === "\n"
+  ) {
+    return startOffset + 2;
+  }
+
+  if (source[startOffset] !== "\n") {
+    return startOffset;
+  }
+
+  return startOffset + 1;
 }
 
 function resolveSourceLineAt(source: string, offset: number): { from: number; to: number } {

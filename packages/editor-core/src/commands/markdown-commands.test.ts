@@ -123,7 +123,7 @@ describe("semantic markdown commands", () => {
     ]);
   });
 
-  it("creates a new paragraph block separator when Enter is pressed in plain paragraph text", () => {
+  it("inserts a single editable line break when Enter is pressed in plain paragraph text", () => {
     const target = createCommandTarget({ doc: "AlphaBeta", anchor: "Alpha".length });
 
     expect(runMarkdownEnterCommand(target, paragraphActiveState)).toBe(true);
@@ -131,10 +131,29 @@ describe("semantic markdown commands", () => {
       {
         from: "Alpha".length,
         to: "Alpha".length,
-        insert: "\n\n",
+        insert: "\n",
         selection: {
-          anchor: "Alpha\n\n".length,
-          head: "Alpha\n\n".length
+          anchor: "Alpha\n".length,
+          head: "Alpha\n".length
+        }
+      }
+    ]);
+  });
+
+  it("does not create two blank rows when Enter is pressed before an existing next line", () => {
+    const source = ["Alpha", "Beta"].join("\n");
+    const target = createCommandTarget({ doc: source, anchor: "Alpha".length });
+    const nextBlockStartAfterInsert = source.indexOf("Beta") + 1;
+
+    expect(runMarkdownEnterCommand(target, paragraphActiveState)).toBe(true);
+    expect(target.getDispatchedChanges()).toEqual([
+      {
+        from: "Alpha".length,
+        to: "Alpha".length,
+        insert: "\n",
+        selection: {
+          anchor: nextBlockStartAfterInsert,
+          head: nextBlockStartAfterInsert
         }
       }
     ]);

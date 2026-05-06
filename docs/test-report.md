@@ -9,6 +9,12 @@
 
 ## 记录
 
+| 2026-05-06 | structural-blank-separator-editing | `npm run test -- packages/editor-core/src/commands/markdown-commands.test.ts src/renderer/code-editor.test.ts src/shared/markdown-text-rendering-standard.test.ts` | 通过 | 覆盖 paragraph Enter 单换行、已有下一行前 Enter 不产生双空白源行、structural separator 不可进入、标准 JSON 契约；3 个文件、177 项通过。 |
+| 2026-05-06 | structural-blank-separator-editing | `npm run test -- src/renderer/code-editor.test.ts src/renderer/app.autosave.test.ts packages/editor-core/src/decorations/block-decorations.test.ts packages/markdown-engine/src/parse-block-map.test.ts packages/editor-core/src/commands/markdown-commands.test.ts packages/editor-core/src/commands/table-commands.test.ts packages/editor-core/src/commands/table-edits.test.ts packages/editor-core/src/commands/table-context.test.ts` | 通过 | 覆盖 editor renderer、autosave 非回归、block decoration、block parser、paragraph Enter / Backspace、table adjacent navigation 和 table edge exit；8 个文件、420 项通过。 |
+| 2026-05-06 | structural-blank-separator-editing | `npm run typecheck` | 通过 | renderer / electron / vitest / cli 四套 TypeScript 检查通过。 |
+| 2026-05-06 | structural-blank-separator-editing | `npm run lint` | 通过 | ESLint 退出码 0；保留既有 `src/renderer/editor/App.tsx:247` Fast Refresh warning。 |
+| 2026-05-06 | structural-blank-separator-editing | `npm run build` | 通过 | renderer / electron / cli build 通过；保留既有 Vite chunk-size warning。 |
+| 2026-05-06 | structural-blank-separator-editing | `git diff --check` | 通过 | 无 whitespace error；仅输出 Windows 工作区 LF/CRLF 归一化提示。 |
 | 2026-05-06 | reference-style-image | `npm run test -- packages/markdown-engine/src/parse-block-map.test.ts packages/editor-core/src/decorations/block-decorations.test.ts src/renderer/export-html.test.ts` | 通过 | 覆盖 reference-style image 的 parser definition resolution、CodeMirror 图片 widget 与 HTML export 不泄漏 definition 行；3 个文件、85 项通过。 |
 | 2026-05-06 | reference-style-image | `npm run typecheck` | 通过 | renderer / electron / vitest / cli 四套 TypeScript 检查通过。 |
 | 2026-05-06 | reference-style-image | `npm run lint` | 通过 | ESLint 退出码 0；保留既有 `src/renderer/editor/App.tsx:247` Fast Refresh warning。 |

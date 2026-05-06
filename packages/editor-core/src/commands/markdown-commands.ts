@@ -239,38 +239,41 @@ function runParagraphBlockEnterCommand(
   const selection = target.getSelection();
   const from = Math.min(selection.anchor, selection.head);
   const to = Math.max(selection.anchor, selection.head);
-  const insert = shouldUseExistingBlockBoundaryForEnter(target, selection) ? "\n" : "\n\n";
+  const insert = "\n";
+  const selectionAnchor = resolveParagraphEnterSelectionAnchor(target, selection, from, insert.length);
 
   target.dispatchChange({
     from,
     to,
     insert,
     selection: {
-      anchor: from + insert.length,
-      head: from + insert.length
+      anchor: selectionAnchor,
+      head: selectionAnchor
     }
   });
 
   return true;
 }
 
-function shouldUseExistingBlockBoundaryForEnter(
+function resolveParagraphEnterSelectionAnchor(
   target: MarkdownCommandTarget,
-  selection: MarkdownCommandSelection
-): boolean {
+  selection: MarkdownCommandSelection,
+  from: number,
+  insertLength: number
+): number {
   if (!selection.empty) {
-    return false;
+    return from + insertLength;
   }
 
   const currentLine = target.lineAt(selection.head);
 
-  if (selection.head !== currentLine.from || currentLine.number <= 1) {
-    return false;
+  if (selection.head !== currentLine.to || currentLine.number >= target.getLineCount()) {
+    return from + insertLength;
   }
 
-  const previousLine = target.line(currentLine.number - 1);
+  const nextLine = target.line(currentLine.number + 1);
 
-  return previousLine.text.trim().length === 0;
+  return nextLine.from + insertLength;
 }
 
 function runBackspaceAcrossStructuralBlankBoundaryCommand(

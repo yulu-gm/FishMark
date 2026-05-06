@@ -104,7 +104,12 @@ describe("markdown text rendering standard", () => {
     expect(standard.typography.lineHeight.paragraph).toBeGreaterThan(standard.typography.lineHeight.list);
     expect(standard.typography.lineHeight.listContinuation).toBe(standard.typography.lineHeight.list);
     expect(standard.blockSpacing.blankLine.inactiveCollapsedHeightPx).toBe(0);
-    expect(standard.blockSpacing.blankLine.rule).toContain("active blank line remains editable");
+    expect(standard.blockSpacing.blankLine.rule).toContain("structural separator is never editable");
+    expect(standard.blockSpacing.blankLine.rule).toContain(
+      "must not enter the structural separator"
+    );
+    expect(standard.blockSpacing.blankLine.rule).toContain("Plain paragraph Enter must insert one line break");
+    expect(standard.blockSpacing.blankLine.rule).toContain("caret must move across the separator");
   });
 
   it("keeps list depth, marker gap, and content offsets as separate constraints", () => {

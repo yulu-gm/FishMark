@@ -265,7 +265,7 @@ describe("createBlockDecorations", () => {
     expectExactRangeClasses(ranges, extraBlankLineStart, extraBlankLineStart, []);
   });
 
-  it("does not mark the focused blank line as inactive reading content", () => {
+  it("keeps structural blank lines collapsed even when selection points at them", () => {
     const source = ["Paragraph one", "", "Paragraph two"].join("\n");
     const blankLineStart = source.indexOf("\n\n") + 1;
     const ranges = createDecorationsForSelection(
@@ -274,7 +274,9 @@ describe("createBlockDecorations", () => {
       true
     );
 
-    expectExactRangeClasses(ranges, blankLineStart, blankLineStart, []);
+    expectExactRangeClasses(ranges, blankLineStart, blankLineStart, [
+      "cm-inactive-blank-line"
+    ]);
   });
 
   it("stacks strong and emphasis classes for triple-marker inline content", () => {

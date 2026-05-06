@@ -60,7 +60,10 @@ import { createGroupedShortcutKeymaps } from "./markdown-shortcuts";
 import {
   type TableWidgetCallbacks
 } from "../decorations";
-import { normalizeHiddenSelectionAnchor } from "../line-visibility";
+import {
+  normalizeHiddenSelectionAnchor,
+  normalizeStructuralBlankSelectionAnchor
+} from "../line-visibility";
 import { resolvePointerSelectionAnchor as resolveBlockPointerSelectionAnchor } from "../interactions";
 
 export type ParseMarkdownDocument = (source: string) => MarkdownDocument;
@@ -644,15 +647,22 @@ export function createFishMarkMarkdownExtensions(
           userEvent === "select" && Math.abs(anchorDelta) <= 2
             ? Math.sign(anchorDelta)
             : 0;
-        const nextAnchor = normalizeHiddenSelectionAnchor(
-          effectiveSource,
-          createActiveBlockStateFromMarkdownDocument(markdownDocument, {
-            anchor: effectiveAnchor,
-            head: effectiveHead
-          }).activeBlock,
-          effectiveAnchor,
-          navigationDirection
-        );
+        const nextAnchor =
+          normalizeStructuralBlankSelectionAnchor(
+            effectiveSource,
+            markdownDocument,
+            effectiveAnchor,
+            navigationDirection
+          ) ??
+          normalizeHiddenSelectionAnchor(
+            effectiveSource,
+            createActiveBlockStateFromMarkdownDocument(markdownDocument, {
+              anchor: effectiveAnchor,
+              head: effectiveHead
+            }).activeBlock,
+            effectiveAnchor,
+            navigationDirection
+          );
 
         if (nextAnchor !== null && nextAnchor !== effectiveAnchor) {
           followUpTransactions.push({
