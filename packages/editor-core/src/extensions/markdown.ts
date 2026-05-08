@@ -1020,6 +1020,7 @@ function findLinkInInlineNode(node: InlineASTNode, offset: number): InlineLink |
 
       return null;
     case "text":
+    case "hardBreak":
     case "codeSpan":
       return null;
   }
