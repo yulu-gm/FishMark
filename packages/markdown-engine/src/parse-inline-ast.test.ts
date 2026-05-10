@@ -68,6 +68,33 @@ describe("parseInlineAst", () => {
     });
   });
 
+  it("parses inline HTML br tags as hard break nodes", () => {
+    const root = parse("Alpha<br>Beta<BR />Gamma");
+
+    expect(root.children).toEqual([
+      { type: "text", startOffset: 0, endOffset: 5, value: "Alpha" },
+      { type: "hardBreak", startOffset: 5, endOffset: 9 },
+      { type: "text", startOffset: 9, endOffset: 13, value: "Beta" },
+      { type: "hardBreak", startOffset: 13, endOffset: 19 },
+      { type: "text", startOffset: 19, endOffset: 24, value: "Gamma" }
+    ]);
+  });
+
+  it("keeps br tags inside inline code as code text", () => {
+    const root = parse("`Alpha<br>Beta`");
+
+    expect(root.children).toEqual([
+      {
+        type: "codeSpan",
+        startOffset: 0,
+        endOffset: 15,
+        text: "Alpha<br>Beta",
+        openMarker: { startOffset: 0, endOffset: 1 },
+        closeMarker: { startOffset: 14, endOffset: 15 }
+      }
+    ]);
+  });
+
   it("parses ~~strike~~", () => {
     const root = parse("~~strike~~");
 

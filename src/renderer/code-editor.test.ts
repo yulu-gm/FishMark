@@ -823,6 +823,34 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("keeps inline hard break source visible while rendering a visual break in active paragraphs", async () => {
+    const host = document.createElement("div");
+    const source = "Alpha<br>Beta";
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const view = getEditorView(host);
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+    view?.dispatch({ selection: { anchor: source.indexOf("<br>") } });
+
+    const activeLine = getLineElementByText(host, "Alpha<br>Beta");
+
+    expect(activeLine).not.toBeNull();
+    expect(activeLine?.classList.contains("cm-active-paragraph")).toBe(true);
+    expect(activeLine?.querySelector("br")).not.toBeNull();
+
+    controller.destroy();
+  });
+
   it("keeps structural blank separators collapsed and unreachable while editing", async () => {
     const host = document.createElement("div");
     const source = ["Paragraph one", "", "Paragraph two"].join("\n");
@@ -4365,7 +4393,7 @@ describe("createCodeEditorController", () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
     const source = [
-      "| oldRule | newRule |",
+      "| 旧规则 | 新规则 |",
       "| :-------- | :------ | ------ |",
       "| df_hf | df | ------ |",
       "| df_hb | db | |"
@@ -4395,10 +4423,10 @@ describe("createCodeEditorController", () => {
 
     expect(controller.getContent()).toBe(
       [
-        "| oldRule | newRule |        |",
-        "| :------ | :------ | :----- |",
-        "| df_hf   | df_new  | ------ |",
-        "| df_hb   | db      |        |"
+        "| 旧规则   | 新规则    |        |",
+        "| :---- | :----- | :----- |",
+        "| df_hf | df_new | ------ |",
+        "| df_hb | db     |        |"
       ].join("\n")
     );
     expect(controller.getContent()).not.toContain(":--------");
@@ -4410,8 +4438,8 @@ describe("createCodeEditorController", () => {
   it("does not render a pipe-table delimiter as cell content when a title directly precedes the table", () => {
     const host = document.createElement("div");
     const source = [
-      "mapping rules without a blank line",
-      "| oldRule | newRule |",
+      "新旧方向映射规则1（旧数据，非3SPY/SSPY）",
+      "| 旧规则 | 新规则 |",
       "| :-------- | :------ | ------ |",
       "| df_hf | df | ------ |",
       "| df_hb | db | |"
@@ -4423,13 +4451,13 @@ describe("createCodeEditorController", () => {
       onChange: vi.fn()
     });
 
-    expect(getLineElementByText(host, "mapping rules without a blank line")).not.toBeNull();
+    expect(getLineElementByText(host, "新旧方向映射规则1（旧数据，非3SPY/SSPY）")).not.toBeNull();
     expect(host.querySelector(".cm-table-widget")).not.toBeNull();
     expect(host.querySelector<HTMLInputElement>('[data-table-cell="1:0"]')?.value).toBe("df_hf");
     expect(host.querySelector<HTMLInputElement>('[data-table-cell="1:1"]')?.value).toBe("df");
     expect(host.querySelector<HTMLInputElement>('[data-table-cell="1:2"]')?.value).toBe("------");
-    expect(host.querySelector<HTMLInputElement>('[data-table-cell="0:0"]')?.value).toBe("oldRule");
-    expect(host.querySelector<HTMLInputElement>('[data-table-cell="0:1"]')?.value).toBe("newRule");
+    expect(host.querySelector<HTMLInputElement>('[data-table-cell="0:0"]')?.value).toBe("旧规则");
+    expect(host.querySelector<HTMLInputElement>('[data-table-cell="0:1"]')?.value).toBe("新规则");
     expect(host.querySelector<HTMLInputElement>('[data-table-cell="0:2"]')?.value).toBe("");
     expect(host.querySelector<HTMLInputElement>('[data-table-cell="0:0"]')?.value).not.toBe(":--------");
 

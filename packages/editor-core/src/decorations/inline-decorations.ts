@@ -1,4 +1,4 @@
-import { Decoration } from "@codemirror/view";
+import { Decoration, WidgetType } from "@codemirror/view";
 import { type Range } from "@codemirror/state";
 
 import type { InlineASTNode, InlineRoot } from "@fishmark/markdown-engine";
@@ -72,6 +72,9 @@ function appendInlineDecorations(
     case "text":
       appendCjkTextRanges(ranges, node.startOffset, node.value);
       return;
+    case "hardBreak":
+      appendHardBreakDecoration(ranges, node.startOffset, node.endOffset);
+      return;
     case "codeSpan":
       appendMarkerDecoration(ranges, node.openMarker.startOffset, node.openMarker.endOffset);
       appendContentDecoration(
@@ -136,6 +139,9 @@ function appendActiveInlineDecorations(node: InlineASTNode, ranges: InlineDecora
     case "text":
       appendCjkTextRanges(ranges, node.startOffset, node.value);
       return;
+    case "hardBreak":
+      appendActiveHardBreakDecoration(ranges, node.endOffset);
+      return;
     case "codeSpan":
       appendContentDecoration(
         ranges,
@@ -185,9 +191,49 @@ function appendCjkTextDecorations(node: InlineASTNode, ranges: InlineDecorationR
     case "text":
       appendCjkTextRanges(ranges, node.startOffset, node.value);
       return;
+    case "hardBreak":
+      return;
     case "codeSpan":
       return;
   }
+}
+
+class HardBreakWidget extends WidgetType {
+  override toDOM(): HTMLElement {
+    return document.createElement("br");
+  }
+
+  override ignoreEvent(): boolean {
+    return true;
+  }
+}
+
+function appendHardBreakDecoration(
+  ranges: InlineDecorationRange[],
+  startOffset: number,
+  endOffset: number
+) {
+  if (endOffset <= startOffset) {
+    return;
+  }
+
+  ranges.push(
+    Decoration.replace({
+      widget: new HardBreakWidget()
+    }).range(startOffset, endOffset)
+  );
+}
+
+function appendActiveHardBreakDecoration(
+  ranges: InlineDecorationRange[],
+  offset: number
+) {
+  ranges.push(
+    Decoration.widget({
+      side: 1,
+      widget: new HardBreakWidget()
+    }).range(offset)
+  );
 }
 
 function appendMarkerDecoration(

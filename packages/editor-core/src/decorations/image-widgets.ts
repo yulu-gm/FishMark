@@ -216,6 +216,7 @@ function appendActiveInlineImageDecorations(
       );
       return;
     case "text":
+    case "hardBreak":
     case "codeSpan":
       return;
   }
@@ -229,6 +230,8 @@ function readInlineNodeText(node: InlineNode): string {
   switch (node.type) {
     case "text":
       return node.value;
+    case "hardBreak":
+      return "\n";
     case "codeSpan":
       return node.text;
     case "strong":

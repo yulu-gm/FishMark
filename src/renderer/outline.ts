@@ -33,6 +33,8 @@ function readInlineNode(node: InlineNode): string {
   switch (node.type) {
     case "text":
       return node.value;
+    case "hardBreak":
+      return " ";
     case "codeSpan":
       return node.text;
     case "strong":

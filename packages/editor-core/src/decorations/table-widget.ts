@@ -534,6 +534,9 @@ function appendInlineNode(
     case "text":
       appendDecoratedPlainText(parent, document, node.value);
       return;
+    case "hardBreak":
+      parent.appendChild(document.createElement("br"));
+      return;
     case "codeSpan":
       appendMarker(parent, document, source.slice(node.openMarker.startOffset, node.openMarker.endOffset));
       appendInlineContent(parent, document, "cm-inactive-inline-code", node.text);
@@ -563,6 +566,8 @@ function appendInlineNode(
 function shouldRenderNodeAsPlainText(node: InlineNode): boolean {
   switch (node.type) {
     case "text":
+      return false;
+    case "hardBreak":
       return false;
     case "codeSpan":
       return (

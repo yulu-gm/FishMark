@@ -150,6 +150,19 @@ describe("createFishmarkExportHtml", () => {
     expect(exported.body.textContent).not.toContain("The Dojocat");
   });
 
+  it("exports inline hard break tags as real line break elements", () => {
+    const html = createFishmarkExportHtml({
+      markdown: ["Alpha<br>Beta", "", "| name | qty |", "| --- | ---: |", "| p<br>en | 2 |"].join("\n"),
+      title: "break.md"
+    });
+    const exported = new DOMParser().parseFromString(html, "text/html");
+    const paragraph = exported.querySelector<HTMLElement>(".cm-inactive-paragraph");
+    const tableCell = exported.querySelector<HTMLElement>('[data-table-cell-preview="1:0"]');
+
+    expect(paragraph?.innerHTML).toBe("Alpha<br>Beta");
+    expect(tableCell?.innerHTML).toBe("p<br>en");
+  });
+
   it("escapes title, Markdown text, and inline CSS terminators", () => {
     const html = createFishmarkExportHtml({
       markdown: "# 1 < 2 & 3",

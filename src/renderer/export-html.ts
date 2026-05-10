@@ -581,6 +581,8 @@ function renderInlineNode(node: InlineNode, source: string): string {
   switch (node.type) {
     case "text":
       return renderDecoratedPlainText(node.value);
+    case "hardBreak":
+      return "<br>";
     case "codeSpan":
       return [
         renderInlineMarker(source.slice(node.openMarker.startOffset, node.openMarker.endOffset)),
@@ -727,6 +729,8 @@ function resolveListItemContentStartOffset(
 function shouldRenderNodeAsPlainText(node: InlineNode): boolean {
   switch (node.type) {
     case "text":
+      return false;
+    case "hardBreak":
       return false;
     case "codeSpan":
       return node.text.length === 0 || node.openMarker.endOffset >= node.closeMarker.startOffset;
@@ -935,6 +939,8 @@ function readInlineNodeText(node: InlineNode): string {
   switch (node.type) {
     case "text":
       return node.value;
+    case "hardBreak":
+      return "\n";
     case "codeSpan":
       return node.text;
     case "strong":

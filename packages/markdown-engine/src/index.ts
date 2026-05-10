@@ -25,6 +25,7 @@ export type {
   InlineCodeSpan,
   InlineContainerNode,
   InlineEmphasis,
+  InlineHardBreak,
   InlineImage,
   InlineLink,
   InlineMarker,

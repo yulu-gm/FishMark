@@ -57,6 +57,7 @@ export function normalizeHiddenInlineAnchor(
         }
         return null;
       case "text":
+      case "hardBreak":
         return null;
       case "codeSpan":
         return (

@@ -1,4 +1,12 @@
-export type InlineNode = InlineText | InlineStrong | InlineEmphasis | InlineStrikethrough | InlineCodeSpan | InlineLink | InlineImage;
+export type InlineNode =
+  | InlineText
+  | InlineHardBreak
+  | InlineStrong
+  | InlineEmphasis
+  | InlineStrikethrough
+  | InlineCodeSpan
+  | InlineLink
+  | InlineImage;
 export type InlineASTNode = InlineRoot | InlineNode;
 
 export interface InlineBaseNode {
@@ -15,6 +23,10 @@ export interface InlineMarker {
 export interface InlineText extends InlineBaseNode {
   type: "text";
   value: string;
+}
+
+export interface InlineHardBreak extends InlineBaseNode {
+  type: "hardBreak";
 }
 
 export interface InlineContainerNode extends InlineBaseNode {

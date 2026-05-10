@@ -5,6 +5,7 @@ import { strikethrough } from "./extensions/strikethrough";
 import type {
   InlineCodeSpan,
   InlineEmphasis,
+  InlineHardBreak,
   InlineImage,
   InlineLink,
   InlineMarker,
@@ -186,6 +187,14 @@ export function parseInlineAst(
         continue;
       }
 
+      if (tokenType === "htmlTextData") {
+        const value = readSlice(sourceSlice, token);
+        if (isInlineHardBreakTag(value)) {
+          appendNode(stack, createHardBreakNode(token, clampedStartOffset));
+        }
+        continue;
+      }
+
       if (tokenType === "resourceDestination") {
         const mediaNode = getNearestMediaNode(stack);
         if (mediaNode) {
@@ -344,6 +353,18 @@ function createCodeSpanNode(token: Token, baseOffset: number): InlineCodeSpan {
   };
 }
 
+function createHardBreakNode(token: Token, baseOffset: number): InlineHardBreak {
+  return {
+    type: "hardBreak",
+    startOffset: toAbsoluteOffset(baseOffset, token.start.offset),
+    endOffset: toAbsoluteOffset(baseOffset, token.end.offset)
+  };
+}
+
+function isInlineHardBreakTag(value: string): boolean {
+  return /^<br\s*\/?>$/iu.test(value);
+}
+
 function appendNode(stack: AstStackEntry[], node: InlineNode): void {
   const parent = stack[stack.length - 1];
   if (!parent || parent.kind === "code") {
@@ -495,6 +516,8 @@ function readInlineNodeText(node: InlineNode): string {
   switch (node.type) {
     case "text":
       return node.value;
+    case "hardBreak":
+      return "\n";
     case "codeSpan":
       return node.text;
     case "strong":
@@ -516,7 +539,7 @@ function resolveReferenceMediaTextNodes(
   }
 
   root.children = root.children.flatMap((node) => {
-    if (node.type === "codeSpan") {
+    if (node.type === "codeSpan" || node.type === "hardBreak") {
       return [node];
     }
 

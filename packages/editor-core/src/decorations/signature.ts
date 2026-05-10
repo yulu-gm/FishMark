@@ -119,6 +119,8 @@ function createInlineFingerprint(node: InlineASTNode): string {
         .join(",")})`;
     case "text":
       return `text(${node.startOffset}-${node.endOffset}:${JSON.stringify(node.value)})`;
+    case "hardBreak":
+      return `hardBreak(${node.startOffset}-${node.endOffset})`;
     case "codeSpan":
       return `codeSpan(${node.startOffset}-${node.endOffset}:${formatMarker(node.openMarker)}:${formatMarker(
         node.closeMarker

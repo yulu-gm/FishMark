@@ -83,6 +83,7 @@ function collectHiddenRanges(node: InlineASTNode, ranges: HiddenRange[]): void {
       }
       return;
     case "text":
+    case "hardBreak":
       return;
     case "codeSpan":
       ranges.push(

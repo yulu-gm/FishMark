@@ -509,7 +509,7 @@
 ### TC-034 行内格式渲染
 
 步骤：
-1. 输入一组普通段落内的行内格式示例：`**bold**`、`*italic*`、`` `code` ``、`~~strike~~`。
+1. 输入一组普通段落内的行内格式示例：`**bold**`、`*italic*`、`` `code` ``、`~~strike~~`、`1111<br>22222222222`。
 2. 再输入两组嵌套示例：`***both***` 与 `~~**mix**~~`。
 3. 额外输入三种块内示例：`# Heading with **bold**`、`- Item with *italic*`、`> Quote with code`（其中 `code` 部分使用反引号包裹）。
 4. 把光标移动到这些 block 外的普通段落，观察非激活态渲染。
@@ -521,6 +521,7 @@
 - 非激活态段落中的 `**bold**`、`*italic*`、`` `code` ``、`~~strike~~` 会显示为渲染态，Markdown markers 被隐藏
 - `***both***` 与 `~~**mix**~~` 的嵌套样式会保持叠加，不会丢失内层样式
 - heading、list、blockquote 内的行内格式在非激活态同样成立
+- `<br>` 在非激活态显示为真实行内换行；光标回到同一行后，源码 `<br>` 仍可见，且后续文本保持在下一视觉行
 - 光标重新进入对应 block 后，完整 Markdown 源码立即恢复并可直接编辑
 - composition 期间不会提前抖动，`compositionend` 后只做一次 decorations flush
 - link/image 即使本轮不做专门视觉替换，也不会破坏 label/alt children 的行内 decorations
@@ -577,7 +578,7 @@
 4. 再把焦点移入表格任意单元格。
 5. 再次按住 `Ctrl/Cmd` 1 秒，观察 shortcut hint 与左侧 rail。
 6. 直接用鼠标点击一个单元格，例如 `2` 所在单元格，并输入新文本把它改为 `20`。
-6A. 在任一单元格中输入或粘贴 `**A**`、`*B*`、`` `C` `` 这类行内格式内容，观察单元格内显示效果。
+6A. 在任一单元格中输入或粘贴 `**A**`、`*B*`、`` `C` ``、`p<br>en` 这类行内格式内容，观察单元格内显示效果。
 7. 在另一个空白文档中只输入一行典型 pipe header，例如 `| a | b | c |`，然后在行尾按 `Enter`。
 8. 回到表格内继续使用 `Tab`、`Shift+Tab`、`ArrowUp`、`ArrowDown`、`ArrowLeft`、`ArrowRight`、`Enter`、`Ctrl/Cmd+Enter`。
 9. 使用 rail 中的表格图标 tools；分别 hover 或 focus 观察 tooltip 是否显示 `Row Above`、`Row Below`、`Column Left`、`Column Right`、`Delete Row`、`Delete Column`、`Delete Table`，并逐个触发对应动作，尤其验证插入空白列后表格仍保持渲染态。
@@ -588,7 +589,7 @@
 - 进入表格后，shortcut hint 切换为表格组，例如 `Next Cell`、`Previous Cell`、`Row Above`、`Row Below`、`Next Row / Exit`、`Insert Row Below`
 - 左侧 rail 中段切换为表格图标工具列，并带有非硬切的过渡
 - 直接点击单元格即可进入对应 cell 的编辑态，不需要先回到原始 Markdown 源码块
-- 非活动单元格里的 `**A**`、`*B*`、`` `C` `` 会按现有 inline 规则渲染；当前正在编辑的活动单元格继续显示原始 Markdown 文本，保证 caret 与输入稳定
+- 非活动单元格里的 `**A**`、`*B*`、`` `C` ``、`p<br>en` 会按现有 inline 规则渲染，其中 `<br>` 显示为真实换行；当前正在编辑的活动单元格继续显示原始 Markdown 文本，保证 caret 与输入稳定
 - `**`、`*`、`` ` `` 这类未闭合或不完整的 inline marker 在单元格里不会被错误扩成重复 marker 预览，而是按原始文本显示
 - 在空白或已有内容的单元格里通过输入法输入 `·`、中文或其他 composition 字符时，组合态期间不会提前触发整表 rewrite；`compositionend` 后会等待 post-composition `input`，若浏览器未补发再走 fallback 单次提交，焦点不退出表格
 - 在仅有 header 行的典型 pipe table 草稿上按 `Enter`，会自动补出 delimiter 行和一个空白 body 行，并把光标放到第一格空白单元格

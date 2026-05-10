@@ -230,6 +230,46 @@ describe("createBlockDecorations", () => {
     expectCoveredRangeClasses(ranges, 6, 8, ["cm-inactive-inline-marker"]);
   });
 
+  it("renders inline hard breaks as inactive inline widgets", () => {
+    const source = "Alpha<br>Beta";
+    const blockMap = parseMarkdownDocument(source);
+    const activeState = createActiveBlockStateFromBlockMap(blockMap, {
+      anchor: 0,
+      head: 0
+    });
+    const result = createBlockDecorations({
+      activeBlockState: activeState,
+      hasEditorFocus: false,
+      source
+    });
+
+    expect(collectWidgets(source, result.decorationSet)).toContainEqual({
+      from: "Alpha".length,
+      to: "Alpha<br>".length,
+      name: "HardBreakWidget"
+    });
+  });
+
+  it("keeps inline hard break source visible and inserts a visual break in active paragraphs", () => {
+    const source = "Alpha<br>Beta";
+    const blockMap = parseMarkdownDocument(source);
+    const activeState = createActiveBlockStateFromBlockMap(blockMap, {
+      anchor: source.indexOf("<br>"),
+      head: source.indexOf("<br>")
+    });
+    const result = createBlockDecorations({
+      activeBlockState: activeState,
+      hasEditorFocus: true,
+      source
+    });
+
+    expect(collectWidgets(source, result.decorationSet)).toContainEqual({
+      from: "Alpha<br>".length,
+      to: "Alpha<br>".length,
+      name: "HardBreakWidget"
+    });
+  });
+
   it("marks structural blank lines as inactive reading blanks", () => {
     const source = ["Paragraph one", "", "Paragraph two"].join("\n");
     const ranges = createDecorationsForSelection(source, { anchor: 0, head: 0 }, false);
