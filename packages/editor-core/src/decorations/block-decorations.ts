@@ -111,7 +111,13 @@ export function createBlockDecorations(
     if (block.id === activeBlockId) {
       if (activeBlockquoteInContentEdit && block.type === "blockquote") {
         signatures.push(`${createBlockDecorationSignature(block)}:content-edit`);
-        appendBlockquoteDecorations(block, source, ranges, resolveImagePreviewUrl);
+        appendBlockquoteDecorations(
+          block,
+          source,
+          ranges,
+          resolveImagePreviewUrl,
+          activeSelectionLineStart
+        );
         continue;
       }
 
@@ -311,7 +317,8 @@ function appendBlockquoteDecorations(
   block: Extract<NonNullable<ActiveBlockState["activeBlock"]>, { type: "blockquote" }>,
   source: string,
   ranges: Range<Decoration>[],
-  resolveImagePreviewUrl?: (href: string | null) => string | null
+  resolveImagePreviewUrl?: (href: string | null) => string | null,
+  activeLineStart: number | null = null
 ): void {
   if (block.lines) {
     const renderableLines = block.lines.filter((line) =>
@@ -346,13 +353,15 @@ function appendBlockquoteDecorations(
       );
 
       if (line.contentStartOffset > line.startOffset) {
-        ranges.push(
-          Decoration.mark({
-            attributes: {
-              class: "cm-inactive-blockquote-marker"
-            }
-          }).range(line.startOffset, line.contentStartOffset)
-        );
+        if (line.startOffset !== activeLineStart) {
+          ranges.push(
+            Decoration.mark({
+              attributes: {
+                class: "cm-inactive-blockquote-marker"
+              }
+            }).range(line.startOffset, line.contentStartOffset)
+          );
+        }
       }
 
       ranges.push(...createInactiveInlineDecorations(line.inline, { resolveImagePreviewUrl }));
@@ -392,13 +401,15 @@ function appendBlockquoteDecorations(
     );
 
     if (line.contentStartOffset > line.lineStart) {
-      ranges.push(
-        Decoration.mark({
-          attributes: {
-            class: "cm-inactive-blockquote-marker"
-          }
-        }).range(line.lineStart, line.contentStartOffset)
-      );
+      if (line.lineStart !== activeLineStart) {
+        ranges.push(
+          Decoration.mark({
+            attributes: {
+              class: "cm-inactive-blockquote-marker"
+            }
+          }).range(line.lineStart, line.contentStartOffset)
+        );
+      }
     }
   }
 }

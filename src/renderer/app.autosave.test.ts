@@ -6008,6 +6008,7 @@ describe("App autosave", () => {
     expect(markdownRenderStylesheet).not.toContain(".cm-inactive-task-marker::after");
     expect(blockquoteRule).toContain("background: var(--fishmark-blockquote-bg);");
     expect(blockquoteRule).toContain("box-shadow: inset 2px 0 0 var(--fishmark-blockquote-border);");
+    expect(markdownRenderStylesheet).not.toContain(".cm-active-blockquote-marker");
   });
 
   it("renders code blocks with visual wrapping instead of a horizontal scrollbar", () => {

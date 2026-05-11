@@ -1,12 +1,14 @@
 import {
   parseInlineAst,
   type BlockquoteBlock,
+  type CodeFenceBlock,
   type HeadingBlock,
   type InlineASTNode,
   type InlineRoot,
   type ListBlock,
   type MarkdownBlock,
-  type MarkdownDocument
+  type MarkdownDocument,
+  resolveIndentedCodeContentStartOffset
 } from "@fishmark/markdown-engine";
 
 import {
@@ -46,7 +48,12 @@ export type VisibleLine = {
 
 // --- Low-level helpers ---
 
-export function resolveLineBaseAnchor(block: MarkdownBlock, lineStart: number): number {
+export function resolveLineBaseAnchor(
+  block: MarkdownBlock,
+  source: string,
+  lineStart: number,
+  lineEnd: number
+): number {
   switch (block.type) {
     case "heading":
       return lineStart === block.startOffset
@@ -59,6 +66,12 @@ export function resolveLineBaseAnchor(block: MarkdownBlock, lineStart: number): 
     case "list": {
       const item = findListItemAtLineStart(block as ListBlock, lineStart);
       return item?.contentStartOffset ?? item?.markerEnd ?? lineStart;
+    }
+    case "codeFence": {
+      const codeBlock = block as CodeFenceBlock;
+      return codeBlock.kind === "indented"
+        ? resolveIndentedCodeContentStartOffset(source, lineStart, lineEnd)
+        : lineStart;
     }
     default:
       return lineStart;
@@ -132,8 +145,11 @@ function findHiddenRangeContainingOffset(hiddenRanges: readonly HiddenRange[], o
 // --- VisibleLine: pre-computed line visibility data ---
 
 export function createVisibleLine(params: LineVisibilityParams): VisibleLine {
-  const baseAnchor = resolveLineBaseAnchor(params.block, params.lineStart);
-  const inline = parseLineInline(params.source, baseAnchor, params.lineStart, params.lineEnd);
+  const baseAnchor = resolveLineBaseAnchor(params.block, params.source, params.lineStart, params.lineEnd);
+  const inline =
+    params.block.type === "codeFence"
+      ? null
+      : parseLineInline(params.source, baseAnchor, params.lineStart, params.lineEnd);
   const hiddenRanges = getHiddenRanges(inline);
   const visibleStartAnchor = resolveVisibleInlineStartAnchor(baseAnchor, inline ?? undefined);
 
@@ -226,6 +242,7 @@ export function normalizeHiddenSelectionAnchor(
   switch (activeBlock.type) {
     case "paragraph":
     case "heading":
+    case "codeFence":
     case "list":
     case "blockquote": {
       const line = resolveSourceLineAt(source, anchor);
@@ -255,6 +272,10 @@ export function normalizeStructuralBlankSelectionAnchor(
     return null;
   }
 
+  if (separator.nextBlockStart === null) {
+    return separator.blankLineStart;
+  }
+
   if (direction > 0 && separator.nextBlockStart !== null) {
     return separator.nextBlockStart;
   }
@@ -267,6 +288,7 @@ export function normalizeStructuralBlankSelectionAnchor(
 }
 
 type StructuralBlankLine = {
+  blankLineStart: number;
   previousBlockEnd: number | null;
   nextBlockStart: number | null;
 };
@@ -279,8 +301,11 @@ function findStructuralBlankLineAt(
   let cursor = 0;
 
   for (const block of blocks) {
-    if (isStructuralBlankLineAnchor(source, cursor, block.startOffset, cursor > 0, anchor)) {
+    const blankLineStart = findStructuralBlankLineAnchor(source, cursor, block.startOffset, cursor > 0, anchor);
+
+    if (blankLineStart !== null) {
       return {
+        blankLineStart,
         previousBlockEnd: cursor > 0 ? cursor : null,
         nextBlockStart: block.startOffset
       };
@@ -289,8 +314,11 @@ function findStructuralBlankLineAt(
     cursor = Math.max(cursor, block.endOffset);
   }
 
-  if (isStructuralBlankLineAnchor(source, cursor, source.length, cursor > 0, anchor)) {
+  const blankLineStart = findStructuralBlankLineAnchor(source, cursor, source.length, cursor > 0, anchor);
+
+  if (blankLineStart !== null) {
     return {
+      blankLineStart,
       previousBlockEnd: cursor > 0 ? cursor : null,
       nextBlockStart: null
     };
@@ -299,13 +327,13 @@ function findStructuralBlankLineAt(
   return null;
 }
 
-function isStructuralBlankLineAnchor(
+function findStructuralBlankLineAnchor(
   source: string,
   startOffset: number,
   endOffset: number,
   skipLeadingLineBreak: boolean,
   anchor: number
-): boolean {
+): number | null {
   const contentStartOffset = skipLeadingLineBreak
     ? skipSingleLeadingLineBreak(source, startOffset, endOffset)
     : startOffset;
@@ -328,15 +356,15 @@ function isStructuralBlankLineAnchor(
     }
 
     if (hasConsumedStructuralBlankLine) {
-      return false;
+      return null;
     }
 
     hasConsumedStructuralBlankLine = true;
 
-    return anchor >= cursor && anchor <= contentEndOffset;
+    return anchor >= cursor && anchor <= contentEndOffset ? cursor : null;
   }
 
-  return false;
+  return null;
 }
 
 function skipSingleLeadingLineBreak(source: string, startOffset: number, endOffset: number): number {

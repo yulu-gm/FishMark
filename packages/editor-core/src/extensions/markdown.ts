@@ -159,12 +159,9 @@ export function createFishMarkMarkdownExtensions(
     }
 
     const lineElement = targetElement.closest(".cm-line");
+    const hasPointerCoordinates = event.clientX !== 0 || event.clientY !== 0;
 
-    if (!(lineElement instanceof HTMLElement)) {
-      return null;
-    }
-
-    if (event.clientX !== 0 || event.clientY !== 0) {
+    if (hasPointerCoordinates && !isBlankTableSideGutterClick(view, lineElement, event.clientY)) {
       const positionAtCoords = view.posAtCoords({
         x: event.clientX,
         y: event.clientY
@@ -175,11 +172,31 @@ export function createFishMarkMarkdownExtensions(
       }
     }
 
+    if (!(lineElement instanceof HTMLElement)) {
+      return null;
+    }
+
     try {
       return view.posAtDOM(lineElement, 0);
     } catch {
       return null;
     }
+  };
+
+  const isBlankTableSideGutterClick = (
+    view: EditorView,
+    lineElement: Element | null,
+    clientY: number
+  ): boolean => {
+    if (lineElement) {
+      return false;
+    }
+
+    return Array.from(view.dom.querySelectorAll<HTMLElement>(".cm-table-widget")).some((table) => {
+      const rect = table.getBoundingClientRect();
+
+      return clientY >= rect.top && clientY <= rect.bottom;
+    });
   };
 
   const focusTableCellEditor = (
@@ -730,6 +747,15 @@ export function createFishMarkMarkdownExtensions(
     blockDecorationsField,
     lifecyclePlugin,
     EditorState.transactionFilter.of((transaction) => {
+      const detachedListBlankLineInsert = createDetachedListBlankLineInsertTransaction(
+        transaction,
+        markdownDocumentCache
+      );
+
+      if (detachedListBlankLineInsert) {
+        return detachedListBlankLineInsert;
+      }
+
       const shouldNormalizeOrderedLists =
         transaction.docChanged && !transaction.annotation(orderedListNormalizationAnnotation);
       const shouldNormalizeHiddenSelection = !transaction.annotation(hiddenSelectionNormalizationAnnotation);
@@ -923,6 +949,105 @@ export function createFishMarkMarkdownExtensions(
       recomputeDerivedState(update.view, update.state);
     })
   ];
+}
+
+function createDetachedListBlankLineInsertTransaction(
+  transaction: Transaction,
+  markdownDocumentCache: { read: (source: string) => MarkdownDocument }
+): TransactionSpec | null {
+  if (!transaction.docChanged || !transaction.startState.selection.main.empty) {
+    return null;
+  }
+
+  const insertion = readSinglePlainTextInsertion(transaction);
+
+  if (!insertion || insertion.text.trim().length === 0 || /[\r\n]/u.test(insertion.text)) {
+    return null;
+  }
+
+  const source = transaction.startState.doc.toString();
+  const selection = transaction.startState.selection.main;
+  const line = transaction.startState.doc.lineAt(selection.from);
+
+  if (
+    insertion.from !== selection.from ||
+    selection.from < line.from ||
+    selection.from > line.to ||
+    !/^[ \t]+$/u.test(line.text)
+  ) {
+    return null;
+  }
+
+  const markdownDocument = markdownDocumentCache.read(source);
+  const previousList = findPreviousListBlockBeforeWhitespaceLine(source, markdownDocument, line.from);
+
+  if (!previousList) {
+    return null;
+  }
+
+  const anchor = line.from + insertion.text.length;
+  const addToHistory = transaction.annotation(Transaction.addToHistory);
+
+  return {
+    changes: {
+      from: line.from,
+      to: line.to,
+      insert: insertion.text
+    },
+    selection: {
+      anchor,
+      head: anchor
+    },
+    annotations: addToHistory === undefined ? undefined : Transaction.addToHistory.of(addToHistory),
+    userEvent: transaction.annotation(Transaction.userEvent),
+    scrollIntoView: transaction.scrollIntoView
+  };
+}
+
+function readSinglePlainTextInsertion(transaction: Transaction): { from: number; text: string } | null {
+  let insertion: { from: number; text: string } | null = null;
+  let count = 0;
+
+  transaction.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
+    count += 1;
+
+    if (fromA !== toA) {
+      return;
+    }
+
+    insertion = {
+      from: fromA,
+      text: inserted.toString()
+    };
+  });
+
+  return count === 1 ? insertion : null;
+}
+
+function findPreviousListBlockBeforeWhitespaceLine(
+  source: string,
+  markdownDocument: MarkdownDocument,
+  lineStart: number
+): ListBlock | null {
+  let previousBlock: MarkdownBlock | null = null;
+
+  for (const block of markdownDocument.blocks) {
+    if (block.startOffset > lineStart) {
+      break;
+    }
+
+    if (block.endOffset <= lineStart) {
+      previousBlock = block;
+    }
+  }
+
+  if (previousBlock?.type !== "list") {
+    return null;
+  }
+
+  const gap = source.slice(previousBlock.endOffset, lineStart);
+
+  return /^[\r\n \t]*$/u.test(gap) ? previousBlock : null;
 }
 
 function findLinkAtOffset(markdownDocument: MarkdownDocument, offset: number): InlineLink | null {

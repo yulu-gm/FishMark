@@ -93,18 +93,21 @@ export function computeOrderedListEnter(
     deleteTo += 1;
   }
 
+  const replacement =
+    current.parentItem === null && current.item.startOffset > current.rootList.startOffset ? "\n" : "";
+
   const tentativeSource = replaceRange(
     blockSource,
     toBlockOffset(current.rootList, current.item.startOffset),
     toBlockOffset(current.rootList, deleteTo),
-    ""
+    replacement
   );
 
   return finalizeListEdit(
     current.rootList,
     blockSource,
     tentativeSource,
-    toBlockOffset(current.rootList, current.item.startOffset)
+    toBlockOffset(current.rootList, current.item.startOffset) + replacement.length
   );
 }
 

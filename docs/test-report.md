@@ -9,6 +9,13 @@
 
 ## 记录
 
+| 2026-05-10 | markdown-editing-experience | `npm.cmd run test:editing-experience` | 先失败后通过 | 新增 Electron/Chromium probe 真实模拟中文输入、Backspace 与鼠标拖选；RED 阶段复现引用块内容起点 Backspace 不能移除 marker、列表后纯空格行输入会继承列表缩进、列表项末尾双 Enter 退出后正文会变成上一项 lazy continuation、退出列表后的空行需要两次 Backspace 才回到列表项、表格单元格聚焦后点击下方空白画布输入会写入单元格、表格外文本被解析成新 row、以及表格下一行输入单个 `-` 会让表格退回源码态；修复后覆盖段落、标题、列表、引用块、围栏代码块、分割线源码行、表格最后一行点击与表格外输入。 |
+| 2026-05-10 | markdown-editing-experience | `npm.cmd run test:cursor-hit-geometry` | 通过 | focused 空引用块保留 raw `> ` 源码前缀，无 active hidden marker，光标可见且可命中。 |
+| 2026-05-10 | markdown-editing-experience | `npm.cmd run test -- src/renderer/code-editor.test.ts packages/editor-core/src/commands/list-edits.test.ts packages/editor-core/src/commands/markdown-commands.test.ts packages/editor-core/src/extensions/markdown.test.ts packages/editor-core/src/decorations/block-decorations.test.ts` | 通过 | 覆盖列表双 Enter 退出、退出后一次 Backspace 回到列表项、尾部空有序项、尾部空任务项、嵌套列表二次退出、列表后纯空格行输入，以及 editor-core 列表编辑、命令与 decoration 回归；5 个文件、268 项通过。 |
+| 2026-05-10 | markdown-editing-experience | `npm.cmd run test -- src/renderer/code-editor.test.ts src/renderer/app.autosave.test.ts packages/editor-core/src/decorations/block-decorations.test.ts packages/markdown-engine/src/parse-block-map.test.ts` | 通过 | 覆盖引用块 decoration、Backspace 行为、renderer 样式契约与 block map；4 个文件、408 项通过。 |
+| 2026-05-10 | markdown-editing-experience | `npm.cmd run test` | 通过 | Vitest 全量通过：98 个测试文件、1009 项测试。 |
+| 2026-05-10 | markdown-editing-experience | `npm.cmd run test:list-geometry` | 先失败后通过 | 新增列表后纯空格行与双 Enter 退出列表几何回归：RED 阶段纯空格行光标比普通段落左边界多偏 11.578px；修复后 selection 归一到空白行起点，caret left 与 paragraph left 差值为 0；双 Enter 后两行正文 left 与 paragraph left 差值均为 0，且不带 list class。 |
+| 2026-05-10 | markdown-editing-experience | `npm.cmd run typecheck` / `npm.cmd run lint` / `npm.cmd run build` / `git diff --check` | 通过 | 类型、ESLint、clean/renderer/electron/cli build 均通过；build 保留既有 Vite chunk size warning，diff check 仅有 LF/CRLF 提示。 |
 | 2026-05-10 | TASK-038 icon-refresh | `npm.cmd run test -- src/main/generate-icons.test.ts` | 先失败后通过 | 新增 icon 生成回归：RED 阶段确认缺少 `16/24/48` 输出且 light 图标鱼身中心不是黑色；修复后 3 项通过。 |
 | 2026-05-10 | TASK-038 icon-refresh | `npm.cmd run test -- src/main/generate-icons.test.ts src/main/package-scripts.test.ts src/main/after-pack-win-icon.test.ts` | 通过 | 覆盖 icon 生成、打包脚本契约与 Windows executable icon patch；3 个文件、34 项通过。 |
 | 2026-05-10 | TASK-038 icon-refresh | `npm.cmd run lint` | 通过 | ESLint 退出码 0。 |

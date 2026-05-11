@@ -165,7 +165,8 @@ export function looksLikePipeTable(lines: readonly string[]): boolean {
 
   return lines.slice(2).every((line) => {
     const trimmed = line.trim();
-    return trimmed.length > 0 && splitTableLine(line).length <= delimiterSegments.length;
+    const cellCount = splitTableLine(line).length;
+    return trimmed.length > 0 && cellCount >= 2 && cellCount <= delimiterSegments.length;
   });
 }
 

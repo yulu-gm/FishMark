@@ -266,7 +266,7 @@ function createParagraphDerivedBlocks(
 function createSetextHeadingDerivedBlocks(
   token: Token,
   source: string
-): Array<HeadingBlock | ParagraphBlock | ThematicBreakBlock | ListBlock> {
+): Array<HeadingBlock | ParagraphBlock | ThematicBreakBlock | ListBlock | TableBlock> {
   const trailingListMarkerSplit = createTrailingSingleDashListMarkerBlocks(token, source);
 
   if (trailingListMarkerSplit) {
@@ -281,7 +281,10 @@ function createSetextHeadingDerivedBlocks(
   );
 }
 
-function createTrailingSingleDashListMarkerBlocks(token: Token, source: string): Array<ParagraphBlock | ListBlock> | null {
+function createTrailingSingleDashListMarkerBlocks(
+  token: Token,
+  source: string
+): Array<ParagraphBlock | ThematicBreakBlock | TableBlock | ListBlock> | null {
   if (token.end.offset !== source.length) {
     return null;
   }
@@ -308,15 +311,19 @@ function createTrailingSingleDashListMarkerBlocks(token: Token, source: string):
   const indent = underlineLine.text.search(/\S/u);
   const markerStart = underlineLine.startOffset + Math.max(indent, 0);
   const markerEnd = markerStart + 1;
-
-  return [
+  const contentLines = lines.slice(0, -1);
+  const contentBlocks = createLooseTableDerivedBlocksFromLines(contentLines, source) ?? [
     createBlockFromRange(
       "paragraph",
       contentStart.startOffset,
       contentEnd.endOffset,
       contentStart.lineNumber,
       contentEnd.lineNumber
-    ),
+    )
+  ];
+
+  return [
+    ...contentBlocks,
     {
       ...createBlockFromRange(
         "list",
@@ -364,6 +371,14 @@ function createLooseTableDerivedBlocks(
     token.start.offset,
     token.start.line
   );
+
+  return createLooseTableDerivedBlocksFromLines(lines, source);
+}
+
+function createLooseTableDerivedBlocksFromLines(
+  lines: readonly LineInfo[],
+  source: string
+): Array<ParagraphBlock | ThematicBreakBlock | TableBlock> | null {
   const blocks: Array<ParagraphBlock | ThematicBreakBlock | TableBlock> = [];
   let foundLooseTable = false;
   let pendingTextStart = 0;
@@ -449,8 +464,9 @@ function findPipeTableLineRunEnd(lines: readonly LineInfo[], startIndex: number)
   while (runEnd < lines.length) {
     const line = lines[runEnd]!;
     const trimmed = line.text.trim();
+    const cellCount = splitTableLine(line.text).length;
 
-    if (trimmed.length === 0 || splitTableLine(line.text).length > delimiterColumnCount) {
+    if (trimmed.length === 0 || cellCount < 2 || cellCount > delimiterColumnCount) {
       break;
     }
 

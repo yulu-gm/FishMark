@@ -1400,7 +1400,8 @@ describe("createCodeEditorController", () => {
     expect(firstQuoteLine?.classList.contains("cm-inactive-blockquote-start")).toBe(true);
     expect(secondQuoteLine).not.toBeNull();
     expect(secondQuoteLine?.classList.contains("cm-inactive-blockquote")).toBe(true);
-    expect(host.querySelectorAll(".cm-inactive-blockquote-marker")).toHaveLength(2);
+    expect(host.querySelectorAll(".cm-inactive-blockquote-marker")).toHaveLength(1);
+    expect(host.querySelectorAll(".cm-active-blockquote-marker")).toHaveLength(0);
 
     controller.destroy();
   });
@@ -2618,7 +2619,7 @@ describe("createCodeEditorController", () => {
 
     expect(controller.getContent()).toBe("> ");
     expect(host.querySelector(".cm-inactive-blockquote")).not.toBeNull();
-    expect(host.querySelector(".cm-inactive-blockquote-marker")).not.toBeNull();
+    expect(host.querySelector(".cm-active-blockquote-marker")).toBeNull();
 
     controller.destroy();
   });
@@ -2850,7 +2851,8 @@ describe("createCodeEditorController", () => {
     expect(controller.getContent()).toBe(source);
     expect(view?.state.selection.main.anchor).toBe(source.indexOf("> quote two") - 1);
     expect(host.querySelector(".cm-inactive-blockquote")).not.toBeNull();
-    expect(host.querySelectorAll(".cm-inactive-blockquote-marker")).toHaveLength(2);
+    expect(host.querySelectorAll(".cm-inactive-blockquote-marker")).toHaveLength(1);
+    expect(host.querySelectorAll(".cm-active-blockquote-marker")).toHaveLength(0);
 
     controller.destroy();
   });
@@ -2909,6 +2911,33 @@ describe("createCodeEditorController", () => {
 
     expect(controller.getContent()).toBe(expected);
     expect(view?.state.selection.main.anchor).toBe(expected.indexOf("quote one"));
+
+    controller.destroy();
+  });
+
+  it("removes the blockquote marker when Backspace is pressed at the content start", () => {
+    const host = document.createElement("div");
+    const source = "> quote";
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const view = getEditorView(host);
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressBackspace: () => void;
+    };
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection("> ".length);
+    advancedController.pressBackspace();
+
+    expect(controller.getContent()).toBe("quote");
+    expect(view?.state.selection.main.anchor).toBe(0);
+    expect(view?.state.selection.main.head).toBe(0);
 
     controller.destroy();
   });
@@ -3255,9 +3284,196 @@ describe("createCodeEditorController", () => {
     advancedController.setSelection(emptyItemCursor);
     advancedController.pressEnter();
 
-    expect(controller.getContent()).toBe("1. Todo\n");
-    expect(view?.state.selection.main.anchor).toBe("1. Todo\n".length);
-    expect(view?.state.selection.main.head).toBe("1. Todo\n".length);
+    expect(controller.getContent()).toBe("1. Todo\n\n");
+    expect(view?.state.selection.main.anchor).toBe("1. Todo\n\n".length);
+    expect(view?.state.selection.main.head).toBe("1. Todo\n\n".length);
+
+    controller.destroy();
+  });
+
+  it("starts body text at the left edge on a whitespace-only line after a list", async () => {
+    const host = document.createElement("div");
+    const source = [
+      "- 1",
+      "- 2",
+      "1. 111",
+      "2. 222",
+      "  1. 333",
+      "  2. 222",
+      "    1. 111",
+      "    2. 22",
+      "3. 222",
+      "   "
+    ].join("\n");
+    const expected = [
+      "- 1",
+      "- 2",
+      "1. 111",
+      "2. 222",
+      "  1. 333",
+      "  2. 222",
+      "    1. 111",
+      "    2. 22",
+      "3. 222",
+      "正文"
+    ].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      insertText: (text: string) => void;
+    };
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(source.length);
+    await flushMicrotasks();
+
+    expect(view?.state.selection.main.anchor).toBe(source.length - "   ".length);
+
+    advancedController.insertText("正文");
+
+    expect(controller.getContent()).toBe(expected);
+    expect(view?.state.selection.main.anchor).toBe(expected.length);
+
+    const bodyLine = getLineElementByText(host, "正文");
+    expect(bodyLine?.classList.contains("cm-active-list")).toBe(false);
+    expect(bodyLine?.classList.contains("cm-active-list-continuation")).toBe(false);
+
+    controller.destroy();
+  });
+
+  it("keeps following body lines detached after typing below a list", async () => {
+    const host = document.createElement("div");
+    const source = ["- 11111", "- 22222", "  "].join("\n");
+    const expected = ["- 11111", "- 22222", "111111", "1111"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      insertText: (text: string) => void;
+      pressEnter: () => void;
+    };
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(source.length);
+    await flushMicrotasks();
+
+    expect(view?.state.selection.main.anchor).toBe(source.length - "  ".length);
+
+    advancedController.insertText("111111");
+    await flushMicrotasks();
+    advancedController.pressEnter();
+    await flushMicrotasks();
+    advancedController.insertText("1111");
+
+    expect(controller.getContent()).toBe(expected);
+
+    const firstBodyLine = getLineElementByText(host, "111111");
+    const secondBodyLine = getLineElementByText(host, "1111");
+
+    expect(firstBodyLine?.classList.contains("cm-active-list")).toBe(false);
+    expect(firstBodyLine?.classList.contains("cm-active-list-continuation")).toBe(false);
+    expect(secondBodyLine?.classList.contains("cm-active-list")).toBe(false);
+    expect(secondBodyLine?.classList.contains("cm-active-list-continuation")).toBe(false);
+
+    controller.destroy();
+  });
+
+  it("keeps text typed after double Enter out of the previous list item", async () => {
+    const host = document.createElement("div");
+    const source = ["- 11111", "- 22222"].join("\n");
+    const expectedAfterExit = ["- 11111", "- 22222", "", ""].join("\n");
+    const expected = ["- 11111", "- 22222", "", "111111", "1111"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      insertText: (text: string) => void;
+      pressEnter: () => void;
+    };
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(source.length);
+    advancedController.pressEnter();
+    await flushMicrotasks();
+
+    expect(controller.getContent()).toBe(`${source}\n- `);
+
+    advancedController.pressEnter();
+    await flushMicrotasks();
+
+    expect(controller.getContent()).toBe(expectedAfterExit);
+    expect(view?.state.selection.main.anchor).toBe(expectedAfterExit.length);
+
+    advancedController.insertText("111111");
+    await flushMicrotasks();
+    advancedController.pressEnter();
+    await flushMicrotasks();
+    advancedController.insertText("1111");
+
+    expect(controller.getContent()).toBe(expected);
+
+    const firstBodyLine = getLineElementByText(host, "111111");
+    const secondBodyLine = getLineElementByText(host, "1111");
+
+    expect(firstBodyLine?.classList.contains("cm-active-list")).toBe(false);
+    expect(firstBodyLine?.classList.contains("cm-active-list-continuation")).toBe(false);
+    expect(secondBodyLine?.classList.contains("cm-active-list")).toBe(false);
+    expect(secondBodyLine?.classList.contains("cm-active-list-continuation")).toBe(false);
+
+    controller.destroy();
+  });
+
+  it("returns to the previous list item with one Backspace after exiting a list", async () => {
+    const host = document.createElement("div");
+    const source = ["- 11111", "- 22222"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressBackspace: () => void;
+      pressEnter: () => void;
+    };
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(source.length);
+    advancedController.pressEnter();
+    await flushMicrotasks();
+    advancedController.pressEnter();
+    await flushMicrotasks();
+
+    expect(controller.getContent()).toBe(`${source}\n\n`);
+    expect(view?.state.selection.main.anchor).toBe(`${source}\n\n`.length);
+
+    advancedController.pressBackspace();
+
+    expect(controller.getContent()).toBe(source);
+    expect(view?.state.selection.main.anchor).toBe(source.length);
+    expect(view?.state.selection.main.head).toBe(source.length);
 
     controller.destroy();
   });
@@ -3349,10 +3565,10 @@ describe("createCodeEditorController", () => {
 
     advancedController.pressEnter();
 
-    expect(controller.getContent()).toBe("- parent\n");
+    expect(controller.getContent()).toBe("- parent\n\n");
     expect(controller.getSelection()).toEqual({
-      anchor: "- parent\n".length,
-      head: "- parent\n".length
+      anchor: "- parent\n\n".length,
+      head: "- parent\n\n".length
     });
 
     controller.destroy();
@@ -3751,7 +3967,7 @@ describe("createCodeEditorController", () => {
     });
   });
 
-  it("removes the trailing newline when exiting an empty task item at EOF", () => {
+  it("keeps a structural separator when exiting an empty task item at EOF", () => {
     const host = document.createElement("div");
     const source = "- [ ] todo\n- [ ] \n";
 
@@ -3768,7 +3984,7 @@ describe("createCodeEditorController", () => {
     advancedController.setSelection(17);
     advancedController.pressEnter();
 
-    expect(controller.getContent()).toBe("- [ ] todo\n");
+    expect(controller.getContent()).toBe("- [ ] todo\n\n");
 
     controller.destroy();
   });

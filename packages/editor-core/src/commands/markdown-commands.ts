@@ -1,6 +1,7 @@
 import { formatTableMarkdown, parseMarkdownDocument, splitTableLine } from "@fishmark/markdown-engine";
 
 import type { ActiveBlockState } from "../active-block";
+import { parseListLine } from "./line-parsers";
 
 export type MarkdownCommandLine = {
   from: number;
@@ -74,6 +75,7 @@ export function runMarkdownBackspaceCommand(
     target.runCodeFenceBackspace(activeState) ||
     target.runBlockquoteBackspace(activeState) ||
     target.runListBackspace(activeState) ||
+    runBackspaceFromTrailingListExitBlankLineCommand(target) ||
     runBackspaceAcrossStructuralBlankBoundaryCommand(target, activeState) ||
     target.deleteCharBackward()
   );
@@ -313,6 +315,49 @@ function runBackspaceAcrossStructuralBlankBoundaryCommand(
     selection: {
       anchor: deleteFrom,
       head: deleteFrom
+    }
+  });
+
+  return true;
+}
+
+function runBackspaceFromTrailingListExitBlankLineCommand(target: MarkdownCommandTarget): boolean {
+  const selection = target.getSelection();
+
+  if (!selection.empty) {
+    return false;
+  }
+
+  const currentLine = target.lineAt(selection.head);
+
+  if (
+    currentLine.number <= 1 ||
+    currentLine.number !== target.getLineCount() ||
+    selection.head !== currentLine.from ||
+    currentLine.text.length !== 0
+  ) {
+    return false;
+  }
+
+  let previousLineNumber = currentLine.number - 1;
+  let previousLine = target.line(previousLineNumber);
+
+  while (previousLineNumber > 1 && previousLine.text.trim().length === 0) {
+    previousLineNumber -= 1;
+    previousLine = target.line(previousLineNumber);
+  }
+
+  if (previousLine.text.trim().length === 0 || !parseListLine(previousLine.text)) {
+    return false;
+  }
+
+  target.dispatchChange({
+    from: previousLine.to,
+    to: currentLine.to,
+    insert: "",
+    selection: {
+      anchor: previousLine.to,
+      head: previousLine.to
     }
   });
 

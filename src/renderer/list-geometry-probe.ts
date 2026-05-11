@@ -3,6 +3,8 @@ import "./styles/primitives.css";
 import "./styles/editor-source.css";
 import "./styles/markdown-render.css";
 
+import { EditorView } from "@codemirror/view";
+
 import { createCodeEditorController } from "./code-editor";
 
 type SerializableRect = {
@@ -32,6 +34,18 @@ type ProbeResult = {
     paragraph: SerializableRect;
   };
   deltas: Record<string, number>;
+  doubleEnterListExit: {
+    content: string;
+    firstBodyLeftMinusParagraphLeft: number;
+    firstBodyLine: SerializableRect;
+    firstBodyLineClasses: string;
+    firstBodyText: SerializableRect;
+    secondBodyLeftMinusParagraphLeft: number;
+    secondBodyLine: SerializableRect;
+    secondBodyLineClasses: string;
+    secondBodyText: SerializableRect;
+    selection: { anchor: number; head: number };
+  };
   failures: string[];
   inactive: RowGeometry;
   inactiveTopLevel: {
@@ -44,6 +58,16 @@ type ProbeResult = {
     unordered: RowGeometry;
   };
   pass: boolean;
+  trailingBlankAfterList: {
+    caret: SerializableRect;
+    caretLeftMinusParagraphLeft: number;
+    line: SerializableRect;
+    lineClasses: string;
+    linePaddingLeft: string;
+    lineText: string;
+    paragraphAnchor: SerializableRect;
+    selection: { anchor: number; head: number };
+  };
 };
 
 const CONTENT = [
@@ -62,16 +86,40 @@ const CONTENT = [
   "after"
 ].join("\n");
 
+const TRAILING_BLANK_AFTER_LIST_CONTENT = [
+  "Plain anchor",
+  "",
+  "- 1",
+  "- 2",
+  "1. 111",
+  "2. 222",
+  "  1. 333",
+  "  2. 222",
+  "    1. 111",
+  "    2. 22",
+  "3. 222",
+  "   "
+].join("\n");
+
+const DOUBLE_ENTER_LIST_EXIT_CONTENT = ["- 11111", "- 22222"].join("\n");
+
 const TOLERANCE_PX = 1;
 
-function toSerializableRect(rect: DOMRect): SerializableRect {
+function toSerializableRect(rect: {
+  bottom: number;
+  height?: number;
+  left: number;
+  right: number;
+  top: number;
+  width?: number;
+}): SerializableRect {
   return {
     bottom: rect.bottom,
-    height: rect.height,
+    height: rect.height ?? rect.bottom - rect.top,
     left: rect.left,
     right: rect.right,
     top: rect.top,
-    width: rect.width
+    width: rect.width ?? rect.right - rect.left
   };
 }
 
@@ -153,6 +201,22 @@ function measureRowWithMarkerElement(root: ParentNode, targetText: string): RowG
     marker: toSerializableRect(marker.getBoundingClientRect()),
     content: firstRangeRect(line, targetText)
   };
+}
+
+function findEditorView(root: ParentNode): EditorView {
+  const editorRoot = root.querySelector<HTMLElement>(".cm-editor");
+
+  if (!editorRoot) {
+    throw new Error("Missing CodeMirror editor root.");
+  }
+
+  const view = EditorView.findFromDOM(editorRoot);
+
+  if (!view) {
+    throw new Error("Could not resolve CodeMirror EditorView.");
+  }
+
+  return view;
 }
 
 function assertNear(failures: string[], name: string, actual: number, expected = 0): void {
@@ -311,16 +375,128 @@ export async function runListGeometryProbe(): Promise<ProbeResult> {
     deltas.inactiveOrderedMinusUnorderedMarkerLeft
   );
 
+  root.innerHTML = "";
+  const trailingBlankController = createCodeEditorController({
+    parent: root,
+    initialContent: TRAILING_BLANK_AFTER_LIST_CONTENT,
+    onChange: () => undefined
+  });
+  const trailingBlankEditorRoot = root.querySelector<HTMLElement>(".cm-editor");
+  trailingBlankEditorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+  trailingBlankController.setSelection(TRAILING_BLANK_AFTER_LIST_CONTENT.length);
+  await nextFrame();
+  const trailingBlankView = findEditorView(root);
+  const trailingBlankSelection = trailingBlankController.getSelection();
+  const trailingBlankLine = Array.from(root.querySelectorAll<HTMLElement>(".cm-line")).at(-1);
+  const trailingBlankCaret = trailingBlankView.coordsAtPos(trailingBlankSelection.anchor);
+
+  if (!trailingBlankLine || !trailingBlankCaret) {
+    throw new Error("Could not measure trailing blank line after list.");
+  }
+
+  const trailingBlankAfterList = {
+    caret: toSerializableRect(trailingBlankCaret),
+    caretLeftMinusParagraphLeft: trailingBlankCaret.left - blockAnchors.paragraph.left,
+    line: toSerializableRect(trailingBlankLine.getBoundingClientRect()),
+    lineClasses: trailingBlankLine.className,
+    linePaddingLeft: getComputedStyle(trailingBlankLine).paddingLeft,
+    lineText: trailingBlankLine.textContent ?? "",
+    paragraphAnchor: blockAnchors.paragraph,
+    selection: trailingBlankSelection
+  };
+  trailingBlankController.destroy();
+
+  assertNear(
+    failures,
+    "trailing blank after list caret left minus paragraph left",
+    trailingBlankAfterList.caretLeftMinusParagraphLeft
+  );
+
+  if (/\bcm-(?:active|inactive)-list\b/u.test(trailingBlankAfterList.lineClasses)) {
+    failures.push(
+      `trailing blank after list must not inherit list classes, got ${JSON.stringify(
+        trailingBlankAfterList.lineClasses
+      )}`
+    );
+  }
+
+  root.innerHTML = "";
+  const doubleEnterController = createCodeEditorController({
+    parent: root,
+    initialContent: DOUBLE_ENTER_LIST_EXIT_CONTENT,
+    onChange: () => undefined
+  });
+  const doubleEnterEditorRoot = root.querySelector<HTMLElement>(".cm-editor");
+  doubleEnterEditorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+  doubleEnterController.setSelection(DOUBLE_ENTER_LIST_EXIT_CONTENT.length);
+  doubleEnterController.pressEnter();
+  await nextFrame();
+  doubleEnterController.pressEnter();
+  await nextFrame();
+  doubleEnterController.insertText("BodyOne");
+  await nextFrame();
+  doubleEnterController.pressEnter();
+  await nextFrame();
+  doubleEnterController.insertText("BodyTwo");
+  await nextFrame();
+
+  const firstBodyLine = findLineByText(root, "BodyOne");
+  const secondBodyLine = findLineByText(root, "BodyTwo");
+  const firstBodyText = firstRangeRect(firstBodyLine, "BodyOne");
+  const secondBodyText = firstRangeRect(secondBodyLine, "BodyTwo");
+  const doubleEnterListExit = {
+    content: doubleEnterController.getContent(),
+    firstBodyLeftMinusParagraphLeft: firstBodyText.left - blockAnchors.paragraph.left,
+    firstBodyLine: toSerializableRect(firstBodyLine.getBoundingClientRect()),
+    firstBodyLineClasses: firstBodyLine.className,
+    firstBodyText,
+    secondBodyLeftMinusParagraphLeft: secondBodyText.left - blockAnchors.paragraph.left,
+    secondBodyLine: toSerializableRect(secondBodyLine.getBoundingClientRect()),
+    secondBodyLineClasses: secondBodyLine.className,
+    secondBodyText,
+    selection: doubleEnterController.getSelection()
+  };
+  doubleEnterController.destroy();
+
+  assertNear(
+    failures,
+    "double Enter list exit first body left minus paragraph left",
+    doubleEnterListExit.firstBodyLeftMinusParagraphLeft
+  );
+  assertNear(
+    failures,
+    "double Enter list exit second body left minus paragraph left",
+    doubleEnterListExit.secondBodyLeftMinusParagraphLeft
+  );
+
+  if (/\bcm-(?:active|inactive)-list(?:-continuation)?\b/u.test(doubleEnterListExit.firstBodyLineClasses)) {
+    failures.push(
+      `double Enter list exit first body line must not inherit list classes, got ${JSON.stringify(
+        doubleEnterListExit.firstBodyLineClasses
+      )}`
+    );
+  }
+
+  if (/\bcm-(?:active|inactive)-list(?:-continuation)?\b/u.test(doubleEnterListExit.secondBodyLineClasses)) {
+    failures.push(
+      `double Enter list exit second body line must not inherit list classes, got ${JSON.stringify(
+        doubleEnterListExit.secondBodyLineClasses
+      )}`
+    );
+  }
+
   return {
     active,
     activeTask,
     blockAnchors,
     deltas,
+    doubleEnterListExit,
     failures,
     inactive,
     inactiveTopLevel,
     inactiveSiblings,
-    pass: failures.length === 0
+    pass: failures.length === 0,
+    trailingBlankAfterList
   };
 }
 

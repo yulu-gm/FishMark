@@ -63,16 +63,18 @@ export function runListEnter(view: EditorView, activeState: ActiveBlockState): b
       line.to < view.state.doc.length && view.state.doc.sliceString(line.to, line.to + 1) === "\n"
         ? line.to + 1
         : line.to;
+    const exitsTrailingListItem = line.from > 0 && deleteTo >= view.state.doc.length;
+    const insert = exitsTrailingListItem ? "\n" : "";
 
     view.dispatch({
       changes: {
         from: line.from,
         to: deleteTo,
-        insert: ""
+        insert
       },
       selection: {
-        anchor: line.from,
-        head: line.from
+        anchor: line.from + insert.length,
+        head: line.from + insert.length
       }
     });
     return true;

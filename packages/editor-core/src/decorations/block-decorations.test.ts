@@ -937,12 +937,6 @@ describe("createBlockDecorations", () => {
         text: ""
       },
       {
-        from: 0,
-        to: 2,
-        className: "cm-inactive-blockquote-marker",
-        text: "> "
-      },
-      {
         from: 13,
         to: 13,
         className: "cm-inactive-blockquote cm-inactive-blockquote-depth-1 cm-inactive-blockquote-end",
@@ -1025,6 +1019,51 @@ describe("createBlockDecorations", () => {
 
     expect(result.signature).not.toContain(":content-edit");
     expect(collectDecorations(source, result.decorationSet)).toEqual([]);
+  });
+
+  it("keeps a marker and trailing space as raw source while the blockquote is focused", () => {
+    const source = "> ";
+    const blockMap = parseMarkdownDocument(source);
+    const activeState = createActiveBlockStateFromBlockMap(blockMap, {
+      anchor: 2,
+      head: 2
+    });
+
+    const result = createBlockDecorations({
+      activeBlockState: activeState,
+      hasEditorFocus: true,
+      source
+    });
+
+    expect(result.signature).toContain(":content-edit");
+    expect(collectDecorations(source, result.decorationSet)).toEqual([
+      {
+        from: 0,
+        to: 0,
+        className: "cm-inactive-blockquote cm-inactive-blockquote-depth-1 cm-inactive-blockquote-start cm-inactive-blockquote-end",
+        text: ""
+      }
+    ]);
+  });
+
+  it("keeps only inactive blockquote line markers hidden inside a focused quoted block", () => {
+    const source = ["> Quote", "> "].join("\n");
+    const secondLineStart = source.indexOf("> ", source.indexOf("\n"));
+    const blockMap = parseMarkdownDocument(source);
+    const activeState = createActiveBlockStateFromBlockMap(blockMap, {
+      anchor: source.length,
+      head: source.length
+    });
+
+    const result = createBlockDecorations({
+      activeBlockState: activeState,
+      hasEditorFocus: true,
+      source
+    });
+    const ranges = collectDecorations(source, result.decorationSet);
+
+    expectExactRangeClasses(ranges, 0, 2, ["cm-inactive-blockquote-marker"]);
+    expectExactRangeClasses(ranges, secondLineStart, secondLineStart + 2, []);
   });
 
   it("omits the active block only while the editor has focus", () => {

@@ -76,10 +76,51 @@ export function runBlockquoteBackspace(view: EditorView, activeState: ActiveBloc
     return false;
   }
 
-  const contentStart = getActiveBlockquoteContentStart(activeBlockquote, lineStart);
+  const contentStart = line.from + parsed.contentStartOffset;
 
   if (selection.head !== lineStart && selection.head !== contentStart) {
     return false;
+  }
+
+  if (activeBlockquote.startOffset === lineStart) {
+    const previousLineEnd = getPreviousLineEnd(lineStart);
+    if (previousLineEnd !== null && view.state.doc.lineAt(previousLineEnd).text.trim().length === 0) {
+      view.dispatch({
+        changes: {
+          from: previousLineEnd,
+          to: lineStart,
+          insert: ""
+        },
+        selection: {
+          anchor: previousLineEnd,
+          head: previousLineEnd
+        }
+      });
+
+      return true;
+    }
+  }
+
+  if (selection.head === contentStart && activeBlockquote.startOffset === lineStart) {
+    const deleteTo = line.from + resolveBlockquoteLayerDeleteEnd(parsed);
+
+    if (deleteTo <= line.from) {
+      return false;
+    }
+
+    view.dispatch({
+      changes: {
+        from: line.from,
+        to: deleteTo,
+        insert: ""
+      },
+      selection: {
+        anchor: line.from,
+        head: line.from
+      }
+    });
+
+    return true;
   }
 
   if (activeBlockquote.startOffset === lineStart) {
@@ -118,15 +159,6 @@ export function runBlockquoteBackspace(view: EditorView, activeState: ActiveBloc
   return true;
 }
 
-function getActiveBlockquoteContentStart(
-  activeBlockquote: BlockquoteBlock,
-  lineStart: number
-): number {
-  const line = activeBlockquote.lines?.find((entry) => entry.startOffset === lineStart);
-
-  return line?.contentStartOffset ?? lineStart;
-}
-
 function getActiveBlockquote(
   activeState: ActiveBlockState,
   lineStart: number
@@ -150,6 +182,12 @@ function getPreviousLineEnd(lineStart: number): number | null {
   }
 
   return lineStart - 1;
+}
+
+function resolveBlockquoteLayerDeleteEnd(parsed: NonNullable<ReturnType<typeof parseBlockquoteLine>>): number {
+  const secondMarker = parsed.markers[1];
+
+  return secondMarker?.markerStart ?? parsed.contentStartOffset;
 }
 
 function buildBlockquoteContinuationPrefix(sourcePrefix: string): string {

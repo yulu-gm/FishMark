@@ -221,6 +221,50 @@ describe("parseBlockMap", () => {
     ]);
   });
 
+  it("stops a headed pipe table before a following plain text line without a pipe", () => {
+    const source = ["| name | qty |", "| --- | ---: |", "| pen | 2 |", "After table"].join("\n");
+
+    const result = parseMarkdownDocument(source);
+
+    expect(result.blocks).toMatchObject([
+      {
+        type: "table",
+        startLine: 1,
+        endLine: 3,
+        rows: [[{ text: "pen" }, { text: "2" }]]
+      },
+      {
+        type: "paragraph",
+        startLine: 4,
+        endLine: 4
+      }
+    ]);
+  });
+
+  it("keeps a headed pipe table before a following dash list marker", () => {
+    const source = ["| 1 | 2 |", "| :--- | :--- |", "| 1 | 2 |", "| 2 | 1", "-"].join("\n");
+
+    const result = parseMarkdownDocument(source);
+
+    expect(result.blocks).toMatchObject([
+      {
+        type: "table",
+        startLine: 1,
+        endLine: 4,
+        header: [{ text: "1" }, { text: "2" }],
+        rows: [
+          [{ text: "1" }, { text: "2" }],
+          [{ text: "2" }, { text: "1" }]
+        ]
+      },
+      {
+        type: "list",
+        startLine: 5,
+        endLine: 5
+      }
+    ]);
+  });
+
   it("treats a wider delimiter row as table structure instead of loose cell content", () => {
     const source = [
       "| oldRule | newRule |",
