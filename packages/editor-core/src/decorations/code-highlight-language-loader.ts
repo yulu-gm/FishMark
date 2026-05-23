@@ -1,13 +1,17 @@
 import type { Parser } from "@lezer/common";
 
 export type CodeHighlightLanguageKey =
+  | "cpp"
   | "css"
+  | "go"
   | "html"
+  | "java"
   | "javascript"
   | "json"
   | "jsx"
   | "markdown"
   | "python"
+  | "rust"
   | "tsx"
   | "typescript";
 
@@ -15,6 +19,10 @@ type CodeHighlightParserLoader = () => Promise<Parser>;
 type CodeHighlightParserLoadedListener = () => void;
 
 const LANGUAGE_ALIASES: Record<string, CodeHighlightLanguageKey> = {
+  "c++": "cpp",
+  cc: "cpp",
+  cpp: "cpp",
+  cxx: "cpp",
   js: "javascript",
   mjs: "javascript",
   cjs: "javascript",
@@ -25,6 +33,11 @@ const LANGUAGE_ALIASES: Record<string, CodeHighlightLanguageKey> = {
   tsx: "tsx",
   py: "python",
   python: "python",
+  rust: "rust",
+  rs: "rust",
+  go: "go",
+  golang: "go",
+  java: "java",
   json: "json",
   json5: "json",
   css: "css",
@@ -39,6 +52,10 @@ const LANGUAGE_ALIASES: Record<string, CodeHighlightLanguageKey> = {
 };
 
 const LANGUAGE_LOADERS: Record<CodeHighlightLanguageKey, CodeHighlightParserLoader> = {
+  async cpp() {
+    const module = await import("@codemirror/lang-cpp");
+    return module.cppLanguage.parser;
+  },
   async javascript() {
     const module = await import("@codemirror/lang-javascript");
     return module.javascriptLanguage.parser;
@@ -58,6 +75,18 @@ const LANGUAGE_LOADERS: Record<CodeHighlightLanguageKey, CodeHighlightParserLoad
   async python() {
     const module = await import("@codemirror/lang-python");
     return module.pythonLanguage.parser;
+  },
+  async rust() {
+    const module = await import("@codemirror/lang-rust");
+    return module.rustLanguage.parser;
+  },
+  async go() {
+    const module = await import("@codemirror/lang-go");
+    return module.goLanguage.parser;
+  },
+  async java() {
+    const module = await import("@codemirror/lang-java");
+    return module.javaLanguage.parser;
   },
   async json() {
     const module = await import("@codemirror/lang-json");

@@ -46,6 +46,31 @@ describe("appendCodeHighlightRanges", () => {
     });
   });
 
+  it.each([
+    ["c++", "int main() { return 0; }"],
+    ["cpp", "int main() { return 0; }"],
+    ["rust", "fn main() { println!(\"hi\"); }"],
+    ["go", "package main\nfunc main() {}"],
+    ["java", "class Main { public static void main(String[] args) {} }"]
+  ])("loads %s fence parser on demand and highlights after the chunk is ready", async (info, source) => {
+    expect(collectHighlightRanges(source, info)).toEqual([]);
+    expect(getCodeHighlightLanguageLoaderStats()).toMatchObject({
+      requestedLoads: 1,
+      loadedParsers: 0
+    });
+
+    await waitForPendingCodeHighlightLanguageLoads();
+
+    expect(collectHighlightRanges(source, info).length).toBeGreaterThan(0);
+    expect(getCodeHighlightLanguageLoaderStats()).toMatchObject({
+      requestedLoads: 1,
+      loadedParsers: 1
+    });
+
+    clearCodeHighlightCache();
+    clearCodeHighlightLanguageLoaderState();
+  });
+
   it("leaves low-frequency language fences unhighlighted instead of eager-loading parsers", () => {
     const ranges = collectHighlightRanges("SELECT * FROM notes;", "sql");
 
