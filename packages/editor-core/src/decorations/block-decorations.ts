@@ -1135,14 +1135,14 @@ function appendInactiveBlankLineDecorationsInRange(
   let hasConsumedStructuralBlankLine = false;
 
   for (const line of createLineInfosInRange(source, contentStartOffset, endOffset)) {
+    if (line.startOffset === activeSelectionLineStart) {
+      continue;
+    }
+
     const lineEndOffset = trimTrailingCarriageReturn(source, line.startOffset, line.endOffset);
     const lineText = source.slice(line.startOffset, lineEndOffset);
 
     if (lineText.trim().length > 0) {
-      continue;
-    }
-
-    if (lineText.length > 0 && line.startOffset === activeSelectionLineStart) {
       continue;
     }
 

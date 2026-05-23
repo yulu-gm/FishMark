@@ -899,11 +899,10 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("keeps structural blank separators collapsed and unreachable while editing", async () => {
+  it("keeps an active empty paragraph block visible while editing", async () => {
     const host = document.createElement("div");
-    const source = ["Paragraph one", "", "Paragraph two"].join("\n");
-    const blankLineStart = source.indexOf("\n\n") + 1;
-    const previousBlockEnd = "Paragraph one".length;
+    const source = ["Paragraph one", "Paragraph two"].join("\n");
+    const activeBlankLineStart = "Paragraph one\n\n".length;
 
     const controller = createCodeEditorController({
       parent: host,
@@ -915,27 +914,20 @@ describe("createCodeEditorController", () => {
 
     expect(view).not.toBeNull();
 
-    view?.dispatch({ selection: { anchor: source.indexOf("Paragraph two") } });
-
-    const blankLine = Array.from(host.querySelectorAll<HTMLElement>(".cm-line")).find(
-      (line) => line.textContent === ""
-    );
-
-    expect(blankLine).not.toBeNull();
-    expect(blankLine?.classList.contains("cm-inactive-blank-line")).toBe(true);
-
     host.querySelector(".cm-editor")?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
     await flushMicrotasks();
-    view?.dispatch({ selection: { anchor: blankLineStart } });
+    view?.dispatch({ selection: { anchor: "Paragraph one".length } });
+    dispatchEditorKeydown(view, "Enter");
     await flushMicrotasks();
 
-    const activeBlankLine = Array.from(host.querySelectorAll<HTMLElement>(".cm-line")).find(
+    const blankLines = Array.from(host.querySelectorAll<HTMLElement>(".cm-line")).filter(
       (line) => line.textContent === ""
     );
+    const activeBlankLine = blankLines.find((line) => !line.classList.contains("cm-inactive-blank-line"));
 
     expect(activeBlankLine).not.toBeNull();
-    expect(activeBlankLine?.classList.contains("cm-inactive-blank-line")).toBe(true);
-    expect(view?.state.selection.main.anchor).toBe(previousBlockEnd);
+    expect(activeBlankLine?.classList.contains("cm-inactive-blank-line")).toBe(false);
+    expect(view?.state.selection.main.anchor).toBe(activeBlankLineStart);
 
     controller.destroy();
   });
@@ -2644,7 +2636,7 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("uses a single editable line break for plain paragraph Enter and removes it with one Backspace", () => {
+  it("creates an independent empty paragraph block on Enter at paragraph end", () => {
     const host = document.createElement("div");
     const source = "Alpha";
 
@@ -2656,7 +2648,6 @@ describe("createCodeEditorController", () => {
     const advancedController = controller as typeof controller & {
       setSelection: (anchor: number, head?: number) => void;
       pressEnter: () => void;
-      pressBackspace: () => void;
     };
     const view = getEditorView(host);
 
@@ -2665,23 +2656,17 @@ describe("createCodeEditorController", () => {
     advancedController.setSelection(source.length);
     advancedController.pressEnter();
 
-    expect(controller.getContent()).toBe("Alpha\n");
-    expect(view?.state.selection.main.anchor).toBe("Alpha\n".length);
-    expect(view?.state.selection.main.head).toBe("Alpha\n".length);
-
-    advancedController.pressBackspace();
-
-    expect(controller.getContent()).toBe("Alpha");
-    expect(view?.state.selection.main.anchor).toBe("Alpha".length);
-    expect(view?.state.selection.main.head).toBe("Alpha".length);
+    expect(controller.getContent()).toBe("Alpha\n\n");
+    expect(view?.state.selection.main.anchor).toBe("Alpha\n\n".length);
+    expect(view?.state.selection.main.head).toBe("Alpha\n\n".length);
 
     controller.destroy();
   });
 
-  it("does not create two blank source rows when Enter is pressed before an existing next line", () => {
+  it("creates a visible active empty paragraph block before an existing next line", () => {
     const host = document.createElement("div");
     const source = ["AAAAA", "BBBBB"].join("\n");
-    const nextBlockStartAfterInsert = "AAAAA\n\n".length;
+    const activeEmptyBlockStartAfterInsert = "AAAAA\n\n".length;
 
     const controller = createCodeEditorController({
       parent: host,
@@ -2699,14 +2684,14 @@ describe("createCodeEditorController", () => {
     advancedController.setSelection("AAAAA".length);
     advancedController.pressEnter();
 
-    expect(controller.getContent()).toBe(["AAAAA", "", "BBBBB"].join("\n"));
-    expect(view?.state.selection.main.anchor).toBe(nextBlockStartAfterInsert);
-    expect(view?.state.selection.main.head).toBe(nextBlockStartAfterInsert);
+    expect(controller.getContent()).toBe(["AAAAA", "", "", "", "BBBBB"].join("\n"));
+    expect(view?.state.selection.main.anchor).toBe(activeEmptyBlockStartAfterInsert);
+    expect(view?.state.selection.main.head).toBe(activeEmptyBlockStartAfterInsert);
 
     controller.destroy();
   });
 
-  it("does not create another structural separator on Enter at an existing block start", () => {
+  it("creates an active empty paragraph block on Enter at an existing block start", () => {
     const host = document.createElement("div");
     const source = ["Alpha", "", "Beta"].join("\n");
 
@@ -2726,9 +2711,36 @@ describe("createCodeEditorController", () => {
     advancedController.setSelection(source.indexOf("Beta"));
     advancedController.pressEnter();
 
-    expect(controller.getContent()).toBe(["Alpha", "", "", "Beta"].join("\n"));
+    expect(controller.getContent()).toBe(["Alpha", "", "", "", "Beta"].join("\n"));
     expect(view?.state.selection.main.anchor).toBe("Alpha\n\n\n".length);
     expect(view?.state.selection.main.head).toBe("Alpha\n\n\n".length);
+
+    controller.destroy();
+  });
+
+  it("creates an empty following block on Enter after an active thematic break", () => {
+    const host = document.createElement("div");
+    const source = "+++";
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(source.length);
+    advancedController.pressEnter();
+
+    expect(controller.getContent()).toBe("+++\n\n");
+    expect(view?.state.selection.main.anchor).toBe("+++\n\n".length);
+    expect(view?.state.selection.main.head).toBe("+++\n\n".length);
 
     controller.destroy();
   });
@@ -3539,7 +3551,7 @@ describe("createCodeEditorController", () => {
     const host = document.createElement("div");
     const source = ["- 11111", "- 22222"].join("\n");
     const expectedAfterExit = ["- 11111", "- 22222", "", ""].join("\n");
-    const expected = ["- 11111", "- 22222", "", "111111", "1111"].join("\n");
+    const expected = ["- 11111", "- 22222", "", "111111", "", "1111"].join("\n");
 
     const controller = createCodeEditorController({
       parent: host,

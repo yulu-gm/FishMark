@@ -2,7 +2,9 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import type { ActiveBlockState } from "../active-block";
+import { parseMarkdownDocument } from "@fishmark/markdown-engine";
+
+import { createActiveBlockStateFromBlockMap, type ActiveBlockState } from "../active-block";
 import {
   runMarkdownArrowDownCommand,
   runMarkdownArrowUpCommand,
@@ -20,6 +22,7 @@ type TestCommandTarget = MarkdownCommandTarget & {
 function createCommandTarget(input: {
   doc: string;
   anchor: number;
+  head?: number;
 }): TestCommandTarget {
   const lines = input.doc.split("\n");
   const lineStarts = lines.reduce<number[]>((starts, _line, index) => {
@@ -42,8 +45,8 @@ function createCommandTarget(input: {
     getLineCount: () => lines.length,
     getSelection: () => ({
       anchor: input.anchor,
-      head: input.anchor,
-      empty: true
+      head: input.head ?? input.anchor,
+      empty: input.head === undefined || input.head === input.anchor
     }),
     insertNewlineAndIndent: vi.fn(() => false),
     line: (lineNumber) => {
@@ -97,6 +100,13 @@ const paragraphActiveState = {
   }
 } as ActiveBlockState;
 
+function createActiveState(source: string, anchor: number): ActiveBlockState {
+  return createActiveBlockStateFromBlockMap(parseMarkdownDocument(source), {
+    anchor,
+    head: anchor
+  });
+}
+
 describe("semantic markdown commands", () => {
   it("converts a draft table without requiring a CodeMirror EditorView", () => {
     const target = createCommandTarget({ doc: "| name | qty |", anchor: "| name | qty |".length });
@@ -123,43 +133,42 @@ describe("semantic markdown commands", () => {
     ]);
   });
 
-  it("inserts a single editable line break when Enter is pressed in plain paragraph text", () => {
-    const target = createCommandTarget({ doc: "AlphaBeta", anchor: "Alpha".length });
+  it("creates an independent empty paragraph block at paragraph end", () => {
+    const target = createCommandTarget({ doc: "Alpha", anchor: "Alpha".length });
 
     expect(runMarkdownEnterCommand(target, paragraphActiveState)).toBe(true);
     expect(target.getDispatchedChanges()).toEqual([
       {
         from: "Alpha".length,
         to: "Alpha".length,
-        insert: "\n",
+        insert: "\n\n",
         selection: {
-          anchor: "Alpha\n".length,
-          head: "Alpha\n".length
+          anchor: "Alpha\n\n".length,
+          head: "Alpha\n\n".length
         }
       }
     ]);
   });
 
-  it("does not create two blank rows when Enter is pressed before an existing next line", () => {
+  it("creates a visible active empty paragraph block before an existing next line", () => {
     const source = ["Alpha", "Beta"].join("\n");
     const target = createCommandTarget({ doc: source, anchor: "Alpha".length });
-    const nextBlockStartAfterInsert = source.indexOf("Beta") + 1;
 
     expect(runMarkdownEnterCommand(target, paragraphActiveState)).toBe(true);
     expect(target.getDispatchedChanges()).toEqual([
       {
         from: "Alpha".length,
         to: "Alpha".length,
-        insert: "\n",
+        insert: "\n\n\n",
         selection: {
-          anchor: nextBlockStartAfterInsert,
-          head: nextBlockStartAfterInsert
+          anchor: "Alpha\n\n".length,
+          head: "Alpha\n\n".length
         }
       }
     ]);
   });
 
-  it("does not create another structural separator when Enter is pressed at an existing block start", () => {
+  it("creates an active empty paragraph block at an existing paragraph block start", () => {
     const source = ["Alpha", "", "Beta"].join("\n");
     const blockStart = source.indexOf("Beta");
     const target = createCommandTarget({ doc: source, anchor: blockStart });
@@ -169,13 +178,79 @@ describe("semantic markdown commands", () => {
       {
         from: blockStart,
         to: blockStart,
-        insert: "\n",
+        insert: "\n\n",
         selection: {
           anchor: blockStart + 1,
           head: blockStart + 1
         }
       }
     ]);
+  });
+
+  it("replaces a non-empty paragraph selection with a new paragraph block", () => {
+    const target = createCommandTarget({
+      doc: "AlphaBeta",
+      anchor: "Alpha".length,
+      head: "AlphaBeta".length
+    });
+
+    expect(runMarkdownEnterCommand(target, paragraphActiveState)).toBe(true);
+    expect(target.getDispatchedChanges()).toEqual([
+      {
+        from: "Alpha".length,
+        to: "AlphaBeta".length,
+        insert: "\n\n",
+        selection: {
+          anchor: "Alpha\n\n".length,
+          head: "Alpha\n\n".length
+        }
+      }
+    ]);
+  });
+
+  it("creates an empty following block after an active thematic break", () => {
+    const source = "+++";
+    const target = createCommandTarget({ doc: source, anchor: source.length });
+
+    expect(runMarkdownEnterCommand(target, createActiveState(source, source.length))).toBe(true);
+    expect(target.getDispatchedChanges()).toEqual([
+      {
+        from: "+++".length,
+        to: "+++".length,
+        insert: "\n\n",
+        selection: {
+          anchor: "+++\n\n".length,
+          head: "+++\n\n".length
+        }
+      }
+    ]);
+  });
+
+  it("preserves the thematic break marker when Enter is pressed inside it", () => {
+    const source = "+++";
+    const target = createCommandTarget({ doc: source, anchor: 1 });
+
+    expect(runMarkdownEnterCommand(target, createActiveState(source, 1))).toBe(true);
+    expect(target.getDispatchedChanges()).toEqual([
+      {
+        from: source.length,
+        to: source.length,
+        insert: "\n\n",
+        selection: {
+          anchor: "+++\n\n".length,
+          head: "+++\n\n".length
+        }
+      }
+    ]);
+  });
+
+  it("falls back to native Enter handling for a thematic break selection", () => {
+    const source = "+++";
+    const target = createCommandTarget({ doc: source, anchor: 0, head: source.length });
+
+    expect(runMarkdownEnterCommand(target, createActiveState(source, source.length))).toBe(false);
+    expect(target.getDispatchedChanges()).toEqual([]);
+    expect(target.insertNewlineAndIndent).toHaveBeenCalledTimes(1);
   });
 
   it("requests cursor scrolling when a custom ArrowDown navigation is handled", () => {

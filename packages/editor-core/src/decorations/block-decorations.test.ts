@@ -305,7 +305,7 @@ describe("createBlockDecorations", () => {
     expectExactRangeClasses(ranges, extraBlankLineStart, extraBlankLineStart, []);
   });
 
-  it("keeps structural blank lines collapsed even when selection points at them", () => {
+  it("keeps the active structural blank line visible while editing", () => {
     const source = ["Paragraph one", "", "Paragraph two"].join("\n");
     const blankLineStart = source.indexOf("\n\n") + 1;
     const ranges = createDecorationsForSelection(
@@ -314,9 +314,7 @@ describe("createBlockDecorations", () => {
       true
     );
 
-    expectExactRangeClasses(ranges, blankLineStart, blankLineStart, [
-      "cm-inactive-blank-line"
-    ]);
+    expectExactRangeClasses(ranges, blankLineStart, blankLineStart, []);
   });
 
   it("keeps the focused indentation-only line visible after an empty nested list marker is removed", () => {

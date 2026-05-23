@@ -63,6 +63,7 @@ export function runMarkdownEnterCommand(
     target.runListEnter(activeState) ||
     target.runBlockquoteEnter() ||
     runParagraphBlockEnterCommand(target, activeState) ||
+    runThematicBreakEnterCommand(target, activeState) ||
     target.insertNewlineAndIndent()
   );
 }
@@ -242,8 +243,84 @@ function runParagraphBlockEnterCommand(
   const selection = target.getSelection();
   const from = Math.min(selection.anchor, selection.head);
   const to = Math.max(selection.anchor, selection.head);
-  const insert = "\n";
-  const selectionAnchor = resolveParagraphEnterSelectionAnchor(target, selection, from, insert.length);
+  const plan = resolveParagraphBlockEnterInsert(target, selection, from);
+
+  target.dispatchChange({
+    from,
+    to,
+    insert: plan.insert,
+    selection: {
+      anchor: plan.selectionAnchor,
+      head: plan.selectionAnchor
+    }
+  });
+
+  return true;
+}
+
+function resolveParagraphBlockEnterInsert(
+  target: MarkdownCommandTarget,
+  selection: MarkdownCommandSelection,
+  from: number
+): { insert: string; selectionAnchor: number } {
+  const defaultInsert = "\n\n";
+
+  if (!selection.empty) {
+    return {
+      insert: defaultInsert,
+      selectionAnchor: from + defaultInsert.length
+    };
+  }
+
+  const currentLine = target.lineAt(selection.head);
+
+  if (selection.head === currentLine.from && currentLine.number > 1) {
+    const previousLine = target.line(currentLine.number - 1);
+
+    if (previousLine.text.trim().length === 0) {
+      return {
+        insert: defaultInsert,
+        selectionAnchor: from + 1
+      };
+    }
+  }
+
+  if (selection.head === currentLine.to && currentLine.number < target.getLineCount()) {
+    const nextLine = target.line(currentLine.number + 1);
+
+    if (nextLine.text.trim().length > 0) {
+      return {
+        insert: "\n\n\n",
+        selectionAnchor: from + 2
+      };
+    }
+  }
+
+  return {
+    insert: defaultInsert,
+    selectionAnchor: from + defaultInsert.length
+  };
+}
+
+function runThematicBreakEnterCommand(
+  target: MarkdownCommandTarget,
+  activeState: ActiveBlockState
+): boolean {
+  if (activeState.activeBlock?.type !== "thematicBreak") {
+    return false;
+  }
+
+  const selection = target.getSelection();
+
+  if (!selection.empty) {
+    return false;
+  }
+
+  const line = target.lineAt(selection.head);
+  const from = line.to;
+  const to = line.to;
+  const insert = "\n\n";
+  const selectionAnchor = from + insert.length;
 
   target.dispatchChange({
     from,
@@ -256,27 +333,6 @@ function runParagraphBlockEnterCommand(
   });
 
   return true;
-}
-
-function resolveParagraphEnterSelectionAnchor(
-  target: MarkdownCommandTarget,
-  selection: MarkdownCommandSelection,
-  from: number,
-  insertLength: number
-): number {
-  if (!selection.empty) {
-    return from + insertLength;
-  }
-
-  const currentLine = target.lineAt(selection.head);
-
-  if (selection.head !== currentLine.to || currentLine.number >= target.getLineCount()) {
-    return from + insertLength;
-  }
-
-  const nextLine = target.line(currentLine.number + 1);
-
-  return nextLine.from + insertLength;
 }
 
 function runBackspaceAcrossStructuralBlankBoundaryCommand(
