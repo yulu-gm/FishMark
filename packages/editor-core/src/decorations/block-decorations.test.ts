@@ -360,6 +360,49 @@ describe("createBlockDecorations", () => {
     expect(ranges.some((range) => range.className === "cm-inactive-inline-marker")).toBe(false);
   });
 
+  it("uses active inline decorations inside active list item content", () => {
+    const source = "- **bold** *it* ~~del~~ `code`";
+    const ranges = createDecorationsForSelection(
+      source,
+      { anchor: source.indexOf("bold"), head: source.indexOf("bold") },
+      true
+    );
+    const boldStart = source.indexOf("**bold**");
+    const emphasisStart = source.indexOf("*it*");
+    const delStart = source.indexOf("~~del~~");
+    const codeStart = source.indexOf("`code`");
+
+    expectExactRangeClasses(ranges, 0, 0, ["cm-active-list cm-active-list-unordered cm-active-list-depth-0"]);
+    expectCoveredRangeClasses(ranges, boldStart, boldStart + 2, ["cm-active-inline-marker"]);
+    expectCoveredRangeClasses(ranges, boldStart + 2, boldStart + 6, ["cm-inactive-inline-strong"]);
+    expectCoveredRangeClasses(ranges, boldStart + 6, boldStart + 8, ["cm-active-inline-marker"]);
+    expectCoveredRangeClasses(ranges, emphasisStart, emphasisStart + 1, ["cm-active-inline-marker"]);
+    expectCoveredRangeClasses(ranges, emphasisStart + 1, emphasisStart + 3, ["cm-inactive-inline-emphasis"]);
+    expectCoveredRangeClasses(ranges, emphasisStart + 3, emphasisStart + 4, ["cm-active-inline-marker"]);
+    expectCoveredRangeClasses(ranges, delStart, delStart + 2, ["cm-active-inline-marker"]);
+    expectCoveredRangeClasses(ranges, delStart + 2, delStart + 5, ["cm-inactive-inline-strikethrough"]);
+    expectCoveredRangeClasses(ranges, delStart + 5, delStart + 7, ["cm-active-inline-marker"]);
+    expectCoveredRangeClasses(ranges, codeStart, codeStart + 1, ["cm-active-inline-marker"]);
+    expectCoveredRangeClasses(ranges, codeStart + 1, codeStart + 5, ["cm-inactive-inline-code"]);
+    expectCoveredRangeClasses(ranges, codeStart + 5, codeStart + 6, ["cm-active-inline-marker"]);
+    expect(ranges.some((range) => range.className === "cm-inactive-inline-marker")).toBe(false);
+  });
+
+  it("uses active inline decorations inside active list continuation content", () => {
+    const source = ["- item", "  continuation **bold**"].join("\n");
+    const boldStart = source.indexOf("**bold**");
+    const ranges = createDecorationsForSelection(
+      source,
+      { anchor: boldStart + 2, head: boldStart + 2 },
+      true
+    );
+
+    expectCoveredRangeClasses(ranges, boldStart, boldStart + 2, ["cm-active-inline-marker"]);
+    expectCoveredRangeClasses(ranges, boldStart + 2, boldStart + 6, ["cm-inactive-inline-strong"]);
+    expectCoveredRangeClasses(ranges, boldStart + 6, boldStart + 8, ["cm-active-inline-marker"]);
+    expect(ranges.some((range) => range.className === "cm-inactive-inline-marker")).toBe(false);
+  });
+
   it("layers active inline marker visibility with nested strong and emphasis styling", () => {
     const source = "***both***";
     const ranges = createActiveParagraphInlineDecorations(source);

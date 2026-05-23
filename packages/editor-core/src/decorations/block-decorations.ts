@@ -794,6 +794,15 @@ function appendListItemDecorations(
     if (isFirstLine) {
       if (isActiveLine) {
         appendActiveListItemFirstLineDecorations(item, source, ordered, ranges);
+        appendInlineDecorationsForLine(
+          source,
+          resolveListItemContentStartOffset(item, source),
+          line.endOffset,
+          true,
+          ranges,
+          resolveImagePreviewUrl,
+          referenceDefinitions
+        );
         continue;
       }
 
@@ -812,6 +821,12 @@ function appendListItemDecorations(
     }
 
     if (isActiveLine) {
+      const continuationContentStartOffset = resolveListItemContinuationContentStartOffset(
+        line.startOffset,
+        line.endOffset,
+        source
+      );
+
       appendListItemContinuationLineDecorations(
         line.startOffset,
         line.endOffset,
@@ -820,6 +835,15 @@ function appendListItemDecorations(
         ordered,
         "active",
         ranges
+      );
+      appendInlineDecorationsForLine(
+        source,
+        continuationContentStartOffset,
+        line.endOffset,
+        true,
+        ranges,
+        resolveImagePreviewUrl,
+        referenceDefinitions
       );
       continue;
     }
