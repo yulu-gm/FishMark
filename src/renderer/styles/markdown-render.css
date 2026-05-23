@@ -158,6 +158,10 @@
   line-height: 0;
 }
 
+.document-editor .cm-active-inline-marker {
+  color: var(--fishmark-text-muted, #687180);
+}
+
 .document-editor .cm-inactive-inline-strong {
   color: var(--fishmark-markdown-strong, var(--fishmark-text-primary, #171a1f));
   font-weight: 650;

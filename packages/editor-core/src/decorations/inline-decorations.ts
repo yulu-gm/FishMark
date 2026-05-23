@@ -6,6 +6,7 @@ import { createInactiveImagePreviewDecoration } from "./image-widgets";
 
 const CJK_TEXT_CLASS = "cm-fishmark-cjk-font";
 const INACTIVE_INLINE_MARKER_CLASS = "cm-inactive-inline-marker";
+const ACTIVE_INLINE_MARKER_CLASS = "cm-active-inline-marker";
 const INACTIVE_INLINE_LINK_CLASS = "cm-inactive-inline-link";
 export const INACTIVE_INLINE_LINK_SELECTOR = `.${INACTIVE_INLINE_LINK_CLASS}`;
 export const INACTIVE_INLINE_LINK_HREF_ATTRIBUTE = "data-fishmark-link-href";
@@ -143,16 +144,19 @@ function appendActiveInlineDecorations(node: InlineASTNode, ranges: InlineDecora
       appendActiveHardBreakDecoration(ranges, node.endOffset);
       return;
     case "codeSpan":
+      appendActiveMarkerDecoration(ranges, node.openMarker.startOffset, node.openMarker.endOffset);
       appendContentDecoration(
         ranges,
         node.openMarker.endOffset,
         node.closeMarker.startOffset,
         INACTIVE_INLINE_CONTENT_CLASSES.codeSpan
       );
+      appendActiveMarkerDecoration(ranges, node.closeMarker.startOffset, node.closeMarker.endOffset);
       return;
     case "strong":
     case "emphasis":
     case "strikethrough":
+      appendActiveMarkerDecoration(ranges, node.openMarker.startOffset, node.openMarker.endOffset);
       appendContentDecoration(
         ranges,
         node.openMarker.endOffset,
@@ -162,6 +166,7 @@ function appendActiveInlineDecorations(node: InlineASTNode, ranges: InlineDecora
       for (const child of node.children) {
         appendActiveInlineDecorations(child, ranges);
       }
+      appendActiveMarkerDecoration(ranges, node.closeMarker.startOffset, node.closeMarker.endOffset);
       return;
     case "link":
       for (const child of node.children) {
@@ -241,6 +246,23 @@ function appendMarkerDecoration(
   startOffset: number,
   endOffset: number
 ) {
+  appendInlineMarkerDecoration(ranges, startOffset, endOffset, INACTIVE_INLINE_MARKER_CLASS);
+}
+
+function appendActiveMarkerDecoration(
+  ranges: InlineDecorationRange[],
+  startOffset: number,
+  endOffset: number
+) {
+  appendInlineMarkerDecoration(ranges, startOffset, endOffset, ACTIVE_INLINE_MARKER_CLASS);
+}
+
+function appendInlineMarkerDecoration(
+  ranges: InlineDecorationRange[],
+  startOffset: number,
+  endOffset: number,
+  className: string
+) {
   if (endOffset <= startOffset) {
     return;
   }
@@ -248,7 +270,7 @@ function appendMarkerDecoration(
   ranges.push(
     Decoration.mark({
       attributes: {
-        class: INACTIVE_INLINE_MARKER_CLASS
+        class: className
       }
     }).range(startOffset, endOffset)
   );

@@ -345,13 +345,34 @@ describe("createBlockDecorations", () => {
     expectCoveredRangeClasses(ranges, 9, 10, ["cm-inactive-inline-marker"]);
   });
 
-  it("keeps inline style classes in active content while preserving markdown source text", () => {
-    const source = "**bold**";
+  it("keeps active inline markers visible while preserving styled content", () => {
+    const source = "**bold** `code`";
     const ranges = createActiveParagraphInlineDecorations(source);
+    const codeStart = source.indexOf("`code`");
 
     expectExactRangeClasses(ranges, 0, 0, ["cm-active-paragraph cm-active-paragraph-leading"]);
     expectCoveredRangeClasses(ranges, 2, 6, ["cm-inactive-inline-strong"]);
+    expectCoveredRangeClasses(ranges, 0, 2, ["cm-active-inline-marker"]);
+    expectCoveredRangeClasses(ranges, 6, 8, ["cm-active-inline-marker"]);
+    expectCoveredRangeClasses(ranges, codeStart, codeStart + 1, ["cm-active-inline-marker"]);
+    expectCoveredRangeClasses(ranges, codeStart + 1, codeStart + 5, ["cm-inactive-inline-code"]);
+    expectCoveredRangeClasses(ranges, codeStart + 5, codeStart + 6, ["cm-active-inline-marker"]);
     expect(ranges.some((range) => range.className === "cm-inactive-inline-marker")).toBe(false);
+  });
+
+  it("layers active inline marker visibility with nested strong and emphasis styling", () => {
+    const source = "***both***";
+    const ranges = createActiveParagraphInlineDecorations(source);
+
+    expectExactRangeClasses(ranges, 0, 0, ["cm-active-paragraph cm-active-paragraph-leading"]);
+    expectCoveredRangeClasses(ranges, 0, 1, ["cm-active-inline-marker"]);
+    expectCoveredRangeClasses(ranges, 1, 3, ["cm-active-inline-marker", "cm-inactive-inline-emphasis"]);
+    expectCoveredRangeClasses(ranges, 3, 7, [
+      "cm-inactive-inline-emphasis",
+      "cm-inactive-inline-strong"
+    ]);
+    expectCoveredRangeClasses(ranges, 7, 9, ["cm-active-inline-marker", "cm-inactive-inline-emphasis"]);
+    expectCoveredRangeClasses(ranges, 9, 10, ["cm-active-inline-marker"]);
   });
 
   it("keeps nested strikethrough and strong decorations layered for inactive content", () => {
@@ -986,6 +1007,49 @@ describe("createBlockDecorations", () => {
         text: "> "
       }
     ]);
+  });
+
+  it("uses active inline decorations inside focused blockquote content", () => {
+    const source = "> ***中文*** ![图](./demo.png)";
+    const blockMap = parseMarkdownDocument(source);
+    const activeState = createActiveBlockStateFromBlockMap(blockMap, {
+      anchor: source.indexOf("中文"),
+      head: source.indexOf("中文")
+    });
+
+    const result = createBlockDecorations({
+      activeBlockState: activeState,
+      hasEditorFocus: true,
+      source,
+      resolveImagePreviewUrl: (href) => href
+    });
+    const ranges = collectDecorations(source, result.decorationSet);
+    const contentStart = source.indexOf("***中文***");
+    const imageEnd = source.length;
+
+    expect(result.signature).toContain(":content-edit");
+    expectExactRangeClasses(ranges, 0, 2, []);
+    expectCoveredRangeClasses(ranges, contentStart, contentStart + 1, ["cm-active-inline-marker"]);
+    expectCoveredRangeClasses(ranges, contentStart + 1, contentStart + 3, [
+      "cm-active-inline-marker",
+      "cm-inactive-inline-emphasis"
+    ]);
+    expectCoveredRangeClasses(ranges, source.indexOf("中文"), source.indexOf("中文") + "中文".length, [
+      "cm-fishmark-cjk-font",
+      "cm-inactive-inline-emphasis",
+      "cm-inactive-inline-strong"
+    ]);
+    expectCoveredRangeClasses(ranges, contentStart + 5, contentStart + 7, [
+      "cm-active-inline-marker",
+      "cm-inactive-inline-emphasis"
+    ]);
+    expectCoveredRangeClasses(ranges, contentStart + 7, contentStart + 8, ["cm-active-inline-marker"]);
+    expect(ranges.some((range) => range.className === "cm-inactive-inline-marker")).toBe(false);
+    expect(collectWidgets(source, result.decorationSet)).toContainEqual({
+      from: imageEnd,
+      to: imageEnd,
+      name: "MarkdownImagePreviewWidget"
+    });
   });
 
   it("hides the full nested blockquote source prefix and adds capped depth classes", () => {

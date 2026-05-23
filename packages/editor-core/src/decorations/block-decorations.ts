@@ -598,7 +598,12 @@ function appendBlockquoteDecorations(
         }
       }
 
-      ranges.push(...createInactiveInlineDecorations(line.inline, { resolveImagePreviewUrl }));
+      if (activeLineStart !== null) {
+        ranges.push(...createActiveInlineImageDecorations(line.inline, source, resolveImagePreviewUrl));
+        ranges.push(...createActiveInlineDecorations(line.inline));
+      } else {
+        ranges.push(...createInactiveInlineDecorations(line.inline, { resolveImagePreviewUrl }));
+      }
     });
     return;
   }

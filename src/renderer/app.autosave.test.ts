@@ -5938,6 +5938,20 @@ describe("App autosave", () => {
     expect(lightMarkdownRule).toContain("--fishmark-code-block-radius:");
   });
 
+  it("keeps active inline markdown markers visible but subdued", () => {
+    const markdownRenderStylesheet = readFileSync(markdownRenderStylesheetPath, "utf-8");
+    const activeInlineMarkerRule = getCssRule(
+      markdownRenderStylesheet,
+      ".document-editor .cm-active-inline-marker"
+    );
+
+    expect(activeInlineMarkerRule).toContain("color:");
+    expect(activeInlineMarkerRule).not.toContain("color: transparent");
+    expect(activeInlineMarkerRule).not.toContain("font-size: 0");
+    expect(activeInlineMarkerRule).not.toContain("line-height: 0");
+    expect(activeInlineMarkerRule).not.toContain("opacity: 0");
+  });
+
   it("renders markdown lists and quotes with explicit markers instead of solid blocks", () => {
     const markdownRenderStylesheet = readFileSync(markdownRenderStylesheetPath, "utf-8");
     const markdownTextStandard = JSON.parse(
