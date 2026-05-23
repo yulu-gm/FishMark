@@ -1715,7 +1715,7 @@ async function runCommittedDashListCompositionPreviewCase(): Promise<CaseResult>
 
 async function runListDoubleEnterExitInsertCase(): Promise<CaseResult> {
   const initialContent = ["- 11111", "- 22222"].join("\n");
-  const expectedContent = ["- 11111", "- 22222", "", "正文一", "正文二"].join("\n");
+  const expectedContent = ["- 11111", "- 22222", "", "正文一", "", "正文二"].join("\n");
   const harness = setupHarness(initialContent);
 
   harness.controller.setSelection(initialContent.length);
