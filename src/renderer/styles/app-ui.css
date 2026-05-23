@@ -1023,6 +1023,20 @@
   opacity: 1;
 }
 
+.shortcut-hint-overlay-panel {
+  width: fit-content;
+  max-width: min(18rem, calc(100vw - 32px));
+  padding: 8px 10px;
+  border: 1px solid var(--fishmark-panel-border, rgba(15, 23, 42, 0.12));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--fishmark-panel-bg, rgba(255, 255, 255, 0.92)) 88%, transparent);
+  box-shadow:
+    var(--fishmark-shadow-1),
+    0 14px 30px -22px rgba(15, 23, 42, 0.38);
+  backdrop-filter: blur(18px) saturate(1.08);
+  -webkit-backdrop-filter: blur(18px) saturate(1.08);
+}
+
 .shortcut-hint-overlay-list {
   margin: 0;
   padding: 0;
@@ -1648,6 +1662,11 @@
   .shortcut-hint-overlay {
     top: var(--fishmark-space-3);
     padding-inline-start: 0;
+  }
+
+  .shortcut-hint-overlay-panel {
+    max-width: min(14rem, calc(100vw - 24px));
+    padding: 7px 9px;
   }
 
   .shortcut-hint-overlay-item {

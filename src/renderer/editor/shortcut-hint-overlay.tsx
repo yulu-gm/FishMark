@@ -107,10 +107,12 @@ export function ShortcutHintOverlay({ visible, platform, group }: ShortcutHintOv
       role="presentation"
       style={style}
     >
-      <ShortcutHintOverlayContent
-        platform={platform}
-        group={group}
-      />
+      <div className="shortcut-hint-overlay-panel">
+        <ShortcutHintOverlayContent
+          platform={platform}
+          group={group}
+        />
+      </div>
     </div>
   );
 }

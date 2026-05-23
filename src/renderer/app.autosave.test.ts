@@ -4777,6 +4777,20 @@ describe("App autosave", () => {
     expect(overlayItemExitKeyframes).toContain("scaleY");
   });
 
+  it("renders shortcut hints inside a readable translucent panel", () => {
+    const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8");
+    const panelRule = getCssRule(appUiStylesheet, ".shortcut-hint-overlay-panel");
+
+    expect(panelRule).toContain("background:");
+    expect(panelRule).toContain("border:");
+    expect(panelRule).toContain("box-shadow:");
+    expect(panelRule).toContain("backdrop-filter:");
+    expect(panelRule).toContain("-webkit-backdrop-filter:");
+    expect(panelRule).toContain("max-width: min(18rem, calc(100vw - 32px));");
+    expect(panelRule).toContain("padding: 8px 10px;");
+    expect(panelRule).toContain("border-radius: 8px;");
+  });
+
   function getSettingsDrawerPanel(): HTMLElement {
     const drawerPanel = container.querySelector<HTMLElement>('[data-fishmark-panel="settings-drawer"]');
     if (!drawerPanel) {

@@ -43,9 +43,10 @@ describe("ShortcutHintOverlay", () => {
       );
     });
 
-    expect(
-      container.querySelector('[data-fishmark-region="shortcut-hint-overlay"]')
-    )?.not.toBeNull();
+    const overlay = container.querySelector('[data-fishmark-region="shortcut-hint-overlay"]');
+
+    expect(overlay).not.toBeNull();
+    expect(overlay?.querySelector(".shortcut-hint-overlay-panel")).not.toBeNull();
     expect(container.textContent).toContain("Ctrl+B");
     expect(container.textContent).toContain("Bold");
     expect(container.textContent).toContain("Ctrl+Shift+9");
