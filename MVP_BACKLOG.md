@@ -1005,6 +1005,38 @@
 - [ ] 补充场景标签、描述和前置条件
 - [ ] 验证工作台列表、CLI 触发和结果输出全部可用
 
+### TASK-052 Dev-only 输入录制 Debug 工具
+
+状态：未开始
+依赖：`TASK-007`、`TASK-025`、`TASK-029`
+
+目标：在 dev/debug 模式下提供手动开始/结束的编辑器输入录制工具，用实际键盘输入序列、文档开始快照和结束快照帮助复现编辑体验 bug；release 与打包产物必须剔除该调试逻辑。
+
+主要落点：`src/renderer/`、`src/main/`、`src/preload/`、`src/shared/`、`electron-builder.json`。
+
+交付物：
+- 右下角 dev-only 输入录制 icon
+- 手动开始/结束录制状态
+- 录制开始时的活动文档内容与 selection 快照
+- 录制期间的键盘输入序列与最近输入可视化
+- 录制结束时写入 OS 临时目录的 JSON artifact
+- release/package 中剔除 recorder UI、bridge 和 writer 逻辑的保护
+
+验收：
+- dev/debug 模式打开文档后能看到右下角开始录制 icon
+- 点击开始后记录文档开始快照，并将按钮切换为结束录制状态
+- 键盘输入期间右下角能显示最近输入
+- 点击结束后在临时目录生成输入记录 JSON，并包含开始/结束快照和有序输入步骤
+- 切换活动文档会中断录制并写出带中断原因的 artifact
+- release 与打包产物中不出现 recorder UI，也不包含可用的 debug writer bridge
+- 不影响现有输入、autosave、undo/redo 和 Markdown round-trip 行为
+
+执行切片：
+- [ ] 定义 debug input recording artifact 协议与 dev-only bridge 边界
+- [ ] 实现 renderer 录制状态、右下角 icon 与最近输入展示
+- [ ] 实现 main/preload dev-only 临时目录 artifact 写入链路
+- [ ] 补 dev gating、package exclusion、录制流程和中断流程测试
+
 ### TASK-024 Playwright 冒烟测试
 
 状态：未开始

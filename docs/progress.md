@@ -104,6 +104,7 @@
 | TASK-029 | CLI 与工件协议 | DEV_DONE | 已提供 `npm run test:scenario` 统一入口、稳定退出码与标准结果工件目录协议。 |
 | TASK-030 | visual-test 支持 | TODO | 首版 synthetic gradient 方案已回退；需按真实截图与真实结果来源重做。 |
 | TASK-031 | 核心场景扩充 | TODO | 首批可持续使用的核心测试场景集。 |
+| TASK-052 | Dev-only 输入录制 Debug 工具 | TODO | 在 dev/debug 模式提供右下角手动开始/结束的编辑器输入录制工具，写出键盘输入序列与文档开始/结束快照；release 和打包产物必须剔除 recorder UI、bridge 与 writer 逻辑。 |
 | TASK-033 | 代码块渲染 | DEV_DONE | 已补齐 fenced code block block map/info string、非激活态等宽渲染与源码态恢复，并覆盖 round-trip 基线回归。 |
 | TASK-034 | 行内格式渲染 | DEV_DONE | 已在 `markdown-engine` 建立 canonical `parseMarkdownDocument()` 与完整 inline AST，并接入 `editor-core` / renderer 的非激活态行内渲染；当前支持 bold / italic / inline code / strikethrough 及常见嵌套，光标回到对应 block 后恢复 Markdown 源码态。 |
 | TASK-035 | IME 基线保护 | ACCEPTED | 已完成 composition guard、autosave 光标回归修复与段落/标题/列表回归测试，并通过本轮中文 IME 人工验收。 |
