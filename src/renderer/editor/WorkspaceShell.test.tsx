@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
@@ -53,6 +55,30 @@ function setTextInputValue(input: HTMLInputElement, value: string) {
 
   valueSetter?.call(input, value);
   input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function readSharedFishMarkSvg() {
+  const sharedMarkPath = path.join(process.cwd(), "assets", "branding", "fishmark_mark.svg");
+
+  expect(existsSync(sharedMarkPath)).toBe(true);
+
+  return readFileSync(sharedMarkPath, "utf8");
+}
+
+function readSvgFingerprint(svg: SVGSVGElement | string) {
+  const parsedSvg = typeof svg === "string"
+    ? new DOMParser().parseFromString(svg, "image/svg+xml").querySelector("svg")
+    : svg;
+
+  if (!parsedSvg) {
+    throw new Error("FishMark mark SVG was not found.");
+  }
+
+  return {
+    viewBox: parsedSvg.getAttribute("viewBox"),
+    fill: parsedSvg.querySelector("g")?.getAttribute("fill"),
+    paths: Array.from(parsedSvg.querySelectorAll("path")).map((element) => element.getAttribute("d"))
+  };
 }
 
 it("renders workspace tabs and delegates commands without owning persistence logic", async () => {
@@ -578,6 +604,8 @@ it("renders recent files without the old empty headline and delegates open and c
   expect(container.textContent).toContain("C:/notes/today.md");
   expect(container.textContent).not.toContain("Your writing space");
   expect(container.querySelector(".empty-inner h1")).toBeNull();
+  expect(readSvgFingerprint(container.querySelector<SVGSVGElement>(".empty-mark svg") ?? ""))
+    .toEqual(readSvgFingerprint(readSharedFishMarkSvg()));
   expect(onOpenRecentFile).toHaveBeenCalledWith("C:/notes/today.md");
   expect(onClearRecentFile).toHaveBeenCalledWith("C:/notes/today.md");
 });

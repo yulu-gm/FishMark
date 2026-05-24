@@ -100,6 +100,16 @@ const paragraphActiveState = {
   }
 } as ActiveBlockState;
 
+const headingActiveState = {
+  activeBlock: {
+    type: "heading"
+  }
+} as ActiveBlockState;
+
+const noActiveBlockState = {
+  activeBlock: null
+} as ActiveBlockState;
+
 function createActiveState(source: string, anchor: number): ActiveBlockState {
   return createActiveBlockStateFromBlockMap(parseMarkdownDocument(source), {
     anchor,
@@ -126,11 +136,119 @@ describe("semantic markdown commands", () => {
     expect(runMarkdownArrowUpCommand(target, paragraphActiveState)).toBe(true);
     expect(target.getDispatchedSelections()).toEqual([
       {
-        anchor: "Alpha\n".length,
-        head: "Alpha\n".length,
+        anchor: "Alpha".length,
+        head: "Alpha".length,
         scrollIntoView: true
       }
     ]);
+  });
+
+  it("skips the hidden separator when ArrowUp moves between trailing visible empty paragraphs", () => {
+    const source = "# Title\n\n\n\n";
+    const visiblePreviousEmptyLineStart = "# Title\n\n".length;
+    const target = createCommandTarget({ doc: source, anchor: source.length });
+
+    expect(runMarkdownArrowUpCommand(target, noActiveBlockState)).toBe(true);
+    expect(target.getDispatchedSelections()).toEqual([
+      {
+        anchor: visiblePreviousEmptyLineStart,
+        head: visiblePreviousEmptyLineStart,
+        scrollIntoView: true
+      }
+    ]);
+  });
+
+  it("leaves an active trailing separator line on ArrowUp in one step", () => {
+    const source = "# Title\n\n\n";
+    const visiblePreviousEmptyLineStart = "# Title\n\n".length;
+    const target = createCommandTarget({ doc: source, anchor: source.length });
+
+    expect(runMarkdownArrowUpCommand(target, noActiveBlockState)).toBe(true);
+    expect(target.getDispatchedSelections()).toEqual([
+      {
+        anchor: visiblePreviousEmptyLineStart,
+        head: visiblePreviousEmptyLineStart,
+        scrollIntoView: true
+      }
+    ]);
+  });
+
+  it("skips the hidden separator when ArrowDown moves between trailing visible empty paragraphs", () => {
+    const source = "# Title\n\n\n\n";
+    const visiblePreviousEmptyLineStart = "# Title\n\n".length;
+    const target = createCommandTarget({ doc: source, anchor: visiblePreviousEmptyLineStart });
+
+    expect(runMarkdownArrowDownCommand(target, noActiveBlockState)).toBe(true);
+    expect(target.getDispatchedSelections()).toEqual([
+      {
+        anchor: source.length,
+        head: source.length,
+        scrollIntoView: true
+      }
+    ]);
+  });
+
+  it("skips alternating and block-leading structural separators around a table", () => {
+    const source = ["+++", "", "", "", "", "| a | b |", "| - | - |"].join("\n");
+    const tableStart = source.indexOf("| a");
+    const visibleBlankBeforeTable = "+++\n\n".length;
+    const activeState = createActiveState(source, tableStart);
+    const upTarget = createCommandTarget({ doc: source, anchor: tableStart });
+    const downTarget = createCommandTarget({ doc: source, anchor: visibleBlankBeforeTable });
+
+    expect(runMarkdownArrowUpCommand(upTarget, activeState)).toBe(true);
+    expect(upTarget.getDispatchedSelections()).toEqual([
+      {
+        anchor: visibleBlankBeforeTable,
+        head: visibleBlankBeforeTable,
+        scrollIntoView: true
+      }
+    ]);
+
+    expect(runMarkdownArrowDownCommand(downTarget, activeState)).toBe(true);
+    expect(downTarget.getDispatchedSelections()).toEqual([
+      {
+        anchor: tableStart,
+        head: tableStart,
+        scrollIntoView: true
+      }
+    ]);
+  });
+
+  it("enters a whitespace-only line when ArrowUp leaves the empty paragraph below it", () => {
+    const source = "   \n\n";
+    const target = createCommandTarget({ doc: source, anchor: source.length });
+
+    expect(runMarkdownArrowUpCommand(target, noActiveBlockState)).toBe(true);
+    expect(target.getDispatchedSelections()).toEqual([
+      {
+        anchor: "   ".length,
+        head: "   ".length,
+        scrollIntoView: true
+      }
+    ]);
+  });
+
+  it("skips the hidden separator when ArrowDown leaves a whitespace-only line", () => {
+    const source = "   \n\n";
+    const target = createCommandTarget({ doc: source, anchor: 0 });
+
+    expect(runMarkdownArrowDownCommand(target, noActiveBlockState)).toBe(true);
+    expect(target.getDispatchedSelections()).toEqual([
+      {
+        anchor: source.length,
+        head: source.length,
+        scrollIntoView: true
+      }
+    ]);
+  });
+
+  it("lets native ArrowUp geometry handle the current whitespace-only physical line", () => {
+    const source = ["", "   "].join("\n");
+    const target = createCommandTarget({ doc: source, anchor: source.length });
+
+    expect(runMarkdownArrowUpCommand(target, paragraphActiveState)).toBe(false);
+    expect(target.getDispatchedSelections()).toEqual([]);
   });
 
   it("creates an independent empty paragraph block at paragraph end", () => {
@@ -145,6 +263,61 @@ describe("semantic markdown commands", () => {
         selection: {
           anchor: "Alpha\n\n".length,
           head: "Alpha\n\n".length
+        }
+      }
+    ]);
+  });
+
+  it("creates an independent empty paragraph block at heading end", () => {
+    const source = "# Title";
+    const target = createCommandTarget({ doc: source, anchor: source.length });
+
+    expect(runMarkdownEnterCommand(target, headingActiveState)).toBe(true);
+    expect(target.getDispatchedChanges()).toEqual([
+      {
+        from: source.length,
+        to: source.length,
+        insert: "\n\n",
+        selection: {
+          anchor: `${source}\n\n`.length,
+          head: `${source}\n\n`.length
+        }
+      }
+    ]);
+  });
+
+  it("uses physical paragraph fallback on Enter from an empty physical line without an active semantic block", () => {
+    const source = "# Title\n\n";
+    const target = createCommandTarget({ doc: source, anchor: source.length });
+
+    expect(runMarkdownEnterCommand(target, noActiveBlockState)).toBe(true);
+    expect(target.getDispatchedChanges()).toEqual([
+      {
+        from: source.length,
+        to: source.length,
+        insert: "\n\n",
+        selection: {
+          anchor: `${source}\n\n`.length,
+          head: `${source}\n\n`.length
+        }
+      }
+    ]);
+  });
+
+  it("uses Typora paragraph spacing on Enter at a whitespace-only physical line end without deleting spaces", () => {
+    const source = ["Alpha", "   ", "Beta"].join("\n");
+    const anchor = source.indexOf("Beta") - 1;
+    const target = createCommandTarget({ doc: source, anchor });
+
+    expect(runMarkdownEnterCommand(target, paragraphActiveState)).toBe(true);
+    expect(target.getDispatchedChanges()).toEqual([
+      {
+        from: anchor,
+        to: anchor,
+        insert: "\n\n",
+        selection: {
+          anchor: anchor + 2,
+          head: anchor + 2
         }
       }
     ]);
@@ -319,6 +492,99 @@ describe("semantic markdown commands", () => {
         selection: {
           anchor: "Alpha".length,
           head: "Alpha".length
+        }
+      }
+    ]);
+  });
+
+  it("removes the current empty paragraph pair on Backspace from repeated trailing empty paragraphs", () => {
+    const source = "# Title\n\n\n\n";
+    const target = createCommandTarget({ doc: source, anchor: source.length });
+
+    expect(runMarkdownBackspaceCommand(target, noActiveBlockState)).toBe(true);
+    expect(target.getDispatchedChanges()).toEqual([
+      {
+        from: "# Title\n\n".length,
+        to: source.length,
+        insert: "",
+        selection: {
+          anchor: "# Title\n\n".length,
+          head: "# Title\n\n".length
+        }
+      }
+    ]);
+  });
+
+  it("returns from an empty paragraph below a whitespace-only line in one Backspace", () => {
+    const source = "   \n\n";
+    const target = createCommandTarget({ doc: source, anchor: source.length });
+
+    expect(runMarkdownBackspaceCommand(target, noActiveBlockState)).toBe(true);
+    expect(target.getDispatchedChanges()).toEqual([
+      {
+        from: "   ".length,
+        to: source.length,
+        insert: "",
+        selection: {
+          anchor: "   ".length,
+          head: "   ".length
+        }
+      }
+    ]);
+  });
+
+  it("removes only the current empty paragraph below an ordered list on Backspace", () => {
+    const source = "1. 1\n\n\n\n";
+    const previousVisibleEmptyLineStart = "1. 1\n\n".length;
+    const target = createCommandTarget({ doc: source, anchor: source.length });
+
+    expect(runMarkdownBackspaceCommand(target, noActiveBlockState)).toBe(true);
+    expect(target.getDispatchedChanges()).toEqual([
+      {
+        from: previousVisibleEmptyLineStart,
+        to: source.length,
+        insert: "",
+        selection: {
+          anchor: previousVisibleEmptyLineStart,
+          head: previousVisibleEmptyLineStart
+        }
+      }
+    ]);
+  });
+
+  it("leaves an active trailing separator line below an ordered list on Backspace", () => {
+    const source = "1. 1\n\n\n";
+    const previousVisibleEmptyLineStart = "1. 1\n\n".length;
+    const target = createCommandTarget({ doc: source, anchor: source.length });
+
+    expect(runMarkdownBackspaceCommand(target, noActiveBlockState)).toBe(true);
+    expect(target.getDispatchedChanges()).toEqual([
+      {
+        from: previousVisibleEmptyLineStart,
+        to: source.length,
+        insert: "",
+        selection: {
+          anchor: previousVisibleEmptyLineStart,
+          head: previousVisibleEmptyLineStart
+        }
+      }
+    ]);
+  });
+
+  it("returns to the whitespace-only line below an ordered list on Backspace", () => {
+    const source = "1. 1\n   \n\n";
+    const whitespaceLineEnd = "1. 1\n   ".length;
+    const target = createCommandTarget({ doc: source, anchor: source.length });
+
+    expect(runMarkdownBackspaceCommand(target, noActiveBlockState)).toBe(true);
+    expect(target.getDispatchedChanges()).toEqual([
+      {
+        from: whitespaceLineEnd,
+        to: source.length,
+        insert: "",
+        selection: {
+          anchor: whitespaceLineEnd,
+          head: whitespaceLineEnd
         }
       }
     ]);

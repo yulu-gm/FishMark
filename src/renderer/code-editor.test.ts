@@ -140,6 +140,10 @@ const complexEditorFixtureSource = readFileSync(
   resolve(process.cwd(), "fixtures/test-harness/complex-editor-navigation.md"),
   "utf8"
 ).replace(/\r\n/g, "\n");
+const markdownRenderCss = readFileSync(
+  resolve(process.cwd(), "src/renderer/styles/markdown-render.css"),
+  "utf8"
+);
 
 describe("createCodeEditorController", () => {
   it("returns the current content and can replace the loaded document", () => {
@@ -960,11 +964,134 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("marks active empty and whitespace-only physical lines with editable surface classes", async () => {
+    const host = document.createElement("div");
+    const source = ["Paragraph one", "", "", "   ", "Paragraph two"].join("\n");
+    const structuralEmptyLineStart = source.indexOf("\n\n\n") + 1;
+    const emptyLineStart = structuralEmptyLineStart + 1;
+    const whitespaceLineStart = source.indexOf("   ");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const view = getEditorView(host);
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+    view?.dispatch({ selection: { anchor: emptyLineStart } });
+    await flushMicrotasks();
+
+    const emptyLine = Array.from(host.querySelectorAll<HTMLElement>(".cm-line")).find((line) =>
+      line.textContent === "" && line.classList.contains("cm-fm-line-extra-blank")
+    );
+
+    expect(emptyLine?.classList.contains("cm-fm-line")).toBe(true);
+    expect(emptyLine?.classList.contains("cm-fm-line-empty")).toBe(true);
+    expect(emptyLine?.classList.contains("cm-fm-line-active")).toBe(true);
+    expect(emptyLine?.classList.contains("cm-inactive-blank-line")).toBe(false);
+
+    view?.dispatch({ selection: { anchor: whitespaceLineStart + 1 } });
+    await flushMicrotasks();
+
+    const whitespaceLine = Array.from(host.querySelectorAll<HTMLElement>(".cm-line")).find(
+      (line) => line.textContent === "   "
+    );
+
+    expect(whitespaceLine?.classList.contains("cm-fm-line")).toBe(true);
+    expect(whitespaceLine?.classList.contains("cm-fm-line-whitespace")).toBe(true);
+    expect(whitespaceLine?.classList.contains("cm-fm-line-active")).toBe(true);
+    expect(whitespaceLine?.classList.contains("cm-inactive-blank-line")).toBe(false);
+
+    controller.destroy();
+  });
+
+  it("keeps the selection after inserted spaces on an empty physical line", async () => {
+    const host = document.createElement("div");
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "",
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      insertText: (text: string) => void;
+      setSelection: (anchor: number, head?: number) => void;
+    };
+
+    advancedController.setSelection(0);
+    advancedController.insertText(" ");
+    await flushMicrotasks();
+
+    expect(controller.getContent()).toBe(" ");
+    expect(controller.getSelection()).toEqual({ anchor: 1, head: 1 });
+
+    controller.destroy();
+  });
+
+  it("deletes one real whitespace character from inside a whitespace-only physical line", async () => {
+    const host = document.createElement("div");
+    const source = "   ";
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      pressBackspace: () => void;
+      setSelection: (anchor: number, head?: number) => void;
+    };
+
+    advancedController.setSelection(2);
+    advancedController.pressBackspace();
+    await flushMicrotasks();
+
+    expect(controller.getContent()).toBe("  ");
+    expect(controller.getSelection()).toEqual({ anchor: 1, head: 1 });
+
+    controller.destroy();
+  });
+
+  it("deletes one real whitespace character from the end of a whitespace-only physical line", async () => {
+    const host = document.createElement("div");
+    const source = "   ";
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      pressBackspace: () => void;
+      setSelection: (anchor: number, head?: number) => void;
+    };
+
+    advancedController.setSelection(source.length);
+    advancedController.pressBackspace();
+    await flushMicrotasks();
+
+    expect(controller.getContent()).toBe("  ");
+    expect(controller.getSelection()).toEqual({ anchor: 2, head: 2 });
+
+    controller.destroy();
+  });
+
+  it("keeps active physical blank and whitespace line CSS in the normal editable line box", () => {
+    expect(markdownRenderCss).toMatch(
+      /\.document-editor \.cm-line\.cm-fm-line-active\.cm-fm-line-empty\s*\{[^}]*min-height:\s*1\.[^;}]+em;[^}]*line-height:\s*1\.[^;}]+;[^}]*white-space:\s*pre-wrap;/su
+    );
+    expect(markdownRenderCss).toMatch(
+      /\.document-editor \.cm-line\.cm-fm-line-active\.cm-fm-line-whitespace\s*\{[^}]*min-height:\s*1\.[^;}]+em;[^}]*line-height:\s*1\.[^;}]+;[^}]*white-space:\s*pre-wrap;/su
+    );
+  });
+
   it("skips the collapsed structural blank row on ArrowDown from the previous block", async () => {
     const host = document.createElement("div");
     const source = ["Paragraph one", "", "Paragraph two"].join("\n");
     const blankLineStart = source.indexOf("\n\n") + 1;
-    const nextBlockStart = source.indexOf("Paragraph two");
 
     const controller = createCodeEditorController({
       parent: host,
@@ -984,7 +1111,7 @@ describe("createCodeEditorController", () => {
     controller.pressArrowDown();
     await flushMicrotasks();
 
-    expect(view?.state.selection.main.anchor).toBe(nextBlockStart);
+    expect(view?.state.selection.main.anchor).toBe(source.length);
     expect(view?.state.selection.main.anchor).not.toBe(blankLineStart);
 
     controller.destroy();
@@ -2663,6 +2790,89 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("creates a visible empty paragraph block on Enter at heading end and returns with one Backspace", async () => {
+    const host = document.createElement("div");
+    const source = "# Title";
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressBackspace: () => void;
+      pressEnter: () => void;
+    };
+    const editorRoot = host.querySelector(".cm-editor");
+    const view = getEditorView(host);
+
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+    expect(view).not.toBeNull();
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+    advancedController.setSelection(source.length);
+    advancedController.pressEnter();
+    await flushMicrotasks();
+
+    const blankLines = Array.from(host.querySelectorAll<HTMLElement>(".cm-line")).filter(
+      (line) => line.textContent === ""
+    );
+    const activeBlankLine = blankLines.find((line) => !line.classList.contains("cm-inactive-blank-line"));
+
+    expect(controller.getContent()).toBe(`${source}\n\n`);
+    expect(view?.state.selection.main.anchor).toBe(`${source}\n\n`.length);
+    expect(activeBlankLine).toBeDefined();
+
+    advancedController.pressBackspace();
+
+    expect(controller.getContent()).toBe(source);
+    expect(view?.state.selection.main.anchor).toBe(source.length);
+    expect(view?.state.selection.main.head).toBe(source.length);
+
+    controller.destroy();
+  });
+
+  it("removes one repeated empty paragraph with one Backspace from consecutive trailing blank lines", async () => {
+    const host = document.createElement("div");
+    const source = "# Title";
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressBackspace: () => void;
+      pressEnter: () => void;
+    };
+    const editorRoot = host.querySelector(".cm-editor");
+    const view = getEditorView(host);
+
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+    expect(view).not.toBeNull();
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+    advancedController.setSelection(source.length);
+    advancedController.pressEnter();
+    advancedController.pressEnter();
+    await flushMicrotasks();
+
+    expect(controller.getContent()).toBe(`${source}\n\n\n\n`);
+    expect(view?.state.selection.main.anchor).toBe(`${source}\n\n\n\n`.length);
+
+    advancedController.pressBackspace();
+
+    expect(controller.getContent()).toBe(`${source}\n\n`);
+    expect(view?.state.selection.main.anchor).toBe(`${source}\n\n`.length);
+    expect(view?.state.selection.main.head).toBe(`${source}\n\n`.length);
+
+    controller.destroy();
+  });
+
   it("creates a visible active empty paragraph block before an existing next line", () => {
     const host = document.createElement("div");
     const source = ["AAAAA", "BBBBB"].join("\n");
@@ -3178,6 +3388,34 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("deletes the marker for a first ordered item after paragraph text on Backspace at content start", () => {
+    const host = document.createElement("div");
+    const source = ["Intro", "1. first"].join("\n");
+    const expected = ["Intro", "first"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressBackspace: () => void;
+    };
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(source.indexOf("first"));
+    advancedController.pressBackspace();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(view?.state.selection.main.anchor).toBe(expected.indexOf("first"));
+    expect(view?.state.selection.main.head).toBe(expected.indexOf("first"));
+
+    controller.destroy();
+  });
+
   it("joins body text after a list boundary into the previous item on Backspace", () => {
     const host = document.createElement("div");
     const source = ["1. Tail", "", "Body"].join("\n");
@@ -3490,7 +3728,7 @@ describe("createCodeEditorController", () => {
     advancedController.setSelection(source.length);
     await flushMicrotasks();
 
-    expect(view?.state.selection.main.anchor).toBe(source.length - "   ".length);
+    expect(view?.state.selection.main.anchor).toBe(source.length);
 
     advancedController.insertText("正文");
 
@@ -3526,7 +3764,7 @@ describe("createCodeEditorController", () => {
     advancedController.setSelection(source.length);
     await flushMicrotasks();
 
-    expect(view?.state.selection.main.anchor).toBe(source.length - "  ".length);
+    expect(view?.state.selection.main.anchor).toBe(source.length);
 
     advancedController.insertText("111111");
     await flushMicrotasks();
@@ -3634,6 +3872,130 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("removes only one visible empty paragraph below an ordered list on Backspace", async () => {
+    const host = document.createElement("div");
+    const source = "1. 1\n\n\n\n";
+    const previousVisibleEmptyLineStart = "1. 1\n\n".length;
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressBackspace: () => void;
+    };
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(source.length);
+    advancedController.pressBackspace();
+    await flushMicrotasks();
+
+    expect(controller.getContent()).toBe("1. 1\n\n");
+    expect(view?.state.selection.main.anchor).toBe(previousVisibleEmptyLineStart);
+    expect(view?.state.selection.main.head).toBe(previousVisibleEmptyLineStart);
+
+    controller.destroy();
+  });
+
+  it("returns to the whitespace-only line below an ordered list on Backspace", async () => {
+    const host = document.createElement("div");
+    const source = "1. 1\n   \n\n";
+    const whitespaceLineEnd = "1. 1\n   ".length;
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressBackspace: () => void;
+    };
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(source.length);
+    advancedController.pressBackspace();
+    await flushMicrotasks();
+
+    expect(controller.getContent()).toBe("1. 1\n   ");
+    expect(view?.state.selection.main.anchor).toBe(whitespaceLineEnd);
+    expect(view?.state.selection.main.head).toBe(whitespaceLineEnd);
+
+    controller.destroy();
+  });
+
+  it("moves between visible empty paragraphs below an ordered list with one vertical arrow press", async () => {
+    const host = document.createElement("div");
+    const source = "1. 1\n\n\n\n";
+    const previousVisibleEmptyLineStart = "1. 1\n\n".length;
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressArrowDown: () => void;
+      pressArrowUp: () => void;
+    };
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(source.length);
+    advancedController.pressArrowUp();
+    await flushMicrotasks();
+
+    expect(view?.state.selection.main.anchor).toBe(previousVisibleEmptyLineStart);
+
+    advancedController.pressArrowDown();
+    await flushMicrotasks();
+
+    expect(view?.state.selection.main.anchor).toBe(source.length);
+
+    controller.destroy();
+  });
+
+  it("moves through the whitespace-only line below an ordered list with one vertical arrow press", async () => {
+    const host = document.createElement("div");
+    const source = "1. 1\n   \n\n";
+    const whitespaceLineEnd = "1. 1\n   ".length;
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressArrowDown: () => void;
+      pressArrowUp: () => void;
+    };
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(source.length);
+    advancedController.pressArrowUp();
+    await flushMicrotasks();
+
+    expect(view?.state.selection.main.anchor).toBe(whitespaceLineEnd);
+
+    advancedController.pressArrowDown();
+    await flushMicrotasks();
+
+    expect(view?.state.selection.main.anchor).toBe(source.length);
+
+    controller.destroy();
+  });
+
   it("removes an empty top-level unordered marker on Backspace and keeps an empty line", () => {
     const host = document.createElement("div");
     const source = "- ";
@@ -3698,6 +4060,7 @@ describe("createCodeEditorController", () => {
     const host = document.createElement("div");
     const source = ["- parent", "  - "].join("\n");
     const afterMarkerRemoval = ["- parent", "  "].join("\n");
+    const afterFirstIndentRemoval = ["- parent", " "].join("\n");
     const afterIndentRemoval = "- parent\n";
 
     const controller = createCodeEditorController({
@@ -3722,6 +4085,12 @@ describe("createCodeEditorController", () => {
 
     advancedController.pressBackspace();
 
+    expect(controller.getContent()).toBe(afterFirstIndentRemoval);
+    expect(view?.state.selection.main.anchor).toBe(afterFirstIndentRemoval.length);
+    expect(view?.state.selection.main.head).toBe(afterFirstIndentRemoval.length);
+
+    advancedController.pressBackspace();
+
     expect(controller.getContent()).toBe(afterIndentRemoval);
     expect(view?.state.selection.main.anchor).toBe(afterIndentRemoval.length);
     expect(view?.state.selection.main.head).toBe(afterIndentRemoval.length);
@@ -3733,6 +4102,7 @@ describe("createCodeEditorController", () => {
     const host = document.createElement("div");
     const source = ["1. parent", "  1. "].join("\n");
     const afterMarkerRemoval = ["1. parent", "  "].join("\n");
+    const afterFirstIndentRemoval = ["1. parent", " "].join("\n");
     const afterIndentRemoval = "1. parent\n";
 
     const controller = createCodeEditorController({
@@ -3754,6 +4124,12 @@ describe("createCodeEditorController", () => {
     expect(controller.getContent()).toBe(afterMarkerRemoval);
     expect(view?.state.selection.main.anchor).toBe(afterMarkerRemoval.length);
     expect(view?.state.selection.main.head).toBe(afterMarkerRemoval.length);
+
+    advancedController.pressBackspace();
+
+    expect(controller.getContent()).toBe(afterFirstIndentRemoval);
+    expect(view?.state.selection.main.anchor).toBe(afterFirstIndentRemoval.length);
+    expect(view?.state.selection.main.head).toBe(afterFirstIndentRemoval.length);
 
     advancedController.pressBackspace();
 
@@ -6109,7 +6485,9 @@ describe("createCodeEditorController", () => {
     expect(view).not.toBeNull();
 
     const tableAdjacentBlankLineStart = getLineStartOffset(source, 14);
-    const previousExtraBlankLineStart = getLineStartOffset(source, 13);
+    const tableStart = getLineStartOffset(source, 15);
+    const hiddenSeparatorBeforeTable = getLineStartOffset(source, 13);
+    const previousVisibleBlankLineStart = getLineStartOffset(source, 12);
 
     view!.dispatch({
       selection: {
@@ -6128,7 +6506,29 @@ describe("createCodeEditorController", () => {
     await flushMicrotasks();
     await flushMicrotasks();
 
-    expect(view!.state.selection.main.anchor).toBe(previousExtraBlankLineStart);
+    expect(view!.state.selection.main.anchor).toBe(previousVisibleBlankLineStart);
+    expect(view!.state.selection.main.anchor).not.toBe(hiddenSeparatorBeforeTable);
+    expect(view!.state.selection.main.anchor).not.toBe(tableAdjacentBlankLineStart);
+
+    view!.dispatch({
+      selection: {
+        anchor: tableStart,
+        head: tableStart
+      }
+    });
+    view!.contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "ArrowUp",
+        code: "ArrowUp",
+        bubbles: true,
+        cancelable: true
+      })
+    );
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    expect(view!.state.selection.main.anchor).toBe(previousVisibleBlankLineStart);
+    expect(view!.state.selection.main.anchor).not.toBe(tableAdjacentBlankLineStart);
 
     controller.destroy();
     host.remove();

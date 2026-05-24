@@ -1,0 +1,43 @@
+{
+    "caseId":  "structural-blank-backspace-at-next-block",
+    "status":  "blocked",
+    "captureDate":  "2026-05-24",
+    "operator":  "Codex GUI automation",
+    "typora":  {
+                   "executable":  "C:\\Program Files\\Typora\\Typora.exe",
+                   "productVersion":  "1.13.4",
+                   "fileVersion":  "1.13.4",
+                   "platform":  "Windows",
+                   "mode":  "hybrid editing view",
+                   "settings":  "Default Whitespace / LineBreak settings; not modified during capture"
+               },
+    "initialSource":  "Paragraph one\n\nParagraph two",
+    "initialCaret":  {
+                         "offset":  15
+                     },
+    "actions":  [
+                    {
+                        "key":  "Backspace",
+                        "type":  "key"
+                    }
+                ],
+    "sentinel":  "FM_SENTINEL_STRUCT_BACKSPACE",
+    "savedSourceAfterSentinel":  "Paragraph one\n\nFM_SENTINEL_STRUCT_BACKSPACEaragraph two",
+    "screenshot":  "images/structural-blank-backspace-at-next-block.png",
+    "notes":  "Blocked: GUI automation could not deterministically place the caret at the start of the next block after the structural blank separator. The saved source shows the sentinel inserted after the first visible character of the next paragraph, so this file is retained only as failed capture evidence and must not be used as a Typora oracle expectation.",
+    "blockedReview":  {
+                          "reviewDate":  "2026-05-24",
+                          "reviewer":  "Codex second implementation worker",
+                          "conclusion":  "blocked",
+                          "reason":  "The matrix target is offset 15, the start of `Paragraph two` after `Paragraph one\\n\\n`. The saved source is `Paragraph one\\n\\nFM_SENTINEL_STRUCT_BACKSPACEaragraph two`, proving the initial Backspace was executed from after the leading `P`, not at the next block start. The screenshot also shows the caret at the start of `aragraph two`, after `P` has been removed.",
+                          "attemptedMethods":  [
+                                                   "Re-read the case matrix target offset, failed capture JSON, initial Markdown fixture bytes, saved source after sentinel, and screenshot.",
+                                                   "Compared the saved failed capture in `tmp/typora-oracle-capture/structural-blank-backspace-at-next-block.md` against the intended next-block-start source offset."
+                                               ],
+                          "nextManualSteps":  [
+                                                  "Open a fresh fixture containing exactly `Paragraph one\\n\\nParagraph two`.",
+                                                  "Place the caret at the visual start of `Paragraph two` with screenshot evidence before pressing Backspace.",
+                                                  "Press Backspace, insert `FM_SENTINEL_STRUCT_BACKSPACE`, save, and promote only if the sentinel/source prove the action started at offset 15 rather than after the first paragraph character."
+                                              ]
+                      }
+}

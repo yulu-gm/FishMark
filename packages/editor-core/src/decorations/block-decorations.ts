@@ -31,9 +31,18 @@ import {
   resolveLineStartOffset,
   trimTrailingCarriageReturn
 } from "../source-utils";
+import { blockRequiresLeadingStructuralSeparator } from "../structural-blank-lines";
+import {
+  createPhysicalEditingDocument,
+  type EditingLine,
+  type PhysicalEditingDocument,
+  type SemanticLineRole
+} from "../physical-editing-document";
 
 export type CreateBlockDecorationsOptions = {
   activeBlockState: ActiveBlockState;
+  activeLine?: EditingLine;
+  editingDocument?: PhysicalEditingDocument;
   hasEditorFocus: boolean;
   source: string;
   referenceDefinitions?: ReadonlyMap<string, InlineReferenceDefinition>;
@@ -54,12 +63,15 @@ export type SelectionScopedBlockDecorationsResult = BlockDecorationsResult & {
 export type CreateSelectionScopedBlockDecorationsOptions = CreateBlockDecorationsOptions & {
   baseDecorationSet: DecorationSet;
   previousActiveBlockState: ActiveBlockState;
+  previousActiveLine?: EditingLine;
 };
 
 type DecoratableBlock = ActiveBlockState["blockMap"]["blocks"][number];
 
 type BlockDecorationContext = {
   activeBlockState: ActiveBlockState;
+  activeLine: EditingLine;
+  editingDocument: PhysicalEditingDocument;
   activeBlockId: string | null;
   activeTableCursor: ActiveBlockState["tableCursor"];
   activeBlockquoteInContentEdit: boolean;
@@ -82,6 +94,7 @@ export function createBlockDecorations(
     createActiveDecorationSignature(context)
   ];
 
+  appendPhysicalLineDecorations(context, ranges);
   appendInactiveBlankLineDecorations(
     context.source,
     context.activeBlockState.blockMap.blocks,
@@ -114,6 +127,9 @@ export function createSelectionScopedBlockDecorations(
     ...options,
     collectReferenceDefinitionsWhenMissing: false
   });
+  const shouldRefreshPhysicalLineDecorations =
+    options.previousActiveLine?.number !== context.activeLine.number ||
+    options.previousActiveLine?.from !== context.activeLine.from;
   const shouldRefreshWhitespaceOnlyActiveLine = shouldRefreshWhitespaceOnlyLineDecorations(
     context.source,
     options.previousActiveBlockState.selection.head,
@@ -121,9 +137,11 @@ export function createSelectionScopedBlockDecorations(
     context.hasEditorFocus
   );
 
-  if (shouldRefreshWhitespaceOnlyActiveLine) {
+  if (shouldRefreshPhysicalLineDecorations || shouldRefreshWhitespaceOnlyActiveLine) {
     const refreshed = createBlockDecorations({
       activeBlockState: options.activeBlockState,
+      activeLine: context.activeLine,
+      editingDocument: context.editingDocument,
       hasEditorFocus: options.hasEditorFocus,
       source: options.source,
       referenceDefinitions: options.referenceDefinitions,
@@ -185,6 +203,11 @@ function createBlockDecorationContext(
     resolveImagePreviewUrl,
     tableWidgetCallbacks
   } = options;
+  const editingDocument = options.editingDocument ??
+    createPhysicalEditingDocument(source, activeBlockState.blockMap);
+  const activeLine = options.activeLine ??
+    editingDocument.getLineAtOffset(activeBlockState.selection.head) ??
+    editingDocument.lines[0]!;
   const activeBlockId = hasEditorFocus ? activeBlockState.activeBlock?.id ?? null : null;
   const activeBlockquoteInContentEdit =
     hasEditorFocus &&
@@ -207,6 +230,8 @@ function createBlockDecorationContext(
 
   return {
     activeBlockState,
+    activeLine,
+    editingDocument,
     activeBlockId,
     activeTableCursor: activeBlockState.tableCursor,
     activeBlockquoteInContentEdit,
@@ -449,7 +474,11 @@ function rangeTouchesSpan(
 }
 
 function createActiveDecorationSignature(context: BlockDecorationContext): string {
-  return `active:${context.activeBlockId ?? "none"}:blank-line:${context.activeSelectionLineStart ?? "none"}`;
+  return [
+    `active:${context.activeBlockId ?? "none"}`,
+    `blank-line:${context.activeSelectionLineStart ?? "none"}`,
+    `physical-line:${context.hasEditorFocus ? context.activeLine.number : "none"}:${context.activeLine.from}:${context.activeLine.to}:${context.activeLine.kind}`
+  ].join(":");
 }
 
 function createScopedSelectionSignature(context: BlockDecorationContext): string {
@@ -461,6 +490,53 @@ function createScopedSelectionSignature(context: BlockDecorationContext): string
       ? `${context.activeBlockState.tableCursor.tableStartOffset}:${context.activeBlockState.tableCursor.row}:${context.activeBlockState.tableCursor.column}`
       : ""
   ].join(":");
+}
+
+function appendPhysicalLineDecorations(
+  context: BlockDecorationContext,
+  ranges: Range<Decoration>[]
+): void {
+  for (const line of context.editingDocument.lines) {
+    const semanticLine = context.editingDocument.semanticLineMap.byLineNumber.get(line.number);
+    const classNames = createPhysicalLineClassNames(
+      line,
+      semanticLine?.role ?? null,
+      context.hasEditorFocus && line.number === context.activeLine.number
+    );
+
+    ranges.push(
+      Decoration.line({
+        attributes: {
+          class: classNames.join(" ")
+        }
+      }).range(line.from)
+    );
+  }
+}
+
+function createPhysicalLineClassNames(
+  line: EditingLine,
+  role: SemanticLineRole | null,
+  isActiveLine: boolean
+): string[] {
+  const classNames = [
+    "cm-fm-line",
+    `cm-fm-line-${line.kind}`
+  ];
+
+  if (isActiveLine) {
+    classNames.push("cm-fm-line-active");
+  }
+
+  if (role === "structural-separator") {
+    classNames.push("cm-fm-line-structural-separator");
+  }
+
+  if (role === "extra-blank") {
+    classNames.push("cm-fm-line-extra-blank");
+  }
+
+  return classNames;
 }
 
 function appendCodeFenceDecorations(
@@ -1127,6 +1203,7 @@ function appendInactiveBlankLineDecorations(
   ranges: Range<Decoration>[]
 ): void {
   let cursor = 0;
+  const hiddenLineStarts = new Set<number>();
 
   for (const block of blocks) {
     appendInactiveBlankLineDecorationsInRange(
@@ -1135,6 +1212,14 @@ function appendInactiveBlankLineDecorations(
       block.startOffset,
       cursor > 0,
       activeSelectionLineStart,
+      hiddenLineStarts,
+      ranges
+    );
+    appendLeadingBlockSeparatorDecoration(
+      source,
+      block,
+      activeSelectionLineStart,
+      hiddenLineStarts,
       ranges
     );
     cursor = Math.max(cursor, block.endOffset);
@@ -1146,6 +1231,7 @@ function appendInactiveBlankLineDecorations(
     source.length,
     cursor > 0,
     activeSelectionLineStart,
+    hiddenLineStarts,
     ranges
   );
 }
@@ -1156,39 +1242,77 @@ function appendInactiveBlankLineDecorationsInRange(
   endOffset: number,
   skipLeadingLineBreak: boolean,
   activeSelectionLineStart: number | null,
+  hiddenLineStarts: Set<number>,
   ranges: Range<Decoration>[]
 ): void {
   const contentStartOffset = skipLeadingLineBreak
     ? skipSingleLeadingLineBreak(source, startOffset, endOffset)
     : startOffset;
-  let hasConsumedStructuralBlankLine = false;
+  let emptyLineRunIndex = 0;
 
   for (const line of createLineInfosInRange(source, contentStartOffset, endOffset)) {
+    const lineEndOffset = trimTrailingCarriageReturn(source, line.startOffset, line.endOffset);
+    const lineText = source.slice(line.startOffset, lineEndOffset);
+
+    if (lineText.length > 0) {
+      emptyLineRunIndex = 0;
+      continue;
+    }
+
+    emptyLineRunIndex += 1;
+
     if (line.startOffset === activeSelectionLineStart) {
       continue;
     }
 
-    const lineEndOffset = trimTrailingCarriageReturn(source, line.startOffset, line.endOffset);
-    const lineText = source.slice(line.startOffset, lineEndOffset);
-
-    if (lineText.trim().length > 0) {
+    if (emptyLineRunIndex % 2 === 0) {
       continue;
     }
 
-    if (hasConsumedStructuralBlankLine) {
-      continue;
-    }
-
-    hasConsumedStructuralBlankLine = true;
-
-    ranges.push(
-      Decoration.line({
-        attributes: {
-          class: "cm-inactive-blank-line"
-        }
-      }).range(line.startOffset)
-    );
+    appendInactiveBlankLineDecoration(line.startOffset, activeSelectionLineStart, hiddenLineStarts, ranges);
   }
+}
+
+function appendLeadingBlockSeparatorDecoration(
+  source: string,
+  block: DecoratableBlock,
+  activeSelectionLineStart: number | null,
+  hiddenLineStarts: Set<number>,
+  ranges: Range<Decoration>[]
+): void {
+  if (!blockRequiresLeadingStructuralSeparator(block) || block.startOffset <= 0) {
+    return;
+  }
+
+  const previousLineEnd = source[block.startOffset - 1] === "\n" ? block.startOffset - 1 : block.startOffset;
+  const previousLineStart = resolveLineStartOffset(source, previousLineEnd);
+  const contentEnd = trimTrailingCarriageReturn(source, previousLineStart, previousLineEnd);
+
+  if (source.slice(previousLineStart, contentEnd).length !== 0) {
+    return;
+  }
+
+  appendInactiveBlankLineDecoration(previousLineStart, activeSelectionLineStart, hiddenLineStarts, ranges);
+}
+
+function appendInactiveBlankLineDecoration(
+  lineStart: number,
+  activeSelectionLineStart: number | null,
+  hiddenLineStarts: Set<number>,
+  ranges: Range<Decoration>[]
+): void {
+  if (lineStart === activeSelectionLineStart || hiddenLineStarts.has(lineStart)) {
+    return;
+  }
+
+  hiddenLineStarts.add(lineStart);
+  ranges.push(
+    Decoration.line({
+      attributes: {
+        class: "cm-inactive-blank-line"
+      }
+    }).range(lineStart)
+  );
 }
 
 function skipSingleLeadingLineBreak(source: string, startOffset: number, endOffset: number): number {

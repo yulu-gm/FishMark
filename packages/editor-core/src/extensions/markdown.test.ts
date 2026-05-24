@@ -238,6 +238,33 @@ describe("createFishMarkMarkdownExtensions", () => {
     destroy();
   });
 
+  it("updates physical active line classes on selection-only line changes", async () => {
+    const source = ["First", "Second"].join("\n");
+    const onBlockDecorationsBuilt = vi.fn();
+    const { host, view, destroy } = createHarness({
+      source,
+      onBlockDecorationsBuilt
+    });
+    view.dom.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+
+    onBlockDecorationsBuilt.mockClear();
+
+    view.dispatch({
+      selection: {
+        anchor: source.indexOf("Second")
+      }
+    });
+
+    const lines = Array.from(host.querySelectorAll<HTMLElement>(".cm-line"));
+
+    expect(lines[0]?.classList.contains("cm-fm-line-active")).toBe(false);
+    expect(lines[1]?.classList.contains("cm-fm-line-active")).toBe(true);
+    expect(onBlockDecorationsBuilt).not.toHaveBeenCalled();
+
+    destroy();
+  });
+
   it("refreshes decorations after a lazy code fence parser chunk loads", async () => {
     clearCodeHighlightCache();
     clearCodeHighlightLanguageLoaderState();
@@ -523,8 +550,9 @@ describe("createFishMarkMarkdownExtensions", () => {
     destroy();
   });
 
-  it("deletes a middle ordered marker without exposing raw marker source", () => {
+  it("detaches a middle ordered item while preserving its visible marker text", () => {
     const source = ["1. first", "2. second", "3. third"].join("\n");
+    const expected = ["1. first", "", "2.second", "3. third"].join("\n");
     const { view, destroy } = createHarness({ source });
     const contentStart = source.indexOf("second");
 
@@ -545,10 +573,9 @@ describe("createFishMarkMarkdownExtensions", () => {
     );
 
     expect(handled).toBe(false);
-    expect(view.state.doc.toString()).toBe(["1. first", "second", "3. third"].join("\n"));
-    expect(view.state.doc.toString()).not.toContain("2.second");
-    expect(view.state.selection.main.anchor).toBe(["1. first", ""].join("\n").length);
-    expect(view.state.selection.main.head).toBe(["1. first", ""].join("\n").length);
+    expect(view.state.doc.toString()).toBe(expected);
+    expect(view.state.selection.main.anchor).toBe(expected.indexOf("2.") + "2.".length);
+    expect(view.state.selection.main.head).toBe(expected.indexOf("2.") + "2.".length);
 
     destroy();
   });
@@ -810,6 +837,83 @@ describe("createFishMarkMarkdownExtensions", () => {
       anchor: view.state.selection.main.anchor
     });
     expect(document.activeElement).toBe(input);
+
+    destroy();
+  });
+
+  it("moves ArrowDown from a paragraph end across a collapsed structural blank to the next paragraph end", async () => {
+    const source = ["Paragraph one", "", "Paragraph two"].join("\n");
+    const { view, destroy } = createHarness({ source });
+
+    view.dispatch({
+      selection: {
+        anchor: "Paragraph one".length,
+        head: "Paragraph one".length
+      }
+    });
+
+    view.contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "ArrowDown",
+        code: "ArrowDown",
+        bubbles: true,
+        cancelable: true
+      })
+    );
+    await flushMicrotasks();
+
+    expect(view.state.selection.main.anchor).toBe(source.length);
+    expect(view.state.selection.main.head).toBe(source.length);
+
+    destroy();
+  });
+
+  it.each(["input.type", "input.type.compose"])(
+    "does not run structural blank normalization for %s transactions",
+    (userEvent) => {
+      const source = ["Paragraph one", "", "Paragraph two"].join("\n");
+      const { view, destroy } = createHarness({ source });
+      const blankLineStartAfterInsert = "xParagraph one\n".length;
+
+      view.dispatch({
+        changes: {
+          from: 0,
+          insert: "x"
+        },
+        selection: {
+          anchor: blankLineStartAfterInsert,
+          head: blankLineStartAfterInsert
+        },
+        userEvent
+      });
+
+      expect(view.state.doc.toString()).toBe(`x${source}`);
+      expect(view.state.selection.main.anchor).toBe(blankLineStartAfterInsert);
+      expect(view.state.selection.main.head).toBe(blankLineStartAfterInsert);
+
+      destroy();
+    }
+  );
+
+  it("repairs hidden inline marker selection after a single-line paste transaction", () => {
+    const source = "**bold**";
+    const { view, destroy } = createHarness({ source });
+
+    view.dispatch({
+      changes: {
+        from: source.length,
+        insert: "!"
+      },
+      selection: {
+        anchor: 1,
+        head: 1
+      },
+      userEvent: "input.paste"
+    });
+
+    expect(view.state.doc.toString()).toBe("**bold**!");
+    expect(view.state.selection.main.anchor).toBe(2);
+    expect(view.state.selection.main.head).toBe(2);
 
     destroy();
   });

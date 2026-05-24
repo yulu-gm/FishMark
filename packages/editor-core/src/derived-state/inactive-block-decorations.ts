@@ -47,6 +47,8 @@ export function deriveInactiveBlockDecorationsState(
 
   const { decorationSet, signature: blockSignature } = createBlockDecorations({
     activeBlockState: editorDerivedState.activeBlockState,
+    activeLine: editorDerivedState.activeLine,
+    editingDocument: editorDerivedState.editingDocument,
     hasEditorFocus: options.hasEditorFocus,
     source: options.source,
     referenceDefinitions: editorDerivedState.referenceDefinitions,

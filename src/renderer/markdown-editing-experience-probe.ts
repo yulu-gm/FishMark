@@ -10,6 +10,7 @@ import { createCodeEditorController } from "./code-editor";
 type CaseResult = {
   actualContent: string;
   actualSelection: { anchor: number; head: number };
+  caseId: string;
   details?: Record<string, unknown>;
   expectedContent?: string;
   expectedSelection?: { anchor: number; head: number };
@@ -37,6 +38,25 @@ type ClickSample = {
   y: number | null;
 };
 
+type LineSnapshot = {
+  className: string;
+  text: string;
+  whiteSpace: string;
+};
+
+type VisualAssertion = {
+  details?: Record<string, unknown>;
+  name: string;
+  pass: boolean;
+};
+
+type OracleVisualSnapshot = {
+  actualContent: string;
+  actualSelection: { anchor: number; head: number };
+  caretAfterActions: Record<string, number | null>;
+  linesAfterActions: LineSnapshot[];
+};
+
 type HumanListAction =
   | { kind: "backspace"; count?: number }
   | { kind: "enter" }
@@ -48,6 +68,105 @@ type HumanListCheckpoint = {
   expectedContent: string;
   name: string;
 };
+
+type OracleProbeAction =
+  | { text: string; type: "type" }
+  | { key: "ArrowDown" | "Backspace" | "Enter"; type: "key" };
+
+type NamedProbeCase = {
+  caseId: string;
+  group: string;
+  run: () => Promise<CaseResult>;
+};
+
+type OracleVisualAssertionFactory = (snapshot: OracleVisualSnapshot) => VisualAssertion[];
+
+function makeLegacyCaseId(grammar: string, name: string): string {
+  const slug = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, "-")
+    .replace(/^-+|-+$/gu, "");
+
+  return `legacy-${grammar}-${slug || "case"}`;
+}
+
+function visualAssertion(
+  name: string,
+  pass: boolean,
+  details?: Record<string, unknown>
+): VisualAssertion {
+  return { details, name, pass };
+}
+
+function hasFiniteMetric(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function assertFiniteCaret(snapshot: OracleVisualSnapshot): VisualAssertion {
+  const pass =
+    hasFiniteMetric(snapshot.caretAfterActions.bottom) &&
+    hasFiniteMetric(snapshot.caretAfterActions.left) &&
+    hasFiniteMetric(snapshot.caretAfterActions.right) &&
+    hasFiniteMetric(snapshot.caretAfterActions.top);
+
+  return visualAssertion("caret has finite geometry after actions", pass, {
+    caretAfterActions: snapshot.caretAfterActions
+  });
+}
+
+function assertLineAt(
+  snapshot: OracleVisualSnapshot,
+  index: number,
+  expected: {
+    classTokens?: string[];
+    text: string;
+    whiteSpace?: string;
+  }
+): VisualAssertion {
+  const line = snapshot.linesAfterActions[index] ?? null;
+  const classTokens = expected.classTokens ?? [];
+  const hasExpectedClasses =
+    line !== null &&
+    classTokens.every((classToken) => line.className.split(/\s+/u).includes(classToken));
+  const hasExpectedWhiteSpace =
+    line !== null &&
+    (expected.whiteSpace === undefined || line.whiteSpace === expected.whiteSpace);
+  const pass =
+    line !== null &&
+    line.text === expected.text &&
+    hasExpectedClasses &&
+    hasExpectedWhiteSpace;
+
+  return visualAssertion(`line ${index} matches expected editing surface`, pass, {
+    actualLine: line,
+    expected
+  });
+}
+
+function assertLineSequence(
+  snapshot: OracleVisualSnapshot,
+  expectedLines: Array<{
+    classTokens?: string[];
+    text: string;
+    whiteSpace?: string;
+  }>
+): VisualAssertion[] {
+  return expectedLines.map((expected, index) => assertLineAt(snapshot, index, expected));
+}
+
+function createOracleVisualAssertions(
+  expectedLines: Array<{
+    classTokens?: string[];
+    text: string;
+    whiteSpace?: string;
+  }>
+): OracleVisualAssertionFactory {
+  return (snapshot) => [
+    assertFiniteCaret(snapshot),
+    ...assertLineSequence(snapshot, expectedLines)
+  ];
+}
 
 function nextFrame(): Promise<void> {
   return new Promise((resolve) => {
@@ -106,7 +225,8 @@ function setupHarness(initialContent: string): Harness {
 }
 
 function resultFor(
-  input: Omit<CaseResult, "actualContent" | "actualSelection" | "pass"> & {
+  input: Omit<CaseResult, "actualContent" | "actualSelection" | "caseId" | "pass"> & {
+    caseId?: string;
     harness: Harness;
     pass: boolean;
   }
@@ -114,6 +234,7 @@ function resultFor(
   return {
     actualContent: input.harness.controller.getContent(),
     actualSelection: input.harness.controller.getSelection(),
+    caseId: input.caseId ?? makeLegacyCaseId(input.grammar, input.name),
     details: input.details,
     expectedContent: input.expectedContent,
     expectedSelection: input.expectedSelection,
@@ -125,6 +246,39 @@ function resultFor(
 
 function nativeInsertText(view: EditorView, text: string): boolean {
   view.contentDOM.focus();
+
+  if (/^[ \t]+$/u.test(text)) {
+    const selection = view.state.selection.main;
+    const anchor = selection.from + text.length;
+
+    view.dispatch({
+      changes: {
+        from: selection.from,
+        to: selection.to,
+        insert: text
+      },
+      selection: {
+        anchor,
+        head: anchor
+      },
+      userEvent: "input.type"
+    });
+    return true;
+  }
+
+  const beforeInputAccepted = view.contentDOM.dispatchEvent(
+    new InputEvent("beforeinput", {
+      bubbles: true,
+      cancelable: true,
+      data: text,
+      inputType: "insertText"
+    })
+  );
+
+  if (!beforeInputAccepted) {
+    return true;
+  }
+
   return document.execCommand("insertText", false, text);
 }
 
@@ -173,6 +327,17 @@ function dispatchTab(view: EditorView): boolean {
     new KeyboardEvent("keydown", {
       key: "Tab",
       code: "Tab",
+      bubbles: true,
+      cancelable: true
+    })
+  );
+}
+
+function dispatchKey(view: EditorView, key: "ArrowDown" | "Backspace" | "Enter"): boolean {
+  return view.contentDOM.dispatchEvent(
+    new KeyboardEvent("keydown", {
+      key,
+      code: key,
       bubbles: true,
       cancelable: true
     })
@@ -284,6 +449,26 @@ function describeDomSelectionGeometry(): Record<string, number | string | boolea
     rectLeft: Number.isFinite(rect.left) ? rect.left : null,
     rectTop: Number.isFinite(rect.top) ? rect.top : null,
     rectWidth: Number.isFinite(rect.width) ? rect.width : null
+  };
+}
+
+function describeRect(
+  rect: {
+    bottom: number;
+    height?: number;
+    left: number;
+    right: number;
+    top: number;
+    width?: number;
+  } | null
+): Record<string, number | null> {
+  return {
+    bottom: rect && Number.isFinite(rect.bottom) ? rect.bottom : null,
+    height: rect && typeof rect.height === "number" && Number.isFinite(rect.height) ? rect.height : null,
+    left: rect && Number.isFinite(rect.left) ? rect.left : null,
+    right: rect && Number.isFinite(rect.right) ? rect.right : null,
+    top: rect && Number.isFinite(rect.top) ? rect.top : null,
+    width: rect && typeof rect.width === "number" && Number.isFinite(rect.width) ? rect.width : null
   };
 }
 
@@ -1813,6 +1998,660 @@ async function runListDoubleEnterBackspaceCase(): Promise<CaseResult> {
   return result;
 }
 
+async function runHeadingEnterSpaceCaretCase(): Promise<CaseResult> {
+  const initialContent = "# Title";
+  const expectedContent = `${initialContent}\n\n `;
+  const harness = setupHarness(initialContent);
+
+  harness.controller.setSelection(initialContent.length);
+  await settle();
+
+  const enterEventAccepted = dispatchEnter(harness.view);
+  await settle();
+
+  const contentAfterEnter = harness.controller.getContent();
+  const selectionAfterEnter = harness.controller.getSelection();
+  const caretAfterEnterRect = harness.view.coordsAtPos(selectionAfterEnter.anchor);
+  const cursorAfterEnterRect =
+    harness.root.querySelector<HTMLElement>(".cm-cursor")?.getBoundingClientRect() ?? null;
+  const domSelectionAfterEnter = describeDomSelectionGeometry();
+
+  const spaceInsertAccepted = nativeInsertText(harness.view, " ");
+  await settle();
+
+  const selectionAfterSpace = harness.controller.getSelection();
+  const caretAfterSpaceRect = harness.view.coordsAtPos(selectionAfterSpace.anchor);
+  const cursorAfterSpaceRect =
+    harness.root.querySelector<HTMLElement>(".cm-cursor")?.getBoundingClientRect() ?? null;
+  const domSelectionAfterSpace = describeDomSelectionGeometry();
+  const linesAfterSpace = Array.from(harness.root.querySelectorAll<HTMLElement>(".cm-line")).map((line) => ({
+    className: line.className,
+    text: line.textContent ?? "",
+    whiteSpace: window.getComputedStyle(line).whiteSpace
+  }));
+  const activeWhitespaceLine = Array.from(harness.root.querySelectorAll<HTMLElement>(".cm-line")).find(
+    (line) => (line.textContent ?? "") === " " && !line.classList.contains("cm-inactive-blank-line")
+  ) ?? null;
+  const activeWhitespaceLineStyle = activeWhitespaceLine
+    ? window.getComputedStyle(activeWhitespaceLine)
+    : null;
+  const activeWhitespaceLineHasPhysicalSurface =
+    activeWhitespaceLine?.classList.contains("cm-fm-line") === true &&
+    activeWhitespaceLine.classList.contains("cm-fm-line-whitespace") &&
+    activeWhitespaceLine.classList.contains("cm-fm-line-active");
+  const caretMovedAfterSpace =
+    caretAfterEnterRect !== null &&
+    caretAfterSpaceRect !== null &&
+    caretAfterSpaceRect.left > caretAfterEnterRect.left + 1;
+  const pass =
+    contentAfterEnter === `${initialContent}\n\n` &&
+    selectionAfterEnter.anchor === `${initialContent}\n\n`.length &&
+    selectionAfterEnter.head === `${initialContent}\n\n`.length &&
+    spaceInsertAccepted &&
+    harness.controller.getContent() === expectedContent &&
+    selectionAfterSpace.anchor === expectedContent.length &&
+    selectionAfterSpace.head === expectedContent.length &&
+    caretMovedAfterSpace &&
+    activeWhitespaceLine !== null &&
+    activeWhitespaceLineHasPhysicalSurface &&
+    activeWhitespaceLineStyle?.whiteSpace === "pre-wrap";
+
+  const result = resultFor({
+    caseId: "heading-empty-paragraph-space",
+    details: {
+      activeWhitespaceLineClassName: activeWhitespaceLine?.className ?? null,
+      activeWhitespaceLineHasPhysicalSurface,
+      activeWhitespaceLineText: activeWhitespaceLine?.textContent ?? null,
+      activeWhitespaceLineWhiteSpace: activeWhitespaceLineStyle?.whiteSpace ?? null,
+      caretAfterEnter: describeRect(caretAfterEnterRect),
+      caretAfterSpace: describeRect(caretAfterSpaceRect),
+      caretLeftDelta:
+        caretAfterEnterRect !== null && caretAfterSpaceRect !== null
+          ? caretAfterSpaceRect.left - caretAfterEnterRect.left
+          : null,
+      caretMovedAfterSpace,
+      contentAfterEnter,
+      cursorAfterEnter: describeRect(cursorAfterEnterRect),
+      cursorAfterSpace: describeRect(cursorAfterSpaceRect),
+      cursorLeftDelta:
+        cursorAfterEnterRect !== null && cursorAfterSpaceRect !== null
+          ? cursorAfterSpaceRect.left - cursorAfterEnterRect.left
+          : null,
+      domSelectionAfterEnter,
+      domSelectionAfterSpace,
+      enterEventAccepted,
+      linesAfterSpace,
+      selectionAfterEnter,
+      selectionAfterSpace,
+      spaceInsertAccepted
+    },
+    expectedContent,
+    expectedSelection: { anchor: expectedContent.length, head: expectedContent.length },
+    grammar: "heading",
+    harness,
+    name: "space after Enter at heading end advances the caret visually",
+    pass
+  });
+  harness.controller.destroy();
+  return result;
+}
+
+async function runEmptyDocumentSpaceCaretCase(): Promise<CaseResult> {
+  const initialContent = "";
+  const expectedContent = " ";
+  const harness = setupHarness(initialContent);
+
+  harness.controller.setSelection(0);
+  await settle();
+
+  const selectionBeforeSpace = harness.controller.getSelection();
+  const caretBeforeSpaceRect = harness.view.coordsAtPos(selectionBeforeSpace.anchor);
+  const domSelectionBeforeSpace = describeDomSelectionGeometry();
+  const linesBeforeSpace = Array.from(harness.root.querySelectorAll<HTMLElement>(".cm-line")).map((line) => ({
+    className: line.className,
+    text: line.textContent ?? "",
+    whiteSpace: window.getComputedStyle(line).whiteSpace
+  }));
+
+  const spaceInsertAccepted = nativeInsertText(harness.view, " ");
+  await settle();
+
+  const selectionAfterSpace = harness.controller.getSelection();
+  const caretAfterSpaceRect = harness.view.coordsAtPos(selectionAfterSpace.anchor);
+  const domSelectionAfterSpace = describeDomSelectionGeometry();
+  const linesAfterSpace = Array.from(harness.root.querySelectorAll<HTMLElement>(".cm-line")).map((line) => ({
+    className: line.className,
+    text: line.textContent ?? "",
+    whiteSpace: window.getComputedStyle(line).whiteSpace
+  }));
+  const activeWhitespaceLine = Array.from(harness.root.querySelectorAll<HTMLElement>(".cm-line")).find(
+    (line) => (line.textContent ?? "") === " "
+  ) ?? null;
+  const activeWhitespaceLineStyle = activeWhitespaceLine
+    ? window.getComputedStyle(activeWhitespaceLine)
+    : null;
+  const activeWhitespaceLineHasPhysicalSurface =
+    activeWhitespaceLine?.classList.contains("cm-fm-line") === true &&
+    activeWhitespaceLine.classList.contains("cm-fm-line-whitespace") &&
+    activeWhitespaceLine.classList.contains("cm-fm-line-active");
+  const caretMovedAfterSpace =
+    caretBeforeSpaceRect !== null &&
+    caretAfterSpaceRect !== null &&
+    caretAfterSpaceRect.left > caretBeforeSpaceRect.left + 1;
+  const pass =
+    selectionBeforeSpace.anchor === 0 &&
+    selectionBeforeSpace.head === 0 &&
+    spaceInsertAccepted &&
+    harness.controller.getContent() === expectedContent &&
+    selectionAfterSpace.anchor === expectedContent.length &&
+    selectionAfterSpace.head === expectedContent.length &&
+    caretMovedAfterSpace &&
+    activeWhitespaceLine !== null &&
+    activeWhitespaceLineHasPhysicalSurface &&
+    activeWhitespaceLineStyle?.whiteSpace === "pre-wrap";
+
+  const result = resultFor({
+    caseId: "empty-type-one-space",
+    details: {
+      activeWhitespaceLineClassName: activeWhitespaceLine?.className ?? null,
+      activeWhitespaceLineHasPhysicalSurface,
+      activeWhitespaceLineText: activeWhitespaceLine?.textContent ?? null,
+      activeWhitespaceLineWhiteSpace: activeWhitespaceLineStyle?.whiteSpace ?? null,
+      caretAfterSpace: describeRect(caretAfterSpaceRect),
+      caretBeforeSpace: describeRect(caretBeforeSpaceRect),
+      caretLeftDelta:
+        caretBeforeSpaceRect !== null && caretAfterSpaceRect !== null
+          ? caretAfterSpaceRect.left - caretBeforeSpaceRect.left
+          : null,
+      caretMovedAfterSpace,
+      domSelectionAfterSpace,
+      domSelectionBeforeSpace,
+      linesAfterSpace,
+      linesBeforeSpace,
+      selectionAfterSpace,
+      selectionBeforeSpace,
+      spaceInsertAccepted
+    },
+    expectedContent,
+    expectedSelection: { anchor: expectedContent.length, head: expectedContent.length },
+    grammar: "paragraph",
+    harness,
+    name: "space at empty document start advances the caret visually",
+    pass
+  });
+  harness.controller.destroy();
+  return result;
+}
+
+function selectionAtEnd(content: string): { anchor: number; head: number } {
+  return { anchor: content.length, head: content.length };
+}
+
+async function runOracleActionCase(input: {
+  actions: OracleProbeAction[];
+  caseId: string;
+  expectedContent: string;
+  expectedSelection?: { anchor: number; head: number };
+  grammar: string;
+  group: string;
+  initialContent: string;
+  initialSelection: number;
+  name: string;
+  visualAssertions?: OracleVisualAssertionFactory;
+}): Promise<CaseResult> {
+  const harness = setupHarness(input.initialContent);
+
+  harness.controller.setSelection(input.initialSelection);
+  await settle();
+
+  const selectionBeforeActions = harness.controller.getSelection();
+  const actionResults: Array<Record<string, unknown>> = [];
+  let textInsertAccepted = true;
+
+  for (const [index, action] of input.actions.entries()) {
+    if (action.type === "type") {
+      const characterResults: boolean[] = [];
+
+      for (const character of Array.from(action.text)) {
+        characterResults.push(nativeInsertText(harness.view, character));
+        await settle();
+      }
+
+      const accepted = characterResults.every(Boolean);
+      textInsertAccepted &&= accepted;
+      actionResults.push({
+        accepted,
+        characterResults,
+        contentAfterAction: harness.controller.getContent(),
+        index,
+        selectionAfterAction: harness.controller.getSelection(),
+        text: action.text,
+        type: action.type
+      });
+      continue;
+    }
+
+    const accepted = dispatchKey(harness.view, action.key);
+    await settle();
+    actionResults.push({
+      accepted,
+      contentAfterAction: harness.controller.getContent(),
+      index,
+      key: action.key,
+      selectionAfterAction: harness.controller.getSelection(),
+      type: action.type
+    });
+  }
+
+  const expectedSelection = input.expectedSelection ?? selectionAtEnd(input.expectedContent);
+  const actualSelection = harness.controller.getSelection();
+  const actualContent = harness.controller.getContent();
+  const linesAfterActions: LineSnapshot[] = Array.from(harness.root.querySelectorAll<HTMLElement>(".cm-line")).map((line) => ({
+    className: line.className,
+    text: line.textContent ?? "",
+    whiteSpace: window.getComputedStyle(line).whiteSpace
+  }));
+  const caretAfterActionsRect = harness.view.coordsAtPos(actualSelection.anchor);
+  const caretAfterActions = describeRect(caretAfterActionsRect);
+  const visualAssertions = input.visualAssertions?.({
+    actualContent,
+    actualSelection,
+    caretAfterActions,
+    linesAfterActions
+  }) ?? [];
+  const visualPass = visualAssertions.every((assertion) => assertion.pass);
+  const pass =
+    textInsertAccepted &&
+    actualContent === input.expectedContent &&
+    actualSelection.anchor === expectedSelection.anchor &&
+    actualSelection.head === expectedSelection.head &&
+    visualPass;
+
+  const result = resultFor({
+    caseId: input.caseId,
+    details: {
+      actionResults,
+      caretAfterActions,
+      domSelectionAfterActions: describeDomSelectionGeometry(),
+      group: input.group,
+      linesAfterActions,
+      selectionBeforeActions,
+      visualAssertions,
+      visualPass
+    },
+    expectedContent: input.expectedContent,
+    expectedSelection,
+    grammar: input.grammar,
+    harness,
+    name: input.name,
+    pass
+  });
+  harness.controller.destroy();
+  return result;
+}
+
+function runEmptyTypeHashCase(): Promise<CaseResult> {
+  return runOracleActionCase({
+    actions: [{ text: "#", type: "type" }],
+    caseId: "empty-type-hash",
+    expectedContent: "#",
+    expectedSelection: { anchor: 1, head: 1 },
+    grammar: "heading",
+    group: "empty-document",
+    initialContent: "",
+    initialSelection: 0,
+    name: "empty document typing hash keeps raw heading marker",
+    visualAssertions: createOracleVisualAssertions([
+      {
+        classTokens: ["cm-active-heading", "cm-active-heading-depth-1"],
+        text: "#",
+        whiteSpace: "break-spaces"
+      }
+    ])
+  });
+}
+
+function runEmptyTypeThreeSpacesCase(): Promise<CaseResult> {
+  return runOracleActionCase({
+    actions: [{ text: "   ", type: "type" }],
+    caseId: "empty-type-three-spaces",
+    expectedContent: "   ",
+    expectedSelection: { anchor: 3, head: 3 },
+    grammar: "paragraph",
+    group: "empty-document",
+    initialContent: "",
+    initialSelection: 0,
+    name: "empty document typing three spaces preserves source spaces",
+    visualAssertions: createOracleVisualAssertions([
+      {
+        classTokens: ["cm-fm-line", "cm-fm-line-whitespace", "cm-fm-line-active"],
+        text: "   ",
+        whiteSpace: "pre-wrap"
+      }
+    ])
+  });
+}
+
+function runEmptySpacesEnterTextCase(): Promise<CaseResult> {
+  const expectedContent = "   \n\nabc";
+
+  return runOracleActionCase({
+    actions: [
+      { text: "   ", type: "type" },
+      { key: "Enter", type: "key" },
+      { text: "abc", type: "type" }
+    ],
+    caseId: "empty-spaces-enter-text",
+    expectedContent,
+    expectedSelection: selectionAtEnd(expectedContent),
+    grammar: "paragraph",
+    group: "empty-document",
+    initialContent: "",
+    initialSelection: 0,
+    name: "empty document spaces then Enter then text matches oracle source",
+    visualAssertions: createOracleVisualAssertions([
+      {
+        classTokens: ["cm-fm-line-whitespace"],
+        text: "   ",
+        whiteSpace: "break-spaces"
+      },
+      {
+        classTokens: ["cm-inactive-blank-line"],
+        text: "",
+        whiteSpace: "break-spaces"
+      },
+      {
+        classTokens: ["cm-active-paragraph"],
+        text: "abc",
+        whiteSpace: "break-spaces"
+      }
+    ])
+  });
+}
+
+function runEmptySpacesRepeatedEnterCase(): Promise<CaseResult> {
+  const expectedContent = "   \n\n\n\n";
+
+  return runOracleActionCase({
+    actions: [
+      { text: "   ", type: "type" },
+      { key: "Enter", type: "key" },
+      { key: "Enter", type: "key" }
+    ],
+    caseId: "empty-spaces-repeated-enter",
+    expectedContent,
+    expectedSelection: selectionAtEnd(expectedContent),
+    grammar: "paragraph",
+    group: "empty-document",
+    initialContent: "",
+    initialSelection: 0,
+    name: "empty document spaces then repeated Enter keeps visible empty paragraphs",
+    visualAssertions: createOracleVisualAssertions([
+      {
+        classTokens: ["cm-fm-line-whitespace"],
+        text: "   ",
+        whiteSpace: "break-spaces"
+      },
+      {
+        classTokens: ["cm-inactive-blank-line"],
+        text: "",
+        whiteSpace: "break-spaces"
+      },
+      { text: "", whiteSpace: "break-spaces" },
+      {
+        classTokens: ["cm-inactive-blank-line"],
+        text: "",
+        whiteSpace: "break-spaces"
+      },
+      {
+        classTokens: ["cm-fm-line-active", "cm-fm-line-empty"],
+        text: "",
+        whiteSpace: "pre-wrap"
+      }
+    ])
+  });
+}
+
+function runParagraphEndEnterCase(): Promise<CaseResult> {
+  const initialContent = "Paragraph";
+  const expectedContent = `${initialContent}\n\n`;
+
+  return runOracleActionCase({
+    actions: [{ key: "Enter", type: "key" }],
+    caseId: "paragraph-end-enter",
+    expectedContent,
+    expectedSelection: selectionAtEnd(expectedContent),
+    grammar: "paragraph",
+    group: "paragraph",
+    initialContent,
+    initialSelection: initialContent.length,
+    name: "Enter at paragraph end creates an empty paragraph",
+    visualAssertions: createOracleVisualAssertions([
+      {
+        classTokens: ["cm-inactive-paragraph"],
+        text: "Paragraph",
+        whiteSpace: "break-spaces"
+      },
+      {
+        classTokens: ["cm-inactive-blank-line"],
+        text: "",
+        whiteSpace: "break-spaces"
+      },
+      {
+        classTokens: ["cm-fm-line-active", "cm-fm-line-empty"],
+        text: "",
+        whiteSpace: "pre-wrap"
+      }
+    ])
+  });
+}
+
+function runParagraphMiddleEnterCase(): Promise<CaseResult> {
+  const expectedContent = "Alpha\n\nBeta";
+
+  return runOracleActionCase({
+    actions: [{ key: "Enter", type: "key" }],
+    caseId: "paragraph-middle-enter",
+    expectedContent,
+    expectedSelection: { anchor: "Alpha\n\n".length, head: "Alpha\n\n".length },
+    grammar: "paragraph",
+    group: "paragraph",
+    initialContent: "AlphaBeta",
+    initialSelection: "Alpha".length,
+    name: "Enter in paragraph middle splits with a blank editing line",
+    visualAssertions: createOracleVisualAssertions([
+      {
+        classTokens: ["cm-inactive-paragraph"],
+        text: "Alpha",
+        whiteSpace: "break-spaces"
+      },
+      {
+        classTokens: ["cm-inactive-blank-line"],
+        text: "",
+        whiteSpace: "break-spaces"
+      },
+      {
+        classTokens: ["cm-active-paragraph"],
+        text: "Beta",
+        whiteSpace: "break-spaces"
+      }
+    ])
+  });
+}
+
+function runParagraphStartEnterCase(): Promise<CaseResult> {
+  const initialContent = "Paragraph";
+  const expectedContent = `\n\n${initialContent}`;
+
+  return runOracleActionCase({
+    actions: [{ key: "Enter", type: "key" }],
+    caseId: "paragraph-start-enter",
+    expectedContent,
+    expectedSelection: { anchor: 2, head: 2 },
+    grammar: "paragraph",
+    group: "paragraph",
+    initialContent,
+    initialSelection: 0,
+    name: "Enter at paragraph start creates an empty paragraph above",
+    visualAssertions: createOracleVisualAssertions([
+      {
+        classTokens: ["cm-inactive-blank-line"],
+        text: "",
+        whiteSpace: "break-spaces"
+      },
+      { text: "", whiteSpace: "break-spaces" },
+      {
+        classTokens: ["cm-active-paragraph"],
+        text: "Paragraph",
+        whiteSpace: "break-spaces"
+      }
+    ])
+  });
+}
+
+function runHeadingEndEnterCase(): Promise<CaseResult> {
+  const initialContent = "# Title";
+  const expectedContent = `${initialContent}\n\n`;
+
+  return runOracleActionCase({
+    actions: [{ key: "Enter", type: "key" }],
+    caseId: "heading-end-enter",
+    expectedContent,
+    expectedSelection: selectionAtEnd(expectedContent),
+    grammar: "heading",
+    group: "heading",
+    initialContent,
+    initialSelection: initialContent.length,
+    name: "Enter at heading end creates an empty paragraph",
+    visualAssertions: createOracleVisualAssertions([
+      {
+        classTokens: ["cm-inactive-heading", "cm-inactive-heading-depth-1"],
+        text: "# Title",
+        whiteSpace: "break-spaces"
+      },
+      {
+        classTokens: ["cm-inactive-blank-line"],
+        text: "",
+        whiteSpace: "break-spaces"
+      },
+      {
+        classTokens: ["cm-fm-line-active", "cm-fm-line-empty"],
+        text: "",
+        whiteSpace: "pre-wrap"
+      }
+    ])
+  });
+}
+
+function runHeadingEndRepeatedEnterCase(): Promise<CaseResult> {
+  const initialContent = "# Title";
+  const expectedContent = `${initialContent}\n\n\n\n\n\n`;
+
+  return runOracleActionCase({
+    actions: [
+      { key: "Enter", type: "key" },
+      { key: "Enter", type: "key" },
+      { key: "Enter", type: "key" }
+    ],
+    caseId: "heading-end-repeated-enter",
+    expectedContent,
+    expectedSelection: selectionAtEnd(expectedContent),
+    grammar: "heading",
+    group: "heading",
+    initialContent,
+    initialSelection: initialContent.length,
+    name: "repeated Enter at heading end accumulates empty paragraphs",
+    visualAssertions: createOracleVisualAssertions([
+      {
+        classTokens: ["cm-inactive-heading", "cm-inactive-heading-depth-1"],
+        text: "# Title",
+        whiteSpace: "break-spaces"
+      },
+      {
+        classTokens: ["cm-inactive-blank-line"],
+        text: "",
+        whiteSpace: "break-spaces"
+      },
+      { text: "", whiteSpace: "break-spaces" },
+      {
+        classTokens: ["cm-inactive-blank-line"],
+        text: "",
+        whiteSpace: "break-spaces"
+      },
+      { text: "", whiteSpace: "break-spaces" },
+      {
+        classTokens: ["cm-inactive-blank-line"],
+        text: "",
+        whiteSpace: "break-spaces"
+      },
+      {
+        classTokens: ["cm-fm-line-active", "cm-fm-line-empty"],
+        text: "",
+        whiteSpace: "pre-wrap"
+      }
+    ])
+  });
+}
+
+function runHeadingEmptyParagraphBackspaceCase(): Promise<CaseResult> {
+  const initialContent = "# Title";
+
+  return runOracleActionCase({
+    actions: [
+      { key: "Enter", type: "key" },
+      { key: "Backspace", type: "key" }
+    ],
+    caseId: "heading-empty-paragraph-backspace",
+    expectedContent: initialContent,
+    expectedSelection: selectionAtEnd(initialContent),
+    grammar: "heading",
+    group: "heading",
+    initialContent,
+    initialSelection: initialContent.length,
+    name: "Backspace from empty paragraph below heading rejoins heading line",
+    visualAssertions: createOracleVisualAssertions([
+      {
+        classTokens: ["cm-active-heading", "cm-active-heading-depth-1"],
+        text: "# Title",
+        whiteSpace: "break-spaces"
+      }
+    ])
+  });
+}
+
+function runStructuralBlankArrowDownCase(): Promise<CaseResult> {
+  const initialContent = "Paragraph one\n\nParagraph two";
+
+  return runOracleActionCase({
+    actions: [{ key: "ArrowDown", type: "key" }],
+    caseId: "structural-blank-arrow-down",
+    expectedContent: initialContent,
+    expectedSelection: selectionAtEnd(initialContent),
+    grammar: "paragraph",
+    group: "structural-blank",
+    initialContent,
+    initialSelection: "Paragraph one".length,
+    name: "ArrowDown from paragraph end crosses structural blank to next paragraph end",
+    visualAssertions: createOracleVisualAssertions([
+      {
+        classTokens: ["cm-inactive-paragraph"],
+        text: "Paragraph one",
+        whiteSpace: "break-spaces"
+      },
+      {
+        classTokens: ["cm-inactive-blank-line"],
+        text: "",
+        whiteSpace: "break-spaces"
+      },
+      {
+        classTokens: ["cm-active-paragraph"],
+        text: "Paragraph two",
+        whiteSpace: "break-spaces"
+      }
+    ])
+  });
+}
+
 async function runNestedEmptyListMarkerBackspaceCaretCase(): Promise<CaseResult> {
   const initialContent = ["- parent", "  - child", "    - grandchild"].join("\n");
   const expectedMarkerContent = `${initialContent}\n    - `;
@@ -2320,12 +3159,95 @@ async function runBlockquoteDragSelectionCase(): Promise<CaseResult> {
   return result;
 }
 
+const namedProbeCases: NamedProbeCase[] = [
+  { caseId: "empty-type-hash", group: "empty-document", run: runEmptyTypeHashCase },
+  { caseId: "empty-type-one-space", group: "empty-document", run: runEmptyDocumentSpaceCaretCase },
+  { caseId: "empty-type-three-spaces", group: "empty-document", run: runEmptyTypeThreeSpacesCase },
+  { caseId: "empty-spaces-enter-text", group: "empty-document", run: runEmptySpacesEnterTextCase },
+  { caseId: "empty-spaces-repeated-enter", group: "empty-document", run: runEmptySpacesRepeatedEnterCase },
+  { caseId: "paragraph-end-enter", group: "paragraph", run: runParagraphEndEnterCase },
+  { caseId: "paragraph-middle-enter", group: "paragraph", run: runParagraphMiddleEnterCase },
+  { caseId: "paragraph-start-enter", group: "paragraph", run: runParagraphStartEnterCase },
+  { caseId: "heading-end-enter", group: "heading", run: runHeadingEndEnterCase },
+  { caseId: "heading-end-repeated-enter", group: "heading", run: runHeadingEndRepeatedEnterCase },
+  { caseId: "heading-empty-paragraph-space", group: "heading", run: runHeadingEnterSpaceCaretCase },
+  { caseId: "heading-empty-paragraph-backspace", group: "heading", run: runHeadingEmptyParagraphBackspaceCase },
+  { caseId: "structural-blank-arrow-down", group: "structural-blank", run: runStructuralBlankArrowDownCase }
+];
+
+const namedProbeAliases = new Map<string, string>([
+  ["empty-document-space-caret", "empty-type-one-space"],
+  ["heading-enter-space-caret", "heading-empty-paragraph-space"]
+]);
+
+function buildProbeResult(cases: CaseResult[]): ProbeResult {
+  const failures = cases
+    .filter((entry) => !entry.pass)
+    .map((entry) => `${entry.caseId}:${entry.grammar}/${entry.name}`);
+
+  return {
+    cases,
+    failures,
+    pass: failures.length === 0
+  };
+}
+
+async function runRequestedNamedProbeCase(
+  requestedCase: string | null,
+  requestedGroup: string | null
+): Promise<ProbeResult | null> {
+  if (requestedCase && requestedCase.length > 0) {
+    const caseId = namedProbeAliases.get(requestedCase) ?? requestedCase;
+    const entry = namedProbeCases.find((candidate) => candidate.caseId === caseId);
+
+    if (!entry) {
+      return {
+        cases: [],
+        failures: [`Unknown markdown editing experience probe case: ${requestedCase}`],
+        pass: false
+      };
+    }
+
+    return buildProbeResult([await entry.run()]);
+  }
+
+  if (requestedGroup && requestedGroup.length > 0) {
+    const entries = requestedGroup === "oracle-captured"
+      ? namedProbeCases
+      : namedProbeCases.filter((entry) => entry.group === requestedGroup);
+
+    if (entries.length === 0) {
+      return {
+        cases: [],
+        failures: [`Unknown markdown editing experience probe group: ${requestedGroup}`],
+        pass: false
+      };
+    }
+
+    const cases: CaseResult[] = [];
+    for (const entry of entries) {
+      cases.push(await entry.run());
+    }
+
+    return buildProbeResult(cases);
+  }
+
+  return null;
+}
+
 export async function runMarkdownEditingExperienceProbe(): Promise<ProbeResult> {
   document.body.style.margin = "0";
   document.body.style.background = "#fff";
   document.body.style.color = "#1f2937";
   document.body.style.fontFamily = "Georgia, 'Times New Roman', serif";
   document.body.style.fontSize = "16px";
+
+  const requestedCase = new URLSearchParams(window.location.search).get("case");
+  const requestedGroup = new URLSearchParams(window.location.search).get("group");
+  const requestedProbeResult = await runRequestedNamedProbeCase(requestedCase, requestedGroup);
+  if (requestedProbeResult) {
+    return requestedProbeResult;
+  }
 
   const cases: CaseResult[] = [];
 
@@ -2414,6 +3336,7 @@ export async function runMarkdownEditingExperienceProbe(): Promise<ProbeResult> 
     );
   }
 
+  cases.push(await runHeadingEnterSpaceCaretCase());
   cases.push(await runListDoubleEnterExitInsertCase());
   cases.push(await runListDoubleEnterBackspaceCase());
   cases.push(await runNestedEmptyListMarkerBackspaceCaretCase());
@@ -2534,15 +3457,7 @@ export async function runMarkdownEditingExperienceProbe(): Promise<ProbeResult> 
   cases.push(await runTableKeyboardExitInsertCase("ArrowDown"));
   cases.push(await runTableDashBelowKeepsRenderedTableCase());
 
-  const failures = cases
-    .filter((entry) => !entry.pass)
-    .map((entry) => `${entry.grammar}/${entry.name}`);
-
-  return {
-    cases,
-    failures,
-    pass: failures.length === 0
-  };
+  return buildProbeResult(cases);
 }
 
 Object.assign(window, {

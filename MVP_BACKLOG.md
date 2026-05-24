@@ -955,7 +955,7 @@
 
 ### TASK-030 visual-test 截图与 diff 支持
 
-状态：DEV_IN_PROGRESS
+状态：DEV_DONE
 依赖：`TASK-027`、`TASK-028`、`TASK-029`
 
 目标：让测试工作台支持带界面的 visual-test，并输出截图、基线和 diff 工件。
@@ -1157,3 +1157,183 @@
 - [x] 在 `src/renderer/` 中把单一 `currentDocument` 模型迁移为标签栏 + 活动标签编辑器工作流
 - [x] 接通 `New` / `Open...` / `New Window`、拖入文件、外部打开文件、标签排序与拖出成新窗口
 - [x] 将保存、另存为、autosave、外部文件变更、关闭确认迁移到 `tabId` 维度并补回归测试
+
+---
+
+## Epic 11：Typora-like 编辑对齐
+
+> 设计来源：`docs/plans/typora-like-editor/2026-05-24-typora-editing-alignment-design.md`。本 Epic 只处理直接写作、光标、空白、换行、Backspace 和 Markdown 可编辑表面的对齐；图片、导出、主题和壳层不在本 Epic 内。
+
+### TASK-053 Typora oracle 与 FishMark baseline
+
+状态：DEV_DONE
+依赖：`TASK-007`、`TASK-009`、`TASK-035`
+
+目标：先建立可重复的 Typora 行为 oracle、FishMark 当前 probe baseline 和首批行为矩阵，避免在没有外部参照的情况下继续堆编辑器例外。
+
+主要落点：`docs/plans/typora-like-editor/oracle/`、`docs/plans/typora-like-editor/`、`src/renderer/markdown-editing-experience-probe.ts`、`scripts/probe-markdown-editing-experience.mjs`。
+
+交付物：
+- oracle artifact 协议与 case matrix
+- 首批空文档、纯空格行、段落、标题、结构空白、Backspace 行为 case
+- Typora 1.13.4 Windows 捕获记录或明确的手动捕获占位
+- FishMark probe 对应 case 的当前 pass/fail baseline
+- baseline report，列出后续 refactor 的必须修复项
+
+验收：
+- 每个 case 有稳定 `caseId`、初始 source、动作序列、期望采集字段和 capture 状态
+- oracle 记录不依赖 Typora 私有 API
+- FishMark probe 可按 case 或 case group 运行，并输出 source、selection 与必要几何信息
+- 本任务不改变 FishMark 编辑行为，除非只是为 probe 暴露诊断数据
+
+执行切片：
+- [x] 将 Typora-like alignment 拆成正式 backlog task
+- [x] 建立 oracle artifact 协议、case matrix 和 baseline report 骨架
+- [x] 自动捕获空文档、段落与标题类 Windows Typora 1.13.4 oracle 结果，并记录 GUI 定位不可靠的 blocked case
+- [x] 运行现有 FishMark named probe：`empty-document-space-caret` 与 `heading-enter-space-caret`
+- [x] 将 whitespace-line / structural-blank 自动化不可靠 case 明确记录为 blocked，禁止作为 oracle expectation
+- [x] 手动复核 blocked case，或改进 GUI 自动化后补齐可用 oracle expectation
+- [x] 将现有 `test:editing-experience` probe 映射到首批 caseId
+- [x] 运行并发布 FishMark baseline pass/fail 报告
+
+执行备注：2026-05-24 第二实现 worker 已复核 4 个 blocked case 的 matrix offset、sentinel 保存结果、截图与 `tmp/typora-oracle-*` scratch 证据；现有证据不足以升级为 captured，仍需人工手动捕获或更强 GUI 自动化。
+
+### TASK-054 物理编辑行模型
+
+状态：DEV_DONE
+依赖：`TASK-053`
+
+目标：在 `editor-core` 中引入从 CodeMirror source 直接派生的 `PhysicalEditingDocument` / `EditingLine`，让每一条物理源码行都成为可推理的编辑表面。
+
+主要落点：`packages/editor-core/src/`、`packages/editor-core/src/derived-state/`、`packages/editor-core/src/active-block.ts`。
+
+交付物：
+- `EditingLine` 数据结构，覆盖 empty / whitespace / text 三类行
+- `PhysicalEditingDocument` 创建函数
+- `SemanticLineMap`，把 Markdown block 语义作为可选 overlay 关联到物理行
+- derived state 中暴露 `editingDocument` 与始终存在的 `activeLine`
+- 单元测试覆盖空文档、纯空格文档、混合文档、heading、list、code fence、结构空白
+
+验收：
+- Markdown parser 不再为了编辑性伪造 semantic block
+- 非空编辑器状态下 `activeLine` 始终存在，`activeBlock` 可以为 null
+- 现有 block map、outline、table cursor 和 decorations 不因新增模型发生行为变化
+
+执行切片：
+- [x] 定义 physical editing line 类型与纯函数测试
+- [x] 建立 semantic line mapping
+- [x] 将 derived state 接入 `editingDocument` / `activeLine`
+- [x] 保持现有命令和 decoration 行为稳定
+
+### TASK-055 基于物理行的编辑表面 decoration
+
+状态：DEV_DONE
+依赖：`TASK-054`
+
+目标：让 active empty line、active whitespace line 和结构空白行的可见性由物理行模型统一驱动，并移除 whitespace-only 文档伪 paragraph 的过渡方案。
+
+主要落点：`packages/editor-core/src/decorations/`、`packages/editor-core/src/extensions/markdown.ts`、`src/renderer/styles/markdown-render.css`、`src/renderer/code-editor.test.ts`。
+
+交付物：
+- 统一的 `cm-fm-line-*` 物理行 class
+- active empty / whitespace line 可见且可测量
+- inactive structural separator 仍可按现有规则折叠
+- 删除或替换 `materializeEditableWhitespaceDocument` 方向的 parser-first 例外
+- CSS / renderer / Electron geometry 回归
+
+验收：
+- 空文档输入空格后 caret 可见并按空格宽度前进
+- 混合文档中的纯空格行不会被当作结构空白折叠
+- active line 优先级高于 inactive structural separator collapse
+- 保存源码不新增隐藏字符或 editor-only sentinel
+
+执行切片：
+- [x] 为每个 CodeMirror visible line 输出物理行 class
+- [x] 让 active empty / whitespace line 具备稳定高度与 caret 几何
+- [x] 移除 whitespace-only semantic fake block
+- [x] 补 Electron geometry probe 与 CSS contract 测试
+
+### TASK-056 Enter / Backspace line-first 路由
+
+状态：DEV_DONE
+依赖：`TASK-054`、`TASK-055`
+
+目标：把普通 Enter / Backspace 改成先看物理行，再交给 list、blockquote、code fence、table 等语义 handler；空文档、纯空格行、段落、标题和重复操作必须匹配 oracle。
+
+主要落点：`packages/editor-core/src/commands/markdown-commands.ts`、`packages/editor-core/src/commands/`、`src/renderer/code-editor.test.ts`、`src/renderer/markdown-editing-experience-probe.ts`。
+
+交付物：
+- Enter command order：table / code fence / list / blockquote / thematic break / heading / generic physical line
+- Backspace command order：selection delete / whitespace char delete / semantic marker / physical line start join / structural separator / native fallback
+- 空文档、纯空格行、段落、标题的 oracle 对齐测试
+- 现有 list、blockquote、code fence、table 回归保持通过
+
+验收：
+- `#`、空格、多空格、普通文本在空文档中的输入不跳光标
+- heading 末尾连续 Enter 行为稳定
+- whitespace-only line 内 Backspace 一次删除一个真实空白字符
+- line start Backspace 行为按 oracle join 或删除上一行
+- undo 粒度保持一键一事务，除非 case report 记录例外
+
+执行切片：
+- [x] 写 line-first Enter 失败测试
+- [x] 实现 Enter 物理行 fallback
+- [x] 写 whitespace Backspace 失败测试
+- [x] 实现 Backspace 物理行 fallback
+- [x] 跑完整编辑命令与 Electron probe 回归
+
+### TASK-057 selection normalization 边界拆分
+
+状态：DEV_DONE
+依赖：`TASK-055`、`TASK-056`
+
+目标：拆分 hidden marker selection normalization 与 structural navigation selection normalization，禁止普通 printable input 被结构空白逻辑移动。
+
+主要落点：`packages/editor-core/src/extensions/markdown.ts`、`packages/editor-core/src/line-visibility.ts`、`src/renderer/code-editor.test.ts`、`src/renderer/markdown-editing-experience-probe.ts`。
+
+交付物：
+- `normalizeHiddenMarkerSelection`
+- `normalizeStructuralNavigationSelection`
+- transaction filter 按 user event / transaction shape 决定是否归一化
+- printable input、IME composition、space 输入的光标稳定回归
+
+验收：
+- 输入空格、`#`、中文、普通文本后 selection 不被 structural blank normalization 拉回
+- ArrowUp / ArrowDown / mouse selection 仍按结构空白规则导航
+- hidden Markdown marker 边界仍保持可编辑和可选中
+- IME composition guard 不回归
+
+执行切片：
+- [x] 给 printable input selection 写 RED 用例
+- [x] 拆出 hidden marker normalization
+- [x] 拆出 structural navigation normalization
+- [x] 将 transaction filter 改为按事件类型调用
+- [x] 补 IME 与鼠标/箭头导航回归
+
+### TASK-058 Typora-like alignment gate
+
+状态：DEV_DONE
+依赖：`TASK-053`、`TASK-054`、`TASK-055`、`TASK-056`、`TASK-057`
+
+目标：把 Phase 1 的 oracle case 全部跑过 FishMark probe，发布 pass/fail 报告，并只在证据满足时声明本行为子集已 Typora-like aligned。
+
+主要落点：`docs/plans/typora-like-editor/`、`docs/test-report.md`、`reports/task-summaries/`、`.artifacts/test-runs/`。
+
+交付物：
+- 全量 oracle 对比报告
+- FishMark probe artifact
+- 未对齐 case 清单与后续 task 建议
+- `docs/test-report.md` 与任务总结同步
+
+验收：
+- 所有已 captured 的 TASK-053 oracle case 都有 FishMark source、selection、几何与重复操作 PASS / FAIL 结论
+- blocked oracle case 保持 blocked / not scored，并列出后续人工捕获步骤；没有新 Typora 证据时不得描述为已对齐
+- undo 粒度只有在 oracle / probe artifact 提供证据时才参与评分；无证据时必须明确记录为未评分
+- 未通过、blocked 或未评分 case 不被描述为已对齐
+- 现有 list、blockquote、code fence、table、image、inline rendering 回归不失败
+
+执行切片：
+- [x] 汇总 oracle 与 FishMark probe 输出
+- [x] 跑 `npm run test:editing-experience`
+- [x] 跑相关 unit / renderer / build 门禁
+- [x] 写 alignment gate report 与 task summary

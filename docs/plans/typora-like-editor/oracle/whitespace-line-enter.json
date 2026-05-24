@@ -1,0 +1,44 @@
+{
+  "caseId": "whitespace-line-enter",
+  "status": "blocked",
+  "captureDate": "2026-05-24",
+  "operator": "Codex GUI automation",
+  "typora": {
+    "executable": "C:\\Program Files\\Typora\\Typora.exe",
+    "productVersion": "1.13.4",
+    "fileVersion": "1.13.4",
+    "platform": "Windows",
+    "mode": "hybrid editing view",
+    "settings": "Default Whitespace / LineBreak settings; not modified during capture"
+  },
+  "initialSource": "Before\n   \nAfter",
+  "initialCaret": {
+    "intended": "whitespace-only source line",
+    "attemptedPlacement": "visual click between Before and After"
+  },
+  "actions": [
+    {
+      "type": "key",
+      "key": "Enter"
+    }
+  ],
+  "sentinel": "FM_SENTINEL_CLICK_WS_ENTER",
+  "savedSourceAfterSentinel": "Before\n\nA\n\nFM_SENTINEL_CLICK_WS_ENTERfter",
+  "screenshot": null,
+  "notes": "Blocked: GUI automation could not deterministically place the caret on the whitespace-only source line. A visual click between the rendered lines placed the caret in the following visible word, so this failed capture must not be used as a Typora oracle expectation.",
+  "blockedReview": {
+    "reviewDate": "2026-05-24",
+    "reviewer": "Codex second implementation worker",
+    "conclusion": "blocked",
+    "reason": "The matrix target is offset 10 inside the whitespace-only line of `Before\\n   \\nAfter`, but the failed click-test source is `Before\\n\\nA\\n\\nFM_SENTINEL_CLICK_WS_ENTERfter`. Enter and the sentinel landed after the first visible character of `After`; the record also has no screenshot and uses a click-test sentinel that differs from the matrix sentinel.",
+    "attemptedMethods": [
+      "Re-read the case matrix target offset, failed capture JSON, and `tmp/typora-oracle-click-test/whitespace-click-test.md`.",
+      "Checked whether saved source alone proves the action happened on the whitespace-only source line; it proves the opposite."
+    ],
+    "nextManualSteps": [
+      "Create a fresh `Before\\n   \\nAfter` fixture and capture a screenshot with the caret visibly on the whitespace-only line before pressing Enter.",
+      "Press Enter, insert the matrix sentinel `FM_SENTINEL_WS_ENTER`, save, and keep the exact saved source.",
+      "Promote only if the source and screenshot jointly prove the action began on the whitespace-only line."
+    ]
+  }
+}

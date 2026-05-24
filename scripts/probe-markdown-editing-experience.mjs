@@ -10,6 +10,19 @@ const electronBinary = require("electron");
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, "..");
 const port = Number(process.env.FISHMARK_MARKDOWN_EDITING_EXPERIENCE_PROBE_PORT ?? "5195");
+const requestedCase = process.env.FISHMARK_MARKDOWN_EDITING_EXPERIENCE_PROBE_CASE ?? "";
+const requestedGroup = process.env.FISHMARK_MARKDOWN_EDITING_EXPERIENCE_PROBE_GROUP ?? "";
+const probeSearchParams = new URLSearchParams();
+if (requestedCase.length > 0) {
+  probeSearchParams.set("case", requestedCase);
+}
+if (requestedGroup.length > 0) {
+  probeSearchParams.set("group", requestedGroup);
+}
+const probeSearch = probeSearchParams.toString();
+const probePath = probeSearch.length > 0
+  ? `/markdown-editing-experience-probe.html?${probeSearch}`
+  : "/markdown-editing-experience-probe.html";
 
 const server = await createServer({
   configFile: resolve(projectRoot, "vite.config.ts"),
@@ -30,7 +43,7 @@ const child = spawn(
     cwd: projectRoot,
     env: {
       ...process.env,
-      FISHMARK_MARKDOWN_EDITING_EXPERIENCE_PROBE_URL: `http://localhost:${port}/markdown-editing-experience-probe.html`
+      FISHMARK_MARKDOWN_EDITING_EXPERIENCE_PROBE_URL: `http://localhost:${port}${probePath}`
     },
     stdio: "inherit"
   }

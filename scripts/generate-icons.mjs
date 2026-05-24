@@ -8,14 +8,18 @@ import { PNG } from "pngjs";
 const PNG_SIZES = [16, 24, 32, 48, 64, 128, 256, 512];
 const SOURCE_PNG_SIZE = Math.max(...PNG_SIZES);
 const ICO_SIZES = new Set([16, 24, 32, 48, 64, 128, 256]);
+const MARK_SOURCE = "assets/branding/fishmark_mark.svg";
+const FISH_FILL_RADIUS = 245;
 const VARIANTS = [
   {
     name: "light",
-    source: "assets/branding/fishmark_logo_light.svg"
+    color: "#111827",
+    baseColor: "#ffffff"
   },
   {
     name: "dark",
-    source: "assets/branding/fishmark_logo_dark.svg"
+    color: "#f8fafc",
+    baseColor: "#111827"
   }
 ];
 
@@ -54,6 +58,16 @@ function renderPng(svgSource, size) {
   return renderer.render().asPng();
 }
 
+function createIconSvg(svgSource, variant) {
+  return svgSource
+    .toString("utf8")
+    .replace(
+      /(<svg\b[^>]*>)/u,
+      `$1\n  <circle cx="300" cy="300" r="${FISH_FILL_RADIUS}" fill="${variant.baseColor}" />`
+    )
+    .replaceAll("currentColor", variant.color);
+}
+
 function resizePng(sourcePng, size) {
   if (sourcePng.width === size && sourcePng.height === size) {
     return PNG.sync.write(sourcePng);
@@ -86,9 +100,9 @@ function resizePng(sourcePng, size) {
 }
 
 async function generateVariant(variant, outputDirectory) {
-  const sourcePath = path.join(process.cwd(), variant.source);
+  const sourcePath = path.join(process.cwd(), MARK_SOURCE);
   const variantOutputDirectory = path.join(outputDirectory, variant.name);
-  const svgSource = readFileSync(sourcePath);
+  const svgSource = createIconSvg(readFileSync(sourcePath), variant);
   const sourcePng = PNG.sync.read(renderPng(svgSource, SOURCE_PNG_SIZE));
   const icoImages = [];
 

@@ -28,6 +28,14 @@ afterEach(() => {
 });
 
 describe("generate-icons script", () => {
+  it("generates app icons from the shared FishMark mark source", () => {
+    const scriptSource = readFileSync(path.join(process.cwd(), "scripts", "generate-icons.mjs"), "utf8");
+    const sharedMarkPath = path.join(process.cwd(), "assets", "branding", "fishmark_mark.svg");
+
+    expect(existsSync(sharedMarkPath)).toBe(true);
+    expect(scriptSource).toContain("assets/branding/fishmark_mark.svg");
+  });
+
   it("creates PNG and ICO assets for both FishMark logo variants", () => {
     const outputDirectory = mkdtempSync(path.join(tmpdir(), "fishmark-icons-"));
     createdDirectories.push(outputDirectory);
@@ -55,7 +63,7 @@ describe("generate-icons script", () => {
     }
   }, 30000);
 
-  it("renders the light icon fish body as an opaque black fill", () => {
+  it("renders the light icon with a high contrast mark fill", () => {
     const outputDirectory = mkdtempSync(path.join(tmpdir(), "fishmark-icons-fill-"));
     createdDirectories.push(outputDirectory);
 
@@ -72,12 +80,17 @@ describe("generate-icons script", () => {
     expect(result.status).toBe(0);
 
     const image = PNG.sync.read(readFileSync(path.join(outputDirectory, "light", "icon-512.png")));
-    const centerOffset = (Math.floor(image.height / 2) * image.width + Math.floor(image.width / 2)) * 4;
+    const markOffset = (Math.floor(image.height * 0.25) * image.width + Math.floor(image.width * 0.5)) * 4;
+    const fishOffset = (260 * image.width + 180) * 4;
 
-    expect(image.data[centerOffset]).toBeLessThanOrEqual(8);
-    expect(image.data[centerOffset + 1]).toBeLessThanOrEqual(8);
-    expect(image.data[centerOffset + 2]).toBeLessThanOrEqual(8);
-    expect(image.data[centerOffset + 3]).toBe(255);
+    expect(image.data[markOffset]).toBeLessThanOrEqual(32);
+    expect(image.data[markOffset + 1]).toBeLessThanOrEqual(32);
+    expect(image.data[markOffset + 2]).toBeLessThanOrEqual(48);
+    expect(image.data[markOffset + 3]).toBe(255);
+    expect(image.data[fishOffset]).toBeGreaterThanOrEqual(240);
+    expect(image.data[fishOffset + 1]).toBeGreaterThanOrEqual(240);
+    expect(image.data[fishOffset + 2]).toBeGreaterThanOrEqual(240);
+    expect(image.data[fishOffset + 3]).toBe(255);
   }, 30000);
 
   it("does not leave icon generation blocked in ICO conversion", () => {

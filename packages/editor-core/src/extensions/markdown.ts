@@ -114,7 +114,8 @@ const createSelectionSnapshot = (state: EditorState): ActiveBlockSelection => ({
 
 const forceRefreshMarkdownDecorationsEffect = StateEffect.define<null>();
 const orderedListNormalizationAnnotation = Annotation.define<boolean>();
-const hiddenSelectionNormalizationAnnotation = Annotation.define<boolean>();
+const hiddenMarkerSelectionNormalizationAnnotation = Annotation.define<boolean>();
+const structuralNavigationSelectionNormalizationAnnotation = Annotation.define<boolean>();
 const blockPointerDragThresholdPx = 3;
 
 export function createFishMarkMarkdownExtensions(
@@ -579,6 +580,27 @@ export function createFishMarkMarkdownExtensions(
     },
     provide: (field) => EditorView.decorations.from(field)
   });
+  const whitespaceInputHandler = EditorView.inputHandler.of((view, from, to, text) => {
+    if (from !== to || text.trim().length > 0 || /[\r\n]/u.test(text)) {
+      return false;
+    }
+
+    const line = view.state.doc.lineAt(from);
+
+    if (from < line.from || from > line.to || line.text.trim().length > 0) {
+      return false;
+    }
+
+    const anchor = from + text.length;
+
+    view.dispatch({
+      changes: { from, to, insert: text },
+      selection: { anchor, head: anchor },
+      userEvent: "input.type"
+    });
+
+    return true;
+  });
 
   const applyBlockDecorations = (
     view: EditorView,
@@ -610,7 +632,10 @@ export function createFishMarkMarkdownExtensions(
       const scopedDecorations = createSelectionScopedBlockDecorations({
         baseDecorationSet: state.field(blockDecorationsField),
         previousActiveBlockState: runtime.editorDerivedState.activeBlockState,
+        previousActiveLine: runtime.editorDerivedState.activeLine,
         activeBlockState: editorDerivedState.activeBlockState,
+        activeLine: editorDerivedState.activeLine,
+        editingDocument: editorDerivedState.editingDocument,
         hasEditorFocus: runtime.hasEditorFocus,
         source: editorDerivedState.source,
         referenceDefinitions: editorDerivedState.referenceDefinitions,
@@ -895,7 +920,14 @@ export function createFishMarkMarkdownExtensions(
   return [
     blockDecorationsField,
     lifecyclePlugin,
+    whitespaceInputHandler,
     EditorState.transactionFilter.of((transaction) => {
+      const whitespaceInputSelection = createWhitespaceInputSelectionTransaction(transaction);
+
+      if (whitespaceInputSelection) {
+        return whitespaceInputSelection;
+      }
+
       const detachedListBlankLineInsert = createDetachedListBlankLineInsertTransaction(
         transaction,
         markdownDocumentCache
@@ -907,11 +939,10 @@ export function createFishMarkMarkdownExtensions(
 
       const shouldNormalizeOrderedLists =
         transaction.docChanged && !transaction.annotation(orderedListNormalizationAnnotation);
-      const shouldNormalizeHiddenSelection =
-        (transaction.docChanged || transaction.selection !== undefined) &&
-        !transaction.annotation(hiddenSelectionNormalizationAnnotation);
+      const shouldNormalizeHiddenSelection = shouldNormalizeHiddenMarkerSelection(transaction);
+      const shouldNormalizeStructuralNavigation = shouldNormalizeStructuralNavigationSelection(transaction);
 
-      if (!shouldNormalizeOrderedLists && !shouldNormalizeHiddenSelection) {
+      if (!shouldNormalizeOrderedLists && !shouldNormalizeHiddenSelection && !shouldNormalizeStructuralNavigation) {
         return transaction;
       }
 
@@ -943,7 +974,7 @@ export function createFishMarkMarkdownExtensions(
       }
 
       if (
-        shouldNormalizeHiddenSelection &&
+        (shouldNormalizeHiddenSelection || shouldNormalizeStructuralNavigation) &&
         effectiveAnchor === effectiveHead &&
         transaction.annotation(Transaction.userEvent) !== "delete.list-marker"
       ) {
@@ -958,30 +989,41 @@ export function createFishMarkMarkdownExtensions(
           userEvent === "select" && Math.abs(anchorDelta) <= 2
             ? Math.sign(anchorDelta)
             : 0;
-        const nextAnchor =
-          normalizeStructuralBlankSelectionAnchor(
-            effectiveSource,
-            markdownDocument,
-            effectiveAnchor,
-            navigationDirection
-          ) ??
-          normalizeHiddenSelectionAnchor(
-            effectiveSource,
-            createActiveBlockStateFromMarkdownDocument(markdownDocument, {
-              anchor: effectiveAnchor,
-              head: effectiveHead
-            }).activeBlock,
-            effectiveAnchor,
-            navigationDirection
-          );
+        let nextAnchor = effectiveAnchor;
 
-        if (nextAnchor !== null && nextAnchor !== effectiveAnchor) {
+        if (shouldNormalizeStructuralNavigation) {
+          nextAnchor =
+            normalizeStructuralBlankSelectionAnchor(
+              effectiveSource,
+              markdownDocument,
+              nextAnchor,
+              navigationDirection
+            ) ?? nextAnchor;
+        }
+
+        if (shouldNormalizeHiddenSelection) {
+          nextAnchor =
+            normalizeHiddenSelectionAnchor(
+              effectiveSource,
+              createActiveBlockStateFromMarkdownDocument(markdownDocument, {
+                anchor: nextAnchor,
+                head: nextAnchor
+              }).activeBlock,
+              nextAnchor,
+              navigationDirection
+            ) ?? nextAnchor;
+        }
+
+        if (nextAnchor !== effectiveAnchor) {
           followUpTransactions.push({
             selection: {
               anchor: nextAnchor,
               head: nextAnchor
             },
-            annotations: hiddenSelectionNormalizationAnnotation.of(true),
+            annotations: [
+              hiddenMarkerSelectionNormalizationAnnotation.of(true),
+              structuralNavigationSelectionNormalizationAnnotation.of(true)
+            ],
             sequential: true
           });
         }
@@ -1087,6 +1129,21 @@ export function createFishMarkMarkdownExtensions(
         return;
       }
 
+      const whitespaceInputSelectionAnchor = resolveWhitespaceInputSelectionAnchor(
+        update.transactions,
+        update.state.selection.main
+      );
+
+      if (whitespaceInputSelectionAnchor !== null) {
+        update.view.dispatch({
+          selection: {
+            anchor: whitespaceInputSelectionAnchor,
+            head: whitespaceInputSelectionAnchor
+          }
+        });
+        return;
+      }
+
       if (shouldForceRefresh) {
         recomputeDerivedState(update.view, update.state, true);
         return;
@@ -1108,6 +1165,33 @@ export function createFishMarkMarkdownExtensions(
   ];
 }
 
+function isTypingOrCompositionInputTransaction(transaction: Transaction): boolean {
+  const userEvent = transaction.annotation(Transaction.userEvent);
+
+  if (!transaction.docChanged || !userEvent?.startsWith("input.type")) {
+    return false;
+  }
+
+  const insertion = readSinglePlainTextInsertion(transaction);
+
+  return insertion !== null && insertion.text.length > 0 && !/[\r\n]/u.test(insertion.text);
+}
+
+function shouldNormalizeHiddenMarkerSelection(transaction: Transaction): boolean {
+  return (
+    (transaction.docChanged || transaction.selection !== undefined) &&
+    !transaction.annotation(hiddenMarkerSelectionNormalizationAnnotation) &&
+    !isTypingOrCompositionInputTransaction(transaction)
+  );
+}
+
+function shouldNormalizeStructuralNavigationSelection(transaction: Transaction): boolean {
+  return (
+    !transaction.docChanged &&
+    transaction.selection !== undefined &&
+    !transaction.annotation(structuralNavigationSelectionNormalizationAnnotation)
+  );
+}
 function readTransactionChangedRanges(
   transaction: Transaction
 ): Array<{ from: number; to: number }> {
@@ -1118,6 +1202,41 @@ function readTransactionChangedRanges(
   });
 
   return ranges;
+}
+
+function resolveWhitespaceInputSelectionAnchor(
+  transactions: readonly Transaction[],
+  currentSelection: ActiveBlockSelection
+): number | null {
+  for (const transaction of transactions) {
+    if (!transaction.docChanged || !transaction.startState.selection.main.empty) {
+      continue;
+    }
+
+    const insertion = readSinglePlainTextInsertion(transaction);
+
+    if (!insertion || insertion.text.trim().length > 0 || /[\r\n]/u.test(insertion.text)) {
+      continue;
+    }
+
+    const selection = transaction.startState.selection.main;
+    const line = transaction.startState.doc.lineAt(selection.from);
+
+    if (
+      insertion.from !== selection.from ||
+      selection.from < line.from ||
+      selection.from > line.to ||
+      line.text.trim().length > 0 ||
+      currentSelection.anchor !== insertion.from ||
+      currentSelection.head !== insertion.from
+    ) {
+      continue;
+    }
+
+    return insertion.from + insertion.text.length;
+  }
+
+  return null;
 }
 
 function createDetachedListBlankLineInsertTransaction(
@@ -1167,6 +1286,45 @@ function createDetachedListBlankLineInsertTransaction(
       anchor,
       head: anchor
     },
+    annotations: addToHistory === undefined ? undefined : Transaction.addToHistory.of(addToHistory),
+    userEvent: transaction.annotation(Transaction.userEvent),
+    scrollIntoView: transaction.scrollIntoView
+  };
+}
+
+function createWhitespaceInputSelectionTransaction(transaction: Transaction): TransactionSpec | null {
+  if (!transaction.docChanged || !transaction.startState.selection.main.empty) {
+    return null;
+  }
+
+  const insertion = readSinglePlainTextInsertion(transaction);
+
+  if (!insertion || insertion.text.trim().length > 0 || /[\r\n]/u.test(insertion.text)) {
+    return null;
+  }
+
+  const selection = transaction.startState.selection.main;
+  const line = transaction.startState.doc.lineAt(selection.from);
+
+  if (
+    insertion.from !== selection.from ||
+    selection.from < line.from ||
+    selection.from > line.to ||
+    line.text.trim().length > 0
+  ) {
+    return null;
+  }
+
+  const anchor = insertion.from + insertion.text.length;
+  const addToHistory = transaction.annotation(Transaction.addToHistory);
+
+  return {
+    changes: transaction.changes,
+    selection: {
+      anchor,
+      head: anchor
+    },
+    effects: transaction.effects,
     annotations: addToHistory === undefined ? undefined : Transaction.addToHistory.of(addToHistory),
     userEvent: transaction.annotation(Transaction.userEvent),
     scrollIntoView: transaction.scrollIntoView

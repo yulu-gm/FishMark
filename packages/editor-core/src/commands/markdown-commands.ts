@@ -1,6 +1,12 @@
-import { formatTableMarkdown, parseMarkdownDocument, splitTableLine } from "@fishmark/markdown-engine";
+import {
+  formatTableMarkdown,
+  parseMarkdownDocument,
+  splitTableLine,
+  type ListBlock
+} from "@fishmark/markdown-engine";
 
 import type { ActiveBlockState } from "../active-block";
+import { blockRequiresLeadingStructuralSeparator } from "../structural-blank-lines";
 import { parseListLine } from "./line-parsers";
 
 export type MarkdownCommandLine = {
@@ -62,8 +68,9 @@ export function runMarkdownEnterCommand(
     target.runCodeFenceEnter(activeState) ||
     target.runListEnter(activeState) ||
     target.runBlockquoteEnter() ||
-    runParagraphBlockEnterCommand(target, activeState) ||
     runThematicBreakEnterCommand(target, activeState) ||
+    runHeadingBlockEndEnterCommand(target, activeState) ||
+    runPhysicalParagraphEnterCommand(target, activeState) ||
     target.insertNewlineAndIndent()
   );
 }
@@ -72,12 +79,20 @@ export function runMarkdownBackspaceCommand(
   target: MarkdownCommandTarget,
   activeState: ActiveBlockState
 ): boolean {
+  const selection = target.getSelection();
+
+  if (!selection.empty) {
+    return target.deleteCharBackward();
+  }
+
   return (
+    runBackspaceFromWhitespaceOnlyLineCommand(target) ||
     target.runCodeFenceBackspace(activeState) ||
     target.runBlockquoteBackspace(activeState) ||
+    runBackspaceFromOrderedListItemContentStartCommand(target, activeState) ||
     target.runListBackspace(activeState) ||
+    runBackspaceFromTrailingEmptyBlockCommand(target, activeState) ||
     runBackspaceFromTrailingListExitBlankLineCommand(target) ||
-    runBackspaceFromWhitespaceOnlyLineCommand(target) ||
     runBackspaceAcrossStructuralBlankBoundaryCommand(target, activeState) ||
     target.deleteCharBackward()
   );
@@ -123,7 +138,7 @@ export function runMarkdownArrowDownCommand(
   const result = target.resolveArrowDown(activeState);
 
   if (result === null) {
-    return false;
+    return runVisibleLineArrowDownCommand(target, activeState);
   }
 
   target.dispatchSelection({
@@ -140,7 +155,7 @@ export function runMarkdownArrowUpCommand(
   const result = target.resolveArrowUp(activeState);
 
   if (result === null) {
-    return runBlankLineArrowUpCommand(target);
+    return runVisibleLineArrowUpCommand(target, activeState);
   }
 
   target.dispatchSelection({
@@ -232,11 +247,46 @@ function looksLikeCommittedTableDelimiter(line: string): boolean {
   return segments.length >= 2 && segments.every((segment) => /^:?-{3,}:?$/u.test(segment.text));
 }
 
-function runParagraphBlockEnterCommand(
+function runHeadingBlockEndEnterCommand(
   target: MarkdownCommandTarget,
   activeState: ActiveBlockState
 ): boolean {
-  if (activeState.activeBlock?.type !== "paragraph") {
+  if (activeState.activeBlock?.type !== "heading") {
+    return false;
+  }
+
+  const selection = target.getSelection();
+
+  if (!selection.empty) {
+    return false;
+  }
+
+  const currentLine = target.lineAt(selection.head);
+
+  if (selection.head !== currentLine.to) {
+    return false;
+  }
+
+  const plan = resolveParagraphBlockEnterInsert(target, selection, selection.head);
+
+  target.dispatchChange({
+    from: selection.head,
+    to: selection.head,
+    insert: plan.insert,
+    selection: {
+      anchor: plan.selectionAnchor,
+      head: plan.selectionAnchor
+    }
+  });
+
+  return true;
+}
+
+function runPhysicalParagraphEnterCommand(
+  target: MarkdownCommandTarget,
+  activeState: ActiveBlockState
+): boolean {
+  if (activeState.activeBlock && activeState.activeBlock.type !== "paragraph") {
     return false;
   }
 
@@ -274,7 +324,14 @@ function resolveParagraphBlockEnterInsert(
 
   const currentLine = target.lineAt(selection.head);
 
-  if (selection.head === currentLine.from && currentLine.number > 1) {
+  if (currentLine.text.trim().length === 0) {
+    return {
+      insert: defaultInsert,
+      selectionAnchor: from + defaultInsert.length
+    };
+  }
+
+  if (selection.head === currentLine.from && currentLine.number > 1 && currentLine.text.length > 0) {
     const previousLine = target.line(currentLine.number - 1);
 
     if (previousLine.text.trim().length === 0) {
@@ -357,12 +414,12 @@ function runBackspaceAcrossStructuralBlankBoundaryCommand(
 
   const previousLine = target.line(currentLine.number - 1);
 
-  if (previousLine.text.trim().length !== 0) {
+  if (previousLine.text.length !== 0) {
     return false;
   }
 
   const previousPreviousLine = target.line(currentLine.number - 2);
-  const isPreviousLineVisibleExtraBlank = previousPreviousLine.text.trim().length === 0;
+  const isPreviousLineVisibleExtraBlank = previousPreviousLine.text.length === 0;
   const deleteFrom = isPreviousLineVisibleExtraBlank ? previousLine.from : previousPreviousLine.to;
 
   target.dispatchChange({
@@ -372,6 +429,53 @@ function runBackspaceAcrossStructuralBlankBoundaryCommand(
     selection: {
       anchor: deleteFrom,
       head: deleteFrom
+    }
+  });
+
+  return true;
+}
+
+function runBackspaceFromTrailingEmptyBlockCommand(
+  target: MarkdownCommandTarget,
+  activeState: ActiveBlockState
+): boolean {
+  const selection = target.getSelection();
+
+  if (!selection.empty) {
+    return false;
+  }
+
+  const currentLine = target.lineAt(selection.head);
+
+  if (
+    currentLine.number <= 2 ||
+    currentLine.number !== target.getLineCount() ||
+    selection.head !== currentLine.from ||
+    currentLine.text.length !== 0
+  ) {
+    return false;
+  }
+
+  const previousLine = target.line(currentLine.number - 1);
+  const currentLineIsHiddenSeparator = isHiddenSeparatorLine(target, currentLine.number, activeState);
+
+  if (!currentLineIsHiddenSeparator && !isHiddenSeparatorLine(target, previousLine.number, activeState)) {
+    return false;
+  }
+
+  const previousVisibleLine = findPreviousVisiblePhysicalLine(target, currentLine.number, activeState);
+
+  if (!previousVisibleLine) {
+    return false;
+  }
+
+  target.dispatchChange({
+    from: previousVisibleLine.to,
+    to: currentLine.to,
+    insert: "",
+    selection: {
+      anchor: previousVisibleLine.to,
+      head: previousVisibleLine.to
     }
   });
 
@@ -399,12 +503,12 @@ function runBackspaceFromTrailingListExitBlankLineCommand(target: MarkdownComman
   let previousLineNumber = currentLine.number - 1;
   let previousLine = target.line(previousLineNumber);
 
-  while (previousLineNumber > 1 && previousLine.text.trim().length === 0) {
+  while (previousLineNumber > 1 && previousLine.text.length === 0) {
     previousLineNumber -= 1;
     previousLine = target.line(previousLineNumber);
   }
 
-  if (previousLine.text.trim().length === 0 || !parseListLine(previousLine.text)) {
+  if (previousLine.text.length === 0 || !parseListLine(previousLine.text)) {
     return false;
   }
 
@@ -431,26 +535,214 @@ function runBackspaceFromWhitespaceOnlyLineCommand(target: MarkdownCommandTarget
   const line = target.lineAt(selection.head);
 
   if (
-    selection.head !== line.to ||
+    selection.head <= line.from ||
+    selection.head > line.to ||
     !/^[ \t]+$/u.test(line.text)
   ) {
     return false;
   }
 
+  const deleteFrom = selection.head - 1;
+
   target.dispatchChange({
-    from: line.from,
-    to: line.to,
+    from: deleteFrom,
+    to: selection.head,
     insert: "",
     selection: {
-      anchor: line.from,
-      head: line.from
+      anchor: deleteFrom,
+      head: deleteFrom
     }
   });
 
   return true;
 }
 
-function runBlankLineArrowUpCommand(target: MarkdownCommandTarget): boolean {
+function runBackspaceFromOrderedListItemContentStartCommand(
+  target: MarkdownCommandTarget,
+  activeState: ActiveBlockState
+): boolean {
+  const selection = target.getSelection();
+
+  if (!selection.empty) {
+    return false;
+  }
+
+  const currentLine = target.lineAt(selection.head);
+  const parsed = parseListLine(currentLine.text);
+
+  if (!parsed || !/^\d+[.)]$/u.test(parsed.marker) || parsed.content.trim().length === 0) {
+    return false;
+  }
+
+  const contentStart = currentLine.to - parsed.content.length;
+
+  if (selection.head !== contentStart || currentLine.number <= 1) {
+    return false;
+  }
+
+  if (!hasPreviousOrderedSiblingInActiveListScope(activeState, selection.head)) {
+    return false;
+  }
+
+  const previousLine = target.line(currentLine.number - 1);
+
+  if (previousLine.text.trim().length === 0) {
+    return false;
+  }
+
+  const markerPrefix = currentLine.text.slice(0, contentStart - currentLine.from).trimEnd();
+  const insert = `\n\n${markerPrefix}`;
+  const selectionAnchor = previousLine.to + insert.length;
+
+  target.dispatchChange({
+    from: previousLine.to,
+    to: contentStart,
+    insert,
+    selection: {
+      anchor: selectionAnchor,
+      head: selectionAnchor
+    }
+  });
+
+  return true;
+}
+
+function hasPreviousOrderedSiblingInActiveListScope(
+  activeState: ActiveBlockState,
+  offset: number
+): boolean {
+  const activeBlock = activeState.activeBlock;
+
+  if (activeBlock?.type !== "list") {
+    return false;
+  }
+
+  return findPreviousOrderedSiblingInListScope(activeBlock, offset) === true;
+}
+
+function findPreviousOrderedSiblingInListScope(
+  list: ListBlock,
+  offset: number
+): boolean | null {
+  for (const [index, item] of list.items.entries()) {
+    for (const child of item.children) {
+      if (offset >= child.startOffset && offset <= child.endOffset) {
+        const nestedResult = findPreviousOrderedSiblingInListScope(child, offset);
+
+        if (nestedResult !== null) {
+          return nestedResult;
+        }
+      }
+    }
+
+    if (offset >= item.startOffset && offset <= item.endOffset) {
+      return list.ordered ? index > 0 : false;
+    }
+  }
+
+  return null;
+}
+
+function isHiddenSeparatorLine(
+  target: MarkdownCommandTarget,
+  lineNumber: number,
+  activeState?: ActiveBlockState
+): boolean {
+  if (lineNumber < 1 || lineNumber > target.getLineCount()) {
+    return false;
+  }
+
+  const line = target.line(lineNumber);
+
+  if (line.text.length !== 0) {
+    return false;
+  }
+
+  if (isLeadingStyledBlockSeparatorLine(lineNumber, activeState)) {
+    return true;
+  }
+
+  let emptyRunIndex = 1;
+
+  for (let previousLineNumber = lineNumber - 1; previousLineNumber >= 1; previousLineNumber -= 1) {
+    const previousLine = target.line(previousLineNumber);
+
+    if (previousLine.text.length !== 0) {
+      break;
+    }
+
+    emptyRunIndex += 1;
+  }
+
+  return emptyRunIndex % 2 === 1;
+}
+
+function isLeadingStyledBlockSeparatorLine(
+  lineNumber: number,
+  activeState: ActiveBlockState | undefined
+): boolean {
+  const blocks = activeState?.blockMap?.blocks ?? [];
+  const nextBlock = blocks.find((block) => block.startLine === lineNumber + 1);
+
+  return nextBlock ? blockRequiresLeadingStructuralSeparator(nextBlock) : false;
+}
+
+function findPreviousVisiblePhysicalLine(
+  target: MarkdownCommandTarget,
+  currentLineNumber: number,
+  activeState?: ActiveBlockState
+): MarkdownCommandLine | null {
+  for (let lineNumber = currentLineNumber - 1; lineNumber >= 1; lineNumber -= 1) {
+    if (!isHiddenSeparatorLine(target, lineNumber, activeState)) {
+      return target.line(lineNumber);
+    }
+  }
+
+  return null;
+}
+
+function findNextVisiblePhysicalLine(
+  target: MarkdownCommandTarget,
+  currentLineNumber: number,
+  activeState?: ActiveBlockState
+): MarkdownCommandLine | null {
+  for (let lineNumber = currentLineNumber + 1; lineNumber <= target.getLineCount(); lineNumber += 1) {
+    if (!isHiddenSeparatorLine(target, lineNumber, activeState)) {
+      return target.line(lineNumber);
+    }
+  }
+
+  return null;
+}
+
+function resolveArrowUpAnchor(
+  currentLine: MarkdownCommandLine,
+  previousLine: MarkdownCommandLine,
+  selectionHead: number
+): number {
+  if (currentLine.text.length === 0) {
+    return previousLine.text.length === 0 ? previousLine.from : previousLine.to;
+  }
+
+  const column = Math.max(0, selectionHead - currentLine.from);
+
+  return previousLine.from + Math.min(column, previousLine.text.length);
+}
+
+function resolveArrowDownAnchor(
+  currentLine: MarkdownCommandLine,
+  nextLine: MarkdownCommandLine,
+  selectionHead: number
+): number {
+  const column = Math.max(0, selectionHead - currentLine.from);
+
+  return nextLine.from + Math.min(column, nextLine.text.length);
+}
+
+function runVisibleLineArrowUpCommand(
+  target: MarkdownCommandTarget,
+  activeState: ActiveBlockState
+): boolean {
   const selection = target.getSelection();
 
   if (!selection.empty) {
@@ -459,19 +751,68 @@ function runBlankLineArrowUpCommand(target: MarkdownCommandTarget): boolean {
 
   const currentLine = target.lineAt(selection.head);
 
-  if (currentLine.number <= 1 || currentLine.text.trim().length !== 0) {
+  if (currentLine.number <= 1) {
     return false;
   }
 
   const previousLine = target.line(currentLine.number - 1);
+  const currentLineIsHiddenSeparator = isHiddenSeparatorLine(target, currentLine.number, activeState);
 
-  if (previousLine.text.trim().length !== 0) {
+  if (!currentLineIsHiddenSeparator && !isHiddenSeparatorLine(target, previousLine.number, activeState)) {
     return false;
   }
 
+  const previousVisibleLine = findPreviousVisiblePhysicalLine(target, currentLine.number, activeState);
+
+  if (!previousVisibleLine) {
+    return false;
+  }
+
+  const anchor = resolveArrowUpAnchor(currentLine, previousVisibleLine, selection.head);
+
   target.dispatchSelection({
-    anchor: previousLine.from,
-    head: previousLine.from,
+    anchor,
+    head: anchor,
+    scrollIntoView: true
+  });
+
+  return true;
+}
+
+function runVisibleLineArrowDownCommand(
+  target: MarkdownCommandTarget,
+  activeState: ActiveBlockState
+): boolean {
+  const selection = target.getSelection();
+
+  if (!selection.empty) {
+    return false;
+  }
+
+  const currentLine = target.lineAt(selection.head);
+
+  if (currentLine.number >= target.getLineCount()) {
+    return false;
+  }
+
+  const nextLine = target.line(currentLine.number + 1);
+  const currentLineIsHiddenSeparator = isHiddenSeparatorLine(target, currentLine.number, activeState);
+
+  if (!currentLineIsHiddenSeparator && !isHiddenSeparatorLine(target, nextLine.number, activeState)) {
+    return false;
+  }
+
+  const nextVisibleLine = findNextVisiblePhysicalLine(target, currentLine.number, activeState);
+
+  if (!nextVisibleLine) {
+    return false;
+  }
+
+  const anchor = resolveArrowDownAnchor(currentLine, nextVisibleLine, selection.head);
+
+  target.dispatchSelection({
+    anchor,
+    head: anchor,
     scrollIntoView: true
   });
 

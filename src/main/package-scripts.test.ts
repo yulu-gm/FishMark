@@ -447,6 +447,8 @@ describe("package scripts", () => {
 
     expect(batchSource).toContain("@echo off");
     expect(batchSource).toContain('cd /d "%~dp0\\.."');
+    expect(batchSource).toContain("node_modules\\.package-lock.json");
+    expect(batchSource).toContain("call npm.cmd ci");
     expect(batchSource).toContain("node scripts/sync-dev-themes.mjs");
     expect(batchSource).toContain("call npm run dev");
     expect(syncScriptSource).toContain("FishMark-dev");

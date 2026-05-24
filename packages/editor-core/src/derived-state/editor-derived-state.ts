@@ -12,6 +12,11 @@ import {
   type ActiveBlockState
 } from "../active-block";
 import {
+  createPhysicalEditingDocument,
+  type EditingLine,
+  type PhysicalEditingDocument
+} from "../physical-editing-document";
+import {
   deriveTableCursorState,
   type TableCursorState
 } from "../table-cursor-state";
@@ -30,6 +35,8 @@ export type EditorDerivedState = {
   source: string;
   selection: ActiveBlockSelection;
   markdownDocument: MarkdownDocument;
+  editingDocument: PhysicalEditingDocument;
+  activeLine: EditingLine;
   activeBlockState: ActiveBlockState;
   tableCursor: TableCursorState | null;
   referenceDefinitions?: ReadonlyMap<string, InlineReferenceDefinition>;
@@ -47,6 +54,8 @@ export function createEditorDerivedState(
   options: CreateEditorDerivedStateOptions
 ): EditorDerivedState {
   const markdownDocument = options.parseMarkdownDocument(options.source);
+  const editingDocument = createPhysicalEditingDocument(options.source, markdownDocument);
+  const activeLine = editingDocument.getLineAtOffset(options.selection.head) ?? editingDocument.lines[0]!;
   const tableCursor = deriveTableCursorState(
     options.source,
     options.selection,
@@ -62,6 +71,8 @@ export function createEditorDerivedState(
     source: options.source,
     selection: options.selection,
     markdownDocument,
+    editingDocument,
+    activeLine,
     activeBlockState,
     tableCursor,
     referenceDefinitions: markdownDocument.referenceDefinitions,

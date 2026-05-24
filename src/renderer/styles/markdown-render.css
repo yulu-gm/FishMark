@@ -152,6 +152,22 @@
   overflow: hidden;
 }
 
+.document-editor .cm-line.cm-fm-line-active.cm-fm-line-empty {
+  height: auto;
+  min-height: 1.95em;
+  line-height: 1.95;
+  overflow: visible;
+  white-space: pre-wrap;
+}
+
+.document-editor .cm-line.cm-fm-line-active.cm-fm-line-whitespace {
+  height: auto;
+  min-height: 1.95em;
+  line-height: 1.95;
+  overflow: visible;
+  white-space: pre-wrap;
+}
+
 .document-editor .cm-inactive-inline-marker {
   color: transparent;
   font-size: 0;
@@ -296,6 +312,7 @@
 }
 
 .document-editor .cm-active-list-ordered .cm-active-list-marker {
+  position: absolute;
   left: var(--fishmark-list-depth-offset);
   display: inline-block;
   min-width: var(--fishmark-list-ordered-marker-width);

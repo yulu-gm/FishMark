@@ -1,0 +1,43 @@
+{
+    "caseId":  "whitespace-line-type-text",
+    "status":  "blocked",
+    "captureDate":  "2026-05-24",
+    "operator":  "Codex GUI automation",
+    "typora":  {
+                   "executable":  "C:\\Program Files\\Typora\\Typora.exe",
+                   "productVersion":  "1.13.4",
+                   "fileVersion":  "1.13.4",
+                   "platform":  "Windows",
+                   "mode":  "hybrid editing view",
+                   "settings":  "Default Whitespace / LineBreak settings; not modified during capture"
+               },
+    "initialSource":  "Before\n   \nAfter",
+    "initialCaret":  {
+                         "offset":  10
+                     },
+    "actions":  [
+                    {
+                        "text":  "abc",
+                        "type":  "type"
+                    }
+                ],
+    "sentinel":  "FM_SENTINEL_WS_TYPE_TEXT",
+    "savedSourceAfterSentinel":  "Before\n\nAftabcFM_SENTINEL_WS_TYPE_TEXTer",
+    "screenshot":  "images/whitespace-line-type-text.png",
+    "notes":  "Blocked: GUI automation could not deterministically place the caret on the whitespace-only source line. The saved source shows text inserted into the following visible word instead of the whitespace line, so this file is retained only as failed capture evidence and must not be used as a Typora oracle expectation.",
+    "blockedReview":  {
+                          "reviewDate":  "2026-05-24",
+                          "reviewer":  "Codex second implementation worker",
+                          "conclusion":  "blocked",
+                          "reason":  "The matrix target is offset 10 inside the whitespace-only line of `Before\\n   \\nAfter`, but the saved source is `Before\\n\\nAftabcFM_SENTINEL_WS_TYPE_TEXTer`. The typed text and sentinel landed inside `After`, and the screenshot shows `Afta'b'...` on the visible `After` line. This does not prove Typora caret placement on the whitespace-only source line.",
+                          "attemptedMethods":  [
+                                                   "Re-read the case matrix target offset, failed capture JSON, initial Markdown fixture bytes, saved source after sentinel, and screenshot.",
+                                                   "Compared the sentinel location against the intended whitespace-only line and checked `tmp/typora-oracle-capture/whitespace-line-type-text.md` for the saved failed capture."
+                                               ],
+                          "nextManualSteps":  [
+                                                  "Open a fresh fixture containing exactly `Before\\n   \\nAfter` in Typora 1.13.4 on Windows.",
+                                                  "Use a human-visible caret placement method that clearly lands inside the three-space source line, then type `abc`, insert `FM_SENTINEL_WS_TYPE_TEXT`, save, and screenshot before sentinel insertion.",
+                                                  "Promote only if saved source shows `abc` and the sentinel on the whitespace-only line, not inside `After`."
+                                              ]
+                      }
+}

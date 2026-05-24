@@ -45,6 +45,16 @@ describe("createActiveBlockState", () => {
     expect(createActiveBlockState(source, { anchor: 19, head: 19 }).activeBlock).toBeNull();
   });
 
+  it("keeps a non-empty whitespace-only document without an active semantic block", () => {
+    const whitespaceOnlySource = " ";
+    const activeBlock = createActiveBlockState(whitespaceOnlySource, {
+      anchor: whitespaceOnlySource.length,
+      head: whitespaceOnlySource.length
+    }).activeBlock;
+
+    expect(activeBlock).toBeNull();
+  });
+
   it("resolves thematic breaks as active blocks when the selection lands on the separator", () => {
     const thematicBreakSource = ["Paragraph", "", "---", "", "+++"].join("\n");
 

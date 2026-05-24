@@ -1,0 +1,43 @@
+{
+    "caseId":  "whitespace-line-backspace-inside",
+    "status":  "blocked",
+    "captureDate":  "2026-05-24",
+    "operator":  "Codex GUI automation",
+    "typora":  {
+                   "executable":  "C:\\Program Files\\Typora\\Typora.exe",
+                   "productVersion":  "1.13.4",
+                   "fileVersion":  "1.13.4",
+                   "platform":  "Windows",
+                   "mode":  "hybrid editing view",
+                   "settings":  "Default Whitespace / LineBreak settings; not modified during capture"
+               },
+    "initialSource":  "Before\n   \nAfter",
+    "initialCaret":  {
+                         "offset":  9
+                     },
+    "actions":  [
+                    {
+                        "key":  "Backspace",
+                        "type":  "key"
+                    }
+                ],
+    "sentinel":  "FM_SENTINEL_WS_BACKSPACE_INSIDE",
+    "savedSourceAfterSentinel":  "Before\n\nAFM_SENTINEL_WS_BACKSPACE_INSIDEter",
+    "screenshot":  "images/whitespace-line-backspace-inside.png",
+    "notes":  "Blocked: GUI automation could not deterministically place the caret inside the whitespace-only source line. The saved source shows the sentinel inserted in the following visible word, so this file is retained only as failed capture evidence and must not be used as a Typora oracle expectation.",
+    "blockedReview":  {
+                          "reviewDate":  "2026-05-24",
+                          "reviewer":  "Codex second implementation worker",
+                          "conclusion":  "blocked",
+                          "reason":  "The matrix target is offset 9 inside the whitespace-only line of `Before\\n   \\nAfter`, but the saved source is `Before\\n\\nAFM_SENTINEL_WS_BACKSPACE_INSIDEter`. Backspace did not produce source evidence from inside the whitespace line; the sentinel landed after `A` in the visible `After` line, and the screenshot shows the caret there.",
+                          "attemptedMethods":  [
+                                                   "Re-read the case matrix target offset, failed capture JSON, initial Markdown fixture bytes, saved source after sentinel, and screenshot.",
+                                                   "Compared the saved failed capture in `tmp/typora-oracle-capture/whitespace-line-backspace-inside.md` against the intended source offset."
+                                               ],
+                          "nextManualSteps":  [
+                                                  "Open a fresh fixture containing exactly `Before\\n   \\nAfter`.",
+                                                  "Place the caret inside the three-space source line with visible confirmation, press Backspace, insert `FM_SENTINEL_WS_BACKSPACE_INSIDE`, save, and record screenshot plus bytes.",
+                                                  "Promote only if source bytes prove the deletion and sentinel location are inside the whitespace-only line."
+                                              ]
+                      }
+}

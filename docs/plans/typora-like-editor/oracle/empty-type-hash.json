@@ -1,0 +1,28 @@
+{
+    "caseId":  "empty-type-hash",
+    "status":  "captured",
+    "captureDate":  "2026-05-24",
+    "operator":  "Codex GUI automation",
+    "typora":  {
+                   "executable":  "C:\\Program Files\\Typora\\Typora.exe",
+                   "productVersion":  "1.13.4",
+                   "fileVersion":  "1.13.4",
+                   "platform":  "Windows",
+                   "mode":  "hybrid editing view",
+                   "settings":  "Default Whitespace / LineBreak settings; not modified during capture"
+               },
+    "initialSource":  "",
+    "initialCaret":  {
+                         "offset":  0
+                     },
+    "actions":  [
+                    {
+                        "text":  "#",
+                        "type":  "type"
+                    }
+                ],
+    "sentinel":  "FM_SENTINEL_EMPTY_HASH",
+    "savedSourceAfterSentinel":  "#FM_SENTINEL_EMPTY_HASH",
+    "screenshot":  "images/empty-type-hash.png",
+    "notes":  "Captured by opening a temporary Markdown file in Typora, driving keyboard input, capturing a screenshot before sentinel insertion, inserting the sentinel at the final caret, saving through File \u003e Save, then reading the saved UTF-8 file."
+}

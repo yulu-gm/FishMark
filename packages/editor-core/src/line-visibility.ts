@@ -346,7 +346,7 @@ function findStructuralBlankLineAnchor(
     const contentEndOffset = trimTrailingCarriageReturn(source, cursor, lineEndOffset);
     const lineText = source.slice(cursor, contentEndOffset);
 
-    if (lineText.trim().length > 0) {
+    if (lineText.length > 0) {
       if (nextBreakOffset === -1 || nextBreakOffset >= endOffset) {
         break;
       }

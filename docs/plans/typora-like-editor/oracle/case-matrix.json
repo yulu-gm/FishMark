@@ -1,0 +1,304 @@
+{
+  "schemaVersion": 1,
+  "baseline": {
+    "product": "Typora",
+    "version": "1.13.4",
+    "platform": "Windows",
+    "mode": "hybrid editing view",
+    "settings": "Default Whitespace / LineBreak settings unless a case overrides them"
+  },
+  "cases": [
+    {
+      "caseId": "empty-type-hash",
+      "group": "empty-document",
+      "priority": "P0",
+      "initialSource": "",
+      "actions": [
+        {
+          "type": "type",
+          "text": "#"
+        }
+      ],
+      "sentinel": "FM_SENTINEL_EMPTY_HASH",
+      "requiresVisualEvidence": true,
+      "fishmarkProbeCase": null,
+      "status": "captured"
+    },
+    {
+      "caseId": "empty-type-one-space",
+      "group": "empty-document",
+      "priority": "P0",
+      "initialSource": "",
+      "actions": [
+        {
+          "type": "type",
+          "text": " "
+        }
+      ],
+      "sentinel": "FM_SENTINEL_EMPTY_SPACE_1",
+      "requiresVisualEvidence": true,
+      "fishmarkProbeCase": "empty-document-space-caret",
+      "status": "captured"
+    },
+    {
+      "caseId": "empty-type-three-spaces",
+      "group": "empty-document",
+      "priority": "P0",
+      "initialSource": "",
+      "actions": [
+        {
+          "type": "type",
+          "text": "   "
+        }
+      ],
+      "sentinel": "FM_SENTINEL_EMPTY_SPACE_3",
+      "requiresVisualEvidence": true,
+      "fishmarkProbeCase": null,
+      "status": "captured"
+    },
+    {
+      "caseId": "empty-spaces-enter-text",
+      "group": "empty-document",
+      "priority": "P0",
+      "initialSource": "",
+      "actions": [
+        {
+          "type": "type",
+          "text": "   "
+        },
+        {
+          "type": "key",
+          "key": "Enter"
+        },
+        {
+          "type": "type",
+          "text": "abc"
+        }
+      ],
+      "sentinel": "FM_SENTINEL_EMPTY_SPACES_ENTER_TEXT",
+      "requiresVisualEvidence": true,
+      "fishmarkProbeCase": null,
+      "status": "captured"
+    },
+    {
+      "caseId": "paragraph-end-enter",
+      "group": "paragraph",
+      "priority": "P0",
+      "initialSource": "Paragraph",
+      "initialCaret": "end",
+      "actions": [
+        {
+          "type": "key",
+          "key": "Enter"
+        }
+      ],
+      "sentinel": "FM_SENTINEL_P_END_ENTER",
+      "requiresVisualEvidence": true,
+      "fishmarkProbeCase": null,
+      "status": "captured"
+    },
+    {
+      "caseId": "paragraph-middle-enter",
+      "group": "paragraph",
+      "priority": "P0",
+      "initialSource": "AlphaBeta",
+      "initialCaretOffset": 5,
+      "actions": [
+        {
+          "type": "key",
+          "key": "Enter"
+        }
+      ],
+      "sentinel": "FM_SENTINEL_P_MID_ENTER",
+      "requiresVisualEvidence": true,
+      "fishmarkProbeCase": null,
+      "status": "captured"
+    },
+    {
+      "caseId": "paragraph-start-enter",
+      "group": "paragraph",
+      "priority": "P1",
+      "initialSource": "Paragraph",
+      "initialCaretOffset": 0,
+      "actions": [
+        {
+          "type": "key",
+          "key": "Enter"
+        }
+      ],
+      "sentinel": "FM_SENTINEL_P_START_ENTER",
+      "requiresVisualEvidence": true,
+      "fishmarkProbeCase": null,
+      "status": "captured"
+    },
+    {
+      "caseId": "heading-end-enter",
+      "group": "heading",
+      "priority": "P0",
+      "initialSource": "# Title",
+      "initialCaret": "end",
+      "actions": [
+        {
+          "type": "key",
+          "key": "Enter"
+        }
+      ],
+      "sentinel": "FM_SENTINEL_H_END_ENTER",
+      "requiresVisualEvidence": true,
+      "fishmarkProbeCase": "heading-enter-space-caret",
+      "status": "captured"
+    },
+    {
+      "caseId": "heading-end-repeated-enter",
+      "group": "heading",
+      "priority": "P0",
+      "initialSource": "# Title",
+      "initialCaret": "end",
+      "actions": [
+        {
+          "type": "key",
+          "key": "Enter"
+        },
+        {
+          "type": "key",
+          "key": "Enter"
+        },
+        {
+          "type": "key",
+          "key": "Enter"
+        }
+      ],
+      "sentinel": "FM_SENTINEL_H_REPEAT_ENTER",
+      "requiresVisualEvidence": true,
+      "fishmarkProbeCase": null,
+      "status": "captured"
+    },
+    {
+      "caseId": "heading-empty-paragraph-space",
+      "group": "heading",
+      "priority": "P0",
+      "initialSource": "# Title",
+      "initialCaret": "end",
+      "actions": [
+        {
+          "type": "key",
+          "key": "Enter"
+        },
+        {
+          "type": "type",
+          "text": " "
+        }
+      ],
+      "sentinel": "FM_SENTINEL_H_EMPTY_P_SPACE",
+      "requiresVisualEvidence": true,
+      "fishmarkProbeCase": "heading-enter-space-caret",
+      "status": "captured"
+    },
+    {
+      "caseId": "heading-empty-paragraph-backspace",
+      "group": "heading",
+      "priority": "P0",
+      "initialSource": "# Title",
+      "initialCaret": "end",
+      "actions": [
+        {
+          "type": "key",
+          "key": "Enter"
+        },
+        {
+          "type": "key",
+          "key": "Backspace"
+        }
+      ],
+      "sentinel": "FM_SENTINEL_H_EMPTY_P_BACKSPACE",
+      "requiresVisualEvidence": true,
+      "fishmarkProbeCase": null,
+      "status": "captured"
+    },
+    {
+      "caseId": "whitespace-line-type-text",
+      "group": "whitespace-line",
+      "priority": "P0",
+      "initialSource": "Before\n   \nAfter",
+      "initialCaretOffset": 10,
+      "actions": [
+        {
+          "type": "type",
+          "text": "abc"
+        }
+      ],
+      "sentinel": "FM_SENTINEL_WS_TYPE_TEXT",
+      "requiresVisualEvidence": true,
+      "fishmarkProbeCase": null,
+      "status": "blocked"
+    },
+    {
+      "caseId": "whitespace-line-enter",
+      "group": "whitespace-line",
+      "priority": "P0",
+      "initialSource": "Before\n   \nAfter",
+      "initialCaretOffset": 10,
+      "actions": [
+        {
+          "type": "key",
+          "key": "Enter"
+        }
+      ],
+      "sentinel": "FM_SENTINEL_WS_ENTER",
+      "requiresVisualEvidence": true,
+      "fishmarkProbeCase": null,
+      "status": "blocked"
+    },
+    {
+      "caseId": "whitespace-line-backspace-inside",
+      "group": "whitespace-line",
+      "priority": "P0",
+      "initialSource": "Before\n   \nAfter",
+      "initialCaretOffset": 9,
+      "actions": [
+        {
+          "type": "key",
+          "key": "Backspace"
+        }
+      ],
+      "sentinel": "FM_SENTINEL_WS_BACKSPACE_INSIDE",
+      "requiresVisualEvidence": false,
+      "fishmarkProbeCase": null,
+      "status": "blocked"
+    },
+    {
+      "caseId": "structural-blank-arrow-down",
+      "group": "structural-blank",
+      "priority": "P1",
+      "initialSource": "Paragraph one\n\nParagraph two",
+      "initialCaretOffset": 13,
+      "actions": [
+        {
+          "type": "key",
+          "key": "ArrowDown"
+        }
+      ],
+      "sentinel": "FM_SENTINEL_STRUCT_ARROW_DOWN",
+      "requiresVisualEvidence": true,
+      "fishmarkProbeCase": null,
+      "status": "captured"
+    },
+    {
+      "caseId": "structural-blank-backspace-at-next-block",
+      "group": "structural-blank",
+      "priority": "P0",
+      "initialSource": "Paragraph one\n\nParagraph two",
+      "initialCaretOffset": 15,
+      "actions": [
+        {
+          "type": "key",
+          "key": "Backspace"
+        }
+      ],
+      "sentinel": "FM_SENTINEL_STRUCT_BACKSPACE",
+      "requiresVisualEvidence": true,
+      "fishmarkProbeCase": null,
+      "status": "blocked"
+    }
+  ]
+}

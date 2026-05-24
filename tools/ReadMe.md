@@ -1,5 +1,5 @@
 ## dev-app.bat
-本地一键打安装包
+本地一键启动开发应用，会先同步依赖和开发主题。
 
 ## package-macos.sh / package-win.bat
 一键本地打包

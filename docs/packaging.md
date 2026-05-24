@@ -12,10 +12,12 @@
 
 ### 品牌素材来源
 
-- 已提交的唯一图标源文件位于 `assets/branding/`
+- 已提交的共享图标形状源文件位于 `assets/branding/fishmark_mark.svg`
 - 当前包含：
+  - `assets/branding/fishmark_mark.svg`
   - `assets/branding/fishmark_logo_light.svg`
   - `assets/branding/fishmark_logo_dark.svg`
+- `fishmark_logo_light.svg` / `fishmark_logo_dark.svg` 是 README 与素材预览用的高对比展示变体；打包生成器以 `fishmark_mark.svg` 为形状源，按 light / dark 颜色生成 PNG / ICO
 - 生成出来的 PNG / ICO 不提交进仓库，只作为打包时的临时产物
 
 ### 执行命令
@@ -63,7 +65,10 @@ Windows 正式发版额外依赖两份元数据：
 
 `npm run generate:icons` 会按需生成：
 
+- `build/icons/light/icon-16.png`
+- `build/icons/light/icon-24.png`
 - `build/icons/light/icon-32.png`
+- `build/icons/light/icon-48.png`
 - `build/icons/light/icon-64.png`
 - `build/icons/light/icon-128.png`
 - `build/icons/light/icon-256.png`

@@ -22,7 +22,10 @@ export function createActiveBlockState(
   source: string,
   selection: ActiveBlockSelection
 ): ActiveBlockState {
-  return createActiveBlockStateFromBlockMap(parseBlockMap(source), selection);
+  return createActiveBlockStateFromBlockMap(
+    parseBlockMap(source),
+    selection
+  );
 }
 
 export function createActiveBlockStateFromBlockMap(

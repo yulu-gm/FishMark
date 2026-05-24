@@ -8,7 +8,7 @@ import { parseMarkdownDocument } from "@fishmark/markdown-engine";
 
 import { createActiveBlockStateFromMarkdownDocument, type ActiveBlockState } from "../active-block";
 import { deriveTableCursorState } from "../table-cursor-state";
-import { resolveArrowDown, resolvePointerSelectionAnchor } from "./registry";
+import { resolveArrowDown, resolveArrowUp, resolvePointerSelectionAnchor } from "./registry";
 
 const views: EditorView[] = [];
 
@@ -101,6 +101,14 @@ describe("block interaction registry", () => {
       anchor: source.indexOf("Right", followingTableStart),
       goalColumn: undefined
     });
+  });
+
+  it("lets native ArrowUp geometry enter a visible whitespace-only physical line", () => {
+    const source = ["A", "   ", "B"].join("\n");
+    const paragraphStart = source.indexOf("B");
+    const { activeState, view } = createVerticalNavigationHarness(source, paragraphStart);
+
+    expect(resolveArrowUp(view, activeState)).toBeNull();
   });
 
   it("uses elementFromPoint to resolve pointer selection when drag events target the document", () => {

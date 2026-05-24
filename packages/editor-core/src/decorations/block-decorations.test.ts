@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { parseBlockMap, parseMarkdownDocument } from "@fishmark/markdown-engine";
 
 import { createActiveBlockStateFromBlockMap } from "../active-block";
+import { createEditorDerivedState } from "../derived-state/editor-derived-state";
 import { createBlockDecorations } from "./block-decorations";
 import { getInactiveBlockquoteLines, getInactiveCodeFenceLines } from "./block-lines";
 
@@ -16,6 +17,10 @@ const collectDecorations = (source: string, decorationSet: ReturnType<typeof cre
 
     const className = typeof value.spec.attributes?.class === "string" ? value.spec.attributes.class : "";
     const directMarkClass = typeof value.spec.class === "string" ? value.spec.class : "";
+
+    if (className.includes("cm-fm-line")) {
+      return;
+    }
 
     // Skip syntax-highlight mark decorations (they set `class` directly on the spec
     // rather than on `attributes`, and would otherwise add language-parser-specific
@@ -80,6 +85,30 @@ const collectBlockReplacements = (
   return replacements;
 };
 
+const collectPhysicalLineDecorations = (
+  source: string,
+  decorationSet: ReturnType<typeof createBlockDecorations>["decorationSet"]
+) => {
+  const ranges: Array<{ from: number; to: number; className: string; text: string }> = [];
+
+  decorationSet.between(0, source.length, (from, to, value) => {
+    const className = typeof value.spec.attributes?.class === "string" ? value.spec.attributes.class : "";
+
+    if (!className.includes("cm-fm-line")) {
+      return;
+    }
+
+    ranges.push({
+      from,
+      to,
+      className,
+      text: source.slice(from, to)
+    });
+  });
+
+  return ranges;
+};
+
 const createInactiveInlineDecorations = (source: string) => {
   const blockMap = parseMarkdownDocument(source);
   const activeState = createActiveBlockStateFromBlockMap(blockMap, {
@@ -126,6 +155,29 @@ const createDecorationsForSelection = (
     source,
     createBlockDecorations({
       activeBlockState: activeState,
+      hasEditorFocus,
+      source
+    }).decorationSet
+  );
+};
+
+const createPhysicalDecorationsForSelection = (
+  source: string,
+  selection: { anchor: number; head: number },
+  hasEditorFocus: boolean
+) => {
+  const editorDerivedState = createEditorDerivedState({
+    source,
+    selection,
+    parseMarkdownDocument
+  });
+
+  return collectPhysicalLineDecorations(
+    source,
+    createBlockDecorations({
+      activeBlockState: editorDerivedState.activeBlockState,
+      activeLine: editorDerivedState.activeLine,
+      editingDocument: editorDerivedState.editingDocument,
       hasEditorFocus,
       source
     }).decorationSet
@@ -327,6 +379,167 @@ describe("createBlockDecorations", () => {
     );
 
     expectExactRangeClasses(ranges, indentationOnlyLineStart, indentationOnlyLineStart, []);
+  });
+
+  it("adds physical line classes to an active empty document without a semantic block", () => {
+    const source = "";
+    const ranges = createPhysicalDecorationsForSelection(source, { anchor: 0, head: 0 }, true);
+
+    expect(ranges).toHaveLength(1);
+    expect(ranges[0]?.className.split(" ").sort()).toEqual([
+      "cm-fm-line",
+      "cm-fm-line-active",
+      "cm-fm-line-empty",
+      "cm-fm-line-extra-blank"
+    ].sort());
+  });
+
+  it("keeps an active whitespace-only physical line editable instead of collapsed", () => {
+    const source = ["Paragraph one", "   ", "Paragraph two"].join("\n");
+    const whitespaceLineStart = source.indexOf("   ");
+    const physicalRanges = createPhysicalDecorationsForSelection(
+      source,
+      { anchor: whitespaceLineStart + 1, head: whitespaceLineStart + 1 },
+      true
+    );
+    const blockRanges = createDecorationsForSelection(
+      source,
+      { anchor: whitespaceLineStart + 1, head: whitespaceLineStart + 1 },
+      true
+    );
+
+    expectExactRangeClasses(blockRanges, whitespaceLineStart, whitespaceLineStart, []);
+    expect(physicalRanges.find((range) => range.from === whitespaceLineStart)?.className.split(" ").sort()).toEqual([
+      "cm-fm-line",
+      "cm-fm-line-active",
+      "cm-fm-line-extra-blank",
+      "cm-fm-line-whitespace"
+    ].sort());
+  });
+
+  it("keeps an inactive whitespace-only physical line visible instead of collapsed", () => {
+    const source = ["Paragraph one", "   ", "Paragraph two"].join("\n");
+    const whitespaceLineStart = source.indexOf("   ");
+    const paragraphTwoStart = source.indexOf("Paragraph two");
+    const blockRanges = createDecorationsForSelection(
+      source,
+      { anchor: paragraphTwoStart, head: paragraphTwoStart },
+      false
+    );
+    const physicalRanges = createPhysicalDecorationsForSelection(
+      source,
+      { anchor: paragraphTwoStart, head: paragraphTwoStart },
+      false
+    );
+
+    expectExactRangeClasses(blockRanges, whitespaceLineStart, whitespaceLineStart, []);
+    expect(physicalRanges.find((range) => range.from === whitespaceLineStart)?.className.split(" ").sort()).toEqual([
+      "cm-fm-line",
+      "cm-fm-line-extra-blank",
+      "cm-fm-line-whitespace"
+    ].sort());
+  });
+
+  it("hides Typora separator rows between repeated empty paragraphs after a whitespace-only line", () => {
+    const source = "   \n\n\n\n";
+    const firstSeparatorLineStart = source.indexOf("\n") + 1;
+    const firstVisibleEmptyLineStart = firstSeparatorLineStart + 1;
+    const secondSeparatorLineStart = firstVisibleEmptyLineStart + 1;
+    const finalEmptyLineStart = source.length;
+    const blockRanges = createDecorationsForSelection(
+      source,
+      { anchor: finalEmptyLineStart, head: finalEmptyLineStart },
+      true
+    );
+    const physicalRanges = createPhysicalDecorationsForSelection(
+      source,
+      { anchor: finalEmptyLineStart, head: finalEmptyLineStart },
+      true
+    );
+
+    expectExactRangeClasses(blockRanges, firstSeparatorLineStart, firstSeparatorLineStart, [
+      "cm-inactive-blank-line"
+    ]);
+    expectExactRangeClasses(blockRanges, firstVisibleEmptyLineStart, firstVisibleEmptyLineStart, []);
+    expectExactRangeClasses(blockRanges, secondSeparatorLineStart, secondSeparatorLineStart, [
+      "cm-inactive-blank-line"
+    ]);
+    expect(physicalRanges.find((range) => range.from === firstSeparatorLineStart)?.className.split(" ").sort()).toEqual([
+      "cm-fm-line",
+      "cm-fm-line-empty",
+      "cm-fm-line-extra-blank"
+    ].sort());
+    expect(physicalRanges.find((range) => range.from === firstVisibleEmptyLineStart)?.className.split(" ").sort()).toEqual([
+      "cm-fm-line",
+      "cm-fm-line-empty",
+      "cm-fm-line-extra-blank"
+    ].sort());
+    expect(physicalRanges.find((range) => range.from === secondSeparatorLineStart)?.className.split(" ").sort()).toEqual([
+      "cm-fm-line",
+      "cm-fm-line-empty",
+      "cm-fm-line-extra-blank"
+    ].sort());
+    expect(physicalRanges.find((range) => range.from === finalEmptyLineStart)?.className.split(" ").sort()).toEqual([
+      "cm-fm-line",
+      "cm-fm-line-active",
+      "cm-fm-line-empty",
+      "cm-fm-line-extra-blank"
+    ].sort());
+  });
+
+  it("hides the leading structural separator above a table without collapsing visible blanks", () => {
+    const source = ["+++", "", "", "", "", "| a | b |", "| - | - |"].join("\n");
+    const firstSeparatorLineStart = "+++\n".length;
+    const firstVisibleEmptyLineStart = firstSeparatorLineStart + 1;
+    const secondSeparatorLineStart = firstVisibleEmptyLineStart + 1;
+    const tableLeadingSeparatorLineStart = secondSeparatorLineStart + 1;
+    const blockRanges = createDecorationsForSelection(
+      source,
+      { anchor: source.indexOf("| a"), head: source.indexOf("| a") },
+      false
+    );
+
+    expectExactRangeClasses(blockRanges, firstSeparatorLineStart, firstSeparatorLineStart, [
+      "cm-inactive-blank-line"
+    ]);
+    expectExactRangeClasses(blockRanges, firstVisibleEmptyLineStart, firstVisibleEmptyLineStart, []);
+    expectExactRangeClasses(blockRanges, secondSeparatorLineStart, secondSeparatorLineStart, [
+      "cm-inactive-blank-line"
+    ]);
+    expectExactRangeClasses(blockRanges, tableLeadingSeparatorLineStart, tableLeadingSeparatorLineStart, [
+      "cm-inactive-blank-line"
+    ]);
+  });
+
+  it("adds physical text, structural separator, and extra blank classes to every source line", () => {
+    const source = ["Paragraph one", "", "", "Paragraph two"].join("\n");
+    const structuralBlankLineStart = source.indexOf("\n\n\n") + 1;
+    const extraBlankLineStart = structuralBlankLineStart + 1;
+    const secondParagraphStart = source.indexOf("Paragraph two");
+    const ranges = createPhysicalDecorationsForSelection(
+      source,
+      { anchor: secondParagraphStart, head: secondParagraphStart },
+      false
+    );
+
+    expect(ranges.map((range) => ({ from: range.from, className: range.className }))).toEqual([
+      {
+        from: 0,
+        className: "cm-fm-line cm-fm-line-text"
+      },
+      {
+        from: structuralBlankLineStart,
+        className: "cm-fm-line cm-fm-line-empty cm-fm-line-structural-separator"
+      },
+      {
+        from: extraBlankLineStart,
+        className: "cm-fm-line cm-fm-line-empty cm-fm-line-extra-blank"
+      },
+      {
+        from: secondParagraphStart,
+        className: "cm-fm-line cm-fm-line-text"
+      }
+    ]);
   });
 
   it("stacks strong and emphasis classes for triple-marker inline content", () => {
@@ -554,7 +767,7 @@ describe("createBlockDecorations", () => {
 
     expect(result.signature).toBe(
       [
-        "active:paragraph:86-95:blank-line:86",
+        "active:paragraph:86-95:blank-line:86:physical-line:15:86:95:text",
         "heading:heading:0-7:0:1",
         "list:list:9-25:9:false:list-item:9-14:0:none,list-item:15-25:0:true",
         "blockquote:blockquote:27-49:27:49",

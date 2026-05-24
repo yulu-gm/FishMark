@@ -38,6 +38,12 @@ describe("createEditorDerivedState", () => {
       column: 0
     });
     expect(state.activeBlockState.tableCursor).toBe(state.tableCursor);
+    expect(state.editingDocument.source).toBe(source);
+    expect(state.activeLine).toMatchObject({
+      number: 5,
+      kind: "text",
+      text: "| pen | 2 |"
+    });
     expect(state.referenceDefinitions?.get("hero")?.href).toBe("hero.png");
     expect(state.outlineHeadings).toEqual([
       {
@@ -48,5 +54,45 @@ describe("createEditorDerivedState", () => {
         startLine: 1
       }
     ]);
+  });
+
+  it("keeps whitespace-only Markdown semantic blocks unchanged while exposing an active physical line", () => {
+    const source = " ";
+    const state = createEditorDerivedState({
+      source,
+      selection: {
+        anchor: source.length,
+        head: source.length
+      },
+      parseMarkdownDocument
+    });
+
+    expect(state.markdownDocument.blocks).toHaveLength(0);
+    expect(state.activeLine).toMatchObject({
+      number: 1,
+      kind: "whitespace",
+      from: 0,
+      to: 1
+    });
+    expect(state.activeBlockState.activeBlock).toBeNull();
+  });
+
+  it("exposes an active empty physical line for an empty document", () => {
+    const state = createEditorDerivedState({
+      source: "",
+      selection: {
+        anchor: 0,
+        head: 0
+      },
+      parseMarkdownDocument
+    });
+
+    expect(state.activeLine).toMatchObject({
+      number: 1,
+      kind: "empty",
+      from: 0,
+      to: 0
+    });
+    expect(state.activeBlockState.activeBlock).toBeNull();
   });
 });

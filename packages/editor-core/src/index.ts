@@ -1,5 +1,14 @@
 export type { ActiveBlockState } from "./active-block";
 export {
+  createPhysicalEditingDocument,
+  type EditingLine,
+  type EditingLineKind,
+  type PhysicalEditingDocument,
+  type SemanticLine,
+  type SemanticLineMap,
+  type SemanticLineRole
+} from "./physical-editing-document";
+export {
   createEditorDerivedState,
   type CreateEditorDerivedStateOptions,
   type EditorDerivedState,

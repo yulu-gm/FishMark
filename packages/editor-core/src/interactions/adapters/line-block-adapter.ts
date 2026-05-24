@@ -14,6 +14,7 @@ import {
   visibleLineColumn
 } from "../../line-visibility";
 import { findListItemAtLineStart } from "../../list-utils";
+import { blockRequiresLeadingStructuralSeparator } from "../../structural-blank-lines";
 import type {
   BlockInteractionAdapter,
   PointerInteractionContext,
@@ -261,7 +262,7 @@ function resolveVisibleBlockEntryAnchor(block: MarkdownBlock, direction: "start"
 }
 
 function isBlankLineText(text: string): boolean {
-  return text.trim().length === 0;
+  return text.length === 0;
 }
 
 function isSourceBlankLineOutsideBlock(context: VerticalInteractionContext, lineNumber: number): boolean {
@@ -281,7 +282,13 @@ function isStructuralSeparatorLine(context: VerticalInteractionContext, lineNumb
 
   const previousLine = context.view.state.doc.line(lineNumber - 1);
 
-  return !isBlankLineText(previousLine.text) && findBlockForLine(context.document.blocks, previousLine.number) !== null;
+  if (!isBlankLineText(previousLine.text) && findBlockForLine(context.document.blocks, previousLine.number) !== null) {
+    return true;
+  }
+
+  const nextBlock = context.document.blocks.find((block) => block.startLine === lineNumber + 1) ?? null;
+
+  return nextBlock ? blockRequiresLeadingStructuralSeparator(nextBlock) : false;
 }
 
 function findBlockAboveStructuralSeparator(
@@ -401,7 +408,7 @@ function resolveCollapsedSeparatorArrowUp(context: VerticalInteractionContext): 
   return null;
 }
 
-function resolveCollapsedSeparatorArrowDown(context: VerticalInteractionContext): number | null {
+function resolveCollapsedSeparatorArrowDown(context: VerticalInteractionContext): VerticalNavigationResult | number | null {
   const selection = context.view.state.selection.main;
 
   if (!selection.empty) {
@@ -420,7 +427,52 @@ function resolveCollapsedSeparatorArrowDown(context: VerticalInteractionContext)
     return null;
   }
 
-  return resolveLineAfterStructuralSeparator(context, currentLine.number + 1);
+  const separatorLineNumber = currentLine.number + 1;
+
+  if (!isStructuralSeparatorLine(context, separatorLineNumber)) {
+    return null;
+  }
+
+  const lineAfterSeparatorNumber = separatorLineNumber + 1;
+
+  if (lineAfterSeparatorNumber > context.view.state.doc.lines) {
+    return null;
+  }
+
+  const lineAfterSeparator = context.view.state.doc.line(lineAfterSeparatorNumber);
+
+  if (isSourceBlankLineOutsideBlock(context, lineAfterSeparator.number)) {
+    return lineAfterSeparator.from;
+  }
+
+  const blockBelow = findBlockBelowStructuralSeparator(context, separatorLineNumber);
+
+  if (!blockBelow) {
+    return null;
+  }
+
+  if (blockBelow.type === "table" || blockBelow.type === "thematicBreak" || blockBelow.type === "htmlImage") {
+    return resolveVisibleBlockEntryAnchor(blockBelow, "start");
+  }
+
+  const currentVisible = createVisibleLine({
+    source: context.source,
+    block: currentBlock,
+    lineStart: currentLine.from,
+    lineEnd: currentLine.to
+  });
+  const nextVisible = createVisibleLine({
+    source: context.source,
+    block: blockBelow,
+    lineStart: lineAfterSeparator.from,
+    lineEnd: lineAfterSeparator.to
+  });
+  const column = context.goalColumn ?? visibleLineColumn(currentVisible, selection.anchor);
+
+  return {
+    anchor: anchorForVisibleLineColumn(nextVisible, column),
+    goalColumn: column
+  };
 }
 
 function resolveFirstLineBelowTableArrowDown(
