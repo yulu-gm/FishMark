@@ -2652,6 +2652,175 @@ function runStructuralBlankArrowDownCase(): Promise<CaseResult> {
   });
 }
 
+async function runDeepNestedListExitCaretCase(): Promise<CaseResult> {
+  const initialContent = [
+    "# Test",
+    "- List Content 1",
+    "- List Content 2",
+    "  - Child List Content",
+    "    - CC",
+    "- "
+  ].join("\n");
+  const expectedContent = [
+    "# Test",
+    "- List Content 1",
+    "- List Content 2",
+    "  - Child List Content",
+    "    - CC",
+    "",
+    ""
+  ].join("\n");
+  const harness = setupHarness(initialContent);
+
+  harness.controller.setSelection(initialContent.length);
+  await settle();
+  harness.controller.pressEnter();
+  await settle();
+
+  const selection = harness.controller.getSelection();
+  const caretRect = harness.view.coordsAtPos(selection.anchor);
+  const ccLine = findLineByText(harness.root, "CC");
+  const finalLineBlock = harness.view.lineBlockAt(selection.anchor);
+  const ccLineRect = ccLine?.getBoundingClientRect() ?? null;
+  const caretHeight = caretRect === null ? null : caretRect.bottom - caretRect.top;
+  const caretHasGeometry =
+    caretRect !== null &&
+    Number.isFinite(caretRect.left) &&
+    Number.isFinite(caretRect.top) &&
+    caretHeight !== null &&
+    caretHeight > 0;
+  const caretStaysBelowNestedItem =
+    caretRect !== null &&
+    ccLineRect !== null &&
+    caretRect.top >= ccLineRect.bottom - 2;
+  const visibleLines = Array.from(harness.root.querySelectorAll<HTMLElement>(".cm-line")).map((line) => ({
+    className: line.className,
+    text: line.textContent ?? "",
+    top: line.getBoundingClientRect().top
+  }));
+  const pass =
+    harness.controller.getContent() === expectedContent &&
+    selection.anchor === expectedContent.length &&
+    selection.head === expectedContent.length &&
+    caretHasGeometry &&
+    caretStaysBelowNestedItem;
+
+  const result = resultFor({
+    details: {
+      caretBottom: caretRect?.bottom ?? null,
+      caretHasGeometry,
+      caretHeight,
+      caretLeft: caretRect?.left ?? null,
+      caretStaysBelowNestedItem,
+      caretTop: caretRect?.top ?? null,
+      ccLineBottom: ccLineRect?.bottom ?? null,
+      ccLineClasses: ccLine?.className ?? null,
+      ccLineTop: ccLineRect?.top ?? null,
+      finalLineBlockFrom: finalLineBlock.from,
+      finalLineBlockTo: finalLineBlock.to,
+      visibleLines
+    },
+    expectedContent,
+    expectedSelection: { anchor: expectedContent.length, head: expectedContent.length },
+    grammar: "list",
+    harness,
+    name: "Enter on a trailing empty top-level item after nested children keeps the caret below the child item",
+    pass
+  });
+  harness.controller.destroy();
+  return result;
+}
+
+async function runDeepNestedListExitBeforeFollowingContentCaretCase(): Promise<CaseResult> {
+  const initialContent = [
+    "# Test",
+    "- List Content 1",
+    "- List Content 2",
+    "  - Child List Content",
+    "    - CC",
+    "- ",
+    "",
+    "After"
+  ].join("\n");
+  const expectedContent = [
+    "# Test",
+    "- List Content 1",
+    "- List Content 2",
+    "  - Child List Content",
+    "    - CC",
+    "",
+    "After"
+  ].join("\n");
+  const expectedBlankLineStart = expectedContent.indexOf("\n\nAfter") + 1;
+  const harness = setupHarness(initialContent);
+
+  harness.controller.setSelection(initialContent.indexOf("- \n\nAfter") + "- ".length);
+  await settle();
+  harness.controller.pressEnter();
+  await settle();
+
+  const selection = harness.controller.getSelection();
+  const caretRect = harness.view.coordsAtPos(selection.anchor);
+  const ccLine = findLineByText(harness.root, "CC");
+  const afterLine = findLineByText(harness.root, "After");
+  const ccLineRect = ccLine?.getBoundingClientRect() ?? null;
+  const afterLineRect = afterLine?.getBoundingClientRect() ?? null;
+  const caretHeight = caretRect === null ? null : caretRect.bottom - caretRect.top;
+  const caretHasGeometry =
+    caretRect !== null &&
+    Number.isFinite(caretRect.left) &&
+    Number.isFinite(caretRect.top) &&
+    caretHeight !== null &&
+    caretHeight > 0;
+  const caretStaysBelowNestedItem =
+    caretRect !== null &&
+    ccLineRect !== null &&
+    caretRect.top >= ccLineRect.bottom - 2;
+  const caretStaysAboveFollowingContent =
+    caretRect !== null &&
+    afterLineRect !== null &&
+    caretRect.bottom <= afterLineRect.top + 2;
+  const visibleLines = Array.from(harness.root.querySelectorAll<HTMLElement>(".cm-line")).map((line) => ({
+    className: line.className,
+    text: line.textContent ?? "",
+    top: line.getBoundingClientRect().top
+  }));
+  const pass =
+    harness.controller.getContent() === expectedContent &&
+    selection.anchor === expectedBlankLineStart &&
+    selection.head === expectedBlankLineStart &&
+    caretHasGeometry &&
+    caretStaysBelowNestedItem &&
+    caretStaysAboveFollowingContent;
+
+  const result = resultFor({
+    details: {
+      afterLineClasses: afterLine?.className ?? null,
+      afterLineTop: afterLineRect?.top ?? null,
+      caretBottom: caretRect?.bottom ?? null,
+      caretHasGeometry,
+      caretHeight,
+      caretLeft: caretRect?.left ?? null,
+      caretStaysAboveFollowingContent,
+      caretStaysBelowNestedItem,
+      caretTop: caretRect?.top ?? null,
+      ccLineBottom: ccLineRect?.bottom ?? null,
+      ccLineClasses: ccLine?.className ?? null,
+      ccLineTop: ccLineRect?.top ?? null,
+      expectedBlankLineStart,
+      visibleLines
+    },
+    expectedContent,
+    expectedSelection: { anchor: expectedBlankLineStart, head: expectedBlankLineStart },
+    grammar: "list",
+    harness,
+    name: "Enter on an empty top-level item before following content keeps the caret on the blank block",
+    pass
+  });
+  harness.controller.destroy();
+  return result;
+}
+
 async function runNestedEmptyListMarkerBackspaceCaretCase(): Promise<CaseResult> {
   const initialContent = ["- parent", "  - child", "    - grandchild"].join("\n");
   const expectedMarkerContent = `${initialContent}\n    - `;
@@ -3339,6 +3508,8 @@ export async function runMarkdownEditingExperienceProbe(): Promise<ProbeResult> 
   cases.push(await runHeadingEnterSpaceCaretCase());
   cases.push(await runListDoubleEnterExitInsertCase());
   cases.push(await runListDoubleEnterBackspaceCase());
+  cases.push(await runDeepNestedListExitCaretCase());
+  cases.push(await runDeepNestedListExitBeforeFollowingContentCaretCase());
   cases.push(await runNestedEmptyListMarkerBackspaceCaretCase());
 
   cases.push(

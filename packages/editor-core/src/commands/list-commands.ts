@@ -75,7 +75,8 @@ export function runListEnter(view: EditorView, activeState: ActiveBlockState): b
       selection: {
         anchor: line.from + insert.length,
         head: line.from + insert.length
-      }
+      },
+      userEvent: "input.list-exit"
     });
     return true;
   }

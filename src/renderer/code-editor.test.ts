@@ -3685,6 +3685,140 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("keeps the caret on the blank body line when exiting a trailing empty top-level item after nested children", () => {
+    const host = document.createElement("div");
+    const source = [
+      "# Test",
+      "- List Content 1",
+      "- List Content 2",
+      "  - Child List Content",
+      "    - CC",
+      "- "
+    ].join("\n");
+    const expected = [
+      "# Test",
+      "- List Content 1",
+      "- List Content 2",
+      "  - Child List Content",
+      "    - CC",
+      "",
+      ""
+    ].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(source.length);
+    advancedController.pressEnter();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(view?.state.selection.main.anchor).toBe(expected.length);
+    expect(view?.state.selection.main.head).toBe(expected.length);
+
+    controller.destroy();
+  });
+
+  it("keeps the caret on the visible blank line when exiting an empty top-level item before following content", () => {
+    const host = document.createElement("div");
+    const source = [
+      "# Test",
+      "- List Content 1",
+      "- List Content 2",
+      "  - Child List Content",
+      "    - CC",
+      "- ",
+      "",
+      "After"
+    ].join("\n");
+    const expected = [
+      "# Test",
+      "- List Content 1",
+      "- List Content 2",
+      "  - Child List Content",
+      "    - CC",
+      "",
+      "After"
+    ].join("\n");
+    const expectedBlankLineStart = expected.indexOf("\n\nAfter") + 1;
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(source.indexOf("- \n\nAfter") + "- ".length);
+    advancedController.pressEnter();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(view?.state.selection.main.anchor).toBe(expectedBlankLineStart);
+    expect(view?.state.selection.main.head).toBe(expectedBlankLineStart);
+
+    controller.destroy();
+  });
+
+  it("keeps the caret below a deep nested list after repeated Enter exits", () => {
+    const host = document.createElement("div");
+    const source = [
+      "# Test",
+      "- List Content 1",
+      "- List Content 2",
+      "  - Child List Content",
+      "    - CC"
+    ].join("\n");
+    const expected = [
+      "# Test",
+      "- List Content 1",
+      "- List Content 2",
+      "  - Child List Content",
+      "    - CC",
+      "",
+      ""
+    ].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(source.length);
+    advancedController.pressEnter();
+    advancedController.pressEnter();
+    advancedController.pressEnter();
+    advancedController.pressEnter();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(view?.state.selection.main.anchor).toBe(expected.length);
+    expect(view?.state.selection.main.head).toBe(expected.length);
+
+    controller.destroy();
+  });
+
   it("starts body text at the left edge on a whitespace-only line after a list", async () => {
     const host = document.createElement("div");
     const source = [

@@ -990,8 +990,9 @@ export function createFishMarkMarkdownExtensions(
             ? Math.sign(anchorDelta)
             : 0;
         let nextAnchor = effectiveAnchor;
+        const shouldPreserveListExitBlankSelection = userEvent === "input.list-exit";
 
-        if (shouldNormalizeStructuralNavigation) {
+        if (shouldNormalizeStructuralNavigation && !shouldPreserveListExitBlankSelection) {
           nextAnchor =
             normalizeStructuralBlankSelectionAnchor(
               effectiveSource,

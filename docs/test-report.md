@@ -9,6 +9,9 @@
 
 ## 记录
 
+| 2026-05-29 | list-exit-caret-regression | `npm run test -- src/renderer/code-editor.test.ts -t "visible blank line when exiting\|trailing empty top-level\|repeated Enter exits\|text typed after double Enter\|returns to the previous list item" --reporter=verbose` / `npm run test -- packages/editor-core/src/extensions/markdown.test.ts packages/editor-core/src/decorations/block-decorations.test.ts --reporter=verbose` | 通过 | 修复嵌套列表后空顶层 `- ` 回车退出时，结构空行选择规范化把光标折回上一条子列表内容末尾的问题；新增覆盖 EOF、下方已有内容、连续 Enter 退出、退出后输入与 Backspace 返回列表的回归场景。 |
+| 2026-05-29 | list-exit-caret-regression | `npm run test:editing-experience` | 通过 | 真实 Electron/Chromium probe 新增两组嵌套列表退出测量：EOF 场景 caret 落在 `CC` 下方；下方有 `After` 时 caret 坐标位于 `CC` 下方且 `After` 上方，确认不是仅 selection offset 正确。 |
+| 2026-05-29 | list-exit-caret-regression | `npm run typecheck` / `npm run lint` / `npm run build` / `git diff --check` | 通过 | TypeScript、ESLint、renderer/electron/cli build 与 whitespace check 全部通过。 |
 | 2026-05-24 | TASK-058 Typora-like alignment gate | `$env:FISHMARK_MARKDOWN_EDITING_EXPERIENCE_PROBE_GROUP='oracle-captured'; npm.cmd run test:editing-experience` | 通过 | 12 个 captured TASK-053 oracle rows 全部 PASS，0 failures，exit 0；完整 JSON 保存到 `.artifacts/test-runs/2026-05-24-task-058-oracle-captured-probe.json`。4 个 blocked rows 保持 blocked / not scored。 |
 | 2026-05-24 | TASK-058 Typora-like alignment gate | `npm.cmd run test -- packages/editor-core/src/physical-editing-document.test.ts packages/editor-core/src/decorations/block-decorations.test.ts packages/editor-core/src/commands/markdown-commands.test.ts packages/editor-core/src/extensions/markdown.test.ts` | 通过 | 4 个文件、111 项通过；覆盖 physical line、block decoration、Markdown command、extension selection/line routing 回归。 |
 | 2026-05-24 | TASK-058 Typora-like alignment gate | `npm.cmd run test -- src/renderer/code-editor.test.ts` | 通过 | 1 个文件、189 项通过；renderer list、blockquote、code fence、table、image、inline rendering、selection 与 physical-line 行为未回归。 |
