@@ -4,12 +4,10 @@ import type { ActiveBlockState } from "../active-block";
 import { buildContinuationPrefix, parseListLine } from "./line-parsers";
 import {
   computeBackspaceListMarker,
-  computeExitEmptyNestedListItem,
   computeIndentListItem,
+  computeListItemEnter,
   computeMoveListItemDown,
   computeMoveListItemUp,
-  computeOrderedListEnter,
-  computeUpgradeEmptyLeftListItemEnter,
   computeOutdentListItem,
   type ListEdit
 } from "./list-edits";
@@ -29,31 +27,12 @@ export function runListEnter(view: EditorView, activeState: ActiveBlockState): b
 
   const semanticContext = readSemanticContext(view.state, activeState);
   const contentStartOffset = line.to - parsed.content.length;
-  const leftContent = view.state.doc.sliceString(contentStartOffset, selection.head);
 
-  if (activeState.activeBlock?.type === "list" && leftContent.trim().length === 0) {
-    const splitUpgradeEdit = computeUpgradeEmptyLeftListItemEnter(semanticContext, contentStartOffset);
+  if (activeState.activeBlock?.type === "list") {
+    const listItemEdit = computeListItemEnter(semanticContext, contentStartOffset);
 
-    if (splitUpgradeEdit) {
-      applyListEdit(view, splitUpgradeEdit);
-      return true;
-    }
-  }
-
-  if (activeState.activeBlock?.type === "list" && /^\d+[.)]$/.test(parsed.marker) && selection.head === line.to) {
-    const orderedEdit = computeOrderedListEnter(semanticContext, parsed.content.trim().length === 0);
-
-    if (orderedEdit) {
-      applyListEdit(view, orderedEdit);
-      return true;
-    }
-  }
-
-  if (activeState.activeBlock?.type === "list" && parsed.content.trim().length === 0 && selection.head === line.to) {
-    const nestedExitEdit = computeExitEmptyNestedListItem(semanticContext);
-
-    if (nestedExitEdit) {
-      applyListEdit(view, nestedExitEdit);
+    if (listItemEdit) {
+      applyListEdit(view, listItemEdit);
       return true;
     }
   }

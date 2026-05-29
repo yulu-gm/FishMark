@@ -126,8 +126,37 @@ export function computeOrderedListEnter(
     current.rootList,
     blockSource,
     tentativeSource,
-    toBlockOffset(current.rootList, current.item.startOffset) + replacement.length
+    toBlockOffset(current.rootList, current.item.startOffset) + replacement.length,
+    current.parentItem === null ? "input.list-exit" : undefined
   );
+}
+
+export function computeListItemEnter(
+  ctx: SemanticContext,
+  contentStartOffset: number
+): ListEdit | null {
+  if (ctx.selection.empty === false || ctx.selection.from < contentStartOffset) {
+    return null;
+  }
+
+  const rootList = readActiveListRoot(ctx);
+  if (!rootList) {
+    return null;
+  }
+
+  const current = findListItemContext(rootList, ctx.selection.from, rootList, null, null);
+  if (!current) {
+    return null;
+  }
+
+  const line = ctx.state.doc.lineAt(ctx.selection.from);
+  const leftContent = ctx.source.slice(contentStartOffset, ctx.selection.from);
+
+  if (leftContent.trim().length === 0 && ctx.selection.from <= line.to) {
+    return computeUpgradeListItemAtContentStart(ctx, current, line.to);
+  }
+
+  return computeSplitListItemAtSelection(ctx, current);
 }
 
 export function computeUpgradeEmptyLeftListItemEnter(
@@ -165,10 +194,42 @@ export function computeUpgradeEmptyLeftListItemEnter(
     return null;
   }
 
+  return computeUpgradeListItemAtContentStart(ctx, current, line.to);
+}
+
+function computeUpgradeListItemAtContentStart(
+  ctx: SemanticContext,
+  current: ListItemContext,
+  lineEndOffset: number
+): ListEdit | null {
+  if (current.item.children.length > 0 || current.item.endLine > current.item.startLine) {
+    if (current.parentItem) {
+      return computeOutdentListItem(ctx);
+    }
+
+    return computeUpgradeTopLevelSubtreeAtContentStart(ctx, current, lineEndOffset);
+  }
+
+  const rightContent = ctx.source.slice(ctx.selection.from, lineEndOffset);
+  const rightContentIsEmpty = rightContent.trim().length === 0;
+  const exitsTopLevelEmptyItem = current.parentItem === null && rightContentIsEmpty;
+  const hasFollowingLineBreak = lineEndOffset < ctx.source.length && ctx.source[lineEndOffset] === "\n";
+  const hasExistingSeparatorAfterItem =
+    exitsTopLevelEmptyItem &&
+    hasFollowingLineBreak &&
+    lineEndOffset + 1 < ctx.source.length &&
+    ctx.source[lineEndOffset + 1] === "\n";
+  const needsTrailingBodySeparator =
+    current.parentItem === null &&
+    !rightContentIsEmpty &&
+    hasFollowingLineBreak &&
+    lineEndOffset < current.rootList.endOffset;
   const replacementPrefix =
     current.parentScope && current.parentItem
       ? buildParentEmptyListItemPrefix(current.parentScope, current.parentItem)
-      : toBlockOffset(rootList, current.item.startOffset) > 0
+      : hasExistingSeparatorAfterItem
+        ? ""
+      : toBlockOffset(current.rootList, current.item.startOffset) > 0
         ? "\n"
         : "";
 
@@ -176,14 +237,111 @@ export function computeUpgradeEmptyLeftListItemEnter(
     return null;
   }
 
-  const blockSource = readBlockSource(ctx, rootList);
-  const replaceFrom = toBlockOffset(rootList, current.item.startOffset);
-  const replaceTo = toBlockOffset(rootList, line.to);
-  const replacement = `${replacementPrefix}${rightContent}`;
+  const blockSource = readBlockSource(ctx, current.rootList);
+  const replaceFrom = toBlockOffset(current.rootList, current.item.startOffset);
+  const deleteTo =
+    exitsTopLevelEmptyItem && hasFollowingLineBreak
+      ? lineEndOffset + 1
+      : lineEndOffset;
+
+  if (exitsTopLevelEmptyItem && hasFollowingLineBreak && deleteTo > current.rootList.endOffset) {
+    return {
+      changes: {
+        from: current.item.startOffset,
+        to: deleteTo,
+        insert: replacementPrefix
+      },
+      selection: {
+        anchor: current.item.startOffset,
+        head: current.item.startOffset
+      },
+      userEvent: "input.list-exit"
+    };
+  }
+
+  const replaceTo = toBlockOffset(current.rootList, deleteTo);
+  const replacement = `${replacementPrefix}${rightContent}${needsTrailingBodySeparator ? "\n" : ""}`;
+  const tentativeSource = replaceRange(blockSource, replaceFrom, replaceTo, replacement);
+  const tentativeCursor =
+    exitsTopLevelEmptyItem && hasFollowingLineBreak
+      ? replaceFrom
+      : replaceFrom + replacementPrefix.length;
+
+  return finalizeListEdit(
+    current.rootList,
+    blockSource,
+    tentativeSource,
+    tentativeCursor,
+    current.parentItem === null ? "input.list-exit" : undefined
+  );
+}
+
+function computeUpgradeTopLevelSubtreeAtContentStart(
+  ctx: SemanticContext,
+  current: ListItemContext,
+  lineEndOffset: number
+): ListEdit | null {
+  const rightContent = ctx.source.slice(ctx.selection.from, lineEndOffset);
+  const tailFrom =
+    lineEndOffset < current.item.endOffset && ctx.source[lineEndOffset] === "\n"
+      ? lineEndOffset + 1
+      : lineEndOffset;
+  const rawTail = ctx.source.slice(tailFrom, current.item.endOffset);
+  const tail = outdentListItemTail(rawTail);
+  const tailStartsList = firstNonBlankLineStartsList(tail);
+  const hasFollowingRootItem = current.item.endOffset < current.rootList.endOffset;
+  const replacementPrefix =
+    toBlockOffset(current.rootList, current.item.startOffset) > 0 ? "\n" : "";
+  const tailSeparator = tail.length === 0 ? "" : tailStartsList ? "\n\n" : "\n";
+  const trailingSeparator =
+    hasFollowingRootItem && (tail.length === 0 || !tailStartsList) ? "\n" : "";
+  const replacement = `${replacementPrefix}${rightContent}${tailSeparator}${tail}${trailingSeparator}`;
+  const blockSource = readBlockSource(ctx, current.rootList);
+  const replaceFrom = toBlockOffset(current.rootList, current.item.startOffset);
+  const replaceTo = toBlockOffset(current.rootList, current.item.endOffset);
   const tentativeSource = replaceRange(blockSource, replaceFrom, replaceTo, replacement);
   const tentativeCursor = replaceFrom + replacementPrefix.length;
 
-  return finalizeListEdit(rootList, blockSource, tentativeSource, tentativeCursor);
+  return finalizeListEdit(
+    current.rootList,
+    blockSource,
+    tentativeSource,
+    tentativeCursor,
+    "input.list-exit"
+  );
+}
+
+function computeSplitListItemAtSelection(
+  ctx: SemanticContext,
+  current: ListItemContext
+): ListEdit | null {
+  if (current.item.children.length > 0 || current.item.endLine > current.item.startLine) {
+    return null;
+  }
+
+  const blockSource = readBlockSource(ctx, current.rootList);
+  const insertAt = toBlockOffset(current.rootList, ctx.selection.from);
+  const marker = current.scope.ordered
+    ? `${current.scope.startOrdinal + current.itemIndex + 1}${current.scope.delimiter}`
+    : current.item.marker;
+  const continuationPrefix = `${" ".repeat(current.item.indent)}${marker} ${current.item.task ? "[ ] " : ""}`;
+  const insert = `\n${continuationPrefix}`;
+  const tentativeSource = replaceRange(blockSource, insertAt, insertAt, insert);
+  const tentativeCursor = insertAt + insert.length;
+
+  return finalizeListEdit(current.rootList, blockSource, tentativeSource, tentativeCursor);
+}
+
+function outdentListItemTail(source: string): string {
+  return source
+    .split("\n")
+    .map((line) => (line.startsWith("  ") ? line.slice(2) : line))
+    .join("\n");
+}
+
+function firstNonBlankLineStartsList(source: string): boolean {
+  const line = source.split("\n").find((candidate) => candidate.trim().length > 0);
+  return line ? lineHasPotentialListMarker(line) : false;
 }
 
 export function computeExitEmptyNestedListItem(ctx: SemanticContext): ListEdit | null {
@@ -676,7 +834,8 @@ function finalizeListEdit(
   rootList: ListBlock,
   originalSource: string,
   tentativeSource: string,
-  tentativeCursor: number
+  tentativeCursor: number,
+  userEvent?: string
 ): ListEdit {
   const normalization = normalizeOrderedListBlock(tentativeSource);
   const selectionOffset = mapBlockOffsetThroughChanges(tentativeCursor, normalization.changes);
@@ -686,7 +845,8 @@ function finalizeListEdit(
     selection: {
       anchor: rootList.startOffset + selectionOffset,
       head: rootList.startOffset + selectionOffset
-    }
+    },
+    userEvent
   };
 }
 

@@ -1187,6 +1187,7 @@ async function runStrictHumanListInputCases(): Promise<CaseResult[]> {
         { kind: "type", text: "child" },
         { kind: "backspace", count: Array.from("child").length },
         { kind: "backspace" },
+        { kind: "backspace" },
         { kind: "backspace" }
       ],
       checkpoints: [
@@ -1194,10 +1195,15 @@ async function runStrictHumanListInputCases(): Promise<CaseResult[]> {
           afterAction: 8,
           expectedContent: "- parent\n  ",
           name: "child marker deletion preserves child indentation"
+        },
+        {
+          afterAction: 9,
+          expectedContent: "- parent\n ",
+          name: "child indentation deletes one source space at a time"
         }
       ],
       expectedContent: "- parent\n",
-      name: "strict Backspace removes a child marker in two stages"
+      name: "strict Backspace removes a child marker and indentation in source order"
     }),
     await runStrictHumanListInputCase({
       actions: [
@@ -2821,6 +2827,116 @@ async function runDeepNestedListExitBeforeFollowingContentCaretCase(): Promise<C
   return result;
 }
 
+async function runDeepOrderedListRepeatedEnterExitCase(): Promise<CaseResult> {
+  const initialContent = ["1. 111", "2. 222", "  1. 2.1", "    1. 2.1.1"].join("\n");
+  const expectedContent = ["1. 111", "2. 222", "  1. 2.1", "    1. 2.1.1", "", ""].join("\n");
+  const harness = setupHarness(initialContent);
+
+  harness.controller.setSelection(initialContent.length);
+  await settle();
+  harness.controller.pressEnter();
+  await settle();
+  harness.controller.pressEnter();
+  await settle();
+  harness.controller.pressEnter();
+  await settle();
+  harness.controller.pressEnter();
+  await settle();
+
+  const selection = harness.controller.getSelection();
+  const caretRect = harness.view.coordsAtPos(selection.anchor);
+  const nestedLine = findLineByText(harness.root, "2.1.1");
+  const nestedLineRect = nestedLine?.getBoundingClientRect() ?? null;
+  const finalLineBlock = harness.view.lineBlockAt(selection.anchor);
+  const caretStaysBelowNestedItem =
+    caretRect !== null &&
+    nestedLineRect !== null &&
+    caretRect.top >= nestedLineRect.bottom - 2;
+  const pass =
+    harness.controller.getContent() === expectedContent &&
+    selection.anchor === expectedContent.length &&
+    selection.head === expectedContent.length &&
+    caretStaysBelowNestedItem;
+
+  const result = resultFor({
+    caseId: "deep-ordered-list-repeated-enter-exit",
+    details: {
+      caretBottom: caretRect?.bottom ?? null,
+      caretStaysBelowNestedItem,
+      caretTop: caretRect?.top ?? null,
+      finalLineBlockFrom: finalLineBlock.from,
+      finalLineBlockTo: finalLineBlock.to,
+      nestedLineBottom: nestedLineRect?.bottom ?? null,
+      nestedLineClasses: nestedLine?.className ?? null,
+      nestedLineTop: nestedLineRect?.top ?? null
+    },
+    expectedContent,
+    expectedSelection: { anchor: expectedContent.length, head: expectedContent.length },
+    grammar: "list",
+    harness,
+    name: "repeated Enter exits a deep ordered list without jumping the caret upward",
+    pass
+  });
+  harness.controller.destroy();
+  return result;
+}
+
+async function runTopLevelListItemEnterBodyUpgradeCase(): Promise<CaseResult> {
+  const initialContent = ["1. Previous", "2. Body"].join("\n");
+  const expectedContent = ["1. Previous", "", "Body"].join("\n");
+  const expectedSelection = expectedContent.indexOf("Body");
+  const harness = setupHarness(initialContent);
+
+  harness.controller.setSelection(initialContent.indexOf("Body"));
+  await settle();
+  harness.controller.pressEnter();
+  await settle();
+
+  const selection = harness.controller.getSelection();
+  const caretRect = harness.view.coordsAtPos(selection.anchor);
+  const previousLine = findLineByText(harness.root, "Previous");
+  const bodyLine = findLineByText(harness.root, "Body");
+  const previousLineRect = previousLine?.getBoundingClientRect() ?? null;
+  const bodyLineRect = bodyLine?.getBoundingClientRect() ?? null;
+  const caretStaysOnBodyLine =
+    caretRect !== null &&
+    bodyLineRect !== null &&
+    caretRect.top >= bodyLineRect.top - 2 &&
+    caretRect.bottom <= bodyLineRect.bottom + 2;
+  const bodyStaysBelowList =
+    bodyLineRect !== null &&
+    previousLineRect !== null &&
+    bodyLineRect.top >= previousLineRect.bottom - 2;
+  const pass =
+    harness.controller.getContent() === expectedContent &&
+    selection.anchor === expectedSelection &&
+    selection.head === expectedSelection &&
+    caretStaysOnBodyLine &&
+    bodyStaysBelowList;
+
+  const result = resultFor({
+    caseId: "top-level-list-item-enter-body-upgrade",
+    details: {
+      bodyLineClasses: bodyLine?.className ?? null,
+      bodyLineTop: bodyLineRect?.top ?? null,
+      bodyStaysBelowList,
+      caretBottom: caretRect?.bottom ?? null,
+      caretStaysOnBodyLine,
+      caretTop: caretRect?.top ?? null,
+      previousLineBottom: previousLineRect?.bottom ?? null,
+      previousLineClasses: previousLine?.className ?? null
+    },
+    expectedContent,
+    expectedSelection: { anchor: expectedSelection, head: expectedSelection },
+    grammar: "list",
+    harness,
+    name: "Enter at a top-level list item start upgrades it to body text below the list",
+    pass
+  });
+  harness.controller.destroy();
+  return result;
+}
+
 async function runNestedEmptyListMarkerBackspaceCaretCase(): Promise<CaseResult> {
   const initialContent = ["- parent", "  - child", "    - grandchild"].join("\n");
   const expectedMarkerContent = `${initialContent}\n    - `;
@@ -3341,7 +3457,9 @@ const namedProbeCases: NamedProbeCase[] = [
   { caseId: "heading-end-repeated-enter", group: "heading", run: runHeadingEndRepeatedEnterCase },
   { caseId: "heading-empty-paragraph-space", group: "heading", run: runHeadingEnterSpaceCaretCase },
   { caseId: "heading-empty-paragraph-backspace", group: "heading", run: runHeadingEmptyParagraphBackspaceCase },
-  { caseId: "structural-blank-arrow-down", group: "structural-blank", run: runStructuralBlankArrowDownCase }
+  { caseId: "structural-blank-arrow-down", group: "structural-blank", run: runStructuralBlankArrowDownCase },
+  { caseId: "deep-ordered-list-repeated-enter-exit", group: "list", run: runDeepOrderedListRepeatedEnterExitCase },
+  { caseId: "top-level-list-item-enter-body-upgrade", group: "list", run: runTopLevelListItemEnterBodyUpgradeCase }
 ];
 
 const namedProbeAliases = new Map<string, string>([
@@ -3510,6 +3628,8 @@ export async function runMarkdownEditingExperienceProbe(): Promise<ProbeResult> 
   cases.push(await runListDoubleEnterBackspaceCase());
   cases.push(await runDeepNestedListExitCaretCase());
   cases.push(await runDeepNestedListExitBeforeFollowingContentCaretCase());
+  cases.push(await runDeepOrderedListRepeatedEnterExitCase());
+  cases.push(await runTopLevelListItemEnterBodyUpgradeCase());
   cases.push(await runNestedEmptyListMarkerBackspaceCaretCase());
 
   cases.push(

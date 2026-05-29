@@ -3,6 +3,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+import { Transaction } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -3538,6 +3539,36 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("splits a list item at the cursor and moves right-side text into the new sibling", () => {
+    const host = document.createElement("div");
+    const source = ["1. AlphaBeta", "2. Gamma"].join("\n");
+    const expected = ["1. Alpha", "2. Beta", "3. Gamma"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+    const view = getEditorView(host);
+    const cursor = source.indexOf("Beta");
+    const expectedCursor = expected.indexOf("Beta");
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(cursor);
+    advancedController.pressEnter();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(view?.state.selection.main.anchor).toBe(expectedCursor);
+    expect(view?.state.selection.main.head).toBe(expectedCursor);
+
+    controller.destroy();
+  });
+
   it("joins paragraph text across a structural blank separator on Backspace", () => {
     const host = document.createElement("div");
     const source = ["Alpha", "", "Beta"].join("\n");
@@ -3627,10 +3658,10 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("continues an empty ordered list item when later siblings still exist", () => {
+  it("upgrades an empty top-level ordered list item before later siblings to a body blank block", () => {
     const host = document.createElement("div");
     const source = ["1. Todo", "2. ", "3. Todo2", "4. Todo3"].join("\n");
-    const expected = ["1. Todo", "2. ", "3. ", "4. Todo2", "5. Todo3"].join("\n");
+    const expected = ["1. Todo", "", "3. Todo2", "4. Todo3"].join("\n");
 
     const controller = createCodeEditorController({
       parent: host,
@@ -3643,7 +3674,7 @@ describe("createCodeEditorController", () => {
     };
     const view = getEditorView(host);
     const emptyItemCursor = getLineStartOffset(source, 2) + "2. ".length;
-    const expectedCursor = getLineStartOffset(expected, 3) + "3. ".length;
+    const expectedCursor = expected.indexOf("\n\n3. Todo2") + 1;
 
     expect(view).not.toBeNull();
 
@@ -3681,6 +3712,50 @@ describe("createCodeEditorController", () => {
     expect(controller.getContent()).toBe("1. Todo\n\n");
     expect(view?.state.selection.main.anchor).toBe("1. Todo\n\n".length);
     expect(view?.state.selection.main.head).toBe("1. Todo\n\n".length);
+
+    controller.destroy();
+  });
+
+  it("keeps input.list-exit when exiting a trailing empty top-level ordered item", () => {
+    const host = document.createElement("div");
+    const source = ["1. Todo", "2. "].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+    const view = getEditorView(host);
+    const emptyItemCursor = getLineStartOffset(source, 2) + "2. ".length;
+    const userEvents: (string | undefined)[] = [];
+
+    expect(view).not.toBeNull();
+
+    const dispatch = view!.dispatch.bind(view) as (...transactions: unknown[]) => void;
+    view!.dispatch = ((...transactions: unknown[]) => {
+      dispatch(...transactions);
+
+      for (const transaction of transactions) {
+        if (transaction instanceof Transaction) {
+          userEvents.push(transaction.annotation(Transaction.userEvent));
+          continue;
+        }
+
+        if (!Array.isArray(transaction)) {
+          userEvents.push((transaction as { userEvent?: string }).userEvent);
+        }
+      }
+    }) as EditorView["dispatch"];
+
+    advancedController.setSelection(emptyItemCursor);
+    advancedController.pressEnter();
+
+    expect(controller.getContent()).toBe("1. Todo\n\n");
+    expect(userEvents).toContain("input.list-exit");
 
     controller.destroy();
   });
@@ -4304,6 +4379,155 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("upgrades a nested ordered item at content start without creating a blank line", () => {
+    const host = document.createElement("div");
+    const source = ["1. Parent", "  1. Child", "2. After"].join("\n");
+    const expected = ["1. Parent", "2. Child", "3. After"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+    const view = getEditorView(host);
+    const cursor = source.indexOf("Child");
+    const expectedCursor = expected.indexOf("Child");
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(cursor);
+    advancedController.pressEnter();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(view?.state.selection.main.anchor).toBe(expectedCursor);
+    expect(view?.state.selection.main.head).toBe(expectedCursor);
+
+    controller.destroy();
+  });
+
+  it("upgrades a nested list item with children at content start", () => {
+    const host = document.createElement("div");
+    const source = ["- parent", "  - child", "    - grandchild", "- after"].join("\n");
+    const expected = ["- parent", "- child", "  - grandchild", "- after"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+    const view = getEditorView(host);
+    const cursor = source.indexOf("child");
+    const expectedCursor = expected.indexOf("child");
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(cursor);
+    advancedController.pressEnter();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(view?.state.selection.main.anchor).toBe(expectedCursor);
+    expect(view?.state.selection.main.head).toBe(expectedCursor);
+
+    controller.destroy();
+  });
+
+  it("upgrades a top-level ordered item at content start into body text with a structural separator", () => {
+    const host = document.createElement("div");
+    const source = ["1. Previous", "2. Body"].join("\n");
+    const expected = ["1. Previous", "", "Body"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+    const view = getEditorView(host);
+    const cursor = source.indexOf("Body");
+    const expectedCursor = expected.indexOf("Body");
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(cursor);
+    advancedController.pressEnter();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(view?.state.selection.main.anchor).toBe(expectedCursor);
+    expect(view?.state.selection.main.head).toBe(expectedCursor);
+
+    controller.destroy();
+  });
+
+  it("upgrades a top-level list item with children to body text", () => {
+    const host = document.createElement("div");
+    const source = ["- parent", "  - child", "- after"].join("\n");
+    const expected = ["parent", "", "- child", "- after"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+    const view = getEditorView(host);
+    const cursor = source.indexOf("parent");
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(cursor);
+    advancedController.pressEnter();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(view?.state.selection.main.anchor).toBe(0);
+    expect(view?.state.selection.main.head).toBe(0);
+
+    controller.destroy();
+  });
+
+  it("separates later top-level list siblings when upgrading a middle item to body text", () => {
+    const host = document.createElement("div");
+    const source = ["1. Previous", "2. Body", "3. After"].join("\n");
+    const expected = ["1. Previous", "", "Body", "", "3. After"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+    const view = getEditorView(host);
+    const cursor = source.indexOf("Body");
+    const expectedCursor = expected.indexOf("Body");
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(cursor);
+    advancedController.pressEnter();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(view?.state.selection.main.anchor).toBe(expectedCursor);
+    expect(view?.state.selection.main.head).toBe(expectedCursor);
+
+    controller.destroy();
+  });
+
   it("upgrades a single top-level list item to body text without leaving a leading blank line", () => {
     const host = document.createElement("div");
     const source = "1. Tail";
@@ -4366,6 +4590,34 @@ describe("createCodeEditorController", () => {
       anchor: "- parent\n\n".length,
       head: "- parent\n\n".length
     });
+
+    controller.destroy();
+  });
+
+  it("upgrades an empty nested ordered item on Enter without adding a blank line", () => {
+    const host = document.createElement("div");
+    const source = ["1. Parent", "  1. "].join("\n");
+    const expected = ["1. Parent", "2. "].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(source.length);
+    advancedController.pressEnter();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(view?.state.selection.main.anchor).toBe(expected.length);
+    expect(view?.state.selection.main.head).toBe(expected.length);
 
     controller.destroy();
   });
@@ -7153,9 +7405,9 @@ describe("createCodeEditorController", () => {
       "1. 有序列表第一项\n2. 有序列表第二项\n3. \n4. 有序列表第四项",
       "1. 有序列表第一项\n  1. 有序列表第二项\n2. \n3. 有序列表第四项"
     );
-    const orderedContinuationSource = source.replace(
+    const orderedExitSource = source.replace(
       "3. \n4. 有序列表第四项",
-      "3. \n4. \n5. 有序列表第四项"
+      "\n4. 有序列表第四项"
     );
 
     const controller = createCodeEditorController({
@@ -7183,9 +7435,9 @@ describe("createCodeEditorController", () => {
 
     advancedController.setSelection(source.indexOf("3. \n4. 有序列表第四项") + "3. ".length);
     advancedController.pressEnter();
-    expect(controller.getContent()).toBe(orderedContinuationSource);
+    expect(controller.getContent()).toBe(orderedExitSource);
     expect(view!.state.selection.main.anchor).toBe(
-      orderedContinuationSource.indexOf("4. \n5. 有序列表第四项") + "4. ".length
+      orderedExitSource.indexOf("\n\n4. 有序列表第四项") + 1
     );
 
     controller.replaceDocument(source);

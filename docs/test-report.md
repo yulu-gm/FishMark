@@ -1,4 +1,4 @@
-# Yulora 测试报告
+# FishMark 测试报告
 
 用于记录各任务的验证结果。
 
@@ -9,6 +9,10 @@
 
 ## 记录
 
+| 2026-05-30 | list-enter-typora-behavior | `npm run test -- src/renderer/code-editor.test.ts -t "upgrades an empty top-level ordered list item before later siblings" --reporter=verbose` / `npm run test -- src/renderer/code-editor.test.ts -t "separates later top-level list siblings" --reporter=verbose` / `npm run test -- src/renderer/code-editor.test.ts -t "upgrades a nested list item with children\|upgrades a top-level list item with children" --reporter=verbose` | 先失败后通过 / 补测通过 | RED 阶段分别复现空顶级有序列表项在后续 sibling 前错误继续列表、顶级中间项升级正文时后续 sibling 缺少结构分隔的问题；code review 指出的带子列表 item 内容开头 fallback 问题修复后，focused 补测通过。 |
+| 2026-05-30 | list-enter-typora-behavior | `npm run test -- src/renderer/code-editor.test.ts --reporter=verbose` / `npm run test -- packages/editor-core/src/commands/list-edits.test.ts packages/editor-core/src/extensions/markdown.test.ts packages/editor-core/src/decorations/block-decorations.test.ts --reporter=verbose` | 通过 | renderer 205 项、editor-core 相关 124 项通过；覆盖列表项中间拆分并搬移右侧内容、内容开头升级、带子列表 item 升级、顶级列表升级正文、顶级中间项正文分隔、空嵌套项升级、空顶级项退出的 `input.list-exit` 与复杂 fixture 编号保持。 |
+| 2026-05-30 | list-enter-typora-behavior | `npm run test:editing-experience` | 通过 | 真实 Electron/Chromium probe 通过且 `failures: []`；新增 `deep-ordered-list-repeated-enter-exit` 确认深层有序列表连续 Enter 后 caret 不跳回上方，`top-level-list-item-enter-body-upgrade` 确认顶级列表项开头 Enter 升级为正文并停在正文行。 |
+| 2026-05-30 | list-enter-typora-behavior | `npm run typecheck` / `npm run lint` / `npm run build` / `git diff --check` | 通过 | TypeScript、ESLint、renderer/electron/cli build 与 whitespace check 全部通过。 |
 | 2026-05-29 | list-exit-caret-regression | `npm run test -- src/renderer/code-editor.test.ts -t "visible blank line when exiting\|trailing empty top-level\|repeated Enter exits\|text typed after double Enter\|returns to the previous list item" --reporter=verbose` / `npm run test -- packages/editor-core/src/extensions/markdown.test.ts packages/editor-core/src/decorations/block-decorations.test.ts --reporter=verbose` | 通过 | 修复嵌套列表后空顶层 `- ` 回车退出时，结构空行选择规范化把光标折回上一条子列表内容末尾的问题；新增覆盖 EOF、下方已有内容、连续 Enter 退出、退出后输入与 Backspace 返回列表的回归场景。 |
 | 2026-05-29 | list-exit-caret-regression | `npm run test:editing-experience` | 通过 | 真实 Electron/Chromium probe 新增两组嵌套列表退出测量：EOF 场景 caret 落在 `CC` 下方；下方有 `After` 时 caret 坐标位于 `CC` 下方且 `After` 上方，确认不是仅 selection offset 正确。 |
 | 2026-05-29 | list-exit-caret-regression | `npm run typecheck` / `npm run lint` / `npm run build` / `git diff --check` | 通过 | TypeScript、ESLint、renderer/electron/cli build 与 whitespace check 全部通过。 |
