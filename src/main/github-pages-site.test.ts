@@ -21,7 +21,7 @@ describe("GitHub Pages site", () => {
     const siteIndexPath = path.join(process.cwd(), "site", "index.html");
     const siteIndexSource = readFileSync(siteIndexPath, "utf8");
 
-    for (const anchorId of ["features", "shortcuts", "tech", "download"]) {
+    for (const anchorId of ["features", "shortcuts", "syntax", "download"]) {
       expect(siteIndexSource).toContain(`href="#${anchorId}"`);
       expect(siteIndexSource).toContain(`id="${anchorId}"`);
     }
@@ -40,14 +40,74 @@ describe("GitHub Pages site", () => {
     }
   });
 
-  it("points macOS downloads to the current Apple Silicon beta release", () => {
+  it("shows customer-facing capabilities without the implementation stack", () => {
     const siteIndexPath = path.join(process.cwd(), "site", "index.html");
     const siteIndexSource = readFileSync(siteIndexPath, "utf8");
 
-    expect(siteIndexSource).toContain("https://github.com/yulu-gm/FishMark/releases/tag/v0.2.2-mac-beta");
-    expect(siteIndexSource).toContain("macOS Beta");
-    expect(siteIndexSource).toContain("Apple Silicon");
-    expect(siteIndexSource).not.toContain("Apple Silicon · Intel");
+    expect(siteIndexSource).toContain("多标签页工作区");
+    expect(siteIndexSource).toContain("剪贴板粘贴图片");
+    expect(siteIndexSource).toContain("查找替换与 HTML 导出");
+    expect(siteIndexSource).toContain("当前支持的 Markdown 语法");
+
+    for (const implementationDetail of [
+      "技术栈",
+      "Electron",
+      "React",
+      "TypeScript",
+      "CodeMirror",
+      "micromark",
+      "Vitest"
+    ]) {
+      expect(siteIndexSource).not.toContain(implementationDetail);
+    }
+  });
+
+  it("documents the currently advertised Markdown syntax support", () => {
+    const siteIndexPath = path.join(process.cwd(), "site", "index.html");
+    const siteIndexSource = readFileSync(siteIndexPath, "utf8");
+
+    for (const syntaxLabel of [
+      "标题",
+      "段落",
+      "加粗与斜体",
+      "删除线",
+      "行内代码",
+      "代码块",
+      "引用块",
+      "列表与任务",
+      "分割线",
+      "链接与图片",
+      "表格"
+    ]) {
+      expect(siteIndexSource).toContain(syntaxLabel);
+    }
+  });
+
+  it("keeps the original homepage rhythm and motion hooks", () => {
+    const siteIndexPath = path.join(process.cwd(), "site", "index.html");
+    const siteIndexSource = readFileSync(siteIndexPath, "utf8");
+
+    expect(siteIndexSource).toContain('class="editor-frame fade-up"');
+    expect(siteIndexSource).toContain('class="phil-card fade-up"');
+    expect(siteIndexSource).toContain('class="feat-card fade-up"');
+    expect(siteIndexSource).toContain('class="shortcuts-grid"');
+    expect(siteIndexSource).toContain("const observer = new IntersectionObserver");
+    expect(siteIndexSource).toContain("@keyframes blink");
+  });
+
+  it("uses light neutral styling and avoids stale homepage phrasing", () => {
+    const siteIndexPath = path.join(process.cwd(), "site", "index.html");
+    const siteIndexSource = readFileSync(siteIndexPath, "utf8");
+
+    expect(siteIndexSource).toContain("--bg: #f8fafc");
+    expect(siteIndexSource).toContain("--icon: #aebccc");
+    expect(siteIndexSource).toContain("color: var(--icon)");
+    expect(siteIndexSource).not.toContain("本地优先");
+    expect(siteIndexSource).not.toContain("local-first");
+    expect(siteIndexSource).not.toContain("Local-first");
+    expect(siteIndexSource).not.toContain("而非");
+    expect(siteIndexSource).not.toContain("不是");
+    expect(siteIndexSource).not.toContain("https://github.com/yulu-gm/FishMark/releases/tag/v0.2.2-mac-beta");
   });
 
   it("publishes the static site directory through GitHub Pages Actions", () => {
