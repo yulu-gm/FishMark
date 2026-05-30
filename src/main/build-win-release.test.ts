@@ -247,6 +247,31 @@ describe("build-win-release", () => {
     expect(steps).toEqual(["doPack", "prepare", "package"]);
   });
 
+  it("requests x64 Windows artifacts regardless of host architecture", async () => {
+    class FakePlatformPackager {
+      async pack(...args: unknown[]) {
+        void args;
+      }
+    }
+
+    const buildMock = vi.fn(async () => {});
+
+    await buildWindowsArtifacts({
+      projectDir: process.cwd(),
+      builderConfig: createBuilderConfig(),
+      platformPackagerClass: FakePlatformPackager,
+      electronBuilderBuildImpl: buildMock
+    });
+
+    expect(buildMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        win: ["nsis"],
+        x64: true,
+        publish: "never"
+      })
+    );
+  });
+
   it("creates a GitHub release using the structured release note title and body", async () => {
     const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
       const url = String(input);

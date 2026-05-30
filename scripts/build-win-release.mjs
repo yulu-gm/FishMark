@@ -126,6 +126,7 @@ export async function buildWindowsArtifacts({
     await electronBuilderBuildImpl({
       projectDir,
       win: ["nsis"],
+      x64: true,
       config: buildConfig,
       publish: "never"
     });
