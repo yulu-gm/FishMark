@@ -481,6 +481,7 @@ it("opens find and replace controls and delegates search actions to the editor",
 it("renders recent files without the old empty headline and delegates open and clear actions", async () => {
   const onOpenRecentFile = vi.fn();
   const onClearRecentFile = vi.fn();
+  const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
   container = document.createElement("div");
   root = createRoot(container);
 
@@ -603,9 +604,14 @@ it("renders recent files without the old empty headline and delegates open and c
   expect(container.textContent).toContain("today.md");
   expect(container.textContent).toContain("C:/notes/today.md");
   expect(container.textContent).not.toContain("Your writing space");
+  expect(container.textContent).not.toContain(
+    "Open a Markdown file to begin. Edits are written back without reformatting."
+  );
+  expect(container.querySelector(".empty-copy")?.textContent).toBe("Tip: Ctrl+B · Bold");
   expect(container.querySelector(".empty-inner h1")).toBeNull();
   expect(readSvgFingerprint(container.querySelector<SVGSVGElement>(".empty-mark svg") ?? ""))
     .toEqual(readSvgFingerprint(readSharedFishMarkSvg()));
   expect(onOpenRecentFile).toHaveBeenCalledWith("C:/notes/today.md");
   expect(onClearRecentFile).toHaveBeenCalledWith("C:/notes/today.md");
+  randomSpy.mockRestore();
 });

@@ -46,6 +46,7 @@ let resolveGitHubToken: (input?: {
     stderr?: string;
   };
 }) => string;
+let assertWindowsReleaseHost: (input?: { platform?: NodeJS.Platform }) => void;
 
 beforeAll(async () => {
   const moduleUrl = pathToFileURL(path.join(process.cwd(), "scripts", "build-win-release.mjs")).href;
@@ -58,6 +59,7 @@ beforeAll(async () => {
   loadReleaseNotes = releaseScriptModule.loadReleaseNotes as typeof loadReleaseNotes;
   ensureRelease = releaseScriptModule.ensureRelease as typeof ensureRelease;
   resolveGitHubToken = releaseScriptModule.resolveGitHubToken as typeof resolveGitHubToken;
+  assertWindowsReleaseHost = releaseScriptModule.assertWindowsReleaseHost as typeof assertWindowsReleaseHost;
 });
 
 afterEach(() => {
@@ -85,6 +87,19 @@ function createBuilderConfig() {
 }
 
 describe("build-win-release", () => {
+  it("rejects Windows packaging on non-Windows hosts because executable icon patching is Windows-only", () => {
+    const scriptSource = readFileSync(path.join(process.cwd(), "scripts", "build-win-release.mjs"), "utf8");
+
+    expect(() => assertWindowsReleaseHost({ platform: "darwin" })).toThrow(
+      "Windows release must run on Windows"
+    );
+    expect(() => assertWindowsReleaseHost({ platform: "linux" })).toThrow(
+      "Windows release must run on Windows"
+    );
+    expect(() => assertWindowsReleaseHost({ platform: "win32" })).not.toThrow();
+    expect(scriptSource).toContain("assertWindowsReleaseHost();");
+  });
+
   it("loads release notes from project metadata for the target version", async () => {
     const tempDirectory = mkdtempSync(path.join(tmpdir(), "fishmark-build-win-release-"));
     const metadataDirectory = path.join(tempDirectory, "release-metadata");

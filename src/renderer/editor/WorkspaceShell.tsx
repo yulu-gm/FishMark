@@ -12,9 +12,11 @@ import {
   type SVGProps
 } from "react";
 
-import type {
-  ActiveBlockState,
-  ShortcutGroup
+import {
+  DEFAULT_TEXT_SHORTCUT_GROUP,
+  formatShortcutHintKey,
+  type ActiveBlockState,
+  type ShortcutGroup
 } from "@fishmark/editor-core";
 import type { AppNotification } from "../../shared/app-update";
 import type { Preferences, PreferencesUpdate } from "../../shared/preferences";
@@ -53,6 +55,21 @@ type TableToolAction = {
   icon: TableToolIconComponent;
   onClick: () => void;
 };
+
+function createWelcomeShortcutTip(platform: string, random = Math.random) {
+  const shortcuts = DEFAULT_TEXT_SHORTCUT_GROUP.shortcuts;
+  const shortcutIndex = Math.min(
+    shortcuts.length - 1,
+    Math.max(0, Math.floor(random() * shortcuts.length))
+  );
+  const shortcut = shortcuts[shortcutIndex];
+
+  if (!shortcut) {
+    return "Tip: Hold Ctrl for shortcuts";
+  }
+
+  return `Tip: ${formatShortcutHintKey(shortcut.key, platform)} · ${shortcut.label}`;
+}
 
 function RowAboveIcon(props: SVGProps<SVGSVGElement>) {
   return (
@@ -375,6 +392,7 @@ export function WorkspaceShell({
   const [findReplaceTabId, setFindReplaceTabId] = useState<string | null>(null);
   const [findText, setFindText] = useState("");
   const [replaceText, setReplaceText] = useState("");
+  const [welcomeShortcutTip] = useState(() => createWelcomeShortcutTip(fishmarkPlatform));
   const [findReplaceSnapshot, setFindReplaceSnapshot] = useState<FindReplaceSnapshot>({
     matchCount: 0,
     currentMatchIndex: null
@@ -1045,9 +1063,7 @@ export function WorkspaceShell({
                     dangerouslySetInnerHTML={{ __html: fishmarkMarkSvg }}
                   />
                   <p className="empty-kicker">FishMark</p>
-                  <p className="empty-copy">
-                    Open a Markdown file to begin. Edits are written back without reformatting.
-                  </p>
+                  <p className="empty-copy">{welcomeShortcutTip}</p>
                   <p className="empty-meta">⌘ O · Ctrl O</p>
                   {recentFiles.entries.length > 0 ? (
                     <section

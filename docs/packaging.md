@@ -10,6 +10,8 @@
 - 已安装 Node.js 与 npm
 - 已在仓库根目录执行 `npm install` 或 `npm ci`
 
+Windows 打包脚本会在非 Windows host 上直接停止，避免 `FishMark.exe` 图标补写步骤被跳过后仍生成可发布安装包。
+
 ### 品牌素材来源
 
 - 已提交的共享图标形状源文件位于 `assets/branding/fishmark_mark.svg`

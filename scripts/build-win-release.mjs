@@ -30,6 +30,14 @@ export {
 
 const VALID_MODES = new Set(["package", "release"]);
 
+export function assertWindowsReleaseHost({ platform = process.platform } = {}) {
+  if (platform !== "win32") {
+    throw new Error(
+      "Windows release must run on Windows because FishMark patches the packaged executable icon after electron-builder finishes."
+    );
+  }
+}
+
 function toYamlScalar(value) {
   return `'${String(value).replace(/'/gu, "''")}'`;
 }
@@ -176,6 +184,8 @@ export async function main() {
   if (!version || typeof version !== "string") {
     throw new Error("package.json must define a version string.");
   }
+
+  assertWindowsReleaseHost();
 
   if (mode === "release") {
     await loadReleaseNotes({ projectDir, version });
