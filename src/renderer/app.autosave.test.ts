@@ -563,17 +563,13 @@ describe("App autosave", () => {
     typeof vi.fn<(input: { tabId: string | null }) => Promise<void>>
   >;
   let importClipboardImage: ReturnType<
-    typeof vi.fn<
-      (input: { documentPath: string }) => Promise<
-        | { status: "success"; markdown: string; relativePath: string }
-        | { status: "error"; error: { code: string; message: string } }
-      >
-    >
+    typeof vi.fn<Window["fishmark"]["importClipboardImage"]>
   >;
   let listFontFamilies: ReturnType<typeof vi.fn<() => Promise<string[]>>>;
   let listThemePackages: ReturnType<typeof vi.fn<() => Promise<ThemePackageDescriptor[]>>>;
   let refreshThemePackages: ReturnType<typeof vi.fn<() => Promise<ThemePackageDescriptor[]>>>;
   let openThemesDirectory: ReturnType<typeof vi.fn<() => Promise<void>>>;
+  let selectTemporaryImageDirectory: ReturnType<typeof vi.fn<() => Promise<string | null>>>;
   let confirmWorkspaceWindowClose: ReturnType<typeof vi.fn<() => Promise<boolean>>>;
   let colorSchemeMediaQuery: MockMediaQueryList;
   let workspaceWindowId: string;
@@ -1007,6 +1003,7 @@ describe("App autosave", () => {
       .fn<() => Promise<ThemePackageDescriptor[]>>()
       .mockResolvedValue(defaultThemeCatalog);
     openThemesDirectory = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    selectTemporaryImageDirectory = vi.fn<() => Promise<string | null>>().mockResolvedValue(null);
     confirmWorkspaceWindowClose = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
 
     window.fishmark = {
@@ -1050,6 +1047,7 @@ describe("App autosave", () => {
       listThemePackages,
       refreshThemePackages,
       openThemesDirectory,
+      selectTemporaryImageDirectory,
       checkForUpdates: vi.fn().mockResolvedValue(undefined),
       openExternalLink: vi.fn().mockResolvedValue(undefined),
       confirmWorkspaceWindowClose,
@@ -1189,7 +1187,8 @@ describe("App autosave", () => {
           : window.fishmark.updatePreferences,
       listThemePackages,
       refreshThemePackages,
-      openThemesDirectory
+      openThemesDirectory,
+      selectTemporaryImageDirectory
     } as Window["fishmark"];
 
     await renderApp();
@@ -4930,6 +4929,65 @@ describe("App autosave", () => {
     expect(recentFilesInput?.disabled).toBe(false);
     expect(activeSection?.textContent).toContain("范围 0 - 100");
     expect(themeSelect).toBeNull();
+  });
+
+  it("lets the temporary image directory be selected from settings", async () => {
+    selectTemporaryImageDirectory.mockResolvedValueOnce("D:/FishMark/temp/clipboard-images");
+    const driver = await renderEditorApp();
+    await driver.openSettings();
+
+    await clickSettingsNavigationButton("图片");
+
+    const activeSection = container.querySelector<HTMLElement>('[data-fishmark-settings-section="images"]');
+    const directoryDisplay = container.querySelector<HTMLElement>("#settings-temporary-image-directory");
+    const chooseButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="选择临时图片目录"]'
+    );
+
+    expect(getSettingsNavigationButton("图片").getAttribute("aria-current")).toBe("page");
+    expect(activeSection?.textContent).toContain("图片");
+    expect(directoryDisplay?.textContent).toContain("FishMark 默认目录");
+    expect(chooseButton).not.toBeNull();
+
+    await act(async () => {
+      chooseButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(selectTemporaryImageDirectory).toHaveBeenCalledTimes(1);
+    expect(window.fishmark.updatePreferences).toHaveBeenCalledWith({
+      images: { temporaryDirectory: "D:/FishMark/temp/clipboard-images" }
+    });
+  });
+
+  it("can restore the temporary image directory to the FishMark default", async () => {
+    const driver = await renderEditorApp({
+      getPreferencesResult: {
+        ...DEFAULT_PREFERENCES,
+        images: { temporaryDirectory: "D:/FishMark/custom-images" }
+      }
+    });
+    await driver.openSettings();
+
+    await clickSettingsNavigationButton("图片");
+
+    const directoryDisplay = container.querySelector<HTMLElement>("#settings-temporary-image-directory");
+    const restoreButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent?.includes("恢复默认目录")
+    );
+
+    expect(directoryDisplay?.textContent).toContain("D:/FishMark/custom-images");
+    expect(restoreButton).not.toBeNull();
+
+    await act(async () => {
+      restoreButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(window.fishmark.updatePreferences).toHaveBeenCalledWith({
+      images: { temporaryDirectory: null }
+    });
   });
 
   it("lets parent settings categories expand and collapse without hiding the active branch", async () => {

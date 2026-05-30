@@ -1337,3 +1337,26 @@
 - [x] 跑 `npm run test:editing-experience`
 - [x] 跑相关 unit / renderer / build 门禁
 - [x] 写 alignment gate report 与 task summary
+
+### TASK-059 剪贴板图片临时目录
+
+状态：DEV_DONE
+依赖：`TASK-015`、`TASK-040`
+
+目标：让外部复制的图片可以直接粘贴到 FishMark，同时保留已保存文档当前的 `assets/` 粘贴行为。未保存文档粘贴图片时，先写入可配置临时图片目录，并在 Markdown 中插入绝对本地路径。
+
+主要落点：`src/main/clipboard-image-import.ts`、`src/shared/preferences.ts`、`src/main/temporary-image-directory.ts`、`src/preload/preload.ts`、`src/renderer/code-editor.ts`、`src/renderer/editor/settings-view.tsx`。
+
+交付物：
+- 已保存文档继续写入同级 `assets/`，返回相对路径 Markdown
+- 未保存文档写入 `images.temporaryDirectory` 或默认 `<userData>/temp/clipboard-images`，返回绝对路径 Markdown
+- 设置页 File > 图片 可选择临时图片目录，也可恢复默认
+- DOM paste payload 没有图片项但也没有可粘贴文本时，renderer 会 fallback 到 main clipboard image import
+
+验收：
+- Windows 截图类 clipboard image 写盘为可预览图片，不再写入损坏字节
+- 已保存文档 `assets/` 行为非回归
+- 未保存文档图片落到有效临时目录，Markdown 使用绝对路径
+- 普通文本 / HTML 粘贴不被图片 fallback 抢走
+- 目录选择通过受限 bridge 暴露，不向 renderer 暴露通用文件系统能力
+- `npm.cmd run test`、`npm.cmd run typecheck`、`npm.cmd run lint`、`npm.cmd run build` 均通过

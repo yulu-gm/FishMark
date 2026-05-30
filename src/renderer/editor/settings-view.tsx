@@ -44,7 +44,7 @@ type FontOption = {
   value: string;
 };
 
-type SettingsSectionId = "theme" | "typography" | "autosave" | "recent-files";
+type SettingsSectionId = "theme" | "typography" | "autosave" | "recent-files" | "images";
 type SettingsCategoryId = "appearance" | "file";
 
 type SettingsCategory = {
@@ -73,7 +73,8 @@ const SETTINGS_CATEGORIES: SettingsCategory[] = [
     iconLabel: "F",
     children: [
       { id: "autosave", label: "自动保存" },
-      { id: "recent-files", label: "最近文件" }
+      { id: "recent-files", label: "最近文件" },
+      { id: "images", label: "图片" }
     ]
   }
 ];
@@ -441,6 +442,30 @@ export function SettingsView({
     }
   }
 
+  async function handleSelectTemporaryImageDirectory(): Promise<void> {
+    try {
+      const selectedDirectory = await window.fishmark.selectTemporaryImageDirectory();
+
+      if (!selectedDirectory) {
+        return;
+      }
+
+      await applyPatch({
+        images: { temporaryDirectory: selectedDirectory }
+      });
+    } catch {
+      setErrorMessage("无法选择临时图片目录。");
+    }
+  }
+
+  function handleResetTemporaryImageDirectory(): void {
+    void applyPatch({
+      images: {
+        temporaryDirectory: DEFAULT_PREFERENCES.images.temporaryDirectory
+      }
+    });
+  }
+
   function handleThemeModeChange(mode: ThemeMode): void {
     void applyPatch({ theme: { mode } });
   }
@@ -644,7 +669,8 @@ export function SettingsView({
         fontSize: DEFAULT_PREFERENCES.document.fontSize
       },
       autosave: { idleDelayMs: DEFAULT_PREFERENCES.autosave.idleDelayMs },
-      recentFiles: { maxEntries: DEFAULT_PREFERENCES.recentFiles.maxEntries }
+      recentFiles: { maxEntries: DEFAULT_PREFERENCES.recentFiles.maxEntries },
+      images: { temporaryDirectory: DEFAULT_PREFERENCES.images.temporaryDirectory }
     });
   }
 
@@ -1061,6 +1087,57 @@ export function SettingsView({
     );
   }
 
+  function renderImagesSection() {
+    const temporaryDirectory =
+      preferences.images.temporaryDirectory ?? "FishMark 默认目录";
+
+    return (
+      <SettingsGroup
+        title="图片"
+        description="未保存文档中粘贴的图片会先写入临时图片目录。"
+      >
+        <SettingsRow>
+          <div
+            id="settings-temporary-image-directory-label"
+            className="settings-label"
+          >
+            <span>临时图片目录</span>
+            <span className="settings-hint">已保存文档仍会写入文档旁的 assets 目录。</span>
+          </div>
+          <div className="settings-input-stack">
+            <div
+              id="settings-temporary-image-directory"
+              className="settings-input settings-path-display"
+              aria-labelledby="settings-temporary-image-directory-label"
+            >
+              {temporaryDirectory}
+            </div>
+            <div className="settings-inline-actions">
+              <button
+                type="button"
+                className="settings-reset"
+                aria-label="选择临时图片目录"
+                onClick={() => {
+                  void handleSelectTemporaryImageDirectory();
+                }}
+              >
+                选择目录
+              </button>
+              <button
+                type="button"
+                className="settings-reset"
+                disabled={preferences.images.temporaryDirectory === null}
+                onClick={handleResetTemporaryImageDirectory}
+              >
+                恢复默认目录
+              </button>
+            </div>
+          </div>
+        </SettingsRow>
+      </SettingsGroup>
+    );
+  }
+
   return (
     <section
       className="settings-shell"
@@ -1150,6 +1227,14 @@ export function SettingsView({
               data-fishmark-settings-section="recent-files"
             >
               {renderRecentFilesSection()}
+            </div>
+          ) : null}
+          {activeSectionId === "images" ? (
+            <div
+              className="settings-groups"
+              data-fishmark-settings-section="images"
+            >
+              {renderImagesSection()}
             </div>
           ) : null}
         </div>

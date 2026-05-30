@@ -24,6 +24,7 @@ import { createPreferencesService } from "./preferences-service";
 import { createRecentFilesService } from "./recent-files-service";
 import { createFontCatalogService } from "./font-catalog-service";
 import { openThemesDirectory } from "./open-themes-directory";
+import { resolveTemporaryImageDirectory, selectTemporaryImageDirectory } from "./temporary-image-directory";
 import {
   createThemePackageService,
   resolveBuiltinThemePackagesDir
@@ -60,6 +61,7 @@ import { APP_MENU_COMMAND_EVENT, type AppMenuCommand } from "../shared/menu-comm
 import {
   GET_PREFERENCES_CHANNEL,
   PREFERENCES_CHANGED_EVENT,
+  SELECT_TEMPORARY_IMAGE_DIRECTORY_CHANNEL,
   UPDATE_PREFERENCES_CHANNEL,
   type PreferencesUpdate
 } from "../shared/preferences";
@@ -813,11 +815,20 @@ app.whenReady().then(async () => {
       )
   );
   ipcMain.handle(IMPORT_CLIPBOARD_IMAGE_CHANNEL, async (_event, input: ImportClipboardImageInput) =>
-    importClipboardImage(input, { clipboard })
+    importClipboardImage(input, {
+      clipboard,
+      temporaryDirectory: resolveTemporaryImageDirectory(
+        app.getPath("userData"),
+        preferencesService.getPreferences()
+      )
+    })
   );
   ipcMain.handle(GET_PREFERENCES_CHANNEL, async () => preferencesService.getPreferences());
   ipcMain.handle(UPDATE_PREFERENCES_CHANNEL, async (_event, patch: PreferencesUpdate | undefined) =>
     preferencesService.updatePreferences(patch)
+  );
+  ipcMain.handle(SELECT_TEMPORARY_IMAGE_DIRECTORY_CHANNEL, async () =>
+    selectTemporaryImageDirectory()
   );
   ipcMain.handle(GET_RECENT_FILES_CHANNEL, async () => recentFilesService.getRecentFiles());
   ipcMain.handle(CLEAR_RECENT_FILE_CHANNEL, async (_event, input: ClearRecentFileInput) =>

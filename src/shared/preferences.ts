@@ -7,11 +7,13 @@
 
 export const PREFERENCES_FILE_NAME = "preferences.json";
 
-export const PREFERENCES_SCHEMA_VERSION = 2 as const;
+export const PREFERENCES_SCHEMA_VERSION = 3 as const;
 export type PreferencesSchemaVersion = typeof PREFERENCES_SCHEMA_VERSION;
 
 export const GET_PREFERENCES_CHANNEL = "fishmark:get-preferences";
 export const UPDATE_PREFERENCES_CHANNEL = "fishmark:update-preferences";
+export const SELECT_TEMPORARY_IMAGE_DIRECTORY_CHANNEL =
+  "fishmark:select-temporary-image-directory";
 export const PREFERENCES_CHANGED_EVENT = "fishmark:preferences-changed";
 
 export type ThemeMode = "system" | "light" | "dark";
@@ -43,6 +45,11 @@ export type DocumentPreferences = {
   fontSize: number | null;
 };
 
+export type ImagePreferences = {
+  /** Absolute temporary directory path for extracted images, or `null` for the app default. */
+  temporaryDirectory: string | null;
+};
+
 /**
  * Per-theme parameter overrides. Keyed by theme package id, then by parameter
  * id. Values are always numbers (toggles are serialized as 0 or 1) so the main
@@ -63,6 +70,7 @@ export type Preferences = {
   recentFiles: RecentFilesPreferences;
   ui: UiPreferences;
   document: DocumentPreferences;
+  images: ImagePreferences;
   theme: ThemePreferences;
 };
 
@@ -71,6 +79,7 @@ export type PreferencesUpdate = {
   recentFiles?: Partial<RecentFilesPreferences>;
   ui?: Partial<UiPreferences>;
   document?: Partial<DocumentPreferences>;
+  images?: Partial<ImagePreferences>;
   theme?: Partial<ThemePreferences>;
 };
 
@@ -103,6 +112,9 @@ export const DEFAULT_PREFERENCES: Preferences = {
     fontFamily: null,
     cjkFontFamily: null,
     fontSize: null
+  },
+  images: {
+    temporaryDirectory: null
   },
   theme: {
     mode: "system",
@@ -168,6 +180,28 @@ function normalizeFontSize(value: unknown): number | null {
   }
 
   return clampInteger(value, FONT_SIZE_MIN, FONT_SIZE_MAX);
+}
+
+function isAbsoluteFilesystemPath(value: string): boolean {
+  return (
+    /^[A-Za-z]:[\\/]/.test(value) ||
+    /^[/\\]{2}[^/\\]+[/\\][^/\\]+/.test(value) ||
+    value.startsWith("/")
+  );
+}
+
+function normalizeImageTemporaryDirectory(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  if (trimmed.length === 0 || !isAbsoluteFilesystemPath(trimmed)) {
+    return null;
+  }
+
+  return trimmed;
 }
 
 function normalizeThemeMode(value: unknown): ThemeMode {
@@ -262,6 +296,7 @@ export function normalizePreferences(raw: unknown): Preferences {
   const recentFilesSource = isRecord(source.recentFiles) ? source.recentFiles : {};
   const uiSource = isRecord(source.ui) ? source.ui : {};
   const documentSource = isRecord(source.document) ? source.document : {};
+  const imagesSource = isRecord(source.images) ? source.images : {};
   const themeSource = isRecord(source.theme) ? source.theme : {};
 
   return {
@@ -280,6 +315,9 @@ export function normalizePreferences(raw: unknown): Preferences {
       fontFamily: normalizeFontFamily(documentSource.fontFamily),
       cjkFontFamily: normalizeFontFamily(documentSource.cjkFontFamily),
       fontSize: normalizeFontSize(documentSource.fontSize)
+    },
+    images: {
+      temporaryDirectory: normalizeImageTemporaryDirectory(imagesSource.temporaryDirectory)
     },
     theme: {
       mode: normalizeThemeMode(themeSource.mode),
@@ -338,6 +376,7 @@ export function mergePreferences(
     recentFiles: { ...current.recentFiles, ...patch.recentFiles },
     ui: { ...current.ui, ...patch.ui },
     document: { ...current.document, ...patch.document },
+    images: { ...current.images, ...patch.images },
     theme: { ...current.theme, ...themePatch, parameters: mergedThemeParameters }
   });
 }

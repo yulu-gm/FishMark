@@ -18,6 +18,7 @@ import {
   DEFAULT_PREFERENCES,
   GET_PREFERENCES_CHANNEL,
   PREFERENCES_CHANGED_EVENT,
+  SELECT_TEMPORARY_IMAGE_DIRECTORY_CHANNEL,
   UPDATE_PREFERENCES_CHANNEL,
   type Preferences,
   type PreferencesUpdate
@@ -357,6 +358,7 @@ describe("preload contract", () => {
     void testApi.completeEditorTestCommand(completeInput);
     void api.getPreferences();
     void api.updatePreferences(updatePreferencesInput);
+    void api.selectTemporaryImageDirectory();
     void api.getRecentFiles();
     void api.clearRecentFile(clearRecentFileInput);
     expect(api).not.toHaveProperty("listThemes");
@@ -408,6 +410,7 @@ describe("preload contract", () => {
     expect(invoke.mock.calls).toContainEqual([COMPLETE_EDITOR_TEST_COMMAND_CHANNEL, completeInput]);
     expect(invoke.mock.calls).toContainEqual([GET_PREFERENCES_CHANNEL]);
     expect(invoke.mock.calls).toContainEqual([UPDATE_PREFERENCES_CHANNEL, updatePreferencesInput]);
+    expect(invoke.mock.calls).toContainEqual([SELECT_TEMPORARY_IMAGE_DIRECTORY_CHANNEL]);
     expect(invoke.mock.calls).toContainEqual([GET_RECENT_FILES_CHANNEL]);
     expect(invoke.mock.calls).toContainEqual([CLEAR_RECENT_FILE_CHANNEL, clearRecentFileInput]);
     expect(invoke.mock.calls).toContainEqual([LIST_FONT_FAMILIES_CHANNEL]);

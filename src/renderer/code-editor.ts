@@ -138,9 +138,11 @@ export function createCodeEditorController(
       return;
     }
 
-    const clipboardItems = Array.from(event.clipboardData?.items ?? []);
+    const clipboardData = event.clipboardData;
+    const clipboardItems = Array.from(clipboardData?.items ?? []);
+    const hasDomImage = clipboardItems.some((item) => item.type.startsWith("image/"));
 
-    if (!clipboardItems.some((item) => item.type.startsWith("image/"))) {
+    if (!hasDomImage && (!clipboardData || hasPasteableClipboardText(clipboardData))) {
       return;
     }
 
@@ -403,6 +405,28 @@ export function createCodeEditorController(
       view.destroy();
     }
   };
+}
+
+const PASTEABLE_TEXT_TYPES = new Set(["text/plain", "text/html", "text/uri-list"]);
+
+function hasPasteableClipboardText(clipboardData: DataTransfer): boolean {
+  const clipboardTypes = Array.from(clipboardData.types ?? []).map((type) => type.toLowerCase());
+
+  if (clipboardTypes.some((type) => PASTEABLE_TEXT_TYPES.has(type))) {
+    return true;
+  }
+
+  for (const type of PASTEABLE_TEXT_TYPES) {
+    try {
+      if (clipboardData.getData(type).length > 0) {
+        return true;
+      }
+    } catch {
+      // Some DOM implementations throw for unsupported MIME types.
+    }
+  }
+
+  return false;
 }
 
 function resolveImagePreviewUrl(documentPath: string | null, href: string | null): string | null {

@@ -921,7 +921,7 @@ function EditorShell({
     input: { documentPath: string | null }
   ): Promise<string | null> {
     const result = await fishmark.importClipboardImage({
-      documentPath: input.documentPath ?? ""
+      documentPath: input.documentPath
     });
 
     if (result.status === "success") {

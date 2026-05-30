@@ -22,6 +22,28 @@ describe("normalizePreferences", () => {
     expect(result.version).toBe(PREFERENCES_SCHEMA_VERSION);
   });
 
+  it("defaults image preferences to no temporary directory on schema version 3", () => {
+    expect(PREFERENCES_SCHEMA_VERSION).toBe(3);
+    expect(DEFAULT_PREFERENCES.images).toEqual({ temporaryDirectory: null });
+    expect(normalizePreferences({}).images).toEqual({ temporaryDirectory: null });
+  });
+
+  it("migrates legacy preferences without image settings to the current image defaults", () => {
+    const result = normalizePreferences({
+      version: 2,
+      autosave: { idleDelayMs: 2500 },
+      recentFiles: { maxEntries: 25 },
+      ui: { fontFamily: "Segoe UI", fontSize: 15 },
+      document: { fontFamily: "Mono", cjkFontFamily: "Source Han Sans SC", fontSize: 16 },
+      theme: { mode: "dark", selectedId: "graphite", effectsMode: "full", parameters: {} }
+    });
+
+    expect(result.version).toBe(3);
+    expect(result.images).toEqual({ temporaryDirectory: null });
+    expect(result.autosave.idleDelayMs).toBe(2500);
+    expect(result.theme.mode).toBe("dark");
+  });
+
   it("falls back to default idle delay for non-numeric or non-finite values", () => {
     expect(normalizePreferences({ autosave: { idleDelayMs: "1000" } }).autosave.idleDelayMs).toBe(
       DEFAULT_PREFERENCES.autosave.idleDelayMs
@@ -137,6 +159,47 @@ describe("normalizePreferences", () => {
     expect(normalizePreferences({ theme: { effectsMode: "storm" } }).theme.effectsMode).toBe("auto");
   });
 
+  it("trims accepted absolute image temporary directory paths", () => {
+    expect(
+      normalizePreferences({ images: { temporaryDirectory: "  C:/Users/me/AppData/Temp  " } })
+        .images.temporaryDirectory
+    ).toBe("C:/Users/me/AppData/Temp");
+    expect(
+      normalizePreferences({ images: { temporaryDirectory: "  C:\\Users\\me\\AppData\\Temp  " } })
+        .images.temporaryDirectory
+    ).toBe("C:\\Users\\me\\AppData\\Temp");
+    expect(
+      normalizePreferences({ images: { temporaryDirectory: "  //server/share/fishmark  " } }).images
+        .temporaryDirectory
+    ).toBe("//server/share/fishmark");
+    expect(
+      normalizePreferences({ images: { temporaryDirectory: "  \\\\server\\share\\fishmark  " } })
+        .images.temporaryDirectory
+    ).toBe("\\\\server\\share\\fishmark");
+    expect(
+      normalizePreferences({ images: { temporaryDirectory: "  /tmp/fishmark  " } }).images
+        .temporaryDirectory
+    ).toBe("/tmp/fishmark");
+  });
+
+  it("rejects empty, non-string, and relative image temporary directories", () => {
+    expect(normalizePreferences({ images: { temporaryDirectory: "" } }).images.temporaryDirectory).toBeNull();
+    expect(
+      normalizePreferences({ images: { temporaryDirectory: "   " } }).images.temporaryDirectory
+    ).toBeNull();
+    expect(
+      normalizePreferences({ images: { temporaryDirectory: "temp/fishmark" } }).images
+        .temporaryDirectory
+    ).toBeNull();
+    expect(
+      normalizePreferences({ images: { temporaryDirectory: ".\\temp\\fishmark" } }).images
+        .temporaryDirectory
+    ).toBeNull();
+    expect(
+      normalizePreferences({ images: { temporaryDirectory: 42 } }).images.temporaryDirectory
+    ).toBeNull();
+  });
+
   it("drops unknown extra fields at every level", () => {
     const result = normalizePreferences({
       version: 99,
@@ -152,7 +215,8 @@ describe("normalizePreferences", () => {
       recentFiles: DEFAULT_PREFERENCES.recentFiles,
       ui: { fontSize: 18, fontFamily: "Segoe UI" },
       document: { fontFamily: "Mono", cjkFontFamily: "Source Han Sans SC", fontSize: null },
-      theme: DEFAULT_PREFERENCES.theme
+      theme: DEFAULT_PREFERENCES.theme,
+      images: DEFAULT_PREFERENCES.images
     });
   });
 });
@@ -195,6 +259,24 @@ describe("mergePreferences", () => {
     expect(next.autosave.idleDelayMs).toBe(60_000);
     expect(next.recentFiles.maxEntries).toBe(0);
     expect(next.ui.fontSize).toBe(72);
+  });
+
+  it("updates and restores the image temporary directory while preserving other preferences", () => {
+    const withTemporaryDirectory = mergePreferences(DEFAULT_PREFERENCES, {
+      autosave: { idleDelayMs: 2500 },
+      images: { temporaryDirectory: "  /tmp/fishmark-images  " }
+    });
+
+    expect(withTemporaryDirectory.images.temporaryDirectory).toBe("/tmp/fishmark-images");
+    expect(withTemporaryDirectory.autosave.idleDelayMs).toBe(2500);
+    expect(withTemporaryDirectory.theme).toEqual(DEFAULT_PREFERENCES.theme);
+
+    const restored = mergePreferences(withTemporaryDirectory, {
+      images: { temporaryDirectory: null }
+    });
+
+    expect(restored.images.temporaryDirectory).toBeNull();
+    expect(restored.autosave.idleDelayMs).toBe(2500);
   });
 });
 

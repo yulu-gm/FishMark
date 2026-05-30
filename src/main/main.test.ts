@@ -39,8 +39,10 @@ describe("main process window wiring", () => {
     const mainSource = readMainSource();
 
     expect(mainSource).toContain('import { createExternalFileWatchService } from "./external-file-watch-service"');
+    expect(mainSource).toContain('import { resolveTemporaryImageDirectory, selectTemporaryImageDirectory } from "./temporary-image-directory"');
     expect(mainSource).toContain('ipcMain.handle(GET_PREFERENCES_CHANNEL');
     expect(mainSource).toContain('ipcMain.handle(UPDATE_PREFERENCES_CHANNEL');
+    expect(mainSource).toContain('ipcMain.handle(SELECT_TEMPORARY_IMAGE_DIRECTORY_CHANNEL');
     expect(mainSource).toContain('SYNC_WATCHED_MARKDOWN_FILE_CHANNEL');
     expect(mainSource).toContain('ipcMain.handle(LIST_FONT_FAMILIES_CHANNEL');
     expect(mainSource).toContain('ipcMain.handle(LIST_THEME_PACKAGES_CHANNEL');
@@ -48,6 +50,7 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain('ipcMain.handle(OPEN_THEMES_DIRECTORY_CHANNEL');
     expect(mainSource).toContain('workspaceService.getTabPath(input.tabId)');
     expect(mainSource).toContain('externalFileWatchService.syncDocumentPath(');
+    expect(mainSource).toContain('temporaryDirectory: resolveTemporaryImageDirectory(');
   });
 
   it("registers a safe system-browser opener for external Markdown links", () => {

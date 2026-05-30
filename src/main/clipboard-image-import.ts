@@ -17,11 +17,31 @@ type ClipboardImageDependencies = {
   clipboard: {
     availableFormats: () => string[];
     readBuffer: (format: string) => Buffer;
+    readImage?: () => {
+      isEmpty: () => boolean;
+      toPNG: () => Buffer;
+    };
   };
+  temporaryDirectory?: string | null;
   mkdir?: typeof mkdir;
   writeFile?: typeof writeFile;
   now?: () => Date;
 };
+
+type ImportTarget =
+  | {
+      storage: "assets";
+      directory: string;
+      fileBaseName: string;
+      markdownAlt: string;
+      documentDirectory: string;
+    }
+  | {
+      storage: "temporary";
+      directory: string;
+      fileBaseName: string;
+      markdownAlt: string;
+    };
 
 const SUPPORTED_FORMATS: SupportedClipboardFormat[] = [
   { mimeType: "image/png", extension: "png" },
@@ -35,19 +55,10 @@ export async function importClipboardImage(
   input: ImportClipboardImageInput,
   dependencies: ClipboardImageDependencies
 ): Promise<ImportClipboardImageResult> {
-  if (!input.documentPath) {
-    return {
-      status: "error",
-      error: {
-        code: "document-path-required",
-        message: "Save the Markdown document before pasting images."
-      }
-    };
-  }
-
   const selectedFormat = selectSupportedFormat(dependencies.clipboard.availableFormats());
+  const imageFile = readClipboardImageFile(dependencies.clipboard, selectedFormat);
 
-  if (!selectedFormat) {
+  if (!imageFile) {
     return {
       status: "error",
       error: {
@@ -57,9 +68,7 @@ export async function importClipboardImage(
     };
   }
 
-  const imageBuffer = dependencies.clipboard.readBuffer(selectedFormat.mimeType);
-
-  if (imageBuffer.byteLength > MAX_IMAGE_BYTES) {
+  if (imageFile.buffer.byteLength > MAX_IMAGE_BYTES) {
     return {
       status: "error",
       error: {
@@ -72,32 +81,45 @@ export async function importClipboardImage(
   const createDirectory = dependencies.mkdir ?? mkdir;
   const writeImageFile = dependencies.writeFile ?? writeFile;
   const timestamp = formatTimestamp((dependencies.now ?? (() => new Date()))());
-  const parsedDocumentPath = path.parse(input.documentPath);
-  const documentBaseName = sanitizeBaseName(parsedDocumentPath.name || "image");
-  const assetsDirectory = normalizePathForFs(path.join(parsedDocumentPath.dir, "assets"));
+  const target = resolveImportTarget(input, dependencies.temporaryDirectory);
 
-  await createDirectory(assetsDirectory, { recursive: true });
+  if (!target) {
+    return {
+      status: "error",
+      error: {
+        code: "write-failed",
+        message: "The clipboard image could not be imported."
+      }
+    };
+  }
+
+  await createDirectory(target.directory, { recursive: true });
 
   let attempt = 1;
 
   while (true) {
     const candidateName = buildCandidateName({
-      baseName: documentBaseName,
-      extension: selectedFormat.extension,
+      baseName: target.fileBaseName,
+      extension: imageFile.extension,
       timestamp,
       attempt
     });
-    const assetPath = normalizePathForFs(path.join(assetsDirectory, candidateName));
+    const imagePath = normalizePathForFs(path.join(target.directory, candidateName));
 
     try {
-      await writeImageFile(assetPath, imageBuffer, { flag: "wx" });
+      await writeImageFile(imagePath, imageFile.buffer, { flag: "wx" });
 
-      const relativePath = path.relative(parsedDocumentPath.dir, assetPath).replace(/\\/g, "/");
+      const markdownPath =
+        target.storage === "assets"
+          ? path.relative(target.documentDirectory, imagePath).replace(/\\/g, "/")
+          : imagePath;
 
       return {
         status: "success",
-        markdown: `![${documentBaseName}](${relativePath})`,
-        relativePath
+        markdown: `![${target.markdownAlt}](${markdownPath})`,
+        storage: target.storage,
+        filePath: imagePath,
+        relativePath: target.storage === "assets" ? markdownPath : null
       };
     } catch (error) {
       if (isNodeErrorWithCode(error, "EEXIST")) {
@@ -112,6 +134,96 @@ export async function importClipboardImage(
           message: "The clipboard image could not be imported."
         }
       };
+    }
+  }
+}
+
+function resolveImportTarget(
+  input: ImportClipboardImageInput,
+  temporaryDirectory: string | null | undefined
+): ImportTarget | null {
+  if (input.documentPath) {
+    const parsedDocumentPath = path.parse(input.documentPath);
+    const documentBaseName = sanitizeBaseName(parsedDocumentPath.name || "image");
+
+    return {
+      storage: "assets",
+      directory: normalizePathForFs(path.join(parsedDocumentPath.dir, "assets")),
+      fileBaseName: documentBaseName,
+      markdownAlt: documentBaseName,
+      documentDirectory: parsedDocumentPath.dir
+    };
+  }
+
+  if (!temporaryDirectory) {
+    return null;
+  }
+
+  return {
+    storage: "temporary",
+    directory: normalizePathForFs(temporaryDirectory),
+    fileBaseName: "clipboard",
+    markdownAlt: "image"
+  };
+}
+
+function readClipboardImageFile(
+  clipboard: ClipboardImageDependencies["clipboard"],
+  selectedFormat: SupportedClipboardFormat | null
+): { buffer: Buffer; extension: SupportedClipboardFormat["extension"] } | null {
+  if (selectedFormat) {
+    const imageBuffer = clipboard.readBuffer(selectedFormat.mimeType);
+
+    if (isEncodedImageBuffer(imageBuffer, selectedFormat.extension)) {
+      return {
+        buffer: imageBuffer,
+        extension: selectedFormat.extension
+      };
+    }
+  }
+
+  const nativeImage = clipboard.readImage?.();
+
+  if (!nativeImage || nativeImage.isEmpty()) {
+    return null;
+  }
+
+  const encodedPng = nativeImage.toPNG();
+
+  if (!isEncodedImageBuffer(encodedPng, "png")) {
+    return null;
+  }
+
+  return {
+    buffer: encodedPng,
+    extension: "png"
+  };
+}
+
+function isEncodedImageBuffer(buffer: Buffer, extension: SupportedClipboardFormat["extension"]): boolean {
+  if (buffer.byteLength === 0) {
+    return false;
+  }
+
+  switch (extension) {
+    case "png":
+      return buffer.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    case "jpg":
+      return (
+        buffer.byteLength >= 3 &&
+        buffer[0] === 0xff &&
+        buffer[1] === 0xd8 &&
+        buffer[2] === 0xff
+      );
+    case "webp":
+      return (
+        buffer.byteLength >= 12 &&
+        buffer.subarray(0, 4).toString("ascii") === "RIFF" &&
+        buffer.subarray(8, 12).toString("ascii") === "WEBP"
+      );
+    case "gif": {
+      const signature = buffer.subarray(0, 6).toString("ascii");
+      return signature === "GIF87a" || signature === "GIF89a";
     }
   }
 }

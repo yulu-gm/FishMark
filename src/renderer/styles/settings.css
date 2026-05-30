@@ -321,6 +321,13 @@
   justify-self: end;
 }
 
+.settings-path-display {
+  min-height: 36px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 /* ── Segment / radio group ──────────────────────────────────── */
 /*   Visual appearance lives in primitives.css. Layout here.     */
 

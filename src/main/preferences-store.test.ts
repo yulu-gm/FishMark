@@ -2,7 +2,11 @@ import path from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { DEFAULT_PREFERENCES, serializePreferences } from "../shared/preferences";
+import {
+  DEFAULT_PREFERENCES,
+  PREFERENCES_SCHEMA_VERSION,
+  serializePreferences
+} from "../shared/preferences";
 import {
   loadPreferencesFromDisk,
   resolvePreferencesFilePath,
@@ -79,11 +83,12 @@ describe("loadPreferencesFromDisk", () => {
 
     expect(result.source).toBe("parsed");
     expect(result.preferences).toEqual({
-      version: 2,
+      version: PREFERENCES_SCHEMA_VERSION,
       autosave: { idleDelayMs: 2500 },
       recentFiles: { maxEntries: 20 },
       ui: { fontFamily: null, fontSize: 18 },
       document: { fontFamily: "Fira Code", cjkFontFamily: "Source Han Sans SC", fontSize: 16 },
+      images: DEFAULT_PREFERENCES.images,
       theme: { mode: "dark", selectedId: "graphite", effectsMode: "auto", parameters: {} }
     });
   });

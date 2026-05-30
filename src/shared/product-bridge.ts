@@ -80,6 +80,7 @@ export interface ProductBridge {
   onWorkspaceWindowCloseRequest: (listener: () => Promise<boolean>) => () => void;
   getPreferences: () => Promise<Preferences>;
   updatePreferences: (patch: PreferencesUpdate) => Promise<UpdatePreferencesResult>;
+  selectTemporaryImageDirectory: () => Promise<string | null>;
   onPreferencesChanged: (listener: (preferences: Preferences) => void) => () => void;
   getRecentFiles: () => Promise<RecentFilesSnapshot>;
   clearRecentFile: (input: ClearRecentFileInput) => Promise<RecentFilesSnapshot>;

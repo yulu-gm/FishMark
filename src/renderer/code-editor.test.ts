@@ -631,7 +631,7 @@ describe("createCodeEditorController", () => {
   it("intercepts image paste, imports the clipboard image, and inserts the returned Markdown", async () => {
     const host = document.createElement("div");
     const importClipboardImage = vi
-      .fn<() => Promise<string | null>>()
+      .fn<(input: { documentPath: string | null }) => Promise<string | null>>()
       .mockResolvedValue("![today](assets/pasted.png)");
 
     const controller = createCodeEditorController({
@@ -672,6 +672,82 @@ describe("createCodeEditorController", () => {
       documentPath: "D:/notes/today.md"
     });
     expect(controller.getContent()).toBe("Paragraph![today](assets/pasted.png)");
+
+    controller.destroy();
+  });
+
+  it("falls back to main clipboard image import when the DOM paste payload has no pasteable text", async () => {
+    const host = document.createElement("div");
+    const importClipboardImage = vi
+      .fn<(input: { documentPath: string | null }) => Promise<string | null>>()
+      .mockResolvedValue("![image](D:/FishMark/temp/pasted.png)");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "",
+      onChange: vi.fn(),
+      importClipboardImage
+    });
+
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    const pasteEvent = new Event("paste", {
+      bubbles: true,
+      cancelable: true
+    });
+
+    Object.defineProperty(pasteEvent, "clipboardData", {
+      value: {
+        items: [],
+        types: [],
+        getData: () => ""
+      }
+    });
+
+    editorRoot?.dispatchEvent(pasteEvent);
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    expect(pasteEvent.defaultPrevented).toBe(true);
+    expect(importClipboardImage).toHaveBeenCalledWith({
+      documentPath: null
+    });
+    expect(controller.getContent()).toBe("![image](D:/FishMark/temp/pasted.png)");
+
+    controller.destroy();
+  });
+
+  it("does not intercept normal text paste while checking for clipboard images", () => {
+    const host = document.createElement("div");
+    const importClipboardImage = vi.fn<(input: { documentPath: string | null }) => Promise<string | null>>();
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "Paragraph",
+      onChange: vi.fn(),
+      importClipboardImage
+    });
+
+    const editorRoot = host.querySelector(".cm-editor");
+    const pasteEvent = new Event("paste", {
+      bubbles: true,
+      cancelable: true
+    });
+
+    Object.defineProperty(pasteEvent, "clipboardData", {
+      value: {
+        items: [],
+        types: ["text/plain"],
+        getData: (type: string) => (type === "text/plain" ? "copied text" : "")
+      }
+    });
+
+    editorRoot?.dispatchEvent(pasteEvent);
+
+    expect(pasteEvent.defaultPrevented).toBe(false);
+    expect(importClipboardImage).not.toHaveBeenCalled();
 
     controller.destroy();
   });

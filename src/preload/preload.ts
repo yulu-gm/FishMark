@@ -113,7 +113,12 @@ import {
   EXTERNAL_MARKDOWN_FILE_CHANGED_EVENT,
   SYNC_WATCHED_MARKDOWN_FILE_CHANNEL
 } from "../shared/external-file-change";
-import { GET_PREFERENCES_CHANNEL, PREFERENCES_CHANGED_EVENT, UPDATE_PREFERENCES_CHANNEL } from "../shared/preferences";
+import {
+  GET_PREFERENCES_CHANNEL,
+  PREFERENCES_CHANGED_EVENT,
+  SELECT_TEMPORARY_IMAGE_DIRECTORY_CHANNEL,
+  UPDATE_PREFERENCES_CHANNEL
+} from "../shared/preferences";
 import {
   CLEAR_RECENT_FILE_CHANNEL,
   GET_RECENT_FILES_CHANNEL,
@@ -255,6 +260,8 @@ const productApi: ProductBridge = {
   getPreferences: (): Promise<Preferences> => ipcRenderer.invoke(GET_PREFERENCES_CHANNEL),
   updatePreferences: (patch: PreferencesUpdate): Promise<UpdatePreferencesResult> =>
     ipcRenderer.invoke(UPDATE_PREFERENCES_CHANNEL, patch),
+  selectTemporaryImageDirectory: (): Promise<string | null> =>
+    ipcRenderer.invoke(SELECT_TEMPORARY_IMAGE_DIRECTORY_CHANNEL),
   getRecentFiles: (): Promise<RecentFilesSnapshot> => ipcRenderer.invoke(GET_RECENT_FILES_CHANNEL),
   clearRecentFile: (input: ClearRecentFileInput): Promise<RecentFilesSnapshot> =>
     ipcRenderer.invoke(CLEAR_RECENT_FILE_CHANNEL, input),
