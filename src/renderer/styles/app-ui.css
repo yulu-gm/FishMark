@@ -136,7 +136,7 @@
   grid-template-columns: 0 minmax(0, 1fr);
 }
 
-.app-layout > :not(.theme-surface-host) {
+.app-layout > :not(.theme-surface-host):not(.app-rail) {
   position: relative;
   z-index: 1;
 }

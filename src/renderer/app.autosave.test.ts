@@ -5145,13 +5145,19 @@ describe("App autosave", () => {
       join(process.cwd(), "src/renderer/editor/WorkspaceShell.tsx"),
       "utf-8"
     );
+    const layoutChromeRule = getCssRule(
+      appUiStylesheet,
+      ".app-layout > :not(.theme-surface-host):not(.app-rail)"
+    );
     const railRule = getCssRule(appUiStylesheet, ".app-rail");
     const stripRule = getCssRule(appUiStylesheet, ".table-tool-strip");
     const buttonRule = getCssRule(appUiStylesheet, ".table-tool-button");
     const tooltipRule = getCssRule(appUiStylesheet, ".table-tool-tooltip");
     const dangerRule = getCssRule(appUiStylesheet, '.table-tool-button[data-tone="danger"]');
 
+    expect(layoutChromeRule).toContain("z-index: 1;");
     expect(railRule).toContain("z-index: var(--fishmark-z-shell);");
+    expect(appUiStylesheet).not.toContain(".app-layout > :not(.theme-surface-host) {\n");
     expect(appUiStylesheet).not.toContain(".app-layout > .app-rail");
     expect(stripRule).toContain("justify-items: center;");
     expect(buttonRule).toContain("inline-size: 44px;");
