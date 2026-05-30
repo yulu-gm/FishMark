@@ -10,6 +10,7 @@ import { createActiveBlockStateFromMarkdownDocument } from "../active-block";
 import { deriveTableCursorState } from "../table-cursor-state";
 import { runMarkdownTab } from "./codemirror-markdown-commands";
 import {
+  runTableBackspaceFromLineBelow,
   runTableEnterFromLineBelow,
   runTableInsertRowBelow,
   runTableMoveDown,
@@ -237,6 +238,26 @@ describe("table commands", () => {
 
     expect(runTableEnterFromLineBelow(harness.view, harness.activeState)).toBe(true);
     expect(harness.view.state.selection.main.anchor).toBe(doc.indexOf("pen"));
+
+    harness.destroy();
+  });
+
+  it("moves Backspace from the editable line below a table to the last cell", () => {
+    const doc = ["| A | B | C |", "| --- | --- | --- |", "| 1 | 2 | 3 |", "", ""].join("\n");
+    const harness = createHarness(doc, doc.length);
+
+    expect(runTableBackspaceFromLineBelow(harness.view, harness.activeState)).toBe(true);
+    expect(harness.view.state.selection.main.anchor).toBe(doc.indexOf("3") + "3".length);
+
+    harness.destroy();
+  });
+
+  it("does not steal Backspace from non-empty text below a table", () => {
+    const doc = ["| A | B | C |", "| --- | --- | --- |", "| 1 | 2 | 3 |", "", "---"].join("\n");
+    const harness = createHarness(doc, doc.length);
+
+    expect(runTableBackspaceFromLineBelow(harness.view, harness.activeState)).toBe(false);
+    expect(harness.view.state.selection.main.anchor).toBe(doc.length);
 
     harness.destroy();
   });

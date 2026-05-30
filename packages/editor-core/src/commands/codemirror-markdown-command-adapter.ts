@@ -17,6 +17,7 @@ import {
 } from "./list-commands";
 import type { MarkdownCommandTarget } from "./markdown-commands";
 import {
+  runTableBackspaceFromLineBelow,
   runTableMoveDownOrExit,
   runTableNextCell,
   runTablePreviousCell
@@ -75,6 +76,7 @@ export function createCodeMirrorMarkdownCommandTarget(view: EditorView): Markdow
     runListEnter: (activeState) => runListEnter(view, activeState),
     runListIndentOnTab: (activeState) => runListIndentOnTab(view, activeState),
     runListOutdentOnShiftTab: (activeState) => runListOutdentOnShiftTab(view, activeState),
+    runTableBackspaceFromLineBelow: (activeState) => runTableBackspaceFromLineBelow(view, activeState),
     runTableMoveDownOrExit: (activeState) => runTableMoveDownOrExit(view, activeState),
     runTableNextCell: (activeState) => runTableNextCell(view, activeState),
     runTablePreviousCell: (activeState) => runTablePreviousCell(view, activeState)

@@ -88,6 +88,7 @@ function createCommandTarget(input: {
     runListEnter: vi.fn(() => false),
     runListIndentOnTab: vi.fn(() => false),
     runListOutdentOnShiftTab: vi.fn(() => false),
+    runTableBackspaceFromLineBelow: vi.fn(() => false),
     runTableMoveDownOrExit: vi.fn(() => false),
     runTableNextCell: vi.fn(() => false),
     runTablePreviousCell: vi.fn(() => false)
@@ -606,5 +607,26 @@ describe("semantic markdown commands", () => {
         }
       }
     ]);
+  });
+
+  it("routes Backspace from the editable line below a table before deleting blank lines", () => {
+    const source = ["| A | B |", "| --- | --- |", "| 1 | 2 |", "", ""].join("\n");
+    const activeState = {
+      activeBlock: null,
+      tableCursor: {
+        mode: "adjacent-below",
+        tableStartOffset: 0,
+        row: 1,
+        column: 0,
+        offsetInCell: 0
+      }
+    } as ActiveBlockState;
+    const target = createCommandTarget({ doc: source, anchor: source.length });
+
+    vi.mocked(target.runTableBackspaceFromLineBelow).mockReturnValue(true);
+
+    expect(runMarkdownBackspaceCommand(target, activeState)).toBe(true);
+    expect(target.runTableBackspaceFromLineBelow).toHaveBeenCalledWith(activeState);
+    expect(target.getDispatchedChanges()).toEqual([]);
   });
 });

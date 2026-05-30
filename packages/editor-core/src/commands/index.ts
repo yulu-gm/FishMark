@@ -26,6 +26,7 @@ export {
   runTableDelete,
   runTableDeleteColumn,
   runTableDeleteRow,
+  runTableBackspaceFromLineBelow,
   runTableEnterFromLineAbove,
   runTableEnterFromLineBelow,
   runTableInsertColumnLeft,

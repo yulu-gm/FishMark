@@ -6225,27 +6225,73 @@ describe("createCodeEditorController", () => {
     host.remove();
   });
 
-  it("creates a new line after the table when Enter exits from the last row at document end", async () => {
+  it("creates a structural separator and editable line when Enter exits from the last row at document end", async () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
-    const source = ["| name | qty |", "| --- | ---: |", "| pen | 2 |"].join("\n");
+    const source = ["| A | B | C |", "| --- | --- | --- |", "|   |   |   |"].join("\n");
 
     const controller = createCodeEditorController({
       parent: host,
       initialContent: source,
       onChange: vi.fn()
     });
+    const view = getEditorView(host);
+    const input = host.querySelector<HTMLInputElement>('[data-table-cell="1:2"]');
 
-    const input = host.querySelector<HTMLInputElement>('[data-table-cell="1:1"]');
+    expect(view).not.toBeNull();
+    expect(input).toBeInstanceOf(HTMLElement);
 
     input?.focus();
     input?.setSelectionRange(0, 0);
     input?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true, cancelable: true }));
     await flushMicrotasks();
+    await flushMicrotasks();
 
-    expect(controller.getContent()).toBe(`${source}\n`);
+    const blankLines = Array.from(host.querySelectorAll<HTMLElement>(".cm-line")).filter(
+      (line) => line.textContent === ""
+    );
+
+    expect(controller.getContent()).toBe(`${source}\n\n`);
     expect(document.activeElement).not.toBe(input);
-    expect(getEditorView(host)?.state.selection.main.anchor).toBe(controller.getContent().length);
+    expect(view?.state.selection.main.anchor).toBe(controller.getContent().length);
+    expect(blankLines).toHaveLength(2);
+    expect(blankLines[0]?.classList.contains("cm-inactive-blank-line")).toBe(true);
+    expect(blankLines[1]?.classList.contains("cm-inactive-blank-line")).toBe(false);
+
+    dispatchEditorKeydown(view, "Backspace");
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    expect(controller.getContent()).toBe(`${source}\n\n`);
+    expect(document.activeElement).toBe(host.querySelector('[data-table-cell="1:2"]'));
+
+    controller.destroy();
+    host.remove();
+  });
+
+  it("keeps Backspace editing text below a table instead of jumping into the last cell", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const source = ["| A | B | C |", "| --- | --- | --- |", "|   |   |   |", "", "---"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    view?.dispatch({ selection: { anchor: source.length, head: source.length } });
+    await flushMicrotasks();
+
+    dispatchEditorKeydown(view, "Backspace");
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    expect(controller.getContent()).toBe(source.slice(0, -1));
+    expect(document.activeElement?.classList.contains("cm-table-widget-input")).toBe(false);
 
     controller.destroy();
     host.remove();

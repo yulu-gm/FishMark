@@ -83,6 +83,40 @@ export function runTableEnterFromLineBelow(view: EditorView, activeState: Active
   });
 }
 
+export function runTableBackspaceFromLineBelow(view: EditorView, activeState: ActiveBlockState): boolean {
+  if (activeState.tableCursor?.mode !== "adjacent-below") {
+    return false;
+  }
+
+  const selection = view.state.selection.main;
+
+  if (!selection.empty) {
+    return false;
+  }
+
+  const line = view.state.doc.lineAt(selection.head);
+
+  if (selection.head !== line.from || line.text.length > 0) {
+    return false;
+  }
+
+  const tableBlock = findTableBlockByStartOffset(activeState, activeState.tableCursor.tableStartOffset);
+
+  if (!tableBlock) {
+    return false;
+  }
+
+  const row = Math.max(tableBlock.rows.length, 0);
+  const column = Math.max(tableBlock.columnCount - 1, 0);
+
+  return runTableSelectCell(view, activeState, {
+    row,
+    column,
+    tableStartOffset: tableBlock.startOffset,
+    offsetInCell: Number.MAX_SAFE_INTEGER
+  });
+}
+
 export function runTableMoveLeft(view: EditorView, activeState: ActiveBlockState): boolean {
   return applyTableSemanticEdit(
     view,

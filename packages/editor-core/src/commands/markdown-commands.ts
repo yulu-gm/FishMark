@@ -53,6 +53,7 @@ export type MarkdownCommandTarget = {
   runListEnter: (activeState: ActiveBlockState) => boolean;
   runListIndentOnTab: (activeState: ActiveBlockState) => boolean;
   runListOutdentOnShiftTab: (activeState: ActiveBlockState) => boolean;
+  runTableBackspaceFromLineBelow: (activeState: ActiveBlockState) => boolean;
   runTableMoveDownOrExit: (activeState: ActiveBlockState) => boolean;
   runTableNextCell: (activeState: ActiveBlockState) => boolean;
   runTablePreviousCell: (activeState: ActiveBlockState) => boolean;
@@ -91,6 +92,7 @@ export function runMarkdownBackspaceCommand(
     target.runBlockquoteBackspace(activeState) ||
     runBackspaceFromOrderedListItemContentStartCommand(target, activeState) ||
     target.runListBackspace(activeState) ||
+    target.runTableBackspaceFromLineBelow(activeState) ||
     runBackspaceFromTrailingEmptyBlockCommand(target, activeState) ||
     runBackspaceFromTrailingListExitBlankLineCommand(target) ||
     runBackspaceAcrossStructuralBlankBoundaryCommand(target, activeState) ||

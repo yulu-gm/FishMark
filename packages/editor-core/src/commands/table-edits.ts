@@ -119,9 +119,9 @@ export function computeExitTableAbove(ctx: TableContext | null): TableSemanticEd
 /**
  * Plan a caret move that leaves the table downward.
  *
- * If the table is the last line of the document, the edit appends a newline and places the
- * caret past it. A single structural blank separator below the table is skipped; user-authored
- * extra blank rows remain reachable.
+ * If the table is the last line of the document, the edit appends a structural separator plus
+ * an editable empty line. A single structural blank separator below the table is skipped;
+ * user-authored extra blank rows remain reachable.
  */
 export function computeExitTableBelow(ctx: TableContext | null): TableSemanticEdit | null {
   if (!ctx) {
@@ -155,17 +155,35 @@ function resolveExitBelowTarget(source: string, tableEndOffset: number): TableEx
 
   if (nextNewline !== -1) {
     const nextLineStart = nextNewline + 1;
-    const followingLineStart = isBlankLineAt(source, nextLineStart)
-      ? findNextLineStart(source, nextLineStart)
-      : null;
+    if (isBlankLineAt(source, nextLineStart)) {
+      const followingLineStart = findNextLineStart(source, nextLineStart);
 
-    return { kind: "outside", anchor: followingLineStart ?? nextLineStart };
+      if (followingLineStart === null) {
+        return {
+          kind: "outside",
+          anchor: source.length + 1,
+          insert: { from: source.length, to: source.length, insert: "\n" }
+        };
+      }
+
+      return { kind: "outside", anchor: findLineStartAt(source, followingLineStart) };
+    }
+
+    return { kind: "outside", anchor: findLineStartAt(source, nextLineStart) };
+  }
+
+  if (tableEndOffset < source.length) {
+    return {
+      kind: "outside",
+      anchor: source.length + 1,
+      insert: { from: source.length, to: source.length, insert: "\n" }
+    };
   }
 
   return {
     kind: "outside",
-    anchor: source.length + 1,
-    insert: { from: source.length, to: source.length, insert: "\n" }
+    anchor: source.length + 2,
+    insert: { from: source.length, to: source.length, insert: "\n\n" }
   };
 }
 

@@ -7,6 +7,7 @@ import { createActiveBlockStateFromMarkdownDocument } from "../active-block";
 import { deriveTableCursorState } from "../table-cursor-state";
 import { readTableContext } from "./table-context";
 import {
+  computeExitTableBelow,
   computeInsertTableRowBelow,
   computeMoveToNextTableCell,
   computeMoveToPreviousTableCell
@@ -57,5 +58,36 @@ describe("table edit planners", () => {
       insert: ["| name | qty |", "| :--- | ---: |", "| pen  |   2 |", "|      |     |"].join("\n")
     });
     expect(edit?.selectionTarget).toEqual({ row: 2, column: 0 });
+  });
+
+  it("computes a structural blank and editable line when exiting below a trailing table", () => {
+    const doc = ["| name | qty |", "| --- | ---: |", "| pen | 2 |"].join("\n");
+    const ctx = buildTableContext(doc, doc.indexOf("2"));
+    const edit = computeExitTableBelow(ctx);
+
+    expect(edit).toMatchObject({
+      changes: null,
+      selectionTarget: {
+        kind: "outside",
+        anchor: doc.length + 2,
+        insert: { from: doc.length, to: doc.length, insert: "\n\n" }
+      }
+    });
+  });
+
+  it("extends a single trailing blank below a table into an editable line", () => {
+    const table = ["| name | qty |", "| --- | ---: |", "| pen | 2 |"].join("\n");
+    const doc = `${table}\n`;
+    const ctx = buildTableContext(doc, doc.indexOf("2"));
+    const edit = computeExitTableBelow(ctx);
+
+    expect(edit).toMatchObject({
+      changes: null,
+      selectionTarget: {
+        kind: "outside",
+        anchor: doc.length + 1,
+        insert: { from: doc.length, to: doc.length, insert: "\n" }
+      }
+    });
   });
 });
