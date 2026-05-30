@@ -3,10 +3,8 @@ import path from "node:path";
 import process from "node:process";
 
 import { Resvg } from "@resvg/resvg-js";
-import { PNG } from "pngjs";
 
 const PNG_SIZES = [16, 24, 32, 48, 64, 128, 256, 512];
-const SOURCE_PNG_SIZE = Math.max(...PNG_SIZES);
 const ICO_SIZES = new Set([16, 24, 32, 48, 64, 128, 256]);
 const MARK_SOURCE = "assets/branding/fishmark_mark.svg";
 const FISH_FILL_RADIUS = 245;
@@ -68,49 +66,17 @@ function createIconSvg(svgSource, variant) {
     .replaceAll("currentColor", variant.color);
 }
 
-function resizePng(sourcePng, size) {
-  if (sourcePng.width === size && sourcePng.height === size) {
-    return PNG.sync.write(sourcePng);
-  }
-
-  const targetPng = new PNG({ width: size, height: size });
-
-  for (let targetY = 0; targetY < size; targetY += 1) {
-    const sourceY = Math.min(
-      sourcePng.height - 1,
-      Math.floor((targetY * sourcePng.height) / size)
-    );
-
-    for (let targetX = 0; targetX < size; targetX += 1) {
-      const sourceX = Math.min(
-        sourcePng.width - 1,
-        Math.floor((targetX * sourcePng.width) / size)
-      );
-      const sourceOffset = (sourceY * sourcePng.width + sourceX) * 4;
-      const targetOffset = (targetY * size + targetX) * 4;
-
-      targetPng.data[targetOffset] = sourcePng.data[sourceOffset];
-      targetPng.data[targetOffset + 1] = sourcePng.data[sourceOffset + 1];
-      targetPng.data[targetOffset + 2] = sourcePng.data[sourceOffset + 2];
-      targetPng.data[targetOffset + 3] = sourcePng.data[sourceOffset + 3];
-    }
-  }
-
-  return PNG.sync.write(targetPng);
-}
-
 async function generateVariant(variant, outputDirectory) {
   const sourcePath = path.join(process.cwd(), MARK_SOURCE);
   const variantOutputDirectory = path.join(outputDirectory, variant.name);
   const svgSource = createIconSvg(readFileSync(sourcePath), variant);
-  const sourcePng = PNG.sync.read(renderPng(svgSource, SOURCE_PNG_SIZE));
   const icoImages = [];
 
   mkdirSync(variantOutputDirectory, { recursive: true });
 
   for (const size of PNG_SIZES) {
     const outputPath = path.join(variantOutputDirectory, `icon-${size}.png`);
-    const pngBuffer = resizePng(sourcePng, size);
+    const pngBuffer = renderPng(svgSource, size);
 
     writeFileSync(outputPath, pngBuffer);
 

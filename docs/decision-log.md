@@ -9,6 +9,7 @@
 
 ## 记录
 
+| 2026-05-30 | 桌面、窗口和安装包默认图标切换到 `build/icons/dark/` 这一视觉浅色系变体。 | Windows 桌面深色背景下浅底深鱼的识别度更好，也符合当前产品默认图标偏浅色的取向。 | 目录名沿用主题命名，`dark` 变体视觉上是浅色圆底深色鱼；切换默认图标需要同步打包配置、Windows exe 补写 hook 和运行时窗口图标路径并重新打包。 |
 | 2026-05-12 | 编辑器性能预算以 first editor load 静态 import 闭包作为硬门槛：bundle analyzer 从 `dist/index.html` 的初始 JS 与 editor chunk 出发递归静态 import，`lazyChunks` 必须是该闭包补集；`export-html`、theme surface runtime 与语言 parser chunks 通过 required-lazy / forbidden-source-group gate 防回退。 | 只看 `App-*.js` 文件大小会漏掉被静态 import 的共享 chunks；只看总 JS 又会惩罚按需加载的低频能力。用 first editor load 闭包做首屏预算，既能保护启动路径，也能继续允许 HTML export、shader runtime、代码高亮 parser 按需加载。 | `npm run perf:bundle` 会输出 `bundleBudget=PASS/FAIL`，失败时非 0 退出；耗时 benchmark 只做参考，长期硬门槛由 parse count、bundle budget 与回归测试承担。 |
 | 2026-05-11 | `TASK-018` 查找替换复用 CodeMirror search state：renderer 只维护面板输入状态，编辑器控制器负责设置 query、打开隐藏 search panel 以启用匹配高亮，并调用 CodeMirror 的 find / replace 命令。 | 查找替换属于编辑器视图与编辑事务能力，不应该新增 main/preload 桥接，也不应该绕开 CodeMirror history 手写全文替换。复用 search state 能让匹配高亮、选区跳转和替换事务保持在同一条编辑器语义链里。 | 面板入口放在左侧 rail 和 `Ctrl/Command+F`；本轮只做大小写不敏感的 literal 全文搜索，不提供正则、大小写开关或 whole-word 模式。 |
 | 2026-05-08 | `TASK-014` 的系统浏览器打开能力只通过 main/preload 受限桥接暴露，renderer 只能提交 Markdown link href，main 仅允许 `http:`、`https:`、`mailto:` 协议后调用 `shell.openExternal()`。 | 链接打开是用户可见的桌面集成能力，但不能为了方便把 shell 或任意 Node API 暴露给 renderer。协议白名单能避免 `file:`、`javascript:`、`data:` 等不该由编辑区直接触发的目标，同时保留 Markdown 文本作为唯一事实源。 | 非激活态链接使用 `editor-core` 的 inline AST 生成可读 label 和隐藏语法装饰；编辑态仍恢复完整 Markdown 源码。默认打开手势为 `Mod-click` 和 `Mod-Enter`。 |

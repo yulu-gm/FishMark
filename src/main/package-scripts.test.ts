@@ -318,7 +318,7 @@ describe("package scripts", () => {
         })
       ])
     );
-    expect(config.win?.icon).toBe("build/icons/light/icon.ico");
+    expect(config.win?.icon).toBe("build/icons/dark/icon.ico");
     expect(config.win?.target).toEqual([
       {
         target: "nsis",
@@ -348,7 +348,7 @@ describe("package scripts", () => {
     };
 
     expect(config.mac?.category).toBe("public.app-category.productivity");
-    expect(config.mac?.icon).toBe("build/icons/light/icon-512.png");
+    expect(config.mac?.icon).toBe("build/icons/dark/icon-512.png");
     expect(config.mac?.fileAssociations).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -359,6 +359,26 @@ describe("package scripts", () => {
         })
       ])
     );
+  });
+
+  it("uses the visual-light generated icon variant for packaged and runtime app icons", () => {
+    const configPath = path.join(process.cwd(), "electron-builder.json");
+    const config = JSON.parse(readFileSync(configPath, "utf8")) as {
+      mac?: {
+        icon?: string;
+      };
+      win?: {
+        icon?: string;
+      };
+    };
+    const afterPackSource = readFileSync(path.join(process.cwd(), "scripts", "after-pack-win-icon.mjs"), "utf8");
+    const windowIconSource = readFileSync(path.join(process.cwd(), "src", "main", "window-icon.ts"), "utf8");
+
+    expect(config.win?.icon).toBe("build/icons/dark/icon.ico");
+    expect(config.mac?.icon).toBe("build/icons/dark/icon-512.png");
+    expect(afterPackSource).toContain('"build", "icons", "dark", "icon.ico"');
+    expect(windowIconSource).toContain('"icons", "dark", "icon.ico"');
+    expect(windowIconSource).toContain("../../build/icons/dark/icon.ico");
   });
 
   it("keeps renderer libraries as build-time dependencies while allowing required main-process runtime packages", () => {

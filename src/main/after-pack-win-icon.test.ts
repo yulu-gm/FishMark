@@ -15,7 +15,7 @@ afterEach(() => {
 
 describe("after-pack Windows icon hook", () => {
   it("builds rcedit options that overwrite Electron metadata with FishMark branding", async () => {
-    const iconPath = path.join(process.cwd(), "build", "icons", "light", "icon.ico");
+    const iconPath = path.join(process.cwd(), "build", "icons", "dark", "icon.ico");
     const afterPackModule = (await import(
       pathToFileURL(path.join(process.cwd(), "scripts", "after-pack-win-icon.mjs")).href
     )) as {
@@ -51,7 +51,7 @@ describe("after-pack Windows icon hook", () => {
     const appOutDirectory = path.join(tempDirectory, "win-unpacked");
     const targetExePath = path.join(appOutDirectory, "FishMark.exe");
     const sourceExePath = process.execPath;
-    const iconPath = path.join(process.cwd(), "build", "icons", "light", "icon.ico");
+    const iconPath = path.join(process.cwd(), "build", "icons", "dark", "icon.ico");
 
     createdDirectories.push(tempDirectory);
 

@@ -20,6 +20,8 @@ Windows 打包脚本会在非 Windows host 上直接停止，避免 `FishMark.ex
   - `assets/branding/fishmark_logo_light.svg`
   - `assets/branding/fishmark_logo_dark.svg`
 - `fishmark_logo_light.svg` / `fishmark_logo_dark.svg` 是 README 与素材预览用的高对比展示变体；打包生成器以 `fishmark_mark.svg` 为形状源，按 light / dark 颜色生成 PNG / ICO
+- 当前默认使用 `build/icons/dark/` 作为 Windows、macOS 和运行时窗口图标来源；这套图标在桌面上表现为浅色圆底深色鱼形。`build/icons/light/` 是深色圆底白色鱼形备用资产。
+- 切换桌面图标不是运行时主题开关，而是打包配置选择：需要同步调整 `electron-builder.json`、`scripts/after-pack-win-icon.mjs` 和 `src/main/window-icon.ts` 指向的图标目录，然后重新打包安装。
 - 生成出来的 PNG / ICO 不提交进仓库，只作为打包时的临时产物
 
 ### 执行命令
@@ -78,7 +80,9 @@ Windows 正式发版额外依赖两份元数据：
 - `build/icons/light/icon.ico`
 - `build/icons/dark/` 下对应的同名产物
 
-其中 `light` 版本会作为当前 Windows 与 macOS 打包默认图标。
+每个 PNG 尺寸都会直接从 SVG 渲染，避免从 512px 位图缩小导致 32px / 48px 桌面图标边缘发糊。
+
+其中 `dark` 版本会作为当前 Windows 与 macOS 打包默认图标；这里的目录名沿用主题命名，视觉上它是浅色系桌面图标。
 
 当前仓库会在专用的 Windows 打包脚本中于 `electron-builder` 完成后补写应用主程序 `FishMark.exe` 的图标，并带重试保护，因此安装器和安装后的应用都会使用同一套正式图标，同时避免 Windows 上对 `.exe` 做二次资源写入时的偶发锁文件失败。
 

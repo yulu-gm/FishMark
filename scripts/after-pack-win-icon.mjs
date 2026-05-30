@@ -55,7 +55,7 @@ async function patchWindowsExecutableIcon(rawContext) {
   }
 
   const executablePath = path.join(context.appOutDir, `${context.productFilename}.exe`);
-  const iconPath = path.join(process.cwd(), "build", "icons", "light", "icon.ico");
+  const iconPath = path.join(process.cwd(), "build", "icons", "dark", "icon.ico");
 
   let lastError = null;
 

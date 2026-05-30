@@ -109,7 +109,7 @@ function createMacReleaseBuildConfig({ builderConfig, outputDirectory }) {
     },
     mac: {
       ...existingMacConfig,
-      icon: existingMacConfig.icon ?? "build/icons/light/icon-512.png",
+      icon: existingMacConfig.icon ?? "build/icons/dark/icon-512.png",
       artifactName: "${productName}-${version}-${arch}.${ext}",
       forceCodeSigning: true,
       hardenedRuntime: true,
@@ -134,7 +134,7 @@ function createMacBetaBuildConfig({ builderConfig, outputDirectory }) {
     },
     mac: {
       ...existingMacConfig,
-      icon: existingMacConfig.icon ?? "build/icons/light/icon-512.png",
+      icon: existingMacConfig.icon ?? "build/icons/dark/icon-512.png",
       artifactName: "${productName}-${version}-${arch}.${ext}",
       identity: "-",
       forceCodeSigning: false,

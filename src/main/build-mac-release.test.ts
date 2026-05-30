@@ -80,7 +80,7 @@ function createBuilderConfig() {
     ],
     mac: {
       category: "public.app-category.productivity",
-      icon: "build/icons/light/icon-512.png"
+      icon: "build/icons/dark/icon-512.png"
     }
   };
 }
@@ -104,7 +104,7 @@ describe("build-mac-release", () => {
         config: expect.objectContaining({
           publish: null,
           mac: expect.objectContaining({
-            icon: "build/icons/light/icon-512.png",
+            icon: "build/icons/dark/icon-512.png",
             notarize: true,
             target: [
               {

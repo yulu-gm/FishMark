@@ -9,6 +9,11 @@ const createdDirectories: string[] = [];
 const require = createRequire(import.meta.url);
 const { PNG } = require("pngjs") as {
   PNG: {
+    new (options: { width: number; height: number }): {
+      width: number;
+      height: number;
+      data: Buffer;
+    };
     sync: {
       read: (buffer: Buffer) => {
         width: number;
@@ -93,6 +98,29 @@ describe("generate-icons script", () => {
     expect(image.data[fishOffset + 3]).toBe(255);
   }, 30000);
 
+  it("renders small icons directly from the vector source instead of nearest-neighbor downsampling", () => {
+    const outputDirectory = mkdtempSync(path.join(tmpdir(), "fishmark-icons-vector-"));
+    createdDirectories.push(outputDirectory);
+
+    const result = spawnSync(
+      process.execPath,
+      ["scripts/generate-icons.mjs", "--out-dir", outputDirectory],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        timeout: 30000
+      }
+    );
+
+    expect(result.status).toBe(0);
+
+    const sourceImage = PNG.sync.read(readFileSync(path.join(outputDirectory, "light", "icon-512.png")));
+    const smallImage = PNG.sync.read(readFileSync(path.join(outputDirectory, "light", "icon-48.png")));
+    const nearestDownsample = resizeNearestLikeGenerator(sourceImage, 48);
+
+    expect(Buffer.compare(smallImage.data, nearestDownsample.data)).not.toBe(0);
+  }, 30000);
+
   it("does not leave icon generation blocked in ICO conversion", () => {
     const outputDirectory = mkdtempSync(path.join(tmpdir(), "fishmark-icons-fast-"));
     createdDirectories.push(outputDirectory);
@@ -129,4 +157,38 @@ function readIcoSizes(icoPath: string): number[] {
   }
 
   return sizes;
+}
+
+function resizeNearestLikeGenerator(
+  sourcePng: {
+    width: number;
+    height: number;
+    data: Buffer;
+  },
+  size: number
+) {
+  const targetPng = new PNG({ width: size, height: size });
+
+  for (let targetY = 0; targetY < size; targetY += 1) {
+    const sourceY = Math.min(
+      sourcePng.height - 1,
+      Math.floor((targetY * sourcePng.height) / size)
+    );
+
+    for (let targetX = 0; targetX < size; targetX += 1) {
+      const sourceX = Math.min(
+        sourcePng.width - 1,
+        Math.floor((targetX * sourcePng.width) / size)
+      );
+      const sourceOffset = (sourceY * sourcePng.width + sourceX) * 4;
+      const targetOffset = (targetY * size + targetX) * 4;
+
+      targetPng.data[targetOffset] = sourcePng.data[sourceOffset] ?? 0;
+      targetPng.data[targetOffset + 1] = sourcePng.data[sourceOffset + 1] ?? 0;
+      targetPng.data[targetOffset + 2] = sourcePng.data[sourceOffset + 2] ?? 0;
+      targetPng.data[targetOffset + 3] = sourcePng.data[sourceOffset + 3] ?? 0;
+    }
+  }
+
+  return targetPng;
 }

@@ -37,7 +37,7 @@
   ],
   "mac": {
     "category": "public.app-category.productivity",
-    "icon": "build/icons/light/icon-512.png",
+    "icon": "build/icons/dark/icon-512.png",
     "target": [
       {
         "target": "dmg",
@@ -58,7 +58,7 @@
     ]
   },
   "win": {
-    "icon": "build/icons/light/icon.ico",
+    "icon": "build/icons/dark/icon.ico",
     "signAndEditExecutable": false,
     "target": [
       {
