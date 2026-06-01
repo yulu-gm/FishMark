@@ -273,6 +273,12 @@ describe("package scripts", () => {
       win?: {
         icon?: string;
         signAndEditExecutable?: boolean;
+        fileAssociations?: Array<{
+          ext?: string[];
+          name?: string;
+          description?: string;
+          icon?: string;
+        }>;
         target?: Array<{
           target?: string;
           arch?: string[];
@@ -319,6 +325,16 @@ describe("package scripts", () => {
       ])
     );
     expect(config.win?.icon).toBe("build/icons/dark/icon.ico");
+    expect(config.win?.fileAssociations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          ext: ["md", "markdown"],
+          name: "Markdown Document",
+          description: "Markdown Document",
+          icon: "icons/file/markdown"
+        })
+      ])
+    );
     expect(config.win?.target).toEqual([
       {
         target: "nsis",
@@ -343,6 +359,7 @@ describe("package scripts", () => {
           mimeType?: string;
           name?: string;
           role?: string;
+          icon?: string;
         }>;
       };
     };
@@ -355,7 +372,8 @@ describe("package scripts", () => {
           ext: ["md", "markdown"],
           mimeType: "text/markdown",
           name: "Markdown Document",
-          role: "Editor"
+          role: "Editor",
+          icon: "icons/file/markdown"
         })
       ])
     );

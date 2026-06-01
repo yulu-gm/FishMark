@@ -53,13 +53,22 @@
         "ext": ["md", "markdown"],
         "mimeType": "text/markdown",
         "name": "Markdown Document",
-        "role": "Editor"
+        "role": "Editor",
+        "icon": "icons/file/markdown"
       }
     ]
   },
   "win": {
     "icon": "build/icons/dark/icon.ico",
     "signAndEditExecutable": false,
+    "fileAssociations": [
+      {
+        "ext": ["md", "markdown"],
+        "name": "Markdown Document",
+        "description": "Markdown Document",
+        "icon": "icons/file/markdown"
+      }
+    ],
     "target": [
       {
         "target": "nsis",

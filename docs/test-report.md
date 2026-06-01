@@ -9,6 +9,11 @@
 
 ## 记录
 
+| 2026-06-02 | TASK-038 Markdown 文件图标接入 | `npm.cmd run test -- src/main/generate-icons.test.ts src/main/package-scripts.test.ts` | 先失败后通过 | RED 阶段确认生成脚本缺少 `assets/branding/fishmark_file_icon.svg` 源、Windows `fileAssociations` 未声明、macOS 文件关联未指定专用 icon；修复后 2 个文件、36 项通过。 |
+| 2026-06-02 | TASK-038 Markdown 文件图标接入 | `npm.cmd run test -- src/main/generate-icons.test.ts src/main/package-scripts.test.ts src/main/after-pack-win-icon.test.ts src/main/build-win-release.test.ts src/main/build-mac-release.test.ts` | 通过 | 5 个文件、57 项通过；覆盖文件图标生成、应用图标非回归、Windows/macOS 打包脚本契约与 release 脚本。 |
+| 2026-06-02 | TASK-038 Markdown 文件图标接入 | `npm.cmd run generate:icons` | 通过 | 生成 `build/icons/file/icon-{16,24,32,48,64,128,256,512,1024}.png`、`markdown.ico`、`markdown.icns`；`.ico` 尺寸为 `16/24/32/48/64/128/256`，`.icns` 条目为 `icp4/icp5/icp6/ic07/ic08/ic09/ic10/ic11/ic12/ic13/ic14`。 |
+| 2026-06-02 | TASK-038 Markdown 文件图标接入 | `npm.cmd run lint` / `npm.cmd run typecheck` / `git diff --check` / `npm.cmd run build` / `npm.cmd run test` | 通过 | ESLint、四套 TypeScript 检查、renderer/electron/cli build 与全量 Vitest 106 个文件、1175 项通过；diff check 仅有 Windows LF/CRLF 提示。 |
+| 2026-06-02 | TASK-038 Markdown 文件图标接入 | `npm.cmd run package:win` | 通过 | 生成 `release/FishMark-Setup-0.2.8.exe`；日志确认 `release/win-unpacked/FishMark.exe` 已执行 icon patch，展开产物包含 `resources/icons/file/markdown.ico` 与 `markdown.icns`，尺寸/条目同生成目录。 |
 | 2026-05-30 | homepage-light-refresh | `npm.cmd run test -- src/main/github-pages-site.test.ts` | 通过 | 8 项通过；锁定首页导航改为 `syntax`、客户侧功能文案、语法支持区、浅色中性图标、原 `fade-up` / cursor blink 动效 hook，以及不再展示技术栈和旧 macOS beta 固定链接。 |
 | 2026-05-30 | homepage-light-refresh | `rg -n -e 本地优先 -e local-first -e Local-first -e 而非 -e 不是 -e 而是 -e 技术栈 -e Electron -e React -e TypeScript -e CodeMirror -e micromark -e Vitest -e '#tech' -e 'tech-' -e 'v0\\.2\\.2' -e green -e 绿色 site/index.html` | 通过 | 无命中；首页可见源码不含本轮要求避开的 AI 味文案、技术栈细节、绿色图标语义和旧发布链接。 |
 | 2026-05-30 | homepage-light-refresh | Chrome headless screenshot / CDP scroll QA | 通过 | 检查 `file:///D:/FishMark/FishMark/site/index.html` 的 1440x1100 首屏、390x900 移动首屏、滚动后的编辑器预览和语法区；移动端标题与文案无横向溢出，滚动后 `.editor-frame` opacity 为 1，`fade-up.visible` 会被原 IntersectionObserver 添加。 |

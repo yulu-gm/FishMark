@@ -19,10 +19,12 @@ Windows 打包脚本会在非 Windows host 上直接停止，避免 `FishMark.ex
   - `assets/branding/fishmark_mark.svg`
   - `assets/branding/fishmark_logo_light.svg`
   - `assets/branding/fishmark_logo_dark.svg`
-- `fishmark_logo_light.svg` / `fishmark_logo_dark.svg` 是 README 与素材预览用的高对比展示变体；打包生成器以 `fishmark_mark.svg` 为形状源，按 light / dark 颜色生成 PNG / ICO
+  - `assets/branding/fishmark_file_icon.svg`
+- `fishmark_logo_light.svg` / `fishmark_logo_dark.svg` 是 README 与素材预览用的高对比展示变体；打包生成器以 `fishmark_mark.svg` 为应用图标形状源，按 light / dark 颜色生成 PNG / ICO
+- `fishmark_file_icon.svg` 是 Markdown 文件关联图标源，和应用主图标分离；文件图标会生成纸张形态的 PNG / ICO / ICNS
 - 当前默认使用 `build/icons/dark/` 作为 Windows、macOS 和运行时窗口图标来源；这套图标在桌面上表现为浅色圆底深色鱼形。`build/icons/light/` 是深色圆底白色鱼形备用资产。
 - 切换桌面图标不是运行时主题开关，而是打包配置选择：需要同步调整 `electron-builder.json`、`scripts/after-pack-win-icon.mjs` 和 `src/main/window-icon.ts` 指向的图标目录，然后重新打包安装。
-- 生成出来的 PNG / ICO 不提交进仓库，只作为打包时的临时产物
+- 生成出来的 PNG / ICO / ICNS 不提交进仓库，只作为打包时的临时产物
 
 ### 执行命令
 
@@ -79,10 +81,15 @@ Windows 正式发版额外依赖两份元数据：
 - `build/icons/light/icon-512.png`
 - `build/icons/light/icon.ico`
 - `build/icons/dark/` 下对应的同名产物
+- `build/icons/file/icon-{16,24,32,48,64,128,256,512,1024}.png`
+- `build/icons/file/markdown.ico`
+- `build/icons/file/markdown.icns`
 
 每个 PNG 尺寸都会直接从 SVG 渲染，避免从 512px 位图缩小导致 32px / 48px 桌面图标边缘发糊。
 
 其中 `dark` 版本会作为当前 Windows 与 macOS 打包默认图标；这里的目录名沿用主题命名，视觉上它是浅色系桌面图标。
+
+Markdown 文件图标与应用主图标分离。`electron-builder.json` 中 `.md` / `.markdown` 文件关联统一指向 `icons/file/markdown`：Windows 打包时解析为 `build/icons/file/markdown.ico`，macOS 打包时解析为 `build/icons/file/markdown.icns`。
 
 当前仓库会在专用的 Windows 打包脚本中于 `electron-builder` 完成后补写应用主程序 `FishMark.exe` 的图标，并带重试保护，因此安装器和安装后的应用都会使用同一套正式图标，同时避免 Windows 上对 `.exe` 做二次资源写入时的偶发锁文件失败。
 
@@ -252,13 +259,13 @@ release/
 - `release:mac` 只发布 Apple Silicon `arm64` 产物
 - `release:mac:beta` 只发布 ad-hoc signed、未公证的 Apple Silicon `.dmg`
 - 正式发版必须配置 Developer ID 签名与 notarization 凭据
-- macOS `.icns` 仍未生成
+- 应用主图标仍未单独生成 `.icns`；Markdown 文件关联图标已生成 `.icns`
 
 ### 后续扩展位
 
 - Windows / macOS 代码签名
 - macOS `x64` 或 `universal` 打包产物
-- `.icns` 生成与安装器视觉定制
+- 应用主图标 `.icns` 生成与安装器视觉定制
 
 ## Package Size Guardrails
 

@@ -5,9 +5,26 @@ import process from "node:process";
 import { Resvg } from "@resvg/resvg-js";
 
 const PNG_SIZES = [16, 24, 32, 48, 64, 128, 256, 512];
+const FILE_ICON_PNG_SIZES = [16, 24, 32, 48, 64, 128, 256, 512, 1024];
 const ICO_SIZES = new Set([16, 24, 32, 48, 64, 128, 256]);
 const MARK_SOURCE = "assets/branding/fishmark_mark.svg";
+const FILE_ICON_SOURCE = "assets/branding/fishmark_file_icon.svg";
+const FILE_ICON_OUTPUT_DIRECTORY = "file";
+const FILE_ICON_BASENAME = "markdown";
 const FISH_FILL_RADIUS = 245;
+const ICNS_ENTRIES = [
+  { size: 16, type: "icp4" },
+  { size: 32, type: "icp5" },
+  { size: 64, type: "icp6" },
+  { size: 128, type: "ic07" },
+  { size: 256, type: "ic08" },
+  { size: 512, type: "ic09" },
+  { size: 1024, type: "ic10" },
+  { size: 32, type: "ic11" },
+  { size: 64, type: "ic12" },
+  { size: 256, type: "ic13" },
+  { size: 512, type: "ic14" }
+];
 const VARIANTS = [
   {
     name: "light",
@@ -88,6 +105,49 @@ async function generateVariant(variant, outputDirectory) {
   writeFileSync(path.join(variantOutputDirectory, "icon.ico"), createIcoBuffer(icoImages));
 }
 
+async function generateFileIcon(outputDirectory) {
+  const sourcePath = path.join(process.cwd(), FILE_ICON_SOURCE);
+  const fileIconOutputDirectory = path.join(outputDirectory, FILE_ICON_OUTPUT_DIRECTORY);
+  const svgSource = readFileSync(sourcePath, "utf8");
+  const icoImages = [];
+  const renderedPngs = new Map();
+
+  mkdirSync(fileIconOutputDirectory, { recursive: true });
+
+  for (const size of FILE_ICON_PNG_SIZES) {
+    const pngBuffer = renderPng(svgSource, size);
+
+    writeFileSync(path.join(fileIconOutputDirectory, `icon-${size}.png`), pngBuffer);
+    renderedPngs.set(size, pngBuffer);
+
+    if (ICO_SIZES.has(size)) {
+      icoImages.push({ size, buffer: pngBuffer });
+    }
+  }
+
+  const icnsImages = ICNS_ENTRIES.map((entry) => {
+    const buffer = renderedPngs.get(entry.size);
+
+    if (!buffer) {
+      throw new Error(`Missing ${entry.size}px PNG for ${entry.type} ICNS entry.`);
+    }
+
+    return {
+      type: entry.type,
+      buffer
+    };
+  });
+
+  writeFileSync(
+    path.join(fileIconOutputDirectory, `${FILE_ICON_BASENAME}.ico`),
+    createIcoBuffer(icoImages)
+  );
+  writeFileSync(
+    path.join(fileIconOutputDirectory, `${FILE_ICON_BASENAME}.icns`),
+    createIcnsBuffer(icnsImages)
+  );
+}
+
 function createIcoBuffer(images) {
   const headerSize = 6;
   const directoryEntrySize = 16;
@@ -119,6 +179,24 @@ function createIcoBuffer(images) {
   return Buffer.concat([header, ...directoryEntries, ...imageBuffers]);
 }
 
+function createIcnsBuffer(images) {
+  const chunks = images.map((image) => {
+    const header = Buffer.alloc(8);
+
+    header.write(image.type, 0, "ascii");
+    header.writeUInt32BE(image.buffer.length + header.length, 4);
+
+    return Buffer.concat([header, image.buffer]);
+  });
+  const totalLength = 8 + chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const header = Buffer.alloc(8);
+
+  header.write("icns", 0, "ascii");
+  header.writeUInt32BE(totalLength, 4);
+
+  return Buffer.concat([header, ...chunks]);
+}
+
 async function main() {
   const { outputDirectory } = parseArguments(process.argv.slice(2));
   const resolvedOutputDirectory = path.resolve(process.cwd(), outputDirectory);
@@ -126,6 +204,8 @@ async function main() {
   for (const variant of VARIANTS) {
     await generateVariant(variant, resolvedOutputDirectory);
   }
+
+  await generateFileIcon(resolvedOutputDirectory);
 
   console.log(`Generated icon assets in ${resolvedOutputDirectory}`);
 }

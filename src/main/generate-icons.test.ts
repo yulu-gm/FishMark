@@ -24,7 +24,9 @@ const { PNG } = require("pngjs") as {
   };
 };
 const PNG_SIZES = [16, 24, 32, 48, 64, 128, 256, 512];
+const FILE_ICON_PNG_SIZES = [16, 24, 32, 48, 64, 128, 256, 512, 1024];
 const ICO_SIZES = [16, 24, 32, 48, 64, 128, 256];
+const ICNS_TYPES = ["icp4", "icp5", "icp6", "ic07", "ic08", "ic09", "ic10", "ic11", "ic12", "ic13", "ic14"];
 
 afterEach(() => {
   for (const directory of createdDirectories.splice(0)) {
@@ -40,6 +42,39 @@ describe("generate-icons script", () => {
     expect(existsSync(sharedMarkPath)).toBe(true);
     expect(scriptSource).toContain("assets/branding/fishmark_mark.svg");
   });
+
+  it("creates dedicated Markdown document icons from the approved file icon source", () => {
+    const scriptSource = readFileSync(path.join(process.cwd(), "scripts", "generate-icons.mjs"), "utf8");
+    const fileIconSourcePath = path.join(process.cwd(), "assets", "branding", "fishmark_file_icon.svg");
+    const outputDirectory = mkdtempSync(path.join(tmpdir(), "fishmark-file-icons-"));
+    createdDirectories.push(outputDirectory);
+
+    const result = spawnSync(
+      process.execPath,
+      ["scripts/generate-icons.mjs", "--out-dir", outputDirectory],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        timeout: 30000
+      }
+    );
+
+    expect(existsSync(fileIconSourcePath)).toBe(true);
+    expect(scriptSource).toContain("assets/branding/fishmark_file_icon.svg");
+    expect(result.status).toBe(0);
+
+    for (const size of FILE_ICON_PNG_SIZES) {
+      expect(existsSync(path.join(outputDirectory, "file", `icon-${size}.png`))).toBe(true);
+    }
+
+    const icoPath = path.join(outputDirectory, "file", "markdown.ico");
+    const icnsPath = path.join(outputDirectory, "file", "markdown.icns");
+
+    expect(existsSync(icoPath)).toBe(true);
+    expect(readIcoSizes(icoPath)).toEqual(ICO_SIZES);
+    expect(existsSync(icnsPath)).toBe(true);
+    expect(readIcnsTypes(icnsPath)).toEqual(ICNS_TYPES);
+  }, 30000);
 
   it("creates PNG and ICO assets for both FishMark logo variants", () => {
     const outputDirectory = mkdtempSync(path.join(tmpdir(), "fishmark-icons-"));
@@ -157,6 +192,30 @@ function readIcoSizes(icoPath: string): number[] {
   }
 
   return sizes;
+}
+
+function readIcnsTypes(icnsPath: string): string[] {
+  const icns = readFileSync(icnsPath);
+  const types: string[] = [];
+  let offset = 8;
+
+  expect(icns.subarray(0, 4).toString("ascii")).toBe("icns");
+  expect(icns.readUInt32BE(4)).toBe(icns.length);
+
+  while (offset < icns.length) {
+    const type = icns.subarray(offset, offset + 4).toString("ascii");
+    const chunkLength = icns.readUInt32BE(offset + 4);
+
+    expect(chunkLength).toBeGreaterThan(8);
+    expect(offset + chunkLength).toBeLessThanOrEqual(icns.length);
+
+    types.push(type);
+    offset += chunkLength;
+  }
+
+  expect(offset).toBe(icns.length);
+
+  return types;
 }
 
 function resizeNearestLikeGenerator(

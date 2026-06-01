@@ -766,11 +766,41 @@
 - 桌面常用图标大小下不应明显发糊。
 - 打包产物内的 `resources/icons/dark/icon.ico` 至少包含 `16/24/32/48/64/128/256` 尺寸。
 
+### TC-070B Windows Markdown 文件图标
+
+步骤：
+1. 运行 `npm.cmd run package:win` 生成 Windows 安装包。
+2. 安装或覆盖安装 `release/FishMark-Setup-<version>.exe`。
+3. 将 FishMark 设为 `.md` / `.markdown` 文件的打开方式或默认应用。
+4. 在文件管理器中切换不同图标大小观察一个 Markdown 文件。
+5. 双击该 Markdown 文件。
+
+预期：
+- Markdown 文件使用独立纸张图标，而不是直接复用 FishMark 应用圆形图标。
+- 文件图标中心使用浅色系 FishMark logo，位置与比例居中稳定。
+- 生成产物内的 `build/icons/file/markdown.ico` 至少包含 `16/24/32/48/64/128/256` 尺寸。
+- 打包产物内包含 `resources/icons/file/markdown.ico`。
+- 双击 Markdown 文件会用 FishMark 打开。
+
 ### TC-071 macOS 启动
 
 预期：
 - 应用能在 macOS 上启动
 - 应用可以保存文件
+
+### TC-071A macOS Markdown 文件图标
+
+步骤：
+1. 在 macOS 上运行 `npm run package:mac`。
+2. 检查 `release/mac-arm64/FishMark.app/Contents/Resources/markdown.icns` 是否存在。
+3. 将 FishMark 设为 `.md` / `.markdown` 文件的打开方式。
+4. 在 Finder 中观察一个 Markdown 文件图标，并双击打开。
+
+预期：
+- `.md` / `.markdown` 文件关联到 FishMark。
+- Finder 中 Markdown 文件使用独立纸张图标，中心为浅色系 FishMark logo。
+- `markdown.icns` 包含常用与 Retina 图标条目，避免高分屏下明显发糊。
+- 双击 Markdown 文件会用 FishMark 打开。
 
 ## 9. 测试工作台
 
