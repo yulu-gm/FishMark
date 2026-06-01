@@ -560,12 +560,9 @@
   display: none;
 }
 
-.app-workspace[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] > .workspace-tab-strip[data-fishmark-region="workspace-tab-strip"][data-visibility="collapsed"] {
-  display: none;
-}
-
 .workspace-tab-strip {
   grid-row: 2;
+  display: block;
   width: 100%;
   min-width: 0;
   margin: calc(var(--fishmark-space-4) * -1) calc(var(--fishmark-shell-gutter) * -1) 0;
@@ -594,6 +591,12 @@
   max-height: 0;
   border-bottom-color: transparent;
   pointer-events: none;
+}
+
+.app-workspace[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] > .workspace-tab-strip[data-fishmark-region="workspace-tab-strip"] {
+  grid-row: 1;
+  grid-column: 1;
+  align-self: start;
 }
 
 .workspace-tab-strip-scroll {
@@ -815,6 +818,7 @@
 
 .workspace-canvas[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] {
   grid-row: 1;
+  grid-column: 1;
   width: 100%;
   max-width: none;
   margin: 0;
@@ -1363,6 +1367,7 @@
 
 .app-status-bar {
   position: fixed;
+  display: block;
   left: calc(var(--fishmark-shell-rail-offset) + var(--fishmark-shell-gutter));
   right: var(--fishmark-shell-gutter);
   bottom: calc(var(--fishmark-space-3) + env(safe-area-inset-bottom));
@@ -1372,16 +1377,26 @@
   background: transparent;
   z-index: var(--fishmark-z-overlay);
   transform: translateY(0);
+  opacity: 1;
   transition:
     left var(--fishmark-focus-transition-duration) var(--fishmark-focus-transition-easing),
     opacity var(--fishmark-focus-transition-duration) ease,
-    transform var(--fishmark-focus-transition-duration) var(--fishmark-focus-transition-easing);
+    transform var(--fishmark-focus-transition-duration) var(--fishmark-focus-transition-easing),
+    display var(--fishmark-focus-transition-duration) allow-discrete;
+  transition-behavior: allow-discrete;
 }
 
 .app-status-bar[data-visibility="collapsed"] {
   opacity: 0;
   transform: translateY(14px);
   pointer-events: none;
+}
+
+@starting-style {
+  .app-status-bar[data-visibility="visible"] {
+    opacity: 0;
+    transform: translateY(14px);
+  }
 }
 
 .app-status-bar [data-fishmark-region="status-strip"] {

@@ -5132,23 +5132,37 @@ describe("App autosave", () => {
     expect(readingLayoutRule).toContain("grid-template-columns: 0 minmax(0, 1fr);");
     expect(readingWorkspaceRule).toContain("grid-template-rows: minmax(0, 1fr);");
     expect(tabStripRule).toContain("transition:");
+    expect(tabStripRule).not.toContain("display var(--fishmark-focus-transition-duration) allow-discrete;");
+    expect(tabStripRule).not.toContain("transition-behavior: allow-discrete;");
     expect(collapsedTabStripRule).toContain("transform:");
+    expect(collapsedTabStripRule).toContain("max-height: 0;");
     expect(statusBarRule).toContain("transition:");
+    expect(statusBarRule).toContain("display var(--fishmark-focus-transition-duration) allow-discrete;");
+    expect(statusBarRule).toContain("transition-behavior: allow-discrete;");
     expect(collapsedStatusBarRule).toContain("transform:");
+    expect(appUiStylesheet).toContain("@starting-style");
+    expect(appUiStylesheet).toContain('.app-status-bar[data-visibility="visible"]');
   });
 
-  it("removes collapsed reading-mode chrome from workspace flow so the canvas stays pinned to the top", () => {
+  it("anchors collapsed reading-mode tab chrome to the top while it folds out", () => {
     const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8");
-    const collapsedReadingTabRule = getCssRule(
+    const collapsedTabStripRule = getCssRule(appUiStylesheet, '.workspace-tab-strip[data-visibility="collapsed"]');
+    const readingTabStripRule = getCssRule(
       appUiStylesheet,
-      '.app-workspace[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] > .workspace-tab-strip[data-fishmark-region="workspace-tab-strip"][data-visibility="collapsed"]'
+      '.app-workspace[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] > .workspace-tab-strip[data-fishmark-region="workspace-tab-strip"]'
     );
     const collapsedReadingStatusBarRule = getCssRule(
       appUiStylesheet,
       '.app-workspace[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] > .app-status-bar[data-fishmark-region="app-status-bar"][data-visibility="collapsed"]'
     );
 
-    expect(collapsedReadingTabRule).toContain("display: none;");
+    expect(collapsedTabStripRule).toContain("opacity: 0;");
+    expect(collapsedTabStripRule).toContain("transform: translateY(-8px);");
+    expect(collapsedTabStripRule).toContain("max-height: 0;");
+    expect(readingTabStripRule).toContain("grid-row: 1;");
+    expect(readingTabStripRule).toContain("grid-column: 1;");
+    expect(readingTabStripRule).toContain("align-self: start;");
+    expect(readingTabStripRule).not.toContain("display: none;");
     expect(collapsedReadingStatusBarRule).toContain("display: none;");
   });
 
@@ -5574,7 +5588,7 @@ describe("App autosave", () => {
     const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8").replace(/\r\n/g, "\n");
 
     expect(appUiStylesheet).toContain(
-      '.workspace-canvas[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] {\n  grid-row: 1;\n  width: 100%;\n  max-width: none;\n  margin: 0;\n}'
+      '.workspace-canvas[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] {\n  grid-row: 1;\n  grid-column: 1;\n  width: 100%;\n  max-width: none;\n  margin: 0;\n}'
     );
     expect(appUiStylesheet).toContain(
       '.workspace-canvas[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] .workspace-shell {\n  width: 100%;\n  max-width: none;\n  margin: 0;\n}'
@@ -5657,6 +5671,7 @@ describe("App autosave", () => {
     );
 
     expect(readingCanvasRule).not.toContain("width: min(100%, var(--fishmark-workspace-max-width));");
+    expect(readingCanvasRule).toContain("grid-column: 1;");
     expect(readingCanvasRule).not.toContain("margin: 0 auto;");
     expect(readingShellRule).not.toContain("max-width: min(100%, 960px);");
     expect(readingShellRule).not.toContain("margin: 0 auto;");

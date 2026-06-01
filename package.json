@@ -1,6 +1,6 @@
 {
   "name": "fishmark",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "private": true,
   "description": "Local-first Markdown desktop editor MVP shell.",
   "repository": {
