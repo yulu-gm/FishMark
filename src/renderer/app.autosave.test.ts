@@ -569,6 +569,7 @@ describe("App autosave", () => {
   let listThemePackages: ReturnType<typeof vi.fn<() => Promise<ThemePackageDescriptor[]>>>;
   let refreshThemePackages: ReturnType<typeof vi.fn<() => Promise<ThemePackageDescriptor[]>>>;
   let openThemesDirectory: ReturnType<typeof vi.fn<() => Promise<void>>>;
+  let openExternalLink: ReturnType<typeof vi.fn<(href: string) => Promise<void>>>;
   let selectTemporaryImageDirectory: ReturnType<typeof vi.fn<() => Promise<string | null>>>;
   let confirmWorkspaceWindowClose: ReturnType<typeof vi.fn<() => Promise<boolean>>>;
   let colorSchemeMediaQuery: MockMediaQueryList;
@@ -1003,6 +1004,7 @@ describe("App autosave", () => {
       .fn<() => Promise<ThemePackageDescriptor[]>>()
       .mockResolvedValue(defaultThemeCatalog);
     openThemesDirectory = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    openExternalLink = vi.fn<(href: string) => Promise<void>>().mockResolvedValue(undefined);
     selectTemporaryImageDirectory = vi.fn<() => Promise<string | null>>().mockResolvedValue(null);
     confirmWorkspaceWindowClose = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
 
@@ -1049,7 +1051,7 @@ describe("App autosave", () => {
       openThemesDirectory,
       selectTemporaryImageDirectory,
       checkForUpdates: vi.fn().mockResolvedValue(undefined),
-      openExternalLink: vi.fn().mockResolvedValue(undefined),
+      openExternalLink,
       confirmWorkspaceWindowClose,
       onPreferencesChanged(listener: PreferencesChangedListener) {
         preferencesChangedListener = listener;
@@ -3306,6 +3308,36 @@ describe("App autosave", () => {
 
     expect(openThemesDirectory).toHaveBeenCalledTimes(1);
     expect(container.textContent).not.toContain("无法打开主题目录。");
+  });
+
+  it("opens the hosted theme gallery link from settings", async () => {
+    await renderApp();
+
+    const settingsButton = container.querySelector<HTMLButtonElement>(".settings-entry");
+    expect(settingsButton).not.toBeNull();
+
+    await act(async () => {
+      settingsButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await vi.dynamicImportSettled();
+      await Promise.resolve();
+    });
+
+    const themeGalleryLink = container.querySelector<HTMLAnchorElement>(
+      'a[href="https://yulu-gm.github.io/fishmark-themes/"]'
+    );
+
+    expect(themeGalleryLink).not.toBeNull();
+    expect(themeGalleryLink?.textContent).toContain("打开主题页面");
+
+    await act(async () => {
+      themeGalleryLink?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true })
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(openExternalLink).toHaveBeenCalledWith("https://yulu-gm.github.io/fishmark-themes/");
   });
 
   it("shows an error when opening the themes directory fails", async () => {

@@ -1173,6 +1173,7 @@ export function WorkspaceShell({
                 isRefreshingThemes={isRefreshingThemePackages}
                 onRefreshThemes={onRefreshThemePackages}
                 onUpdate={onUpdatePreferences}
+                onOpenExternalLink={onOpenExternalLink}
                 onClose={onCloseSettingsDrawer}
               />
             </Suspense>

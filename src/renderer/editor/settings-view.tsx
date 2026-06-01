@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type MouseEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 
 import {
   DEFAULT_PREFERENCES,
@@ -26,6 +26,7 @@ type SettingsViewProps = {
   isRefreshingThemes: boolean;
   onRefreshThemes: () => Promise<void>;
   onUpdate: (patch: PreferencesUpdate) => Promise<UpdatePreferencesResult>;
+  onOpenExternalLink: (href: string) => void;
   onClose: () => void;
 };
 
@@ -93,6 +94,8 @@ const THEME_EFFECT_LABELS = {
   full: "始终开启",
   off: "关闭"
 } as const;
+
+const THEME_GALLERY_URL = "https://yulu-gm.github.io/fishmark-themes/";
 
 function resolveParameterDefaultValue(parameter: ThemeParameterDescriptor): number {
   if (parameter.type === "toggle") {
@@ -349,6 +352,7 @@ export function SettingsView({
   isRefreshingThemes,
   onRefreshThemes,
   onUpdate,
+  onOpenExternalLink,
   onClose
 }: SettingsViewProps) {
   const [draft, setDraft] = useState<DraftState>(() => buildDraft(preferences));
@@ -440,6 +444,11 @@ export function SettingsView({
     } catch {
       setErrorMessage("无法打开主题目录。");
     }
+  }
+
+  function handleOpenThemeGallery(event: MouseEvent<HTMLAnchorElement>): void {
+    event.preventDefault();
+    onOpenExternalLink(THEME_GALLERY_URL);
   }
 
   async function handleSelectTemporaryImageDirectory(): Promise<void> {
@@ -771,6 +780,15 @@ export function SettingsView({
                 >
                   {isRefreshingThemes ? "刷新中..." : "刷新主题"}
                 </button>
+                <a
+                  className="settings-external-link"
+                  href={THEME_GALLERY_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={handleOpenThemeGallery}
+                >
+                  打开主题页面
+                </a>
               </div>
             </div>
           </SettingsRow>

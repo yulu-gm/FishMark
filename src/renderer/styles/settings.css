@@ -382,6 +382,25 @@
   justify-items: start;
 }
 
+.settings-external-link {
+  justify-self: start;
+  color: var(--fishmark-markdown-link, var(--fishmark-text-accent, #2563eb));
+  font-size: 0.84rem;
+  text-decoration: none;
+  text-underline-offset: 3px;
+}
+
+.settings-external-link:hover {
+  color: var(--fishmark-markdown-link-hover, var(--fishmark-markdown-link, #1d4ed8));
+  text-decoration: underline;
+}
+
+.settings-external-link:focus-visible {
+  outline: 2px solid var(--fishmark-focus-ring);
+  outline-offset: 3px;
+  border-radius: var(--fishmark-radius-sm);
+}
+
 @media (max-width: 860px) {
   .settings-shell {
     left: calc(var(--fishmark-shell-rail-width) + 10px);
