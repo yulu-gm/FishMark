@@ -5163,7 +5163,7 @@ describe("App autosave", () => {
     expect(readingTabStripRule).toContain("grid-column: 1;");
     expect(readingTabStripRule).toContain("align-self: start;");
     expect(readingTabStripRule).not.toContain("display: none;");
-    expect(collapsedReadingStatusBarRule).toContain("display: none;");
+    expect(collapsedReadingStatusBarRule).toContain("display: none !important;");
   });
 
   it("guards app-owned workspace row geometry against legacy theme overrides", () => {
@@ -5176,6 +5176,10 @@ describe("App autosave", () => {
       appUiStylesheet,
       '.app-workspace[data-fishmark-layout="workspace"][data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"]'
     );
+    const statusBarGeometryGuardRule = getCssRule(
+      appUiStylesheet,
+      '.app-workspace[data-fishmark-layout="workspace"] > .app-status-bar[data-fishmark-region="app-status-bar"]'
+    );
 
     expect(editingWorkspaceGuardRule).toContain(
       "grid-template-rows: auto auto minmax(0, 1fr) !important;"
@@ -5183,6 +5187,14 @@ describe("App autosave", () => {
     expect(readingWorkspaceGuardRule).toContain(
       "grid-template-rows: minmax(0, 1fr) !important;"
     );
+    expect(statusBarGeometryGuardRule).toContain("position: fixed !important;");
+    expect(statusBarGeometryGuardRule).toContain("left: var(--fishmark-status-bar-left) !important;");
+    expect(statusBarGeometryGuardRule).toContain("right: var(--fishmark-status-bar-right) !important;");
+    expect(statusBarGeometryGuardRule).toContain("bottom: calc(var(--fishmark-space-3) + env(safe-area-inset-bottom)) !important;");
+    expect(statusBarGeometryGuardRule).toContain("min-height: var(--fishmark-status-bar-height) !important;");
+    expect(statusBarGeometryGuardRule).toContain("padding: 0 var(--fishmark-status-bar-inline-padding) !important;");
+    expect(statusBarGeometryGuardRule).toContain("z-index: var(--fishmark-z-overlay) !important;");
+    expect(statusBarGeometryGuardRule).not.toContain("display:");
   });
 
   it("defines compact icon rail tool styles and tooltip positioning", () => {

@@ -3,6 +3,9 @@
   --fishmark-focus-transition-duration: 220ms;
   --fishmark-focus-transition-easing: var(--fishmark-ease-standard);
   --fishmark-shell-rail-offset: var(--fishmark-shell-rail-width);
+  --fishmark-status-bar-left: calc(var(--fishmark-shell-rail-offset) + var(--fishmark-shell-gutter));
+  --fishmark-status-bar-right: var(--fishmark-shell-gutter);
+  --fishmark-status-bar-inline-padding: var(--fishmark-space-5);
   height: 100dvh;
   position: relative;
   isolation: isolate;
@@ -416,6 +419,16 @@
   grid-template-rows: minmax(0, 1fr) !important;
 }
 
+.app-workspace[data-fishmark-layout="workspace"] > .app-status-bar[data-fishmark-region="app-status-bar"] {
+  position: fixed !important;
+  left: var(--fishmark-status-bar-left) !important;
+  right: var(--fishmark-status-bar-right) !important;
+  bottom: calc(var(--fishmark-space-3) + env(safe-area-inset-bottom)) !important;
+  min-height: var(--fishmark-status-bar-height) !important;
+  padding: 0 var(--fishmark-status-bar-inline-padding) !important;
+  z-index: var(--fishmark-z-overlay) !important;
+}
+
 .app-notification-banner {
   position: fixed;
   top: calc(var(--fishmark-titlebar-height) + 14px);
@@ -557,7 +570,7 @@
 }
 
 .app-workspace[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] > .app-status-bar[data-fishmark-region="app-status-bar"][data-visibility="collapsed"] {
-  display: none;
+  display: none !important;
 }
 
 .workspace-tab-strip {
@@ -1368,11 +1381,11 @@
 .app-status-bar {
   position: fixed;
   display: block;
-  left: calc(var(--fishmark-shell-rail-offset) + var(--fishmark-shell-gutter));
-  right: var(--fishmark-shell-gutter);
+  left: var(--fishmark-status-bar-left);
+  right: var(--fishmark-status-bar-right);
   bottom: calc(var(--fishmark-space-3) + env(safe-area-inset-bottom));
   min-height: var(--fishmark-status-bar-height);
-  padding: 0 var(--fishmark-space-5);
+  padding: 0 var(--fishmark-status-bar-inline-padding);
   border-radius: var(--fishmark-radius-pill);
   background: transparent;
   z-index: var(--fishmark-z-overlay);
@@ -1628,6 +1641,10 @@
     --fishmark-shell-gutter: 16px;
   }
 
+  .app-shell {
+    --fishmark-status-bar-left: calc(var(--fishmark-shell-rail-width) + var(--fishmark-shell-gutter));
+  }
+
   .app-titlebar[data-compact-when-narrow="true"] [data-fishmark-titlebar-item="dirty-indicator"] {
     display: none;
   }
@@ -1644,9 +1661,6 @@
     border-radius: var(--fishmark-radius-lg);
   }
 
-  .app-status-bar {
-    left: calc(var(--fishmark-shell-rail-width) + var(--fishmark-shell-gutter));
-  }
 }
 
 @media (max-width: 640px) {
@@ -1666,10 +1680,10 @@
     padding-top: var(--fishmark-space-3);
   }
 
-  .app-status-bar {
-    left: calc(var(--fishmark-shell-rail-width) + var(--fishmark-shell-gutter));
-    right: 12px;
-    padding-inline: var(--fishmark-space-3);
+  .app-shell {
+    --fishmark-status-bar-left: calc(var(--fishmark-shell-rail-width) + var(--fishmark-shell-gutter));
+    --fishmark-status-bar-right: 12px;
+    --fishmark-status-bar-inline-padding: var(--fishmark-space-3);
   }
 
   .workspace-shell.is-outline-open {
