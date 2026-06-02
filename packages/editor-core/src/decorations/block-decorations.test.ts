@@ -958,6 +958,11 @@ describe("createBlockDecorations", () => {
       "const answer = 42;",
       "```",
       "",
+      "```mermaid",
+      "graph TD",
+      "  A[Start] --> B[End]",
+      "```",
+      "",
       "---",
       "",
       "tail"
@@ -1275,9 +1280,14 @@ describe("createBlockDecorations", () => {
     const definitionStart = source.indexOf("[^n]:");
     const definitionContentStart = source.indexOf("Footnote");
 
-    expectExactRangeClasses(ranges, 4, 6, ["cm-inactive-inline-marker"]);
-    expectExactRangeClasses(ranges, 6, 7, ["cm-inactive-inline-footnote-reference"]);
-    expectExactRangeClasses(ranges, 7, 8, ["cm-inactive-inline-marker"]);
+    expect(collectWidgets(source, result.decorationSet)).toContainEqual({
+      from: source.indexOf("[^n]"),
+      to: source.indexOf("[^n]") + "[^n]".length,
+      name: "FootnoteReferenceWidget"
+    });
+    expectExactRangeClasses(ranges, 4, 6, []);
+    expectExactRangeClasses(ranges, 6, 7, []);
+    expectExactRangeClasses(ranges, 7, 8, []);
     expectExactRangeClasses(ranges, definitionStart, definitionStart, [
       "cm-inactive-footnote-definition cm-inactive-footnote-definition-start cm-inactive-footnote-definition-end"
     ]);
@@ -1330,8 +1340,53 @@ describe("createBlockDecorations", () => {
     ]);
   });
 
+  it("renders inactive Mermaid code fences with preview widgets and restores source while active", () => {
+    const source = ["```mermaid", "graph TD", "  A[Start] --> B[End]", "```", "", "Paragraph"].join("\n");
+    const blockMap = parseMarkdownDocument(source);
+    const inactiveState = createActiveBlockStateFromBlockMap(blockMap, {
+      anchor: source.indexOf("Paragraph"),
+      head: source.indexOf("Paragraph")
+    });
+    const activeState = createActiveBlockStateFromBlockMap(blockMap, {
+      anchor: source.indexOf("graph TD"),
+      head: source.indexOf("graph TD")
+    });
+
+    const inactiveResult = createBlockDecorations({
+      activeBlockState: inactiveState,
+      hasEditorFocus: true,
+      source
+    });
+    const activeResult = createBlockDecorations({
+      activeBlockState: activeState,
+      hasEditorFocus: true,
+      source
+    });
+
+    expect(collectWidgets(source, inactiveResult.decorationSet)).toEqual([
+      { from: 0, to: source.indexOf("\n\nParagraph"), name: "MermaidPreviewWidget" }
+    ]);
+    expect(collectWidgets(source, activeResult.decorationSet)).toEqual([]);
+    expect(collectDecorations(source, activeResult.decorationSet).some((range) =>
+      range.className.includes("cm-inactive-code-block")
+    )).toBe(true);
+  });
+
   it("keeps math previews hidden in whole-document source mode", () => {
-    const source = ["Text $x^2$", "", "$$", "a + b", "$$", "", "Paragraph"].join("\n");
+    const source = [
+      "Text $x^2$",
+      "",
+      "$$",
+      "a + b",
+      "$$",
+      "",
+      "```mermaid",
+      "graph TD",
+      "  A --> B",
+      "```",
+      "",
+      "Paragraph"
+    ].join("\n");
     const blockMap = parseMarkdownDocument(source);
     const activeState = createActiveBlockStateFromBlockMap(blockMap, {
       anchor: source.indexOf("Paragraph"),

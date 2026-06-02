@@ -1162,7 +1162,7 @@
 
 ## Epic 10：Markdown 扩展语法与安全渲染
 
-> 2026-06-02 初始现状确认：脚注、数学公式与 Mermaid 当时没有产品级实现；`docs/progress.md` 已记录 `TASK-045` 到 `TASK-051` 为 TODO，但 `MVP_BACKLOG.md` 曾缺少对应正文。本节把扩展语法计划恢复到唯一执行计划中。随后同日已完成 `TASK-045` 与 `TASK-046`，Mermaid 仍待后续实现。`markdown-it` 插件生态只作为语法调研来源，不接入主编辑解析链；实现必须继续以 `micromark` / `packages/markdown-engine` 的 parser-owned range / AST 为事实来源。
+> 2026-06-02 初始现状确认：脚注、数学公式与 Mermaid 当时没有产品级实现；`docs/progress.md` 已记录 `TASK-045` 到 `TASK-051` 为 TODO，但 `MVP_BACKLOG.md` 曾缺少对应正文。本节把扩展语法计划恢复到唯一执行计划中。随后同日已完成 `TASK-045`、`TASK-046` 与 `TASK-051` 的首版实现。`markdown-it` 插件生态只作为语法调研来源，不接入主编辑解析链；实现必须继续以 `micromark` / `packages/markdown-engine` 的 parser-owned range / AST 为事实来源。
 
 ### TASK-045 脚注语法
 
@@ -1333,8 +1333,8 @@
 
 ### TASK-051 Mermaid / diagram code fence 渲染
 
-状态：未开始
-备注：2026-06-02 已恢复正式任务正文；本轮不实现 Mermaid renderer，后续实现仍按本任务验收切片推进。
+状态：DEV_DONE
+备注：2026-06-02 已接入 `mermaid` fence 的非激活态 SVG 预览；运行时通过 editor widget lazy import 按需加载 Mermaid，并使用 `securityLevel: "strict"` 与 SVG 属性清理。active code fence 与整篇源码模式都恢复原始 Markdown；HTML export 不注入 Mermaid runtime，明确保留安全源码 fallback。
 依赖：`TASK-033`、`TASK-019`、`TASK-023`
 
 目标：对 ```` ```mermaid ```` / diagram 类代码围栏提供安全预览与静态导出，禁止引入不受控脚本执行通道；失败时回退为源码 / 代码块显示。
@@ -1356,10 +1356,10 @@
 - 渲染依赖不破坏首屏 bundle 预算，长文档滚动不明显卡顿
 
 执行切片：
-- [ ] 明确 Mermaid 安全沙箱、按需加载、静态导出与错误回退策略
-- [ ] 将 diagram fence candidate 收敛到 parser / code fence metadata
-- [ ] 接入 renderer 预览、active source restore 和渲染节流
-- [ ] 接入 HTML export、性能预算与错误回归测试
+- [x] 明确 Mermaid 安全沙箱、按需加载、静态导出与错误回退策略
+- [x] 将 diagram fence candidate 收敛到 parser-owned code fence info metadata
+- [x] 接入 renderer 预览、active source restore 和 viewport-scoped lazy widget 渲染
+- [x] 接入 HTML export 安全 fallback、性能预算与回归测试
 
 ---
 

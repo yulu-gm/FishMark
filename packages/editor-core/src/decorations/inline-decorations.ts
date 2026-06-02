@@ -2,6 +2,7 @@ import { Decoration, WidgetType } from "@codemirror/view";
 import { type Range } from "@codemirror/state";
 
 import type { InlineASTNode, InlineRoot } from "@fishmark/markdown-engine";
+import { createInactiveFootnoteReferenceDecoration } from "./footnote-widgets";
 import { createInactiveImagePreviewDecoration } from "./image-widgets";
 import { createInactiveInlineMathPreviewDecoration } from "./math-widgets";
 
@@ -23,6 +24,7 @@ type InlineDecorationRange = Range<Decoration>;
 
 type CreateInactiveInlineDecorationsOptions = {
   resolveImagePreviewUrl?: (href: string | null) => string | null;
+  resolveFootnoteReferenceLabel?: (identifier: string) => string | null;
 };
 
 export function createInactiveInlineDecorations(
@@ -92,14 +94,12 @@ function appendInlineDecorations(
       ranges.push(createInactiveInlineMathPreviewDecoration(node).range(node.startOffset, node.endOffset));
       return;
     case "footnoteReference":
-      appendMarkerDecoration(ranges, node.openMarker.startOffset, node.openMarker.endOffset);
-      appendContentDecoration(
-        ranges,
-        node.labelStartOffset,
-        node.labelEndOffset,
-        INACTIVE_INLINE_FOOTNOTE_REFERENCE_CLASS
+      ranges.push(
+        createInactiveFootnoteReferenceDecoration(
+          node,
+          options.resolveFootnoteReferenceLabel?.(node.identifier) ?? node.label
+        ).range(node.startOffset, node.endOffset)
       );
-      appendMarkerDecoration(ranges, node.closeMarker.startOffset, node.closeMarker.endOffset);
       return;
     case "strong":
     case "emphasis":

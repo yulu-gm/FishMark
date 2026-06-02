@@ -8,8 +8,13 @@ const katexPreviewRendererPath = join(
   process.cwd(),
   "packages/editor-core/src/decorations/katex-preview-renderer.ts"
 );
+const mermaidWidgetsPath = join(process.cwd(), "packages/editor-core/src/decorations/mermaid-widgets.ts");
+const mermaidPreviewRendererPath = join(
+  process.cwd(),
+  "packages/editor-core/src/decorations/mermaid-preview-renderer.ts"
+);
 
-describe("editor math preview assets", () => {
+describe("editor preview assets", () => {
   it("loads KaTeX CSS through the same lazy editor preview module as KaTeX JS", () => {
     const mathWidgetsSource = readFileSync(mathWidgetsPath, "utf8").replace(/\r\n/g, "\n");
 
@@ -20,5 +25,18 @@ describe("editor math preview assets", () => {
 
     expect(rendererSource).toContain('import "katex/dist/katex.min.css";');
     expect(rendererSource).toContain('import katex from "katex";');
+  });
+
+  it("keeps Mermaid rendering in a lazy preview module with strict security", () => {
+    const mermaidWidgetsSource = readFileSync(mermaidWidgetsPath, "utf8").replace(/\r\n/g, "\n");
+
+    expect(mermaidWidgetsSource).toContain('import("./mermaid-preview-renderer")');
+    expect(existsSync(mermaidPreviewRendererPath)).toBe(true);
+
+    const rendererSource = readFileSync(mermaidPreviewRendererPath, "utf8").replace(/\r\n/g, "\n");
+
+    expect(rendererSource).toContain('import mermaid from "mermaid";');
+    expect(rendererSource).toContain('securityLevel: "strict"');
+    expect(rendererSource).toContain("removeUnsafeSvgAttributes");
   });
 });

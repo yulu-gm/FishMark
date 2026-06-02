@@ -44,4 +44,4 @@ Provide a window-scoped full-document source mode on the existing CodeMirror edi
 
 - The status bar follows the existing reading-mode chrome collapse, so the toggle is visible from editing chrome. Source mode itself is still window-scoped once toggled.
 - Visual scroll preservation is covered by avoiding `EditorState` rebuild, but this task did not add a separate browser scroll-position probe.
-- Mermaid preview implementation remains a separate TODO; source mode now provides the shared preview gate used by TASK-045 footnotes and TASK-046 math.
+- Mermaid preview now also uses the same source mode gate as TASK-045 footnotes and TASK-046 math.

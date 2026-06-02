@@ -1,38 +1,48 @@
-# TASK-051 Formal Task Body Summary
+# TASK-051 Mermaid Preview Summary
 
 ## Result
 
-PASS. TASK-051 Mermaid / diagram code fence 渲染的正式任务正文已恢复到 `MVP_BACKLOG.md`；Mermaid renderer、dependency、preview 和 export 本轮未实现，任务实现状态仍保持 TODO。
+PASS. TASK-051 Mermaid / diagram code fence 渲染已完成首版编辑器预览实现，状态同步为 `DEV_DONE`。
 
 ## Delivered
 
-- Restored TASK-051 with goal, dependencies, affected modules, deliverables, acceptance criteria, and execution slices.
-- Kept `docs/progress.md` aligned with the docs-only scope: formal task body restored, implementation still TODO.
-- Recorded handoff notes in `docs/plans/2026-06-02-task-051-mermaid-task-body-handoff.md`.
-- Confirmed no Mermaid runtime dependency or renderer implementation was introduced.
+- Added inactive `mermaid` fenced code block preview widgets in editor-core.
+- Added a lazy Mermaid renderer module with `securityLevel: "strict"` and SVG script / unsafe attribute cleanup.
+- Preserved active code fence source restore and TASK-060 whole-document source mode gating.
+- Kept HTML export script-free by explicitly treating Mermaid fences as safe source fallback code blocks.
+- Added focused editor-core, renderer, export, preview asset, sanitizer behavior, bundle budget, and Electron screenshot probe coverage.
+- Added `npm.cmd run test:mermaid-footnote-render`, which opens a real renderer page, verifies valid Mermaid SVG plus invalid Mermaid source fallback, and saves `.artifacts/visual-verification/mermaid-footnote-render-probe.png`.
 
 ## Verification
 
 ```powershell
-rg -n -e TASK-051 -e "Mermaid / diagram code fence" MVP_BACKLOG.md docs/progress.md docs/decision-log.md
-rg -n -e mermaid package.json package-lock.json src packages
+npm.cmd exec vitest -- run packages/editor-core/src/decorations/block-decorations.test.ts src/renderer/code-editor.test.ts src/renderer/export-html.test.ts src/main/editor-math-preview-assets.test.ts --reporter=verbose --testNamePattern "Mermaid|source mode|footnote|preview assets|export"
+npm.cmd exec vitest -- run packages/editor-core/src/decorations/mermaid-preview-renderer.test.ts --reporter=verbose
+npm.cmd run test:mermaid-footnote-render
+npm.cmd run typecheck
+npm.cmd run perf:bundle
 ```
 
-Results:
+Current focused results:
 
-- `MVP_BACKLOG.md` contains the formal TASK-051 body.
-- `docs/progress.md` keeps TASK-051 as TODO and notes this was only a task-body restoration.
-- No Mermaid dependency was added; the only source hit is an unrelated existing ordered-list test string.
+- focused tests: 5 files, 23 matched tests passed.
+- Electron probe: PASS; valid Mermaid rendered as SVG, invalid Mermaid fell back to its original fenced source, two valid footnote references rendered as label `1`, and screenshot written to `.artifacts/visual-verification/mermaid-footnote-render-probe.png`.
+- sanitizer behavior test: PASS; `<script>`, event attributes, and `javascript:` attribute values are removed before SVG insertion.
+- typecheck: passed.
+
+Final all-repo quality gates are recorded in `docs/test-report.md`.
 
 ## Manual Acceptance
 
-1. Open `MVP_BACKLOG.md`.
-2. Confirm Epic 10 contains `TASK-051 Mermaid / diagram code fence 渲染`.
-3. Confirm the task includes dependencies, target files, deliverables, acceptance criteria, and execution slices.
-4. Open `docs/progress.md` and confirm TASK-051 remains TODO.
-5. Confirm `package.json` / `package-lock.json` do not contain a Mermaid dependency.
-6. Confirm no Mermaid preview behavior is claimed as implemented.
+1. Open or paste the sample from `TC-051-MERMAID` in `docs/test-cases.md`.
+2. Move the cursor outside the Mermaid fence and footnote paragraph.
+3. Confirm valid `[^note]` references render as superscript `1`; repeated references reuse `1`.
+4. Confirm undefined `[^missing]` remains raw source text.
+5. Confirm the `mermaid` fence renders as a diagram SVG, not a code block.
+6. Move the cursor into the Mermaid fence and confirm the full fenced source returns.
+7. Toggle `</>` source mode and confirm all previews disappear and raw Markdown is visible.
 
 ## Residual Risk
 
-- Actual Mermaid rendering, sandboxing, static export, and performance work remain future implementation work under TASK-051.
+- HTML export deliberately keeps Mermaid as safe source fallback in this first slice; it does not emit static Mermaid SVG.
+- The full Mermaid package is lazy-loaded to support Mermaid broadly. It increases total JS gzip, so `perf:bundle` now gates `mermaid` as lazy-only and raises total gzip budget to 1,430,000 bytes.

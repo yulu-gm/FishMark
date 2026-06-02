@@ -194,6 +194,11 @@ describe("createCodeEditorController", () => {
       "const answer = 42;",
       "```",
       "",
+      "```mermaid",
+      "graph TD",
+      "  A[Start] --> B[End]",
+      "```",
+      "",
       "---"
     ].join("\n");
     const onChange = vi.fn();
@@ -229,6 +234,7 @@ describe("createCodeEditorController", () => {
     expect(host.querySelector(".cm-table-widget")).toBeNull();
     expect(host.querySelector(".cm-inactive-blockquote")).toBeNull();
     expect(host.querySelector(".cm-math-preview")).toBeNull();
+    expect(host.querySelector(".cm-mermaid-preview")).toBeNull();
     expect(host.querySelector(".cm-inactive-inline-footnote-reference")).toBeNull();
     expect(host.querySelector(".cm-inactive-footnote-definition")).toBeNull();
     expect(host.querySelector(".cm-inactive-code-block")).toBeNull();
@@ -242,8 +248,48 @@ describe("createCodeEditorController", () => {
     expect(onChange).not.toHaveBeenCalled();
     expect(host.querySelector(".cm-inactive-heading-marker")).not.toBeNull();
     expect(host.querySelector(".cm-math-preview")).not.toBeNull();
+    expect(host.querySelector(".cm-mermaid-preview")).not.toBeNull();
     expect(host.querySelector(".cm-inactive-inline-footnote-reference")).not.toBeNull();
     expect(host.querySelector(".cm-table-widget")).not.toBeNull();
+
+    controller.destroy();
+  });
+
+  it("renders inactive footnote references and Mermaid fences as preview widgets", async () => {
+    const host = document.createElement("div");
+    const source = [
+      "普通脚注引用[^note]，重复引用[^note]，未定义引用[^missing]。",
+      "",
+      "```mermaid",
+      "graph TD",
+      "  A[Start] --> B[End]",
+      "```",
+      "",
+      "[^note]: 这是脚注定义。"
+    ].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    view?.dispatch({ selection: { anchor: source.indexOf("graph TD") } });
+    await flushMicrotasks();
+
+    const footnoteLine = getLineElementByText(host, "普通脚注引用");
+    const footnotePreviews = Array.from(host.querySelectorAll<HTMLElement>(".cm-footnote-reference-preview"));
+
+    expect(footnotePreviews.map((preview) => preview.textContent)).toEqual(["1", "1"]);
+    expect(footnotePreviews.map((preview) => preview.dataset.footnoteIdentifier)).toEqual(["note", "note"]);
+    expect(footnoteLine?.textContent).toContain("普通脚注引用1，重复引用1，未定义引用[^missing]。");
+    expect(footnoteLine?.textContent).not.toContain("[^note]");
+    expect(host.querySelector(".cm-mermaid-preview")).not.toBeNull();
+    expect(host.textContent).not.toContain("```mermaid");
+    expect(host.querySelector(".cm-inactive-footnote-definition")).not.toBeNull();
 
     controller.destroy();
   });

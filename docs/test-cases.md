@@ -626,6 +626,47 @@
 - HTML 导出包含 KaTeX `renderToString` 生成的 MathML 与内联基础 CSS，不残留 `fonts/...` 等外部资源 URL，可作为单文件离线阅读；导出不改变 Markdown 保存目标或 dirty 状态。
 - `perf:bundle` 必须显示 `katex` 是 lazy chunk，且 `forbiddenInitialSourceGroup:katex` 通过。
 
+### TC-051-MERMAID Mermaid / diagram code fence 渲染
+
+步骤：
+1. 输入包含有效脚注、未定义脚注、行内公式和 Mermaid fence 的 Markdown，例如：
+   ~~~markdown
+   # 验收样本
+
+   普通脚注引用[^note]，重复引用[^note]，未定义引用[^missing]。
+
+   行内公式：$a^2 + b^2 = c^2$
+
+   ```mermaid
+   graph TD
+     A[Start] --> B[End]
+   ```
+
+   坏 Mermaid：
+
+   ```mermaid
+   graph TD
+     A -->
+   ```
+
+   [^note]: 这是脚注内容。
+   ~~~
+2. 把光标移动到 Mermaid fence 与脚注引用之外，观察非激活态渲染。
+3. 点击 Mermaid 预览所在区域或把光标移动进 fence 内容，确认源码态恢复。
+4. 点击状态栏 `</>` 切到整篇源码模式，再切回默认 WYSIWYM。
+5. 导出 HTML。
+6. 如需自动化回归，运行 `npm.cmd run test:mermaid-footnote-render`、`npm.cmd run test -- packages/editor-core/src/decorations/block-decorations.test.ts src/renderer/code-editor.test.ts src/renderer/export-html.test.ts src/main/editor-math-preview-assets.test.ts packages/editor-core/src/decorations/mermaid-preview-renderer.test.ts`，并运行 `npm.cmd run perf:bundle`。
+
+预期：
+- 非激活态有效 `mermaid` fence 显示为 SVG 图，不显示 ```` ```mermaid ```` 源码块。
+- Mermaid 语法错误不会崩溃编辑器，并以原始 fenced code block fallback 显示源码。
+- 光标进入 Mermaid fence 后完整恢复原始 fenced code block，可直接编辑源码。
+- Mermaid runtime 只通过 lazy preview module 加载，`perf:bundle` 中 `requiredLazyChunk:mermaid` 与 `forbiddenInitialSourceGroup:mermaid` 均通过。
+- Mermaid 渲染使用 strict security，并清理 SVG 内 `<script>`、事件属性和 `javascript:` 属性值。
+- 源码模式下 Mermaid、脚注和数学公式都回到原始 Markdown，不显示 preview widget。
+- HTML export 不注入 Mermaid runtime script，当前首版以代码块形式输出安全源码 fallback。
+- `npm.cmd run test:mermaid-footnote-render` 会生成 `.artifacts/visual-verification/mermaid-footnote-render-probe.png`，截图中应能看到脚注上标和 Mermaid 流程图。
+
 ### TC-018-SEARCH 查找替换
 
 步骤：

@@ -263,6 +263,20 @@ describe("createFishmarkExportHtml", () => {
     expect(exported.body.textContent).toContain("$x^2$");
   });
 
+  it("exports Mermaid fences as safe source fallback without runtime scripts", () => {
+    const html = createFishmarkExportHtml({
+      markdown: ["```mermaid", "graph TD", "  A[Start] --> B[End]", "```"].join("\n"),
+      title: "mermaid-fallback.md"
+    });
+    const exported = new DOMParser().parseFromString(html, "text/html");
+    const codeLines = Array.from(exported.querySelectorAll<HTMLElement>(".cm-inactive-code-block"));
+
+    expect(codeLines.map((line) => line.textContent)).toEqual(["graph TD", "  A[Start] --> B[End]"]);
+    expect(exported.querySelector(".cm-inactive-code-block-end")?.getAttribute("data-language")).toBe("mermaid");
+    expect(exported.querySelector("script")).toBeNull();
+    expect(html).not.toContain("mermaid.min.js");
+  });
+
   it("falls back without throwing when KaTeX receives invalid math", () => {
     const html = createFishmarkExportHtml({
       markdown: "Broken $\\unknowncommand{a}$ math.",
