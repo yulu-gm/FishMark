@@ -1160,6 +1160,209 @@
 
 ---
 
+## Epic 10：Markdown 扩展语法与安全渲染
+
+> 2026-06-02 初始现状确认：脚注、数学公式与 Mermaid 当时没有产品级实现；`docs/progress.md` 已记录 `TASK-045` 到 `TASK-051` 为 TODO，但 `MVP_BACKLOG.md` 曾缺少对应正文。本节把扩展语法计划恢复到唯一执行计划中。随后同日已完成 `TASK-045` 与 `TASK-046`，Mermaid 仍待后续实现。`markdown-it` 插件生态只作为语法调研来源，不接入主编辑解析链；实现必须继续以 `micromark` / `packages/markdown-engine` 的 parser-owned range / AST 为事实来源。
+
+### TASK-045 脚注语法
+
+状态：DEV_DONE
+依赖：`TASK-008`、`TASK-009`、`TASK-014`、`TASK-019`、`TASK-023`、`TASK-034`
+
+目标：支持 Pandoc / GFM 风格脚注引用与定义，例如 `[^1]`、`[^name]`、`[^name]: text`，并让编辑器渲染态、源码态、HTML 导出和 round-trip 共享同一份 parser-owned 语义。
+
+主要落点：`packages/markdown-engine/src/`、`packages/editor-core/src/decorations/`、`src/renderer/code-editor.ts`、`src/renderer/export-html.ts`、相关测试与文档。
+
+交付物：
+- 文档级 footnote definition map 与 inline footnote reference AST
+- 非激活态脚注引用可读标记，光标进入所在块后完整恢复 Markdown 源码
+- 脚注定义块的阅读态展示 / 折叠策略
+- HTML export 中稳定输出 footnotes 区域与反向链接
+- malformed / missing definition 的源码回退策略
+
+验收：
+- `[^id]` 引用和 `[^id]:` 定义可被解析，offset 可回拿原始 Markdown 切片
+- 未定义引用、重复定义、跨段定义不丢失源码，不静默重写文档
+- 脚注引用所在块进入 active 后可直接编辑原始 Markdown
+- HTML 导出包含脚注区域，且不改变保存目标或 dirty 状态
+- IME、undo/redo、round-trip 与现有链接/行内格式渲染不回归
+
+执行切片：
+- [x] 在 `markdown-engine` 中建立 footnote reference / definition AST 与 definition map
+- [x] 接入 editor-core inactive decorations 与 active source restore
+- [x] 接入 HTML export，并覆盖 missing / duplicate definition 回退
+- [x] 补 parser、decorations、renderer、export 与 round-trip 回归测试
+
+### TASK-046 数学公式语法
+
+状态：DEV_DONE
+依赖：`TASK-033`、`TASK-034`、`TASK-019`、`TASK-023`
+
+目标：支持 Markdown 中的行内数学公式与块级数学公式，首版覆盖 `$...$` 与 `$$...$$`。语法侧以 `micromark-extension-math` 作为参考 / tokenizer 来源并收敛为 FishMark 自有 parser-owned AST；渲染侧首选 `katex` 按需加载，不首选 MathJax。Markdown 源码继续是唯一事实来源。
+
+主要落点：`packages/markdown-engine/src/`、`packages/editor-core/src/decorations/`、`src/renderer/code-editor.ts`、`src/renderer/export-html.ts`、`package.json`、性能预算测试、`docs/decision-log.md`。
+
+交付物：
+- inline math 与 block math parser-owned AST / block map；不要让 renderer 直接用第二套 Markdown parser 猜公式范围
+- `micromark-extension-math` 语法子集评估：首版只承接 `$...$` 与 `$$...$$`，并明确空格、转义、代码内 `$`、货币符号等歧义规则
+- `katex` renderer adapter，使用 dynamic import / lazy chunk，并集中管理 KaTeX CSS 与字体资源
+- 非激活态公式预览，active 时完整源码可编辑
+- HTML export 使用同一 math AST 和 KaTeX `renderToString` 路径输出可离线阅读的 HTML
+- 解析失败、KaTeX 渲染失败和未闭合公式的源码回退
+- 明确 MathJax / Temml 不作为首版默认依赖：MathJax 留给后续“更完整 TeX 覆盖”评估，Temml 留给后续 MathML-first 方向评估
+
+验收：
+- `$x^2$` 与 `$$\n...\n$$` 可被稳定识别，未闭合 `$`、货币文本和 code span / code fence 内的 `$` 保持普通文本或原代码内容
+- 公式渲染失败时显示源码或明确 fallback，不阻塞编辑器输入；`throwOnError: false` 或等效策略必须覆盖坏公式
+- active 公式所在行 / 块可直接编辑 Markdown 源码
+- KaTeX 相关 JS / CSS 不进入首屏静态 import 闭包，或在决策日志中记录明确取舍
+- HTML export、round-trip、IME 与 undo/redo 不回归
+
+执行切片：
+- [x] 引入并评估 `micromark-extension-math` 与 `katex`，记录不选 MathJax / Temml 作为首版默认依赖的原因
+- [x] 在 `markdown-engine` 中实现 inline / block math AST、source range、歧义规则和失败回退
+- [x] 接入 editor-core / renderer 渲染预览与 active source restore
+- [x] 接入 HTML export 的 KaTeX `renderToString` 路径、性能预算与回归测试
+
+### TASK-047 提示容器与 admonition 语法
+
+状态：未开始
+依赖：`TASK-008`、`TASK-009`、`TASK-019`、`TASK-023`
+
+目标：支持白名单提示容器，例如 note / tip / warning / danger，让常见 Markdown 写作中的提示块可以阅读态渲染，同时保持 active 源码态与导出语义一致。
+
+主要落点：`packages/markdown-engine/src/`、`packages/editor-core/src/decorations/`、`src/renderer/export-html.ts`、`src/renderer/styles/markdown-render.css`。
+
+交付物：
+- 容器 block AST，包含 type、title、content range 与原始 fence range
+- 白名单容器类型与未知类型源码回退
+- 非激活态提示块样式，active 后完整显示原始 Markdown
+- HTML export 中语义化提示块输出
+
+验收：
+- 白名单提示块可渲染，未知容器保持源码显示
+- 容器内 Markdown 子内容不破坏外层 source range
+- active / inactive 切换不引发光标跳转或全文重写
+- HTML export 与编辑器阅读态语义一致
+
+执行切片：
+- [ ] 定义 admonition 语法子集与白名单
+- [ ] 在 parser 层输出容器 block metadata
+- [ ] 接入 editor-core / renderer 样式与 active restore
+- [ ] 接入 HTML export 与回归测试
+
+### TASK-048 定义列表与缩写语法
+
+状态：未开始
+依赖：`TASK-008`、`TASK-019`、`TASK-023`、`TASK-034`
+
+目标：支持定义列表与缩写 definition map，让术语解释类 Markdown 在阅读态和 HTML 导出中有稳定语义。
+
+主要落点：`packages/markdown-engine/src/`、`packages/editor-core/src/decorations/`、`src/renderer/export-html.ts`。
+
+交付物：
+- definition list block AST
+- abbreviation definition map 与 inline abbreviation reference
+- 非激活态定义列表排版与缩写提示
+- HTML export 中 `dl` / `abbr` 语义输出
+
+验收：
+- 定义列表不会被普通段落 / 列表误识别
+- 缩写 definition 不作为普通正文重复渲染，active 时仍可编辑源码
+- HTML export 输出语义标签，round-trip 不重排 Markdown
+
+执行切片：
+- [ ] 定义语法子集和歧义处理规则
+- [ ] 实现 parser-owned block / inline metadata
+- [ ] 接入 editor-core / renderer / export
+- [ ] 补 parser、渲染和 export 回归测试
+
+### TASK-049 行内扩展标记
+
+状态：未开始
+依赖：`TASK-034`、`TASK-019`、`TASK-023`
+
+目标：扩展现有 inline AST，支持下标、上标、插入、标记、高亮和 emoji shortcode 等常见行内扩展，且所有失败情况回退为普通文本。
+
+主要落点：`packages/markdown-engine/src/parse-inline-ast.ts`、`packages/editor-core/src/decorations/inline-decorations.ts`、`src/renderer/export-html.ts`。
+
+交付物：
+- inline AST 新节点与 source range
+- 非激活态行内预览装饰
+- HTML export 语义输出
+- 未闭合 / 嵌套冲突时的 plain text fallback
+
+验收：
+- 新行内标记与现有 bold / italic / code / strikethrough 可组合
+- active 行仍完整恢复 Markdown 源码
+- 不完整标记不生成错误 DOM，不影响 caret 和 IME
+- HTML export 与 editor preview 使用同一 AST
+
+执行切片：
+- [ ] 逐个确认行内扩展语法子集和优先级
+- [ ] 扩展 inline AST 与 parser 测试
+- [ ] 接入 inactive decorations 与 export
+- [ ] 补嵌套、未闭合、IME 与 round-trip 回归
+
+### TASK-050 导出 HTML 标题锚点与目录
+
+状态：未开始
+依赖：`TASK-017`、`TASK-019`、`TASK-023`
+
+目标：在 HTML export 中生成稳定 heading id 与可选目录，不改变编辑器正文显示或 Markdown 源码。
+
+主要落点：`src/renderer/export-html.ts`、`src/renderer/outline.ts`、`packages/markdown-engine/src/`、导出测试。
+
+交付物：
+- heading slug 生成与重复标题去重
+- HTML export heading anchor
+- 可选 TOC 输出策略
+- 与当前 outline 数据来源的共享或明确分层
+
+验收：
+- 重复标题生成稳定且唯一的 id
+- 导出目录顺序与文档标题结构一致
+- 编辑器正文不新增锚点控件，不改变 Markdown 文本
+- HTML export 回归通过
+
+执行切片：
+- [ ] 定义 slug 规则和重复标题去重策略
+- [ ] 复用或抽取 outline heading model
+- [ ] 接入 HTML export heading anchor / TOC
+- [ ] 补导出测试和文档说明
+
+### TASK-051 Mermaid / diagram code fence 渲染
+
+状态：未开始
+备注：2026-06-02 已恢复正式任务正文；本轮不实现 Mermaid renderer，后续实现仍按本任务验收切片推进。
+依赖：`TASK-033`、`TASK-019`、`TASK-023`
+
+目标：对 ```` ```mermaid ```` / diagram 类代码围栏提供安全预览与静态导出，禁止引入不受控脚本执行通道；失败时回退为源码 / 代码块显示。
+
+主要落点：`packages/markdown-engine/src/code-block.ts`、`packages/editor-core/src/decorations/`、`src/renderer/code-editor.ts`、`src/renderer/export-html.ts`、性能预算测试。
+
+交付物：
+- fenced code block info string 识别为 diagram preview candidate
+- Mermaid renderer 的安全沙箱、按需加载与错误边界
+- 非激活态 diagram 预览，active code fence 保持源码可编辑
+- HTML export 的静态 SVG / fallback 输出策略
+- 大文档与多 diagram 场景的渲染节流
+
+验收：
+- `mermaid` fence 可以在非激活态预览，active 后完整恢复 fence 源码
+- Mermaid 语法错误不会崩溃 editor，也不会吞掉原始代码块文本
+- renderer 不暴露任意脚本执行或 Node 能力
+- HTML export 在无运行时脚本的情况下可读，或明确输出安全 fallback
+- 渲染依赖不破坏首屏 bundle 预算，长文档滚动不明显卡顿
+
+执行切片：
+- [ ] 明确 Mermaid 安全沙箱、按需加载、静态导出与错误回退策略
+- [ ] 将 diagram fence candidate 收敛到 parser / code fence metadata
+- [ ] 接入 renderer 预览、active source restore 和渲染节流
+- [ ] 接入 HTML export、性能预算与错误回归测试
+
+---
+
 ## Epic 11：Typora-like 编辑对齐
 
 > 设计来源：`docs/plans/typora-like-editor/2026-05-24-typora-editing-alignment-design.md`。本 Epic 只处理直接写作、光标、空白、换行、Backspace 和 Markdown 可编辑表面的对齐；图片、导出、主题和壳层不在本 Epic 内。
@@ -1360,3 +1563,40 @@
 - 普通文本 / HTML 粘贴不被图片 fallback 抢走
 - 目录选择通过受限 bridge 暴露，不向 renderer 暴露通用文件系统能力
 - `npm.cmd run test`、`npm.cmd run typecheck`、`npm.cmd run lint`、`npm.cmd run build` 均通过
+
+---
+
+## Epic 12：源码模式与视图切换
+
+### TASK-060 整篇源码模式
+
+状态：DEV_DONE
+依赖：`TASK-007`、`TASK-009`、`TASK-010`、`TASK-011`、`TASK-012`、`TASK-013`、`TASK-014`、`TASK-015`、`TASK-033`、`TASK-034`、`TASK-039`、`TASK-043`、`TASK-058`
+
+目标：提供 Typora 式整篇源码模式，让用户可以在当前 CodeMirror 编辑器中一键查看和编辑完整原始 Markdown；源码模式只是窗口级视图模式，不创建第二份文档真相，不改变保存、autosave、undo/redo 或导出语义。
+
+主要落点：`packages/editor-core/src/extensions/markdown.ts`、`packages/editor-core/src/decorations/`、`src/renderer/code-editor.ts`、`src/renderer/editor/App.tsx`、`src/renderer/editor/WorkspaceShell.tsx`、`src/renderer/styles/editor-source.css`、`src/renderer/app.autosave.test.ts`、`src/renderer/code-editor.test.ts`。
+
+交付物：
+- `wysiwym` / `source` 两种 editor view mode 的显式状态，状态由窗口级 `App.tsx` 持有，不写入 tab、workspace snapshot 或 Markdown 文件
+- 状态栏右侧增加 `</>` toggle button，点击切换源码模式；按钮使用 `aria-pressed` 表示当前状态，并避免抢走编辑器 selection / focus
+- 源码模式下关闭所有 Markdown preview / decoration：inactive block、inline replacement、图片 preview、表格 widget、任务列表 checkbox widget、引用块 rail、代码块高亮、未来数学 / Mermaid / 脚注 preview 都不显示
+- 源码模式下只保留可用文本编辑所需的基础样式：字体、字号、行高、caret、selection、前景色、背景色和滚动
+- 视图切换时保留当前文档、selection、scroll、dirty、autosave 和 undo/redo 链路
+- 多标签工作区下 view mode 的作用域规则：窗口级全局开关；当前窗口内切换标签后仍保持源码模式，直到用户再次点击 `</>` 关闭
+
+验收：
+- 状态栏显示 `</>` 按钮；有文档打开时点击按钮可在默认 WYSIWYM 与源码模式之间切换
+- 源码模式是窗口级：同一窗口内切换标签后仍保持当前 view mode；新窗口按默认 WYSIWYM 启动，除非后续任务明确持久化窗口偏好
+- 标题、链接、图片、表格、任务列表、引用块、代码块、分割线、行内格式在源码模式下全部显示原始 Markdown，不显示任何 Markdown preview 样式或 widget
+- 从源码模式切回默认 WYSIWYM 后，已有阅读态 / 编辑态和 active block 行为恢复
+- 切换源码模式不改写 `EditorState.doc`，不触发保存，不重置 undo history
+- 切换标签、打开文件、新建文件时不会把某个 tab 的内容同步到另一个 tab
+- HTML export、PDF export 规划和 Markdown 保存继续以原始 Markdown 为输入，不受视图模式影响
+- IME composition 期间不允许触发会破坏组合输入的装饰重建；若正在 composition，则延后切换或只更新外壳状态
+
+执行切片：
+- [x] 定义窗口级 editor view mode 状态、`</>` 状态栏入口和 focus / selection 保持规则
+- [x] 给 editor-core decoration 管线增加 source mode gate，禁用所有 Markdown preview decorations / widgets
+- [x] 接入 renderer 壳层入口、状态栏按钮样式和源码模式基础纯文本样式
+- [x] 补 renderer、editor-core、workspace 多标签、undo/redo 与 round-trip 回归测试

@@ -1,5 +1,6 @@
 import type {
   HeadingBlock,
+  FootnoteDefinition,
   InlineNode,
   InlineReferenceDefinition,
   InlineRoot,
@@ -40,6 +41,7 @@ export type EditorDerivedState = {
   activeBlockState: ActiveBlockState;
   tableCursor: TableCursorState | null;
   referenceDefinitions?: ReadonlyMap<string, InlineReferenceDefinition>;
+  footnoteDefinitions?: ReadonlyMap<string, FootnoteDefinition>;
   outlineHeadings: readonly EditorOutlineHeading[];
 };
 
@@ -76,6 +78,7 @@ export function createEditorDerivedState(
     activeBlockState,
     tableCursor,
     referenceDefinitions: markdownDocument.referenceDefinitions,
+    footnoteDefinitions: markdownDocument.footnoteDefinitions,
     outlineHeadings: createOutlineHeadings(markdownDocument)
   };
 }
@@ -108,6 +111,8 @@ function readInlineNode(node: InlineNode): string {
       return " ";
     case "codeSpan":
       return node.text;
+    case "footnoteReference":
+      return node.label;
     case "strong":
     case "emphasis":
     case "strikethrough":

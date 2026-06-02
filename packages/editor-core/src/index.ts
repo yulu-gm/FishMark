@@ -55,6 +55,10 @@ export {
 } from "./extensions/markdown-shortcuts";
 export {
   createFishMarkMarkdownExtensions,
+  DEFAULT_EDITOR_VIEW_MODE,
+  getMarkdownEditorViewMode,
   refreshMarkdownDecorations,
-  type CreateFishMarkMarkdownExtensionsOptions
+  setMarkdownEditorViewMode,
+  type CreateFishMarkMarkdownExtensionsOptions,
+  type EditorViewMode
 } from "./extensions";

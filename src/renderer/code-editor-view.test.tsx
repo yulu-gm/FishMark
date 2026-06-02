@@ -8,6 +8,7 @@ import { CodeEditorView, type CodeEditorHandle } from "./code-editor-view";
 
 const replaceDocumentMock = vi.fn<(content: string) => void>();
 const setDocumentPathMock = vi.fn<(documentPath: string | null) => void>();
+const setViewModeMock = vi.fn<(viewMode: "wysiwym" | "source") => void>();
 const focusMock = vi.fn<() => void>();
 const navigateToOffsetMock = vi.fn<(offset: number) => void>();
 const destroyMock = vi.fn<() => void>();
@@ -36,6 +37,7 @@ describe("CodeEditorView", () => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     replaceDocumentMock.mockReset();
     setDocumentPathMock.mockReset();
+    setViewModeMock.mockReset();
     destroyMock.mockReset();
     focusMock.mockReset();
     navigateToOffsetMock.mockReset();
@@ -54,6 +56,7 @@ describe("CodeEditorView", () => {
       getSelection: getSelectionMock,
       replaceDocument: replaceDocumentMock,
       setDocumentPath: setDocumentPathMock,
+      setViewMode: setViewModeMock,
       focus: focusMock,
       navigateToOffset: navigateToOffsetMock,
       pressEnter: pressEnterMock,
@@ -104,6 +107,41 @@ describe("CodeEditorView", () => {
     });
 
     expect(replaceDocumentMock).not.toHaveBeenCalled();
+  });
+
+  it("updates view mode through the existing controller without replacing content", async () => {
+    await act(async () => {
+      root.render(
+        createElement(CodeEditorView, {
+          initialContent: "# Initial\n",
+          documentPath: "D:/notes/initial.md",
+          loadRevision: 1,
+          viewMode: "wysiwym",
+          onChange: vi.fn()
+        })
+      );
+    });
+
+    replaceDocumentMock.mockClear();
+    setViewModeMock.mockClear();
+
+    await act(async () => {
+      root.render(
+        createElement(CodeEditorView, {
+          initialContent: "# Initial\n",
+          documentPath: "D:/notes/initial.md",
+          loadRevision: 1,
+          viewMode: "source",
+          onChange: vi.fn()
+        })
+      );
+    });
+
+    expect(setViewModeMock).toHaveBeenCalledWith("source");
+    expect(replaceDocumentMock).not.toHaveBeenCalled();
+    expect(container.querySelector(".document-editor")?.getAttribute("data-fishmark-editor-view-mode")).toBe(
+      "source"
+    );
   });
 
   it("replaces the editor document when a new document load revision arrives", async () => {

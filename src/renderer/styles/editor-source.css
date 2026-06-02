@@ -35,6 +35,24 @@
   caret-color: var(--fishmark-caret-color);
 }
 
+.document-editor[data-fishmark-editor-view-mode="source"] .cm-line,
+.document-editor[data-fishmark-editor-view-mode="source"] .cm-inactive-heading,
+.document-editor[data-fishmark-editor-view-mode="source"] .cm-active-heading,
+.document-editor[data-fishmark-editor-view-mode="source"] .cm-inactive-paragraph,
+.document-editor[data-fishmark-editor-view-mode="source"] .cm-active-paragraph {
+  font-size: var(--fishmark-document-font-size, var(--fishmark-editor-font-size));
+  font-weight: 400;
+  line-height: 1.85;
+  color: inherit;
+}
+
+.document-editor[data-fishmark-editor-view-mode="source"] .cm-inactive-inline-marker,
+.document-editor[data-fishmark-editor-view-mode="source"] .cm-active-inline-marker {
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
 .document-editor .cm-focused {
   outline: none;
 }

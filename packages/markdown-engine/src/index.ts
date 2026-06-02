@@ -1,5 +1,6 @@
 export type {
   BlockMap,
+  BlockMathBlock,
   BlockquoteBlock,
   BlockquoteMarker,
   CodeFenceBlock,
@@ -25,16 +26,22 @@ export type {
   InlineCodeSpan,
   InlineContainerNode,
   InlineEmphasis,
+  InlineFootnoteReference,
   InlineHardBreak,
   InlineImage,
   InlineLink,
   InlineMarker,
+  InlineMath,
   InlineNode,
   InlineReferenceDefinition,
   InlineRoot,
   InlineStrong,
   InlineStrikethrough,
-  InlineText
+  InlineText,
+  FootnoteDefinition,
+  FootnoteDefinitionBlockData,
+  FootnoteDefinitionContentLine,
+  FootnoteDefinitionStatus
 } from "./inline-ast";
 export { parseBlockquoteLinePrefix, type BlockquoteLinePrefix } from "./blockquote";
 export {
@@ -58,7 +65,7 @@ export {
   type TableColumnLayoutInput
 } from "./table-column-layout";
 export { normalizeReferenceIdentifier, parseInlineAst, type ParseInlineAstOptions } from "./parse-inline-ast";
-export { collectReferenceDefinitions, parseMarkdownDocument } from "./parse-markdown-document";
+export { collectFootnoteDefinitions, collectReferenceDefinitions, parseMarkdownDocument } from "./parse-markdown-document";
 export {
   createCanonicalTableModel,
   isTableDelimiterLine,

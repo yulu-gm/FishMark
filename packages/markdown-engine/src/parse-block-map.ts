@@ -1,7 +1,9 @@
 import { parse, postprocess, preprocess } from "micromark";
+import { math } from "micromark-extension-math";
 import type { Event, Token } from "micromark-util-types";
 
 import type {
+  BlockMathBlock,
   BlockMap,
   BlockquoteBlock,
   CodeFenceBlock,
@@ -58,6 +60,11 @@ export function parseTopLevelBlocks(source: string): MarkdownBlock[] {
         continue;
       }
 
+      if (token.type === "mathFlow") {
+        blocks.push(createBlockMathBlock(token, source));
+        continue;
+      }
+
       if (token.type === "codeIndented") {
         blocks.push(createIndentedCodeBlock(token));
         continue;
@@ -109,7 +116,7 @@ export function parseTopLevelBlocks(source: string): MarkdownBlock[] {
 }
 
 function parseEvents(source: string): Event[] {
-  return postprocess(parse().document().write(preprocess()(source, "utf8", true)));
+  return postprocess(parse({ extensions: [math({ singleDollarTextMath: true })] }).document().write(preprocess()(source, "utf8", true)));
 }
 
 function createHeadingBlock(token: Token, source: string): HeadingBlock {
@@ -167,6 +174,107 @@ function createIndentedCodeBlock(token: Token): CodeFenceBlock {
     kind: "indented",
     info: null
   };
+}
+
+function createBlockMathBlock(token: Token, source: string): BlockMathBlock {
+  const base = createBaseBlock("blockMath", token);
+  const lines = createLineInfos(source.slice(base.startOffset, base.endOffset), base.startOffset, base.startLine);
+  const openingLine = lines[0];
+  const openingMatch = openingLine ? /^([ \t]{0,3})(\${2,})[ \t]*$/u.exec(openingLine.text) : null;
+  const openingIndentLength = openingMatch?.[1]?.length ?? 0;
+  const openingMarkerLength = openingMatch?.[2]?.length ?? "$$".length;
+  const markerStartOffset = openingLine
+    ? openingLine.startOffset + openingIndentLength
+    : base.startOffset;
+  const markerEndOffset = markerStartOffset + openingMarkerLength;
+  const contentStartOffset = openingLine
+    ? skipLineBreak(source, openingLine.endOffset, base.endOffset)
+    : base.startOffset;
+  const closingLine = findClosingBlockMathLine(lines, contentStartOffset);
+  const closingMarkerStartOffset = closingLine ? closingLine.startOffset + getLeadingWhitespaceLength(closingLine.text) : null;
+  const closingMarkerLength = closingLine ? getBlockMathFenceLength(closingLine.text) : 0;
+  const closingMarkerEndOffset = closingMarkerStartOffset === null
+    ? null
+    : closingMarkerStartOffset + closingMarkerLength;
+  const contentEndOffset = closingLine
+    ? trimLineBreakBefore(source, contentStartOffset, closingLine.startOffset)
+    : trimTrailingLineBreak(source, contentStartOffset, base.endOffset);
+
+  return {
+    ...base,
+    markerStartOffset,
+    markerEndOffset,
+    closingMarkerStartOffset,
+    closingMarkerEndOffset,
+    contentStartOffset,
+    contentEndOffset,
+    value: source.slice(contentStartOffset, contentEndOffset),
+    closed: closingMarkerStartOffset !== null
+  };
+}
+
+function findClosingBlockMathLine(lines: readonly LineInfo[], contentStartOffset: number): LineInfo | null {
+  for (let index = lines.length - 1; index >= 1; index -= 1) {
+    const line = lines[index]!;
+
+    if (line.startOffset < contentStartOffset) {
+      continue;
+    }
+
+    if (/^[ \t]{0,3}\${2,}[ \t]*$/u.test(line.text)) {
+      return line;
+    }
+  }
+
+  return null;
+}
+
+function getLeadingWhitespaceLength(value: string): number {
+  return /^[ \t]*/u.exec(value)?.[0].length ?? 0;
+}
+
+function getBlockMathFenceLength(value: string): number {
+  return /\${2,}/u.exec(value)?.[0].length ?? "$$".length;
+}
+
+function skipLineBreak(source: string, startOffset: number, endOffset: number): number {
+  if (startOffset >= endOffset) {
+    return startOffset;
+  }
+
+  if (source[startOffset] === "\r" && source[startOffset + 1] === "\n") {
+    return Math.min(startOffset + 2, endOffset);
+  }
+
+  if (source[startOffset] === "\n") {
+    return Math.min(startOffset + 1, endOffset);
+  }
+
+  return startOffset;
+}
+
+function trimLineBreakBefore(source: string, startOffset: number, endOffset: number): number {
+  let cursor = endOffset;
+
+  if (cursor > startOffset && source[cursor - 1] === "\n") {
+    cursor -= 1;
+  }
+
+  if (cursor > startOffset && source[cursor - 1] === "\r") {
+    cursor -= 1;
+  }
+
+  return cursor;
+}
+
+function trimTrailingLineBreak(source: string, startOffset: number, endOffset: number): number {
+  let cursor = endOffset;
+
+  while (cursor > startOffset && (source[cursor - 1] === "\n" || source[cursor - 1] === "\r")) {
+    cursor -= 1;
+  }
+
+  return cursor;
 }
 
 function createDefinitionBlock(token: Token): DefinitionBlock {

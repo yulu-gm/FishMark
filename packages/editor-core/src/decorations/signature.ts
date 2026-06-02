@@ -61,8 +61,16 @@ export function createBlockDecorationSignature(block: MarkdownBlock): string {
     return `${block.type}:${block.id}:${block.info ?? ""}`;
   }
 
+  if (block.type === "blockMath") {
+    return `${block.type}:${block.id}:${block.startOffset}:${block.endOffset}:${block.contentStartOffset}:${block.contentEndOffset}:${block.closed}:${JSON.stringify(block.value)}`;
+  }
+
   if (block.type === "definition") {
-    return `${block.type}:${block.id}:${block.startOffset}:${block.endOffset}`;
+    const footnoteDefinition = block.footnoteDefinition;
+
+    return `${block.type}:${block.id}:${block.startOffset}:${block.endOffset}:${
+      footnoteDefinition ? `${footnoteDefinition.status}:${footnoteDefinition.identifier}` : "reference"
+    }`;
   }
 
   if (block.type === "htmlImage") {
@@ -125,6 +133,14 @@ function createInlineFingerprint(node: InlineASTNode): string {
       return `codeSpan(${node.startOffset}-${node.endOffset}:${formatMarker(node.openMarker)}:${formatMarker(
         node.closeMarker
       )}:${JSON.stringify(node.text)})`;
+    case "inlineMath":
+      return `inlineMath(${node.startOffset}-${node.endOffset}:${formatMarker(node.openMarker)}:${formatMarker(
+        node.closeMarker
+      )}:${JSON.stringify(node.value)})`;
+    case "footnoteReference":
+      return `footnoteReference(${node.startOffset}-${node.endOffset}:${formatMarker(
+        node.openMarker
+      )}:${formatMarker(node.closeMarker)}:${JSON.stringify(node.identifier)})`;
     case "strong":
     case "emphasis":
     case "strikethrough":

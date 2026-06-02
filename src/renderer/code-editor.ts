@@ -26,7 +26,9 @@ import {
   runTableInsertRowBelow,
   runTableSelectCell,
   runTableUpdateCell,
-  type ActiveBlockState
+  setMarkdownEditorViewMode,
+  type ActiveBlockState,
+  type EditorViewMode
 } from "@fishmark/editor-core";
 import { parseMarkdownDocument } from "@fishmark/markdown-engine";
 
@@ -41,6 +43,7 @@ export type CreateCodeEditorControllerOptions = {
   onActiveBlockChange?: (state: ActiveBlockState) => void;
   importClipboardImage?: (input: { documentPath: string | null }) => Promise<string | null>;
   openExternalLink?: (href: string) => void;
+  viewMode?: EditorViewMode;
 };
 
 export type CodeEditorController = {
@@ -54,6 +57,7 @@ export type CodeEditorController = {
   clearFindReplaceQuery: () => FindReplaceSnapshot;
   replaceDocument: (nextContent: string) => void;
   setDocumentPath: (nextDocumentPath: string | null) => void;
+  setViewMode: (nextMode: EditorViewMode) => void;
   focus: () => void;
   navigateToOffset: (offset: number) => void;
   insertText: (text: string) => void;
@@ -89,6 +93,7 @@ export function createCodeEditorController(
   options: CreateCodeEditorControllerOptions
 ): CodeEditorController {
   let currentDocumentPath = options.documentPath ?? null;
+  let currentViewMode = options.viewMode ?? "wysiwym";
   let isDestroyed = false;
   let activeBlockState: ActiveBlockState = {
     blockMap: parseMarkdownDocument(""),
@@ -113,7 +118,8 @@ export function createCodeEditorController(
           },
           resolveImagePreviewUrl: (href) => resolveImagePreviewUrl(currentDocumentPath, href),
           onOpenLink: (href) => options.openExternalLink?.(href),
-          onBlur: options.onBlur
+          onBlur: options.onBlur,
+          viewMode: currentViewMode
         }),
         search({
           createPanel: () => {
@@ -314,6 +320,10 @@ export function createCodeEditorController(
     setDocumentPath(nextDocumentPath: string | null) {
       currentDocumentPath = nextDocumentPath;
       refreshMarkdownDecorations(view);
+    },
+    setViewMode(nextMode: EditorViewMode) {
+      currentViewMode = nextMode;
+      setMarkdownEditorViewMode(view, nextMode);
     },
     focus() {
       view.focus();

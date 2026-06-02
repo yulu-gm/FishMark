@@ -99,6 +99,7 @@ function collectHiddenRanges(node: InlineASTNode, ranges: HiddenRange[]): void {
     case "hardBreak":
       return;
     case "codeSpan":
+    case "footnoteReference":
       ranges.push(
         { start: node.openMarker.startOffset, end: node.openMarker.endOffset },
         { start: node.closeMarker.startOffset, end: node.closeMarker.endOffset }

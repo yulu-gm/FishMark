@@ -60,6 +60,8 @@ export function normalizeHiddenInlineAnchor(
       case "hardBreak":
         return null;
       case "codeSpan":
+      case "inlineMath":
+      case "footnoteReference":
         return (
           normalizeHiddenOpenMarkerAnchor(anchor, node.openMarker.startOffset, node.openMarker.endOffset, direction) ??
           normalizeHiddenCloseMarkerAnchor(anchor, node.closeMarker.startOffset, node.closeMarker.endOffset, direction)

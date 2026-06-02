@@ -1,4 +1,4 @@
-import type { InlineRoot } from "./inline-ast";
+import type { FootnoteDefinitionBlockData, InlineRoot } from "./inline-ast";
 import type { CodeBlockKind } from "./code-block";
 
 export interface BlockquoteMarker {
@@ -28,6 +28,7 @@ export interface BaseBlock {
     | "list"
     | "blockquote"
     | "codeFence"
+    | "blockMath"
     | "definition"
     | "thematicBreak"
     | "htmlImage"
@@ -103,8 +104,21 @@ export interface CodeFenceBlock extends BaseBlock {
   info: string | null;
 }
 
+export interface BlockMathBlock extends BaseBlock {
+  type: "blockMath";
+  markerStartOffset: number;
+  markerEndOffset: number;
+  closingMarkerStartOffset: number | null;
+  closingMarkerEndOffset: number | null;
+  contentStartOffset: number;
+  contentEndOffset: number;
+  value: string;
+  closed: boolean;
+}
+
 export interface DefinitionBlock extends BaseBlock {
   type: "definition";
+  footnoteDefinition?: FootnoteDefinitionBlockData;
 }
 
 export interface ThematicBreakBlock extends BaseBlock {
@@ -155,6 +169,7 @@ export type MarkdownBlock =
   | ListBlock
   | BlockquoteBlock
   | CodeFenceBlock
+  | BlockMathBlock
   | DefinitionBlock
   | ThematicBreakBlock
   | HtmlImageBlock

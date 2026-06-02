@@ -218,6 +218,8 @@ function appendActiveInlineImageDecorations(
     case "text":
     case "hardBreak":
     case "codeSpan":
+    case "inlineMath":
+    case "footnoteReference":
       return;
   }
 }
@@ -234,6 +236,10 @@ function readInlineNodeText(node: InlineNode): string {
       return "\n";
     case "codeSpan":
       return node.text;
+    case "inlineMath":
+      return node.value;
+    case "footnoteReference":
+      return node.label;
     case "strong":
     case "emphasis":
     case "strikethrough":

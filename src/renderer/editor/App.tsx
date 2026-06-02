@@ -12,6 +12,7 @@ import {
   DEFAULT_TEXT_SHORTCUT_GROUP,
   TABLE_EDITING_SHORTCUT_GROUP,
   type ActiveBlockState,
+  type EditorViewMode,
   type ShortcutGroup,
   type ShortcutGroupId
 } from "@fishmark/editor-core";
@@ -227,6 +228,7 @@ function EditorShell({
   const [isOutlineOpen, setIsOutlineOpen] = useState(false);
   const [isOutlineClosing, setIsOutlineClosing] = useState(false);
   const [shellMode, setShellMode] = useState<ShellMode>("reading");
+  const [editorViewMode, setEditorViewMode] = useState<EditorViewMode>("wysiwym");
   const [preferences, setPreferences] = useState<Preferences>(DEFAULT_PREFERENCES);
   const [recentFiles, setRecentFiles] = useState<RecentFilesSnapshot>(DEFAULT_RECENT_FILES_SNAPSHOT);
   const [fontFamilies, setFontFamilies] = useState<string[]>([]);
@@ -1508,6 +1510,7 @@ function EditorShell({
         editorContainerRef={editorContainerRef}
         editorLoadRevision={state.editorLoadRevision}
         editorRef={editorRef}
+        editorViewMode={editorViewMode}
         externalFileConflictMessage={externalFileConflictMessage}
         externalFileState={externalConflictController.externalFileState}
         fishmarkPlatform={fishmark.platform}
@@ -1546,6 +1549,7 @@ function EditorShell({
         onDismissExternalFileConflict={externalConflictController.dismissConflict}
         onDraftChange={handleEditorContentChange}
         onEditorBlur={handleEditorBlurFromShell}
+        onEditorViewModeChange={setEditorViewMode}
         onImportClipboardImage={handleImportClipboardImage}
         onOpenExternalLink={(href) => {
           void handleOpenExternalLink(href);

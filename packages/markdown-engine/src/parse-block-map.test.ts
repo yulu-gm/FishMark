@@ -910,6 +910,74 @@ describe("parseBlockMap", () => {
     );
   });
 
+  it("captures top-level block math with marker and content ranges", () => {
+    const source = ["Before", "", "$$", "a + b", "$$", "", "After"].join("\n");
+    const result = parseBlockMap(source);
+
+    expect(result.blocks).toMatchObject([
+      {
+        id: "paragraph:0-6",
+        type: "paragraph",
+        startOffset: 0,
+        endOffset: 6,
+        startLine: 1,
+        endLine: 1
+      },
+      {
+        id: "blockMath:8-19",
+        type: "blockMath",
+        startOffset: 8,
+        endOffset: 19,
+        startLine: 3,
+        endLine: 5,
+        markerStartOffset: 8,
+        markerEndOffset: 10,
+        closingMarkerStartOffset: 17,
+        closingMarkerEndOffset: 19,
+        contentStartOffset: 11,
+        contentEndOffset: 16,
+        value: "a + b",
+        closed: true
+      },
+      {
+        id: "paragraph:21-26",
+        type: "paragraph",
+        startOffset: 21,
+        endOffset: 26,
+        startLine: 7,
+        endLine: 7
+      }
+    ]);
+  });
+
+  it("keeps unclosed block math as a recoverable block and ignores math fences inside code", () => {
+    const unclosed = ["$$", "a + b"].join("\n");
+    const code = ["```md", "$$", "a + b", "$$", "```"].join("\n");
+
+    expect(parseBlockMap(unclosed).blocks).toMatchObject([
+      {
+        type: "blockMath",
+        startOffset: 0,
+        endOffset: unclosed.length,
+        markerStartOffset: 0,
+        markerEndOffset: 2,
+        closingMarkerStartOffset: null,
+        closingMarkerEndOffset: null,
+        contentStartOffset: 3,
+        contentEndOffset: unclosed.length,
+        value: "a + b",
+        closed: false
+      }
+    ]);
+    expect(parseBlockMap(code).blocks).toMatchObject([
+      {
+        type: "codeFence",
+        startOffset: 0,
+        endOffset: code.length
+      }
+    ]);
+  });
+
   it("captures thematic breaks for both CommonMark dashes and FishMark plus separators", () => {
     const source = ["Paragraph", "", "---", "", "+++", "", "After"].join("\n");
     const result = parseBlockMap(source);

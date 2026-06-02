@@ -566,6 +566,66 @@
 - 光标回到链接所在 block 后，完整 Markdown 源码恢复并可继续编辑。
 - renderer 不直接获得 Node shell 能力；main 进程只允许 `http:` / `https:` / `mailto:` 外部链接协议。
 
+### TC-045-FOOTNOTE 脚注语法
+
+步骤：
+1. 输入包含有效脚注、未定义脚注和重复定义的 Markdown，例如：
+   ```markdown
+   Paragraph with a footnote[^note] and missing[^missing].
+
+   [^note]: Footnote **body**
+   [^note]: duplicate
+   ```
+2. 再输入一个围栏代码块，代码块内容包含 `[^code]: not a footnote`。
+3. 把光标移动到普通段落之外，观察非激活态脚注引用和脚注定义。
+4. 点击脚注引用所在段落，再点击脚注定义所在行，观察源码态恢复。
+5. 点击状态栏 `</>` 切换到整篇源码模式，再切回默认 WYSIWYM。
+6. 导出 HTML。
+7. 如需自动化回归，运行 `npm.cmd run test -- packages/markdown-engine/src/parse-inline-ast.test.ts packages/markdown-engine/src/parse-markdown-document.test.ts packages/editor-core/src/decorations/block-decorations.test.ts src/renderer/code-editor.test.ts src/renderer/export-html.test.ts`。
+
+预期：
+- 有效 `[^note]` 只在存在唯一有效 `[^note]:` 定义时渲染为脚注引用。
+- 脚注引用所在 block active 后立即恢复完整 Markdown 源码，可直接编辑 `[^note]`。
+- 有效脚注定义在非激活态显示为脚注定义阅读态，active 后恢复 `[^note]: Footnote **body**`。
+- 未定义引用、重复定义和 malformed 定义保持源码文本，不被静默删除、合并或重写。
+- 代码块、列表子块或引用块里的脚注形态文本不会被提升成文档级脚注定义。
+- 源码模式下脚注引用和定义全部显示原始 Markdown，不显示脚注 preview decoration。
+- HTML 导出包含脚注区域和反向链接，且不会改变 Markdown 保存目标或 dirty 状态。
+
+### TC-046-MATH 数学公式语法
+
+步骤：
+1. 输入包含行内公式、块级公式、坏公式、货币文本、转义美元符号和代码内容的 Markdown，例如：
+   ~~~markdown
+   Inline $x^2$ and escaped \$x$.
+
+   $$
+   a + b
+   $$
+
+   Price is $5 and $6.
+
+   `$not_math$`
+
+   ```tex
+   $not_math_either$
+   ```
+   ~~~
+2. 把光标移动到公式之外，观察非激活态公式预览。
+3. 点击行内公式所在段落和块级公式所在块，确认源码态恢复。
+4. 点击状态栏 `</>` 切换到整篇源码模式，再切回默认 WYSIWYM。
+5. 导出 HTML。
+6. 如需自动化回归，运行 `npm.cmd run test -- packages/markdown-engine/src/parse-inline-ast.test.ts packages/markdown-engine/src/parse-block-map.test.ts packages/markdown-engine/src/parse-markdown-document.test.ts packages/editor-core/src/decorations/block-decorations.test.ts src/renderer/code-editor.test.ts src/renderer/export-html.test.ts src/main/analyze-renderer-bundle.test.ts src/main/editor-math-preview-assets.test.ts`，并运行 `npm.cmd run perf:bundle`。
+
+预期：
+- `$x^2$` 解析为 parser-owned inline math，`$$...$$` 解析为 parser-owned block math。
+- 未闭合 `$`、货币文本、转义 `\$`、code span 和 code fence 内的 `$` 保持普通文本或原代码内容。
+- 非激活态公式使用 KaTeX 预览，并随预览按需加载 KaTeX CSS / font assets；公式渲染失败时显示源码 fallback，不阻塞输入。
+- active 公式所在行 / 块恢复完整 Markdown 源码并可直接编辑。
+- 源码模式下不显示公式 preview widget，全部显示原始 Markdown。
+- HTML 导出包含 KaTeX `renderToString` 生成的 MathML 与内联基础 CSS，不残留 `fonts/...` 等外部资源 URL，可作为单文件离线阅读；导出不改变 Markdown 保存目标或 dirty 状态。
+- `perf:bundle` 必须显示 `katex` 是 lazy chunk，且 `forbiddenInitialSourceGroup:katex` 通过。
+
 ### TC-018-SEARCH 查找替换
 
 步骤：
@@ -585,6 +645,26 @@
 - `Replace` 只替换当前匹配，`All` 替换剩余全部匹配。
 - 替换操作进入 CodeMirror history，撤销 / 重做保持自然，不触发整篇 Markdown 重排。
 - 查找替换面板只通过 renderer 的 CodeMirror 控制器工作，不新增 main/preload 文件或 Node 能力暴露。
+
+### TC-060-SOURCE 整篇源码模式
+
+步骤：
+1. 打开一个包含标题、链接、图片、表格、任务列表、引用块、代码块、分割线和行内格式的 Markdown 文档。
+2. 确认默认视图仍显示现有 WYSIWYM 阅读 / 编辑效果。
+3. 在状态栏点击 `</>` 按钮。
+4. 观察正文所有 Markdown 语法是否以原始源码显示。
+5. 在源码模式下移动光标、输入文本，并按 `Ctrl/Cmd+Z` 撤销。
+6. 切换到同一窗口中的其他标签页，再切回当前标签页。
+7. 再次点击 `</>` 按钮切回默认 WYSIWYM。
+8. 导出 HTML 或保存当前 Markdown 文件。
+
+预期：
+- `</>` 按钮使用 `aria-pressed` 表示源码模式状态。
+- 源码模式是当前窗口级开关，同一窗口切换标签后仍保持当前 view mode。
+- 标题、链接、图片、表格、任务列表、引用块、代码块、分割线和行内格式全部显示原始 Markdown，不显示 preview widget、隐藏 marker、任务 checkbox widget、表格 widget 或代码高亮。
+- 切换源码模式不改写 Markdown 文本，不触发保存，不重置 undo / redo。
+- 切回默认 WYSIWYM 后，已有阅读态、编辑态和 active block 行为恢复。
+- 保存和 HTML export 仍以原始 Markdown 为输入，不受 view mode 影响。
 
 ### TC-040 大纲侧栏
 

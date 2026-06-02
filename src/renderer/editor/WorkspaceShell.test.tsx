@@ -13,13 +13,17 @@ import { WorkspaceShell } from "./WorkspaceShell";
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock("../code-editor-view", () => ({
-  CodeEditorView: ({ initialContent, onChange }: {
+  CodeEditorView: ({ initialContent, onChange, viewMode }: {
     initialContent: string;
     onChange: (content: string) => void;
+    viewMode?: "wysiwym" | "source";
   }) =>
     createElement(
       "div",
-      null,
+      {
+        "data-testid": "mock-code-editor",
+        "data-view-mode": viewMode ?? "wysiwym"
+      },
       createElement("textarea", {
         "aria-label": "Markdown editor",
         defaultValue: initialContent,
@@ -85,6 +89,7 @@ it("renders workspace tabs and delegates commands without owning persistence log
   const onTabActivate = vi.fn();
   const onDraftChange = vi.fn();
   const onNavigateToOutlineItem = vi.fn();
+  const onEditorViewModeChange = vi.fn();
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -159,6 +164,7 @@ it("renders workspace tabs and delegates commands without owning persistence log
         titlebarHeight: 0,
         activeHeadingId: null,
         editorLoadRevision: 1,
+        editorViewMode: "wysiwym",
         editorRef: { current: null },
         editorContainerRef: { current: null },
         settingsEntryRef: { current: null },
@@ -190,6 +196,7 @@ it("renders workspace tabs and delegates commands without owning persistence log
         onCloseSettingsDrawer: vi.fn(),
         onCloseWorkspaceTab: vi.fn(),
         onEditorBlur: vi.fn(),
+        onEditorViewModeChange,
         onImportClipboardImage: vi.fn(),
         onOpenExternalLink: vi.fn(),
         onInsertTableColumnLeft: vi.fn(),
@@ -237,9 +244,24 @@ it("renders workspace tabs and delegates commands without owning persistence log
     buttons.find((button) => button.textContent === "A heading")?.click();
   });
 
+  const viewModeToggle = container.querySelector<HTMLButtonElement>(
+    '[aria-label="Switch to source mode"]'
+  );
+
+  expect(viewModeToggle).not.toBeNull();
+  expect(viewModeToggle?.textContent).toBe("</>");
+  expect(viewModeToggle?.getAttribute("aria-pressed")).toBe("false");
+  expect(container.querySelector('[data-testid="mock-code-editor"]')?.getAttribute("data-view-mode"))
+    .toBe("wysiwym");
+
+  await act(async () => {
+    viewModeToggle?.click();
+  });
+
   expect(onTabActivate).toHaveBeenCalledWith("tab-2");
   expect(onDraftChange).toHaveBeenCalledWith("# Changed\n");
   expect(onNavigateToOutlineItem).toHaveBeenCalledWith(3);
+  expect(onEditorViewModeChange).toHaveBeenCalledWith("source");
   expect(container.querySelector('[data-fishmark-region="workspace-header"]')).toBeNull();
   expect(container.querySelector('[data-fishmark-region="workspace-tab"]')?.getAttribute("title"))
     .toBe("C:/note.md");
@@ -325,6 +347,7 @@ it("opens find and replace controls and delegates search actions to the editor",
         titlebarHeight: 0,
         activeHeadingId: null,
         editorLoadRevision: 1,
+        editorViewMode: "wysiwym",
         editorRef: {
           current: {
             getContent: vi.fn(),
@@ -349,6 +372,7 @@ it("opens find and replace controls and delegates search actions to the editor",
             pressTab: vi.fn(),
             pressArrowUp: vi.fn(),
             pressArrowDown: vi.fn(),
+            setViewMode: vi.fn(),
             updateFindReplaceQuery,
             findNextMatch,
             findPreviousMatch: vi.fn(),
@@ -387,6 +411,7 @@ it("opens find and replace controls and delegates search actions to the editor",
         onCloseSettingsDrawer: vi.fn(),
         onCloseWorkspaceTab: vi.fn(),
         onEditorBlur: vi.fn(),
+        onEditorViewModeChange: vi.fn(),
         onImportClipboardImage: vi.fn(),
         onOpenExternalLink: vi.fn(),
         onInsertTableColumnLeft: vi.fn(),
@@ -530,6 +555,7 @@ it("renders recent files without the old empty headline and delegates open and c
         titlebarHeight: 0,
         activeHeadingId: null,
         editorLoadRevision: 1,
+        editorViewMode: "wysiwym",
         editorRef: { current: null },
         editorContainerRef: { current: null },
         settingsEntryRef: { current: null },
@@ -561,6 +587,7 @@ it("renders recent files without the old empty headline and delegates open and c
         onCloseSettingsDrawer: vi.fn(),
         onCloseWorkspaceTab: vi.fn(),
         onEditorBlur: vi.fn(),
+        onEditorViewModeChange: vi.fn(),
         onImportClipboardImage: vi.fn(),
         onOpenExternalLink: vi.fn(),
         onInsertTableColumnLeft: vi.fn(),

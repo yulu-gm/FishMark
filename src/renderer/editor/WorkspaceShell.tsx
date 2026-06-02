@@ -16,6 +16,7 @@ import {
   DEFAULT_TEXT_SHORTCUT_GROUP,
   formatShortcutHintKey,
   type ActiveBlockState,
+  type EditorViewMode,
   type ShortcutGroup
 } from "@fishmark/editor-core";
 import type { AppNotification } from "../../shared/app-update";
@@ -169,6 +170,7 @@ export type WorkspaceShellProps = {
   editorContainerRef: RefObject<HTMLDivElement | null>;
   editorLoadRevision: number;
   editorRef: RefObject<CodeEditorHandle | null>;
+  editorViewMode: EditorViewMode;
   externalFileConflictMessage: string;
   externalFileState: ExternalMarkdownFileState;
   fishmarkPlatform: NodeJS.Platform;
@@ -205,6 +207,7 @@ export type WorkspaceShellProps = {
   onDismissExternalFileConflict: () => void;
   onDraftChange: (content: string) => void;
   onEditorBlur: () => void;
+  onEditorViewModeChange: (mode: EditorViewMode) => void;
   onImportClipboardImage: (input: { documentPath: string | null }) => Promise<string | null>;
   onOpenExternalLink: (href: string) => void;
   onInsertTableColumnLeft: () => void;
@@ -320,6 +323,7 @@ export function WorkspaceShell({
   editorContainerRef,
   editorLoadRevision,
   editorRef,
+  editorViewMode,
   externalFileConflictMessage,
   externalFileState,
   fishmarkPlatform,
@@ -360,6 +364,7 @@ export function WorkspaceShell({
   onDismissExternalFileConflict,
   onDraftChange,
   onEditorBlur,
+  onEditorViewModeChange,
   onImportClipboardImage,
   onInsertTableColumnLeft,
   onInsertTableColumnRight,
@@ -388,6 +393,7 @@ export function WorkspaceShell({
   const activeDocument = workspaceSnapshot?.activeDocument ?? null;
   const workspaceTabs = workspaceSnapshot?.tabs ?? [];
   const activeTabId = workspaceSnapshot?.activeTabId ?? null;
+  const nextEditorViewMode: EditorViewMode = editorViewMode === "source" ? "wysiwym" : "source";
   const [isFindReplaceOpen, setIsFindReplaceOpen] = useState(false);
   const [findReplaceTabId, setFindReplaceTabId] = useState<string | null>(null);
   const [findText, setFindText] = useState("");
@@ -956,6 +962,7 @@ export function WorkspaceShell({
                       loadRevision={editorLoadRevision}
                       importClipboardImage={onImportClipboardImage}
                       openExternalLink={onOpenExternalLink}
+                      viewMode={editorViewMode}
                       onActiveBlockChange={onActiveBlockChange}
                       onChange={onDraftChange}
                       onBlur={onEditorBlur}
@@ -1138,6 +1145,25 @@ export function WorkspaceShell({
                   <p className="document-word-count">
                     字数 {currentDocumentMetrics?.meaningfulCharacterCount ?? 0}
                   </p>
+                  <button
+                    type="button"
+                    className="editor-view-mode-toggle"
+                    aria-label={
+                      editorViewMode === "source"
+                        ? "Switch to WYSIWYM mode"
+                        : "Switch to source mode"
+                    }
+                    aria-pressed={editorViewMode === "source"}
+                    title={
+                      editorViewMode === "source"
+                        ? "Switch to WYSIWYM mode"
+                        : "Switch to source mode"
+                    }
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => onEditorViewModeChange(nextEditorViewMode)}
+                  >
+                    &lt;/&gt;
+                  </button>
                 </>
               ) : (
                 <>

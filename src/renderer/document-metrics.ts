@@ -54,6 +54,8 @@ function collectBlockReadableText(
         .join("\n");
     case "codeFence":
       return collectCodeFenceReadableText(block, source);
+    case "blockMath":
+      return block.value;
     case "htmlImage":
       return block.alt;
     case "definition":
@@ -98,6 +100,10 @@ function collectInlineNodeReadableText(node: InlineNode): string {
       return "\n";
     case "codeSpan":
       return node.text;
+    case "inlineMath":
+      return node.value;
+    case "footnoteReference":
+      return node.label;
     case "strong":
     case "emphasis":
     case "strikethrough":

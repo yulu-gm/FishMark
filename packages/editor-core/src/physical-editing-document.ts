@@ -26,6 +26,8 @@ export type SemanticLineRole =
   | "blockquote"
   | "code-fence-boundary"
   | "code-fence-content"
+  | "math-block-boundary"
+  | "math-block-content"
   | "table-source"
   | "thematic-break"
   | "definition"
@@ -216,6 +218,10 @@ function resolveSemanticLineRole(
       return line.number === block.startLine || isCodeFenceClosingLine(line, block, lines)
         ? "code-fence-boundary"
         : "code-fence-content";
+    case "blockMath":
+      return line.number === block.startLine || (block.closed && line.number === block.endLine)
+        ? "math-block-boundary"
+        : "math-block-content";
     case "definition":
       return "definition";
     case "thematicBreak":

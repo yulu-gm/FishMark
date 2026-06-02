@@ -4,6 +4,12 @@ export {
   type CreateFishMarkMarkdownExtensionsOptions
 } from "./markdown";
 export {
+  DEFAULT_EDITOR_VIEW_MODE,
+  getMarkdownEditorViewMode,
+  setMarkdownEditorViewMode,
+  type EditorViewMode
+} from "../editor-view-mode";
+export {
   createTextEditingShortcutKeymap,
   formatShortcutHintKey,
   TEXT_EDITING_SHORTCUTS,

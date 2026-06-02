@@ -8,6 +8,7 @@ import {
   type EditorDerivedState
 } from "./editor-derived-state";
 import type { MarkdownDocumentCache } from "./markdown-document-cache";
+import type { EditorViewMode } from "../editor-view-mode";
 
 export type DeriveInactiveBlockDecorationsStateOptions = {
   source: string;
@@ -19,6 +20,7 @@ export type DeriveInactiveBlockDecorationsStateOptions = {
   resolveImagePreviewUrl?: (href: string | null) => string | null;
   tableWidgetCallbacks?: TableWidgetCallbacks | null;
   previousTableCursor?: TableCursorState | null;
+  viewMode?: EditorViewMode;
 };
 
 export type InactiveBlockDecorationsDerivedState = {
@@ -52,8 +54,10 @@ export function deriveInactiveBlockDecorationsState(
     hasEditorFocus: options.hasEditorFocus,
     source: options.source,
     referenceDefinitions: editorDerivedState.referenceDefinitions,
+    footnoteDefinitions: editorDerivedState.footnoteDefinitions,
     resolveImagePreviewUrl: options.resolveImagePreviewUrl,
-    tableWidgetCallbacks: options.tableWidgetCallbacks
+    tableWidgetCallbacks: options.tableWidgetCallbacks,
+    viewMode: options.viewMode
   });
 
   return {

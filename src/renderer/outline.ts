@@ -37,6 +37,8 @@ function readInlineNode(node: InlineNode): string {
       return " ";
     case "codeSpan":
       return node.text;
+    case "footnoteReference":
+      return node.label;
     case "strong":
     case "emphasis":
     case "strikethrough":

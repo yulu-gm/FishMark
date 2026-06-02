@@ -2,8 +2,11 @@ import { Decoration, WidgetType, type DecorationSet } from "@codemirror/view";
 import { type Range } from "@codemirror/state";
 
 import {
+  collectFootnoteDefinitions,
   collectReferenceDefinitions,
   parseInlineAst,
+  type FootnoteDefinition,
+  type DefinitionBlock,
   type ListItemBlock,
   type InlineReferenceDefinition
 } from "@fishmark/markdown-engine";
@@ -26,6 +29,7 @@ import {
   getInactiveHeadingMarkerEnd
 } from "./signature";
 import { createTableWidgetDecoration, type TableWidgetCallbacks } from "./table-widget";
+import { createInactiveBlockMathPreviewDecoration } from "./math-widgets";
 import {
   createLineInfosInRange,
   resolveLineStartOffset,
@@ -38,6 +42,7 @@ import {
   type PhysicalEditingDocument,
   type SemanticLineRole
 } from "../physical-editing-document";
+import type { EditorViewMode } from "../editor-view-mode";
 
 export type CreateBlockDecorationsOptions = {
   activeBlockState: ActiveBlockState;
@@ -46,9 +51,11 @@ export type CreateBlockDecorationsOptions = {
   hasEditorFocus: boolean;
   source: string;
   referenceDefinitions?: ReadonlyMap<string, InlineReferenceDefinition>;
+  footnoteDefinitions?: ReadonlyMap<string, FootnoteDefinition>;
   collectReferenceDefinitionsWhenMissing?: boolean;
   resolveImagePreviewUrl?: (href: string | null) => string | null;
   tableWidgetCallbacks?: TableWidgetCallbacks | null;
+  viewMode?: EditorViewMode;
 };
 
 export type BlockDecorationsResult = {
@@ -81,8 +88,10 @@ type BlockDecorationContext = {
   hasEditorFocus: boolean;
   source: string;
   referenceDefinitions?: ReadonlyMap<string, InlineReferenceDefinition>;
+  footnoteDefinitions?: ReadonlyMap<string, FootnoteDefinition>;
   resolveImagePreviewUrl?: (href: string | null) => string | null;
   tableWidgetCallbacks?: TableWidgetCallbacks | null;
+  viewMode: EditorViewMode;
 };
 
 export function createBlockDecorations(
@@ -95,6 +104,14 @@ export function createBlockDecorations(
   ];
 
   appendPhysicalLineDecorations(context, ranges);
+
+  if (context.viewMode === "source") {
+    return {
+      decorationSet: Decoration.set(ranges, true),
+      signature: signatures.join("|")
+    };
+  }
+
   appendInactiveBlankLineDecorations(
     context.source,
     context.activeBlockState.blockMap.blocks,
@@ -145,9 +162,11 @@ export function createSelectionScopedBlockDecorations(
       hasEditorFocus: options.hasEditorFocus,
       source: options.source,
       referenceDefinitions: options.referenceDefinitions,
+      footnoteDefinitions: options.footnoteDefinitions,
       collectReferenceDefinitionsWhenMissing: false,
       resolveImagePreviewUrl: options.resolveImagePreviewUrl,
-      tableWidgetCallbacks: options.tableWidgetCallbacks
+      tableWidgetCallbacks: options.tableWidgetCallbacks,
+      viewMode: options.viewMode
     });
 
     return {
@@ -160,6 +179,14 @@ export function createSelectionScopedBlockDecorations(
     options.previousActiveBlockState,
     options.activeBlockState
   );
+
+  if (context.viewMode === "source") {
+    return {
+      decorationSet: options.baseDecorationSet,
+      signature: createScopedSelectionSignature(context),
+      didUpdateDecorations: false
+    };
+  }
 
   if (affectedBlocks.length === 0) {
     return {
@@ -200,6 +227,7 @@ function createBlockDecorationContext(
     hasEditorFocus,
     source,
     referenceDefinitions: providedReferenceDefinitions,
+    footnoteDefinitions: providedFootnoteDefinitions,
     resolveImagePreviewUrl,
     tableWidgetCallbacks
   } = options;
@@ -226,7 +254,11 @@ function createBlockDecorationContext(
     : null;
   const shouldCollectReferenceDefinitions = options.collectReferenceDefinitionsWhenMissing !== false;
   const referenceDefinitions = providedReferenceDefinitions ??
+    activeBlockState.blockMap.referenceDefinitions ??
     (shouldCollectReferenceDefinitions ? collectReferenceDefinitions(source) : undefined);
+  const footnoteDefinitions = providedFootnoteDefinitions ??
+    activeBlockState.blockMap.footnoteDefinitions ??
+    (shouldCollectReferenceDefinitions ? collectFootnoteDefinitions(source) : undefined);
 
   return {
     activeBlockState,
@@ -241,8 +273,10 @@ function createBlockDecorationContext(
     hasEditorFocus,
     source,
     referenceDefinitions,
+    footnoteDefinitions,
     resolveImagePreviewUrl,
-    tableWidgetCallbacks
+    tableWidgetCallbacks,
+    viewMode: options.viewMode ?? "wysiwym"
   };
 }
 
@@ -308,7 +342,8 @@ function appendDecorationsForBlock(
         context.activeListLineStart,
         ranges,
         context.resolveImagePreviewUrl,
-        context.referenceDefinitions
+        context.referenceDefinitions,
+        context.footnoteDefinitions
       );
       return;
     }
@@ -362,7 +397,8 @@ function appendDecorationsForBlock(
       context.source,
       ranges,
       context.resolveImagePreviewUrl,
-      context.referenceDefinitions
+      context.referenceDefinitions,
+      context.footnoteDefinitions
     );
     return;
   }
@@ -377,7 +413,27 @@ function appendDecorationsForBlock(
     return;
   }
 
+  if (block.type === "blockMath") {
+    if (block.closed) {
+      ranges.push(createInactiveBlockMathPreviewDecoration(block).range(block.startOffset, block.endOffset));
+    }
+    return;
+  }
+
   if (block.type === "definition") {
+    if (block.footnoteDefinition?.status === "valid") {
+      appendInactiveFootnoteDefinitionDecorations(
+        block,
+        ranges,
+        context.resolveImagePreviewUrl
+      );
+      return;
+    }
+
+    if (block.footnoteDefinition) {
+      return;
+    }
+
     ranges.push(Decoration.replace({ block: true }).range(block.startOffset, block.endOffset));
     return;
   }
@@ -475,6 +531,7 @@ function rangeTouchesSpan(
 
 function createActiveDecorationSignature(context: BlockDecorationContext): string {
   return [
+    `view-mode:${context.viewMode}`,
     `active:${context.activeBlockId ?? "none"}`,
     `blank-line:${context.activeSelectionLineStart ?? "none"}`,
     `physical-line:${context.hasEditorFocus ? context.activeLine.number : "none"}:${context.activeLine.from}:${context.activeLine.to}:${context.activeLine.kind}`
@@ -767,14 +824,68 @@ function isCodeFenceContentSelection(
   return line?.kind === "content";
 }
 
+function appendInactiveFootnoteDefinitionDecorations(
+  block: DefinitionBlock,
+  ranges: Range<Decoration>[],
+  resolveImagePreviewUrl?: (href: string | null) => string | null
+): void {
+  const definition = block.footnoteDefinition;
+
+  if (!definition || definition.status !== "valid") {
+    return;
+  }
+
+  const lines = definition.lines;
+
+  for (const [index, line] of lines.entries()) {
+    const lineClasses = ["cm-inactive-footnote-definition"];
+
+    if (index === 0) {
+      lineClasses.push("cm-inactive-footnote-definition-start");
+    }
+
+    if (index === lines.length - 1) {
+      lineClasses.push("cm-inactive-footnote-definition-end");
+    }
+
+    ranges.push(
+      Decoration.line({
+        attributes: {
+          class: lineClasses.join(" ")
+        }
+      }).range(line.startOffset)
+    );
+
+    if (line.contentStartOffset > line.startOffset) {
+      ranges.push(
+        Decoration.mark({
+          attributes: {
+            class: "cm-inactive-footnote-definition-marker"
+          }
+        }).range(line.startOffset, line.contentStartOffset)
+      );
+    }
+
+    ranges.push(...createInactiveInlineDecorations(line.inline, { resolveImagePreviewUrl }));
+  }
+}
+
 function appendInactiveListDecorations(
   block: Extract<NonNullable<ActiveBlockState["activeBlock"]>, { type: "list" }>,
   source: string,
   ranges: Range<Decoration>[],
   resolveImagePreviewUrl?: (href: string | null) => string | null,
-  referenceDefinitions?: ReadonlyMap<string, InlineReferenceDefinition>
+  referenceDefinitions?: ReadonlyMap<string, InlineReferenceDefinition>,
+  footnoteDefinitions?: ReadonlyMap<string, FootnoteDefinition>
 ): void {
-  appendInactiveListScopeDecorations(block, source, ranges, resolveImagePreviewUrl, referenceDefinitions);
+  appendInactiveListScopeDecorations(
+    block,
+    source,
+    ranges,
+    resolveImagePreviewUrl,
+    referenceDefinitions,
+    footnoteDefinitions
+  );
 }
 
 function appendInactiveListScopeDecorations(
@@ -782,7 +893,8 @@ function appendInactiveListScopeDecorations(
   source: string,
   ranges: Range<Decoration>[],
   resolveImagePreviewUrl?: (href: string | null) => string | null,
-  referenceDefinitions?: ReadonlyMap<string, InlineReferenceDefinition>
+  referenceDefinitions?: ReadonlyMap<string, InlineReferenceDefinition>,
+  footnoteDefinitions?: ReadonlyMap<string, FootnoteDefinition>
 ): void {
   for (const item of block.items) {
     appendListItemDecorations(
@@ -792,11 +904,19 @@ function appendInactiveListScopeDecorations(
       block.ordered,
       ranges,
       resolveImagePreviewUrl,
-      referenceDefinitions
+      referenceDefinitions,
+      footnoteDefinitions
     );
 
     for (const child of item.children) {
-      appendInactiveListScopeDecorations(child, source, ranges, resolveImagePreviewUrl, referenceDefinitions);
+      appendInactiveListScopeDecorations(
+        child,
+        source,
+        ranges,
+        resolveImagePreviewUrl,
+        referenceDefinitions,
+        footnoteDefinitions
+      );
     }
   }
 }
@@ -807,7 +927,8 @@ function appendActiveListDecorations(
   activeLineStart: number | null,
   ranges: Range<Decoration>[],
   resolveImagePreviewUrl?: (href: string | null) => string | null,
-  referenceDefinitions?: ReadonlyMap<string, InlineReferenceDefinition>
+  referenceDefinitions?: ReadonlyMap<string, InlineReferenceDefinition>,
+  footnoteDefinitions?: ReadonlyMap<string, FootnoteDefinition>
 ): void {
   appendActiveListScopeDecorations(
     block,
@@ -815,7 +936,8 @@ function appendActiveListDecorations(
     activeLineStart,
     ranges,
     resolveImagePreviewUrl,
-    referenceDefinitions
+    referenceDefinitions,
+    footnoteDefinitions
   );
 }
 
@@ -825,7 +947,8 @@ function appendActiveListScopeDecorations(
   activeLineStart: number | null,
   ranges: Range<Decoration>[],
   resolveImagePreviewUrl?: (href: string | null) => string | null,
-  referenceDefinitions?: ReadonlyMap<string, InlineReferenceDefinition>
+  referenceDefinitions?: ReadonlyMap<string, InlineReferenceDefinition>,
+  footnoteDefinitions?: ReadonlyMap<string, FootnoteDefinition>
 ): void {
   for (const item of block.items) {
     appendListItemDecorations(
@@ -835,7 +958,8 @@ function appendActiveListScopeDecorations(
       block.ordered,
       ranges,
       resolveImagePreviewUrl,
-      referenceDefinitions
+      referenceDefinitions,
+      footnoteDefinitions
     );
 
     for (const child of item.children) {
@@ -845,7 +969,8 @@ function appendActiveListScopeDecorations(
         activeLineStart,
         ranges,
         resolveImagePreviewUrl,
-        referenceDefinitions
+        referenceDefinitions,
+        footnoteDefinitions
       );
     }
   }
@@ -858,7 +983,8 @@ function appendListItemDecorations(
   ordered: boolean,
   ranges: Range<Decoration>[],
   resolveImagePreviewUrl?: (href: string | null) => string | null,
-  referenceDefinitions?: ReadonlyMap<string, InlineReferenceDefinition>
+  referenceDefinitions?: ReadonlyMap<string, InlineReferenceDefinition>,
+  footnoteDefinitions?: ReadonlyMap<string, FootnoteDefinition>
 ): void {
   const contentEndOffset = item.children[0]?.startOffset ?? item.endOffset;
   const lines = createLineInfosInRange(source, item.startOffset, contentEndOffset);
@@ -877,7 +1003,8 @@ function appendListItemDecorations(
           true,
           ranges,
           resolveImagePreviewUrl,
-          referenceDefinitions
+          referenceDefinitions,
+          footnoteDefinitions
         );
         continue;
       }
@@ -890,7 +1017,8 @@ function appendListItemDecorations(
         false,
         ranges,
         resolveImagePreviewUrl,
-        referenceDefinitions
+        referenceDefinitions,
+        footnoteDefinitions
       );
 
       continue;
@@ -919,7 +1047,8 @@ function appendListItemDecorations(
         true,
         ranges,
         resolveImagePreviewUrl,
-        referenceDefinitions
+        referenceDefinitions,
+        footnoteDefinitions
       );
       continue;
     }
@@ -952,7 +1081,8 @@ function appendListItemDecorations(
       false,
       ranges,
       resolveImagePreviewUrl,
-      referenceDefinitions
+      referenceDefinitions,
+      footnoteDefinitions
     );
   }
 }
@@ -1417,7 +1547,8 @@ function appendInlineDecorationsForLine(
   active: boolean,
   ranges: Range<Decoration>[],
   resolveImagePreviewUrl?: (href: string | null) => string | null,
-  referenceDefinitions?: ReadonlyMap<string, InlineReferenceDefinition>
+  referenceDefinitions?: ReadonlyMap<string, InlineReferenceDefinition>,
+  footnoteDefinitions?: ReadonlyMap<string, FootnoteDefinition>
 ): void {
   const contentEndOffset = trimTrailingCarriageReturn(source, contentStartOffset, lineEndOffset);
 
@@ -1425,7 +1556,10 @@ function appendInlineDecorationsForLine(
     return;
   }
 
-  const inline = parseInlineAst(source, contentStartOffset, contentEndOffset, { referenceDefinitions });
+  const inline = parseInlineAst(source, contentStartOffset, contentEndOffset, {
+    referenceDefinitions,
+    footnoteDefinitions
+  });
   if (active) {
     ranges.push(...createActiveInlineImageDecorations(inline, source, resolveImagePreviewUrl));
     ranges.push(...createActiveInlineDecorations(inline));

@@ -164,6 +164,90 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("toggles source mode without changing content, selection, or onChange state", async () => {
+    const host = document.createElement("div");
+    const source = [
+      "# Heading",
+      "",
+      "[link](https://example.com) and **bold** with *emphasis*",
+      "![alt](./image.png)",
+      "",
+      "| A | B |",
+      "| - | - |",
+      "| 1 | 2 |",
+      "",
+      "- [x] Task",
+      "",
+      "> **Quote**",
+      "",
+      "Math $x^2$",
+      "",
+      "$$",
+      "a + b",
+      "$$",
+      "",
+      "Footnote[^note]",
+      "",
+      "[^note]: Footnote **body**",
+      "",
+      "```ts",
+      "const answer = 42;",
+      "```",
+      "",
+      "---"
+    ].join("\n");
+    const onChange = vi.fn();
+    const selectionAnchor = source.indexOf("bold");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange
+    });
+
+    controller.setSelection(selectionAnchor);
+    const beforeSelection = controller.getSelection();
+
+    expect(host.querySelector(".cm-inactive-heading-marker")).not.toBeNull();
+    expect(host.querySelector(".cm-table-widget")).not.toBeNull();
+
+    controller.setViewMode("source");
+    await flushMicrotasks();
+
+    const headingLine = getLineElementByText(host, "# Heading");
+    const taskLine = getLineElementByText(host, "- [x] Task");
+
+    expect(controller.getContent()).toBe(source);
+    expect(controller.getSelection()).toEqual(beforeSelection);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(headingLine?.classList.contains("cm-inactive-heading")).toBe(false);
+    expect(headingLine?.textContent).toContain("# Heading");
+    expect(taskLine?.textContent).toContain("- [x] Task");
+    expect(host.querySelector(".cm-inactive-heading-marker")).toBeNull();
+    expect(host.querySelector(".cm-inactive-inline-marker")).toBeNull();
+    expect(host.querySelector(".cm-markdown-image-preview")).toBeNull();
+    expect(host.querySelector(".cm-table-widget")).toBeNull();
+    expect(host.querySelector(".cm-inactive-blockquote")).toBeNull();
+    expect(host.querySelector(".cm-math-preview")).toBeNull();
+    expect(host.querySelector(".cm-inactive-inline-footnote-reference")).toBeNull();
+    expect(host.querySelector(".cm-inactive-footnote-definition")).toBeNull();
+    expect(host.querySelector(".cm-inactive-code-block")).toBeNull();
+    expect(host.querySelector(".cm-inactive-thematic-break")).toBeNull();
+
+    controller.setViewMode("wysiwym");
+    await flushMicrotasks();
+
+    expect(controller.getContent()).toBe(source);
+    expect(controller.getSelection()).toEqual(beforeSelection);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(host.querySelector(".cm-inactive-heading-marker")).not.toBeNull();
+    expect(host.querySelector(".cm-math-preview")).not.toBeNull();
+    expect(host.querySelector(".cm-inactive-inline-footnote-reference")).not.toBeNull();
+    expect(host.querySelector(".cm-table-widget")).not.toBeNull();
+
+    controller.destroy();
+  });
+
   it("moves the selection and scroll target when navigateToOffset is requested", () => {
     const host = document.createElement("div");
     const source = ["# Title", "", "Paragraph"].join("\n");

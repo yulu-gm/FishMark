@@ -304,7 +304,7 @@ function readSourceGroupsFromMap(map) {
 
 function resolveSourceGroup(source) {
   const nodeModulesMarker = "node_modules/";
-  const nodeModulesIndex = source.indexOf(nodeModulesMarker);
+  const nodeModulesIndex = source.lastIndexOf(nodeModulesMarker);
 
   if (nodeModulesIndex >= 0) {
     const packagePath = source.slice(nodeModulesIndex + nodeModulesMarker.length);

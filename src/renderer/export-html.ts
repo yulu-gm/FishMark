@@ -7,10 +7,13 @@ import {
   resolveIndentedCodeContentStartOffset,
   tableBlockToCanonicalModel,
   type BlockquoteBlock,
+  type BlockMathBlock,
   type CodeFenceBlock,
+  type FootnoteDefinition,
   type HeadingBlock,
   type HtmlImageBlock,
   type InlineNode,
+  type InlineReferenceDefinition,
   type InlineRoot,
   type ListBlock,
   type ListItemBlock,
@@ -20,6 +23,7 @@ import {
   type TableCell,
   type ThematicBreakBlock
 } from "@fishmark/markdown-engine";
+import katex from "katex";
 
 export type FishmarkExportRootAttributes = {
   className?: string | null;
@@ -41,9 +45,32 @@ type SourceLine = {
   startOffset: number;
   text: string;
 };
-type ReferenceDefinitions = ReturnType<typeof collectReferenceDefinitions>;
+type ReferenceDefinitions = ReadonlyMap<string, InlineReferenceDefinition>;
+type FootnoteDefinitions = ReadonlyMap<string, FootnoteDefinition>;
+type FootnoteRenderState = {
+  backlinksByIdentifier: Map<string, string[]>;
+  definitions: FootnoteDefinitions;
+  orderedIdentifiers: string[];
+  referenceCountsByIdentifier: Map<string, number>;
+  referenceNumbersByIdentifier: Map<string, number>;
+};
 
 const EXPORT_ROOT_CLASS_NAME = "fishmark-html-export-root";
+
+const KATEX_EXPORT_CSS = `
+.katex {
+  font: normal 1.15em KaTeX_Main, "Times New Roman", serif;
+  line-height: 1.2;
+  text-indent: 0;
+  text-rendering: auto;
+}
+
+.katex-display {
+  display: block;
+  margin: 0.65rem 0;
+  text-align: center;
+}
+`.trim();
 
 const EXPORT_RUNTIME_CSS = `
 .fishmark-html-export-root {
@@ -111,7 +138,7 @@ const EXPORT_RUNTIME_CSS = `
 export function createFishmarkExportHtml(input: CreateFishmarkExportHtmlInput): string {
   const rootAttributes = input.rootAttributes ?? {};
   const htmlAttributes = createHtmlAttributes(rootAttributes);
-  const cssText = sanitizeStyleText([input.cssText?.trim(), EXPORT_RUNTIME_CSS].filter(Boolean).join("\n\n"));
+  const cssText = sanitizeStyleText([input.cssText?.trim(), KATEX_EXPORT_CSS, EXPORT_RUNTIME_CSS].filter(Boolean).join("\n\n"));
   const contentHtml = renderMarkdownContent(input.markdown);
 
   return [
@@ -169,7 +196,8 @@ export function collectRootExportAttributes(targetDocument: Document = document)
 
 function renderMarkdownContent(markdown: string): string {
   const documentModel = parseMarkdownDocument(markdown);
-  const referenceDefinitions = collectReferenceDefinitions(markdown);
+  const referenceDefinitions = documentModel.referenceDefinitions ?? collectReferenceDefinitions(markdown);
+  const footnoteState = createFootnoteRenderState(documentModel.footnoteDefinitions ?? new Map());
   const chunks: string[] = [];
   let cursor = 0;
 
@@ -178,7 +206,7 @@ function renderMarkdownContent(markdown: string): string {
       chunks.push(renderPlainLines(markdown, cursor, block.startOffset));
     }
 
-    chunks.push(renderBlock(block, markdown, referenceDefinitions));
+    chunks.push(renderBlock(block, markdown, referenceDefinitions, footnoteState));
     cursor = Math.max(cursor, block.endOffset);
   }
 
@@ -190,23 +218,32 @@ function renderMarkdownContent(markdown: string): string {
     return renderLine("", "<br>");
   }
 
+  chunks.push(renderFootnoteSection(markdown, footnoteState));
+
   return chunks.filter(Boolean).join("");
 }
 
-function renderBlock(block: MarkdownBlock, source: string, referenceDefinitions: ReferenceDefinitions): string {
+function renderBlock(
+  block: MarkdownBlock,
+  source: string,
+  referenceDefinitions: ReferenceDefinitions,
+  footnoteState: FootnoteRenderState
+): string {
   switch (block.type) {
     case "heading":
-      return renderHeadingBlock(block, source);
+      return renderHeadingBlock(block, source, footnoteState);
     case "paragraph":
-      return renderParagraphBlock(block, source, referenceDefinitions);
+      return renderParagraphBlock(block, source, referenceDefinitions, footnoteState);
     case "list":
-      return renderListBlock(block, source, referenceDefinitions);
+      return renderListBlock(block, source, referenceDefinitions, footnoteState);
     case "blockquote":
-      return renderBlockquoteBlock(block, source);
+      return renderBlockquoteBlock(block, source, footnoteState);
     case "codeFence":
       return renderCodeFenceBlock(block, source);
+    case "blockMath":
+      return renderBlockMathBlock(block, source);
     case "definition":
-      return renderDefinitionBlock();
+      return renderDefinitionBlock(block, source);
     case "thematicBreak":
       return renderThematicBreakBlock(block, source);
     case "htmlImage":
@@ -216,7 +253,7 @@ function renderBlock(block: MarkdownBlock, source: string, referenceDefinitions:
   }
 }
 
-function renderHeadingBlock(block: HeadingBlock, source: string): string {
+function renderHeadingBlock(block: HeadingBlock, source: string, footnoteState: FootnoteRenderState): string {
   const line = createSourceLines(source, block.startOffset, block.endOffset)[0];
   if (!line) {
     return "";
@@ -226,7 +263,7 @@ function renderHeadingBlock(block: HeadingBlock, source: string): string {
   const markerEnd = Math.min(block.markerEnd ?? contentStartOffset, line.endOffset);
   const contentEndOffset = Math.min(block.inline?.endOffset ?? line.endOffset, line.endOffset);
   const inlineHtml = block.inline
-    ? renderInlineRoot(block.inline, source)
+    ? renderInlineRoot(block.inline, source, footnoteState)
     : renderDecoratedPlainText(source.slice(contentStartOffset, contentEndOffset));
   const trailingHtml = renderDecoratedPlainText(source.slice(contentEndOffset, line.endOffset));
 
@@ -243,13 +280,14 @@ function renderHeadingBlock(block: HeadingBlock, source: string): string {
 function renderParagraphBlock(
   block: ParagraphBlock,
   source: string,
-  referenceDefinitions: ReferenceDefinitions
+  referenceDefinitions: ReferenceDefinitions,
+  footnoteState: FootnoteRenderState
 ): string {
   return createSourceLines(source, block.startOffset, block.endOffset)
     .map((line) =>
       renderLine(
         "cm-inactive-paragraph cm-inactive-paragraph-leading",
-        renderInlineRange(source, line.startOffset, line.endOffset, referenceDefinitions) || "<br>"
+        renderInlineRange(source, line.startOffset, line.endOffset, referenceDefinitions, footnoteState) || "<br>"
       )
     )
     .join("");
@@ -258,27 +296,29 @@ function renderParagraphBlock(
 function renderListBlock(
   block: ListBlock,
   source: string,
-  referenceDefinitions: ReferenceDefinitions
+  referenceDefinitions: ReferenceDefinitions,
+  footnoteState: FootnoteRenderState
 ): string {
-  return block.items.map((item) => renderListItem(item, source, block.ordered, referenceDefinitions)).join("");
+  return block.items.map((item) => renderListItem(item, source, block.ordered, referenceDefinitions, footnoteState)).join("");
 }
 
 function renderListItem(
   item: ListItemBlock,
   source: string,
   ordered: boolean,
-  referenceDefinitions: ReferenceDefinitions
+  referenceDefinitions: ReferenceDefinitions,
+  footnoteState: FootnoteRenderState
 ): string {
   const contentUpperBound = item.children[0]?.startOffset ?? item.endOffset;
   const lines = createSourceLines(source, item.startOffset, contentUpperBound);
   const chunks = lines.map((line) =>
     line.startOffset === item.startOffset
-      ? renderListItemFirstLine(item, source, line, ordered, referenceDefinitions)
-      : renderListItemContinuationLine(item, source, line, ordered, referenceDefinitions)
+      ? renderListItemFirstLine(item, source, line, ordered, referenceDefinitions, footnoteState)
+      : renderListItemContinuationLine(item, source, line, ordered, referenceDefinitions, footnoteState)
   );
 
   for (const child of item.children) {
-    chunks.push(renderListBlock(child, source, referenceDefinitions));
+    chunks.push(renderListBlock(child, source, referenceDefinitions, footnoteState));
   }
 
   return chunks.filter(Boolean).join("");
@@ -289,7 +329,8 @@ function renderListItemFirstLine(
   source: string,
   line: SourceLine,
   ordered: boolean,
-  referenceDefinitions: ReferenceDefinitions
+  referenceDefinitions: ReferenceDefinitions,
+  footnoteState: FootnoteRenderState
 ): string {
   const contentStartOffset = resolveListItemContentStartOffset(item, source, line.endOffset);
   const lineAttributes = createListItemLineAttributes(item, source, ordered, "first");
@@ -303,7 +344,7 @@ function renderListItemFirstLine(
     renderSpan("cm-inactive-list-source-prefix", source.slice(item.markerEnd, taskStartOffset)),
     taskHtml,
     renderSpan("cm-inactive-list-source-prefix", source.slice(taskEndOffset, inlineStart)),
-    renderInlineRange(source, inlineStart, line.endOffset, referenceDefinitions)
+    renderInlineRange(source, inlineStart, line.endOffset, referenceDefinitions, footnoteState)
   ].join("");
 
   return renderLine(lineAttributes.className, innerHtml || "<br>", { style: lineAttributes.style });
@@ -314,7 +355,8 @@ function renderListItemContinuationLine(
   source: string,
   line: SourceLine,
   ordered: boolean,
-  referenceDefinitions: ReferenceDefinitions
+  referenceDefinitions: ReferenceDefinitions,
+  footnoteState: FootnoteRenderState
 ): string {
   if (isExplicitThematicBreakLine(line.text)) {
     return renderLine(
@@ -333,13 +375,13 @@ function renderListItemContinuationLine(
   );
   const innerHtml = [
     renderSpan("cm-inactive-list-source-prefix", source.slice(line.startOffset, contentStartOffset)),
-    renderInlineRange(source, contentStartOffset, line.endOffset, referenceDefinitions)
+    renderInlineRange(source, contentStartOffset, line.endOffset, referenceDefinitions, footnoteState)
   ].join("");
 
   return renderLine(lineAttributes.className, innerHtml || "<br>", { style: lineAttributes.style });
 }
 
-function renderBlockquoteBlock(block: BlockquoteBlock, source: string): string {
+function renderBlockquoteBlock(block: BlockquoteBlock, source: string, footnoteState: FootnoteRenderState): string {
   const renderableLines = (block.lines ?? []).filter((line) => line.contentStartOffset > line.markerEnd);
   const lastIndex = renderableLines.length - 1;
 
@@ -358,7 +400,7 @@ function renderBlockquoteBlock(block: BlockquoteBlock, source: string): string {
 
       const innerHtml = [
         renderSpan("cm-inactive-blockquote-marker", source.slice(line.startOffset, line.contentStartOffset)),
-        renderInlineRoot(line.inline, source)
+        renderInlineRoot(line.inline, source, footnoteState)
       ].join("");
 
       return renderLine(lineClasses.join(" "), innerHtml || "<br>");
@@ -443,6 +485,17 @@ function renderIndentedCodeBlock(lines: SourceLine[], source: string): string {
     .join("");
 }
 
+function renderBlockMathBlock(block: BlockMathBlock, source: string): string {
+  if (!block.closed) {
+    return renderPlainLines(source, block.startOffset, block.endOffset);
+  }
+
+  return renderLine(
+    "cm-inactive-block-math",
+    renderMathHtml(block.value, true, source.slice(block.startOffset, block.endOffset))
+  );
+}
+
 function renderThematicBreakBlock(block: ThematicBreakBlock, source: string): string {
   const marker = source.slice(block.startOffset, block.endOffset);
   return renderLine(
@@ -463,7 +516,11 @@ function renderHtmlImageBlock(block: HtmlImageBlock): string {
   });
 }
 
-function renderDefinitionBlock(): string {
+function renderDefinitionBlock(block: Extract<MarkdownBlock, { type: "definition" }>, source: string): string {
+  if (block.footnoteDefinition && block.footnoteDefinition.status !== "valid") {
+    return renderPlainLines(source, block.startOffset, block.endOffset);
+  }
+
   return "";
 }
 
@@ -560,20 +617,28 @@ function renderInlineRange(
   source: string,
   startOffset: number,
   endOffset: number,
-  referenceDefinitions: ReferenceDefinitions = new Map()
+  referenceDefinitions: ReferenceDefinitions = new Map(),
+  footnoteState: FootnoteRenderState | null = null
 ): string {
   if (endOffset <= startOffset) {
     return "";
   }
 
-  return renderInlineRoot(parseInlineAst(source, startOffset, endOffset, { referenceDefinitions }), source);
+  return renderInlineRoot(
+    parseInlineAst(source, startOffset, endOffset, {
+      referenceDefinitions,
+      footnoteDefinitions: footnoteState?.definitions
+    }),
+    source,
+    footnoteState
+  );
 }
 
-function renderInlineRoot(root: InlineRoot, source: string): string {
-  return root.children.map((node) => renderInlineNode(node, source)).join("");
+function renderInlineRoot(root: InlineRoot, source: string, footnoteState: FootnoteRenderState | null = null): string {
+  return root.children.map((node) => renderInlineNode(node, source, footnoteState)).join("");
 }
 
-function renderInlineNode(node: InlineNode, source: string): string {
+function renderInlineNode(node: InlineNode, source: string, footnoteState: FootnoteRenderState | null = null): string {
   if (shouldRenderNodeAsPlainText(node)) {
     return renderDecoratedPlainText(source.slice(node.startOffset, node.endOffset));
   }
@@ -583,18 +648,22 @@ function renderInlineNode(node: InlineNode, source: string): string {
       return renderDecoratedPlainText(node.value);
     case "hardBreak":
       return "<br>";
+    case "footnoteReference":
+      return renderFootnoteReferenceNode(node, source, footnoteState);
     case "codeSpan":
       return [
         renderInlineMarker(source.slice(node.openMarker.startOffset, node.openMarker.endOffset)),
         renderSpan("cm-inactive-inline-code", node.text),
         renderInlineMarker(source.slice(node.closeMarker.startOffset, node.closeMarker.endOffset))
       ].join("");
+    case "inlineMath":
+      return renderMathHtml(node.value, false, source.slice(node.startOffset, node.endOffset));
     case "strong":
     case "emphasis":
     case "strikethrough":
       return [
         renderInlineMarker(source.slice(node.openMarker.startOffset, node.openMarker.endOffset)),
-        renderSpan(resolveInlineContainerClass(node.type), renderInlineChildren(node.children, source), {
+        renderSpan(resolveInlineContainerClass(node.type), renderInlineChildren(node.children, source, footnoteState), {
           escapeContent: false
         }),
         renderInlineMarker(source.slice(node.closeMarker.startOffset, node.closeMarker.endOffset))
@@ -602,7 +671,7 @@ function renderInlineNode(node: InlineNode, source: string): string {
     case "link":
       return [
         renderInlineMarker(source.slice(node.openMarker.startOffset, node.openMarker.endOffset)),
-        renderInlineChildren(node.children, source),
+        renderInlineChildren(node.children, source, footnoteState),
         renderInlineMarker(source.slice(node.closeMarker.startOffset, node.closeMarker.endOffset)),
         renderDecoratedPlainText(source.slice(node.closeMarker.endOffset, node.endOffset))
       ].join("");
@@ -616,8 +685,157 @@ function renderInlineNode(node: InlineNode, source: string): string {
   }
 }
 
-function renderInlineChildren(children: readonly InlineNode[], source: string): string {
-  return children.map((child) => renderInlineNode(child, source)).join("");
+function renderInlineChildren(
+  children: readonly InlineNode[],
+  source: string,
+  footnoteState: FootnoteRenderState | null = null
+): string {
+  return children.map((child) => renderInlineNode(child, source, footnoteState)).join("");
+}
+
+function renderMathHtml(value: string, displayMode: boolean, fallbackSource: string): string {
+  try {
+    const mathMarkup = katex.renderToString(value, {
+      displayMode,
+      output: "mathml",
+      throwOnError: false
+    });
+
+    return displayMode ? `<span class="katex-display">${mathMarkup}</span>` : mathMarkup;
+  } catch {
+    return renderSpan(
+      displayMode ? "cm-math-preview cm-math-preview-block cm-math-preview-fallback" : "cm-math-preview cm-math-preview-inline cm-math-preview-fallback",
+      fallbackSource
+    );
+  }
+}
+
+function createFootnoteRenderState(definitions: FootnoteDefinitions): FootnoteRenderState {
+  return {
+    backlinksByIdentifier: new Map(),
+    definitions,
+    orderedIdentifiers: [],
+    referenceCountsByIdentifier: new Map(),
+    referenceNumbersByIdentifier: new Map()
+  };
+}
+
+function renderFootnoteReferenceNode(
+  node: Extract<InlineNode, { type: "footnoteReference" }>,
+  source: string,
+  footnoteState: FootnoteRenderState | null
+): string {
+  const reference = footnoteState ? registerFootnoteReference(footnoteState, node.identifier) : null;
+
+  if (!reference) {
+    return renderDecoratedPlainText(source.slice(node.startOffset, node.endOffset));
+  }
+
+  return [
+    `<sup class="cm-inactive-inline-footnote-reference" id="${escapeAttribute(reference.referenceId)}">`,
+    `<a href="#${escapeAttribute(reference.footnoteId)}" class="fishmark-footnote-ref" role="doc-noteref">`,
+    `${reference.number}`,
+    "</a>",
+    "</sup>"
+  ].join("");
+}
+
+function registerFootnoteReference(
+  footnoteState: FootnoteRenderState,
+  identifier: string
+): { footnoteId: string; number: number; referenceId: string } | null {
+  if (!footnoteState.definitions.has(identifier)) {
+    return null;
+  }
+
+  let number = footnoteState.referenceNumbersByIdentifier.get(identifier);
+
+  if (number === undefined) {
+    number = footnoteState.orderedIdentifiers.length + 1;
+    footnoteState.orderedIdentifiers.push(identifier);
+    footnoteState.referenceNumbersByIdentifier.set(identifier, number);
+  }
+
+  const referenceCount = (footnoteState.referenceCountsByIdentifier.get(identifier) ?? 0) + 1;
+  footnoteState.referenceCountsByIdentifier.set(identifier, referenceCount);
+
+  const footnoteId = createFootnoteId(number);
+  const referenceId = createFootnoteReferenceId(number, referenceCount);
+  const backlinks = footnoteState.backlinksByIdentifier.get(identifier) ?? [];
+  backlinks.push(referenceId);
+  footnoteState.backlinksByIdentifier.set(identifier, backlinks);
+
+  return { footnoteId, number, referenceId };
+}
+
+function renderFootnoteSection(source: string, footnoteState: FootnoteRenderState): string {
+  if (footnoteState.orderedIdentifiers.length === 0) {
+    return "";
+  }
+
+  const items: string[] = [];
+
+  for (let index = 0; index < footnoteState.orderedIdentifiers.length; index += 1) {
+    const identifier = footnoteState.orderedIdentifiers[index]!;
+    const definition = footnoteState.definitions.get(identifier);
+    const number = footnoteState.referenceNumbersByIdentifier.get(identifier);
+
+    if (!definition || number === undefined) {
+      continue;
+    }
+
+    items.push(renderFootnoteDefinitionItem(definition, source, footnoteState, number));
+  }
+
+  if (items.length === 0) {
+    return "";
+  }
+
+  return [
+    '<section class="fishmark-footnotes" role="doc-endnotes">',
+    '<hr class="fishmark-footnotes-separator">',
+    `<ol class="fishmark-footnotes-list">${items.join("")}</ol>`,
+    "</section>"
+  ].join("");
+}
+
+function renderFootnoteDefinitionItem(
+  definition: FootnoteDefinition,
+  source: string,
+  footnoteState: FootnoteRenderState,
+  number: number
+): string {
+  const contentHtml = definition.lines
+    .map((line) => line.inline
+      ? renderInlineRoot(line.inline, source, footnoteState)
+      : renderDecoratedPlainText(source.slice(line.contentStartOffset, line.contentEndOffset)))
+    .join("<br>");
+  const backlinks = (footnoteState.backlinksByIdentifier.get(definition.identifier) ?? [])
+    .map((referenceId, index) =>
+      [
+        `<a href="#${escapeAttribute(referenceId)}"`,
+        ' class="fishmark-footnote-backref"',
+        ` aria-label="Back to reference ${index + 1}">`,
+        index === 0 ? "&#8617;" : `&#8617;${index + 1}`,
+        "</a>"
+      ].join("")
+    )
+    .join(" ");
+
+  return [
+    `<li id="${escapeAttribute(createFootnoteId(number))}" class="fishmark-footnote-item">`,
+    contentHtml || "<br>",
+    backlinks ? ` ${backlinks}` : "",
+    "</li>"
+  ].join("");
+}
+
+function createFootnoteId(number: number): string {
+  return `fishmark-fn-${number}`;
+}
+
+function createFootnoteReferenceId(number: number, referenceCount: number): string {
+  return `fishmark-fnref-${number}-${referenceCount}`;
 }
 
 function renderImagePreview(input: {
@@ -732,8 +950,12 @@ function shouldRenderNodeAsPlainText(node: InlineNode): boolean {
       return false;
     case "hardBreak":
       return false;
+    case "footnoteReference":
+      return false;
     case "codeSpan":
       return node.text.length === 0 || node.openMarker.endOffset >= node.closeMarker.startOffset;
+    case "inlineMath":
+      return node.value.length === 0 || node.openMarker.endOffset >= node.closeMarker.startOffset;
     case "strong":
     case "emphasis":
     case "strikethrough":
@@ -943,6 +1165,10 @@ function readInlineNodeText(node: InlineNode): string {
       return "\n";
     case "codeSpan":
       return node.text;
+    case "inlineMath":
+      return node.value;
+    case "footnoteReference":
+      return node.label;
     case "strong":
     case "emphasis":
     case "strikethrough":

@@ -150,6 +150,132 @@ describe("createFishmarkExportHtml", () => {
     expect(exported.body.textContent).not.toContain("The Dojocat");
   });
 
+  it("exports footnote references as endnotes with backlinks", () => {
+    const html = createFishmarkExportHtml({
+      markdown: [
+        "Alpha[^note] and beta[^note].",
+        "",
+        "[^note]: Footnote **body**",
+        "    continuation `code`"
+      ].join("\n"),
+      title: "footnote.md"
+    });
+    const exported = new DOMParser().parseFromString(html, "text/html");
+    const references = Array.from(exported.querySelectorAll<HTMLAnchorElement>(".fishmark-footnote-ref"));
+    const section = exported.querySelector<HTMLElement>(".fishmark-footnotes");
+    const item = exported.querySelector<HTMLElement>(".fishmark-footnote-item");
+    const backlinks = Array.from(exported.querySelectorAll<HTMLAnchorElement>(".fishmark-footnote-backref"));
+
+    expect(references).toHaveLength(2);
+    expect(references.map((reference) => reference.textContent)).toEqual(["1", "1"]);
+    expect(references[0]?.getAttribute("href")).toBe("#fishmark-fn-1");
+    expect(references[1]?.getAttribute("href")).toBe("#fishmark-fn-1");
+    expect(section?.getAttribute("role")).toBe("doc-endnotes");
+    expect(item?.id).toBe("fishmark-fn-1");
+    expect(item?.querySelector(".cm-inactive-inline-strong")?.textContent).toBe("body");
+    expect(item?.querySelector(".cm-inactive-inline-code")?.textContent).toBe("code");
+    expect(backlinks.map((backlink) => backlink.getAttribute("href"))).toEqual([
+      "#fishmark-fnref-1-1",
+      "#fishmark-fnref-1-2"
+    ]);
+    expect(exported.body.textContent).not.toContain("[^note]:");
+  });
+
+  it("keeps duplicate and undefined footnote syntax as source text in export", () => {
+    const html = createFishmarkExportHtml({
+      markdown: [
+        "Alpha[^dup] [^missing].",
+        "",
+        "[^dup]: first",
+        "[^dup]: second"
+      ].join("\n"),
+      title: "footnote-fallback.md"
+    });
+    const exported = new DOMParser().parseFromString(html, "text/html");
+
+    expect(exported.querySelector(".fishmark-footnotes")).toBeNull();
+    expect(exported.body.textContent).toContain("Alpha[^dup] [^missing].");
+    expect(exported.body.textContent).toContain("[^dup]: first");
+    expect(exported.body.textContent).toContain("[^dup]: second");
+  });
+
+  it("keeps list and blockquote footnote-looking text out of exported footnotes", () => {
+    const html = createFishmarkExportHtml({
+      markdown: [
+        "Alpha[^real].",
+        "",
+        "- item",
+        "  [^list]: not a definition",
+        "",
+        "> [^quote]: not a definition",
+        "",
+        "[^real]: Real note"
+      ].join("\n"),
+      title: "footnote-container-fallback.md"
+    });
+    const exported = new DOMParser().parseFromString(html, "text/html");
+    const items = Array.from(exported.querySelectorAll<HTMLElement>(".fishmark-footnote-item"));
+
+    expect(items).toHaveLength(1);
+    expect(items[0]?.textContent).toContain("Real note");
+    expect(items[0]?.textContent).not.toContain("not a definition");
+    expect(exported.body.textContent).toContain("[^list]: not a definition");
+    expect(exported.body.textContent).toContain("[^quote]: not a definition");
+  });
+
+  it("exports inline and block math through KaTeX markup", () => {
+    const html = createFishmarkExportHtml({
+      markdown: ["Inline $x^2$ math.", "", "$$", "a + b", "$$"].join("\n"),
+      title: "math.md"
+    });
+    const exported = new DOMParser().parseFromString(html, "text/html");
+    const katexNodes = exported.querySelectorAll(".katex");
+    const display = exported.querySelector(".katex-display");
+
+    expect(katexNodes.length).toBeGreaterThanOrEqual(2);
+    expect(display?.textContent).toContain("a");
+    expect(exported.body.textContent).not.toContain("$x^2$");
+    expect(html).toContain(".katex");
+  });
+
+  it("exports self-contained KaTeX MathML without external font asset URLs", () => {
+    const html = createFishmarkExportHtml({
+      markdown: "Inline $x^2$ math.",
+      title: "math-fonts.md"
+    });
+    const exported = new DOMParser().parseFromString(html, "text/html");
+
+    expect(exported.querySelector("math annotation")?.textContent).toBe("x^2");
+    expect(html).toContain(".katex");
+    expect(html).not.toContain("url(fonts/");
+    expect(html).not.toContain("data:font/");
+  });
+
+  it("keeps currency text and code-fenced dollars out of exported math", () => {
+    const html = createFishmarkExportHtml({
+      markdown: ["Price is $5 and $6.", "", "```tex", "$x^2$", "```"].join("\n"),
+      title: "math-fallback.md"
+    });
+    const exported = new DOMParser().parseFromString(html, "text/html");
+
+    expect(exported.querySelector(".katex")).toBeNull();
+    expect(exported.body.textContent).toContain("Price is $5 and $6.");
+    expect(exported.body.textContent).toContain("$x^2$");
+  });
+
+  it("falls back without throwing when KaTeX receives invalid math", () => {
+    const html = createFishmarkExportHtml({
+      markdown: "Broken $\\unknowncommand{a}$ math.",
+      title: "bad-math.md"
+    });
+    const exported = new DOMParser().parseFromString(html, "text/html");
+    const katexNode = exported.querySelector<HTMLElement>(".katex");
+
+    expect(katexNode?.textContent).toContain("\\unknowncommand");
+    expect(exported.body.textContent).toContain("Broken");
+    expect(exported.body.textContent).toContain("math.");
+  });
+
   it("exports inline hard break tags as real line break elements", () => {
     const html = createFishmarkExportHtml({
       markdown: ["Alpha<br>Beta", "", "| name | qty |", "| --- | ---: |", "| p<br>en | 2 |"].join("\n"),

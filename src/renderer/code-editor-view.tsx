@@ -12,7 +12,7 @@ import {
   type FindReplaceQueryInput,
   type FindReplaceSnapshot
 } from "./code-editor";
-import type { ActiveBlockState } from "@fishmark/editor-core";
+import type { ActiveBlockState, EditorViewMode } from "@fishmark/editor-core";
 
 export type CodeEditorHandle = {
   getContent: () => string;
@@ -25,6 +25,7 @@ export type CodeEditorHandle = {
   clearFindReplaceQuery: () => FindReplaceSnapshot;
   setContent: (content: string) => void;
   setDocumentPath: (documentPath: string | null) => void;
+  setViewMode: (viewMode: EditorViewMode) => void;
   focus: () => void;
   navigateToOffset: (offset: number) => void;
   insertText: (text: string) => void;
@@ -54,6 +55,7 @@ type CodeEditorViewProps = {
   onActiveBlockChange?: (state: ActiveBlockState) => void;
   importClipboardImage?: (input: { documentPath: string | null }) => Promise<string | null>;
   openExternalLink?: (href: string) => void;
+  viewMode?: EditorViewMode;
 };
 
 export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
@@ -66,13 +68,15 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
       onBlur,
       onActiveBlockChange,
       importClipboardImage,
-      openExternalLink
+      openExternalLink,
+      viewMode = "wysiwym"
     },
     ref
   ) {
     const hostRef = useRef<HTMLDivElement | null>(null);
     const controllerRef = useRef<CodeEditorController | null>(null);
     const initialContentRef = useRef(initialContent);
+    const initialViewModeRef = useRef(viewMode);
     const latestLoadedContentRef = useRef(initialContent);
     const handleChange = useEffectEvent(onChange);
     const handleBlur = useEffectEvent(() => onBlur?.());
@@ -97,7 +101,8 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
         onBlur: () => handleBlur(),
         onActiveBlockChange: (state) => handleActiveBlockChange(state),
         importClipboardImage: (input) => handleImportClipboardImage(input),
-        openExternalLink: (href) => handleOpenExternalLink(href)
+        openExternalLink: (href) => handleOpenExternalLink(href),
+        viewMode: initialViewModeRef.current
       });
 
       controllerRef.current = controller;
@@ -122,6 +127,10 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
     useEffect(() => {
       controllerRef.current?.setDocumentPath(documentPath);
     }, [documentPath]);
+
+    useEffect(() => {
+      controllerRef.current?.setViewMode(viewMode);
+    }, [viewMode]);
 
     useImperativeHandle(
       ref,
@@ -167,6 +176,9 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
         },
         setDocumentPath: (nextDocumentPath: string | null) => {
           controllerRef.current?.setDocumentPath(nextDocumentPath);
+        },
+        setViewMode: (nextViewMode: EditorViewMode) => {
+          controllerRef.current?.setViewMode(nextViewMode);
         },
         focus: () => {
           controllerRef.current?.focus();
@@ -226,6 +238,12 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
       [initialContent]
     );
 
-    return <div className="document-editor" ref={hostRef} />;
+    return (
+      <div
+        className="document-editor"
+        data-fishmark-editor-view-mode={viewMode}
+        ref={hostRef}
+      />
+    );
   }
 );

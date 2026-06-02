@@ -3,11 +3,13 @@ import { type Range } from "@codemirror/state";
 
 import type { InlineASTNode, InlineRoot } from "@fishmark/markdown-engine";
 import { createInactiveImagePreviewDecoration } from "./image-widgets";
+import { createInactiveInlineMathPreviewDecoration } from "./math-widgets";
 
 const CJK_TEXT_CLASS = "cm-fishmark-cjk-font";
 const INACTIVE_INLINE_MARKER_CLASS = "cm-inactive-inline-marker";
 const ACTIVE_INLINE_MARKER_CLASS = "cm-active-inline-marker";
 const INACTIVE_INLINE_LINK_CLASS = "cm-inactive-inline-link";
+const INACTIVE_INLINE_FOOTNOTE_REFERENCE_CLASS = "cm-inactive-inline-footnote-reference";
 export const INACTIVE_INLINE_LINK_SELECTOR = `.${INACTIVE_INLINE_LINK_CLASS}`;
 export const INACTIVE_INLINE_LINK_HREF_ATTRIBUTE = "data-fishmark-link-href";
 const INACTIVE_INLINE_CONTENT_CLASSES = {
@@ -86,6 +88,19 @@ function appendInlineDecorations(
       );
       appendMarkerDecoration(ranges, node.closeMarker.startOffset, node.closeMarker.endOffset);
       return;
+    case "inlineMath":
+      ranges.push(createInactiveInlineMathPreviewDecoration(node).range(node.startOffset, node.endOffset));
+      return;
+    case "footnoteReference":
+      appendMarkerDecoration(ranges, node.openMarker.startOffset, node.openMarker.endOffset);
+      appendContentDecoration(
+        ranges,
+        node.labelStartOffset,
+        node.labelEndOffset,
+        INACTIVE_INLINE_FOOTNOTE_REFERENCE_CLASS
+      );
+      appendMarkerDecoration(ranges, node.closeMarker.startOffset, node.closeMarker.endOffset);
+      return;
     case "strong":
     case "emphasis":
     case "strikethrough":
@@ -144,12 +159,23 @@ function appendActiveInlineDecorations(node: InlineASTNode, ranges: InlineDecora
       appendActiveHardBreakDecoration(ranges, node.endOffset);
       return;
     case "codeSpan":
+    case "inlineMath":
       appendActiveMarkerDecoration(ranges, node.openMarker.startOffset, node.openMarker.endOffset);
       appendContentDecoration(
         ranges,
         node.openMarker.endOffset,
         node.closeMarker.startOffset,
-        INACTIVE_INLINE_CONTENT_CLASSES.codeSpan
+        node.type === "codeSpan" ? INACTIVE_INLINE_CONTENT_CLASSES.codeSpan : "cm-active-inline-math"
+      );
+      appendActiveMarkerDecoration(ranges, node.closeMarker.startOffset, node.closeMarker.endOffset);
+      return;
+    case "footnoteReference":
+      appendActiveMarkerDecoration(ranges, node.openMarker.startOffset, node.openMarker.endOffset);
+      appendContentDecoration(
+        ranges,
+        node.labelStartOffset,
+        node.labelEndOffset,
+        INACTIVE_INLINE_FOOTNOTE_REFERENCE_CLASS
       );
       appendActiveMarkerDecoration(ranges, node.closeMarker.startOffset, node.closeMarker.endOffset);
       return;
@@ -199,6 +225,10 @@ function appendCjkTextDecorations(node: InlineASTNode, ranges: InlineDecorationR
     case "hardBreak":
       return;
     case "codeSpan":
+      return;
+    case "inlineMath":
+      return;
+    case "footnoteReference":
       return;
   }
 }

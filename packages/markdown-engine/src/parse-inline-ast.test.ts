@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseInlineAst } from "./index";
+import { collectFootnoteDefinitions, parseInlineAst } from "./index";
 import type { InlineRoot } from "./index";
 
 function parse(source: string, startOffset = 0, endOffset = source.length): InlineRoot {
@@ -91,6 +91,87 @@ describe("parseInlineAst", () => {
         text: "Alpha<br>Beta",
         openMarker: { startOffset: 0, endOffset: 1 },
         closeMarker: { startOffset: 14, endOffset: 15 }
+      }
+    ]);
+  });
+
+  it("parses inline math with marker and content offsets", () => {
+    const root = parse("Alpha $x^2$ beta");
+
+    expect(root.children).toEqual([
+      { type: "text", startOffset: 0, endOffset: 6, value: "Alpha " },
+      {
+        type: "inlineMath",
+        startOffset: 6,
+        endOffset: 11,
+        value: "x^2",
+        contentStartOffset: 7,
+        contentEndOffset: 10,
+        openMarker: { startOffset: 6, endOffset: 7 },
+        closeMarker: { startOffset: 10, endOffset: 11 }
+      },
+      { type: "text", startOffset: 11, endOffset: 16, value: " beta" }
+    ]);
+  });
+
+  it("keeps unclosed, escaped, currency, and code-span dollars as text or code", () => {
+    expect(parse("Alpha $x").children).toEqual([
+      { type: "text", startOffset: 0, endOffset: 8, value: "Alpha $x" }
+    ]);
+    expect(parse("Alpha \\$x$").children).toEqual([
+      { type: "text", startOffset: 0, endOffset: 10, value: "Alpha $x$" }
+    ]);
+    expect(parse("Price is $5 and $6").children).toEqual([
+      { type: "text", startOffset: 0, endOffset: 18, value: "Price is $5 and $6" }
+    ]);
+    expect(parse("`$x$` and $y$").children).toEqual([
+      {
+        type: "codeSpan",
+        startOffset: 0,
+        endOffset: 5,
+        text: "$x$",
+        openMarker: { startOffset: 0, endOffset: 1 },
+        closeMarker: { startOffset: 4, endOffset: 5 }
+      },
+      { type: "text", startOffset: 5, endOffset: 10, value: " and " },
+      {
+        type: "inlineMath",
+        startOffset: 10,
+        endOffset: 13,
+        value: "y",
+        contentStartOffset: 11,
+        contentEndOffset: 12,
+        openMarker: { startOffset: 10, endOffset: 11 },
+        closeMarker: { startOffset: 12, endOffset: 13 }
+      }
+    ]);
+  });
+
+  it("accepts padded inline math while preserving content offsets", () => {
+    expect(parse("Alpha $ x $").children).toEqual([
+      { type: "text", startOffset: 0, endOffset: 6, value: "Alpha " },
+      {
+        type: "inlineMath",
+        startOffset: 6,
+        endOffset: 11,
+        value: "x",
+        contentStartOffset: 8,
+        contentEndOffset: 9,
+        openMarker: { startOffset: 6, endOffset: 7 },
+        closeMarker: { startOffset: 10, endOffset: 11 }
+      }
+    ]);
+    expect(parse("Alpha $x $").children).toEqual([
+      { type: "text", startOffset: 0, endOffset: 6, value: "Alpha " },
+      {
+        type: "inlineMath",
+        startOffset: 6,
+        endOffset: 10,
+        value: "x ",
+        contentStartOffset: 7,
+        contentEndOffset: 9,
+        openMarker: { startOffset: 6, endOffset: 7 },
+        closeMarker: { startOffset: 9, endOffset: 10 }
       }
     ]);
   });
@@ -258,5 +339,52 @@ describe("parseInlineAst", () => {
 
     expect(root.children.every((node) => node.type === "text")).toBe(true);
     expect(root.children.map((node) => (node.type === "text" ? node.value : "")).join("")).toBe(source);
+  });
+
+  it("parses defined footnote references with absolute marker offsets", () => {
+    const source = ["Alpha[^note] beta", "", "[^note]: Footnote text"].join("\n");
+    const footnoteDefinitions = collectFootnoteDefinitions(source);
+    const root = parseInlineAst(source, 0, "Alpha[^note] beta".length, { footnoteDefinitions });
+
+    expect(root.children).toEqual([
+      { type: "text", startOffset: 0, endOffset: 5, value: "Alpha" },
+      {
+        type: "footnoteReference",
+        startOffset: 5,
+        endOffset: 12,
+        identifier: "note",
+        label: "note",
+        labelStartOffset: 7,
+        labelEndOffset: 11,
+        openMarker: { startOffset: 5, endOffset: 7 },
+        closeMarker: { startOffset: 11, endOffset: 12 }
+      },
+      { type: "text", startOffset: 12, endOffset: 17, value: " beta" }
+    ]);
+  });
+
+  it("keeps undefined and definition-like footnote syntax as source text", () => {
+    const source = ["Alpha[^missing]", "", "[^note]:", "", "[^note]: Footnote text"].join("\n");
+    const footnoteDefinitions = collectFootnoteDefinitions(source);
+    const undefinedRoot = parseInlineAst(source, 0, "Alpha[^missing]".length, { footnoteDefinitions });
+    const malformedDefinitionStart = source.indexOf("[^note]:");
+    const malformedDefinitionRoot = parseInlineAst(
+      source,
+      malformedDefinitionStart,
+      malformedDefinitionStart + "[^note]:".length,
+      { footnoteDefinitions }
+    );
+
+    expect(undefinedRoot.children).toEqual([
+      { type: "text", startOffset: 0, endOffset: "Alpha[^missing]".length, value: "Alpha[^missing]" }
+    ]);
+    expect(malformedDefinitionRoot.children).toEqual([
+      {
+        type: "text",
+        startOffset: malformedDefinitionStart,
+        endOffset: malformedDefinitionStart + "[^note]:".length,
+        value: "[^note]:"
+      }
+    ]);
   });
 });

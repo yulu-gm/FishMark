@@ -82,6 +82,12 @@ import {
   normalizeStructuralBlankSelectionAnchor
 } from "../line-visibility";
 import { resolvePointerSelectionAnchor as resolveBlockPointerSelectionAnchor } from "../interactions";
+import {
+  createMarkdownEditorViewModeExtension,
+  getMarkdownEditorViewMode,
+  setMarkdownEditorViewModeEffect,
+  type EditorViewMode
+} from "../editor-view-mode";
 
 export type ParseMarkdownDocument = (source: string) => MarkdownDocument;
 export type ParseOrderedListNormalizationBlockMap = (source: string) => BlockMap;
@@ -96,6 +102,7 @@ export type CreateFishMarkMarkdownExtensionsOptions = {
   onBlur?: () => void;
   onOpenLink?: (href: string) => void;
   resolveImagePreviewUrl?: (href: string | null) => string | null;
+  viewMode?: EditorViewMode;
 };
 
 type MarkdownExtensionRuntime = {
@@ -536,14 +543,19 @@ export function createFishMarkMarkdownExtensions(
     }
   };
 
-  const createDecoratedDerivedState = (editorDerivedState: EditorDerivedState) => {
+  const createDecoratedDerivedState = (
+    editorDerivedState: EditorDerivedState,
+    state: EditorState
+  ) => {
+    const viewMode = getMarkdownEditorViewMode(state);
     const inactiveBlockDecorationsState = deriveInactiveBlockDecorationsState({
       source: editorDerivedState.source,
       selection: editorDerivedState.selection,
       hasEditorFocus: runtime.hasEditorFocus,
       editorDerivedState,
       resolveImagePreviewUrl: options.resolveImagePreviewUrl,
-      tableWidgetCallbacks
+      tableWidgetCallbacks,
+      viewMode
     });
 
     options.onBlockDecorationsBuilt?.();
@@ -555,7 +567,7 @@ export function createFishMarkMarkdownExtensions(
   };
 
   const createDerivedState = (state: EditorState) =>
-    createDecoratedDerivedState(createLiveEditorDerivedState(state));
+    createDecoratedDerivedState(createLiveEditorDerivedState(state), state);
 
   const blockDecorationsField = StateField.define<DecorationSet>({
     create(state) {
@@ -640,7 +652,8 @@ export function createFishMarkMarkdownExtensions(
         source: editorDerivedState.source,
         referenceDefinitions: editorDerivedState.referenceDefinitions,
         resolveImagePreviewUrl: options.resolveImagePreviewUrl,
-        tableWidgetCallbacks
+        tableWidgetCallbacks,
+        viewMode: getMarkdownEditorViewMode(state)
       });
 
       runtime.editorDerivedState = editorDerivedState;
@@ -659,7 +672,10 @@ export function createFishMarkMarkdownExtensions(
       return;
     }
 
-    const { activeBlockState, decorationSet, signature } = createDecoratedDerivedState(editorDerivedState);
+    const { activeBlockState, decorationSet, signature } = createDecoratedDerivedState(
+      editorDerivedState,
+      state
+    );
 
     runtime.editorDerivedState = editorDerivedState;
     notifyActiveBlockChange(activeBlockState, force);
@@ -776,7 +792,9 @@ export function createFishMarkMarkdownExtensions(
     };
 
     resolvePointerSelectionHead = (event: MouseEvent): number | null => {
-      const interactionAnchor = resolveBlockPointerSelectionAnchor(this.view, runtime.activeBlockState, event);
+      const interactionAnchor = getMarkdownEditorViewMode(this.view.state) === "source"
+        ? null
+        : resolveBlockPointerSelectionAnchor(this.view, runtime.activeBlockState, event);
 
       if (interactionAnchor !== null) {
         return interactionAnchor;
@@ -859,7 +877,9 @@ export function createFishMarkMarkdownExtensions(
         }
       }
 
-      const interactionAnchor = resolveBlockPointerSelectionAnchor(this.view, runtime.activeBlockState, event);
+      const interactionAnchor = getMarkdownEditorViewMode(this.view.state) === "source"
+        ? null
+        : resolveBlockPointerSelectionAnchor(this.view, runtime.activeBlockState, event);
 
       if (interactionAnchor !== null) {
         event.preventDefault();
@@ -918,6 +938,7 @@ export function createFishMarkMarkdownExtensions(
   });
 
   return [
+    createMarkdownEditorViewModeExtension(options.viewMode),
     blockDecorationsField,
     lifecyclePlugin,
     whitespaceInputHandler,
@@ -939,8 +960,11 @@ export function createFishMarkMarkdownExtensions(
 
       const shouldNormalizeOrderedLists =
         transaction.docChanged && !transaction.annotation(orderedListNormalizationAnnotation);
-      const shouldNormalizeHiddenSelection = shouldNormalizeHiddenMarkerSelection(transaction);
-      const shouldNormalizeStructuralNavigation = shouldNormalizeStructuralNavigationSelection(transaction);
+      const isSourceMode = getMarkdownEditorViewMode(transaction.startState) === "source";
+      const shouldNormalizeHiddenSelection =
+        !isSourceMode && shouldNormalizeHiddenMarkerSelection(transaction);
+      const shouldNormalizeStructuralNavigation =
+        !isSourceMode && shouldNormalizeStructuralNavigationSelection(transaction);
 
       if (!shouldNormalizeOrderedLists && !shouldNormalizeHiddenSelection && !shouldNormalizeStructuralNavigation) {
         return transaction;
@@ -1121,12 +1145,16 @@ export function createFishMarkMarkdownExtensions(
       const shouldForceRefresh = update.transactions.some((transaction) =>
         transaction.effects.some((effect) => effect.is(forceRefreshMarkdownDecorationsEffect))
       );
+      const didChangeViewMode = update.transactions.some((transaction) =>
+        transaction.effects.some((effect) => effect.is(setMarkdownEditorViewModeEffect))
+      );
+      const shouldRefreshDecorations = shouldForceRefresh || didChangeViewMode;
 
       if (update.docChanged) {
         options.onContentChange(update.state.doc.toString());
       }
 
-      if (!update.docChanged && !update.selectionSet && !shouldForceRefresh) {
+      if (!update.docChanged && !update.selectionSet && !shouldRefreshDecorations) {
         return;
       }
 
@@ -1145,17 +1173,17 @@ export function createFishMarkMarkdownExtensions(
         return;
       }
 
-      if (shouldForceRefresh) {
-        recomputeDerivedState(update.view, update.state, true);
-        return;
-      }
-
       if (
         runtime.isCompositionGuardActive ||
         update.view.compositionStarted ||
         update.view.composing
       ) {
         runtime.hasPendingDerivedStateFlush = true;
+        return;
+      }
+
+      if (shouldRefreshDecorations) {
+        recomputeDerivedState(update.view, update.state, true);
         return;
       }
 
@@ -1475,6 +1503,8 @@ function findLinkInInlineNode(node: InlineASTNode, offset: number): InlineLink |
     case "text":
     case "hardBreak":
     case "codeSpan":
+    case "inlineMath":
+    case "footnoteReference":
       return null;
   }
 }

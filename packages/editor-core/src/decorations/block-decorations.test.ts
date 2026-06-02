@@ -767,7 +767,7 @@ describe("createBlockDecorations", () => {
 
     expect(result.signature).toBe(
       [
-        "active:paragraph:86-95:blank-line:86:physical-line:15:86:95:text",
+        "view-mode:wysiwym:active:paragraph:86-95:blank-line:86:physical-line:15:86:95:text",
         "heading:heading:0-7:0:1",
         "list:list:9-25:9:false:list-item:9-14:0:none,list-item:15-25:0:true",
         "blockquote:blockquote:27-49:27:49",
@@ -937,6 +937,59 @@ describe("createBlockDecorations", () => {
     expect(collectWidgets(source, result.decorationSet)).toEqual([
       { from: 17, to: 20, name: "TaskMarkerWidget" }
     ]);
+  });
+
+  it("source mode keeps raw Markdown visible by omitting preview decorations and widgets", () => {
+    const source = [
+      "# Heading",
+      "",
+      "[link](https://example.com) and **bold** with *emphasis*",
+      "![alt](./image.png)",
+      "",
+      "| A | B |",
+      "| - | - |",
+      "| 1 | 2 |",
+      "",
+      "- [x] Task",
+      "",
+      "> **Quote**",
+      "",
+      "```ts",
+      "const answer = 42;",
+      "```",
+      "",
+      "---",
+      "",
+      "tail"
+    ].join("\n");
+    const selection = {
+      anchor: source.indexOf("tail"),
+      head: source.indexOf("tail")
+    };
+    const editorDerivedState = createEditorDerivedState({
+      source,
+      selection,
+      parseMarkdownDocument
+    });
+
+    const result = createBlockDecorations({
+      activeBlockState: editorDerivedState.activeBlockState,
+      activeLine: editorDerivedState.activeLine,
+      editingDocument: editorDerivedState.editingDocument,
+      hasEditorFocus: true,
+      source,
+      viewMode: "source"
+    });
+
+    expect(result.signature).toContain("view-mode:source");
+    expect(result.signature).not.toContain("heading:");
+    expect(result.signature).not.toContain("table:");
+    expect(collectDecorations(source, result.decorationSet)).toEqual([]);
+    expect(collectWidgets(source, result.decorationSet)).toEqual([]);
+    expect(collectBlockReplacements(source, result.decorationSet)).toEqual([]);
+    expect(collectPhysicalLineDecorations(source, result.decorationSet)).toHaveLength(
+      source.split("\n").length
+    );
   });
 
   it("renders indented code blocks as inactive code and hides the source indentation marker", () => {
@@ -1203,6 +1256,97 @@ describe("createBlockDecorations", () => {
         text: '[id]: https://octodex.github.com/images/dojocat.jpg  "The Dojocat"'
       }
     ]);
+  });
+
+  it("renders valid footnote references and definitions with inactive decorations", () => {
+    const source = ["Text[^n]", "", "[^n]: Footnote **body**", "", "Paragraph"].join("\n");
+    const blockMap = parseMarkdownDocument(source);
+    const activeState = createActiveBlockStateFromBlockMap(blockMap, {
+      anchor: source.indexOf("Paragraph"),
+      head: source.indexOf("Paragraph")
+    });
+
+    const result = createBlockDecorations({
+      activeBlockState: activeState,
+      hasEditorFocus: true,
+      source
+    });
+    const ranges = collectDecorations(source, result.decorationSet);
+    const definitionStart = source.indexOf("[^n]:");
+    const definitionContentStart = source.indexOf("Footnote");
+
+    expectExactRangeClasses(ranges, 4, 6, ["cm-inactive-inline-marker"]);
+    expectExactRangeClasses(ranges, 6, 7, ["cm-inactive-inline-footnote-reference"]);
+    expectExactRangeClasses(ranges, 7, 8, ["cm-inactive-inline-marker"]);
+    expectExactRangeClasses(ranges, definitionStart, definitionStart, [
+      "cm-inactive-footnote-definition cm-inactive-footnote-definition-start cm-inactive-footnote-definition-end"
+    ]);
+    expectExactRangeClasses(ranges, definitionStart, definitionContentStart, [
+      "cm-inactive-footnote-definition-marker"
+    ]);
+    expectCoveredRangeClasses(ranges, source.indexOf("body"), source.indexOf("body") + "body".length, [
+      "cm-inactive-inline-strong"
+    ]);
+    expect(collectBlockReplacements(source, result.decorationSet)).toEqual([]);
+  });
+
+  it("keeps duplicate footnote definitions and references visible as source", () => {
+    const source = ["Text[^n]", "", "[^n]: first", "[^n]: second", "", "Paragraph"].join("\n");
+    const blockMap = parseMarkdownDocument(source);
+    const activeState = createActiveBlockStateFromBlockMap(blockMap, {
+      anchor: source.indexOf("Paragraph"),
+      head: source.indexOf("Paragraph")
+    });
+
+    const result = createBlockDecorations({
+      activeBlockState: activeState,
+      hasEditorFocus: true,
+      source
+    });
+    const ranges = collectDecorations(source, result.decorationSet);
+
+    expect(ranges.some((range) => range.className === "cm-inactive-inline-footnote-reference")).toBe(false);
+    expect(ranges.some((range) => range.className.includes("cm-inactive-footnote-definition"))).toBe(false);
+    expect(collectBlockReplacements(source, result.decorationSet)).toEqual([]);
+  });
+
+  it("renders inactive inline and block math with preview widgets", () => {
+    const source = ["Text $x^2$", "", "$$", "a + b", "$$", "", "Paragraph"].join("\n");
+    const blockMap = parseMarkdownDocument(source);
+    const activeState = createActiveBlockStateFromBlockMap(blockMap, {
+      anchor: source.indexOf("Paragraph"),
+      head: source.indexOf("Paragraph")
+    });
+
+    const result = createBlockDecorations({
+      activeBlockState: activeState,
+      hasEditorFocus: true,
+      source
+    });
+
+    expect(collectWidgets(source, result.decorationSet)).toEqual([
+      { from: source.indexOf("$x^2$"), to: source.indexOf("$x^2$") + "$x^2$".length, name: "MathPreviewWidget" },
+      { from: source.indexOf("$$"), to: source.indexOf("\n\nParagraph"), name: "MathPreviewWidget" }
+    ]);
+  });
+
+  it("keeps math previews hidden in whole-document source mode", () => {
+    const source = ["Text $x^2$", "", "$$", "a + b", "$$", "", "Paragraph"].join("\n");
+    const blockMap = parseMarkdownDocument(source);
+    const activeState = createActiveBlockStateFromBlockMap(blockMap, {
+      anchor: source.indexOf("Paragraph"),
+      head: source.indexOf("Paragraph")
+    });
+
+    const result = createBlockDecorations({
+      activeBlockState: activeState,
+      hasEditorFocus: true,
+      source,
+      viewMode: "source"
+    });
+
+    expect(collectWidgets(source, result.decorationSet)).toEqual([]);
+    expect(collectBlockReplacements(source, result.decorationSet)).toEqual([]);
   });
 
   it("applies active paragraph line classes to keep body typography consistent", () => {

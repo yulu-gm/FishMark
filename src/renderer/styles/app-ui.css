@@ -1454,6 +1454,31 @@
   color: var(--fishmark-text-muted, #687180);
 }
 
+.editor-view-mode-toggle {
+  margin-left: auto;
+  min-width: 2.35rem;
+  min-height: 2rem;
+  padding: 0 var(--fishmark-space-3);
+  border: 1px solid transparent;
+  border-radius: var(--fishmark-radius-sm);
+  background: transparent;
+  color: var(--fishmark-text-muted, #687180);
+  font: 600 0.82rem/1 var(--fishmark-ui-font-family, var(--fishmark-editor-font-family));
+  letter-spacing: 0;
+  cursor: default;
+}
+
+.editor-view-mode-toggle:hover,
+.editor-view-mode-toggle:focus-visible {
+  border-color: color-mix(in srgb, var(--fishmark-text-accent, #4f7cff) 30%, transparent);
+  color: var(--fishmark-text-primary, #171a1f);
+}
+
+.editor-view-mode-toggle[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--fishmark-text-accent, #4f7cff) 12%, transparent);
+  color: var(--fishmark-text-accent, #4f7cff);
+}
+
 .app-update-status {
   margin: 0;
   color: var(--fishmark-text-primary, #171a1f);

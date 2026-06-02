@@ -537,9 +537,19 @@ function appendInlineNode(
     case "hardBreak":
       parent.appendChild(document.createElement("br"));
       return;
+    case "footnoteReference":
+      appendMarker(parent, document, source.slice(node.openMarker.startOffset, node.openMarker.endOffset));
+      appendInlineContent(parent, document, "cm-inactive-inline-footnote-reference", node.label);
+      appendMarker(parent, document, source.slice(node.closeMarker.startOffset, node.closeMarker.endOffset));
+      return;
     case "codeSpan":
       appendMarker(parent, document, source.slice(node.openMarker.startOffset, node.openMarker.endOffset));
       appendInlineContent(parent, document, "cm-inactive-inline-code", node.text);
+      appendMarker(parent, document, source.slice(node.closeMarker.startOffset, node.closeMarker.endOffset));
+      return;
+    case "inlineMath":
+      appendMarker(parent, document, source.slice(node.openMarker.startOffset, node.openMarker.endOffset));
+      appendInlineContent(parent, document, "cm-inactive-inline-math", node.value);
       appendMarker(parent, document, source.slice(node.closeMarker.startOffset, node.closeMarker.endOffset));
       return;
     case "strong":
@@ -569,9 +579,16 @@ function shouldRenderNodeAsPlainText(node: InlineNode): boolean {
       return false;
     case "hardBreak":
       return false;
+    case "footnoteReference":
+      return false;
     case "codeSpan":
       return (
         node.text.length === 0 ||
+        node.openMarker.endOffset >= node.closeMarker.startOffset
+      );
+    case "inlineMath":
+      return (
+        node.value.length === 0 ||
         node.openMarker.endOffset >= node.closeMarker.startOffset
       );
     case "strong":

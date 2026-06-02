@@ -29,11 +29,13 @@ describe("scripts/analyze-renderer-bundle.mjs", () => {
         version: 3,
         sources: [
           "../../node_modules/@codemirror/view/dist/index.js",
+          "../../node_modules/micromark-extension-math/node_modules/katex/dist/katex.mjs",
           "../../packages/editor-core/src/extensions/markdown.ts",
           "../../src/renderer/editor/App.tsx"
         ],
         sourcesContent: [
           "export const view = 'x'.repeat(100);",
+          "export const katex = 'x';",
           "export const extension = 'x';",
           "export const app = 'x';"
         ],
@@ -79,6 +81,7 @@ describe("scripts/analyze-renderer-bundle.mjs", () => {
       expect(report.lazyChunks.map((chunk) => chunk.name)).toContain("settings-view-test.js");
       expect(report.lazyChunks.map((chunk) => chunk.name)).not.toContain("shared-test.js");
       expect(report.topSourceGroups[0]?.group).toBe("@codemirror/view");
+      expect(report.topSourceGroups.map((group) => group.group)).toContain("katex");
       expect(report.budget).toBeNull();
     } finally {
       await rm(root, { force: true, recursive: true });

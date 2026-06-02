@@ -1,14 +1,18 @@
 import { parse, postprocess, preprocess } from "micromark";
+import { math } from "micromark-extension-math";
 import type { Token } from "micromark-util-types";
 
 import { strikethrough } from "./extensions/strikethrough";
 import type {
+  FootnoteDefinition,
   InlineCodeSpan,
   InlineEmphasis,
+  InlineFootnoteReference,
   InlineHardBreak,
   InlineImage,
   InlineLink,
   InlineMarker,
+  InlineMath,
   InlineNode,
   InlineReferenceDefinition,
   InlineRoot,
@@ -40,10 +44,18 @@ type CodeEntry = {
   textChunks: string[];
 };
 
-type AstStackEntry = RootEntry | ContainerEntry | CodeEntry;
+type MathEntry = {
+  kind: "math";
+  node: InlineMath;
+  markerCount: number;
+  textChunks: string[];
+};
+
+type AstStackEntry = RootEntry | ContainerEntry | CodeEntry | MathEntry;
 
 export type ParseInlineAstOptions = {
   referenceDefinitions?: ReadonlyMap<string, InlineReferenceDefinition>;
+  footnoteDefinitions?: ReadonlyMap<string, FootnoteDefinition>;
 };
 
 export function normalizeReferenceIdentifier(value: string): string {
@@ -71,7 +83,9 @@ export function parseInlineAst(
   }
 
   const events = postprocess(
-    parse({ extensions: [strikethrough()] }).text().write(preprocess()(sourceSlice, "utf8", true))
+    parse({ extensions: [math({ singleDollarTextMath: true }), strikethrough()] })
+      .text()
+      .write(preprocess()(sourceSlice, "utf8", true))
   );
 
   const stack: AstStackEntry[] = [{ kind: "root", node: root }];
@@ -154,6 +168,16 @@ export function parseInlineAst(
         continue;
       }
 
+      if (tokenType === "mathText") {
+        stack.push({
+          kind: "math",
+          markerCount: 0,
+          textChunks: [],
+          node: createInlineMathNode(token, clampedStartOffset)
+        });
+        continue;
+      }
+
       if (tokenType === "strongSequence") {
         assignContainerMarker(stack, "strong", token, clampedStartOffset);
         continue;
@@ -179,6 +203,11 @@ export function parseInlineAst(
         continue;
       }
 
+      if (tokenType === "mathTextSequence") {
+        assignMathMarker(stack, token, clampedStartOffset);
+        continue;
+      }
+
       if (tokenType === "codeTextData") {
         const codeEntry = getNearestCodeEntry(stack);
         if (codeEntry) {
@@ -187,10 +216,31 @@ export function parseInlineAst(
         continue;
       }
 
+      if (tokenType === "mathTextData") {
+        const mathEntry = getNearestMathEntry(stack);
+        if (mathEntry) {
+          appendMathData(mathEntry, sourceSlice, token, clampedStartOffset);
+        }
+        continue;
+      }
+
       if (tokenType === "htmlTextData") {
         const value = readSlice(sourceSlice, token);
         if (isInlineHardBreakTag(value)) {
           appendNode(stack, createHardBreakNode(token, clampedStartOffset));
+        }
+        continue;
+      }
+
+      if (tokenType === "characterEscapeValue" && resourceDepth === 0 && referenceDepth === 0) {
+        const value = readSlice(sourceSlice, token);
+        if (value.length > 0) {
+          appendNode(stack, {
+            type: "text",
+            startOffset: toAbsoluteOffset(clampedStartOffset, token.start.offset),
+            endOffset: toAbsoluteOffset(clampedStartOffset, token.end.offset),
+            value
+          });
         }
         continue;
       }
@@ -270,10 +320,25 @@ export function parseInlineAst(
         ensureCodeMarkers(codeEntry.node);
         appendNode(stack, codeEntry.node);
       }
+      continue;
+    }
+
+    if (tokenType === "mathText") {
+      const mathEntry = popMathEntry(stack);
+      if (mathEntry) {
+        mathEntry.node.value = mathEntry.textChunks.join("");
+        ensureMathMarkers(mathEntry.node);
+        if (shouldAcceptInlineMath(mathEntry.node, source)) {
+          appendNode(stack, mathEntry.node);
+        } else {
+          appendTextNode(stack, source, mathEntry.node.startOffset, mathEntry.node.endOffset);
+        }
+      }
     }
   }
 
   resolveReferenceMediaTextNodes(root, source, options.referenceDefinitions);
+  resolveFootnoteReferenceTextNodes(root, source, options.footnoteDefinitions);
   return root;
 }
 
@@ -353,6 +418,20 @@ function createCodeSpanNode(token: Token, baseOffset: number): InlineCodeSpan {
   };
 }
 
+function createInlineMathNode(token: Token, baseOffset: number): InlineMath {
+  const startOffset = toAbsoluteOffset(baseOffset, token.start.offset);
+  return {
+    type: "inlineMath",
+    startOffset,
+    endOffset: toAbsoluteOffset(baseOffset, token.end.offset),
+    value: "",
+    contentStartOffset: startOffset,
+    contentEndOffset: startOffset,
+    openMarker: createMarker(startOffset, startOffset),
+    closeMarker: createMarker(startOffset, startOffset)
+  };
+}
+
 function createHardBreakNode(token: Token, baseOffset: number): InlineHardBreak {
   return {
     type: "hardBreak",
@@ -367,7 +446,7 @@ function isInlineHardBreakTag(value: string): boolean {
 
 function appendNode(stack: AstStackEntry[], node: InlineNode): void {
   const parent = stack[stack.length - 1];
-  if (!parent || parent.kind === "code") {
+  if (!parent || parent.kind === "code" || parent.kind === "math") {
     return;
   }
 
@@ -382,6 +461,19 @@ function appendNode(stack: AstStackEntry[], node: InlineNode): void {
   }
 
   siblings.push(node);
+}
+
+function appendTextNode(stack: AstStackEntry[], source: string, startOffset: number, endOffset: number): void {
+  if (endOffset <= startOffset) {
+    return;
+  }
+
+  appendNode(stack, {
+    type: "text",
+    startOffset,
+    endOffset,
+    value: source.slice(startOffset, endOffset)
+  });
 }
 
 function assignContainerMarker(
@@ -432,6 +524,37 @@ function assignCodeMarker(stack: AstStackEntry[], token: Token, baseOffset: numb
   codeEntry.markerCount += 1;
 }
 
+function assignMathMarker(stack: AstStackEntry[], token: Token, baseOffset: number): void {
+  const mathEntry = getNearestMathEntry(stack);
+  if (!mathEntry) {
+    return;
+  }
+
+  const marker = createMarker(
+    toAbsoluteOffset(baseOffset, token.start.offset),
+    toAbsoluteOffset(baseOffset, token.end.offset)
+  );
+  if (mathEntry.markerCount === 0) {
+    mathEntry.node.openMarker = marker;
+    mathEntry.node.contentStartOffset = marker.endOffset;
+    mathEntry.node.contentEndOffset = marker.endOffset;
+  } else {
+    mathEntry.node.closeMarker = marker;
+  }
+  mathEntry.markerCount += 1;
+}
+
+function appendMathData(mathEntry: MathEntry, sourceSlice: string, token: Token, baseOffset: number): void {
+  const startOffset = toAbsoluteOffset(baseOffset, token.start.offset);
+  const endOffset = toAbsoluteOffset(baseOffset, token.end.offset);
+
+  mathEntry.textChunks.push(readSlice(sourceSlice, token));
+  if (mathEntry.node.contentEndOffset <= mathEntry.node.contentStartOffset) {
+    mathEntry.node.contentStartOffset = startOffset;
+  }
+  mathEntry.node.contentEndOffset = endOffset;
+}
+
 function popContainerEntry(stack: AstStackEntry[], kind: ContainerKind): ContainerEntry | null {
   const entry = stack[stack.length - 1];
   if (!entry || entry.kind !== "container" || entry.containerKind !== kind) {
@@ -452,10 +575,31 @@ function popCodeEntry(stack: AstStackEntry[]): CodeEntry | null {
   return entry;
 }
 
+function popMathEntry(stack: AstStackEntry[]): MathEntry | null {
+  const entry = stack[stack.length - 1];
+  if (!entry || entry.kind !== "math") {
+    return null;
+  }
+
+  stack.pop();
+  return entry;
+}
+
 function getNearestCodeEntry(stack: AstStackEntry[]): CodeEntry | null {
   for (let index = stack.length - 1; index >= 0; index -= 1) {
     const entry = stack[index];
     if (entry?.kind === "code") {
+      return entry;
+    }
+  }
+
+  return null;
+}
+
+function getNearestMathEntry(stack: AstStackEntry[]): MathEntry | null {
+  for (let index = stack.length - 1; index >= 0; index -= 1) {
+    const entry = stack[index];
+    if (entry?.kind === "math") {
       return entry;
     }
   }
@@ -520,6 +664,10 @@ function readInlineNodeText(node: InlineNode): string {
       return "\n";
     case "codeSpan":
       return node.text;
+    case "inlineMath":
+      return node.value;
+    case "footnoteReference":
+      return node.label;
     case "strong":
     case "emphasis":
     case "strikethrough":
@@ -539,7 +687,12 @@ function resolveReferenceMediaTextNodes(
   }
 
   root.children = root.children.flatMap((node) => {
-    if (node.type === "codeSpan" || node.type === "hardBreak") {
+    if (
+      node.type === "codeSpan" ||
+      node.type === "hardBreak" ||
+      node.type === "inlineMath" ||
+      node.type === "footnoteReference"
+    ) {
       return [node];
     }
 
@@ -623,6 +776,130 @@ function splitReferenceMediaTextNode(
   return replacements;
 }
 
+function resolveFootnoteReferenceTextNodes(
+  root: InlineRoot | InlineContainerNode,
+  source: string,
+  footnoteDefinitions: ReadonlyMap<string, FootnoteDefinition> | undefined
+): void {
+  if (!footnoteDefinitions || footnoteDefinitions.size === 0) {
+    return;
+  }
+
+  root.children = root.children.flatMap((node) => {
+    if (
+      node.type === "codeSpan" ||
+      node.type === "hardBreak" ||
+      node.type === "inlineMath" ||
+      node.type === "footnoteReference"
+    ) {
+      return [node];
+    }
+
+    if (node.type !== "text") {
+      resolveFootnoteReferenceTextNodes(node, source, footnoteDefinitions);
+      return [node];
+    }
+
+    return splitFootnoteReferenceTextNode(node, source, footnoteDefinitions);
+  });
+}
+
+function splitFootnoteReferenceTextNode(
+  node: InlineText,
+  source: string,
+  footnoteDefinitions: ReadonlyMap<string, FootnoteDefinition>
+): InlineNode[] {
+  const replacements: InlineNode[] = [];
+  let cursor = 0;
+  const pattern = /\[\^([^\]\n\r]+)\]/gu;
+
+  for (const match of node.value.matchAll(pattern)) {
+    if (typeof match.index !== "number") {
+      continue;
+    }
+
+    const label = match[1] ?? "";
+    const identifier = normalizeReferenceIdentifier(label);
+
+    if (identifier.length === 0 || !footnoteDefinitions.has(identifier)) {
+      continue;
+    }
+
+    const matchStartOffset = node.startOffset + match.index;
+    const matchEndOffset = matchStartOffset + match[0].length;
+
+    if (
+      isLikelyLinkReferenceSecondLabel(node.value, match.index) ||
+      isFootnoteDefinitionLikeReference(source, matchStartOffset, matchEndOffset)
+    ) {
+      continue;
+    }
+
+    if (match.index > cursor) {
+      replacements.push({
+        type: "text",
+        startOffset: node.startOffset + cursor,
+        endOffset: matchStartOffset,
+        value: node.value.slice(cursor, match.index)
+      });
+    }
+
+    replacements.push(createFootnoteReferenceNode(matchStartOffset, matchEndOffset, identifier, label));
+    cursor = match.index + match[0].length;
+  }
+
+  if (replacements.length === 0) {
+    return [node];
+  }
+
+  if (cursor < node.value.length) {
+    replacements.push({
+      type: "text",
+      startOffset: node.startOffset + cursor,
+      endOffset: node.endOffset,
+      value: node.value.slice(cursor)
+    });
+  }
+
+  return replacements;
+}
+
+function createFootnoteReferenceNode(
+  startOffset: number,
+  endOffset: number,
+  identifier: string,
+  label: string
+): InlineFootnoteReference {
+  const labelStartOffset = startOffset + 2;
+  const labelEndOffset = endOffset - 1;
+
+  return {
+    type: "footnoteReference",
+    startOffset,
+    endOffset,
+    identifier,
+    label,
+    labelStartOffset,
+    labelEndOffset,
+    openMarker: createMarker(startOffset, labelStartOffset),
+    closeMarker: createMarker(labelEndOffset, endOffset)
+  };
+}
+
+function isLikelyLinkReferenceSecondLabel(value: string, matchIndex: number): boolean {
+  return matchIndex > 0 && value[matchIndex - 1] === "]";
+}
+
+function isFootnoteDefinitionLikeReference(source: string, matchStartOffset: number, matchEndOffset: number): boolean {
+  if (source[matchEndOffset] !== ":") {
+    return false;
+  }
+
+  const previousLineBreakOffset = source.lastIndexOf("\n", Math.max(0, matchStartOffset - 1));
+  const lineStartOffset = previousLineBreakOffset === -1 ? 0 : previousLineBreakOffset + 1;
+  return /^[ \t]{0,3}$/u.test(source.slice(lineStartOffset, matchStartOffset));
+}
+
 function createReferenceMediaNode(input: {
   definition: InlineReferenceDefinition;
   endOffset: number;
@@ -670,4 +947,41 @@ function ensureCodeMarkers(node: InlineCodeSpan): void {
   if (node.closeMarker.startOffset === node.closeMarker.endOffset) {
     node.closeMarker = { ...node.openMarker };
   }
+}
+
+function ensureMathMarkers(node: InlineMath): void {
+  if (node.closeMarker.startOffset === node.closeMarker.endOffset) {
+    node.closeMarker = { ...node.openMarker };
+  }
+}
+
+function shouldAcceptInlineMath(node: InlineMath, source: string): boolean {
+  if (node.value.trim().length === 0) {
+    return false;
+  }
+
+  if (node.openMarker.endOffset >= node.closeMarker.startOffset) {
+    return false;
+  }
+
+  return !isLikelyCurrencyInlineMath(node, source);
+}
+
+function isLikelyCurrencyInlineMath(node: InlineMath, source: string): boolean {
+  const markerLength = node.openMarker.endOffset - node.openMarker.startOffset;
+  const value = node.value.trim();
+
+  if (markerLength !== 1 || !/^\d/u.test(value)) {
+    return false;
+  }
+
+  const previousCharacter = source[node.startOffset - 1] ?? "";
+  const nextCharacter = source[node.endOffset] ?? "";
+  const looksLikePlainAmount = !/[\\^_=+\-*/{}()[\]]/u.test(value);
+
+  return /[0-9]/u.test(nextCharacter) || (looksLikePlainAmount && isCurrencyBoundary(previousCharacter));
+}
+
+function isCurrencyBoundary(character: string): boolean {
+  return character.length === 0 || /\s/u.test(character);
 }

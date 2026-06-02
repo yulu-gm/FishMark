@@ -10,15 +10,36 @@ import type {
 } from "./block-map";
 import { parseBlockquoteLinePrefix } from "./blockquote";
 import type { InlineReferenceDefinition } from "./inline-ast";
+import type {
+  FootnoteDefinition,
+  FootnoteDefinitionBlockData,
+  FootnoteDefinitionContentLine,
+  FootnoteDefinitionStatus
+} from "./inline-ast";
 import type { MarkdownDocument } from "./markdown-document";
 import { parseBlockMap } from "./parse-block-map";
 import { normalizeReferenceIdentifier, parseInlineAst } from "./parse-inline-ast";
 
 export function parseMarkdownDocument(source: string): MarkdownDocument {
   const referenceDefinitions = collectReferenceDefinitions(source);
-  return {
-    blocks: parseBlockMap(source).blocks.map((block) => attachInlineData(block, source, referenceDefinitions)),
+  const blockMap = parseBlockMap(source);
+  const footnoteDefinitionData = collectFootnoteDefinitionData(source, blockMap.blocks);
+  const footnoteDefinitions = enrichFootnoteDefinitions(
+    footnoteDefinitionData.definitions,
+    source,
     referenceDefinitions
+  );
+  const blocks = attachFootnoteDefinitionBlocks(
+    blockMap.blocks,
+    footnoteDefinitionData.candidates,
+    footnoteDefinitions,
+    source
+  );
+
+  return {
+    blocks: blocks.map((block) => attachInlineData(block, source, referenceDefinitions, footnoteDefinitions)),
+    referenceDefinitions,
+    footnoteDefinitions
   };
 }
 
@@ -28,6 +49,7 @@ export function collectReferenceDefinitions(source: string): Map<string, InlineR
     destinationEndOffset: number | null;
     destinationStartOffset: number | null;
     href: string | null;
+    isFootnote: boolean;
     label: string | null;
     title: string | null;
     titleEndOffset: number | null;
@@ -43,6 +65,7 @@ export function collectReferenceDefinitions(source: string): Map<string, InlineR
           destinationEndOffset: null,
           destinationStartOffset: null,
           href: null,
+          isFootnote: false,
           label: null,
           title: null,
           titleEndOffset: null,
@@ -56,7 +79,9 @@ export function collectReferenceDefinitions(source: string): Map<string, InlineR
       }
 
       if (tokenType === "definitionLabelString") {
-        current.label = normalizeReferenceIdentifier(source.slice(token.start.offset, token.end.offset));
+        const label = source.slice(token.start.offset, token.end.offset);
+        current.isFootnote = isFootnoteDefinitionLabel(label);
+        current.label = current.isFootnote ? null : normalizeReferenceIdentifier(label);
         continue;
       }
 
@@ -82,6 +107,7 @@ export function collectReferenceDefinitions(source: string): Map<string, InlineR
 
     if (
       current.label &&
+      !current.isFootnote &&
       current.href !== null &&
       current.destinationStartOffset !== null &&
       current.destinationEndOffset !== null &&
@@ -103,10 +129,412 @@ export function collectReferenceDefinitions(source: string): Map<string, InlineR
   return definitions;
 }
 
+type FootnoteDefinitionCandidate = FootnoteDefinition & {
+  status: FootnoteDefinitionStatus;
+};
+
+type FootnoteDefinitionData = {
+  candidates: FootnoteDefinitionCandidate[];
+  definitions: Map<string, FootnoteDefinition>;
+};
+
+export function collectFootnoteDefinitions(source: string): Map<string, FootnoteDefinition> {
+  return collectFootnoteDefinitionData(source, parseBlockMap(source).blocks).definitions;
+}
+
+function collectFootnoteDefinitionData(
+  source: string,
+  blocks: readonly MarkdownBlock[]
+): FootnoteDefinitionData {
+  const candidates = filterAttachableFootnoteDefinitionCandidates(
+    scanFootnoteDefinitionCandidates(source),
+    blocks
+  );
+  const validCandidatesByIdentifier = new Map<string, FootnoteDefinitionCandidate[]>();
+
+  for (const candidate of candidates) {
+    if (candidate.status !== "valid") {
+      continue;
+    }
+
+    const existing = validCandidatesByIdentifier.get(candidate.identifier) ?? [];
+    existing.push(candidate);
+    validCandidatesByIdentifier.set(candidate.identifier, existing);
+  }
+
+  const definitions = new Map<string, FootnoteDefinition>();
+
+  for (const [identifier, entries] of validCandidatesByIdentifier) {
+    if (entries.length === 1) {
+      const definition = entries[0]!;
+      definitions.set(identifier, cloneFootnoteDefinition(definition));
+      continue;
+    }
+
+    for (const entry of entries) {
+      entry.status = "duplicate";
+    }
+  }
+
+  return { candidates, definitions };
+}
+
+function scanFootnoteDefinitionCandidates(source: string): FootnoteDefinitionCandidate[] {
+  const candidates: FootnoteDefinitionCandidate[] = [];
+  const lines = createLineInfos(source, 0, 1);
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]!;
+    const match = /^([ \t]{0,3})\[\^([^\]\r\n]*)\]:[ \t]*/u.exec(line.text);
+
+    if (!match) {
+      continue;
+    }
+
+    const indent = match[1] ?? "";
+    const label = match[2] ?? "";
+    const identifier = normalizeReferenceIdentifier(label);
+    const labelStartOffset = line.startOffset + indent.length + 2;
+    const labelEndOffset = labelStartOffset + label.length;
+    const markerStartOffset = line.startOffset + indent.length;
+    const markerEndOffset = markerStartOffset + "[^".length + label.length + "]:".length;
+    const firstContentStartOffset = line.startOffset + match[0].length;
+    const contentLines: FootnoteDefinitionContentLine[] = [];
+    let endOffset = line.endOffset;
+    let endLine = line.lineNumber;
+
+    appendFootnoteContentLine(
+      contentLines,
+      line.startOffset,
+      line.endOffset,
+      firstContentStartOffset,
+      trimTrailingCarriageReturn(source, line.startOffset, line.endOffset)
+    );
+
+    let continuationIndex = index + 1;
+    while (continuationIndex < lines.length) {
+      const continuation = lines[continuationIndex]!;
+      const continuationContentStart = getFootnoteContinuationContentStart(continuation.text);
+
+      if (continuationContentStart === null) {
+        break;
+      }
+
+      const contentStartOffset = continuation.startOffset + continuationContentStart;
+      const contentEndOffset = trimTrailingCarriageReturn(
+        source,
+        continuation.startOffset,
+        continuation.endOffset
+      );
+
+      appendFootnoteContentLine(
+        contentLines,
+        continuation.startOffset,
+        continuation.endOffset,
+        contentStartOffset,
+        contentEndOffset
+      );
+      endOffset = continuation.endOffset;
+      endLine = continuation.lineNumber;
+      continuationIndex += 1;
+    }
+
+    const contentStartOffset = contentLines[0]?.contentStartOffset ?? firstContentStartOffset;
+    const contentEndOffset = contentLines.at(-1)?.contentEndOffset ?? firstContentStartOffset;
+    const hasContent = contentLines.some((entry) => entry.contentEndOffset > entry.contentStartOffset);
+    const status: FootnoteDefinitionStatus = identifier.length > 0 && hasContent ? "valid" : "malformed";
+
+    candidates.push({
+      identifier,
+      label,
+      status,
+      startOffset: line.startOffset,
+      endOffset,
+      startLine: line.lineNumber,
+      endLine,
+      labelStartOffset,
+      labelEndOffset,
+      markerStartOffset,
+      markerEndOffset,
+      contentStartOffset,
+      contentEndOffset,
+      lines: contentLines
+    });
+
+    index = Math.max(index, continuationIndex - 1);
+  }
+
+  return candidates;
+}
+
+function appendFootnoteContentLine(
+  lines: FootnoteDefinitionContentLine[],
+  startOffset: number,
+  endOffset: number,
+  contentStartOffset: number,
+  contentEndOffset: number
+): void {
+  if (contentEndOffset < contentStartOffset) {
+    return;
+  }
+
+  lines.push({
+    startOffset,
+    endOffset,
+    contentStartOffset,
+    contentEndOffset
+  });
+}
+
+function getFootnoteContinuationContentStart(lineText: string): number | null {
+  if (lineText.length === 0 || lineText.trim().length === 0) {
+    return null;
+  }
+
+  if (lineText.startsWith("\t")) {
+    return 1;
+  }
+
+  const spaces = /^ {4,}/u.exec(lineText)?.[0].length ?? 0;
+  return spaces >= 4 ? 4 : null;
+}
+
+function cloneFootnoteDefinition(definition: FootnoteDefinition): FootnoteDefinition {
+  return {
+    identifier: definition.identifier,
+    label: definition.label,
+    startOffset: definition.startOffset,
+    endOffset: definition.endOffset,
+    startLine: definition.startLine,
+    endLine: definition.endLine,
+    labelStartOffset: definition.labelStartOffset,
+    labelEndOffset: definition.labelEndOffset,
+    markerStartOffset: definition.markerStartOffset,
+    markerEndOffset: definition.markerEndOffset,
+    contentStartOffset: definition.contentStartOffset,
+    contentEndOffset: definition.contentEndOffset,
+    lines: definition.lines.map((line) => ({ ...line }))
+  };
+}
+
+function enrichFootnoteDefinitions(
+  definitions: ReadonlyMap<string, FootnoteDefinition>,
+  source: string,
+  referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition>
+): Map<string, FootnoteDefinition> {
+  const enriched = new Map<string, FootnoteDefinition>();
+
+  for (const [identifier, definition] of definitions) {
+    enriched.set(identifier, enrichFootnoteDefinition(definition, source, referenceDefinitions, definitions));
+  }
+
+  return enriched;
+}
+
+function enrichFootnoteDefinition(
+  definition: FootnoteDefinition,
+  source: string,
+  referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition>,
+  footnoteDefinitions: ReadonlyMap<string, FootnoteDefinition>
+): FootnoteDefinition {
+  return {
+    ...definition,
+    lines: definition.lines.map((line) => ({
+      ...line,
+      inline: parseInlineAst(source, line.contentStartOffset, line.contentEndOffset, {
+        referenceDefinitions,
+        footnoteDefinitions
+      })
+    }))
+  };
+}
+
+function attachFootnoteDefinitionBlocks(
+  blocks: MarkdownBlock[],
+  candidates: readonly FootnoteDefinitionCandidate[],
+  definitions: ReadonlyMap<string, FootnoteDefinition>,
+  source: string
+): MarkdownBlock[] {
+  const sortedCandidates = [...candidates].sort((left, right) => left.startOffset - right.startOffset);
+  const nextBlocks: MarkdownBlock[] = [];
+  let candidateIndex = 0;
+
+  for (let index = 0; index < blocks.length; index += 1) {
+    const block = blocks[index]!;
+    const blockCandidates: FootnoteDefinitionCandidate[] = [];
+
+    while (
+      candidateIndex < sortedCandidates.length &&
+      sortedCandidates[candidateIndex]!.endOffset <= block.startOffset
+    ) {
+      candidateIndex += 1;
+    }
+
+    let lookaheadIndex = candidateIndex;
+    while (
+      lookaheadIndex < sortedCandidates.length &&
+      sortedCandidates[lookaheadIndex]!.startOffset < block.endOffset
+    ) {
+      const candidate = sortedCandidates[lookaheadIndex]!;
+
+      if (canAttachFootnoteDefinitionCandidate(block, candidate)) {
+        blockCandidates.push(candidate);
+      }
+
+      lookaheadIndex += 1;
+    }
+
+    if (blockCandidates.length === 0) {
+      nextBlocks.push(block);
+      continue;
+    }
+
+    let segmentStartOffset = block.startOffset;
+
+    for (const candidate of blockCandidates) {
+      appendParagraphSegmentIfPresent(nextBlocks, source, segmentStartOffset, candidate.startOffset, block.startLine);
+      nextBlocks.push(createFootnoteDefinitionBlock(candidate, definitions));
+      segmentStartOffset = Math.max(segmentStartOffset, candidate.endOffset);
+    }
+
+    appendParagraphSegmentIfPresent(nextBlocks, source, segmentStartOffset, block.endOffset, block.startLine);
+  }
+
+  return nextBlocks;
+}
+
+function filterAttachableFootnoteDefinitionCandidates(
+  candidates: readonly FootnoteDefinitionCandidate[],
+  blocks: readonly MarkdownBlock[]
+): FootnoteDefinitionCandidate[] {
+  return candidates.filter((candidate) =>
+    blocks.some((block) => canAttachFootnoteDefinitionCandidate(block, candidate))
+  );
+}
+
+function canAttachFootnoteDefinitionCandidate(
+  block: MarkdownBlock,
+  candidate: FootnoteDefinitionCandidate
+): boolean {
+  return (
+    (block.type === "paragraph" || block.type === "definition") &&
+    candidate.startOffset >= block.startOffset &&
+    candidate.endOffset <= block.endOffset
+  );
+}
+
+function createFootnoteDefinitionBlock(
+  candidate: FootnoteDefinitionCandidate,
+  definitions: ReadonlyMap<string, FootnoteDefinition>
+): MarkdownBlock {
+  const footnoteDefinition = createFootnoteDefinitionBlockData(candidate, definitions);
+
+  return {
+    id: `definition:${candidate.startOffset}-${candidate.endOffset}`,
+    type: "definition",
+    startOffset: candidate.startOffset,
+    endOffset: candidate.endOffset,
+    startLine: candidate.startLine,
+    endLine: candidate.endLine,
+    footnoteDefinition
+  };
+}
+
+function appendParagraphSegmentIfPresent(
+  blocks: MarkdownBlock[],
+  source: string,
+  startOffset: number,
+  endOffset: number,
+  fallbackStartLine: number
+): void {
+  const contentStartOffset = skipLineBreaks(source, startOffset, endOffset);
+  const contentEndOffset = trimOuterWhitespace(source, contentStartOffset, endOffset);
+
+  if (contentEndOffset <= contentStartOffset) {
+    return;
+  }
+
+  const startLine = resolveLineNumberAtOffset(source, contentStartOffset, fallbackStartLine);
+  const endLine = resolveLineNumberAtOffset(source, contentEndOffset, startLine);
+
+  blocks.push({
+    id: `paragraph:${contentStartOffset}-${contentEndOffset}`,
+    type: "paragraph",
+    startOffset: contentStartOffset,
+    endOffset: contentEndOffset,
+    startLine,
+    endLine
+  });
+}
+
+function skipLineBreaks(source: string, startOffset: number, endOffset: number): number {
+  let cursor = startOffset;
+
+  while (cursor < endOffset && (source[cursor] === "\r" || source[cursor] === "\n")) {
+    cursor += 1;
+  }
+
+  return cursor;
+}
+
+function trimOuterWhitespace(source: string, startOffset: number, endOffset: number): number {
+  let cursor = endOffset;
+
+  while (cursor > startOffset) {
+    const character = source[cursor - 1];
+
+    if (character !== " " && character !== "\t" && character !== "\r" && character !== "\n") {
+      break;
+    }
+
+    cursor -= 1;
+  }
+
+  return cursor;
+}
+
+function resolveLineNumberAtOffset(source: string, offset: number, fallbackLine: number): number {
+  if (offset <= 0) {
+    return 1;
+  }
+
+  let line = 1;
+  let cursor = 0;
+
+  while (cursor < offset && cursor < source.length) {
+    if (source[cursor] === "\n") {
+      line += 1;
+    }
+
+    cursor += 1;
+  }
+
+  return line || fallbackLine;
+}
+
+function createFootnoteDefinitionBlockData(
+  candidate: FootnoteDefinitionCandidate,
+  definitions: ReadonlyMap<string, FootnoteDefinition>
+): FootnoteDefinitionBlockData {
+  const definition = candidate.status === "valid"
+    ? definitions.get(candidate.identifier) ?? candidate
+    : candidate;
+
+  return {
+    ...definition,
+    status: candidate.status
+  };
+}
+
+function isFootnoteDefinitionLabel(label: string): boolean {
+  return label.startsWith("^");
+}
+
 function attachInlineData(
   block: MarkdownBlock,
   source: string,
-  referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition>
+  referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition>,
+  footnoteDefinitions: ReadonlyMap<string, FootnoteDefinition>
 ): MarkdownBlock {
   if (block.type === "heading") {
     const contentRange = getHeadingContentRange(block, source);
@@ -114,7 +542,8 @@ function attachInlineData(
       ...block,
       markerEnd: contentRange.markerEnd,
       inline: parseInlineAst(source, contentRange.contentStartOffset, contentRange.contentEndOffset, {
-        referenceDefinitions
+        referenceDefinitions,
+        footnoteDefinitions
       })
     };
   }
@@ -123,18 +552,18 @@ function attachInlineData(
     const contentEndOffset = trimTrailingCarriageReturn(source, block.startOffset, block.endOffset);
     return {
       ...block,
-      inline: parseInlineAst(source, block.startOffset, contentEndOffset, { referenceDefinitions })
+      inline: parseInlineAst(source, block.startOffset, contentEndOffset, { referenceDefinitions, footnoteDefinitions })
     };
   }
 
   if (block.type === "list") {
-    return enrichListBlock(block, source, referenceDefinitions);
+    return enrichListBlock(block, source, referenceDefinitions, footnoteDefinitions);
   }
 
   if (block.type === "blockquote") {
     return {
       ...block,
-      lines: createBlockquoteLines(block, source, referenceDefinitions)
+      lines: createBlockquoteLines(block, source, referenceDefinitions, footnoteDefinitions)
     };
   }
 
@@ -148,11 +577,12 @@ function attachInlineData(
 function enrichListBlock(
   block: ListBlock,
   source: string,
-  referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition>
+  referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition>,
+  footnoteDefinitions: ReadonlyMap<string, FootnoteDefinition>
 ): ListBlock {
   return {
     ...block,
-    items: block.items.map((item) => enrichListItem(item, source, referenceDefinitions))
+    items: block.items.map((item) => enrichListItem(item, source, referenceDefinitions, footnoteDefinitions))
   };
 }
 
@@ -195,7 +625,8 @@ function getHeadingContentRange(heading: HeadingBlock, source: string): HeadingC
 function enrichListItem(
   item: ListItemBlock,
   source: string,
-  referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition>
+  referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition>,
+  footnoteDefinitions: ReadonlyMap<string, FootnoteDefinition>
 ): ListItemBlock {
   const contentRange = getListItemContentRange(item, source);
   return {
@@ -203,9 +634,10 @@ function enrichListItem(
     contentStartOffset: contentRange.contentStartOffset,
     contentEndOffset: contentRange.contentEndOffset,
     inline: parseInlineAst(source, contentRange.contentStartOffset, contentRange.contentEndOffset, {
-      referenceDefinitions
+      referenceDefinitions,
+      footnoteDefinitions
     }),
-    children: item.children.map((child) => enrichListBlock(child, source, referenceDefinitions))
+    children: item.children.map((child) => enrichListBlock(child, source, referenceDefinitions, footnoteDefinitions))
   };
 }
 
@@ -256,7 +688,8 @@ function trimTrailingListItemContent(source: string, startOffset: number, endOff
 function createBlockquoteLines(
   blockquote: BlockquoteBlock,
   source: string,
-  referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition>
+  referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition>,
+  footnoteDefinitions: ReadonlyMap<string, FootnoteDefinition>
 ): InlineLine[] {
   const lines = createLineInfos(
     source.slice(blockquote.startOffset, blockquote.endOffset),
@@ -278,7 +711,10 @@ function createBlockquoteLines(
       sourcePrefixEndOffset: prefix.sourcePrefixEndOffset,
       contentStartOffset: prefix.contentStartOffset,
       contentEndOffset: contentLineEndOffset,
-      inline: parseInlineAst(source, prefix.contentStartOffset, contentLineEndOffset, { referenceDefinitions })
+      inline: parseInlineAst(source, prefix.contentStartOffset, contentLineEndOffset, {
+        referenceDefinitions,
+        footnoteDefinitions
+      })
     };
   });
 }
