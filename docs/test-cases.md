@@ -629,13 +629,19 @@
 ### TC-051-MERMAID Mermaid / diagram code fence 渲染
 
 步骤：
-1. 输入包含有效脚注、未定义脚注、行内公式和 Mermaid fence 的 Markdown，例如：
+1. 输入包含有效脚注、未定义脚注、行内 / 块级公式和 Mermaid fence 的 Markdown，例如：
    ~~~markdown
    # 验收样本
 
    普通脚注引用[^note]，重复引用[^note]，未定义引用[^missing]。
 
    行内公式：$a^2 + b^2 = c^2$
+
+   块级公式：
+
+   $$
+   \int_0^1 x^2 dx = \frac{1}{3}
+   $$
 
    ```mermaid
    graph TD
@@ -665,7 +671,7 @@
 - Mermaid 渲染使用 strict security，并清理 SVG 内 `<script>`、事件属性和 `javascript:` 属性值。
 - 源码模式下 Mermaid、脚注和数学公式都回到原始 Markdown，不显示 preview widget。
 - HTML export 不注入 Mermaid runtime script，当前首版以代码块形式输出安全源码 fallback。
-- `npm.cmd run test:mermaid-footnote-render` 会生成 `.artifacts/visual-verification/mermaid-footnote-render-probe.png`，截图中应能看到脚注上标和 Mermaid 流程图。
+- `npm.cmd run test:mermaid-footnote-render` 会加载 `fixtures/test-harness/mermaid-footnote-math.md`，生成 `.artifacts/visual-verification/mermaid-footnote-render-probe.png`，截图中应能看到脚注上标、行内 / 块级公式和 Mermaid 流程图。
 
 ### TC-018-SEARCH 查找替换
 

@@ -4,12 +4,16 @@ import "./styles/editor-source.css";
 import "./styles/markdown-render.css";
 
 import { createCodeEditorController } from "./code-editor";
+import SAMPLE_MARKDOWN from "../../fixtures/test-harness/mermaid-footnote-math.md?raw";
 
 type MermaidFootnoteRenderProbeResult = {
   details: {
     fallbackMermaidText: string;
     footnoteLabels: string[];
+    inlineMathPreviewCount: number;
     loadingMermaidPreviewCount: number;
+    blockMathPreviewCount: number;
+    blockMathRenderedCount: number;
     mermaidPreviewCount: number;
     renderedMermaidText: string;
     validMermaidHasSvg: boolean;
@@ -17,30 +21,6 @@ type MermaidFootnoteRenderProbeResult = {
   failures: string[];
   pass: boolean;
 };
-
-const SAMPLE_MARKDOWN = [
-  "# 验收样本",
-  "",
-  "普通脚注引用[^note]，重复引用[^note]，未定义引用[^missing]。",
-  "",
-  "行内公式：$a^2 + b^2 = c^2$",
-  "",
-  "```mermaid",
-  "graph TD",
-  "  A[Start] --> B[End]",
-  "```",
-  "",
-  "坏 Mermaid：",
-  "",
-  "```mermaid",
-  "graph TD",
-  "  A -->",
-  "```",
-  "",
-  "[^note]: 这是脚注内容。",
-  "",
-  "结尾行"
-].join("\n");
 
 function nextFrame(): Promise<void> {
   return new Promise((resolve) => {
@@ -82,13 +62,18 @@ function collectProbeResult(root: HTMLElement): MermaidFootnoteRenderProbeResult
   const footnoteReferences = Array.from(
     root.querySelectorAll<HTMLElement>(".cm-footnote-reference-preview")
   );
+  const inlineMathPreviews = Array.from(root.querySelectorAll<HTMLElement>(".cm-math-preview-inline"));
+  const blockMathPreviews = Array.from(root.querySelectorAll<HTMLElement>(".cm-math-preview-block"));
   const footnoteLabels = footnoteReferences.map((reference) => reference.textContent ?? "");
   const details = {
     fallbackMermaidText: fallbackMermaidPreview?.textContent ?? "",
     footnoteLabels,
+    inlineMathPreviewCount: inlineMathPreviews.length,
     loadingMermaidPreviewCount: mermaidPreviews.filter((preview) =>
       preview.classList.contains("cm-mermaid-preview-loading")
     ).length,
+    blockMathPreviewCount: blockMathPreviews.length,
+    blockMathRenderedCount: blockMathPreviews.filter((preview) => preview.querySelector(".katex") !== null).length,
     mermaidPreviewCount: mermaidPreviews.length,
     renderedMermaidText: renderedMermaidPreview?.textContent ?? "",
     validMermaidHasSvg: renderedMermaidPreview !== null
@@ -101,6 +86,16 @@ function collectProbeResult(root: HTMLElement): MermaidFootnoteRenderProbeResult
 
   if (!details.validMermaidHasSvg) {
     failures.push("valid Mermaid preview did not render an SVG");
+  }
+
+  if (details.inlineMathPreviewCount < 1) {
+    failures.push("inline math preview widget did not render");
+  }
+
+  if (details.blockMathPreviewCount !== 1 || details.blockMathRenderedCount !== 1) {
+    failures.push(
+      `expected one rendered block math preview; got ${details.blockMathRenderedCount}/${details.blockMathPreviewCount}`
+    );
   }
 
   if (details.loadingMermaidPreviewCount > 0) {

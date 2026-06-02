@@ -17,7 +17,7 @@ async function main() {
 
   const window = new BrowserWindow({
     width: 1187,
-    height: 792,
+    height: 900,
     show: false,
     webPreferences: {
       contextIsolation: true,

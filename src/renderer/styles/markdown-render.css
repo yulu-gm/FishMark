@@ -238,14 +238,11 @@
   display: flex;
   box-sizing: border-box;
   width: 100%;
-  min-height: 6rem;
-  margin: 0.45rem 0 0.85rem;
-  padding: 0.8rem 1rem;
+  min-height: 4rem;
+  margin: 0.65rem 0 1.15rem;
+  padding: 0.4rem 0;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--fishmark-markdown-code-border, rgba(31, 35, 40, 0.12));
-  border-radius: 6px;
-  background: var(--fishmark-markdown-code-bg, #f6f8fa);
   color: var(--fishmark-markdown-code-fg, #1f2328);
   overflow-x: auto;
   overflow-y: hidden;
@@ -259,7 +256,12 @@
 
 .document-editor .cm-mermaid-preview-loading,
 .document-editor .cm-mermaid-preview-fallback {
+  min-height: 6rem;
+  padding: 0.8rem 1rem;
   justify-content: flex-start;
+  border: 1px solid var(--fishmark-markdown-code-border, rgba(31, 35, 40, 0.12));
+  border-radius: 6px;
+  background: var(--fishmark-markdown-code-bg, #f6f8fa);
   font:
     400 0.88rem/1.55 "JetBrains Mono", "Cascadia Code", "Consolas", "SFMono-Regular", "Menlo", "Courier New", monospace;
   white-space: pre-wrap;
