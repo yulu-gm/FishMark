@@ -294,6 +294,45 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("jumps from an inactive footnote reference to its definition on Ctrl-click", async () => {
+    const host = document.createElement("div");
+    const source = [
+      "普通脚注引用[^note]，重复引用[^note]。",
+      "",
+      "Paragraph",
+      "",
+      "[^note]: 这是脚注定义。"
+    ].join("\n");
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const view = getEditorView(host);
+    const paragraphOffset = source.indexOf("Paragraph");
+    const definitionContentOffset = source.indexOf("这是脚注定义");
+
+    view?.dispatch({ selection: { anchor: paragraphOffset, head: paragraphOffset } });
+    await flushMicrotasks();
+
+    const footnotePreview = host.querySelector<HTMLElement>(".cm-footnote-reference-preview");
+
+    expect(footnotePreview).toBeInstanceOf(HTMLElement);
+    footnotePreview?.dispatchEvent(
+      new MouseEvent("mousedown", {
+        bubbles: true,
+        cancelable: true,
+        ctrlKey: true
+      })
+    );
+
+    expect(view?.state.selection.main.anchor).toBe(definitionContentOffset);
+    expect(view?.state.selection.main.head).toBe(definitionContentOffset);
+    expect(controller.getContent()).toBe(source);
+
+    controller.destroy();
+  });
+
   it("moves the selection and scroll target when navigateToOffset is requested", () => {
     const host = document.createElement("div");
     const source = ["# Title", "", "Paragraph"].join("\n");

@@ -76,6 +76,10 @@ import {
   INACTIVE_INLINE_LINK_HREF_ATTRIBUTE,
   INACTIVE_INLINE_LINK_SELECTOR
 } from "../decorations/inline-decorations";
+import {
+  INACTIVE_INLINE_FOOTNOTE_REFERENCE_IDENTIFIER_ATTRIBUTE,
+  INACTIVE_INLINE_FOOTNOTE_REFERENCE_SELECTOR
+} from "../decorations/footnote-widgets";
 import { subscribeCodeHighlightParserLoaded } from "../decorations/code-highlight-language-loader";
 import {
   normalizeHiddenSelectionAnchor,
@@ -726,6 +730,47 @@ export function createFishMarkMarkdownExtensions(
     return linkElement instanceof HTMLElement ? linkElement : null;
   };
 
+  const resolveInactiveFootnoteReferenceTarget = (event: MouseEvent): HTMLElement | null => {
+    const targetElement = event.target instanceof Element ? event.target : null;
+
+    if (!targetElement || event.button !== 0 || (!event.ctrlKey && !event.metaKey)) {
+      return null;
+    }
+
+    const referenceElement = targetElement.closest<HTMLElement>(INACTIVE_INLINE_FOOTNOTE_REFERENCE_SELECTOR);
+
+    return referenceElement instanceof HTMLElement ? referenceElement : null;
+  };
+
+  const jumpToFootnoteDefinition = (view: EditorView, identifier: string | null | undefined): boolean => {
+    if (!identifier) {
+      return false;
+    }
+
+    const footnoteDefinition = markdownDocumentCache
+      .read(view.state.doc.toString())
+      .footnoteDefinitions?.get(identifier);
+
+    if (!footnoteDefinition) {
+      return false;
+    }
+
+    const anchor = footnoteDefinition.contentStartOffset;
+
+    view.dispatch({
+      selection: {
+        anchor,
+        head: anchor
+      },
+      effects: EditorView.scrollIntoView(anchor, {
+        y: "center",
+        yMargin: 24
+      })
+    });
+    view.focus();
+    return true;
+  };
+
   const lifecyclePlugin = ViewPlugin.fromClass(class {
     view: EditorView;
     stopBlockPointerDragSelection: (() => void) | null = null;
@@ -871,6 +916,20 @@ export function createFishMarkMarkdownExtensions(
         const href = inactiveLinkTarget.getAttribute(INACTIVE_INLINE_LINK_HREF_ATTRIBUTE);
 
         if (openHref(href)) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+      }
+
+      const inactiveFootnoteReferenceTarget = resolveInactiveFootnoteReferenceTarget(event);
+
+      if (inactiveFootnoteReferenceTarget) {
+        const identifier = inactiveFootnoteReferenceTarget.getAttribute(
+          INACTIVE_INLINE_FOOTNOTE_REFERENCE_IDENTIFIER_ATTRIBUTE
+        );
+
+        if (jumpToFootnoteDefinition(this.view, identifier)) {
           event.preventDefault();
           event.stopPropagation();
           return;
