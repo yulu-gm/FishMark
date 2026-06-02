@@ -7,7 +7,7 @@ export const INACTIVE_INLINE_FOOTNOTE_REFERENCE_SELECTOR = ".cm-footnote-referen
 
 class FootnoteReferenceWidget extends WidgetType {
   constructor(
-    private readonly label: string,
+    private readonly text: string,
     private readonly identifier: string
   ) {
     super();
@@ -15,16 +15,16 @@ class FootnoteReferenceWidget extends WidgetType {
 
   override eq(other: WidgetType): boolean {
     return other instanceof FootnoteReferenceWidget &&
-      other.label === this.label &&
+      other.text === this.text &&
       other.identifier === this.identifier;
   }
 
   override toDOM(): HTMLElement {
-    const reference = document.createElement("sup");
+    const reference = document.createElement("span");
 
     reference.className = "cm-footnote-reference-preview cm-inactive-inline-footnote-reference";
     reference.setAttribute(INACTIVE_INLINE_FOOTNOTE_REFERENCE_IDENTIFIER_ATTRIBUTE, this.identifier);
-    reference.textContent = this.label;
+    reference.textContent = this.text;
     reference.title = `[^${this.identifier}]`;
 
     return reference;
@@ -37,9 +37,9 @@ class FootnoteReferenceWidget extends WidgetType {
 
 export function createInactiveFootnoteReferenceDecoration(
   node: InlineFootnoteReference,
-  label: string
+  text: string
 ): Decoration {
   return Decoration.replace({
-    widget: new FootnoteReferenceWidget(label, node.identifier)
+    widget: new FootnoteReferenceWidget(text, node.identifier)
   });
 }

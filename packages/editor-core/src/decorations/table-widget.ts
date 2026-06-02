@@ -6,6 +6,7 @@ import {
   formatTableColumnWidthPercent,
   parseInlineAst,
   tableBlockToCanonicalModel,
+  type FootnoteDefinition,
   type InlineNode,
   type TableBlock
 } from "@fishmark/markdown-engine";
@@ -38,7 +39,8 @@ export class TableWidget extends WidgetType {
   constructor(
     private readonly block: TableBlock,
     private readonly activePosition: TablePosition | null,
-    private readonly callbacks: TableWidgetCallbacks | null
+    private readonly callbacks: TableWidgetCallbacks | null,
+    private readonly footnoteDefinitions?: ReadonlyMap<string, FootnoteDefinition>
   ) {
     super();
   }
@@ -48,7 +50,8 @@ export class TableWidget extends WidgetType {
       other.block.id === this.block.id &&
       other.block.endOffset === this.block.endOffset &&
       other.activePosition?.row === this.activePosition?.row &&
-      other.activePosition?.column === this.activePosition?.column
+      other.activePosition?.column === this.activePosition?.column &&
+      other.footnoteDefinitions === this.footnoteDefinitions
     );
   }
 
@@ -118,7 +121,10 @@ export class TableWidget extends WidgetType {
       editor.setAttribute("data-table-cell", `${cell.rowIndex}:${cell.columnIndex}`);
       editor.setAttribute("data-table-cell-preview", `${cell.rowIndex}:${cell.columnIndex}`);
       installEditorInputFacade(editor);
-      syncTableCellEditor(editor, cell.text, { renderMode: isActive ? "plain" : "preview" });
+      syncTableCellEditor(editor, cell.text, {
+        footnoteDefinitions: this.footnoteDefinitions,
+        renderMode: isActive ? "plain" : "preview"
+      });
 
       const readCurrentPosition = (): TablePosition => ({
         row: cell.rowIndex,
@@ -356,7 +362,10 @@ export class TableWidget extends WidgetType {
           this.activePosition?.row === cell.rowIndex &&
           this.activePosition?.column === cell.columnIndex;
 
-        syncTableCellEditor(editor, cell.text, { renderMode: isActive ? "plain" : "preview" });
+        syncTableCellEditor(editor, cell.text, {
+          footnoteDefinitions: this.footnoteDefinitions,
+          renderMode: isActive ? "plain" : "preview"
+        });
         cellElement.dataset.active = isActive ? "true" : "false";
       });
     });
@@ -414,6 +423,7 @@ function syncTableCellEditor(
   editor: HTMLElement,
   text: string,
   options: {
+    footnoteDefinitions?: ReadonlyMap<string, FootnoteDefinition>;
     renderMode?: TableCellRenderMode;
   } = {}
 ): void {
@@ -443,7 +453,7 @@ function syncTableCellEditor(
   editor.replaceChildren(
     nextRenderMode === "plain"
       ? buildPlainTextFragment(editor.ownerDocument, text)
-      : buildInlinePreviewFragment(editor.ownerDocument, text)
+      : buildInlinePreviewFragment(editor.ownerDocument, text, options.footnoteDefinitions)
   );
   editor.dataset.tableCellText = text;
   editor.dataset.tableCellRenderMode = nextRenderMode;
@@ -504,9 +514,13 @@ function buildPlainTextFragment(document: Document, text: string): DocumentFragm
   return fragment;
 }
 
-function buildInlinePreviewFragment(document: Document, text: string): DocumentFragment {
+function buildInlinePreviewFragment(
+  document: Document,
+  text: string,
+  footnoteDefinitions?: ReadonlyMap<string, FootnoteDefinition>
+): DocumentFragment {
   const fragment = document.createDocumentFragment();
-  const inline = parseInlineAst(text, 0, text.length);
+  const inline = parseInlineAst(text, 0, text.length, { footnoteDefinitions });
 
   inline.children.forEach((node) => {
     appendInlineNode(fragment, document, text, node);
@@ -836,10 +850,11 @@ function resolveWidgetTableStartOffset(editor: HTMLElement, fallback: number): n
 export function createTableWidgetDecoration(
   block: TableBlock,
   activePosition: TablePosition | null,
-  callbacks: TableWidgetCallbacks | null
+  callbacks: TableWidgetCallbacks | null,
+  footnoteDefinitions?: ReadonlyMap<string, FootnoteDefinition>
 ): Range<Decoration> {
   return Decoration.replace({
     block: true,
-    widget: new TableWidget(block, activePosition, callbacks)
+    widget: new TableWidget(block, activePosition, callbacks, footnoteDefinitions)
   }).range(block.startOffset, block.endOffset);
 }

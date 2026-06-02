@@ -790,16 +790,16 @@
 
 .document-editor .cm-inactive-inline-footnote-reference {
   color: var(--fishmark-markdown-link, var(--fishmark-text-accent, #2563eb));
-  font-size: 0.72em;
-  font-weight: 620;
-  line-height: 1;
-  vertical-align: super;
+  font-size: 0.94em;
+  font-weight: 500;
+  line-height: inherit;
+  vertical-align: baseline;
 }
 
 .document-editor .cm-footnote-reference-preview {
-  display: inline-block;
-  min-width: 0.65em;
-  text-align: center;
+  display: inline;
+  cursor: pointer;
+  text-align: start;
   user-select: none;
 }
 

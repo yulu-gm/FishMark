@@ -24,7 +24,6 @@ type InlineDecorationRange = Range<Decoration>;
 
 type CreateInactiveInlineDecorationsOptions = {
   resolveImagePreviewUrl?: (href: string | null) => string | null;
-  resolveFootnoteReferenceLabel?: (identifier: string) => string | null;
 };
 
 export function createInactiveInlineDecorations(
@@ -97,7 +96,7 @@ function appendInlineDecorations(
       ranges.push(
         createInactiveFootnoteReferenceDecoration(
           node,
-          options.resolveFootnoteReferenceLabel?.(node.identifier) ?? node.label
+          node.label
         ).range(node.startOffset, node.endOffset)
       );
       return;

@@ -9,13 +9,15 @@ import SAMPLE_MARKDOWN from "../../fixtures/test-harness/mermaid-footnote-math.m
 type MermaidFootnoteRenderProbeResult = {
   details: {
     fallbackMermaidText: string;
-    footnoteLabels: string[];
+    footnotePreviewTexts: string[];
     inlineMathPreviewCount: number;
+    inlineMathRenderedCount: number;
     loadingMermaidPreviewCount: number;
     blockMathPreviewCount: number;
     blockMathRenderedCount: number;
     mermaidPreviewCount: number;
     renderedMermaidText: string;
+    undefinedFootnoteSourceVisible: boolean;
     validMermaidHasSvg: boolean;
   };
   failures: string[];
@@ -64,11 +66,12 @@ function collectProbeResult(root: HTMLElement): MermaidFootnoteRenderProbeResult
   );
   const inlineMathPreviews = Array.from(root.querySelectorAll<HTMLElement>(".cm-math-preview-inline"));
   const blockMathPreviews = Array.from(root.querySelectorAll<HTMLElement>(".cm-math-preview-block"));
-  const footnoteLabels = footnoteReferences.map((reference) => reference.textContent ?? "");
+  const footnotePreviewTexts = footnoteReferences.map((reference) => reference.textContent ?? "");
   const details = {
     fallbackMermaidText: fallbackMermaidPreview?.textContent ?? "",
-    footnoteLabels,
+    footnotePreviewTexts,
     inlineMathPreviewCount: inlineMathPreviews.length,
+    inlineMathRenderedCount: inlineMathPreviews.filter((preview) => preview.querySelector(".katex") !== null).length,
     loadingMermaidPreviewCount: mermaidPreviews.filter((preview) =>
       preview.classList.contains("cm-mermaid-preview-loading")
     ).length,
@@ -76,6 +79,7 @@ function collectProbeResult(root: HTMLElement): MermaidFootnoteRenderProbeResult
     blockMathRenderedCount: blockMathPreviews.filter((preview) => preview.querySelector(".katex") !== null).length,
     mermaidPreviewCount: mermaidPreviews.length,
     renderedMermaidText: renderedMermaidPreview?.textContent ?? "",
+    undefinedFootnoteSourceVisible: root.textContent?.includes("未定义引用[^missing]") === true,
     validMermaidHasSvg: renderedMermaidPreview !== null
   };
   const failures: string[] = [];
@@ -88,8 +92,10 @@ function collectProbeResult(root: HTMLElement): MermaidFootnoteRenderProbeResult
     failures.push("valid Mermaid preview did not render an SVG");
   }
 
-  if (details.inlineMathPreviewCount < 1) {
-    failures.push("inline math preview widget did not render");
+  if (details.inlineMathPreviewCount !== 1 || details.inlineMathRenderedCount !== 1) {
+    failures.push(
+      `expected one rendered inline math preview; got ${details.inlineMathRenderedCount}/${details.inlineMathPreviewCount}`
+    );
   }
 
   if (details.blockMathPreviewCount !== 1 || details.blockMathRenderedCount !== 1) {
@@ -110,8 +116,17 @@ function collectProbeResult(root: HTMLElement): MermaidFootnoteRenderProbeResult
     failures.push("invalid Mermaid preview did not fall back to the original source fence");
   }
 
-  if (footnoteLabels.length !== 2 || footnoteLabels.some((label) => label !== "1")) {
-    failures.push(`expected two rendered footnote reference widgets labelled 1; got [${footnoteLabels.join(", ")}]`);
+  if (
+    footnotePreviewTexts.length !== 2 ||
+    footnotePreviewTexts.some((text) => text !== "first")
+  ) {
+    failures.push(
+      `expected two rendered footnote reference widgets with label text; got [${footnotePreviewTexts.join(", ")}]`
+    );
+  }
+
+  if (!details.undefinedFootnoteSourceVisible) {
+    failures.push("undefined footnote reference source is not visible");
   }
 
   return {
@@ -147,7 +162,12 @@ export async function runMermaidFootnoteRenderProbe(): Promise<MermaidFootnoteRe
     onChange: () => undefined
   });
 
-  const trailingLineOffset = SAMPLE_MARKDOWN.indexOf("结尾行");
+  const trailingLineOffset = controller.getContent().indexOf("结尾行");
+
+  if (trailingLineOffset < 0) {
+    throw new Error("Mermaid footnote render probe fixture is missing the trailing line marker.");
+  }
+
   controller.setSelection(trailingLineOffset);
   controller.focus();
   await settle();

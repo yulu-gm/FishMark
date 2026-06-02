@@ -258,14 +258,15 @@ describe("createCodeEditorController", () => {
   it("renders inactive footnote references and Mermaid fences as preview widgets", async () => {
     const host = document.createElement("div");
     const source = [
-      "普通脚注引用[^note]，重复引用[^note]，未定义引用[^missing]。",
+      "普通脚注引用[^first]，重复引用[^first]，第二个引用[^second]，未定义引用[^missing]。",
       "",
       "```mermaid",
       "graph TD",
       "  A[Start] --> B[End]",
       "```",
       "",
-      "[^note]: 这是脚注定义。"
+      "[^first]: 这是第一条脚注定义。",
+      "[^second]: 这是第二条脚注定义。"
     ].join("\n");
 
     const controller = createCodeEditorController({
@@ -283,10 +284,12 @@ describe("createCodeEditorController", () => {
     const footnoteLine = getLineElementByText(host, "普通脚注引用");
     const footnotePreviews = Array.from(host.querySelectorAll<HTMLElement>(".cm-footnote-reference-preview"));
 
-    expect(footnotePreviews.map((preview) => preview.textContent)).toEqual(["1", "1"]);
-    expect(footnotePreviews.map((preview) => preview.dataset.footnoteIdentifier)).toEqual(["note", "note"]);
-    expect(footnoteLine?.textContent).toContain("普通脚注引用1，重复引用1，未定义引用[^missing]。");
-    expect(footnoteLine?.textContent).not.toContain("[^note]");
+    expect(footnotePreviews.map((preview) => preview.textContent)).toEqual(["first", "first", "second"]);
+    expect(footnotePreviews.map((preview) => preview.dataset.footnoteIdentifier)).toEqual(["first", "first", "second"]);
+    expect(footnoteLine?.textContent).toContain(
+      "普通脚注引用first，重复引用first，第二个引用second，未定义引用[^missing]。"
+    );
+    expect(footnoteLine?.textContent).not.toContain("[^first]");
     expect(host.querySelector(".cm-mermaid-preview")).not.toBeNull();
     expect(host.textContent).not.toContain("```mermaid");
     expect(host.querySelector(".cm-inactive-footnote-definition")).not.toBeNull();
@@ -297,11 +300,11 @@ describe("createCodeEditorController", () => {
   it("jumps from an inactive footnote reference to its definition on Ctrl-click", async () => {
     const host = document.createElement("div");
     const source = [
-      "普通脚注引用[^note]，重复引用[^note]。",
+      "普通脚注引用[^first]，重复引用[^first]。",
       "",
       "Paragraph",
       "",
-      "[^note]: 这是脚注定义。"
+      "[^first]: 这是脚注定义。"
     ].join("\n");
     const controller = createCodeEditorController({
       parent: host,
@@ -318,6 +321,7 @@ describe("createCodeEditorController", () => {
     const footnotePreview = host.querySelector<HTMLElement>(".cm-footnote-reference-preview");
 
     expect(footnotePreview).toBeInstanceOf(HTMLElement);
+    expect(footnotePreview?.textContent).toBe("first");
     footnotePreview?.dispatchEvent(
       new MouseEvent("mousedown", {
         bubbles: true,
@@ -5685,6 +5689,31 @@ describe("createCodeEditorController", () => {
     expect(italicPreview?.querySelectorAll(".cm-inactive-inline-marker")).toHaveLength(2);
     expect(codePreview?.querySelector(".cm-inactive-inline-code")?.textContent).toBe("C");
     expect(codePreview?.querySelectorAll(".cm-inactive-inline-marker")).toHaveLength(2);
+
+    controller.destroy();
+  });
+
+  it("renders footnote labels inside inactive table cell previews", () => {
+    const host = document.createElement("div");
+    const source = [
+      "| note | missing |",
+      "| --- | --- |",
+      "| [^first] | [^missing] |",
+      "",
+      "[^first]: table footnote"
+    ].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const definedPreview = host.querySelector<HTMLElement>('[data-table-cell-preview="1:0"]');
+    const missingPreview = host.querySelector<HTMLElement>('[data-table-cell-preview="1:1"]');
+
+    expect(definedPreview?.querySelector(".cm-inactive-inline-footnote-reference")?.textContent).toBe("first");
+    expect(definedPreview?.querySelectorAll(".cm-inactive-inline-marker")).toHaveLength(2);
+    expect(missingPreview?.textContent).toBe("[^missing]");
 
     controller.destroy();
   });
