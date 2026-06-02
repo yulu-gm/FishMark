@@ -285,6 +285,7 @@ describe("createCodeEditorController", () => {
     const footnotePreviews = Array.from(host.querySelectorAll<HTMLElement>(".cm-footnote-reference-preview"));
 
     expect(footnotePreviews.map((preview) => preview.textContent)).toEqual(["first", "first", "second"]);
+    expect(footnotePreviews.map((preview) => preview.tagName)).toEqual(["SUP", "SUP", "SUP"]);
     expect(footnotePreviews.map((preview) => preview.dataset.footnoteIdentifier)).toEqual(["first", "first", "second"]);
     expect(footnoteLine?.textContent).toContain(
       "普通脚注引用first，重复引用first，第二个引用second，未定义引用[^missing]。"
@@ -322,6 +323,7 @@ describe("createCodeEditorController", () => {
 
     expect(footnotePreview).toBeInstanceOf(HTMLElement);
     expect(footnotePreview?.textContent).toBe("first");
+    expect(footnotePreview?.tagName).toBe("SUP");
     footnotePreview?.dispatchEvent(
       new MouseEvent("mousedown", {
         bubbles: true,

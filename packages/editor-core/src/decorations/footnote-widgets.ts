@@ -20,7 +20,7 @@ class FootnoteReferenceWidget extends WidgetType {
   }
 
   override toDOM(): HTMLElement {
-    const reference = document.createElement("span");
+    const reference = document.createElement("sup");
 
     reference.className = "cm-footnote-reference-preview cm-inactive-inline-footnote-reference";
     reference.setAttribute(INACTIVE_INLINE_FOOTNOTE_REFERENCE_IDENTIFIER_ATTRIBUTE, this.identifier);

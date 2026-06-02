@@ -633,7 +633,7 @@
    ~~~markdown
    # 验收样本
 
-   普通脚注引用[^first]，重复引用[^first]，未定义引用[^missing]。
+   普通脚注引用[^first]，第二个引用[^second]，未定义引用[^missing]。
 
    行内公式：$a^2 + b^2 = c^2$
 
@@ -656,6 +656,7 @@
    ```
 
    [^first]: 这是脚注内容。
+   [^second]: 这是第二条脚注。
    ~~~
 2. 把光标移动到 Mermaid fence 与脚注引用之外，观察非激活态渲染。
 3. 点击 Mermaid 预览所在区域或把光标移动进 fence 内容，确认源码态恢复。
@@ -671,7 +672,7 @@
 - Mermaid 渲染使用 strict security，并清理 SVG 内 `<script>`、事件属性和 `javascript:` 属性值。
 - 源码模式下 Mermaid、脚注和数学公式都回到原始 Markdown，不显示 preview widget。
 - HTML export 不注入 Mermaid runtime script，当前首版以代码块形式输出安全源码 fallback。
-- `npm.cmd run test:mermaid-footnote-render` 会加载 `fixtures/test-harness/mermaid-footnote-math.md`，生成 `.artifacts/visual-verification/mermaid-footnote-render-probe.png`，截图中应能看到脚注标签预览、行内 / 块级公式和 Mermaid 流程图。
+- `npm.cmd run test:mermaid-footnote-render` 会加载 `fixtures/test-harness/mermaid-footnote-math.md`，生成 `.artifacts/visual-verification/mermaid-footnote-render-probe.png`，截图中应能看到 `first` / `second` 上标脚注标签、行内 / 块级公式和 Mermaid 流程图。
 
 ### TC-018-SEARCH 查找替换
 

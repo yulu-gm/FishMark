@@ -10,6 +10,7 @@ type MermaidFootnoteRenderProbeResult = {
   details: {
     fallbackMermaidText: string;
     footnotePreviewTexts: string[];
+    footnotePreviewTags: string[];
     inlineMathPreviewCount: number;
     inlineMathRenderedCount: number;
     loadingMermaidPreviewCount: number;
@@ -67,9 +68,11 @@ function collectProbeResult(root: HTMLElement): MermaidFootnoteRenderProbeResult
   const inlineMathPreviews = Array.from(root.querySelectorAll<HTMLElement>(".cm-math-preview-inline"));
   const blockMathPreviews = Array.from(root.querySelectorAll<HTMLElement>(".cm-math-preview-block"));
   const footnotePreviewTexts = footnoteReferences.map((reference) => reference.textContent ?? "");
+  const footnotePreviewTags = footnoteReferences.map((reference) => reference.tagName);
   const details = {
     fallbackMermaidText: fallbackMermaidPreview?.textContent ?? "",
     footnotePreviewTexts,
+    footnotePreviewTags,
     inlineMathPreviewCount: inlineMathPreviews.length,
     inlineMathRenderedCount: inlineMathPreviews.filter((preview) => preview.querySelector(".katex") !== null).length,
     loadingMermaidPreviewCount: mermaidPreviews.filter((preview) =>
@@ -118,11 +121,16 @@ function collectProbeResult(root: HTMLElement): MermaidFootnoteRenderProbeResult
 
   if (
     footnotePreviewTexts.length !== 2 ||
-    footnotePreviewTexts.some((text) => text !== "first")
+    footnotePreviewTexts[0] !== "first" ||
+    footnotePreviewTexts[1] !== "second"
   ) {
     failures.push(
-      `expected two rendered footnote reference widgets with label text; got [${footnotePreviewTexts.join(", ")}]`
+      `expected rendered footnote reference labels [first, second]; got [${footnotePreviewTexts.join(", ")}]`
     );
+  }
+
+  if (details.footnotePreviewTags.some((tag) => tag !== "SUP")) {
+    failures.push(`expected footnote reference labels to render as SUP; got [${details.footnotePreviewTags.join(", ")}]`);
   }
 
   if (!details.undefinedFootnoteSourceVisible) {
