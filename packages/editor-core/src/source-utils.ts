@@ -10,7 +10,12 @@ export function trimTrailingCarriageReturn(source: string, startOffset: number, 
 
 export function resolveLineStartOffset(source: string, offset: number): number {
   const boundedOffset = Math.max(0, Math.min(offset, source.length));
-  const lineBreakOffset = source.lastIndexOf("\n", Math.max(0, boundedOffset - 1));
+
+  if (boundedOffset === 0) {
+    return 0;
+  }
+
+  const lineBreakOffset = source.lastIndexOf("\n", boundedOffset - 1);
 
   return lineBreakOffset === -1 ? 0 : lineBreakOffset + 1;
 }

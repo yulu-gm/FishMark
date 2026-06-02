@@ -2911,6 +2911,63 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("keeps a heading visible after Enter when it sits above an ordered list gap", async () => {
+    const host = document.createElement("div");
+    const source = [
+      "",
+      "### Todo",
+      "",
+      "1. 脚注",
+      "",
+      "2. latex",
+      "3. mermaid",
+      "4. 源码模式",
+      "-----",
+      "",
+      "### 其他待定功能",
+      "",
+      "1. 页面分栏"
+    ].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+    const editorRoot = host.querySelector(".cm-editor");
+    const view = getEditorView(host);
+    const headingEnd = source.indexOf("### Todo") + "### Todo".length;
+
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+    expect(view).not.toBeNull();
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await flushMicrotasks();
+    advancedController.setSelection(headingEnd);
+    advancedController.pressEnter();
+    await flushMicrotasks();
+
+    const headingLine = getLineElementByText(host, "### Todo");
+    const headingMarker = host.querySelector(".cm-inactive-heading-marker");
+    const activeBlankLine = Array.from(host.querySelectorAll<HTMLElement>(".cm-line")).find(
+      (line) => line.textContent === "" && line.classList.contains("cm-fm-line-active")
+    );
+
+    expect(controller.getContent()).toContain("### Todo\n\n\n\n1. 脚注");
+    expect(headingLine).not.toBeNull();
+    expect(headingLine?.classList.contains("cm-inactive-heading")).toBe(true);
+    expect(headingLine?.classList.contains("cm-inactive-blank-line")).toBe(false);
+    expect(headingMarker?.textContent).toBe("### ");
+    expect(headingLine?.textContent).toContain("Todo");
+    expect(activeBlankLine).toBeDefined();
+
+    controller.destroy();
+  });
+
   it("removes one repeated empty paragraph with one Backspace from consecutive trailing blank lines", async () => {
     const host = document.createElement("div");
     const source = "# Title";
