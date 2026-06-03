@@ -910,6 +910,21 @@
 - 打包产物内包含 `resources/icons/file/markdown.ico`。
 - 双击 Markdown 文件会用 FishMark 打开。
 
+### TC-070C Windows 自动更新确认弹窗更新内容
+
+步骤：
+1. 安装一个低于 GitHub latest release 的 Windows 安装版 FishMark。
+2. 确认 GitHub latest release 正文包含“本次更新”及至少一条面向用户的更新内容。
+3. 启动已安装的旧版本，等待自动检查并下载更新；或通过 `Help > Check for Updates` 手动触发。
+4. 等待下载完成后观察系统安装确认弹窗。
+5. 分别点击“稍后”和下一次弹窗中的“立即重启更新”验证两条路径。
+
+预期：
+- 弹窗仍显示“立即重启更新 / 稍后”两个选择。
+- 弹窗详情区域显示目标版本号，并展示本次更新内容。
+- GitHub Release 正文中的 Markdown 标题、加粗、行内代码和链接会被清洗为可读纯文本。
+- release notes 缺失时，弹窗仍显示版本已准备好安装的兜底说明。
+- 点击“稍后”不会退出应用；点击“立即重启更新”会继续现有安装流程。
 ### TC-071 macOS 启动
 
 预期：

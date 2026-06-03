@@ -66,6 +66,7 @@ Windows 正式发版额外依赖两份元数据：
 - 正式发版前必须同步更新 `package.json` 与 `release-metadata/release-notes.json` 的版本号
 - `release:win` 会在真正发布前校验这两个版本是否一致
 - 不要再把 GitHub Release 正文硬编码到 `scripts/build-win-release.mjs`
+- Windows 自动更新下载完成后的安装确认弹窗会复用 GitHub Release 返回的 release notes，并清洗为纯文本后展示给用户；因此 `body` 应保持简洁、面向用户可读
 
 ### 图标生成产物
 

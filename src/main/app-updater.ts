@@ -42,6 +42,11 @@ type LoggerLike = {
   error: (message: string) => void;
 };
 
+type ReleaseNoteInfoLike = {
+  note?: unknown;
+  version?: unknown;
+};
+
 export type CreateAppUpdaterOptions = {
   app: AppLike;
   autoUpdater: AutoUpdaterLike;
@@ -63,6 +68,7 @@ const DEFAULT_LOGGER: LoggerLike = {
   warn: () => {},
   error: () => {}
 };
+const MAX_RELEASE_NOTES_DETAIL_LENGTH = 2000;
 
 function resolveErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim().length > 0) {
@@ -72,6 +78,101 @@ function resolveErrorMessage(error: unknown): string {
   return String(error);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function cleanMarkdownReleaseNotes(markdown: string): string | null {
+  const cleaned = markdown
+    .replace(/\r\n?/g, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .split("\n")
+    .map((line) =>
+      line
+        .replace(/^\s{0,3}#{1,6}\s+/, "")
+        .replace(/\[([^\]]+)]\(([^)]+)\)/g, "$1 ($2)")
+        .replace(/<\/?[^>]+>/g, "")
+        .replace(/(\*\*|__)(.*?)\1/g, "$2")
+        .replace(/(\*|_)(.*?)\1/g, "$2")
+        .replace(/`([^`]+)`/g, "$1")
+        .trimEnd()
+    )
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  if (cleaned.length === 0) {
+    return null;
+  }
+
+  if (cleaned.length <= MAX_RELEASE_NOTES_DETAIL_LENGTH) {
+    return cleaned;
+  }
+
+  return `${cleaned.slice(0, MAX_RELEASE_NOTES_DETAIL_LENGTH).trimEnd()}\n...`;
+}
+
+function resolveReleaseNoteEntryText(entry: ReleaseNoteInfoLike): string | null {
+  if (typeof entry.note !== "string") {
+    return null;
+  }
+
+  const note = cleanMarkdownReleaseNotes(entry.note);
+
+  if (!note) {
+    return null;
+  }
+
+  if (typeof entry.version === "string" && entry.version.trim().length > 0) {
+    return `${entry.version.trim()}\n${note}`;
+  }
+
+  return note;
+}
+
+function resolveReleaseNotesText(info: unknown): string | null {
+  if (!isRecord(info) || !("releaseNotes" in info)) {
+    return null;
+  }
+
+  const releaseNotes = info.releaseNotes;
+
+  if (typeof releaseNotes === "string") {
+    return cleanMarkdownReleaseNotes(releaseNotes);
+  }
+
+  if (Array.isArray(releaseNotes)) {
+    const notes = releaseNotes
+      .map((entry) => (isRecord(entry) ? resolveReleaseNoteEntryText(entry) : null))
+      .filter((entry): entry is string => entry !== null);
+
+    if (notes.length === 0) {
+      return null;
+    }
+
+    return cleanMarkdownReleaseNotes(notes.join("\n\n"));
+  }
+
+  return null;
+}
+
+function createInstallDialogDetail(version: string, releaseNotes: string | null): string {
+  const baseDetail = `FishMark ${version} \u5df2\u51c6\u5907\u597d\u5b89\u88c5\u3002`;
+
+  if (!releaseNotes) {
+    return baseDetail;
+  }
+
+  const releaseNotesHasHeading = /^(?:\u672c\u6b21\u66f4\u65b0|\u66f4\u65b0\u5185\u5bb9)\b/m.test(
+    releaseNotes
+  );
+  const releaseNotesDetail = releaseNotesHasHeading
+    ? releaseNotes
+    : `\u672c\u6b21\u66f4\u65b0\uff1a\n${releaseNotes}`;
+
+  return `${baseDetail}\n\n${releaseNotesDetail}`;
+}
+
 export function createAppUpdater(options: CreateAppUpdaterOptions): AppUpdaterController {
   const logger = options.logger ?? DEFAULT_LOGGER;
   const isEnabled =
@@ -79,6 +180,7 @@ export function createAppUpdater(options: CreateAppUpdaterOptions): AppUpdaterCo
   let state: AppUpdateState = { kind: "idle" };
   let lastCheckSource: CheckSource = "auto";
   let activeVersion = options.app.getVersion();
+  let activeReleaseNotes: string | null = null;
   let isChecking = false;
 
   const setState = (nextState: AppUpdateState): void => {
@@ -108,7 +210,7 @@ export function createAppUpdater(options: CreateAppUpdaterOptions): AppUpdaterCo
       cancelId: 1,
       title: "\u5b89\u88c5\u66f4\u65b0",
       message: "\u65b0\u7248\u672c\u5df2\u4e0b\u8f7d\u5b8c\u6210\u3002",
-      detail: `FishMark ${activeVersion} \u5df2\u51c6\u5907\u597d\u5b89\u88c5\u3002`
+      detail: createInstallDialogDetail(activeVersion, activeReleaseNotes)
     });
 
     if (result.response === 0) {
@@ -130,6 +232,7 @@ export function createAppUpdater(options: CreateAppUpdaterOptions): AppUpdaterCo
           ? info.version
           : options.app.getVersion();
       activeVersion = nextVersion;
+      activeReleaseNotes = resolveReleaseNotesText(info);
       logger.info(`[fishmark] update available: ${nextVersion}`);
       setState({ kind: "downloading", version: nextVersion, percent: 0 });
     });
@@ -164,6 +267,7 @@ export function createAppUpdater(options: CreateAppUpdaterOptions): AppUpdaterCo
           ? info.version
           : activeVersion;
       activeVersion = nextVersion;
+      activeReleaseNotes = resolveReleaseNotesText(info) ?? activeReleaseNotes;
       isChecking = false;
       logger.info(`[fishmark] update downloaded: ${nextVersion}`);
       setState({ kind: "downloaded", version: nextVersion });

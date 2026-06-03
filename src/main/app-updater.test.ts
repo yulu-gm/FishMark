@@ -10,6 +10,20 @@ type FakeAutoUpdater = EventEmitter & {
   quitAndInstall: ReturnType<typeof vi.fn<(isSilent?: boolean, isForceRunAfter?: boolean) => void>>;
 };
 
+type MessageBoxOptions = {
+  type: "info" | "error";
+  buttons: string[];
+  title: string;
+  message: string;
+  detail?: string;
+  cancelId?: number;
+  defaultId?: number;
+};
+
+type FakeDialog = {
+  showMessageBox: ReturnType<typeof vi.fn<(options: MessageBoxOptions) => Promise<{ response: number }>>>;
+};
+
 function createFakeAutoUpdater(): FakeAutoUpdater {
   const emitter = new EventEmitter() as FakeAutoUpdater;
   emitter.autoDownload = false;
@@ -18,9 +32,12 @@ function createFakeAutoUpdater(): FakeAutoUpdater {
   return emitter;
 }
 
-function createDialog(response = 1) {
+function createDialog(response = 1): FakeDialog {
   return {
-    showMessageBox: vi.fn(async () => ({ response }))
+    showMessageBox: vi.fn(async (options: MessageBoxOptions) => {
+      void options;
+      return { response };
+    })
   };
 }
 
@@ -145,9 +162,86 @@ describe("createAppUpdater", () => {
     await Promise.resolve();
 
     expect(dialog.showMessageBox).toHaveBeenCalledTimes(1);
+    expect(dialog.showMessageBox.mock.calls[0]?.[0].detail).toBe(
+      "FishMark 0.1.1 已准备好安装。"
+    );
     expect(autoUpdater.quitAndInstall).toHaveBeenCalledTimes(1);
     expect(autoUpdater.quitAndInstall).toHaveBeenCalledWith(true, true);
     expect(updater.getState()).toEqual({ kind: "downloaded", version: "0.1.1" });
+  });
+
+  it("includes cleaned release notes in the install confirmation", async () => {
+    const autoUpdater = createFakeAutoUpdater();
+    const dialog = createDialog();
+    createAppUpdater({
+      app: {
+        isPackaged: true,
+        getVersion: () => "0.1.0"
+      },
+      autoUpdater,
+      broadcast: vi.fn(),
+      dialog,
+      logger: createLogger(),
+      notify: vi.fn(),
+      platform: "win32",
+      runtimeMode: "editor"
+    });
+
+    autoUpdater.emit("update-available", {
+      version: "0.1.1",
+      releaseNotes:
+        "### 本次更新\n\n- 修复 **状态栏** 定位\n- 查看 [详情](https://example.com/release)"
+    });
+    autoUpdater.emit("update-downloaded", { version: "0.1.1" });
+    await Promise.resolve();
+
+    expect(dialog.showMessageBox).toHaveBeenCalledTimes(1);
+    const detail = dialog.showMessageBox.mock.calls[0]?.[0].detail;
+    expect(detail).toContain("FishMark 0.1.1 已准备好安装。");
+    expect(detail).toContain("本次更新");
+    expect(detail).toContain("- 修复 状态栏 定位");
+    expect(detail).toContain("详情 (https://example.com/release)");
+    expect(detail).not.toContain("###");
+    expect(detail).not.toContain("**");
+  });
+
+  it("formats full changelog release notes arrays for the install confirmation", async () => {
+    const autoUpdater = createFakeAutoUpdater();
+    const dialog = createDialog();
+    createAppUpdater({
+      app: {
+        isPackaged: true,
+        getVersion: () => "0.1.0"
+      },
+      autoUpdater,
+      broadcast: vi.fn(),
+      dialog,
+      logger: createLogger(),
+      notify: vi.fn(),
+      platform: "win32",
+      runtimeMode: "editor"
+    });
+
+    autoUpdater.emit("update-downloaded", {
+      version: "0.2.0",
+      releaseNotes: [
+        {
+          version: "0.2.0",
+          note: "### Update\n\n- Added `release notes` to the updater dialog."
+        },
+        {
+          version: "0.1.9",
+          note: null
+        }
+      ]
+    });
+    await Promise.resolve();
+
+    expect(dialog.showMessageBox).toHaveBeenCalledTimes(1);
+    const detail = dialog.showMessageBox.mock.calls[0]?.[0].detail;
+    expect(detail).toContain("FishMark 0.2.0 已准备好安装。");
+    expect(detail).toContain("0.2.0\nUpdate");
+    expect(detail).toContain("- Added release notes to the updater dialog.");
   });
 
   it("shows a latest-version dialog only for manual checks", async () => {
