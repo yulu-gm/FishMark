@@ -18,6 +18,7 @@ import type {
   TableBlock,
   ThematicBreakBlock
 } from "./block-map";
+import { parseBlockquoteLinePrefix } from "./blockquote";
 import { parseHtmlImageData } from "./html-image";
 import { isTableDelimiterLine, parseLoosePipeTable, parsePipeTable, splitTableLine } from "./table-model";
 
@@ -44,7 +45,7 @@ export function parseTopLevelBlocks(source: string): MarkdownBlock[] {
 
       if (token.type === "blockQuote") {
         if (containerDepth === 0) {
-          blocks.push(createBlockquoteBlock(token));
+          blocks.push(createBlockquoteOrParagraphBlock(token, source));
         }
 
         containerDepth += 1;
@@ -154,8 +155,26 @@ function createListBlocks(token: Token, ordered: boolean, source: string): Array
   return listScopes.map((scope) => materializeListScope(scope));
 }
 
-function createBlockquoteBlock(token: Token): BlockquoteBlock {
-  return createBaseBlock("blockquote", token);
+function createBlockquoteOrParagraphBlock(token: Token, source: string): BlockquoteBlock | ParagraphBlock {
+  const base = createBaseBlock("blockquote", token);
+
+  if (!hasCommittedBlockquoteMarker(source, base.startOffset, base.endOffset, base.startLine)) {
+    return createBlockFromRange("paragraph", base.startOffset, base.endOffset, base.startLine, base.endLine);
+  }
+
+  return base;
+}
+
+function hasCommittedBlockquoteMarker(
+  source: string,
+  startOffset: number,
+  endOffset: number,
+  startLine: number
+): boolean {
+  return createLineInfos(source.slice(startOffset, endOffset), startOffset, startLine).some((line) => {
+    const prefix = parseBlockquoteLinePrefix(source, line.startOffset, line.endOffset);
+    return prefix.markers.length > 0 && prefix.contentStartOffset > prefix.markerEnd;
+  });
 }
 
 function createCodeFenceBlock(token: Token, source: string): CodeFenceBlock {

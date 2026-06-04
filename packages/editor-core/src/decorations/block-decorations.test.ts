@@ -1450,6 +1450,18 @@ describe("createBlockDecorations", () => {
         text: ""
       },
       {
+        from: 0,
+        to: 1,
+        className: "cm-active-blockquote-marker",
+        text: ">"
+      },
+      {
+        from: 1,
+        to: 2,
+        className: "cm-active-blockquote-padding-anchor",
+        text: " "
+      },
+      {
         from: 13,
         to: 13,
         className: "cm-inactive-blockquote cm-inactive-blockquote-depth-1 cm-inactive-blockquote-end",
@@ -1483,7 +1495,8 @@ describe("createBlockDecorations", () => {
     const imageEnd = source.length;
 
     expect(result.signature).toContain(":content-edit");
-    expectExactRangeClasses(ranges, 0, 2, []);
+    expectExactRangeClasses(ranges, 0, 1, ["cm-active-blockquote-marker"]);
+    expectExactRangeClasses(ranges, 1, 2, ["cm-active-blockquote-padding-anchor"]);
     expectCoveredRangeClasses(ranges, contentStart, contentStart + 1, ["cm-active-inline-marker"]);
     expectCoveredRangeClasses(ranges, contentStart + 1, contentStart + 3, [
       "cm-active-inline-marker",
@@ -1559,6 +1572,195 @@ describe("createBlockDecorations", () => {
     ]);
   });
 
+  it("keeps bare quote separator lines rendered inside inactive blockquotes", () => {
+    const source = [
+      "> Target paragraph",
+      ">",
+      "> Explanation paragraph",
+      "",
+      "Plain paragraph"
+    ].join("\n");
+    const blockMap = parseMarkdownDocument(source);
+    const activeState = createActiveBlockStateFromBlockMap(blockMap, {
+      anchor: source.indexOf("Plain paragraph"),
+      head: source.indexOf("Plain paragraph")
+    });
+
+    const ranges = collectDecorations(
+      source,
+      createBlockDecorations({
+        activeBlockState: activeState,
+        hasEditorFocus: true,
+        source
+      }).decorationSet
+    );
+    const firstLineStart = source.indexOf("> Target");
+    const separatorLineStart = source.indexOf("\n>") + 1;
+    const finalLineStart = source.indexOf("> Explanation");
+
+    expectExactRangeClasses(ranges, firstLineStart, firstLineStart, [
+      "cm-inactive-blockquote cm-inactive-blockquote-depth-1 cm-inactive-blockquote-start"
+    ]);
+    expectExactRangeClasses(ranges, separatorLineStart, separatorLineStart, [
+      "cm-inactive-blockquote cm-inactive-blockquote-depth-1 cm-inactive-blockquote-separator"
+    ]);
+    expectExactRangeClasses(ranges, finalLineStart, finalLineStart, [
+      "cm-inactive-blockquote cm-inactive-blockquote-depth-1 cm-inactive-blockquote-end"
+    ]);
+    expectExactRangeClasses(ranges, firstLineStart, firstLineStart + "> ".length, [
+      "cm-inactive-blockquote-marker"
+    ]);
+    expectExactRangeClasses(ranges, separatorLineStart, separatorLineStart + ">".length, [
+      "cm-inactive-blockquote-marker"
+    ]);
+    expectExactRangeClasses(ranges, finalLineStart, finalLineStart + "> ".length, [
+      "cm-inactive-blockquote-marker"
+    ]);
+  });
+
+  it("renders list structure inside inactive blockquotes", () => {
+    const source = [
+      "> Intro",
+      ">",
+      "> - item",
+      ">   - child",
+      "> - item 2",
+      "",
+      "Plain paragraph"
+    ].join("\n");
+    const blockMap = parseMarkdownDocument(source);
+    const activeState = createActiveBlockStateFromBlockMap(blockMap, {
+      anchor: source.indexOf("Plain paragraph"),
+      head: source.indexOf("Plain paragraph")
+    });
+
+    const ranges = collectDecorations(
+      source,
+      createBlockDecorations({
+        activeBlockState: activeState,
+        hasEditorFocus: true,
+        source
+      }).decorationSet
+    );
+    const firstItemStart = source.indexOf("> - item");
+    const childItemStart = source.indexOf(">   - child");
+    const secondItemStart = source.indexOf("> - item 2");
+    const firstMarkerStart = source.indexOf("- item");
+    const childMarkerStart = source.indexOf("- child");
+
+    expectExactRangeClasses(ranges, firstItemStart, firstItemStart, [
+      "cm-inactive-blockquote cm-inactive-blockquote-depth-1",
+      "cm-inactive-list cm-inactive-list-unordered cm-inactive-list-depth-0"
+    ]);
+    expectExactRangeClasses(ranges, childItemStart, childItemStart, [
+      "cm-inactive-blockquote cm-inactive-blockquote-depth-1",
+      "cm-inactive-list cm-inactive-list-unordered cm-inactive-list-depth-1"
+    ]);
+    expectExactRangeClasses(ranges, secondItemStart, secondItemStart, [
+      "cm-inactive-blockquote cm-inactive-blockquote-depth-1 cm-inactive-blockquote-end",
+      "cm-inactive-list cm-inactive-list-unordered cm-inactive-list-depth-0"
+    ]);
+    expectExactRangeClasses(ranges, firstItemStart, firstMarkerStart, [
+      "cm-inactive-blockquote-marker",
+      "cm-inactive-list-source-prefix"
+    ]);
+    expectExactRangeClasses(ranges, firstMarkerStart, firstMarkerStart + 1, [
+      "cm-inactive-list-marker"
+    ]);
+    expectExactRangeClasses(ranges, childItemStart, childItemStart + "> ".length, [
+      "cm-inactive-blockquote-marker"
+    ]);
+    expectExactRangeClasses(ranges, childItemStart, childMarkerStart, [
+      "cm-inactive-list-source-prefix"
+    ]);
+    expectExactRangeClasses(ranges, childMarkerStart, childMarkerStart + 1, [
+      "cm-inactive-list-marker"
+    ]);
+  });
+
+  it("keeps only the focused inner blockquote list line active", () => {
+    const source = [
+      "> - parent",
+      "> - child",
+      "> - sibling",
+      "",
+      "Plain paragraph"
+    ].join("\n");
+    const blockMap = parseMarkdownDocument(source);
+    const activeState = createActiveBlockStateFromBlockMap(blockMap, {
+      anchor: source.indexOf("child"),
+      head: source.indexOf("child")
+    });
+
+    const result = createBlockDecorations({
+      activeBlockState: activeState,
+      hasEditorFocus: true,
+      source
+    });
+    const ranges = collectDecorations(source, result.decorationSet);
+    const widgets = collectWidgets(source, result.decorationSet);
+    const parentStart = source.indexOf("> - parent");
+    const childStart = source.indexOf("> - child");
+    const siblingStart = source.indexOf("> - sibling");
+    const parentMarkerStart = source.indexOf("- parent");
+    const childMarkerStart = source.indexOf("- child");
+    const siblingMarkerStart = source.indexOf("- sibling");
+
+    expectExactRangeClasses(ranges, parentStart, parentStart, [
+      "cm-inactive-blockquote cm-inactive-blockquote-depth-1 cm-inactive-blockquote-start",
+      "cm-inactive-list cm-inactive-list-unordered cm-inactive-list-depth-0"
+    ]);
+    expectExactRangeClasses(ranges, childStart, childStart, [
+      "cm-active-list cm-active-list-unordered cm-active-list-depth-0",
+      "cm-inactive-blockquote cm-inactive-blockquote-depth-1"
+    ]);
+    expectExactRangeClasses(ranges, siblingStart, siblingStart, [
+      "cm-inactive-blockquote cm-inactive-blockquote-depth-1 cm-inactive-blockquote-end",
+      "cm-inactive-list cm-inactive-list-unordered cm-inactive-list-depth-0"
+    ]);
+    expectExactRangeClasses(ranges, parentMarkerStart, parentMarkerStart + 1, [
+      "cm-inactive-list-marker"
+    ]);
+    expect(widgets).toContainEqual({
+      from: childMarkerStart,
+      name: "ActiveListMarkerWidget",
+      to: childMarkerStart + 1
+    });
+    expectExactRangeClasses(ranges, siblingMarkerStart, siblingMarkerStart + 1, [
+      "cm-inactive-list-marker"
+    ]);
+  });
+
+  it("renders block math previews inside inactive blockquotes", () => {
+    const source = [
+      "> $$",
+      "> x^2",
+      "> $$",
+      "",
+      "Plain paragraph"
+    ].join("\n");
+    const blockMap = parseMarkdownDocument(source);
+    const activeState = createActiveBlockStateFromBlockMap(blockMap, {
+      anchor: source.indexOf("Plain paragraph"),
+      head: source.indexOf("Plain paragraph")
+    });
+
+    const result = createBlockDecorations({
+      activeBlockState: activeState,
+      hasEditorFocus: true,
+      source
+    });
+    const ranges = collectDecorations(source, result.decorationSet);
+    const mathStart = source.indexOf("> $$");
+
+    expect(collectWidgets(source, result.decorationSet)).toEqual([
+      { from: mathStart, to: source.indexOf("\n\nPlain paragraph"), name: "MathPreviewWidget" }
+    ]);
+    expectExactRangeClasses(ranges, mathStart, mathStart, [
+      "cm-inactive-blockquote cm-inactive-blockquote-depth-1 cm-inactive-blockquote-start"
+    ]);
+  });
+
   it("does not render a blockquote presentation for a bare marker while focused", () => {
     const source = ">";
     const blockMap = parseMarkdownDocument(source);
@@ -1574,10 +1776,17 @@ describe("createBlockDecorations", () => {
     });
 
     expect(result.signature).not.toContain(":content-edit");
-    expect(collectDecorations(source, result.decorationSet)).toEqual([]);
+    expect(collectDecorations(source, result.decorationSet)).toEqual([
+      {
+        from: 0,
+        to: 0,
+        className: "cm-active-paragraph cm-active-paragraph-leading",
+        text: ""
+      }
+    ]);
   });
 
-  it("keeps a marker and trailing space as raw source while the blockquote is focused", () => {
+  it("hides a marker and trailing space while the blockquote is focused", () => {
     const source = "> ";
     const blockMap = parseMarkdownDocument(source);
     const activeState = createActiveBlockStateFromBlockMap(blockMap, {
@@ -1598,11 +1807,23 @@ describe("createBlockDecorations", () => {
         to: 0,
         className: "cm-inactive-blockquote cm-inactive-blockquote-depth-1 cm-inactive-blockquote-start cm-inactive-blockquote-end",
         text: ""
+      },
+      {
+        from: 0,
+        to: 1,
+        className: "cm-active-blockquote-marker",
+        text: ">"
+      },
+      {
+        from: 1,
+        to: 2,
+        className: "cm-active-blockquote-padding-anchor",
+        text: " "
       }
     ]);
   });
 
-  it("keeps only inactive blockquote line markers hidden inside a focused quoted block", () => {
+  it("keeps blockquote markers hidden inside a focused quoted block", () => {
     const source = ["> Quote", "> "].join("\n");
     const secondLineStart = source.indexOf("> ", source.indexOf("\n"));
     const blockMap = parseMarkdownDocument(source);
@@ -1619,7 +1840,49 @@ describe("createBlockDecorations", () => {
     const ranges = collectDecorations(source, result.decorationSet);
 
     expectExactRangeClasses(ranges, 0, 2, ["cm-inactive-blockquote-marker"]);
-    expectExactRangeClasses(ranges, secondLineStart, secondLineStart + 2, []);
+    expectExactRangeClasses(ranges, secondLineStart, secondLineStart + 1, ["cm-active-blockquote-marker"]);
+    expectExactRangeClasses(ranges, secondLineStart + 1, secondLineStart + 2, [
+      "cm-active-blockquote-padding-anchor"
+    ]);
+  });
+
+  it("keeps an unpadded nested quote marker visible while the quoted line is focused", () => {
+    const source = "> >";
+    const blockMap = parseMarkdownDocument(source);
+    const activeState = createActiveBlockStateFromBlockMap(blockMap, {
+      anchor: source.length,
+      head: source.length
+    });
+
+    const result = createBlockDecorations({
+      activeBlockState: activeState,
+      hasEditorFocus: true,
+      source
+    });
+    const ranges = collectDecorations(source, result.decorationSet);
+
+    expectExactRangeClasses(ranges, 0, 1, ["cm-active-blockquote-marker"]);
+    expectExactRangeClasses(ranges, 1, 2, ["cm-active-blockquote-padding-anchor"]);
+    expectExactRangeClasses(ranges, 2, 3, []);
+  });
+
+  it("adds a caret anchor after committing a nested quote marker while focused", () => {
+    const source = "> > ";
+    const blockMap = parseMarkdownDocument(source);
+    const activeState = createActiveBlockStateFromBlockMap(blockMap, {
+      anchor: source.length,
+      head: source.length
+    });
+
+    const result = createBlockDecorations({
+      activeBlockState: activeState,
+      hasEditorFocus: true,
+      source
+    });
+    const ranges = collectDecorations(source, result.decorationSet);
+
+    expectExactRangeClasses(ranges, 0, 3, ["cm-active-blockquote-marker"]);
+    expectExactRangeClasses(ranges, 3, 4, ["cm-active-blockquote-padding-anchor"]);
   });
 
   it("omits the active block only while the editor has focus", () => {
@@ -1738,6 +2001,7 @@ describe("block decoration line helpers", () => {
     expect(getInactiveBlockquoteLines(0, source.length, source)).toEqual([
       {
         lineStart: 0,
+        lineEnd: 7,
         markerEnd: 1,
         sourcePrefixEndOffset: 2,
         contentStartOffset: 2,
@@ -1747,6 +2011,7 @@ describe("block decoration line helpers", () => {
       },
       {
         lineStart: 8,
+        lineEnd: 18,
         markerEnd: 11,
         sourcePrefixEndOffset: 12,
         contentStartOffset: 12,

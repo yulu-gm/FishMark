@@ -27,17 +27,16 @@
   --fishmark-task-toggle-check-stroke: 2px;
   --fishmark-task-toggle-box-rotation: 0deg;
   --fishmark-task-toggle-box-scale: 1;
-  --fishmark-blockquote-bg: color-mix(
-    in srgb,
-    var(--fishmark-markdown-quote-border, rgba(15, 23, 42, 0.12)) 12%,
-    transparent
+  --fishmark-blockquote-bg: transparent;
+  --fishmark-blockquote-border: var(--fishmark-markdown-quote-border, #dfe2e5);
+  --fishmark-blockquote-padding-inline: 15px;
+  --fishmark-blockquote-rail-width: 4px;
+  --fishmark-blockquote-nested-indent: calc(
+    var(--fishmark-blockquote-rail-width) + var(--fishmark-blockquote-padding-inline)
   );
-  --fishmark-blockquote-border: var(--fishmark-markdown-quote-border, rgba(15, 23, 42, 0.12));
-  --fishmark-blockquote-nested-indent: 0.9rem;
-  --fishmark-blockquote-rail-width: 2px;
   --fishmark-blockquote-nested-rail: color-mix(
     in srgb,
-    var(--fishmark-blockquote-border) 72%,
+    var(--fishmark-blockquote-border) 88%,
     transparent
   );
   --fishmark-table-margin-top: 0.35rem;
@@ -228,6 +227,14 @@
   overflow-y: hidden;
 }
 
+.document-editor .cm-math-preview-block.cm-math-preview-blockquote {
+  min-height: 0;
+  padding: 0.8em 0 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--fishmark-markdown-quote-fg, #777777);
+}
+
 .document-editor .cm-math-preview-fallback {
   font:
     400 0.92em/1.5 "JetBrains Mono", "Cascadia Code", "Consolas", "SFMono-Regular", "Menlo", "Courier New", monospace;
@@ -278,12 +285,17 @@
 }
 
 .document-editor .cm-line.cm-inactive-list {
+  --fishmark-list-container-offset: 0rem;
   --fishmark-list-depth-offset: 0rem;
   --fishmark-list-source-prefix-offset: 0ch;
   --fishmark-list-content-offset: var(--fishmark-list-unordered-content-offset);
   color: var(--fishmark-markdown-list-text, var(--fishmark-text-muted, #687180));
   position: relative;
-  padding-left: calc(var(--fishmark-list-depth-offset) + var(--fishmark-list-content-offset));
+  padding-left: calc(
+    var(--fishmark-list-container-offset) +
+    var(--fishmark-list-depth-offset) +
+    var(--fishmark-list-content-offset)
+  );
   min-height: 1.84em;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -291,11 +303,16 @@
 }
 
 .document-editor .cm-line.cm-active-list {
+  --fishmark-list-container-offset: 0rem;
   --fishmark-list-depth-offset: 0rem;
   --fishmark-list-source-prefix-offset: 0em;
   --fishmark-list-content-offset: var(--fishmark-list-unordered-content-offset);
   position: relative;
-  padding-left: calc(var(--fishmark-list-depth-offset) + var(--fishmark-list-content-offset));
+  padding-left: calc(
+    var(--fishmark-list-container-offset) +
+    var(--fishmark-list-depth-offset) +
+    var(--fishmark-list-content-offset)
+  );
   min-height: 1.84em;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -303,24 +320,44 @@
 }
 
 .document-editor .cm-line.cm-inactive-list-continuation {
+  --fishmark-list-container-offset: 0rem;
   --fishmark-list-depth-offset: 0rem;
   --fishmark-list-source-prefix-offset: 0ch;
   --fishmark-list-content-offset: var(--fishmark-list-unordered-content-offset);
   color: var(--fishmark-markdown-list-text, var(--fishmark-text-muted, #687180));
-  padding-left: calc(var(--fishmark-list-depth-offset) + var(--fishmark-list-content-offset));
+  padding-left: calc(
+    var(--fishmark-list-container-offset) +
+    var(--fishmark-list-depth-offset) +
+    var(--fishmark-list-content-offset)
+  );
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-all;
 }
 
 .document-editor .cm-line.cm-active-list-continuation {
+  --fishmark-list-container-offset: 0rem;
   --fishmark-list-depth-offset: 0rem;
   --fishmark-list-source-prefix-offset: 0em;
   --fishmark-list-content-offset: var(--fishmark-list-unordered-content-offset);
-  padding-left: calc(var(--fishmark-list-depth-offset) + var(--fishmark-list-content-offset));
+  padding-left: calc(
+    var(--fishmark-list-container-offset) +
+    var(--fishmark-list-depth-offset) +
+    var(--fishmark-list-content-offset)
+  );
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-all;
+}
+
+.document-editor .cm-line.cm-inactive-blockquote.cm-inactive-list,
+.document-editor .cm-line.cm-inactive-blockquote.cm-inactive-list-continuation,
+.document-editor .cm-line.cm-inactive-blockquote.cm-active-list,
+.document-editor .cm-line.cm-inactive-blockquote.cm-active-list-continuation {
+  --fishmark-list-container-offset: calc(
+    var(--fishmark-blockquote-padding-inline) +
+    var(--fishmark-blockquote-depth-offset)
+  );
 }
 
 .document-editor .cm-inactive-list-unordered,
@@ -347,7 +384,11 @@
 .document-editor .cm-active-list-source-prefix {
   position: absolute;
   top: 0;
-  left: calc(var(--fishmark-list-depth-offset) + var(--fishmark-list-content-offset));
+  left: calc(
+    var(--fishmark-list-container-offset) +
+    var(--fishmark-list-depth-offset) +
+    var(--fishmark-list-content-offset)
+  );
   color: transparent;
   width: 0;
   overflow: hidden;
@@ -368,7 +409,11 @@
 }
 
 .document-editor .cm-active-list-unordered .cm-active-list-marker {
-  left: calc(var(--fishmark-list-depth-offset) + var(--fishmark-list-unordered-marker-left));
+  left: calc(
+    var(--fishmark-list-container-offset) +
+    var(--fishmark-list-depth-offset) +
+    var(--fishmark-list-unordered-marker-left)
+  );
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -378,7 +423,7 @@
 
 .document-editor .cm-active-list-ordered .cm-active-list-marker {
   position: absolute;
-  left: var(--fishmark-list-depth-offset);
+  left: calc(var(--fishmark-list-container-offset) + var(--fishmark-list-depth-offset));
   display: inline-block;
   min-width: var(--fishmark-list-ordered-marker-width);
   text-align: left;
@@ -387,7 +432,11 @@
 }
 
 .document-editor .cm-active-list-task .cm-active-list-marker {
-  left: calc(var(--fishmark-list-depth-offset) + var(--fishmark-list-task-marker-left));
+  left: calc(
+    var(--fishmark-list-container-offset) +
+    var(--fishmark-list-depth-offset) +
+    var(--fishmark-list-task-marker-left)
+  );
   display: inline-block;
   min-width: var(--fishmark-list-task-content-offset);
   text-align: left;
@@ -415,7 +464,11 @@
 .document-editor .cm-inactive-list-unordered .cm-inactive-list-marker {
   position: absolute;
   top: 0;
-  left: calc(var(--fishmark-list-depth-offset) + var(--fishmark-list-unordered-marker-left));
+  left: calc(
+    var(--fishmark-list-container-offset) +
+    var(--fishmark-list-depth-offset) +
+    var(--fishmark-list-unordered-marker-left)
+  );
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -440,7 +493,7 @@
 .document-editor .cm-inactive-list-ordered .cm-inactive-list-marker {
   position: absolute;
   top: 0;
-  left: var(--fishmark-list-depth-offset);
+  left: calc(var(--fishmark-list-container-offset) + var(--fishmark-list-depth-offset));
   display: inline-block;
   min-width: var(--fishmark-list-ordered-marker-width);
   text-align: left;
@@ -471,7 +524,11 @@
 .document-editor .cm-inactive-task-marker {
   position: absolute;
   top: 50%;
-  left: calc(var(--fishmark-list-depth-offset) + var(--fishmark-list-task-marker-left));
+  left: calc(
+    var(--fishmark-list-container-offset) +
+    var(--fishmark-list-depth-offset) +
+    var(--fishmark-list-task-marker-left)
+  );
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -552,23 +609,25 @@
 
 .document-editor .cm-inactive-blockquote {
   --fishmark-blockquote-depth-offset: 0rem;
-  color: var(--fishmark-markdown-quote-fg, var(--fishmark-text-secondary, #31353d));
-  background: var(--fishmark-blockquote-bg);
-  box-shadow: inset 2px 0 0 var(--fishmark-blockquote-border);
+  box-sizing: border-box;
+  color: var(--fishmark-markdown-quote-fg, #777777);
+  background: var(--fishmark-blockquote-bg, transparent);
+  border-left: var(--fishmark-blockquote-rail-width, 4px) solid var(--fishmark-blockquote-border, #dfe2e5);
+  box-shadow: none;
   position: relative;
-  line-height: 1.78;
-  padding-left: calc(1.1rem + var(--fishmark-blockquote-depth-offset));
-  padding-right: 0.85rem;
+  line-height: 1.6;
+  padding-left: calc(var(--fishmark-blockquote-padding-inline) + var(--fishmark-blockquote-depth-offset));
+  padding-right: var(--fishmark-blockquote-padding-inline);
 }
 
 .document-editor .cm-inactive-blockquote::before {
   content: "";
   position: absolute;
-  top: 0.1rem;
-  bottom: 0.1rem;
+  top: 0;
+  bottom: 0;
   left: var(--fishmark-blockquote-nested-indent);
   width: var(--fishmark-blockquote-rail-width);
-  border-radius: 999px;
+  border-radius: 0;
   background: var(--fishmark-blockquote-nested-rail);
   opacity: 0;
   pointer-events: none;
@@ -603,19 +662,49 @@
 }
 
 .document-editor .cm-inactive-blockquote-start {
-  padding-top: 0.35rem;
-  border-top-left-radius: var(--fishmark-blockquote-radius, 0.7rem);
-  border-top-right-radius: var(--fishmark-blockquote-radius, 0.7rem);
+  padding-top: 0;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
 }
 
 .document-editor .cm-inactive-blockquote-end {
-  padding-bottom: calc(0.35rem + 0.2rem);
-  border-bottom-left-radius: var(--fishmark-blockquote-radius, 0.7rem);
-  border-bottom-right-radius: var(--fishmark-blockquote-radius, 0.7rem);
+  padding-bottom: 0;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.document-editor .cm-inactive-blockquote-separator {
+  min-height: 0.8em;
+  line-height: 0.8;
 }
 
 .document-editor .cm-inactive-blockquote-marker {
   display: none;
+}
+
+.document-editor .cm-active-blockquote-marker {
+  position: absolute;
+  top: 0;
+  width: 0;
+  overflow: hidden;
+  color: transparent;
+  caret-color: var(--fishmark-caret-color);
+  font-size: inherit;
+  line-height: inherit;
+  white-space: pre;
+}
+
+.document-editor .cm-active-blockquote-padding-anchor {
+  display: inline-block;
+  width: 0.25em;
+  height: 1em;
+  margin-right: -0.25em;
+  color: inherit;
+  caret-color: var(--fishmark-caret-color);
+  line-height: 1;
+  overflow: visible;
+  vertical-align: baseline;
+  white-space: pre;
 }
 
 .document-editor .cm-inactive-code-block-fence {
@@ -689,6 +778,95 @@
   background: var(--fishmark-markdown-code-language-bg, color-mix(in srgb, var(--fishmark-markdown-code-bg, #f6f8fa) 60%, transparent));
   pointer-events: none;
   user-select: none;
+}
+
+.document-editor .cm-inactive-blockquote.cm-inactive-code-block {
+  --fishmark-quote-code-surface-left: calc(
+    var(--fishmark-blockquote-rail-width, 4px) +
+    var(--fishmark-blockquote-padding-inline) +
+    var(--fishmark-blockquote-depth-offset)
+  );
+  color: var(--fishmark-markdown-quote-fg, #777777);
+  background: transparent;
+  border-left: var(--fishmark-blockquote-rail-width, 4px) solid var(--fishmark-blockquote-border, #dfe2e5);
+  border-right: 0;
+  box-shadow: none;
+  font:
+    400 0.9em/1.6 "Lucida Console", "Consolas", "Courier New", monospace;
+  padding-left: calc(var(--fishmark-blockquote-padding-inline) + var(--fishmark-blockquote-depth-offset) + 5px);
+  padding-right: calc(var(--fishmark-blockquote-padding-inline) + 5px);
+  overflow-wrap: normal;
+  word-break: normal;
+  isolation: isolate;
+}
+
+.document-editor .cm-inactive-blockquote.cm-inactive-code-block-start {
+  padding-top: 8px;
+  border-top: 1px solid transparent;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  box-shadow: none;
+}
+
+.document-editor .cm-inactive-blockquote.cm-inactive-code-block-end {
+  padding-bottom: 6px;
+  border-bottom: 1px solid transparent;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  box-shadow: none;
+}
+
+.document-editor .cm-inactive-blockquote.cm-inactive-code-block::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  right: var(--fishmark-blockquote-padding-inline);
+  bottom: 0;
+  left: var(--fishmark-quote-code-surface-left);
+  display: block;
+  border-right: 1px solid #e7eaed;
+  border-left: 1px solid #e7eaed;
+  background: #f8f8f8;
+  pointer-events: none;
+  user-select: none;
+}
+
+.document-editor .cm-inactive-blockquote.cm-inactive-code-block-end[data-language]::after {
+  content: "";
+}
+
+.document-editor .cm-inactive-blockquote.cm-inactive-code-block-start::after {
+  border-top: 1px solid #e7eaed;
+  border-top-left-radius: 3px;
+  border-top-right-radius: 3px;
+}
+
+.document-editor .cm-inactive-blockquote.cm-inactive-code-block-end::after {
+  border-bottom: 1px solid #e7eaed;
+  border-bottom-left-radius: 3px;
+  border-bottom-right-radius: 3px;
+}
+
+.document-editor .cm-inactive-blockquote.cm-inactive-code-block .tok-keyword,
+.document-editor .cm-inactive-blockquote.cm-inactive-code-block .cm-keyword {
+  color: rgb(119, 0, 136);
+}
+
+.document-editor .cm-inactive-blockquote.cm-inactive-code-block .tok-number,
+.document-editor .cm-inactive-blockquote.cm-inactive-code-block .cm-number {
+  color: rgb(17, 102, 68);
+}
+
+.document-editor .cm-inactive-blockquote.cm-inactive-code-block .tok-string,
+.document-editor .cm-inactive-blockquote.cm-inactive-code-block .cm-string {
+  color: rgb(170, 17, 17);
+}
+
+.document-editor .cm-inactive-blockquote.cm-inactive-code-block .tok-variableName,
+.document-editor .cm-inactive-blockquote.cm-inactive-code-block .cm-variable,
+.document-editor .cm-inactive-blockquote.cm-inactive-code-block .cm-property {
+  color: rgb(0, 0, 0);
 }
 
 .document-editor .cm-inactive-thematic-break {

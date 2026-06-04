@@ -213,9 +213,10 @@ describe("editor source layout stylesheet", () => {
     expect(activeListRule).toContain(
       "--fishmark-list-source-prefix-offset: 0em;"
     );
-    expect(activeListRule).toContain(
-      "padding-left: calc(var(--fishmark-list-depth-offset) + var(--fishmark-list-content-offset));"
-    );
+    expect(activeListRule).toContain("--fishmark-list-container-offset: 0rem;");
+    expect(activeListRule).toContain("var(--fishmark-list-container-offset) +");
+    expect(activeListRule).toContain("var(--fishmark-list-depth-offset) +");
+    expect(activeListRule).toContain("var(--fishmark-list-content-offset)");
     expect(activeListRule).toContain("position: relative;");
     expect(activeListRule).toContain("min-height: 1.84em;");
     expect(inactiveListRule).toContain("min-height: 1.84em;");
@@ -223,13 +224,16 @@ describe("editor source layout stylesheet", () => {
     expect(activeListRule).not.toContain("0ch");
     expect(activeListRule).not.toContain("ch;");
     expect(activeContinuationRule).toContain("--fishmark-list-source-prefix-offset: 0em;");
-    expect(activeContinuationRule).toContain(
-      "padding-left: calc(var(--fishmark-list-depth-offset) + var(--fishmark-list-content-offset));"
-    );
+    expect(activeContinuationRule).toContain("--fishmark-list-container-offset: 0rem;");
+    expect(activeContinuationRule).toContain("var(--fishmark-list-container-offset) +");
+    expect(activeContinuationRule).toContain("var(--fishmark-list-depth-offset) +");
+    expect(activeContinuationRule).toContain("var(--fishmark-list-content-offset)");
     expect(activeContinuationRule).not.toContain("text-indent:");
     expect(activeSourcePrefixRule).not.toContain("font-size: 0;");
     expect(activeSourcePrefixRule).toContain("position: absolute;");
-    expect(activeSourcePrefixRule).toContain("left: calc(var(--fishmark-list-depth-offset) + var(--fishmark-list-content-offset));");
+    expect(activeSourcePrefixRule).toContain("var(--fishmark-list-container-offset) +");
+    expect(activeSourcePrefixRule).toContain("var(--fishmark-list-depth-offset) +");
+    expect(activeSourcePrefixRule).toContain("var(--fishmark-list-content-offset)");
     expect(activeSourcePrefixRule).toContain("width: 0;");
     expect(activeSourcePrefixRule).toContain("overflow: hidden;");
     expect(activeSourcePrefixRule).toContain("font-size: inherit;");
@@ -239,7 +243,9 @@ describe("editor source layout stylesheet", () => {
     expect(activeMarkerRule).toContain("word-break: normal;");
     expect(activeMarkerRule).toContain("overflow-wrap: normal;");
     expect(activeOrderedMarkerRule).toContain("position: absolute;");
-    expect(activeOrderedMarkerRule).toContain("left: var(--fishmark-list-depth-offset);");
+    expect(activeOrderedMarkerRule).toContain(
+      "left: calc(var(--fishmark-list-container-offset) + var(--fishmark-list-depth-offset));"
+    );
     expect(activeOrderedMarkerRule).toContain("min-width: var(--fishmark-list-ordered-marker-width);");
     expect(activeOrderedMarkerRule).toContain("text-align: left;");
 
@@ -309,7 +315,7 @@ describe("editor source layout stylesheet", () => {
       ".document-editor .cm-inactive-thematic-break + .cm-table-widget"
     );
 
-    expect(blockquoteEndRule).toContain("padding-bottom: calc(0.35rem + 0.2rem);");
+    expect(blockquoteEndRule).toContain("padding-bottom: 0;");
     expect(blockquoteEndRule).not.toContain("margin-bottom:");
     expect(codeBlockEndRule).toContain("padding-bottom: calc(0.65rem + 0.35rem);");
     expect(codeBlockEndRule).not.toContain("margin-bottom:");
@@ -517,8 +523,12 @@ describe("editor source layout stylesheet", () => {
     expect(readNumericCssVariable(values, "--fishmark-list-task-marker-left")).toBe(0);
     expect(standard.lists.unordered.markerGlyphLeftFromDepthEm).toBe(0);
     expect(standard.lists.task.checkboxLeftFromDepthEm).toBe(0);
-    expect(activeOrderedMarkerRule).toContain("left: var(--fishmark-list-depth-offset);");
-    expect(inactiveOrderedMarkerRule).toContain("left: var(--fishmark-list-depth-offset);");
+    expect(activeOrderedMarkerRule).toContain(
+      "left: calc(var(--fishmark-list-container-offset) + var(--fishmark-list-depth-offset));"
+    );
+    expect(inactiveOrderedMarkerRule).toContain(
+      "left: calc(var(--fishmark-list-container-offset) + var(--fishmark-list-depth-offset));"
+    );
   });
 
   it("keeps task checkbox rendering on a themeable widget contract without changing list geometry", async () => {

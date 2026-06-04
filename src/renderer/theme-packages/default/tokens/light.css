@@ -65,8 +65,8 @@
   --fishmark-markdown-link-hover: var(--fishmark-color-accent-1);
   --fishmark-markdown-strong: var(--fishmark-color-fg-0);
   --fishmark-markdown-emphasis: var(--fishmark-color-fg-1);
-  --fishmark-markdown-quote-fg: var(--fishmark-color-fg-2);
-  --fishmark-markdown-quote-border: var(--fishmark-color-border-1);
+  --fishmark-markdown-quote-fg: #777777;
+  --fishmark-markdown-quote-border: #dfe2e5;
   --fishmark-markdown-list-bullet: #98a2b3;
   --fishmark-markdown-list-text: var(--fishmark-color-fg-2);
   --fishmark-markdown-task-done: #4b5565;

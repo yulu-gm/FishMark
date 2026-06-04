@@ -18,6 +18,23 @@ export function runBlockquoteEnter(view: EditorView): boolean {
   }
 
   if (parsed.content.trim().length === 0) {
+    if (parsed.quoteDepth > 1) {
+      const parentPrefix = buildParentBlockquoteEmptyPrefix(line.text, parsed);
+
+      view.dispatch({
+        changes: {
+          from: line.from,
+          to: line.to,
+          insert: parentPrefix
+        },
+        selection: {
+          anchor: line.from + parentPrefix.length,
+          head: line.from + parentPrefix.length
+        }
+      });
+      return true;
+    }
+
     const deleteTo =
       line.to < view.state.doc.length && view.state.doc.sliceString(line.to, line.to + 1) === "\n"
         ? line.to + 1
@@ -38,14 +55,16 @@ export function runBlockquoteEnter(view: EditorView): boolean {
   }
 
   const continuationPrefix = buildBlockquoteContinuationPrefix(parsed.sourcePrefix);
+  const separatorPrefix = buildBlockquoteStructuralSeparatorPrefix(parsed.sourcePrefix, parsed.quoteDepth);
   const insertAt = selection.head;
-  const nextAnchor = insertAt + 1 + continuationPrefix.length;
+  const insertText = `\n${separatorPrefix}\n${continuationPrefix}`;
+  const nextAnchor = insertAt + insertText.length;
 
   view.dispatch({
     changes: {
       from: insertAt,
       to: insertAt,
-      insert: `\n${continuationPrefix}`
+      insert: insertText
     },
     selection: {
       anchor: nextAnchor,
@@ -196,4 +215,24 @@ function buildBlockquoteContinuationPrefix(sourcePrefix: string): string {
   }
 
   return `${sourcePrefix} `;
+}
+
+function buildBlockquoteStructuralSeparatorPrefix(sourcePrefix: string, quoteDepth: number): string {
+  if (quoteDepth > 1) {
+    return buildBlockquoteContinuationPrefix(sourcePrefix);
+  }
+
+  return sourcePrefix.replace(/[ \t]+$/u, "");
+}
+
+function buildParentBlockquoteEmptyPrefix(
+  lineText: string,
+  parsed: NonNullable<ReturnType<typeof parseBlockquoteLine>>
+): string {
+  const lastMarker = parsed.markers.at(-1);
+  if (!lastMarker) {
+    return buildBlockquoteContinuationPrefix(parsed.sourcePrefix);
+  }
+
+  return buildBlockquoteContinuationPrefix(lineText.slice(0, lastMarker.markerStart));
 }

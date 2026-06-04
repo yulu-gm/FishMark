@@ -8,7 +8,8 @@ class MathPreviewWidget extends WidgetType {
   constructor(
     private readonly value: string,
     private readonly mode: MathPreviewMode,
-    private readonly sourceText: string
+    private readonly sourceText: string,
+    private readonly className = ""
   ) {
     super();
   }
@@ -17,12 +18,16 @@ class MathPreviewWidget extends WidgetType {
     return other instanceof MathPreviewWidget &&
       other.value === this.value &&
       other.mode === this.mode &&
-      other.sourceText === this.sourceText;
+      other.sourceText === this.sourceText &&
+      other.className === this.className;
   }
 
   override toDOM(): HTMLElement {
     const container = document.createElement(this.mode === "block" ? "div" : "span");
-    container.className = this.mode === "block" ? "cm-math-preview cm-math-preview-block" : "cm-math-preview cm-math-preview-inline";
+    container.className = [
+      this.mode === "block" ? "cm-math-preview cm-math-preview-block" : "cm-math-preview cm-math-preview-inline",
+      this.className
+    ].filter((entry) => entry.length > 0).join(" ");
     container.textContent = this.sourceText;
 
     void import("./katex-preview-renderer")
@@ -48,9 +53,12 @@ export function createInactiveInlineMathPreviewDecoration(node: InlineMath): Dec
   });
 }
 
-export function createInactiveBlockMathPreviewDecoration(block: BlockMathBlock): Decoration {
+export function createInactiveBlockMathPreviewDecoration(
+  block: BlockMathBlock,
+  options: { className?: string } = {}
+): Decoration {
   return Decoration.replace({
     block: true,
-    widget: new MathPreviewWidget(block.value, "block", `$$\n${block.value}\n$$`)
+    widget: new MathPreviewWidget(block.value, "block", `$$\n${block.value}\n$$`, options.className ?? "")
   });
 }

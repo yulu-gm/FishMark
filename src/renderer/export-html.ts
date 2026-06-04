@@ -45,8 +45,10 @@ type SourceLine = {
   startOffset: number;
   text: string;
 };
+type BlockquoteExportLine = NonNullable<BlockquoteBlock["lines"]>[number];
 type ReferenceDefinitions = ReadonlyMap<string, InlineReferenceDefinition>;
 type FootnoteDefinitions = ReadonlyMap<string, FootnoteDefinition>;
+type ExtraLineClassResolver = (lineStartOffset: number) => string;
 type FootnoteRenderState = {
   backlinksByIdentifier: Map<string, string[]>;
   definitions: FootnoteDefinitions;
@@ -237,7 +239,7 @@ function renderBlock(
     case "list":
       return renderListBlock(block, source, referenceDefinitions, footnoteState);
     case "blockquote":
-      return renderBlockquoteBlock(block, source, footnoteState);
+      return renderBlockquoteBlock(block, source, referenceDefinitions, footnoteState);
     case "codeFence":
       return renderCodeFenceBlock(block, source);
     case "blockMath":
@@ -297,9 +299,12 @@ function renderListBlock(
   block: ListBlock,
   source: string,
   referenceDefinitions: ReferenceDefinitions,
-  footnoteState: FootnoteRenderState
+  footnoteState: FootnoteRenderState,
+  extraLineClassResolver?: ExtraLineClassResolver
 ): string {
-  return block.items.map((item) => renderListItem(item, source, block.ordered, referenceDefinitions, footnoteState)).join("");
+  return block.items
+    .map((item) => renderListItem(item, source, block.ordered, referenceDefinitions, footnoteState, extraLineClassResolver))
+    .join("");
 }
 
 function renderListItem(
@@ -307,18 +312,19 @@ function renderListItem(
   source: string,
   ordered: boolean,
   referenceDefinitions: ReferenceDefinitions,
-  footnoteState: FootnoteRenderState
+  footnoteState: FootnoteRenderState,
+  extraLineClassResolver?: ExtraLineClassResolver
 ): string {
   const contentUpperBound = item.children[0]?.startOffset ?? item.endOffset;
   const lines = createSourceLines(source, item.startOffset, contentUpperBound);
   const chunks = lines.map((line) =>
     line.startOffset === item.startOffset
-      ? renderListItemFirstLine(item, source, line, ordered, referenceDefinitions, footnoteState)
-      : renderListItemContinuationLine(item, source, line, ordered, referenceDefinitions, footnoteState)
+      ? renderListItemFirstLine(item, source, line, ordered, referenceDefinitions, footnoteState, extraLineClassResolver)
+      : renderListItemContinuationLine(item, source, line, ordered, referenceDefinitions, footnoteState, extraLineClassResolver)
   );
 
   for (const child of item.children) {
-    chunks.push(renderListBlock(child, source, referenceDefinitions, footnoteState));
+    chunks.push(renderListBlock(child, source, referenceDefinitions, footnoteState, extraLineClassResolver));
   }
 
   return chunks.filter(Boolean).join("");
@@ -330,10 +336,12 @@ function renderListItemFirstLine(
   line: SourceLine,
   ordered: boolean,
   referenceDefinitions: ReferenceDefinitions,
-  footnoteState: FootnoteRenderState
+  footnoteState: FootnoteRenderState,
+  extraLineClassResolver?: ExtraLineClassResolver
 ): string {
   const contentStartOffset = resolveListItemContentStartOffset(item, source, line.endOffset);
   const lineAttributes = createListItemLineAttributes(item, source, ordered, "first");
+  const className = mergeLineClassNames(extraLineClassResolver?.(line.startOffset), lineAttributes.className);
   const taskHtml = item.task ? renderTaskMarker(item.task.checked) : "";
   const taskStartOffset = item.task?.markerStart ?? contentStartOffset;
   const taskEndOffset = item.task?.markerEnd ?? contentStartOffset;
@@ -347,7 +355,7 @@ function renderListItemFirstLine(
     renderInlineRange(source, inlineStart, line.endOffset, referenceDefinitions, footnoteState)
   ].join("");
 
-  return renderLine(lineAttributes.className, innerHtml || "<br>", { style: lineAttributes.style });
+  return renderLine(className, innerHtml || "<br>", { style: lineAttributes.style });
 }
 
 function renderListItemContinuationLine(
@@ -356,11 +364,12 @@ function renderListItemContinuationLine(
   line: SourceLine,
   ordered: boolean,
   referenceDefinitions: ReferenceDefinitions,
-  footnoteState: FootnoteRenderState
+  footnoteState: FootnoteRenderState,
+  extraLineClassResolver?: ExtraLineClassResolver
 ): string {
   if (isExplicitThematicBreakLine(line.text)) {
     return renderLine(
-      "cm-inactive-thematic-break",
+      mergeLineClassNames(extraLineClassResolver?.(line.startOffset), "cm-inactive-thematic-break"),
       renderSpan("cm-inactive-thematic-break-marker", line.text)
     );
   }
@@ -373,39 +382,216 @@ function renderListItemContinuationLine(
     "continuation",
     Math.max(contentStartOffset - line.startOffset, 0)
   );
+  const className = mergeLineClassNames(extraLineClassResolver?.(line.startOffset), lineAttributes.className);
   const innerHtml = [
     renderSpan("cm-inactive-list-source-prefix", source.slice(line.startOffset, contentStartOffset)),
     renderInlineRange(source, contentStartOffset, line.endOffset, referenceDefinitions, footnoteState)
   ].join("");
 
-  return renderLine(lineAttributes.className, innerHtml || "<br>", { style: lineAttributes.style });
+  return renderLine(className, innerHtml || "<br>", { style: lineAttributes.style });
 }
 
-function renderBlockquoteBlock(block: BlockquoteBlock, source: string, footnoteState: FootnoteRenderState): string {
-  const renderableLines = (block.lines ?? []).filter((line) => line.contentStartOffset > line.markerEnd);
+function renderBlockquoteBlock(
+  block: BlockquoteBlock,
+  source: string,
+  referenceDefinitions: ReferenceDefinitions,
+  footnoteState: FootnoteRenderState
+): string {
+  const renderableLines = getRenderableBlockquoteLines(block.lines ?? []);
   const lastIndex = renderableLines.length - 1;
+  const lineClassesByStartOffset = new Map(
+    renderableLines.map((line, index) => [
+      line.startOffset,
+      createBlockquoteLineClassName(line.quoteDepth, index, lastIndex)
+    ])
+  );
+
+  if (block.innerBlocks && block.innerBlocks.length > 0) {
+    return renderBlockquoteInnerBlocks(
+      block.innerBlocks,
+      source,
+      referenceDefinitions,
+      footnoteState,
+      block.lines ?? [],
+      lineClassesByStartOffset
+    );
+  }
 
   return renderableLines
     .map((line, index) => {
-      const lineClasses = [
-        "cm-inactive-blockquote",
-        createInactiveBlockquoteDepthClass(line.quoteDepth)
-      ];
-      if (index === 0) {
-        lineClasses.push("cm-inactive-blockquote-start");
-      }
-      if (index === lastIndex) {
-        lineClasses.push("cm-inactive-blockquote-end");
-      }
-
       const innerHtml = [
         renderSpan("cm-inactive-blockquote-marker", source.slice(line.startOffset, line.contentStartOffset)),
         renderInlineRoot(line.inline, source, footnoteState)
       ].join("");
 
-      return renderLine(lineClasses.join(" "), innerHtml || "<br>");
+      return renderLine(createBlockquoteLineClassName(line.quoteDepth, index, lastIndex), innerHtml || "<br>");
     })
     .join("");
+}
+
+function renderBlockquoteInnerBlocks(
+  innerBlocks: readonly MarkdownBlock[],
+  source: string,
+  referenceDefinitions: ReferenceDefinitions,
+  footnoteState: FootnoteRenderState,
+  lines: readonly BlockquoteExportLine[],
+  lineClassesByStartOffset: ReadonlyMap<number, string>
+): string {
+  const extraLineClass = (lineStartOffset: number) => lineClassesByStartOffset.get(lineStartOffset) ?? "";
+
+  return innerBlocks
+    .map((innerBlock) => {
+      switch (innerBlock.type) {
+        case "paragraph":
+          return renderBlockquoteParagraphBlock(innerBlock, source, referenceDefinitions, footnoteState, lines, lineClassesByStartOffset);
+        case "list":
+          return renderListBlock(innerBlock, source, referenceDefinitions, footnoteState, extraLineClass);
+        case "codeFence":
+          return renderBlockquoteCodeFenceBlock(innerBlock, source, lines, lineClassesByStartOffset);
+        case "blockMath":
+          return renderLine(
+            mergeLineClassNames(extraLineClass(innerBlock.startOffset), "cm-inactive-block-math"),
+            renderMathHtml(innerBlock.value, true, source.slice(innerBlock.startOffset, innerBlock.endOffset))
+          );
+        case "thematicBreak":
+          return renderLine(
+            mergeLineClassNames(extraLineClass(innerBlock.startOffset), "cm-inactive-thematic-break"),
+            renderSpan(
+              "cm-inactive-thematic-break-marker",
+              source.slice(innerBlock.startOffset, innerBlock.endOffset)
+            )
+          );
+        default:
+          return renderBlock(innerBlock, source, referenceDefinitions, footnoteState);
+      }
+    })
+    .join("");
+}
+
+function renderBlockquoteParagraphBlock(
+  block: ParagraphBlock,
+  source: string,
+  referenceDefinitions: ReferenceDefinitions,
+  footnoteState: FootnoteRenderState,
+  lines: readonly BlockquoteExportLine[],
+  lineClassesByStartOffset: ReadonlyMap<number, string>
+): string {
+  return lines
+    .filter((line) => line.contentEndOffset >= block.startOffset && line.contentStartOffset <= block.endOffset)
+    .map((line) => {
+      const contentStartOffset = Math.max(block.startOffset, line.contentStartOffset);
+      const contentEndOffset = Math.min(block.endOffset, line.contentEndOffset);
+      const innerHtml = [
+        renderSpan("cm-inactive-blockquote-marker", source.slice(line.startOffset, line.contentStartOffset)),
+        renderInlineRange(source, contentStartOffset, contentEndOffset, referenceDefinitions, footnoteState)
+      ].join("");
+
+      return renderLine(
+        mergeLineClassNames(
+          lineClassesByStartOffset.get(line.startOffset),
+          "cm-inactive-paragraph cm-inactive-paragraph-leading"
+        ),
+        innerHtml || "<br>"
+      );
+    })
+    .join("");
+}
+
+function renderBlockquoteCodeFenceBlock(
+  block: CodeFenceBlock,
+  source: string,
+  lines: readonly BlockquoteExportLine[],
+  lineClassesByStartOffset: ReadonlyMap<number, string>
+): string {
+  const codeLines = createSourceLines(source, block.startOffset, block.endOffset);
+  const fenceLineIndexes = new Set<number>([0]);
+  const lastLine = codeLines[codeLines.length - 1];
+
+  if (codeLines.length > 1 && lastLine) {
+    const closingQuoteLine = findBlockquoteLineForOffset(lastLine.startOffset, lines);
+    const closingText = closingQuoteLine
+      ? source.slice(closingQuoteLine.contentStartOffset, closingQuoteLine.contentEndOffset)
+      : lastLine.text;
+
+    if (isCodeFenceLine(closingText)) {
+      fenceLineIndexes.add(codeLines.length - 1);
+    }
+  }
+
+  const contentLineIndexes = codeLines
+    .map((_, index) => index)
+    .filter((index) => !fenceLineIndexes.has(index));
+  const lastContentLineIndex = contentLineIndexes[contentLineIndexes.length - 1] ?? null;
+  const languageLabel = formatLanguageLabel(block.info);
+
+  return codeLines
+    .map((line, index) => {
+      const quoteLine = findBlockquoteLineForOffset(line.startOffset, lines);
+      const quoteClassName = quoteLine ? lineClassesByStartOffset.get(quoteLine.startOffset) : "";
+      const prefixHtml = quoteLine
+        ? renderSpan("cm-inactive-blockquote-marker", source.slice(quoteLine.startOffset, quoteLine.contentStartOffset))
+        : "";
+      const contentText = quoteLine
+        ? source.slice(quoteLine.contentStartOffset, quoteLine.contentEndOffset)
+        : line.text;
+
+      if (fenceLineIndexes.has(index)) {
+        return renderLine(
+          mergeLineClassNames(quoteClassName, "cm-inactive-code-block-fence"),
+          prefixHtml + renderSpan("cm-inactive-code-block-fence-marker", contentText)
+        );
+      }
+
+      const lineClasses = ["cm-inactive-code-block"];
+      if (index === contentLineIndexes[0]) {
+        lineClasses.push("cm-inactive-code-block-start");
+      }
+      if (index === lastContentLineIndex) {
+        lineClasses.push("cm-inactive-code-block-end");
+      }
+
+      return renderLine(
+        mergeLineClassNames(quoteClassName, lineClasses.join(" ")),
+        prefixHtml + (escapeHtml(contentText) || "<br>"),
+        index === lastContentLineIndex && languageLabel ? { "data-language": languageLabel } : {}
+      );
+    })
+    .join("");
+}
+
+function getRenderableBlockquoteLines(lines: readonly BlockquoteExportLine[]): BlockquoteExportLine[] {
+  if (!lines.some((line) => line.contentStartOffset > line.markerEnd)) {
+    return [];
+  }
+
+  return lines.filter((line) =>
+    line.contentStartOffset > line.markerEnd ||
+    (line.quoteDepth > 0 && line.contentStartOffset === line.markerEnd && line.contentEndOffset === line.contentStartOffset)
+  );
+}
+
+function createBlockquoteLineClassName(depth: number, index: number, lastIndex: number): string {
+  const lineClasses = [
+    "cm-inactive-blockquote",
+    createInactiveBlockquoteDepthClass(depth)
+  ];
+
+  if (index === 0) {
+    lineClasses.push("cm-inactive-blockquote-start");
+  }
+
+  if (index === lastIndex) {
+    lineClasses.push("cm-inactive-blockquote-end");
+  }
+
+  return lineClasses.join(" ");
+}
+
+function findBlockquoteLineForOffset(
+  offset: number,
+  lines: readonly BlockquoteExportLine[]
+): BlockquoteExportLine | null {
+  return lines.find((line) => offset >= line.startOffset && offset <= line.endOffset) ?? null;
 }
 
 function createInactiveBlockquoteDepthClass(depth: number): string {
@@ -1018,6 +1204,10 @@ function renderLine(
 ): string {
   const lineClass = className ? `cm-line ${className}` : "cm-line";
   return `<div${renderAttributes({ ...attributes, class: lineClass })}>${innerHtml}</div>`;
+}
+
+function mergeLineClassNames(...classNames: Array<string | null | undefined>): string {
+  return classNames.filter((className): className is string => Boolean(className)).join(" ");
 }
 
 function renderSpan(

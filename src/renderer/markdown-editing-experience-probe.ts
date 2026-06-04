@@ -322,13 +322,14 @@ function dispatchEnter(view: EditorView): boolean {
   );
 }
 
-function dispatchTab(view: EditorView): boolean {
+function dispatchTab(view: EditorView, shiftKey = false): boolean {
   return view.contentDOM.dispatchEvent(
     new KeyboardEvent("keydown", {
       key: "Tab",
       code: "Tab",
       bubbles: true,
-      cancelable: true
+      cancelable: true,
+      shiftKey
     })
   );
 }
@@ -378,6 +379,46 @@ function findTextRect(root: ParentNode, text: string): DOMRect | null {
   let node = walker.nextNode();
 
   while (node) {
+    const value = node.nodeValue ?? "";
+    const index = value.indexOf(text);
+
+    if (index >= 0) {
+      const range = document.createRange();
+      range.setStart(node, index);
+      range.setEnd(node, index + text.length);
+      const rect = Array.from(range.getClientRects()).find((entry) => entry.width > 0 && entry.height > 0);
+      range.detach();
+
+      if (rect) {
+        return rect;
+      }
+    }
+
+    node = walker.nextNode();
+  }
+
+  return null;
+}
+
+function findTextRectOutsideClosestClasses(
+  root: ParentNode,
+  text: string,
+  ignoredClasses: readonly string[]
+): DOMRect | null {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+
+  while (node) {
+    const parentElement = node.parentElement;
+    const shouldIgnore =
+      parentElement !== null &&
+      ignoredClasses.some((className) => parentElement.closest(`.${className}`) !== null);
+
+    if (shouldIgnore) {
+      node = walker.nextNode();
+      continue;
+    }
+
     const value = node.nodeValue ?? "";
     const index = value.indexOf(text);
 
@@ -3296,35 +3337,711 @@ async function runBackspaceCase(input: {
 }
 
 async function runBlockquoteRawPrefixCase(): Promise<CaseResult> {
-  const initialContent = "> ";
+  const initialContent = "> quote";
+  const contentStart = initialContent.indexOf("quote");
   const harness = setupHarness(initialContent);
-  harness.controller.setSelection(initialContent.length);
+  harness.controller.setSelection(contentStart);
   await settle();
 
   const hasActiveMarkerDecoration = harness.root.querySelector(".cm-active-blockquote-marker") !== null;
+  const hasHiddenMarkerDecoration = harness.root.querySelector(".cm-inactive-blockquote-marker") !== null;
+  const activeMarkerElement = harness.root.querySelector<HTMLElement>(".cm-active-blockquote-marker");
+  const paddingAnchorElement = harness.root.querySelector<HTMLElement>(".cm-active-blockquote-padding-anchor");
+  const activeMarkerStyle = activeMarkerElement ? window.getComputedStyle(activeMarkerElement) : null;
+  const paddingAnchorStyle = paddingAnchorElement ? window.getComputedStyle(paddingAnchorElement) : null;
+  const activeMarkerInvisible =
+    activeMarkerStyle !== null &&
+    isTransparentColor(activeMarkerStyle.color) &&
+    activeMarkerStyle.overflow === "hidden";
   const sourcePrefixRect = findTextRect(harness.root, "> ");
-  const caretRect = harness.view.coordsAtPos(initialContent.length);
-  const pass =
-    !hasActiveMarkerDecoration &&
-    sourcePrefixRect !== null &&
-    sourcePrefixRect.width > 0 &&
+  const contentRect = findTextRect(harness.root, "quote");
+  const caretRect = harness.view.coordsAtPos(contentStart);
+  const caretAlignsWithContent =
     caretRect !== null &&
-    caretRect.left >= sourcePrefixRect.right - 2;
+    contentRect !== null &&
+    Math.abs(caretRect.left - contentRect.left) <= 1.5;
+  const pass =
+    hasActiveMarkerDecoration &&
+    !hasHiddenMarkerDecoration &&
+    activeMarkerInvisible &&
+    paddingAnchorStyle?.overflow === "visible" &&
+    contentRect !== null &&
+    caretAlignsWithContent &&
+    Number.isFinite(caretRect?.top ?? NaN);
 
   const result = resultFor({
+    caseId: "blockquote-raw-prefix-hidden",
     details: {
       caretLeft: caretRect?.left ?? null,
+      caretAlignsWithContent,
+      contentLeft: contentRect?.left ?? null,
       hasActiveMarkerDecoration,
+      hasHiddenMarkerDecoration,
+      activeMarkerColor: activeMarkerStyle?.color ?? null,
+      activeMarkerOverflow: activeMarkerStyle?.overflow ?? null,
+      paddingAnchorOverflow: paddingAnchorStyle?.overflow ?? null,
       sourcePrefixMeasured: sourcePrefixRect !== null,
       sourcePrefixWidth: sourcePrefixRect?.width ?? null
     },
     grammar: "blockquote",
     harness,
-    name: "focused blockquote source prefix remains raw editable text",
+    name: "focused blockquote source prefix stays hidden while editing quote body",
     pass
   });
   harness.controller.destroy();
   return result;
+}
+
+async function runBlockquoteMarkerCommitInputCase(): Promise<CaseResult> {
+  const harness = setupHarness("");
+  harness.controller.setSelection(0);
+  await settle();
+
+  const markerInsertAccepted = nativeInsertText(harness.view, ">");
+  await settle();
+
+  const contentAfterMarker = harness.controller.getContent();
+  const selectionAfterMarker = harness.controller.getSelection();
+  const lineAfterMarker = findLineByExactText(harness.root, ">");
+  const lineAfterMarkerClasses = lineAfterMarker?.className ?? "";
+  const markerBeforePadding = lineAfterMarker?.querySelector(".cm-inactive-blockquote-marker") ?? null;
+
+  const paddingInsertAccepted = nativeInsertText(harness.view, " ");
+  await settle();
+
+  const contentAfterPadding = harness.controller.getContent();
+  const selectionAfterPadding = harness.controller.getSelection();
+  const lineAfterPadding = findLineByExactText(harness.root, "> ");
+  const lineAfterPaddingClasses = lineAfterPadding?.className ?? "";
+  const hiddenMarker = lineAfterPadding?.querySelector(".cm-inactive-blockquote-marker") ?? null;
+  const activeMarker = lineAfterPadding?.querySelector(".cm-active-blockquote-marker") ?? null;
+  const paddingAnchor = lineAfterPadding?.querySelector(".cm-active-blockquote-padding-anchor") ?? null;
+  const activeMarkerStyle = activeMarker instanceof HTMLElement
+    ? window.getComputedStyle(activeMarker)
+    : null;
+  const paddingAnchorStyle = paddingAnchor instanceof HTMLElement
+    ? window.getComputedStyle(paddingAnchor)
+    : null;
+  const activeMarkerInvisible =
+    activeMarkerStyle !== null &&
+    isTransparentColor(activeMarkerStyle.color) &&
+    activeMarkerStyle.overflow === "hidden";
+  const caretAfterPaddingRect = harness.view.coordsAtPos(selectionAfterPadding.anchor);
+  const caretAfterPaddingHasGeometry =
+    caretAfterPaddingRect !== null &&
+    Number.isFinite(caretAfterPaddingRect.top) &&
+    Number.isFinite(caretAfterPaddingRect.bottom) &&
+    caretAfterPaddingRect.bottom > caretAfterPaddingRect.top;
+
+  const textInsertAccepted = nativeInsertText(harness.view, "quote");
+  await settle();
+
+  const expectedContent = "> quote";
+  const finalSelection = harness.controller.getSelection();
+  const finalLine = findLineByText(harness.root, "quote");
+  const finalLineClasses = finalLine?.className ?? "";
+  const sourcePrefixRect = findTextRect(harness.root, "> ");
+  const contentRect = findTextRect(harness.root, "quote");
+  const caretRect = harness.view.coordsAtPos(finalSelection.anchor);
+  const pass =
+    markerInsertAccepted &&
+    paddingInsertAccepted &&
+    textInsertAccepted &&
+    contentAfterMarker === ">" &&
+    selectionAfterMarker.anchor === 1 &&
+    selectionAfterMarker.head === 1 &&
+    lineAfterMarker !== null &&
+    /\bcm-active-paragraph\b/u.test(lineAfterMarkerClasses) &&
+    !/\bcm-inactive-blockquote\b/u.test(lineAfterMarkerClasses) &&
+    markerBeforePadding === null &&
+    contentAfterPadding === "> " &&
+    selectionAfterPadding.anchor === 2 &&
+    selectionAfterPadding.head === 2 &&
+    lineAfterPadding !== null &&
+    /\bcm-inactive-blockquote\b/u.test(lineAfterPaddingClasses) &&
+    hiddenMarker === null &&
+    activeMarker?.textContent === ">" &&
+    activeMarkerInvisible &&
+    paddingAnchor?.textContent === " " &&
+    paddingAnchorStyle?.overflow === "visible" &&
+    caretAfterPaddingHasGeometry &&
+    harness.controller.getContent() === expectedContent &&
+    finalSelection.anchor === expectedContent.length &&
+    finalSelection.head === expectedContent.length &&
+    finalLine !== null &&
+    /\bcm-inactive-blockquote\b/u.test(finalLineClasses) &&
+    contentRect !== null &&
+    caretRect !== null &&
+    caretRect.left >= contentRect.right - 2;
+
+  const result = resultFor({
+    caseId: "blockquote-marker-commits-after-padding",
+    details: {
+      activeMarkerAfterPadding: activeMarker?.textContent ?? null,
+      activeMarkerColor: activeMarkerStyle?.color ?? null,
+      activeMarkerInvisible,
+      activeMarkerOverflow: activeMarkerStyle?.overflow ?? null,
+      caretAfterPaddingBottom: caretAfterPaddingRect?.bottom ?? null,
+      caretAfterPaddingHasGeometry,
+      caretAfterPaddingLeft: caretAfterPaddingRect?.left ?? null,
+      caretAfterPaddingTop: caretAfterPaddingRect?.top ?? null,
+      caretLeft: caretRect?.left ?? null,
+      contentAfterMarker,
+      contentAfterPadding,
+      contentRight: contentRect?.right ?? null,
+      finalLineClasses,
+      hiddenMarkerAfterPadding: hiddenMarker?.textContent ?? null,
+      lineAfterMarkerClasses,
+      lineAfterPaddingClasses,
+      markerBeforePadding: markerBeforePadding?.textContent ?? null,
+      markerInsertAccepted,
+      paddingInsertAccepted,
+      paddingAnchorAfterPadding: paddingAnchor?.textContent ?? null,
+      paddingAnchorOverflow: paddingAnchorStyle?.overflow ?? null,
+      selectionAfterMarker,
+      selectionAfterPadding,
+      sourcePrefixMeasured: sourcePrefixRect !== null,
+      textInsertAccepted
+    },
+    expectedContent,
+    expectedSelection: { anchor: expectedContent.length, head: expectedContent.length },
+    grammar: "blockquote",
+    harness,
+    name: "typing greater-than commits a blockquote only after marker padding",
+    pass
+  });
+  harness.controller.destroy();
+  return result;
+}
+
+async function runNestedBlockquoteMarkerCommitInputCase(): Promise<CaseResult> {
+  const harness = setupHarness("> ");
+  harness.controller.setSelection(2);
+  await settle();
+
+  const markerInsertAccepted = nativeInsertText(harness.view, ">");
+  await settle();
+
+  const contentAfterMarker = harness.controller.getContent();
+  const selectionAfterMarker = harness.controller.getSelection();
+  const lineAfterMarker = findLineByExactText(harness.root, "> >");
+  const lineAfterMarkerClasses = lineAfterMarker?.className ?? "";
+  const activeMarkerAfterMarker = lineAfterMarker?.querySelector(".cm-active-blockquote-marker") ?? null;
+  const paddingAnchorAfterMarker =
+    lineAfterMarker?.querySelector(".cm-active-blockquote-padding-anchor") ?? null;
+  const visibleNestedMarkerRect = lineAfterMarker ? findTextRect(lineAfterMarker, ">") : null;
+  const caretAfterMarkerRect = harness.view.coordsAtPos(selectionAfterMarker.anchor);
+  const caretAfterMarkerHasGeometry =
+    caretAfterMarkerRect !== null &&
+    Number.isFinite(caretAfterMarkerRect.top) &&
+    Number.isFinite(caretAfterMarkerRect.bottom) &&
+    caretAfterMarkerRect.bottom > caretAfterMarkerRect.top;
+
+  const paddingInsertAccepted = nativeInsertText(harness.view, " ");
+  await settle();
+
+  const contentAfterPadding = harness.controller.getContent();
+  const selectionAfterPadding = harness.controller.getSelection();
+  const lineAfterPadding = findLineByExactText(harness.root, "> > ");
+  const lineAfterPaddingClasses = lineAfterPadding?.className ?? "";
+  const activeMarkerAfterPadding = lineAfterPadding?.querySelector(".cm-active-blockquote-marker") ?? null;
+  const paddingAnchorAfterPadding =
+    lineAfterPadding?.querySelector(".cm-active-blockquote-padding-anchor") ?? null;
+  const activeMarkerAfterPaddingStyle = activeMarkerAfterPadding instanceof HTMLElement
+    ? window.getComputedStyle(activeMarkerAfterPadding)
+    : null;
+  const paddingAnchorAfterPaddingStyle = paddingAnchorAfterPadding instanceof HTMLElement
+    ? window.getComputedStyle(paddingAnchorAfterPadding)
+    : null;
+  const activeMarkerAfterPaddingInvisible =
+    activeMarkerAfterPaddingStyle !== null &&
+    isTransparentColor(activeMarkerAfterPaddingStyle.color) &&
+    activeMarkerAfterPaddingStyle.overflow === "hidden";
+  const caretAfterPaddingRect = harness.view.coordsAtPos(selectionAfterPadding.anchor);
+  const caretAfterPaddingHasGeometry =
+    caretAfterPaddingRect !== null &&
+    Number.isFinite(caretAfterPaddingRect.top) &&
+    Number.isFinite(caretAfterPaddingRect.bottom) &&
+    caretAfterPaddingRect.bottom > caretAfterPaddingRect.top;
+
+  const textInsertAccepted = nativeInsertText(harness.view, "nested");
+  await settle();
+
+  const expectedContent = "> > nested";
+  const finalSelection = harness.controller.getSelection();
+  const finalLine = findLineByText(harness.root, "nested");
+  const finalLineClasses = finalLine?.className ?? "";
+  const contentRect = findTextRect(harness.root, "nested");
+  const caretRect = harness.view.coordsAtPos(finalSelection.anchor);
+  const pass =
+    markerInsertAccepted &&
+    paddingInsertAccepted &&
+    textInsertAccepted &&
+    contentAfterMarker === "> >" &&
+    selectionAfterMarker.anchor === 3 &&
+    selectionAfterMarker.head === 3 &&
+    lineAfterMarker !== null &&
+    /\bcm-inactive-blockquote-depth-1\b/u.test(lineAfterMarkerClasses) &&
+    !/\bcm-inactive-blockquote-depth-2\b/u.test(lineAfterMarkerClasses) &&
+    activeMarkerAfterMarker !== null &&
+    paddingAnchorAfterMarker?.textContent === " " &&
+    visibleNestedMarkerRect !== null &&
+    caretAfterMarkerHasGeometry &&
+    contentAfterPadding === "> > " &&
+    selectionAfterPadding.anchor === 4 &&
+    selectionAfterPadding.head === 4 &&
+    lineAfterPadding !== null &&
+    /\bcm-inactive-blockquote-depth-2\b/u.test(lineAfterPaddingClasses) &&
+    activeMarkerAfterPadding?.textContent === "> >" &&
+    activeMarkerAfterPaddingInvisible &&
+    paddingAnchorAfterPadding?.textContent === " " &&
+    paddingAnchorAfterPaddingStyle?.overflow === "visible" &&
+    caretAfterPaddingHasGeometry &&
+    harness.controller.getContent() === expectedContent &&
+    finalSelection.anchor === expectedContent.length &&
+    finalSelection.head === expectedContent.length &&
+    finalLine !== null &&
+    /\bcm-inactive-blockquote-depth-2\b/u.test(finalLineClasses) &&
+    contentRect !== null &&
+    caretRect !== null &&
+    caretRect.left >= contentRect.right - 2;
+
+  const result = resultFor({
+    caseId: "nested-blockquote-marker-commits-after-padding",
+    details: {
+      activeMarkerAfterMarker: activeMarkerAfterMarker?.textContent ?? null,
+      activeMarkerAfterPadding: activeMarkerAfterPadding?.textContent ?? null,
+      activeMarkerAfterPaddingColor: activeMarkerAfterPaddingStyle?.color ?? null,
+      activeMarkerAfterPaddingInvisible,
+      activeMarkerAfterPaddingOverflow: activeMarkerAfterPaddingStyle?.overflow ?? null,
+      caretAfterMarkerBottom: caretAfterMarkerRect?.bottom ?? null,
+      caretAfterMarkerHasGeometry,
+      caretAfterMarkerLeft: caretAfterMarkerRect?.left ?? null,
+      caretAfterMarkerTop: caretAfterMarkerRect?.top ?? null,
+      caretAfterPaddingBottom: caretAfterPaddingRect?.bottom ?? null,
+      caretAfterPaddingHasGeometry,
+      caretAfterPaddingLeft: caretAfterPaddingRect?.left ?? null,
+      caretAfterPaddingTop: caretAfterPaddingRect?.top ?? null,
+      caretLeft: caretRect?.left ?? null,
+      contentAfterMarker,
+      contentAfterPadding,
+      contentRight: contentRect?.right ?? null,
+      finalLineClasses,
+      lineAfterMarkerClasses,
+      lineAfterPaddingClasses,
+      markerInsertAccepted,
+      paddingAnchorAfterMarker: paddingAnchorAfterMarker?.textContent ?? null,
+      paddingAnchorAfterPadding: paddingAnchorAfterPadding?.textContent ?? null,
+      paddingAnchorAfterPaddingOverflow: paddingAnchorAfterPaddingStyle?.overflow ?? null,
+      paddingInsertAccepted,
+      selectionAfterMarker,
+      selectionAfterPadding,
+      textInsertAccepted,
+      visibleNestedMarkerMeasured: visibleNestedMarkerRect !== null
+    },
+    expectedContent,
+    expectedSelection: { anchor: expectedContent.length, head: expectedContent.length },
+    grammar: "blockquote",
+    harness,
+    name: "typing a nested greater-than commits only after nested marker padding",
+    pass
+  });
+  harness.controller.destroy();
+  return result;
+}
+
+async function runBlockquoteBareSeparatorRenderingCase(): Promise<CaseResult> {
+  const initialContent = [
+    "> Target paragraph",
+    ">",
+    "> Explanation paragraph",
+    "",
+    "Plain paragraph"
+  ].join("\n");
+  const harness = setupHarness(initialContent);
+  harness.controller.setSelection(initialContent.indexOf("Plain paragraph"));
+  await settle();
+
+  const firstLine = findLineByText(harness.root, "Target paragraph");
+  const separatorLine = findLineByExactText(harness.root, ">");
+  const finalLine = findLineByText(harness.root, "Explanation paragraph");
+  const separatorMarker = separatorLine?.querySelector<HTMLElement>(".cm-inactive-blockquote-marker") ?? null;
+  const visibleSeparatorMarkerRect = separatorLine ? findTextRect(separatorLine, ">") : null;
+  const markerTexts = Array.from(
+    harness.root.querySelectorAll<HTMLElement>(".cm-inactive-blockquote-marker"),
+    (marker) => marker.textContent ?? ""
+  );
+  const firstContentRect = findTextRect(harness.root, "Target paragraph");
+  const finalContentRect = findTextRect(harness.root, "Explanation paragraph");
+  const firstLineIsStart = firstLine?.classList.contains("cm-inactive-blockquote-start") === true;
+  const separatorLineIsBlockquote = separatorLine?.classList.contains("cm-inactive-blockquote") === true;
+  const separatorLineIsStart = separatorLine?.classList.contains("cm-inactive-blockquote-start") === true;
+  const separatorLineIsEnd = separatorLine?.classList.contains("cm-inactive-blockquote-end") === true;
+  const finalLineIsEnd = finalLine?.classList.contains("cm-inactive-blockquote-end") === true;
+  const separatorMarkerDisplay = separatorMarker ? getComputedStyle(separatorMarker).display : null;
+  const pass =
+    firstLineIsStart &&
+    separatorLineIsBlockquote &&
+    !separatorLineIsStart &&
+    !separatorLineIsEnd &&
+    finalLineIsEnd &&
+    separatorMarkerDisplay === "none" &&
+    visibleSeparatorMarkerRect === null &&
+    markerTexts.join("|") === "> |>|> " &&
+    firstContentRect !== null &&
+    finalContentRect !== null;
+
+  const result = resultFor({
+    caseId: "blockquote-bare-separator-rendering",
+    details: {
+      finalLineClass: finalLine?.className ?? null,
+      firstContentLeft: firstContentRect?.left ?? null,
+      firstLineClass: firstLine?.className ?? null,
+      finalContentLeft: finalContentRect?.left ?? null,
+      markerTexts,
+      separatorLineClass: separatorLine?.className ?? null,
+      separatorMarkerDisplay,
+      visibleSeparatorMarkerRect: visibleSeparatorMarkerRect
+        ? {
+            height: visibleSeparatorMarkerRect.height,
+            left: visibleSeparatorMarkerRect.left,
+            top: visibleSeparatorMarkerRect.top,
+            width: visibleSeparatorMarkerRect.width
+          }
+        : null
+    },
+    grammar: "blockquote",
+    harness,
+    name: "bare quote separator line remains hidden inside rendered blockquote",
+    pass
+  });
+  harness.controller.destroy();
+  return result;
+}
+
+async function runBlockquoteInnerBlocksRenderingAndEnterCase(): Promise<CaseResult> {
+  const renderingContent = [
+    "> - item",
+    ">   - child",
+    "> - item 2",
+    ">",
+    "> > nested quote",
+    "> > - nested item",
+    "> >   - nested child",
+    ">",
+    "> > > deep quote",
+    ">",
+    "> ```ts",
+    "> const value = 1;",
+    "> ```",
+    ">",
+    "> $$",
+    "> x^2",
+    "> $$",
+    "",
+    "Plain paragraph"
+  ].join("\n");
+  const renderingHarness = setupHarness(renderingContent);
+  renderingHarness.controller.setSelection(renderingContent.indexOf("Plain paragraph"));
+  await settle();
+
+  const listLines = Array.from(renderingHarness.root.querySelectorAll<HTMLElement>(".cm-inactive-blockquote.cm-inactive-list"));
+  const childListLine = findLineByText(renderingHarness.root, "child");
+  const nestedQuoteLine = findLineByText(renderingHarness.root, "nested quote");
+  const nestedListLine = findLineByText(renderingHarness.root, "nested item");
+  const nestedChildListLine = findLineByText(renderingHarness.root, "nested child");
+  const deepQuoteLine = findLineByText(renderingHarness.root, "deep quote");
+  const codeLine = findLineByText(renderingHarness.root, "const value = 1;");
+  const mathWidget = renderingHarness.root.querySelector<HTMLElement>(".cm-math-preview-block");
+  const quoteMarkers = Array.from(
+    renderingHarness.root.querySelectorAll<HTMLElement>(".cm-inactive-blockquote-marker"),
+    (marker) => marker.textContent ?? ""
+  );
+  const renderingPass =
+    listLines.length === 5 &&
+    childListLine?.classList.contains("cm-inactive-list-depth-1") === true &&
+    nestedQuoteLine?.classList.contains("cm-inactive-blockquote-depth-2") === true &&
+    nestedQuoteLine.classList.contains("cm-inactive-code-block") === false &&
+    nestedListLine?.classList.contains("cm-inactive-blockquote-depth-2") === true &&
+    nestedListLine.classList.contains("cm-inactive-list-depth-0") &&
+    nestedChildListLine?.classList.contains("cm-inactive-blockquote-depth-2") === true &&
+    nestedChildListLine.classList.contains("cm-inactive-list-depth-1") &&
+    deepQuoteLine?.classList.contains("cm-inactive-blockquote-depth-3") === true &&
+    deepQuoteLine.classList.contains("cm-inactive-code-block") === false &&
+    codeLine?.classList.contains("cm-inactive-blockquote") === true &&
+    codeLine.classList.contains("cm-inactive-code-block") &&
+    mathWidget !== null &&
+    quoteMarkers.includes("> ");
+  const renderingDetails = {
+    codeLineClass: codeLine?.className ?? null,
+    childListLineClass: childListLine?.className ?? null,
+    deepQuoteLineClass: deepQuoteLine?.className ?? null,
+    listLineClasses: listLines.map((line) => line.className),
+    mathWidgetText: mathWidget?.textContent ?? null,
+    nestedChildListLineClass: nestedChildListLine?.className ?? null,
+    nestedListLineClass: nestedListLine?.className ?? null,
+    nestedQuoteLineClass: nestedQuoteLine?.className ?? null,
+    quoteMarkers
+  };
+  renderingHarness.controller.destroy();
+
+  const enterInitialContent = "> alpha";
+  const enterExpectedContent = ["> alpha", ">", "> "].join("\n");
+  const enterHarness = setupHarness(enterInitialContent);
+  enterHarness.controller.setSelection(enterInitialContent.length);
+  await settle();
+
+  const enterAccepted = dispatchEnter(enterHarness.view);
+  await settle();
+
+  const actualContent = enterHarness.controller.getContent();
+  const actualSelection = enterHarness.controller.getSelection();
+  const enterPass =
+    actualContent === enterExpectedContent &&
+    actualSelection.anchor === enterExpectedContent.length &&
+    actualSelection.head === enterExpectedContent.length;
+  enterHarness.controller.destroy();
+
+  const nestedEnterInitialContent = "> > alpha";
+  const nestedEnterExpectedContent = ["> > alpha", "> > ", "> > "].join("\n");
+  const nestedEnterHarness = setupHarness(nestedEnterInitialContent);
+  nestedEnterHarness.controller.setSelection(nestedEnterInitialContent.length);
+  await settle();
+  const nestedEnterAccepted = dispatchEnter(nestedEnterHarness.view);
+  await settle();
+  const nestedEnterActualContent = nestedEnterHarness.controller.getContent();
+  const nestedEnterActualSelection = nestedEnterHarness.controller.getSelection();
+  const nestedEnterLines = Array.from(nestedEnterHarness.root.querySelectorAll<HTMLElement>(".cm-line"));
+  const nestedEnterLineClasses = nestedEnterLines.map((line) => line.className);
+  const visibleRawNestedEnterMarker = findTextRectOutsideClosestClasses(nestedEnterHarness.root, ">", [
+    "cm-active-blockquote-marker",
+    "cm-inactive-blockquote-marker"
+  ]);
+  const nestedEnterPass =
+    nestedEnterActualContent === nestedEnterExpectedContent &&
+    nestedEnterActualSelection.anchor === nestedEnterExpectedContent.length &&
+    nestedEnterActualSelection.head === nestedEnterExpectedContent.length &&
+    nestedEnterLineClasses.length === 3 &&
+    nestedEnterLineClasses.every((className) => /\bcm-inactive-blockquote-depth-2\b/u.test(className)) &&
+    visibleRawNestedEnterMarker === null;
+  nestedEnterHarness.controller.destroy();
+
+  const emptyNestedEnterInitialContent = ["> 11", "> > 222", "> > > 33333", "> > > "].join("\n");
+  const emptyNestedEnterExpectedContent = ["> 11", "> > 222", "> > > 33333", "> > "].join("\n");
+  const emptyNestedEnterHarness = setupHarness(emptyNestedEnterInitialContent);
+  emptyNestedEnterHarness.controller.setSelection(emptyNestedEnterInitialContent.length);
+  await settle();
+  const emptyNestedEnterAccepted = dispatchEnter(emptyNestedEnterHarness.view);
+  await settle();
+  const emptyNestedEnterActualContent = emptyNestedEnterHarness.controller.getContent();
+  const emptyNestedEnterActualSelection = emptyNestedEnterHarness.controller.getSelection();
+  const emptyNestedActiveLine = Array.from(
+    emptyNestedEnterHarness.root.querySelectorAll<HTMLElement>(".cm-line")
+  ).at(-1) ?? null;
+  const emptyNestedCaretRect = emptyNestedEnterHarness.view.coordsAtPos(emptyNestedEnterActualSelection.anchor);
+  const emptyNestedCaretHasGeometry =
+    emptyNestedCaretRect !== null &&
+    Number.isFinite(emptyNestedCaretRect.top) &&
+    Number.isFinite(emptyNestedCaretRect.bottom) &&
+    emptyNestedCaretRect.bottom > emptyNestedCaretRect.top;
+  const emptyNestedEnterPass =
+    emptyNestedEnterActualContent === emptyNestedEnterExpectedContent &&
+    emptyNestedEnterActualSelection.anchor === emptyNestedEnterExpectedContent.length &&
+    emptyNestedEnterActualSelection.head === emptyNestedEnterExpectedContent.length &&
+    emptyNestedActiveLine?.classList.contains("cm-inactive-blockquote-depth-2") === true &&
+    emptyNestedActiveLine.classList.contains("cm-inactive-blockquote-depth-3") === false &&
+    emptyNestedCaretHasGeometry;
+  emptyNestedEnterHarness.controller.destroy();
+
+  const quoteListInitialContent = "> - item";
+  const quoteListExpectedContent = ["> - item", "> - "].join("\n");
+  const quoteListHarness = setupHarness(quoteListInitialContent);
+  quoteListHarness.controller.setSelection(quoteListInitialContent.length);
+  await settle();
+  const quoteListEnterAccepted = dispatchEnter(quoteListHarness.view);
+  await settle();
+  const quoteListActualContent = quoteListHarness.controller.getContent();
+  const quoteListActualSelection = quoteListHarness.controller.getSelection();
+  const quoteListEnterPass =
+    quoteListActualContent === quoteListExpectedContent &&
+    quoteListActualSelection.anchor === quoteListExpectedContent.length &&
+    quoteListActualSelection.head === quoteListExpectedContent.length;
+  quoteListHarness.controller.destroy();
+
+  const quoteChildListInitialContent = ["> - parent", ">   - "].join("\n");
+  const quoteChildListExpectedContent = ["> - parent", "> - "].join("\n");
+  const quoteChildListHarness = setupHarness(quoteChildListInitialContent);
+  quoteChildListHarness.controller.setSelection(quoteChildListInitialContent.length);
+  await settle();
+  const quoteChildListEnterAccepted = dispatchEnter(quoteChildListHarness.view);
+  await settle();
+  const quoteChildListActualContent = quoteChildListHarness.controller.getContent();
+  const quoteChildListActualSelection = quoteChildListHarness.controller.getSelection();
+  const quoteChildListEnterPass =
+    quoteChildListActualContent === quoteChildListExpectedContent &&
+    quoteChildListActualSelection.anchor === quoteChildListExpectedContent.length &&
+    quoteChildListActualSelection.head === quoteChildListExpectedContent.length;
+  quoteChildListHarness.controller.destroy();
+
+  const quoteTopListInitialContent = ["> - parent", "> - "].join("\n");
+  const quoteTopListExpectedContent = ["> - parent", ">", "> "].join("\n");
+  const quoteTopListHarness = setupHarness(quoteTopListInitialContent);
+  quoteTopListHarness.controller.setSelection(quoteTopListInitialContent.length);
+  await settle();
+  const quoteTopListEnterAccepted = dispatchEnter(quoteTopListHarness.view);
+  await settle();
+  const quoteTopListActualContent = quoteTopListHarness.controller.getContent();
+  const quoteTopListActualSelection = quoteTopListHarness.controller.getSelection();
+  const quoteTopListEnterPass =
+    quoteTopListActualContent === quoteTopListExpectedContent &&
+    quoteTopListActualSelection.anchor === quoteTopListExpectedContent.length &&
+    quoteTopListActualSelection.head === quoteTopListExpectedContent.length;
+  quoteTopListHarness.controller.destroy();
+
+  const quoteActiveListInitialContent = ["> - parent", "> - child", "> - sibling"].join("\n");
+  const quoteActiveListHarness = setupHarness(quoteActiveListInitialContent);
+  quoteActiveListHarness.controller.setSelection(quoteActiveListInitialContent.indexOf("child"));
+  await settle();
+  const quoteActiveParentLine = findLineByText(quoteActiveListHarness.root, "parent");
+  const quoteActiveChildLine = findLineByText(quoteActiveListHarness.root, "child");
+  const quoteActiveSiblingLine = findLineByText(quoteActiveListHarness.root, "sibling");
+  const quoteActiveListPass =
+    quoteActiveParentLine?.classList.contains("cm-inactive-list") === true &&
+    quoteActiveParentLine.querySelector(".cm-inactive-list-marker")?.textContent === "-" &&
+    quoteActiveChildLine?.classList.contains("cm-active-list") === true &&
+    quoteActiveChildLine.querySelector(".cm-active-list-marker")?.textContent === "-" &&
+    quoteActiveSiblingLine?.classList.contains("cm-inactive-list") === true &&
+    quoteActiveSiblingLine.querySelector(".cm-inactive-list-marker")?.textContent === "-";
+  const quoteActiveListDetails = {
+    childClass: quoteActiveChildLine?.className ?? null,
+    childMarker: quoteActiveChildLine?.querySelector(".cm-active-list-marker")?.textContent ?? null,
+    parentClass: quoteActiveParentLine?.className ?? null,
+    parentMarker: quoteActiveParentLine?.querySelector(".cm-inactive-list-marker")?.textContent ?? null,
+    siblingClass: quoteActiveSiblingLine?.className ?? null,
+    siblingMarker: quoteActiveSiblingLine?.querySelector(".cm-inactive-list-marker")?.textContent ?? null
+  };
+  quoteActiveListHarness.controller.destroy();
+
+  const quoteListBackspaceInitialContent = ["> - parent", ">   - "].join("\n");
+  const quoteListBackspaceExpectedContent = ["> - parent", "> "].join("\n");
+  const quoteListBackspaceHarness = setupHarness(quoteListBackspaceInitialContent);
+  quoteListBackspaceHarness.controller.setSelection(quoteListBackspaceInitialContent.length);
+  await settle();
+  const quoteListBackspaceAccepted = [
+    dispatchBackspace(quoteListBackspaceHarness.view),
+    dispatchBackspace(quoteListBackspaceHarness.view),
+    dispatchBackspace(quoteListBackspaceHarness.view)
+  ];
+  await settle();
+  const quoteListBackspaceActualContent = quoteListBackspaceHarness.controller.getContent();
+  const quoteListBackspaceActualSelection = quoteListBackspaceHarness.controller.getSelection();
+  const quoteListBackspacePass =
+    quoteListBackspaceActualContent === quoteListBackspaceExpectedContent &&
+    quoteListBackspaceActualSelection.anchor === quoteListBackspaceExpectedContent.length &&
+    quoteListBackspaceActualSelection.head === quoteListBackspaceExpectedContent.length;
+  quoteListBackspaceHarness.controller.destroy();
+
+  const quoteListTabInitialContent = ["> - parent", "> - child"].join("\n");
+  const quoteListTabIndentedContent = ["> - parent", ">   - child"].join("\n");
+  const quoteListTabHarness = setupHarness(quoteListTabInitialContent);
+  quoteListTabHarness.controller.setSelection(quoteListTabInitialContent.indexOf("child"));
+  await settle();
+  const quoteListTabAccepted = dispatchTab(quoteListTabHarness.view);
+  await settle();
+  const quoteListTabActualIndentedContent = quoteListTabHarness.controller.getContent();
+  const quoteListTabIndentedSelection = quoteListTabHarness.controller.getSelection();
+  const quoteListShiftTabAccepted = dispatchTab(quoteListTabHarness.view, true);
+  await settle();
+  const quoteListTabActualOutdentedContent = quoteListTabHarness.controller.getContent();
+  const quoteListTabOutdentedSelection = quoteListTabHarness.controller.getSelection();
+  const quoteListTabPass =
+    quoteListTabActualIndentedContent === quoteListTabIndentedContent &&
+    quoteListTabIndentedSelection.anchor === quoteListTabIndentedContent.indexOf("child") &&
+    quoteListTabIndentedSelection.head === quoteListTabIndentedContent.indexOf("child") &&
+    quoteListTabActualOutdentedContent === quoteListTabInitialContent &&
+    quoteListTabOutdentedSelection.anchor === quoteListTabInitialContent.indexOf("child") &&
+    quoteListTabOutdentedSelection.head === quoteListTabInitialContent.indexOf("child");
+  quoteListTabHarness.controller.destroy();
+
+  return {
+    actualContent,
+    actualSelection,
+    caseId: "blockquote-inner-blocks-rendering-enter",
+    details: {
+      enterAccepted,
+      nestedQuoteEnter: {
+        accepted: nestedEnterAccepted,
+        actualContent: nestedEnterActualContent,
+        actualSelection: nestedEnterActualSelection,
+        expectedContent: nestedEnterExpectedContent,
+        lineClasses: nestedEnterLineClasses,
+        visibleRawMarkerMeasured: visibleRawNestedEnterMarker !== null
+      },
+      emptyNestedQuoteEnter: {
+        accepted: emptyNestedEnterAccepted,
+        actualContent: emptyNestedEnterActualContent,
+        actualSelection: emptyNestedEnterActualSelection,
+        caretBottom: emptyNestedCaretRect?.bottom ?? null,
+        caretHasGeometry: emptyNestedCaretHasGeometry,
+        caretLeft: emptyNestedCaretRect?.left ?? null,
+        caretTop: emptyNestedCaretRect?.top ?? null,
+        expectedContent: emptyNestedEnterExpectedContent,
+        lineClass: emptyNestedActiveLine?.className ?? null
+      },
+      quoteChildListEnter: {
+        accepted: quoteChildListEnterAccepted,
+        actualContent: quoteChildListActualContent,
+        actualSelection: quoteChildListActualSelection,
+        expectedContent: quoteChildListExpectedContent
+      },
+      quoteListBackspace: {
+        accepted: quoteListBackspaceAccepted,
+        actualContent: quoteListBackspaceActualContent,
+        actualSelection: quoteListBackspaceActualSelection,
+        expectedContent: quoteListBackspaceExpectedContent
+      },
+      quoteActiveList: quoteActiveListDetails,
+      quoteListEnter: {
+        accepted: quoteListEnterAccepted,
+        actualContent: quoteListActualContent,
+        actualSelection: quoteListActualSelection,
+        expectedContent: quoteListExpectedContent
+      },
+      quoteListTab: {
+        indentedContent: quoteListTabActualIndentedContent,
+        indentedSelection: quoteListTabIndentedSelection,
+        outdentedContent: quoteListTabActualOutdentedContent,
+        outdentedSelection: quoteListTabOutdentedSelection,
+        tabAccepted: quoteListTabAccepted,
+        shiftTabAccepted: quoteListShiftTabAccepted
+      },
+      quoteTopListEnter: {
+        accepted: quoteTopListEnterAccepted,
+        actualContent: quoteTopListActualContent,
+        actualSelection: quoteTopListActualSelection,
+        expectedContent: quoteTopListExpectedContent
+      },
+      rendering: renderingDetails
+    },
+    expectedContent: enterExpectedContent,
+    expectedSelection: {
+      anchor: enterExpectedContent.length,
+      head: enterExpectedContent.length
+    },
+    grammar: "blockquote",
+    name: "blockquote inner blocks render with block styles and Enter creates a quoted separator",
+    pass:
+      renderingPass &&
+      enterPass &&
+      nestedEnterPass &&
+      emptyNestedEnterPass &&
+      quoteListEnterPass &&
+      quoteChildListEnterPass &&
+      quoteTopListEnterPass &&
+      quoteActiveListPass &&
+      quoteListBackspacePass &&
+      quoteListTabPass
+  };
 }
 
 async function runListDragSelectionCase(input: {
@@ -3458,6 +4175,11 @@ const namedProbeCases: NamedProbeCase[] = [
   { caseId: "heading-empty-paragraph-space", group: "heading", run: runHeadingEnterSpaceCaretCase },
   { caseId: "heading-empty-paragraph-backspace", group: "heading", run: runHeadingEmptyParagraphBackspaceCase },
   { caseId: "structural-blank-arrow-down", group: "structural-blank", run: runStructuralBlankArrowDownCase },
+  { caseId: "blockquote-raw-prefix-hidden", group: "blockquote", run: runBlockquoteRawPrefixCase },
+  { caseId: "blockquote-marker-commits-after-padding", group: "blockquote", run: runBlockquoteMarkerCommitInputCase },
+  { caseId: "nested-blockquote-marker-commits-after-padding", group: "blockquote", run: runNestedBlockquoteMarkerCommitInputCase },
+  { caseId: "blockquote-bare-separator-rendering", group: "blockquote", run: runBlockquoteBareSeparatorRenderingCase },
+  { caseId: "blockquote-inner-blocks-rendering-enter", group: "blockquote", run: runBlockquoteInnerBlocksRenderingAndEnterCase },
   { caseId: "deep-ordered-list-repeated-enter-exit", group: "list", run: runDeepOrderedListRepeatedEnterExitCase },
   { caseId: "top-level-list-item-enter-body-upgrade", group: "list", run: runTopLevelListItemEnterBodyUpgradeCase }
 ];
@@ -3669,6 +4391,10 @@ export async function runMarkdownEditingExperienceProbe(): Promise<ProbeResult> 
   );
 
   cases.push(await runBlockquoteRawPrefixCase());
+  cases.push(await runBlockquoteMarkerCommitInputCase());
+  cases.push(await runNestedBlockquoteMarkerCommitInputCase());
+  cases.push(await runBlockquoteBareSeparatorRenderingCase());
+  cases.push(await runBlockquoteInnerBlocksRenderingAndEnterCase());
 
   cases.push(
     await runListDragSelectionCase({

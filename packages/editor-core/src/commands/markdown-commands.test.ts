@@ -480,6 +480,27 @@ describe("semantic markdown commands", () => {
     ]);
   });
 
+  it("breaks ordered quote list rendering on Backspace at content start", () => {
+    const source = ["> 1. 内容", "> 2. 内容2", "> 3. 内容3"].join("\n");
+    const cursor = source.indexOf("内容2");
+    const target = createCommandTarget({ doc: source, anchor: cursor });
+    const insert = "\n>\n> 2.";
+    const previousLineEnd = "> 1. 内容".length;
+
+    expect(runMarkdownBackspaceCommand(target, createActiveState(source, cursor))).toBe(true);
+    expect(target.getDispatchedChanges()).toEqual([
+      {
+        from: previousLineEnd,
+        to: cursor,
+        insert,
+        selection: {
+          anchor: previousLineEnd + insert.length,
+          head: previousLineEnd + insert.length
+        }
+      }
+    ]);
+  });
+
   it("joins paragraph text into the previous paragraph on Backspace across a structural blank separator", () => {
     const source = ["Alpha", "", "Beta"].join("\n");
     const target = createCommandTarget({ doc: source, anchor: source.indexOf("Beta") });

@@ -1,12 +1,14 @@
 import {
+  parseMarkdownDocument,
   parseBlockMap,
   type BlockMap,
+  type MarkdownBlock,
   type ListBlock,
   type ListItemBlock
 } from "@fishmark/markdown-engine";
 
 import type { SemanticContext } from "./semantic-context";
-import { parseListLine } from "./line-parsers";
+import { parseBlockquoteLine, parseListLine } from "./line-parsers";
 
 export type TextChange = {
   from: number;
@@ -62,7 +64,8 @@ export function computeInsertOrderedListItemBelow(ctx: SemanticContext): ListEdi
 
   const insertAt = toBlockOffset(current.rootList, current.item.endOffset);
   const nextOrdinal = current.scope.startOrdinal + current.itemIndex + 1;
-  const insert = `\n${" ".repeat(current.item.indent)}${nextOrdinal}${current.scope.delimiter} `;
+  const insert =
+    `\n${readListItemMarkerPrefix(ctx, current.item)}${nextOrdinal}${current.scope.delimiter} `;
   const blockSource = readBlockSource(ctx, current.rootList);
   const tentativeSource = replaceRange(blockSource, insertAt, insertAt, insert);
   const tentativeCursor = insertAt + insert.length;
@@ -133,9 +136,9 @@ export function computeOrderedListEnter(
 
 export function computeListItemEnter(
   ctx: SemanticContext,
-  contentStartOffset: number
+  contentStartOffset?: number
 ): ListEdit | null {
-  if (ctx.selection.empty === false || ctx.selection.from < contentStartOffset) {
+  if (ctx.selection.empty === false) {
     return null;
   }
 
@@ -149,8 +152,15 @@ export function computeListItemEnter(
     return null;
   }
 
+  const resolvedContentStartOffset =
+    contentStartOffset ?? current.item.contentStartOffset ?? current.item.markerEnd;
+
+  if (ctx.selection.from < resolvedContentStartOffset) {
+    return null;
+  }
+
   const line = ctx.state.doc.lineAt(ctx.selection.from);
-  const leftContent = ctx.source.slice(contentStartOffset, ctx.selection.from);
+  const leftContent = ctx.source.slice(resolvedContentStartOffset, ctx.selection.from);
 
   if (leftContent.trim().length === 0 && ctx.selection.from <= line.to) {
     return computeUpgradeListItemAtContentStart(ctx, current, line.to);
@@ -224,11 +234,20 @@ function computeUpgradeListItemAtContentStart(
     !rightContentIsEmpty &&
     hasFollowingLineBreak &&
     lineEndOffset < current.rootList.endOffset;
+  const topLevelBodyPrefix = readTopLevelBodyPrefix(ctx, current.item);
+  const topLevelQuoteExitPrefix =
+    exitsTopLevelEmptyItem && topLevelBodyPrefix !== null
+      ? buildTopLevelQuoteListExitPrefix(ctx, current.item)
+      : null;
   const replacementPrefix =
     current.parentScope && current.parentItem
-      ? buildParentEmptyListItemPrefix(current.parentScope, current.parentItem)
+      ? buildParentEmptyListItemPrefix(ctx, current.parentScope, current.parentItem)
       : hasExistingSeparatorAfterItem
         ? ""
+      : topLevelQuoteExitPrefix !== null
+        ? topLevelQuoteExitPrefix
+      : topLevelBodyPrefix !== null
+        ? topLevelBodyPrefix
       : toBlockOffset(current.rootList, current.item.startOffset) > 0
         ? "\n"
         : "";
@@ -245,6 +264,11 @@ function computeUpgradeListItemAtContentStart(
       : lineEndOffset;
 
   if (exitsTopLevelEmptyItem && hasFollowingLineBreak && deleteTo > current.rootList.endOffset) {
+    const selectionOffset =
+      topLevelBodyPrefix !== null
+        ? current.item.startOffset + replacementPrefix.length
+        : current.item.startOffset;
+
     return {
       changes: {
         from: current.item.startOffset,
@@ -252,8 +276,8 @@ function computeUpgradeListItemAtContentStart(
         insert: replacementPrefix
       },
       selection: {
-        anchor: current.item.startOffset,
-        head: current.item.startOffset
+        anchor: selectionOffset,
+        head: selectionOffset
       },
       userEvent: "input.list-exit"
     };
@@ -264,7 +288,7 @@ function computeUpgradeListItemAtContentStart(
   const tentativeSource = replaceRange(blockSource, replaceFrom, replaceTo, replacement);
   const tentativeCursor =
     exitsTopLevelEmptyItem && hasFollowingLineBreak
-      ? replaceFrom
+      ? replaceFrom + (topLevelBodyPrefix !== null ? replacementPrefix.length : 0)
       : replaceFrom + replacementPrefix.length;
 
   return finalizeListEdit(
@@ -324,7 +348,8 @@ function computeSplitListItemAtSelection(
   const marker = current.scope.ordered
     ? `${current.scope.startOrdinal + current.itemIndex + 1}${current.scope.delimiter}`
     : current.item.marker;
-  const continuationPrefix = `${" ".repeat(current.item.indent)}${marker} ${current.item.task ? "[ ] " : ""}`;
+  const continuationPrefix =
+    `${readListItemMarkerPrefix(ctx, current.item)}${marker} ${current.item.task ? "[ ] " : ""}`;
   const insert = `\n${continuationPrefix}`;
   const tentativeSource = replaceRange(blockSource, insertAt, insertAt, insert);
   const tentativeCursor = insertAt + insert.length;
@@ -333,10 +358,7 @@ function computeSplitListItemAtSelection(
 }
 
 function outdentListItemTail(source: string): string {
-  return source
-    .split("\n")
-    .map((line) => (line.startsWith("  ") ? line.slice(2) : line))
-    .join("\n");
+  return outdentListItemSubtreeSource(source);
 }
 
 function firstNonBlankLineStartsList(source: string): boolean {
@@ -367,7 +389,7 @@ export function computeExitEmptyNestedListItem(ctx: SemanticContext): ListEdit |
     return null;
   }
 
-  const replacementPrefix = buildParentEmptyListItemPrefix(current.parentScope, current.parentItem);
+  const replacementPrefix = buildParentEmptyListItemPrefix(ctx, current.parentScope, current.parentItem);
 
   if (!replacementPrefix) {
     return null;
@@ -444,17 +466,14 @@ export function computeBackspaceListMarker(ctx: SemanticContext): ListEdit | nul
   }
 
   const contentStartOffset = current.item.contentStartOffset ?? current.item.markerEnd;
-  const line = ctx.state.doc.lineAt(ctx.selection.from);
-  const parsed = parseListLine(line.text);
-  const lineContentStartOffset = parsed ? line.to - parsed.content.length : contentStartOffset;
 
-  if (!parsed || ctx.selection.from !== lineContentStartOffset) {
+  if (ctx.selection.from !== contentStartOffset) {
     return null;
   }
 
   const blockSource = readBlockSource(ctx, current.rootList);
   const deleteFrom = toBlockOffset(current.rootList, current.item.markerStart);
-  const deleteTo = toBlockOffset(current.rootList, lineContentStartOffset);
+  const deleteTo = toBlockOffset(current.rootList, contentStartOffset);
   const tentativeSource = replaceRange(blockSource, deleteFrom, deleteTo, "");
   const tentativeCursor = deleteFrom;
 
@@ -479,10 +498,7 @@ export function computeIndentListItem(ctx: SemanticContext): ListEdit | null {
 
   const subtreeSource = readItemSubtreeSource(ctx, current.item);
   const subtree = current.scope.ordered ? resetOrderedListSubtreeRootMarker(subtreeSource) : subtreeSource;
-  const indentedSubtree = subtree
-    .split("\n")
-    .map((line) => `  ${line}`)
-    .join("\n");
+  const indentedSubtree = indentListItemSubtreeSource(subtree);
   const blockSource = readBlockSource(ctx, current.rootList);
   const subtreeFrom = toBlockOffset(current.rootList, current.item.startOffset);
   const subtreeTo = toBlockOffset(current.rootList, current.item.endOffset);
@@ -506,10 +522,7 @@ export function computeOutdentListItem(ctx: SemanticContext): ListEdit | null {
   }
 
   const subtree = readItemSubtreeSource(ctx, current.item);
-  const outdentedSubtree = subtree
-    .split("\n")
-    .map((line) => (line.startsWith("  ") ? line.slice(2) : line))
-    .join("\n");
+  const outdentedSubtree = outdentListItemSubtreeSource(subtree);
   const blockSource = readBlockSource(ctx, current.rootList);
   const subtreeFrom = toBlockOffset(current.rootList, current.item.startOffset);
   const subtreeTo = toBlockOffset(current.rootList, current.item.endOffset);
@@ -788,7 +801,7 @@ function readLineInfoAfter(source: string, lineEnd: number): { from: number; to:
 }
 
 function lineHasPotentialListMarker(line: string): boolean {
-  return /^[ \t]*(?:[-+*]|\d+[.)])(?:[ \t]+)/u.test(line);
+  return /^[ \t]*(?:[-+*]|\d+[.)])(?:[ \t]+)/u.test(readListContentLine(line));
 }
 
 function rangesIntersect(leftFrom: number, leftTo: number, rightFrom: number, rightTo: number): boolean {
@@ -854,7 +867,7 @@ function normalizeOrderedListBlock(source: string, parsedList?: ListBlock, rootS
   source: string;
   changes: TextChange[];
 } {
-  const nextParsedList = parsedList ?? parseBlockMap(source).blocks[0];
+  const nextParsedList = parsedList ?? parseListBlockForNormalization(source);
 
   if (!nextParsedList || nextParsedList.type !== "list") {
     return { source, changes: [] };
@@ -1008,6 +1021,12 @@ function findListItemContext(
 }
 
 function readActiveListRoot(ctx: SemanticContext): ListBlock | null {
+  const activeRoot = readActiveListRootFromActiveBlock(ctx.activeState.activeBlock, ctx.selection.from);
+
+  if (activeRoot) {
+    return activeRoot;
+  }
+
   const blocks = parseBlockMap(ctx.source).blocks;
   const selectionOffset = ctx.selection.from;
   const currentIndex = blocks.findIndex(
@@ -1065,6 +1084,42 @@ function readActiveListRoot(ctx: SemanticContext): ListBlock | null {
   return nextRoot;
 }
 
+function readActiveListRootFromActiveBlock(
+  activeBlock: MarkdownBlock | null,
+  selectionOffset: number
+): ListBlock | null {
+  if (!activeBlock) {
+    return null;
+  }
+
+  if (activeBlock.type === "list" && offsetIsInsideBlock(activeBlock, selectionOffset)) {
+    return activeBlock;
+  }
+
+  if (activeBlock.type !== "blockquote" || !activeBlock.innerBlocks) {
+    return null;
+  }
+
+  return findListRootInBlocks(activeBlock.innerBlocks, selectionOffset);
+}
+
+function findListRootInBlocks(
+  blocks: readonly MarkdownBlock[],
+  selectionOffset: number
+): ListBlock | null {
+  for (const block of blocks) {
+    if (block.type === "list" && offsetIsInsideBlock(block, selectionOffset)) {
+      return block;
+    }
+  }
+
+  return null;
+}
+
+function offsetIsInsideBlock(block: { startOffset: number; endOffset: number }, offset: number): boolean {
+  return offset >= block.startOffset && offset <= block.endOffset;
+}
+
 function tryReadListRootFromRange(source: string, startOffset: number, endOffset: number): ListBlock | null {
   const candidateSource = source.slice(startOffset, endOffset);
   const parsed = parseBlockMap(candidateSource).blocks;
@@ -1075,6 +1130,24 @@ function tryReadListRootFromRange(source: string, startOffset: number, endOffset
   }
 
   return offsetListBlock(rootList, startOffset);
+}
+
+function parseListBlockForNormalization(source: string): ListBlock | null {
+  const parsed = parseBlockMap(source).blocks;
+  const rootList = parsed.length === 1 && parsed[0]?.type === "list" ? parsed[0] : null;
+
+  if (rootList) {
+    return rootList;
+  }
+
+  const richParsed = parseMarkdownDocument(source).blocks;
+  const blockquote = richParsed.length === 1 && richParsed[0]?.type === "blockquote" ? richParsed[0] : null;
+  const innerList =
+    blockquote?.innerBlocks?.length === 1 && blockquote.innerBlocks[0]?.type === "list"
+      ? blockquote.innerBlocks[0]
+      : null;
+
+  return innerList;
 }
 
 function offsetListBlock(list: ListBlock, offset: number): ListBlock {
@@ -1128,7 +1201,11 @@ function readItemSubtreeSource(ctx: SemanticContext, item: ListItemBlock): strin
   return ctx.source.slice(item.startOffset, item.endOffset);
 }
 
-function buildParentEmptyListItemPrefix(scope: ListBlock, parentItem: ListItemBlock): string | null {
+function buildParentEmptyListItemPrefix(
+  ctx: SemanticContext,
+  scope: ListBlock,
+  parentItem: ListItemBlock
+): string | null {
   if (scope.ordered) {
     const parentItemIndex = scope.items.findIndex((item) => item === parentItem);
 
@@ -1136,10 +1213,10 @@ function buildParentEmptyListItemPrefix(scope: ListBlock, parentItem: ListItemBl
       return null;
     }
 
-    return `${" ".repeat(parentItem.indent)}${scope.startOrdinal + parentItemIndex + 1}${scope.delimiter} `;
+    return `${readListItemMarkerPrefix(ctx, parentItem)}${scope.startOrdinal + parentItemIndex + 1}${scope.delimiter} `;
   }
 
-  return `${" ".repeat(parentItem.indent)}${parentItem.marker} ${parentItem.task ? "[ ] " : ""}`;
+  return `${readListItemMarkerPrefix(ctx, parentItem)}${parentItem.marker} ${parentItem.task ? "[ ] " : ""}`;
 }
 
 function resetOrderedListSubtreeRootMarker(subtree: string): string {
@@ -1149,15 +1226,95 @@ function resetOrderedListSubtreeRootMarker(subtree: string): string {
     return subtree;
   }
 
-  const parsed = parseListLine(firstLine);
+  const parsedLine = parseListLineWithContainerPrefix(firstLine);
+  const parsed = parsedLine?.parsed ?? null;
 
   if (!parsed || !/^\d+[.)]$/u.test(parsed.marker)) {
     return subtree;
   }
 
   const delimiter = parsed.marker.endsWith(")") ? ")" : ".";
-  const suffix = firstLine.slice(parsed.indent.length + parsed.marker.length);
-  return [`${parsed.indent}1${delimiter}${suffix}`, ...restLines].join("\n");
+  const markerStart = parsedLine!.containerPrefix.length + parsed.indent.length;
+  const markerEnd = markerStart + parsed.marker.length;
+  return [
+    `${firstLine.slice(0, markerStart)}1${delimiter}${firstLine.slice(markerEnd)}`,
+    ...restLines
+  ].join("\n");
+}
+
+function readListItemMarkerPrefix(ctx: SemanticContext, item: ListItemBlock): string {
+  return ctx.source.slice(item.startOffset, item.markerStart);
+}
+
+function readTopLevelBodyPrefix(ctx: SemanticContext, item: ListItemBlock): string | null {
+  const markerPrefix = readListItemMarkerPrefix(ctx, item);
+
+  return markerPrefix.includes(">") ? markerPrefix : null;
+}
+
+function buildTopLevelQuoteListExitPrefix(ctx: SemanticContext, item: ListItemBlock): string | null {
+  const line = readLineInfoAt(ctx.source, item.startOffset);
+  const lineText = ctx.source.slice(line.from, line.to);
+  const parsedQuote = parseBlockquoteLine(lineText);
+
+  if (!parsedQuote) {
+    return null;
+  }
+
+  const separatorPrefix =
+    parsedQuote.quoteDepth <= 1 ? parsedQuote.sourcePrefix.trimEnd() : parsedQuote.sourcePrefix;
+
+  return `${separatorPrefix}\n${parsedQuote.sourcePrefix}`;
+}
+
+function indentListItemSubtreeSource(source: string): string {
+  return source
+    .split("\n")
+    .map((line) => {
+      const containerPrefixLength = readContainerPrefixLength(line);
+      return `${line.slice(0, containerPrefixLength)}  ${line.slice(containerPrefixLength)}`;
+    })
+    .join("\n");
+}
+
+function outdentListItemSubtreeSource(source: string): string {
+  return source
+    .split("\n")
+    .map((line) => {
+      const containerPrefixLength = readContainerPrefixLength(line);
+      const removable = line.slice(containerPrefixLength, containerPrefixLength + 2);
+
+      return removable === "  "
+        ? `${line.slice(0, containerPrefixLength)}${line.slice(containerPrefixLength + 2)}`
+        : line;
+    })
+    .join("\n");
+}
+
+function readContainerPrefixLength(line: string): number {
+  const parsedQuote = parseBlockquoteLine(line);
+  return parsedQuote?.contentStartOffset ?? 0;
+}
+
+function readListContentLine(line: string): string {
+  return line.slice(readContainerPrefixLength(line));
+}
+
+function parseListLineWithContainerPrefix(line: string): {
+  containerPrefix: string;
+  parsed: NonNullable<ReturnType<typeof parseListLine>>;
+} | null {
+  const containerPrefixLength = readContainerPrefixLength(line);
+  const parsed = parseListLine(line.slice(containerPrefixLength));
+
+  if (!parsed) {
+    return null;
+  }
+
+  return {
+    containerPrefix: line.slice(0, containerPrefixLength),
+    parsed
+  };
 }
 
 function containsOrderedScope(list: ListBlock): boolean {

@@ -1600,3 +1600,41 @@
 - [x] 给 editor-core decoration 管线增加 source mode gate，禁用所有 Markdown preview decorations / widgets
 - [x] 接入 renderer 壳层入口、状态栏按钮样式和源码模式基础纯文本样式
 - [x] 补 renderer、editor-core、workspace 多标签、undo/redo 与 round-trip 回归测试
+
+---
+
+## Epic 13：引用块内部 Block 同构
+
+### TASK-061 引用块内部 block 渲染与结构空行
+
+状态：DEV_DONE
+依赖：`TASK-013`、`TASK-033`、`TASK-034`、`TASK-044`、`TASK-046`、`TASK-051`、`TASK-054`、`TASK-055`、`TASK-056`、`TASK-058`、`TASK-060`
+
+目标：让 blockquote 内部遵守和外部正文一致的 block 规则：引用块内部的段落、列表、代码块、数学公式等 block 由结构性空行区分；在引用块内部按 Enter 默认创建结构性空行加新的引用内 block；在引用块内部空行再次 Enter 退出引用块；非激活态渲染时，引用块 rail 按 Typora 导出样式保持连续，内部 block 按各自 Markdown 语义渲染。
+
+主要落点：`packages/markdown-engine/src/parse-markdown-document.ts`、`packages/markdown-engine/src/block-map.ts`、`packages/editor-core/src/decorations/block-decorations.ts`、`packages/editor-core/src/commands/blockquote-commands.ts`、`packages/editor-core/src/physical-editing-document.ts`、`src/renderer/code-editor.test.ts`、`src/renderer/markdown-editing-experience-probe.ts`、`src/renderer/styles/markdown-render.css`、`src/renderer/export-html.ts`。
+
+交付物：
+- blockquote block 暴露 parser-owned 的内部 block / line metadata，保留原始 Markdown offset，所有源码仍可 round-trip 还原。
+- blockquote 内部空引用行 `>` / `> ` 表示引用内结构性空行，而不是裸露源码 marker 或额外独立 block。
+- blockquote 内部的 paragraph、list / task list、fenced code block、indented code block、block math、Mermaid fence 至少在非激活态复用外部对应渲染规则；引用 rail 以透明背景、4px 左边框和 15px 内边距连续包住这些内部 block。
+- blockquote 内非空内容行按 Enter 产生 `\n>\n> ` 形态的新引用内 block；引用内空行再按 Enter 退出引用块，生成外部空段落 surface。
+- active 行仍恢复完整 Markdown 源码，不隐藏正在编辑行的 `>` 前缀，不破坏 IME、selection、undo/redo、autosave 或 source mode gate。
+- HTML export 对 blockquote 内部 block 复用同一 parser-owned 语义，不用 renderer 正则二次猜测。
+
+验收：
+- `> 第一段\n>\n> 第二段` 非激活态显示为一个连续引用块，中间 `>` marker 不可见，两个段落由引用内结构空行区分。
+- blockquote 基础视觉与 Typora 导出 HTML 对齐：透明背景、4px `#dfe2e5` 左 rail、15px 左右内边距、无圆角、无 inset shadow。
+- `> - item\n> - item 2` 在引用块内渲染为列表；marker、缩进、软换行几何符合 `docs/standards/markdown-text-rendering-standard.json`。
+- 引用块内列表 Enter / Backspace / Tab / Shift+Tab 与外部列表共用语义：非空项续同级、空子项升级父项、空顶级项先创建引用内结构空行再退出为引用正文、Backspace 删除 marker / 清理缩进 / 断开有序列表时都保留 quote 前缀；active 行只让当前引用内列表项回源码态，父项和兄弟项继续按 inactive list marker 渲染。
+- `> ```ts\n> const x = 1\n> ``` ` 在引用块内渲染为代码块，active/source mode 恢复完整源码。
+- `> $$\n> x^2\n> $$` 和 Mermaid fence 在引用块内沿用现有 math / Mermaid preview fallback 和 source mode gate。
+- 引用块内正文行末 Enter 产生一个新的引用内 block，源码包含结构性空行；引用内空行再次 Enter 退出引用块。
+- 现有 top-level heading / paragraph / list / blockquote / code fence / math / Mermaid / table / source mode 回归不失败。
+
+执行切片：
+- [x] 为 blockquote 增加内部 block parser-owned metadata，并补 parser / signature / export 回归。
+- [x] 改造 blockquote inactive decoration，让内部 paragraph / list / code / math / Mermaid 复用对应 block 渲染，同时保持 quote rail 连续。
+- [x] 调整 blockquote Enter / Backspace 与 physical line surface，让引用内结构空行和退出引用块行为符合 Typora-like block 规则。
+- [x] 统一引用内列表编辑命令入口，让引用块内列表的 Enter、Backspace、Tab / Shift+Tab 与正文列表走同一套编辑语义。
+- [x] 增加 renderer DOM 测试与 Electron geometry / editing-experience / Typora visual probe，覆盖引用内列表、代码块、数学公式、空行 Enter 退出、source mode gate 和 Typora 导出样式对齐。

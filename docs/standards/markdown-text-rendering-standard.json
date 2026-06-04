@@ -3,7 +3,7 @@
   "id": "fishmark.markdownTextRendering",
   "status": "canonical",
   "title": "FishMark Markdown Text Rendering Standard",
-  "updatedAt": "2026-05-05",
+  "updatedAt": "2026-06-04",
   "owner": "FishMark renderer",
   "appliesTo": [
     "src/renderer/styles/markdown-render.css",
@@ -50,7 +50,7 @@
       "paragraph": 1.86,
       "list": 1.84,
       "listContinuation": 1.84,
-      "blockquote": 1.78,
+      "blockquote": 1.6,
       "inlineCode": 1.72,
       "codeBlock": 1.55,
       "tableCell": 1.55,
@@ -94,9 +94,9 @@
       "rule": "List item vertical rhythm is governed by list line-height. Nested items must not gain extra top margin unless the source contains a blank line."
     },
     "blockquote": {
-      "paddingBlockStartRem": 0.35,
-      "paddingBlockEndRem": 0.35,
-      "marginBlockEndRem": 0.2
+      "paddingBlockStartRem": 0,
+      "paddingBlockEndRem": 0,
+      "marginBlockEndRem": 0
     },
     "codeBlock": {
       "paddingBlockStartRem": 0.65,
@@ -211,15 +211,18 @@
   },
   "blocks": {
     "blockquote": {
-      "borderWidthPx": 2,
-      "paddingInlineStartRem": 1.1,
-      "paddingInlineEndRem": 0.85,
-      "nestedIndentStepRem": 0.9,
+      "borderWidthPx": 4,
+      "paddingInlineStartRem": 0.9375,
+      "paddingInlineEndRem": 0.9375,
+      "nestedIndentStepRem": 1.1875,
       "maxStyledDepth": 4,
       "depthClassRule": "Inactive blockquote rows must include cm-inactive-blockquote-depth-N where N is the parser-owned quote depth capped to 4.",
+      "markerCommitRule": "A blockquote marker at each editable depth is committed only after marker padding is typed. A bare > or >text remains paragraph text at the top level, and remains visible content when typed inside an already committed quote line. > followed by a space or tab may become a blockquote marker; inside an existing quote, > > stays depth 1 content until the nested marker padding makes it > > . Bare > lines remain valid structural separators only inside an already committed blockquote.",
       "markerVisibilityInactive": "hidden through the parser-owned contentStartOffset, including every legal nested quote marker and its consumed source padding.",
-      "nestedRailRule": "Depth 1 shows the existing outer rail. Depth 2 through 4 add readable inner rails and increase content padding by one nestedIndentStepRem per extra depth level.",
+      "markerVisibilityActive": "hidden while the blockquote is focused; active marker source hides the raw > with a transparent zero-width marker span, and the consumed marker padding is a visible caret anchor so an empty committed quote line immediately shows a caret inside the quote content column.",
+      "nestedRailRule": "Depth 1 shows a Typora-compatible 4px left rail. Depth 2 through 4 add readable inner rails and increase content padding by one nestedIndentStepRem per extra depth level.",
       "sourcePrefixRule": "Renderer decorations must use block map line metadata for quoteDepth and contentStartOffset. Fallback parsing, when needed for lean block maps, must call the markdown-engine blockquote prefix parser instead of duplicating Markdown regex logic.",
+      "innerBlockRule": "Parser-owned blockquote inner block metadata must preserve original source offsets while allowing inactive paragraph, list, code block, block math, and Mermaid rendering to reuse the same visual rules as top-level blocks. Bare quote lines inside an established blockquote are structural separators, not visible source text, and render as a 0.8em visible rhythm gap while the quote rail remains continuous. Quote-internal code and math surfaces follow the measured Typora export blockquote style: code boxes sit inside the quote content column, hide the language label, use #f8f8f8 with a 1px #e7eaed border, and block math stays transparent rather than a FishMark card.",
       "lineHeight": "typography.lineHeight.blockquote"
     },
     "codeBlock": {

@@ -7,12 +7,17 @@ export interface BlockquoteLinePrefix {
   contentStartOffset: number;
 }
 
+type ParsedBlockquoteMarker = {
+  marker: BlockquoteMarker;
+  sourcePrefixEndOffset: number;
+};
+
 export function parseBlockquoteLinePrefix(
   source: string,
   lineStartOffset: number,
   lineEndOffset: number
 ): BlockquoteLinePrefix {
-  const markers: BlockquoteMarker[] = [];
+  const markers: ParsedBlockquoteMarker[] = [];
   let cursor = lineStartOffset;
   let column = 0;
   let markerEnd = lineStartOffset;
@@ -26,11 +31,15 @@ export function parseBlockquoteLinePrefix(
     }
 
     markerEnd = marker.offset + 1;
-    markers.push({ markerStart: marker.offset, markerEnd });
 
     const nextColumn = marker.column + 1;
     const prefixEnd = consumeOptionalMarkerPadding(source, markerEnd, nextColumn, lineEndOffset);
     const padding = source[markerEnd];
+
+    markers.push({
+      marker: { markerStart: marker.offset, markerEnd },
+      sourcePrefixEndOffset: prefixEnd.offset
+    });
 
     cursor = padding === " " ? prefixEnd.offset : markerEnd;
     column = padding === " " ? prefixEnd.column : nextColumn;
@@ -39,19 +48,55 @@ export function parseBlockquoteLinePrefix(
 
   if (markers.length === 0) {
     return {
-      markers,
+      markers: [],
       markerEnd: lineStartOffset,
       sourcePrefixEndOffset: lineStartOffset,
       contentStartOffset: lineStartOffset
     };
   }
 
+  const committedMarkers = trimTrailingUncommittedNestedMarkers(markers);
+  const lastCommittedMarker = committedMarkers.at(-1);
+
+  if (lastCommittedMarker) {
+    markerEnd = lastCommittedMarker.marker.markerEnd;
+    sourcePrefixEndOffset = lastCommittedMarker.sourcePrefixEndOffset;
+  }
+
   return {
-    markers,
+    markers: committedMarkers.map((entry) => entry.marker),
     markerEnd,
     sourcePrefixEndOffset,
     contentStartOffset: sourcePrefixEndOffset
   };
+}
+
+function trimTrailingUncommittedNestedMarkers(
+  markers: readonly ParsedBlockquoteMarker[]
+): readonly ParsedBlockquoteMarker[] {
+  const lastMarkerWithPaddingIndex = findLastIndex(
+    markers,
+    (entry) => entry.sourcePrefixEndOffset > entry.marker.markerEnd
+  );
+
+  if (lastMarkerWithPaddingIndex < 0 || lastMarkerWithPaddingIndex === markers.length - 1) {
+    return markers;
+  }
+
+  return markers.slice(0, lastMarkerWithPaddingIndex + 1);
+}
+
+function findLastIndex<TValue>(
+  values: readonly TValue[],
+  predicate: (value: TValue) => boolean
+): number {
+  for (let index = values.length - 1; index >= 0; index -= 1) {
+    if (predicate(values[index]!)) {
+      return index;
+    }
+  }
+
+  return -1;
 }
 
 type MarkerCursor = {

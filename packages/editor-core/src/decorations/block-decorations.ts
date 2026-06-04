@@ -321,9 +321,8 @@ function appendDecorationsForBlock(
       signatures?.push(`${createBlockDecorationSignature(block)}:content-edit`);
       appendBlockquoteDecorations(
         block,
-        context.source,
+        context,
         ranges,
-        context.resolveImagePreviewUrl,
         context.activeSelectionLineStart
       );
       return;
@@ -355,6 +354,14 @@ function appendDecorationsForBlock(
 
   signatures?.push(createBlockDecorationSignature(block));
 
+  appendInactiveDecorationsForBlock(block, context, ranges);
+}
+
+function appendInactiveDecorationsForBlock(
+  block: DecoratableBlock,
+  context: BlockDecorationContext,
+  ranges: Range<Decoration>[]
+): void {
   if (block.type === "htmlImage") {
     ranges.push(createInactiveHtmlImagePreviewDecoration(block, context.resolveImagePreviewUrl));
     return;
@@ -411,9 +418,8 @@ function appendDecorationsForBlock(
   if (block.type === "blockquote") {
     appendBlockquoteDecorations(
       block,
-      context.source,
-      ranges,
-      context.resolveImagePreviewUrl
+      context,
+      ranges
     );
     return;
   }
@@ -697,26 +703,39 @@ function formatLanguageLabel(info: string | null): string {
 
 function appendBlockquoteDecorations(
   block: Extract<NonNullable<ActiveBlockState["activeBlock"]>, { type: "blockquote" }>,
-  source: string,
+  context: BlockDecorationContext,
   ranges: Range<Decoration>[],
-  resolveImagePreviewUrl?: (href: string | null) => string | null,
   activeLineStart: number | null = null
 ): void {
+  const source = context.source;
+  const resolveImagePreviewUrl = context.resolveImagePreviewUrl;
+
   if (block.lines) {
-    const renderableLines = block.lines.filter((line) =>
-      hasCommittedRichBlockquoteMarker(line.markerEnd, line.contentStartOffset)
+    const renderableLines = getRenderableBlockquoteLines(
+      block.lines,
+      (line) => line.contentEndOffset
     );
     const lineCount = renderableLines.length;
+    const shouldRenderInnerBlocks = Boolean(block.innerBlocks && block.innerBlocks.length > 0);
+    const activeLineInnerBlock =
+      activeLineStart !== null && block.innerBlocks
+        ? findInnerBlockTouchingLine(block.innerBlocks, activeLineStart, source)
+        : null;
 
     renderableLines.forEach((line, index) => {
       if (lineCount === 0) {
         return;
       }
 
+      const isSeparatorLine = isBareBlockquoteSeparatorLine(line, line.contentEndOffset);
       const lineClasses = [
         "cm-inactive-blockquote",
         createInactiveBlockquoteDepthClass(line.quoteDepth)
       ];
+
+      if (isSeparatorLine) {
+        lineClasses.push("cm-inactive-blockquote-separator");
+      }
 
       if (index === 0) {
         lineClasses.push("cm-inactive-blockquote-start");
@@ -734,16 +753,29 @@ function appendBlockquoteDecorations(
         }).range(line.startOffset)
       );
 
-      if (line.contentStartOffset > line.startOffset) {
-        if (line.startOffset !== activeLineStart) {
-          ranges.push(
-            Decoration.mark({
-              attributes: {
-                class: "cm-inactive-blockquote-marker"
-              }
-            }).range(line.startOffset, line.contentStartOffset)
-          );
+      if (activeLineStart === line.startOffset) {
+        appendActiveBlockquoteSourcePrefixDecorations(
+          line.startOffset,
+          line.markerEnd,
+          line.contentStartOffset,
+          ranges
+        );
+      } else if (line.contentStartOffset > line.startOffset) {
+        ranges.push(
+          Decoration.mark({
+            attributes: {
+              class: "cm-inactive-blockquote-marker"
+            }
+          }).range(line.startOffset, line.contentStartOffset)
+        );
+      }
+
+      if (shouldRenderInnerBlocks) {
+        if (activeLineStart === line.startOffset && activeLineInnerBlock?.type !== "list") {
+          ranges.push(...createActiveInlineImageDecorations(line.inline, source, resolveImagePreviewUrl));
+          ranges.push(...createActiveInlineDecorations(line.inline));
         }
+        return;
       }
 
       if (activeLineStart !== null) {
@@ -755,11 +787,17 @@ function appendBlockquoteDecorations(
         }));
       }
     });
+
+    if (block.innerBlocks && block.innerBlocks.length > 0) {
+      appendBlockquoteInnerBlockDecorations(block.innerBlocks, context, ranges, activeLineStart);
+    }
+
     return;
   }
 
-  const renderableLines = getInactiveBlockquoteLines(block.startOffset, block.endOffset, source).filter((line) =>
-    hasCommittedRichBlockquoteMarker(line.markerEnd, line.contentStartOffset)
+  const renderableLines = getRenderableBlockquoteLines(
+    getInactiveBlockquoteLines(block.startOffset, block.endOffset, source),
+    (line) => trimTrailingCarriageReturn(source, line.lineStart, line.lineEnd)
   );
   const lineCount = renderableLines.length;
 
@@ -768,10 +806,18 @@ function appendBlockquoteDecorations(
       continue;
     }
 
+    const isSeparatorLine = isBareBlockquoteSeparatorLine(
+      line,
+      trimTrailingCarriageReturn(source, line.lineStart, line.lineEnd)
+    );
     const lineClasses = [
       "cm-inactive-blockquote",
       createInactiveBlockquoteDepthClass(line.quoteDepth)
     ];
+
+    if (isSeparatorLine) {
+      lineClasses.push("cm-inactive-blockquote-separator");
+    }
 
     if (index === 0) {
       lineClasses.push("cm-inactive-blockquote-start");
@@ -789,18 +835,101 @@ function appendBlockquoteDecorations(
       }).range(line.lineStart)
     );
 
-    if (line.contentStartOffset > line.lineStart) {
-      if (line.lineStart !== activeLineStart) {
-        ranges.push(
-          Decoration.mark({
-            attributes: {
-              class: "cm-inactive-blockquote-marker"
-            }
-          }).range(line.lineStart, line.contentStartOffset)
-        );
-      }
+    if (activeLineStart === line.lineStart) {
+      appendActiveBlockquoteSourcePrefixDecorations(
+        line.lineStart,
+        line.markerEnd,
+        line.contentStartOffset,
+        ranges
+      );
+    } else if (line.contentStartOffset > line.lineStart) {
+      ranges.push(
+        Decoration.mark({
+          attributes: {
+            class: "cm-inactive-blockquote-marker"
+          }
+        }).range(line.lineStart, line.contentStartOffset)
+      );
     }
   }
+}
+
+function appendActiveBlockquoteSourcePrefixDecorations(
+  lineStartOffset: number,
+  markerEndOffset: number,
+  contentStartOffset: number,
+  ranges: Range<Decoration>[]
+): void {
+  if (markerEndOffset > lineStartOffset) {
+    ranges.push(
+      Decoration.mark({
+        attributes: {
+          class: "cm-active-blockquote-marker"
+        }
+      }).range(lineStartOffset, markerEndOffset)
+    );
+  }
+
+  if (contentStartOffset > markerEndOffset) {
+    ranges.push(
+      Decoration.mark({
+        attributes: {
+          class: "cm-active-blockquote-padding-anchor"
+        }
+      }).range(markerEndOffset, contentStartOffset)
+    );
+  }
+}
+
+function appendBlockquoteInnerBlockDecorations(
+  innerBlocks: readonly DecoratableBlock[],
+  context: BlockDecorationContext,
+  ranges: Range<Decoration>[],
+  activeLineStart: number | null
+): void {
+  for (const innerBlock of innerBlocks) {
+    if (activeLineStart !== null && blockTouchesLine(innerBlock, activeLineStart, context.source)) {
+      if (innerBlock.type === "list") {
+        appendActiveListDecorations(
+          innerBlock,
+          context.source,
+          activeLineStart,
+          ranges,
+          context.resolveImagePreviewUrl,
+          context.referenceDefinitions,
+          context.footnoteDefinitions
+        );
+      }
+
+      continue;
+    }
+
+    if (innerBlock.type === "blockMath") {
+      if (innerBlock.closed) {
+        ranges.push(
+          createInactiveBlockMathPreviewDecoration(innerBlock, {
+            className: "cm-math-preview-blockquote"
+          }).range(innerBlock.startOffset, innerBlock.endOffset)
+        );
+      }
+      continue;
+    }
+
+    appendInactiveDecorationsForBlock(innerBlock, context, ranges);
+  }
+}
+
+function findInnerBlockTouchingLine(
+  innerBlocks: readonly DecoratableBlock[],
+  lineStart: number,
+  source: string
+): DecoratableBlock | null {
+  return innerBlocks.find((innerBlock) => blockTouchesLine(innerBlock, lineStart, source)) ?? null;
+}
+
+function blockTouchesLine(block: DecoratableBlock, lineStart: number, source: string): boolean {
+  const lineEnd = findLineEndOffset(source, lineStart, source.length);
+  return block.startOffset <= lineEnd && block.endOffset >= lineStart;
 }
 
 function createInactiveBlockquoteDepthClass(depth: number): string {
@@ -812,12 +941,35 @@ function hasRenderableBlockquotePresentation(
   source: string
 ): boolean {
   if (block.lines) {
-    return block.lines.some((line) =>
-      hasCommittedRichBlockquoteMarker(line.markerEnd, line.contentStartOffset)
-    );
+    return hasCommittedRichBlockquoteLine(block.lines);
   }
 
-  return getInactiveBlockquoteLines(block.startOffset, block.endOffset, source).some((line) =>
+  return hasCommittedRichBlockquoteLine(getInactiveBlockquoteLines(block.startOffset, block.endOffset, source));
+}
+
+function getRenderableBlockquoteLines<T extends {
+  contentStartOffset: number;
+  markerEnd: number;
+  quoteDepth: number;
+}>(
+  lines: readonly T[],
+  getContentEndOffset: (line: T) => number
+): T[] {
+  if (!hasCommittedRichBlockquoteLine(lines)) {
+    return [];
+  }
+
+  return lines.filter((line) =>
+    hasCommittedRichBlockquoteMarker(line.markerEnd, line.contentStartOffset) ||
+    isBareBlockquoteSeparatorLine(line, getContentEndOffset(line))
+  );
+}
+
+function hasCommittedRichBlockquoteLine<T extends {
+  contentStartOffset: number;
+  markerEnd: number;
+}>(lines: readonly T[]): boolean {
+  return lines.some((line) =>
     hasCommittedRichBlockquoteMarker(line.markerEnd, line.contentStartOffset)
   );
 }
@@ -827,6 +979,21 @@ function hasCommittedRichBlockquoteMarker(
   contentStartOffset: number
 ): boolean {
   return contentStartOffset > markerEnd;
+}
+
+function isBareBlockquoteSeparatorLine(
+  line: {
+    contentStartOffset: number;
+    markerEnd: number;
+    quoteDepth: number;
+  },
+  contentEndOffset: number
+): boolean {
+  return (
+    line.quoteDepth > 0 &&
+    line.contentStartOffset === line.markerEnd &&
+    contentEndOffset === line.contentStartOffset
+  );
 }
 
 function isCodeFenceContentSelection(

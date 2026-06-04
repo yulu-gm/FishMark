@@ -55,6 +55,12 @@ describe("createActiveBlockState", () => {
     expect(activeBlock).toBeNull();
   });
 
+  it("keeps a bare blockquote marker active as paragraph text until marker padding is typed", () => {
+    expect(createActiveBlockState(">", { anchor: 1, head: 1 }).activeBlock?.type).toBe("paragraph");
+    expect(createActiveBlockState(">quote", { anchor: 6, head: 6 }).activeBlock?.type).toBe("paragraph");
+    expect(createActiveBlockState("> ", { anchor: 2, head: 2 }).activeBlock?.type).toBe("blockquote");
+  });
+
   it("resolves thematic breaks as active blocks when the selection lands on the separator", () => {
     const thematicBreakSource = ["Paragraph", "", "---", "", "+++"].join("\n");
 

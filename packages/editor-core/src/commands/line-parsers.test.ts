@@ -58,19 +58,19 @@ describe("line-parsers", () => {
     ).toBe("  3. [ ] ");
   });
 
+  it("does not parse blockquote markers until marker padding is typed", () => {
+    expect(parseBlockquoteLine(">")).toBeNull();
+    expect(parseBlockquoteLine(">quote")).toBeNull();
+    expect(parseBlockquoteLine("> ")).toEqual(expect.objectContaining({
+      indent: "",
+      content: ""
+    }));
+  });
+
   it("parses blockquote and code fence markers", () => {
     expect(parseBlockquoteLine("  > quote")).toEqual(expect.objectContaining({
       indent: "  ",
       content: "quote"
-    }));
-    expect(parseBlockquoteLine(">")).toEqual(expect.objectContaining({
-      indent: "",
-      content: ""
-    }));
-    expect(parseBlockquoteLine(">quote")).toEqual(expect.objectContaining({
-      indent: "",
-      content: "quote",
-      sourcePrefix: ">"
     }));
     expect(parseBlockquoteLine("> ")).toEqual(expect.objectContaining({
       indent: "",
@@ -100,6 +100,27 @@ describe("line-parsers", () => {
       content: "quote",
       quoteDepth: 2,
       sourcePrefix: ">    > "
+    }));
+  });
+
+  it("keeps an unpadded nested blockquote marker in the current quote content", () => {
+    expect(parseBlockquoteLine("> >")).toEqual(expect.objectContaining({
+      indent: "",
+      content: ">",
+      quoteDepth: 1,
+      sourcePrefix: "> "
+    }));
+    expect(parseBlockquoteLine("> >quote")).toEqual(expect.objectContaining({
+      indent: "",
+      content: ">quote",
+      quoteDepth: 1,
+      sourcePrefix: "> "
+    }));
+    expect(parseBlockquoteLine("> > ")).toEqual(expect.objectContaining({
+      indent: "",
+      content: "",
+      quoteDepth: 2,
+      sourcePrefix: "> > "
     }));
   });
 

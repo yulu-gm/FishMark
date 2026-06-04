@@ -96,6 +96,7 @@ export type ListBlock = UnorderedListBlock | OrderedListBlock;
 export interface BlockquoteBlock extends BaseBlock {
   type: "blockquote";
   lines?: InlineLine[];
+  innerBlocks?: readonly MarkdownBlock[];
 }
 
 export interface CodeFenceBlock extends BaseBlock {

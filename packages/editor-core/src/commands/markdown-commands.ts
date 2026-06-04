@@ -2,12 +2,13 @@ import {
   formatTableMarkdown,
   parseMarkdownDocument,
   splitTableLine,
-  type ListBlock
+  type ListBlock,
+  type MarkdownBlock
 } from "@fishmark/markdown-engine";
 
 import type { ActiveBlockState } from "../active-block";
 import { blockRequiresLeadingStructuralSeparator } from "../structural-blank-lines";
-import { parseListLine } from "./line-parsers";
+import { parseBlockquoteLine, parseListLine } from "./line-parsers";
 
 export type MarkdownCommandLine = {
   from: number;
@@ -570,13 +571,13 @@ function runBackspaceFromOrderedListItemContentStartCommand(
   }
 
   const currentLine = target.lineAt(selection.head);
-  const parsed = parseListLine(currentLine.text);
+  const parsed = parseOrderedListCommandLine(currentLine.text);
 
   if (!parsed || !/^\d+[.)]$/u.test(parsed.marker) || parsed.content.trim().length === 0) {
     return false;
   }
 
-  const contentStart = currentLine.to - parsed.content.length;
+  const contentStart = currentLine.from + parsed.contentStartColumn;
 
   if (selection.head !== contentStart || currentLine.number <= 1) {
     return false;
@@ -592,8 +593,11 @@ function runBackspaceFromOrderedListItemContentStartCommand(
     return false;
   }
 
-  const markerPrefix = currentLine.text.slice(0, contentStart - currentLine.from).trimEnd();
-  const insert = `\n\n${markerPrefix}`;
+  const markerPrefix = currentLine.text.slice(0, parsed.contentStartColumn).trimEnd();
+  const insert =
+    parsed.quoteSeparatorPrefix === null
+      ? `\n\n${markerPrefix}`
+      : `\n${parsed.quoteSeparatorPrefix}\n${markerPrefix}`;
   const selectionAnchor = previousLine.to + insert.length;
 
   target.dispatchChange({
@@ -609,17 +613,85 @@ function runBackspaceFromOrderedListItemContentStartCommand(
   return true;
 }
 
+function parseOrderedListCommandLine(lineText: string): {
+  content: string;
+  contentStartColumn: number;
+  marker: string;
+  quoteSeparatorPrefix: string | null;
+} | null {
+  const parsed = parseListLine(lineText);
+
+  if (parsed) {
+    return {
+      content: parsed.content,
+      contentStartColumn: lineText.length - parsed.content.length,
+      marker: parsed.marker,
+      quoteSeparatorPrefix: null
+    };
+  }
+
+  const parsedQuote = parseBlockquoteLine(lineText);
+
+  if (!parsedQuote) {
+    return null;
+  }
+
+  const parsedQuotedList = parseListLine(parsedQuote.content);
+
+  if (!parsedQuotedList) {
+    return null;
+  }
+
+  return {
+    content: parsedQuotedList.content,
+    contentStartColumn: lineText.length - parsedQuotedList.content.length,
+    marker: parsedQuotedList.marker,
+    quoteSeparatorPrefix: buildQuotedStructuralSeparatorPrefix(parsedQuote.sourcePrefix, parsedQuote.quoteDepth)
+  };
+}
+
+function buildQuotedStructuralSeparatorPrefix(sourcePrefix: string, quoteDepth: number): string {
+  return quoteDepth <= 1 ? sourcePrefix.trimEnd() : sourcePrefix;
+}
+
 function hasPreviousOrderedSiblingInActiveListScope(
   activeState: ActiveBlockState,
   offset: number
 ): boolean {
   const activeBlock = activeState.activeBlock;
 
-  if (activeBlock?.type !== "list") {
+  if (!activeBlock) {
     return false;
   }
 
-  return findPreviousOrderedSiblingInListScope(activeBlock, offset) === true;
+  if (activeBlock.type === "list") {
+    return findPreviousOrderedSiblingInListScope(activeBlock, offset) === true;
+  }
+
+  if (activeBlock.type !== "blockquote" || !activeBlock.innerBlocks) {
+    return false;
+  }
+
+  return findPreviousOrderedSiblingInBlocks(activeBlock.innerBlocks, offset) === true;
+}
+
+function findPreviousOrderedSiblingInBlocks(
+  blocks: readonly MarkdownBlock[],
+  offset: number
+): boolean | null {
+  for (const block of blocks) {
+    if (block.type !== "list") {
+      continue;
+    }
+
+    const result = findPreviousOrderedSiblingInListScope(block, offset);
+
+    if (result !== null) {
+      return result;
+    }
+  }
+
+  return null;
 }
 
 function findPreviousOrderedSiblingInListScope(

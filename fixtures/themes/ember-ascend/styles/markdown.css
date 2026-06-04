@@ -7,7 +7,7 @@
   --fishmark-task-toggle-checked-bg: color-mix(in srgb, var(--fishmark-surface-bg) 84%, #ff9a5c 16%);
   --fishmark-task-toggle-check: #ff9a5c;
   --fishmark-task-toggle-radius: 0.18rem;
-  --fishmark-blockquote-bg: color-mix(in srgb, var(--fishmark-surface-blockquote-bg) 82%, transparent);
+  --fishmark-blockquote-bg: transparent;
   --fishmark-blockquote-border: color-mix(in srgb, var(--fishmark-list-marker) 54%, var(--fishmark-border-muted));
   --fishmark-thematic-break: #4a3c33;
   --fishmark-code-block-bg: color-mix(in srgb, var(--fishmark-surface-raised-bg) 88%, #1a0f08 12%);

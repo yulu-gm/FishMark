@@ -274,6 +274,46 @@ describe("parseBlockMap", () => {
     ]);
   });
 
+  it("keeps a bare blockquote marker as paragraph text until marker padding is typed", () => {
+    expect(parseMarkdownDocument(">").blocks).toMatchObject([
+      {
+        id: "paragraph:0-1",
+        type: "paragraph",
+        startOffset: 0,
+        endOffset: 1,
+        startLine: 1,
+        endLine: 1
+      }
+    ]);
+    expect(parseMarkdownDocument(">quote").blocks).toMatchObject([
+      {
+        id: "paragraph:0-6",
+        type: "paragraph",
+        startOffset: 0,
+        endOffset: 6,
+        startLine: 1,
+        endLine: 1
+      }
+    ]);
+    expect(parseMarkdownDocument("> ").blocks).toMatchObject([
+      {
+        id: "blockquote:0-2",
+        type: "blockquote",
+        startOffset: 0,
+        endOffset: 2,
+        startLine: 1,
+        endLine: 1,
+        lines: [
+          {
+            markerEnd: 1,
+            contentStartOffset: 2,
+            contentEndOffset: 2
+          }
+        ]
+      }
+    ]);
+  });
+
   it("parses common pipe table variants into a top-level table block", () => {
     const source = ["name | qty", "--- | ---:", "pen | 2"].join("\n");
 
@@ -1359,6 +1399,108 @@ describe("parseBlockMap", () => {
     });
   });
 
+  it("stitches blockquote inner paragraph separators and list blocks with original offsets", () => {
+    const source = [
+      "> 第一段",
+      ">",
+      "> 第二段",
+      ">",
+      "> - item",
+      ">   - child",
+      "> - item 2"
+    ].join("\n");
+    const result = parseMarkdownDocument(source);
+    const blockquote = result.blocks[0] as BlockquoteBlock;
+
+    expect(blockquote.type).toBe("blockquote");
+    expect(blockquote.innerBlocks).toHaveLength(3);
+    expect(blockquote.innerBlocks?.[0]).toMatchObject({
+      type: "paragraph",
+      startOffset: source.indexOf("第一段"),
+      endOffset: source.indexOf("第一段") + "第一段".length
+    });
+    expect(blockquote.innerBlocks?.[1]).toMatchObject({
+      type: "paragraph",
+      startOffset: source.indexOf("第二段"),
+      endOffset: source.indexOf("第二段") + "第二段".length
+    });
+
+    const innerList = blockquote.innerBlocks?.[2] as ListBlock;
+    expect(innerList).toMatchObject({
+      type: "list",
+      startOffset: source.indexOf("> - item"),
+      endOffset: source.length,
+      ordered: false,
+      items: [
+        {
+          startOffset: source.indexOf("> - item"),
+          markerStart: source.indexOf("- item"),
+          markerEnd: source.indexOf("- item") + 1,
+          contentStartOffset: source.indexOf("item"),
+          contentEndOffset: source.indexOf("item") + "item".length,
+          indent: 0,
+          children: [
+            {
+              ordered: false,
+              items: [
+                {
+                  startOffset: source.indexOf(">   - child"),
+                  markerStart: source.indexOf("- child"),
+                  markerEnd: source.indexOf("- child") + 1,
+                  contentStartOffset: source.indexOf("child"),
+                  contentEndOffset: source.indexOf("child") + "child".length,
+                  indent: 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          startOffset: source.indexOf("> - item 2"),
+          markerStart: source.indexOf("- item 2"),
+          markerEnd: source.indexOf("- item 2") + 1,
+          contentStartOffset: source.indexOf("item 2"),
+          contentEndOffset: source.indexOf("item 2") + "item 2".length,
+          indent: 0
+        }
+      ]
+    });
+  });
+
+  it("stitches blockquote inner fenced code and block math blocks", () => {
+    const source = [
+      "> ```ts",
+      "> const value = 1;",
+      "> ```",
+      ">",
+      "> $$",
+      "> x^2",
+      "> $$"
+    ].join("\n");
+    const result = parseMarkdownDocument(source);
+    const blockquote = result.blocks[0] as BlockquoteBlock;
+
+    expect(blockquote.innerBlocks).toHaveLength(2);
+    expect(blockquote.innerBlocks?.[0]).toMatchObject({
+      type: "codeFence",
+      kind: "fenced",
+      info: "ts",
+      startOffset: 0,
+      endOffset: source.indexOf("\n>\n> $$")
+    });
+    expect(blockquote.innerBlocks?.[1]).toMatchObject({
+      type: "blockMath",
+      markerStartOffset: source.indexOf("$$"),
+      markerEndOffset: source.indexOf("$$") + 2,
+      closingMarkerStartOffset: source.lastIndexOf("$$"),
+      closingMarkerEndOffset: source.lastIndexOf("$$") + 2,
+      contentStartOffset: source.indexOf("x^2"),
+      contentEndOffset: source.indexOf("x^2") + "x^2".length,
+      value: "x^2",
+      closed: true
+    });
+  });
+
   it("stitches nested blockquote markers and inline content from the deepest quote prefix", () => {
     const source = ["> outer", "> > **nested**", ">> `compact`", ">   > nested"].join("\n");
     const result = parseMarkdownDocument(source);
@@ -1395,6 +1537,40 @@ describe("parseBlockMap", () => {
       contentStartOffset: source.indexOf("nested", source.lastIndexOf("> nested")),
       sourcePrefixEndOffset: source.indexOf("nested", source.lastIndexOf("> nested")),
       inline: { children: [{ type: "text", value: "nested" }] }
+    });
+  });
+
+  it("keeps an unpadded nested quote marker as visible quote content until padding is typed", () => {
+    const uncommittedSource = "> >";
+    const uncommittedResult = parseMarkdownDocument(uncommittedSource);
+    const uncommittedBlockquote = uncommittedResult.blocks[0] as BlockquoteBlock;
+
+    expect(uncommittedBlockquote.type).toBe("blockquote");
+    expect(uncommittedBlockquote.lines?.[0]).toMatchObject({
+      quoteDepth: 1,
+      markerEnd: 1,
+      sourcePrefixEndOffset: 2,
+      contentStartOffset: 2,
+      contentEndOffset: uncommittedSource.length,
+      markers: [{ markerStart: 0, markerEnd: 1 }],
+      inline: { children: [{ type: "text", value: ">" }] }
+    });
+
+    const committedSource = "> > ";
+    const committedResult = parseMarkdownDocument(committedSource);
+    const committedBlockquote = committedResult.blocks[0] as BlockquoteBlock;
+
+    expect(committedBlockquote.type).toBe("blockquote");
+    expect(committedBlockquote.lines?.[0]).toMatchObject({
+      quoteDepth: 2,
+      markerEnd: 3,
+      sourcePrefixEndOffset: 4,
+      contentStartOffset: 4,
+      contentEndOffset: committedSource.length,
+      markers: [
+        { markerStart: 0, markerEnd: 1 },
+        { markerStart: 2, markerEnd: 3 }
+      ]
     });
   });
 

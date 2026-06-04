@@ -9,9 +9,8 @@
   --fishmark-task-toggle-checked-bg: color-mix(in srgb, var(--fishmark-markdown-task-done) 12%, transparent);
   --fishmark-task-toggle-check: var(--fishmark-markdown-task-done);
   --fishmark-task-toggle-radius: var(--fishmark-markdown-boundary-radius);
-  --fishmark-blockquote-bg: color-mix(in srgb, var(--fishmark-markdown-quote-border) 10%, transparent);
+  --fishmark-blockquote-bg: transparent;
   --fishmark-blockquote-border: var(--fishmark-markdown-quote-border);
-  --fishmark-blockquote-radius: var(--fishmark-markdown-boundary-radius);
   --fishmark-thematic-break: var(--fishmark-markdown-hr);
   --fishmark-code-block-bg: var(--fishmark-markdown-code-bg);
   --fishmark-code-block-text: var(--fishmark-markdown-code-fg);
@@ -71,8 +70,9 @@
 
 .document-editor .cm-inactive-blockquote {
   color: var(--fishmark-markdown-quote-fg);
-  background: var(--fishmark-blockquote-bg);
-  box-shadow: inset 2px 0 0 var(--fishmark-blockquote-border);
+  background: var(--fishmark-blockquote-bg, transparent);
+  border-left: var(--fishmark-blockquote-rail-width, 4px) solid var(--fishmark-blockquote-border);
+  box-shadow: none;
 }
 
 .document-editor .cm-inactive-code-block {

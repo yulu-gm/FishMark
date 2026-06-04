@@ -21,20 +21,16 @@ export function runListEnter(view: EditorView, activeState: ActiveBlockState): b
 
   const line = view.state.doc.lineAt(selection.head);
   const parsed = parseListLine(line.text);
-  if (!parsed) {
-    return false;
+  const semanticContext = readSemanticContext(view.state, activeState);
+  const listItemEdit = computeListItemEnter(semanticContext);
+
+  if (listItemEdit) {
+    applyListEdit(view, listItemEdit);
+    return true;
   }
 
-  const semanticContext = readSemanticContext(view.state, activeState);
-  const contentStartOffset = line.to - parsed.content.length;
-
-  if (activeState.activeBlock?.type === "list") {
-    const listItemEdit = computeListItemEnter(semanticContext, contentStartOffset);
-
-    if (listItemEdit) {
-      applyListEdit(view, listItemEdit);
-      return true;
-    }
+  if (!parsed) {
+    return false;
   }
 
   if (parsed.content.trim().length === 0) {
@@ -90,10 +86,6 @@ export function runListMoveLineDown(view: EditorView, activeState: ActiveBlockSt
   return runOrderedListEdit(view, activeState, computeMoveListItemDown);
 }
 
-function isInsideOrderedList(activeState: ActiveBlockState): boolean {
-  return activeState.activeBlock?.type === "list" && activeState.activeBlock.ordered;
-}
-
 export function runListIndentOnTab(view: EditorView, activeState: ActiveBlockState): boolean {
   return runListEdit(view, activeState, computeIndentListItem);
 }
@@ -107,10 +99,6 @@ function runOrderedListEdit(
   activeState: ActiveBlockState,
   computeEdit: (ctx: ReturnType<typeof readSemanticContext>) => ListEdit | null
 ): boolean {
-  if (!isInsideOrderedList(activeState)) {
-    return false;
-  }
-
   const edit = computeEdit(readSemanticContext(view.state, activeState));
 
   if (!edit) {
@@ -127,7 +115,9 @@ function runListEdit(
   activeState: ActiveBlockState,
   computeEdit: (ctx: ReturnType<typeof readSemanticContext>) => ListEdit | null
 ): boolean {
-  if (activeState.activeBlock?.type !== "list") {
+  const activeBlockType = activeState.activeBlock?.type;
+
+  if (activeBlockType !== "list" && activeBlockType !== "blockquote") {
     return false;
   }
 

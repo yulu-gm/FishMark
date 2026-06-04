@@ -83,12 +83,8 @@
   );
   --fishmark-markdown-strong: var(--fishmark-text-primary);
   --fishmark-markdown-emphasis: var(--fishmark-markdown-body);
-  --fishmark-markdown-quote-fg: var(--fishmark-text-secondary);
-  --fishmark-markdown-quote-border: color-mix(
-    in srgb,
-    var(--fishmark-panel-border) 82%,
-    transparent
-  );
+  --fishmark-markdown-quote-fg: #777777;
+  --fishmark-markdown-quote-border: #dfe2e5;
   --fishmark-markdown-list-bullet: #98a2b3;
   --fishmark-markdown-list-text: var(--fishmark-text-muted);
   --fishmark-markdown-task-done: var(--fishmark-text-secondary);

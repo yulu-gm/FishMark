@@ -410,7 +410,7 @@
 - 非激活引用块显示为带缩进和整块淡色背景的连续区域
 - 非激活时 `>` 前缀被隐藏，不破坏原始 Markdown 文本
 - 光标重新进入引用块后，完整 `>` Markdown 源码立即恢复并可直接编辑
-- 在非空引用行按 `Enter` 会续出新的 `> ` 行
+- 在非空引用行按 `Enter` 会生成引用内结构空行和新的 `> ` 编辑行，即源码形态为 `> text\n>\n> `
 - 在空引用行按 `Enter` 会退出当前引用块
 - composition 期间不会提前切换装饰，结束后只做一次 flush
 
@@ -439,10 +439,69 @@
 - 非激活态按引用深度显示多层 quote rail，并带有 `cm-inactive-blockquote-depth-N` class，深度超过 4 时按 4 样式显示
 - 行内格式从最深层引用前缀后开始渲染，`**nested**` 显示为加粗内容
 - 光标重新进入对应引用行后，原始 Markdown 前缀完整恢复并可编辑
-- 非空嵌套引用行按 `Enter` 会续出同一层源码前缀，例如 `> > `
-- 空嵌套引用行按 `Enter` 会退出引用块，不留下半截 marker
+- 非空嵌套引用行按 `Enter` 会生成同层引用内结构空行和新的编辑行，例如 `> > text\n> > \n> > `
+- 空嵌套引用行按 `Enter` 会像列表一样先退出到上一级引用；只有顶级引用空行再次 `Enter` 才退出引用块
 - blockquote toggle 对已引用行只移除一层引用，`> > text` 变为 `> text`，`>> text` 变为 `> text`
 - HTML 导出使用同样的隐藏前缀和深度 class，不把嵌套 marker padding 漏成可见文本
+
+### TC-015B 引用块内部 block 同构
+
+步骤：
+1. 输入以下 Markdown：
+   ~~~md
+   > 第一段
+   >
+   > 第二段
+   >
+   > - item
+   >   - child
+   > - item 2
+   >
+   > > 第二层
+   > > - nested item
+   > >   - nested child
+   >
+   > > > 第三层
+   >
+   > ```ts
+   > const value = 1;
+   > ```
+   >
+   > $$
+   > x^2
+   > $$
+
+   Paragraph
+   ~~~
+2. 把光标移动到 `Paragraph`。
+3. 观察引用块非激活态：quote rail 应按 Typora 导出样式显示为透明背景、4px 左边框、15px 左右内边距、无圆角和无 inset shadow；内部段落、列表、代码块和公式按各自 block 样式显示。
+4. 在空行依次输入 `>`、` `、`quote`。
+5. 把光标放到 `> 第一段` 行末，按 `Enter`。
+6. 把光标放到新生成的引用内空行，再按 `Enter`。
+7. 输入 `> - item`，把光标放到行末按 `Enter`。
+8. 输入 `> - parent\n>   - `，把光标放到空子项末尾按 `Enter`。
+9. 输入 `> - parent\n> - `，把光标放到空顶级项末尾按 `Enter`。
+10. 在引用内列表项上使用 `Tab` / `Shift+Tab`；分别在非空列表正文开头、空嵌套列表项末尾、有序列表第二项正文开头按 `Backspace`。
+11. 导出 HTML，检查引用内 list / code / math 不退化为普通文本。
+12. 如需自动化回归，运行 `npm.cmd run test -- packages/markdown-engine/src/parse-block-map.test.ts packages/editor-core/src/decorations/block-decorations.test.ts packages/editor-core/src/commands/blockquote-commands.test.ts packages/editor-core/src/commands/list-edits.test.ts src/renderer/code-editor.test.ts src/renderer/export-html.test.ts`，并运行 `FISHMARK_MARKDOWN_EDITING_EXPERIENCE_PROBE_GROUP=blockquote npm.cmd run test:editing-experience`、`FISHMARK_MARKDOWN_EDITING_EXPERIENCE_PROBE_GROUP=list npm.cmd run test:editing-experience` 和 `npm.cmd run test:blockquote-typora-visual`。
+
+预期：
+- `>` / `> ` 空引用行作为引用内结构空行，marker 不可见，不把上下内容拆成两个独立视觉引用块
+- 引用块基础视觉 computed style 与 Typora 导出样式对齐：`border-left: 4px solid #dfe2e5`、`padding-left/right: 15px`、透明背景、无圆角、无 box-shadow
+- 引用内列表具有 `cm-inactive-list` class，列表深度从引用内容起点计算，而不是把 quote 前缀算入缩进；引用内子列表继续按外部列表缩进规则渲染
+- 第二层、第三层引用内的字体、content offset、行距与外部引用规则一致，不被误判为 `cm-inactive-code-block`
+- 引用内 fenced code 和 block math 复用外部代码块 / 公式预览规则，同时保留 blockquote line class
+- 顶层裸 `>` 和 `>text` 先保持普通段落，只有输入 `> ` 后才提交为引用块
+- 已提交引用块内输入内层裸 `>` 时保持当前引用层级并显示光标；继续输入空格形成 `> > ` 后才提交为嵌套引用块，光标仍落在嵌套引用内容列
+- 引用块激活时不显示原始 `>` marker，光标和正文起点停在引用内容列
+- 输入 `> ` 后继续输入正文，文本留在引用块内并形成 `> quote`，不会插入到引用块前面
+- 非空引用行 Enter 后源码为 `> text\n>\n> `，光标落到最后一个 `> ` 之后
+- 非空嵌套引用行 Enter 后源码为 `> > text\n> > \n> > `，结构空行与新编辑行都保持同一嵌套引用层级，不露出裸 `>` 文本
+- 在嵌套引用空行 Enter 会逐级退出到父引用层级；在顶级引用空行再次 Enter 才退出引用块，光标落到外部普通空段落 surface
+- 引用内非空列表项按 Enter 创建同级引用内列表项；空子项按 Enter 升级为父列表项；空顶级引用列表项按 Enter 先创建引用内结构空行再退出为引用正文，例如 `> - parent\n> - ` 变为 `> - parent\n>\n> `
+- 引用内有序列表续项会继续归一编号；`Tab` / `Shift+Tab` 只调整 quote 前缀后的列表缩进；列表正文开头 `Backspace` 删除 list marker 但保留引用前缀，空嵌套列表项先删除 marker 再逐次清理 quote 前缀后的缩进
+- 引用内有序列表第二项正文开头 `Backspace` 和外部有序列表一致，会在引用内插入结构空行并把当前项断开为引用正文，例如 `> 1. 内容\n> 2. 内容2` 变为 `> 1. 内容\n>\n> 2.内容2`
+- HTML export 使用 parser-owned `innerBlocks`，不通过 export 侧正则二次猜测引用内语法
 
 ### TC-016 代码块渲染
 
@@ -925,6 +984,7 @@
 - GitHub Release 正文中的 Markdown 标题、加粗、行内代码和链接会被清洗为可读纯文本。
 - release notes 缺失时，弹窗仍显示版本已准备好安装的兜底说明。
 - 点击“稍后”不会退出应用；点击“立即重启更新”会继续现有安装流程。
+
 ### TC-071 macOS 启动
 
 预期：

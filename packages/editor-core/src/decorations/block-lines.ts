@@ -11,6 +11,7 @@ export type BlockLineInfo = {
 
 export type InactiveBlockquoteLine = {
   lineStart: number;
+  lineEnd: number;
   markerEnd: number;
   sourcePrefixEndOffset: number;
   contentStartOffset: number;
@@ -72,6 +73,7 @@ export function getInactiveBlockquoteLines(
 
     lines.push({
       lineStart: cursor,
+      lineEnd,
       markerEnd: prefix.markerEnd,
       sourcePrefixEndOffset: prefix.sourcePrefixEndOffset,
       contentStartOffset: prefix.contentStartOffset,

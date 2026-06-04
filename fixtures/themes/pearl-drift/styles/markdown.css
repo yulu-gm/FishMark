@@ -7,7 +7,7 @@
   --fishmark-task-toggle-checked-bg: color-mix(in srgb, var(--fishmark-surface-bg) 84%, #9a97ea 16%);
   --fishmark-task-toggle-check: #6b68d4;
   --fishmark-task-toggle-radius: 999px;
-  --fishmark-blockquote-bg: color-mix(in srgb, var(--fishmark-surface-blockquote-bg) 82%, transparent);
+  --fishmark-blockquote-bg: transparent;
   --fishmark-blockquote-border: color-mix(in srgb, var(--fishmark-list-marker) 56%, var(--fishmark-border-muted));
   --fishmark-thematic-break: #d4d4e4;
   --fishmark-code-block-bg: color-mix(in srgb, var(--fishmark-surface-raised-bg) 88%, #ece9f7 12%);
@@ -32,7 +32,7 @@
   --fishmark-task-toggle-checked-bg: color-mix(in srgb, var(--fishmark-surface-bg) 84%, #a19eef 16%);
   --fishmark-task-toggle-check: #a19eef;
   --fishmark-task-toggle-radius: 999px;
-  --fishmark-blockquote-bg: color-mix(in srgb, var(--fishmark-surface-blockquote-bg) 84%, transparent);
+  --fishmark-blockquote-bg: transparent;
   --fishmark-blockquote-border: color-mix(in srgb, var(--fishmark-list-marker) 52%, var(--fishmark-border-muted));
   --fishmark-thematic-break: #35364e;
   --fishmark-code-block-bg: color-mix(in srgb, var(--fishmark-surface-raised-bg) 94%, #0a0914 6%);

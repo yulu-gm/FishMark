@@ -53,8 +53,11 @@ export function createBlockDecorationSignature(block: MarkdownBlock): string {
 
   if (block.type === "blockquote") {
     const lineSignature = block.lines?.map((line) => createBlockquoteLineSignature(line)).join("|") ?? "";
+    const innerBlockSignature = block.innerBlocks?.map((innerBlock) => createBlockDecorationSignature(innerBlock)).join("|") ?? "";
 
-    return `${block.type}:${block.id}:${block.startOffset}:${block.endOffset}${lineSignature ? `:${lineSignature}` : ""}`;
+    return `${block.type}:${block.id}:${block.startOffset}:${block.endOffset}${lineSignature ? `:${lineSignature}` : ""}${
+      innerBlockSignature ? `:inner(${innerBlockSignature})` : ""
+    }`;
   }
 
   if (block.type === "codeFence") {

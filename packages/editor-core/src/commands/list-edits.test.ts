@@ -13,6 +13,7 @@ import {
   computeDeleteOrderedListRange,
   computeIndentListItem,
   computeInsertOrderedListItemBelow,
+  computeListItemEnter,
   computeMoveListItemDown,
   computeMoveListItemUp,
   computeOrderedListEnter,
@@ -230,6 +231,77 @@ describe("list-edits", () => {
     expect(result?.selection).toEqual({
       anchor: ["- parent", "- "].join("\n").length,
       head: ["- parent", "- "].join("\n").length
+    });
+  });
+
+  it("continues a non-empty list item inside a blockquote at the same quote/list depth", () => {
+    const doc = "> - item";
+    const context = buildContext(doc, doc.length);
+    const result = computeListItemEnter(context);
+
+    expect(applyEdit(doc, result)).toBe(["> - item", "> - "].join("\n"));
+    expect(result?.selection).toEqual({
+      anchor: ["> - item", "> - "].join("\n").length,
+      head: ["> - item", "> - "].join("\n").length
+    });
+  });
+
+  it("upgrades an empty child list item inside a blockquote to the parent quote list", () => {
+    const doc = ["> - parent", ">   - "].join("\n");
+    const context = buildContext(doc, doc.length);
+    const result = computeListItemEnter(context);
+
+    expect(applyEdit(doc, result)).toBe(["> - parent", "> - "].join("\n"));
+    expect(result?.selection).toEqual({
+      anchor: ["> - parent", "> - "].join("\n").length,
+      head: ["> - parent", "> - "].join("\n").length
+    });
+  });
+
+  it("exits an empty top-level quote list item to quote body text", () => {
+    const doc = ["> - parent", "> - "].join("\n");
+    const context = buildContext(doc, doc.length);
+    const result = computeListItemEnter(context);
+    const expected = ["> - parent", ">", "> "].join("\n");
+
+    expect(applyEdit(doc, result)).toBe(expected);
+    expect(result?.selection).toEqual({
+      anchor: expected.length,
+      head: expected.length
+    });
+  });
+
+  it("renumbers ordered quote list siblings when Enter inserts a same-level item", () => {
+    const doc = ["> 1. one", "> 2. two"].join("\n");
+    const context = buildContext(doc, doc.indexOf("one") + "one".length);
+    const result = computeListItemEnter(context);
+
+    expect(applyEdit(doc, result)).toBe(["> 1. one", "> 2. ", "> 3. two"].join("\n"));
+    expect(result?.selection).toEqual({
+      anchor: ["> 1. one", "> 2. "].join("\n").length,
+      head: ["> 1. one", "> 2. "].join("\n").length
+    });
+  });
+
+  it("indents and outdents list items inside blockquotes after the quote prefix", () => {
+    const doc = ["> - parent", "> - child"].join("\n");
+    const indentContext = buildContext(doc, doc.indexOf("child"));
+    const indentResult = computeIndentListItem(indentContext);
+    const indented = ["> - parent", ">   - child"].join("\n");
+
+    expect(applyEdit(doc, indentResult)).toBe(indented);
+    expect(indentResult?.selection).toEqual({
+      anchor: indented.indexOf("child"),
+      head: indented.indexOf("child")
+    });
+
+    const outdentContext = buildContext(indented, indented.indexOf("child"));
+    const outdentResult = computeOutdentListItem(outdentContext);
+
+    expect(applyEdit(indented, outdentResult)).toBe(doc);
+    expect(outdentResult?.selection).toEqual({
+      anchor: doc.indexOf("child"),
+      head: doc.indexOf("child")
     });
   });
 
@@ -505,6 +577,20 @@ describe("list-edits", () => {
     const context = buildContext(doc, cursor);
     const result = computeBackspaceListMarker(context);
     const expected = ["- [ ] 内容", "内容2", "- [ ] 内容3"].join("\n");
+
+    expect(applyEdit(doc, result)).toBe(expected);
+    expect(result?.selection).toEqual({
+      anchor: expected.indexOf("内容2"),
+      head: expected.indexOf("内容2")
+    });
+  });
+
+  it("removes a quote list marker on Backspace while preserving the quote prefix", () => {
+    const doc = ["> - 内容", "> - 内容2"].join("\n");
+    const cursor = doc.indexOf("内容2");
+    const context = buildContext(doc, cursor);
+    const result = computeBackspaceListMarker(context);
+    const expected = ["> - 内容", "> 内容2"].join("\n");
 
     expect(applyEdit(doc, result)).toBe(expected);
     expect(result?.selection).toEqual({

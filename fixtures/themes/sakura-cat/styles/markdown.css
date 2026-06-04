@@ -8,7 +8,7 @@
   --fishmark-task-toggle-checked-bg: color-mix(in srgb, var(--fishmark-surface-bg) 80%, #ffb3c0 20%);
   --fishmark-task-toggle-check: #d96380;
   --fishmark-task-toggle-radius: 999px;
-  --fishmark-blockquote-bg: color-mix(in srgb, var(--fishmark-surface-blockquote-bg) 88%, transparent);
+  --fishmark-blockquote-bg: transparent;
   --fishmark-blockquote-border: color-mix(in srgb, #f4a8b8 72%, var(--fishmark-border-muted));
   --fishmark-thematic-break: #f4cfd8;
   --fishmark-code-block-bg: color-mix(in srgb, var(--fishmark-surface-raised-bg) 88%, #ffd5dc 12%);
@@ -38,7 +38,7 @@
   --fishmark-task-toggle-checked-bg: color-mix(in srgb, var(--fishmark-surface-bg) 78%, #ff9eb5 22%);
   --fishmark-task-toggle-check: #ff9eb5;
   --fishmark-task-toggle-radius: 999px;
-  --fishmark-blockquote-bg: color-mix(in srgb, var(--fishmark-surface-blockquote-bg) 88%, transparent);
+  --fishmark-blockquote-bg: transparent;
   --fishmark-blockquote-border: color-mix(in srgb, #b95d75 60%, var(--fishmark-border-muted));
   --fishmark-thematic-break: #4a2a36;
   --fishmark-code-block-bg: color-mix(in srgb, var(--fishmark-surface-raised-bg) 92%, #100309 8%);
@@ -100,22 +100,4 @@
 
 .document-editor .cm-inactive-task-marker[data-task-state="checked"]::after {
   opacity: 1;
-}
-
-/* Blockquote — soft pink card with a tiny heart sticker, matching the
-   highlighted intro panel in the design. */
-.document-editor .cm-inactive-blockquote {
-  position: relative;
-  border-radius: 14px;
-  padding-right: 2em;
-}
-
-.document-editor .cm-inactive-blockquote::after {
-  content: var(--fishmark-sakura-heart-glyph, "💕");
-  position: absolute;
-  right: 0.6em;
-  bottom: 0.4em;
-  font-size: 0.85em;
-  opacity: 0.9;
-  pointer-events: none;
 }

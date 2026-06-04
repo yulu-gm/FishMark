@@ -111,6 +111,35 @@ describe("createFishmarkExportHtml", () => {
     );
   });
 
+  it("exports blockquote inner list, code, and math blocks without flattening them to text", () => {
+    const html = createFishmarkExportHtml({
+      markdown: [
+        "> - item",
+        "> - item 2",
+        ">",
+        "> ```ts",
+        "> const value = 1;",
+        "> ```",
+        ">",
+        "> $$",
+        "> x^2",
+        "> $$"
+      ].join("\n"),
+      title: "quote-inner-blocks.md"
+    });
+    const exported = new DOMParser().parseFromString(html, "text/html");
+    const listLines = Array.from(exported.querySelectorAll<HTMLElement>(".cm-inactive-blockquote.cm-inactive-list"));
+    const codeLines = Array.from(exported.querySelectorAll<HTMLElement>(".cm-inactive-blockquote.cm-inactive-code-block"));
+    const mathLine = exported.querySelector<HTMLElement>(".cm-inactive-blockquote.cm-inactive-block-math");
+
+    expect(listLines).toHaveLength(2);
+    expect(listLines[0]?.classList.contains("cm-inactive-list-depth-0")).toBe(true);
+    expect(listLines[0]?.querySelector(".cm-inactive-list-marker")?.textContent).toBe("-");
+    expect(codeLines).toHaveLength(1);
+    expect(codeLines[0]?.textContent).toContain("const value = 1;");
+    expect(mathLine?.querySelector(".katex-display")?.textContent).toContain("x2");
+  });
+
   it("exports indented code blocks with their source indentation marker hidden from text flow", () => {
     const html = createFishmarkExportHtml({
       markdown: [

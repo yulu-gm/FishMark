@@ -1,6 +1,7 @@
 import { parse, postprocess, preprocess } from "micromark";
 
 import type {
+  BlockMathBlock,
   BlockquoteBlock,
   HeadingBlock,
   InlineLine,
@@ -17,7 +18,7 @@ import type {
   FootnoteDefinitionStatus
 } from "./inline-ast";
 import type { MarkdownDocument } from "./markdown-document";
-import { parseBlockMap } from "./parse-block-map";
+import { parseBlockMap, parseTopLevelBlocks } from "./parse-block-map";
 import { normalizeReferenceIdentifier, parseInlineAst } from "./parse-inline-ast";
 
 export function parseMarkdownDocument(source: string): MarkdownDocument {
@@ -561,9 +562,11 @@ function attachInlineData(
   }
 
   if (block.type === "blockquote") {
+    const lines = createBlockquoteLines(block, source, referenceDefinitions, footnoteDefinitions);
     return {
       ...block,
-      lines: createBlockquoteLines(block, source, referenceDefinitions, footnoteDefinitions)
+      lines,
+      innerBlocks: createBlockquoteInnerBlocks(source, lines, referenceDefinitions, footnoteDefinitions)
     };
   }
 
@@ -717,6 +720,412 @@ function createBlockquoteLines(
       })
     };
   });
+}
+
+function createBlockquoteInnerBlocks(
+  source: string,
+  lines: readonly InlineLine[],
+  referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition>,
+  footnoteDefinitions: ReadonlyMap<string, FootnoteDefinition>
+): MarkdownBlock[] {
+  if (lines.length === 0 || !lines.some((line) => line.quoteDepth > 0)) {
+    return [];
+  }
+
+  const innerSource = createBlockquoteInnerSource(source, lines);
+  return parseTopLevelBlocks(innerSource.source)
+    .map((block) => normalizeBlockquoteInnerBlock(block, source, lines, innerSource))
+    .map((block) => attachInlineData(block, source, referenceDefinitions, footnoteDefinitions));
+}
+
+type BlockquoteInnerSource = {
+  boundaryMap: number[];
+  source: string;
+};
+
+function createBlockquoteInnerSource(source: string, lines: readonly InlineLine[]): BlockquoteInnerSource {
+  const parts: string[] = [];
+  const boundaryMap: number[] = [];
+  let virtualOffset = 0;
+
+  for (const [index, line] of lines.entries()) {
+    boundaryMap[virtualOffset] = line.contentStartOffset;
+
+    for (let offset = line.contentStartOffset; offset < line.contentEndOffset; offset += 1) {
+      parts.push(source[offset] ?? " ");
+      virtualOffset += 1;
+      boundaryMap[virtualOffset] = offset + 1;
+    }
+
+    if (index < lines.length - 1) {
+      parts.push("\n");
+      virtualOffset += 1;
+      boundaryMap[virtualOffset] = getLineBreakEndOffset(source, line.endOffset);
+    }
+  }
+
+  return {
+    boundaryMap,
+    source: parts.join("")
+  };
+}
+
+function normalizeBlockquoteInnerBlock(
+  block: MarkdownBlock,
+  source: string,
+  lines: readonly InlineLine[],
+  innerSource: BlockquoteInnerSource
+): MarkdownBlock {
+  if (block.type === "paragraph") {
+    return normalizeBlockquoteInnerParagraph(block, source, lines, innerSource);
+  }
+
+  if (block.type === "list") {
+    return normalizeBlockquoteInnerList(block, lines, innerSource);
+  }
+
+  if (block.type === "blockMath") {
+    return normalizeBlockquoteInnerBlockMath(block, source, lines, innerSource);
+  }
+
+  if (block.type === "codeFence" || block.type === "thematicBreak" || block.type === "table") {
+    return normalizeBlockquoteInnerBlockLineRange(block, lines, innerSource);
+  }
+
+  return block;
+}
+
+function normalizeBlockquoteInnerParagraph(
+  block: Extract<MarkdownBlock, { type: "paragraph" }>,
+  source: string,
+  lines: readonly InlineLine[],
+  innerSource: BlockquoteInnerSource
+): Extract<MarkdownBlock, { type: "paragraph" }> {
+  const mappedStartOffset = mapBlockquoteInnerOffset(innerSource, block.startOffset);
+  const mappedEndOffset = mapBlockquoteInnerOffset(innerSource, block.endOffset);
+  const range = getBlockquoteInnerContentRange(mappedStartOffset, mappedEndOffset, source, lines);
+  return {
+    ...block,
+    id: `paragraph:${range.startOffset}-${range.endOffset}`,
+    startOffset: range.startOffset,
+    endOffset: range.endOffset,
+    startLine: resolveLineNumberAtOffset(source, range.startOffset, block.startLine),
+    endLine: resolveLineNumberAtOffset(source, range.endOffset, block.endLine)
+  };
+}
+
+function normalizeBlockquoteInnerList(
+  block: ListBlock,
+  lines: readonly InlineLine[],
+  innerSource: BlockquoteInnerSource
+): ListBlock {
+  const normalizedRange = getBlockquoteLineRange(
+    mapBlockquoteInnerOffset(innerSource, block.startOffset),
+    mapBlockquoteInnerOffset(innerSource, block.endOffset),
+    lines
+  );
+  const items = block.items.map((item) => normalizeBlockquoteInnerListItem(item, lines, innerSource));
+  const base = {
+    ...block,
+    id: `list:${normalizedRange.startOffset}-${normalizedRange.endOffset}`,
+    startOffset: normalizedRange.startOffset,
+    endOffset: normalizedRange.endOffset,
+    startLine: normalizedRange.startLine,
+    endLine: normalizedRange.endLine,
+    items
+  };
+
+  const normalizedBlock: ListBlock = block.ordered
+    ? {
+        ...base,
+        ordered: true,
+        startOrdinal: block.startOrdinal,
+        delimiter: block.delimiter
+      }
+    : {
+        ...base,
+        ordered: false
+      };
+
+  return promoteBlockquotePrefixNestedListItems(normalizedBlock, lines);
+}
+
+function normalizeBlockquoteInnerListItem(
+  item: ListItemBlock,
+  lines: readonly InlineLine[],
+  innerSource: BlockquoteInnerSource
+): ListItemBlock {
+  const normalizedRange = getBlockquoteLineRange(
+    mapBlockquoteInnerOffset(innerSource, item.startOffset),
+    mapBlockquoteInnerOffset(innerSource, item.endOffset),
+    lines
+  );
+  const markerStart = mapBlockquoteInnerOffset(innerSource, item.markerStart);
+  const markerEnd = mapBlockquoteInnerOffset(innerSource, item.markerEnd);
+  const task = item.task
+    ? {
+        ...item.task,
+        markerStart: mapBlockquoteInnerOffset(innerSource, item.task.markerStart),
+        markerEnd: mapBlockquoteInnerOffset(innerSource, item.task.markerEnd)
+      }
+    : null;
+
+  return {
+    ...item,
+    id: `list-item:${normalizedRange.startOffset}-${normalizedRange.endOffset}`,
+    startOffset: normalizedRange.startOffset,
+    endOffset: normalizedRange.endOffset,
+    startLine: normalizedRange.startLine,
+    endLine: normalizedRange.endLine,
+    markerStart,
+    markerEnd,
+    indent: item.indent,
+    task,
+    children: item.children.map((child) => normalizeBlockquoteInnerList(child, lines, innerSource))
+  };
+}
+
+function promoteBlockquotePrefixNestedListItems(block: ListBlock, lines: readonly InlineLine[]): ListBlock {
+  const items: ListItemBlock[] = [];
+
+  for (const item of block.items) {
+    const normalizedChildren = item.children.map((child) => promoteBlockquotePrefixNestedListItems(child, lines));
+    const keptChildren: ListBlock[] = [];
+    const promotedItems: ListItemBlock[] = [];
+    let normalizedItem: ListItemBlock = {
+      ...item,
+      children: normalizedChildren
+    };
+
+    for (const child of normalizedChildren) {
+      if (shouldPromoteBlockquotePrefixNestedListItems(block, normalizedItem, child)) {
+        promotedItems.push(...child.items);
+        continue;
+      }
+
+      keptChildren.push(child);
+    }
+
+    if (promotedItems.length > 0) {
+      normalizedItem = truncateListItemBeforeOffset(
+        {
+          ...normalizedItem,
+          children: keptChildren
+        },
+        promotedItems[0]!.startOffset,
+        lines
+      );
+    } else {
+      normalizedItem = {
+        ...normalizedItem,
+        children: keptChildren
+      };
+    }
+
+    items.push(normalizedItem, ...promotedItems);
+  }
+
+  return block.ordered
+    ? {
+        ...block,
+        ordered: true,
+        items
+      }
+    : {
+        ...block,
+        ordered: false,
+        items
+      };
+}
+
+function shouldPromoteBlockquotePrefixNestedListItems(
+  parentList: ListBlock,
+  parentItem: ListItemBlock,
+  childList: ListBlock
+): boolean {
+  return (
+    listKindsMatch(parentList, childList) &&
+    childList.items.length > 0 &&
+    childList.items.every((childItem) => childItem.indent <= parentItem.indent)
+  );
+}
+
+function listKindsMatch(left: ListBlock, right: ListBlock): boolean {
+  if (left.ordered !== right.ordered) {
+    return false;
+  }
+
+  if (!left.ordered || !right.ordered) {
+    return true;
+  }
+
+  return left.delimiter === right.delimiter;
+}
+
+function truncateListItemBeforeOffset(
+  item: ListItemBlock,
+  nextItemStartOffset: number,
+  lines: readonly InlineLine[]
+): ListItemBlock {
+  const previousLine = [...lines]
+    .reverse()
+    .find((line) => line.startOffset >= item.startOffset && line.endOffset < nextItemStartOffset);
+  const endOffset = previousLine?.endOffset ?? Math.min(item.endOffset, nextItemStartOffset);
+  const endLine = previousLine?.lineNumber ?? item.endLine;
+
+  return {
+    ...item,
+    id: `list-item:${item.startOffset}-${endOffset}`,
+    endOffset,
+    endLine
+  };
+}
+
+function normalizeBlockquoteInnerBlockMath(
+  block: BlockMathBlock,
+  source: string,
+  lines: readonly InlineLine[],
+  innerSource: BlockquoteInnerSource
+): BlockMathBlock {
+  const mappedContentStartOffset = mapBlockquoteInnerOffset(innerSource, block.contentStartOffset);
+  const mappedContentEndOffset = mapBlockquoteInnerOffset(innerSource, block.contentEndOffset);
+  const normalizedRange = getBlockquoteLineRange(
+    mapBlockquoteInnerOffset(innerSource, block.startOffset),
+    mapBlockquoteInnerOffset(innerSource, block.endOffset),
+    lines
+  );
+  const contentRange = getBlockquoteInnerContentRange(
+    mappedContentStartOffset,
+    mappedContentEndOffset,
+    source,
+    lines
+  );
+
+  return {
+    ...block,
+    id: `blockMath:${normalizedRange.startOffset}-${normalizedRange.endOffset}`,
+    startOffset: normalizedRange.startOffset,
+    endOffset: normalizedRange.endOffset,
+    startLine: normalizedRange.startLine,
+    endLine: normalizedRange.endLine,
+    markerStartOffset: mapBlockquoteInnerOffset(innerSource, block.markerStartOffset),
+    markerEndOffset: mapBlockquoteInnerOffset(innerSource, block.markerEndOffset),
+    closingMarkerStartOffset: block.closingMarkerStartOffset === null
+      ? null
+      : mapBlockquoteInnerOffset(innerSource, block.closingMarkerStartOffset),
+    closingMarkerEndOffset: block.closingMarkerEndOffset === null
+      ? null
+      : mapBlockquoteInnerOffset(innerSource, block.closingMarkerEndOffset),
+    contentStartOffset: contentRange.startOffset,
+    contentEndOffset: contentRange.endOffset,
+    value: block.value
+  };
+}
+
+function normalizeBlockquoteInnerBlockLineRange<TBlock extends MarkdownBlock>(
+  block: TBlock,
+  lines: readonly InlineLine[],
+  innerSource: BlockquoteInnerSource
+): TBlock {
+  const range = getBlockquoteLineRange(
+    mapBlockquoteInnerOffset(innerSource, block.startOffset),
+    mapBlockquoteInnerOffset(innerSource, block.endOffset),
+    lines
+  );
+  return {
+    ...block,
+    id: `${block.type}:${range.startOffset}-${range.endOffset}`,
+    startOffset: range.startOffset,
+    endOffset: range.endOffset,
+    startLine: range.startLine,
+    endLine: range.endLine
+  };
+}
+
+function getBlockquoteLineRange(
+  startOffset: number,
+  endOffset: number,
+  lines: readonly InlineLine[]
+): { startOffset: number; endOffset: number; startLine: number; endLine: number } {
+  const startLine = findBlockquoteLineForOffset(startOffset, lines);
+  const endLine = findBlockquoteLineForOffset(Math.max(startOffset, endOffset - 1), lines) ?? startLine;
+
+  return {
+    startOffset: startLine?.startOffset ?? startOffset,
+    endOffset: endLine?.endOffset ?? endOffset,
+    startLine: startLine?.lineNumber ?? 1,
+    endLine: endLine?.lineNumber ?? startLine?.lineNumber ?? 1
+  };
+}
+
+function mapBlockquoteInnerOffset(innerSource: BlockquoteInnerSource, offset: number): number {
+  if (innerSource.boundaryMap.length === 0) {
+    return offset;
+  }
+
+  if (offset <= 0) {
+    return innerSource.boundaryMap[0] ?? offset;
+  }
+
+  if (offset < innerSource.boundaryMap.length) {
+    return innerSource.boundaryMap[offset] ?? innerSource.boundaryMap[offset - 1] ?? offset;
+  }
+
+  return innerSource.boundaryMap.at(-1) ?? offset;
+}
+
+function getLineBreakEndOffset(source: string, lineEndOffset: number): number {
+  if (source[lineEndOffset] === "\r" && source[lineEndOffset + 1] === "\n") {
+    return lineEndOffset + 2;
+  }
+
+  if (source[lineEndOffset] === "\n") {
+    return lineEndOffset + 1;
+  }
+
+  if (source[lineEndOffset] === "\r") {
+    return lineEndOffset + 1;
+  }
+
+  return lineEndOffset;
+}
+
+function getBlockquoteInnerContentRange(
+  startOffset: number,
+  endOffset: number,
+  source: string,
+  lines: readonly InlineLine[]
+): { startOffset: number; endOffset: number } {
+  let contentStartOffset: number | null = null;
+  let contentEndOffset: number | null = null;
+
+  for (const line of lines) {
+    if (line.endOffset < startOffset || line.startOffset > endOffset) {
+      continue;
+    }
+
+    const segmentStart = Math.max(startOffset, line.contentStartOffset);
+    const segmentEnd = Math.min(endOffset, line.contentEndOffset);
+    const trimmedSegmentEnd = trimOuterWhitespace(source, segmentStart, segmentEnd);
+
+    if (trimmedSegmentEnd <= segmentStart) {
+      continue;
+    }
+
+    if (contentStartOffset === null) {
+      contentStartOffset = segmentStart;
+    }
+    contentEndOffset = trimmedSegmentEnd;
+  }
+
+  return {
+    startOffset: contentStartOffset ?? startOffset,
+    endOffset: contentEndOffset ?? endOffset
+  };
+}
+
+function findBlockquoteLineForOffset(offset: number, lines: readonly InlineLine[]): InlineLine | null {
+  return lines.find((line) => offset >= line.startOffset && offset <= line.endOffset) ?? null;
 }
 
 function consumeHorizontalSpace(source: string, offset: number, endOffset: number): number {

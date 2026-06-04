@@ -5975,8 +5975,11 @@ describe("App autosave", () => {
       '[data-fishmark-region="workspace-canvas"] .document-editor .cm-inactive-list-ordered .cm-inactive-list-marker {'
     );
     expect(rainGlassUnorderedListMarkerRule).toContain("background: var(--fishmark-list-marker);");
-    expect(rainGlassBlockquoteRule).toContain("background: var(--fishmark-blockquote-bg);");
-    expect(rainGlassBlockquoteRule).toContain("box-shadow: inset 2px 0 0 var(--fishmark-blockquote-border);");
+    expect(rainGlassBlockquoteRule).toContain("background: var(--fishmark-blockquote-bg, transparent);");
+    expect(rainGlassBlockquoteRule).toContain(
+      "border-left: var(--fishmark-blockquote-rail-width, 4px) solid var(--fishmark-blockquote-border);"
+    );
+    expect(rainGlassBlockquoteRule).toContain("box-shadow: none;");
   });
 
   it("defines formal semantic text, control, editor, and markdown slots for bundled dark fixture themes", () => {
@@ -6071,7 +6074,10 @@ describe("App autosave", () => {
     expect(lightMarkdownRule).toContain("--fishmark-task-toggle-radius:");
     expect(lightMarkdownRule).toContain("--fishmark-blockquote-bg:");
     expect(lightMarkdownRule).toContain("--fishmark-blockquote-border:");
-    expect(lightMarkdownRule).toContain("--fishmark-blockquote-radius:");
+    expect(lightMarkdownRule).not.toContain("--fishmark-blockquote-radius:");
+    expect(appRootRule).toContain("--fishmark-blockquote-padding-inline: 15px;");
+    expect(appRootRule).toContain("--fishmark-blockquote-rail-width: 4px;");
+    expect(appRootRule).toContain("--fishmark-blockquote-nested-indent:");
     expect(lightMarkdownRule).toContain("--fishmark-code-block-radius:");
   });
 
@@ -6173,6 +6179,22 @@ describe("App autosave", () => {
       '.document-editor .cm-inactive-task-marker[data-task-state="checked"] .cm-inactive-task-marker-check'
     );
     const blockquoteRule = getCssRule(markdownRenderStylesheet, ".document-editor .cm-inactive-blockquote");
+    const blockquoteSeparatorRule = getCssRule(
+      markdownRenderStylesheet,
+      ".document-editor .cm-inactive-blockquote-separator"
+    );
+    const blockquoteCodeRule = getCssRule(
+      markdownRenderStylesheet,
+      ".document-editor .cm-inactive-blockquote.cm-inactive-code-block"
+    );
+    const blockquoteCodeSurfaceRule = getCssRule(
+      markdownRenderStylesheet,
+      ".document-editor .cm-inactive-blockquote.cm-inactive-code-block::after"
+    );
+    const blockquoteMathRule = getCssRule(
+      markdownRenderStylesheet,
+      ".document-editor .cm-math-preview-block.cm-math-preview-blockquote"
+    );
 
     expect(listRootRule).toContain(
       `--fishmark-list-marker-text-gap: ${markdownTextStandard.lists.markerToTextGapRem.value}em;`
@@ -6189,42 +6211,60 @@ describe("App autosave", () => {
     expect(listRootRule).toContain(
       `--fishmark-list-nested-indent: ${markdownTextStandard.lists.geometry.indentStepEm}em;`
     );
+    expect(listRule).toContain("--fishmark-list-container-offset: 0rem;");
     expect(listRule).toContain("--fishmark-list-source-prefix-offset: 0ch;");
     expect(listRule).toContain("var(--fishmark-list-unordered-content-offset)");
     expect(listRule).not.toContain("var(--fishmark-list-source-prefix-offset)");
     expect(listRule).not.toContain("max(");
     expect(listRule).toContain("position: relative;");
-    expect(listRule).toContain("padding-left: calc(var(--fishmark-list-depth-offset) + var(--fishmark-list-content-offset));");
+    expect(listRule).toContain("var(--fishmark-list-container-offset) +");
+    expect(listRule).toContain("var(--fishmark-list-depth-offset) +");
+    expect(listRule).toContain("var(--fishmark-list-content-offset)");
     expect(listRule).not.toContain("text-indent:");
     expect(listRule).toContain("overflow-wrap: anywhere;");
     expect(listRule).toContain("word-break: break-all;");
+    expect(activeListRule).toContain("--fishmark-list-container-offset: 0rem;");
     expect(activeListRule).toContain("--fishmark-list-source-prefix-offset: 0em;");
     expect(activeListRule).toContain("var(--fishmark-list-unordered-content-offset)");
     expect(activeListRule).not.toContain("0ch");
     expect(activeListRule).not.toContain("max(");
     expect(activeListRule).toContain("position: relative;");
-    expect(activeListRule).toContain("padding-left: calc(var(--fishmark-list-depth-offset) + var(--fishmark-list-content-offset));");
+    expect(activeListRule).toContain("var(--fishmark-list-container-offset) +");
+    expect(activeListRule).toContain("var(--fishmark-list-depth-offset) +");
+    expect(activeListRule).toContain("var(--fishmark-list-content-offset)");
     expect(activeListRule).not.toContain("text-indent:");
     expect(activeListRule).toContain("overflow-wrap: anywhere;");
     expect(activeListRule).toContain("word-break: break-all;");
+    expect(listContinuationRule).toContain("--fishmark-list-container-offset: 0rem;");
     expect(listContinuationRule).toContain("--fishmark-list-source-prefix-offset: 0ch;");
     expect(listContinuationRule).not.toContain("var(--fishmark-list-source-prefix-offset)");
     expect(listContinuationRule).not.toContain("max(");
-    expect(listContinuationRule).toContain("padding-left: calc(var(--fishmark-list-depth-offset) + var(--fishmark-list-content-offset));");
+    expect(listContinuationRule).toContain("var(--fishmark-list-container-offset) +");
+    expect(listContinuationRule).toContain("var(--fishmark-list-depth-offset) +");
+    expect(listContinuationRule).toContain("var(--fishmark-list-content-offset)");
     expect(listContinuationRule).toContain("overflow-wrap: anywhere;");
     expect(listContinuationRule).not.toContain("text-indent:");
+    expect(activeListContinuationRule).toContain("--fishmark-list-container-offset: 0rem;");
     expect(activeListContinuationRule).toContain("--fishmark-list-source-prefix-offset: 0em;");
     expect(activeListContinuationRule).not.toContain("var(--fishmark-list-source-prefix-offset)");
     expect(activeListContinuationRule).not.toContain("max(");
-    expect(activeListContinuationRule).toContain("padding-left: calc(var(--fishmark-list-depth-offset) + var(--fishmark-list-content-offset));");
+    expect(activeListContinuationRule).toContain("var(--fishmark-list-container-offset) +");
+    expect(activeListContinuationRule).toContain("var(--fishmark-list-depth-offset) +");
+    expect(activeListContinuationRule).toContain("var(--fishmark-list-content-offset)");
     expect(activeListContinuationRule).toContain("overflow-wrap: anywhere;");
     expect(activeListContinuationRule).not.toContain("text-indent:");
+    expect(markdownRenderStylesheet).toContain(".document-editor .cm-line.cm-inactive-blockquote.cm-inactive-list,");
+    expect(markdownRenderStylesheet).toContain(
+      "var(--fishmark-blockquote-padding-inline) +\n    var(--fishmark-blockquote-depth-offset)"
+    );
     expect(orderedListRule).toContain("--fishmark-list-content-offset: var(--fishmark-list-ordered-content-offset);");
     expect(taskListRule).toContain("--fishmark-list-content-offset: var(--fishmark-list-task-content-offset);");
     expect(listSourcePrefixRule).toContain("font-size: 0;");
     expect(activeListSourcePrefixRule).not.toContain("font-size: 0;");
     expect(activeListSourcePrefixRule).toContain("position: absolute;");
-    expect(activeListSourcePrefixRule).toContain("left: calc(var(--fishmark-list-depth-offset) + var(--fishmark-list-content-offset));");
+    expect(activeListSourcePrefixRule).toContain("var(--fishmark-list-container-offset) +");
+    expect(activeListSourcePrefixRule).toContain("var(--fishmark-list-depth-offset) +");
+    expect(activeListSourcePrefixRule).toContain("var(--fishmark-list-content-offset)");
     expect(activeListSourcePrefixRule).toContain("width: 0;");
     expect(activeListSourcePrefixRule).toContain("overflow: hidden;");
     expect(activeListSourcePrefixRule).toContain("font-size: inherit;");
@@ -6237,7 +6277,9 @@ describe("App autosave", () => {
     expect(activeListPaddingAnchorRule).toContain("color: inherit;");
     expect(activeListPaddingAnchorRule).toContain("caret-color: var(--fishmark-caret-color);");
     expect(activeListPaddingAnchorRule).toContain("overflow: visible;");
-    expect(activeOrderedListMarkerRule).toContain("left: var(--fishmark-list-depth-offset);");
+    expect(activeOrderedListMarkerRule).toContain(
+      "left: calc(var(--fishmark-list-container-offset) + var(--fishmark-list-depth-offset));"
+    );
     expect(activeOrderedListMarkerRule).toContain("min-width: var(--fishmark-list-ordered-marker-width);");
     expect(activeOrderedListMarkerRule).toContain("text-align: left;");
     expect(markdownRenderStylesheet).toContain(".document-editor .cm-line.cm-inactive-list-depth-1,");
@@ -6246,18 +6288,20 @@ describe("App autosave", () => {
     expect(markdownRenderStylesheet).toContain(".document-editor .cm-line.cm-active-list-depth-2");
     expect(listMarkerRule).not.toContain("background:");
     expect(unorderedListMarkerRule).toContain("position: absolute;");
-    expect(unorderedListMarkerRule).toContain(
-      "left: calc(var(--fishmark-list-depth-offset) + var(--fishmark-list-unordered-marker-left));"
-    );
+    expect(unorderedListMarkerRule).toContain("var(--fishmark-list-container-offset) +");
+    expect(unorderedListMarkerRule).toContain("var(--fishmark-list-depth-offset) +");
+    expect(unorderedListMarkerRule).toContain("var(--fishmark-list-unordered-marker-left)");
     expect(unorderedListMarkerGlyphRule).toContain("width: var(--fishmark-list-marker-size);");
     expect(unorderedListMarkerGlyphRule).toContain("height: var(--fishmark-list-marker-size);");
     expect(unorderedListMarkerGlyphRule).toContain("background: var(--fishmark-list-marker);");
     expect(orderedListMarkerRule).toContain("position: absolute;");
+    expect(orderedListMarkerRule).toContain(
+      "left: calc(var(--fishmark-list-container-offset) + var(--fishmark-list-depth-offset));"
+    );
     expect(orderedListMarkerRule).toContain("min-width: var(--fishmark-list-ordered-marker-width);");
     expect(orderedListMarkerRule).toContain("font-variant-numeric: tabular-nums;");
-    expect(markdownRenderStylesheet).toContain(
-      "left: calc(var(--fishmark-list-depth-offset) + var(--fishmark-list-task-marker-left));"
-    );
+    expect(markdownRenderStylesheet).toContain("var(--fishmark-list-container-offset) +");
+    expect(markdownRenderStylesheet).toContain("var(--fishmark-list-task-marker-left)");
     expect(taskListMarkerGlyphRule).toContain("content: none;");
     expect(listRootRule).toContain("--fishmark-task-size: 1.08em;");
     expect(taskMarkerContainerRule).toContain("display: inline-flex;");
@@ -6286,8 +6330,26 @@ describe("App autosave", () => {
     expect(checkedTaskMarkerCheckRule).toContain("opacity: 1;");
     expect(markdownRenderStylesheet).not.toContain(".cm-inactive-task-marker::before");
     expect(markdownRenderStylesheet).not.toContain(".cm-inactive-task-marker::after");
-    expect(blockquoteRule).toContain("background: var(--fishmark-blockquote-bg);");
-    expect(blockquoteRule).toContain("box-shadow: inset 2px 0 0 var(--fishmark-blockquote-border);");
+    expect(blockquoteRule).toContain("background: var(--fishmark-blockquote-bg, transparent);");
+    expect(blockquoteRule).toContain(
+      "border-left: var(--fishmark-blockquote-rail-width, 4px) solid var(--fishmark-blockquote-border, #dfe2e5);"
+    );
+    expect(blockquoteRule).toContain("box-shadow: none;");
+    expect(blockquoteRule).toContain(
+      "padding-left: calc(var(--fishmark-blockquote-padding-inline) + var(--fishmark-blockquote-depth-offset));"
+    );
+    expect(blockquoteSeparatorRule).toContain("min-height: 0.8em;");
+    expect(blockquoteSeparatorRule).toContain("line-height: 0.8;");
+    expect(blockquoteCodeRule).toContain("background: transparent;");
+    expect(blockquoteCodeRule).toContain(
+      "border-left: var(--fishmark-blockquote-rail-width, 4px) solid var(--fishmark-blockquote-border, #dfe2e5);"
+    );
+    expect(blockquoteCodeRule).toContain('400 0.9em/1.6 "Lucida Console", "Consolas", "Courier New", monospace;');
+    expect(blockquoteCodeSurfaceRule).toContain("background: #f8f8f8;");
+    expect(blockquoteCodeSurfaceRule).toContain("border-right: 1px solid #e7eaed;");
+    expect(blockquoteCodeSurfaceRule).toContain("border-left: 1px solid #e7eaed;");
+    expect(blockquoteMathRule).toContain("background: transparent;");
+    expect(blockquoteMathRule).toContain("color: var(--fishmark-markdown-quote-fg, #777777);");
     expect(markdownRenderStylesheet).not.toContain(".cm-active-blockquote-marker");
   });
 
@@ -6334,13 +6396,13 @@ describe("App autosave", () => {
 
     expect(lightMarkdownRule).toContain("--fishmark-markdown-boundary-radius: 4px;");
     expect(lightMarkdownRule).toContain("--fishmark-task-toggle-radius: var(--fishmark-markdown-boundary-radius);");
-    expect(lightMarkdownRule).toContain("--fishmark-blockquote-radius: var(--fishmark-markdown-boundary-radius);");
+    expect(lightMarkdownRule).not.toContain("--fishmark-blockquote-radius:");
     expect(lightMarkdownRule).toContain("--fishmark-code-block-radius: var(--fishmark-markdown-boundary-radius);");
     expect(lightMarkdownRule).toContain("--fishmark-table-radius: var(--fishmark-markdown-boundary-radius);");
-    expect(blockquoteStartRule).toContain("border-top-left-radius: var(--fishmark-blockquote-radius, 0.7rem);");
-    expect(blockquoteStartRule).toContain("border-top-right-radius: var(--fishmark-blockquote-radius, 0.7rem);");
-    expect(blockquoteEndRule).toContain("border-bottom-left-radius: var(--fishmark-blockquote-radius, 0.7rem);");
-    expect(blockquoteEndRule).toContain("border-bottom-right-radius: var(--fishmark-blockquote-radius, 0.7rem);");
+    expect(blockquoteStartRule).toContain("border-top-left-radius: 0;");
+    expect(blockquoteStartRule).toContain("border-top-right-radius: 0;");
+    expect(blockquoteEndRule).toContain("border-bottom-left-radius: 0;");
+    expect(blockquoteEndRule).toContain("border-bottom-right-radius: 0;");
     expect(codeBlockStartRule).toContain("border-top-left-radius: var(--fishmark-code-block-radius, 6px);");
     expect(codeBlockStartRule).toContain("border-top-right-radius: var(--fishmark-code-block-radius, 6px);");
     expect(codeBlockEndRule).toContain("border-bottom-left-radius: var(--fishmark-code-block-radius, 6px);");

@@ -1807,6 +1807,113 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("commits a blockquote marker only after marker padding is typed and keeps the caret inside it", async () => {
+    const host = document.createElement("div");
+    const activeBlockTypes: Array<string | null> = [];
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "",
+      onChange: vi.fn(),
+      onActiveBlockChange: (state) => {
+        activeBlockTypes.push(state.activeBlock?.type ?? null);
+      }
+    });
+    const advancedController = controller as typeof controller & {
+      insertText: (text: string) => void;
+      setSelection: (anchor: number, head?: number) => void;
+    };
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+
+    advancedController.setSelection(0);
+    advancedController.insertText(">");
+    await flushMicrotasks();
+
+    const bareQuoteLine = Array.from(host.querySelectorAll<HTMLElement>(".cm-line")).find(
+      (line) => line.textContent === ">"
+    );
+
+    expect(controller.getContent()).toBe(">");
+    expect(controller.getSelection()).toEqual({ anchor: 1, head: 1 });
+    expect(activeBlockTypes.at(-1)).toBe("paragraph");
+    expect(bareQuoteLine?.classList.contains("cm-active-paragraph")).toBe(true);
+    expect(bareQuoteLine?.classList.contains("cm-inactive-blockquote")).toBe(false);
+    expect(bareQuoteLine?.querySelector(".cm-inactive-blockquote-marker")).toBeNull();
+
+    advancedController.insertText(" ");
+    await flushMicrotasks();
+
+    const committedQuoteLine = Array.from(host.querySelectorAll<HTMLElement>(".cm-line")).find(
+      (line) => line.textContent === "> "
+    );
+
+    expect(controller.getContent()).toBe("> ");
+    expect(controller.getSelection()).toEqual({ anchor: 2, head: 2 });
+    expect(activeBlockTypes.at(-1)).toBe("blockquote");
+    expect(committedQuoteLine?.classList.contains("cm-inactive-blockquote")).toBe(true);
+    expect(committedQuoteLine?.querySelector(".cm-active-blockquote-marker")?.textContent).toBe(">");
+    expect(committedQuoteLine?.querySelector(".cm-active-blockquote-padding-anchor")?.textContent).toBe(" ");
+
+    controller.destroy();
+  });
+
+  it("commits a nested blockquote marker only after marker padding is typed", async () => {
+    const host = document.createElement("div");
+    const activeBlockTypes: Array<string | null> = [];
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "> ",
+      onChange: vi.fn(),
+      onActiveBlockChange: (state) => {
+        activeBlockTypes.push(state.activeBlock?.type ?? null);
+      }
+    });
+    const advancedController = controller as typeof controller & {
+      insertText: (text: string) => void;
+      setSelection: (anchor: number, head?: number) => void;
+    };
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+
+    advancedController.setSelection(2);
+    advancedController.insertText(">");
+    await flushMicrotasks();
+
+    const uncommittedNestedLine = Array.from(host.querySelectorAll<HTMLElement>(".cm-line")).find(
+      (line) => line.textContent === "> >"
+    );
+
+    expect(controller.getContent()).toBe("> >");
+    expect(controller.getSelection()).toEqual({ anchor: 3, head: 3 });
+    expect(activeBlockTypes.at(-1)).toBe("blockquote");
+    expect(uncommittedNestedLine?.classList.contains("cm-inactive-blockquote-depth-1")).toBe(true);
+    expect(uncommittedNestedLine?.classList.contains("cm-inactive-blockquote-depth-2")).toBe(false);
+    expect(uncommittedNestedLine?.querySelector(".cm-active-blockquote-marker")?.textContent).toBe(">");
+    expect(uncommittedNestedLine?.querySelector(".cm-active-blockquote-padding-anchor")?.textContent).toBe(" ");
+
+    advancedController.insertText(" ");
+    await flushMicrotasks();
+
+    const committedNestedLine = Array.from(host.querySelectorAll<HTMLElement>(".cm-line")).find(
+      (line) => line.textContent === "> > "
+    );
+
+    expect(controller.getContent()).toBe("> > ");
+    expect(controller.getSelection()).toEqual({ anchor: 4, head: 4 });
+    expect(activeBlockTypes.at(-1)).toBe("blockquote");
+    expect(committedNestedLine?.classList.contains("cm-inactive-blockquote-depth-2")).toBe(true);
+    expect(committedNestedLine?.querySelector(".cm-active-blockquote-marker")?.textContent).toBe("> >");
+    expect(committedNestedLine?.querySelector(".cm-active-blockquote-padding-anchor")?.textContent).toBe(" ");
+
+    controller.destroy();
+  });
+
   it("moves the cursor to a list item content start when its left padding is clicked", async () => {
     const host = document.createElement("div");
     const source = ["- one", "- [ ] todo", "", "Paragraph"].join("\n");
@@ -1881,6 +1988,45 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("renders a bare quote separator line inside an inactive blockquote", () => {
+    const host = document.createElement("div");
+    const source = [
+      "> Target paragraph",
+      ">",
+      "> Explanation paragraph",
+      "",
+      "Plain paragraph"
+    ].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    view?.dispatch({ selection: { anchor: source.indexOf("Plain paragraph") } });
+
+    const lines = Array.from(host.querySelectorAll<HTMLElement>(".cm-line"));
+    const firstQuoteLine = getLineElementByText(host, "> Target paragraph");
+    const separatorLine = lines.find((line) => line.textContent === ">") ?? null;
+    const finalQuoteLine = getLineElementByText(host, "> Explanation paragraph");
+    const quoteMarkers = host.querySelectorAll(".cm-inactive-blockquote-marker");
+
+    expect(firstQuoteLine?.classList.contains("cm-inactive-blockquote-start")).toBe(true);
+    expect(separatorLine?.classList.contains("cm-inactive-blockquote")).toBe(true);
+    expect(separatorLine?.classList.contains("cm-inactive-blockquote-start")).toBe(false);
+    expect(separatorLine?.classList.contains("cm-inactive-blockquote-end")).toBe(false);
+    expect(finalQuoteLine?.classList.contains("cm-inactive-blockquote-end")).toBe(true);
+    expect(quoteMarkers).toHaveLength(3);
+    expect(Array.from(quoteMarkers, (marker) => marker.textContent)).toEqual(["> ", ">", "> "]);
+
+    controller.destroy();
+  });
+
   it("keeps blockquote presentation when that blockquote becomes active again", async () => {
     const host = document.createElement("div");
     const source = ["> Quote line", "> Still quoted", "", "Paragraph"].join("\n");
@@ -1916,7 +2062,7 @@ describe("createCodeEditorController", () => {
     expect(secondQuoteLine).not.toBeNull();
     expect(secondQuoteLine?.classList.contains("cm-inactive-blockquote")).toBe(true);
     expect(host.querySelectorAll(".cm-inactive-blockquote-marker")).toHaveLength(1);
-    expect(host.querySelectorAll(".cm-active-blockquote-marker")).toHaveLength(0);
+    expect(host.querySelectorAll(".cm-active-blockquote-marker")).toHaveLength(1);
 
     controller.destroy();
   });
@@ -2960,7 +3106,8 @@ describe("createCodeEditorController", () => {
     advancedController.setSelection(source.length);
     advancedController.pressEnter();
 
-    expect(controller.getContent()).toBe("> quote\n> ");
+    expect(controller.getContent()).toBe(["> quote", ">", "> "].join("\n"));
+    expect(getEditorView(host)?.state.selection.main.anchor).toBe(controller.getContent().length);
 
     controller.destroy();
   });
@@ -2982,7 +3129,245 @@ describe("createCodeEditorController", () => {
     advancedController.setSelection(source.length);
     advancedController.pressEnter();
 
-    expect(controller.getContent()).toBe("> > quote\n> > ");
+    expect(controller.getContent()).toBe(["> > quote", "> > ", "> > "].join("\n"));
+    expect(getEditorView(host)?.state.selection.main.anchor).toBe(controller.getContent().length);
+
+    controller.destroy();
+  });
+
+  it("continues a non-empty quote list item on Enter", () => {
+    const host = document.createElement("div");
+    const source = "> - item";
+    const expected = ["> - item", "> - "].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+
+    advancedController.setSelection(source.length);
+    advancedController.pressEnter();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(getEditorView(host)?.state.selection.main.anchor).toBe(expected.length);
+
+    controller.destroy();
+  });
+
+  it("upgrades an empty quote child list item to the parent list on Enter", () => {
+    const host = document.createElement("div");
+    const source = ["> - parent", ">   - "].join("\n");
+    const expected = ["> - parent", "> - "].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+
+    advancedController.setSelection(source.length);
+    advancedController.pressEnter();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(getEditorView(host)?.state.selection.main.anchor).toBe(expected.length);
+
+    controller.destroy();
+  });
+
+  it("exits an empty top-level quote list item to quote body on Enter", () => {
+    const host = document.createElement("div");
+    const source = ["> - parent", "> - "].join("\n");
+    const expected = ["> - parent", ">", "> "].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+
+    advancedController.setSelection(source.length);
+    advancedController.pressEnter();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(getEditorView(host)?.state.selection.main.anchor).toBe(expected.length);
+
+    controller.destroy();
+  });
+
+  it("keeps only the current quote list line active while editing a quote list item", async () => {
+    const host = document.createElement("div");
+    const source = ["> - parent", "> - child", "> - sibling"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const view = getEditorView(host);
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    view?.dispatch({ selection: { anchor: source.indexOf("child") } });
+    await flushMicrotasks();
+
+    const parentLine = getLineElementByText(host, "parent");
+    const childLine = getLineElementByText(host, "child");
+    const siblingLine = getLineElementByText(host, "sibling");
+
+    expect(parentLine?.classList.contains("cm-inactive-list")).toBe(true);
+    expect(parentLine?.querySelector(".cm-inactive-list-marker")?.textContent).toBe("-");
+    expect(childLine?.classList.contains("cm-active-list")).toBe(true);
+    expect(childLine?.querySelector(".cm-active-list-marker")?.textContent).toBe("-");
+    expect(siblingLine?.classList.contains("cm-inactive-list")).toBe(true);
+    expect(siblingLine?.querySelector(".cm-inactive-list-marker")?.textContent).toBe("-");
+
+    controller.destroy();
+  });
+
+  it("removes a non-empty quote list marker on Backspace at content start", () => {
+    const host = document.createElement("div");
+    const source = ["> - 内容", "> - 内容2"].join("\n");
+    const expected = ["> - 内容", "> 内容2"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressBackspace: () => void;
+    };
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(source.indexOf("内容2"));
+    advancedController.pressBackspace();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(view?.state.selection.main.anchor).toBe(expected.indexOf("内容2"));
+    expect(view?.state.selection.main.head).toBe(expected.indexOf("内容2"));
+
+    controller.destroy();
+  });
+
+  it("removes an empty nested quote list marker before clearing its indentation on Backspace", () => {
+    const host = document.createElement("div");
+    const source = ["> - parent", ">   - "].join("\n");
+    const afterMarkerRemoval = ["> - parent", ">   "].join("\n");
+    const afterFirstIndentRemoval = ["> - parent", ">  "].join("\n");
+    const afterIndentRemoval = ["> - parent", "> "].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressBackspace: () => void;
+    };
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(source.length);
+    advancedController.pressBackspace();
+
+    expect(controller.getContent()).toBe(afterMarkerRemoval);
+    expect(view?.state.selection.main.anchor).toBe(afterMarkerRemoval.length);
+    expect(view?.state.selection.main.head).toBe(afterMarkerRemoval.length);
+
+    advancedController.pressBackspace();
+
+    expect(controller.getContent()).toBe(afterFirstIndentRemoval);
+    expect(view?.state.selection.main.anchor).toBe(afterFirstIndentRemoval.length);
+    expect(view?.state.selection.main.head).toBe(afterFirstIndentRemoval.length);
+
+    advancedController.pressBackspace();
+
+    expect(controller.getContent()).toBe(afterIndentRemoval);
+    expect(view?.state.selection.main.anchor).toBe(afterIndentRemoval.length);
+    expect(view?.state.selection.main.head).toBe(afterIndentRemoval.length);
+
+    controller.destroy();
+  });
+
+  it("breaks ordered quote list rendering from the current item on Backspace at content start", () => {
+    const host = document.createElement("div");
+    const source = ["> 1. 内容", "> 2. 内容2", "> 3. 内容3"].join("\n");
+    const expected = ["> 1. 内容", ">", "> 2.内容2", "> 3. 内容3"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressBackspace: () => void;
+    };
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(source.indexOf("内容2"));
+    advancedController.pressBackspace();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(view?.state.selection.main.anchor).toBe(expected.indexOf("2.") + "2.".length);
+    expect(view?.state.selection.main.head).toBe(expected.indexOf("2.") + "2.".length);
+
+    controller.destroy();
+  });
+
+  it("indents and outdents quote list items with the same Tab commands as body lists", () => {
+    const host = document.createElement("div");
+    const source = ["> - parent", "> - child"].join("\n");
+    const indented = ["> - parent", ">   - child"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressTab: (shiftKey?: boolean) => void;
+    };
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(source.indexOf("child"));
+    advancedController.pressTab();
+
+    expect(controller.getContent()).toBe(indented);
+    expect(view?.state.selection.main.anchor).toBe(indented.indexOf("child"));
+    expect(view?.state.selection.main.head).toBe(indented.indexOf("child"));
+
+    advancedController.pressTab(true);
+
+    expect(controller.getContent()).toBe(source);
+    expect(view?.state.selection.main.anchor).toBe(source.indexOf("child"));
+    expect(view?.state.selection.main.head).toBe(source.indexOf("child"));
 
     controller.destroy();
   });
@@ -3294,7 +3679,7 @@ describe("createCodeEditorController", () => {
 
     expect(controller.getContent()).toBe("> ");
     expect(host.querySelector(".cm-inactive-blockquote")).not.toBeNull();
-    expect(host.querySelector(".cm-active-blockquote-marker")).toBeNull();
+    expect(host.querySelector(".cm-active-blockquote-marker")).not.toBeNull();
 
     controller.destroy();
   });
@@ -3321,9 +3706,10 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("exits an empty nested blockquote line on Enter", () => {
+  it("outdents an empty nested blockquote line one level on Enter", () => {
     const host = document.createElement("div");
     const source = ["> > quote", "> > "].join("\n");
+    const expected = ["> > quote", "> "].join("\n");
 
     const controller = createCodeEditorController({
       parent: host,
@@ -3338,7 +3724,8 @@ describe("createCodeEditorController", () => {
     advancedController.setSelection(source.length);
     advancedController.pressEnter();
 
-    expect(controller.getContent()).toBe("> > quote\n");
+    expect(controller.getContent()).toBe(expected);
+    expect(getEditorView(host)?.state.selection.main.anchor).toBe(expected.length);
 
     controller.destroy();
   });
@@ -3527,7 +3914,7 @@ describe("createCodeEditorController", () => {
     expect(view?.state.selection.main.anchor).toBe(source.indexOf("> quote two") - 1);
     expect(host.querySelector(".cm-inactive-blockquote")).not.toBeNull();
     expect(host.querySelectorAll(".cm-inactive-blockquote-marker")).toHaveLength(1);
-    expect(host.querySelectorAll(".cm-active-blockquote-marker")).toHaveLength(0);
+    expect(host.querySelectorAll(".cm-active-blockquote-marker")).toHaveLength(1);
 
     controller.destroy();
   });
