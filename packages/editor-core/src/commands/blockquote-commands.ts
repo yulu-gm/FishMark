@@ -1,6 +1,11 @@
 import type { EditorView } from "@codemirror/view";
 
 import type { ActiveBlockState } from "../active-block";
+import {
+  findBlockquoteStructuralSeparatorAt,
+  findPreviousBlockquoteStructuralSeparator,
+  type BlockquoteStructuralSeparator
+} from "../blockquote-structural-separators";
 import { getBackspaceLineStart, parseBlockquoteLine } from "./line-parsers";
 
 type BlockquoteBlock = Extract<ActiveBlockState["activeBlock"], { type: "blockquote" }>;
@@ -95,6 +100,16 @@ export function runBlockquoteBackspace(view: EditorView, activeState: ActiveBloc
     return false;
   }
 
+  const currentStructuralSeparator = findBlockquoteStructuralSeparatorAt(
+    activeState.blockMap.blocks,
+    selection.head
+  );
+
+  if (currentStructuralSeparator) {
+    deleteBlockquoteStructuralSeparator(view, source, currentStructuralSeparator);
+    return true;
+  }
+
   const contentStart = line.from + parsed.contentStartOffset;
 
   if (selection.head !== lineStart && selection.head !== contentStart) {
@@ -163,6 +178,16 @@ export function runBlockquoteBackspace(view: EditorView, activeState: ActiveBloc
     return true;
   }
 
+  const previousStructuralSeparator = findPreviousBlockquoteStructuralSeparator(
+    activeState.blockMap.blocks,
+    lineStart
+  );
+
+  if (previousStructuralSeparator) {
+    deleteBlockquoteStructuralSeparator(view, source, previousStructuralSeparator);
+    return true;
+  }
+
   const previousLineEnd = getPreviousLineEnd(lineStart);
   if (previousLineEnd === null) {
     return false;
@@ -193,6 +218,77 @@ function getActiveBlockquote(
   }
 
   return null;
+}
+
+function deleteBlockquoteStructuralSeparator(
+  view: EditorView,
+  source: string,
+  separator: BlockquoteStructuralSeparator
+): void {
+  const range = resolveBlockquoteStructuralSeparatorDeleteRange(source, separator);
+  const deleteLength = range.to - range.from;
+  const selectionAnchor =
+    separator.nextBlockStart !== null && separator.nextBlockStart >= range.to
+      ? separator.nextBlockStart - deleteLength
+      : separator.previousBlockEnd ?? range.from;
+
+  view.dispatch({
+    changes: {
+      from: range.from,
+      to: range.to,
+      insert: ""
+    },
+    selection: {
+      anchor: selectionAnchor,
+      head: selectionAnchor
+    }
+  });
+}
+
+function resolveBlockquoteStructuralSeparatorDeleteRange(
+  source: string,
+  separator: BlockquoteStructuralSeparator
+): { from: number; to: number } {
+  const lineBreakEnd = getLineBreakEndAfter(source, separator.lineEndOffset);
+
+  if (lineBreakEnd > separator.lineEndOffset) {
+    return {
+      from: separator.lineStartOffset,
+      to: lineBreakEnd
+    };
+  }
+
+  if (separator.lineStartOffset > 0) {
+    return {
+      from: getLineBreakStartBefore(source, separator.lineStartOffset),
+      to: separator.lineEndOffset
+    };
+  }
+
+  return {
+    from: separator.lineStartOffset,
+    to: separator.lineEndOffset
+  };
+}
+
+function getLineBreakEndAfter(source: string, lineEndOffset: number): number {
+  if (source.slice(lineEndOffset, lineEndOffset + 2) === "\r\n") {
+    return lineEndOffset + 2;
+  }
+
+  if (source[lineEndOffset] === "\n") {
+    return lineEndOffset + 1;
+  }
+
+  return lineEndOffset;
+}
+
+function getLineBreakStartBefore(source: string, lineStartOffset: number): number {
+  if (lineStartOffset >= 2 && source.slice(lineStartOffset - 2, lineStartOffset) === "\r\n") {
+    return lineStartOffset - 2;
+  }
+
+  return Math.max(0, lineStartOffset - 1);
 }
 
 function getPreviousLineEnd(lineStart: number): number | null {

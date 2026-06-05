@@ -15,6 +15,7 @@ import {
   normalizeHiddenInlineSelectionAnchor,
   resolveVisibleInlineStartAnchor
 } from "./hidden-markers";
+import { findBlockquoteStructuralSeparatorAt } from "./blockquote-structural-separators";
 import { findListItemAtLineStart } from "./list-utils";
 import { trimTrailingCarriageReturn } from "./source-utils";
 
@@ -267,7 +268,9 @@ export function normalizeStructuralBlankSelectionAnchor(
   anchor: number,
   direction = 0
 ): number | null {
-  const separator = findStructuralBlankLineAt(source, markdownDocument.blocks, anchor);
+  const separator =
+    findStructuralBlankLineAt(source, markdownDocument.blocks, anchor) ??
+    findBlockquoteStructuralSeparatorAt(markdownDocument.blocks, anchor);
 
   if (!separator) {
     return null;

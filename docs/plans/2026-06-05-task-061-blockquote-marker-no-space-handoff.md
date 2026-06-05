@@ -5,6 +5,7 @@
 - Updated blockquote marker parsing so `>`, `>text`, `> >`, and `> >text` are valid blockquote prefixes without requiring marker padding.
 - Kept active empty unpadded marker rows visually unparsed until commit: top-level `>` stays plain source text, and `> >` inside an existing quote stays at the parent quote depth with the final `>` visible.
 - Committed draft markers when text is typed after them, Enter is pressed after them, or selection leaves the line; committed or inactive rows hide the quote source prefix.
+- Reused parser-owned blockquote `innerBlocks` to keep the caret out of quote-internal structural separator lines and make Backspace from the next quote block line start delete that separator.
 - Synced editor decorations, HTML export rendering, editing-experience probes, stylesheet contract tests, and the markdown text rendering standard.
 
 ## Files
@@ -27,6 +28,7 @@
 - `$env:FISHMARK_MARKDOWN_EDITING_EXPERIENCE_PROBE_CASE='blockquote-marker-commits-after-text'; npm.cmd run test:editing-experience`
 - `$env:FISHMARK_MARKDOWN_EDITING_EXPERIENCE_PROBE_CASE='blockquote-marker-commits-after-selection-move'; npm.cmd run test:editing-experience`
 - `$env:FISHMARK_MARKDOWN_EDITING_EXPERIENCE_PROBE_CASE='nested-blockquote-marker-commits-after-text'; npm.cmd run test:editing-experience`
+- `$env:FISHMARK_MARKDOWN_EDITING_EXPERIENCE_PROBE_CASE='blockquote-structural-separator-navigation'; npm.cmd run test:editing-experience`
 - `$env:FISHMARK_MARKDOWN_EDITING_EXPERIENCE_PROBE_GROUP='blockquote'; npm.cmd run test:editing-experience`
 - `npm.cmd run typecheck`
 - `npm.cmd run lint`
@@ -39,7 +41,8 @@
 2. Continue typing `quote` without inserting a space and confirm the source is `>quote`, the text remains inside the quote, and the marker is hidden.
 3. Type `>` on an empty line, then move the cursor to another paragraph and confirm the bare quote row hides the raw marker while the quote rail remains visible.
 4. Inside an existing quote, type another `>` and then `nested`; confirm the source is `> >nested`, the row is depth 2, and the marker prefix is hidden after text is typed.
-5. Confirm `>` + Enter and `> >` + Enter still create padded quote continuation lines with visible caret geometry.
+5. With `> 11\n>\n> > 1`, try to place the caret on the middle `>` line and confirm it snaps to adjacent editable content; then place the caret before `1`, press Backspace, and confirm the source becomes `> 11\n> > 1`.
+6. Confirm `>` + Enter and `> >` + Enter still create padded quote continuation lines with visible caret geometry.
 
 ## Known Notes
 

@@ -4055,6 +4055,69 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("keeps the caret out of a quote-internal structural separator", async () => {
+    const host = document.createElement("div");
+    const source = ["> 11", ">", "> > 1"].join("\n");
+    const separatorAnchor = source.indexOf("\n>\n") + 2;
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const view = getEditorView(host);
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+    };
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    advancedController.setSelection(separatorAnchor);
+    await flushMicrotasks();
+
+    expect(controller.getContent()).toBe(source);
+    expect(view?.state.selection.main.anchor).toBe(source.indexOf("\n>\n"));
+    expect(view?.state.selection.main.head).toBe(source.indexOf("\n>\n"));
+
+    controller.destroy();
+  });
+
+  it("deletes a quote-internal structural separator on Backspace from the next quote line start", async () => {
+    const host = document.createElement("div");
+    const source = ["> 11", ">", "> > 1"].join("\n");
+    const expected = ["> 11", "> > 1"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const view = getEditorView(host);
+    const advancedController = controller as typeof controller & {
+      pressBackspace: () => void;
+      setSelection: (anchor: number, head?: number) => void;
+    };
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    advancedController.setSelection(source.lastIndexOf("1"));
+    await flushMicrotasks();
+    advancedController.pressBackspace();
+    await flushMicrotasks();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(view?.state.selection.main.anchor).toBe(expected.lastIndexOf("1"));
+    expect(view?.state.selection.main.head).toBe(expected.lastIndexOf("1"));
+
+    controller.destroy();
+  });
+
   it("keeps compact nested blockquote content intact when Backspace is pressed at content start", async () => {
     const host = document.createElement("div");
     const source = [">> quote one", ">> quote two"].join("\n");

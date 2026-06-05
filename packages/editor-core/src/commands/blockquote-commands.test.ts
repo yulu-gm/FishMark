@@ -4,7 +4,10 @@ import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { describe, expect, it } from "vitest";
 
-import { runBlockquoteEnter } from "./blockquote-commands";
+import { parseMarkdownDocument } from "@fishmark/markdown-engine";
+
+import { createActiveBlockStateFromMarkdownDocument } from "../active-block";
+import { runBlockquoteBackspace, runBlockquoteEnter } from "./blockquote-commands";
 
 const createHarness = (init: { doc: string; anchor: number; head?: number }) => {
   const state = EditorState.create({
@@ -15,6 +18,14 @@ const createHarness = (init: { doc: string; anchor: number; head?: number }) => 
 
   return {
     view,
+    runBackspace: () =>
+      runBlockquoteBackspace(
+        view,
+        createActiveBlockStateFromMarkdownDocument(parseMarkdownDocument(view.state.doc.toString()), {
+          anchor: view.state.selection.main.anchor,
+          head: view.state.selection.main.head
+        })
+      ),
     runEnter: () => runBlockquoteEnter(view),
     text: () => view.state.doc.toString(),
     selectionHead: () => view.state.selection.main.head,
@@ -70,6 +81,30 @@ describe("runBlockquoteEnter", () => {
     expect(harness.runEnter()).toBe(true);
     expect(harness.text()).toBe(["> 11", "> > 222", "> > > 33333", ""].join("\n"));
     expect(harness.selectionHead()).toBe(harness.text().length);
+
+    harness.destroy();
+  });
+});
+
+describe("runBlockquoteBackspace", () => {
+  it("deletes a quote-internal structural separator from the next quote line start", () => {
+    const source = ["> 11", ">", "> > 1"].join("\n");
+    const harness = createHarness({ doc: source, anchor: source.lastIndexOf("1") });
+
+    expect(harness.runBackspace()).toBe(true);
+    expect(harness.text()).toBe(["> 11", "> > 1"].join("\n"));
+    expect(harness.selectionHead()).toBe(harness.text().lastIndexOf("1"));
+
+    harness.destroy();
+  });
+
+  it("deletes a quote-internal structural separator when Backspace starts from that separator", () => {
+    const source = ["> 11", ">", "> > 1"].join("\n");
+    const harness = createHarness({ doc: source, anchor: source.indexOf("\n>\n") + 2 });
+
+    expect(harness.runBackspace()).toBe(true);
+    expect(harness.text()).toBe(["> 11", "> > 1"].join("\n"));
+    expect(harness.selectionHead()).toBe(harness.text().lastIndexOf("1"));
 
     harness.destroy();
   });

@@ -868,6 +868,40 @@ describe("createFishMarkMarkdownExtensions", () => {
     destroy();
   });
 
+  it("keeps selection out of a quote-internal structural separator", () => {
+    const source = ["> 11", ">", "> > 1"].join("\n");
+    const { view, destroy } = createHarness({ source });
+
+    view.dispatch({
+      selection: {
+        anchor: source.indexOf("\n>\n") + 2,
+        head: source.indexOf("\n>\n") + 2
+      }
+    });
+
+    expect(view.state.selection.main.anchor).toBe(source.indexOf("\n>\n"));
+    expect(view.state.selection.main.head).toBe(source.indexOf("\n>\n"));
+
+    destroy();
+  });
+
+  it("keeps a trailing editable empty quote line selectable", () => {
+    const source = ["> alpha", ">", "> "].join("\n");
+    const { view, destroy } = createHarness({ source });
+
+    view.dispatch({
+      selection: {
+        anchor: source.length,
+        head: source.length
+      }
+    });
+
+    expect(view.state.selection.main.anchor).toBe(source.length);
+    expect(view.state.selection.main.head).toBe(source.length);
+
+    destroy();
+  });
+
   it.each(["input.type", "input.type.compose"])(
     "does not run structural blank normalization for %s transactions",
     (userEvent) => {

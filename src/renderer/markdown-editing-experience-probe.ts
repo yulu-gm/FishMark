@@ -3955,6 +3955,75 @@ async function runBlockquoteBareSeparatorRenderingCase(): Promise<CaseResult> {
   return result;
 }
 
+async function runBlockquoteStructuralSeparatorNavigationCase(): Promise<CaseResult> {
+  const initialContent = ["> 11", ">", "> > 1"].join("\n");
+  const separatorAnchor = initialContent.indexOf("\n>\n") + 2;
+  const separatorPreviousAnchor = initialContent.indexOf("\n>\n");
+  const nextContentAnchor = initialContent.lastIndexOf("1");
+  const expectedContent = ["> 11", "> > 1"].join("\n");
+  const expectedSelection = expectedContent.lastIndexOf("1");
+  const harness = setupHarness(initialContent);
+
+  harness.controller.setSelection(separatorAnchor);
+  await settle();
+
+  const selectionAfterSeparatorAttempt = harness.controller.getSelection();
+  const separatorLineBeforeBackspace = findLineByExactText(harness.root, ">");
+  const separatorLineBeforeBackspaceClasses = separatorLineBeforeBackspace?.className ?? "";
+  const separatorLineIsActive =
+    separatorLineBeforeBackspace?.classList.contains("cm-fm-line-active") === true;
+  const separatorMarker = separatorLineBeforeBackspace?.querySelector<HTMLElement>(".cm-inactive-blockquote-marker") ?? null;
+  const separatorMarkerDisplay = separatorMarker ? getComputedStyle(separatorMarker).display : null;
+
+  harness.controller.setSelection(nextContentAnchor);
+  await settle();
+  const selectionBeforeBackspace = harness.controller.getSelection();
+  const backspaceAccepted = dispatchBackspace(harness.view);
+  await settle();
+
+  const contentAfterBackspace = harness.controller.getContent();
+  const selectionAfterBackspace = harness.controller.getSelection();
+  const separatorLineAfterBackspace = findLineByExactText(harness.root, ">");
+  const pass =
+    selectionAfterSeparatorAttempt.anchor === separatorPreviousAnchor &&
+    selectionAfterSeparatorAttempt.head === separatorPreviousAnchor &&
+    separatorLineBeforeBackspace !== null &&
+    !separatorLineIsActive &&
+    separatorMarkerDisplay === "none" &&
+    selectionBeforeBackspace.anchor === nextContentAnchor &&
+    selectionBeforeBackspace.head === nextContentAnchor &&
+    contentAfterBackspace === expectedContent &&
+    selectionAfterBackspace.anchor === expectedSelection &&
+    selectionAfterBackspace.head === expectedSelection &&
+    separatorLineAfterBackspace === null;
+
+  const result = resultFor({
+    caseId: "blockquote-structural-separator-navigation",
+    details: {
+      backspaceAccepted,
+      contentAfterBackspace,
+      expectedSelection,
+      selectionAfterBackspace,
+      selectionAfterSeparatorAttempt,
+      selectionBeforeBackspace,
+      separatorAnchor,
+      separatorLineAfterBackspaceClass: separatorLineAfterBackspace?.className ?? null,
+      separatorLineBeforeBackspaceClasses,
+      separatorLineIsActive,
+      separatorMarkerDisplay,
+      separatorPreviousAnchor
+    },
+    expectedContent,
+    expectedSelection: { anchor: expectedSelection, head: expectedSelection },
+    grammar: "blockquote",
+    harness,
+    name: "quote-internal structural separator cannot receive caret and Backspace removes it",
+    pass
+  });
+  harness.controller.destroy();
+  return result;
+}
+
 async function runBlockquoteInnerBlocksRenderingAndEnterCase(): Promise<CaseResult> {
   const renderingContent = [
     "> - item",
@@ -4452,6 +4521,7 @@ const namedProbeCases: NamedProbeCase[] = [
   { caseId: "blockquote-marker-commits-after-enter", group: "blockquote", run: runBlockquoteMarkerCommitOnEnterInputCase },
   { caseId: "nested-blockquote-marker-commits-after-enter", group: "blockquote", run: runNestedBlockquoteMarkerCommitOnEnterInputCase },
   { caseId: "blockquote-bare-separator-rendering", group: "blockquote", run: runBlockquoteBareSeparatorRenderingCase },
+  { caseId: "blockquote-structural-separator-navigation", group: "blockquote", run: runBlockquoteStructuralSeparatorNavigationCase },
   { caseId: "blockquote-inner-blocks-rendering-enter", group: "blockquote", run: runBlockquoteInnerBlocksRenderingAndEnterCase },
   { caseId: "deep-ordered-list-repeated-enter-exit", group: "list", run: runDeepOrderedListRepeatedEnterExitCase },
   { caseId: "top-level-list-item-enter-body-upgrade", group: "list", run: runTopLevelListItemEnterBodyUpgradeCase }
@@ -4667,6 +4737,7 @@ export async function runMarkdownEditingExperienceProbe(): Promise<ProbeResult> 
   cases.push(await runBlockquoteMarkerCommitInputCase());
   cases.push(await runNestedBlockquoteMarkerCommitInputCase());
   cases.push(await runBlockquoteBareSeparatorRenderingCase());
+  cases.push(await runBlockquoteStructuralSeparatorNavigationCase());
   cases.push(await runBlockquoteInnerBlocksRenderingAndEnterCase());
 
   cases.push(
