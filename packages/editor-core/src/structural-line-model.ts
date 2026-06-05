@@ -253,7 +253,7 @@ function toStructuralLineSeparator(
   return {
     lineNumber: line?.number ?? 1,
     lineStartOffset: separator.lineStartOffset,
-    lineEndOffset: separator.lineEndOffset,
+    lineEndOffset: line?.to ?? separator.lineEndOffset,
     lineBreakTo: line?.lineBreakTo ?? separator.lineEndOffset,
     previousBlockEnd: separator.previousBlockEnd,
     nextBlockStart: separator.nextBlockStart

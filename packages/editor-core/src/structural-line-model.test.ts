@@ -44,4 +44,19 @@ describe("StructuralLineModel", () => {
       to: "> 1\n>\n".length
     });
   });
+
+  it("normalizes quote separator metadata to physical CRLF line boundaries", () => {
+    const source = ["> 1", ">", "> 222"].join("\r\n");
+    const model = createStructuralLineModel(source, parseMarkdownDocument(source));
+    const separator = model.findSeparatorBeforeLine(source.indexOf("> 222"));
+
+    expect(separator).not.toBeNull();
+    expect(separator?.lineStartOffset).toBe("> 1\r\n".length);
+    expect(separator?.lineEndOffset).toBe("> 1\r\n>".length);
+    expect(separator?.lineBreakTo).toBe("> 1\r\n>\r\n".length);
+    expect(resolveStructuralLineDeleteRange(source, separator!)).toEqual({
+      from: "> 1\r\n".length,
+      to: "> 1\r\n>\r\n".length
+    });
+  });
 });
