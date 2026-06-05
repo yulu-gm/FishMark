@@ -4089,6 +4089,8 @@ describe("createCodeEditorController", () => {
     const host = document.createElement("div");
     const source = ["> 1", ">", "> 222"].join("\n");
     const separatorAnchor = source.indexOf("\n>\n") + 2;
+    // ArrowUp preserves the visible column, so the shorter previous quote line lands at line end.
+    const expectedAnchor = source.indexOf("1") + "1".length;
 
     const controller = createCodeEditorController({
       parent: host,
@@ -4108,8 +4110,9 @@ describe("createCodeEditorController", () => {
       controller.pressArrowUp();
       await flushMicrotasks();
 
+      expect(view?.state.selection.main.anchor).toBe(expectedAnchor);
+      expect(view?.state.selection.main.head).toBe(expectedAnchor);
       expect(view?.state.selection.main.anchor).not.toBe(separatorAnchor);
-      expect(view?.state.selection.main.anchor).toBeLessThan(source.indexOf("\n>\n") + 1);
     } finally {
       controller.destroy();
     }

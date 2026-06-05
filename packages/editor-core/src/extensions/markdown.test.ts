@@ -889,6 +889,8 @@ describe("createFishMarkMarkdownExtensions", () => {
     const source = ["> 1", ">", "> 222"].join("\n");
     const { view, destroy } = createHarness({ source });
     const separatorAnchor = source.indexOf("\n>\n") + 2;
+    // ArrowUp preserves the visible column, so the shorter previous quote line lands at line end.
+    const expectedAnchor = source.indexOf("1") + "1".length;
 
     try {
       view.dispatch({
@@ -908,8 +910,9 @@ describe("createFishMarkMarkdownExtensions", () => {
       );
       await flushMicrotasks();
 
+      expect(view.state.selection.main.anchor).toBe(expectedAnchor);
+      expect(view.state.selection.main.head).toBe(expectedAnchor);
       expect(view.state.selection.main.anchor).not.toBe(separatorAnchor);
-      expect(view.state.selection.main.anchor).toBeLessThan(source.indexOf("\n>\n") + 1);
     } finally {
       destroy();
     }
@@ -939,6 +942,54 @@ describe("createFishMarkMarkdownExtensions", () => {
       await flushMicrotasks();
 
       expect(view.state.selection.main.anchor).toBe(source.indexOf("222"));
+      expect(view.state.selection.main.anchor).not.toBe(separatorAnchor);
+    } finally {
+      destroy();
+    }
+  });
+
+  it("moves vertically across a multi-line quote-internal structural separator", async () => {
+    const source = ["> one", "> two", ">", "> three"].join("\n");
+    const { view, destroy } = createHarness({ source });
+    const separatorAnchor = source.indexOf("\n>\n") + 2;
+    const twoAnchor = source.indexOf("two");
+    const twoLineEndAnchor = twoAnchor + "two".length;
+    const threeAnchor = source.indexOf("three");
+
+    try {
+      view.dispatch({
+        selection: {
+          anchor: twoAnchor,
+          head: twoAnchor
+        }
+      });
+
+      view.contentDOM.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "ArrowDown",
+          code: "ArrowDown",
+          bubbles: true,
+          cancelable: true
+        })
+      );
+      await flushMicrotasks();
+
+      expect(view.state.selection.main.anchor).toBe(threeAnchor);
+      expect(view.state.selection.main.head).toBe(threeAnchor);
+      expect(view.state.selection.main.anchor).not.toBe(separatorAnchor);
+
+      view.contentDOM.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "ArrowUp",
+          code: "ArrowUp",
+          bubbles: true,
+          cancelable: true
+        })
+      );
+      await flushMicrotasks();
+
+      expect(view.state.selection.main.anchor).toBe(twoLineEndAnchor);
+      expect(view.state.selection.main.head).toBe(twoLineEndAnchor);
       expect(view.state.selection.main.anchor).not.toBe(separatorAnchor);
     } finally {
       destroy();

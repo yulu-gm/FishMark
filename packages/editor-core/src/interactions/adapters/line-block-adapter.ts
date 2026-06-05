@@ -25,6 +25,10 @@ import type {
   VerticalNavigationResult
 } from "../types";
 
+type StructuralNavigationContext = VerticalInteractionContext & {
+  getLineModel: () => ReturnType<typeof createStructuralLineModel>;
+};
+
 function isPointerWithinLeftPadding(context: PointerInteractionContext): boolean {
   return (
     context.event.clientX >= context.rect.left &&
@@ -278,8 +282,16 @@ function isSourceBlankLineOutsideBlock(context: VerticalInteractionContext, line
   return isBlankLineText(line.text) && !findBlockForLine(context.document.blocks, lineNumber);
 }
 
-function createLineModel(context: VerticalInteractionContext) {
-  return createStructuralLineModel(context.source, context.document);
+function createStructuralNavigationContext(context: VerticalInteractionContext): StructuralNavigationContext {
+  let lineModel: ReturnType<typeof createStructuralLineModel> | null = null;
+
+  return {
+    ...context,
+    getLineModel: () => {
+      lineModel ??= createStructuralLineModel(context.source, context.document);
+      return lineModel;
+    }
+  };
 }
 
 function findBlockStartingAtOffset(
@@ -297,7 +309,7 @@ function findBlockEndingAtOffset(
 }
 
 function findStructuralSeparatorAtLine(
-  context: VerticalInteractionContext,
+  context: StructuralNavigationContext,
   lineNumber: number
 ): StructuralLineSeparator | null {
   if (lineNumber < 1 || lineNumber > context.view.state.doc.lines) {
@@ -306,19 +318,19 @@ function findStructuralSeparatorAtLine(
 
   const line = context.view.state.doc.line(lineNumber);
 
-  return createLineModel(context).findSeparatorAt(line.from);
+  return context.getLineModel().findSeparatorAt(line.from);
 }
 
-function isStructuralSeparatorLine(context: VerticalInteractionContext, lineNumber: number): boolean {
+function isStructuralSeparatorLine(context: StructuralNavigationContext, lineNumber: number): boolean {
   if (lineNumber < 1 || lineNumber > context.view.state.doc.lines) {
     return false;
   }
 
-  return createLineModel(context).getLineRole(lineNumber) === "structural-separator";
+  return context.getLineModel().getLineRole(lineNumber) === "structural-separator";
 }
 
 function findBlockAboveStructuralSeparator(
-  context: VerticalInteractionContext,
+  context: StructuralNavigationContext,
   lineNumber: number
 ): MarkdownBlock | null {
   const separator = findStructuralSeparatorAtLine(context, lineNumber);
@@ -331,7 +343,7 @@ function findBlockAboveStructuralSeparator(
 }
 
 function findBlockBelowStructuralSeparator(
-  context: VerticalInteractionContext,
+  context: StructuralNavigationContext,
   lineNumber: number
 ): MarkdownBlock | null {
   const separator = findStructuralSeparatorAtLine(context, lineNumber);
@@ -397,13 +409,13 @@ function resolveAnchorBelowStructuralSeparator(
 }
 
 function isVisibleExtraBlankLineImmediatelyAfterSeparator(
-  context: VerticalInteractionContext,
+  context: StructuralNavigationContext,
   lineNumber: number
 ): boolean {
   return isSourceBlankLineOutsideBlock(context, lineNumber) && isStructuralSeparatorLine(context, lineNumber - 1);
 }
 
-function resolveLineAfterStructuralSeparator(context: VerticalInteractionContext, lineNumber: number): number | null {
+function resolveLineAfterStructuralSeparator(context: StructuralNavigationContext, lineNumber: number): number | null {
   const separator = findStructuralSeparatorAtLine(context, lineNumber);
 
   if (!separator) {
@@ -423,7 +435,7 @@ function resolveLineAfterStructuralSeparator(context: VerticalInteractionContext
   return resolveAnchorBelowStructuralSeparator(context, separator);
 }
 
-function resolveLineBeforeStructuralSeparator(context: VerticalInteractionContext, lineNumber: number): number | null {
+function resolveLineBeforeStructuralSeparator(context: StructuralNavigationContext, lineNumber: number): number | null {
   const previousLineNumber = lineNumber - 1;
 
   if (
@@ -460,7 +472,7 @@ function resolveVisibleExtraBlankBeforeStructuralSeparator(
 }
 
 function findTableAboveVisibleLine(
-  context: VerticalInteractionContext,
+  context: StructuralNavigationContext,
   lineNumber: number
 ): TableBlock | null {
   const previousLineNumber = lineNumber - 1;
@@ -475,7 +487,7 @@ function findTableAboveVisibleLine(
   return separatorBlock?.type === "table" ? (separatorBlock as TableBlock) : null;
 }
 
-function resolveCollapsedSeparatorArrowUp(context: VerticalInteractionContext): number | null {
+function resolveCollapsedSeparatorArrowUp(context: StructuralNavigationContext): number | null {
   const selection = context.view.state.selection.main;
 
   if (!selection.empty) {
@@ -525,7 +537,7 @@ function resolveCollapsedSeparatorArrowUp(context: VerticalInteractionContext): 
   return null;
 }
 
-function resolveCollapsedSeparatorArrowDown(context: VerticalInteractionContext): VerticalNavigationResult | number | null {
+function resolveCollapsedSeparatorArrowDown(context: StructuralNavigationContext): VerticalNavigationResult | number | null {
   const selection = context.view.state.selection.main;
 
   if (!selection.empty) {
@@ -603,7 +615,7 @@ function resolveCollapsedSeparatorArrowDown(context: VerticalInteractionContext)
 }
 
 function resolveFirstLineBelowTableArrowDown(
-  context: VerticalInteractionContext
+  context: StructuralNavigationContext
 ): VerticalNavigationResult | null {
   const selection = context.view.state.selection.main;
 
@@ -887,18 +899,22 @@ export const lineBlockAdapter: BlockInteractionAdapter = {
     );
   },
   resolveArrowUp(context) {
+    const structuralContext = createStructuralNavigationContext(context);
+
     return (
-      resolveCollapsedSeparatorArrowUp(context) ??
-      resolveSourceLineArrowUp(context) ??
-      resolveAdjacentBlockArrowUp(context)
+      resolveCollapsedSeparatorArrowUp(structuralContext) ??
+      resolveSourceLineArrowUp(structuralContext) ??
+      resolveAdjacentBlockArrowUp(structuralContext)
     );
   },
   resolveArrowDown(context) {
+    const structuralContext = createStructuralNavigationContext(context);
+
     return (
-      resolveCollapsedSeparatorArrowDown(context) ??
-      resolveFirstLineBelowTableArrowDown(context) ??
-      resolveSourceLineArrowDown(context) ??
-      resolveAdjacentBlockArrowDown(context)
+      resolveCollapsedSeparatorArrowDown(structuralContext) ??
+      resolveFirstLineBelowTableArrowDown(structuralContext) ??
+      resolveSourceLineArrowDown(structuralContext) ??
+      resolveAdjacentBlockArrowDown(structuralContext)
     );
   }
 };
