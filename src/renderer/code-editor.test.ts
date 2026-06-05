@@ -4151,6 +4151,39 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("deletes a bare quote separator on Backspace at the following content start", async () => {
+    const host = document.createElement("div");
+    const source = ["> 11", ">", "> 222"].join("\n");
+    const expected = ["> 11", "> 222"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const view = getEditorView(host);
+    const advancedController = controller as typeof controller & {
+      pressBackspace: () => void;
+      setSelection: (anchor: number, head?: number) => void;
+    };
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    advancedController.setSelection(source.indexOf("222"));
+    await flushMicrotasks();
+    advancedController.pressBackspace();
+    await flushMicrotasks();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(view?.state.selection.main.anchor).toBe(["> 11", "> "].join("\n").length);
+    expect(view?.state.selection.main.head).toBe(["> 11", "> "].join("\n").length);
+
+    controller.destroy();
+  });
+
   it("keeps compact nested blockquote content intact when Backspace is pressed at content start", async () => {
     const host = document.createElement("div");
     const source = [">> quote one", ">> quote two"].join("\n");

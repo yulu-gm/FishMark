@@ -84,9 +84,31 @@ describe("runBlockquoteEnter", () => {
 
     harness.destroy();
   });
+
+  it("exits only one nested quote level from an empty quoted line", () => {
+    const source = ["> 11", "> > 222", "> > >"].join("\n");
+    const harness = createHarness({ doc: source, anchor: source.length });
+
+    expect(harness.runEnter()).toBe(true);
+    expect(harness.text()).toBe(["> 11", "> > 222", "> > "].join("\n"));
+    expect(harness.selectionHead()).toBe(harness.text().length);
+
+    harness.destroy();
+  });
 });
 
 describe("runBlockquoteBackspace", () => {
+  it("deletes the quote structural separator before moving the caret at a quoted content start", () => {
+    const source = ["> 11", ">", "> 222"].join("\n");
+    const harness = createHarness({ doc: source, anchor: source.indexOf("222") });
+
+    expect(harness.runBackspace()).toBe(true);
+    expect(harness.text()).toBe(["> 11", "> 222"].join("\n"));
+    expect(harness.selectionHead()).toBe(["> 11", "> "].join("\n").length);
+
+    harness.destroy();
+  });
+
   it("deletes a quote-internal structural separator from the next quote line start", () => {
     const source = ["> 11", ">", "> > 1"].join("\n");
     const harness = createHarness({ doc: source, anchor: source.lastIndexOf("1") });
