@@ -134,13 +134,26 @@ function makeManifestThemePackage(
 
 function getCssRule(stylesheet: string, selector: string): string {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = stylesheet.match(new RegExp(`${escapedSelector}\\s*\\{([\\s\\S]*?)\\n\\}`, "m"));
+  const directMatch = stylesheet.match(new RegExp(`${escapedSelector}\\s*\\{([\\s\\S]*?)\\n\\}`, "m"));
 
-  if (!match || match[0] === undefined) {
-    throw new Error(`Missing stylesheet rule for selector: ${selector}`);
+  if (directMatch && directMatch[0] !== undefined) {
+    return directMatch[0];
   }
 
-  return match[0];
+  const rulePattern = /(?:^|\n)([^{}]+?)\s*\{([\s\S]*?)\n\}/gm;
+  let match: RegExpExecArray | null;
+
+  while ((match = rulePattern.exec(stylesheet)) !== null) {
+    const selectorList = (match[1] ?? "")
+      .split(",")
+      .map((ruleSelector) => ruleSelector.trim());
+
+    if (selectorList.includes(selector)) {
+      return (match[0] ?? "").trimStart();
+    }
+  }
+
+  throw new Error(`Missing stylesheet rule for selector: ${selector}`);
 }
 
 function cloneWorkspaceSnapshot(snapshot: WorkspaceWindowSnapshot): WorkspaceWindowSnapshot {
@@ -6140,6 +6153,10 @@ describe("App autosave", () => {
       markdownRenderStylesheet,
       ".document-editor .cm-line.cm-active-list-continuation"
     );
+    const blockquoteListRule = getCssRule(
+      markdownRenderStylesheet,
+      ".document-editor .cm-line.cm-inactive-blockquote.cm-inactive-list"
+    );
     const orderedListRule = getCssRule(
       markdownRenderStylesheet,
       ".document-editor .cm-line.cm-inactive-list-ordered"
@@ -6262,9 +6279,9 @@ describe("App autosave", () => {
     expect(activeListContinuationRule).toContain("overflow-wrap: anywhere;");
     expect(activeListContinuationRule).not.toContain("text-indent:");
     expect(markdownRenderStylesheet).toContain(".document-editor .cm-line.cm-inactive-blockquote.cm-inactive-list,");
-    expect(markdownRenderStylesheet).toContain(
-      "var(--fishmark-blockquote-padding-inline) +\n    var(--fishmark-blockquote-depth-offset)"
-    );
+    expect(blockquoteListRule).toContain("--fishmark-list-container-offset: calc(");
+    expect(blockquoteListRule).toContain("var(--fishmark-blockquote-padding-inline) +");
+    expect(blockquoteListRule).toContain("var(--fishmark-blockquote-depth-offset)");
     expect(orderedListRule).toContain("--fishmark-list-content-offset: var(--fishmark-list-ordered-content-offset);");
     expect(taskListRule).toContain("--fishmark-list-content-offset: var(--fishmark-list-task-content-offset);");
     expect(listSourcePrefixRule).toContain("font-size: 0;");
