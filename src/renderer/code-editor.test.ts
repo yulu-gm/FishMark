@@ -3309,6 +3309,41 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("promotes an empty ordered quote list child on Enter and keeps parent numbering", () => {
+    const host = document.createElement("div");
+    const source = [
+      "> 1. 111",
+      "> 2. 333",
+      ">    1. 222",
+      ">       1. 1.1",
+      ">       2."
+    ].join("\n");
+    const expected = [
+      "> 1. 111",
+      "> 2. 333",
+      ">    1. 222",
+      ">    2."
+    ].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+
+    advancedController.setSelection(source.length);
+    advancedController.pressEnter();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(getEditorView(host)?.state.selection.main.anchor).toBe(expected.length);
+
+    controller.destroy();
+  });
+
   it("exits an empty top-level quote list item to quote body on Enter", () => {
     const host = document.createElement("div");
     const source = ["> - parent", "> - "].join("\n");

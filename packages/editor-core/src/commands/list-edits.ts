@@ -55,6 +55,13 @@ type OrderedListItemContext = ListItemContext & {
   scope: OrderedListScope;
 };
 
+type BareListMarkerLine = {
+  marker: string;
+  indent: number;
+  ordered: boolean;
+  delimiter: "." | ")" | null;
+};
+
 export function computeInsertOrderedListItemBelow(ctx: SemanticContext): ListEdit | null {
   const current = findOrderedListItemContext(ctx);
 
@@ -140,6 +147,11 @@ export function computeListItemEnter(
 ): ListEdit | null {
   if (ctx.selection.empty === false) {
     return null;
+  }
+
+  const bareMarkerEdit = computeBareEmptyListItemEnter(ctx);
+  if (bareMarkerEdit) {
+    return bareMarkerEdit;
   }
 
   const rootList = readActiveListRoot(ctx);
@@ -850,14 +862,30 @@ function finalizeListEdit(
   tentativeCursor: number,
   userEvent?: string
 ): ListEdit {
+  return finalizeListEditRange(
+    rootList.startOffset,
+    originalSource,
+    tentativeSource,
+    tentativeCursor,
+    userEvent
+  );
+}
+
+function finalizeListEditRange(
+  sourceStartOffset: number,
+  originalSource: string,
+  tentativeSource: string,
+  tentativeCursor: number,
+  userEvent?: string
+): ListEdit {
   const normalization = normalizeOrderedListBlock(tentativeSource);
   const selectionOffset = mapBlockOffsetThroughChanges(tentativeCursor, normalization.changes);
 
   return {
-    changes: createMinimalTextChange(originalSource, normalization.source, rootList.startOffset),
+    changes: createMinimalTextChange(originalSource, normalization.source, sourceStartOffset),
     selection: {
-      anchor: rootList.startOffset + selectionOffset,
-      head: rootList.startOffset + selectionOffset
+      anchor: sourceStartOffset + selectionOffset,
+      head: sourceStartOffset + selectionOffset
     },
     userEvent
   };
@@ -1114,6 +1142,218 @@ function findListRootInBlocks(
   }
 
   return null;
+}
+
+function computeBareEmptyListItemEnter(ctx: SemanticContext): ListEdit | null {
+  if (ctx.selection.empty === false) {
+    return null;
+  }
+
+  const line = ctx.state.doc.lineAt(ctx.selection.from);
+  if (ctx.selection.from !== line.to) {
+    return null;
+  }
+
+  const lineText = ctx.source.slice(line.from, line.to);
+  const bareMarker = parseBareListMarkerLine(lineText);
+  if (!bareMarker) {
+    return null;
+  }
+
+  const rootList = readActiveListRoot(ctx) ?? readPrecedingActiveListRoot(ctx, line.from);
+  if (!rootList || !listKindMatchesBareMarker(rootList, bareMarker)) {
+    return null;
+  }
+
+  const previousContext = findListItemContext(rootList, rootList.endOffset, rootList, null, null);
+  if (!previousContext || !listKindMatchesBareMarker(previousContext.scope, bareMarker)) {
+    return null;
+  }
+
+  const deleteTo = line.to < ctx.source.length && ctx.source[line.to] === "\n" ? line.to + 1 : line.to;
+  const previousScopeIndent = readListScopeIndent(previousContext.scope);
+
+  if (
+    previousContext.parentItem &&
+    previousContext.parentScope &&
+    previousScopeIndent === bareMarker.indent
+  ) {
+    const replacementPrefix = buildBareParentEmptyListItemPrefix(
+      ctx,
+      previousContext.parentScope,
+      previousContext.parentItem
+    );
+
+    if (!replacementPrefix) {
+      return null;
+    }
+
+    return finalizeBareListMarkerEnter(
+      ctx,
+      rootList.startOffset,
+      deleteTo,
+      previousContext.scope.startOffset,
+      deleteTo,
+      replacementPrefix
+    );
+  }
+
+  if (previousScopeIndent !== bareMarker.indent) {
+    return null;
+  }
+
+  const replacementPrefix = buildBareTopLevelListExitPrefix(lineText);
+  return finalizeBareListMarkerEnter(
+    ctx,
+    rootList.startOffset,
+    deleteTo,
+    line.from,
+    deleteTo,
+    replacementPrefix,
+    "input.list-exit"
+  );
+}
+
+function parseBareListMarkerLine(lineText: string): BareListMarkerLine | null {
+  const content = readListContentLine(lineText);
+  const match = /^([ \t]*)([*+-]|\d+[.)])$/u.exec(content);
+
+  if (!match) {
+    return null;
+  }
+
+  const marker = match[2] ?? "-";
+  const orderedMatch = /^(\d+)([.)])$/u.exec(marker);
+
+  return {
+    marker,
+    indent: (match[1] ?? "").length,
+    ordered: orderedMatch !== null,
+    delimiter: orderedMatch ? (orderedMatch[2] as "." | ")") : null
+  };
+}
+
+function readPrecedingActiveListRoot(ctx: SemanticContext, lineStartOffset: number): ListBlock | null {
+  const activeBlock = ctx.activeState.activeBlock;
+
+  if (activeBlock?.type === "blockquote" && activeBlock.innerBlocks) {
+    return findPrecedingListRootInBlocks(activeBlock.innerBlocks, lineStartOffset, ctx.source);
+  }
+
+  const activeRoot = activeBlock?.type === "list"
+    ? activeBlock
+    : findPrecedingListRootInBlocks(ctx.activeState.blockMap.blocks, lineStartOffset, ctx.source);
+
+  if (
+    activeRoot?.type === "list" &&
+    activeRoot.endOffset <= lineStartOffset &&
+    sourceBetweenBlocksIsStructuralWhitespace(ctx.source, activeRoot.endOffset, lineStartOffset)
+  ) {
+    return activeRoot;
+  }
+
+  return null;
+}
+
+function findPrecedingListRootInBlocks(
+  blocks: readonly MarkdownBlock[],
+  lineStartOffset: number,
+  source: string
+): ListBlock | null {
+  let nearest: ListBlock | null = null;
+
+  for (const block of blocks) {
+    if (block.type === "blockquote" && block.innerBlocks) {
+      const inner = findPrecedingListRootInBlocks(block.innerBlocks, lineStartOffset, source);
+      if (inner && (!nearest || inner.endOffset > nearest.endOffset)) {
+        nearest = inner;
+      }
+      continue;
+    }
+
+    if (
+      block.type === "list" &&
+      block.endOffset <= lineStartOffset &&
+      sourceBetweenBlocksIsStructuralWhitespace(source, block.endOffset, lineStartOffset) &&
+      (!nearest || block.endOffset > nearest.endOffset)
+    ) {
+      nearest = block;
+    }
+  }
+
+  return nearest;
+}
+
+function sourceBetweenBlocksIsStructuralWhitespace(source: string, from: number, to: number): boolean {
+  return /^[\s>]*$/u.test(source.slice(from, to));
+}
+
+function listKindMatchesBareMarker(list: ListBlock, bareMarker: BareListMarkerLine): boolean {
+  if (list.ordered !== bareMarker.ordered) {
+    return false;
+  }
+
+  if (!list.ordered || !bareMarker.ordered) {
+    return true;
+  }
+
+  return list.delimiter === bareMarker.delimiter;
+}
+
+function readListScopeIndent(scope: ListBlock): number | null {
+  return scope.items[0]?.indent ?? null;
+}
+
+function buildBareParentEmptyListItemPrefix(
+  ctx: SemanticContext,
+  scope: ListBlock,
+  parentItem: ListItemBlock
+): string | null {
+  if (scope.ordered) {
+    const parentItemIndex = scope.items.findIndex((item) => item === parentItem);
+
+    if (parentItemIndex === -1) {
+      return null;
+    }
+
+    return `${readListItemMarkerPrefix(ctx, parentItem)}${scope.startOrdinal + parentItemIndex + 1}${scope.delimiter}`;
+  }
+
+  return `${readListItemMarkerPrefix(ctx, parentItem)}${parentItem.marker}${parentItem.task ? " [ ]" : ""}`;
+}
+
+function buildBareTopLevelListExitPrefix(lineText: string): string {
+  const parsedQuote = parseBlockquoteLine(lineText);
+
+  if (!parsedQuote) {
+    return "";
+  }
+
+  const separatorPrefix =
+    parsedQuote.quoteDepth <= 1 ? parsedQuote.sourcePrefix.trimEnd() : parsedQuote.sourcePrefix;
+
+  return `${separatorPrefix}\n${parsedQuote.sourcePrefix}`;
+}
+
+function finalizeBareListMarkerEnter(
+  ctx: SemanticContext,
+  rangeFrom: number,
+  rangeTo: number,
+  replaceFrom: number,
+  replaceTo: number,
+  replacement: string,
+  userEvent?: string
+): ListEdit {
+  const originalSource = ctx.source.slice(rangeFrom, rangeTo);
+  const tentativeSource = replaceRange(
+    originalSource,
+    replaceFrom - rangeFrom,
+    replaceTo - rangeFrom,
+    replacement
+  );
+  const tentativeCursor = replaceFrom - rangeFrom + replacement.length;
+
+  return finalizeListEditRange(rangeFrom, originalSource, tentativeSource, tentativeCursor, userEvent);
 }
 
 function offsetIsInsideBlock(block: { startOffset: number; endOffset: number }, offset: number): boolean {

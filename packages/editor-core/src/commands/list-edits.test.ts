@@ -283,6 +283,27 @@ describe("list-edits", () => {
     });
   });
 
+  it("promotes an empty ordered child item inside a blockquote and keeps parent numbering", () => {
+    const doc = [
+      "> 1. 111",
+      "> 2. 333",
+      ">    1. 222",
+      ">       1. 1.1",
+      ">       2."
+    ].join("\n");
+    const context = buildContext(doc, doc.length);
+    const result = computeListItemEnter(context);
+    const expected = [
+      "> 1. 111",
+      "> 2. 333",
+      ">    1. 222",
+      ">    2."
+    ].join("\n");
+
+    expect(applyEdit(doc, result)).toBe(expected);
+    expect(result?.selection).toEqual({ anchor: expected.length, head: expected.length });
+  });
+
   it("exits an empty top-level quote list item to quote body text", () => {
     const doc = ["> - parent", "> - "].join("\n");
     const context = buildContext(doc, doc.length);
@@ -294,6 +315,16 @@ describe("list-edits", () => {
       anchor: expected.length,
       head: expected.length
     });
+  });
+
+  it("exits a top-level empty ordered quote list item into quoted body text with a structural separator", () => {
+    const doc = ["> 1. 111", "> 2."].join("\n");
+    const context = buildContext(doc, doc.length);
+    const result = computeListItemEnter(context);
+    const expected = ["> 1. 111", ">", "> "].join("\n");
+
+    expect(applyEdit(doc, result)).toBe(expected);
+    expect(result?.selection).toEqual({ anchor: expected.length, head: expected.length });
   });
 
   it("renumbers ordered quote list siblings when Enter inserts a same-level item", () => {
@@ -623,4 +654,21 @@ describe("list-edits", () => {
       head: expected.indexOf("内容2")
     });
   });
+
+  it.each([
+    ["unordered", ["> - parent", ">   - "].join("\n"), ["> - parent", ">   "].join("\n")],
+    ["ordered", ["> 1. parent", ">    1. "].join("\n"), ["> 1. parent", ">    "].join("\n")]
+  ])(
+    "removes a quoted empty nested %s list marker before indentation backspace",
+    (_kind, doc, expected) => {
+      const context = buildContext(doc, doc.length);
+      const result = computeBackspaceEmptyListMarker(context);
+
+      expect(applyEdit(doc, result)).toBe(expected);
+      expect(result?.selection).toEqual({
+        anchor: expected.length,
+        head: expected.length
+      });
+    }
+  );
 });
