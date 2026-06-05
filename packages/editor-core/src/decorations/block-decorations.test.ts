@@ -1761,7 +1761,7 @@ describe("createBlockDecorations", () => {
     ]);
   });
 
-  it("renders a bare blockquote marker as a focused quote editing anchor", () => {
+  it("keeps a bare blockquote marker visually unparsed while it is focused", () => {
     const source = ">";
     const blockMap = parseMarkdownDocument(source);
     const activeState = createActiveBlockStateFromBlockMap(blockMap, {
@@ -1776,14 +1776,7 @@ describe("createBlockDecorations", () => {
     });
 
     expect(result.signature).toContain(":content-edit");
-    expect(collectDecorations(source, result.decorationSet)).toEqual([
-      {
-        from: 0,
-        to: 0,
-        className: "cm-inactive-blockquote cm-inactive-blockquote-depth-1 cm-inactive-blockquote-separator cm-inactive-blockquote-start cm-inactive-blockquote-end",
-        text: ""
-      }
-    ]);
+    expect(collectDecorations(source, result.decorationSet)).toEqual([]);
   });
 
   it("hides a marker and trailing space while the blockquote is focused", () => {
@@ -1862,13 +1855,13 @@ describe("createBlockDecorations", () => {
     const ranges = collectDecorations(source, result.decorationSet);
 
     expectExactRangeClasses(ranges, 0, 0, [
-      "cm-inactive-blockquote cm-inactive-blockquote-depth-2 cm-inactive-blockquote-separator cm-inactive-blockquote-start cm-inactive-blockquote-end"
+      "cm-inactive-blockquote cm-inactive-blockquote-depth-1 cm-inactive-blockquote-start cm-inactive-blockquote-end"
     ]);
     expectExactRangeClasses(ranges, 0, 2, ["cm-active-blockquote-marker"]);
     expectExactRangeClasses(ranges, 2, 3, []);
   });
 
-  it("renders a bare active quote marker as an editable anchor until content is typed", () => {
+  it("leaves a top-level bare active quote marker as plain editable text until content is typed", () => {
     const source = ">";
     const blockMap = parseMarkdownDocument(source);
     const activeState = createActiveBlockStateFromBlockMap(blockMap, {
@@ -1883,9 +1876,7 @@ describe("createBlockDecorations", () => {
     });
     const ranges = collectDecorations(source, result.decorationSet);
 
-    expectExactRangeClasses(ranges, 0, 0, [
-      "cm-inactive-blockquote cm-inactive-blockquote-depth-1 cm-inactive-blockquote-separator cm-inactive-blockquote-start cm-inactive-blockquote-end"
-    ]);
+    expect(ranges).toEqual([]);
     expectExactRangeClasses(ranges, 0, 1, []);
   });
 

@@ -3445,8 +3445,8 @@ async function runBlockquoteMarkerCommitInputCase(): Promise<CaseResult> {
     selectionAfterMarker.anchor === 1 &&
     selectionAfterMarker.head === 1 &&
     lineAfterMarker !== null &&
-    /\bcm-inactive-blockquote\b/u.test(lineAfterMarkerClasses) &&
-    /\bcm-inactive-blockquote-separator\b/u.test(lineAfterMarkerClasses) &&
+    !/\bcm-inactive-blockquote\b/u.test(lineAfterMarkerClasses) &&
+    !/\bcm-inactive-blockquote-separator\b/u.test(lineAfterMarkerClasses) &&
     draftActiveMarker === null &&
     draftHiddenMarker === null &&
     draftMarkerRect !== null &&
@@ -3502,7 +3502,79 @@ async function runBlockquoteMarkerCommitInputCase(): Promise<CaseResult> {
     expectedSelection: { anchor: expectedContent.length, head: expectedContent.length },
     grammar: "blockquote",
     harness,
-    name: "typing text after greater-than commits a blockquote without marker padding",
+    name: "typing text after a plain greater-than commits a blockquote without marker padding",
+    pass
+  });
+  harness.controller.destroy();
+  return result;
+}
+
+async function runBlockquoteMarkerCommitOnSelectionMoveCase(): Promise<CaseResult> {
+  const initialContent = [">", "", "Paragraph"].join("\n");
+  const harness = setupHarness(initialContent);
+  harness.controller.setSelection(1);
+  await settle();
+
+  const activeLine = findLineByExactText(harness.root, ">");
+  const activeLineClasses = activeLine?.className ?? "";
+  const activeMarker = activeLine?.querySelector(".cm-active-blockquote-marker") ?? null;
+  const activeHiddenMarker = activeLine?.querySelector(".cm-inactive-blockquote-marker") ?? null;
+  const activeVisibleMarkerRect = activeLine ? findTextRect(activeLine, ">") : null;
+  const activeCaretRect = harness.view.coordsAtPos(1);
+  const activeCaretHasGeometry =
+    activeCaretRect !== null &&
+    Number.isFinite(activeCaretRect.top) &&
+    Number.isFinite(activeCaretRect.bottom) &&
+    activeCaretRect.bottom > activeCaretRect.top;
+
+  const paragraphStart = initialContent.indexOf("Paragraph");
+  harness.controller.setSelection(paragraphStart);
+  await settle();
+
+  const inactiveLine = findLineByExactText(harness.root, ">");
+  const inactiveLineClasses = inactiveLine?.className ?? "";
+  const inactiveHiddenMarker = inactiveLine?.querySelector<HTMLElement>(".cm-inactive-blockquote-marker") ?? null;
+  const inactiveActiveMarker = inactiveLine?.querySelector(".cm-active-blockquote-marker") ?? null;
+  const inactiveVisibleMarkerRect = inactiveLine ? findTextRect(inactiveLine, ">") : null;
+  const inactiveMarkerDisplay = inactiveHiddenMarker ? getComputedStyle(inactiveHiddenMarker).display : null;
+  const pass =
+    harness.controller.getContent() === initialContent &&
+    activeLine !== null &&
+    !/\bcm-inactive-blockquote\b/u.test(activeLineClasses) &&
+    activeMarker === null &&
+    activeHiddenMarker === null &&
+    activeVisibleMarkerRect !== null &&
+    activeCaretHasGeometry &&
+    inactiveLine !== null &&
+    /\bcm-inactive-blockquote\b/u.test(inactiveLineClasses) &&
+    /\bcm-inactive-blockquote-separator\b/u.test(inactiveLineClasses) &&
+    inactiveHiddenMarker?.textContent === ">" &&
+    inactiveActiveMarker === null &&
+    inactiveMarkerDisplay === "none" &&
+    inactiveVisibleMarkerRect === null;
+
+  const result = resultFor({
+    caseId: "blockquote-marker-commits-after-selection-move",
+    details: {
+      activeCaretBottom: activeCaretRect?.bottom ?? null,
+      activeCaretHasGeometry,
+      activeCaretTop: activeCaretRect?.top ?? null,
+      activeHiddenMarker: activeHiddenMarker?.textContent ?? null,
+      activeLineClasses,
+      activeMarker: activeMarker?.textContent ?? null,
+      activeVisibleMarkerMeasured: activeVisibleMarkerRect !== null,
+      inactiveActiveMarker: inactiveActiveMarker?.textContent ?? null,
+      inactiveHiddenMarker: inactiveHiddenMarker?.textContent ?? null,
+      inactiveLineClasses,
+      inactiveMarkerDisplay,
+      inactiveVisibleMarkerMeasured: inactiveVisibleMarkerRect !== null,
+      paragraphStart
+    },
+    expectedContent: initialContent,
+    expectedSelection: { anchor: paragraphStart, head: paragraphStart },
+    grammar: "blockquote",
+    harness,
+    name: "moving the cursor away commits a plain greater-than as an inactive blockquote row",
     pass
   });
   harness.controller.destroy();
@@ -3522,6 +3594,7 @@ async function runNestedBlockquoteMarkerCommitInputCase(): Promise<CaseResult> {
   const lineAfterMarker = findLineByExactText(harness.root, "> >");
   const lineAfterMarkerClasses = lineAfterMarker?.className ?? "";
   const activeMarkerAfterMarker = lineAfterMarker?.querySelector(".cm-active-blockquote-marker") ?? null;
+  const activeMarkerAfterMarkerText = activeMarkerAfterMarker?.textContent ?? null;
   const paddingAnchorAfterMarker =
     lineAfterMarker?.querySelector(".cm-active-blockquote-padding-anchor") ?? null;
   const visibleNestedMarkerRect = lineAfterMarker ? findTextRect(lineAfterMarker, ">") : null;
@@ -3562,10 +3635,11 @@ async function runNestedBlockquoteMarkerCommitInputCase(): Promise<CaseResult> {
     selectionAfterMarker.anchor === 3 &&
     selectionAfterMarker.head === 3 &&
     lineAfterMarker !== null &&
-    /\bcm-inactive-blockquote-depth-2\b/u.test(lineAfterMarkerClasses) &&
-    /\bcm-inactive-blockquote-separator\b/u.test(lineAfterMarkerClasses) &&
+    /\bcm-inactive-blockquote-depth-1\b/u.test(lineAfterMarkerClasses) &&
+    !/\bcm-inactive-blockquote-depth-2\b/u.test(lineAfterMarkerClasses) &&
+    !/\bcm-inactive-blockquote-separator\b/u.test(lineAfterMarkerClasses) &&
     activeMarkerAfterMarker !== null &&
-    (activeMarkerAfterMarker.textContent === "> " || activeMarkerAfterMarker.textContent === "> >") &&
+    activeMarkerAfterMarkerText === "> " &&
     paddingAnchorAfterMarker === null &&
     visibleNestedMarkerRect !== null &&
     caretAfterMarkerHasGeometry &&
@@ -3589,7 +3663,7 @@ async function runNestedBlockquoteMarkerCommitInputCase(): Promise<CaseResult> {
   const result = resultFor({
     caseId: "nested-blockquote-marker-commits-after-text",
     details: {
-      activeMarkerAfterMarker: activeMarkerAfterMarker?.textContent ?? null,
+      activeMarkerAfterMarker: activeMarkerAfterMarkerText,
       activeMarkerAfterText: activeMarkerAfterText?.textContent ?? null,
       activeMarkerAfterTextColor: activeMarkerAfterTextStyle?.color ?? null,
       activeMarkerAfterTextInvisible,
@@ -4373,6 +4447,7 @@ const namedProbeCases: NamedProbeCase[] = [
   { caseId: "structural-blank-arrow-down", group: "structural-blank", run: runStructuralBlankArrowDownCase },
   { caseId: "blockquote-raw-prefix-hidden", group: "blockquote", run: runBlockquoteRawPrefixCase },
   { caseId: "blockquote-marker-commits-after-text", group: "blockquote", run: runBlockquoteMarkerCommitInputCase },
+  { caseId: "blockquote-marker-commits-after-selection-move", group: "blockquote", run: runBlockquoteMarkerCommitOnSelectionMoveCase },
   { caseId: "nested-blockquote-marker-commits-after-text", group: "blockquote", run: runNestedBlockquoteMarkerCommitInputCase },
   { caseId: "blockquote-marker-commits-after-enter", group: "blockquote", run: runBlockquoteMarkerCommitOnEnterInputCase },
   { caseId: "nested-blockquote-marker-commits-after-enter", group: "blockquote", run: runNestedBlockquoteMarkerCommitOnEnterInputCase },

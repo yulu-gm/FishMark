@@ -725,10 +725,25 @@ function appendBlockquoteDecorations(
         return;
       }
 
-      const isSeparatorLine = isBareBlockquoteSeparatorLine(line, line.contentEndOffset);
+      const draftMarker = activeLineStart === line.startOffset
+        ? resolveActiveDraftBlockquoteMarker({
+            lineStartOffset: line.startOffset,
+            markerEndOffset: line.markerEnd,
+            contentStartOffset: line.contentStartOffset,
+            contentEndOffset: line.contentEndOffset,
+            markers: line.markers
+          }, context.activeBlockState.selection)
+        : null;
+
+      if (draftMarker?.quoteDepth === 0) {
+        return;
+      }
+
+      const quoteDepth = draftMarker?.quoteDepth ?? line.quoteDepth;
+      const isSeparatorLine = draftMarker === null && isBareBlockquoteSeparatorLine(line, line.contentEndOffset);
       const lineClasses = [
         "cm-inactive-blockquote",
-        createInactiveBlockquoteDepthClass(line.quoteDepth)
+        createInactiveBlockquoteDepthClass(quoteDepth)
       ];
 
       if (isSeparatorLine) {
@@ -752,14 +767,20 @@ function appendBlockquoteDecorations(
       );
 
       if (activeLineStart === line.startOffset) {
-        appendActiveBlockquoteSourcePrefixDecorations(
-          line.startOffset,
-          line.markerEnd,
-          line.contentStartOffset,
-          line.contentEndOffset,
-          line.markers,
-          ranges
-        );
+        if (draftMarker) {
+          appendActiveDraftBlockquoteSourcePrefixDecorations(
+            line.startOffset,
+            draftMarker,
+            ranges
+          );
+        } else {
+          appendActiveBlockquoteSourcePrefixDecorations(
+            line.startOffset,
+            line.markerEnd,
+            line.contentStartOffset,
+            ranges
+          );
+        }
       } else if (line.contentStartOffset > line.startOffset) {
         ranges.push(
           Decoration.mark({
@@ -805,13 +826,29 @@ function appendBlockquoteDecorations(
       continue;
     }
 
-    const isSeparatorLine = isBareBlockquoteSeparatorLine(
+    const contentEndOffset = trimTrailingCarriageReturn(source, line.lineStart, line.lineEnd);
+    const draftMarker = activeLineStart === line.lineStart
+      ? resolveActiveDraftBlockquoteMarker({
+          lineStartOffset: line.lineStart,
+          markerEndOffset: line.markerEnd,
+          contentStartOffset: line.contentStartOffset,
+          contentEndOffset,
+          markers: line.markers
+        }, context.activeBlockState.selection)
+      : null;
+
+    if (draftMarker?.quoteDepth === 0) {
+      continue;
+    }
+
+    const quoteDepth = draftMarker?.quoteDepth ?? line.quoteDepth;
+    const isSeparatorLine = draftMarker === null && isBareBlockquoteSeparatorLine(
       line,
-      trimTrailingCarriageReturn(source, line.lineStart, line.lineEnd)
+      contentEndOffset
     );
     const lineClasses = [
       "cm-inactive-blockquote",
-      createInactiveBlockquoteDepthClass(line.quoteDepth)
+      createInactiveBlockquoteDepthClass(quoteDepth)
     ];
 
     if (isSeparatorLine) {
@@ -835,14 +872,20 @@ function appendBlockquoteDecorations(
     );
 
     if (activeLineStart === line.lineStart) {
-      appendActiveBlockquoteSourcePrefixDecorations(
-        line.lineStart,
-        line.markerEnd,
-        line.contentStartOffset,
-        trimTrailingCarriageReturn(source, line.lineStart, line.lineEnd),
-        line.markers,
-        ranges
-      );
+      if (draftMarker) {
+        appendActiveDraftBlockquoteSourcePrefixDecorations(
+          line.lineStart,
+          draftMarker,
+          ranges
+        );
+      } else {
+        appendActiveBlockquoteSourcePrefixDecorations(
+          line.lineStart,
+          line.markerEnd,
+          line.contentStartOffset,
+          ranges
+        );
+      }
     } else if (line.contentStartOffset > line.lineStart) {
       ranges.push(
         Decoration.mark({
@@ -859,28 +902,8 @@ function appendActiveBlockquoteSourcePrefixDecorations(
   lineStartOffset: number,
   markerEndOffset: number,
   contentStartOffset: number,
-  contentEndOffset: number,
-  markers: readonly BlockquoteMarker[],
   ranges: Range<Decoration>[]
 ): void {
-  const lastMarker = markers.at(-1);
-  if (
-    lastMarker &&
-    markerEndOffset === contentStartOffset &&
-    contentEndOffset === contentStartOffset
-  ) {
-    if (lastMarker.markerStart > lineStartOffset) {
-      ranges.push(
-        Decoration.mark({
-          attributes: {
-            class: "cm-active-blockquote-marker"
-          }
-        }).range(lineStartOffset, lastMarker.markerStart)
-      );
-    }
-    return;
-  }
-
   if (markerEndOffset > lineStartOffset) {
     ranges.push(
       Decoration.mark({
@@ -900,6 +923,59 @@ function appendActiveBlockquoteSourcePrefixDecorations(
       }).range(markerEndOffset, contentStartOffset)
     );
   }
+}
+
+type DraftBlockquoteMarker = {
+  hiddenPrefixEndOffset: number;
+  quoteDepth: number;
+};
+
+function resolveActiveDraftBlockquoteMarker(
+  line: {
+    lineStartOffset: number;
+    markerEndOffset: number;
+    contentStartOffset: number;
+    contentEndOffset: number;
+    markers: readonly BlockquoteMarker[];
+  },
+  selection: ActiveBlockState["selection"]
+): DraftBlockquoteMarker | null {
+  if (
+    selection.anchor !== selection.head ||
+    selection.head !== line.contentEndOffset ||
+    line.markerEndOffset !== line.contentStartOffset ||
+    line.contentEndOffset !== line.contentStartOffset
+  ) {
+    return null;
+  }
+
+  const lastMarker = line.markers.at(-1);
+  if (!lastMarker || lastMarker.markerEnd !== line.markerEndOffset) {
+    return null;
+  }
+
+  return {
+    hiddenPrefixEndOffset: lastMarker.markerStart,
+    quoteDepth: Math.max(0, line.markers.length - 1)
+  };
+}
+
+function appendActiveDraftBlockquoteSourcePrefixDecorations(
+  lineStartOffset: number,
+  draftMarker: DraftBlockquoteMarker,
+  ranges: Range<Decoration>[]
+): void {
+  if (draftMarker.hiddenPrefixEndOffset <= lineStartOffset) {
+    return;
+  }
+
+  ranges.push(
+    Decoration.mark({
+      attributes: {
+        class: "cm-active-blockquote-marker"
+      }
+    }).range(lineStartOffset, draftMarker.hiddenPrefixEndOffset)
+  );
 }
 
 function appendBlockquoteInnerBlockDecorations(

@@ -3,7 +3,8 @@
 ## Changed
 
 - Updated blockquote marker parsing so `>`, `>text`, `> >`, and `> >text` are valid blockquote prefixes without requiring marker padding.
-- Kept active empty unpadded marker rows editable with a visible caret anchor, while committed or inactive rows hide the quote source prefix.
+- Kept active empty unpadded marker rows visually unparsed until commit: top-level `>` stays plain source text, and `> >` inside an existing quote stays at the parent quote depth with the final `>` visible.
+- Committed draft markers when text is typed after them, Enter is pressed after them, or selection leaves the line; committed or inactive rows hide the quote source prefix.
 - Synced editor decorations, HTML export rendering, editing-experience probes, stylesheet contract tests, and the markdown text rendering standard.
 
 ## Files
@@ -24,6 +25,7 @@
 - `npm.cmd run test -- packages/editor-core/src/commands/line-parsers.test.ts packages/markdown-engine/src/parse-block-map.test.ts packages/editor-core/src/active-block.test.ts packages/editor-core/src/decorations/block-decorations.test.ts packages/editor-core/src/commands/markdown-commands.test.ts packages/editor-core/src/commands/blockquote-commands.test.ts src/renderer/code-editor.test.ts`
 - `npm.cmd run test -- src/renderer/export-html.test.ts src/shared/markdown-text-rendering-standard.test.ts src/renderer/editor-source-layout.test.ts src/renderer/app.autosave.test.ts`
 - `$env:FISHMARK_MARKDOWN_EDITING_EXPERIENCE_PROBE_CASE='blockquote-marker-commits-after-text'; npm.cmd run test:editing-experience`
+- `$env:FISHMARK_MARKDOWN_EDITING_EXPERIENCE_PROBE_CASE='blockquote-marker-commits-after-selection-move'; npm.cmd run test:editing-experience`
 - `$env:FISHMARK_MARKDOWN_EDITING_EXPERIENCE_PROBE_CASE='nested-blockquote-marker-commits-after-text'; npm.cmd run test:editing-experience`
 - `$env:FISHMARK_MARKDOWN_EDITING_EXPERIENCE_PROBE_GROUP='blockquote'; npm.cmd run test:editing-experience`
 - `npm.cmd run typecheck`
@@ -33,7 +35,7 @@
 
 ## Manual Acceptance Draft
 
-1. Type `>` on an empty line and confirm a quote row appears with a visible caret.
+1. Type `>` on an empty line and confirm it remains plain visible source text with no quote rail while the caret is still after it.
 2. Continue typing `quote` without inserting a space and confirm the source is `>quote`, the text remains inside the quote, and the marker is hidden.
 3. Type `>` on an empty line, then move the cursor to another paragraph and confirm the bare quote row hides the raw marker while the quote rail remains visible.
 4. Inside an existing quote, type another `>` and then `nested`; confirm the source is `> >nested`, the row is depth 2, and the marker prefix is hidden after text is typed.
