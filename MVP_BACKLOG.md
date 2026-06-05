@@ -1638,3 +1638,52 @@
 - [x] 调整 blockquote Enter / Backspace 与 physical line surface，让引用内结构空行和退出引用块行为符合 Typora-like block 规则。
 - [x] 统一引用内列表编辑命令入口，让引用块内列表的 Enter、Backspace、Tab / Shift+Tab 与正文列表走同一套编辑语义。
 - [x] 增加 renderer DOM 测试与 Electron geometry / editing-experience / Typora visual probe，覆盖引用内列表、代码块、数学公式、空行 Enter 退出、source mode gate 和 Typora 导出样式对齐。
+
+---
+
+## Epic 14：长文档性能与响应性
+
+### TASK-062 长文档打开性能优化
+
+状态：未开始
+依赖：`TASK-007`、`TASK-008`、`TASK-017`、`TASK-033`、`TASK-046`、`TASK-051`、`TASK-054`、`TASK-060`、`TASK-061`
+
+目标：基于 `tmp/complex_stress_test.md` 的打开性能日志，优化复杂长 Markdown 文件首次打开与打开后刷新路径，降低 renderer 主线程同步占用，消除同一文档重复全文建模，并为后续性能回归建立可复现的日志 / probe 基线。
+
+问题证据：
+- `main:openMarkdownFileFromPath.total` 约 17.77ms，main 侧读取、decode、workspace 更新不是当前瓶颈。
+- 首次 `renderer:codeEditor.createState` 约 349.80ms，其中 `createEditorDerivedState.total` 约 299.70ms，`parseMarkdownDocument` 约 219.00ms，`physicalEditingDocument` 约 79.40ms。
+- 打开后同一内容又触发 `replaceDocument -> createState`，第二次完整链路约 266.10ms。
+- 首次设置 documentPath 后触发 `setDocumentPath.refreshDecorations`，约 111.00ms。
+- 打开后同步计算 `outlineNow` 约 146.40ms，`metricsNow` 约 229.20ms。
+- 打开期额外 6 次 `recomputeDerivedState.total` 累计约 561.70ms；parse 基本命中缓存，但 `PhysicalEditingDocument` 与 block decorations 仍被重复重建。
+
+主要落点：`src/renderer/code-editor-view.tsx`、`src/renderer/code-editor.ts`、`src/renderer/editor/App.tsx`、`src/renderer/editor/useDocumentDerivedDataController.ts`、`packages/editor-core/src/derived-state/editor-derived-state.ts`、`packages/editor-core/src/derived-state/markdown-document-cache.ts`、`packages/editor-core/src/physical-editing-document.ts`、`packages/editor-core/src/extensions/markdown.ts`、`packages/editor-core/src/decorations/`、性能日志 / probe 入口。
+
+交付物：
+- 可复现的长文档打开性能 probe 或 opt-in 日志入口，能按 read / IPC / createState / parse / physical lines / decorations / outline / metrics / lazy refresh 分段输出。
+- 修复 initialContent 与首个 loadRevision effect 之间的重复加载，打开同一路径同一 revision 只做一次全文 CodeMirror state 构建。
+- 首次创建 editor state 时携带 documentPath，或让首次 `setDocumentPath` 不触发全量 decoration refresh。
+- outline / metrics 从首屏同步路径移出，延后到 editor view 创建后或 idle 调度，并尽量共享 parser / derived cache。
+- 合并打开期由 code parser / highlight lazy load、documentPath、source gate 等触发的 decoration refresh，避免短时间多次 `recomputeDerivedState`。
+- 在 parse cache 之外评估并实现 `PhysicalEditingDocument` 与可安全复用 decoration 输入的分层复用。
+- 优化前后性能报告，记录 stress fixture、机器环境、关键耗时对比与剩余风险。
+
+验收：
+- `tmp/complex_stress_test.md` 或等价稳定 fixture 下，main 侧 `openMarkdownFileFromPath.total` 保持在 50ms 以内。
+- 打开同一路径同一 revision 时，不再出现第二次同内容 `replaceDocument -> createState` 全量链路。
+- 首次 editor state 构建拿到 documentPath，打开后不再因为首次设置 documentPath 触发 100ms 级全量 refresh。
+- outline / metrics 不阻塞 editor 首帧创建；日志能证明它们发生在 editor view 创建之后或 idle 调度中。
+- 打开期 `editorCore:recomputeDerivedState.total` 强制刷新次数降到 2 次以内，累计耗时低于 200ms。
+- stress 文件打开期间 renderer 不出现连续 500ms 以上同步占用窗口。
+- 编辑、保存、autosave、source mode、active block、IME composition、outline 点击定位和图片相对路径解析不回归。
+- `npm.cmd run typecheck`、`npm.cmd run lint`、`npm.cmd run build` 通过；相关 editor-core / renderer 测试通过。
+
+执行切片：
+- [ ] 固化性能基线：把本轮临时日志收集方式整理为可复现 probe，并记录当前 stress fixture 的基线数值。
+- [ ] 消除重复加载：修复 initialContent 与首个 `loadRevision` effect 的重复 `replaceDocument`。
+- [ ] 合并 documentPath 初始化：让 documentPath 参与首次 editor state 创建，或让首次 `setDocumentPath` 不触发全量 refresh。
+- [ ] 延后非首屏派生数据：把 outline / metrics 挪出打开同步路径，并避免重复解析同一文档。
+- [ ] 合并打开期 refresh：批处理 lazy parser / highlight / source gate 周边 decoration refresh。
+- [ ] 复用派生中间产物：降低 `PhysicalEditingDocument` 与 block decorations 的重复构建成本。
+- [ ] 写入性能验收报告：对优化前后日志做对比，更新 `docs/test-report.md` 或 task summary。
