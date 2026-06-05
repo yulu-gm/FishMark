@@ -4085,6 +4085,36 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("keeps ArrowUp out of a quote-internal structural separator", async () => {
+    const host = document.createElement("div");
+    const source = ["> 1", ">", "> 222"].join("\n");
+    const separatorAnchor = source.indexOf("\n>\n") + 2;
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const view = getEditorView(host);
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    try {
+      editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      await flushMicrotasks();
+      controller.setSelection(source.indexOf("222"));
+      controller.pressArrowUp();
+      await flushMicrotasks();
+
+      expect(view?.state.selection.main.anchor).not.toBe(separatorAnchor);
+      expect(view?.state.selection.main.anchor).toBeLessThan(source.indexOf("\n>\n") + 1);
+    } finally {
+      controller.destroy();
+    }
+  });
+
   it("deletes a quote-internal structural separator on Backspace from the next quote line start", async () => {
     const host = document.createElement("div");
     const source = ["> 11", ">", "> > 1"].join("\n");

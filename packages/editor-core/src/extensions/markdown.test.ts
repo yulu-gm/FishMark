@@ -885,6 +885,66 @@ describe("createFishMarkMarkdownExtensions", () => {
     destroy();
   });
 
+  it("normalizes ArrowUp away from a quote-internal structural separator", async () => {
+    const source = ["> 1", ">", "> 222"].join("\n");
+    const { view, destroy } = createHarness({ source });
+    const separatorAnchor = source.indexOf("\n>\n") + 2;
+
+    try {
+      view.dispatch({
+        selection: {
+          anchor: source.indexOf("222"),
+          head: source.indexOf("222")
+        }
+      });
+
+      view.contentDOM.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "ArrowUp",
+          code: "ArrowUp",
+          bubbles: true,
+          cancelable: true
+        })
+      );
+      await flushMicrotasks();
+
+      expect(view.state.selection.main.anchor).not.toBe(separatorAnchor);
+      expect(view.state.selection.main.anchor).toBeLessThan(source.indexOf("\n>\n") + 1);
+    } finally {
+      destroy();
+    }
+  });
+
+  it("moves ArrowDown across a quote-internal structural separator", async () => {
+    const source = ["> 1", ">", "> 222"].join("\n");
+    const { view, destroy } = createHarness({ source });
+    const separatorAnchor = source.indexOf("\n>\n") + 2;
+
+    try {
+      view.dispatch({
+        selection: {
+          anchor: source.indexOf("1"),
+          head: source.indexOf("1")
+        }
+      });
+
+      view.contentDOM.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "ArrowDown",
+          code: "ArrowDown",
+          bubbles: true,
+          cancelable: true
+        })
+      );
+      await flushMicrotasks();
+
+      expect(view.state.selection.main.anchor).toBe(source.indexOf("222"));
+      expect(view.state.selection.main.anchor).not.toBe(separatorAnchor);
+    } finally {
+      destroy();
+    }
+  });
+
   it("keeps a trailing editable empty quote line selectable", () => {
     const source = ["> alpha", ">", "> "].join("\n");
     const { view, destroy } = createHarness({ source });
