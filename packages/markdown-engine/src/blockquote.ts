@@ -55,48 +55,12 @@ export function parseBlockquoteLinePrefix(
     };
   }
 
-  const committedMarkers = trimTrailingUncommittedNestedMarkers(markers);
-  const lastCommittedMarker = committedMarkers.at(-1);
-
-  if (lastCommittedMarker) {
-    markerEnd = lastCommittedMarker.marker.markerEnd;
-    sourcePrefixEndOffset = lastCommittedMarker.sourcePrefixEndOffset;
-  }
-
   return {
-    markers: committedMarkers.map((entry) => entry.marker),
+    markers: markers.map((entry) => entry.marker),
     markerEnd,
     sourcePrefixEndOffset,
     contentStartOffset: sourcePrefixEndOffset
   };
-}
-
-function trimTrailingUncommittedNestedMarkers(
-  markers: readonly ParsedBlockquoteMarker[]
-): readonly ParsedBlockquoteMarker[] {
-  const lastMarkerWithPaddingIndex = findLastIndex(
-    markers,
-    (entry) => entry.sourcePrefixEndOffset > entry.marker.markerEnd
-  );
-
-  if (lastMarkerWithPaddingIndex < 0 || lastMarkerWithPaddingIndex === markers.length - 1) {
-    return markers;
-  }
-
-  return markers.slice(0, lastMarkerWithPaddingIndex + 1);
-}
-
-function findLastIndex<TValue>(
-  values: readonly TValue[],
-  predicate: (value: TValue) => boolean
-): number {
-  for (let index = values.length - 1; index >= 0; index -= 1) {
-    if (predicate(values[index]!)) {
-      return index;
-    }
-  }
-
-  return -1;
 }
 
 type MarkerCursor = {

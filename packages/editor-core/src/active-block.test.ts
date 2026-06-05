@@ -55,9 +55,9 @@ describe("createActiveBlockState", () => {
     expect(activeBlock).toBeNull();
   });
 
-  it("keeps a bare blockquote marker active as paragraph text until marker padding is typed", () => {
-    expect(createActiveBlockState(">", { anchor: 1, head: 1 }).activeBlock?.type).toBe("paragraph");
-    expect(createActiveBlockState(">quote", { anchor: 6, head: 6 }).activeBlock?.type).toBe("paragraph");
+  it("resolves blockquote markers without requiring marker padding", () => {
+    expect(createActiveBlockState(">", { anchor: 1, head: 1 }).activeBlock?.type).toBe("blockquote");
+    expect(createActiveBlockState(">quote", { anchor: 6, head: 6 }).activeBlock?.type).toBe("blockquote");
     expect(createActiveBlockState("> ", { anchor: 2, head: 2 }).activeBlock?.type).toBe("blockquote");
   });
 

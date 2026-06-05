@@ -560,14 +560,11 @@ function renderBlockquoteCodeFenceBlock(
 }
 
 function getRenderableBlockquoteLines(lines: readonly BlockquoteExportLine[]): BlockquoteExportLine[] {
-  if (!lines.some((line) => line.contentStartOffset > line.markerEnd)) {
+  if (!lines.some((line) => line.quoteDepth > 0)) {
     return [];
   }
 
-  return lines.filter((line) =>
-    line.contentStartOffset > line.markerEnd ||
-    (line.quoteDepth > 0 && line.contentStartOffset === line.markerEnd && line.contentEndOffset === line.contentStartOffset)
-  );
+  return lines.filter((line) => line.quoteDepth > 0);
 }
 
 function createBlockquoteLineClassName(depth: number, index: number, lastIndex: number): string {

@@ -258,6 +258,31 @@ describe("list-edits", () => {
     });
   });
 
+  it("continues ordered numbering when a nested empty quote list item upgrades to its parent list", () => {
+    const doc = [
+      "> 1. 111",
+      "> 2. 333",
+      ">   1. 222",
+      ">     1. 1.1",
+      ">     2. "
+    ].join("\n");
+    const context = buildContext(doc, doc.length);
+    const result = computeListItemEnter(context);
+    const expected = [
+      "> 1. 111",
+      "> 2. 333",
+      ">   1. 222",
+      ">     1. 1.1",
+      ">   2. "
+    ].join("\n");
+
+    expect(applyEdit(doc, result)).toBe(expected);
+    expect(result?.selection).toEqual({
+      anchor: expected.length,
+      head: expected.length
+    });
+  });
+
   it("exits an empty top-level quote list item to quote body text", () => {
     const doc = ["> - parent", "> - "].join("\n");
     const context = buildContext(doc, doc.length);

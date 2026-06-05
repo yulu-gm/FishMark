@@ -12,8 +12,8 @@
 - HTML export 改为消费 `innerBlocks`，引用内 list / code / math 不再退化为普通文本。
 - 引用块视觉改为按 Typora 导出 HTML 对齐：透明背景、4px `#dfe2e5` 左 rail、15px 左右内边距、0.8em 引用内结构空行、无圆角、无 inset shadow，并让 bundled Markdown theme 不再覆盖回卡片式 blockquote。
 - 引用内 code fence 现在位于 quote 内容列内，使用 Typora export 的 `#f8f8f8` / `#e7eaed` 代码盒样式并隐藏语言角标；引用内 block math 保持透明背景，不再显示 FishMark 数学卡片底色。
-- 顶层 blockquote marker 提交规则改为 `> `：裸 `>` 与 `>text` 保持 paragraph，输入 marker padding 后才进入 blockquote。
-- 嵌套 blockquote marker 提交规则同步顶层：已提交引用内输入 `>` 时仍保持当前层级并显示光标，输入后续 padding 形成 `> > ` 后才进入二层引用。
+- 顶层 blockquote marker 提交规则改为不要求 marker padding：裸 `>` 是活动空引用锚点，继续输入正文形成 `>text` 后进入提交态并隐藏 marker。
+- 嵌套 blockquote marker 提交规则同步顶层：已提交引用内输入 `>` 时形成嵌套引用活动行，继续输入正文得到 `> >text` 后保持二层引用并隐藏完整 quote prefix。
 - 引用块激活态继续隐藏原始 `>` marker，光标和正文起点对齐到引用内容列。
 - 激活空引用行的 marker 隐藏方式从 `display:none` 改为透明零宽 caret anchor，避免 `> ` 后继续输入正文时被浏览器插到引用块前面。
 - 引用内列表编辑同步外部列表语义：非空项 Enter 续同级项，空子项 Enter 升级为父项，空顶级项 Enter 先插入引用内结构空行再退出为引用正文；Tab / Shift+Tab、非空 marker Backspace、空嵌套 marker 后缩进清理，以及有序列表 content-start Backspace 断开列表都只改 quote 前缀后的 list marker / indent / 结构空行。
@@ -28,9 +28,9 @@
 - `> > 第二层` 与 `> > > 第三层` 在非激活态保留 blockquote 字体、offset 与行距；二/三层 quote content left delta 与 Typora 对照均为 19px / 38px。
 - 引用内 fenced code 与 block math 复用外部代码块 / 公式预览规则。
 - 引用块基础视觉样式与 `C:/Users/wuche/Desktop/4.1 引用：简单样例.html` 导出的 Typora blockquote / nested code fence computed style 对齐。
-- 裸 `>` 与 `>text` 不进入 blockquote；`> ` 后进入 blockquote，继续输入 `quote` 得到 `> quote`，光标不跳到引用块外。
-- 引用块内输入 `>` 得到 `> >` 时仍是 depth 1，selection 为 3 且光标可见；继续输入空格得到 `> > ` 时提交为 depth 2，selection 为 4 且光标可见。
-- 激活引用块不显示 `>` marker，`> quote` 中光标位于 `quote` 正文列。
+- 裸 `>`、`>text`、`> >` 与 `> >text` 不再要求 marker padding；继续输入正文得到 `>quote` / `> >nested` 时，文本留在引用块内且 quote prefix 隐藏。
+- 光标位于活动裸 marker 行时保留可见 caret 锚点；光标移出裸 `>` 空引用行后，inactive 阅读态隐藏 raw marker 并保留 quote rail。
+- 激活提交态引用块不显示 quote prefix，`>quote` / `> quote` 中光标位于引用正文列。
 - 非空引用行 Enter 后光标位于新 `> ` 行；空嵌套引用行 Enter 先退出到父引用层级，顶级引用空行 Enter 才退出引用块。
 - 非空嵌套引用行 Enter 后结构空行与新编辑行都保持同层级 quote depth，真实 Electron probe 确认 marker 装饰之外没有可见裸 `>`。
 - 空三层引用行 Enter 后源码变为 `> 11\n> > 222\n> > > 33333\n> > `，真实 Electron probe 确认 active 行降为 depth 2 且 caret geometry 存在。
@@ -46,7 +46,7 @@
 - `npm.cmd run test -- src/renderer/app.autosave.test.ts -t "renders markdown lists and quotes"`
 - `npm.cmd run test:blockquote-typora-visual`
 - `FISHMARK_MARKDOWN_EDITING_EXPERIENCE_PROBE_GROUP=blockquote npm.cmd run test:editing-experience`
-- `FISHMARK_MARKDOWN_EDITING_EXPERIENCE_PROBE_CASE=nested-blockquote-marker-commits-after-padding npm.cmd run test:editing-experience`
+- `FISHMARK_MARKDOWN_EDITING_EXPERIENCE_PROBE_CASE=nested-blockquote-marker-commits-after-text npm.cmd run test:editing-experience`
 - `npm.cmd run test -- packages/editor-core/src/commands/line-parsers.test.ts packages/markdown-engine/src/parse-block-map.test.ts packages/editor-core/src/active-block.test.ts packages/editor-core/src/decorations/block-decorations.test.ts packages/editor-core/src/commands/blockquote-commands.test.ts src/renderer/code-editor.test.ts src/renderer/editor-source-layout.test.ts src/shared/markdown-text-rendering-standard.test.ts`
 - `FISHMARK_MARKDOWN_EDITING_EXPERIENCE_PROBE_GROUP=list npm.cmd run test:editing-experience`
 - `npm.cmd run test -- packages/editor-core/src/commands/list-edits.test.ts packages/editor-core/src/commands/markdown-commands.test.ts packages/editor-core/src/commands/blockquote-commands.test.ts packages/editor-core/src/decorations/block-decorations.test.ts src/renderer/code-editor.test.ts`

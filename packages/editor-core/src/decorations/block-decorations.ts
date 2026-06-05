@@ -8,7 +8,8 @@ import {
   type FootnoteDefinition,
   type DefinitionBlock,
   type ListItemBlock,
-  type InlineReferenceDefinition
+  type InlineReferenceDefinition,
+  type BlockquoteMarker
 } from "@fishmark/markdown-engine";
 
 import type { ActiveBlockState } from "../active-block";
@@ -711,10 +712,7 @@ function appendBlockquoteDecorations(
   const resolveImagePreviewUrl = context.resolveImagePreviewUrl;
 
   if (block.lines) {
-    const renderableLines = getRenderableBlockquoteLines(
-      block.lines,
-      (line) => line.contentEndOffset
-    );
+    const renderableLines = getRenderableBlockquoteLines(block.lines);
     const lineCount = renderableLines.length;
     const shouldRenderInnerBlocks = Boolean(block.innerBlocks && block.innerBlocks.length > 0);
     const activeLineInnerBlock =
@@ -758,6 +756,8 @@ function appendBlockquoteDecorations(
           line.startOffset,
           line.markerEnd,
           line.contentStartOffset,
+          line.contentEndOffset,
+          line.markers,
           ranges
         );
       } else if (line.contentStartOffset > line.startOffset) {
@@ -796,8 +796,7 @@ function appendBlockquoteDecorations(
   }
 
   const renderableLines = getRenderableBlockquoteLines(
-    getInactiveBlockquoteLines(block.startOffset, block.endOffset, source),
-    (line) => trimTrailingCarriageReturn(source, line.lineStart, line.lineEnd)
+    getInactiveBlockquoteLines(block.startOffset, block.endOffset, source)
   );
   const lineCount = renderableLines.length;
 
@@ -840,6 +839,8 @@ function appendBlockquoteDecorations(
         line.lineStart,
         line.markerEnd,
         line.contentStartOffset,
+        trimTrailingCarriageReturn(source, line.lineStart, line.lineEnd),
+        line.markers,
         ranges
       );
     } else if (line.contentStartOffset > line.lineStart) {
@@ -858,8 +859,28 @@ function appendActiveBlockquoteSourcePrefixDecorations(
   lineStartOffset: number,
   markerEndOffset: number,
   contentStartOffset: number,
+  contentEndOffset: number,
+  markers: readonly BlockquoteMarker[],
   ranges: Range<Decoration>[]
 ): void {
+  const lastMarker = markers.at(-1);
+  if (
+    lastMarker &&
+    markerEndOffset === contentStartOffset &&
+    contentEndOffset === contentStartOffset
+  ) {
+    if (lastMarker.markerStart > lineStartOffset) {
+      ranges.push(
+        Decoration.mark({
+          attributes: {
+            class: "cm-active-blockquote-marker"
+          }
+        }).range(lineStartOffset, lastMarker.markerStart)
+      );
+    }
+    return;
+  }
+
   if (markerEndOffset > lineStartOffset) {
     ranges.push(
       Decoration.mark({
@@ -951,34 +972,20 @@ function getRenderableBlockquoteLines<T extends {
   contentStartOffset: number;
   markerEnd: number;
   quoteDepth: number;
-}>(
-  lines: readonly T[],
-  getContentEndOffset: (line: T) => number
-): T[] {
+}>(lines: readonly T[]): T[] {
   if (!hasCommittedRichBlockquoteLine(lines)) {
     return [];
   }
 
-  return lines.filter((line) =>
-    hasCommittedRichBlockquoteMarker(line.markerEnd, line.contentStartOffset) ||
-    isBareBlockquoteSeparatorLine(line, getContentEndOffset(line))
-  );
+  return lines.filter((line) => line.quoteDepth > 0);
 }
 
 function hasCommittedRichBlockquoteLine<T extends {
   contentStartOffset: number;
   markerEnd: number;
+  quoteDepth: number;
 }>(lines: readonly T[]): boolean {
-  return lines.some((line) =>
-    hasCommittedRichBlockquoteMarker(line.markerEnd, line.contentStartOffset)
-  );
-}
-
-function hasCommittedRichBlockquoteMarker(
-  markerEnd: number,
-  contentStartOffset: number
-): boolean {
-  return contentStartOffset > markerEnd;
+  return lines.some((line) => line.quoteDepth > 0);
 }
 
 function isBareBlockquoteSeparatorLine(

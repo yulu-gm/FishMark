@@ -950,7 +950,7 @@ function hasTopLevelPlainTextTail(item: ListItemBlock, source: string, baseOffse
   }
 
   for (let index = 1; index < lines.length; index += 1) {
-    const line = lines[index] ?? "";
+    const line = readListContentLine(lines[index] ?? "");
 
     if (line.trim().length === 0) {
       continue;

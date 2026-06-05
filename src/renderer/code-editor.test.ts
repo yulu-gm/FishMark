@@ -1807,7 +1807,7 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("commits a blockquote marker only after marker padding is typed and keeps the caret inside it", async () => {
+  it("renders a bare blockquote marker as an active quote and commits text without padding", async () => {
     const host = document.createElement("div");
     const activeBlockTypes: Array<string | null> = [];
 
@@ -1838,29 +1838,74 @@ describe("createCodeEditorController", () => {
 
     expect(controller.getContent()).toBe(">");
     expect(controller.getSelection()).toEqual({ anchor: 1, head: 1 });
-    expect(activeBlockTypes.at(-1)).toBe("paragraph");
-    expect(bareQuoteLine?.classList.contains("cm-active-paragraph")).toBe(true);
-    expect(bareQuoteLine?.classList.contains("cm-inactive-blockquote")).toBe(false);
+    expect(activeBlockTypes.at(-1)).toBe("blockquote");
+    expect(bareQuoteLine?.classList.contains("cm-inactive-blockquote")).toBe(true);
+    expect(bareQuoteLine?.classList.contains("cm-inactive-blockquote-separator")).toBe(true);
     expect(bareQuoteLine?.querySelector(".cm-inactive-blockquote-marker")).toBeNull();
+    expect(bareQuoteLine?.querySelector(".cm-active-blockquote-marker")).toBeNull();
 
-    advancedController.insertText(" ");
+    advancedController.insertText("quote");
     await flushMicrotasks();
 
     const committedQuoteLine = Array.from(host.querySelectorAll<HTMLElement>(".cm-line")).find(
-      (line) => line.textContent === "> "
+      (line) => line.textContent === ">quote"
     );
 
-    expect(controller.getContent()).toBe("> ");
-    expect(controller.getSelection()).toEqual({ anchor: 2, head: 2 });
+    expect(controller.getContent()).toBe(">quote");
+    expect(controller.getSelection()).toEqual({ anchor: ">quote".length, head: ">quote".length });
     expect(activeBlockTypes.at(-1)).toBe("blockquote");
     expect(committedQuoteLine?.classList.contains("cm-inactive-blockquote")).toBe(true);
     expect(committedQuoteLine?.querySelector(".cm-active-blockquote-marker")?.textContent).toBe(">");
-    expect(committedQuoteLine?.querySelector(".cm-active-blockquote-padding-anchor")?.textContent).toBe(" ");
+    expect(committedQuoteLine?.querySelector(".cm-active-blockquote-padding-anchor")).toBeNull();
 
     controller.destroy();
   });
 
-  it("commits a nested blockquote marker only after marker padding is typed", async () => {
+  it("commits a blockquote marker when Enter is pressed after the bare marker", async () => {
+    const host = document.createElement("div");
+    const activeBlockTypes: Array<string | null> = [];
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "",
+      onChange: vi.fn(),
+      onActiveBlockChange: (state) => {
+        activeBlockTypes.push(state.activeBlock?.type ?? null);
+      }
+    });
+    const advancedController = controller as typeof controller & {
+      insertText: (text: string) => void;
+      pressEnter: () => void;
+      setSelection: (anchor: number, head?: number) => void;
+    };
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+
+    advancedController.setSelection(0);
+    advancedController.insertText(">");
+    await flushMicrotasks();
+    advancedController.pressEnter();
+    await flushMicrotasks();
+
+    const expected = "> \n> ";
+    const committedQuoteLines = Array.from(host.querySelectorAll<HTMLElement>(".cm-line")).filter(
+      (line) => line.textContent === "> "
+    );
+
+    expect(controller.getContent()).toBe(expected);
+    expect(controller.getSelection()).toEqual({ anchor: expected.length, head: expected.length });
+    expect(activeBlockTypes.at(-1)).toBe("blockquote");
+    expect(committedQuoteLines).toHaveLength(2);
+    expect(committedQuoteLines.at(-1)?.classList.contains("cm-inactive-blockquote")).toBe(true);
+    expect(committedQuoteLines.at(-1)?.querySelector(".cm-active-blockquote-marker")?.textContent).toBe(">");
+    expect(committedQuoteLines.at(-1)?.querySelector(".cm-active-blockquote-padding-anchor")?.textContent).toBe(" ");
+
+    controller.destroy();
+  });
+
+  it("renders a nested blockquote marker and commits nested text without padding", async () => {
     const host = document.createElement("div");
     const activeBlockTypes: Array<string | null> = [];
 
@@ -1892,24 +1937,68 @@ describe("createCodeEditorController", () => {
     expect(controller.getContent()).toBe("> >");
     expect(controller.getSelection()).toEqual({ anchor: 3, head: 3 });
     expect(activeBlockTypes.at(-1)).toBe("blockquote");
-    expect(uncommittedNestedLine?.classList.contains("cm-inactive-blockquote-depth-1")).toBe(true);
-    expect(uncommittedNestedLine?.classList.contains("cm-inactive-blockquote-depth-2")).toBe(false);
-    expect(uncommittedNestedLine?.querySelector(".cm-active-blockquote-marker")?.textContent).toBe(">");
-    expect(uncommittedNestedLine?.querySelector(".cm-active-blockquote-padding-anchor")?.textContent).toBe(" ");
+    expect(uncommittedNestedLine?.classList.contains("cm-inactive-blockquote-depth-2")).toBe(true);
+    expect(uncommittedNestedLine?.classList.contains("cm-inactive-blockquote-separator")).toBe(true);
+    expect(uncommittedNestedLine?.querySelector(".cm-active-blockquote-marker")?.textContent).toBe("> ");
+    expect(uncommittedNestedLine?.querySelector(".cm-active-blockquote-padding-anchor")).toBeNull();
 
-    advancedController.insertText(" ");
+    advancedController.insertText("child");
     await flushMicrotasks();
 
     const committedNestedLine = Array.from(host.querySelectorAll<HTMLElement>(".cm-line")).find(
-      (line) => line.textContent === "> > "
+      (line) => line.textContent === "> >child"
     );
 
-    expect(controller.getContent()).toBe("> > ");
-    expect(controller.getSelection()).toEqual({ anchor: 4, head: 4 });
+    expect(controller.getContent()).toBe("> >child");
+    expect(controller.getSelection()).toEqual({ anchor: "> >child".length, head: "> >child".length });
     expect(activeBlockTypes.at(-1)).toBe("blockquote");
     expect(committedNestedLine?.classList.contains("cm-inactive-blockquote-depth-2")).toBe(true);
     expect(committedNestedLine?.querySelector(".cm-active-blockquote-marker")?.textContent).toBe("> >");
-    expect(committedNestedLine?.querySelector(".cm-active-blockquote-padding-anchor")?.textContent).toBe(" ");
+    expect(committedNestedLine?.querySelector(".cm-active-blockquote-padding-anchor")).toBeNull();
+
+    controller.destroy();
+  });
+
+  it("commits a nested blockquote marker when Enter is pressed after the nested bare marker", async () => {
+    const host = document.createElement("div");
+    const activeBlockTypes: Array<string | null> = [];
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "> ",
+      onChange: vi.fn(),
+      onActiveBlockChange: (state) => {
+        activeBlockTypes.push(state.activeBlock?.type ?? null);
+      }
+    });
+    const advancedController = controller as typeof controller & {
+      insertText: (text: string) => void;
+      pressEnter: () => void;
+      setSelection: (anchor: number, head?: number) => void;
+    };
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+
+    advancedController.setSelection(2);
+    advancedController.insertText(">");
+    await flushMicrotasks();
+    advancedController.pressEnter();
+    await flushMicrotasks();
+
+    const expected = "> > \n> > ";
+    const committedNestedLines = Array.from(host.querySelectorAll<HTMLElement>(".cm-line")).filter(
+      (line) => line.textContent === "> > "
+    );
+
+    expect(controller.getContent()).toBe(expected);
+    expect(controller.getSelection()).toEqual({ anchor: expected.length, head: expected.length });
+    expect(activeBlockTypes.at(-1)).toBe("blockquote");
+    expect(committedNestedLines).toHaveLength(2);
+    expect(committedNestedLines.at(-1)?.classList.contains("cm-inactive-blockquote-depth-2")).toBe(true);
+    expect(committedNestedLines.at(-1)?.querySelector(".cm-active-blockquote-marker")?.textContent).toBe("> >");
+    expect(committedNestedLines.at(-1)?.querySelector(".cm-active-blockquote-padding-anchor")?.textContent).toBe(" ");
 
     controller.destroy();
   });
@@ -3183,6 +3272,42 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("keeps ordered numbering when an empty nested quote list item upgrades on Enter", () => {
+    const host = document.createElement("div");
+    const source = [
+      "> 1. 111",
+      "> 2. 333",
+      ">   1. 222",
+      ">     1. 1.1",
+      ">     2. "
+    ].join("\n");
+    const expected = [
+      "> 1. 111",
+      "> 2. 333",
+      ">   1. 222",
+      ">     1. 1.1",
+      ">   2. "
+    ].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+
+    advancedController.setSelection(source.length);
+    advancedController.pressEnter();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(getEditorView(host)?.state.selection.main.anchor).toBe(expected.length);
+
+    controller.destroy();
+  });
+
   it("exits an empty top-level quote list item to quote body on Enter", () => {
     const host = document.createElement("div");
     const source = ["> - parent", "> - "].join("\n");
@@ -3649,16 +3774,16 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("does not render a blockquote until a space is typed after the marker", async () => {
+  it("renders a bare blockquote marker and hides it after the cursor leaves the line", async () => {
     const host = document.createElement("div");
+    const initialContent = [">", "", "Paragraph"].join("\n");
 
     const controller = createCodeEditorController({
       parent: host,
-      initialContent: "",
+      initialContent,
       onChange: vi.fn()
     });
     const advancedController = controller as typeof controller & {
-      insertText: (text: string) => void;
       setSelection: (anchor: number, head?: number) => void;
     };
     const editorRoot = host.querySelector(".cm-editor");
@@ -3668,18 +3793,27 @@ describe("createCodeEditorController", () => {
     editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
     await flushMicrotasks();
 
-    advancedController.setSelection(0);
-    advancedController.insertText(">");
+    advancedController.setSelection(1);
+    await flushMicrotasks();
 
-    expect(controller.getContent()).toBe(">");
-    expect(host.querySelector(".cm-inactive-blockquote")).toBeNull();
-    expect(host.querySelector(".cm-inactive-blockquote-marker")).toBeNull();
+    const activeQuoteLine = Array.from(host.querySelectorAll<HTMLElement>(".cm-line")).find(
+      (line) => line.textContent === ">"
+    );
+    expect(controller.getContent()).toBe(initialContent);
+    expect(activeQuoteLine?.classList.contains("cm-inactive-blockquote")).toBe(true);
+    expect(activeQuoteLine?.classList.contains("cm-inactive-blockquote-separator")).toBe(true);
+    expect(activeQuoteLine?.querySelector(".cm-inactive-blockquote-marker")).toBeNull();
 
-    advancedController.insertText(" ");
+    advancedController.setSelection(initialContent.indexOf("Paragraph"));
+    await flushMicrotasks();
 
-    expect(controller.getContent()).toBe("> ");
-    expect(host.querySelector(".cm-inactive-blockquote")).not.toBeNull();
-    expect(host.querySelector(".cm-active-blockquote-marker")).not.toBeNull();
+    const inactiveQuoteLine = Array.from(host.querySelectorAll<HTMLElement>(".cm-line")).find(
+      (line) => line.textContent === ">"
+    );
+    expect(controller.getContent()).toBe(initialContent);
+    expect(inactiveQuoteLine?.classList.contains("cm-inactive-blockquote")).toBe(true);
+    expect(inactiveQuoteLine?.querySelector(".cm-inactive-blockquote-marker")?.textContent).toBe(">");
+    expect(inactiveQuoteLine?.querySelector(".cm-active-blockquote-marker")).toBeNull();
 
     controller.destroy();
   });

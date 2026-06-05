@@ -131,6 +131,37 @@ describe("semantic markdown commands", () => {
     ]);
   });
 
+  it("commits a bare blockquote marker when Enter is pressed after it", () => {
+    const target = createCommandTarget({ doc: ">", anchor: 1 });
+
+    expect(runMarkdownEnterCommand(target, paragraphActiveState)).toBe(true);
+    expect(target.getDispatchedChanges()).toEqual([{
+      from: 1,
+      to: 1,
+      insert: " \n> ",
+      selection: {
+        anchor: 5,
+        head: 5
+      }
+    }]);
+  });
+
+  it("commits a nested blockquote marker when Enter is pressed after it", () => {
+    const source = "> >";
+    const target = createCommandTarget({ doc: source, anchor: source.length });
+
+    expect(runMarkdownEnterCommand(target, createActiveState(source, source.length))).toBe(true);
+    expect(target.getDispatchedChanges()).toEqual([{
+      from: source.length,
+      to: source.length,
+      insert: " \n> > ",
+      selection: {
+        anchor: "> > \n> > ".length,
+        head: "> > \n> > ".length
+      }
+    }]);
+  });
+
   it("moves across blank lines through the editor command target", () => {
     const target = createCommandTarget({ doc: "Alpha\n\n", anchor: "Alpha\n\n".length });
 

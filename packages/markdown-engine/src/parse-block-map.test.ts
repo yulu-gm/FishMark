@@ -274,25 +274,42 @@ describe("parseBlockMap", () => {
     ]);
   });
 
-  it("keeps a bare blockquote marker as paragraph text until marker padding is typed", () => {
+  it("parses blockquote markers without requiring marker padding", () => {
     expect(parseMarkdownDocument(">").blocks).toMatchObject([
       {
-        id: "paragraph:0-1",
-        type: "paragraph",
+        id: "blockquote:0-1",
+        type: "blockquote",
         startOffset: 0,
         endOffset: 1,
         startLine: 1,
-        endLine: 1
+        endLine: 1,
+        lines: [
+          {
+            markerEnd: 1,
+            contentStartOffset: 1,
+            contentEndOffset: 1,
+            quoteDepth: 1
+          }
+        ]
       }
     ]);
     expect(parseMarkdownDocument(">quote").blocks).toMatchObject([
       {
-        id: "paragraph:0-6",
-        type: "paragraph",
+        id: "blockquote:0-6",
+        type: "blockquote",
         startOffset: 0,
         endOffset: 6,
         startLine: 1,
-        endLine: 1
+        endLine: 1,
+        lines: [
+          {
+            markerEnd: 1,
+            contentStartOffset: 1,
+            contentEndOffset: 6,
+            quoteDepth: 1,
+            inline: { children: [{ type: "text", value: "quote" }] }
+          }
+        ]
       }
     ]);
     expect(parseMarkdownDocument("> ").blocks).toMatchObject([
@@ -1540,37 +1557,41 @@ describe("parseBlockMap", () => {
     });
   });
 
-  it("keeps an unpadded nested quote marker as visible quote content until padding is typed", () => {
-    const uncommittedSource = "> >";
-    const uncommittedResult = parseMarkdownDocument(uncommittedSource);
-    const uncommittedBlockquote = uncommittedResult.blocks[0] as BlockquoteBlock;
+  it("parses unpadded nested quote markers as nested quote prefixes", () => {
+    const emptyNestedSource = "> >";
+    const emptyNestedResult = parseMarkdownDocument(emptyNestedSource);
+    const emptyNestedBlockquote = emptyNestedResult.blocks[0] as BlockquoteBlock;
 
-    expect(uncommittedBlockquote.type).toBe("blockquote");
-    expect(uncommittedBlockquote.lines?.[0]).toMatchObject({
-      quoteDepth: 1,
-      markerEnd: 1,
-      sourcePrefixEndOffset: 2,
-      contentStartOffset: 2,
-      contentEndOffset: uncommittedSource.length,
-      markers: [{ markerStart: 0, markerEnd: 1 }],
-      inline: { children: [{ type: "text", value: ">" }] }
-    });
-
-    const committedSource = "> > ";
-    const committedResult = parseMarkdownDocument(committedSource);
-    const committedBlockquote = committedResult.blocks[0] as BlockquoteBlock;
-
-    expect(committedBlockquote.type).toBe("blockquote");
-    expect(committedBlockquote.lines?.[0]).toMatchObject({
+    expect(emptyNestedBlockquote.type).toBe("blockquote");
+    expect(emptyNestedBlockquote.lines?.[0]).toMatchObject({
       quoteDepth: 2,
       markerEnd: 3,
-      sourcePrefixEndOffset: 4,
-      contentStartOffset: 4,
-      contentEndOffset: committedSource.length,
+      sourcePrefixEndOffset: 3,
+      contentStartOffset: 3,
+      contentEndOffset: emptyNestedSource.length,
       markers: [
         { markerStart: 0, markerEnd: 1 },
         { markerStart: 2, markerEnd: 3 }
-      ]
+      ],
+      inline: { children: [] }
+    });
+
+    const nestedTextSource = "> >quote";
+    const nestedTextResult = parseMarkdownDocument(nestedTextSource);
+    const nestedTextBlockquote = nestedTextResult.blocks[0] as BlockquoteBlock;
+
+    expect(nestedTextBlockquote.type).toBe("blockquote");
+    expect(nestedTextBlockquote.lines?.[0]).toMatchObject({
+      quoteDepth: 2,
+      markerEnd: 3,
+      sourcePrefixEndOffset: 3,
+      contentStartOffset: 3,
+      contentEndOffset: nestedTextSource.length,
+      markers: [
+        { markerStart: 0, markerEnd: 1 },
+        { markerStart: 2, markerEnd: 3 }
+      ],
+      inline: { children: [{ type: "text", value: "quote" }] }
     });
   });
 

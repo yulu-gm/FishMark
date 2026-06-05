@@ -1,6 +1,7 @@
 import {
   parseBlockquoteLinePrefix,
   resolveIndentedCodeContentStartOffset,
+  type BlockquoteMarker,
   type CodeBlockKind
 } from "@fishmark/markdown-engine";
 
@@ -16,6 +17,7 @@ export type InactiveBlockquoteLine = {
   sourcePrefixEndOffset: number;
   contentStartOffset: number;
   quoteDepth: number;
+  markers: readonly BlockquoteMarker[];
   isFirstLine: boolean;
   isLastLine: boolean;
 };
@@ -78,6 +80,7 @@ export function getInactiveBlockquoteLines(
       sourcePrefixEndOffset: prefix.sourcePrefixEndOffset,
       contentStartOffset: prefix.contentStartOffset,
       quoteDepth: prefix.markers.length,
+      markers: prefix.markers,
       isFirstLine,
       isLastLine: nextCursor >= endOffset
     });

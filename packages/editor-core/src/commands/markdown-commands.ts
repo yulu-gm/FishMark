@@ -69,6 +69,7 @@ export function runMarkdownEnterCommand(
     runDraftTableEnterCommand(target, activeState) ||
     target.runCodeFenceEnter(activeState) ||
     target.runListEnter(activeState) ||
+    runDraftBlockquoteMarkerEnterCommand(target) ||
     target.runBlockquoteEnter() ||
     runThematicBreakEnterCommand(target, activeState) ||
     runHeadingBlockEndEnterCommand(target, activeState) ||
@@ -166,6 +167,60 @@ export function runMarkdownArrowUpCommand(
     scrollIntoView: true
   });
   return true;
+}
+
+function runDraftBlockquoteMarkerEnterCommand(target: MarkdownCommandTarget): boolean {
+  const selection = target.getSelection();
+
+  if (!selection.empty) {
+    return false;
+  }
+
+  const line = target.lineAt(selection.head);
+
+  if (selection.head !== line.to) {
+    return false;
+  }
+
+  const committedPrefix = resolveDraftBlockquoteMarkerCommitPrefix(line.text);
+
+  if (committedPrefix === null) {
+    return false;
+  }
+
+  const insert = `${committedPrefix.slice(line.text.length)}\n${committedPrefix}`;
+  const selectionAnchor = line.to + insert.length;
+
+  target.dispatchChange({
+    from: line.to,
+    to: line.to,
+    insert,
+    selection: {
+      anchor: selectionAnchor,
+      head: selectionAnchor
+    }
+  });
+
+  return true;
+}
+
+function resolveDraftBlockquoteMarkerCommitPrefix(lineText: string): string | null {
+  const parsed = parseBlockquoteLine(lineText);
+
+  if (
+    parsed &&
+    parsed.content.trim().length === 0 &&
+    parsed.contentStartOffset === parsed.markerEnd &&
+    lineText.length === parsed.markerEnd
+  ) {
+    return `${parsed.sourcePrefix} `;
+  }
+
+  if (parsed?.content === ">") {
+    return `${parsed.sourcePrefix}> `;
+  }
+
+  return /^[ \t]{0,3}>$/u.test(lineText) ? `${lineText} ` : null;
 }
 
 function runDraftTableEnterCommand(

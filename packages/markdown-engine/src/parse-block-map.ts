@@ -173,7 +173,7 @@ function hasCommittedBlockquoteMarker(
 ): boolean {
   return createLineInfos(source.slice(startOffset, endOffset), startOffset, startLine).some((line) => {
     const prefix = parseBlockquoteLinePrefix(source, line.startOffset, line.endOffset);
-    return prefix.markers.length > 0 && prefix.contentStartOffset > prefix.markerEnd;
+    return prefix.markers.length > 0;
   });
 }
 

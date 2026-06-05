@@ -1761,7 +1761,7 @@ describe("createBlockDecorations", () => {
     ]);
   });
 
-  it("does not render a blockquote presentation for a bare marker while focused", () => {
+  it("renders a bare blockquote marker as a focused quote editing anchor", () => {
     const source = ">";
     const blockMap = parseMarkdownDocument(source);
     const activeState = createActiveBlockStateFromBlockMap(blockMap, {
@@ -1775,12 +1775,12 @@ describe("createBlockDecorations", () => {
       source
     });
 
-    expect(result.signature).not.toContain(":content-edit");
+    expect(result.signature).toContain(":content-edit");
     expect(collectDecorations(source, result.decorationSet)).toEqual([
       {
         from: 0,
         to: 0,
-        className: "cm-active-paragraph cm-active-paragraph-leading",
+        className: "cm-inactive-blockquote cm-inactive-blockquote-depth-1 cm-inactive-blockquote-separator cm-inactive-blockquote-start cm-inactive-blockquote-end",
         text: ""
       }
     ]);
@@ -1861,9 +1861,32 @@ describe("createBlockDecorations", () => {
     });
     const ranges = collectDecorations(source, result.decorationSet);
 
-    expectExactRangeClasses(ranges, 0, 1, ["cm-active-blockquote-marker"]);
-    expectExactRangeClasses(ranges, 1, 2, ["cm-active-blockquote-padding-anchor"]);
+    expectExactRangeClasses(ranges, 0, 0, [
+      "cm-inactive-blockquote cm-inactive-blockquote-depth-2 cm-inactive-blockquote-separator cm-inactive-blockquote-start cm-inactive-blockquote-end"
+    ]);
+    expectExactRangeClasses(ranges, 0, 2, ["cm-active-blockquote-marker"]);
     expectExactRangeClasses(ranges, 2, 3, []);
+  });
+
+  it("renders a bare active quote marker as an editable anchor until content is typed", () => {
+    const source = ">";
+    const blockMap = parseMarkdownDocument(source);
+    const activeState = createActiveBlockStateFromBlockMap(blockMap, {
+      anchor: source.length,
+      head: source.length
+    });
+
+    const result = createBlockDecorations({
+      activeBlockState: activeState,
+      hasEditorFocus: true,
+      source
+    });
+    const ranges = collectDecorations(source, result.decorationSet);
+
+    expectExactRangeClasses(ranges, 0, 0, [
+      "cm-inactive-blockquote cm-inactive-blockquote-depth-1 cm-inactive-blockquote-separator cm-inactive-blockquote-start cm-inactive-blockquote-end"
+    ]);
+    expectExactRangeClasses(ranges, 0, 1, []);
   });
 
   it("adds a caret anchor after committing a nested quote marker while focused", () => {
@@ -2006,6 +2029,7 @@ describe("block decoration line helpers", () => {
         sourcePrefixEndOffset: 2,
         contentStartOffset: 2,
         quoteDepth: 1,
+        markers: [{ markerStart: 0, markerEnd: 1 }],
         isFirstLine: true,
         isLastLine: false
       },
@@ -2016,6 +2040,7 @@ describe("block decoration line helpers", () => {
         sourcePrefixEndOffset: 12,
         contentStartOffset: 12,
         quoteDepth: 1,
+        markers: [{ markerStart: 10, markerEnd: 11 }],
         isFirstLine: false,
         isLastLine: true
       }

@@ -65,7 +65,7 @@ export function parseListLine(text: string): ParsedListLine | null {
 
 export function parseBlockquoteLine(text: string): ParsedBlockquoteLine | null {
   const prefix = parseBlockquoteLinePrefix(text, 0, text.length);
-  if (prefix.markers.length === 0 || prefix.contentStartOffset <= prefix.markerEnd) {
+  if (prefix.markers.length === 0) {
     return null;
   }
 

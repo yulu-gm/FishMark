@@ -6195,6 +6195,14 @@ describe("App autosave", () => {
       markdownRenderStylesheet,
       ".document-editor .cm-math-preview-block.cm-math-preview-blockquote"
     );
+    const activeBlockquoteMarkerRule = getCssRule(
+      markdownRenderStylesheet,
+      ".document-editor .cm-active-blockquote-marker"
+    );
+    const activeBlockquotePaddingAnchorRule = getCssRule(
+      markdownRenderStylesheet,
+      ".document-editor .cm-active-blockquote-padding-anchor"
+    );
 
     expect(listRootRule).toContain(
       `--fishmark-list-marker-text-gap: ${markdownTextStandard.lists.markerToTextGapRem.value}em;`
@@ -6350,7 +6358,14 @@ describe("App autosave", () => {
     expect(blockquoteCodeSurfaceRule).toContain("border-left: 1px solid #e7eaed;");
     expect(blockquoteMathRule).toContain("background: transparent;");
     expect(blockquoteMathRule).toContain("color: var(--fishmark-markdown-quote-fg, #777777);");
-    expect(markdownRenderStylesheet).not.toContain(".cm-active-blockquote-marker");
+    expect(activeBlockquoteMarkerRule).toContain("position: absolute;");
+    expect(activeBlockquoteMarkerRule).toContain("width: 0;");
+    expect(activeBlockquoteMarkerRule).toContain("overflow: hidden;");
+    expect(activeBlockquoteMarkerRule).toContain("color: transparent;");
+    expect(activeBlockquotePaddingAnchorRule).toContain("width: 0.25em;");
+    expect(activeBlockquotePaddingAnchorRule).toContain("margin-right: -0.25em;");
+    expect(activeBlockquotePaddingAnchorRule).toContain("caret-color: var(--fishmark-caret-color);");
+    expect(activeBlockquotePaddingAnchorRule).toContain("overflow: visible;");
   });
 
   it("renders code blocks with visual wrapping instead of a horizontal scrollbar", () => {
