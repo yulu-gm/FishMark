@@ -1202,7 +1202,10 @@ function computeBareEmptyListItemEnter(ctx: SemanticContext): ListEdit | null {
     return null;
   }
 
-  const replacementPrefix = buildBareTopLevelListExitPrefix(lineText);
+  const replacementPrefix = buildBareTopLevelListExitPrefix(
+    lineText,
+    line.from > rootList.startOffset
+  );
   return finalizeBareListMarkerEnter(
     ctx,
     rootList.startOffset,
@@ -1322,11 +1325,11 @@ function buildBareParentEmptyListItemPrefix(
   return `${readListItemMarkerPrefix(ctx, parentItem)}${parentItem.marker}${parentItem.task ? " [ ]" : ""}`;
 }
 
-function buildBareTopLevelListExitPrefix(lineText: string): string {
+function buildBareTopLevelListExitPrefix(lineText: string, hasPreviousRootContent: boolean): string {
   const parsedQuote = parseBlockquoteLine(lineText);
 
   if (!parsedQuote) {
-    return "";
+    return hasPreviousRootContent ? "\n" : "";
   }
 
   const separatorPrefix =

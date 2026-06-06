@@ -198,6 +198,19 @@ describe("list-edits", () => {
     expect(result?.selection).toEqual({ anchor: 13, head: 13 });
   });
 
+  it("exits a bare empty top-level body list item with a structural separator", () => {
+    const doc = ["1. 111", "2."].join("\n");
+    const context = buildContext(doc, doc.length);
+    const result = computeListItemEnter(context);
+    const expected = ["1. 111", "", ""].join("\n");
+
+    expect(applyEdit(doc, result)).toBe(expected);
+    expect(result?.selection).toEqual({
+      anchor: expected.length,
+      head: expected.length
+    });
+  });
+
   it("upgrades a top-level list item to body text when its left split content is empty", () => {
     const doc = ["1. one", "2. two", "3. tail"].join("\n");
     const context = buildContext(doc, doc.indexOf("tail"));
