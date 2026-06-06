@@ -6,6 +6,16 @@
 
 ## 当前项目判断
 
+### 2026-06-06 TASK-061 引用块末尾空行 Backspace 回归修复
+
+针对人工验收截图中的引用块末尾空行回归，Backspace 现在会把当前 `>` / `> ` 空引用行当作引用内 empty line 直接删除；如果上方紧邻同一引用块末尾结构空行，也会一并删除。删除后 selection 落在同一引用块内上一条实际内容行的文本末尾，例如 quoted list 的 `child list` 行尾，不再出现裸 `>` 中间态。
+
+### 2026-06-06 TASK-061 结构行模型验收补充
+
+`codex/editing-region-structural-model` 分支已完成 `TASK-061` 后续结构行模型收敛：`editor-core` 新增共享 `StructuralLineModel`，body structural blank 与 blockquote 内部 bare `>` separator 统一进入同一 line role / separator metadata；selection normalization、ArrowUp / ArrowDown、Backspace separator 删除和引用内列表 Enter / Backspace parity 已改为消费这份模型。
+
+本轮 macOS 验收结论为 PASS：focused Vitest、blockquote / list / structural-blank editing-experience probes、blockquote Typora visual probe、排除 Windows/打包图标测试后的 mac 全量 Vitest、typecheck、lint、build 与 `git diff --check` 均通过。按用户要求，本轮不把 Windows/打包图标测试作为 mac 验收阻断项。
+
 ### 2026-04-24 架构重构进度
 
 当前架构重构在隔离 worktree `/Users/chenglinwu/Documents/Yulora/.worktrees/codex-architecture-reset`、分支 `codex/architecture-reset` 上继续推进，执行计划为 `docs/superpowers/plans/2026-04-23-fishmark-architecture-reset.md`。

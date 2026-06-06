@@ -120,6 +120,58 @@ describe("runBlockquoteBackspace", () => {
     harness.destroy();
   });
 
+  it("deletes trailing empty quoted lines after a quoted list", () => {
+    const source = [
+      "> 111",
+      ">",
+      "> - list1",
+      "> - list2",
+      ">   - child list",
+      ">",
+      "> "
+    ].join("\n");
+    const expected = [
+      "> 111",
+      ">",
+      "> - list1",
+      "> - list2",
+      ">   - child list"
+    ].join("\n");
+    const harness = createHarness({ doc: source, anchor: source.length });
+
+    expect(harness.runBackspace()).toBe(true);
+    expect(harness.text()).toBe(expected);
+    expect(harness.selectionHead()).toBe(expected.length);
+
+    harness.destroy();
+  });
+
+  it("treats a bare trailing quoted line after a quoted list as an empty quote line", () => {
+    const source = [
+      "> 111",
+      ">",
+      "> - list1",
+      "> - list2",
+      ">   - child list",
+      ">",
+      ">"
+    ].join("\n");
+    const expected = [
+      "> 111",
+      ">",
+      "> - list1",
+      "> - list2",
+      ">   - child list"
+    ].join("\n");
+    const harness = createHarness({ doc: source, anchor: source.length });
+
+    expect(harness.runBackspace()).toBe(true);
+    expect(harness.text()).toBe(expected);
+    expect(harness.selectionHead()).toBe(expected.length);
+
+    harness.destroy();
+  });
+
   it("deletes a quote-internal structural separator from the next quote line start", () => {
     const source = ["> 11", ">", "> > 1"].join("\n");
     const harness = createHarness({ doc: source, anchor: source.lastIndexOf("1") });

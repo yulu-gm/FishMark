@@ -4087,6 +4087,70 @@ async function runBlockquoteTrailingEmptySeparatorBackspaceCase(): Promise<CaseR
   return result;
 }
 
+async function runBlockquoteListTrailingEmptyBackspaceCase(): Promise<CaseResult> {
+  const initialContent = [
+    "> 111",
+    ">",
+    "> - list1",
+    "> - list2",
+    ">   - child list",
+    ">",
+    "> "
+  ].join("\n");
+  const expectedContent = [
+    "> 111",
+    ">",
+    "> - list1",
+    "> - list2",
+    ">   - child list"
+  ].join("\n");
+  const expectedSelection = expectedContent.length;
+  const harness = setupHarness(initialContent);
+
+  harness.controller.setSelection(initialContent.length);
+  await settle();
+
+  const selectionBeforeBackspace = harness.controller.getSelection();
+  const backspaceAccepted = dispatchBackspace(harness.view);
+  await settle();
+
+  const contentAfterBackspace = harness.controller.getContent();
+  const selectionAfterBackspace = harness.controller.getSelection();
+  const linesAfterBackspace = Array.from(harness.root.querySelectorAll<HTMLElement>(".cm-line"));
+  const exactQuoteLineCountAfterBackspace = linesAfterBackspace.filter(
+    (line) => (line.textContent || "") === ">"
+  ).length;
+  const lastLineAfterBackspace = linesAfterBackspace.at(-1) || null;
+  const pass =
+    selectionBeforeBackspace.anchor === initialContent.length &&
+    selectionBeforeBackspace.head === initialContent.length &&
+    contentAfterBackspace === expectedContent &&
+    selectionAfterBackspace.anchor === expectedSelection &&
+    selectionAfterBackspace.head === expectedSelection &&
+    exactQuoteLineCountAfterBackspace === 1 &&
+    (lastLineAfterBackspace?.textContent || "").includes("child list");
+
+  const result = resultFor({
+    caseId: "blockquote-list-trailing-empty-backspace",
+    details: {
+      backspaceAccepted,
+      contentAfterBackspace,
+      exactQuoteLineCountAfterBackspace,
+      lastLineAfterBackspaceText: lastLineAfterBackspace?.textContent || null,
+      selectionAfterBackspace,
+      selectionBeforeBackspace
+    },
+    expectedContent,
+    expectedSelection: { anchor: expectedSelection, head: expectedSelection },
+    grammar: "blockquote",
+    harness,
+    name: "Backspace from a trailing empty quoted line after a quoted list removes the empty quote rows",
+    pass
+  });
+  harness.controller.destroy();
+  return result;
+}
+
 async function runBlockquoteInnerBlocksRenderingAndEnterCase(): Promise<CaseResult> {
   const renderingContent = [
     "> - item",
@@ -4586,6 +4650,7 @@ const namedProbeCases: NamedProbeCase[] = [
   { caseId: "blockquote-bare-separator-rendering", group: "blockquote", run: runBlockquoteBareSeparatorRenderingCase },
   { caseId: "blockquote-structural-separator-navigation", group: "blockquote", run: runBlockquoteStructuralSeparatorNavigationCase },
   { caseId: "blockquote-trailing-empty-separator-backspace", group: "blockquote", run: runBlockquoteTrailingEmptySeparatorBackspaceCase },
+  { caseId: "blockquote-list-trailing-empty-backspace", group: "blockquote", run: runBlockquoteListTrailingEmptyBackspaceCase },
   { caseId: "blockquote-inner-blocks-rendering-enter", group: "blockquote", run: runBlockquoteInnerBlocksRenderingAndEnterCase },
   { caseId: "deep-ordered-list-repeated-enter-exit", group: "list", run: runDeepOrderedListRepeatedEnterExitCase },
   { caseId: "top-level-list-item-enter-body-upgrade", group: "list", run: runTopLevelListItemEnterBodyUpgradeCase }

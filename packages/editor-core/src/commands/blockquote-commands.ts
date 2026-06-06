@@ -176,6 +176,19 @@ export function runBlockquoteBackspace(view: EditorView, activeState: ActiveBloc
     return true;
   }
 
+  if (
+    deleteTrailingEmptyBlockquoteLines(
+      view,
+      activeBlockquote,
+      parsed,
+      selection.head,
+      contentStart,
+      lineStart
+    )
+  ) {
+    return true;
+  }
+
   const previousStructuralSeparator = structuralLineModel.findSeparatorBeforeLine(lineStart);
 
   if (previousStructuralSeparator) {
@@ -193,20 +206,6 @@ export function runBlockquoteBackspace(view: EditorView, activeState: ActiveBloc
     }
 
     deleteBlockquoteStructuralSeparator(view, source, previousStructuralSeparator);
-    return true;
-  }
-
-  if (
-    mergeTrailingEmptyBlockquoteAcrossSeparatorLine(
-      view,
-      source,
-      activeBlockquote,
-      parsed,
-      selection.head,
-      contentStart,
-      lineStart
-    )
-  ) {
     return true;
   }
 
@@ -329,9 +328,8 @@ function hasParagraphInnerBlocksAroundStructuralSeparator(
   return previousBlock?.type === "paragraph" && nextBlock?.type === "paragraph";
 }
 
-function mergeTrailingEmptyBlockquoteAcrossSeparatorLine(
+function deleteTrailingEmptyBlockquoteLines(
   view: EditorView,
-  source: string,
   activeBlockquote: BlockquoteBlock,
   currentParsed: NonNullable<ReturnType<typeof parseBlockquoteLine>>,
   selectionHead: number,
@@ -342,71 +340,60 @@ function mergeTrailingEmptyBlockquoteAcrossSeparatorLine(
     return false;
   }
 
-  const separatorLineEnd = getPreviousLineEnd(lineStart);
-  if (separatorLineEnd === null) {
-    return false;
-  }
+  const previousContentEnd = findPreviousSameDepthBlockquoteContentLineEnd(
+    view,
+    activeBlockquote,
+    lineStart,
+    currentParsed.quoteDepth
+  );
 
-  const separatorLine = view.state.doc.lineAt(separatorLineEnd);
-  const separatorParsed = parseBlockquoteLine(separatorLine.text);
-
-  if (
-    !separatorParsed ||
-    separatorParsed.content.trim().length > 0 ||
-    separatorParsed.quoteDepth !== currentParsed.quoteDepth
-  ) {
-    return false;
-  }
-
-  const previousBlock = findPreviousParagraphInnerBlock(activeBlockquote, separatorLine.from);
-  if (
-    !previousBlock ||
-    previousBlock.endOffset >= contentStart ||
-    !isSingleLineBreakBetween(source, previousBlock.endOffset, separatorLine.from)
-  ) {
-    return false;
-  }
-
-  const previousLine = view.state.doc.lineAt(previousBlock.endOffset);
-  const previousParsed = parseBlockquoteLine(previousLine.text);
-  if (!previousParsed || previousParsed.quoteDepth !== currentParsed.quoteDepth) {
+  if (previousContentEnd === null || previousContentEnd >= contentStart) {
     return false;
   }
 
   view.dispatch({
     changes: {
-      from: previousBlock.endOffset,
+      from: previousContentEnd,
       to: contentStart,
       insert: ""
     },
     selection: {
-      anchor: previousBlock.endOffset,
-      head: previousBlock.endOffset
+      anchor: previousContentEnd,
+      head: previousContentEnd
     }
   });
 
   return true;
 }
 
-function findPreviousParagraphInnerBlock(
+function findPreviousSameDepthBlockquoteContentLineEnd(
+  view: EditorView,
   activeBlockquote: BlockquoteBlock,
-  beforeOffset: number
-): Extract<NonNullable<BlockquoteBlock["innerBlocks"]>[number], { type: "paragraph" }> | null {
-  const innerBlocks = activeBlockquote.innerBlocks;
-  if (!innerBlocks) {
-    return null;
+  beforeLineStart: number,
+  quoteDepth: number
+): number | null {
+  let previousLineEnd = getPreviousLineEnd(beforeLineStart);
+
+  while (previousLineEnd !== null) {
+    const previousLine = view.state.doc.lineAt(previousLineEnd);
+
+    if (previousLine.from < activeBlockquote.startOffset) {
+      return null;
+    }
+
+    const previousParsed = parseBlockquoteLine(previousLine.text);
+    if (!previousParsed || previousParsed.quoteDepth !== quoteDepth) {
+      return null;
+    }
+
+    if (previousParsed.content.trim().length > 0) {
+      return previousLine.to;
+    }
+
+    previousLineEnd = getPreviousLineEnd(previousLine.from);
   }
 
-  const previousBlock = [...innerBlocks]
-    .reverse()
-    .find((block) => block.type === "paragraph" && block.endOffset <= beforeOffset);
-
-  return previousBlock?.type === "paragraph" ? previousBlock : null;
-}
-
-function isSingleLineBreakBetween(source: string, from: number, to: number): boolean {
-  const between = source.slice(from, to);
-  return between === "\n" || between === "\r\n" || between === "\r";
+  return null;
 }
 
 function getPreviousLineEnd(lineStart: number): number | null {

@@ -20,6 +20,39 @@
 - 引用内列表 active decoration 现在只作用于当前列表行；同一引用块内的父项 / 兄弟项继续保持 inactive list marker，不会因为 active block 是外层 blockquote 而整段列表退回 raw marker。
 - 新增 parser、decoration、command、renderer、export 与 Electron editing-experience probe 覆盖。
 
+## 2026-06-06 结构行模型验收补充
+
+- 在 `editor-core` 新增共享 `StructuralLineModel`，把 body structural blank 与 blockquote 内部 bare `>` separator 统一成显式 line role / separator metadata。
+- `line-visibility` 与 `line-block-adapter` 改为通过共享结构行模型处理 selection normalization、ArrowUp / ArrowDown 和 collapsed separator navigation，不再让 quote separator 与 body separator 分走两套判断。
+- `runBlockquoteBackspace` 通过 `StructuralLineModel` 删除或合并结构 separator；从 quote 内下一条内容行行首 Backspace 会删除中间 bare `>` separator，同层 paragraph 可直接合并。
+- 引用内列表 Enter / Backspace 补齐 bare marker、quoted ordered-list promotion、top-level quote list exit 和 quote prefix 后缩进清理边界，继续复用正文列表语义。
+- editing-experience probe 新增 `blockquote-bare-separator-rendering`、`blockquote-structural-separator-navigation`、`blockquote-trailing-empty-separator-backspace`，覆盖 quote 内结构空行不可进入、Backspace 删除和 trailing separator 合并。
+
+## 2026-06-06 macOS 验收结论
+
+结果：PASS。
+
+本轮按用户要求不把 Windows/打包图标测试作为 mac 验收阻断项；`src/main/after-pack-win-icon.test.ts` 与 `src/main/generate-icons.test.ts` 未纳入最终 mac 通过门禁。
+
+验证：
+- `npm run test -- packages/editor-core/src/structural-line-model.test.ts packages/editor-core/src/commands/blockquote-commands.test.ts packages/editor-core/src/commands/list-edits.test.ts packages/editor-core/src/extensions/markdown.test.ts src/renderer/code-editor.test.ts src/renderer/app.autosave.test.ts`：6 文件 504 项通过。
+- `FISHMARK_MARKDOWN_EDITING_EXPERIENCE_PROBE_GROUP=blockquote npm run test:editing-experience`：通过，`failures: []`。
+- `FISHMARK_MARKDOWN_EDITING_EXPERIENCE_PROBE_GROUP=list npm run test:editing-experience`：通过，`failures: []`。
+- `FISHMARK_MARKDOWN_EDITING_EXPERIENCE_PROBE_GROUP=structural-blank npm run test:editing-experience`：通过，`failures: []`。
+- `npm run test:blockquote-typora-visual`：通过，`pass: true`。
+- `npm run test -- --exclude src/main/after-pack-win-icon.test.ts --exclude src/main/generate-icons.test.ts`：110 文件 1277 项通过。
+- `npm run typecheck`：通过。
+- `npm run lint`：通过。
+- `npm run build`：通过，保留既有 Vite chunk-size warning。
+- `git diff --check`：通过。
+
+## 2026-06-06 引用块末尾空行 Backspace 回归修复
+
+- 修复引用块末尾空引用行 Backspace 暴露裸 `>` 的回归。
+- `>` 与 `> ` 现在都按引用内 empty line 处理；当前空引用行和上方紧邻的同深度末尾空引用行会一次删除。
+- 删除后光标落在上一条实际内容行文本末尾，quoted list 场景中为 `child list` 行尾。
+- 新增 command、renderer 和 editing-experience probe 覆盖；本轮 macOS 验收不运行 Windows 打包测试。
+
 ## 关键验收
 
 - `> 第一段\n>\n> 第二段` 渲染为连续引用块，中间裸 `>` 作为结构空行隐藏。
