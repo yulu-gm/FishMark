@@ -310,11 +310,48 @@ describe("list-edits", () => {
       "> 1. 111",
       "> 2. 333",
       ">    1. 222",
+      ">       1. 1.1",
       ">    2."
     ].join("\n");
 
     expect(applyEdit(doc, result)).toBe(expected);
     expect(result?.selection).toEqual({ anchor: expected.length, head: expected.length });
+  });
+
+  it("promotes a bare empty ordered child item in body text and preserves its existing child subtree", () => {
+    const doc = [
+      "1. 111",
+      "2. 333",
+      "    1. 222",
+      "       1. 1.1",
+      "       2."
+    ].join("\n");
+    const context = buildContext(doc, doc.length);
+    const result = computeListItemEnter(context);
+    const expected = [
+      "1. 111",
+      "2. 333",
+      "    1. 222",
+      "       1. 1.1",
+      "    2."
+    ].join("\n");
+
+    expect(applyEdit(doc, result)).toBe(expected);
+    expect(result?.selection).toEqual({ anchor: expected.length, head: expected.length });
+  });
+
+  it("does not treat an ordinary bare ordered marker after a blank line as a list exit", () => {
+    const doc = ["1. one", "", "2."].join("\n");
+    const context = buildContext(doc, doc.length);
+
+    expect(computeListItemEnter(context)).toBeNull();
+  });
+
+  it("does not treat a quoted bare ordered marker after a quote separator as a list exit", () => {
+    const doc = ["> 1. one", ">", "> 2."].join("\n");
+    const context = buildContext(doc, doc.length);
+
+    expect(computeListItemEnter(context)).toBeNull();
   });
 
   it("exits an empty top-level quote list item to quote body text", () => {

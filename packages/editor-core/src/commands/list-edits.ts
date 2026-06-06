@@ -1192,7 +1192,7 @@ function computeBareEmptyListItemEnter(ctx: SemanticContext): ListEdit | null {
       ctx,
       rootList.startOffset,
       deleteTo,
-      previousContext.scope.startOffset,
+      line.from,
       deleteTo,
       replacementPrefix
     );
@@ -1250,7 +1250,7 @@ function readPrecedingActiveListRoot(ctx: SemanticContext, lineStartOffset: numb
   if (
     activeRoot?.type === "list" &&
     activeRoot.endOffset <= lineStartOffset &&
-    sourceBetweenBlocksIsStructuralWhitespace(ctx.source, activeRoot.endOffset, lineStartOffset)
+    sourceBetweenBlocksIsAdjacentLineBreak(ctx.source, activeRoot.endOffset, lineStartOffset)
   ) {
     return activeRoot;
   }
@@ -1277,7 +1277,7 @@ function findPrecedingListRootInBlocks(
     if (
       block.type === "list" &&
       block.endOffset <= lineStartOffset &&
-      sourceBetweenBlocksIsStructuralWhitespace(source, block.endOffset, lineStartOffset) &&
+      sourceBetweenBlocksIsAdjacentLineBreak(source, block.endOffset, lineStartOffset) &&
       (!nearest || block.endOffset > nearest.endOffset)
     ) {
       nearest = block;
@@ -1287,8 +1287,10 @@ function findPrecedingListRootInBlocks(
   return nearest;
 }
 
-function sourceBetweenBlocksIsStructuralWhitespace(source: string, from: number, to: number): boolean {
-  return /^[\s>]*$/u.test(source.slice(from, to));
+function sourceBetweenBlocksIsAdjacentLineBreak(source: string, from: number, to: number): boolean {
+  const gapSource = source.slice(from, to);
+
+  return gapSource === "\n" || gapSource === "\r\n";
 }
 
 function listKindMatchesBareMarker(list: ListBlock, bareMarker: BareListMarkerLine): boolean {
