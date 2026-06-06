@@ -196,6 +196,20 @@ export function runBlockquoteBackspace(view: EditorView, activeState: ActiveBloc
     return true;
   }
 
+  if (
+    mergeTrailingEmptyBlockquoteAcrossSeparatorLine(
+      view,
+      source,
+      activeBlockquote,
+      parsed,
+      selection.head,
+      contentStart,
+      lineStart
+    )
+  ) {
+    return true;
+  }
+
   const previousLineEnd = getPreviousLineEnd(lineStart);
   if (previousLineEnd === null) {
     return false;
@@ -313,6 +327,86 @@ function hasParagraphInnerBlocksAroundStructuralSeparator(
   const nextBlock = innerBlocks.find((block) => block.startOffset === separator.nextBlockStart);
 
   return previousBlock?.type === "paragraph" && nextBlock?.type === "paragraph";
+}
+
+function mergeTrailingEmptyBlockquoteAcrossSeparatorLine(
+  view: EditorView,
+  source: string,
+  activeBlockquote: BlockquoteBlock,
+  currentParsed: NonNullable<ReturnType<typeof parseBlockquoteLine>>,
+  selectionHead: number,
+  contentStart: number,
+  lineStart: number
+): boolean {
+  if (selectionHead !== contentStart || currentParsed.content.trim().length > 0) {
+    return false;
+  }
+
+  const separatorLineEnd = getPreviousLineEnd(lineStart);
+  if (separatorLineEnd === null) {
+    return false;
+  }
+
+  const separatorLine = view.state.doc.lineAt(separatorLineEnd);
+  const separatorParsed = parseBlockquoteLine(separatorLine.text);
+
+  if (
+    !separatorParsed ||
+    separatorParsed.content.trim().length > 0 ||
+    separatorParsed.quoteDepth !== currentParsed.quoteDepth
+  ) {
+    return false;
+  }
+
+  const previousBlock = findPreviousParagraphInnerBlock(activeBlockquote, separatorLine.from);
+  if (
+    !previousBlock ||
+    previousBlock.endOffset >= contentStart ||
+    !isSingleLineBreakBetween(source, previousBlock.endOffset, separatorLine.from)
+  ) {
+    return false;
+  }
+
+  const previousLine = view.state.doc.lineAt(previousBlock.endOffset);
+  const previousParsed = parseBlockquoteLine(previousLine.text);
+  if (!previousParsed || previousParsed.quoteDepth !== currentParsed.quoteDepth) {
+    return false;
+  }
+
+  view.dispatch({
+    changes: {
+      from: previousBlock.endOffset,
+      to: contentStart,
+      insert: ""
+    },
+    selection: {
+      anchor: previousBlock.endOffset,
+      head: previousBlock.endOffset
+    }
+  });
+
+  return true;
+}
+
+function findPreviousParagraphInnerBlock(
+  activeBlockquote: BlockquoteBlock,
+  beforeOffset: number
+): Extract<NonNullable<BlockquoteBlock["innerBlocks"]>[number], { type: "paragraph" }> | null {
+  const innerBlocks = activeBlockquote.innerBlocks;
+  if (!innerBlocks) {
+    return null;
+  }
+
+  const previousBlock = [...innerBlocks]
+    .reverse()
+    .find((block) => block.type === "paragraph" && block.endOffset <= beforeOffset);
+
+  return previousBlock?.type === "paragraph" ? previousBlock : null;
+}
+
+function isSingleLineBreakBetween(source: string, from: number, to: number): boolean {
+  const between = source.slice(from, to);
+  return between === "\n" || between === "\r\n" || between === "\r";
 }
 
 function getPreviousLineEnd(lineStart: number): number | null {

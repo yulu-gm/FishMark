@@ -109,6 +109,17 @@ describe("runBlockquoteBackspace", () => {
     harness.destroy();
   });
 
+  it("joins a trailing empty quoted line across its structural separator", () => {
+    const source = ["> 1111", ">", "> "].join("\n");
+    const harness = createHarness({ doc: source, anchor: source.length });
+
+    expect(harness.runBackspace()).toBe(true);
+    expect(harness.text()).toBe("> 1111");
+    expect(harness.selectionHead()).toBe("> 1111".length);
+
+    harness.destroy();
+  });
+
   it("deletes a quote-internal structural separator from the next quote line start", () => {
     const source = ["> 11", ">", "> > 1"].join("\n");
     const harness = createHarness({ doc: source, anchor: source.lastIndexOf("1") });

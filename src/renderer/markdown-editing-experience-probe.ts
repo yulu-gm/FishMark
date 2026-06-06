@@ -4043,6 +4043,50 @@ async function runBlockquoteStructuralSeparatorNavigationCase(): Promise<CaseRes
   return result;
 }
 
+async function runBlockquoteTrailingEmptySeparatorBackspaceCase(): Promise<CaseResult> {
+  const initialContent = ["> 1111", ">", "> "].join("\n");
+  const expectedContent = "> 1111";
+  const expectedSelection = expectedContent.length;
+  const harness = setupHarness(initialContent);
+
+  harness.controller.setSelection(initialContent.length);
+  await settle();
+
+  const selectionBeforeBackspace = harness.controller.getSelection();
+  const backspaceAccepted = dispatchBackspace(harness.view);
+  await settle();
+
+  const contentAfterBackspace = harness.controller.getContent();
+  const selectionAfterBackspace = harness.controller.getSelection();
+  const separatorLineAfterBackspace = findLineByExactText(harness.root, ">");
+  const pass =
+    selectionBeforeBackspace.anchor === initialContent.length &&
+    selectionBeforeBackspace.head === initialContent.length &&
+    contentAfterBackspace === expectedContent &&
+    selectionAfterBackspace.anchor === expectedSelection &&
+    selectionAfterBackspace.head === expectedSelection &&
+    separatorLineAfterBackspace === null;
+
+  const result = resultFor({
+    caseId: "blockquote-trailing-empty-separator-backspace",
+    details: {
+      backspaceAccepted,
+      contentAfterBackspace,
+      selectionAfterBackspace,
+      selectionBeforeBackspace,
+      separatorLineAfterBackspaceClass: separatorLineAfterBackspace?.className ?? null
+    },
+    expectedContent,
+    expectedSelection: { anchor: expectedSelection, head: expectedSelection },
+    grammar: "blockquote",
+    harness,
+    name: "Backspace from an empty quoted line removes its structural separator without leaving a quote row",
+    pass
+  });
+  harness.controller.destroy();
+  return result;
+}
+
 async function runBlockquoteInnerBlocksRenderingAndEnterCase(): Promise<CaseResult> {
   const renderingContent = [
     "> - item",
@@ -4541,6 +4585,7 @@ const namedProbeCases: NamedProbeCase[] = [
   { caseId: "nested-blockquote-marker-commits-after-enter", group: "blockquote", run: runNestedBlockquoteMarkerCommitOnEnterInputCase },
   { caseId: "blockquote-bare-separator-rendering", group: "blockquote", run: runBlockquoteBareSeparatorRenderingCase },
   { caseId: "blockquote-structural-separator-navigation", group: "blockquote", run: runBlockquoteStructuralSeparatorNavigationCase },
+  { caseId: "blockquote-trailing-empty-separator-backspace", group: "blockquote", run: runBlockquoteTrailingEmptySeparatorBackspaceCase },
   { caseId: "blockquote-inner-blocks-rendering-enter", group: "blockquote", run: runBlockquoteInnerBlocksRenderingAndEnterCase },
   { caseId: "deep-ordered-list-repeated-enter-exit", group: "list", run: runDeepOrderedListRepeatedEnterExitCase },
   { caseId: "top-level-list-item-enter-body-upgrade", group: "list", run: runTopLevelListItemEnterBodyUpgradeCase }
@@ -4757,6 +4802,7 @@ export async function runMarkdownEditingExperienceProbe(): Promise<ProbeResult> 
   cases.push(await runNestedBlockquoteMarkerCommitInputCase());
   cases.push(await runBlockquoteBareSeparatorRenderingCase());
   cases.push(await runBlockquoteStructuralSeparatorNavigationCase());
+  cases.push(await runBlockquoteTrailingEmptySeparatorBackspaceCase());
   cases.push(await runBlockquoteInnerBlocksRenderingAndEnterCase());
 
   cases.push(

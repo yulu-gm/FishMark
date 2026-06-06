@@ -4220,6 +4220,39 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("joins a trailing empty quote line across its structural separator on Backspace", async () => {
+    const host = document.createElement("div");
+    const source = ["> 1111", ">", "> "].join("\n");
+    const expected = "> 1111";
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const view = getEditorView(host);
+    const advancedController = controller as typeof controller & {
+      pressBackspace: () => void;
+      setSelection: (anchor: number, head?: number) => void;
+    };
+    const editorRoot = host.querySelector(".cm-editor");
+
+    expect(view).not.toBeNull();
+    expect(editorRoot).toBeInstanceOf(HTMLElement);
+
+    editorRoot?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    advancedController.setSelection(source.length);
+    await flushMicrotasks();
+    advancedController.pressBackspace();
+    await flushMicrotasks();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(view?.state.selection.main.anchor).toBe(expected.length);
+    expect(view?.state.selection.main.head).toBe(expected.length);
+
+    controller.destroy();
+  });
+
   it("keeps compact nested blockquote content intact when Backspace is pressed at content start", async () => {
     const host = document.createElement("div");
     const source = [">> quote one", ">> quote two"].join("\n");
