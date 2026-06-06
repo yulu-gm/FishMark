@@ -98,13 +98,13 @@ describe("runBlockquoteEnter", () => {
 });
 
 describe("runBlockquoteBackspace", () => {
-  it("deletes the quote structural separator before moving the caret at a quoted content start", () => {
+  it("joins same-depth quote text across a quote-internal structural separator from the next quote line start", () => {
     const source = ["> 11", ">", "> 222"].join("\n");
     const harness = createHarness({ doc: source, anchor: source.indexOf("222") });
 
     expect(harness.runBackspace()).toBe(true);
-    expect(harness.text()).toBe(["> 11", "> 222"].join("\n"));
-    expect(harness.selectionHead()).toBe(["> 11", "> "].join("\n").length);
+    expect(harness.text()).toBe("> 11222");
+    expect(harness.selectionHead()).toBe("> 11".length);
 
     harness.destroy();
   });

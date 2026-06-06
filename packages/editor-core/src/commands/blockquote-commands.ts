@@ -179,6 +179,19 @@ export function runBlockquoteBackspace(view: EditorView, activeState: ActiveBloc
   const previousStructuralSeparator = structuralLineModel.findSeparatorBeforeLine(lineStart);
 
   if (previousStructuralSeparator) {
+    if (
+      mergeSameDepthBlockquoteAcrossStructuralSeparator(
+        view,
+        activeBlockquote,
+        previousStructuralSeparator,
+        parsed,
+        selection.head,
+        contentStart
+      )
+    ) {
+      return true;
+    }
+
     deleteBlockquoteStructuralSeparator(view, source, previousStructuralSeparator);
     return true;
   }
@@ -238,6 +251,68 @@ function deleteBlockquoteStructuralSeparator(
       head: selectionAnchor
     }
   });
+}
+
+function mergeSameDepthBlockquoteAcrossStructuralSeparator(
+  view: EditorView,
+  activeBlockquote: BlockquoteBlock,
+  separator: StructuralLineSeparator,
+  currentParsed: NonNullable<ReturnType<typeof parseBlockquoteLine>>,
+  selectionHead: number,
+  contentStart: number
+): boolean {
+  if (selectionHead !== contentStart || separator.previousBlockEnd === null) {
+    return false;
+  }
+
+  if (
+    separator.nextBlockStart !== contentStart ||
+    !hasParagraphInnerBlocksAroundStructuralSeparator(activeBlockquote, separator)
+  ) {
+    return false;
+  }
+
+  const previousLine = view.state.doc.lineAt(separator.previousBlockEnd);
+  const previousParsed = parseBlockquoteLine(previousLine.text);
+
+  if (!previousParsed || previousParsed.quoteDepth !== currentParsed.quoteDepth) {
+    return false;
+  }
+
+  if (separator.previousBlockEnd >= contentStart) {
+    return false;
+  }
+
+  view.dispatch({
+    changes: {
+      from: separator.previousBlockEnd,
+      to: contentStart,
+      insert: ""
+    },
+    selection: {
+      anchor: separator.previousBlockEnd,
+      head: separator.previousBlockEnd
+    }
+  });
+
+  return true;
+}
+
+function hasParagraphInnerBlocksAroundStructuralSeparator(
+  activeBlockquote: BlockquoteBlock,
+  separator: StructuralLineSeparator
+): boolean {
+  const innerBlocks = activeBlockquote.innerBlocks;
+  if (!innerBlocks || separator.previousBlockEnd === null || separator.nextBlockStart === null) {
+    return false;
+  }
+
+  const previousBlock = innerBlocks.find(
+    (block) => block.endOffset === separator.previousBlockEnd
+  );
+  const nextBlock = innerBlocks.find((block) => block.startOffset === separator.nextBlockStart);
+
+  return previousBlock?.type === "paragraph" && nextBlock?.type === "paragraph";
 }
 
 function getPreviousLineEnd(lineStart: number): number | null {

@@ -4189,7 +4189,7 @@ describe("createCodeEditorController", () => {
   it("deletes a bare quote separator on Backspace at the following content start", async () => {
     const host = document.createElement("div");
     const source = ["> 11", ">", "> 222"].join("\n");
-    const expected = ["> 11", "> 222"].join("\n");
+    const expected = "> 11222";
 
     const controller = createCodeEditorController({
       parent: host,
@@ -4213,8 +4213,8 @@ describe("createCodeEditorController", () => {
     await flushMicrotasks();
 
     expect(controller.getContent()).toBe(expected);
-    expect(view?.state.selection.main.anchor).toBe(["> 11", "> "].join("\n").length);
-    expect(view?.state.selection.main.head).toBe(["> 11", "> "].join("\n").length);
+    expect(view?.state.selection.main.anchor).toBe("> 11".length);
+    expect(view?.state.selection.main.head).toBe("> 11".length);
 
     controller.destroy();
   });
