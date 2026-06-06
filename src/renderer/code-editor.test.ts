@@ -3322,6 +3322,7 @@ describe("createCodeEditorController", () => {
       "> 1. 111",
       "> 2. 333",
       ">    1. 222",
+      ">       1. 1.1",
       ">    2."
     ].join("\n");
 

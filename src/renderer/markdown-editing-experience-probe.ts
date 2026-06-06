@@ -71,7 +71,7 @@ type HumanListCheckpoint = {
 
 type OracleProbeAction =
   | { text: string; type: "type" }
-  | { key: "ArrowDown" | "Backspace" | "Enter"; type: "key" };
+  | { key: "ArrowDown" | "ArrowUp" | "Backspace" | "Enter"; type: "key" };
 
 type NamedProbeCase = {
   caseId: string;
@@ -334,7 +334,7 @@ function dispatchTab(view: EditorView, shiftKey = false): boolean {
   );
 }
 
-function dispatchKey(view: EditorView, key: "ArrowDown" | "Backspace" | "Enter"): boolean {
+function dispatchKey(view: EditorView, key: "ArrowDown" | "ArrowUp" | "Backspace" | "Enter"): boolean {
   return view.contentDOM.dispatchEvent(
     new KeyboardEvent("keydown", {
       key,
@@ -3888,9 +3888,9 @@ async function runNestedBlockquoteMarkerCommitOnEnterInputCase(): Promise<CaseRe
 
 async function runBlockquoteBareSeparatorRenderingCase(): Promise<CaseResult> {
   const initialContent = [
-    "> Target paragraph",
+    "> 1",
     ">",
-    "> Explanation paragraph",
+    "> 222",
     "",
     "Plain paragraph"
   ].join("\n");
@@ -3898,19 +3898,23 @@ async function runBlockquoteBareSeparatorRenderingCase(): Promise<CaseResult> {
   harness.controller.setSelection(initialContent.indexOf("Plain paragraph"));
   await settle();
 
-  const firstLine = findLineByText(harness.root, "Target paragraph");
+  const firstLine = findLineByText(harness.root, "1");
   const separatorLine = findLineByExactText(harness.root, ">");
-  const finalLine = findLineByText(harness.root, "Explanation paragraph");
+  const finalLine = findLineByText(harness.root, "222");
   const separatorMarker = separatorLine?.querySelector<HTMLElement>(".cm-inactive-blockquote-marker") ?? null;
   const visibleSeparatorMarkerRect = separatorLine ? findTextRect(separatorLine, ">") : null;
   const markerTexts = Array.from(
     harness.root.querySelectorAll<HTMLElement>(".cm-inactive-blockquote-marker"),
     (marker) => marker.textContent ?? ""
   );
-  const firstContentRect = findTextRect(harness.root, "Target paragraph");
-  const finalContentRect = findTextRect(harness.root, "Explanation paragraph");
+  const firstContentRect = findTextRect(harness.root, "1");
+  const finalContentRect = findTextRect(harness.root, "222");
   const firstLineIsStart = firstLine?.classList.contains("cm-inactive-blockquote-start") === true;
   const separatorLineIsBlockquote = separatorLine?.classList.contains("cm-inactive-blockquote") === true;
+  const separatorLineIsSeparator =
+    separatorLine?.classList.contains("cm-inactive-blockquote-separator") === true;
+  const separatorLineIsStructural =
+    separatorLine?.classList.contains("cm-fm-line-structural-separator") === true;
   const separatorLineIsStart = separatorLine?.classList.contains("cm-inactive-blockquote-start") === true;
   const separatorLineIsEnd = separatorLine?.classList.contains("cm-inactive-blockquote-end") === true;
   const finalLineIsEnd = finalLine?.classList.contains("cm-inactive-blockquote-end") === true;
@@ -3918,6 +3922,7 @@ async function runBlockquoteBareSeparatorRenderingCase(): Promise<CaseResult> {
   const pass =
     firstLineIsStart &&
     separatorLineIsBlockquote &&
+    separatorLineIsSeparator &&
     !separatorLineIsStart &&
     !separatorLineIsEnd &&
     finalLineIsEnd &&
@@ -3936,6 +3941,8 @@ async function runBlockquoteBareSeparatorRenderingCase(): Promise<CaseResult> {
       finalContentLeft: finalContentRect?.left ?? null,
       markerTexts,
       separatorLineClass: separatorLine?.className ?? null,
+      separatorLineIsSeparator,
+      separatorLineIsStructural,
       separatorMarkerDisplay,
       visibleSeparatorMarkerRect: visibleSeparatorMarkerRect
         ? {
@@ -3956,24 +3963,30 @@ async function runBlockquoteBareSeparatorRenderingCase(): Promise<CaseResult> {
 }
 
 async function runBlockquoteStructuralSeparatorNavigationCase(): Promise<CaseResult> {
-  const initialContent = ["> 11", ">", "> > 1"].join("\n");
+  const initialContent = ["> 1", ">", "> 222"].join("\n");
   const separatorAnchor = initialContent.indexOf("\n>\n") + 2;
   const separatorPreviousAnchor = initialContent.indexOf("\n>\n");
-  const nextContentAnchor = initialContent.lastIndexOf("1");
-  const expectedContent = ["> 11", "> > 1"].join("\n");
-  const expectedSelection = expectedContent.lastIndexOf("1");
+  const previousQuoteLineEndAnchor = initialContent.indexOf("1") + "1".length;
+  const nextContentAnchor = initialContent.indexOf("222");
+  const expectedContentAfterBackspace = "> 1222";
   const harness = setupHarness(initialContent);
 
   harness.controller.setSelection(separatorAnchor);
   await settle();
 
   const selectionAfterSeparatorAttempt = harness.controller.getSelection();
-  const separatorLineBeforeBackspace = findLineByExactText(harness.root, ">");
-  const separatorLineBeforeBackspaceClasses = separatorLineBeforeBackspace?.className ?? "";
+  const separatorLineBeforeNavigation = findLineByExactText(harness.root, ">");
+  const separatorLineBeforeNavigationClasses = separatorLineBeforeNavigation?.className ?? "";
   const separatorLineIsActive =
-    separatorLineBeforeBackspace?.classList.contains("cm-fm-line-active") === true;
-  const separatorMarker = separatorLineBeforeBackspace?.querySelector<HTMLElement>(".cm-inactive-blockquote-marker") ?? null;
+    separatorLineBeforeNavigation?.classList.contains("cm-fm-line-active") === true;
+  const separatorMarker = separatorLineBeforeNavigation?.querySelector<HTMLElement>(".cm-inactive-blockquote-marker") ?? null;
   const separatorMarkerDisplay = separatorMarker ? getComputedStyle(separatorMarker).display : null;
+
+  harness.controller.setSelection(nextContentAnchor);
+  await settle();
+  const arrowUpAccepted = dispatchKey(harness.view, "ArrowUp");
+  await settle();
+  const selectionAfterArrowUp = harness.controller.getSelection();
 
   harness.controller.setSelection(nextContentAnchor);
   await settle();
@@ -3987,37 +4000,43 @@ async function runBlockquoteStructuralSeparatorNavigationCase(): Promise<CaseRes
   const pass =
     selectionAfterSeparatorAttempt.anchor === separatorPreviousAnchor &&
     selectionAfterSeparatorAttempt.head === separatorPreviousAnchor &&
-    separatorLineBeforeBackspace !== null &&
+    separatorLineBeforeNavigation !== null &&
     !separatorLineIsActive &&
     separatorMarkerDisplay === "none" &&
+    selectionAfterArrowUp.anchor === previousQuoteLineEndAnchor &&
+    selectionAfterArrowUp.head === previousQuoteLineEndAnchor &&
+    selectionAfterArrowUp.anchor !== separatorAnchor &&
     selectionBeforeBackspace.anchor === nextContentAnchor &&
     selectionBeforeBackspace.head === nextContentAnchor &&
-    contentAfterBackspace === expectedContent &&
-    selectionAfterBackspace.anchor === expectedSelection &&
-    selectionAfterBackspace.head === expectedSelection &&
+    contentAfterBackspace === expectedContentAfterBackspace &&
+    selectionAfterBackspace.anchor === previousQuoteLineEndAnchor &&
+    selectionAfterBackspace.head === previousQuoteLineEndAnchor &&
     separatorLineAfterBackspace === null;
 
   const result = resultFor({
     caseId: "blockquote-structural-separator-navigation",
     details: {
+      arrowUpAccepted,
       backspaceAccepted,
       contentAfterBackspace,
-      expectedSelection,
+      expectedContentAfterBackspace,
+      previousQuoteLineEndAnchor,
+      selectionAfterArrowUp,
       selectionAfterBackspace,
       selectionAfterSeparatorAttempt,
       selectionBeforeBackspace,
       separatorAnchor,
       separatorLineAfterBackspaceClass: separatorLineAfterBackspace?.className ?? null,
-      separatorLineBeforeBackspaceClasses,
+      separatorLineBeforeNavigationClasses,
       separatorLineIsActive,
       separatorMarkerDisplay,
       separatorPreviousAnchor
     },
-    expectedContent,
-    expectedSelection: { anchor: expectedSelection, head: expectedSelection },
+    expectedContent: expectedContentAfterBackspace,
+    expectedSelection: { anchor: previousQuoteLineEndAnchor, head: previousQuoteLineEndAnchor },
     grammar: "blockquote",
     harness,
-    name: "quote-internal structural separator cannot receive caret and Backspace removes it",
+    name: "quote-internal structural separator cannot receive caret and Backspace joins same-depth text",
     pass
   });
   harness.controller.destroy();
@@ -4131,8 +4150,8 @@ async function runBlockquoteInnerBlocksRenderingAndEnterCase(): Promise<CaseResu
     visibleRawNestedEnterMarker === null;
   nestedEnterHarness.controller.destroy();
 
-  const emptyNestedEnterInitialContent = ["> 11", "> > 222", "> > > 33333", "> > > "].join("\n");
-  const emptyNestedEnterExpectedContent = ["> 11", "> > 222", "> > > 33333", "> > "].join("\n");
+  const emptyNestedEnterInitialContent = ["> 11", "> > 222", "> > > "].join("\n");
+  const emptyNestedEnterExpectedContent = ["> 11", "> > 222", "> > "].join("\n");
   const emptyNestedEnterHarness = setupHarness(emptyNestedEnterInitialContent);
   emptyNestedEnterHarness.controller.setSelection(emptyNestedEnterInitialContent.length);
   await settle();
@@ -4191,16 +4210,16 @@ async function runBlockquoteInnerBlocksRenderingAndEnterCase(): Promise<CaseResu
   const quoteNestedOrderedListInitialContent = [
     "> 1. 111",
     "> 2. 333",
-    ">   1. 222",
-    ">     1. 1.1",
-    ">     2. "
+    ">    1. 222",
+    ">       1. 1.1",
+    ">       2."
   ].join("\n");
   const quoteNestedOrderedListExpectedContent = [
     "> 1. 111",
     "> 2. 333",
-    ">   1. 222",
-    ">     1. 1.1",
-    ">   2. "
+    ">    1. 222",
+    ">       1. 1.1",
+    ">    2."
   ].join("\n");
   const quoteNestedOrderedListHarness = setupHarness(quoteNestedOrderedListInitialContent);
   quoteNestedOrderedListHarness.controller.setSelection(quoteNestedOrderedListInitialContent.length);
