@@ -45,4 +45,4 @@
 
 - [x] Run focused unit tests and the blockquote probe.
 - [x] Run `npm.cmd test`, `npm.cmd run typecheck`, `npm.cmd run lint`, `npm.cmd run build`, and `git diff --check`.
-- [ ] Commit the focused fix and push `codex/editing-region-structural-model`.
+- [x] Commit the focused fix and push `codex/editing-region-structural-model`.
