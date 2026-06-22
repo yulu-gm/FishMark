@@ -4087,6 +4087,82 @@ async function runBlockquoteTrailingEmptySeparatorBackspaceCase(): Promise<CaseR
   return result;
 }
 
+async function runNestedQuoteListRepeatedEnterExitCase(): Promise<CaseResult> {
+  const initialContent = [
+    "> 引用块",
+    ">",
+    "> > 二级引用块",
+    "> > - List 1",
+    "> > - List 2",
+    "> >   - List 2.1",
+    "> >   -"
+  ].join("\n");
+  const expectedAfterFirstEnter = [
+    "> 引用块",
+    ">",
+    "> > 二级引用块",
+    "> > - List 1",
+    "> > - List 2",
+    "> >   - List 2.1",
+    "> > -"
+  ].join("\n");
+  const expectedContent = [
+    "> 引用块",
+    ">",
+    "> > 二级引用块",
+    "> > - List 1",
+    "> > - List 2",
+    "> >   - List 2.1",
+    "> > ",
+    "> > "
+  ].join("\n");
+  const harness = setupHarness(initialContent);
+
+  harness.controller.setSelection(initialContent.length);
+  await settle();
+
+  const firstEnterAccepted = dispatchEnter(harness.view);
+  await settle();
+  const contentAfterFirstEnter = harness.controller.getContent();
+  const selectionAfterFirstEnter = harness.controller.getSelection();
+
+  const secondEnterAccepted = dispatchEnter(harness.view);
+  await settle();
+  const actualContent = harness.controller.getContent();
+  const actualSelection = harness.controller.getSelection();
+  const finalLine = Array.from(harness.root.querySelectorAll<HTMLElement>(".cm-line")).at(-1) ?? null;
+  const pass =
+    contentAfterFirstEnter === expectedAfterFirstEnter &&
+    selectionAfterFirstEnter.anchor === expectedAfterFirstEnter.length &&
+    selectionAfterFirstEnter.head === expectedAfterFirstEnter.length &&
+    actualContent === expectedContent &&
+    actualSelection.anchor === expectedContent.length &&
+    actualSelection.head === expectedContent.length &&
+    finalLine?.classList.contains("cm-inactive-blockquote-depth-2") === true &&
+    finalLine.classList.contains("cm-inactive-blockquote-depth-3") === false;
+
+  const result = resultFor({
+    caseId: "nested-quote-list-repeated-enter-exit",
+    details: {
+      actualContent,
+      actualSelection,
+      contentAfterFirstEnter,
+      finalLineClass: finalLine?.className ?? null,
+      firstEnterAccepted,
+      secondEnterAccepted,
+      selectionAfterFirstEnter
+    },
+    expectedContent,
+    expectedSelection: { anchor: expectedContent.length, head: expectedContent.length },
+    grammar: "blockquote",
+    harness,
+    name: "repeated Enter exits a nested empty list into its existing quote depth",
+    pass
+  });
+  harness.controller.destroy();
+  return result;
+}
+
 async function runBlockquoteInnerBlocksRenderingAndEnterCase(): Promise<CaseResult> {
   const renderingContent = [
     "> - item",
@@ -4586,6 +4662,7 @@ const namedProbeCases: NamedProbeCase[] = [
   { caseId: "blockquote-bare-separator-rendering", group: "blockquote", run: runBlockquoteBareSeparatorRenderingCase },
   { caseId: "blockquote-structural-separator-navigation", group: "blockquote", run: runBlockquoteStructuralSeparatorNavigationCase },
   { caseId: "blockquote-trailing-empty-separator-backspace", group: "blockquote", run: runBlockquoteTrailingEmptySeparatorBackspaceCase },
+  { caseId: "nested-quote-list-repeated-enter-exit", group: "blockquote", run: runNestedQuoteListRepeatedEnterExitCase },
   { caseId: "blockquote-inner-blocks-rendering-enter", group: "blockquote", run: runBlockquoteInnerBlocksRenderingAndEnterCase },
   { caseId: "deep-ordered-list-repeated-enter-exit", group: "list", run: runDeepOrderedListRepeatedEnterExitCase },
   { caseId: "top-level-list-item-enter-body-upgrade", group: "list", run: runTopLevelListItemEnterBodyUpgradeCase }
@@ -4803,6 +4880,7 @@ export async function runMarkdownEditingExperienceProbe(): Promise<ProbeResult> 
   cases.push(await runBlockquoteBareSeparatorRenderingCase());
   cases.push(await runBlockquoteStructuralSeparatorNavigationCase());
   cases.push(await runBlockquoteTrailingEmptySeparatorBackspaceCase());
+  cases.push(await runNestedQuoteListRepeatedEnterExitCase());
   cases.push(await runBlockquoteInnerBlocksRenderingAndEnterCase());
 
   cases.push(

@@ -1165,8 +1165,8 @@ function computeBareEmptyListItemEnter(ctx: SemanticContext): ListEdit | null {
     return null;
   }
 
-  const previousContext = findListItemContext(rootList, rootList.endOffset, rootList, null, null);
-  if (!previousContext || !listKindMatchesBareMarker(previousContext.scope, bareMarker)) {
+  const previousContext = findTrailingListItemContextForBareMarker(rootList, bareMarker);
+  if (!previousContext) {
     return null;
   }
 
@@ -1307,6 +1307,50 @@ function listKindMatchesBareMarker(list: ListBlock, bareMarker: BareListMarkerLi
 
 function readListScopeIndent(scope: ListBlock): number | null {
   return scope.items[0]?.indent ?? null;
+}
+
+function findTrailingListItemContextForBareMarker(
+  rootList: ListBlock,
+  bareMarker: BareListMarkerLine
+): ListItemContext | null {
+  let scope = rootList;
+  let parentItem: ListItemBlock | null = null;
+  let parentScope: ListBlock | null = null;
+  let match: ListItemContext | null = null;
+
+  while (scope.items.length > 0) {
+    const itemIndex = scope.items.length - 1;
+    const item = scope.items[itemIndex]!;
+
+    if (
+      readListScopeIndent(scope) === bareMarker.indent &&
+      listKindMatchesBareMarker(scope, bareMarker)
+    ) {
+      match = {
+        rootList,
+        scope,
+        parentScope,
+        parentItem,
+        item,
+        itemIndex
+      };
+    }
+
+    const trailingChild = item.children.reduce<ListBlock | null>(
+      (latest, child) => (!latest || child.endOffset > latest.endOffset ? child : latest),
+      null
+    );
+
+    if (!trailingChild || trailingChild.endOffset !== item.endOffset) {
+      break;
+    }
+
+    parentScope = scope;
+    parentItem = item;
+    scope = trailingChild;
+  }
+
+  return match;
 }
 
 function buildBareParentEmptyListItemPrefix(
