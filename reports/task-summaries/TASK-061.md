@@ -18,6 +18,7 @@
 - 激活空引用行的 marker 隐藏方式从 `display:none` 改为透明零宽 caret anchor，避免 `> ` 后继续输入正文时被浏览器插到引用块前面。
 - 引用内列表编辑同步外部列表语义：非空项 Enter 续同级项，空子项 Enter 升级为父项，空顶级项 Enter 先插入引用内结构空行再退出为引用正文；Tab / Shift+Tab、非空 marker Backspace、空嵌套 marker 后缩进清理，以及有序列表 content-start Backspace 断开列表都只改 quote 前缀后的 list marker / indent / 结构空行。
 - 引用内列表 active decoration 现在只作用于当前列表行；同一引用块内的父项 / 兄弟项继续保持 inactive list marker，不会因为 active block 是外层 blockquote 而整段列表退回 raw marker。
+- 修复嵌套引用内空列表项连续 Enter 的作用域选择：裸列表 marker 只沿最后列表项的尾部祖先链按 marker 类型和缩进匹配 scope；空子项升级到顶级后再次 Enter 会退出为原引用层级正文，不会回溯误选较早兄弟分支，也不再额外增加 quote depth。
 - 新增 parser、decoration、command、renderer、export 与 Electron editing-experience probe 覆盖。
 
 ## 2026-06-06 结构行模型验收补充
@@ -68,6 +69,7 @@
 - 非空嵌套引用行 Enter 后结构空行与新编辑行都保持同层级 quote depth，真实 Electron probe 确认 marker 装饰之外没有可见裸 `>`。
 - 空三层引用行 Enter 后源码变为 `> 11\n> > 222\n> > > 33333\n> > `，真实 Electron probe 确认 active 行降为 depth 2 且 caret geometry 存在。
 - `> - item` 行末 Enter 生成 `> - `；`>   - ` 空子项 Enter 生成父级 `> - `；`> - ` 空顶级项 Enter 生成 `>\n> `，让列表和后续引用正文之间有引用内结构空行。
+- 二级引用中的 `> >   -` 连续 Enter 会先升级为 `> > -`，再退出为 `> > \n> > `；最终 active 行仍为 depth 2，不产生 depth 3 / 4 rail。
 - 光标位于 `> - child` 时只有该行显示 active list marker，`> - parent` / `> - sibling` 仍显示 inactive list marker。
 - 引用内有序列表 Enter 会归一后续编号，引用内列表 Tab / Shift+Tab 保留 quote 前缀并调整列表层级；Backspace 删除非空 list marker 时保留 `> `，空嵌套 list marker 删除后继续逐次清理 quote 前缀后的缩进。
 - 引用内有序列表第二项正文开头 Backspace 与外部有序列表一致，会在引用内插入结构空行并把当前项断开为引用正文，例如 `> 1. 内容\n> 2. 内容2` 变为 `> 1. 内容\n>\n> 2.内容2`。
@@ -86,6 +88,7 @@
 - `npm.cmd run test -- packages/editor-core/src/commands/markdown-commands.test.ts packages/editor-core/src/commands/list-edits.test.ts src/renderer/code-editor.test.ts`
 - `FISHMARK_BLOCKQUOTE_TYPORA_VISUAL_PHASE=nested-final npm.cmd run test:blockquote-typora-visual`
 - `npm.cmd run test -- packages/editor-core/src/decorations/block-decorations.test.ts packages/editor-core/src/commands/blockquote-commands.test.ts packages/markdown-engine/src/parse-block-map.test.ts src/renderer/app.autosave.test.ts src/renderer/editor-source-layout.test.ts src/renderer/code-editor.test.ts src/renderer/export-html.test.ts`
+- `$env:FISHMARK_MARKDOWN_EDITING_EXPERIENCE_PROBE_CASE='nested-quote-list-repeated-enter-exit'; npm.cmd run test:editing-experience`
 - `npm.cmd run typecheck`
 - `npm.cmd run lint`
 - `npm.cmd run build`

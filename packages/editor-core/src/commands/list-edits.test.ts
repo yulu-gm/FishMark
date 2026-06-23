@@ -367,6 +367,59 @@ describe("list-edits", () => {
     });
   });
 
+  it("exits a promoted top-level list marker at its existing nested quote depth", () => {
+    const doc = [
+      "> 引用块",
+      ">",
+      "> > 二级引用块",
+      "> > - List 1",
+      "> > - List 2",
+      "> >   - List 2.1",
+      "> > -"
+    ].join("\n");
+    const context = buildContext(doc, doc.length);
+    const result = computeListItemEnter(context);
+    const expected = [
+      "> 引用块",
+      ">",
+      "> > 二级引用块",
+      "> > - List 1",
+      "> > - List 2",
+      "> >   - List 2.1",
+      "> > ",
+      "> > "
+    ].join("\n");
+
+    expect(applyEdit(doc, result)).toBe(expected);
+    expect(result?.selection).toEqual({ anchor: expected.length, head: expected.length });
+  });
+
+  it("does not recover a bare nested marker from an earlier sibling branch", () => {
+    const doc = [
+      "> > - [ ] first",
+      "> >   - child",
+      "> > - second",
+      "> >   1. ordered child",
+      "> >   -"
+    ].join("\n");
+    const context = buildContext(doc, doc.length);
+
+    expect(computeListItemEnter(context)).toBeNull();
+  });
+
+  it("does not recover an ordered bare marker from an earlier delimiter branch", () => {
+    const doc = [
+      "> > 1. first",
+      "> >   1. child",
+      "> > 2. second",
+      "> >   1) ordered child",
+      "> >   2."
+    ].join("\n");
+    const context = buildContext(doc, doc.length);
+
+    expect(computeListItemEnter(context)).toBeNull();
+  });
+
   it("exits a top-level empty ordered quote list item into quoted body text with a structural separator", () => {
     const doc = ["> 1. 111", "> 2."].join("\n");
     const context = buildContext(doc, doc.length);
