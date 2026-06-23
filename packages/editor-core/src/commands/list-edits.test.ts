@@ -467,6 +467,11 @@ describe("list-edits", () => {
   it.each([
     ["body unordered", ["- parent", "-"].join("\n"), ["- parent", "  - "].join("\n")],
     [
+      "single quote padded unordered",
+      ["> - parent", "> - "].join("\n"),
+      ["> - parent", ">   - "].join("\n")
+    ],
+    [
       "nested quote unordered",
       ["> > - parent", "> > -"].join("\n"),
       ["> > - parent", "> >   - "].join("\n")

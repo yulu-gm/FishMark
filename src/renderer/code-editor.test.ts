@@ -3562,6 +3562,55 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("indents an empty single-quote list item when Tab is pressed", () => {
+    const host = document.createElement("div");
+    const source = ["> - List1", "> - "].join("\n");
+    const expected = ["> - List1", ">   - "].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressTab: (shiftKey?: boolean) => void;
+    };
+    const view = getEditorView(host);
+
+    advancedController.setSelection(source.length);
+    advancedController.pressTab();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(view?.state.selection.main.anchor).toBe(expected.length);
+
+    controller.destroy();
+  });
+
+  it("exits a quoted list without leaving trailing quote separator rows", () => {
+    const host = document.createElement("div");
+    const source = ["> - List1", "> - "].join("\n");
+    const expected = ["> - List1", "", ""].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+
+    advancedController.setSelection(source.length);
+    advancedController.pressEnter();
+    advancedController.pressEnter();
+
+    expect(controller.getContent()).toBe(expected);
+
+    controller.destroy();
+  });
+
   it("inserts an inline hard break on Shift+Enter", () => {
     const host = document.createElement("div");
     const source = "AlphaBeta";

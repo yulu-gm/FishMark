@@ -1,3 +1,4 @@
+import type { Line } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 
 import type { ActiveBlockState } from "../active-block";
@@ -23,6 +24,10 @@ export function runBlockquoteEnter(view: EditorView): boolean {
   }
 
   if (parsed.content.trim().length === 0) {
+    if (exitTrailingBlockquoteSeparatorPair(view, line, parsed)) {
+      return true;
+    }
+
     if (parsed.quoteDepth > 1) {
       const parentPrefix = buildParentBlockquoteEmptyPrefix(line.text, parsed);
 
@@ -74,6 +79,55 @@ export function runBlockquoteEnter(view: EditorView): boolean {
     selection: {
       anchor: nextAnchor,
       head: nextAnchor
+    }
+  });
+
+  return true;
+}
+
+function exitTrailingBlockquoteSeparatorPair(
+  view: EditorView,
+  line: Line,
+  parsed: NonNullable<ReturnType<typeof parseBlockquoteLine>>
+): boolean {
+  const previousLineEnd = getPreviousLineEnd(line.from);
+  if (previousLineEnd === null) {
+    return false;
+  }
+
+  const previousLine = view.state.doc.lineAt(previousLineEnd);
+  const previousParsed = parseBlockquoteLine(previousLine.text);
+  if (
+    !previousParsed ||
+    previousParsed.quoteDepth !== parsed.quoteDepth ||
+    previousParsed.content.trim().length > 0
+  ) {
+    return false;
+  }
+
+  const deleteTo =
+    line.to < view.state.doc.length && view.state.doc.sliceString(line.to, line.to + 1) === "\n"
+      ? line.to + 1
+      : line.to;
+  let replacement = "\n";
+
+  if (parsed.quoteDepth > 1) {
+    const parentPrefix = buildParentBlockquoteEmptyPrefix(line.text, parsed);
+    replacement =
+      `${buildBlockquoteStructuralSeparatorPrefix(parentPrefix, parsed.quoteDepth - 1)}` +
+      `\n${buildBlockquoteContinuationPrefix(parentPrefix)}`;
+  }
+
+  const selectionAnchor = previousLine.from + replacement.length;
+  view.dispatch({
+    changes: {
+      from: previousLine.from,
+      to: deleteTo,
+      insert: replacement
+    },
+    selection: {
+      anchor: selectionAnchor,
+      head: selectionAnchor
     }
   });
 

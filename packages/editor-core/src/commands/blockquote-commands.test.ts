@@ -60,7 +60,33 @@ describe("runBlockquoteEnter", () => {
     const harness = createHarness({ doc: source, anchor: source.length });
 
     expect(harness.runEnter()).toBe(true);
-    expect(harness.text()).toBe(["> alpha", ">", ""].join("\n"));
+    expect(harness.text()).toBe(["> alpha", "", ""].join("\n"));
+    expect(harness.selectionHead()).toBe(harness.text().length);
+
+    harness.destroy();
+  });
+
+  it("does not leave a trailing quote separator after exiting a quoted list", () => {
+    const source = ["> - List1", ">", "> "].join("\n");
+    const harness = createHarness({ doc: source, anchor: source.length });
+
+    expect(harness.runEnter()).toBe(true);
+    expect(harness.text()).toBe(["> - List1", "", ""].join("\n"));
+    expect(harness.selectionHead()).toBe(harness.text().length);
+
+    harness.destroy();
+  });
+
+  it("outdents a trailing nested quote separator together with its empty line", () => {
+    const source = ["> > - List1", "> > ", "> > "].join("\n");
+    const harness = createHarness({ doc: source, anchor: source.length });
+
+    expect(harness.runEnter()).toBe(true);
+    expect(harness.text()).toBe(["> > - List1", ">", "> "].join("\n"));
+    expect(harness.selectionHead()).toBe(harness.text().length);
+
+    expect(harness.runEnter()).toBe(true);
+    expect(harness.text()).toBe(["> > - List1", "", ""].join("\n"));
     expect(harness.selectionHead()).toBe(harness.text().length);
 
     harness.destroy();

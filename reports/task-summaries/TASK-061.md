@@ -20,6 +20,7 @@
 - 引用内列表 active decoration 现在只作用于当前列表行；同一引用块内的父项 / 兄弟项继续保持 inactive list marker，不会因为 active block 是外层 blockquote 而整段列表退回 raw marker。
 - 修复嵌套引用内空列表项连续 Enter 的作用域选择：裸列表 marker 只沿最后列表项的尾部祖先链按 marker 类型和缩进匹配 scope；空子项升级到顶级后再次 Enter 会退出为原引用层级正文，不会回溯误选较早兄弟分支，也不再额外增加 quote depth。
 - 修复引用内裸列表 marker 的 Tab 路径：即使 micromark 把 `> > -` 当作上一列表项的 lazy continuation，Tab 也会复用 active list root，在 quote prefix 后缩进并补 marker padding，得到可解析的 `> >   - ` 嵌套列表项。
+- 补齐单层引用 padded empty list item 的 Tab 验证，并修复引用列表/嵌套引用退出后的尾部 marker 累积：同深度 structural separator 与活动空引用行成对 outdent 或退出，顶层最终只保留外部结构空行。
 - 新增 parser、decoration、command、renderer、export 与 Electron editing-experience probe 覆盖。
 
 ## 2026-06-06 结构行模型验收补充

@@ -506,6 +506,8 @@
 - 引用内嵌套有序列表空子项按 Enter 升级到父列表时，编号和外部正文列表完全一致继续递增，例如 `>   1. 222\n>     1. 1.1\n>     2. ` 升级后得到 `>   1. 222\n>     1. 1.1\n>   2. `，不会重启为 `>   1. `
 - 引用内有序列表续项会继续归一编号；`Tab` / `Shift+Tab` 只调整 quote 前缀后的列表缩进；列表正文开头 `Backspace` 删除 list marker 但保留引用前缀，空嵌套列表项先删除 marker 再逐次清理 quote 前缀后的缩进
 - 引用内空列表项经 Enter 提升后即使暂时只剩裸 `-` / `1.` marker，按 `Tab` 仍会沿用正文列表缩进语义并补齐 marker padding，例如 `> > - parent\n> > -` 变为 `> > - parent\n> >   - `；marker 与前一列表之间存在引用内结构空行时不得误缩进
+- 单层引用内由 Enter 创建的 padded empty list item 也必须响应 `Tab`，例如 `> - List1\n> - ` 变为 `> - List1\n>   - `，不能因为活动行为空而 no-op
+- 空顶级引用列表项第一次 Enter 生成 `>\n> ` 后，第二次 Enter 必须同时清理尾部结构 separator 和活动空引用行，得到 `> - List1\n\n`；嵌套引用中的同类两行必须一起逐级 outdent，不得在文档末端累积孤立 `>` 行
 - 引用内有序列表第二项正文开头 `Backspace` 和外部有序列表一致，会在引用内插入结构空行并把当前项断开为引用正文，例如 `> 1. 内容\n> 2. 内容2` 变为 `> 1. 内容\n>\n> 2.内容2`
 - HTML export 使用 parser-owned `innerBlocks`，不通过 export 侧正则二次猜测引用内语法
 

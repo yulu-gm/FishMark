@@ -6,6 +6,10 @@
 
 ## 当前项目判断
 
+### 2026-06-23 TASK-061 引用列表 Tab 与尾部 separator 回归修复
+
+补齐单层引用中 padded empty list item（`> - `）的真实 Tab 覆盖；当前 `origin/main` 的统一列表命令可将其缩进为 `>   - `。同时修复引用列表退出后尾部 `>` 累积：同深度的结构分隔行和活动空引用行现在成对退出，顶层 `>\n> ` 收敛为普通结构空行，嵌套层级则两行一起逐级 outdent，不再留下孤立 quote marker。
+
 ### 2026-06-23 TASK-061 引用内裸列表 marker Tab 回归修复
 
 引用内普通非空列表项的 Tab / Shift+Tab 路径原本保持可用，但 Enter 提升空列表项后留下的裸 `-` / `1.` 会被 micromark 解析为上一列表项的 lazy continuation，导致 Tab 找不到当前 list item。现在 editor-core 会在普通列表缩进命令前识别紧邻活动列表尾部祖先链的裸 marker，在 quote prefix 后增加缩进并补 marker padding；`> > -` 按 Tab 后得到 `> >   - `，重新成为可解析、可渲染的嵌套列表项。
