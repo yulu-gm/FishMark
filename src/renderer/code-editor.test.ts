@@ -3587,6 +3587,80 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("indents a quoted list item immediately after Enter and text input", () => {
+    const host = document.createElement("div");
+    const source = "> - List 1";
+    const expected = ["> - List 1", ">   - 2"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+      pressTab: (shiftKey?: boolean) => void;
+    };
+    const view = getEditorView(host);
+
+    advancedController.setSelection(source.length);
+    advancedController.pressEnter();
+    controller.insertText("2");
+    advancedController.pressTab();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(view?.state.selection.main.anchor).toBe(expected.length);
+
+    controller.destroy();
+  });
+
+  it("indents an adjacent quoted list item with a different unordered marker", () => {
+    const host = document.createElement("div");
+    const source = ["> * List 1", "> - 2"].join("\n");
+    const expected = ["> * List 1", ">   - 2"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressTab: (shiftKey?: boolean) => void;
+    };
+
+    advancedController.setSelection(source.length);
+    advancedController.pressTab();
+
+    expect(controller.getContent()).toBe(expected);
+
+    controller.destroy();
+  });
+
+  it("repairs a residual quote separator when indenting the following list item", () => {
+    const host = document.createElement("div");
+    const source = ["> - List 1", ">", "> - 2"].join("\n");
+    const expected = ["> - List 1", ">   - 2"].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressTab: (shiftKey?: boolean) => void;
+    };
+
+    advancedController.setSelection(source.length);
+    advancedController.pressTab();
+
+    expect(controller.getContent()).toBe(expected);
+
+    controller.destroy();
+  });
+
   it("exits a quoted list without leaving trailing quote separator rows", () => {
     const host = document.createElement("div");
     const source = ["> - List1", "> - "].join("\n");

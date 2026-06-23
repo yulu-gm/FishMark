@@ -467,9 +467,29 @@ describe("list-edits", () => {
   it.each([
     ["body unordered", ["- parent", "-"].join("\n"), ["- parent", "  - "].join("\n")],
     [
+      "body mixed unordered markers",
+      ["* parent", "- child"].join("\n"),
+      ["* parent", "  - child"].join("\n")
+    ],
+    [
       "single quote padded unordered",
       ["> - parent", "> - "].join("\n"),
       ["> - parent", ">   - "].join("\n")
+    ],
+    [
+      "single quote mixed unordered markers",
+      ["> * List 1", "> - 2"].join("\n"),
+      ["> * List 1", ">   - 2"].join("\n")
+    ],
+    [
+      "single quote list after a residual structural separator",
+      ["> - List 1", ">", "> - 2"].join("\n"),
+      ["> - List 1", ">   - 2"].join("\n")
+    ],
+    [
+      "single quote list after repeated residual structural separators",
+      ["> - List 1", ">", "> ", "> - 2"].join("\n"),
+      ["> - List 1", ">   - 2"].join("\n")
     ],
     [
       "nested quote unordered",
@@ -494,6 +514,16 @@ describe("list-edits", () => {
 
   it("does not indent a bare marker that is separated from the preceding list", () => {
     const doc = ["> > - parent", "> >", "> > -"].join("\n");
+    const context = buildContext(doc, doc.length);
+
+    expect(computeIndentListItem(context)).toBeNull();
+  });
+
+  it.each([
+    ["non-list quote content", ["> paragraph", ">", "> - 2"].join("\n")],
+    ["an external blank line", ["> - parent", "", "> - 2"].join("\n")],
+    ["a different quote depth", ["> > - parent", ">", "> > - 2"].join("\n")]
+  ])("does not repair residual quote separators across %s", (_kind, doc) => {
     const context = buildContext(doc, doc.length);
 
     expect(computeIndentListItem(context)).toBeNull();

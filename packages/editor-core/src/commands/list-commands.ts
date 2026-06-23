@@ -115,12 +115,6 @@ function runListEdit(
   activeState: ActiveBlockState,
   computeEdit: (ctx: ReturnType<typeof readSemanticContext>) => ListEdit | null
 ): boolean {
-  const activeBlockType = activeState.activeBlock?.type;
-
-  if (activeBlockType !== "list" && activeBlockType !== "blockquote") {
-    return false;
-  }
-
   const edit = computeEdit(readSemanticContext(view.state, activeState));
 
   if (!edit) {

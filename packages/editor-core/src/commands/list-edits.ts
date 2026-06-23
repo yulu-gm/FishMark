@@ -7,6 +7,7 @@ import {
   type ListItemBlock
 } from "@fishmark/markdown-engine";
 
+import { createActiveBlockStateFromMarkdownDocument } from "../active-block";
 import type { SemanticContext } from "./semantic-context";
 import { parseBlockquoteLine, parseListLine } from "./line-parsers";
 
@@ -509,8 +510,12 @@ export function computeIndentListItem(ctx: SemanticContext): ListEdit | null {
   const rootList = readActiveListRoot(ctx);
   const current = rootList ? findListItemContext(rootList, ctx.selection.from, rootList, null, null) : null;
 
-  if (!current || ctx.selection.empty === false || current.itemIndex <= 0) {
+  if (!current || ctx.selection.empty === false) {
     return null;
+  }
+
+  if (current.itemIndex <= 0) {
+    return computeIndentAcrossResidualQuoteSeparators(ctx);
   }
 
   const subtreeSource = readItemSubtreeSource(ctx, current.item);
@@ -523,6 +528,117 @@ export function computeIndentListItem(ctx: SemanticContext): ListEdit | null {
   const cursor = ctx.selection.from + 2;
 
   return finalizeListEdit(current.rootList, blockSource, tentativeSource, toBlockOffset(current.rootList, cursor));
+}
+
+function computeIndentAcrossResidualQuoteSeparators(ctx: SemanticContext): ListEdit | null {
+  const currentLine = ctx.state.doc.lineAt(ctx.selection.from);
+  const currentQuote = parseBlockquoteLine(currentLine.text);
+  const currentListLine = parseListLineWithContainerPrefix(currentLine.text);
+
+  if (!currentQuote || !currentListLine || currentLine.number <= 2) {
+    return null;
+  }
+
+  let firstSeparatorFrom = currentLine.from;
+  let previousLineNumber = currentLine.number - 1;
+  let separatorCount = 0;
+
+  while (previousLineNumber >= 1) {
+    const previousLine = ctx.state.doc.line(previousLineNumber);
+    const previousQuote = parseBlockquoteLine(previousLine.text);
+
+    if (
+      !previousQuote ||
+      previousQuote.quoteDepth !== currentQuote.quoteDepth ||
+      previousQuote.content.trim().length > 0
+    ) {
+      break;
+    }
+
+    firstSeparatorFrom = previousLine.from;
+    separatorCount += 1;
+    previousLineNumber -= 1;
+  }
+
+  if (separatorCount === 0 || previousLineNumber < 1) {
+    return null;
+  }
+
+  const previousContentLine = ctx.state.doc.line(previousLineNumber);
+  const previousQuote = parseBlockquoteLine(previousContentLine.text);
+  const previousListLine = parseListLineWithContainerPrefix(previousContentLine.text);
+
+  if (
+    !previousQuote ||
+    previousQuote.quoteDepth !== currentQuote.quoteDepth ||
+    !previousListLine ||
+    previousListLine.parsed.indent !== currentListLine.parsed.indent ||
+    !listMarkersShareKind(previousListLine.parsed.marker, currentListLine.parsed.marker)
+  ) {
+    return null;
+  }
+
+  const removedLength = currentLine.from - firstSeparatorFrom;
+  const repairedState = ctx.state.update({
+    changes: {
+      from: firstSeparatorFrom,
+      to: currentLine.from,
+      insert: ""
+    },
+    selection: {
+      anchor: ctx.selection.from - removedLength,
+      head: ctx.selection.to - removedLength
+    }
+  }).state;
+  const repairedSource = repairedState.doc.toString();
+  const repairedSelection = repairedState.selection.main;
+  const repairedActiveState = createActiveBlockStateFromMarkdownDocument(
+    parseMarkdownDocument(repairedSource),
+    {
+      anchor: repairedSelection.anchor,
+      head: repairedSelection.head
+    }
+  );
+  const repairedEdit = computeIndentListItem({
+    ...ctx,
+    state: repairedState,
+    source: repairedSource,
+    activeState: repairedActiveState,
+    selection: {
+      from: repairedSelection.from,
+      to: repairedSelection.to,
+      empty: repairedSelection.empty
+    }
+  });
+
+  if (!repairedEdit) {
+    return null;
+  }
+
+  const finalSource = replaceRange(
+    repairedSource,
+    repairedEdit.changes.from,
+    repairedEdit.changes.to,
+    repairedEdit.changes.insert
+  );
+
+  return {
+    changes: createMinimalTextChange(ctx.source, finalSource, 0),
+    selection: repairedEdit.selection,
+    filter: repairedEdit.filter,
+    userEvent: repairedEdit.userEvent
+  };
+}
+
+function listMarkersShareKind(left: string, right: string): boolean {
+  const leftOrdered = /^(\d+)([.)])$/u.exec(left);
+  const rightOrdered = /^(\d+)([.)])$/u.exec(right);
+
+  if (!leftOrdered || !rightOrdered) {
+    return leftOrdered === null && rightOrdered === null;
+  }
+
+  return leftOrdered[2] === rightOrdered[2];
 }
 
 export function computeOutdentListItem(ctx: SemanticContext): ListEdit | null {
@@ -1060,8 +1176,17 @@ function readActiveListRoot(ctx: SemanticContext): ListBlock | null {
     return activeRoot;
   }
 
-  const blocks = parseBlockMap(ctx.source).blocks;
   const selectionOffset = ctx.selection.from;
+  const nestedLiveRoot = findListRootInBlockquotes(
+    parseMarkdownDocument(ctx.source).blocks,
+    selectionOffset
+  );
+
+  if (nestedLiveRoot) {
+    return nestedLiveRoot;
+  }
+
+  const blocks = parseBlockMap(ctx.source).blocks;
   const currentIndex = blocks.findIndex(
     (block) => block.type === "list" && selectionOffset >= block.startOffset && selectionOffset <= block.endOffset
   );
@@ -1143,6 +1268,32 @@ function findListRootInBlocks(
   for (const block of blocks) {
     if (block.type === "list" && offsetIsInsideBlock(block, selectionOffset)) {
       return block;
+    }
+
+    if (block.type === "blockquote" && block.innerBlocks && offsetIsInsideBlock(block, selectionOffset)) {
+      const nested = findListRootInBlocks(block.innerBlocks, selectionOffset);
+
+      if (nested) {
+        return nested;
+      }
+    }
+  }
+
+  return null;
+}
+
+function findListRootInBlockquotes(
+  blocks: readonly MarkdownBlock[],
+  selectionOffset: number
+): ListBlock | null {
+  for (const block of blocks) {
+    if (block.type !== "blockquote" || !block.innerBlocks || !offsetIsInsideBlock(block, selectionOffset)) {
+      continue;
+    }
+
+    const nested = findListRootInBlocks(block.innerBlocks, selectionOffset);
+    if (nested) {
+      return nested;
     }
   }
 
