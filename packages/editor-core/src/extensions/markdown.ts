@@ -1176,11 +1176,11 @@ export function createFishMarkMarkdownExtensions(
       },
       {
         key: "Tab",
-        run: (view) => runMarkdownTab(view, runtime.activeBlockState)
+        run: (view) => runMarkdownTab(view, createLiveActiveBlockState(view.state))
       },
       {
         key: "Shift-Tab",
-        run: (view) => runMarkdownShiftTab(view, runtime.activeBlockState)
+        run: (view) => runMarkdownShiftTab(view, createLiveActiveBlockState(view.state))
       },
       {
         key: "Alt-ArrowUp",
