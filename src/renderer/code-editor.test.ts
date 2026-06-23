@@ -3534,6 +3534,34 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("indents a promoted bare quote list marker when Tab is pressed", () => {
+    const host = document.createElement("div");
+    const source = ["> > - parent", "> > -"].join("\n");
+    const expected = ["> > - parent", "> >   - "].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressTab: (shiftKey?: boolean) => void;
+    };
+    const view = getEditorView(host);
+
+    expect(view).not.toBeNull();
+
+    advancedController.setSelection(source.length);
+    advancedController.pressTab();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(view?.state.selection.main.anchor).toBe(expected.length);
+    expect(view?.state.selection.main.head).toBe(expected.length);
+
+    controller.destroy();
+  });
+
   it("inserts an inline hard break on Shift+Enter", () => {
     const host = document.createElement("div");
     const source = "AlphaBeta";

@@ -501,6 +501,11 @@ export function computeBackspaceListMarker(ctx: SemanticContext): ListEdit | nul
 }
 
 export function computeIndentListItem(ctx: SemanticContext): ListEdit | null {
+  const bareMarkerEdit = computeIndentBareListMarker(ctx);
+  if (bareMarkerEdit) {
+    return bareMarkerEdit;
+  }
+
   const rootList = readActiveListRoot(ctx);
   const current = rootList ? findListItemContext(rootList, ctx.selection.from, rootList, null, null) : null;
 
@@ -1188,7 +1193,7 @@ function computeBareEmptyListItemEnter(ctx: SemanticContext): ListEdit | null {
       return null;
     }
 
-    return finalizeBareListMarkerEnter(
+    return finalizeBareListMarkerEdit(
       ctx,
       rootList.startOffset,
       deleteTo,
@@ -1206,7 +1211,7 @@ function computeBareEmptyListItemEnter(ctx: SemanticContext): ListEdit | null {
     lineText,
     line.from > rootList.startOffset
   );
-  return finalizeBareListMarkerEnter(
+  return finalizeBareListMarkerEdit(
     ctx,
     rootList.startOffset,
     deleteTo,
@@ -1214,6 +1219,45 @@ function computeBareEmptyListItemEnter(ctx: SemanticContext): ListEdit | null {
     deleteTo,
     replacementPrefix,
     "input.list-exit"
+  );
+}
+
+function computeIndentBareListMarker(ctx: SemanticContext): ListEdit | null {
+  if (ctx.selection.empty === false) {
+    return null;
+  }
+
+  const line = ctx.state.doc.lineAt(ctx.selection.from);
+  if (ctx.selection.from !== line.to) {
+    return null;
+  }
+
+  const lineText = ctx.source.slice(line.from, line.to);
+  const bareMarker = parseBareListMarkerLine(lineText);
+  if (!bareMarker) {
+    return null;
+  }
+
+  const rootList = readActiveListRoot(ctx) ?? readPrecedingActiveListRoot(ctx, line.from);
+  if (!rootList || !findTrailingListItemContextForBareMarker(rootList, bareMarker)) {
+    return null;
+  }
+
+  const containerPrefixLength = readContainerPrefixLength(lineText);
+  const marker = bareMarker.ordered
+    ? `1${bareMarker.delimiter ?? "."}`
+    : bareMarker.marker;
+  const replacement =
+    `${lineText.slice(0, containerPrefixLength)}  ${" ".repeat(bareMarker.indent)}${marker} `;
+  const deleteTo = line.to < ctx.source.length && ctx.source[line.to] === "\n" ? line.to + 1 : line.to;
+
+  return finalizeBareListMarkerEdit(
+    ctx,
+    rootList.startOffset,
+    deleteTo,
+    line.from,
+    deleteTo,
+    replacement
   );
 }
 
@@ -1384,7 +1428,7 @@ function buildBareTopLevelListExitPrefix(lineText: string, hasPreviousRootConten
   return `${separatorPrefix}\n${parsedQuote.sourcePrefix}`;
 }
 
-function finalizeBareListMarkerEnter(
+function finalizeBareListMarkerEdit(
   ctx: SemanticContext,
   rangeFrom: number,
   rangeTo: number,

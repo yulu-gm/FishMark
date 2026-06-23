@@ -6,6 +6,10 @@
 
 ## 当前项目判断
 
+### 2026-06-23 TASK-061 引用内裸列表 marker Tab 回归修复
+
+引用内普通非空列表项的 Tab / Shift+Tab 路径原本保持可用，但 Enter 提升空列表项后留下的裸 `-` / `1.` 会被 micromark 解析为上一列表项的 lazy continuation，导致 Tab 找不到当前 list item。现在 editor-core 会在普通列表缩进命令前识别紧邻活动列表尾部祖先链的裸 marker，在 quote prefix 后增加缩进并补 marker padding；`> > -` 按 Tab 后得到 `> >   - `，重新成为可解析、可渲染的嵌套列表项。
+
 ### 2026-06-06 TASK-061 引用块末尾空行 Backspace 回归修复
 
 针对人工验收截图中的引用块末尾空行回归，Backspace 现在会把当前 `>` / `> ` 空引用行当作引用内 empty line 直接删除；如果上方紧邻同一引用块末尾结构空行，也会一并删除。删除后 selection 落在同一引用块内上一条实际内容行的文本末尾，例如 quoted list 的 `child list` 行尾，不再出现裸 `>` 中间态。

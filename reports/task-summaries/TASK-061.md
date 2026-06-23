@@ -19,6 +19,7 @@
 - 引用内列表编辑同步外部列表语义：非空项 Enter 续同级项，空子项 Enter 升级为父项，空顶级项 Enter 先插入引用内结构空行再退出为引用正文；Tab / Shift+Tab、非空 marker Backspace、空嵌套 marker 后缩进清理，以及有序列表 content-start Backspace 断开列表都只改 quote 前缀后的 list marker / indent / 结构空行。
 - 引用内列表 active decoration 现在只作用于当前列表行；同一引用块内的父项 / 兄弟项继续保持 inactive list marker，不会因为 active block 是外层 blockquote 而整段列表退回 raw marker。
 - 修复嵌套引用内空列表项连续 Enter 的作用域选择：裸列表 marker 只沿最后列表项的尾部祖先链按 marker 类型和缩进匹配 scope；空子项升级到顶级后再次 Enter 会退出为原引用层级正文，不会回溯误选较早兄弟分支，也不再额外增加 quote depth。
+- 修复引用内裸列表 marker 的 Tab 路径：即使 micromark 把 `> > -` 当作上一列表项的 lazy continuation，Tab 也会复用 active list root，在 quote prefix 后缩进并补 marker padding，得到可解析的 `> >   - ` 嵌套列表项。
 - 新增 parser、decoration、command、renderer、export 与 Electron editing-experience probe 覆盖。
 
 ## 2026-06-06 结构行模型验收补充

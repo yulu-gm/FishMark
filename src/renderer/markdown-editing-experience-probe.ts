@@ -4227,6 +4227,46 @@ async function runNestedQuoteListRepeatedEnterExitCase(): Promise<CaseResult> {
   return result;
 }
 
+async function runBlockquoteBareListMarkerTabCase(): Promise<CaseResult> {
+  const initialContent = ["> > - parent", "> > -"].join("\n");
+  const expectedContent = ["> > - parent", "> >   - "].join("\n");
+  const harness = setupHarness(initialContent);
+
+  harness.controller.setSelection(initialContent.length);
+  await settle();
+
+  const tabAccepted = dispatchTab(harness.view);
+  await settle();
+
+  const actualContent = harness.controller.getContent();
+  const actualSelection = harness.controller.getSelection();
+  const activeLine = Array.from(harness.root.querySelectorAll<HTMLElement>(".cm-line")).at(-1) ?? null;
+  const pass =
+    actualContent === expectedContent &&
+    actualSelection.anchor === expectedContent.length &&
+    actualSelection.head === expectedContent.length &&
+    activeLine?.classList.contains("cm-inactive-blockquote-depth-2") === true &&
+    activeLine.classList.contains("cm-active-list-depth-1") === true;
+
+  const result = resultFor({
+    caseId: "blockquote-bare-list-marker-tab",
+    details: {
+      activeLineClass: activeLine?.className ?? null,
+      actualContent,
+      actualSelection,
+      tabAccepted
+    },
+    expectedContent,
+    expectedSelection: { anchor: expectedContent.length, head: expectedContent.length },
+    grammar: "blockquote",
+    harness,
+    name: "Tab indents a promoted bare list marker inside a nested blockquote",
+    pass
+  });
+  harness.controller.destroy();
+  return result;
+}
+
 async function runBlockquoteInnerBlocksRenderingAndEnterCase(): Promise<CaseResult> {
   const renderingContent = [
     "> - item",
@@ -4728,6 +4768,7 @@ const namedProbeCases: NamedProbeCase[] = [
   { caseId: "blockquote-trailing-empty-separator-backspace", group: "blockquote", run: runBlockquoteTrailingEmptySeparatorBackspaceCase },
   { caseId: "blockquote-list-trailing-empty-backspace", group: "blockquote", run: runBlockquoteListTrailingEmptyBackspaceCase },
   { caseId: "nested-quote-list-repeated-enter-exit", group: "blockquote", run: runNestedQuoteListRepeatedEnterExitCase },
+  { caseId: "blockquote-bare-list-marker-tab", group: "blockquote", run: runBlockquoteBareListMarkerTabCase },
   { caseId: "blockquote-inner-blocks-rendering-enter", group: "blockquote", run: runBlockquoteInnerBlocksRenderingAndEnterCase },
   { caseId: "deep-ordered-list-repeated-enter-exit", group: "list", run: runDeepOrderedListRepeatedEnterExitCase },
   { caseId: "top-level-list-item-enter-body-upgrade", group: "list", run: runTopLevelListItemEnterBodyUpgradeCase }
@@ -4946,6 +4987,7 @@ export async function runMarkdownEditingExperienceProbe(): Promise<ProbeResult> 
   cases.push(await runBlockquoteStructuralSeparatorNavigationCase());
   cases.push(await runBlockquoteTrailingEmptySeparatorBackspaceCase());
   cases.push(await runNestedQuoteListRepeatedEnterExitCase());
+  cases.push(await runBlockquoteBareListMarkerTabCase());
   cases.push(await runBlockquoteInnerBlocksRenderingAndEnterCase());
 
   cases.push(

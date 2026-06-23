@@ -464,6 +464,36 @@ describe("list-edits", () => {
     });
   });
 
+  it.each([
+    ["body unordered", ["- parent", "-"].join("\n"), ["- parent", "  - "].join("\n")],
+    [
+      "nested quote unordered",
+      ["> > - parent", "> > -"].join("\n"),
+      ["> > - parent", "> >   - "].join("\n")
+    ],
+    [
+      "nested quote ordered",
+      ["> > 1. parent", "> > 2."].join("\n"),
+      ["> > 1. parent", "> >   1. "].join("\n")
+    ]
+  ])("indents a promoted bare %s list marker", (_kind, doc, expected) => {
+    const context = buildContext(doc, doc.length);
+    const result = computeIndentListItem(context);
+
+    expect(applyEdit(doc, result)).toBe(expected);
+    expect(result?.selection).toEqual({
+      anchor: expected.length,
+      head: expected.length
+    });
+  });
+
+  it("does not indent a bare marker that is separated from the preceding list", () => {
+    const doc = ["> > - parent", "> >", "> > -"].join("\n");
+    const context = buildContext(doc, doc.length);
+
+    expect(computeIndentListItem(context)).toBeNull();
+  });
+
   it("moves an ordered subtree down together with its continuation lines", () => {
     const doc = ["5. parent", "6. child", "  continuation", "  - nested", "7. sibling"].join("\n");
     const context = buildContext(doc, doc.indexOf("child"));
