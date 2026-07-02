@@ -1,5 +1,11 @@
 export type { ActiveBlockState } from "./active-block";
 export {
+  findBlockPathAt,
+  findLeafBlockAt,
+  findTopLevelBlockAt,
+  type BlockPathEntry
+} from "./context/block-path";
+export {
   createPhysicalEditingDocument,
   type EditingLine,
   type EditingLineKind,
