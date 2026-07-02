@@ -5,6 +5,7 @@ export {
   findTopLevelBlockAt,
   type BlockPathEntry
 } from "./context/block-path";
+export { detectDraftSyntax, type DraftSyntax } from "./context/draft-syntax";
 export {
   createPhysicalEditingDocument,
   type EditingLine,
