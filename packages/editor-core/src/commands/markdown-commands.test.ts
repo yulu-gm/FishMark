@@ -13,10 +13,15 @@ import {
   runMarkdownHardBreakCommand,
   type MarkdownCommandTarget
 } from "./markdown-commands";
+import {
+  parseBlockquoteLine,
+  parseCodeFenceLine
+} from "./line-parsers";
 
 type TestCommandTarget = MarkdownCommandTarget & {
   getDispatchedChanges: () => unknown[];
   getDispatchedSelections: () => unknown[];
+  getSource: () => string;
 };
 
 function createCommandTarget(input: {
@@ -31,23 +36,45 @@ function createCommandTarget(input: {
   }, []);
   const dispatchedChanges: unknown[] = [];
   const dispatchedSelections: unknown[] = [];
+  const getSelection = () => ({
+    anchor: input.anchor,
+    head: input.head ?? input.anchor,
+    empty: input.head === undefined || input.head === input.anchor
+  });
+  const lineAt = (position: number) => {
+    let lineIndex = 0;
+
+    for (let index = 0; index < lineStarts.length; index += 1) {
+      if (lineStarts[index]! <= position) {
+        lineIndex = index;
+      }
+    }
+
+    const number = lineIndex + 1;
+    const text = lines[lineIndex]!;
+    const from = lineStarts[lineIndex]!;
+    return {
+      from,
+      number,
+      text,
+      to: from + text.length
+    };
+  };
+  const dispatchChange = vi.fn((change) => {
+    dispatchedChanges.push(change);
+  });
 
   return {
     deleteCharBackward: vi.fn(() => false),
-    dispatchChange: vi.fn((change) => {
-      dispatchedChanges.push(change);
-    }),
+    dispatchChange,
     dispatchSelection: vi.fn((selection) => {
       dispatchedSelections.push(selection);
     }),
     getDispatchedChanges: () => dispatchedChanges,
     getDispatchedSelections: () => dispatchedSelections,
     getLineCount: () => lines.length,
-    getSelection: () => ({
-      anchor: input.anchor,
-      head: input.head ?? input.anchor,
-      empty: input.head === undefined || input.head === input.anchor
-    }),
+    getSelection,
+    getSource: () => input.doc,
     insertNewlineAndIndent: vi.fn(() => false),
     line: (lineNumber) => {
       const text = lines[lineNumber - 1]!;
@@ -59,31 +86,47 @@ function createCommandTarget(input: {
         to: from + text.length
       };
     },
-    lineAt: (position) => {
-      let lineIndex = 0;
-
-      for (let index = 0; index < lineStarts.length; index += 1) {
-        if (lineStarts[index]! <= position) {
-          lineIndex = index;
-        }
-      }
-
-      const number = lineIndex + 1;
-      const text = lines[lineIndex]!;
-      const from = lineStarts[lineIndex]!;
-      return {
-        from,
-        number,
-        text,
-        to: from + text.length
-      };
-    },
+    lineAt,
     resolveArrowDown: vi.fn(() => null),
     resolveArrowUp: vi.fn(() => null),
     runBlockquoteBackspace: vi.fn(() => false),
     runBlockquoteEnter: vi.fn(() => false),
     runCodeFenceBackspace: vi.fn(() => false),
-    runCodeFenceEnter: vi.fn(() => false),
+    runCodeFenceEnter: vi.fn(() => {
+      const selection = getSelection();
+
+      if (!selection.empty) {
+        return false;
+      }
+
+      const line = lineAt(selection.head);
+
+      if (selection.head !== line.to) {
+        return false;
+      }
+
+      const codeFenceLine = parseTestCodeFenceEnterLine(line.text);
+
+      if (!codeFenceLine) {
+        return false;
+      }
+
+      const closingFence = `${codeFenceLine.closingLinePrefix}${codeFenceLine.fence}`;
+      const insert = `\n${codeFenceLine.contentLinePrefix}\n${closingFence}`;
+      const anchor = selection.head + 1 + codeFenceLine.contentLinePrefix.length;
+
+      dispatchChange({
+        from: selection.head,
+        to: selection.head,
+        insert,
+        selection: {
+          anchor,
+          head: anchor
+        }
+      });
+
+      return true;
+    }),
     runListBackspace: vi.fn(() => false),
     runListEnter: vi.fn(() => false),
     runListIndentOnTab: vi.fn(() => false),
@@ -92,6 +135,46 @@ function createCommandTarget(input: {
     runTableMoveDownOrExit: vi.fn(() => false),
     runTableNextCell: vi.fn(() => false),
     runTablePreviousCell: vi.fn(() => false)
+  };
+}
+
+type TestCodeFenceEnterLine = {
+  closingLinePrefix: string;
+  contentLinePrefix: string;
+  fence: string;
+};
+
+function parseTestCodeFenceEnterLine(text: string): TestCodeFenceEnterLine | null {
+  const topLevelFence = parseCodeFenceLine(text);
+
+  if (topLevelFence) {
+    return {
+      closingLinePrefix: topLevelFence.indent,
+      contentLinePrefix: "",
+      fence: topLevelFence.fence
+    };
+  }
+
+  const blockquote = parseBlockquoteLine(text);
+
+  if (!blockquote) {
+    return null;
+  }
+
+  const quotedFence = parseCodeFenceLine(blockquote.content);
+
+  if (!quotedFence) {
+    return null;
+  }
+
+  const quotePrefix = blockquote.sourcePrefix.endsWith(" ") || blockquote.sourcePrefix.endsWith("\t")
+    ? blockquote.sourcePrefix
+    : `${blockquote.sourcePrefix} `;
+
+  return {
+    closingLinePrefix: `${quotePrefix}${quotedFence.indent}`,
+    contentLinePrefix: quotePrefix,
+    fence: quotedFence.fence
   };
 }
 
@@ -160,6 +243,25 @@ describe("semantic markdown commands", () => {
         head: "> > \n> > ".length
       }
     }]);
+  });
+
+  it("creates a closed code fence block from a draft quote-internal fence opener", () => {
+    const source = "> ```";
+    const target = createCommandTarget({ doc: source, anchor: source.length });
+    const activeState = createActiveState(source, source.length);
+
+    expect(runMarkdownEnterCommand(target, activeState)).toBe(true);
+    expect(target.getDispatchedChanges()).toEqual([
+      {
+        from: source.length,
+        to: source.length,
+        insert: "\n> \n> ```",
+        selection: {
+          anchor: "> ```\n> ".length,
+          head: "> ```\n> ".length
+        }
+      }
+    ]);
   });
 
   it("moves across blank lines through the editor command target", () => {

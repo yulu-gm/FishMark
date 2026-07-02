@@ -61,6 +61,15 @@ describe("createActiveBlockState", () => {
     expect(createActiveBlockState("> ", { anchor: 2, head: 2 }).activeBlock?.type).toBe("blockquote");
   });
 
+  it("keeps blockquote as the compatibility active block for quote-internal code fences", () => {
+    const source = ["> ```ts", "> const answer = 42;", "> ```"].join("\n");
+    const cursor = source.indexOf("answer");
+
+    expect(createActiveBlockState(source, { anchor: cursor, head: cursor }).activeBlock?.type).toBe(
+      "blockquote"
+    );
+  });
+
   it("resolves thematic breaks as active blocks when the selection lands on the separator", () => {
     const thematicBreakSource = ["Paragraph", "", "---", "", "+++"].join("\n");
 

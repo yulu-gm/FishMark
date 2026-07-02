@@ -4122,6 +4122,73 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("creates a quoted code fence from human-like input", () => {
+    const host = document.createElement("div");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "",
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      insertText: (text: string) => void;
+      pressEnter: () => void;
+      setSelection: (anchor: number, head?: number) => void;
+    };
+
+    advancedController.setSelection(0);
+    advancedController.insertText("> ");
+    advancedController.insertText("```");
+    advancedController.pressEnter();
+
+    expect(controller.getContent()).toBe(["> ```", "> ", "> ```"].join("\n"));
+    expect(controller.getSelection()).toEqual({
+      anchor: "> ```\n> ".length,
+      head: "> ```\n> ".length
+    });
+
+    controller.destroy();
+  });
+
+  it.each([
+    {
+      expected: "> ```\n> \n> ```",
+      name: "quoted",
+      source: "> ```"
+    },
+    {
+      expected: "> > ```\n> > \n> > ```",
+      name: "nested quoted",
+      source: "> > ```"
+    },
+    {
+      expected: ">```\n> \n> ```",
+      name: "compact quoted",
+      source: ">```"
+    }
+  ])("auto-completes a $name fenced code block when pressing Enter after triple backticks", ({ expected, source }) => {
+    const host = document.createElement("div");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+
+    advancedController.setSelection(source.length);
+    advancedController.pressEnter();
+
+    const expectedAnchor = expected.indexOf("\n", source.length) + 1 + expected.split("\n")[1]!.length;
+    expect(controller.getContent()).toBe(expected);
+    expect(controller.getSelection()).toEqual({ anchor: expectedAnchor, head: expectedAnchor });
+
+    controller.destroy();
+  });
+
   it("keeps the info string and inserts subsequent text inside the new fenced code block", () => {
     const host = document.createElement("div");
     const source = "```ts";
@@ -4141,6 +4208,58 @@ describe("createCodeEditorController", () => {
     controller.insertText("const answer = 42;");
 
     expect(controller.getContent()).toBe("```ts\nconst answer = 42;\n```");
+
+    controller.destroy();
+  });
+
+  it("keeps the quoted fenced code block info string and inserts subsequent text inside it", () => {
+    const host = document.createElement("div");
+    const source = "> ```ts";
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+
+    advancedController.setSelection(source.length);
+    advancedController.pressEnter();
+    expect(controller.getSelection()).toEqual({ anchor: "> ```ts\n> ".length, head: "> ```ts\n> ".length });
+
+    controller.insertText("const answer = 42;");
+
+    expect(controller.getContent()).toBe("> ```ts\n> const answer = 42;\n> ```");
+
+    controller.destroy();
+  });
+
+  it("does not auto-complete when pressing Enter after a quoted closing fenced code block marker", () => {
+    const host = document.createElement("div");
+    const source = ["> ```ts", "> const answer = 42;", "> ```"].join("\n");
+    const expected = ["> ```ts", "> const answer = 42;", "> ```", ">", "> "].join("\n");
+
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: source,
+      onChange: vi.fn()
+    });
+    const advancedController = controller as typeof controller & {
+      setSelection: (anchor: number, head?: number) => void;
+      pressEnter: () => void;
+    };
+
+    advancedController.setSelection(source.length);
+    advancedController.pressEnter();
+
+    expect(controller.getContent()).toBe(expected);
+    expect(controller.getSelection()).toEqual({
+      anchor: expected.length,
+      head: expected.length
+    });
 
     controller.destroy();
   });

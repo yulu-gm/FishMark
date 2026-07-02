@@ -4759,6 +4759,86 @@ async function runBlockquoteInnerBlocksRenderingAndEnterCase(): Promise<CaseResu
   };
 }
 
+async function runBlockquoteCodeFenceInputCase(): Promise<CaseResult> {
+  const initialContent = ["> ", "", "Plain paragraph"].join("\n");
+  const expectedAfterEnter = ["> ```", "> ", "> ```", "", "Plain paragraph"].join("\n");
+  const expectedAfterCode = ["> ```", "> const answer = 42;", "> ```", "", "Plain paragraph"].join("\n");
+  const harness = setupHarness(initialContent);
+
+  harness.controller.setSelection("> ".length);
+  await settle();
+  const backticksAccepted = nativeInsertText(harness.view, "```");
+  await settle();
+  const enterAccepted = dispatchEnter(harness.view);
+  await settle();
+
+  const contentAfterEnter = harness.controller.getContent();
+  const selectionAfterEnter = harness.controller.getSelection();
+  const caretAfterEnterRect = harness.view.coordsAtPos(selectionAfterEnter.anchor);
+  const expectedSelectionAfterEnter = {
+    anchor: "> ```\n> ".length,
+    head: "> ```\n> ".length
+  };
+
+  const codeTextAccepted = nativeInsertText(harness.view, "const answer = 42;");
+  await settle();
+  harness.controller.setSelection(expectedAfterCode.indexOf("Plain paragraph"));
+  await settle();
+
+  const codeLine = findLineByText(harness.root, "const answer = 42;");
+  const codeLineStyle = codeLine ? window.getComputedStyle(codeLine) : null;
+  const quoteCodeInset = codeLineStyle?.getPropertyValue("--fishmark-quote-code-content-inset").trim() ?? null;
+  const codeLinePaddingLeft = codeLineStyle?.paddingLeft ?? null;
+  const quoteCodeInsetPx = quoteCodeInset ? Number.parseFloat(quoteCodeInset) : Number.NaN;
+  const paddingLeftPx = codeLinePaddingLeft ? Number.parseFloat(codeLinePaddingLeft) : Number.NaN;
+  const stylePass =
+    codeLine?.classList.contains("cm-inactive-blockquote") === true &&
+    codeLine.classList.contains("cm-inactive-code-block") &&
+    Number.isFinite(quoteCodeInsetPx) &&
+    quoteCodeInsetPx >= 12 &&
+    Number.isFinite(paddingLeftPx) &&
+    paddingLeftPx >= 27;
+  const pass =
+    contentAfterEnter === expectedAfterEnter &&
+    selectionAfterEnter.anchor === expectedSelectionAfterEnter.anchor &&
+    selectionAfterEnter.head === expectedSelectionAfterEnter.head &&
+    harness.controller.getContent() === expectedAfterCode &&
+    stylePass &&
+    caretAfterEnterRect !== null &&
+    Number.isFinite(caretAfterEnterRect.left) &&
+    Number.isFinite(caretAfterEnterRect.top);
+
+  const result = resultFor({
+    caseId: "blockquote-code-fence-input",
+    details: {
+      backticksAccepted,
+      caretAfterEnterRect: describeRect(caretAfterEnterRect),
+      codeLineClass: codeLine?.className ?? null,
+      codeLinePaddingLeft,
+      codeTextAccepted,
+      contentAfterEnter,
+      enterAccepted,
+      expectedAfterCode,
+      expectedAfterEnter,
+      quoteCodeInset,
+      selectionAfterEnter,
+      stylePass
+    },
+    expectedContent: expectedAfterCode,
+    expectedSelection: {
+      anchor: expectedAfterCode.indexOf("Plain paragraph"),
+      head: expectedAfterCode.indexOf("Plain paragraph")
+    },
+    grammar: "blockquote",
+    harness,
+    name: "typing a fenced code block inside a blockquote creates a quoted code block",
+    pass
+  });
+
+  harness.controller.destroy();
+  return result;
+}
+
 async function runListDragSelectionCase(input: {
   initialContent: string;
   name: string;
@@ -4906,6 +4986,7 @@ const namedProbeCases: NamedProbeCase[] = [
   { caseId: "blockquote-list-exit-trailing-separator-cleanup", group: "blockquote", run: runBlockquoteListExitTrailingSeparatorCleanupCase },
   { caseId: "blockquote-list-tab-after-residual-separator", group: "blockquote", run: runBlockquoteListTabAfterResidualSeparatorCase },
   { caseId: "blockquote-inner-blocks-rendering-enter", group: "blockquote", run: runBlockquoteInnerBlocksRenderingAndEnterCase },
+  { caseId: "blockquote-code-fence-input", group: "blockquote", run: runBlockquoteCodeFenceInputCase },
   { caseId: "deep-ordered-list-repeated-enter-exit", group: "list", run: runDeepOrderedListRepeatedEnterExitCase },
   { caseId: "top-level-list-item-enter-body-upgrade", group: "list", run: runTopLevelListItemEnterBodyUpgradeCase }
 ];
