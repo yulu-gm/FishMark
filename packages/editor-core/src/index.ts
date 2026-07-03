@@ -7,6 +7,13 @@ export {
 } from "./context/block-path";
 export { detectDraftSyntax, type DraftSyntax } from "./context/draft-syntax";
 export {
+  createEditorSemanticContext,
+  type CreateEditorSemanticContextOptions,
+  type EditorContainerContext,
+  type EditorLeafContext,
+  type EditorSemanticContext
+} from "./context/editor-semantic-context";
+export {
   createPhysicalEditingDocument,
   type EditingLine,
   type EditingLineKind,
