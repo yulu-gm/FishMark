@@ -781,6 +781,7 @@
 }
 
 .document-editor .cm-inactive-blockquote.cm-inactive-code-block {
+  --fishmark-quote-code-content-inset: 12px;
   --fishmark-quote-code-surface-left: calc(
     var(--fishmark-blockquote-rail-width, 4px) +
     var(--fishmark-blockquote-padding-inline) +
@@ -793,8 +794,8 @@
   box-shadow: none;
   font:
     400 0.9em/1.6 "Lucida Console", "Consolas", "Courier New", monospace;
-  padding-left: calc(var(--fishmark-blockquote-padding-inline) + var(--fishmark-blockquote-depth-offset) + 5px);
-  padding-right: calc(var(--fishmark-blockquote-padding-inline) + 5px);
+  padding-left: calc(var(--fishmark-blockquote-padding-inline) + var(--fishmark-blockquote-depth-offset) + var(--fishmark-quote-code-content-inset));
+  padding-right: calc(var(--fishmark-blockquote-padding-inline) + var(--fishmark-quote-code-content-inset));
   overflow-wrap: normal;
   word-break: normal;
   isolation: isolate;
