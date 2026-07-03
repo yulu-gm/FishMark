@@ -4760,12 +4760,14 @@ async function runBlockquoteInnerBlocksRenderingAndEnterCase(): Promise<CaseResu
 }
 
 async function runBlockquoteCodeFenceInputCase(): Promise<CaseResult> {
-  const initialContent = ["> ", "", "Plain paragraph"].join("\n");
+  const initialContent = ["", "", "Plain paragraph"].join("\n");
   const expectedAfterEnter = ["> ```", "> ", "> ```", "", "Plain paragraph"].join("\n");
   const expectedAfterCode = ["> ```", "> const answer = 42;", "> ```", "", "Plain paragraph"].join("\n");
   const harness = setupHarness(initialContent);
 
-  harness.controller.setSelection("> ".length);
+  harness.controller.setSelection(0);
+  await settle();
+  const quotePrefixAccepted = nativeInsertText(harness.view, "> ");
   await settle();
   const backticksAccepted = nativeInsertText(harness.view, "```");
   await settle();
@@ -4820,6 +4822,7 @@ async function runBlockquoteCodeFenceInputCase(): Promise<CaseResult> {
       enterAccepted,
       expectedAfterCode,
       expectedAfterEnter,
+      quotePrefixAccepted,
       quoteCodeInset,
       selectionAfterEnter,
       stylePass
