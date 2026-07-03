@@ -1484,6 +1484,34 @@ describe("parseBlockMap", () => {
     });
   });
 
+  it("stitches blockquote inner pipe tables with original offsets", () => {
+    const source = [
+      "> | name | qty |",
+      "> | --- | ---: |",
+      "> | pen | 2 |",
+      "",
+      "Plain"
+    ].join("\n");
+    const result = parseMarkdownDocument(source);
+    const blockquote = result.blocks[0] as BlockquoteBlock;
+    const table = blockquote.innerBlocks?.[0];
+
+    expect(blockquote.type).toBe("blockquote");
+    expect(table?.type).toBe("table");
+    if (table?.type !== "table") {
+      throw new Error("Expected quote-internal table block");
+    }
+
+    expect(table.startOffset).toBe(0);
+    expect(table.endOffset).toBe(source.indexOf("\n\nPlain"));
+    expect(table.startLine).toBe(1);
+    expect(table.endLine).toBe(3);
+    expect(table.header.map((cell) => cell.text)).toEqual(["name", "qty"]);
+    expect(table.rows.map((row) => row.map((cell) => cell.text))).toEqual([["pen", "2"]]);
+    expect(table.header[0]?.contentStartOffset).toBe(source.indexOf("name"));
+    expect(table.rows[0]?.[0]?.contentStartOffset).toBe(source.indexOf("pen"));
+  });
+
   it("stitches blockquote inner fenced code and block math blocks", () => {
     const source = [
       "> ```ts",

@@ -272,6 +272,38 @@ describe("createBlockDecorations", () => {
     expect(widgets).toContain("TableWidget");
   });
 
+  it("renders inactive quote-internal tables through the shared table widget", () => {
+    const source = [
+      "> | name | qty |",
+      "> | --- | ---: |",
+      "> | pen | 2 |",
+      "",
+      "Plain"
+    ].join("\n");
+    const blockMap = parseMarkdownDocument(source);
+    const activeState = createActiveBlockStateFromBlockMap(blockMap, {
+      anchor: source.indexOf("Plain"),
+      head: source.indexOf("Plain")
+    });
+
+    const result = createBlockDecorations({
+      activeBlockState: activeState,
+      hasEditorFocus: true,
+      source
+    });
+    const ranges = collectDecorations(source, result.decorationSet);
+    const widgets = collectWidgets(source, result.decorationSet);
+
+    expectExactRangeClasses(ranges, 0, 0, [
+      "cm-inactive-blockquote cm-inactive-blockquote-depth-1 cm-inactive-blockquote-start"
+    ]);
+    expect(widgets).toContainEqual({
+      from: 0,
+      to: source.indexOf("\n\nPlain"),
+      name: "TableWidget"
+    });
+  });
+
   it("applies inline strong decorations to inactive paragraph content and hides bold markers", () => {
     const source = "**bold**";
     const ranges = createInactiveInlineDecorations(source);
