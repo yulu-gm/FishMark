@@ -2,6 +2,9 @@ import type { ActiveBlockSelection } from "./active-block";
 
 import type { MarkdownDocument, TableBlock, TableCell } from "@fishmark/markdown-engine";
 
+import { walkMarkdownBlocks } from "./context/block-tree";
+import type { MarkdownBlockTreeEntry } from "./context/block-tree";
+
 export type TableCursorMode = "inside" | "adjacent-above" | "adjacent-below";
 
 export type TableCursorState = {
@@ -18,46 +21,50 @@ export function deriveTableCursorState(
   markdownDocument: MarkdownDocument,
   previousCursor: TableCursorState | null
 ): TableCursorState | null {
-  const tableBlocks = markdownDocument.blocks.filter(
-    (block): block is TableBlock => block.type === "table"
-  );
-  const containingTable = tableBlocks.find(
-    (block) => selection.head >= block.startOffset && selection.head < block.endOffset
-  );
+  const blockEntries = walkMarkdownBlocks(markdownDocument.blocks);
+  const tableEntries = blockEntries.filter(isTableBlockEntry);
+  const containingTable = tableEntries
+    .map((entry) => entry.block)
+    .find((block) => selection.head >= block.startOffset && selection.head < block.endOffset);
 
   if (containingTable) {
     return createInsideTableCursor(containingTable, selection.head);
   }
 
   const lineNumber = resolveLineNumberAtOffset(source, selection.head);
-  const tableBelow = tableBlocks.find(
-    (block) =>
-      block.startLine === lineNumber + 1 ||
-      (block.startLine === lineNumber + 2 && isBlankSourceLine(source, lineNumber + 1))
+  const cursorParents = resolveCursorParentBlocks(blockEntries, selection.head, lineNumber);
+  const tableBelow = tableEntries.find(
+    (entry) =>
+      shareParentBlocks(cursorParents, entry.parents) &&
+      (entry.block.startLine === lineNumber + 1 ||
+        (entry.block.startLine === lineNumber + 2 &&
+          isBlankSourceLineForParentBlocks(source, lineNumber + 1, blockEntries, cursorParents)))
   );
 
   if (tableBelow) {
     return {
       mode: "adjacent-above",
-      tableStartOffset: tableBelow.startOffset,
+      tableStartOffset: tableBelow.block.startOffset,
       row: 0,
-      column: resolveBoundaryColumn(previousCursor, tableBelow.startOffset),
+      column: resolveBoundaryColumn(previousCursor, tableBelow.block.startOffset),
       offsetInCell: 0
     };
   }
 
-  const tableAbove = tableBlocks.find(
-    (block) =>
-      block.endLine === lineNumber - 1 ||
-      (block.endLine === lineNumber - 2 && isBlankSourceLine(source, lineNumber - 1))
+  const tableAbove = tableEntries.find(
+    (entry) =>
+      shareParentBlocks(cursorParents, entry.parents) &&
+      (entry.block.endLine === lineNumber - 1 ||
+        (entry.block.endLine === lineNumber - 2 &&
+          isBlankSourceLineForParentBlocks(source, lineNumber - 1, blockEntries, cursorParents)))
   );
 
   if (tableAbove) {
     return {
       mode: "adjacent-below",
-      tableStartOffset: tableAbove.startOffset,
-      row: getLastTableRowIndex(tableAbove),
-      column: resolveBoundaryColumn(previousCursor, tableAbove.startOffset),
+      tableStartOffset: tableAbove.block.startOffset,
+      row: getLastTableRowIndex(tableAbove.block),
+      column: resolveBoundaryColumn(previousCursor, tableAbove.block.startOffset),
       offsetInCell: 0
     };
   }
@@ -69,6 +76,50 @@ export function isInsideTableCursor(
   tableCursor: TableCursorState | null
 ): tableCursor is TableCursorState & { mode: "inside" } {
   return tableCursor?.mode === "inside";
+}
+
+type TableBlockEntry = MarkdownBlockTreeEntry & {
+  readonly block: TableBlock;
+};
+
+function isTableBlockEntry(entry: MarkdownBlockTreeEntry): entry is TableBlockEntry {
+  return entry.block.type === "table";
+}
+
+function resolveCursorParentBlocks(
+  entries: readonly MarkdownBlockTreeEntry[],
+  offset: number,
+  lineNumber: number
+): MarkdownBlockTreeEntry["parents"] {
+  const containingEntry = entries
+    .filter(
+      (entry) =>
+        lineNumber >= entry.block.startLine &&
+        lineNumber <= entry.block.endLine &&
+        offset >= entry.block.startOffset &&
+        offset <= entry.block.endOffset
+    )
+    .at(-1);
+
+  if (!containingEntry) {
+    return [];
+  }
+
+  if (containingEntry.block.type === "blockquote" || containingEntry.block.type === "list") {
+    return [...containingEntry.parents, containingEntry.block];
+  }
+
+  return containingEntry.parents;
+}
+
+function shareParentBlocks(
+  leftParents: MarkdownBlockTreeEntry["parents"],
+  rightParents: MarkdownBlockTreeEntry["parents"]
+): boolean {
+  return (
+    leftParents.length === rightParents.length &&
+    leftParents.every((parent, index) => parent === rightParents[index])
+  );
 }
 
 function createInsideTableCursor(tableBlock: TableBlock, offset: number): TableCursorState {
@@ -149,7 +200,12 @@ function resolveLineNumberAtOffset(source: string, offset: number): number {
   return lineNumber;
 }
 
-function isBlankSourceLine(source: string, lineNumber: number): boolean {
+function isBlankSourceLineForParentBlocks(
+  source: string,
+  lineNumber: number,
+  entries: readonly MarkdownBlockTreeEntry[],
+  expectedParents: MarkdownBlockTreeEntry["parents"]
+): boolean {
   if (lineNumber < 1) {
     return false;
   }
@@ -164,7 +220,17 @@ function isBlankSourceLine(source: string, lineNumber: number): boolean {
     if (currentLineNumber === lineNumber) {
       const contentEnd = endOffset > cursor && source[endOffset - 1] === "\r" ? endOffset - 1 : endOffset;
 
-      return source.slice(cursor, contentEnd).trim().length === 0;
+      const trimmedLine = source.slice(cursor, contentEnd).trim();
+
+      if (trimmedLine.length === 0) {
+        return true;
+      }
+
+      if (!/^(?:>\s*)+$/.test(trimmedLine)) {
+        return false;
+      }
+
+      return shareParentBlocks(expectedParents, resolveCursorParentBlocks(entries, cursor, lineNumber));
     }
 
     if (lineEnd === -1) {
