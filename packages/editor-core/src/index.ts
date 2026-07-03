@@ -5,6 +5,12 @@ export {
   findTopLevelBlockAt,
   type BlockPathEntry
 } from "./context/block-path";
+export {
+  findBlockByStartOffsetDeep,
+  findBlocksByTypeDeep,
+  walkMarkdownBlocks,
+  type MarkdownBlockTreeEntry
+} from "./context/block-tree";
 export { detectDraftSyntax, type DraftSyntax } from "./context/draft-syntax";
 export {
   createEditorSemanticContext,
