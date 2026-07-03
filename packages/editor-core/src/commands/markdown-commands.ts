@@ -69,6 +69,8 @@ export function runMarkdownEnterCommand(
   const context = createCommandSemanticContext(target, activeState);
 
   return (
+    // Table and list command handlers still consume ActiveBlockState.
+    // Their semantic-context migration should preserve this routing order.
     target.runTableMoveDownOrExit(activeState) ||
     runDraftTableEnterCommand(target, activeState) ||
     runDraftCodeFenceEnterCommand(target, context) ||

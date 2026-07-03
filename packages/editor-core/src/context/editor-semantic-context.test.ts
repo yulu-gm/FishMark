@@ -41,6 +41,28 @@ describe("editor semantic context", () => {
     expect(context.draft).toBeNull();
   });
 
+  it("describes a body list as a list leaf", () => {
+    const source = "- item";
+    const context = createContext(source, source.indexOf("item"));
+
+    expect(context.leaf?.type).toBe("list");
+  });
+
+  it("describes a quote-internal list as blockquote container plus list leaf", () => {
+    const source = ["> - item", "> - next"].join("\n");
+    const context = createContext(source, source.indexOf("item"));
+
+    expect(context.containers.map((container) => container.type)).toEqual(["blockquote"]);
+    expect(context.leaf?.type).toBe("list");
+  });
+
+  it("describes a table as a table leaf", () => {
+    const source = ["| A | B |", "| - | - |", "| 1 | 2 |"].join("\n");
+    const context = createContext(source, source.indexOf("1"));
+
+    expect(context.leaf?.type).toBe("table");
+  });
+
   it("re-derives stale compatibility active block state instead of mixing contexts", () => {
     const source = "> quote";
     const markdownDocument = parseMarkdownDocument(source);
