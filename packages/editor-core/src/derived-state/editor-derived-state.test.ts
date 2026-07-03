@@ -77,6 +77,23 @@ describe("createEditorDerivedState", () => {
     expect(state.activeBlockState.activeBlock).toBeNull();
   });
 
+  it("derives semantic context beside compatibility active block state", () => {
+    const source = ["> ```", "> code", "> ```"].join("\n");
+    const state = createEditorDerivedState({
+      source,
+      selection: {
+        anchor: source.indexOf("code"),
+        head: source.indexOf("code")
+      },
+      parseMarkdownDocument
+    });
+
+    expect(state.activeBlockState.activeBlock?.type).toBe("blockquote");
+    expect(state.semanticContext.activeBlock?.type).toBe("blockquote");
+    expect(state.semanticContext.leaf?.type).toBe("codeFence");
+    expect(state.semanticContext.containers.map((container) => container.type)).toEqual(["blockquote"]);
+  });
+
   it("exposes an active empty physical line for an empty document", () => {
     const state = createEditorDerivedState({
       source: "",

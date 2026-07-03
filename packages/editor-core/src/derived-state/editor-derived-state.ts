@@ -18,9 +18,14 @@ import {
   type PhysicalEditingDocument
 } from "../physical-editing-document";
 import {
+  createEditorSemanticContext,
+  type EditorSemanticContext
+} from "../context/editor-semantic-context";
+import {
   deriveTableCursorState,
   type TableCursorState
 } from "../table-cursor-state";
+import { measureEditorCorePerformance } from "../performance/runtime-performance-log";
 
 export type ParseEditorMarkdownDocument = (source: string) => MarkdownDocument;
 
@@ -39,6 +44,7 @@ export type EditorDerivedState = {
   editingDocument: PhysicalEditingDocument;
   activeLine: EditingLine;
   activeBlockState: ActiveBlockState;
+  semanticContext: EditorSemanticContext;
   tableCursor: TableCursorState | null;
   referenceDefinitions?: ReadonlyMap<string, InlineReferenceDefinition>;
   footnoteDefinitions?: ReadonlyMap<string, FootnoteDefinition>;
@@ -55,32 +61,88 @@ export type CreateEditorDerivedStateOptions = {
 export function createEditorDerivedState(
   options: CreateEditorDerivedStateOptions
 ): EditorDerivedState {
-  const markdownDocument = options.parseMarkdownDocument(options.source);
-  const editingDocument = createPhysicalEditingDocument(options.source, markdownDocument);
-  const activeLine = editingDocument.getLineAtOffset(options.selection.head) ?? editingDocument.lines[0]!;
-  const tableCursor = deriveTableCursorState(
-    options.source,
-    options.selection,
-    markdownDocument,
-    options.previousTableCursor ?? null
-  );
-  const activeBlockState: ActiveBlockState = {
-    ...createActiveBlockStateFromMarkdownDocument(markdownDocument, options.selection),
-    tableCursor
-  };
+  return measureEditorCorePerformance(
+    "editorCore:createEditorDerivedState.total",
+    () => {
+      const markdownDocument = measureEditorCorePerformance(
+        "editorCore:createEditorDerivedState.parseMarkdownDocument",
+        () => options.parseMarkdownDocument(options.source),
+        { chars: options.source.length }
+      );
+      const editingDocument = measureEditorCorePerformance(
+        "editorCore:createEditorDerivedState.physicalEditingDocument",
+        () => createPhysicalEditingDocument(options.source, markdownDocument),
+        {
+          blocks: markdownDocument.blocks.length,
+          chars: options.source.length
+        }
+      );
+      const activeLine = editingDocument.getLineAtOffset(options.selection.head) ?? editingDocument.lines[0]!;
+      const tableCursor = measureEditorCorePerformance(
+        "editorCore:createEditorDerivedState.tableCursor",
+        () =>
+          deriveTableCursorState(
+            options.source,
+            options.selection,
+            markdownDocument,
+            options.previousTableCursor ?? null
+          ),
+        {
+          blocks: markdownDocument.blocks.length,
+          chars: options.source.length
+        }
+      );
+      const activeBlockState: ActiveBlockState = {
+        ...measureEditorCorePerformance(
+          "editorCore:createEditorDerivedState.activeBlock",
+          () => createActiveBlockStateFromMarkdownDocument(markdownDocument, options.selection),
+          {
+            blocks: markdownDocument.blocks.length,
+            chars: options.source.length
+          }
+        ),
+        tableCursor
+      };
+      const semanticContext = measureEditorCorePerformance(
+        "editorCore:createEditorDerivedState.semanticContext",
+        () =>
+          createEditorSemanticContext({
+            source: options.source,
+            markdownDocument,
+            editingDocument,
+            selection: options.selection,
+            activeState: activeBlockState
+          }),
+        {
+          blocks: markdownDocument.blocks.length,
+          chars: options.source.length
+        }
+      );
+      const outlineHeadings = measureEditorCorePerformance(
+        "editorCore:createEditorDerivedState.outlineHeadings",
+        () => createOutlineHeadings(markdownDocument),
+        {
+          blocks: markdownDocument.blocks.length,
+          chars: options.source.length
+        }
+      );
 
-  return {
-    source: options.source,
-    selection: options.selection,
-    markdownDocument,
-    editingDocument,
-    activeLine,
-    activeBlockState,
-    tableCursor,
-    referenceDefinitions: markdownDocument.referenceDefinitions,
-    footnoteDefinitions: markdownDocument.footnoteDefinitions,
-    outlineHeadings: createOutlineHeadings(markdownDocument)
-  };
+      return {
+        source: options.source,
+        selection: options.selection,
+        markdownDocument,
+        editingDocument,
+        activeLine,
+        activeBlockState,
+        semanticContext,
+        tableCursor,
+        referenceDefinitions: markdownDocument.referenceDefinitions,
+        footnoteDefinitions: markdownDocument.footnoteDefinitions,
+        outlineHeadings
+      };
+    },
+    { chars: options.source.length }
+  );
 }
 
 function createOutlineHeadings(markdownDocument: MarkdownDocument): EditorOutlineHeading[] {
