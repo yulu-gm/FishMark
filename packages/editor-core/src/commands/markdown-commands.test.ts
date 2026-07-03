@@ -13,10 +13,7 @@ import {
   runMarkdownHardBreakCommand,
   type MarkdownCommandTarget
 } from "./markdown-commands";
-import {
-  parseBlockquoteLine,
-  parseCodeFenceLine
-} from "./line-parsers";
+import { parseCodeFenceLine } from "./line-parsers";
 
 type TestCommandTarget = MarkdownCommandTarget & {
   getDispatchedChanges: () => unknown[];
@@ -147,34 +144,14 @@ type TestCodeFenceEnterLine = {
 function parseTestCodeFenceEnterLine(text: string): TestCodeFenceEnterLine | null {
   const topLevelFence = parseCodeFenceLine(text);
 
-  if (topLevelFence) {
-    return {
-      closingLinePrefix: topLevelFence.indent,
-      contentLinePrefix: "",
-      fence: topLevelFence.fence
-    };
-  }
-
-  const blockquote = parseBlockquoteLine(text);
-
-  if (!blockquote) {
+  if (!topLevelFence) {
     return null;
   }
-
-  const quotedFence = parseCodeFenceLine(blockquote.content);
-
-  if (!quotedFence) {
-    return null;
-  }
-
-  const quotePrefix = blockquote.sourcePrefix.endsWith(" ") || blockquote.sourcePrefix.endsWith("\t")
-    ? blockquote.sourcePrefix
-    : `${blockquote.sourcePrefix} `;
 
   return {
-    closingLinePrefix: `${quotePrefix}${quotedFence.indent}`,
-    contentLinePrefix: quotePrefix,
-    fence: quotedFence.fence
+    closingLinePrefix: topLevelFence.indent,
+    contentLinePrefix: "",
+    fence: topLevelFence.fence
   };
 }
 
@@ -296,6 +273,20 @@ describe("semantic markdown commands", () => {
         }
       }
     ]);
+  });
+
+  it("does not create another code fence pair on a closed quote-internal closing fence line", () => {
+    const source = ["> ```", "> code", "> ```"].join("\n");
+    const anchor = source.length;
+    const target = createCommandTarget({ doc: source, anchor });
+
+    expect(runMarkdownEnterCommand(target, createActiveState(source, anchor))).toBe(false);
+    expect(target.getDispatchedChanges()).toEqual([]);
+    expect(target.getDispatchedChanges()).not.toContainEqual(
+      expect.objectContaining({
+        insert: "\n> \n> ```"
+      })
+    );
   });
 
   it("moves across blank lines through the editor command target", () => {

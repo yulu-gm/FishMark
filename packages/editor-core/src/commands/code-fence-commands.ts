@@ -8,7 +8,13 @@ import {
   parseCodeFenceLine
 } from "./line-parsers";
 
-type CodeFenceBlock = Extract<ActiveBlockState["activeBlock"], { type: "codeFence" }>;
+type CodeFenceBlock = Extract<ActiveBlockState["blockMap"]["blocks"][number], { type: "codeFence" }>;
+type CodeFenceEnterLine = {
+  closingLinePrefix: string;
+  contentLinePrefix: string;
+  fence: string;
+  indent: string;
+};
 
 export function runCodeFenceEnter(view: EditorView, activeState: ActiveBlockState): boolean {
   const selection = view.state.selection.main;
@@ -16,8 +22,9 @@ export function runCodeFenceEnter(view: EditorView, activeState: ActiveBlockStat
     return false;
   }
 
+  const source = view.state.doc.toString();
   const activeCodeFence = activeState.activeBlock?.type === "codeFence" ? activeState.activeBlock : null;
-  if (activeCodeFence?.kind === "fenced" && isClosedCodeFenceBlock(view.state.doc.toString(), activeCodeFence)) {
+  if (activeCodeFence?.kind === "fenced" && isClosedCodeFenceBlock(source, activeCodeFence)) {
     return false;
   }
 
@@ -26,15 +33,15 @@ export function runCodeFenceEnter(view: EditorView, activeState: ActiveBlockStat
     return false;
   }
 
-  const parsed = parseCodeFenceLine(line.text);
+  const parsed = parseCodeFenceEnterLine(line.text);
   if (!parsed) {
     return false;
   }
 
-  const closingFence = `${parsed.indent}${parsed.fence}`;
+  const closingFence = `${parsed.closingLinePrefix}${parsed.fence}`;
   const insertAt = selection.head;
-  const insertText = `\n\n${closingFence}`;
-  const nextAnchor = insertAt + 1;
+  const insertText = `\n${parsed.contentLinePrefix}\n${closingFence}`;
+  const nextAnchor = insertAt + 1 + parsed.contentLinePrefix.length;
 
   view.dispatch({
     changes: {
@@ -49,6 +56,21 @@ export function runCodeFenceEnter(view: EditorView, activeState: ActiveBlockStat
   });
 
   return true;
+}
+
+function parseCodeFenceEnterLine(text: string): CodeFenceEnterLine | null {
+  const topLevelFence = parseCodeFenceLine(text);
+
+  if (!topLevelFence) {
+    return null;
+  }
+
+  return {
+    closingLinePrefix: topLevelFence.indent,
+    contentLinePrefix: "",
+    fence: topLevelFence.fence,
+    indent: topLevelFence.indent
+  };
 }
 
 export function runCodeFenceBackspace(view: EditorView, activeState: ActiveBlockState): boolean {
@@ -124,8 +146,8 @@ function isClosedCodeFenceBlock(source: string, block: CodeFenceBlock): boolean 
   const lastEntry = nonEmptyLines.at(-1);
   const firstLine = firstEntry?.line ?? "";
   const lastLine = lastEntry?.line ?? "";
-  const openingFence = parseCodeFenceLine(firstLine);
-  const closingFence = parseCodeFenceLine(lastLine);
+  const openingFence = parseCodeFenceEnterLine(firstLine);
+  const closingFence = parseCodeFenceEnterLine(lastLine);
 
   if (!openingFence || !closingFence || !firstEntry || !lastEntry || firstEntry.index === lastEntry.index) {
     return false;

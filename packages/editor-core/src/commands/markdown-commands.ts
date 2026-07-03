@@ -237,6 +237,10 @@ function runDraftCodeFenceEnterCommand(
     return false;
   }
 
+  if (isParsedCodeFenceClosingLine(context, line)) {
+    return false;
+  }
+
   const closingLine = `${context.draft.contentPrefix}${context.draft.indent}${context.draft.fence}`;
   const insert = `\n${context.draft.contentPrefix}\n${closingLine}`;
   const anchor = selection.head + 1 + context.draft.contentPrefix.length;
@@ -252,6 +256,39 @@ function runDraftCodeFenceEnterCommand(
   });
 
   return true;
+}
+
+function isParsedCodeFenceClosingLine(
+  context: ReturnType<typeof createCommandSemanticContext>,
+  line: MarkdownCommandLine
+): boolean {
+  return containsParsedCodeFenceClosingLine(context.markdownDocument.blocks, line);
+}
+
+function containsParsedCodeFenceClosingLine(
+  blocks: readonly MarkdownBlock[],
+  line: MarkdownCommandLine
+): boolean {
+  for (const block of blocks) {
+    if (
+      block.type === "codeFence" &&
+      block.kind === "fenced" &&
+      block.startOffset < line.from &&
+      line.to <= block.endOffset
+    ) {
+      return true;
+    }
+
+    if (
+      block.type === "blockquote" &&
+      block.innerBlocks &&
+      containsParsedCodeFenceClosingLine(block.innerBlocks, line)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function resolveDraftBlockquoteMarkerCommitPrefix(lineText: string): string | null {
