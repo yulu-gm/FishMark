@@ -4,6 +4,7 @@ import type { TableBlock, TableCell } from "@fishmark/markdown-engine";
 import { tableBlockToCanonicalModel, type CanonicalTableModel } from "@fishmark/markdown-engine";
 
 import type { ActiveBlockState } from "../active-block";
+import { findBlockByStartOffsetDeep } from "../context/block-tree";
 
 export type TablePosition = {
   row: number;
@@ -69,16 +70,7 @@ export function findTableBlockByStartOffset(
   activeState: ActiveBlockState,
   tableStartOffset: number | undefined
 ): TableBlock | null {
-  if (typeof tableStartOffset !== "number") {
-    return null;
-  }
-
-  return (
-    activeState.blockMap.blocks.find(
-      (block): block is TableBlock =>
-        block.type === "table" && block.startOffset === tableStartOffset
-    ) ?? null
-  );
+  return findBlockByStartOffsetDeep(activeState.blockMap.blocks, "table", tableStartOffset);
 }
 
 export function locateTablePosition(block: TableBlock, offset: number): TablePosition {
