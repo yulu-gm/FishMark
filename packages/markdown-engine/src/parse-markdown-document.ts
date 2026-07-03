@@ -7,7 +7,9 @@ import type {
   InlineLine,
   ListBlock,
   ListItemBlock,
-  MarkdownBlock
+  MarkdownBlock,
+  TableBlock,
+  TableCell
 } from "./block-map";
 import { parseBlockquoteLinePrefix } from "./blockquote";
 import type { InlineReferenceDefinition } from "./inline-ast";
@@ -788,7 +790,11 @@ function normalizeBlockquoteInnerBlock(
     return normalizeBlockquoteInnerBlockMath(block, source, lines, innerSource);
   }
 
-  if (block.type === "codeFence" || block.type === "thematicBreak" || block.type === "table") {
+  if (block.type === "table") {
+    return normalizeBlockquoteInnerTable(block, lines, innerSource);
+  }
+
+  if (block.type === "codeFence" || block.type === "thematicBreak") {
     return normalizeBlockquoteInnerBlockLineRange(block, lines, innerSource);
   }
 
@@ -1019,6 +1025,35 @@ function normalizeBlockquoteInnerBlockMath(
     contentStartOffset: contentRange.startOffset,
     contentEndOffset: contentRange.endOffset,
     value: block.value
+  };
+}
+
+function normalizeBlockquoteInnerTable(
+  block: TableBlock,
+  lines: readonly InlineLine[],
+  innerSource: BlockquoteInnerSource
+): TableBlock {
+  const normalized = normalizeBlockquoteInnerBlockLineRange(block, lines, innerSource);
+
+  return {
+    ...normalized,
+    header: normalized.header.map((cell) => normalizeBlockquoteInnerTableCell(cell, innerSource)),
+    rows: normalized.rows.map((row) =>
+      row.map((cell) => normalizeBlockquoteInnerTableCell(cell, innerSource))
+    )
+  };
+}
+
+function normalizeBlockquoteInnerTableCell(
+  cell: TableCell,
+  innerSource: BlockquoteInnerSource
+): TableCell {
+  return {
+    ...cell,
+    startOffset: mapBlockquoteInnerOffset(innerSource, cell.startOffset),
+    endOffset: mapBlockquoteInnerOffset(innerSource, cell.endOffset),
+    contentStartOffset: mapBlockquoteInnerOffset(innerSource, cell.contentStartOffset),
+    contentEndOffset: mapBlockquoteInnerOffset(innerSource, cell.contentEndOffset)
   };
 }
 
