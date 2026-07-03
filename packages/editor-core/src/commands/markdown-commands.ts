@@ -7,6 +7,7 @@ import {
 } from "@fishmark/markdown-engine";
 
 import type { ActiveBlockState } from "../active-block";
+import { createEditorSemanticContext } from "../context/editor-semantic-context";
 import { blockRequiresLeadingStructuralSeparator } from "../structural-blank-lines";
 import { parseBlockquoteLine, parseListLine } from "./line-parsers";
 
@@ -41,6 +42,7 @@ export type MarkdownCommandTarget = {
   dispatchSelection: (selection: MarkdownCommandSelectionUpdate) => void;
   getLineCount: () => number;
   getSelection: () => MarkdownCommandSelection;
+  getSource: () => string;
   insertNewlineAndIndent: () => boolean;
   line: (lineNumber: number) => MarkdownCommandLine;
   lineAt: (position: number) => MarkdownCommandLine;
@@ -64,9 +66,12 @@ export function runMarkdownEnterCommand(
   target: MarkdownCommandTarget,
   activeState: ActiveBlockState
 ): boolean {
+  const context = createCommandSemanticContext(target, activeState);
+
   return (
     target.runTableMoveDownOrExit(activeState) ||
     runDraftTableEnterCommand(target, activeState) ||
+    runDraftCodeFenceEnterCommand(target, context) ||
     target.runCodeFenceEnter(activeState) ||
     target.runListEnter(activeState) ||
     runDraftBlockquoteMarkerEnterCommand(target) ||
@@ -76,6 +81,18 @@ export function runMarkdownEnterCommand(
     runPhysicalParagraphEnterCommand(target, activeState) ||
     target.insertNewlineAndIndent()
   );
+}
+
+function createCommandSemanticContext(
+  target: MarkdownCommandTarget,
+  activeState: ActiveBlockState
+) {
+  return createEditorSemanticContext({
+    source: target.getSource(),
+    markdownDocument: activeState.blockMap,
+    selection: activeState.selection,
+    activeState
+  });
 }
 
 export function runMarkdownBackspaceCommand(
@@ -198,6 +215,39 @@ function runDraftBlockquoteMarkerEnterCommand(target: MarkdownCommandTarget): bo
     selection: {
       anchor: selectionAnchor,
       head: selectionAnchor
+    }
+  });
+
+  return true;
+}
+
+function runDraftCodeFenceEnterCommand(
+  target: MarkdownCommandTarget,
+  context: ReturnType<typeof createCommandSemanticContext>
+): boolean {
+  const selection = target.getSelection();
+
+  if (!selection.empty || context.draft?.type !== "codeFenceOpener") {
+    return false;
+  }
+
+  const line = target.lineAt(selection.head);
+
+  if (selection.head !== line.to) {
+    return false;
+  }
+
+  const closingLine = `${context.draft.contentPrefix}${context.draft.indent}${context.draft.fence}`;
+  const insert = `\n${context.draft.contentPrefix}\n${closingLine}`;
+  const anchor = selection.head + 1 + context.draft.contentPrefix.length;
+
+  target.dispatchChange({
+    from: selection.head,
+    to: selection.head,
+    insert,
+    selection: {
+      anchor,
+      head: anchor
     }
   });
 

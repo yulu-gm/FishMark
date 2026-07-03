@@ -63,6 +63,7 @@ export function createCodeMirrorMarkdownCommandTarget(view: EditorView): Markdow
         head: selection.head
       };
     },
+    getSource: () => view.state.doc.toString(),
     insertNewlineAndIndent: () => insertNewlineAndIndent(view),
     line: (lineNumber) => view.state.doc.line(lineNumber),
     lineAt: (position) => view.state.doc.lineAt(position),

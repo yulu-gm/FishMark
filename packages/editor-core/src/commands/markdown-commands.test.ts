@@ -184,28 +184,23 @@ const paragraphActiveState = {
   }
 } as ActiveBlockState;
 
-const headingActiveState = {
-  activeBlock: {
-    type: "heading"
-  }
-} as ActiveBlockState;
-
 const noActiveBlockState = {
   activeBlock: null
 } as ActiveBlockState;
 
-function createActiveState(source: string, anchor: number): ActiveBlockState {
+function createActiveState(source: string, anchor: number, head = anchor): ActiveBlockState {
   return createActiveBlockStateFromBlockMap(parseMarkdownDocument(source), {
     anchor,
-    head: anchor
+    head
   });
 }
 
 describe("semantic markdown commands", () => {
   it("converts a draft table without requiring a CodeMirror EditorView", () => {
-    const target = createCommandTarget({ doc: "| name | qty |", anchor: "| name | qty |".length });
+    const source = "| name | qty |";
+    const target = createCommandTarget({ doc: source, anchor: source.length });
 
-    expect(runMarkdownEnterCommand(target, paragraphActiveState)).toBe(true);
+    expect(runMarkdownEnterCommand(target, createActiveState(source, source.length))).toBe(true);
     expect(target.getDispatchedChanges()).toEqual([
       expect.objectContaining({
         from: 0,
@@ -215,9 +210,10 @@ describe("semantic markdown commands", () => {
   });
 
   it("commits a bare blockquote marker when Enter is pressed after it", () => {
-    const target = createCommandTarget({ doc: ">", anchor: 1 });
+    const source = ">";
+    const target = createCommandTarget({ doc: source, anchor: source.length });
 
-    expect(runMarkdownEnterCommand(target, paragraphActiveState)).toBe(true);
+    expect(runMarkdownEnterCommand(target, createActiveState(source, source.length))).toBe(true);
     expect(target.getDispatchedChanges()).toEqual([{
       from: 1,
       to: 1,
@@ -251,6 +247,44 @@ describe("semantic markdown commands", () => {
     const activeState = createActiveState(source, source.length);
 
     expect(runMarkdownEnterCommand(target, activeState)).toBe(true);
+    expect(target.getDispatchedChanges()).toEqual([
+      {
+        from: source.length,
+        to: source.length,
+        insert: "\n> \n> ```",
+        selection: {
+          anchor: "> ```\n> ".length,
+          head: "> ```\n> ".length
+        }
+      }
+    ]);
+  });
+
+  it("routes body draft code fence creation before the view-specific code fence command", () => {
+    const source = "```";
+    const target = createCommandTarget({ doc: source, anchor: source.length });
+
+    expect(runMarkdownEnterCommand(target, createActiveState(source, source.length))).toBe(true);
+    expect(target.runCodeFenceEnter).not.toHaveBeenCalled();
+    expect(target.getDispatchedChanges()).toEqual([
+      {
+        from: source.length,
+        to: source.length,
+        insert: "\n\n```",
+        selection: {
+          anchor: "```\n".length,
+          head: "```\n".length
+        }
+      }
+    ]);
+  });
+
+  it("routes quote draft code fence creation through semantic context", () => {
+    const source = "> ```";
+    const target = createCommandTarget({ doc: source, anchor: source.length });
+
+    expect(runMarkdownEnterCommand(target, createActiveState(source, source.length))).toBe(true);
+    expect(target.runCodeFenceEnter).not.toHaveBeenCalled();
     expect(target.getDispatchedChanges()).toEqual([
       {
         from: source.length,
@@ -386,9 +420,10 @@ describe("semantic markdown commands", () => {
   });
 
   it("creates an independent empty paragraph block at paragraph end", () => {
-    const target = createCommandTarget({ doc: "Alpha", anchor: "Alpha".length });
+    const source = "Alpha";
+    const target = createCommandTarget({ doc: source, anchor: source.length });
 
-    expect(runMarkdownEnterCommand(target, paragraphActiveState)).toBe(true);
+    expect(runMarkdownEnterCommand(target, createActiveState(source, source.length))).toBe(true);
     expect(target.getDispatchedChanges()).toEqual([
       {
         from: "Alpha".length,
@@ -406,7 +441,7 @@ describe("semantic markdown commands", () => {
     const source = "# Title";
     const target = createCommandTarget({ doc: source, anchor: source.length });
 
-    expect(runMarkdownEnterCommand(target, headingActiveState)).toBe(true);
+    expect(runMarkdownEnterCommand(target, createActiveState(source, source.length))).toBe(true);
     expect(target.getDispatchedChanges()).toEqual([
       {
         from: source.length,
@@ -424,7 +459,7 @@ describe("semantic markdown commands", () => {
     const source = "# Title\n\n";
     const target = createCommandTarget({ doc: source, anchor: source.length });
 
-    expect(runMarkdownEnterCommand(target, noActiveBlockState)).toBe(true);
+    expect(runMarkdownEnterCommand(target, createActiveState(source, source.length))).toBe(true);
     expect(target.getDispatchedChanges()).toEqual([
       {
         from: source.length,
@@ -443,7 +478,7 @@ describe("semantic markdown commands", () => {
     const anchor = source.indexOf("Beta") - 1;
     const target = createCommandTarget({ doc: source, anchor });
 
-    expect(runMarkdownEnterCommand(target, paragraphActiveState)).toBe(true);
+    expect(runMarkdownEnterCommand(target, createActiveState(source, anchor))).toBe(true);
     expect(target.getDispatchedChanges()).toEqual([
       {
         from: anchor,
@@ -461,7 +496,7 @@ describe("semantic markdown commands", () => {
     const source = ["Alpha", "Beta"].join("\n");
     const target = createCommandTarget({ doc: source, anchor: "Alpha".length });
 
-    expect(runMarkdownEnterCommand(target, paragraphActiveState)).toBe(true);
+    expect(runMarkdownEnterCommand(target, createActiveState(source, "Alpha".length))).toBe(true);
     expect(target.getDispatchedChanges()).toEqual([
       {
         from: "Alpha".length,
@@ -480,7 +515,7 @@ describe("semantic markdown commands", () => {
     const blockStart = source.indexOf("Beta");
     const target = createCommandTarget({ doc: source, anchor: blockStart });
 
-    expect(runMarkdownEnterCommand(target, paragraphActiveState)).toBe(true);
+    expect(runMarkdownEnterCommand(target, createActiveState(source, blockStart))).toBe(true);
     expect(target.getDispatchedChanges()).toEqual([
       {
         from: blockStart,
@@ -495,13 +530,14 @@ describe("semantic markdown commands", () => {
   });
 
   it("replaces a non-empty paragraph selection with a new paragraph block", () => {
+    const source = "AlphaBeta";
     const target = createCommandTarget({
-      doc: "AlphaBeta",
+      doc: source,
       anchor: "Alpha".length,
-      head: "AlphaBeta".length
+      head: source.length
     });
 
-    expect(runMarkdownEnterCommand(target, paragraphActiveState)).toBe(true);
+    expect(runMarkdownEnterCommand(target, createActiveState(source, "Alpha".length, source.length))).toBe(true);
     expect(target.getDispatchedChanges()).toEqual([
       {
         from: "Alpha".length,
