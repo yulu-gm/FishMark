@@ -186,7 +186,7 @@ describe("semantic markdown commands", () => {
     ]);
   });
 
-  it("commits a bare blockquote marker when Enter is pressed after it", () => {
+  it("routes bare blockquote marker commits through draft syntax", () => {
     const source = ">";
     const target = createCommandTarget({ doc: source, anchor: source.length });
 
@@ -202,7 +202,7 @@ describe("semantic markdown commands", () => {
     }]);
   });
 
-  it("commits a nested blockquote marker when Enter is pressed after it", () => {
+  it("routes nested blockquote marker commits through draft syntax", () => {
     const source = "> >";
     const target = createCommandTarget({ doc: source, anchor: source.length });
 

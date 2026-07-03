@@ -74,7 +74,7 @@ export function runMarkdownEnterCommand(
     runDraftCodeFenceEnterCommand(target, context) ||
     target.runCodeFenceEnter(activeState) ||
     target.runListEnter(activeState) ||
-    runDraftBlockquoteMarkerEnterCommand(target) ||
+    runDraftBlockquoteMarkerEnterCommand(target, context) ||
     target.runBlockquoteEnter() ||
     runThematicBreakEnterCommand(target, activeState) ||
     runHeadingBlockEndEnterCommand(target, activeState) ||
@@ -186,10 +186,13 @@ export function runMarkdownArrowUpCommand(
   return true;
 }
 
-function runDraftBlockquoteMarkerEnterCommand(target: MarkdownCommandTarget): boolean {
+function runDraftBlockquoteMarkerEnterCommand(
+  target: MarkdownCommandTarget,
+  context: ReturnType<typeof createCommandSemanticContext>
+): boolean {
   const selection = target.getSelection();
 
-  if (!selection.empty) {
+  if (!selection.empty || context.draft?.type !== "blockquoteMarker") {
     return false;
   }
 
@@ -199,13 +202,7 @@ function runDraftBlockquoteMarkerEnterCommand(target: MarkdownCommandTarget): bo
     return false;
   }
 
-  const committedPrefix = resolveDraftBlockquoteMarkerCommitPrefix(line.text);
-
-  if (committedPrefix === null) {
-    return false;
-  }
-
-  const insert = `${committedPrefix.slice(line.text.length)}\n${committedPrefix}`;
+  const insert = `${context.draft.committedPrefix.slice(line.text.length)}\n${context.draft.committedPrefix}`;
   const selectionAnchor = line.to + insert.length;
 
   target.dispatchChange({
@@ -289,25 +286,6 @@ function containsParsedCodeFenceClosingLine(
   }
 
   return false;
-}
-
-function resolveDraftBlockquoteMarkerCommitPrefix(lineText: string): string | null {
-  const parsed = parseBlockquoteLine(lineText);
-
-  if (
-    parsed &&
-    parsed.content.trim().length === 0 &&
-    parsed.contentStartOffset === parsed.markerEnd &&
-    lineText.length === parsed.markerEnd
-  ) {
-    return `${parsed.sourcePrefix} `;
-  }
-
-  if (parsed?.content === ">") {
-    return `${parsed.sourcePrefix}> `;
-  }
-
-  return /^[ \t]{0,3}>$/u.test(lineText) ? `${lineText} ` : null;
 }
 
 function runDraftTableEnterCommand(
