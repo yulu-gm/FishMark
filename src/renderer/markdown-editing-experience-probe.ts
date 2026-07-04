@@ -4842,6 +4842,59 @@ async function runBlockquoteCodeFenceInputCase(): Promise<CaseResult> {
   return result;
 }
 
+async function runBlockquoteTableRenderingCase(): Promise<CaseResult> {
+  const initialContent = [
+    "> Before",
+    ">",
+    "> | name | qty |",
+    "> | --- | ---: |",
+    "> | pen | 2 |",
+    ">",
+    "> After"
+  ].join("\n");
+  const harness = setupHarness(initialContent);
+
+  harness.controller.setSelection(initialContent.indexOf("pen"));
+  await settle();
+
+  const table = harness.view.dom.querySelector<HTMLElement>(".cm-table-widget-blockquote");
+  const firstCell = harness.view.dom.querySelector<HTMLElement>('[data-table-cell="1:0"]');
+  const quoteLine = Array.from(harness.view.dom.querySelectorAll<HTMLElement>(".cm-line"))
+    .find((line) => line.textContent?.includes("Before"));
+  const tableRect = table?.getBoundingClientRect() ?? null;
+  const quoteRect = quoteLine?.getBoundingClientRect() ?? null;
+  const cellText = firstCell?.textContent ?? "";
+  const geometryPass = Boolean(
+    tableRect &&
+    quoteRect &&
+    tableRect.left >= quoteRect.left &&
+    tableRect.width > 120
+  );
+
+  const result = resultFor({
+    caseId: "blockquote-table-rendering",
+    details: {
+      cellText,
+      geometryPass,
+      quoteRect: describeRect(quoteRect),
+      tableClass: table?.className ?? null,
+      tableRect: describeRect(tableRect)
+    },
+    expectedContent: initialContent,
+    expectedSelection: {
+      anchor: initialContent.indexOf("pen"),
+      head: initialContent.indexOf("pen")
+    },
+    grammar: "blockquote",
+    harness,
+    name: "renders a table inside a blockquote through the shared table widget",
+    pass: cellText === "pen" && geometryPass
+  });
+
+  harness.controller.destroy();
+  return result;
+}
+
 async function runListDragSelectionCase(input: {
   initialContent: string;
   name: string;
@@ -4990,6 +5043,7 @@ const namedProbeCases: NamedProbeCase[] = [
   { caseId: "blockquote-list-tab-after-residual-separator", group: "blockquote", run: runBlockquoteListTabAfterResidualSeparatorCase },
   { caseId: "blockquote-inner-blocks-rendering-enter", group: "blockquote", run: runBlockquoteInnerBlocksRenderingAndEnterCase },
   { caseId: "blockquote-code-fence-input", group: "blockquote", run: runBlockquoteCodeFenceInputCase },
+  { caseId: "blockquote-table-rendering", group: "blockquote", run: runBlockquoteTableRenderingCase },
   { caseId: "deep-ordered-list-repeated-enter-exit", group: "list", run: runDeepOrderedListRepeatedEnterExitCase },
   { caseId: "top-level-list-item-enter-body-upgrade", group: "list", run: runTopLevelListItemEnterBodyUpgradeCase }
 ];

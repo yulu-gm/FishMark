@@ -8500,6 +8500,45 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("renders and edits a table inside a blockquote", async () => {
+    const initialContent = [
+      "> | name | qty |",
+      "> | --- | ---: |",
+      "> | pen | 2 |"
+    ].join("\n");
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent,
+      onChange: vi.fn()
+    });
+
+    controller.setSelection(initialContent.indexOf("pen"));
+    await flushMicrotasks();
+
+    const table = host.querySelector<HTMLElement>(".cm-table-widget-blockquote");
+    const cell = host.querySelector<HTMLElement>('[data-table-cell="1:0"]');
+
+    expect(table).not.toBeNull();
+    expect(cell?.textContent).toBe("pen");
+
+    cell?.focus();
+    const tabAccepted = cell?.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Tab" })
+    );
+    await flushMicrotasks();
+
+    const nextCell = host.querySelector<HTMLElement>('[data-table-cell="1:1"]');
+
+    expect(tabAccepted).toBe(false);
+    expect(document.activeElement).toBe(nextCell);
+    expect(controller.getContent()).toContain("> | pen | 2 |");
+
+    controller.destroy();
+    host.remove();
+  });
+
   it("rewrites canonical markdown after a direct cell edit", () => {
     const host = document.createElement("div");
     const source = ["| name | qty |", "| --- | ---: |", "| pen | 2 |"].join("\n");
