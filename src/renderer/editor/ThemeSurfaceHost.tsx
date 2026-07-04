@@ -114,7 +114,6 @@ export function ThemeSurfaceHost({
     () => serializeRuntimeEnv(runtimeEnv),
     [runtimeEnv]
   );
-  runtimeEnvRef.current = runtimeEnv;
 
   useEffect(() => {
     let isDisposed = false;
@@ -207,6 +206,7 @@ export function ThemeSurfaceHost({
   ]);
 
   useEffect(() => {
+    runtimeEnvRef.current = runtimeEnv;
     sceneStateRef.current?.updateRuntimeEnv({
       wordCount: runtimeEnv.wordCount,
       readingMode: runtimeEnv.readingMode,

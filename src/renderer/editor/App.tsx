@@ -448,6 +448,7 @@ function EditorShell({
     editorContentRef.current = activeDocumentContent ?? "";
     activeBlockStateRef.current = null;
     applyDocumentDerivedDataNow(activeDocumentContent);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- A document load boundary intentionally clears editor affordance state.
     setActiveHeadingId(null);
     setActiveShortcutGroupId("default-text");
     setActiveTableToolId(null);
@@ -490,10 +491,12 @@ function EditorShell({
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Runtime mode is recalculated by the mounted shader surface after its inputs change.
     setWorkbenchSurfaceRuntimeMode(null);
   }, [activeWorkbenchSurface?.sceneId, activeWorkbenchSurface?.shaderUrl, activeWorkbenchChannel0Src, preferences.theme.effectsMode]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Runtime mode is recalculated by the mounted shader surface after its inputs change.
     setTitlebarSurfaceRuntimeMode(null);
   }, [
     activeTitlebarSurface?.sceneId,
@@ -505,12 +508,14 @@ function EditorShell({
 
   useEffect(() => {
     if (!activeDocument) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Closing the active document returns shortcut hints to their default group.
       setActiveShortcutGroupId("default-text");
     }
   }, [activeDocument]);
 
   useEffect(() => {
     if (activeShortcutGroup.id !== "table-editing") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Leaving table mode clears the table-specific toolbar selection.
       setActiveTableToolId(null);
     }
   }, [activeShortcutGroup.id]);
@@ -1113,6 +1118,7 @@ function EditorShell({
       return;
     }
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Opening settings lazily loads font options into the settings panel.
     void handleLoadFontFamilies();
   }, [isSettingsOpen]);
 
@@ -1277,6 +1283,7 @@ function EditorShell({
 
     clearShortcutHintHoldTimer();
     pressedShortcutModifiersRef.current.clear();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Closing the document clears transient shortcut focus state.
     setIsEditorFocused(false);
     setIsShortcutHintArmed(false);
   }, [isDocumentOpen]);

@@ -365,6 +365,7 @@ export function SettingsView({
   ]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Settings draft state mirrors the latest persisted preferences when they change externally.
     setDraft(buildDraft(preferences));
   }, [preferences]);
 
