@@ -392,6 +392,31 @@ describe("createBlockDecorations", () => {
     expect(result.signature).toContain("container:blockquote:1");
   });
 
+  it("keeps quote-internal table widgets mounted when selection is inside a table cell", () => {
+    const source = [
+      "> | name | qty |",
+      "> | --- | ---: |",
+      "> | pen | 2 |"
+    ].join("\n");
+    const blockMap = parseMarkdownDocument(source);
+    const activeState = createActiveBlockStateFromBlockMap(blockMap, {
+      anchor: source.indexOf("pen"),
+      head: source.indexOf("pen")
+    });
+
+    const result = createBlockDecorations({
+      activeBlockState: activeState,
+      hasEditorFocus: true,
+      source
+    });
+
+    expect(collectWidgets(source, result.decorationSet)).toContainEqual({
+      from: 0,
+      to: source.length,
+      name: "TableWidget"
+    });
+  });
+
   it("applies inline strong decorations to inactive paragraph content and hides bold markers", () => {
     const source = "**bold**";
     const ranges = createInactiveInlineDecorations(source);

@@ -808,6 +808,26 @@ describe("createFishMarkMarkdownExtensions", () => {
     destroy();
   });
 
+  it("focuses a quote-internal table cell through the shared table widget", async () => {
+    const doc = [
+      "> | name | qty |",
+      "> | --- | ---: |",
+      "> | pen | 2 |"
+    ].join("\n");
+    const harness = createHarness({
+      source: doc
+    });
+
+    await flushMicrotasks();
+
+    const input = harness.view.dom.querySelector<HTMLElement>('[data-table-cell="1:0"]');
+
+    expect(input?.textContent).toBe("pen");
+    expect(input?.closest(".cm-table-widget-blockquote")).not.toBeNull();
+
+    harness.destroy();
+  });
+
   it("enters the adjacent table from the line above on ArrowDown", async () => {
     const source = ["Before", "", "| name | qty |", "| --- | ---: |", "| pen | 2 |"].join("\n");
     const activeBlocks: Array<{ blockType: string | null; anchor: number }> = [];

@@ -1030,6 +1030,12 @@ function appendBlockquoteInnerBlockDecorations(
           context.referenceDefinitions,
           context.footnoteDefinitions
         );
+        continue;
+      }
+
+      if (innerBlock.type === "table") {
+        appendDecorationsForBlock(innerBlock, context, ranges, undefined, containerContext);
+        continue;
       }
 
       continue;
