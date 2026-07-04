@@ -898,6 +898,30 @@
   overflow-x: auto;
 }
 
+.document-editor .cm-table-widget.cm-table-widget-blockquote {
+  --fishmark-table-widget-blockquote-depth-offset: 0rem;
+  position: relative;
+  padding-left: calc(
+    var(--fishmark-blockquote-rail-width, 4px) +
+    var(--fishmark-blockquote-padding-inline) +
+    var(--fishmark-table-widget-blockquote-depth-offset)
+  );
+  padding-right: var(--fishmark-blockquote-padding-inline);
+  border-left: var(--fishmark-blockquote-rail-width, 4px) solid var(--fishmark-blockquote-border, #dfe2e5);
+}
+
+.document-editor .cm-table-widget.cm-table-widget-blockquote-depth-2 {
+  --fishmark-table-widget-blockquote-depth-offset: var(--fishmark-blockquote-nested-indent);
+}
+
+.document-editor .cm-table-widget.cm-table-widget-blockquote-depth-3 {
+  --fishmark-table-widget-blockquote-depth-offset: calc(var(--fishmark-blockquote-nested-indent) * 2);
+}
+
+.document-editor .cm-table-widget.cm-table-widget-blockquote-depth-4 {
+  --fishmark-table-widget-blockquote-depth-offset: calc(var(--fishmark-blockquote-nested-indent) * 3);
+}
+
 .document-editor .cm-inactive-thematic-break:has(+ .cm-table-widget) {
   padding-bottom: calc(
     var(--fishmark-table-after-break-padding-bottom) + var(--fishmark-table-after-break-margin-bottom)

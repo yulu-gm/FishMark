@@ -35,12 +35,18 @@ const INLINE_CONTAINER_CLASS_BY_TYPE = {
 type TableCellRenderMode = "plain" | "preview";
 const compositionCommitFallbackTimers = new WeakMap<HTMLElement, number>();
 
+export type TableWidgetRenderOptions = {
+  readonly containerClassName?: string;
+  readonly containerDepth?: number;
+};
+
 export class TableWidget extends WidgetType {
   constructor(
     private readonly block: TableBlock,
     private readonly activePosition: TablePosition | null,
     private readonly callbacks: TableWidgetCallbacks | null,
-    private readonly footnoteDefinitions?: ReadonlyMap<string, FootnoteDefinition>
+    private readonly footnoteDefinitions?: ReadonlyMap<string, FootnoteDefinition>,
+    private readonly renderOptions: TableWidgetRenderOptions = {}
   ) {
     super();
   }
@@ -51,7 +57,9 @@ export class TableWidget extends WidgetType {
       other.block.endOffset === this.block.endOffset &&
       other.activePosition?.row === this.activePosition?.row &&
       other.activePosition?.column === this.activePosition?.column &&
-      other.footnoteDefinitions === this.footnoteDefinitions
+      other.footnoteDefinitions === this.footnoteDefinitions &&
+      other.renderOptions.containerClassName === this.renderOptions.containerClassName &&
+      other.renderOptions.containerDepth === this.renderOptions.containerDepth
     );
   }
 
@@ -67,6 +75,7 @@ export class TableWidget extends WidgetType {
   override toDOM(): HTMLElement {
     const root = document.createElement("div");
     root.className = "cm-table-widget";
+    applyTableWidgetRenderOptions(root, this.renderOptions);
     root.dataset.tableColumns = String(this.block.columnCount);
     root.dataset.tableStartOffset = String(this.block.startOffset);
 
@@ -343,6 +352,7 @@ export class TableWidget extends WidgetType {
   }
 
   private syncDOM(root: HTMLElement): void {
+    applyTableWidgetRenderOptions(root, this.renderOptions);
     root.dataset.tableColumns = String(this.block.columnCount);
     root.dataset.tableStartOffset = String(this.block.startOffset);
     syncTableColumnGroup(root, this.block);
@@ -369,6 +379,41 @@ export class TableWidget extends WidgetType {
         cellElement.dataset.active = isActive ? "true" : "false";
       });
     });
+  }
+}
+
+function applyTableWidgetRenderOptions(
+  root: HTMLElement,
+  renderOptions: TableWidgetRenderOptions
+): void {
+  const previousContainerClassName = root.dataset.containerClassName;
+
+  if (previousContainerClassName) {
+    root.classList.remove(previousContainerClassName);
+    delete root.dataset.containerClassName;
+  }
+
+  for (const className of Array.from(root.classList)) {
+    if (
+      className === "cm-table-widget-blockquote" ||
+      className.startsWith("cm-table-widget-blockquote-depth-")
+    ) {
+      root.classList.remove(className);
+    }
+  }
+
+  delete root.dataset.containerDepth;
+
+  if (renderOptions.containerClassName) {
+    root.classList.add(renderOptions.containerClassName);
+    root.dataset.containerClassName = renderOptions.containerClassName;
+  }
+
+  if (typeof renderOptions.containerDepth === "number") {
+    root.dataset.containerDepth = String(renderOptions.containerDepth);
+    root.classList.add(
+      `cm-table-widget-blockquote-depth-${Math.max(1, Math.min(renderOptions.containerDepth, 4))}`
+    );
   }
 }
 
@@ -851,10 +896,11 @@ export function createTableWidgetDecoration(
   block: TableBlock,
   activePosition: TablePosition | null,
   callbacks: TableWidgetCallbacks | null,
-  footnoteDefinitions?: ReadonlyMap<string, FootnoteDefinition>
+  footnoteDefinitions?: ReadonlyMap<string, FootnoteDefinition>,
+  renderOptions: TableWidgetRenderOptions = {}
 ): Range<Decoration> {
   return Decoration.replace({
     block: true,
-    widget: new TableWidget(block, activePosition, callbacks, footnoteDefinitions)
+    widget: new TableWidget(block, activePosition, callbacks, footnoteDefinitions, renderOptions)
   }).range(block.startOffset, block.endOffset);
 }

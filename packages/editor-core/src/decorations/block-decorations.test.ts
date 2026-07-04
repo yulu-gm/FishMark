@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createRequire } from "node:module";
 
 import { parseBlockMap, parseMarkdownDocument } from "@fishmark/markdown-engine";
 
@@ -6,6 +7,18 @@ import { createActiveBlockStateFromBlockMap } from "../active-block";
 import { createEditorDerivedState } from "../derived-state/editor-derived-state";
 import { createBlockDecorations } from "./block-decorations";
 import { getInactiveBlockquoteLines, getInactiveCodeFenceLines } from "./block-lines";
+
+type JSDOMInstance = {
+  readonly window: {
+    readonly document: Document;
+    close: () => void;
+  };
+};
+
+type JSDOMConstructor = new (html: string) => JSDOMInstance;
+
+const requireFromTest = createRequire(import.meta.url);
+const { JSDOM } = requireFromTest("jsdom") as { JSDOM: JSDOMConstructor };
 
 const collectDecorations = (source: string, decorationSet: ReturnType<typeof createBlockDecorations>["decorationSet"]) => {
   const ranges: Array<{ from: number; to: number; className: string; text: string }> = [];
@@ -68,6 +81,29 @@ const collectWidgets = (source: string, decorationSet: ReturnType<typeof createB
   });
 
   return widgets;
+};
+
+type TestWidget = {
+  constructor: { name: string };
+  toDOM: () => HTMLElement;
+};
+
+const findWidget = (
+  source: string,
+  decorationSet: ReturnType<typeof createBlockDecorations>["decorationSet"],
+  name: string
+): TestWidget | null => {
+  let widget: TestWidget | null = null;
+
+  decorationSet.between(0, source.length, (_from, _to, value) => {
+    const candidate = value.spec.widget as TestWidget | undefined;
+
+    if (candidate?.constructor.name === name) {
+      widget = candidate;
+    }
+  });
+
+  return widget;
 };
 
 const collectBlockReplacements = (
@@ -302,6 +338,58 @@ describe("createBlockDecorations", () => {
       to: source.indexOf("\n\nPlain"),
       name: "TableWidget"
     });
+  });
+
+  it("adds blockquote container metadata to quote-internal table widgets", () => {
+    const source = [
+      "> | name | qty |",
+      "> | --- | ---: |",
+      "> | pen | 2 |"
+    ].join("\n");
+    const blockMap = parseMarkdownDocument(source);
+    const activeState = createActiveBlockStateFromBlockMap(blockMap, {
+      anchor: 0,
+      head: 0
+    });
+
+    const result = createBlockDecorations({
+      activeBlockState: activeState,
+      hasEditorFocus: false,
+      source
+    });
+
+    const widget = collectWidgets(source, result.decorationSet).find((entry) => entry.name === "TableWidget");
+    const tableWidget = findWidget(source, result.decorationSet, "TableWidget");
+
+    expect(widget).toMatchObject({
+      from: 0,
+      to: source.length,
+      name: "TableWidget"
+    });
+    expect(tableWidget).not.toBeNull();
+
+    const previousDocument = globalThis.document;
+    const dom = new JSDOM("<!doctype html>");
+    const globalWithDocument = globalThis as typeof globalThis & { document?: Document };
+
+    globalWithDocument.document = dom.window.document;
+    try {
+      const root = tableWidget?.toDOM();
+
+      expect(root?.classList.contains("cm-table-widget-blockquote")).toBe(true);
+      expect(root?.dataset.containerDepth).toBe("1");
+      expect(root?.classList.contains("cm-table-widget-blockquote-depth-1")).toBe(true);
+    } finally {
+      if (previousDocument) {
+        globalWithDocument.document = previousDocument;
+      } else {
+        Reflect.deleteProperty(globalWithDocument, "document");
+      }
+      dom.window.close();
+    }
+
+    expect(result.signature).toContain("table:");
+    expect(result.signature).toContain("container:blockquote:1");
   });
 
   it("applies inline strong decorations to inactive paragraph content and hides bold markers", () => {

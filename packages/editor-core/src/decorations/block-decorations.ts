@@ -45,6 +45,7 @@ import {
   type SemanticLineRole
 } from "../physical-editing-document";
 import type { EditorViewMode } from "../editor-view-mode";
+import { parseBlockquoteLine } from "../commands/line-parsers";
 
 export type CreateBlockDecorationsOptions = {
   activeBlockState: ActiveBlockState;
@@ -76,6 +77,13 @@ export type CreateSelectionScopedBlockDecorationsOptions = CreateBlockDecoration
 };
 
 type DecoratableBlock = ActiveBlockState["blockMap"]["blocks"][number];
+
+type BlockDecorationContainerContext =
+  | {
+      readonly type: "blockquote";
+      readonly depth: number;
+    }
+  | null;
 
 type BlockDecorationContext = {
   activeBlockState: ActiveBlockState;
@@ -285,7 +293,8 @@ function appendDecorationsForBlock(
   block: DecoratableBlock,
   context: BlockDecorationContext,
   ranges: Range<Decoration>[],
-  signatures?: string[]
+  signatures?: string[],
+  containerContext: BlockDecorationContainerContext = null
 ): void {
   if (block.type === "table") {
     const cursorForBlock =
@@ -293,11 +302,21 @@ function appendDecorationsForBlock(
       context.activeTableCursor.tableStartOffset === block.startOffset
         ? context.activeTableCursor
         : null;
+    const tableRenderOptions =
+      containerContext?.type === "blockquote"
+        ? {
+            containerClassName: "cm-table-widget-blockquote",
+            containerDepth: containerContext.depth
+          }
+        : {};
+    const tableSignature = `${createBlockDecorationSignature(block)}${
+      containerContext ? `:container:${containerContext.type}:${containerContext.depth}` : ""
+    }`;
 
     signatures?.push(
       cursorForBlock
-        ? `${createBlockDecorationSignature(block)}:table-cursor:${cursorForBlock.mode}:${cursorForBlock.row}:${cursorForBlock.column}`
-        : createBlockDecorationSignature(block)
+        ? `${tableSignature}:table-cursor:${cursorForBlock.mode}:${cursorForBlock.row}:${cursorForBlock.column}`
+        : tableSignature
     );
     ranges.push(
       createTableWidgetDecoration(
@@ -311,7 +330,8 @@ function appendDecorationsForBlock(
             }
           : null,
         context.tableWidgetCallbacks ?? null,
-        context.footnoteDefinitions
+        context.footnoteDefinitions,
+        tableRenderOptions
       )
     );
     return;
@@ -324,7 +344,8 @@ function appendDecorationsForBlock(
         block,
         context,
         ranges,
-        context.activeSelectionLineStart
+        context.activeSelectionLineStart,
+        signatures
       );
       return;
     }
@@ -355,14 +376,21 @@ function appendDecorationsForBlock(
 
   signatures?.push(createBlockDecorationSignature(block));
 
-  appendInactiveDecorationsForBlock(block, context, ranges);
+  appendInactiveDecorationsForBlock(block, context, ranges, signatures);
 }
 
 function appendInactiveDecorationsForBlock(
   block: DecoratableBlock,
   context: BlockDecorationContext,
-  ranges: Range<Decoration>[]
+  ranges: Range<Decoration>[],
+  signatures?: string[],
+  containerContext: BlockDecorationContainerContext = null
 ): void {
+  if (block.type === "table") {
+    appendDecorationsForBlock(block, context, ranges, signatures, containerContext);
+    return;
+  }
+
   if (block.type === "htmlImage") {
     ranges.push(createInactiveHtmlImagePreviewDecoration(block, context.resolveImagePreviewUrl));
     return;
@@ -420,7 +448,9 @@ function appendInactiveDecorationsForBlock(
     appendBlockquoteDecorations(
       block,
       context,
-      ranges
+      ranges,
+      null,
+      signatures
     );
     return;
   }
@@ -706,7 +736,8 @@ function appendBlockquoteDecorations(
   block: Extract<NonNullable<ActiveBlockState["activeBlock"]>, { type: "blockquote" }>,
   context: BlockDecorationContext,
   ranges: Range<Decoration>[],
-  activeLineStart: number | null = null
+  activeLineStart: number | null = null,
+  signatures?: string[]
 ): void {
   const source = context.source;
   const resolveImagePreviewUrl = context.resolveImagePreviewUrl;
@@ -810,7 +841,7 @@ function appendBlockquoteDecorations(
     });
 
     if (block.innerBlocks && block.innerBlocks.length > 0) {
-      appendBlockquoteInnerBlockDecorations(block.innerBlocks, context, ranges, activeLineStart);
+      appendBlockquoteInnerBlockDecorations(block.innerBlocks, context, ranges, activeLineStart, signatures);
     }
 
     return;
@@ -982,9 +1013,12 @@ function appendBlockquoteInnerBlockDecorations(
   innerBlocks: readonly DecoratableBlock[],
   context: BlockDecorationContext,
   ranges: Range<Decoration>[],
-  activeLineStart: number | null
+  activeLineStart: number | null,
+  signatures?: string[]
 ): void {
   for (const innerBlock of innerBlocks) {
+    const containerContext = resolveBlockquoteContainerContextForInnerBlock(innerBlock, context.source);
+
     if (activeLineStart !== null && blockTouchesLine(innerBlock, activeLineStart, context.source)) {
       if (innerBlock.type === "list") {
         appendActiveListDecorations(
@@ -1012,8 +1046,22 @@ function appendBlockquoteInnerBlockDecorations(
       continue;
     }
 
-    appendInactiveDecorationsForBlock(innerBlock, context, ranges);
+    appendInactiveDecorationsForBlock(innerBlock, context, ranges, signatures, containerContext);
   }
+}
+
+function resolveBlockquoteContainerContextForInnerBlock(
+  block: DecoratableBlock,
+  source: string
+): BlockDecorationContainerContext {
+  const lineStart = findLineStartOffset(source, block.startOffset);
+  const lineEnd = findLineEndOffset(source, lineStart, source.length);
+  const parsed = parseBlockquoteLine(source.slice(lineStart, lineEnd));
+
+  return {
+    type: "blockquote",
+    depth: parsed?.quoteDepth ?? 1
+  };
 }
 
 function findInnerBlockTouchingLine(
@@ -1791,6 +1839,11 @@ function resolveListItemContentStartOffset(item: ListItemBlock, source: string):
 function findLineEndOffset(source: string, startOffset: number, upperBound: number): number {
   const newlineOffset = source.indexOf("\n", startOffset);
   return newlineOffset === -1 ? upperBound : Math.min(newlineOffset, upperBound);
+}
+
+function findLineStartOffset(source: string, offset: number): number {
+  const previousBreak = source.lastIndexOf("\n", Math.max(0, offset - 1));
+  return previousBreak === -1 ? 0 : previousBreak + 1;
 }
 
 function consumeHorizontalSpace(source: string, startOffset: number, endOffset: number): number {
