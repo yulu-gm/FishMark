@@ -1,0 +1,1769 @@
+# FishMark Editor Foundation Refactor Roadmap
+
+> **For agentic workers:** execute one `RF-xxx` task at a time with `$fishmark-task-execution`; after implementation, use `$fishmark-architecture-acceptance` and `$fishmark-task-acceptance` before changing its status in `progress.md`. Do not combine multiple tasks into one uncontrolled diff.
+
+**Goal:** rebuild FishMark around a revisioned main-process `DocumentSession`, a recursive Markdown structure model, incremental document caches, pure semantic editing commands, and a thin CodeMirror adapter so complex nested Markdown remains fast, round-trip safe, and consistent to edit.
+
+**Architecture:** main owns the only writable business document state. Renderer-side CodeMirror is an optimistic input surface that submits revisioned edit batches; all renderer caches are derived, disposable, and tied to a document revision. Markdown parsing, semantic editing, CodeMirror integration, presentation, persistence, and React composition become explicit modules with one-way dependencies.
+
+**Tech Stack:** Electron, React, TypeScript, CodeMirror 6, micromark, Vite, Vitest, Playwright.
+
+---
+
+## 1. Program contract
+
+**Program:** `REFACTOR-EDITOR-FOUNDATION`
+
+**Status source:** `docs/refactor/editor-foundation/progress.md`
+
+**Goal:** deliver a production-grade local-first Markdown editing foundation that supports recursive containers and predictable structural editing without retaining the current dual-state, duplicate-parser, duplicate-renderer, or React-owned business workflows.
+
+### In scope
+
+- A main-process canonical `DocumentSession` with monotonic revisions.
+- Incremental edit batches instead of renderer-to-main full-document draft replacement.
+- Per-document disk identity, external-change detection, save preconditions, autosave, close coordination, and crash recovery.
+- A recursive Markdown document tree for nested lists, nested blockquotes, and mixed containers.
+- Blockquote children that use the same paragraph, list, code fence, math, Mermaid, table, footnote, and inline semantics as top-level content.
+- Incremental structure caching with safe invalidation, checkpointed reparsing, stable node identity, and full-parse fallback.
+- A pure semantic editor model for Enter, Backspace, Delete, Tab, Shift+Tab, arrow navigation, formatting, tables, code fences, and selection normalization.
+- A CodeMirror adapter that owns browser input, IME, selection mapping, decorations, widgets, viewport rendering, and editor lifecycle only.
+- A shared semantic render plan consumed by editor presentation and HTML export.
+- Renderer application clients/stores that keep React components presentation-only.
+- Real Electron Playwright coverage for data-safety and editing-critical workflows.
+- Security hardening, dead-code removal, documentation alignment, and architectural dependency gates.
+
+### Out of scope
+
+- Replacing Electron, React, CodeMirror, micromark, Vite, Vitest, or Playwright.
+- Cloud synchronization, collaboration, accounts, plugin marketplace, or a proprietary document format.
+- A utility-process parser or editor host. The incremental synchronous model must be measured before adding another process boundary.
+- CRDT/OT collaboration semantics. Revision conflicts here protect local multi-window ownership and stale renderer messages.
+- Adding new Markdown syntaxes while the foundation is being replaced, except syntax required to prove recursive container parity.
+- Reformatting whole Markdown documents during save or structural edits.
+
+### Primary risks
+
+- IME composition, selection mapping, undo/redo grouping, and cursor geometry.
+- Data loss during save, autosave, external changes, window close, process crash, and revision mismatch.
+- Round-trip changes caused by normalizing list, quote, table, or fence syntax.
+- Parser cache invalidation returning a structurally stale tree.
+- Long-document input latency and repeated full-document work.
+- Temporary migration paths becoming permanent compatibility code.
+
+### Required verification classes
+
+- Pure parser/editor-model tests for every semantic rule.
+- Differential tests comparing incremental parse results with a fresh full parse.
+- CodeMirror integration tests for transactions, selection, history, IME guards, and decorations.
+- Main/application tests for revision, persistence, watch, conflict, recovery, and close flows.
+- Playwright Electron scenarios for real open/edit/save/reload/close processes.
+- Visual and geometry probes for cursor, list, blockquote, table, code, and hidden marker behavior.
+- `npm run lint`, `npm run typecheck`, `npm run test`, and `npm run build` at every code task acceptance.
+
+## 2. Non-negotiable architecture decisions
+
+### 2.1 One writable document truth
+
+The main-process application owns `DocumentSession`. React state, workspace projections, CodeMirror wrappers, outline state, metrics, caches, and render plans must not become independently writable document models.
+
+CodeMirror may display unacknowledged local input so typing remains synchronous. Those changes are represented only as an ordered `PendingEditQueue`; they are commands awaiting acknowledgement, not a second workspace snapshot. Save, autosave, move-tab, detach-tab, reload, and close operations must first cross an explicit `flushEdits()` barrier.
+
+### 2.2 Revisioned incremental editing
+
+The shared edit contract is based on repository-owned plain data types:
+
+```ts
+export type DocumentRevision = number;
+
+export type TextChange = {
+  from: number;
+  to: number;
+  insert: string;
+};
+
+export type ApplyDocumentEditsInput = {
+  tabId: string;
+  clientId: string;
+  clientSequence: number;
+  baseRevision: DocumentRevision;
+  changes: readonly TextChange[];
+};
+
+export type ApplyDocumentEditsResult =
+  | {
+      kind: "applied";
+      revision: DocumentRevision;
+      isDirty: boolean;
+    }
+  | {
+      kind: "revision-conflict";
+      canonicalRevision: DocumentRevision;
+      canonicalText: string;
+    }
+  | {
+      kind: "error";
+      error: { code: string; message: string };
+    };
+```
+
+Rules:
+
+- Changes are sorted, non-overlapping, and expressed against `baseRevision`.
+- A session increments its revision once per accepted batch.
+- Duplicate `clientSequence` values are idempotent.
+- A stale batch is never silently applied to newer text.
+- Revision-conflict recovery preserves the unacknowledged local batch, reloads canonical text, remaps the pending changes, and either reapplies safely or opens an explicit recovery document. It never discards input silently.
+- Normal edit acknowledgements do not send the full document back to renderer.
+
+### 2.3 Reusable text buffer without domain leakage
+
+`workspace-domain` defines a `TextBuffer` interface but does not expose CodeMirror types. The infrastructure implementation wraps the persistent `Text` implementation from `@codemirror/state`; this avoids inventing a rope while keeping CodeMirror-specific types outside the domain API.
+
+```ts
+export interface TextBuffer {
+  readonly length: number;
+  apply(changes: readonly TextChange[]): TextBuffer;
+  slice(from: number, to?: number): string;
+  toString(): string;
+}
+```
+
+`@codemirror/state` becomes an explicit runtime dependency because main uses its persistent text data structure. Only `workspace-infrastructure` imports `Text`; all other layers depend on `TextBuffer`.
+
+### 2.4 Derived caches are not document truth
+
+Every cache key includes `tabId`, `revision`, parser dialect, and relevant subtree hash. Cache values are immutable. A cache can be dropped and rebuilt from canonical text without changing behavior.
+
+No cache may:
+
+- accept arbitrary content writes outside an edit transaction;
+- be used as the save source;
+- survive a revision mismatch without validation;
+- hide a parser inconsistency;
+- create a second dirty/save state.
+
+### 2.5 No permanent compatibility structure
+
+- A migration adapter may exist only inside its owning milestone.
+- The milestone cannot be marked complete until the previous API, implementation, tests, exports, aliases, and documentation are deleted.
+- No `legacy`, `compat`, `v2`, `new-*`, dual parser flag, dual command router, or fallback-to-old-engine module may remain at program completion.
+- Parser fallback means a fresh parse in the new parser, not a call to the old parser.
+- `progress.md` records every required deletion explicitly.
+
+## 3. Target dependency graph
+
+```text
+workspace-domain             markdown-engine
+       ▲                           ▲
+       │                           │
+workspace-application        editor-model
+       ▲                           ▲
+       │                           │
+main infrastructure      markdown-presentation
+       ▲                           ▲
+       │                           │
+shared IPC contracts      codemirror-adapter
+       ▲                           ▲
+       └──────── renderer application client ────────┐
+                                                     ▼
+                                              React presentation
+```
+
+Allowed dependencies:
+
+- `workspace-domain` depends only on TypeScript/runtime-neutral utilities.
+- `workspace-application` depends on `workspace-domain` and declared ports.
+- `markdown-engine` is independent of React, Electron, DOM, and CodeMirror.
+- `editor-model` depends on `markdown-engine` and runtime-neutral utilities.
+- `markdown-presentation` depends on `markdown-engine`, not CodeMirror or React.
+- `codemirror-adapter` depends on `editor-model`, `markdown-presentation`, and CodeMirror.
+- `src/main` depends on workspace application/domain and platform infrastructure.
+- `src/preload` depends only on shared contracts and Electron bridge primitives.
+- `src/renderer` depends on shared contracts, application clients, presentation, and the CodeMirror adapter.
+
+Forbidden dependencies:
+
+- React/Electron/DOM imports in `workspace-domain`, `workspace-application`, `markdown-engine`, or `editor-model`.
+- Direct filesystem, dialog, watcher, or IPC calls from React components.
+- Direct CodeMirror `EditorView` access from application controllers.
+- Renderer imports from `src/main` or `src/preload`.
+- HTML export reparsing syntax independently of the canonical Markdown tree.
+- Editor commands scanning Markdown with feature-specific regular expressions when the structure exists in `EditorSemanticContext`.
+
+## 4. Target file structure
+
+Public package names are fixed as:
+
+- `@fishmark/workspace-domain`
+- `@fishmark/workspace-application`
+- `@fishmark/workspace-infrastructure`
+- `@fishmark/markdown-engine`
+- `@fishmark/editor-model`
+- `@fishmark/markdown-presentation`
+- `@fishmark/codemirror-adapter`
+
+Each package exposes only `src/index.ts`; consumers cannot import package internals.
+
+```text
+packages/
+  workspace-domain/src/
+    document-session.ts
+    document-revision.ts
+    disk-version.ts
+    text-buffer.ts
+    workspace-state.ts
+    index.ts
+  workspace-application/src/
+    ports.ts
+    workspace-application.ts
+    apply-document-edits.ts
+    save-document.ts
+    resolve-external-change.ts
+    close-workspace.ts
+    recovery.ts
+    index.ts
+  workspace-infrastructure/src/
+    codemirror-text-buffer.ts
+    index.ts
+  markdown-engine/src/
+    model/source-range.ts
+    model/markdown-node.ts
+    model/container-path.ts
+    model/document-tree.ts
+    parse/full-document-parser.ts
+    parse/micromark-event-adapter.ts
+    parse/parse-checkpoint.ts
+    cache/document-structure-cache.ts
+    cache/invalidation-range.ts
+    cache/incremental-document-parser.ts
+    index/reference-index.ts
+    index/footnote-index.ts
+    index.ts
+  editor-model/src/
+    physical-lines/physical-editing-document.ts
+    physical-lines/prefix-segment.ts
+    context/editor-semantic-context.ts
+    context/selection-context.ts
+    transactions/edit-transaction-plan.ts
+    commands/enter.ts
+    commands/backspace.ts
+    commands/delete.ts
+    commands/indent.ts
+    commands/navigation.ts
+    commands/formatting.ts
+    commands/table.ts
+    commands/code-fence.ts
+    derived/editor-derived-snapshot.ts
+    index.ts
+  markdown-presentation/src/
+    render-plan.ts
+    build-render-plan.ts
+    inline-render-plan.ts
+    html/render-html.ts
+    html/render-html-document.ts
+    index.ts
+  codemirror-adapter/src/
+    create-editor.ts
+    transaction-adapter.ts
+    pending-edit-queue.ts
+    selection-mapper.ts
+    composition-controller.ts
+    derived-state-field.ts
+    decorations/block-decorations.ts
+    decorations/inline-decorations.ts
+    decorations/viewport-render-plan.ts
+    interactions/interaction-registry.ts
+    interactions/table-interaction.ts
+    interactions/code-fence-interaction.ts
+    index.ts
+src/
+  shared/
+    document-edit.ts
+    document-projection.ts
+    workspace-command.ts
+    product-bridge.ts
+  main/
+    infrastructure/document-repository.ts
+    infrastructure/file-watch-registry.ts
+    infrastructure/recovery-journal.ts
+    infrastructure/workspace-persistence.ts
+    ipc/register-workspace-handlers.ts
+    ipc/register-preference-handlers.ts
+    ipc/register-theme-handlers.ts
+    main.ts
+  preload/
+    product-api.ts
+    test-api.ts
+    preload.ts
+  renderer/
+    application/workspace-client.ts
+    application/workspace-store.ts
+    application/editor-command-gateway.ts
+    editor/CodeEditorHost.tsx
+    editor/App.tsx
+    editor/WorkspaceShell.tsx
+    editor/components/
+    export-html.ts
+tests/
+  e2e/
+    fixtures/
+    editing/
+    persistence/
+    performance/
+```
+
+Existing filenames may move only through the tasks below. Do not create empty package scaffolds that are not consumed in the same task.
+
+## 5. Canonical data models
+
+### 5.1 Document session
+
+```ts
+export type DocumentSession = {
+  tabId: string;
+  windowId: string;
+  path: string | null;
+  name: string;
+  text: TextBuffer;
+  revision: DocumentRevision;
+  savedRevision: DocumentRevision;
+  savedTextHash: string;
+  diskVersion: DiskVersion | null;
+  saveState: "idle" | "manual-saving" | "autosaving";
+  externalState: ExternalDocumentState;
+  recoveryState: RecoveryState;
+};
+```
+
+`isDirty` is always derived as `revision !== savedRevision`; it is not independently assigned.
+
+### 5.2 Disk version
+
+```ts
+export type DiskVersion = {
+  normalizedPath: string;
+  mtimeMs: number;
+  size: number;
+  contentHash: string;
+};
+```
+
+Stat changes trigger a content hash comparison. Save checks the current disk version immediately before writing. A mismatch transitions the session to an external-conflict state and returns a typed result; it never proceeds as an ordinary save.
+
+### 5.3 Recursive Markdown tree
+
+```ts
+export type MarkdownNode =
+  | DocumentNode
+  | BlockquoteNode
+  | ListNode
+  | ListItemNode
+  | ParagraphNode
+  | HeadingNode
+  | CodeFenceNode
+  | IndentedCodeNode
+  | TableNode
+  | BlockMathNode
+  | MermaidNode
+  | FootnoteDefinitionNode
+  | ThematicBreakNode
+  | HtmlImageNode;
+
+export type MarkdownNodeBase = {
+  nodeId: string;
+  type: MarkdownNode["type"];
+  sourceRange: SourceRange;
+  contentRange: SourceRange;
+  lineRange: { from: number; to: number };
+  containerPath: ContainerPath;
+  contentHash: string;
+};
+```
+
+Containers own `children`. Leaf nodes never re-scan parent source to discover nested blocks. Offsets always refer to the original Markdown source.
+
+### 5.4 Container path and prefix map
+
+```ts
+export type ContainerPathEntry =
+  | { kind: "blockquote"; nodeId: string; depth: number }
+  | { kind: "list"; nodeId: string; ordered: boolean; depth: number }
+  | { kind: "list-item"; nodeId: string; index: number }
+  | { kind: "code-fence"; nodeId: string; language: string | null }
+  | { kind: "table"; nodeId: string };
+
+export type PrefixSegment = {
+  kind: "quote" | "indent" | "list-marker" | "task-marker" | "spacing";
+  sourceRange: SourceRange;
+  visibleWidth: number;
+};
+```
+
+The same prefix map drives semantic edits, hidden markers, cursor mapping, soft-wrap geometry, and rendering classes.
+
+### 5.5 Derived snapshot
+
+```ts
+export type EditorDerivedSnapshot = {
+  tabId: string;
+  revision: DocumentRevision;
+  documentTree: MarkdownDocumentTree;
+  physicalDocument: PhysicalEditingDocument;
+  referenceIndex: ReferenceIndex;
+  footnoteIndex: FootnoteIndex;
+  outline: readonly OutlineHeading[];
+  metrics: DocumentMetrics;
+};
+```
+
+There is one derived snapshot per confirmed revision plus one optimistic snapshot for the ordered pending batch. Outline, metrics, decorations, commands, and export consume this snapshot instead of reparsing.
+
+## 6. Incremental document structure cache
+
+### 6.1 Cache layers
+
+1. `TextBuffer`: persistent text storage in main.
+2. `LineIndex`: line starts and line-break forms mapped through changes.
+3. `ParseCheckpointIndex`: parser state at safe block boundaries.
+4. `DocumentTreeCache`: immutable recursive nodes with stable IDs and hashes.
+5. `InlineAstCache`: leaf inline trees keyed by node ID, content hash, and dialect.
+6. `GlobalDefinitionIndex`: references and footnotes with reverse dependencies.
+7. `EditorDerivedSnapshot`: physical lines, outline, metrics, and semantic lookup indexes.
+8. `RenderPlanCache`: viewport-scoped presentation plan.
+
+### 6.2 Invalidation algorithm
+
+For each accepted `TextChange[]`:
+
+1. Map the smallest changed source range into the previous revision.
+2. Expand backward to the nearest stable checkpoint outside an open fence/container continuation.
+3. Expand forward while parser checkpoint state or subtree hashes differ.
+4. Reparse that source window with the same micromark dialect.
+5. Reuse unchanged nodes before and after the window.
+6. Map reused offsets through the change set.
+7. Rebuild only affected container ancestors, physical lines, definition dependencies, outline entries, metrics deltas, and render plans.
+8. If a stable checkpoint cannot be proven, perform a fresh parse with the new parser and record the fallback reason.
+
+### 6.3 Correctness gates
+
+- Incremental and fresh parse outputs are normalized and compared in development/differential tests.
+- Comparison includes node types, nesting, source/content ranges, markers, container paths, inline AST, references, footnotes, and table metadata.
+- Fuzz-like deterministic edit sequences cover inserts, deletes, replacements, line joins, line splits, fence edits, marker edits, and edits at checkpoint boundaries.
+- A cache mismatch is a test failure, never an accepted approximation.
+- Production fallback counters are observable but contain no document content.
+
+### 6.4 Performance rules
+
+- Selection-only transactions do not parse Markdown.
+- A typical single-line edit does not parse the whole document.
+- Outline and metrics update from deltas or reused nodes.
+- Decorations are built for the viewport, active node path, and required adjacent structural lines only.
+- KaTeX, Mermaid, and language highlighters remain lazy and cannot block the synchronous input path.
+- No background worker is introduced in this program. If the completed incremental model fails the performance gate, a separate measured decision is required rather than hiding a second document engine in a worker.
+
+## 7. Editing behavior contract
+
+Editing experience is the highest-priority acceptance area. A structural command is incomplete until source, selection, visible geometry, undo grouping, IME safety, and repeated-operation behavior are all proven.
+
+### 7.1 Command boundary
+
+Pure commands accept `EditorSemanticContext` and return an `EditTransactionPlan`. They do not access DOM, React, Electron, or `EditorView`.
+
+```ts
+export type EditTransactionPlan = {
+  baseRevision: DocumentRevision;
+  changes: readonly TextChange[];
+  selection: { anchor: number; head: number };
+  intent: EditIntent;
+  affectedNodeIds: readonly string[];
+  historyGroup: "input" | "structure" | "format";
+};
+```
+
+### 7.2 Routing order
+
+```text
+composition guard
+→ table interaction
+→ fenced/indented code
+→ list item
+→ blockquote
+→ heading/paragraph
+→ plain physical line
+```
+
+The deepest applicable container handles the action first. Parent containers contribute prefixes and exit behavior but do not replace the leaf semantic rule.
+
+### 7.3 Enter
+
+- A non-empty list item continues the same list kind and preserves every parent quote prefix.
+- An empty nested list item exits exactly one list level.
+- An empty root list item exits the list into a paragraph inside its current parent container.
+- Exiting a list inside a blockquote returns to blockquote text before it can exit the quote.
+- Enter in blockquote text creates a structural quote separator and the next quote paragraph.
+- Enter on an empty quote paragraph exits exactly one quote level.
+- Enter inside a code fence follows code indentation/fence rules and preserves parent quote/list prefixes.
+- Enter in a heading splits at the selection and creates a paragraph where appropriate without copying the heading marker.
+- Every automatic marker/prefix insertion is one undoable history group.
+
+### 7.4 Backspace and Delete
+
+- Ordinary content deletion stays ordinary text deletion.
+- At content start, structure degrades one explicit step: task marker, list marker, list indentation, quote layer, then plain paragraph.
+- A nested item subtree moves together; the first line cannot detach from its children.
+- Hidden marker selection maps to real source offsets before changes are planned.
+- Deleting a range recomputes the destination `ContainerPath`; it cannot reuse stale semantic context.
+- Joining blocks preserves the existing Markdown spelling unless the exact join requires a local marker change.
+
+### 7.5 Tab and Shift+Tab
+
+- Indent/outdent changes the selected list-item subtree, not only the active line.
+- Quote prefixes are retained when a list moves inside a blockquote.
+- Table and code-fence interactions have explicit adapters and do not fall through to list indentation.
+- An invalid indent returns no transaction instead of manufacturing malformed Markdown.
+
+### 7.6 Cursor, selection, and IME
+
+- Arrow navigation uses visible physical lines and prefix maps.
+- Pointer, structural arrow, printable input, and programmatic navigation have separate normalization policies.
+- Printable input never triggers structural cursor movement.
+- Composition updates do not rebuild geometry-changing decorations or run structural completion.
+- `compositionend` applies one incremental structure update from the final text.
+- Source/WYSIWYM switches preserve document revision, selection, scroll, history, and pending edit order.
+
+### 7.7 Recursive parity matrix
+
+Every command must cover at least these container paths:
+
+```text
+Document → Paragraph
+Document → List → ListItem → Paragraph
+Document → List → ListItem → List → ListItem → Paragraph
+Document → Blockquote → Paragraph
+Document → Blockquote → Blockquote → Paragraph
+Document → Blockquote → List → ListItem → Paragraph
+Document → Blockquote → List → ListItem → CodeFence
+Document → List → ListItem → Blockquote → Paragraph
+Document → List → ListItem → Blockquote → List → ListItem → Paragraph
+Document → Blockquote → Blockquote → List → ListItem → BlockMath
+```
+
+Automated coverage uses depths 0 through 8, mixed ordered/unordered/task lists, empty/whitespace/content lines, line-start/middle/end selections, range selections, repeated keys, undo/redo, source mode, WYSIWYM, and save/reopen round trips.
+
+## 8. Performance budgets
+
+The performance fixture is a committed deterministic Markdown document, not a mutable file under `tmp/`.
+
+| Scenario | Required budget |
+| --- | --- |
+| 5,000-line mixed document initial editor-ready time | ≤ 500 ms on the recorded baseline Windows machine |
+| 20,000-line mixed document initial editor-ready time | ≤ 1,500 ms on the recorded baseline Windows machine |
+| 20,000-line ordinary single-character edit synchronous semantic work | p95 ≤ 16 ms |
+| 20,000-line Enter/Backspace structural edit synchronous semantic work | p95 ≤ 24 ms |
+| Selection-only movement | zero full parses |
+| Single-line ordinary edit | zero full parses after warm cache |
+| Initial open | one full structure build maximum |
+| Forced cache fallback during stable ordinary typing sequence | zero |
+| Open-period forced decoration rebuilds | ≤ 2 |
+| Outline/metrics | must not block first editor paint |
+
+The baseline report records CPU, memory, Electron version, fixture hash, warm/cold status, median, p95, parse windows, reused nodes, invalidated nodes, and fallback reasons.
+
+## 9. Delivery and deletion policy
+
+- One `RF-xxx` task per implementation diff.
+- Each task starts from the latest accepted task and ends with focused tests, full required gates, documentation, and a task summary.
+- Every task that changes TypeScript, CSS, runtime configuration, build scripts, fixtures consumed by tests, or test code must run the task's focused commands followed by the complete project gate below. Focused commands never replace the complete gate.
+
+```powershell
+npm.cmd run lint
+npm.cmd run typecheck
+npm.cmd run test
+npm.cmd run build
+```
+
+- A milestone may temporarily contain both paths while its tasks are in progress, but the final task in that milestone is always a hard cutover and deletion task.
+- A milestone with remaining old exports/imports cannot be marked complete.
+- Feature development that touches the migrating boundary pauses until the owning milestone completes.
+- Existing user changes outside the active task remain untouched.
+- No task pushes or merges unless explicitly requested for that execution session.
+
+## 10. Milestone roadmap
+
+### Milestone 0 — Freeze invariants and executable baselines
+
+#### RF-001: Editing behavior baseline
+
+**Outcome:** current intentional behavior is represented as source/selection/geometry/undo fixtures before the engine moves.
+
+**Files:**
+
+- Create: `fixtures/editor-behavior/manifest.ts`
+- Create: `fixtures/editor-behavior/nested-containers.ts`
+- Create: `packages/test-harness/src/scenarios/editor-behavior-matrix.ts`
+- Modify: `docs/test-cases.md`
+
+**Steps:**
+
+- [ ] Convert existing Typora oracle cases and FishMark probes into typed behavior cases.
+- [ ] Add missing mixed-container cases from the recursive parity matrix.
+- [ ] Record expected source, selection, visible line roles, and undo result for every case.
+- [ ] Register one scenario runner entry that can filter by command and container path.
+- [ ] Run the matrix against the current implementation and classify intentional baseline versus known defect.
+- [ ] Store no screenshots or generated artifacts in the manifest itself.
+
+**Verification:**
+
+```powershell
+npm.cmd run test -- packages/test-harness src/renderer/editor-test-driver.test.ts
+npm.cmd run test:editing-experience
+```
+
+**Exit:** every editing-critical behavior has an executable expectation; known defects are explicit and are not silently frozen as desired behavior.
+
+#### RF-002: Architecture and performance guards
+
+**Outcome:** dependency violations, duplicate parse entry points, and performance regressions become test failures.
+
+**Files:**
+
+- Create: `src/main/editor-foundation-architecture.test.ts`
+- Create: `packages/editor-core/src/performance/editor-foundation-baseline.test.ts`
+- Create: `fixtures/performance/complex-20000-lines.md`
+- Modify: `scripts/analyze-renderer-bundle.mjs`
+
+**Steps:**
+
+- [ ] Add import-boundary assertions for the target packages as they appear.
+- [ ] Add forbidden-symbol checks for retired APIs listed in each cutover task.
+- [ ] Move the stress document from `tmp/` into a deterministic fixture with a recorded hash.
+- [ ] Capture current open/edit/selection/derived-state counters as the comparison baseline.
+- [ ] Make reports distinguish full parse, incremental parse window, cache hit, invalidated nodes, and decoration rebuild.
+
+**Verification:**
+
+```powershell
+npm.cmd run test -- src/main/editor-foundation-architecture.test.ts packages/editor-core/src/performance
+npm.cmd run perf:baseline
+```
+
+**Exit:** future tasks cannot claim architectural or performance improvement without machine-readable evidence.
+
+### Milestone 1 — Canonical workspace domain
+
+#### RF-101: Extract workspace domain
+
+**Outcome:** workspace/tab/session rules are pure and no longer owned by `src/main/workspace-service.ts`.
+
+**Files:**
+
+- Create: `packages/workspace-domain/src/document-revision.ts`
+- Create: `packages/workspace-domain/src/disk-version.ts`
+- Create: `packages/workspace-domain/src/text-buffer.ts`
+- Create: `packages/workspace-domain/src/document-session.ts`
+- Create: `packages/workspace-domain/src/workspace-state.ts`
+- Create: `packages/workspace-domain/src/index.ts`
+- Create: `packages/workspace-domain/src/workspace-state.test.ts`
+- Modify: TypeScript/Vite/Vitest path aliases.
+- Delete after cutover: `src/main/workspace-service.ts`
+- Move/replace: `src/main/workspace-service.test.ts`
+
+**Steps:**
+
+- [ ] Define immutable projections and internal mutable session ownership separately.
+- [ ] Derive dirty state from revision equality.
+- [ ] Port create/open/activate/close/reorder/move/detach rules into pure domain operations.
+- [ ] Update main callers to consume the package public API.
+- [ ] Delete the old service and its exports in the same task.
+- [ ] Verify no renderer imports internal session types.
+
+**Verification:**
+
+```powershell
+npm.cmd run test -- packages/workspace-domain src/main/workspace-application.test.ts src/main/workspace-close-coordinator.test.ts
+npm.cmd run lint
+npm.cmd run typecheck
+npm.cmd run build
+```
+
+**Exit:** workspace ownership has one pure domain implementation and no compatibility wrapper.
+
+#### RF-102: Extract workspace application ports and use cases
+
+**Outcome:** main IPC handlers call explicit use cases instead of orchestrating workflows in `main.ts`.
+
+**Files:**
+
+- Create: `packages/workspace-application/src/ports.ts`
+- Create: `packages/workspace-application/src/workspace-application.ts`
+- Create: `packages/workspace-application/src/apply-document-edits.ts`
+- Create: `packages/workspace-application/src/save-document.ts`
+- Create: `packages/workspace-application/src/close-workspace.ts`
+- Create: `packages/workspace-application/src/index.ts`
+- Create: `packages/workspace-application/src/workspace-application.test.ts`
+- Create: `packages/workspace-application/src/apply-document-edits.test.ts`
+- Create: `packages/workspace-application/src/save-document.test.ts`
+- Create: `packages/workspace-application/src/close-workspace.test.ts`
+- Modify: `src/main/main.ts`
+- Delete after cutover: `src/main/workspace-application.ts`
+- Delete after cutover: `src/main/workspace-close-coordinator.ts`
+
+**Steps:**
+
+- [ ] Define repository, dialog, watcher, journal, clock, and hash ports.
+- [ ] Move open/create/activate/move/close/save orchestration into use cases.
+- [ ] Return typed results for success, cancellation, conflict, and error.
+- [ ] Make `main.ts` construct dependencies and register handlers only.
+- [ ] Delete the old main-local application/coordinator implementations and tests.
+
+**Verification:**
+
+```powershell
+npm.cmd run test -- packages/workspace-application src/main/main.test.ts
+npm.cmd run lint
+npm.cmd run typecheck
+npm.cmd run build
+```
+
+**Exit:** workspace business workflows are independently testable without Electron or React.
+
+### Milestone 2 — Revisioned edit transport
+
+#### RF-201: Persistent text buffer and session revisions
+
+**Outcome:** canonical sessions apply small changes without replacing or copying full renderer drafts across IPC.
+
+**Files:**
+
+- Create: `packages/workspace-infrastructure/src/codemirror-text-buffer.ts`
+- Create: `packages/workspace-infrastructure/src/codemirror-text-buffer.test.ts`
+- Create: `packages/workspace-infrastructure/src/index.ts`
+- Modify: `package.json` dependency classification for `@codemirror/state`.
+- Modify: `packages/workspace-domain/src/document-session.ts`
+
+**Steps:**
+
+- [ ] Wrap CodeMirror `Text` behind `TextBuffer`.
+- [ ] Validate sorted, non-overlapping, in-range changes before applying.
+- [ ] Increment revision once per accepted batch.
+- [ ] Track acknowledged `(clientId, clientSequence)` pairs for idempotence.
+- [ ] Prove Unicode, CRLF, large insertion, multiple changes, and invalid-range behavior.
+
+**Verification:**
+
+```powershell
+npm.cmd run test -- packages/workspace-domain packages/workspace-infrastructure
+npm.cmd run typecheck
+npm.cmd run build
+```
+
+**Exit:** main has a persistent canonical text representation with no public CodeMirror type leakage.
+
+#### RF-202: Shared edit contract and main handler
+
+**Outcome:** the product bridge exposes revisioned edit batches and typed conflict results.
+
+**Files:**
+
+- Create: `src/shared/document-edit.ts`
+- Create: `src/shared/document-projection.ts`
+- Modify: `src/shared/product-bridge.ts`
+- Create: `src/preload/product-api.ts`
+- Modify: `src/preload/preload.ts`
+- Create: `src/main/ipc/register-workspace-handlers.ts`
+- Modify: `src/main/main.ts`
+- Modify: preload contract tests.
+
+**Steps:**
+
+- [ ] Define serializable edit/result/projection contracts.
+- [ ] Validate sender window, tab ownership, client identity, revision, and change bounds in main.
+- [ ] Add `applyDocumentEdits`, `flushDocumentEdits`, and projection subscription bridge methods.
+- [ ] Keep the existing full-draft channel only until RF-204 within this milestone.
+- [ ] Cover duplicate sequence and stale revision behavior.
+
+**Verification:**
+
+```powershell
+npm.cmd run test -- src/preload src/main packages/workspace-application
+npm.cmd run typecheck
+```
+
+**Exit:** revisioned edits cross a typed, sender-validated IPC boundary.
+
+#### RF-203: Renderer workspace client and pending edit queue
+
+**Outcome:** CodeMirror stays responsive while main remains authoritative.
+
+**Files:**
+
+- Create: `src/renderer/application/workspace-client.ts`
+- Create: `src/renderer/application/pending-edit-queue.ts`
+- Create: `src/renderer/application/workspace-client.test.ts`
+- Create: `src/renderer/application/pending-edit-queue.test.ts`
+- Modify: `src/renderer/code-editor.ts`
+- Modify: `src/renderer/editor/useWorkspaceController.ts`
+
+**Steps:**
+
+- [ ] Serialize CodeMirror transactions into repository-owned `TextChange[]`.
+- [ ] Batch edits per animation frame without changing undo grouping.
+- [ ] Send batches in client-sequence order and retain unacknowledged changes.
+- [ ] Implement `flushEdits()` for save, switch, move, detach, reload, and close barriers.
+- [ ] On conflict, reload canonical text and remap pending changes; if remapping is ambiguous, create a recovery tab containing the local text.
+- [ ] Keep dirty UI derived from confirmed revision plus non-empty pending queue.
+
+**Verification:**
+
+```powershell
+npm.cmd run test -- src/renderer/application src/renderer/code-editor.test.ts src/renderer/app.autosave.test.ts
+npm.cmd run typecheck
+```
+
+**Exit:** renderer has an ordered command queue, not a writable workspace content snapshot.
+
+#### RF-204: Hard cutover from full draft synchronization
+
+**Outcome:** all document changes use revisioned edit batches.
+
+**Files:**
+
+- Delete: `UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL` and `UpdateWorkspaceTabDraftInput` from `src/shared/workspace.ts`.
+- Delete: `updateWorkspaceTabDraft` from `src/shared/product-bridge.ts` and preload.
+- Remove: renderer `pendingWorkspaceDraftRef`, `lastDraftSyncRequestRef`, and local workspace-content mutation.
+- Modify: save/autosave/tab/window flows and tests.
+
+**Steps:**
+
+- [ ] Route every edit, test driver operation, and programmatic insertion through the new queue.
+- [ ] Remove full draft synchronization and snapshot-preservation code.
+- [ ] Remove tests that mock the retired bridge and replace them with revision assertions.
+- [ ] Add an architecture test that forbids retired channel/symbol names.
+- [ ] Run open/edit/save/switch/detach/close scenarios with delayed IPC acknowledgements.
+
+**Verification:**
+
+```powershell
+rg -n "UPDATE_WORKSPACE_TAB_DRAFT|updateWorkspaceTabDraft|pendingWorkspaceDraftRef|preserveCurrentActiveDocumentDraft" src packages
+npm.cmd run test
+npm.cmd run lint
+npm.cmd run typecheck
+npm.cmd run build
+```
+
+**Exit:** the search returns no retired runtime symbols; milestone 2 contains no dual state path.
+
+### Milestone 3 — Data safety and recovery
+
+#### RF-301: Per-document watch registry
+
+**Outcome:** every open file-backed tab is monitored, including inactive tabs and tabs moved between windows.
+
+**Files:**
+
+- Create: `src/main/infrastructure/file-watch-registry.ts`
+- Create: `src/main/infrastructure/file-watch-registry.test.ts`
+- Modify: workspace application ports/use cases.
+- Delete after cutover: `src/main/external-file-watch-service.ts`
+
+**Steps:**
+
+- [ ] Key watches by normalized path and subscribed tab IDs, not webContents ID.
+- [ ] Record `DiskVersion` on open and successful save.
+- [ ] Recheck disk version on activation and immediately before save.
+- [ ] Deliver external state through canonical session projections.
+- [ ] Cover inactive-tab modification, rename/delete, multi-window same path, internal write suppression, and watcher teardown.
+- [ ] Delete the active-tab-only watcher implementation.
+
+**Verification:**
+
+```powershell
+npm.cmd run test -- src/main/infrastructure packages/workspace-application
+npm.cmd run typecheck
+npm.cmd run build
+```
+
+**Exit:** an inactive external edit cannot be adopted as a silent new baseline or overwritten by autosave.
+
+#### RF-302: Conflict-aware safe save
+
+**Outcome:** save is conditional on the expected disk version and writes through one repository adapter.
+
+**Files:**
+
+- Create: `src/main/infrastructure/document-repository.ts`
+- Create: `src/main/infrastructure/document-repository.test.ts`
+- Modify: `packages/workspace-application/src/save-document.ts`
+- Delete after cutover: direct write orchestration from `src/main/save-markdown-file.ts`.
+
+**Steps:**
+
+- [ ] Read and hash the disk document when stat metadata differs.
+- [ ] Reject normal save when disk version differs from the session version.
+- [ ] Implement safe temporary-file write and platform-appropriate replace while preserving explicit error results.
+- [ ] Update saved revision/disk version only after durable success.
+- [ ] Ensure edits accepted during an in-flight save remain dirty after that save completes.
+- [ ] Make Save As create a new disk identity without overwriting the conflicted source.
+
+**Verification:**
+
+```powershell
+npm.cmd run test -- src/main/infrastructure/document-repository.test.ts packages/workspace-application
+npm.cmd run typecheck
+npm.cmd run build
+```
+
+**Exit:** stale disk content is never overwritten without an explicit conflict-resolution command.
+
+#### RF-303: Recovery journal and session restore
+
+**Outcome:** acknowledged unsaved changes survive renderer/main process crashes and normal restart.
+
+**Files:**
+
+- Create: `src/main/infrastructure/recovery-journal.ts`
+- Create: `src/main/infrastructure/recovery-journal.test.ts`
+- Create: `src/main/infrastructure/workspace-persistence.ts`
+- Create: `packages/workspace-application/src/recovery.ts`
+- Modify: app startup and shutdown composition.
+
+**Steps:**
+
+- [ ] Append accepted edit batches with tab/session/revision metadata.
+- [ ] Compact journals into snapshots after a bounded number of batches.
+- [ ] Use checksums and atomic replacement for journal/snapshot files.
+- [ ] Mark clean shutdown and prune journals only after saved revisions are durable.
+- [ ] Restore file-backed and untitled sessions without modifying source files.
+- [ ] Quarantine corrupt recovery files and surface a typed notification.
+
+**Verification:**
+
+```powershell
+npm.cmd run test -- src/main/infrastructure/recovery-journal.test.ts packages/workspace-application/src/recovery.test.ts
+npm.cmd run typecheck
+npm.cmd run build
+```
+
+**Exit:** the recovery flow is main-owned and does not depend on renderer memory.
+
+#### RF-304: Main-owned conflict and close workflows
+
+**Outcome:** React only presents canonical conflict/close projections and sends user choices.
+
+**Files:**
+
+- Modify: `packages/workspace-application/src/resolve-external-change.ts`
+- Modify: `packages/workspace-application/src/close-workspace.ts`
+- Modify: renderer application client and conflict banner.
+- Delete: `src/renderer/editor/useExternalConflictController.ts`
+- Remove: renderer-owned external conflict state from `editor-shell-state.ts`.
+
+**Steps:**
+
+- [ ] Move keep-memory, reload, Save As, discard, and cancel decisions into typed application commands.
+- [ ] Make close-tab/window iterate canonical sessions after `flushEdits()`.
+- [ ] Ensure external conflict blocks autosave at the session level.
+- [ ] Replace renderer conflict state with projection rendering.
+- [ ] Delete the old controller and its state reducers.
+
+**Verification:**
+
+```powershell
+npm.cmd run test -- packages/workspace-application src/renderer/editor
+npm.cmd run test:scenario -- --id open-markdown-file-basic
+npm.cmd run lint
+npm.cmd run typecheck
+npm.cmd run build
+```
+
+**Exit:** save, conflict, and close decisions share one canonical session state.
+
+### Milestone 4 — Recursive Markdown engine and incremental cache
+
+#### RF-401: Recursive node model and source mapping
+
+**Outcome:** the parser target can express arbitrary mixed container nesting with original offsets.
+
+**Files:**
+
+- Create: `packages/markdown-engine/src/model/source-range.ts`
+- Create: `packages/markdown-engine/src/model/markdown-node.ts`
+- Create: `packages/markdown-engine/src/model/container-path.ts`
+- Create: `packages/markdown-engine/src/model/document-tree.ts`
+- Create: `packages/markdown-engine/src/model/document-tree.test.ts`
+- Modify: `packages/markdown-engine/src/index.ts`
+
+**Steps:**
+
+- [ ] Define recursive container/leaf unions, source/content ranges, marker metadata, and container paths.
+- [ ] Define stable node ID generation from structural ancestry and subtree identity, not raw offsets alone.
+- [ ] Define source mapping helpers for masked/container-prefixed source.
+- [ ] Cover CRLF, tabs, Unicode, empty containers, lazy continuation, and depth 0–8.
+- [ ] Keep the existing parser runtime until RF-405, but prevent new consumers from depending on the new model before it is complete.
+
+**Verification:**
+
+```powershell
+npm.cmd run test -- packages/markdown-engine/src/model
+npm.cmd run typecheck
+```
+
+**Exit:** the model can represent every recursive parity path without top-level special cases.
+
+#### RF-402: Full recursive parser
+
+**Outcome:** one micromark-based parser builds the complete recursive document tree.
+
+**Files:**
+
+- Create: `packages/markdown-engine/src/parse/full-document-parser.ts`
+- Create: `packages/markdown-engine/src/parse/micromark-event-adapter.ts`
+- Create: `packages/markdown-engine/src/parse/full-document-parser.test.ts`
+- Create: `fixtures/markdown/recursive-containers.md`
+- Modify: `packages/markdown-engine/src/index.ts`
+
+**Steps:**
+
+- [ ] Convert micromark events into a container stack and recursive nodes.
+- [ ] Parse blockquote children with the same block rules as document children.
+- [ ] Parse list-item children recursively, including nested list, quote, code, math, Mermaid, table, and paragraphs.
+- [ ] Attach inline AST only to leaf content ranges.
+- [ ] Build reference/footnote indexes from the same tree.
+- [ ] Prove source ranges reconstruct the original Markdown exactly.
+- [ ] Compare supported top-level behavior against current parser fixtures.
+
+**Verification:**
+
+```powershell
+npm.cmd run test -- packages/markdown-engine
+npm.cmd run typecheck
+```
+
+**Exit:** no renderer/editor/export regex scan is required to discover container children.
+
+#### RF-403: Physical line and prefix index
+
+**Outcome:** every source line has a canonical container/prefix interpretation.
+
+**Files:**
+
+- Create: `packages/editor-model/src/physical-lines/prefix-segment.ts`
+- Create: `packages/editor-model/src/physical-lines/physical-editing-document.ts`
+- Create: `packages/editor-model/src/physical-lines/physical-editing-document.test.ts`
+- Modify: `packages/editor-model/src/index.ts`
+- Retire equivalent helpers only in RF-506.
+
+**Steps:**
+
+- [ ] Build physical lines from source plus recursive tree.
+- [ ] Emit ordered quote, indentation, list-marker, task-marker, and spacing segments.
+- [ ] Mark structural blank, separator, fence open/content/close, and ordinary content roles.
+- [ ] Provide offset-to-line, line-to-node, node-to-lines, and visible-column queries.
+- [ ] Verify soft-wrap indentation and hidden-prefix geometry inputs.
+
+**Verification:**
+
+```powershell
+npm.cmd run test -- packages/editor-model/src/physical-lines
+npm.cmd run typecheck
+```
+
+**Exit:** commands and decorations can stop reconstructing prefixes independently.
+
+#### RF-404: Incremental structure cache
+
+**Outcome:** ordinary edits reuse unaffected document structure and derived indexes.
+
+**Files:**
+
+- Create: `packages/markdown-engine/src/parse/parse-checkpoint.ts`
+- Create: `packages/markdown-engine/src/cache/invalidation-range.ts`
+- Create: `packages/markdown-engine/src/cache/document-structure-cache.ts`
+- Create: `packages/markdown-engine/src/cache/incremental-document-parser.ts`
+- Create: `packages/markdown-engine/src/cache/incremental-document-parser.test.ts`
+- Modify: `packages/markdown-engine/src/index.ts`
+
+**Steps:**
+
+- [ ] Define safe checkpoints containing open fence, container stack, line state, and dialect state.
+- [ ] Map change ranges through revisions and choose backward/forward reparse bounds.
+- [ ] Reuse immutable unaffected nodes and remap their offsets.
+- [ ] Invalidate inline/global-definition dependents precisely.
+- [ ] Record parse windows, reused/invalidated nodes, and fallback reasons.
+- [ ] Add differential edit-sequence tests against `fullDocumentParser`.
+- [ ] Prove selection-only changes perform no parse.
+
+**Verification:**
+
+```powershell
+npm.cmd run test -- packages/markdown-engine/src/cache packages/markdown-engine/src/parse
+npm.cmd run perf:baseline
+```
+
+**Exit:** incremental results are structurally identical to fresh parse results for the complete edit corpus.
+
+#### RF-405: Parser hard cutover
+
+**Outcome:** every consumer uses the recursive parser/cache public API and old block-map paths are deleted.
+
+**Files:**
+
+- Modify: editor-core consumers, outline, metrics, export, probes, and tests.
+- Delete/replace: `parse-block-map.ts`, transitional rich-parser stitching, blockquote masked-source helpers, and duplicate parser exports once no longer used.
+
+**Steps:**
+
+- [ ] Migrate consumers one by one to `MarkdownDocumentTree` or `EditorDerivedSnapshot`.
+- [ ] Remove direct `parseInlineAst` calls where the canonical leaf AST exists.
+- [ ] Remove editor/export blockquote child rescans.
+- [ ] Delete retired parser code, aliases, fixtures, and tests.
+- [ ] Add forbidden-import/symbol assertions.
+- [ ] Run round-trip and mixed-container differential suites.
+
+**Verification:**
+
+```powershell
+rg -n "parseBlockMap|parseTopLevelBlocks|createBlockquoteInnerSource" src packages
+npm.cmd run test
+npm.cmd run lint
+npm.cmd run typecheck
+npm.cmd run build
+```
+
+**Exit:** one parser and one recursive tree remain; no old parser compatibility export survives.
+
+### Milestone 5 — Pure semantic editing engine
+
+#### RF-501: Editor semantic context and derived snapshot
+
+**Outcome:** commands receive one immutable context containing tree, physical line, container path, selection, and indexes.
+
+**Files:**
+
+- Create: `packages/editor-model/src/context/editor-semantic-context.ts`
+- Create: `packages/editor-model/src/context/selection-context.ts`
+- Create: `packages/editor-model/src/context/editor-semantic-context.test.ts`
+- Create: `packages/editor-model/src/derived/editor-derived-snapshot.ts`
+- Create: `packages/editor-model/src/derived/editor-derived-snapshot.test.ts`
+- Create: `packages/editor-model/src/transactions/edit-transaction-plan.ts`
+- Modify: `packages/editor-model/src/index.ts`
+
+**Steps:**
+
+- [ ] Build snapshot queries from the incremental structure cache.
+- [ ] Separate document-derived state from selection-derived state.
+- [ ] Recompute only active line/path/table cursor on selection changes.
+- [ ] Define the command registry and `EditTransactionPlan` contract.
+- [ ] Verify stale revision/context rejection.
+
+**Verification:**
+
+```powershell
+npm.cmd run test -- packages/editor-model/src/context packages/editor-model/src/derived
+npm.cmd run typecheck
+```
+
+**Exit:** commands need no parser calls and no CodeMirror state.
+
+#### RF-502: Enter planner
+
+**Outcome:** Enter behavior is recursive-container aware and consistent at every depth.
+
+**Files:**
+
+- Create: `packages/editor-model/src/commands/enter.ts`
+- Create: `packages/editor-model/src/commands/enter.test.ts`
+- Modify: `packages/editor-model/src/index.ts`
+
+**Steps:**
+
+- [ ] Implement plain, heading, list, quote, code-fence, table-boundary, and structural-blank Enter rules.
+- [ ] Preserve parent prefixes while the deepest semantic handler edits the leaf.
+- [ ] Implement one-level empty-container exit rules.
+- [ ] Preserve selection and one-step undo intent.
+- [ ] Pass the full Enter behavior matrix through depth 8 and repeated Enter sequences.
+
+**Verification:**
+
+```powershell
+npm.cmd run test -- packages/editor-model/src/commands/enter.test.ts fixtures/editor-behavior
+```
+
+**Exit:** no Enter behavior depends on DOM class names or feature-specific source rescans.
+
+#### RF-503: Backspace and Delete planners
+
+**Outcome:** deletion degrades structure one predictable step and preserves subtrees.
+
+**Files:**
+
+- Create: `packages/editor-model/src/commands/backspace.ts`
+- Create: `packages/editor-model/src/commands/backspace.test.ts`
+- Create: `packages/editor-model/src/commands/delete.ts`
+- Create: `packages/editor-model/src/commands/delete.test.ts`
+- Modify: `packages/editor-model/src/index.ts`
+
+**Steps:**
+
+- [ ] Implement ordinary deletion and range deletion.
+- [ ] Implement content-start marker/indent/quote degradation.
+- [ ] Move or outdent complete list-item subtrees.
+- [ ] Recompute destination path after range deletion/join.
+- [ ] Cover hidden markers, whitespace lines, repeated deletion, and undo/redo.
+
+**Verification:**
+
+```powershell
+npm.cmd run test -- packages/editor-model/src/commands/backspace.test.ts packages/editor-model/src/commands/delete.test.ts
+```
+
+**Exit:** Backspace/Delete behavior is source-minimal, subtree-safe, and depth-independent.
+
+#### RF-504: Indent, navigation, and selection policies
+
+**Outcome:** Tab/Shift+Tab/arrows/pointer/input use explicit, non-conflicting policies.
+
+**Files:**
+
+- Create: `packages/editor-model/src/commands/indent.ts`
+- Create: `packages/editor-model/src/commands/indent.test.ts`
+- Create: `packages/editor-model/src/commands/navigation.ts`
+- Create: `packages/editor-model/src/commands/navigation.test.ts`
+- Create: `packages/editor-model/src/context/selection-context.test.ts`
+- Modify: `packages/editor-model/src/index.ts`
+
+**Steps:**
+
+- [ ] Implement list-subtree indent/outdent with preserved quote prefixes.
+- [ ] Implement visible-line vertical navigation with preferred columns.
+- [ ] Split pointer, structural arrow, printable input, and programmatic normalization.
+- [ ] Prove printable input never moves selection structurally.
+- [ ] Cover hidden marker and structural blank navigation at mixed depths.
+
+**Verification:**
+
+```powershell
+npm.cmd run test -- packages/editor-model/src/commands/indent.test.ts packages/editor-model/src/commands/navigation.test.ts packages/editor-model/src/context/selection-context.test.ts
+```
+
+**Exit:** selection policy is explicit and no global transaction filter guesses user intent.
+
+#### RF-505: Formatting, table, and code-fence planners
+
+**Outcome:** all remaining semantic edits share the same plan/context boundary.
+
+**Files:**
+
+- Create: `packages/editor-model/src/commands/formatting.ts`
+- Create: `packages/editor-model/src/commands/formatting.test.ts`
+- Create: `packages/editor-model/src/commands/table.ts`
+- Create: `packages/editor-model/src/commands/table.test.ts`
+- Create: `packages/editor-model/src/commands/code-fence.ts`
+- Create: `packages/editor-model/src/commands/code-fence.test.ts`
+- Modify: `packages/editor-model/src/index.ts`
+
+**Steps:**
+
+- [ ] Port inline/block toggles without CodeMirror imports.
+- [ ] Port table selection/edit/row/column operations against canonical table nodes.
+- [ ] Port code fence completion, indentation, and boundary Enter behavior.
+- [ ] Preserve history groups and exact source spelling outside changed ranges.
+- [ ] Cover each command inside list/quote combinations where syntax permits.
+
+**Verification:**
+
+```powershell
+npm.cmd run test -- packages/editor-model/src/commands
+```
+
+**Exit:** semantic behavior is complete before CodeMirror integration switches.
+
+#### RF-506: Semantic engine hard cutover
+
+**Outcome:** old editor-core semantic commands, physical-line models, and parsing helpers are deleted.
+
+**Files:**
+
+- Modify: `packages/editor-core/src/extensions/markdown.ts`
+- Modify: `packages/editor-core/src/commands/codemirror-markdown-command-adapter.ts`
+- Modify: `src/renderer/code-editor.ts`
+- Modify: `src/renderer/editor-test-driver.ts`
+- Delete: superseded files under `packages/editor-core/src/commands/` after their callers use `@fishmark/editor-model`.
+- Delete: superseded files under `packages/editor-core/src/context/` after their callers use `@fishmark/editor-model`.
+- Delete: `packages/editor-core/src/physical-editing-document.ts`
+- Delete: `packages/editor-core/src/structural-line-model.ts`
+
+**Steps:**
+
+- [ ] Route keyboard, menu, toolbar, table widget, and test driver commands through `editor-model`.
+- [ ] Remove old command adapters and duplicate semantic context types.
+- [ ] Remove old line/prefix/list parsing utilities.
+- [ ] Replace tests with package-level behavioral tests plus focused adapter tests.
+- [ ] Add forbidden imports for retired editor-core semantics.
+
+**Verification:**
+
+```powershell
+rg -n "from .*editor-core/src/(commands|context)|list-utils|structural-line-model|physical-editing-document" src packages
+npm.cmd run test
+npm.cmd run lint
+npm.cmd run typecheck
+npm.cmd run build
+```
+
+**Exit:** one pure semantic engine remains.
+
+### Milestone 6 — Thin CodeMirror adapter
+
+#### RF-601: Transaction bridge, queue, history, and IME
+
+**Outcome:** CodeMirror converts browser transactions to/from semantic plans without owning Markdown rules.
+
+**Files:**
+
+- Create: `packages/codemirror-adapter/src/transaction-adapter.ts`
+- Create: `packages/codemirror-adapter/src/transaction-adapter.test.ts`
+- Create: `packages/codemirror-adapter/src/pending-edit-queue.ts`
+- Create: `packages/codemirror-adapter/src/pending-edit-queue.test.ts`
+- Create: `packages/codemirror-adapter/src/selection-mapper.ts`
+- Create: `packages/codemirror-adapter/src/selection-mapper.test.ts`
+- Create: `packages/codemirror-adapter/src/composition-controller.ts`
+- Create: `packages/codemirror-adapter/src/composition-controller.test.ts`
+- Modify: `packages/codemirror-adapter/src/index.ts`
+
+**Steps:**
+
+- [ ] Convert CodeMirror change sets to repository `TextChange[]` and back.
+- [ ] Apply semantic plans with correct history annotations.
+- [ ] Integrate the workspace client acknowledgement queue.
+- [ ] Freeze geometry-changing semantic refresh during composition.
+- [ ] Recompute from final text on composition end.
+- [ ] Prove undo/redo across automatic structure completion and delayed acknowledgements.
+
+**Verification:**
+
+```powershell
+npm.cmd run test -- packages/codemirror-adapter/src/transaction-adapter.test.ts packages/codemirror-adapter/src/composition-controller.test.ts
+```
+
+**Exit:** IME and history are adapter concerns; Markdown semantics stay pure.
+
+#### RF-602: Viewport-scoped decorations
+
+**Outcome:** decorations consume render plans and update only affected visible structures.
+
+**Files:** create the `codemirror-adapter/src/decorations/*` files listed in section 4.
+
+**Steps:**
+
+- [ ] Store `EditorDerivedSnapshot` in a state field keyed by revision.
+- [ ] Build decorations for viewport, active path, and structural neighbors.
+- [ ] Reuse unchanged decoration ranges by node ID/hash.
+- [ ] Keep source mode as a presentation gate over the same document state.
+- [ ] Cover viewport entry/exit, active-node changes, scrolling, and composition.
+
+**Verification:**
+
+```powershell
+npm.cmd run test -- packages/codemirror-adapter/src/decorations
+npm.cmd run perf:baseline
+```
+
+**Exit:** ordinary selection/input no longer rebuilds full-document decorations.
+
+#### RF-603: Interaction adapters and widgets
+
+**Outcome:** tables, links, images, math, Mermaid, and code highlighting are isolated adapters over canonical nodes.
+
+**Files:** create `interactions/*` and migrate current widgets/renderers.
+
+**Steps:**
+
+- [ ] Define a typed interaction registry keyed by semantic node capability.
+- [ ] Move table DOM focus/selection into its adapter.
+- [ ] Move link opening and image preview into presentation interactions.
+- [ ] Keep math/Mermaid/highlight loading lazy and cancel stale revision work.
+- [ ] Ensure widgets submit semantic plans rather than editing source independently.
+
+**Verification:**
+
+```powershell
+npm.cmd run test -- packages/codemirror-adapter/src/interactions packages/codemirror-adapter/src/decorations
+npm.cmd run test:table-layout
+npm.cmd run test:mermaid-footnote-render
+```
+
+**Exit:** every widget is revision-aware and cannot create an alternative edit path.
+
+#### RF-604: CodeMirror adapter hard cutover
+
+**Outcome:** the old mixed `editor-core` runtime is removed.
+
+**Files:**
+
+- Migrate: `src/renderer/code-editor.ts`, `code-editor-view.tsx`, probes, and tests.
+- Delete: superseded `packages/editor-core/src/extensions`, `decorations`, `interactions`, caches, widgets, and public exports.
+- Delete package directory if no valid code remains.
+
+**Steps:**
+
+- [ ] Switch the renderer editor factory to `@fishmark/codemirror-adapter`.
+- [ ] Move remaining reusable pure code to its target package.
+- [ ] Delete `packages/editor-core` after all imports are gone.
+- [ ] Remove obsolete aliases, bundle groups, tests, and README claims.
+- [ ] Run all geometry/editing probes and recursive behavior scenarios.
+
+**Verification:**
+
+```powershell
+rg -n "@fishmark/editor-core|packages/editor-core" src packages vite.config.ts vitest.config.ts tsconfig*.json
+npm.cmd run test
+npm.cmd run lint
+npm.cmd run typecheck
+npm.cmd run build
+npm.cmd run test:editing-experience
+```
+
+**Exit:** `editor-core` no longer exists; semantic and CodeMirror responsibilities have clean package owners.
+
+### Milestone 7 — Shared presentation and derived consumers
+
+#### RF-701: Semantic render plan
+
+**Outcome:** editor and export share one semantic presentation description without sharing DOM implementations.
+
+**Files:**
+
+- Create: `packages/markdown-presentation/src/render-plan.ts`
+- Create: `packages/markdown-presentation/src/build-render-plan.ts`
+- Create: `packages/markdown-presentation/src/inline-render-plan.ts`
+- Create: `packages/markdown-presentation/src/build-render-plan.test.ts`
+- Modify: `packages/markdown-presentation/src/index.ts`
+
+**Steps:**
+
+- [ ] Define block/inline/container presentation roles from canonical nodes.
+- [ ] Include source ranges, hidden markers, classes/roles, preview capability, and fallback text.
+- [ ] Reuse the same nested-container traversal for document and blockquote/list children.
+- [ ] Keep app-owned layout and theme-owned styling outside the semantic plan.
+
+**Verification:**
+
+```powershell
+npm.cmd run test -- packages/markdown-presentation
+npm.cmd run typecheck
+```
+
+**Exit:** renderer/export no longer duplicate semantic traversal decisions.
+
+#### RF-702: HTML export cutover
+
+**Outcome:** HTML export consumes `MarkdownDocumentTree` plus render plan and contains no parser.
+
+**Files:** create `markdown-presentation/src/html/*`; reduce or delete `src/renderer/export-html.ts` after moving orchestration.
+
+**Steps:**
+
+- [ ] Move pure HTML rendering into the presentation package.
+- [ ] Render recursive containers, inline nodes, tables, math fallback, Mermaid fallback, and footnotes from canonical data.
+- [ ] Keep theme/style collection in renderer orchestration only.
+- [ ] Remove direct `parseInlineAst`, blockquote scans, and duplicate prefix helpers from export.
+- [ ] Compare editor semantic plan and exported semantic roles in tests.
+
+**Verification:**
+
+```powershell
+npm.cmd run test -- packages/markdown-presentation src/renderer/export-html.test.ts
+npm.cmd run build
+```
+
+**Exit:** export has one semantic source and no duplicate Markdown parser logic.
+
+#### RF-703: Outline and metrics cutover
+
+**Outcome:** outline and document metrics update from `EditorDerivedSnapshot`.
+
+**Files:** migrate `src/renderer/outline.ts`, `document-metrics.ts`, and `useDocumentDerivedDataController.ts`; delete redundant parsers/timers.
+
+**Steps:**
+
+- [ ] Expose outline and metric deltas from the derived snapshot.
+- [ ] Make renderer subscribe by revision instead of content string.
+- [ ] Remove standalone Markdown parsing from outline and metrics.
+- [ ] Schedule noncritical presentation updates after first paint without duplicating structure work.
+
+**Verification:**
+
+```powershell
+npm.cmd run test -- src/renderer/outline.test.ts src/renderer/document-metrics.test.ts src/renderer/editor/useDocumentDerivedDataController.test.tsx
+npm.cmd run perf:baseline
+```
+
+**Exit:** one document structure build feeds editor, outline, metrics, and export.
+
+### Milestone 8 — Renderer and main composition cleanup
+
+#### RF-801: Non-React workspace client/store
+
+**Outcome:** application workflows are callable without hooks or JSX.
+
+**Files:**
+
+- Create: `src/renderer/application/workspace-client.ts`
+- Create: `src/renderer/application/workspace-client.test.ts`
+- Create: `src/renderer/application/workspace-store.ts`
+- Create: `src/renderer/application/workspace-store.test.ts`
+- Create: `src/renderer/application/editor-command-gateway.ts`
+- Create: `src/renderer/application/editor-command-gateway.test.ts`
+- Modify: controllers under `src/renderer/editor/`.
+
+**Steps:**
+
+- [ ] Implement projection subscription with `useSyncExternalStore` compatibility.
+- [ ] Centralize open/save/save-as/autosave/reload/close/move/detach commands.
+- [ ] Centralize flush barriers and typed error/notification mapping.
+- [ ] Route menu, shortcuts, buttons, drag/drop, and test driver through the command gateway.
+- [ ] Remove direct bridge calls from components and settings views.
+
+**Verification:**
+
+```powershell
+npm.cmd run test -- src/renderer/application src/renderer/editor
+npm.cmd run typecheck
+```
+
+**Exit:** application behavior can be tested without rendering React.
+
+#### RF-802: React shell decomposition
+
+**Outcome:** `App.tsx` is a composition root and `WorkspaceShell` is focused presentation.
+
+**Files:** split `src/renderer/editor/App.tsx`, `WorkspaceShell.tsx`, and `settings-view.tsx` into named components under `editor/components/`.
+
+**Steps:**
+
+- [ ] Keep bootstrapping, store subscription, and top-level error boundary in `App.tsx`.
+- [ ] Extract tab strip, titlebar, status bar, conflict banner, outline, find/replace, settings drawer, notification host, and table toolbar.
+- [ ] Give each component explicit view props and command callbacks.
+- [ ] Remove business IPC and document synchronization effects from React.
+- [ ] Keep component tests focused on projection-to-view behavior.
+
+**Verification:**
+
+```powershell
+npm.cmd run test -- src/renderer/editor
+npm.cmd run lint
+npm.cmd run typecheck
+```
+
+**Exit:** no large React component owns document or workspace workflows.
+
+#### RF-803: Main/preload composition split
+
+**Outcome:** main and preload entry files are wiring roots with grouped handler/API modules.
+
+**Files:** create `main/ipc/register-*.ts`, `preload/product-api.ts`, `preload/test-api.ts`; reduce `main.ts` and `preload.ts`.
+
+**Steps:**
+
+- [ ] Group IPC registration by workspace, preferences, themes, export, updates, and tests.
+- [ ] Validate sender/runtime mode at every privileged handler.
+- [ ] Keep product and test bridges physically and conditionally separate.
+- [ ] Make entry files construct dependencies, register modules, and own lifecycle only.
+- [ ] Remove duplicate channel wiring and re-export noise.
+
+**Verification:**
+
+```powershell
+npm.cmd run test -- src/main src/preload
+npm.cmd run lint
+npm.cmd run typecheck
+npm.cmd run build
+```
+
+**Exit:** process entry points are understandable as composition roots.
+
+### Milestone 9 — Performance, E2E, and security gates
+
+#### RF-901: Final performance gate
+
+**Outcome:** the completed cache/adapter architecture meets section 8 budgets with reproducible evidence.
+
+**Files:** update performance probes, fixtures, reports, and budget scripts.
+
+**Steps:**
+
+- [ ] Measure cold/warm 5k and 20k opens.
+- [ ] Measure ordinary input, structural input, selection, scroll, source-mode switch, and tab switch.
+- [ ] Assert parse windows, reuse ratios, fallback counts, decoration rebuilds, and memory growth.
+- [ ] Remove temporary performance logging and keep opt-in structured metrics only.
+- [ ] Fail the task if any required budget is missed; optimize the owning layer before acceptance.
+
+**Verification:**
+
+```powershell
+npm.cmd run perf:baseline
+npm.cmd run test:editing-experience
+```
+
+**Exit:** performance claims are backed by committed fixture hashes and fresh reports.
+
+#### RF-902: Playwright Electron data-safety and editing suite
+
+**Outcome:** critical workflows are proven in real Electron windows and processes.
+
+**Files:** add Playwright dependency/config and create tests under `tests/e2e/editing`, `persistence`, and `performance`.
+
+**Steps:**
+
+- [ ] Add Electron launch fixture and isolated user-data/temp directories.
+- [ ] Cover open/edit/save/reopen and autosave.
+- [ ] Cover inactive-tab external modification and blocked overwrite.
+- [ ] Cover move/detach with pending edits and revision acknowledgements.
+- [ ] Cover window close prompts and crash recovery.
+- [ ] Cover nested Enter/Backspace/Tab/arrow/undo flows with source and selection assertions.
+- [ ] Add platform-tagged IME smoke instructions where automation cannot synthesize a real OS IME.
+
+**Verification:**
+
+```powershell
+npm.cmd run build
+npm.cmd run test:e2e
+```
+
+**Exit:** real process boundaries protect the highest-risk user workflows.
+
+#### RF-903: Electron security hardening
+
+**Outcome:** renderer compromise cannot freely expand to filesystem or privileged IPC access.
+
+**Files:** modify runtime window config, renderer CSP, custom asset protocol, IPC registrars, packaging tests.
+
+**Steps:**
+
+- [ ] Enable renderer sandbox and adapt preload to supported sandbox APIs.
+- [ ] Add a restrictive CSP compatible with bundled assets, lazy modules, themes, and required custom protocols.
+- [ ] Restrict preview asset reads to registered document resource roots and registered theme roots.
+- [ ] Validate IPC sender, window, runtime mode, tab ownership, and input bounds.
+- [ ] Deny navigation/window creation and keep external links protocol-allowlisted.
+- [ ] Add security contract tests for unauthorized paths/senders.
+
+**Verification:**
+
+```powershell
+npm.cmd run test -- src/main src/preload
+npm.cmd run build
+npm.cmd run test:e2e
+```
+
+**Exit:** Electron security recommendations are applied without weakening local preview behavior.
+
+### Milestone 10 — Final deletion and public truth
+
+#### RF-1001: Dead code and compatibility purge
+
+**Outcome:** only the target architecture remains.
+
+**Files:** repository-wide deletion and dependency/config cleanup.
+
+**Steps:**
+
+- [ ] Remove retired packages, APIs, channels, aliases, feature flags, adapters, tests, probes, CSS selectors, and docs.
+- [ ] Remove unused dependencies and move runtime dependencies to correct package sections.
+- [ ] Run TypeScript unused checks, ESLint, bundle analysis, and architecture forbidden-symbol tests.
+- [ ] Search for `legacy`, `compat`, retired parser/command symbols, old draft sync, old conflict state, and duplicate render helpers.
+- [ ] Confirm every remaining public package export has a production consumer or documented public role.
+- [ ] Confirm generated artifacts and `tmp/` diagnostics are not tracked as architecture inputs.
+
+**Verification:**
+
+```powershell
+rg -n "legacy|compat|updateWorkspaceTabDraft|parseBlockMap|@fishmark/editor-core|useExternalConflictController|preserveCurrentActiveDocumentDraft" src packages tests vite.config.ts vitest.config.ts tsconfig*.json
+npm.cmd run lint
+npm.cmd run typecheck
+npm.cmd run test
+npm.cmd run build
+npm.cmd run perf:bundle
+```
+
+**Exit:** forbidden searches return no runtime compatibility/dead paths; all gates pass.
+
+#### RF-1002: Architecture, behavior, and documentation acceptance
+
+**Outcome:** code, public documentation, test evidence, and product behavior describe the same final system.
+
+**Files:** update `docs/design.md`, `docs/decision-log.md`, `docs/test-cases.md`, `docs/test-report.md`, `docs/progress.md`, `MVP_BACKLOG.md`, package READMEs, and task summaries.
+
+**Steps:**
+
+- [ ] Document final ownership, dependencies, revision/edit flow, cache invalidation, recursive model, and recovery behavior.
+- [ ] Update test cases for nested semantic matrices and data-safety workflows.
+- [ ] Run architecture acceptance over the full program diff.
+- [ ] Run task acceptance over every milestone and the final aggregate.
+- [ ] Perform Windows manual IME/cursor/geometry acceptance and record macOS steps/evidence separately.
+- [ ] Mark the program complete only after roadmap requirements and progress evidence agree.
+
+**Verification:**
+
+```powershell
+npm.cmd run lint
+npm.cmd run typecheck
+npm.cmd run test
+npm.cmd run build
+npm.cmd run perf:baseline
+npm.cmd run test:e2e
+npm.cmd run test:editing-experience
+```
+
+**Exit:** final verdict is `PASS`; no required work, compatibility structure, dead code, or contradictory documentation remains.
+
+## 11. Milestone ordering and dependency rules
+
+```text
+M0 baselines
+  → M1 workspace domain/application
+  → M2 revisioned edit transport
+  → M3 data safety/recovery
+  → M4 recursive parser/cache
+  → M5 semantic editor model
+  → M6 CodeMirror adapter
+  → M7 presentation/derived consumers
+  → M8 renderer/main composition cleanup
+  → M9 performance/E2E/security
+  → M10 purge/final acceptance
+```
+
+Rules:
+
+- M2 cannot start before workspace domain ownership is explicit.
+- M3 cannot accept save/recovery work while full-draft sync still exists.
+- M5 cannot migrate commands before the recursive parser/cache is accepted.
+- M6 cannot delete old editor-core until all pure commands are in editor-model.
+- M7 cannot delete export parsing until the semantic render plan covers all supported nodes.
+- M9 measures the final architecture, not intermediate compatibility paths.
+- M10 is deletion and acceptance, not a place to finish missing architecture.
+
+## 12. Definition of program completion
+
+The refactor is complete only when all statements below are true:
+
+- Main owns canonical `DocumentSession` text, revision, saved revision, disk version, conflict state, and recovery state.
+- Renderer has no writable workspace document copy outside ordered unacknowledged edit commands.
+- Save/autosave/reload/close/move/detach all use an edit-flush barrier and canonical session.
+- Every open file-backed tab is protected from external modifications.
+- Crash recovery restores acknowledged unsaved edits.
+- One recursive Markdown parser represents mixed nested containers with original offsets.
+- Incremental cache results match fresh parse results.
+- Selection-only and ordinary local edits avoid full-document parsing.
+- One pure semantic editor model owns Enter, Backspace, Delete, indentation, navigation, formatting, table, and fence behavior.
+- Nested list/blockquote combinations have the same supported leaf semantics as top-level content.
+- IME, cursor, selection, undo/redo, source mode, WYSIWYM, and round-trip gates pass.
+- CodeMirror adapter contains no Markdown business rules.
+- React components contain no workspace/document workflow orchestration or direct privileged bridge calls.
+- Editor, outline, metrics, and export consume shared canonical derived data/render plans.
+- Required 5k/20k performance budgets pass.
+- Playwright proves data-safety and editing-critical cross-process workflows.
+- Renderer sandbox, CSP, IPC sender validation, and resource path allowlists are active.
+- Old editor-core, old parser, full-draft sync, renderer conflict state, compatibility adapters, dead code, and stale tests/docs are deleted.
+- Build, lint, typecheck, full tests, performance gates, E2E, architecture acceptance, and task acceptance all pass with fresh evidence.
