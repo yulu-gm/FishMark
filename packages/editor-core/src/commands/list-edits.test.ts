@@ -144,6 +144,13 @@ describe("list-edits", () => {
     expect(result?.selection).toEqual({ anchor: doc.indexOf("next") + 2, head: doc.indexOf("next") + 2 });
   });
 
+  it("documents the current list-blockquote-list indent limitation", () => {
+    const doc = ["- > - first", "  > - second", "  > - target"].join("\n");
+    const context = buildContext(doc, doc.indexOf("target") + 1);
+
+    expect(computeIndentListItem(context)).toBeNull();
+  });
+
   it("does not indent the first item in its current list scope", () => {
     const doc = ["- parent", "  - child", "  - leaf"].join("\n");
     const context = buildContext(doc, doc.indexOf("child"));

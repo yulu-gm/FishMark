@@ -12,6 +12,7 @@
     "src/**/*.test.tsx",
     "src/renderer/types.d.ts",
     "src/shared",
-    "packages/**/*.ts"
+    "packages/**/*.ts",
+    "fixtures/editor-behavior/**/*.ts"
   ]
 }

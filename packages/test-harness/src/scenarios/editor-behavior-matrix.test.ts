@@ -1,0 +1,330 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  editorBehaviorCases,
+  filterEditorBehaviorCases,
+  formatContainerPath,
+  recursiveParityMatrixCases,
+  representativeDepthCases,
+  requiredEditorBehaviorContainerPaths
+} from "../../../../fixtures/editor-behavior/manifest";
+import { defaultScenarioRegistry, seedScenarios } from "../index";
+import {
+  createEditorBehaviorMatrixScenario,
+  editorBehaviorMatrixScenario
+} from "./editor-behavior-matrix";
+import { createHeadlessStepHandlers } from "../handlers/headless";
+
+const REQUIRED_COMMANDS = [
+  "Enter",
+  "Backspace",
+  "Tab",
+  "Shift+Tab",
+  "ArrowUp",
+  "ArrowDown",
+  "selection"
+] as const;
+
+const CAPTURED_ORACLE_CASE_IDS = [
+  "empty-type-hash",
+  "empty-type-one-space",
+  "empty-type-three-spaces",
+  "empty-spaces-enter-text",
+  "paragraph-end-enter",
+  "paragraph-middle-enter",
+  "paragraph-start-enter",
+  "heading-end-enter",
+  "heading-end-repeated-enter",
+  "heading-empty-paragraph-space",
+  "heading-empty-paragraph-backspace",
+  "structural-blank-arrow-down"
+] as const;
+
+describe("editor behavior manifest", () => {
+  it("records the complete semantic expectation contract for every case", () => {
+    expect(editorBehaviorCases.length).toBeGreaterThan(20);
+    expect(new Set(editorBehaviorCases.map((behaviorCase) => behaviorCase.id)).size).toBe(
+      editorBehaviorCases.length
+    );
+
+    for (const behaviorCase of editorBehaviorCases) {
+      expect(["desired", "known-defect"]).toContain(behaviorCase.classification.kind);
+      expect(behaviorCase.classification.evidence.length).toBeGreaterThan(0);
+      expect(
+        behaviorCase.classification.evidence.every((entry) => entry.trim().length > 0)
+      ).toBe(true);
+      expect(behaviorCase.initial.source).toEqual(expect.any(String));
+      expect(behaviorCase.initial.selection).toEqual({
+        anchor: expect.any(Number),
+        head: expect.any(Number)
+      });
+      expect(behaviorCase.initial.selection.anchor).toBeGreaterThanOrEqual(0);
+      expect(behaviorCase.initial.selection.anchor).toBeLessThanOrEqual(
+        behaviorCase.initial.source.length
+      );
+      expect(behaviorCase.initial.selection.head).toBeGreaterThanOrEqual(0);
+      expect(behaviorCase.initial.selection.head).toBeLessThanOrEqual(
+        behaviorCase.initial.source.length
+      );
+      expect(behaviorCase.expected.source).toEqual(expect.any(String));
+      expect(behaviorCase.expected.selection).toEqual({
+        anchor: expect.any(Number),
+        head: expect.any(Number)
+      });
+      expect(behaviorCase.expected.repeat.operationCount).toBeGreaterThan(1);
+      expect(behaviorCase.expected.repeat.source).toEqual(expect.any(String));
+      expect(behaviorCase.expected.repeat.selection).toEqual({
+        anchor: expect.any(Number),
+        head: expect.any(Number)
+      });
+      expect(behaviorCase.expected.undo.operationCount).toBeGreaterThan(0);
+      expect(behaviorCase.expected.undo.source).toEqual(expect.any(String));
+      expect(behaviorCase.expected.undo.selection).toEqual({
+        anchor: expect.any(Number),
+        head: expect.any(Number)
+      });
+
+      for (const result of [
+        behaviorCase.expected,
+        behaviorCase.expected.repeat,
+        behaviorCase.expected.undo
+      ]) {
+        expect(result.selection.anchor).toBeGreaterThanOrEqual(0);
+        expect(result.selection.anchor).toBeLessThanOrEqual(result.source.length);
+        expect(result.selection.head).toBeGreaterThanOrEqual(0);
+        expect(result.selection.head).toBeLessThanOrEqual(result.source.length);
+        expect(result.visibleLines).toHaveLength(result.source.split("\n").length);
+
+        result.visibleLines.forEach((line, index) => {
+          expect(line).toMatchObject({
+            line: index + 1,
+            role: expect.any(String),
+            geometry: {
+              containerDepth: expect.any(Number),
+              contentColumn: expect.any(Number),
+              visibility: expect.stringMatching(/^(visible|collapsed)$/)
+            }
+          });
+        });
+      }
+    }
+  });
+
+  it("keeps known defects separate from desired expectations", () => {
+    const defects = editorBehaviorCases.flatMap((behaviorCase) =>
+      behaviorCase.classification.kind === "known-defect" ? [behaviorCase.classification] : []
+    );
+
+    expect(defects.length).toBeGreaterThan(0);
+    for (const defect of defects) {
+      expect(defect.evidence.length).toBeGreaterThan(0);
+      expect(defect.observed.visibleLines).toHaveLength(defect.observed.source.split("\n").length);
+      expect(defect.observed.selection.anchor).toBeLessThanOrEqual(defect.observed.source.length);
+      expect(defect.observed.selection.head).toBeLessThanOrEqual(defect.observed.source.length);
+    }
+  });
+
+  it("generates exactly one typed parity case for all 70 required command/path pairs", () => {
+    expect(recursiveParityMatrixCases).toHaveLength(
+      REQUIRED_COMMANDS.length * requiredEditorBehaviorContainerPaths.length
+    );
+
+    for (const command of REQUIRED_COMMANDS) {
+      for (const path of requiredEditorBehaviorContainerPaths) {
+        const parityMatches = recursiveParityMatrixCases.filter(
+          (behaviorCase) =>
+            behaviorCase.command === command &&
+            formatContainerPath(behaviorCase.containerPath) === formatContainerPath(path)
+        );
+        expect(
+          parityMatches,
+          `${command} parity generation must cover ${formatContainerPath(path)} exactly once`
+        ).toHaveLength(1);
+        expect(
+          filterEditorBehaviorCases({ command, containerPath: path }),
+          `${command} must cover ${formatContainerPath(path)}`
+        ).not.toHaveLength(0);
+      }
+    }
+  });
+
+  it("converts every captured Typora oracle case into the typed corpus", () => {
+    const ids = new Set(editorBehaviorCases.map((behaviorCase) => behaviorCase.id));
+    for (const caseId of CAPTURED_ORACLE_CASE_IDS) {
+      expect(ids.has(caseId), caseId).toBe(true);
+    }
+  });
+
+  it("keeps every physical-line geometry expectation within its source line", () => {
+    for (const behaviorCase of editorBehaviorCases) {
+      for (const result of [
+        behaviorCase.expected,
+        behaviorCase.expected.repeat,
+        behaviorCase.expected.undo
+      ]) {
+        const sourceLines = result.source.split("\n");
+        expect(result.visibleLines).toHaveLength(sourceLines.length);
+        for (const line of result.visibleLines) {
+          expect(line.geometry.contentColumn).toBeLessThanOrEqual(
+            sourceLines[line.line - 1]!.length
+          );
+        }
+      }
+    }
+
+    const quoteNavigation = editorBehaviorCases.find(
+      (behaviorCase) => behaviorCase.id === "blockquote-arrow-down"
+    )!;
+    expect(quoteNavigation.expected.visibleLines[1]).toMatchObject({
+      role: "container-marker",
+      geometry: { contentColumn: 1 }
+    });
+  });
+
+  it("preserves exact quote/list depth and marker columns on every physical line", () => {
+    const nestedTab = editorBehaviorCases.find(
+      (behaviorCase) => behaviorCase.id === "nested-list-item-tab"
+    )!;
+    expect(nestedTab.expected.visibleLines.map((line) => line.geometry)).toEqual([
+      { containerDepth: 1, contentColumn: 2, visibility: "visible" },
+      { containerDepth: 2, contentColumn: 4, visibility: "visible" },
+      { containerDepth: 3, contentColumn: 6, visibility: "visible" }
+    ]);
+
+    const mixedTab = editorBehaviorCases.find(
+      (behaviorCase) => behaviorCase.id === "list-blockquote-list-tab"
+    )!;
+    expect(mixedTab.expected.visibleLines.map((line) => line.geometry)).toEqual([
+      { containerDepth: 3, contentColumn: 6, visibility: "visible" },
+      { containerDepth: 3, contentColumn: 6, visibility: "visible" },
+      { containerDepth: 4, contentColumn: 8, visibility: "visible" }
+    ]);
+
+    const nestedMath = editorBehaviorCases.find(
+      (behaviorCase) => behaviorCase.id === "nested-quote-list-block-math-selection"
+    )!;
+    expect(nestedMath.expected.visibleLines.map((line) => line.geometry)).toEqual([
+      { containerDepth: 3, contentColumn: 6, visibility: "visible" },
+      { containerDepth: 3, contentColumn: 6, visibility: "visible" },
+      { containerDepth: 3, contentColumn: 6, visibility: "visible" }
+    ]);
+
+    const ordered = representativeDepthCases.find((behaviorCase) =>
+      /(?:^|\s)1\. /.test(behaviorCase.initial.source)
+    )!;
+    const task = representativeDepthCases.find((behaviorCase) =>
+      /(?:^|\s)- \[ \] /.test(behaviorCase.initial.source)
+    )!;
+    expect(ordered.expected.visibleLines[0]?.geometry.containerDepth).toBe(
+      ordered.containerDepth
+    );
+    expect(ordered.expected.visibleLines[0]?.geometry.contentColumn).toBe(
+      ordered.initial.source.indexOf("leaf")
+    );
+    expect(task.expected.visibleLines[0]?.geometry.containerDepth).toBe(task.containerDepth);
+    expect(task.expected.visibleLines[0]?.geometry.contentColumn).toBe(
+      task.initial.source.indexOf("leaf")
+    );
+  });
+
+  it("covers depths 0 through 8 and the required line, cursor, selection, and view-mode variants", () => {
+    expect([...new Set(editorBehaviorCases.map((behaviorCase) => behaviorCase.containerDepth))].sort())
+      .toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+
+    expect(new Set(editorBehaviorCases.map((behaviorCase) => behaviorCase.lineContent))).toEqual(
+      new Set(["empty", "whitespace-only", "content"])
+    );
+    expect(new Set(editorBehaviorCases.map((behaviorCase) => behaviorCase.cursorPlacement))).toEqual(
+      new Set(["line-start", "line-middle", "line-end", "range"])
+    );
+    expect(new Set(editorBehaviorCases.map((behaviorCase) => behaviorCase.viewMode))).toEqual(
+      new Set(["source", "wysiwym"])
+    );
+
+    const initialSources = editorBehaviorCases.map((behaviorCase) => behaviorCase.initial.source);
+    expect(initialSources.some((source) => /(?:^|\n)\s*(?:>\s*)*\d+[.)]\s/.test(source))).toBe(
+      true
+    );
+    expect(initialSources.some((source) => /(?:^|\n)\s*(?:>\s*)*[-+*]\s\[[ xX]\]\s/.test(source))).toBe(
+      true
+    );
+  });
+
+  it("contains no screenshot or generated-artifact fields", () => {
+    const serialized = JSON.stringify(editorBehaviorCases);
+    expect(serialized).not.toMatch(/screenshot|artifactPath|imagePath|domClass/i);
+  });
+});
+
+describe("filterEditorBehaviorCases", () => {
+  it("filters by command, exact container path, or both", () => {
+    const tabCases = filterEditorBehaviorCases({ command: "Tab" });
+    expect(tabCases.length).toBeGreaterThan(0);
+    expect(tabCases.every((behaviorCase) => behaviorCase.command === "Tab")).toBe(true);
+
+    const path = requiredEditorBehaviorContainerPaths[5]!;
+    const pathCases = filterEditorBehaviorCases({ containerPath: path });
+    expect(pathCases.length).toBeGreaterThan(0);
+    expect(
+      pathCases.every(
+        (behaviorCase) => formatContainerPath(behaviorCase.containerPath) === formatContainerPath(path)
+      )
+    ).toBe(true);
+
+    const combined = filterEditorBehaviorCases({ command: "Shift+Tab", containerPath: path });
+    expect(combined.length).toBeGreaterThan(0);
+    expect(combined.every((behaviorCase) => behaviorCase.command === "Shift+Tab")).toBe(true);
+    expect(
+      combined.every(
+        (behaviorCase) => formatContainerPath(behaviorCase.containerPath) === formatContainerPath(path)
+      )
+    ).toBe(true);
+  });
+
+  it("returns a defensive array in stable manifest order", () => {
+    const first = filterEditorBehaviorCases();
+    const second = filterEditorBehaviorCases();
+
+    expect(first).toEqual(editorBehaviorCases);
+    expect(first).not.toBe(editorBehaviorCases);
+    expect(first.map((behaviorCase) => behaviorCase.id)).toEqual(
+      second.map((behaviorCase) => behaviorCase.id)
+    );
+  });
+});
+
+describe("editor behavior matrix scenario", () => {
+  it("generates deterministic case steps from the selected corpus", () => {
+    const first = createEditorBehaviorMatrixScenario({ command: "Backspace" });
+    const second = createEditorBehaviorMatrixScenario({ command: "Backspace" });
+    const selectedCases = filterEditorBehaviorCases({ command: "Backspace" });
+
+    expect(first).toEqual(second);
+    expect(first.id).toBe("editor-behavior-matrix");
+    expect(first.steps.map((step) => step.id)).toEqual(
+      selectedCases.map((behaviorCase) => behaviorCase.id)
+    );
+    expect(first.steps.every((step) => step.kind === "assertion")).toBe(true);
+  });
+
+  it("registers exactly one full-corpus scenario entry", () => {
+    expect(editorBehaviorMatrixScenario.steps).toHaveLength(editorBehaviorCases.length);
+    expect(defaultScenarioRegistry.get("editor-behavior-matrix")).toBe(editorBehaviorMatrixScenario);
+    expect(
+      seedScenarios.filter((scenario) => scenario.id === "editor-behavior-matrix")
+    ).toHaveLength(1);
+  });
+
+  it("cannot be reported as passed by the metadata-only headless runner", () => {
+    const firstStep = editorBehaviorMatrixScenario.steps[0]!;
+    const handler = createHeadlessStepHandlers(editorBehaviorMatrixScenario)[firstStep.id]!;
+
+    expect(() =>
+      handler({
+        scenarioId: editorBehaviorMatrixScenario.id,
+        step: firstStep,
+        signal: new AbortController().signal
+      })
+    ).toThrow(/metadata-only/i);
+  });
+});

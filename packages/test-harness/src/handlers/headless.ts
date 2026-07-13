@@ -17,6 +17,12 @@ export function createHeadlessStepHandlers(
 ): StepHandlerMap {
   const entries = scenario.steps.map((step) => {
     const handler = () => {
+      if (scenario.id === "editor-behavior-matrix") {
+        throw new Error(
+          "Editor behavior matrix steps are metadata-only until the shared runner can assert geometry and undo."
+        );
+      }
+
       if (
         scenario.id === "open-markdown-file-basic" &&
         step.id === "select-fixture"

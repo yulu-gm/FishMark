@@ -2,6 +2,7 @@ import type { TestScenario } from "../scenario";
 import { appShellStartupScenario } from "./app-shell-startup";
 import { complexEditorNavigationSmokeScenario } from "./complex-editor-navigation-smoke";
 import { complexEditorStructureKeysScenario } from "./complex-editor-structure-keys";
+import { editorBehaviorMatrixScenario } from "./editor-behavior-matrix";
 import { listEnterBehaviorBasicScenario } from "./list-enter-behavior-basic";
 import { openMarkdownFileBasicScenario } from "./open-markdown-file-basic";
 
@@ -15,13 +16,15 @@ export const seedScenarios: readonly TestScenario[] = [
   openMarkdownFileBasicScenario,
   listEnterBehaviorBasicScenario,
   complexEditorNavigationSmokeScenario,
-  complexEditorStructureKeysScenario
+  complexEditorStructureKeysScenario,
+  editorBehaviorMatrixScenario
 ];
 
 export {
   appShellStartupScenario,
   complexEditorNavigationSmokeScenario,
   complexEditorStructureKeysScenario,
+  editorBehaviorMatrixScenario,
   listEnterBehaviorBasicScenario,
   openMarkdownFileBasicScenario
 };

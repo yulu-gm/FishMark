@@ -3209,7 +3209,7 @@ async function runTableLastRowClickCase(): Promise<CaseResult> {
 
 async function runTableKeyboardExitInsertCase(key: "ArrowDown" | "Enter"): Promise<CaseResult> {
   const initialContent = ["| 表格 | 表格 |", "| --- | --- |", "|  |  |"].join("\n");
-  const expectedContent = ["| 表格 | 表格 |", "| --- | --- |", "|  |  |", "下方"].join("\n");
+  const expectedContent = ["| 表格 | 表格 |", "| --- | --- |", "|  |  |", "", "下方"].join("\n");
   const harness = setupHarness(initialContent);
   await settle();
 

@@ -42,6 +42,24 @@ describe("block path resolution", () => {
     expect(findLeafBlockAt(markdownDocument, cursor)?.type).toBe("paragraph");
   });
 
+  it("documents current mixed-container paths stopping at list blocks", () => {
+    const listQuoteList = ["- > - first", "  > - second", "  > - target"].join("\n");
+    const listDocument = parseMarkdownDocument(listQuoteList);
+    expect(
+      findBlockPathAt(listDocument, listQuoteList.indexOf("target")).map(
+        (entry) => entry.block.type
+      )
+    ).toEqual(["list"]);
+
+    const quoteListMath = ["> > - $$", "> >   x + y", "> >   $$"].join("\n");
+    const quoteDocument = parseMarkdownDocument(quoteListMath);
+    expect(
+      findBlockPathAt(quoteDocument, quoteListMath.indexOf("x + y")).map(
+        (entry) => entry.block.type
+      )
+    ).toEqual(["blockquote", "blockquote", "list"]);
+  });
+
   it("keeps previous block active when cursor is on trailing newline", () => {
     const source = "Paragraph\n";
     const markdownDocument = parseMarkdownDocument(source);

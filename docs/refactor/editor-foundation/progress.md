@@ -6,13 +6,13 @@
 
 **Created:** 2026-07-11
 
-**Last updated:** 2026-07-11
+**Last updated:** 2026-07-13
 
-**Overall status:** `PLANNED`
+**Overall status:** `IN_PROGRESS`
 
 **Current task:** `RF-001`
 
-**Next required skill:** `$fishmark-task-execution` for `RF-001`
+**Next required skill:** `$fishmark-architecture-acceptance` for formal `RF-001` review
 
 ## 1. Status vocabulary
 
@@ -31,7 +31,7 @@ At most one `RF-xxx` task may be `IN_PROGRESS` or `ACCEPTING` at a time. A later
 
 | Milestone | Purpose | Status | Complete | Total | Blocking gate |
 | --- | --- | --- | ---: | ---: | --- |
-| M0 | Invariants and executable baselines | `PLANNED` | 0 | 2 | Behavior matrix and architecture/performance baseline exist |
+| M0 | Invariants and executable baselines | `IN_PROGRESS` | 0 | 2 | Behavior matrix and architecture/performance baseline exist |
 | M1 | Canonical workspace domain | `PLANNED` | 0 | 2 | Old main-local workspace service/application removed |
 | M2 | Revisioned edit transport | `PLANNED` | 0 | 4 | Full-draft sync and renderer writable projection removed |
 | M3 | Data safety and recovery | `PLANNED` | 0 | 4 | Inactive files protected; save/recovery/close are canonical |
@@ -51,7 +51,7 @@ Evidence columns are filled only with fresh command output/report paths from the
 
 | ID | Task | Depends on | Status | Focused evidence | Full gates | Acceptance record | Commit/branch |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| RF-001 | Editing behavior baseline | — | `PLANNED` | — | Docs/scenario checks | — | — |
+| RF-001 | Editing behavior baseline | — | `DEV_DONE` | Matrix: 1 file / 13 tests; harness + driver: 14 files / 81 tests; defect evidence: 2 files / 78 tests. | Unfiltered editing experience: 79 cases, `pass: true`, no failures; lint: 0 errors (8 pre-existing warnings); typecheck passed; full test: 119 files / 1380 tests; build passed. | Architecture and task acceptance pending | `codex/editor-foundation-refactor` |
 | RF-002 | Architecture and performance guards | RF-001 | `PLANNED` | — | Test + perf baseline | — | — |
 | RF-101 | Extract workspace domain | RF-002 | `PLANNED` | — | lint/typecheck/test/build | — | — |
 | RF-102 | Extract workspace application ports/use cases | RF-101 | `PLANNED` | — | lint/typecheck/test/build | — | — |
@@ -189,6 +189,7 @@ Append one entry when a task changes to `DEV_DONE`, then amend the same entry af
 
 | Date | Task | Change summary | Focused verification | Full gates | Acceptance | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-07-13 | RF-001 | Added the typed recursive editing-behavior corpus, exact filtering, one harness scenario, current-defect evidence, and stable documentation; corrected one stale table-exit probe expectation without changing runtime behavior. | Matrix 1/13; harness + driver 14/81; defect evidence 2/78. | Editing experience 79 cases passed; lint, typecheck, 119-file/1380-test suite, and build passed. | Pending | No watchdog/progress diagnostics or other temporary compatibility code retained. |
 
 ## 8. Blockers and deviations
 

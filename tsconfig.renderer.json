@@ -8,5 +8,11 @@
     "jsx": "react-jsx",
     "types": ["vite/client"]
   },
-  "include": ["src/renderer", "src/shared", "packages/**/*.ts", "vite.config.ts"]
+  "include": [
+    "src/renderer",
+    "src/shared",
+    "packages/**/*.ts",
+    "fixtures/editor-behavior/**/*.ts",
+    "vite.config.ts"
+  ]
 }

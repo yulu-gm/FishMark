@@ -599,6 +599,25 @@
 - 表格下一行输入单个 `-` 时，`-` 必须成为表格外的新列表 marker，既不能写进单元格，也不能让前面的表格退回原始 Markdown 源码态。
 - 新增或调整 Markdown 文法渲染时，应给该文法补一个独立 editing-experience 用例，而不是只依赖 parser 或 jsdom 测试。
 
+### TC-017D 编辑行为契约矩阵
+
+步骤：
+1. 运行 `npm.cmd run test -- packages/test-harness src/renderer/editor-test-driver.test.ts`。
+2. 检查 `fixtures/editor-behavior/manifest.ts` 暴露的 typed cases，确认每例都包含初始 Markdown、源码 selection offsets、预期 Markdown、预期 selection、可见物理行角色/几何、重复操作结果、undo 结果和明确分类。
+3. 使用 `filterEditorBehaviorCases({ command: "Enter" })` 选择一个命令，再使用精确 `containerPath` 选择一个递归容器路径；确认组合过滤只返回同时匹配的 case，且顺序稳定。
+4. 检查唯一注册场景 `editor-behavior-matrix`，确认默认 step 顺序与完整 manifest 一致，过滤后的 scenario metadata 与所选 corpus 一致。
+5. 检查 required parity matrix，确认 Enter、Backspace、Tab、Shift+Tab、ArrowUp、ArrowDown、selection 每个 command 都覆盖十条 container paths，包括 Document/Paragraph、递归 List/ListItem、递归 Blockquote，以及 List/Blockquote 与 CodeFence、BlockMath 的混合路径。
+6. 检查生成的代表性深度 case，确认语义容器深度 0 到 8 均存在；另确认 empty、whitespace-only、content、line-start、line-middle、line-end、range、source 和 WYSIWYM metadata 均有覆盖。
+7. 运行 `npm.cmd run test:editing-experience`，确认现有真实 Electron/Chromium 编辑探针没有因 RF-001 契约落地而回归。
+
+预期：
+- manifest 不存 screenshot、DOM class name 或 generated artifact path，只记录 Markdown/source-selection/semantic geometry contract。
+- Enter、Backspace、Tab、Shift+Tab、ArrowUp、ArrowDown、selection 在十条 required paths 上的 70 个组合全部存在，且 repeat 和 undo 预期全部显式存在。
+- 每个 case 分类为 `desired` 或 `known-defect`；已知缺陷保留独立的 current observation 和 evidence，不能把当前错误结果写成 desired expectation。
+- `editor-behavior-matrix` 只注册一次，不建立第二套 runner；command/containerPath filtering 复用同一 typed corpus 与 scenario factory。
+- 当前 driver 尚不能执行 geometry、undo 与 view-mode assertions 时，场景只描述这些 contract，不得把未执行 case 报告为 runtime pass。
+- 测试及 probe 通过，产品编辑源码、选择、undo history、IME 和渲染行为没有变化。
+
 ### TC-034 行内格式渲染
 
 步骤：

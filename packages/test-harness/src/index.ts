@@ -42,6 +42,31 @@ export { runScenario } from "./runner";
 
 export { seedScenarios } from "./scenarios";
 
+export type {
+  EditorBehaviorCase,
+  EditorBehaviorCaseQuery,
+  EditorBehaviorClassification,
+  EditorBehaviorCommand,
+  EditorBehaviorContainer,
+  EditorBehaviorContainerPath,
+  EditorBehaviorResult,
+  SourceSelection,
+  VisiblePhysicalLineExpectation,
+  VisiblePhysicalLineRole
+} from "./scenarios/editor-behavior-matrix";
+export {
+  createEditorBehaviorMatrixScenario,
+  createRepresentativeDepthCases,
+  createRecursiveParityMatrixCases,
+  editorBehaviorCases,
+  editorBehaviorMatrixScenario,
+  filterEditorBehaviorCases,
+  formatContainerPath,
+  representativeDepthCases,
+  recursiveParityMatrixCases,
+  requiredEditorBehaviorContainerPaths
+} from "./scenarios/editor-behavior-matrix";
+
 export { createHeadlessStepHandlers } from "./handlers/headless";
 
 // Browser-safe visual primitives only. The PNG codec, `runVisualCheck`, and
