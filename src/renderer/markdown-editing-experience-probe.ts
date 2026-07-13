@@ -9,7 +9,7 @@ import {
   assertCompleteFishMarkProbeRegistry,
   type FishMarkNamedProbeCaseId,
   type FishMarkNamedProbeGroup
-} from "../../packages/test-harness/src/scenarios/editor-behavior/fishmark-probe-catalog";
+} from "../../fixtures/editor-behavior/fishmark-probe-catalog";
 import { createCodeEditorController } from "./code-editor";
 
 type CaseResult = {

@@ -12,6 +12,7 @@ function scenario(
     summary: "sample",
     surface: "editor",
     tags: ["smoke"],
+    execution: { kind: "headless" },
     steps: steps.map((s) => ({ id: s.id, title: s.id, kind: s.kind ?? "action" }))
   };
 }

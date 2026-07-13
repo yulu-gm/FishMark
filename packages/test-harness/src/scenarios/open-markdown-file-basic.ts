@@ -7,6 +7,12 @@ export const openMarkdownFileBasicScenario: TestScenario = {
     "Opens a UTF-8 Markdown fixture and verifies its content reaches the CodeMirror editor.",
   surface: "editor",
   tags: ["smoke", "editor", "file-io"],
+  execution: {
+    kind: "headless",
+    unsupportedSteps: {
+      "select-fixture": "Fixture picker automation is not implemented in the headless CLI yet."
+    }
+  },
   preconditions: ["fixture markdown file available on disk"],
   steps: [
     {

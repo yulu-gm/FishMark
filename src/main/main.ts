@@ -864,7 +864,10 @@ app.whenReady().then(async () => {
     });
 
     const cliRunner = createCliProcessRunner({
-      cliScriptPath: path.join(__dirname, "../../dist-cli/cli/bin.js"),
+      cliScriptPath: path.join(
+        __dirname,
+        "../../dist-cli/packages/test-harness/src/cli/bin.js"
+      ),
       cwd: path.join(__dirname, "../.."),
       ensureEditorSession: async () => editorTestSessions.ensureSession(),
       dispatchEditorCommand: (input: {

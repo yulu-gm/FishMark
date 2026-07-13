@@ -16,7 +16,7 @@ describe("createCliProcessRunner", () => {
     const child = new FakeChildProcess();
     const spawnProcess = vi.fn(() => child);
     const runner = createCliProcessRunner({
-      cliScriptPath: "D:/MyAgent/FishMark/FishMark/dist-cli/cli/bin.js",
+      cliScriptPath: "D:/MyAgent/FishMark/FishMark/dist-cli/packages/test-harness/src/cli/bin.js",
       cwd: "D:/MyAgent/FishMark/FishMark",
       spawnProcess
     });
@@ -45,7 +45,7 @@ describe("createCliProcessRunner", () => {
 
     expect(spawnProcess).toHaveBeenCalledWith(
       process.execPath,
-      ["D:/MyAgent/FishMark/FishMark/dist-cli/cli/bin.js", "--id", "open-markdown-file-basic"],
+      ["D:/MyAgent/FishMark/FishMark/dist-cli/packages/test-harness/src/cli/bin.js", "--id", "open-markdown-file-basic"],
       expect.objectContaining({
         cwd: "D:/MyAgent/FishMark/FishMark",
         env: expect.objectContaining({
@@ -80,7 +80,7 @@ describe("createCliProcessRunner", () => {
     const spawnProcess = vi.fn(() => child);
     const controller = new AbortController();
     const runner = createCliProcessRunner({
-      cliScriptPath: "D:/MyAgent/FishMark/FishMark/dist-cli/cli/bin.js",
+      cliScriptPath: "D:/MyAgent/FishMark/FishMark/dist-cli/packages/test-harness/src/cli/bin.js",
       cwd: "D:/MyAgent/FishMark/FishMark",
       spawnProcess
     });
@@ -109,7 +109,7 @@ describe("createCliProcessRunner", () => {
       message: "ready"
     });
     const runner = createCliProcessRunner({
-      cliScriptPath: "D:/MyAgent/FishMark/FishMark/dist-cli/cli/bin.js",
+      cliScriptPath: "D:/MyAgent/FishMark/FishMark/dist-cli/packages/test-harness/src/cli/bin.js",
       cwd: "D:/MyAgent/FishMark/FishMark",
       spawnProcess,
       ensureEditorSession: async () => ({ sessionId: "editor-session-1" }),
@@ -155,7 +155,7 @@ describe("createCliProcessRunner", () => {
     });
     expect(spawnProcess).toHaveBeenCalledWith(
       process.execPath,
-      ["D:/MyAgent/FishMark/FishMark/dist-cli/cli/bin.js", "--id", "app-shell-startup"],
+      ["D:/MyAgent/FishMark/FishMark/dist-cli/packages/test-harness/src/cli/bin.js", "--id", "app-shell-startup"],
       expect.objectContaining({
         env: expect.objectContaining({
           FISHMARK_EDITOR_SESSION_ID: "editor-session-1"

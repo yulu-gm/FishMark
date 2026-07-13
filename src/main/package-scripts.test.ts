@@ -86,6 +86,34 @@ describe("package scripts", () => {
     expect(cliWatchConfig.compilerOptions?.tsBuildInfoFile).toBe(".tmp/tsconfig.cli.watch.tsbuildinfo");
   });
 
+  it("compiles canonical editor fixtures with the CLI and uses one emitted bin path", () => {
+    const cliConfig = JSON.parse(
+      readFileSync(path.join(process.cwd(), "tsconfig.cli.json"), "utf8")
+    ) as {
+      compilerOptions?: { rootDir?: string; outDir?: string };
+      include?: string[];
+    };
+    const packageJson = JSON.parse(
+      readFileSync(path.join(process.cwd(), "package.json"), "utf8")
+    ) as { scripts?: Record<string, string> };
+    const mainSource = readFileSync(path.join(process.cwd(), "src", "main", "main.ts"), "utf8");
+    const emittedBin = "dist-cli/packages/test-harness/src/cli/bin.js";
+
+    expect(cliConfig.compilerOptions).toMatchObject({ rootDir: ".", outDir: "dist-cli" });
+    expect(cliConfig.include).toEqual(
+      expect.arrayContaining([
+        "packages/test-harness/src/**/*.ts",
+        "fixtures/editor-behavior/**/*.ts"
+      ])
+    );
+    for (const script of ["dev:electron", "dev:electron:test-workbench", "test:scenario"] as const) {
+      expect(packageJson.scripts?.[script]).toContain(emittedBin);
+      expect(packageJson.scripts?.[script]).not.toContain("dist-cli/cli/bin.js");
+    }
+    expect(mainSource).toContain(`../../${emittedBin}`);
+    expect(mainSource).not.toContain("../../dist-cli/cli/bin.js");
+  });
+
   it("uses cross-env via npm bin resolution instead of a hard-coded node_modules path", () => {
     const packageJsonPath = path.join(process.cwd(), "package.json");
     const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {

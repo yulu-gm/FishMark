@@ -7,6 +7,7 @@ export const listEnterBehaviorBasicScenario: TestScenario = {
     "Opens a task-list fixture, continues a non-empty item, then exits an empty item.",
   surface: "editor",
   tags: ["smoke", "editor", "rendering"],
+  execution: { kind: "headless" },
   preconditions: ["fixture markdown file available on disk"],
   steps: [
     {

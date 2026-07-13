@@ -17,6 +17,7 @@ function createScenario(): TestScenario {
     summary: "Starts the shell and waits for the empty workspace.",
     surface: "editor",
     tags: ["smoke", "editor"],
+    execution: { kind: "headless" },
     steps: [
       { id: "launch-dev-shell", title: "Launch shell", kind: "setup" },
       { id: "wait-for-empty-workspace", title: "Wait for empty workspace", kind: "assertion" }

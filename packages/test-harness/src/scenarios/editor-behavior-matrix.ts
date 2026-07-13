@@ -3,7 +3,7 @@ import {
   filterEditorBehaviorCases,
   formatContainerPath,
   type EditorBehaviorCaseQuery
-} from "./editor-behavior/manifest";
+} from "../../../../fixtures/editor-behavior/manifest";
 import type { TestScenario } from "../scenario";
 
 export function createEditorBehaviorMatrixScenario(
@@ -24,6 +24,11 @@ export function createEditorBehaviorMatrixScenario(
         : `Describes all ${selectedCases.length} typed source, selection, geometry, repeat, undo, and evidence contracts.`,
     surface: "editor",
     tags: ["editor", "rendering"],
+    execution: {
+      kind: "metadata-only",
+      reason:
+        "The shared editor driver has not been implemented for typed RF-001 checkpoint assertions."
+    },
     preconditions: [
       "Typed behavior manifest is the contract source; generated screenshots and runtime artifacts remain external.",
       "Coverage-gap evidence is not an executed pass; a later RF-001 runner slice must replace it with verified evidence."

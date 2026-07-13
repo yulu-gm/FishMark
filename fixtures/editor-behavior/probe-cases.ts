@@ -1,16 +1,26 @@
 import {
+  createEvidence,
   defineEditorBehaviorCase,
   desiredClassification,
-  editorBehaviorResult,
-  operationResult,
-  probeCurrentEvidence,
+  insertText,
+  physicalLineExpectations,
+  pressKey,
+  repeatActions,
+  setSelection,
   sourceSelection,
+  undo,
   type EditorBehaviorCase,
+  type EditorBehaviorAction,
+  type EditorBehaviorCheckpoints,
+  type EditorBehaviorCommand,
   type EditorBehaviorContractReference,
-  type EditorBehaviorEvidenceAspect,
   type EditorBehaviorResult,
   type VisibleLineOptions
 } from "./model";
+import {
+  findFishMarkProbe,
+  type FishMarkNamedProbeCaseId
+} from "./fishmark-probe-catalog";
 
 const DOCUMENT_PARAGRAPH = ["Document", "Paragraph"] as const;
 const DOCUMENT_BLOCKQUOTE_PARAGRAPH = ["Document", "Blockquote", "Paragraph"] as const;
@@ -39,26 +49,127 @@ type ResultInput = readonly [
   options?: VisibleLineOptions
 ];
 
+type ResultDraft = Omit<EditorBehaviorResult, "semanticPath">;
+
 function result(
   viewMode: "source" | "wysiwym",
   [source, selection, options]: ResultInput
-): EditorBehaviorResult {
-  return editorBehaviorResult(source, selection, viewMode, options);
+): ResultDraft {
+  return {
+    source,
+    selection,
+    viewMode,
+    visibleLines: physicalLineExpectations(source, selection, viewMode, options)
+  };
 }
 
-function expectation(
+type CheckpointResults = {
+  readonly primary: ResultDraft;
+  readonly repeatTotalActionCount: number;
+  readonly repeat: ResultDraft;
+  readonly undoActionCount: number;
+  readonly undo: ResultDraft;
+};
+
+function checkpointResults(
   viewMode: "source" | "wysiwym",
   expected: ResultInput,
   repeatCount: number,
   repeat: ResultInput,
   undoCount: number,
   undo: ResultInput
-): EditorBehaviorCase["expected"] {
+): CheckpointResults {
   return {
-    ...result(viewMode, expected),
-    repeat: operationResult(repeatCount, result(viewMode, repeat)),
-    undo: operationResult(undoCount, result(viewMode, undo))
+    primary: result(viewMode, expected),
+    repeatTotalActionCount: repeatCount,
+    repeat: result(viewMode, repeat),
+    undoActionCount: undoCount,
+    undo: result(viewMode, undo)
   };
+}
+
+type ProbeCaseAuthoring = Omit<EditorBehaviorCase, "initial" | "checkpoints"> & {
+  readonly viewMode: "source" | "wysiwym";
+  readonly initial: { readonly source: string; readonly selection: ReturnType<typeof sourceSelection> };
+  readonly checkpointResults: CheckpointResults;
+  readonly semanticPaths?: Partial<
+    Record<"initial" | "primary" | "repeat" | "undo", EditorBehaviorCase["containerPath"]>
+  >;
+  readonly insertedText?: string;
+  readonly primaryFollowupActions?: readonly EditorBehaviorAction[];
+};
+
+function commandAction(
+  command: EditorBehaviorCommand,
+  result: ResultDraft,
+  insertedTextValue?: string
+): EditorBehaviorAction {
+  switch (command) {
+    case "InsertText":
+      if (insertedTextValue === undefined) {
+        throw new Error("InsertText fixtures must declare their inserted text payload.");
+      }
+      return insertText(insertedTextValue);
+    case "Enter":
+    case "Backspace":
+    case "ArrowUp":
+    case "ArrowDown":
+      return pressKey(command);
+    case "Tab":
+      return pressKey("Tab");
+    case "Shift+Tab":
+      return pressKey("Tab", { shift: true });
+    case "selection":
+      return setSelection(result.selection);
+  }
+}
+
+function defineCase(input: ProbeCaseAuthoring): EditorBehaviorCase {
+  const {
+    viewMode,
+    initial,
+    checkpointResults: expected,
+    insertedText: insertedTextValue,
+    primaryFollowupActions = [],
+    semanticPaths = {},
+    ...behaviorCase
+  } = input;
+  const pathFor = (state: "initial" | "primary" | "repeat" | "undo") =>
+    semanticPaths[state] ?? input.containerPath;
+  const complete = (draft: ResultDraft, state: "primary" | "repeat" | "undo") => ({
+    ...draft,
+    semanticPath: pathFor(state)
+  });
+  const primaryAction = commandAction(input.command, expected.primary, insertedTextValue);
+  const repeatAction = commandAction(input.command, expected.repeat, insertedTextValue);
+  const checkpoints: EditorBehaviorCheckpoints = [
+    {
+      id: "primary",
+      from: "initial",
+      actions: [primaryAction, ...primaryFollowupActions],
+      result: complete(expected.primary, "primary")
+    },
+    {
+      id: "repeat",
+      from: "primary",
+      actions: repeatActions([repeatAction], expected.repeatTotalActionCount - 1),
+      result: complete(expected.repeat, "repeat")
+    },
+    {
+      id: "undo",
+      from: "primary",
+      actions: repeatActions([undo()], expected.undoActionCount),
+      result: complete(expected.undo, "undo")
+    }
+  ];
+  return defineEditorBehaviorCase({
+    ...behaviorCase,
+    initial: {
+      ...result(viewMode, [initial.source, initial.selection]),
+      semanticPath: pathFor("initial")
+    },
+    checkpoints
+  });
 }
 
 function roadmapReference(section = "7.7 recursive parity matrix"): EditorBehaviorContractReference {
@@ -73,49 +184,47 @@ function oracleReference(caseId: string): EditorBehaviorContractReference {
 }
 
 function probeClassification(input: {
-  readonly probeCaseId: Parameters<typeof probeCurrentEvidence>[0];
-  readonly verifiedAspects: readonly EditorBehaviorEvidenceAspect[];
+  readonly probeCaseId: FishMarkNamedProbeCaseId;
   readonly contractReferences?: readonly EditorBehaviorContractReference[];
-  readonly note?: string;
 }) {
+  const probe = findFishMarkProbe(input.probeCaseId);
   return desiredClassification({
+    probeCaseId: input.probeCaseId,
     contractReferences: input.contractReferences ?? [roadmapReference()],
-    currentEvidence: probeCurrentEvidence(
-      input.probeCaseId,
-      input.verifiedAspects,
-      "The current named probe does not assert every RF-001 semantic geometry, repeat, undo, and mode aspect.",
-      input.note
-    )
+    evidence: createEvidence({
+      gapReason:
+        "The named probe does not assert this complete RF-001 checkpoint target.",
+      verifiedTargets: probe.capabilities.map((capability) => ({
+        checkpoint: capability.checkpoint,
+        aspect: capability.aspect,
+        provenance: {
+          kind: "fishmark-probe" as const,
+          probeCaseId: input.probeCaseId,
+          assertion: `${probe.probe.file}:${probe.probe.functionName}: ${capability.assertion}`
+        }
+      }))
+    })
   });
 }
 
-const SOURCE_SELECTION = ["command-plan", "source", "selection"] as const;
-const SOURCE_SELECTION_REPEAT = [
-  "command-plan",
-  "source",
-  "selection",
-  "repeat"
-] as const;
-
 export const capturedOracleAndProbeCases: readonly EditorBehaviorCase[] = [
-  defineEditorBehaviorCase({
+  defineCase({
     id: "empty-type-hash",
     title: "Typing a hash in an empty document preserves the source marker",
     origin: "typora-oracle",
     command: "InsertText",
+    insertedText: "#",
     containerPath: DOCUMENT_PARAGRAPH,
     containerDepth: 0,
     lineContent: "empty",
     cursorPlacement: "line-start",
     viewMode: "wysiwym",
-    viewModeContract: "projected-geometry",
     classification: probeClassification({
       probeCaseId: "empty-type-hash",
-      verifiedAspects: SOURCE_SELECTION,
       contractReferences: [oracleReference("empty-type-hash")]
     }),
     initial: { source: "", selection: sourceSelection(0) },
-    expected: expectation(
+    checkpointResults: checkpointResults(
       "wysiwym",
       ["#", sourceSelection(1)],
       2,
@@ -124,24 +233,23 @@ export const capturedOracleAndProbeCases: readonly EditorBehaviorCase[] = [
       ["", sourceSelection(0)]
     )
   }),
-  defineEditorBehaviorCase({
+  defineCase({
     id: "empty-type-one-space",
     title: "Typing one space in an empty document preserves one source space",
     origin: "typora-oracle",
     command: "InsertText",
+    insertedText: " ",
     containerPath: DOCUMENT_PARAGRAPH,
     containerDepth: 0,
     lineContent: "empty",
     cursorPlacement: "line-start",
     viewMode: "wysiwym",
-    viewModeContract: "projected-geometry",
     classification: probeClassification({
       probeCaseId: "empty-type-one-space",
-      verifiedAspects: SOURCE_SELECTION,
       contractReferences: [oracleReference("empty-type-one-space")]
     }),
     initial: { source: "", selection: sourceSelection(0) },
-    expected: expectation(
+    checkpointResults: checkpointResults(
       "wysiwym",
       [" ", sourceSelection(1)],
       2,
@@ -150,24 +258,23 @@ export const capturedOracleAndProbeCases: readonly EditorBehaviorCase[] = [
       ["", sourceSelection(0)]
     )
   }),
-  defineEditorBehaviorCase({
+  defineCase({
     id: "empty-type-three-spaces",
     title: "Typing spaces in an empty document preserves whitespace source",
     origin: "typora-oracle",
     command: "InsertText",
+    insertedText: "   ",
     containerPath: DOCUMENT_PARAGRAPH,
     containerDepth: 0,
     lineContent: "empty",
     cursorPlacement: "line-start",
     viewMode: "source",
-    viewModeContract: "raw-source-geometry",
     classification: probeClassification({
       probeCaseId: "empty-type-three-spaces",
-      verifiedAspects: SOURCE_SELECTION,
       contractReferences: [oracleReference("empty-type-three-spaces")]
     }),
     initial: { source: "", selection: sourceSelection(0) },
-    expected: expectation(
+    checkpointResults: checkpointResults(
       "source",
       ["   ", sourceSelection(3)],
       2,
@@ -176,33 +283,32 @@ export const capturedOracleAndProbeCases: readonly EditorBehaviorCase[] = [
       ["", sourceSelection(0)]
     )
   }),
-  defineEditorBehaviorCase({
+  defineCase({
     id: "empty-spaces-enter-text",
     title: "Enter after spaces creates a paragraph that accepts ordinary text",
     origin: "typora-oracle",
     command: "Enter",
+    primaryFollowupActions: [insertText("abc")],
     containerPath: DOCUMENT_PARAGRAPH,
     containerDepth: 0,
     lineContent: "whitespace-only",
     cursorPlacement: "line-end",
     viewMode: "wysiwym",
-    viewModeContract: "projected-geometry",
     classification: probeClassification({
       probeCaseId: "empty-spaces-enter-text",
-      verifiedAspects: SOURCE_SELECTION,
       contractReferences: [oracleReference("empty-spaces-enter-text")]
     }),
     initial: { source: "   ", selection: sourceSelection(3) },
-    expected: expectation(
+    checkpointResults: checkpointResults(
       "wysiwym",
       ["   \n\nabc", sourceSelection(8)],
       2,
       ["   \n\nabc\n\n", sourceSelection(10)],
-      1,
+      2,
       ["   ", sourceSelection(3)]
     )
   }),
-  defineEditorBehaviorCase({
+  defineCase({
     id: "whitespace-line-enter",
     title: "Repeated Enter preserves the whitespace physical line",
     origin: "fishmark-probe",
@@ -212,13 +318,11 @@ export const capturedOracleAndProbeCases: readonly EditorBehaviorCase[] = [
     lineContent: "whitespace-only",
     cursorPlacement: "line-end",
     viewMode: "wysiwym",
-    viewModeContract: "projected-geometry",
     classification: probeClassification({
       probeCaseId: "empty-spaces-repeated-enter",
-      verifiedAspects: SOURCE_SELECTION_REPEAT
     }),
     initial: { source: "   ", selection: sourceSelection(3) },
-    expected: expectation(
+    checkpointResults: checkpointResults(
       "wysiwym",
       ["   \n\n", sourceSelection(5)],
       2,
@@ -261,7 +365,7 @@ export const capturedOracleAndProbeCases: readonly EditorBehaviorCase[] = [
     }
   ].map((input) => {
     const initialSource = input.initialSource ?? "Paragraph";
-    return defineEditorBehaviorCase({
+    return defineCase({
       id: input.id,
       title: input.title,
       origin: "typora-oracle",
@@ -271,14 +375,12 @@ export const capturedOracleAndProbeCases: readonly EditorBehaviorCase[] = [
       lineContent: "content",
       cursorPlacement: input.placement,
       viewMode: "wysiwym",
-      viewModeContract: "projected-geometry",
       classification: probeClassification({
         probeCaseId: input.id as "paragraph-end-enter" | "paragraph-middle-enter" | "paragraph-start-enter",
-        verifiedAspects: SOURCE_SELECTION,
         contractReferences: [oracleReference(input.id)]
       }),
       initial: { source: initialSource, selection: input.initialSelection },
-      expected: expectation(
+      checkpointResults: checkpointResults(
         "wysiwym",
         [input.expectedSource, input.expectedSelection],
         2,
@@ -288,7 +390,7 @@ export const capturedOracleAndProbeCases: readonly EditorBehaviorCase[] = [
       )
     });
   }),
-  defineEditorBehaviorCase({
+  defineCase({
     id: "heading-end-enter",
     title: "Enter after a heading creates a paragraph without copying the heading marker",
     origin: "typora-oracle",
@@ -298,14 +400,12 @@ export const capturedOracleAndProbeCases: readonly EditorBehaviorCase[] = [
     lineContent: "content",
     cursorPlacement: "line-end",
     viewMode: "wysiwym",
-    viewModeContract: "projected-geometry",
     classification: probeClassification({
       probeCaseId: "heading-end-enter",
-      verifiedAspects: SOURCE_SELECTION,
       contractReferences: [oracleReference("heading-end-enter")]
     }),
     initial: { source: "# Title", selection: sourceSelection(7) },
-    expected: expectation(
+    checkpointResults: checkpointResults(
       "wysiwym",
       ["# Title\n\n", sourceSelection(9)],
       2,
@@ -314,7 +414,7 @@ export const capturedOracleAndProbeCases: readonly EditorBehaviorCase[] = [
       ["# Title", sourceSelection(7)]
     )
   }),
-  defineEditorBehaviorCase({
+  defineCase({
     id: "heading-end-repeated-enter",
     title: "Repeated Enter after a heading accumulates distinct empty paragraphs",
     origin: "typora-oracle",
@@ -324,14 +424,12 @@ export const capturedOracleAndProbeCases: readonly EditorBehaviorCase[] = [
     lineContent: "content",
     cursorPlacement: "line-end",
     viewMode: "wysiwym",
-    viewModeContract: "projected-geometry",
     classification: probeClassification({
       probeCaseId: "heading-end-repeated-enter",
-      verifiedAspects: SOURCE_SELECTION_REPEAT,
       contractReferences: [oracleReference("heading-end-repeated-enter")]
     }),
     initial: { source: "# Title", selection: sourceSelection(7) },
-    expected: expectation(
+    checkpointResults: checkpointResults(
       "wysiwym",
       ["# Title\n\n", sourceSelection(9)],
       3,
@@ -340,24 +438,23 @@ export const capturedOracleAndProbeCases: readonly EditorBehaviorCase[] = [
       ["# Title", sourceSelection(7)]
     )
   }),
-  defineEditorBehaviorCase({
+  defineCase({
     id: "heading-empty-paragraph-space",
     title: "A space in the empty paragraph after a heading remains editable source",
     origin: "typora-oracle",
     command: "InsertText",
+    insertedText: " ",
     containerPath: DOCUMENT_PARAGRAPH,
     containerDepth: 0,
     lineContent: "empty",
     cursorPlacement: "line-end",
     viewMode: "wysiwym",
-    viewModeContract: "projected-geometry",
     classification: probeClassification({
       probeCaseId: "heading-empty-paragraph-space",
-      verifiedAspects: SOURCE_SELECTION,
       contractReferences: [oracleReference("heading-empty-paragraph-space")]
     }),
     initial: { source: "# Title\n\n", selection: sourceSelection(9) },
-    expected: expectation(
+    checkpointResults: checkpointResults(
       "wysiwym",
       ["# Title\n\n ", sourceSelection(10)],
       2,
@@ -366,7 +463,7 @@ export const capturedOracleAndProbeCases: readonly EditorBehaviorCase[] = [
       ["# Title\n\n", sourceSelection(9)]
     )
   }),
-  defineEditorBehaviorCase({
+  defineCase({
     id: "heading-empty-paragraph-backspace",
     title: "Backspace from the empty paragraph below a heading rejoins the heading",
     origin: "typora-oracle",
@@ -376,14 +473,12 @@ export const capturedOracleAndProbeCases: readonly EditorBehaviorCase[] = [
     lineContent: "empty",
     cursorPlacement: "line-end",
     viewMode: "wysiwym",
-    viewModeContract: "projected-geometry",
     classification: probeClassification({
       probeCaseId: "heading-empty-paragraph-backspace",
-      verifiedAspects: SOURCE_SELECTION,
       contractReferences: [oracleReference("heading-empty-paragraph-backspace")]
     }),
     initial: { source: "# Title\n\n", selection: sourceSelection(9) },
-    expected: expectation(
+    checkpointResults: checkpointResults(
       "wysiwym",
       ["# Title", sourceSelection(7)],
       2,
@@ -392,7 +487,7 @@ export const capturedOracleAndProbeCases: readonly EditorBehaviorCase[] = [
       ["# Title\n\n", sourceSelection(9)]
     )
   }),
-  defineEditorBehaviorCase({
+  defineCase({
     id: "structural-blank-arrow-down",
     title: "ArrowDown crosses a structural separator to the next visible paragraph",
     origin: "typora-oracle",
@@ -402,14 +497,12 @@ export const capturedOracleAndProbeCases: readonly EditorBehaviorCase[] = [
     lineContent: "content",
     cursorPlacement: "line-end",
     viewMode: "wysiwym",
-    viewModeContract: "projected-geometry",
     classification: probeClassification({
       probeCaseId: "structural-blank-arrow-down",
-      verifiedAspects: SOURCE_SELECTION,
       contractReferences: [oracleReference("structural-blank-arrow-down")]
     }),
     initial: { source: "Paragraph one\n\nParagraph two", selection: sourceSelection(13) },
-    expected: expectation(
+    checkpointResults: checkpointResults(
       "wysiwym",
       ["Paragraph one\n\nParagraph two", sourceSelection(28)],
       2,
@@ -421,7 +514,7 @@ export const capturedOracleAndProbeCases: readonly EditorBehaviorCase[] = [
 ];
 
 export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
-  defineEditorBehaviorCase({
+  defineCase({
     id: "blockquote-raw-prefix-hidden",
     title: "Focused blockquote prefix projects hidden marker geometry",
     origin: "fishmark-probe",
@@ -431,13 +524,11 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
     lineContent: "content",
     cursorPlacement: "line-start",
     viewMode: "wysiwym",
-    viewModeContract: "projected-geometry",
     classification: probeClassification({
       probeCaseId: "blockquote-raw-prefix-hidden",
-      verifiedAspects: ["physical-geometry", "view-mode"]
     }),
     initial: { source: "> quote", selection: sourceSelection(2) },
-    expected: expectation(
+    checkpointResults: checkpointResults(
       "wysiwym",
       ["> quote", sourceSelection(2)],
       2,
@@ -446,23 +537,22 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
       ["> quote", sourceSelection(2)]
     )
   }),
-  defineEditorBehaviorCase({
+  defineCase({
     id: "blockquote-marker-commits-after-text",
     title: "Typing content commits a plain greater-than as a quote marker",
     origin: "fishmark-probe",
     command: "InsertText",
+    insertedText: "quote",
     containerPath: DOCUMENT_BLOCKQUOTE_PARAGRAPH,
     containerDepth: 1,
     lineContent: "empty",
     cursorPlacement: "line-start",
     viewMode: "wysiwym",
-    viewModeContract: "projected-geometry",
     classification: probeClassification({
       probeCaseId: "blockquote-marker-commits-after-text",
-      verifiedAspects: [...SOURCE_SELECTION, "visible-line-roles", "view-mode"]
     }),
     initial: { source: ">", selection: sourceSelection(1) },
-    expected: expectation(
+    checkpointResults: checkpointResults(
       "wysiwym",
       [">quote", sourceSelection(6)],
       2,
@@ -471,7 +561,7 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
       [">", sourceSelection(1)]
     )
   }),
-  defineEditorBehaviorCase({
+  defineCase({
     id: "blockquote-marker-commits-after-selection-move",
     title: "Moving away collapses an inactive bare quote separator",
     origin: "fishmark-probe",
@@ -481,13 +571,16 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
     lineContent: "empty",
     cursorPlacement: "line-start",
     viewMode: "wysiwym",
-    viewModeContract: "projected-geometry",
     classification: probeClassification({
       probeCaseId: "blockquote-marker-commits-after-selection-move",
-      verifiedAspects: ["source", "visible-line-roles", "view-mode"]
     }),
     initial: { source: ">\n\nParagraph", selection: sourceSelection(1) },
-    expected: expectation(
+    semanticPaths: {
+      primary: DOCUMENT_PARAGRAPH,
+      repeat: DOCUMENT_PARAGRAPH,
+      undo: DOCUMENT_PARAGRAPH
+    },
+    checkpointResults: checkpointResults(
       "wysiwym",
       [">\n\nParagraph", sourceSelection(3)],
       2,
@@ -496,23 +589,22 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
       [">\n\nParagraph", sourceSelection(3)]
     )
   }),
-  defineEditorBehaviorCase({
+  defineCase({
     id: "nested-blockquote-marker-commits-after-text",
     title: "Typing nested content commits the inner quote marker",
     origin: "fishmark-probe",
     command: "InsertText",
+    insertedText: "nested",
     containerPath: DOCUMENT_NESTED_BLOCKQUOTE_PARAGRAPH,
     containerDepth: 2,
     lineContent: "empty",
     cursorPlacement: "line-end",
     viewMode: "wysiwym",
-    viewModeContract: "projected-geometry",
     classification: probeClassification({
       probeCaseId: "nested-blockquote-marker-commits-after-text",
-      verifiedAspects: [...SOURCE_SELECTION, "visible-line-roles", "view-mode"]
     }),
     initial: { source: "> >", selection: sourceSelection(3) },
-    expected: expectation(
+    checkpointResults: checkpointResults(
       "wysiwym",
       ["> >nested", sourceSelection(9)],
       2,
@@ -521,7 +613,7 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
       ["> >", sourceSelection(3)]
     )
   }),
-  defineEditorBehaviorCase({
+  defineCase({
     id: "blockquote-marker-commits-after-enter",
     title: "Enter commits a quote marker and creates the next quoted line",
     origin: "fishmark-probe",
@@ -531,13 +623,12 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
     lineContent: "empty",
     cursorPlacement: "line-end",
     viewMode: "wysiwym",
-    viewModeContract: "projected-geometry",
     classification: probeClassification({
       probeCaseId: "blockquote-marker-commits-after-enter",
-      verifiedAspects: SOURCE_SELECTION
     }),
     initial: { source: ">", selection: sourceSelection(1) },
-    expected: expectation(
+    semanticPaths: { repeat: DOCUMENT_PARAGRAPH },
+    checkpointResults: checkpointResults(
       "wysiwym",
       ["> \n> ", sourceSelection(5)],
       2,
@@ -546,7 +637,7 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
       [">", sourceSelection(1)]
     )
   }),
-  defineEditorBehaviorCase({
+  defineCase({
     id: "nested-blockquote-marker-commits-after-enter",
     title: "Enter commits a nested quote marker at the same quote depth",
     origin: "fishmark-probe",
@@ -556,13 +647,12 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
     lineContent: "empty",
     cursorPlacement: "line-end",
     viewMode: "wysiwym",
-    viewModeContract: "projected-geometry",
     classification: probeClassification({
       probeCaseId: "nested-blockquote-marker-commits-after-enter",
-      verifiedAspects: SOURCE_SELECTION
     }),
     initial: { source: "> >", selection: sourceSelection(3) },
-    expected: expectation(
+    semanticPaths: { repeat: DOCUMENT_BLOCKQUOTE_PARAGRAPH },
+    checkpointResults: checkpointResults(
       "wysiwym",
       ["> > \n> > ", sourceSelection(9)],
       2,
@@ -571,7 +661,7 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
       ["> >", sourceSelection(3)]
     )
   }),
-  defineEditorBehaviorCase({
+  defineCase({
     id: "blockquote-bare-separator-rendering",
     title: "Inactive bare quote separator remains structurally collapsed",
     origin: "fishmark-probe",
@@ -581,16 +671,14 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
     lineContent: "content",
     cursorPlacement: "line-start",
     viewMode: "wysiwym",
-    viewModeContract: "projected-geometry",
     classification: probeClassification({
       probeCaseId: "blockquote-bare-separator-rendering",
-      verifiedAspects: ["visible-line-roles", "view-mode"]
     }),
     initial: {
       source: "> 1\n>\n> 222\n\nPlain paragraph",
       selection: sourceSelection(13)
     },
-    expected: expectation(
+    checkpointResults: checkpointResults(
       "wysiwym",
       ["> 1\n>\n> 222\n\nPlain paragraph", sourceSelection(13)],
       2,
@@ -599,7 +687,7 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
       ["> 1\n>\n> 222\n\nPlain paragraph", sourceSelection(13)]
     )
   }),
-  defineEditorBehaviorCase({
+  defineCase({
     id: "blockquote-structural-separator-navigation",
     title: "ArrowUp skips a quote-internal structural separator",
     origin: "fishmark-probe",
@@ -609,13 +697,11 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
     lineContent: "content",
     cursorPlacement: "line-start",
     viewMode: "wysiwym",
-    viewModeContract: "projected-geometry",
     classification: probeClassification({
       probeCaseId: "blockquote-structural-separator-navigation",
-      verifiedAspects: ["selection", "visible-line-roles", "view-mode"]
     }),
     initial: { source: "> 1\n>\n> 222", selection: sourceSelection(8) },
-    expected: expectation(
+    checkpointResults: checkpointResults(
       "wysiwym",
       ["> 1\n>\n> 222", sourceSelection(3)],
       2,
@@ -624,7 +710,7 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
       ["> 1\n>\n> 222", sourceSelection(3)]
     )
   }),
-  defineEditorBehaviorCase({
+  defineCase({
     id: "blockquote-trailing-empty-separator-backspace",
     title: "Backspace removes a trailing empty quote and its separator",
     origin: "fishmark-probe",
@@ -634,16 +720,14 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
     lineContent: "empty",
     cursorPlacement: "line-end",
     viewMode: "wysiwym",
-    viewModeContract: "projected-geometry",
     classification: probeClassification({
       probeCaseId: "blockquote-trailing-empty-separator-backspace",
-      verifiedAspects: [...SOURCE_SELECTION, "visible-line-roles"]
     }),
     initial: {
       source: "> 1111\n>\n> ",
       selection: sourceSelection("> 1111\n>\n> ".length)
     },
-    expected: expectation(
+    checkpointResults: checkpointResults(
       "wysiwym",
       ["> 1111", sourceSelection(6)],
       2,
@@ -652,7 +736,7 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
       ["> 1111\n>\n> ", sourceSelection("> 1111\n>\n> ".length)]
     )
   }),
-  defineEditorBehaviorCase({
+  defineCase({
     id: "blockquote-list-trailing-empty-backspace",
     title: "Backspace removes trailing quote rows after a quoted list",
     origin: "fishmark-probe",
@@ -662,16 +746,36 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
     lineContent: "empty",
     cursorPlacement: "line-end",
     viewMode: "wysiwym",
-    viewModeContract: "projected-geometry",
     classification: probeClassification({
       probeCaseId: "blockquote-list-trailing-empty-backspace",
-      verifiedAspects: [...SOURCE_SELECTION, "visible-line-roles"]
     }),
     initial: {
       source: "> 111\n>\n> - list1\n> - list2\n>   - child list\n>\n> ",
       selection: sourceSelection("> 111\n>\n> - list1\n> - list2\n>   - child list\n>\n> ".length)
     },
-    expected: expectation(
+    semanticPaths: {
+      initial: DOCUMENT_BLOCKQUOTE_PARAGRAPH,
+      primary: [
+        "Document",
+        "Blockquote",
+        "List",
+        "ListItem",
+        "List",
+        "ListItem",
+        "Paragraph"
+      ],
+      repeat: [
+        "Document",
+        "Blockquote",
+        "List",
+        "ListItem",
+        "List",
+        "ListItem",
+        "Paragraph"
+      ],
+      undo: DOCUMENT_BLOCKQUOTE_PARAGRAPH
+    },
+    checkpointResults: checkpointResults(
       "wysiwym",
       [
         "> 111\n>\n> - list1\n> - list2\n>   - child list",
@@ -689,7 +793,7 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
       ]
     )
   }),
-  defineEditorBehaviorCase({
+  defineCase({
     id: "nested-quote-list-repeated-enter-exit",
     title: "Repeated Enter exits a nested empty list into its quote depth",
     origin: "fishmark-probe",
@@ -699,16 +803,15 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
     lineContent: "empty",
     cursorPlacement: "line-end",
     viewMode: "wysiwym",
-    viewModeContract: "projected-geometry",
     classification: probeClassification({
       probeCaseId: "nested-quote-list-repeated-enter-exit",
-      verifiedAspects: SOURCE_SELECTION_REPEAT
     }),
     initial: {
       source: "> 引用块\n>\n> > 二级引用块\n> > - List 1\n> > - List 2\n> >   - List 2.1\n> >   -",
-      selection: sourceSelection("> 引用块\n>\n> > 二级引用块\n> > - List 1\n> > - List 2\n> >   - List 2.1\n> >   -".length)
+        selection: sourceSelection("> 引用块\n>\n> > 二级引用块\n> > - List 1\n> > - List 2\n> >   - List 2.1\n> >   -".length)
     },
-    expected: expectation(
+    semanticPaths: { repeat: DOCUMENT_NESTED_BLOCKQUOTE_PARAGRAPH },
+    checkpointResults: checkpointResults(
       "wysiwym",
       [
         "> 引用块\n>\n> > 二级引用块\n> > - List 1\n> > - List 2\n> >   - List 2.1\n> > -",
@@ -752,7 +855,7 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
       expected: "> - List 1\n>   - 2"
     }
   ].map((input) =>
-    defineEditorBehaviorCase({
+    defineCase({
       id: input.id,
       title: input.title,
       origin: "fishmark-probe",
@@ -762,13 +865,25 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
       lineContent: "empty",
       cursorPlacement: "line-end",
       viewMode: "wysiwym",
-      viewModeContract: "projected-geometry",
       classification: probeClassification({
         probeCaseId: input.id,
-        verifiedAspects: [...SOURCE_SELECTION, "visible-line-roles"]
       }),
       initial: { source: input.initial, selection: sourceSelection(input.initial.length) },
-      expected: expectation(
+      semanticPaths: {
+        primary: [
+          ...input.path.slice(0, -1),
+          "List",
+          "ListItem",
+          "Paragraph"
+        ],
+        repeat: [
+          ...input.path.slice(0, -1),
+          "List",
+          "ListItem",
+          "Paragraph"
+        ]
+      },
+      checkpointResults: checkpointResults(
         "wysiwym",
         [input.expected, sourceSelection(input.expected.length)],
         2,
@@ -778,7 +893,7 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
       )
     })
   ),
-  defineEditorBehaviorCase({
+  defineCase({
     id: "blockquote-list-exit-trailing-separator-cleanup",
     title: "Repeated Enter exits a quoted list and removes trailing quote rows",
     origin: "fishmark-probe",
@@ -788,13 +903,15 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
     lineContent: "empty",
     cursorPlacement: "line-end",
     viewMode: "wysiwym",
-    viewModeContract: "projected-geometry",
     classification: probeClassification({
       probeCaseId: "blockquote-list-exit-trailing-separator-cleanup",
-      verifiedAspects: SOURCE_SELECTION_REPEAT
     }),
     initial: { source: "> - List1\n> - ", selection: sourceSelection(14) },
-    expected: expectation(
+    semanticPaths: {
+      primary: DOCUMENT_BLOCKQUOTE_PARAGRAPH,
+      repeat: DOCUMENT_PARAGRAPH
+    },
+    checkpointResults: checkpointResults(
       "wysiwym",
       ["> - List1\n>\n> ", sourceSelection("> - List1\n>\n> ".length)],
       2,
@@ -803,7 +920,7 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
       ["> - List1\n> - ", sourceSelection(14)]
     )
   }),
-  defineEditorBehaviorCase({
+  defineCase({
     id: "blockquote-inner-blocks-rendering-enter",
     title: "Enter creates a quoted separator while nested blocks retain semantics",
     origin: "fishmark-probe",
@@ -813,14 +930,12 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
     lineContent: "content",
     cursorPlacement: "line-end",
     viewMode: "wysiwym",
-    viewModeContract: "projected-geometry",
     classification: probeClassification({
       probeCaseId: "blockquote-inner-blocks-rendering-enter",
-      verifiedAspects: [...SOURCE_SELECTION, "visible-line-roles", "view-mode"],
-      note: "The named probe also covers nested quotes, lists, fenced code, block math, list indentation, and repeated exits."
     }),
     initial: { source: "> alpha", selection: sourceSelection(7) },
-    expected: expectation(
+    semanticPaths: { repeat: DOCUMENT_PARAGRAPH },
+    checkpointResults: checkpointResults(
       "wysiwym",
       ["> alpha\n>\n> ", sourceSelection(12)],
       2,
@@ -829,7 +944,7 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
       ["> alpha", sourceSelection(7)]
     )
   }),
-  defineEditorBehaviorCase({
+  defineCase({
     id: "blockquote-code-fence-input",
     title: "Enter completes a fenced code block inside a blockquote",
     origin: "fishmark-probe",
@@ -839,13 +954,11 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
     lineContent: "content",
     cursorPlacement: "line-end",
     viewMode: "wysiwym",
-    viewModeContract: "projected-geometry",
     classification: probeClassification({
       probeCaseId: "blockquote-code-fence-input",
-      verifiedAspects: [...SOURCE_SELECTION, "visible-line-roles", "physical-geometry"]
     }),
     initial: { source: "> ```\n\nPlain paragraph", selection: sourceSelection(5) },
-    expected: expectation(
+    checkpointResults: checkpointResults(
       "wysiwym",
       ["> ```\n> \n> ```\n\nPlain paragraph", sourceSelection(8)],
       2,
@@ -854,7 +967,7 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
       ["> ```\n\nPlain paragraph", sourceSelection(5)]
     )
   }),
-  defineEditorBehaviorCase({
+  defineCase({
     id: "blockquote-table-rendering",
     title: "A table inside a blockquote retains source selection and projected geometry",
     origin: "fishmark-probe",
@@ -864,16 +977,14 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
     lineContent: "content",
     cursorPlacement: "line-start",
     viewMode: "wysiwym",
-    viewModeContract: "projected-geometry",
     classification: probeClassification({
       probeCaseId: "blockquote-table-rendering",
-      verifiedAspects: ["physical-geometry", "view-mode"]
     }),
     initial: {
       source: "> Before\n>\n> | name | qty |\n> | --- | ---: |\n> | pen | 2 |\n>\n> After",
       selection: sourceSelection(49)
     },
-    expected: expectation(
+    checkpointResults: checkpointResults(
       "wysiwym",
       ["> Before\n>\n> | name | qty |\n> | --- | ---: |\n> | pen | 2 |\n>\n> After", sourceSelection(49)],
       2,
@@ -882,7 +993,7 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
       ["> Before\n>\n> | name | qty |\n> | --- | ---: |\n> | pen | 2 |\n>\n> After", sourceSelection(49)]
     )
   }),
-  defineEditorBehaviorCase({
+  defineCase({
     id: "deep-ordered-list-repeated-enter-exit",
     title: "Repeated Enter exits each level of a deep ordered list",
     origin: "fishmark-probe",
@@ -901,16 +1012,15 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
     lineContent: "content",
     cursorPlacement: "line-end",
     viewMode: "wysiwym",
-    viewModeContract: "projected-geometry",
     classification: probeClassification({
       probeCaseId: "deep-ordered-list-repeated-enter-exit",
-      verifiedAspects: ["command-plan", "source", "selection", "repeat", "physical-geometry"]
     }),
     initial: {
       source: "1. 111\n2. 222\n  1. 2.1\n    1. 2.1.1",
       selection: sourceSelection("1. 111\n2. 222\n  1. 2.1\n    1. 2.1.1".length)
     },
-    expected: expectation(
+    semanticPaths: { repeat: DOCUMENT_PARAGRAPH },
+    checkpointResults: checkpointResults(
       "wysiwym",
       [
         "1. 111\n2. 222\n  1. 2.1\n    1. 2.1.1\n    2. ",
@@ -928,7 +1038,7 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
       ]
     )
   }),
-  defineEditorBehaviorCase({
+  defineCase({
     id: "top-level-list-item-enter-body-upgrade",
     title: "Enter at a top-level list item start upgrades it to body text",
     origin: "fishmark-probe",
@@ -938,13 +1048,12 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
     lineContent: "content",
     cursorPlacement: "line-start",
     viewMode: "wysiwym",
-    viewModeContract: "projected-geometry",
     classification: probeClassification({
       probeCaseId: "top-level-list-item-enter-body-upgrade",
-      verifiedAspects: [...SOURCE_SELECTION, "physical-geometry"]
     }),
     initial: { source: "1. Previous\n2. Body", selection: sourceSelection(15) },
-    expected: expectation(
+    semanticPaths: { primary: DOCUMENT_PARAGRAPH, repeat: DOCUMENT_PARAGRAPH },
+    checkpointResults: checkpointResults(
       "wysiwym",
       ["1. Previous\n\nBody", sourceSelection(13)],
       2,

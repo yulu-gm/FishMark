@@ -2,6 +2,7 @@ import { createScenarioRegistry } from "./registry";
 import { seedScenarios } from "./scenarios";
 
 export type {
+  ScenarioExecutionCapability,
   ScenarioSurface,
   ScenarioTag,
   TestScenario,
@@ -43,6 +44,8 @@ export { runScenario } from "./runner";
 export { seedScenarios } from "./scenarios";
 
 export type {
+  EditorBehaviorAction,
+  EditorBehaviorAspect,
   EditorBehaviorCase,
   EditorBehaviorCaseQuery,
   EditorBehaviorClassification,
@@ -50,24 +53,32 @@ export type {
   EditorBehaviorContainer,
   EditorBehaviorContainerPath,
   EditorBehaviorContractReference,
-  EditorBehaviorCurrentEvidence,
   EditorBehaviorCurrentObservation,
-  EditorBehaviorEvidenceAspect,
+  EditorBehaviorEvidence,
+  EditorBehaviorEvidenceObservation,
+  EditorBehaviorEvidenceProvenance,
+  EditorBehaviorEvidenceState,
   EditorBehaviorResult,
+  EditorBehaviorCheckpoint,
+  EditorBehaviorCheckpointId,
+  PhysicalLineGeometryObservation,
   SourceSelection,
   VisiblePhysicalLineExpectation,
   VisiblePhysicalLineRole
-} from "./scenarios/editor-behavior/manifest";
+} from "../../../fixtures/editor-behavior/manifest";
 export {
   createRepresentativeDepthCases,
   createRecursiveParityMatrixCases,
+  editorBehaviorAspects,
   editorBehaviorCases,
+  editorBehaviorCheckpointIds,
   filterEditorBehaviorCases,
   formatContainerPath,
+  replaceEvidenceGaps,
   representativeDepthCases,
   recursiveParityMatrixCases,
   requiredEditorBehaviorContainerPaths
-} from "./scenarios/editor-behavior/manifest";
+} from "../../../fixtures/editor-behavior/manifest";
 export {
   createEditorBehaviorMatrixScenario,
   editorBehaviorMatrixScenario

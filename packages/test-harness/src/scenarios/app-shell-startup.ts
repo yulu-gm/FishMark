@@ -7,6 +7,7 @@ export const appShellStartupScenario: TestScenario = {
     "Launches the desktop shell and confirms the editor window renders with the empty workspace state.",
   surface: "editor",
   tags: ["smoke", "editor"],
+  execution: { kind: "headless" },
   preconditions: ["dist artifacts built", "no prior editor window open"],
   steps: [
     {

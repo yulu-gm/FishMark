@@ -17,19 +17,13 @@ export function createHeadlessStepHandlers(
 ): StepHandlerMap {
   const entries = scenario.steps.map((step) => {
     const handler = () => {
-      if (scenario.id === "editor-behavior-matrix") {
-        throw new Error(
-          "Editor behavior matrix steps are metadata-only until the shared runner can assert geometry and undo."
-        );
+      if (scenario.execution.kind === "metadata-only") {
+        throw new Error(`Scenario is metadata-only: ${scenario.execution.reason}`);
       }
 
-      if (
-        scenario.id === "open-markdown-file-basic" &&
-        step.id === "select-fixture"
-      ) {
-        throw new Error(
-          "Fixture picker automation is not implemented in the headless CLI yet."
-        );
+      const unsupportedReason = scenario.execution.unsupportedSteps?.[step.id];
+      if (unsupportedReason) {
+        throw new Error(unsupportedReason);
       }
     };
     return [step.id, handler] as const;

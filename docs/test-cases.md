@@ -603,22 +603,22 @@
 
 步骤：
 1. 运行 `npm.cmd run test -- packages/test-harness src/renderer/editor-test-driver.test.ts`。
-2. 检查 `fixtures/editor-behavior/manifest.ts` 暴露的 typed cases，确认每例都包含初始 Markdown、源码 selection offsets、预期 Markdown、预期 selection、可见物理行角色/几何、重复操作结果、undo 结果和明确分类。
-3. 检查每例的 `contractReferences` 与 `currentEvidence`，确认设计来源与当前实现证据分离；`verified-probe` / `verified-test` 必须列出真实验证的 aspect，未执行项必须为 `coverage-gap`。
+2. 检查 `fixtures/editor-behavior/manifest.ts` 暴露的 typed cases，确认每例都包含完整 initial result，以及按 `primary`、`repeat`、`undo` 排序且声明 `from` 关系的 checkpoints；每个 checkpoint 必须包含可执行 discriminated actions、源码 selection、实际 view mode 与逐物理行角色/几何。
+3. 检查每例的 `contractReferences` 与 evidence record，确认每个 checkpoint/aspect target 恰好为一个 `Gap` 或 `Verified`；gap reason 与 provenance 不得为空，probe/test 只能标记其真实完整验证的 target。
 4. 使用 `filterEditorBehaviorCases({ command: "Enter" })` 选择一个命令，再使用精确 `containerPath` 选择一个递归容器路径；确认组合过滤只返回同时匹配的 case，且顺序稳定。
 5. 检查唯一注册场景 `editor-behavior-matrix`，确认默认 step 顺序与完整 manifest 一致，过滤后的 scenario metadata 与所选 corpus 一致。
 6. 检查 required parity matrix，确认 Enter、Backspace、Tab、Shift+Tab、ArrowUp、ArrowDown、selection 每个 command 都覆盖十条 container paths，包括 Document/Paragraph、递归 List/ListItem、递归 Blockquote，以及 List/Blockquote 与 CodeFence、BlockMath 的混合路径。
-7. 检查 `fishMarkNamedProbeCatalog`，确认 33 个 named FishMark probes 均映射到 typed current evidence，probe registry 与 catalog 漂移时测试失败。
+7. 检查 `fishMarkNamedProbeCatalog`，确认 33 个 named FishMark probes 均关联到 typed case，并由 catalog 声明真实 checkpoint/aspect capabilities；没有完整 target assertion 的 probe 允许 capabilities 为空，probe registry 与 catalog 漂移时测试失败。
 8. 检查生成的代表性深度 case，确认语义容器深度 0 到 8 均存在；另确认 empty、whitespace-only、content、line-start、line-middle、line-end、range、source 和 WYSIWYM metadata 均有覆盖。
 9. 运行 `npm.cmd run test:editing-experience`，确认现有真实 Electron/Chromium 编辑探针没有因 RF-001 契约落地而回归。
 
 预期：
 - manifest 不存 screenshot、DOM class name 或 generated artifact path，只记录 Markdown/source-selection/semantic geometry contract。
-- Enter、Backspace、Tab、Shift+Tab、ArrowUp、ArrowDown、selection 在十条 required paths 上的 70 个组合全部存在，且 repeat 和 undo 预期全部显式存在。
+- Enter、Backspace、Tab、Shift+Tab、ArrowUp、ArrowDown、selection 在十条 required paths 上的 70 个组合全部存在，且 primary/repeat/undo 的 action sequence、结果和 ancestry 全部显式存在。
 - 每个 case 分类为 `desired` 或 `known-defect`；已知缺陷保留独立的 current observation 和 evidence，不能把当前错误结果写成 desired expectation。
 - 普通顶层前导空格不增加 `semanticDepth`；每条物理行分别记录 `contentColumn`、实际存在的 `markerColumn` 与 `visibility`，非 active 的结构分隔行在 WYSIWYM 中为 `collapsed`。
 - `editor-behavior-matrix` 只注册一次，不建立第二套 runner；command/containerPath filtering 复用同一 typed corpus 与 scenario factory。
-- 当前 driver 尚不能执行 geometry、undo 与 view-mode assertions 时，场景只描述这些 contract，不得把未执行 case 报告为 runtime pass；70 个 parity case 的 `coverage-gap` 清除前，RF-001 保持 `IN_PROGRESS`。
+- 当前 driver 尚不能执行 geometry、undo 与 view-mode assertions 时，场景必须通过 `metadata-only` capability 拒绝 headless pass；70 个 parity case 的 evidence gaps 清除前，RF-001 保持 `IN_PROGRESS`。
 - 测试及 probe 通过，产品编辑源码、选择、undo history、IME 和渲染行为没有变化。
 
 ### TC-034 行内格式渲染

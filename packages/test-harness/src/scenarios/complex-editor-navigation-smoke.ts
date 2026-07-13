@@ -7,6 +7,7 @@ export const complexEditorNavigationSmokeScenario: TestScenario = {
     "Opens the shared complex fixture and verifies ArrowUp/ArrowDown behavior across blockquotes and tables.",
   surface: "editor",
   tags: ["smoke", "editor", "rendering"],
+  execution: { kind: "headless" },
   preconditions: ["complex navigation fixture markdown file available on disk"],
   steps: [
     {

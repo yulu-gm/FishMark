@@ -15,6 +15,7 @@ function makeScenario(id: string, steps: readonly string[]): TestScenario {
     summary: id,
     surface: "editor",
     tags: ["smoke"],
+    execution: { kind: "headless" },
     steps: steps.map((stepId) => ({ id: stepId, title: stepId, kind: "action" }))
   };
 }

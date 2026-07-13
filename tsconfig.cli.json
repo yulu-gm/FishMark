@@ -6,12 +6,18 @@
     "moduleResolution": "Node",
     "target": "ES2022",
     "outDir": "dist-cli",
-    "rootDir": "packages/test-harness/src",
+    "rootDir": ".",
     "types": ["node"],
     "sourceMap": true,
     "declaration": false,
     "ignoreDeprecations": "5.0"
   },
-  "include": ["packages/test-harness/src/**/*.ts"],
-  "exclude": ["packages/test-harness/src/**/*.test.ts"]
+  "include": [
+    "packages/test-harness/src/**/*.ts",
+    "fixtures/editor-behavior/**/*.ts"
+  ],
+  "exclude": [
+    "packages/test-harness/src/**/*.test.ts",
+    "fixtures/editor-behavior/**/*.test.ts"
+  ]
 }

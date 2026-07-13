@@ -10,6 +10,7 @@ function makeScenario(overrides: Partial<TestScenario> = {}): TestScenario {
     summary: "sample scenario",
     surface: "editor",
     tags: ["smoke"],
+    execution: { kind: "headless" },
     steps: [{ id: "only", title: "only", kind: "action" }],
     ...overrides
   };

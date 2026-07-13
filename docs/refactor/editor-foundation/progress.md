@@ -51,7 +51,7 @@ Evidence columns are filled only with fresh command output/report paths from the
 
 | ID | Task | Depends on | Status | Focused evidence | Full gates | Acceptance record | Commit/branch |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| RF-001 | Editing behavior baseline | — | `IN_PROGRESS` | Evidence correction: matrix 1 file / 23 tests; harness + driver: 14 files / 91 tests; defect evidence: 2 files / 78 tests. | lint: 0 errors (8 pre-existing warnings); typecheck passed; full test: 119 files / 1390 tests; build passed. The prior 79-case probe run is historical regression evidence, not proof that all typed matrix aspects executed. | Executable geometry/repeat/undo/mode evidence pending before acceptance | `codex/editor-foundation-refactor` |
+| RF-001 | Editing behavior baseline | — | `IN_PROGRESS` | Model quality + matrix: 2 files / 31 tests; CLI layout: 1 file / 31 tests; CLI scenario smoke passed through the new emitted bin. | lint: 0 errors (8 pre-existing warnings); typecheck passed; full test: 120 files / 1399 tests; build passed. Corpus: 121 cases, 79 verified checkpoint/aspect targets, 2462 explicit gaps. The prior long probe run remains historical evidence only. | Executable command-plan/semantic-path/geometry/view-mode/undo evidence pending before acceptance | `codex/editor-foundation-refactor` |
 | RF-002 | Architecture and performance guards | RF-001 | `PLANNED` | — | Test + perf baseline | — | — |
 | RF-101 | Extract workspace domain | RF-002 | `PLANNED` | — | lint/typecheck/test/build | — | — |
 | RF-102 | Extract workspace application ports/use cases | RF-101 | `PLANNED` | — | lint/typecheck/test/build | — | — |
@@ -142,7 +142,7 @@ Create one executable behavior corpus for structural Markdown editing before cha
 - Cases at depth 0–8 exist for representative mixed containers.
 - Known defects are labeled and are not adopted as desired behavior.
 - Scenario filtering can select a command or container path.
-- Every current-evidence aspect is either verified by a matching probe/test or explicitly marked as a coverage gap.
+- Every checkpoint/aspect target is exactly one validated `Gap` or `Verified` value.
 - A test-only runner executes the matrix before RF-001 returns to `DEV_DONE`; metadata-only scenario steps are never counted as passes.
 
 ### Verification
@@ -198,10 +198,10 @@ There are no accepted external blockers or roadmap deviations.
 
 RF-001 has an internal execution gap that must be completed before acceptance:
 
-- all 70 required command/container-path pairs have typed desired expectations but the current driver does not execute their semantic geometry, repeat, undo, and view-mode assertions;
-- the 33 named FishMark probes are mapped to typed evidence, but each probe may verify only a subset of the RF-001 aspects;
+- all 70 required command/container-path pairs have executable action/checkpoint contracts but remain fully unverified by the current driver;
+- the 33 named FishMark probes are associated with catalog-owned capabilities; their executable pass conditions verify 75 source/selection/visible-role targets and do not overclaim command plan, semantic path, physical geometry, view mode, or undo;
 - the two current known defects expose only the actual planner result or semantic path proven by matching unit tests; they do not claim unmeasured editor geometry;
-- the next RF-001 slice must add one test-only manifest runner that returns source, selection, physical-line geometry, repeated-operation checkpoints, undo result, and view-mode result without changing product IPC or runtime behavior.
+- the next RF-001 slice must execute the canonical discriminated actions, rebuild checkpoints from their declared ancestry, return typed observations, and atomically replace matching evidence gaps without changing product IPC or runtime behavior.
 
 Any deviation must record:
 

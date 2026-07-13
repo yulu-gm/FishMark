@@ -7,6 +7,7 @@ export const complexEditorStructureKeysScenario: TestScenario = {
     "Uses the shared complex fixture to verify Tab, Shift-Tab, Enter, and Backspace behavior on structured Markdown blocks.",
   surface: "editor",
   tags: ["smoke", "editor", "rendering"],
+  execution: { kind: "headless" },
   preconditions: ["complex navigation fixture markdown file available on disk"],
   steps: [
     {

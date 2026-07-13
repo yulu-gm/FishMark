@@ -15,6 +15,7 @@ Static scenario registry and (eventually) runner for the FishMark test workbench
 - `src/scenario.ts` — `TestScenario`, `TestStep` types and validation helpers.
 - `src/registry.ts` — `createScenarioRegistry()` factory with insertion-ordered list, tag / surface / search filtering, and id uniqueness enforcement.
 - `src/scenarios/` — first-party seed scenarios (`app-shell-startup`, `open-markdown-file-basic`).
+- `../../fixtures/editor-behavior/` — repository-owned RF-001 behavior corpus consumed by the matrix scenario and CLI build.
 - `src/runner.ts` — unified `runScenario()` state machine used by the workbench and the CLI.
 - `src/handlers/headless.ts` — headless handler map used by the CLI until a real driver exists.
 - `src/cli/` — agent-facing CLI (`bin.ts`, `run.ts`, `args.ts`, `exit-codes.ts`, `artifacts.ts`).
@@ -54,5 +55,7 @@ Exit codes (stable contract):
 - The registry enforces id uniqueness at registration time.
 - Scenarios are returned in insertion order, which matches the workbench list order.
 - Tags are a closed union in `ScenarioTag` — adding a new tag is a deliberate code change.
+- Every scenario declares an execution capability. `headless` scenarios may name unsupported steps with reasons; `metadata-only` scenarios always fail CLI execution until a real driver exists.
+- Headless handlers branch on capability metadata, never on a scenario id.
 
 The workbench UI and the agent CLI must both consume `defaultScenarioRegistry` so the two surfaces always see the same scenario list.

@@ -37,6 +37,14 @@ export type ScenarioTag =
   | "visual"
   | "workbench";
 
+export type ScenarioExecutionCapability =
+  | {
+      readonly kind: "headless";
+      /** Explicit CLI gaps keyed by step id; avoids scenario-id branches in the handler. */
+      readonly unsupportedSteps?: Readonly<Record<string, string>>;
+    }
+  | { readonly kind: "metadata-only"; readonly reason: string };
+
 export type TestScenario = {
   /** Stable unique id across the whole registry. kebab-case. */
   readonly id: string;
@@ -45,6 +53,7 @@ export type TestScenario = {
   readonly summary: string;
   readonly surface: ScenarioSurface;
   readonly tags: readonly ScenarioTag[];
+  readonly execution: ScenarioExecutionCapability;
   /** Preconditions a human tester should satisfy before running. */
   readonly preconditions?: readonly string[];
   readonly steps: readonly TestStep[];
@@ -65,6 +74,10 @@ export function assertValidScenario(scenario: TestScenario): void {
     throw new Error(`Scenario ${scenario.id} must declare at least one step.`);
   }
 
+  if (scenario.execution.kind === "metadata-only" && scenario.execution.reason.trim() === "") {
+    throw new Error(`Scenario ${scenario.id} metadata-only reason must not be empty.`);
+  }
+
   const seenStepIds = new Set<string>();
   for (const step of scenario.steps) {
     if (!isValidScenarioId(step.id)) {
@@ -78,5 +91,16 @@ export function assertValidScenario(scenario: TestScenario): void {
     }
 
     seenStepIds.add(step.id);
+  }
+
+  if (scenario.execution.kind === "headless") {
+    for (const [stepId, reason] of Object.entries(scenario.execution.unsupportedSteps ?? {})) {
+      if (!seenStepIds.has(stepId)) {
+        throw new Error(`Scenario ${scenario.id} declares an unsupported unknown step ${stepId}.`);
+      }
+      if (reason.trim() === "") {
+        throw new Error(`Scenario ${scenario.id} unsupported step ${stepId} needs a reason.`);
+      }
+    }
   }
 }

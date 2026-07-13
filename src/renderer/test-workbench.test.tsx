@@ -26,6 +26,7 @@ const { registry } = vi.hoisted(() => {
       summary: "Starts the shell and waits for the empty workspace.",
       surface: "editor",
       tags: ["smoke", "editor"],
+      execution: { kind: "headless" },
       steps: [
         { id: "launch-dev-shell", title: "Launch shell", kind: "setup" },
         { id: "wait-for-empty-workspace", title: "Wait for empty workspace", kind: "assertion" },
@@ -38,6 +39,7 @@ const { registry } = vi.hoisted(() => {
       summary: "Opens a fixture and verifies editor content.",
       surface: "editor",
       tags: ["smoke", "editor", "file-io"],
+      execution: { kind: "headless" },
       steps: [
         { id: "launch-dev-shell", title: "Launch shell", kind: "setup" },
         { id: "invoke-open-command", title: "Invoke File > Open", kind: "action" },
