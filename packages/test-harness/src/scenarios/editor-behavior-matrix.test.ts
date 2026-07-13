@@ -184,15 +184,24 @@ describe("editor behavior manifest", () => {
   });
 
   it("rejects executable probe registries that drift from the shared catalog", () => {
-    expect(assertCompleteFishMarkProbeRegistry(fishMarkNamedProbeCatalog)).toEqual(
-      fishMarkNamedProbeCatalog
+    const executableRegistry = fishMarkNamedProbeCatalog.map(({ caseId, group, probe }) => ({
+      caseId,
+      group,
+      run: {
+        [probe.functionName]: async () => undefined
+      }[probe.functionName]!
+    }));
+    const swappedRegistry = executableRegistry.map((entry, index) =>
+      index === 0
+        ? { ...entry, run: executableRegistry[1]!.run }
+        : index === 1
+          ? { ...entry, run: executableRegistry[0]!.run }
+          : entry
     );
+
     expect(() =>
-      assertCompleteFishMarkProbeRegistry([
-        ...fishMarkNamedProbeCatalog.slice(0, -1),
-        fishMarkNamedProbeCatalog[0]!
-      ])
-    ).toThrow(/does not match the typed catalog/i);
+      assertCompleteFishMarkProbeRegistry(swappedRegistry)
+    ).toThrow(/runEmptyTypeHashCase|function.*does not match|does not match the typed catalog/i);
   });
 
   it("marks all generated parity evidence as an explicit execution gap", () => {

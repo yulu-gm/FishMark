@@ -43,42 +43,6 @@ export { runScenario } from "./runner";
 
 export { seedScenarios } from "./scenarios";
 
-export type {
-  EditorBehaviorAction,
-  EditorBehaviorAspect,
-  EditorBehaviorCase,
-  EditorBehaviorCaseQuery,
-  EditorBehaviorClassification,
-  EditorBehaviorCommand,
-  EditorBehaviorContainer,
-  EditorBehaviorContainerPath,
-  EditorBehaviorContractReference,
-  EditorBehaviorCurrentObservation,
-  EditorBehaviorEvidence,
-  EditorBehaviorEvidenceObservation,
-  EditorBehaviorEvidenceProvenance,
-  EditorBehaviorEvidenceState,
-  EditorBehaviorResult,
-  EditorBehaviorCheckpoint,
-  EditorBehaviorCheckpointId,
-  PhysicalLineGeometryObservation,
-  SourceSelection,
-  VisiblePhysicalLineExpectation,
-  VisiblePhysicalLineRole
-} from "../../../fixtures/editor-behavior/manifest";
-export {
-  createRepresentativeDepthCases,
-  createRecursiveParityMatrixCases,
-  editorBehaviorAspects,
-  editorBehaviorCases,
-  editorBehaviorCheckpointIds,
-  filterEditorBehaviorCases,
-  formatContainerPath,
-  replaceEvidenceGaps,
-  representativeDepthCases,
-  recursiveParityMatrixCases,
-  requiredEditorBehaviorContainerPaths
-} from "../../../fixtures/editor-behavior/manifest";
 export {
   createEditorBehaviorMatrixScenario,
   editorBehaviorMatrixScenario

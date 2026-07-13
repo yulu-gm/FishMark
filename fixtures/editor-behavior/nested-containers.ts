@@ -471,6 +471,7 @@ export const focusedRecursiveCases: readonly EditorBehaviorCase[] = [
     classification: desiredClassification({
       contractReferences: roadmapContract(),
       evidence: repositoryTestEvidence({
+        caseId: "list-item-start-backspace",
         file: "packages/editor-core/src/commands/list-edits.test.ts",
         testName: "removes an unordered list marker at the current item content start on Backspace",
         verifiedTargets: [
@@ -506,6 +507,7 @@ export const focusedRecursiveCases: readonly EditorBehaviorCase[] = [
     classification: desiredClassification({
       contractReferences: roadmapContract(),
       evidence: repositoryTestEvidence({
+        caseId: "nested-list-item-tab",
         file: "src/renderer/code-editor.test.ts",
         testName: "indents a second-level unordered item into a third-level child list when Tab is pressed",
         verifiedTargets: [

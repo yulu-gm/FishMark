@@ -1,8 +1,3 @@
-import {
-  findFishMarkProbe,
-  type FishMarkNamedProbeCaseId
-} from "./fishmark-probe-catalog";
-
 export type EditorBehaviorCommand =
   | "InsertText"
   | "Enter"
@@ -116,17 +111,25 @@ export type EditorBehaviorContractReference =
   | { readonly kind: "typora-oracle"; readonly file: string }
   | { readonly kind: "repository-test"; readonly file: string; readonly testName: string };
 
-export type EditorBehaviorEvidenceProvenance =
-  | {
+export type EditorBehaviorEvidenceTargetIdentity = {
+  readonly caseId: string;
+  readonly checkpoint: EditorBehaviorCheckpointId;
+  readonly aspect: EditorBehaviorAspect;
+};
+
+export type EditorBehaviorEvidenceProvenance = EditorBehaviorEvidenceTargetIdentity &
+  (
+    | {
       readonly kind: "fishmark-probe";
-      readonly probeCaseId: FishMarkNamedProbeCaseId;
+      readonly probeCaseId: string;
       readonly assertion: string;
     }
-  | {
-      readonly kind: "repository-test";
-      readonly file: string;
-      readonly testName: string;
-    };
+    | {
+        readonly kind: "repository-test";
+        readonly file: string;
+        readonly testName: string;
+      }
+  );
 
 export type EditorBehaviorEvidenceState =
   | { readonly status: "gap"; readonly reason: string }
@@ -140,9 +143,7 @@ export type EditorBehaviorEvidence = Readonly<
   Record<EditorBehaviorCheckpointId, EditorBehaviorCheckpointEvidence>
 >;
 
-export type EditorBehaviorEvidenceTarget = {
-  readonly checkpoint: EditorBehaviorCheckpointId;
-  readonly aspect: EditorBehaviorAspect;
+export type EditorBehaviorEvidenceTarget = EditorBehaviorEvidenceTargetIdentity & {
   readonly provenance: EditorBehaviorEvidenceProvenance;
 };
 
@@ -159,7 +160,7 @@ export type EditorBehaviorCurrentStatus = "verified" | "partially-verified" | "u
 
 type EditorBehaviorClassificationBase = {
   /** Links a modeled case to a discoverable probe even when that probe verifies no full target. */
-  readonly probeCaseId?: FishMarkNamedProbeCaseId;
+  readonly probeCaseId?: string;
   readonly currentStatus: EditorBehaviorCurrentStatus;
   readonly contractReferences: readonly EditorBehaviorContractReference[];
   readonly evidence: EditorBehaviorEvidence;
@@ -230,56 +231,55 @@ type PrefixState = {
   readonly listContinuationColumns: readonly number[];
 };
 
+type PrefixSegment =
+  | { readonly kind: "blockquote" }
+  | {
+      readonly kind: "list";
+      readonly continuationWidth: number;
+    };
+
 type PrefixGeometry = {
   readonly semanticDepth: number;
   readonly contentColumn: number;
   readonly markerColumn: number | null;
   readonly nextState: PrefixState;
+  readonly signature: readonly PrefixSegment[];
 };
 
-function analyzePrefix(
-  text: string,
-  previous: PrefixState,
-  maximumSemanticDepth?: number
-): PrefixGeometry {
-  if (maximumSemanticDepth === 0) {
-    return {
-      semanticDepth: 0,
-      contentColumn: 0,
-      markerColumn: null,
-      nextState: { listContinuationColumns: [] }
-    };
-  }
-
+function analyzePrefix(text: string, previous: PrefixState): PrefixGeometry {
   let cursor = 0;
   let semanticDepth = 0;
   let markerColumn: number | null = null;
   const inheritedListColumns = new Set<number>();
   const nextListColumns: number[] = [];
+  const signature: PrefixSegment[] = [];
 
   while (cursor < text.length) {
+    const segmentStart = cursor;
     let nextTokenColumn = cursor;
     while (text[nextTokenColumn] === " ") {
       nextTokenColumn += 1;
     }
 
+    let consumedSpaceColumn = segmentStart;
     for (const continuationColumn of previous.listContinuationColumns) {
       if (
-        continuationColumn > cursor &&
+        continuationColumn > consumedSpaceColumn &&
         continuationColumn <= nextTokenColumn &&
-        !inheritedListColumns.has(continuationColumn) &&
-        (maximumSemanticDepth === undefined || semanticDepth < maximumSemanticDepth)
+        !inheritedListColumns.has(continuationColumn)
       ) {
         inheritedListColumns.add(continuationColumn);
         nextListColumns.push(continuationColumn);
+        signature.push({
+          kind: "list",
+          continuationWidth: continuationColumn - consumedSpaceColumn
+        });
+        consumedSpaceColumn = continuationColumn;
         semanticDepth += 1;
       }
     }
 
     cursor = nextTokenColumn;
-    if (maximumSemanticDepth !== undefined && semanticDepth >= maximumSemanticDepth) {
-      break;
-    }
 
     if (text[cursor] === ">") {
       markerColumn = cursor;
@@ -288,9 +288,7 @@ function analyzePrefix(
       if (text[cursor] === " ") {
         cursor += 1;
       }
-      if (maximumSemanticDepth !== undefined && semanticDepth >= maximumSemanticDepth) {
-        break;
-      }
+      signature.push({ kind: "blockquote" });
       continue;
     }
 
@@ -298,15 +296,19 @@ function analyzePrefix(
     if (listMarker) {
       markerColumn = cursor;
       semanticDepth += 1;
+      const leadingSpaces = cursor - consumedSpaceColumn;
+      const markerStart = cursor;
       cursor += listMarker[0].length;
       const taskMarker = /^\[[ xX]\]\s/u.exec(text.slice(cursor));
       if (taskMarker) {
         cursor += taskMarker[0].length;
       }
+      const markerWidth = cursor - markerStart;
       nextListColumns.push(cursor);
-      if (maximumSemanticDepth !== undefined && semanticDepth >= maximumSemanticDepth) {
-        break;
-      }
+      signature.push({
+        kind: "list",
+        continuationWidth: leadingSpaces + markerWidth
+      });
       continue;
     }
 
@@ -319,8 +321,11 @@ function analyzePrefix(
     markerColumn,
     nextState: {
       listContinuationColumns:
-        text.length === 0 ? [] : [...new Set(nextListColumns)].sort((left, right) => left - right)
-    }
+        text.length === 0
+          ? []
+          : [...new Set(nextListColumns)].sort((left, right) => left - right)
+    },
+    signature
   };
 }
 
@@ -336,33 +341,137 @@ export type VisibleLineOptions = {
 type OpaqueBlock =
   | {
       readonly kind: "code";
-      readonly outerDepth: number;
+      readonly outerPrefix: readonly PrefixSegment[];
       readonly fenceCharacter: "`" | "~";
       readonly fenceLength: number;
     }
-  | { readonly kind: "math"; readonly outerDepth: number };
+  | { readonly kind: "math"; readonly outerPrefix: readonly PrefixSegment[] };
 
-function codeFenceOpening(content: string): OpaqueBlock | null {
-  const match = /^\s{0,3}(`{3,}|~{3,})/u.exec(content);
+type CodeFenceOpening = Omit<Extract<OpaqueBlock, { readonly kind: "code" }>, "outerPrefix">;
+
+function codeFenceOpening(content: string): CodeFenceOpening | null {
+  const match = /^ {0,3}(`{3,}|~{3,})/u.exec(content);
   if (!match) {
     return null;
   }
   const marker = match[1]!;
   return {
     kind: "code",
-    outerDepth: 0,
     fenceCharacter: marker[0] as "`" | "~",
     fenceLength: marker.length
   };
 }
 
 function isOpaqueClosing(content: string, opaque: OpaqueBlock): boolean {
-  const trimmed = content.trim();
   if (opaque.kind === "math") {
-    return trimmed === "$$";
+    return /^ {0,3}\$\$[\t ]*$/u.test(content);
   }
   const escaped = opaque.fenceCharacter === "`" ? "`" : "~";
-  return new RegExp(`^${escaped}{${opaque.fenceLength},}\\s*$`, "u").test(trimmed);
+  return new RegExp(`^ {0,3}${escaped}{${opaque.fenceLength},}[\\t ]*$`, "u").test(
+    content
+  );
+}
+
+function isBlockMathDelimiter(content: string): boolean {
+  return /^ {0,3}\$\$[\t ]*$/u.test(content);
+}
+
+type OpaquePrefixGeometry = Pick<
+  PrefixGeometry,
+  "semanticDepth" | "contentColumn" | "markerColumn"
+> & {
+  readonly matchesOuterPrefix: boolean;
+};
+
+function consumeOpaquePrefix(
+  text: string,
+  signature: readonly PrefixSegment[]
+): OpaquePrefixGeometry {
+  let cursor = 0;
+  let semanticDepth = 0;
+  let markerColumn: number | null = null;
+
+  for (const segment of signature) {
+    if (segment.kind === "list") {
+      const continuation = text.slice(cursor, cursor + segment.continuationWidth);
+      if (
+        continuation.length !== segment.continuationWidth ||
+        continuation !== " ".repeat(segment.continuationWidth)
+      ) {
+        break;
+      }
+      cursor += segment.continuationWidth;
+      semanticDepth += 1;
+      continue;
+    }
+
+    let markerColumnCandidate = cursor;
+    while (
+      markerColumnCandidate - cursor < 3 &&
+      text[markerColumnCandidate] === " "
+    ) {
+      markerColumnCandidate += 1;
+    }
+    if (text[markerColumnCandidate] !== ">") {
+      break;
+    }
+    const actualMarkerWidth = text[markerColumnCandidate + 1] === " " ? 2 : 1;
+    markerColumn = markerColumnCandidate;
+    cursor = markerColumnCandidate + actualMarkerWidth;
+    semanticDepth += 1;
+  }
+
+  return {
+    semanticDepth,
+    contentColumn: semanticDepth > 0 ? cursor : 0,
+    markerColumn,
+    matchesOuterPrefix: semanticDepth === signature.length
+  };
+}
+
+type OrdinaryLineAnalysis = {
+  readonly geometry: PrefixGeometry;
+  readonly openedOpaque: OpaqueBlock | null;
+  readonly role: VisiblePhysicalLineRole;
+};
+
+function analyzeOrdinaryLine(
+  text: string,
+  index: number,
+  lineCount: number,
+  prefixState: PrefixState
+): OrdinaryLineAnalysis {
+  const geometry = analyzePrefix(text, prefixState);
+  const content = text.slice(geometry.contentColumn);
+  const openingCodeFence = codeFenceOpening(content);
+  if (openingCodeFence) {
+    return {
+      geometry,
+      openedOpaque: { ...openingCodeFence, outerPrefix: geometry.signature },
+      role: "code-fence-delimiter"
+    };
+  }
+  if (isBlockMathDelimiter(content)) {
+    return {
+      geometry,
+      openedOpaque: { kind: "math", outerPrefix: geometry.signature },
+      role: "block-math-delimiter"
+    };
+  }
+  if (/^\s+$/u.test(text)) {
+    return { geometry, openedOpaque: null, role: "whitespace-only" };
+  }
+  if (text.length === 0) {
+    return {
+      geometry,
+      openedOpaque: null,
+      role: index === lineCount - 1 ? "empty-editing-line" : "structural-separator"
+    };
+  }
+  if (content.length === 0) {
+    return { geometry, openedOpaque: null, role: "structural-separator" };
+  }
+  return { geometry, openedOpaque: null, role: "content" };
 }
 
 export function physicalLineExpectations(
@@ -377,40 +486,42 @@ export function physicalLineExpectations(
   let opaque: OpaqueBlock | null = null;
 
   return lines.map((text, index) => {
-    const geometry = analyzePrefix(text, prefixState, opaque?.outerDepth);
-    prefixState = geometry.nextState;
-    const content = text.slice(geometry.contentColumn);
+    let geometry: Pick<
+      PrefixGeometry,
+      "semanticDepth" | "contentColumn" | "markerColumn"
+    >;
     let role: VisiblePhysicalLineRole;
 
     if (opaque) {
-      const closing = isOpaqueClosing(content, opaque);
-      role = closing
-        ? opaque.kind === "code"
-          ? "code-fence-delimiter"
-          : "block-math-delimiter"
-        : opaque.kind === "code"
-          ? "code-fence-content"
-          : "block-math-content";
-      if (closing) {
-        opaque = null;
+      const activeOpaque = opaque;
+      const opaqueGeometry = consumeOpaquePrefix(text, activeOpaque.outerPrefix);
+      if (opaqueGeometry.matchesOuterPrefix) {
+        geometry = opaqueGeometry;
+        const content = text.slice(geometry.contentColumn);
+        const closing = isOpaqueClosing(content, activeOpaque);
+        role = closing
+          ? activeOpaque.kind === "code"
+            ? "code-fence-delimiter"
+            : "block-math-delimiter"
+          : activeOpaque.kind === "code"
+            ? "code-fence-content"
+            : "block-math-content";
+        if (closing) {
+          opaque = null;
+        }
+      } else {
+        const ordinary = analyzeOrdinaryLine(text, index, lines.length, prefixState);
+        geometry = ordinary.geometry;
+        prefixState = ordinary.geometry.nextState;
+        opaque = ordinary.openedOpaque;
+        role = ordinary.role;
       }
     } else {
-      const openingCodeFence = codeFenceOpening(content);
-      if (openingCodeFence) {
-        role = "code-fence-delimiter";
-        opaque = { ...openingCodeFence, outerDepth: geometry.semanticDepth };
-      } else if (content.trim() === "$$") {
-        role = "block-math-delimiter";
-        opaque = { kind: "math", outerDepth: geometry.semanticDepth };
-      } else if (/^\s+$/u.test(text)) {
-        role = "whitespace-only";
-      } else if (text.length === 0) {
-        role = index === lines.length - 1 ? "empty-editing-line" : "structural-separator";
-      } else if (content.length === 0) {
-        role = "structural-separator";
-      } else {
-        role = "content";
-      }
+      const ordinary = analyzeOrdinaryLine(text, index, lines.length, prefixState);
+      geometry = ordinary.geometry;
+      prefixState = ordinary.geometry.nextState;
+      opaque = ordinary.openedOpaque;
+      role = ordinary.role;
     }
 
     role = options.roleOverrides?.[index + 1] ?? role;
@@ -462,31 +573,41 @@ function assertNonEmpty(value: string, label: string): void {
 
 function validateProvenance(
   provenance: EditorBehaviorEvidenceProvenance,
-  target: Pick<EditorBehaviorEvidenceTarget, "checkpoint" | "aspect">
+  target: EditorBehaviorEvidenceTargetIdentity
 ): void {
+  assertNonEmpty(target.caseId, "Evidence case id");
+  assertNonEmpty(provenance.caseId, "Provenance case id");
+  if (
+    provenance.caseId !== target.caseId ||
+    provenance.checkpoint !== target.checkpoint ||
+    provenance.aspect !== target.aspect
+  ) {
+    throw new Error(
+      `Evidence provenance target ${provenance.caseId}:${targetKey(provenance)} does not match ${target.caseId}:${targetKey(target)}.`
+    );
+  }
   if (provenance.kind === "fishmark-probe") {
     assertNonEmpty(provenance.probeCaseId, "Probe case id");
     assertNonEmpty(provenance.assertion, "Probe assertion");
-    const probe = findFishMarkProbe(provenance.probeCaseId);
-    const capability = probe.capabilities.find(
-      (candidate) =>
-        candidate.checkpoint === target.checkpoint && candidate.aspect === target.aspect
-    );
-    if (!capability) {
-      throw new Error(
-        `Probe ${provenance.probeCaseId} does not declare capability ${targetKey(target)}.`
-      );
-    }
-    const expectedAssertion = `${probe.probe.file}:${probe.probe.functionName}: ${capability.assertion}`;
-    if (provenance.assertion !== expectedAssertion) {
-      throw new Error(
-        `Probe provenance assertion does not match catalog capability ${targetKey(target)}.`
-      );
-    }
     return;
   }
   assertNonEmpty(provenance.file, "Repository test file");
   assertNonEmpty(provenance.testName, "Repository test name");
+}
+
+function validateCaseProbeBinding(
+  provenance: EditorBehaviorEvidenceProvenance,
+  caseId: string,
+  probeCaseId: string | undefined
+): void {
+  if (provenance.kind !== "fishmark-probe") {
+    return;
+  }
+  if (probeCaseId !== provenance.probeCaseId) {
+    throw new Error(
+      `FishMark probe ${provenance.probeCaseId} does not match behavior case ${caseId} probe classification.`
+    );
+  }
 }
 
 export function createEvidence(input: {
@@ -527,17 +648,25 @@ export function unverifiedEvidence(reason: string): EditorBehaviorEvidence {
 }
 
 export function repositoryTestEvidence(input: {
+  readonly caseId: string;
   readonly file: string;
   readonly testName: string;
-  readonly verifiedTargets: readonly Omit<EditorBehaviorEvidenceTarget, "provenance">[];
+  readonly verifiedTargets: readonly Pick<
+    EditorBehaviorEvidenceTarget,
+    "checkpoint" | "aspect"
+  >[];
   readonly gapReason: string;
 }): EditorBehaviorEvidence {
   return createEvidence({
     gapReason: input.gapReason,
     verifiedTargets: input.verifiedTargets.map((target) => ({
       ...target,
+      caseId: input.caseId,
       provenance: {
         kind: "repository-test",
+        caseId: input.caseId,
+        checkpoint: target.checkpoint,
+        aspect: target.aspect,
         file: input.file,
         testName: input.testName
       }
@@ -545,7 +674,11 @@ export function repositoryTestEvidence(input: {
   });
 }
 
-function validateEvidence(evidence: EditorBehaviorEvidence): void {
+function validateEvidence(
+  evidence: EditorBehaviorEvidence,
+  caseId?: string,
+  probeCaseId?: string
+): void {
   if (
     Object.keys(evidence).length !== editorBehaviorCheckpointIds.length ||
     editorBehaviorCheckpointIds.some((checkpoint) => !(checkpoint in evidence))
@@ -569,7 +702,14 @@ function validateEvidence(evidence: EditorBehaviorEvidence): void {
       if (state.status === "gap") {
         assertNonEmpty(state.reason, `${checkpoint}:${aspect} gap reason`);
       } else if (state.status === "verified") {
-        validateProvenance(state.provenance, { checkpoint, aspect });
+        validateProvenance(state.provenance, {
+          caseId: caseId ?? state.provenance.caseId,
+          checkpoint,
+          aspect
+        });
+        if (caseId !== undefined) {
+          validateCaseProbeBinding(state.provenance, caseId, probeCaseId);
+        }
       } else {
         throw new Error(`Invalid evidence state for ${checkpoint}:${aspect}.`);
       }
@@ -590,7 +730,7 @@ function statusForEvidence(evidence: EditorBehaviorEvidence): EditorBehaviorCurr
 }
 
 export function desiredClassification(input: {
-  readonly probeCaseId?: FishMarkNamedProbeCaseId;
+  readonly probeCaseId?: string;
   readonly contractReferences: readonly EditorBehaviorContractReference[];
   readonly evidence: EditorBehaviorEvidence;
 }): EditorBehaviorClassification {
@@ -603,7 +743,7 @@ export function desiredClassification(input: {
 }
 
 export function knownDefectClassification(input: {
-  readonly probeCaseId?: FishMarkNamedProbeCaseId;
+  readonly probeCaseId?: string;
   readonly reason: string;
   readonly contractReferences: readonly EditorBehaviorContractReference[];
   readonly evidence: EditorBehaviorEvidence;
@@ -618,6 +758,7 @@ export function knownDefectClassification(input: {
 }
 
 type EvidenceObservationBase = {
+  readonly caseId: string;
   readonly checkpoint: EditorBehaviorCheckpointId;
   readonly provenance: EditorBehaviorEvidenceProvenance;
 };
@@ -638,6 +779,21 @@ export type EditorBehaviorEvidenceObservation = EvidenceObservationBase &
       }
     | { readonly aspect: "view-mode"; readonly observed: EditorViewMode }
   );
+
+export function createEditorBehaviorEvidenceObservation<
+  const Observation extends EditorBehaviorEvidenceObservation
+>(observation: Observation): Observation {
+  validateProvenance(observation.provenance, observation);
+  if (observation.provenance.kind === "fishmark-probe") {
+    throw new Error(
+      "Catalog-owned FishMark probe provenance cannot be used for dynamic evidence observations."
+    );
+  }
+  if (containsNonFiniteNumber(observation.observed)) {
+    throw new Error("Evidence observation values must contain only finite numbers.");
+  }
+  return observation;
+}
 
 function checkpointFor(
   behaviorCase: EditorBehaviorCase,
@@ -677,8 +833,48 @@ function expectedObservation(
   }
 }
 
+function containsNonFiniteNumber(value: unknown, seen = new Set<object>()): boolean {
+  if (typeof value === "number") {
+    return !Number.isFinite(value);
+  }
+  if (value === null || typeof value !== "object" || seen.has(value)) {
+    return false;
+  }
+  seen.add(value);
+  return Object.values(value).some((child) => containsNonFiniteNumber(child, seen));
+}
+
 function sameValue(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
+  if (Object.is(left, right)) {
+    return true;
+  }
+  if (
+    left === null ||
+    right === null ||
+    typeof left !== "object" ||
+    typeof right !== "object"
+  ) {
+    return false;
+  }
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return (
+      Array.isArray(left) &&
+      Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((value, index) => sameValue(value, right[index]))
+    );
+  }
+  const leftRecord = left as Record<string, unknown>;
+  const rightRecord = right as Record<string, unknown>;
+  const leftKeys = Object.keys(leftRecord).sort();
+  const rightKeys = Object.keys(rightRecord).sort();
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every(
+      (key, index) =>
+        key === rightKeys[index] && sameValue(leftRecord[key], rightRecord[key])
+    )
+  );
 }
 
 export function replaceEvidenceGaps(
@@ -691,12 +887,17 @@ export function replaceEvidenceGaps(
 
   const keys = new Set<string>();
   for (const observation of observations) {
+    if (observation.caseId !== behaviorCase.id) {
+      throw new Error(
+        `Evidence observation case ${observation.caseId} does not match behavior case ${behaviorCase.id}.`
+      );
+    }
     const key = targetKey(observation);
     if (keys.has(key)) {
       throw new Error(`Duplicate evidence target ${key}.`);
     }
     keys.add(key);
-    validateProvenance(observation.provenance, observation);
+    createEditorBehaviorEvidenceObservation(observation);
     if (behaviorCase.classification.evidence[observation.checkpoint][observation.aspect].status !== "gap") {
       throw new Error(`Evidence target ${key} is already verified.`);
     }
@@ -834,7 +1035,11 @@ function validateActions(
 }
 
 export function defineEditorBehaviorCase(input: EditorBehaviorCase): EditorBehaviorCase {
-  validateEvidence(input.classification.evidence);
+  validateEvidence(
+    input.classification.evidence,
+    input.id,
+    input.classification.probeCaseId
+  );
   validateResult(input.initial, `${input.id} initial`);
   if (
     input.checkpoints[0].id !== "primary" ||

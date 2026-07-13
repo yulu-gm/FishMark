@@ -12,6 +12,7 @@ import {
   type EditorBehaviorCase,
   type EditorBehaviorCaseQuery
 } from "./model";
+import { assertFishMarkProbeCaseBindings } from "./fishmark-probe-catalog";
 
 export * from "./fishmark-probe-catalog";
 export * from "./model";
@@ -25,13 +26,15 @@ export {
 } from "./nested-containers";
 export { capturedOracleAndProbeCases, namedFishMarkProbeCases } from "./probe-cases";
 
-export const editorBehaviorCases: readonly EditorBehaviorCase[] = [
+const composedEditorBehaviorCases = assertFishMarkProbeCaseBindings([
   ...capturedOracleAndProbeCases,
   ...namedFishMarkProbeCases,
   ...focusedRecursiveCases,
   ...recursiveParityMatrixCases,
   ...representativeDepthCases
-];
+] satisfies readonly EditorBehaviorCase[]);
+
+export const editorBehaviorCases = composedEditorBehaviorCases;
 
 export function filterEditorBehaviorCases(
   query: EditorBehaviorCaseQuery = {}

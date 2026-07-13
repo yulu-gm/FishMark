@@ -4,7 +4,11 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  assertFishMarkProbeProvenance,
+  assertFishMarkProbeCaseBindings,
   createEvidence,
+  createEditorBehaviorEvidenceObservation,
+  createFishMarkProbeProvenance,
   defineEditorBehaviorCase,
   editorBehaviorAspects,
   editorBehaviorCases,
@@ -40,8 +44,32 @@ describe("RF-001 executable behavior model", () => {
       expect(existsSync(path.join(canonicalDirectory, file)), file).toBe(true);
     }
     expect(existsSync(formerHarnessDirectory)).toBe(false);
-    expect(readFileSync(path.join(canonicalDirectory, "manifest.ts"), "utf8")).not.toContain(
-      "packages/test-harness"
+    const manifestSource = readFileSync(path.join(canonicalDirectory, "manifest.ts"), "utf8");
+    expect(manifestSource).not.toContain("packages/test-harness");
+    expect(manifestSource).toContain("assertFishMarkProbeCaseBindings");
+
+    const modelSource = readFileSync(path.join(canonicalDirectory, "model.ts"), "utf8");
+    const harnessIndexSource = readFileSync(
+      path.join(root, "packages", "test-harness", "src", "index.ts"),
+      "utf8"
+    );
+    const matrixScenarioSource = readFileSync(
+      path.join(
+        root,
+        "packages",
+        "test-harness",
+        "src",
+        "scenarios",
+        "editor-behavior-matrix.ts"
+      ),
+      "utf8"
+    );
+    expect(modelSource).not.toMatch(/fishmark-probe-catalog/u);
+    expect(harnessIndexSource).not.toMatch(
+      /EditorBehaviorCase|editorBehaviorCases|replaceEvidenceGaps/u
+    );
+    expect(matrixScenarioSource).not.toMatch(
+      /export \{ editorBehaviorCases|export type \{ EditorBehaviorCaseQuery/u
     );
   });
 
@@ -96,16 +124,20 @@ describe("RF-001 executable behavior model", () => {
     const original = recursiveParityMatrixCases[0]!;
     const expectedSource = original.checkpoints[0].result.source;
     const updated = replaceEvidenceGaps(original, [
-      {
+      createEditorBehaviorEvidenceObservation({
+        caseId: original.id,
         checkpoint: "primary",
         aspect: "source",
         observed: expectedSource,
         provenance: {
           kind: "repository-test",
+          caseId: original.id,
+          checkpoint: "primary",
+          aspect: "source",
           file: "packages/test-harness/src/scenarios/editor-behavior-model-quality.test.ts",
           testName: "atomically replaces typed gap observations and recomputes status"
         }
-      }
+      })
     ]);
 
     expect(original.classification.evidence.primary.source.status).toBe("gap");
@@ -116,21 +148,29 @@ describe("RF-001 executable behavior model", () => {
     expect(() =>
       replaceEvidenceGaps(original, [
         {
+          caseId: original.id,
           checkpoint: "primary",
           aspect: "source",
           observed: expectedSource,
           provenance: {
             kind: "repository-test",
+            caseId: original.id,
+            checkpoint: "primary",
+            aspect: "source",
             file: "fixture.test.ts",
             testName: "first"
           }
         },
         {
+          caseId: original.id,
           checkpoint: "primary",
           aspect: "source",
           observed: expectedSource,
           provenance: {
             kind: "repository-test",
+            caseId: original.id,
+            checkpoint: "primary",
+            aspect: "source",
             file: "fixture.test.ts",
             testName: "duplicate"
           }
@@ -148,11 +188,15 @@ describe("RF-001 executable behavior model", () => {
     expect(
       replaceEvidenceGaps(structural, [
         {
+          caseId: structural.id,
           checkpoint: "primary",
           aspect: "semantic-path",
           observed: structural.checkpoints[0].result.semanticPath,
           provenance: {
             kind: "repository-test",
+            caseId: structural.id,
+            checkpoint: "primary",
+            aspect: "semantic-path",
             file: "fixture.test.ts",
             testName: "checkpoint semantic path"
           }
@@ -162,17 +206,151 @@ describe("RF-001 executable behavior model", () => {
     expect(() =>
       replaceEvidenceGaps(structural, [
         {
+          caseId: structural.id,
           checkpoint: "primary",
           aspect: "semantic-path",
           observed: structural.containerPath,
           provenance: {
             kind: "repository-test",
+            caseId: structural.id,
+            checkpoint: "primary",
+            aspect: "semantic-path",
             file: "fixture.test.ts",
             testName: "stale case path"
           }
         }
       ])
     ).toThrow(/does not match the expected primary:semantic-path/i);
+  });
+
+  it("rejects same-value observations and provenance from another behavior case", () => {
+    const target = editorBehaviorCases.find(
+      (behaviorCase) => behaviorCase.id === "list-item-start-backspace"
+    )!;
+    const foreign = editorBehaviorCases.find(
+      (behaviorCase) => behaviorCase.id === "empty-type-hash"
+    )!;
+    const foreignRoles = foreign.checkpoints[0].result.visibleLines.map(({ role }) => role);
+
+    expect(foreignRoles).toEqual(
+      target.checkpoints[0].result.visibleLines.map(({ role }) => role)
+    );
+    expect(() =>
+      replaceEvidenceGaps(target, [
+        {
+          caseId: foreign.id,
+          checkpoint: "primary",
+          aspect: "visible-line-roles",
+          observed: foreignRoles,
+          provenance: {
+            kind: "fishmark-probe",
+            caseId: foreign.id,
+            checkpoint: "primary",
+            aspect: "visible-line-roles",
+            probeCaseId: "empty-type-hash",
+            assertion:
+              "src/renderer/markdown-editing-experience-probe.ts:runEmptyTypeHashCase: The probe pass condition checks the visible role oracle for every physical line in this checkpoint."
+          }
+        } as Parameters<typeof replaceEvidenceGaps>[1][number]
+      ])
+    ).toThrow(/case.*does not match|does not belong to case/i);
+
+    const foreignEvidence = foreign.classification.evidence.primary["visible-line-roles"];
+    expect(foreignEvidence.status).toBe("verified");
+    if (foreignEvidence.status !== "verified") {
+      throw new Error("Test fixture must carry the named-probe role provenance.");
+    }
+    const probeProvenance = foreignEvidence.provenance;
+    expect(probeProvenance.kind).toBe("fishmark-probe");
+    if (probeProvenance.kind !== "fishmark-probe") {
+      throw new Error("Test fixture must carry FishMark probe provenance.");
+    }
+    expect(() =>
+      replaceEvidenceGaps(target, [
+        {
+          caseId: target.id,
+          checkpoint: "primary",
+          aspect: "visible-line-roles",
+          observed: foreignRoles,
+          provenance: {
+            ...probeProvenance,
+            caseId: target.id
+          }
+        }
+      ])
+    ).toThrow(/catalog-owned|probe.*classification|probe.*case/i);
+
+    expect(() =>
+      assertFishMarkProbeProvenance(
+        {
+          caseId: foreign.id,
+          checkpoint: "primary",
+          aspect: "visible-line-roles"
+        },
+        {
+          ...probeProvenance,
+          assertion: `${probeProvenance.assertion} forged`
+        }
+      )
+    ).toThrow(/does not match catalog capability/i);
+
+    expect(() =>
+      replaceEvidenceGaps(foreign, [
+        {
+          caseId: foreign.id,
+          checkpoint: "primary",
+          aspect: "command-plan",
+          observed: foreign.checkpoints[0].actions,
+          provenance: {
+            kind: "fishmark-probe",
+            caseId: foreign.id,
+            checkpoint: "primary",
+            aspect: "command-plan",
+            probeCaseId: "empty-type-hash",
+            assertion: "forged undeclared capability"
+          }
+        }
+      ])
+    ).toThrow(/catalog-owned|dynamic.*probe|probe.*observation/i);
+  });
+
+  it("uses structural equality and rejects non-finite observation geometry", () => {
+    const behaviorCase = recursiveParityMatrixCases.find(
+      (candidate) =>
+        candidate.classification.evidence.primary["physical-geometry"].status === "gap" &&
+        candidate.checkpoints[0].result.visibleLines[0]?.geometry.markerColumn === null
+    )!;
+    const expectedGeometry = behaviorCase.checkpoints[0].result.visibleLines.map(
+      ({ line, sourceText, geometry }) => ({ line, sourceText, geometry })
+    );
+    const malformedGeometry = expectedGeometry.map((line, index) =>
+      index === 0
+        ? {
+            ...line,
+            geometry: { ...line.geometry, markerColumn: Number.NaN }
+          }
+        : line
+    );
+
+    expect(JSON.stringify(malformedGeometry)).toBe(JSON.stringify(expectedGeometry));
+    expect(() =>
+      replaceEvidenceGaps(behaviorCase, [
+        {
+          caseId: behaviorCase.id,
+          checkpoint: "primary",
+          aspect: "physical-geometry",
+          observed: malformedGeometry,
+          provenance: {
+            kind: "repository-test",
+            caseId: behaviorCase.id,
+            checkpoint: "primary",
+            aspect: "physical-geometry",
+            file: "fixture.test.ts",
+            testName: "non-finite geometry is not exact evidence"
+          }
+        }
+      ])
+    ).toThrow(/finite|does not match the expected/i);
   });
 
   it("rejects empty evidence payloads and invalid action plans", () => {
@@ -182,15 +360,26 @@ describe("RF-001 executable behavior model", () => {
         gapReason: "not observed",
         verifiedTargets: [
           {
+            caseId: "invalid-repository-evidence",
             checkpoint: "primary",
             aspect: "source",
-            provenance: { kind: "repository-test", file: "", testName: "source assertion" }
+            provenance: {
+              kind: "repository-test",
+              caseId: "invalid-repository-evidence",
+              checkpoint: "primary",
+              aspect: "source",
+              file: "",
+              testName: "source assertion"
+            }
           }
         ]
       })
     ).toThrow(/test file must not be empty/i);
     const provenance = {
       kind: "repository-test" as const,
+      caseId: "duplicate-evidence",
+      checkpoint: "primary" as const,
+      aspect: "source" as const,
       file: "fixture.test.ts",
       testName: "source assertion"
     };
@@ -198,27 +387,32 @@ describe("RF-001 executable behavior model", () => {
       createEvidence({
         gapReason: "not observed",
         verifiedTargets: [
-          { checkpoint: "primary", aspect: "source", provenance },
-          { checkpoint: "primary", aspect: "source", provenance }
+          { caseId: "duplicate-evidence", checkpoint: "primary", aspect: "source", provenance },
+          { caseId: "duplicate-evidence", checkpoint: "primary", aspect: "source", provenance }
         ]
       })
     ).toThrow(/duplicate evidence target/i);
     expect(() =>
-      createEvidence({
-        gapReason: "not observed",
-        verifiedTargets: [
-          {
-            checkpoint: "primary",
-            aspect: "command-plan",
-            provenance: {
-              kind: "fishmark-probe",
-              probeCaseId: "empty-type-hash",
-              assertion: "not a catalog capability"
-            }
-          }
-        ]
+      createFishMarkProbeProvenance({
+        caseId: "empty-type-hash",
+        checkpoint: "primary",
+        aspect: "command-plan",
+        probeCaseId: "empty-type-hash"
       })
     ).toThrow(/does not declare capability primary:command-plan/i);
+
+    const unknownProbeCase = recursiveParityMatrixCases[0]!;
+    expect(() =>
+      assertFishMarkProbeCaseBindings([
+        {
+          ...unknownProbeCase,
+          classification: {
+            ...unknownProbeCase.classification,
+            probeCaseId: "unknown-probe-id"
+          }
+        }
+      ])
+    ).toThrow(/unknown FishMark probe unknown-probe-id/i);
 
     const enterCase = editorBehaviorCases.find(
       (behaviorCase) => behaviorCase.command === "Enter"
@@ -284,6 +478,71 @@ describe("RF-001 executable behavior model", () => {
       ["block-math-content", 2],
       ["block-math-content", 2],
       ["block-math-delimiter", 2],
+      ["content", 1]
+    ]);
+
+    const mismatchedQuotePrefix = physicalLineExpectations(
+      "> ```\n- literal\n> ```",
+      sourceSelection(0),
+      "wysiwym"
+    );
+    expect(
+      mismatchedQuotePrefix.map((line) => [
+        line.role,
+        line.geometry.semanticDepth,
+        line.geometry.contentColumn,
+        line.geometry.markerColumn
+      ])
+    ).toEqual([
+      ["code-fence-delimiter", 1, 2, 0],
+      ["content", 1, 2, 0],
+      ["code-fence-delimiter", 1, 2, 0]
+    ]);
+
+    for (const source of [
+      "> ~~~\n> body\n>~~~\nafter",
+      " > ~~~\n> body\n> ~~~\nafter",
+      "- > ~~~\n    > body\n    > ~~~\nafter"
+    ]) {
+      const equivalentPrefix = physicalLineExpectations(
+        source,
+        sourceSelection(0),
+        "wysiwym"
+      );
+      expect(equivalentPrefix.map((line) => line.role), source).toEqual([
+        "code-fence-delimiter",
+        "code-fence-content",
+        "code-fence-delimiter",
+        "content"
+      ]);
+      expect(equivalentPrefix[3]?.geometry.semanticDepth, source).toBe(0);
+    }
+
+    const indentedClosing = physicalLineExpectations(
+      "```\n    ```\n- literal\n```\nafter",
+      sourceSelection(0),
+      "wysiwym"
+    );
+    expect(indentedClosing.map((line) => line.role)).toEqual([
+      "code-fence-delimiter",
+      "code-fence-content",
+      "code-fence-content",
+      "code-fence-delimiter",
+      "content"
+    ]);
+
+    const quoteListContinuation = physicalLineExpectations(
+      "> - ```\n>   - literal\n>   $$\n>   ```\n> after",
+      sourceSelection(0),
+      "wysiwym"
+    );
+    expect(
+      quoteListContinuation.map((line) => [line.role, line.geometry.semanticDepth])
+    ).toEqual([
+      ["code-fence-delimiter", 2],
+      ["code-fence-content", 2],
+      ["code-fence-content", 2],
+      ["code-fence-delimiter", 2],
       ["content", 1]
     ]);
   });

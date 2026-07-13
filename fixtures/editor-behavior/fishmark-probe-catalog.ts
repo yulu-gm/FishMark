@@ -1,6 +1,11 @@
-import type {
-  EditorBehaviorAspect,
-  EditorBehaviorCheckpointId
+import {
+  editorBehaviorAspects,
+  editorBehaviorCheckpointIds,
+  type EditorBehaviorCase,
+  type EditorBehaviorAspect,
+  type EditorBehaviorCheckpointId,
+  type EditorBehaviorEvidenceProvenance,
+  type EditorBehaviorEvidenceTargetIdentity
 } from "./model";
 
 export type FishMarkProbeCapability = {
@@ -109,9 +114,15 @@ export type FishMarkNamedProbeGroup =
 export type FishMarkNamedProbeRegistryEntry = {
   readonly caseId: FishMarkNamedProbeCaseId;
   readonly group: FishMarkNamedProbeGroup;
+  readonly run: (...args: never[]) => unknown;
 };
 
-export function findFishMarkProbe(caseId: FishMarkNamedProbeCaseId) {
+type FishMarkProbeProvenance = Extract<
+  EditorBehaviorEvidenceProvenance,
+  { readonly kind: "fishmark-probe" }
+>;
+
+export function findFishMarkProbe(caseId: string) {
   const entry = fishMarkNamedProbeCatalog.find((candidate) => candidate.caseId === caseId);
   if (!entry) {
     throw new Error(`Unknown FishMark probe ${caseId}.`);
@@ -119,12 +130,104 @@ export function findFishMarkProbe(caseId: FishMarkNamedProbeCaseId) {
   return entry;
 }
 
-/** Keeps the executable probe registry on the same stable ordered id/group set. */
+function capabilityFor(
+  caseId: FishMarkNamedProbeCaseId,
+  checkpoint: EditorBehaviorCheckpointId,
+  aspect: EditorBehaviorAspect
+) {
+  const probe = findFishMarkProbe(caseId);
+  const capability = probe.capabilities.find(
+    (candidate) => candidate.checkpoint === checkpoint && candidate.aspect === aspect
+  );
+  if (!capability) {
+    throw new Error(
+      `Probe ${caseId} does not declare capability ${checkpoint}:${aspect}.`
+    );
+  }
+  return { capability, probe };
+}
+
+export function createFishMarkProbeProvenance(
+  target: EditorBehaviorEvidenceTargetIdentity & {
+    readonly probeCaseId: FishMarkNamedProbeCaseId;
+  }
+): FishMarkProbeProvenance {
+  const { capability, probe } = capabilityFor(
+    target.probeCaseId,
+    target.checkpoint,
+    target.aspect
+  );
+  return {
+    kind: "fishmark-probe",
+    caseId: target.caseId,
+    checkpoint: target.checkpoint,
+    aspect: target.aspect,
+    probeCaseId: target.probeCaseId,
+    assertion: `${probe.probe.file}:${probe.probe.functionName}: ${capability.assertion}`
+  };
+}
+
+export function assertFishMarkProbeProvenance(
+  target: EditorBehaviorEvidenceTargetIdentity,
+  provenance: EditorBehaviorEvidenceProvenance
+): void {
+  if (provenance.kind !== "fishmark-probe") {
+    throw new Error(`Evidence ${target.caseId}:${target.checkpoint}:${target.aspect} is not probe provenance.`);
+  }
+  const expected = createFishMarkProbeProvenance({
+    ...target,
+    probeCaseId: provenance.probeCaseId as FishMarkNamedProbeCaseId
+  });
+  if (
+    provenance.caseId !== expected.caseId ||
+    provenance.checkpoint !== expected.checkpoint ||
+    provenance.aspect !== expected.aspect ||
+    provenance.probeCaseId !== expected.probeCaseId ||
+    provenance.assertion !== expected.assertion
+  ) {
+    throw new Error(
+      `Probe provenance does not match catalog capability ${target.caseId}:${target.checkpoint}:${target.aspect}.`
+    );
+  }
+}
+
+export function assertFishMarkProbeCaseBindings(
+  behaviorCases: readonly EditorBehaviorCase[]
+): readonly EditorBehaviorCase[] {
+  for (const behaviorCase of behaviorCases) {
+    const classifiedProbeCaseId = behaviorCase.classification.probeCaseId;
+    if (classifiedProbeCaseId !== undefined) {
+      findFishMarkProbe(classifiedProbeCaseId);
+    }
+    for (const checkpoint of editorBehaviorCheckpointIds) {
+      for (const aspect of editorBehaviorAspects) {
+        const evidence = behaviorCase.classification.evidence[checkpoint][aspect];
+        if (evidence.status !== "verified" || evidence.provenance.kind !== "fishmark-probe") {
+          continue;
+        }
+        if (classifiedProbeCaseId !== evidence.provenance.probeCaseId) {
+          throw new Error(
+            `Behavior case ${behaviorCase.id} probe classification does not match its verified provenance.`
+          );
+        }
+        assertFishMarkProbeProvenance(
+          { caseId: behaviorCase.id, checkpoint, aspect },
+          evidence.provenance
+        );
+      }
+    }
+  }
+  return [...behaviorCases];
+}
+
+/** Keeps the executable probe registry on the same stable ordered id/group/function set. */
 export function assertCompleteFishMarkProbeRegistry<
   T extends FishMarkNamedProbeRegistryEntry
 >(entries: readonly T[]): readonly T[] {
-  const expected = fishMarkNamedProbeCatalog.map(({ caseId, group }) => `${group}:${caseId}`);
-  const actual = entries.map(({ caseId, group }) => `${group}:${caseId}`);
+  const expected = fishMarkNamedProbeCatalog.map(
+    ({ caseId, group, probe }) => `${group}:${caseId}:${probe.functionName}`
+  );
+  const actual = entries.map(({ caseId, group, run }) => `${group}:${caseId}:${run.name}`);
 
   if (new Set(actual).size !== actual.length || actual.join("\n") !== expected.join("\n")) {
     throw new Error(

@@ -15,7 +15,7 @@ Static scenario registry and (eventually) runner for the FishMark test workbench
 - `src/scenario.ts` — `TestScenario`, `TestStep` types and validation helpers.
 - `src/registry.ts` — `createScenarioRegistry()` factory with insertion-ordered list, tag / surface / search filtering, and id uniqueness enforcement.
 - `src/scenarios/` — first-party seed scenarios (`app-shell-startup`, `open-markdown-file-basic`).
-- `../../fixtures/editor-behavior/` — repository-owned RF-001 behavior corpus consumed by the matrix scenario and CLI build.
+- `../../fixtures/editor-behavior/` — repository-owned RF-001 behavior corpus consumed by the matrix scenario and CLI build; import fixture types/data/helpers from its manifest directly because the harness barrel intentionally does not re-export them.
 - `src/runner.ts` — unified `runScenario()` state machine used by the workbench and the CLI.
 - `src/handlers/headless.ts` — headless handler map used by the CLI until a real driver exists.
 - `src/cli/` — agent-facing CLI (`bin.ts`, `run.ts`, `args.ts`, `exit-codes.ts`, `artifacts.ts`).

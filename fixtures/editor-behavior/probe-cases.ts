@@ -12,12 +12,14 @@ import {
   type EditorBehaviorCase,
   type EditorBehaviorAction,
   type EditorBehaviorCheckpoints,
+  type EditorBehaviorClassification,
   type EditorBehaviorCommand,
   type EditorBehaviorContractReference,
   type EditorBehaviorResult,
   type VisibleLineOptions
 } from "./model";
 import {
+  createFishMarkProbeProvenance,
   findFishMarkProbe,
   type FishMarkNamedProbeCaseId
 } from "./fishmark-probe-catalog";
@@ -88,7 +90,13 @@ function checkpointResults(
   };
 }
 
-type ProbeCaseAuthoring = Omit<EditorBehaviorCase, "initial" | "checkpoints"> & {
+type ProbeCaseAuthoring = Omit<
+  EditorBehaviorCase,
+  "initial" | "checkpoints" | "classification"
+> & {
+  readonly classification:
+    | EditorBehaviorClassification
+    | ((caseId: string) => EditorBehaviorClassification);
   readonly viewMode: "source" | "wysiwym";
   readonly initial: { readonly source: string; readonly selection: ReturnType<typeof sourceSelection> };
   readonly checkpointResults: CheckpointResults;
@@ -132,6 +140,7 @@ function defineCase(input: ProbeCaseAuthoring): EditorBehaviorCase {
     insertedText: insertedTextValue,
     primaryFollowupActions = [],
     semanticPaths = {},
+    classification,
     ...behaviorCase
   } = input;
   const pathFor = (state: "initial" | "primary" | "repeat" | "undo") =>
@@ -164,6 +173,8 @@ function defineCase(input: ProbeCaseAuthoring): EditorBehaviorCase {
   ];
   return defineEditorBehaviorCase({
     ...behaviorCase,
+    classification:
+      typeof classification === "function" ? classification(input.id) : classification,
     initial: {
       ...result(viewMode, [initial.source, initial.selection]),
       semanticPath: pathFor("initial")
@@ -188,23 +199,26 @@ function probeClassification(input: {
   readonly contractReferences?: readonly EditorBehaviorContractReference[];
 }) {
   const probe = findFishMarkProbe(input.probeCaseId);
-  return desiredClassification({
-    probeCaseId: input.probeCaseId,
-    contractReferences: input.contractReferences ?? [roadmapReference()],
-    evidence: createEvidence({
-      gapReason:
-        "The named probe does not assert this complete RF-001 checkpoint target.",
-      verifiedTargets: probe.capabilities.map((capability) => ({
-        checkpoint: capability.checkpoint,
-        aspect: capability.aspect,
-        provenance: {
-          kind: "fishmark-probe" as const,
-          probeCaseId: input.probeCaseId,
-          assertion: `${probe.probe.file}:${probe.probe.functionName}: ${capability.assertion}`
-        }
-      }))
-    })
-  });
+  return (caseId: string) =>
+    desiredClassification({
+      probeCaseId: input.probeCaseId,
+      contractReferences: input.contractReferences ?? [roadmapReference()],
+      evidence: createEvidence({
+        gapReason:
+          "The named probe does not assert this complete RF-001 checkpoint target.",
+        verifiedTargets: probe.capabilities.map((capability) => ({
+          caseId,
+          checkpoint: capability.checkpoint,
+          aspect: capability.aspect,
+          provenance: createFishMarkProbeProvenance({
+            caseId,
+            checkpoint: capability.checkpoint,
+            aspect: capability.aspect,
+            probeCaseId: input.probeCaseId
+          })
+        }))
+      })
+    });
 }
 
 export const capturedOracleAndProbeCases: readonly EditorBehaviorCase[] = [

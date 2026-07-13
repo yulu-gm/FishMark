@@ -143,6 +143,10 @@ Create one executable behavior corpus for structural Markdown editing before cha
 - Known defects are labeled and are not adopted as desired behavior.
 - Scenario filtering can select a command or container path.
 - Every checkpoint/aspect target is exactly one validated `Gap` or `Verified` value.
+- Typed observations and persisted provenance are bound to the exact case/checkpoint/aspect; equal values cannot be reused across cases, replacement uses structural equality against the checkpoint-owned expected result, and dynamic observations reject non-finite numbers and catalog-owned probe provenance.
+- Named probe registry entries are bound to the catalog through the actual `run.name`, and verified FishMark provenance is narrowed exactly during manifest composition without a generic model/catalog dependency cycle.
+- Opaque code/math projection consumes a CommonMark-equivalent ordered outer quote/list signature, exits and reprocesses a line when the container no longer continues, and only accepts closing delimiters with a matching prefix and 0–3 relative spaces.
+- `fixtures/editor-behavior` is the only fixture public entry; the test harness exposes scenario APIs but no fixture compatibility facade.
 - A test-only runner executes the matrix before RF-001 returns to `DEV_DONE`; metadata-only scenario steps are never counted as passes.
 
 ### Verification

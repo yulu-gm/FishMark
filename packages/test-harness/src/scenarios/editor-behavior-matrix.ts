@@ -1,5 +1,4 @@
 import {
-  editorBehaviorCases,
   filterEditorBehaviorCases,
   formatContainerPath,
   type EditorBehaviorCaseQuery
@@ -47,6 +46,3 @@ export function createEditorBehaviorMatrixScenario(
 }
 
 export const editorBehaviorMatrixScenario = createEditorBehaviorMatrixScenario();
-
-export { editorBehaviorCases, filterEditorBehaviorCases };
-export type { EditorBehaviorCaseQuery };
