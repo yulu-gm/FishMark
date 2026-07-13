@@ -299,7 +299,8 @@ function observeLineRole(
   if (line.text.length === 0) {
     return line.isDocumentEnd ? "empty-editing-line" : "structural-separator";
   }
-  if (source.slice(contentOffset, contentOffset + line.text.length).trim() === "") {
+  const lineContentOffset = Math.max(line.from, Math.min(line.to, contentOffset));
+  if (source.slice(lineContentOffset, line.to).trim() === "") {
     return "structural-separator";
   }
   if (physicalRole === "structural-separator") {

@@ -104,7 +104,7 @@ type ProbeCaseAuthoring = Omit<
     Record<"initial" | "primary" | "repeat" | "undo", EditorBehaviorCase["containerPath"]>
   >;
   readonly insertedText?: string;
-  readonly primaryFollowupActions?: readonly EditorBehaviorAction[];
+  readonly primaryActions?: readonly EditorBehaviorAction[];
 };
 
 function commandAction(
@@ -138,7 +138,7 @@ function defineCase(input: ProbeCaseAuthoring): EditorBehaviorCase {
     initial,
     checkpointResults: expected,
     insertedText: insertedTextValue,
-    primaryFollowupActions = [],
+    primaryActions,
     semanticPaths = {},
     classification,
     ...behaviorCase
@@ -155,7 +155,7 @@ function defineCase(input: ProbeCaseAuthoring): EditorBehaviorCase {
     {
       id: "primary",
       from: "initial",
-      actions: [primaryAction, ...primaryFollowupActions],
+      actions: primaryActions ?? [primaryAction],
       result: complete(expected.primary, "primary")
     },
     {
@@ -187,10 +187,29 @@ function roadmapReference(section = "7.7 recursive parity matrix"): EditorBehavi
   return { kind: "roadmap", section };
 }
 
-function oracleReference(caseId: string): EditorBehaviorContractReference {
+function oracleReference(
+  caseId: string,
+  capturedCheckpoint: "primary" | "repeat" = "primary"
+): EditorBehaviorContractReference {
+  const resultCoverage = (captured: boolean) => ({
+    "semantic-path": "not-captured",
+    source: captured ? "captured-exact" : "not-captured",
+    selection: captured ? "captured-exact" : "not-captured",
+    "visible-line-roles": "not-captured",
+    "physical-geometry": "not-captured",
+    "view-mode": "not-captured"
+  } as const);
   return {
     kind: "typora-oracle",
-    file: `docs/plans/typora-like-editor/oracle/${caseId}.json`
+    file: `docs/plans/typora-like-editor/oracle/${caseId}.json`,
+    capturedCheckpoint,
+    coverage: {
+      initial: resultCoverage(true),
+      actions: "captured-exact",
+      primary: resultCoverage(capturedCheckpoint === "primary"),
+      repeat: resultCoverage(capturedCheckpoint === "repeat"),
+      undo: resultCoverage(false)
+    }
   };
 }
 
@@ -302,17 +321,17 @@ export const capturedOracleAndProbeCases: readonly EditorBehaviorCase[] = [
     title: "Enter after spaces creates a paragraph that accepts ordinary text",
     origin: "typora-oracle",
     command: "Enter",
-    primaryFollowupActions: [insertText("abc")],
+    primaryActions: [insertText("   "), pressKey("Enter"), insertText("abc")],
     containerPath: DOCUMENT_PARAGRAPH,
     containerDepth: 0,
-    lineContent: "whitespace-only",
+    lineContent: "empty",
     cursorPlacement: "line-end",
     viewMode: "wysiwym",
     classification: probeClassification({
       probeCaseId: "empty-spaces-enter-text",
       contractReferences: [oracleReference("empty-spaces-enter-text")]
     }),
-    initial: { source: "   ", selection: sourceSelection(3) },
+    initial: { source: "", selection: sourceSelection(0) },
     checkpointResults: checkpointResults(
       "wysiwym",
       ["   \n\nabc", sourceSelection(8)],
@@ -440,7 +459,7 @@ export const capturedOracleAndProbeCases: readonly EditorBehaviorCase[] = [
     viewMode: "wysiwym",
     classification: probeClassification({
       probeCaseId: "heading-end-repeated-enter",
-      contractReferences: [oracleReference("heading-end-repeated-enter")]
+      contractReferences: [oracleReference("heading-end-repeated-enter", "repeat")]
     }),
     initial: { source: "# Title", selection: sourceSelection(7) },
     checkpointResults: checkpointResults(
@@ -458,16 +477,17 @@ export const capturedOracleAndProbeCases: readonly EditorBehaviorCase[] = [
     origin: "typora-oracle",
     command: "InsertText",
     insertedText: " ",
+    primaryActions: [pressKey("Enter"), insertText(" ")],
     containerPath: DOCUMENT_PARAGRAPH,
     containerDepth: 0,
-    lineContent: "empty",
+    lineContent: "content",
     cursorPlacement: "line-end",
     viewMode: "wysiwym",
     classification: probeClassification({
       probeCaseId: "heading-empty-paragraph-space",
       contractReferences: [oracleReference("heading-empty-paragraph-space")]
     }),
-    initial: { source: "# Title\n\n", selection: sourceSelection(9) },
+    initial: { source: "# Title", selection: sourceSelection(7) },
     checkpointResults: checkpointResults(
       "wysiwym",
       ["# Title\n\n ", sourceSelection(10)],
@@ -482,16 +502,17 @@ export const capturedOracleAndProbeCases: readonly EditorBehaviorCase[] = [
     title: "Backspace from the empty paragraph below a heading rejoins the heading",
     origin: "typora-oracle",
     command: "Backspace",
+    primaryActions: [pressKey("Enter"), pressKey("Backspace")],
     containerPath: DOCUMENT_PARAGRAPH,
     containerDepth: 0,
-    lineContent: "empty",
+    lineContent: "content",
     cursorPlacement: "line-end",
     viewMode: "wysiwym",
     classification: probeClassification({
       probeCaseId: "heading-empty-paragraph-backspace",
       contractReferences: [oracleReference("heading-empty-paragraph-backspace")]
     }),
-    initial: { source: "# Title\n\n", selection: sourceSelection(9) },
+    initial: { source: "# Title", selection: sourceSelection(7) },
     checkpointResults: checkpointResults(
       "wysiwym",
       ["# Title", sourceSelection(7)],

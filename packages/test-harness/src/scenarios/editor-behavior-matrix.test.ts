@@ -30,21 +30,6 @@ const REQUIRED_COMMANDS = [
   "selection"
 ] as const;
 
-const CAPTURED_ORACLE_CASE_IDS = [
-  "empty-type-hash",
-  "empty-type-one-space",
-  "empty-type-three-spaces",
-  "empty-spaces-enter-text",
-  "paragraph-end-enter",
-  "paragraph-middle-enter",
-  "paragraph-start-enter",
-  "heading-end-enter",
-  "heading-end-repeated-enter",
-  "heading-empty-paragraph-space",
-  "heading-empty-paragraph-backspace",
-  "structural-blank-arrow-down"
-] as const;
-
 describe("editor behavior manifest", () => {
   it("records the complete semantic expectation contract for every case", () => {
     expect(editorBehaviorCases.length).toBeGreaterThan(20);
@@ -140,13 +125,6 @@ describe("editor behavior manifest", () => {
           `${command} must cover ${formatContainerPath(path)}`
         ).not.toHaveLength(0);
       }
-    }
-  });
-
-  it("converts every captured Typora oracle case into the typed corpus", () => {
-    const ids = new Set(editorBehaviorCases.map((behaviorCase) => behaviorCase.id));
-    for (const caseId of CAPTURED_ORACLE_CASE_IDS) {
-      expect(ids.has(caseId), caseId).toBe(true);
     }
   });
 

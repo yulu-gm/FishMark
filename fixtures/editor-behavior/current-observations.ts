@@ -1,19 +1,22 @@
 import type {
   EditorBehaviorKnownDefectObservation,
+  EditorBehaviorRunnerCalibration,
   EditorBehaviorRunnerVerifiedTarget
 } from "./runner-protocol";
 
 /**
  * Exact per-target observations from the complete RF-001 Electron calibration.
- * Execution manifest: fnv1a32-75bf1f50; desired contract: fnv1a32-4af00b7a.
- * Targets: 2541; verified: 2001; known defects: 540.
+ * Execution manifest: fnv1a32-fbeac900; desired contract: fnv1a32-aceda9f6.
+ * Calibration identity: fnv1a32-ae988a59.
+ * Targets: 2541; verified: 2007; known defects: 534.
  * Values are structural baselines, never case-wide allowlists.
  */
 export const editorBehaviorRunnerCalibration = {
-  manifestHash: "fnv1a32-75bf1f50",
-  contractHash: "fnv1a32-4af00b7a",
-  runId: "ecde846c-8dfb-468a-94a9-7fd98fd44e61"
-} as const;
+  manifestHash: "fnv1a32-fbeac900",
+  contractHash: "fnv1a32-aceda9f6",
+  runId: "29e6cd7a-3d85-4f7c-844e-63b42ddb2e80",
+  calibrationHash: "fnv1a32-ae988a59"
+} as const satisfies EditorBehaviorRunnerCalibration;
 
 export const editorBehaviorRunnerVerifiedTargets = [
   { caseId: "empty-type-hash", checkpoint: "primary", aspect: "command-plan" },
@@ -84,10 +87,6 @@ export const editorBehaviorRunnerVerifiedTargets = [
   { caseId: "empty-spaces-enter-text", checkpoint: "repeat", aspect: "physical-geometry" },
   { caseId: "empty-spaces-enter-text", checkpoint: "repeat", aspect: "view-mode" },
   { caseId: "empty-spaces-enter-text", checkpoint: "undo", aspect: "command-plan" },
-  { caseId: "empty-spaces-enter-text", checkpoint: "undo", aspect: "source" },
-  { caseId: "empty-spaces-enter-text", checkpoint: "undo", aspect: "selection" },
-  { caseId: "empty-spaces-enter-text", checkpoint: "undo", aspect: "visible-line-roles" },
-  { caseId: "empty-spaces-enter-text", checkpoint: "undo", aspect: "physical-geometry" },
   { caseId: "empty-spaces-enter-text", checkpoint: "undo", aspect: "view-mode" },
   { caseId: "whitespace-line-enter", checkpoint: "primary", aspect: "command-plan" },
   { caseId: "whitespace-line-enter", checkpoint: "primary", aspect: "source" },
@@ -206,10 +205,6 @@ export const editorBehaviorRunnerVerifiedTargets = [
   { caseId: "heading-empty-paragraph-space", checkpoint: "repeat", aspect: "physical-geometry" },
   { caseId: "heading-empty-paragraph-space", checkpoint: "repeat", aspect: "view-mode" },
   { caseId: "heading-empty-paragraph-space", checkpoint: "undo", aspect: "command-plan" },
-  { caseId: "heading-empty-paragraph-space", checkpoint: "undo", aspect: "source" },
-  { caseId: "heading-empty-paragraph-space", checkpoint: "undo", aspect: "selection" },
-  { caseId: "heading-empty-paragraph-space", checkpoint: "undo", aspect: "visible-line-roles" },
-  { caseId: "heading-empty-paragraph-space", checkpoint: "undo", aspect: "physical-geometry" },
   { caseId: "heading-empty-paragraph-space", checkpoint: "undo", aspect: "view-mode" },
   { caseId: "heading-empty-paragraph-backspace", checkpoint: "primary", aspect: "command-plan" },
   { caseId: "heading-empty-paragraph-backspace", checkpoint: "primary", aspect: "source" },
@@ -224,10 +219,6 @@ export const editorBehaviorRunnerVerifiedTargets = [
   { caseId: "heading-empty-paragraph-backspace", checkpoint: "repeat", aspect: "physical-geometry" },
   { caseId: "heading-empty-paragraph-backspace", checkpoint: "repeat", aspect: "view-mode" },
   { caseId: "heading-empty-paragraph-backspace", checkpoint: "undo", aspect: "command-plan" },
-  { caseId: "heading-empty-paragraph-backspace", checkpoint: "undo", aspect: "source" },
-  { caseId: "heading-empty-paragraph-backspace", checkpoint: "undo", aspect: "selection" },
-  { caseId: "heading-empty-paragraph-backspace", checkpoint: "undo", aspect: "visible-line-roles" },
-  { caseId: "heading-empty-paragraph-backspace", checkpoint: "undo", aspect: "physical-geometry" },
   { caseId: "heading-empty-paragraph-backspace", checkpoint: "undo", aspect: "view-mode" },
   { caseId: "structural-blank-arrow-down", checkpoint: "primary", aspect: "command-plan" },
   { caseId: "structural-blank-arrow-down", checkpoint: "primary", aspect: "semantic-path" },
@@ -332,6 +323,7 @@ export const editorBehaviorRunnerVerifiedTargets = [
   { caseId: "blockquote-marker-commits-after-enter", checkpoint: "primary", aspect: "command-plan" },
   { caseId: "blockquote-marker-commits-after-enter", checkpoint: "primary", aspect: "source" },
   { caseId: "blockquote-marker-commits-after-enter", checkpoint: "primary", aspect: "selection" },
+  { caseId: "blockquote-marker-commits-after-enter", checkpoint: "primary", aspect: "visible-line-roles" },
   { caseId: "blockquote-marker-commits-after-enter", checkpoint: "primary", aspect: "physical-geometry" },
   { caseId: "blockquote-marker-commits-after-enter", checkpoint: "primary", aspect: "view-mode" },
   { caseId: "blockquote-marker-commits-after-enter", checkpoint: "repeat", aspect: "command-plan" },
@@ -345,6 +337,7 @@ export const editorBehaviorRunnerVerifiedTargets = [
   { caseId: "nested-blockquote-marker-commits-after-enter", checkpoint: "primary", aspect: "command-plan" },
   { caseId: "nested-blockquote-marker-commits-after-enter", checkpoint: "primary", aspect: "source" },
   { caseId: "nested-blockquote-marker-commits-after-enter", checkpoint: "primary", aspect: "selection" },
+  { caseId: "nested-blockquote-marker-commits-after-enter", checkpoint: "primary", aspect: "visible-line-roles" },
   { caseId: "nested-blockquote-marker-commits-after-enter", checkpoint: "primary", aspect: "physical-geometry" },
   { caseId: "nested-blockquote-marker-commits-after-enter", checkpoint: "primary", aspect: "view-mode" },
   { caseId: "nested-blockquote-marker-commits-after-enter", checkpoint: "repeat", aspect: "command-plan" },
@@ -429,6 +422,7 @@ export const editorBehaviorRunnerVerifiedTargets = [
   { caseId: "nested-quote-list-repeated-enter-exit", checkpoint: "repeat", aspect: "command-plan" },
   { caseId: "nested-quote-list-repeated-enter-exit", checkpoint: "repeat", aspect: "source" },
   { caseId: "nested-quote-list-repeated-enter-exit", checkpoint: "repeat", aspect: "selection" },
+  { caseId: "nested-quote-list-repeated-enter-exit", checkpoint: "repeat", aspect: "visible-line-roles" },
   { caseId: "nested-quote-list-repeated-enter-exit", checkpoint: "repeat", aspect: "view-mode" },
   { caseId: "nested-quote-list-repeated-enter-exit", checkpoint: "undo", aspect: "command-plan" },
   { caseId: "nested-quote-list-repeated-enter-exit", checkpoint: "undo", aspect: "source" },
@@ -782,6 +776,7 @@ export const editorBehaviorRunnerVerifiedTargets = [
   { caseId: "matrix-enter-path-4", checkpoint: "primary", aspect: "view-mode" },
   { caseId: "matrix-enter-path-4", checkpoint: "repeat", aspect: "command-plan" },
   { caseId: "matrix-enter-path-4", checkpoint: "repeat", aspect: "semantic-path" },
+  { caseId: "matrix-enter-path-4", checkpoint: "repeat", aspect: "visible-line-roles" },
   { caseId: "matrix-enter-path-4", checkpoint: "repeat", aspect: "view-mode" },
   { caseId: "matrix-enter-path-4", checkpoint: "undo", aspect: "command-plan" },
   { caseId: "matrix-enter-path-4", checkpoint: "undo", aspect: "semantic-path" },
@@ -794,12 +789,14 @@ export const editorBehaviorRunnerVerifiedTargets = [
   { caseId: "matrix-enter-path-5", checkpoint: "primary", aspect: "semantic-path" },
   { caseId: "matrix-enter-path-5", checkpoint: "primary", aspect: "source" },
   { caseId: "matrix-enter-path-5", checkpoint: "primary", aspect: "selection" },
+  { caseId: "matrix-enter-path-5", checkpoint: "primary", aspect: "visible-line-roles" },
   { caseId: "matrix-enter-path-5", checkpoint: "primary", aspect: "physical-geometry" },
   { caseId: "matrix-enter-path-5", checkpoint: "primary", aspect: "view-mode" },
   { caseId: "matrix-enter-path-5", checkpoint: "repeat", aspect: "command-plan" },
   { caseId: "matrix-enter-path-5", checkpoint: "repeat", aspect: "semantic-path" },
   { caseId: "matrix-enter-path-5", checkpoint: "repeat", aspect: "source" },
   { caseId: "matrix-enter-path-5", checkpoint: "repeat", aspect: "selection" },
+  { caseId: "matrix-enter-path-5", checkpoint: "repeat", aspect: "visible-line-roles" },
   { caseId: "matrix-enter-path-5", checkpoint: "repeat", aspect: "physical-geometry" },
   { caseId: "matrix-enter-path-5", checkpoint: "repeat", aspect: "view-mode" },
   { caseId: "matrix-enter-path-5", checkpoint: "undo", aspect: "command-plan" },
@@ -1233,10 +1230,16 @@ export const editorBehaviorRunnerVerifiedTargets = [
   { caseId: "matrix-shift-tab-path-1", checkpoint: "undo", aspect: "physical-geometry" },
   { caseId: "matrix-shift-tab-path-1", checkpoint: "undo", aspect: "view-mode" },
   { caseId: "matrix-shift-tab-path-2", checkpoint: "primary", aspect: "command-plan" },
+  { caseId: "matrix-shift-tab-path-2", checkpoint: "primary", aspect: "source" },
+  { caseId: "matrix-shift-tab-path-2", checkpoint: "primary", aspect: "selection" },
   { caseId: "matrix-shift-tab-path-2", checkpoint: "primary", aspect: "visible-line-roles" },
+  { caseId: "matrix-shift-tab-path-2", checkpoint: "primary", aspect: "physical-geometry" },
   { caseId: "matrix-shift-tab-path-2", checkpoint: "primary", aspect: "view-mode" },
   { caseId: "matrix-shift-tab-path-2", checkpoint: "repeat", aspect: "command-plan" },
+  { caseId: "matrix-shift-tab-path-2", checkpoint: "repeat", aspect: "source" },
+  { caseId: "matrix-shift-tab-path-2", checkpoint: "repeat", aspect: "selection" },
   { caseId: "matrix-shift-tab-path-2", checkpoint: "repeat", aspect: "visible-line-roles" },
+  { caseId: "matrix-shift-tab-path-2", checkpoint: "repeat", aspect: "physical-geometry" },
   { caseId: "matrix-shift-tab-path-2", checkpoint: "repeat", aspect: "view-mode" },
   { caseId: "matrix-shift-tab-path-2", checkpoint: "undo", aspect: "command-plan" },
   { caseId: "matrix-shift-tab-path-2", checkpoint: "undo", aspect: "source" },
@@ -1298,10 +1301,16 @@ export const editorBehaviorRunnerVerifiedTargets = [
   { caseId: "matrix-shift-tab-path-5", checkpoint: "undo", aspect: "physical-geometry" },
   { caseId: "matrix-shift-tab-path-5", checkpoint: "undo", aspect: "view-mode" },
   { caseId: "matrix-shift-tab-path-6", checkpoint: "primary", aspect: "command-plan" },
+  { caseId: "matrix-shift-tab-path-6", checkpoint: "primary", aspect: "source" },
+  { caseId: "matrix-shift-tab-path-6", checkpoint: "primary", aspect: "selection" },
   { caseId: "matrix-shift-tab-path-6", checkpoint: "primary", aspect: "visible-line-roles" },
+  { caseId: "matrix-shift-tab-path-6", checkpoint: "primary", aspect: "physical-geometry" },
   { caseId: "matrix-shift-tab-path-6", checkpoint: "primary", aspect: "view-mode" },
   { caseId: "matrix-shift-tab-path-6", checkpoint: "repeat", aspect: "command-plan" },
+  { caseId: "matrix-shift-tab-path-6", checkpoint: "repeat", aspect: "source" },
+  { caseId: "matrix-shift-tab-path-6", checkpoint: "repeat", aspect: "selection" },
   { caseId: "matrix-shift-tab-path-6", checkpoint: "repeat", aspect: "visible-line-roles" },
+  { caseId: "matrix-shift-tab-path-6", checkpoint: "repeat", aspect: "physical-geometry" },
   { caseId: "matrix-shift-tab-path-6", checkpoint: "repeat", aspect: "view-mode" },
   { caseId: "matrix-shift-tab-path-6", checkpoint: "undo", aspect: "command-plan" },
   { caseId: "matrix-shift-tab-path-6", checkpoint: "undo", aspect: "source" },
@@ -2017,11 +2026,31 @@ export const editorBehaviorRunnerVerifiedTargets = [
   { caseId: "mixed-container-depth-8-selection", checkpoint: "undo", aspect: "selection" },
   { caseId: "mixed-container-depth-8-selection", checkpoint: "undo", aspect: "visible-line-roles" },
   { caseId: "mixed-container-depth-8-selection", checkpoint: "undo", aspect: "view-mode" }
-] satisfies readonly EditorBehaviorRunnerVerifiedTarget[];
+] as const satisfies readonly EditorBehaviorRunnerVerifiedTarget[];
 
 const observedValues = [
   [
     "Document"
+  ],
+  "",
+  {
+    "anchor": 0,
+    "head": 0
+  },
+  [
+    "empty-editing-line"
+  ],
+  [
+    {
+      "line": 1,
+      "sourceText": "",
+      "geometry": {
+        "semanticDepth": 0,
+        "contentColumn": 0,
+        "markerColumn": null,
+        "visibility": "visible"
+      }
+    }
   ],
   [
     {
@@ -2395,6 +2424,26 @@ const observedValues = [
       }
     }
   ],
+  "# Title",
+  {
+    "anchor": 7,
+    "head": 7
+  },
+  [
+    "content"
+  ],
+  [
+    {
+      "line": 1,
+      "sourceText": "# Title",
+      "geometry": {
+        "semanticDepth": 0,
+        "contentColumn": 0,
+        "markerColumn": null,
+        "visibility": "visible"
+      }
+    }
+  ],
   [
     "Document",
     "Blockquote"
@@ -2435,10 +2484,6 @@ const observedValues = [
     "Document",
     "Blockquote",
     "Blockquote"
-  ],
-  [
-    "content",
-    "structural-separator"
   ],
   "\n",
   {
@@ -2884,16 +2929,6 @@ const observedValues = [
         "visibility": "visible"
       }
     }
-  ],
-  [
-    "content",
-    "structural-separator",
-    "content",
-    "content",
-    "content",
-    "content",
-    "content",
-    "structural-separator"
   ],
   [
     {
@@ -3831,13 +3866,6 @@ const observedValues = [
   ],
   "> al\n>\n> \n>\n> pha",
   [
-    "content",
-    "structural-separator",
-    "content",
-    "structural-separator",
-    "content"
-  ],
-  [
     {
       "line": 1,
       "sourceText": "> al",
@@ -3888,13 +3916,6 @@ const observedValues = [
         "visibility": "visible"
       }
     }
-  ],
-  [
-    "content",
-    "content",
-    "content",
-    "content",
-    "content"
   ],
   "> - al\n> pha",
   [
@@ -3993,7 +4014,7 @@ const observedValues = [
     "content",
     "content",
     "structural-separator",
-    "content",
+    "structural-separator",
     "structural-separator",
     "content",
     "code-fence-delimiter"
@@ -4224,7 +4245,7 @@ const observedValues = [
   [
     "content",
     "content",
-    "content",
+    "structural-separator",
     "content",
     "block-math-delimiter"
   ],
@@ -4288,9 +4309,9 @@ const observedValues = [
   [
     "content",
     "content",
-    "content",
-    "content",
-    "content",
+    "structural-separator",
+    "structural-separator",
+    "structural-separator",
     "content",
     "block-math-delimiter"
   ],
@@ -4438,42 +4459,8 @@ const observedValues = [
       }
     }
   ],
-  "- alpha",
-  {
-    "anchor": 7,
-    "head": 7
-  },
-  [
-    {
-      "line": 1,
-      "sourceText": "- alpha",
-      "geometry": {
-        "semanticDepth": 1,
-        "contentColumn": 2,
-        "markerColumn": 0,
-        "visibility": "visible"
-      }
-    }
-  ],
   "- - alpha",
-  "> - alpha",
-  [
-    {
-      "line": 1,
-      "sourceText": "> - alpha",
-      "geometry": {
-        "semanticDepth": 2,
-        "contentColumn": 4,
-        "markerColumn": 2,
-        "visibility": "visible"
-      }
-    }
-  ],
   "- > - alpha",
-  {
-    "anchor": 0,
-    "head": 0
-  },
   [
     {
       "line": 1,
@@ -4642,4319 +4629,3737 @@ export const editorBehaviorKnownDefectObservations = [
     checkpoint: "primary",
     aspect: "semantic-path",
     observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "empty-type-hash",
     checkpoint: "repeat",
     aspect: "semantic-path",
     observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "empty-type-hash",
     checkpoint: "undo",
     aspect: "semantic-path",
     observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "empty-type-one-space",
     checkpoint: "primary",
     aspect: "semantic-path",
     observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "empty-type-one-space",
     checkpoint: "repeat",
     aspect: "semantic-path",
     observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "empty-type-one-space",
     checkpoint: "undo",
     aspect: "semantic-path",
     observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "empty-type-three-spaces",
     checkpoint: "primary",
     aspect: "semantic-path",
     observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "empty-type-three-spaces",
     checkpoint: "repeat",
     aspect: "semantic-path",
     observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "empty-type-three-spaces",
     checkpoint: "undo",
     aspect: "semantic-path",
     observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "empty-spaces-enter-text",
     checkpoint: "repeat",
     aspect: "semantic-path",
     observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "empty-spaces-enter-text",
     checkpoint: "undo",
     aspect: "semantic-path",
     observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "whitespace-line-enter",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "whitespace-line-enter",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
-    observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "whitespace-line-enter",
-    checkpoint: "repeat",
-    aspect: "physical-geometry",
+    caseId: "empty-spaces-enter-text",
+    checkpoint: "undo",
+    aspect: "source",
     observed: observedValues[1],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
   },
   {
-    caseId: "whitespace-line-enter",
+    caseId: "empty-spaces-enter-text",
     checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "paragraph-end-enter",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "paragraph-end-enter",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
-    observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "paragraph-end-enter",
-    checkpoint: "repeat",
-    aspect: "physical-geometry",
-    observed: observedValues[2],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "paragraph-middle-enter",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
-    observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "paragraph-middle-enter",
-    checkpoint: "repeat",
     aspect: "selection",
-    observed: observedValues[3],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    observed: observedValues[2],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
-    caseId: "paragraph-middle-enter",
-    checkpoint: "repeat",
+    caseId: "empty-spaces-enter-text",
+    checkpoint: "undo",
+    aspect: "visible-line-roles",
+    observed: observedValues[3],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+  },
+  {
+    caseId: "empty-spaces-enter-text",
+    checkpoint: "undo",
     aspect: "physical-geometry",
     observed: observedValues[4],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "paragraph-start-enter",
+    caseId: "whitespace-line-enter",
     checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[0],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "whitespace-line-enter",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[0],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "whitespace-line-enter",
+    checkpoint: "repeat",
     aspect: "physical-geometry",
     observed: observedValues[5],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "paragraph-start-enter",
-    checkpoint: "repeat",
+    caseId: "whitespace-line-enter",
+    checkpoint: "undo",
     aspect: "semantic-path",
     observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "paragraph-start-enter",
-    checkpoint: "repeat",
-    aspect: "selection",
-    observed: observedValues[6],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
-  },
-  {
-    caseId: "paragraph-start-enter",
-    checkpoint: "repeat",
-    aspect: "physical-geometry",
-    observed: observedValues[7],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "heading-end-enter",
+    caseId: "paragraph-end-enter",
     checkpoint: "primary",
     aspect: "semantic-path",
     observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "heading-end-enter",
+    caseId: "paragraph-end-enter",
     checkpoint: "repeat",
     aspect: "semantic-path",
     observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "heading-end-enter",
+    caseId: "paragraph-end-enter",
+    checkpoint: "repeat",
+    aspect: "physical-geometry",
+    observed: observedValues[6],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "paragraph-middle-enter",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[0],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "paragraph-middle-enter",
+    checkpoint: "repeat",
+    aspect: "selection",
+    observed: observedValues[7],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+  },
+  {
+    caseId: "paragraph-middle-enter",
     checkpoint: "repeat",
     aspect: "physical-geometry",
     observed: observedValues[8],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "paragraph-start-enter",
+    checkpoint: "primary",
+    aspect: "physical-geometry",
+    observed: observedValues[9],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "paragraph-start-enter",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[0],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "paragraph-start-enter",
+    checkpoint: "repeat",
+    aspect: "selection",
+    observed: observedValues[10],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+  },
+  {
+    caseId: "paragraph-start-enter",
+    checkpoint: "repeat",
+    aspect: "physical-geometry",
+    observed: observedValues[11],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "heading-end-enter",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[0],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "heading-end-enter",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[0],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "heading-end-enter",
+    checkpoint: "repeat",
+    aspect: "physical-geometry",
+    observed: observedValues[12],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "heading-end-enter",
     checkpoint: "undo",
     aspect: "semantic-path",
     observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "heading-end-repeated-enter",
     checkpoint: "primary",
     aspect: "semantic-path",
     observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "heading-end-repeated-enter",
     checkpoint: "repeat",
     aspect: "semantic-path",
     observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "heading-end-repeated-enter",
     checkpoint: "repeat",
     aspect: "physical-geometry",
-    observed: observedValues[9],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[13],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "heading-end-repeated-enter",
     checkpoint: "undo",
     aspect: "semantic-path",
     observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "heading-empty-paragraph-space",
     checkpoint: "primary",
     aspect: "semantic-path",
     observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "heading-empty-paragraph-space",
     checkpoint: "repeat",
     aspect: "semantic-path",
     observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "heading-empty-paragraph-space",
     checkpoint: "undo",
     aspect: "semantic-path",
     observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "heading-empty-paragraph-space",
+    checkpoint: "undo",
+    aspect: "source",
+    observed: observedValues[14],
+    reason: "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
+  },
+  {
+    caseId: "heading-empty-paragraph-space",
+    checkpoint: "undo",
+    aspect: "selection",
+    observed: observedValues[15],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+  },
+  {
+    caseId: "heading-empty-paragraph-space",
+    checkpoint: "undo",
+    aspect: "visible-line-roles",
+    observed: observedValues[16],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+  },
+  {
+    caseId: "heading-empty-paragraph-space",
+    checkpoint: "undo",
+    aspect: "physical-geometry",
+    observed: observedValues[17],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "heading-empty-paragraph-backspace",
     checkpoint: "primary",
     aspect: "semantic-path",
     observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "heading-empty-paragraph-backspace",
     checkpoint: "repeat",
     aspect: "semantic-path",
     observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "heading-empty-paragraph-backspace",
     checkpoint: "undo",
     aspect: "semantic-path",
     observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "heading-empty-paragraph-backspace",
+    checkpoint: "undo",
+    aspect: "source",
+    observed: observedValues[14],
+    reason: "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
+  },
+  {
+    caseId: "heading-empty-paragraph-backspace",
+    checkpoint: "undo",
+    aspect: "selection",
+    observed: observedValues[15],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+  },
+  {
+    caseId: "heading-empty-paragraph-backspace",
+    checkpoint: "undo",
+    aspect: "visible-line-roles",
+    observed: observedValues[16],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+  },
+  {
+    caseId: "heading-empty-paragraph-backspace",
+    checkpoint: "undo",
+    aspect: "physical-geometry",
+    observed: observedValues[17],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-marker-commits-after-text",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[10],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[18],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-marker-commits-after-selection-move",
     checkpoint: "primary",
     aspect: "physical-geometry",
-    observed: observedValues[11],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[19],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-marker-commits-after-selection-move",
     checkpoint: "repeat",
     aspect: "physical-geometry",
-    observed: observedValues[11],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[19],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-marker-commits-after-selection-move",
     checkpoint: "undo",
     aspect: "physical-geometry",
-    observed: observedValues[11],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[19],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "nested-blockquote-marker-commits-after-text",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[12],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[20],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-marker-commits-after-enter",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[10],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "blockquote-marker-commits-after-enter",
-    checkpoint: "primary",
-    aspect: "visible-line-roles",
-    observed: observedValues[13],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    observed: observedValues[18],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-marker-commits-after-enter",
     checkpoint: "repeat",
     aspect: "semantic-path",
     observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-marker-commits-after-enter",
     checkpoint: "repeat",
     aspect: "source",
-    observed: observedValues[14],
-    reason:
-      "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
-  },
-  {
-    caseId: "blockquote-marker-commits-after-enter",
-    checkpoint: "repeat",
-    aspect: "selection",
-    observed: observedValues[15],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
-  },
-  {
-    caseId: "blockquote-marker-commits-after-enter",
-    checkpoint: "repeat",
-    aspect: "visible-line-roles",
-    observed: observedValues[16],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
-  },
-  {
-    caseId: "blockquote-marker-commits-after-enter",
-    checkpoint: "repeat",
-    aspect: "physical-geometry",
-    observed: observedValues[17],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "blockquote-marker-commits-after-enter",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[10],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "nested-blockquote-marker-commits-after-enter",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[12],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "nested-blockquote-marker-commits-after-enter",
-    checkpoint: "primary",
-    aspect: "visible-line-roles",
-    observed: observedValues[13],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
-  },
-  {
-    caseId: "nested-blockquote-marker-commits-after-enter",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
-    observed: observedValues[10],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "nested-blockquote-marker-commits-after-enter",
-    checkpoint: "repeat",
-    aspect: "source",
-    observed: observedValues[18],
-    reason:
-      "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
-  },
-  {
-    caseId: "nested-blockquote-marker-commits-after-enter",
-    checkpoint: "repeat",
-    aspect: "selection",
-    observed: observedValues[19],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
-  },
-  {
-    caseId: "nested-blockquote-marker-commits-after-enter",
-    checkpoint: "repeat",
-    aspect: "visible-line-roles",
-    observed: observedValues[20],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
-  },
-  {
-    caseId: "nested-blockquote-marker-commits-after-enter",
-    checkpoint: "repeat",
-    aspect: "physical-geometry",
     observed: observedValues[21],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
+  },
+  {
+    caseId: "blockquote-marker-commits-after-enter",
+    checkpoint: "repeat",
+    aspect: "selection",
+    observed: observedValues[22],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+  },
+  {
+    caseId: "blockquote-marker-commits-after-enter",
+    checkpoint: "repeat",
+    aspect: "visible-line-roles",
+    observed: observedValues[23],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+  },
+  {
+    caseId: "blockquote-marker-commits-after-enter",
+    checkpoint: "repeat",
+    aspect: "physical-geometry",
+    observed: observedValues[24],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "blockquote-marker-commits-after-enter",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[18],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "nested-blockquote-marker-commits-after-enter",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[12],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "blockquote-bare-separator-rendering",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[22],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[20],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "blockquote-bare-separator-rendering",
-    checkpoint: "primary",
-    aspect: "physical-geometry",
-    observed: observedValues[23],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "blockquote-bare-separator-rendering",
+    caseId: "nested-blockquote-marker-commits-after-enter",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[22],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[18],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "blockquote-bare-separator-rendering",
+    caseId: "nested-blockquote-marker-commits-after-enter",
     checkpoint: "repeat",
-    aspect: "physical-geometry",
-    observed: observedValues[23],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    aspect: "source",
+    observed: observedValues[25],
+    reason: "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
   },
   {
-    caseId: "blockquote-bare-separator-rendering",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[22],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "blockquote-bare-separator-rendering",
-    checkpoint: "undo",
-    aspect: "physical-geometry",
-    observed: observedValues[23],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "blockquote-structural-separator-navigation",
-    checkpoint: "primary",
-    aspect: "physical-geometry",
-    observed: observedValues[24],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "blockquote-structural-separator-navigation",
+    caseId: "nested-blockquote-marker-commits-after-enter",
     checkpoint: "repeat",
     aspect: "selection",
-    observed: observedValues[25],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
-  },
-  {
-    caseId: "blockquote-structural-separator-navigation",
-    checkpoint: "repeat",
-    aspect: "physical-geometry",
-    observed: observedValues[24],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "blockquote-structural-separator-navigation",
-    checkpoint: "undo",
-    aspect: "physical-geometry",
-    observed: observedValues[24],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "blockquote-trailing-empty-separator-backspace",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[10],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "blockquote-trailing-empty-separator-backspace",
-    checkpoint: "undo",
-    aspect: "physical-geometry",
     observed: observedValues[26],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
-    caseId: "blockquote-list-trailing-empty-backspace",
-    checkpoint: "primary",
-    aspect: "semantic-path",
+    caseId: "nested-blockquote-marker-commits-after-enter",
+    checkpoint: "repeat",
+    aspect: "visible-line-roles",
     observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
-    caseId: "blockquote-list-trailing-empty-backspace",
-    checkpoint: "primary",
+    caseId: "nested-blockquote-marker-commits-after-enter",
+    checkpoint: "repeat",
     aspect: "physical-geometry",
     observed: observedValues[28],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "blockquote-list-trailing-empty-backspace",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "blockquote-list-trailing-empty-backspace",
-    checkpoint: "repeat",
-    aspect: "physical-geometry",
-    observed: observedValues[29],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "blockquote-list-trailing-empty-backspace",
+    caseId: "nested-blockquote-marker-commits-after-enter",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[10],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[20],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "blockquote-list-trailing-empty-backspace",
+    caseId: "blockquote-bare-separator-rendering",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[29],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "blockquote-bare-separator-rendering",
+    checkpoint: "primary",
+    aspect: "physical-geometry",
+    observed: observedValues[30],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "blockquote-bare-separator-rendering",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[29],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "blockquote-bare-separator-rendering",
+    checkpoint: "repeat",
+    aspect: "physical-geometry",
+    observed: observedValues[30],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "blockquote-bare-separator-rendering",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[29],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "blockquote-bare-separator-rendering",
     checkpoint: "undo",
     aspect: "physical-geometry",
     observed: observedValues[30],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "nested-quote-list-repeated-enter-exit",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[31],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "nested-quote-list-repeated-enter-exit",
+    caseId: "blockquote-structural-separator-navigation",
     checkpoint: "primary",
     aspect: "physical-geometry",
+    observed: observedValues[31],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "blockquote-structural-separator-navigation",
+    checkpoint: "repeat",
+    aspect: "selection",
     observed: observedValues[32],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
-    caseId: "nested-quote-list-repeated-enter-exit",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
-    observed: observedValues[12],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "nested-quote-list-repeated-enter-exit",
-    checkpoint: "repeat",
-    aspect: "visible-line-roles",
-    observed: observedValues[33],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
-  },
-  {
-    caseId: "nested-quote-list-repeated-enter-exit",
+    caseId: "blockquote-structural-separator-navigation",
     checkpoint: "repeat",
     aspect: "physical-geometry",
-    observed: observedValues[34],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[31],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "nested-quote-list-repeated-enter-exit",
+    caseId: "blockquote-structural-separator-navigation",
+    checkpoint: "undo",
+    aspect: "physical-geometry",
+    observed: observedValues[31],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "blockquote-trailing-empty-separator-backspace",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[31],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[18],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "nested-quote-list-repeated-enter-exit",
+    caseId: "blockquote-trailing-empty-separator-backspace",
     checkpoint: "undo",
+    aspect: "physical-geometry",
+    observed: observedValues[33],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "blockquote-list-trailing-empty-backspace",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "blockquote-list-trailing-empty-backspace",
+    checkpoint: "primary",
     aspect: "physical-geometry",
     observed: observedValues[35],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "blockquote-bare-list-marker-tab",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[31],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "blockquote-bare-list-marker-tab",
+    caseId: "blockquote-list-trailing-empty-backspace",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[31],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "blockquote-bare-list-marker-tab",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[31],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "blockquote-bare-list-marker-tab",
-    checkpoint: "undo",
+    caseId: "blockquote-list-trailing-empty-backspace",
+    checkpoint: "repeat",
     aspect: "physical-geometry",
     observed: observedValues[36],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "blockquote-padded-empty-list-item-tab",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "blockquote-padded-empty-list-item-tab",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "blockquote-padded-empty-list-item-tab",
+    caseId: "blockquote-list-trailing-empty-backspace",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[18],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "blockquote-list-tab-after-residual-separator",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "blockquote-list-tab-after-residual-separator",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "blockquote-list-tab-after-residual-separator",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "blockquote-list-tab-after-residual-separator",
+    caseId: "blockquote-list-trailing-empty-backspace",
     checkpoint: "undo",
     aspect: "physical-geometry",
     observed: observedValues[37],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "nested-quote-list-repeated-enter-exit",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[38],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "nested-quote-list-repeated-enter-exit",
+    checkpoint: "primary",
+    aspect: "physical-geometry",
+    observed: observedValues[39],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "nested-quote-list-repeated-enter-exit",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[20],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "nested-quote-list-repeated-enter-exit",
+    checkpoint: "repeat",
+    aspect: "physical-geometry",
+    observed: observedValues[40],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "nested-quote-list-repeated-enter-exit",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[38],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "nested-quote-list-repeated-enter-exit",
+    checkpoint: "undo",
+    aspect: "physical-geometry",
+    observed: observedValues[41],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "blockquote-bare-list-marker-tab",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[38],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "blockquote-bare-list-marker-tab",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[38],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "blockquote-bare-list-marker-tab",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[38],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "blockquote-bare-list-marker-tab",
+    checkpoint: "undo",
+    aspect: "physical-geometry",
+    observed: observedValues[42],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "blockquote-padded-empty-list-item-tab",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "blockquote-padded-empty-list-item-tab",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "blockquote-padded-empty-list-item-tab",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "blockquote-list-tab-after-residual-separator",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "blockquote-list-tab-after-residual-separator",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "blockquote-list-tab-after-residual-separator",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "blockquote-list-tab-after-residual-separator",
+    checkpoint: "undo",
+    aspect: "physical-geometry",
+    observed: observedValues[43],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-list-exit-trailing-separator-cleanup",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[10],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[18],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-list-exit-trailing-separator-cleanup",
     checkpoint: "primary",
     aspect: "physical-geometry",
-    observed: observedValues[38],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[44],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-list-exit-trailing-separator-cleanup",
     checkpoint: "repeat",
     aspect: "semantic-path",
     observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-list-exit-trailing-separator-cleanup",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-inner-blocks-rendering-enter",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[10],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[18],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-inner-blocks-rendering-enter",
     checkpoint: "primary",
     aspect: "physical-geometry",
-    observed: observedValues[39],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[45],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-inner-blocks-rendering-enter",
     checkpoint: "repeat",
     aspect: "semantic-path",
     observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-code-fence-input",
     checkpoint: "repeat",
     aspect: "source",
-    observed: observedValues[40],
-    reason:
-      "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
+    observed: observedValues[46],
+    reason: "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-code-fence-input",
     checkpoint: "repeat",
     aspect: "selection",
-    observed: observedValues[3],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    observed: observedValues[7],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-code-fence-input",
     checkpoint: "repeat",
     aspect: "visible-line-roles",
-    observed: observedValues[41],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    observed: observedValues[47],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-code-fence-input",
     checkpoint: "repeat",
     aspect: "physical-geometry",
-    observed: observedValues[42],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[48],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-table-rendering",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[10],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[18],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-table-rendering",
     checkpoint: "primary",
     aspect: "physical-geometry",
-    observed: observedValues[43],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[49],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-table-rendering",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[10],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[18],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-table-rendering",
     checkpoint: "repeat",
     aspect: "physical-geometry",
-    observed: observedValues[43],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[49],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-table-rendering",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[10],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[18],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-table-rendering",
     checkpoint: "undo",
     aspect: "physical-geometry",
-    observed: observedValues[43],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[49],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "deep-ordered-list-repeated-enter-exit",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "deep-ordered-list-repeated-enter-exit",
     checkpoint: "primary",
     aspect: "physical-geometry",
-    observed: observedValues[45],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[51],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "deep-ordered-list-repeated-enter-exit",
     checkpoint: "repeat",
     aspect: "semantic-path",
     observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "deep-ordered-list-repeated-enter-exit",
     checkpoint: "repeat",
     aspect: "physical-geometry",
-    observed: observedValues[46],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[52],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "deep-ordered-list-repeated-enter-exit",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "deep-ordered-list-repeated-enter-exit",
     checkpoint: "undo",
     aspect: "physical-geometry",
-    observed: observedValues[47],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[53],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "top-level-list-item-enter-body-upgrade",
     checkpoint: "repeat",
     aspect: "semantic-path",
     observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "top-level-list-item-enter-body-upgrade",
     checkpoint: "repeat",
     aspect: "selection",
-    observed: observedValues[48],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    observed: observedValues[54],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
     caseId: "top-level-list-item-enter-body-upgrade",
     checkpoint: "repeat",
     aspect: "physical-geometry",
-    observed: observedValues[49],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[55],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "top-level-list-item-enter-body-upgrade",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "list-item-start-backspace",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "nested-list-item-tab",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "nested-list-item-tab",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "nested-list-item-tab",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-arrow-down",
     checkpoint: "primary",
     aspect: "selection",
-    observed: observedValues[50],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    observed: observedValues[56],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-arrow-down",
     checkpoint: "primary",
     aspect: "physical-geometry",
-    observed: observedValues[51],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[57],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-arrow-down",
     checkpoint: "repeat",
     aspect: "physical-geometry",
-    observed: observedValues[51],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[57],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-arrow-down",
     checkpoint: "undo",
     aspect: "selection",
-    observed: observedValues[50],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    observed: observedValues[56],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-arrow-down",
     checkpoint: "undo",
     aspect: "physical-geometry",
-    observed: observedValues[51],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[57],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "nested-blockquote-arrow-up",
     checkpoint: "repeat",
     aspect: "selection",
-    observed: observedValues[19],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    observed: observedValues[26],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-list-shift-tab",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-list-shift-tab",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-list-shift-tab",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-list-code-fence-selection",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-list-code-fence-selection",
     checkpoint: "primary",
     aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-list-code-fence-selection",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "blockquote-list-code-fence-selection",
-    checkpoint: "repeat",
-    aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
-  },
-  {
-    caseId: "blockquote-list-code-fence-selection",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "blockquote-list-code-fence-selection",
-    checkpoint: "undo",
-    aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
-  },
-  {
-    caseId: "list-blockquote-enter",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "list-blockquote-enter",
-    checkpoint: "primary",
-    aspect: "source",
-    observed: observedValues[53],
-    reason:
-      "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
-  },
-  {
-    caseId: "list-blockquote-enter",
-    checkpoint: "primary",
-    aspect: "selection",
-    observed: observedValues[54],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
-  },
-  {
-    caseId: "list-blockquote-enter",
-    checkpoint: "primary",
-    aspect: "physical-geometry",
-    observed: observedValues[55],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "list-blockquote-enter",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
-    observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "list-blockquote-enter",
-    checkpoint: "repeat",
-    aspect: "source",
-    observed: observedValues[56],
-    reason:
-      "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
-  },
-  {
-    caseId: "list-blockquote-enter",
-    checkpoint: "repeat",
-    aspect: "selection",
-    observed: observedValues[57],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
-  },
-  {
-    caseId: "list-blockquote-enter",
     checkpoint: "repeat",
     aspect: "visible-line-roles",
     observed: observedValues[58],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+  },
+  {
+    caseId: "blockquote-list-code-fence-selection",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "blockquote-list-code-fence-selection",
+    checkpoint: "undo",
+    aspect: "visible-line-roles",
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
     caseId: "list-blockquote-enter",
-    checkpoint: "repeat",
-    aspect: "physical-geometry",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "list-blockquote-enter",
+    checkpoint: "primary",
+    aspect: "source",
     observed: observedValues[59],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
   },
   {
     caseId: "list-blockquote-enter",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "list-blockquote-enter",
-    checkpoint: "undo",
-    aspect: "physical-geometry",
+    checkpoint: "primary",
+    aspect: "selection",
     observed: observedValues[60],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+  },
+  {
+    caseId: "list-blockquote-enter",
+    checkpoint: "primary",
+    aspect: "physical-geometry",
+    observed: observedValues[61],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "list-blockquote-enter",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[0],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "list-blockquote-enter",
+    checkpoint: "repeat",
+    aspect: "source",
+    observed: observedValues[62],
+    reason: "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
+  },
+  {
+    caseId: "list-blockquote-enter",
+    checkpoint: "repeat",
+    aspect: "selection",
+    observed: observedValues[63],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+  },
+  {
+    caseId: "list-blockquote-enter",
+    checkpoint: "repeat",
+    aspect: "visible-line-roles",
+    observed: observedValues[64],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+  },
+  {
+    caseId: "list-blockquote-enter",
+    checkpoint: "repeat",
+    aspect: "physical-geometry",
+    observed: observedValues[65],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "list-blockquote-enter",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "list-blockquote-enter",
+    checkpoint: "undo",
+    aspect: "physical-geometry",
+    observed: observedValues[66],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "list-blockquote-list-tab",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "list-blockquote-list-tab",
     checkpoint: "primary",
     aspect: "source",
-    observed: observedValues[61],
-    reason:
-      "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
+    observed: observedValues[67],
+    reason: "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
   },
   {
     caseId: "list-blockquote-list-tab",
     checkpoint: "primary",
     aspect: "selection",
-    observed: observedValues[62],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    observed: observedValues[68],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
     caseId: "list-blockquote-list-tab",
     checkpoint: "primary",
     aspect: "physical-geometry",
-    observed: observedValues[63],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[69],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "list-blockquote-list-tab",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "list-blockquote-list-tab",
     checkpoint: "repeat",
     aspect: "source",
-    observed: observedValues[61],
-    reason:
-      "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
+    observed: observedValues[67],
+    reason: "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
   },
   {
     caseId: "list-blockquote-list-tab",
     checkpoint: "repeat",
     aspect: "selection",
-    observed: observedValues[62],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    observed: observedValues[68],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
     caseId: "list-blockquote-list-tab",
     checkpoint: "repeat",
     aspect: "physical-geometry",
-    observed: observedValues[63],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[69],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "list-blockquote-list-tab",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "list-blockquote-list-tab",
     checkpoint: "undo",
     aspect: "physical-geometry",
-    observed: observedValues[63],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[69],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "nested-quote-list-block-math-selection",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[31],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[38],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "nested-quote-list-block-math-selection",
     checkpoint: "primary",
     aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
     caseId: "nested-quote-list-block-math-selection",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[31],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[38],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "nested-quote-list-block-math-selection",
     checkpoint: "repeat",
     aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
     caseId: "nested-quote-list-block-math-selection",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[31],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[38],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "nested-quote-list-block-math-selection",
     checkpoint: "undo",
     aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-enter-path-1",
     checkpoint: "repeat",
     aspect: "semantic-path",
     observed: observedValues[0],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-enter-path-1",
     checkpoint: "repeat",
     aspect: "selection",
-    observed: observedValues[64],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-1",
-    checkpoint: "repeat",
-    aspect: "physical-geometry",
-    observed: observedValues[65],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-2",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-2",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-3",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-3",
-    checkpoint: "primary",
-    aspect: "source",
-    observed: observedValues[66],
-    reason:
-      "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-3",
-    checkpoint: "primary",
-    aspect: "selection",
-    observed: observedValues[67],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-3",
-    checkpoint: "primary",
-    aspect: "physical-geometry",
-    observed: observedValues[68],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-3",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
-    observed: observedValues[22],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-3",
-    checkpoint: "repeat",
-    aspect: "source",
-    observed: observedValues[69],
-    reason:
-      "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-3",
-    checkpoint: "repeat",
-    aspect: "selection",
-    observed: observedValues[3],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-3",
-    checkpoint: "repeat",
-    aspect: "visible-line-roles",
     observed: observedValues[70],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-enter-path-3",
+    caseId: "matrix-enter-path-1",
     checkpoint: "repeat",
     aspect: "physical-geometry",
     observed: observedValues[71],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-enter-path-3",
+    caseId: "matrix-enter-path-2",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-2",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-enter-path-3",
-    checkpoint: "undo",
-    aspect: "physical-geometry",
-    observed: observedValues[72],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-enter-path-4",
+    caseId: "matrix-enter-path-3",
     checkpoint: "primary",
     aspect: "source",
-    observed: observedValues[73],
-    reason:
-      "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
+    observed: observedValues[72],
+    reason: "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-enter-path-4",
+    caseId: "matrix-enter-path-3",
     checkpoint: "primary",
     aspect: "selection",
-    observed: observedValues[67],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    observed: observedValues[73],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-enter-path-4",
+    caseId: "matrix-enter-path-3",
     checkpoint: "primary",
     aspect: "physical-geometry",
     observed: observedValues[74],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-enter-path-4",
+    caseId: "matrix-enter-path-3",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[29],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-3",
     checkpoint: "repeat",
     aspect: "source",
     observed: observedValues[75],
-    reason:
-      "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-enter-path-4",
+    caseId: "matrix-enter-path-3",
     checkpoint: "repeat",
     aspect: "selection",
-    observed: observedValues[48],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    observed: observedValues[7],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-enter-path-4",
+    caseId: "matrix-enter-path-3",
     checkpoint: "repeat",
     aspect: "visible-line-roles",
     observed: observedValues[76],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-3",
+    checkpoint: "repeat",
+    aspect: "physical-geometry",
+    observed: observedValues[77],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-3",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-3",
+    checkpoint: "undo",
+    aspect: "physical-geometry",
+    observed: observedValues[78],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-4",
+    checkpoint: "primary",
+    aspect: "source",
+    observed: observedValues[79],
+    reason: "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-4",
+    checkpoint: "primary",
+    aspect: "selection",
+    observed: observedValues[73],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-4",
+    checkpoint: "primary",
+    aspect: "physical-geometry",
+    observed: observedValues[80],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-4",
+    checkpoint: "repeat",
+    aspect: "source",
+    observed: observedValues[81],
+    reason: "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-4",
+    checkpoint: "repeat",
+    aspect: "selection",
+    observed: observedValues[54],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-enter-path-4",
     checkpoint: "repeat",
     aspect: "physical-geometry",
-    observed: observedValues[77],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-5",
-    checkpoint: "primary",
-    aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-5",
-    checkpoint: "repeat",
-    aspect: "visible-line-roles",
-    observed: observedValues[78],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-6",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-6",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-6",
-    checkpoint: "repeat",
-    aspect: "source",
-    observed: observedValues[79],
-    reason:
-      "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-6",
-    checkpoint: "repeat",
-    aspect: "selection",
-    observed: observedValues[67],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-6",
-    checkpoint: "repeat",
-    aspect: "visible-line-roles",
-    observed: observedValues[80],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-6",
-    checkpoint: "repeat",
-    aspect: "physical-geometry",
-    observed: observedValues[81],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-6",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-7",
-    checkpoint: "primary",
-    aspect: "semantic-path",
     observed: observedValues[82],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-enter-path-7",
+    caseId: "matrix-enter-path-6",
     checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-6",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-6",
+    checkpoint: "repeat",
     aspect: "source",
     observed: observedValues[83],
-    reason:
-      "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-enter-path-7",
-    checkpoint: "primary",
+    caseId: "matrix-enter-path-6",
+    checkpoint: "repeat",
+    aspect: "selection",
+    observed: observedValues[73],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-6",
+    checkpoint: "repeat",
     aspect: "visible-line-roles",
     observed: observedValues[84],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-enter-path-7",
-    checkpoint: "primary",
+    caseId: "matrix-enter-path-6",
+    checkpoint: "repeat",
     aspect: "physical-geometry",
     observed: observedValues[85],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-enter-path-7",
-    checkpoint: "repeat",
+    caseId: "matrix-enter-path-6",
+    checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[82],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-enter-path-7",
-    checkpoint: "repeat",
-    aspect: "source",
+    checkpoint: "primary",
+    aspect: "semantic-path",
     observed: observedValues[86],
-    reason:
-      "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-enter-path-7",
-    checkpoint: "repeat",
-    aspect: "visible-line-roles",
+    checkpoint: "primary",
+    aspect: "source",
     observed: observedValues[87],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-enter-path-7",
-    checkpoint: "repeat",
-    aspect: "physical-geometry",
+    checkpoint: "primary",
+    aspect: "visible-line-roles",
     observed: observedValues[88],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-enter-path-7",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-7",
-    checkpoint: "undo",
-    aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-8",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-8",
-    checkpoint: "primary",
-    aspect: "source",
-    observed: observedValues[89],
-    reason:
-      "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-8",
-    checkpoint: "primary",
-    aspect: "selection",
-    observed: observedValues[67],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-8",
-    checkpoint: "primary",
-    aspect: "visible-line-roles",
-    observed: observedValues[80],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-8",
     checkpoint: "primary",
     aspect: "physical-geometry",
-    observed: observedValues[90],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[89],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-enter-path-8",
+    caseId: "matrix-enter-path-7",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[22],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[86],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-enter-path-8",
+    caseId: "matrix-enter-path-7",
     checkpoint: "repeat",
     aspect: "source",
-    observed: observedValues[91],
-    reason:
-      "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
+    observed: observedValues[90],
+    reason: "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-enter-path-8",
-    checkpoint: "repeat",
-    aspect: "selection",
-    observed: observedValues[3],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-8",
+    caseId: "matrix-enter-path-7",
     checkpoint: "repeat",
     aspect: "visible-line-roles",
-    observed: observedValues[70],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    observed: observedValues[91],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-enter-path-8",
+    caseId: "matrix-enter-path-7",
     checkpoint: "repeat",
     aspect: "physical-geometry",
     observed: observedValues[92],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-enter-path-8",
+    caseId: "matrix-enter-path-7",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-7",
+    checkpoint: "undo",
+    aspect: "visible-line-roles",
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-enter-path-8",
-    checkpoint: "undo",
-    aspect: "physical-geometry",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-8",
+    checkpoint: "primary",
+    aspect: "source",
     observed: observedValues[93],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-enter-path-9",
+    caseId: "matrix-enter-path-8",
     checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    aspect: "selection",
+    observed: observedValues[73],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-enter-path-9",
+    caseId: "matrix-enter-path-8",
     checkpoint: "primary",
-    aspect: "source",
+    aspect: "visible-line-roles",
+    observed: observedValues[84],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-8",
+    checkpoint: "primary",
+    aspect: "physical-geometry",
     observed: observedValues[94],
-    reason:
-      "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-enter-path-9",
-    checkpoint: "primary",
-    aspect: "selection",
-    observed: observedValues[57],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-9",
-    checkpoint: "primary",
-    aspect: "physical-geometry",
-    observed: observedValues[95],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-9",
+    caseId: "matrix-enter-path-8",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[22],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[29],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-enter-path-9",
+    caseId: "matrix-enter-path-8",
     checkpoint: "repeat",
     aspect: "source",
-    observed: observedValues[96],
-    reason:
-      "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
+    observed: observedValues[95],
+    reason: "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-enter-path-9",
+    caseId: "matrix-enter-path-8",
     checkpoint: "repeat",
     aspect: "selection",
-    observed: observedValues[97],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    observed: observedValues[7],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-enter-path-9",
+    caseId: "matrix-enter-path-8",
+    checkpoint: "repeat",
+    aspect: "visible-line-roles",
+    observed: observedValues[76],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-8",
     checkpoint: "repeat",
     aspect: "physical-geometry",
-    observed: observedValues[98],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[96],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-enter-path-9",
+    caseId: "matrix-enter-path-8",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-8",
+    checkpoint: "undo",
+    aspect: "physical-geometry",
+    observed: observedValues[97],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-enter-path-9",
-    checkpoint: "undo",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-9",
+    checkpoint: "primary",
+    aspect: "source",
+    observed: observedValues[98],
+    reason: "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-9",
+    checkpoint: "primary",
+    aspect: "selection",
+    observed: observedValues[63],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-9",
+    checkpoint: "primary",
     aspect: "physical-geometry",
     observed: observedValues[99],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-enter-path-10",
-    checkpoint: "primary",
+    caseId: "matrix-enter-path-9",
+    checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[100],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[29],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-enter-path-10",
-    checkpoint: "primary",
+    caseId: "matrix-enter-path-9",
+    checkpoint: "repeat",
     aspect: "source",
-    observed: observedValues[101],
-    reason:
-      "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-10",
-    checkpoint: "primary",
-    aspect: "selection",
-    observed: observedValues[102],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-10",
-    checkpoint: "primary",
-    aspect: "visible-line-roles",
-    observed: observedValues[103],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-10",
-    checkpoint: "primary",
-    aspect: "physical-geometry",
-    observed: observedValues[104],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-10",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
     observed: observedValues[100],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-9",
+    checkpoint: "repeat",
+    aspect: "selection",
+    observed: observedValues[101],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-9",
+    checkpoint: "repeat",
+    aspect: "physical-geometry",
+    observed: observedValues[102],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-9",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-9",
+    checkpoint: "undo",
+    aspect: "physical-geometry",
+    observed: observedValues[103],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-enter-path-10",
-    checkpoint: "repeat",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[104],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-10",
+    checkpoint: "primary",
     aspect: "source",
     observed: observedValues[105],
-    reason:
-      "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-10",
+    checkpoint: "primary",
+    aspect: "selection",
+    observed: observedValues[106],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-10",
+    checkpoint: "primary",
+    aspect: "visible-line-roles",
+    observed: observedValues[107],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-10",
+    checkpoint: "primary",
+    aspect: "physical-geometry",
+    observed: observedValues[108],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-10",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[104],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-enter-path-10",
+    checkpoint: "repeat",
+    aspect: "source",
+    observed: observedValues[109],
+    reason: "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-enter-path-10",
     checkpoint: "repeat",
     aspect: "selection",
-    observed: observedValues[106],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-10",
-    checkpoint: "repeat",
-    aspect: "visible-line-roles",
-    observed: observedValues[107],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-10",
-    checkpoint: "repeat",
-    aspect: "physical-geometry",
-    observed: observedValues[108],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-10",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[31],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-enter-path-10",
-    checkpoint: "undo",
-    aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-backspace-path-2",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-backspace-path-2",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-backspace-path-2",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-backspace-path-3",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-backspace-path-3",
-    checkpoint: "primary",
-    aspect: "physical-geometry",
-    observed: observedValues[109],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-backspace-path-3",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-backspace-path-3",
-    checkpoint: "repeat",
-    aspect: "physical-geometry",
     observed: observedValues[110],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-backspace-path-3",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-backspace-path-3",
-    checkpoint: "undo",
-    aspect: "physical-geometry",
-    observed: observedValues[72],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-backspace-path-6",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-backspace-path-6",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-backspace-path-6",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-backspace-path-7",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-backspace-path-7",
-    checkpoint: "primary",
-    aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-backspace-path-7",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-backspace-path-7",
+    caseId: "matrix-enter-path-10",
     checkpoint: "repeat",
     aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-backspace-path-7",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-backspace-path-7",
-    checkpoint: "undo",
-    aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-backspace-path-8",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-backspace-path-8",
-    checkpoint: "primary",
-    aspect: "physical-geometry",
     observed: observedValues[111],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-backspace-path-8",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-backspace-path-8",
+    caseId: "matrix-enter-path-10",
     checkpoint: "repeat",
     aspect: "physical-geometry",
     observed: observedValues[112],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-backspace-path-8",
+    caseId: "matrix-enter-path-10",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[38],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-backspace-path-8",
+    caseId: "matrix-enter-path-10",
     checkpoint: "undo",
-    aspect: "physical-geometry",
-    observed: observedValues[93],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    aspect: "visible-line-roles",
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-backspace-path-9",
+    caseId: "matrix-backspace-path-2",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-backspace-path-9",
+    caseId: "matrix-backspace-path-2",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-backspace-path-2",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-backspace-path-3",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-backspace-path-3",
     checkpoint: "primary",
     aspect: "physical-geometry",
     observed: observedValues[113],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-backspace-path-9",
+    caseId: "matrix-backspace-path-3",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-backspace-path-9",
+    caseId: "matrix-backspace-path-3",
     checkpoint: "repeat",
     aspect: "physical-geometry",
     observed: observedValues[114],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-backspace-path-3",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-backspace-path-3",
+    checkpoint: "undo",
+    aspect: "physical-geometry",
+    observed: observedValues[78],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-backspace-path-6",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-backspace-path-6",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-backspace-path-6",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-backspace-path-7",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-backspace-path-7",
+    checkpoint: "primary",
+    aspect: "visible-line-roles",
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-backspace-path-7",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-backspace-path-7",
+    checkpoint: "repeat",
+    aspect: "visible-line-roles",
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-backspace-path-7",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-backspace-path-7",
+    checkpoint: "undo",
+    aspect: "visible-line-roles",
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-backspace-path-8",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-backspace-path-8",
+    checkpoint: "primary",
+    aspect: "physical-geometry",
+    observed: observedValues[115],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-backspace-path-8",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-backspace-path-8",
+    checkpoint: "repeat",
+    aspect: "physical-geometry",
+    observed: observedValues[116],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-backspace-path-8",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-backspace-path-8",
+    checkpoint: "undo",
+    aspect: "physical-geometry",
+    observed: observedValues[97],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-backspace-path-9",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-backspace-path-9",
+    checkpoint: "primary",
+    aspect: "physical-geometry",
+    observed: observedValues[117],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-backspace-path-9",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-backspace-path-9",
+    checkpoint: "repeat",
+    aspect: "physical-geometry",
+    observed: observedValues[118],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-backspace-path-9",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-backspace-path-9",
     checkpoint: "undo",
     aspect: "physical-geometry",
-    observed: observedValues[99],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[103],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-backspace-path-10",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[31],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[38],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-backspace-path-10",
     checkpoint: "primary",
     aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-backspace-path-10",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[31],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[38],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-backspace-path-10",
     checkpoint: "repeat",
     aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-backspace-path-10",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[31],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[38],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-backspace-path-10",
     checkpoint: "undo",
     aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-2",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-2",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-2",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-3",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-3",
     checkpoint: "primary",
     aspect: "physical-geometry",
-    observed: observedValues[72],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[78],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-3",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-3",
     checkpoint: "repeat",
     aspect: "physical-geometry",
-    observed: observedValues[72],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[78],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-3",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-3",
     checkpoint: "undo",
     aspect: "physical-geometry",
-    observed: observedValues[72],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[78],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-6",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-6",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-6",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-7",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-7",
     checkpoint: "primary",
     aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-7",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-7",
     checkpoint: "repeat",
     aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-7",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-7",
     checkpoint: "undo",
     aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-8",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-8",
     checkpoint: "primary",
     aspect: "physical-geometry",
-    observed: observedValues[93],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[97],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-8",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-8",
     checkpoint: "repeat",
     aspect: "physical-geometry",
-    observed: observedValues[93],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[97],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-8",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-8",
     checkpoint: "undo",
     aspect: "physical-geometry",
-    observed: observedValues[93],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[97],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-9",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-9",
     checkpoint: "primary",
     aspect: "physical-geometry",
-    observed: observedValues[99],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[103],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-9",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-9",
     checkpoint: "repeat",
     aspect: "physical-geometry",
-    observed: observedValues[99],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[103],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-9",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-9",
     checkpoint: "undo",
     aspect: "physical-geometry",
-    observed: observedValues[99],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[103],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-10",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[31],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[38],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-10",
     checkpoint: "primary",
     aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-10",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[31],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[38],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-10",
     checkpoint: "repeat",
     aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-10",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[31],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[38],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-tab-path-10",
     checkpoint: "undo",
     aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-shift-tab-path-2",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-2",
-    checkpoint: "primary",
-    aspect: "source",
-    observed: observedValues[115],
-    reason:
-      "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-2",
-    checkpoint: "primary",
-    aspect: "selection",
-    observed: observedValues[116],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-2",
-    checkpoint: "primary",
-    aspect: "physical-geometry",
-    observed: observedValues[117],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-shift-tab-path-2",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-2",
-    checkpoint: "repeat",
-    aspect: "source",
-    observed: observedValues[115],
-    reason:
-      "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-2",
-    checkpoint: "repeat",
-    aspect: "selection",
-    observed: observedValues[116],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-2",
-    checkpoint: "repeat",
-    aspect: "physical-geometry",
-    observed: observedValues[117],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-shift-tab-path-2",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-shift-tab-path-3",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-shift-tab-path-3",
-    checkpoint: "primary",
-    aspect: "source",
-    observed: observedValues[118],
-    reason:
-      "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-3",
-    checkpoint: "primary",
-    aspect: "selection",
-    observed: observedValues[67],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-3",
-    checkpoint: "primary",
-    aspect: "physical-geometry",
-    observed: observedValues[72],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-3",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-3",
-    checkpoint: "repeat",
-    aspect: "source",
-    observed: observedValues[118],
-    reason:
-      "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-3",
-    checkpoint: "repeat",
-    aspect: "selection",
-    observed: observedValues[67],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-3",
-    checkpoint: "repeat",
-    aspect: "physical-geometry",
-    observed: observedValues[72],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-3",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-3",
-    checkpoint: "undo",
-    aspect: "physical-geometry",
-    observed: observedValues[72],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-6",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-6",
     checkpoint: "primary",
     aspect: "source",
     observed: observedValues[119],
-    reason:
-      "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-shift-tab-path-6",
+    caseId: "matrix-shift-tab-path-3",
     checkpoint: "primary",
     aspect: "selection",
-    observed: observedValues[67],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    observed: observedValues[73],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-shift-tab-path-6",
+    caseId: "matrix-shift-tab-path-3",
     checkpoint: "primary",
     aspect: "physical-geometry",
-    observed: observedValues[120],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[78],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-shift-tab-path-6",
+    caseId: "matrix-shift-tab-path-3",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-shift-tab-path-6",
+    caseId: "matrix-shift-tab-path-3",
     checkpoint: "repeat",
     aspect: "source",
     observed: observedValues[119],
-    reason:
-      "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-shift-tab-path-6",
+    caseId: "matrix-shift-tab-path-3",
     checkpoint: "repeat",
     aspect: "selection",
-    observed: observedValues[67],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    observed: observedValues[73],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-shift-tab-path-3",
+    checkpoint: "repeat",
+    aspect: "physical-geometry",
+    observed: observedValues[78],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-shift-tab-path-3",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-shift-tab-path-3",
+    checkpoint: "undo",
+    aspect: "physical-geometry",
+    observed: observedValues[78],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-shift-tab-path-6",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-shift-tab-path-6",
     checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-shift-tab-path-6",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-shift-tab-path-7",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-shift-tab-path-7",
+    checkpoint: "primary",
+    aspect: "visible-line-roles",
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-shift-tab-path-7",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-shift-tab-path-7",
+    checkpoint: "repeat",
+    aspect: "visible-line-roles",
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-shift-tab-path-7",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-shift-tab-path-7",
+    checkpoint: "undo",
+    aspect: "visible-line-roles",
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-shift-tab-path-8",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-shift-tab-path-8",
+    checkpoint: "primary",
     aspect: "physical-geometry",
+    observed: observedValues[97],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-shift-tab-path-8",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-shift-tab-path-8",
+    checkpoint: "repeat",
+    aspect: "physical-geometry",
+    observed: observedValues[97],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-shift-tab-path-8",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-shift-tab-path-8",
+    checkpoint: "undo",
+    aspect: "physical-geometry",
+    observed: observedValues[97],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-shift-tab-path-9",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-shift-tab-path-9",
+    checkpoint: "primary",
+    aspect: "source",
     observed: observedValues[120],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-6",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-7",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-7",
-    checkpoint: "primary",
-    aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-7",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-7",
-    checkpoint: "repeat",
-    aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-7",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-7",
-    checkpoint: "undo",
-    aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-8",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-8",
-    checkpoint: "primary",
-    aspect: "physical-geometry",
-    observed: observedValues[93],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-8",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-8",
-    checkpoint: "repeat",
-    aspect: "physical-geometry",
-    observed: observedValues[93],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-8",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-8",
-    checkpoint: "undo",
-    aspect: "physical-geometry",
-    observed: observedValues[93],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-9",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-shift-tab-path-9",
-    checkpoint: "primary",
-    aspect: "source",
-    observed: observedValues[121],
-    reason:
-      "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-shift-tab-path-9",
     checkpoint: "primary",
     aspect: "selection",
-    observed: observedValues[57],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    observed: observedValues[63],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-shift-tab-path-9",
     checkpoint: "primary",
     aspect: "physical-geometry",
-    observed: observedValues[99],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[103],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-shift-tab-path-9",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-shift-tab-path-9",
     checkpoint: "repeat",
     aspect: "source",
-    observed: observedValues[121],
-    reason:
-      "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
+    observed: observedValues[120],
+    reason: "RF-001 Electron calibration observed a current source result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-shift-tab-path-9",
     checkpoint: "repeat",
     aspect: "selection",
-    observed: observedValues[57],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    observed: observedValues[63],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-shift-tab-path-9",
     checkpoint: "repeat",
     aspect: "physical-geometry",
-    observed: observedValues[99],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[103],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-shift-tab-path-9",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-shift-tab-path-9",
     checkpoint: "undo",
     aspect: "physical-geometry",
-    observed: observedValues[99],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[103],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-shift-tab-path-10",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[31],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[38],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-shift-tab-path-10",
     checkpoint: "primary",
     aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-shift-tab-path-10",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[31],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[38],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-shift-tab-path-10",
     checkpoint: "repeat",
     aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-shift-tab-path-10",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[31],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[38],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-shift-tab-path-10",
     checkpoint: "undo",
     aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-1",
     checkpoint: "repeat",
     aspect: "selection",
-    observed: observedValues[122],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    observed: observedValues[2],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-2",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-2",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-2",
     checkpoint: "repeat",
     aspect: "selection",
-    observed: observedValues[25],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    observed: observedValues[32],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-2",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-3",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-3",
     checkpoint: "primary",
     aspect: "physical-geometry",
-    observed: observedValues[123],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[121],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-3",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-3",
     checkpoint: "repeat",
     aspect: "selection",
-    observed: observedValues[25],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    observed: observedValues[32],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-3",
     checkpoint: "repeat",
     aspect: "physical-geometry",
-    observed: observedValues[123],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[121],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-3",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-3",
     checkpoint: "undo",
     aspect: "physical-geometry",
-    observed: observedValues[123],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[121],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-4",
     checkpoint: "repeat",
     aspect: "selection",
-    observed: observedValues[25],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    observed: observedValues[32],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-5",
     checkpoint: "repeat",
     aspect: "selection",
-    observed: observedValues[19],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    observed: observedValues[26],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-6",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-6",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-6",
     checkpoint: "repeat",
     aspect: "selection",
-    observed: observedValues[25],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    observed: observedValues[32],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-6",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-7",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-7",
     checkpoint: "primary",
     aspect: "visible-line-roles",
-    observed: observedValues[124],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    observed: observedValues[122],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-7",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-7",
     checkpoint: "repeat",
     aspect: "selection",
-    observed: observedValues[67],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    observed: observedValues[73],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-7",
     checkpoint: "repeat",
     aspect: "visible-line-roles",
-    observed: observedValues[124],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    observed: observedValues[122],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-7",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-7",
     checkpoint: "undo",
     aspect: "visible-line-roles",
-    observed: observedValues[124],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    observed: observedValues[122],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-8",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-8",
     checkpoint: "primary",
     aspect: "physical-geometry",
-    observed: observedValues[125],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[123],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-8",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-8",
     checkpoint: "repeat",
     aspect: "selection",
-    observed: observedValues[25],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    observed: observedValues[32],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-8",
     checkpoint: "repeat",
     aspect: "physical-geometry",
-    observed: observedValues[125],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[123],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-8",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-8",
     checkpoint: "undo",
     aspect: "physical-geometry",
-    observed: observedValues[125],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[123],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-9",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-9",
     checkpoint: "primary",
     aspect: "physical-geometry",
-    observed: observedValues[126],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[124],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-9",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-9",
     checkpoint: "repeat",
     aspect: "selection",
-    observed: observedValues[25],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    observed: observedValues[32],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-9",
     checkpoint: "repeat",
     aspect: "physical-geometry",
-    observed: observedValues[126],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[124],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-9",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-9",
     checkpoint: "undo",
     aspect: "physical-geometry",
-    observed: observedValues[126],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[124],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-10",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[31],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[38],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-10",
     checkpoint: "primary",
     aspect: "visible-line-roles",
-    observed: observedValues[124],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    observed: observedValues[122],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-10",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[31],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[38],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-10",
     checkpoint: "repeat",
     aspect: "selection",
-    observed: observedValues[3],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    observed: observedValues[7],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-10",
     checkpoint: "repeat",
     aspect: "visible-line-roles",
-    observed: observedValues[124],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    observed: observedValues[122],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-10",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[31],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[38],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowup-path-10",
     checkpoint: "undo",
     aspect: "visible-line-roles",
-    observed: observedValues[124],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    observed: observedValues[122],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowdown-path-2",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
     caseId: "matrix-arrowdown-path-2",
+    checkpoint: "primary",
+    aspect: "selection",
+    observed: observedValues[125],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-2",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-2",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-2",
+    checkpoint: "undo",
+    aspect: "selection",
+    observed: observedValues[125],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-3",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-3",
+    checkpoint: "primary",
+    aspect: "selection",
+    observed: observedValues[56],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-3",
+    checkpoint: "primary",
+    aspect: "physical-geometry",
+    observed: observedValues[121],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-3",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-3",
+    checkpoint: "repeat",
+    aspect: "physical-geometry",
+    observed: observedValues[121],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-3",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-3",
+    checkpoint: "undo",
+    aspect: "selection",
+    observed: observedValues[56],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-3",
+    checkpoint: "undo",
+    aspect: "physical-geometry",
+    observed: observedValues[121],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-6",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-6",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-6",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-7",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-7",
+    checkpoint: "primary",
+    aspect: "visible-line-roles",
+    observed: observedValues[122],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-7",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-7",
+    checkpoint: "repeat",
+    aspect: "selection",
+    observed: observedValues[126],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-7",
+    checkpoint: "repeat",
+    aspect: "visible-line-roles",
+    observed: observedValues[122],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-7",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-7",
+    checkpoint: "undo",
+    aspect: "visible-line-roles",
+    observed: observedValues[122],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-8",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-8",
+    checkpoint: "primary",
+    aspect: "selection",
+    observed: observedValues[56],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-8",
+    checkpoint: "primary",
+    aspect: "physical-geometry",
+    observed: observedValues[123],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-8",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-8",
+    checkpoint: "repeat",
+    aspect: "physical-geometry",
+    observed: observedValues[123],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-8",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-8",
+    checkpoint: "undo",
+    aspect: "selection",
+    observed: observedValues[56],
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-8",
+    checkpoint: "undo",
+    aspect: "physical-geometry",
+    observed: observedValues[123],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-9",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-9",
     checkpoint: "primary",
     aspect: "selection",
     observed: observedValues[127],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-arrowdown-path-2",
+    caseId: "matrix-arrowdown-path-9",
+    checkpoint: "primary",
+    aspect: "physical-geometry",
+    observed: observedValues[124],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-9",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-arrowdown-path-2",
+    caseId: "matrix-arrowdown-path-9",
+    checkpoint: "repeat",
+    aspect: "physical-geometry",
+    observed: observedValues[124],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-arrowdown-path-9",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-arrowdown-path-2",
+    caseId: "matrix-arrowdown-path-9",
     checkpoint: "undo",
     aspect: "selection",
     observed: observedValues[127],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-arrowdown-path-3",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-arrowdown-path-3",
-    checkpoint: "primary",
-    aspect: "selection",
-    observed: observedValues[50],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-arrowdown-path-3",
-    checkpoint: "primary",
-    aspect: "physical-geometry",
-    observed: observedValues[123],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-arrowdown-path-3",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-arrowdown-path-3",
-    checkpoint: "repeat",
-    aspect: "physical-geometry",
-    observed: observedValues[123],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-arrowdown-path-3",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-arrowdown-path-3",
-    checkpoint: "undo",
-    aspect: "selection",
-    observed: observedValues[50],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-arrowdown-path-3",
+    caseId: "matrix-arrowdown-path-9",
     checkpoint: "undo",
     aspect: "physical-geometry",
-    observed: observedValues[123],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[124],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-arrowdown-path-6",
+    caseId: "matrix-arrowdown-path-10",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[38],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-arrowdown-path-6",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-arrowdown-path-6",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-arrowdown-path-7",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-arrowdown-path-7",
+    caseId: "matrix-arrowdown-path-10",
     checkpoint: "primary",
     aspect: "visible-line-roles",
-    observed: observedValues[124],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    observed: observedValues[122],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-arrowdown-path-7",
+    caseId: "matrix-arrowdown-path-10",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[38],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-arrowdown-path-7",
+    caseId: "matrix-arrowdown-path-10",
     checkpoint: "repeat",
     aspect: "selection",
     observed: observedValues[128],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-arrowdown-path-7",
+    caseId: "matrix-arrowdown-path-10",
     checkpoint: "repeat",
     aspect: "visible-line-roles",
-    observed: observedValues[124],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    observed: observedValues[122],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-arrowdown-path-7",
+    caseId: "matrix-arrowdown-path-10",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[38],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-arrowdown-path-7",
+    caseId: "matrix-arrowdown-path-10",
     checkpoint: "undo",
     aspect: "visible-line-roles",
-    observed: observedValues[124],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    observed: observedValues[122],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-arrowdown-path-8",
+    caseId: "matrix-selection-path-2",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-arrowdown-path-8",
-    checkpoint: "primary",
-    aspect: "selection",
     observed: observedValues[50],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-arrowdown-path-8",
-    checkpoint: "primary",
-    aspect: "physical-geometry",
-    observed: observedValues[125],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-arrowdown-path-8",
+    caseId: "matrix-selection-path-2",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-arrowdown-path-8",
-    checkpoint: "repeat",
-    aspect: "physical-geometry",
-    observed: observedValues[125],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-arrowdown-path-8",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-arrowdown-path-8",
-    checkpoint: "undo",
-    aspect: "selection",
     observed: observedValues[50],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-arrowdown-path-8",
+    caseId: "matrix-selection-path-2",
     checkpoint: "undo",
-    aspect: "physical-geometry",
-    observed: observedValues[125],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-arrowdown-path-9",
+    caseId: "matrix-selection-path-3",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-arrowdown-path-9",
-    checkpoint: "primary",
-    aspect: "selection",
-    observed: observedValues[129],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-arrowdown-path-9",
+    caseId: "matrix-selection-path-3",
     checkpoint: "primary",
     aspect: "physical-geometry",
-    observed: observedValues[126],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[78],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-arrowdown-path-9",
+    caseId: "matrix-selection-path-3",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-arrowdown-path-9",
+    caseId: "matrix-selection-path-3",
     checkpoint: "repeat",
     aspect: "physical-geometry",
-    observed: observedValues[126],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[78],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-arrowdown-path-9",
+    caseId: "matrix-selection-path-3",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-arrowdown-path-9",
-    checkpoint: "undo",
-    aspect: "selection",
-    observed: observedValues[129],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-arrowdown-path-9",
+    caseId: "matrix-selection-path-3",
     checkpoint: "undo",
     aspect: "physical-geometry",
-    observed: observedValues[126],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[78],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-arrowdown-path-10",
+    caseId: "matrix-selection-path-6",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[31],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-arrowdown-path-10",
+    caseId: "matrix-selection-path-6",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-selection-path-6",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-selection-path-7",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-selection-path-7",
     checkpoint: "primary",
     aspect: "visible-line-roles",
-    observed: observedValues[124],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-arrowdown-path-10",
+    caseId: "matrix-selection-path-7",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[31],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-arrowdown-path-10",
+    caseId: "matrix-selection-path-7",
     checkpoint: "repeat",
-    aspect: "selection",
+    aspect: "visible-line-roles",
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-selection-path-7",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-selection-path-7",
+    checkpoint: "undo",
+    aspect: "visible-line-roles",
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-selection-path-8",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-selection-path-8",
+    checkpoint: "primary",
+    aspect: "physical-geometry",
+    observed: observedValues[97],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-selection-path-8",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-selection-path-8",
+    checkpoint: "repeat",
+    aspect: "physical-geometry",
+    observed: observedValues[97],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-selection-path-8",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-selection-path-8",
+    checkpoint: "undo",
+    aspect: "physical-geometry",
+    observed: observedValues[97],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-selection-path-9",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-selection-path-9",
+    checkpoint: "primary",
+    aspect: "physical-geometry",
+    observed: observedValues[103],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-selection-path-9",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-selection-path-9",
+    checkpoint: "repeat",
+    aspect: "physical-geometry",
+    observed: observedValues[103],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-selection-path-9",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[50],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-selection-path-9",
+    checkpoint: "undo",
+    aspect: "physical-geometry",
+    observed: observedValues[103],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-selection-path-10",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[38],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-selection-path-10",
+    checkpoint: "primary",
+    aspect: "visible-line-roles",
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-selection-path-10",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[38],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-selection-path-10",
+    checkpoint: "repeat",
+    aspect: "visible-line-roles",
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-selection-path-10",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[38],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "matrix-selection-path-10",
+    checkpoint: "undo",
+    aspect: "visible-line-roles",
+    observed: observedValues[58],
+    reason: "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
+  },
+  {
+    caseId: "mixed-container-depth-2-selection",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "mixed-container-depth-2-selection",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "mixed-container-depth-2-selection",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "mixed-container-depth-3-selection",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "mixed-container-depth-3-selection",
+    checkpoint: "primary",
+    aspect: "physical-geometry",
+    observed: observedValues[129],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "mixed-container-depth-3-selection",
+    checkpoint: "repeat",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "mixed-container-depth-3-selection",
+    checkpoint: "repeat",
+    aspect: "physical-geometry",
+    observed: observedValues[129],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "mixed-container-depth-3-selection",
+    checkpoint: "undo",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "mixed-container-depth-3-selection",
+    checkpoint: "undo",
+    aspect: "physical-geometry",
+    observed: observedValues[129],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+  },
+  {
+    caseId: "mixed-container-depth-4-selection",
+    checkpoint: "primary",
+    aspect: "semantic-path",
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+  },
+  {
+    caseId: "mixed-container-depth-4-selection",
+    checkpoint: "primary",
+    aspect: "physical-geometry",
     observed: observedValues[130],
-    reason:
-      "RF-001 Electron calibration observed a current selection result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-arrowdown-path-10",
-    checkpoint: "repeat",
-    aspect: "visible-line-roles",
-    observed: observedValues[124],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-arrowdown-path-10",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[31],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-arrowdown-path-10",
-    checkpoint: "undo",
-    aspect: "visible-line-roles",
-    observed: observedValues[124],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-2",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-2",
+    caseId: "mixed-container-depth-4-selection",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-selection-path-2",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-3",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-3",
-    checkpoint: "primary",
-    aspect: "physical-geometry",
-    observed: observedValues[72],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-3",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-3",
+    caseId: "mixed-container-depth-4-selection",
     checkpoint: "repeat",
     aspect: "physical-geometry",
-    observed: observedValues[72],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[130],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-selection-path-3",
+    caseId: "mixed-container-depth-4-selection",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-selection-path-3",
+    caseId: "mixed-container-depth-4-selection",
     checkpoint: "undo",
     aspect: "physical-geometry",
-    observed: observedValues[72],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    observed: observedValues[130],
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-selection-path-6",
+    caseId: "mixed-container-depth-5-selection",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "matrix-selection-path-6",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-6",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-7",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-7",
-    checkpoint: "primary",
-    aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-7",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-7",
-    checkpoint: "repeat",
-    aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-7",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-7",
-    checkpoint: "undo",
-    aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-8",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-8",
-    checkpoint: "primary",
-    aspect: "physical-geometry",
-    observed: observedValues[93],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-8",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-8",
-    checkpoint: "repeat",
-    aspect: "physical-geometry",
-    observed: observedValues[93],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-8",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-8",
-    checkpoint: "undo",
-    aspect: "physical-geometry",
-    observed: observedValues[93],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-9",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-9",
-    checkpoint: "primary",
-    aspect: "physical-geometry",
-    observed: observedValues[99],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-9",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-9",
-    checkpoint: "repeat",
-    aspect: "physical-geometry",
-    observed: observedValues[99],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-9",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[44],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-9",
-    checkpoint: "undo",
-    aspect: "physical-geometry",
-    observed: observedValues[99],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-10",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[31],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-10",
-    checkpoint: "primary",
-    aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-10",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
-    observed: observedValues[31],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-10",
-    checkpoint: "repeat",
-    aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-10",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[31],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "matrix-selection-path-10",
-    checkpoint: "undo",
-    aspect: "visible-line-roles",
-    observed: observedValues[52],
-    reason:
-      "RF-001 Electron calibration observed a current visible-line-roles result that differs from the desired editor contract."
-  },
-  {
-    caseId: "mixed-container-depth-2-selection",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "mixed-container-depth-2-selection",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "mixed-container-depth-2-selection",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "mixed-container-depth-3-selection",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "mixed-container-depth-3-selection",
+    caseId: "mixed-container-depth-5-selection",
     checkpoint: "primary",
     aspect: "physical-geometry",
     observed: observedValues[131],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "mixed-container-depth-3-selection",
+    caseId: "mixed-container-depth-5-selection",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "mixed-container-depth-3-selection",
+    caseId: "mixed-container-depth-5-selection",
     checkpoint: "repeat",
     aspect: "physical-geometry",
     observed: observedValues[131],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "mixed-container-depth-3-selection",
+    caseId: "mixed-container-depth-5-selection",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "mixed-container-depth-3-selection",
+    caseId: "mixed-container-depth-5-selection",
     checkpoint: "undo",
     aspect: "physical-geometry",
     observed: observedValues[131],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "mixed-container-depth-4-selection",
+    caseId: "mixed-container-depth-6-selection",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "mixed-container-depth-4-selection",
+    caseId: "mixed-container-depth-6-selection",
     checkpoint: "primary",
     aspect: "physical-geometry",
     observed: observedValues[132],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "mixed-container-depth-4-selection",
+    caseId: "mixed-container-depth-6-selection",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "mixed-container-depth-4-selection",
+    caseId: "mixed-container-depth-6-selection",
     checkpoint: "repeat",
     aspect: "physical-geometry",
     observed: observedValues[132],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "mixed-container-depth-4-selection",
+    caseId: "mixed-container-depth-6-selection",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "mixed-container-depth-4-selection",
+    caseId: "mixed-container-depth-6-selection",
     checkpoint: "undo",
     aspect: "physical-geometry",
     observed: observedValues[132],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "mixed-container-depth-5-selection",
+    caseId: "mixed-container-depth-7-selection",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "mixed-container-depth-5-selection",
+    caseId: "mixed-container-depth-7-selection",
     checkpoint: "primary",
     aspect: "physical-geometry",
     observed: observedValues[133],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "mixed-container-depth-5-selection",
+    caseId: "mixed-container-depth-7-selection",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "mixed-container-depth-5-selection",
+    caseId: "mixed-container-depth-7-selection",
     checkpoint: "repeat",
     aspect: "physical-geometry",
     observed: observedValues[133],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "mixed-container-depth-5-selection",
+    caseId: "mixed-container-depth-7-selection",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "mixed-container-depth-5-selection",
+    caseId: "mixed-container-depth-7-selection",
     checkpoint: "undo",
     aspect: "physical-geometry",
     observed: observedValues[133],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "mixed-container-depth-6-selection",
+    caseId: "mixed-container-depth-8-selection",
     checkpoint: "primary",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "mixed-container-depth-6-selection",
+    caseId: "mixed-container-depth-8-selection",
     checkpoint: "primary",
     aspect: "physical-geometry",
     observed: observedValues[134],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "mixed-container-depth-6-selection",
+    caseId: "mixed-container-depth-8-selection",
     checkpoint: "repeat",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "mixed-container-depth-6-selection",
+    caseId: "mixed-container-depth-8-selection",
     checkpoint: "repeat",
     aspect: "physical-geometry",
     observed: observedValues[134],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   },
   {
-    caseId: "mixed-container-depth-6-selection",
+    caseId: "mixed-container-depth-8-selection",
     checkpoint: "undo",
     aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
+    observed: observedValues[34],
+    reason: "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
   },
   {
-    caseId: "mixed-container-depth-6-selection",
+    caseId: "mixed-container-depth-8-selection",
     checkpoint: "undo",
     aspect: "physical-geometry",
     observed: observedValues[134],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "mixed-container-depth-7-selection",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "mixed-container-depth-7-selection",
-    checkpoint: "primary",
-    aspect: "physical-geometry",
-    observed: observedValues[135],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "mixed-container-depth-7-selection",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "mixed-container-depth-7-selection",
-    checkpoint: "repeat",
-    aspect: "physical-geometry",
-    observed: observedValues[135],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "mixed-container-depth-7-selection",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "mixed-container-depth-7-selection",
-    checkpoint: "undo",
-    aspect: "physical-geometry",
-    observed: observedValues[135],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "mixed-container-depth-8-selection",
-    checkpoint: "primary",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "mixed-container-depth-8-selection",
-    checkpoint: "primary",
-    aspect: "physical-geometry",
-    observed: observedValues[136],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "mixed-container-depth-8-selection",
-    checkpoint: "repeat",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "mixed-container-depth-8-selection",
-    checkpoint: "repeat",
-    aspect: "physical-geometry",
-    observed: observedValues[136],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
-  },
-  {
-    caseId: "mixed-container-depth-8-selection",
-    checkpoint: "undo",
-    aspect: "semantic-path",
-    observed: observedValues[27],
-    reason:
-      "RF-001 Electron calibration observed a current semantic-path result that differs from the desired editor contract."
-  },
-  {
-    caseId: "mixed-container-depth-8-selection",
-    checkpoint: "undo",
-    aspect: "physical-geometry",
-    observed: observedValues[136],
-    reason:
-      "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
+    reason: "RF-001 Electron calibration observed a current physical-geometry result that differs from the desired editor contract."
   }
 ] satisfies readonly EditorBehaviorKnownDefectObservation[];

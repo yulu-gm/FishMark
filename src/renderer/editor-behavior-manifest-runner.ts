@@ -19,11 +19,8 @@ import type {
 import { compareEditorBehaviorObservations } from "../../fixtures/editor-behavior/runner-protocol";
 import { createExecutionPlan } from "../../fixtures/editor-behavior/execution-plan";
 import { editorBehaviorKnownDefectObservations } from "../../fixtures/editor-behavior/current-observations";
-import {
-  editorBehaviorCases,
-  filterEditorBehaviorCases,
-  formatContainerPath
-} from "../../fixtures/editor-behavior/manifest";
+import { rawEditorBehaviorCases } from "../../fixtures/editor-behavior/raw-cases";
+import { formatContainerPath } from "../../fixtures/editor-behavior/model";
 import { getMarkdownEditorViewMode } from "@fishmark/editor-core";
 import { createCodeEditorController } from "./code-editor";
 import { observeEditorBehaviorCheckpoint } from "./editor-behavior-observer";
@@ -111,22 +108,22 @@ export function selectEditorBehaviorCases(
   const requestedCase = search.get("case");
   const requestedCommand = search.get("command");
   const requestedPath = search.get("containerPath");
-  const commandValues = new Set(editorBehaviorCases.map(({ command }) => command));
+  const commandValues = new Set(rawEditorBehaviorCases.map(({ command }) => command));
 
   if (requestedCommand && !commandValues.has(requestedCommand as EditorBehaviorCase["command"])) {
     throw new Error(`Unknown command ${requestedCommand}.`);
   }
 
-  let selected = filterEditorBehaviorCases({
-    command: requestedCommand as EditorBehaviorCase["command"] | undefined
-  });
+  let selected = rawEditorBehaviorCases.filter(
+    ({ command }) => !requestedCommand || command === requestedCommand
+  );
   if (requestedPath) {
     selected = selected.filter(
       ({ containerPath }) => formatContainerPath(containerPath) === requestedPath
     );
   }
   if (requestedCase) {
-    if (!editorBehaviorCases.some(({ id }) => id === requestedCase)) {
+    if (!rawEditorBehaviorCases.some(({ id }) => id === requestedCase)) {
       throw new Error(`Unknown editor behavior case ${requestedCase}.`);
     }
     selected = selected.filter(({ id }) => id === requestedCase);

@@ -604,11 +604,14 @@ npm.cmd run build
 - Create: `fixtures/editor-behavior/execution-plan.ts`
 - Create: `fixtures/editor-behavior/runner-protocol.ts`
 - Create: `fixtures/editor-behavior/current-observations.ts`
+- Create: `fixtures/editor-behavior/raw-cases.ts`
 - Create: `packages/test-harness/src/scenarios/editor-behavior-matrix.ts`
 - Create: `packages/test-harness/src/handlers/editor-behavior-batch.ts`
 - Create: `src/renderer/editor-behavior-manifest-runner.ts`
 - Create: `src/renderer/editor-behavior-observer.ts`
 - Create: `scripts/probe-editor-behavior.mjs`
+- Create: `scripts/editor-behavior-process-launcher.mjs`
+- Create: `scripts/process-tree.cjs`
 - Modify: `docs/test-cases.md`
 
 **Steps:**
@@ -617,9 +620,11 @@ npm.cmd run build
 - [x] Add missing mixed-container cases from the recursive parity matrix.
 - [x] Record expected source, selection, visible line roles, and undo result for every case.
 - [x] Register one Electron batch runner that filters by exact case, command, or container path.
-- [x] Run all 121 cases / 2,541 targets against the current implementation and store 2,001 explicit verified targets plus 540 exact target-level known-defect observations.
-- [x] Bind calibration to independent execution and desired-contract hashes; require the two explicit target sets to be unique, disjoint, and complete before persisting zero-gap evidence.
+- [x] Run all 121 cases / 2,541 targets against the current implementation and store 2,007 explicit verified targets plus 534 exact target-level known-defect observations.
+- [x] Bind calibration to independent execution/desired-contract hashes, the exact run ID, and sorted target/value sets through a deterministic calibration hash; require the two explicit target sets to be unique, disjoint, typed, and complete before persisting zero-gap evidence.
 - [x] Route the public `electron-batch` scenario capability to the same atomic formal runner and verify exactly one real `BrowserWindow`.
+- [x] Await cross-platform process-tree termination on launcher timeout, adapter failure/abort, and public CLI timeout/abort, including registered descendants whose root has already exited.
+- [x] Read the Typora oracle catalog and capture JSON directly; validate every captured initial/action/final field and explicitly mark uncaptured checkpoint/aspect coverage.
 - [x] Store no screenshots, raw reports, or generated artifacts in the manifest itself.
 
 **Verification:**

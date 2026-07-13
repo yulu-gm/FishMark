@@ -74,31 +74,51 @@ export type EditorBehaviorVerdictStatus =
   | "unexpected-mismatch"
   | "not-run";
 
-export type EditorBehaviorTargetVerdict = {
-  readonly caseId: string;
-  readonly checkpoint: EditorBehaviorCheckpointId;
-  readonly aspect: EditorBehaviorAspect;
-  readonly status: EditorBehaviorVerdictStatus;
-  readonly expected: unknown;
-  readonly actual?: unknown;
-  readonly runnerProvenance?: {
-    readonly kind: "electron-manifest-runner";
-    readonly caseId: string;
-    readonly checkpoint: EditorBehaviorCheckpointId;
-    readonly aspect: EditorBehaviorAspect;
-    readonly manifestHash: string;
-    readonly contractHash: string;
-    readonly runId: string;
-  };
+export type EditorBehaviorAspectValueMap = {
+  readonly "command-plan": readonly EditorBehaviorAction[];
+  readonly "semantic-path": EditorBehaviorContainerPath;
+  readonly source: string;
+  readonly selection: SourceSelection;
+  readonly "visible-line-roles": readonly VisiblePhysicalLineRole[];
+  readonly "physical-geometry": readonly PhysicalLineGeometryObservation[];
+  readonly "view-mode": EditorViewMode;
 };
 
-export type EditorBehaviorKnownDefectObservation = {
+type EditorBehaviorRunnerProvenance<A extends EditorBehaviorAspect> = {
+  readonly kind: "electron-manifest-runner";
   readonly caseId: string;
   readonly checkpoint: EditorBehaviorCheckpointId;
-  readonly aspect: EditorBehaviorAspect;
-  readonly observed: unknown;
-  readonly reason: string;
+  readonly aspect: A;
+  readonly manifestHash: string;
+  readonly contractHash: string;
+  readonly runId: string;
 };
+
+export type EditorBehaviorTargetVerdict<
+  A extends EditorBehaviorAspect = EditorBehaviorAspect
+> = {
+  [K in A]: {
+    readonly caseId: string;
+    readonly checkpoint: EditorBehaviorCheckpointId;
+    readonly aspect: K;
+    readonly status: EditorBehaviorVerdictStatus;
+    readonly expected: EditorBehaviorAspectValueMap[K];
+    readonly actual?: EditorBehaviorAspectValueMap[K];
+    readonly runnerProvenance?: EditorBehaviorRunnerProvenance<K>;
+  }
+}[A];
+
+export type EditorBehaviorKnownDefectObservation<
+  A extends EditorBehaviorAspect = EditorBehaviorAspect
+> = {
+  [K in A]: {
+    readonly caseId: string;
+    readonly checkpoint: EditorBehaviorCheckpointId;
+    readonly aspect: K;
+    readonly observed: EditorBehaviorAspectValueMap[K];
+    readonly reason: string;
+  }
+}[A];
 
 export type EditorBehaviorComparison = {
   readonly verdicts: readonly EditorBehaviorTargetVerdict[];
@@ -186,6 +206,7 @@ export function compareEditorBehaviorObservations(
     if (defect.reason.trim() === "") {
       throw new Error(`Known defect ${targetKey(defect)} needs a reason.`);
     }
+    assertAspectValue(defect.aspect, defect.observed, `Known defect ${targetKey(defect)}`);
     const key = targetKey(defect);
     if (defectByTarget.has(key)) {
       throw new Error(`Duplicate known-defect target ${key}.`);
@@ -202,17 +223,22 @@ export function compareEditorBehaviorObservations(
       for (const aspect of editorBehaviorAspects) {
         const expected = expectedAspect(checkpoint, aspect);
         if (!observation) {
-          verdicts.push({
+          verdicts.push(createTargetVerdict({
             caseId: behaviorCase.id,
             checkpoint: checkpoint.id,
             aspect,
             status: "not-run",
             expected
-          });
+          }));
           continue;
         }
 
         const actual = observedAspect(observation, aspect);
+        assertAspectValue(
+          aspect,
+          actual,
+          `Observation ${behaviorCase.id}:${checkpoint.id}:${aspect}`
+        );
         const provenance = {
           kind: "electron-manifest-runner" as const,
           caseId: behaviorCase.id,
@@ -227,7 +253,7 @@ export function compareEditorBehaviorObservations(
           const isPreexistingEvidence =
             evidence.status === "verified" &&
             evidence.provenance.kind !== "electron-manifest-runner";
-          verdicts.push({
+          verdicts.push(createTargetVerdict({
             caseId: behaviorCase.id,
             checkpoint: checkpoint.id,
             aspect,
@@ -235,14 +261,14 @@ export function compareEditorBehaviorObservations(
             expected,
             actual,
             runnerProvenance: provenance
-          });
+          }));
           continue;
         }
 
         const defect = defectByTarget.get(
           targetKey({ caseId: behaviorCase.id, checkpoint: checkpoint.id, aspect })
         );
-        verdicts.push({
+        verdicts.push(createTargetVerdict({
           caseId: behaviorCase.id,
           checkpoint: checkpoint.id,
           aspect,
@@ -253,7 +279,7 @@ export function compareEditorBehaviorObservations(
           expected,
           actual,
           runnerProvenance: provenance
-        });
+        }));
       }
     }
   }
@@ -283,6 +309,7 @@ export type EditorBehaviorRunnerCalibration = {
   readonly manifestHash: string;
   readonly contractHash: string;
   readonly runId: string;
+  readonly calibrationHash: string;
 };
 
 export type EditorBehaviorRunnerVerifiedTarget = {
@@ -366,6 +393,7 @@ export function composeEditorBehaviorRunnerEvidence(
     if (defect.observed === undefined) {
       throw new Error(`Known-defect baseline target ${key} omits its exact observation.`);
     }
+    assertAspectValue(defect.aspect, defect.observed, `Known-defect baseline target ${key}`);
     if (expectedTargets.get(key)?.status !== "gap") {
       throw new Error(`Known-defect baseline target ${key} contradicts verified evidence.`);
     }
@@ -374,6 +402,16 @@ export function composeEditorBehaviorRunnerEvidence(
   if (verifiedTargetKeys.size + defectTargets.size !== expectedTargets.size) {
     throw new Error(
       `Runner calibration covers ${verifiedTargetKeys.size + defectTargets.size}/${expectedTargets.size} targets.`
+    );
+  }
+  const expectedCalibrationHash = createCalibrationHash(
+    calibration,
+    verifiedTargets,
+    knownDefects
+  );
+  if (calibration.calibrationHash !== expectedCalibrationHash) {
+    throw new Error(
+      `Runner calibration hash ${calibration.calibrationHash} does not match ${expectedCalibrationHash}.`
     );
   }
 
@@ -444,55 +482,69 @@ function targetKey(input: {
   return `${input.caseId}:${input.checkpoint}:${input.aspect}`;
 }
 
-function expectedAspect(
+function createTargetVerdict<A extends EditorBehaviorAspect>(input: {
+  readonly caseId: string;
+  readonly checkpoint: EditorBehaviorCheckpointId;
+  readonly aspect: A;
+  readonly status: EditorBehaviorVerdictStatus;
+  readonly expected: EditorBehaviorAspectValueMap[A];
+  readonly actual?: EditorBehaviorAspectValueMap[A];
+  readonly runnerProvenance?: EditorBehaviorRunnerProvenance<A>;
+}): EditorBehaviorTargetVerdict<A> {
+  return input as EditorBehaviorTargetVerdict<A>;
+}
+
+function expectedAspect<A extends EditorBehaviorAspect>(
   checkpoint: EditorBehaviorCase["checkpoints"][number],
-  aspect: EditorBehaviorAspect
-): unknown {
+  aspect: A
+): EditorBehaviorAspectValueMap[A] {
   switch (aspect) {
     case "command-plan":
-      return checkpoint.actions;
+      return checkpoint.actions as EditorBehaviorAspectValueMap[A];
     case "semantic-path":
-      return checkpoint.result.semanticPath;
+      return checkpoint.result.semanticPath as EditorBehaviorAspectValueMap[A];
     case "source":
-      return checkpoint.result.source;
+      return checkpoint.result.source as EditorBehaviorAspectValueMap[A];
     case "selection":
-      return checkpoint.result.selection;
+      return checkpoint.result.selection as EditorBehaviorAspectValueMap[A];
     case "visible-line-roles":
-      return checkpoint.result.visibleLines.map(({ role }) => role);
+      return checkpoint.result.visibleLines.map(
+        ({ role }) => role
+      ) as unknown as EditorBehaviorAspectValueMap[A];
     case "physical-geometry":
       return checkpoint.result.visibleLines.map(({ line, sourceText, geometry }) => ({
         line,
         sourceText,
         geometry
-      }));
+      })) as unknown as EditorBehaviorAspectValueMap[A];
     case "view-mode":
-      return checkpoint.result.viewMode;
+      return checkpoint.result.viewMode as EditorBehaviorAspectValueMap[A];
   }
 }
 
-function observedAspect(
+function observedAspect<A extends EditorBehaviorAspect>(
   observation: EditorBehaviorCheckpointObservation,
-  aspect: EditorBehaviorAspect
-): unknown {
+  aspect: A
+): EditorBehaviorAspectValueMap[A] {
   switch (aspect) {
     case "command-plan":
-      return observation.commandPlan;
+      return observation.commandPlan as EditorBehaviorAspectValueMap[A];
     case "semantic-path":
-      return observation.semanticPath;
+      return observation.semanticPath as EditorBehaviorAspectValueMap[A];
     case "source":
-      return observation.source;
+      return observation.source as EditorBehaviorAspectValueMap[A];
     case "selection":
-      return observation.selection;
+      return observation.selection as EditorBehaviorAspectValueMap[A];
     case "visible-line-roles":
-      return observation.visibleLineRoles;
+      return observation.visibleLineRoles as EditorBehaviorAspectValueMap[A];
     case "physical-geometry":
-      return observation.physicalGeometry;
+      return observation.physicalGeometry as EditorBehaviorAspectValueMap[A];
     case "view-mode":
-      return observation.viewMode;
+      return observation.viewMode as EditorBehaviorAspectValueMap[A];
   }
 }
 
-function sameValue(left: unknown, right: unknown): boolean {
+function sameValue<T>(left: T, right: T): boolean {
   if (Object.is(left, right)) {
     return true;
   }
@@ -509,7 +561,7 @@ function sameValue(left: unknown, right: unknown): boolean {
       Array.isArray(left) &&
       Array.isArray(right) &&
       left.length === right.length &&
-      left.every((value, index) => sameValue(value, right[index]))
+      left.every((value, index) => sameValue<unknown>(value, right[index]))
     );
   }
   const leftRecord = left as Record<string, unknown>;
@@ -520,7 +572,181 @@ function sameValue(left: unknown, right: unknown): boolean {
     leftKeys.length === rightKeys.length &&
     leftKeys.every(
       (key, index) =>
-        key === rightKeys[index] && sameValue(leftRecord[key], rightRecord[key])
+        key === rightKeys[index] && sameValue<unknown>(leftRecord[key], rightRecord[key])
     )
   );
+}
+
+const editorBehaviorContainers = new Set([
+  "Document",
+  "Paragraph",
+  "List",
+  "ListItem",
+  "Blockquote",
+  "CodeFence",
+  "BlockMath"
+]);
+const visiblePhysicalLineRoles = new Set<VisiblePhysicalLineRole>([
+  "content",
+  "empty-editing-line",
+  "whitespace-only",
+  "structural-separator",
+  "code-fence-delimiter",
+  "code-fence-content",
+  "block-math-delimiter",
+  "block-math-content"
+]);
+
+function assertAspectValue<A extends EditorBehaviorAspect>(
+  aspect: A,
+  value: unknown,
+  label: string
+): asserts value is EditorBehaviorAspectValueMap[A] {
+  let valid = false;
+  switch (aspect) {
+    case "command-plan":
+      valid = Array.isArray(value) && value.every(isEditorBehaviorAction);
+      break;
+    case "semantic-path":
+      valid =
+        Array.isArray(value) &&
+        value.every(
+          (container) =>
+            typeof container === "string" && editorBehaviorContainers.has(container)
+        );
+      break;
+    case "source":
+      valid = typeof value === "string";
+      break;
+    case "selection":
+      valid = isSourceSelection(value);
+      break;
+    case "visible-line-roles":
+      valid =
+        Array.isArray(value) &&
+        value.every(
+          (role) =>
+            typeof role === "string" &&
+            visiblePhysicalLineRoles.has(role as VisiblePhysicalLineRole)
+        );
+      break;
+    case "physical-geometry":
+      valid = Array.isArray(value) && value.every(isPhysicalLineGeometry);
+      break;
+    case "view-mode":
+      valid = value === "source" || value === "wysiwym";
+      break;
+  }
+  if (!valid) {
+    throw new Error(`${label} has an invalid ${aspect} value.`);
+  }
+}
+
+function isEditorBehaviorAction(value: unknown): value is EditorBehaviorAction {
+  if (!isRecord(value) || typeof value.kind !== "string") return false;
+  switch (value.kind) {
+    case "press-key":
+      return (
+        ["Enter", "Backspace", "Tab", "ArrowUp", "ArrowDown"].includes(
+          String(value.key)
+        ) &&
+        (value.shift === undefined || value.shift === true)
+      );
+    case "insert-text":
+      return typeof value.text === "string";
+    case "set-selection":
+      return isSourceSelection(value.target);
+    case "undo":
+      return true;
+    default:
+      return false;
+  }
+}
+
+function isSourceSelection(value: unknown): value is SourceSelection {
+  return (
+    isRecord(value) &&
+    Number.isSafeInteger(value.anchor) &&
+    Number.isSafeInteger(value.head)
+  );
+}
+
+function isPhysicalLineGeometry(
+  value: unknown
+): value is PhysicalLineGeometryObservation {
+  if (
+    !isRecord(value) ||
+    !Number.isSafeInteger(value.line) ||
+    typeof value.sourceText !== "string" ||
+    !isRecord(value.geometry)
+  ) {
+    return false;
+  }
+  const geometry = value.geometry;
+  return (
+    Number.isSafeInteger(geometry.semanticDepth) &&
+    Number.isSafeInteger(geometry.contentColumn) &&
+    (geometry.markerColumn === null || Number.isSafeInteger(geometry.markerColumn)) &&
+    (geometry.visibility === "visible" || geometry.visibility === "collapsed")
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function createCalibrationHash(
+  calibration: Pick<
+    EditorBehaviorRunnerCalibration,
+    "manifestHash" | "contractHash" | "runId"
+  >,
+  verifiedTargets: readonly EditorBehaviorRunnerVerifiedTarget[],
+  knownDefects: readonly EditorBehaviorKnownDefectObservation[]
+): string {
+  const verified = verifiedTargets
+    .map((target) => ({ target: targetKey(target), outcome: "verified" as const }))
+    .sort((left, right) => left.target.localeCompare(right.target));
+  const defects = knownDefects
+    .map((defect) => ({
+      target: targetKey(defect),
+      outcome: "known-defect-observed" as const,
+      observed: defect.observed,
+      reason: defect.reason
+    }))
+    .sort((left, right) => left.target.localeCompare(right.target));
+  const serialized = stableStringify({
+    schemaVersion: 1,
+    manifestHash: calibration.manifestHash,
+    contractHash: calibration.contractHash,
+    runId: calibration.runId,
+    verified,
+    defects
+  });
+  return `fnv1a32-${fnv1a32(serialized)}`;
+}
+
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(",")}]`;
+  }
+  if (isRecord(value)) {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
+      .join(",")}}`;
+  }
+  const serialized = JSON.stringify(value);
+  if (serialized === undefined) {
+    throw new Error("Calibration identity cannot serialize undefined values.");
+  }
+  return serialized;
+}
+
+function fnv1a32(value: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
 }

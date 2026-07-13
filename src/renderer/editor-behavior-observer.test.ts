@@ -93,6 +93,39 @@ describe("editor behavior observer", () => {
     ]);
   });
 
+  it.each([
+    {
+      source: "> \n> ",
+      roles: ["structural-separator", "structural-separator"],
+      contentColumns: [2, 2]
+    },
+    {
+      source: "- \n- ",
+      roles: ["structural-separator", "structural-separator"],
+      contentColumns: [2, 2]
+    },
+    {
+      source: "> \n> alpha",
+      roles: ["structural-separator", "content"],
+      contentColumns: [2, 2]
+    },
+    {
+      source: "- item\n  \n  continuation",
+      roles: ["content", "whitespace-only", "content"],
+      contentColumns: [2, 0, 0]
+    }
+  ])(
+    "keeps content classification within each physical line for $source",
+    ({ source, roles, contentColumns }) => {
+      const lines = observePhysicalLineSemantics(source);
+      expect(lines.map(({ role }) => role)).toEqual(roles);
+      expect(lines.map(({ contentColumn }) => contentColumn)).toEqual(contentColumns);
+      for (const line of lines) {
+        expect(line.contentColumn).toBeLessThanOrEqual(line.sourceText.length);
+      }
+    }
+  );
+
   it("does not treat an unclosed fence or indented code content as a closing delimiter", () => {
     expect(observePhysicalLineSemantics("```ts\ncode").map(({ role }) => role)).toEqual([
       "code-fence-delimiter",

@@ -44,3 +44,9 @@ The oracle is intentionally file and UI based. It must not depend on Typora priv
 - `captured`: Typora evidence exists under this directory.
 - `blocked`: capture was attempted but could not be completed; the case record must explain why.
 - `retired`: case is no longer part of the current matrix; keep the record for traceability.
+
+Every per-case JSON keeps `caseId`, `status`, `initialSource`, `initialCaret`,
+`actions`, and `sentinel` synchronized with `case-matrix.json`. A blocked
+record whose attempted caret or sentinel differed from the target stores those
+attempted values under `failedAttempt`; its saved source and review remain
+failed-capture evidence and must not be used as a Typora expectation.

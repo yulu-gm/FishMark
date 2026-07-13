@@ -13,8 +13,7 @@
   },
   "initialSource": "Before\n   \nAfter",
   "initialCaret": {
-    "intended": "whitespace-only source line",
-    "attemptedPlacement": "visual click between Before and After"
+    "offset": 10
   },
   "actions": [
     {
@@ -22,7 +21,14 @@
       "key": "Enter"
     }
   ],
-  "sentinel": "FM_SENTINEL_CLICK_WS_ENTER",
+  "sentinel": "FM_SENTINEL_WS_ENTER",
+  "failedAttempt": {
+    "initialCaret": {
+      "intended": "whitespace-only source line",
+      "attemptedPlacement": "visual click between Before and After"
+    },
+    "sentinel": "FM_SENTINEL_CLICK_WS_ENTER"
+  },
   "savedSourceAfterSentinel": "Before\n\nA\n\nFM_SENTINEL_CLICK_WS_ENTERfter",
   "screenshot": null,
   "notes": "Blocked: GUI automation could not deterministically place the caret on the whitespace-only source line. A visual click between the rendered lines placed the caret in the following visible word, so this failed capture must not be used as a Typora oracle expectation.",

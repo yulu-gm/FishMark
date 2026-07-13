@@ -279,6 +279,13 @@ function removeDeepestList(layers: readonly NestedLayer[]): readonly NestedLayer
   return index < 0 ? layers : layers.filter((_, layerIndex) => layerIndex !== index);
 }
 
+function hasPromotableNestedList(layers: readonly NestedLayer[]): boolean {
+  return (
+    layers[layers.length - 1] === "List" &&
+    layers.filter((layer) => layer === "List").length > 1
+  );
+}
+
 function recursiveParityCase(
   command: Exclude<EditorBehaviorCommand, "InsertText">,
   path: EditorBehaviorContainerPath,
@@ -358,10 +365,12 @@ function recursiveParityCase(
 
   if (command === "Shift+Tab") {
     const adapterOwnsTab = leaf === "CodeFence" || leaf === "BlockMath";
-    const listOwnsLeaf = layers[layers.length - 1] === "List";
-    const expectedLayers = adapterOwnsTab || !listOwnsLeaf ? layers : removeDeepestList(layers);
+    const expectedLayers =
+      adapterOwnsTab || !hasPromotableNestedList(layers)
+        ? layers
+        : removeDeepestList(layers);
     const repeatLayers =
-      adapterOwnsTab || expectedLayers[expectedLayers.length - 1] !== "List"
+      adapterOwnsTab || !hasPromotableNestedList(expectedLayers)
         ? expectedLayers
         : removeDeepestList(expectedLayers);
     return defineCase({

@@ -1,29 +1,21 @@
 import {
-  focusedRecursiveCases,
-  recursiveParityMatrixCases,
-  representativeDepthCases
-} from "./nested-containers";
-import {
-  capturedOracleAndProbeCases,
-  namedFishMarkProbeCases
-} from "./probe-cases";
-import {
   formatContainerPath,
   type EditorBehaviorCase,
   type EditorBehaviorCaseQuery
 } from "./model";
-import { assertFishMarkProbeCaseBindings } from "./fishmark-probe-catalog";
 import {
   editorBehaviorKnownDefectObservations,
   editorBehaviorRunnerCalibration,
   editorBehaviorRunnerVerifiedTargets
 } from "./current-observations";
 import { composeEditorBehaviorRunnerEvidence } from "./runner-protocol";
+import { rawEditorBehaviorCases } from "./raw-cases";
 
 export * from "./fishmark-probe-catalog";
 export * from "./model";
 export * from "./execution-plan";
 export * from "./runner-protocol";
+export { rawEditorBehaviorCases } from "./raw-cases";
 export {
   editorBehaviorKnownDefectObservations,
   editorBehaviorRunnerCalibration,
@@ -39,16 +31,8 @@ export {
 } from "./nested-containers";
 export { capturedOracleAndProbeCases, namedFishMarkProbeCases } from "./probe-cases";
 
-const composedEditorBehaviorCases = assertFishMarkProbeCaseBindings([
-  ...capturedOracleAndProbeCases,
-  ...namedFishMarkProbeCases,
-  ...focusedRecursiveCases,
-  ...recursiveParityMatrixCases,
-  ...representativeDepthCases
-] satisfies readonly EditorBehaviorCase[]);
-
 export const editorBehaviorCases = composeEditorBehaviorRunnerEvidence(
-  composedEditorBehaviorCases,
+  rawEditorBehaviorCases,
   editorBehaviorRunnerVerifiedTargets,
   editorBehaviorKnownDefectObservations,
   editorBehaviorRunnerCalibration

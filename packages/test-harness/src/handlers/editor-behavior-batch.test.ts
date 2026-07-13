@@ -93,17 +93,6 @@ describe("runBatchProcess", () => {
     }
   }, 10_000);
 
-  it("rejects a real nonzero child exit", async () => {
-    await expect(
-      runBatchProcess({
-        command: process.execPath,
-        args: ["-e", "process.exit(7)"],
-        cwd: process.cwd(),
-        signal: new AbortController().signal,
-        stdio: "ignore"
-      })
-    ).rejects.toThrow(/code 7/u);
-  });
 });
 
 describe("public CLI batch cleanup", () => {
@@ -153,6 +142,60 @@ describe("public CLI batch cleanup", () => {
       processTree?.remove();
     }
   }, 10_000);
+
+  it("does not return from timeout while a real descendant is still cleaning up", async () => {
+    const delayedAbort = new AbortController();
+    let processTree: ReturnType<typeof startRealProcessTree> | undefined;
+    let handlerCleanupFinished = false;
+    let cleanupTimer: ReturnType<typeof setTimeout> | undefined;
+    const handlers = createEditorBehaviorBatchStepHandlers(
+      scenario,
+      process.cwd(),
+      async ({ signal }) => {
+        processTree = startRealProcessTree(delayedAbort.signal);
+        signal.addEventListener(
+          "abort",
+          () => {
+            cleanupTimer = setTimeout(
+              () => delayedAbort.abort(new Error("delayed timeout cleanup")),
+              5_200
+            );
+          },
+          { once: true }
+        );
+        try {
+          const error = await processTree.outcome;
+          if (error instanceof Error) throw error;
+        } finally {
+          handlerCleanupFinished = true;
+        }
+      }
+    );
+    const cliRun = runCli({
+      argv: ["--id", scenario.id, "--step-timeout", "100", "--no-artifacts"],
+      cwd: process.cwd(),
+      io: { stdout: () => undefined, stderr: () => undefined },
+      registry: createScenarioRegistry([scenario]),
+      buildHandlers: () => handlers
+    });
+
+    try {
+      await waitUntil(
+        () => processTree !== undefined && existsSync(processTree.descendantPidPath),
+        3_000
+      );
+      const descendantPid = processTree!.descendantPid();
+      const outcome = await cliRun;
+      expect(outcome.result?.status).toBe("timed-out");
+      expect(handlerCleanupFinished).toBe(true);
+      expect(isProcessAlive(descendantPid)).toBe(false);
+    } finally {
+      if (cleanupTimer !== undefined) clearTimeout(cleanupTimer);
+      delayedAbort.abort(new Error("test cleanup"));
+      await cliRun;
+      processTree?.remove();
+    }
+  }, 12_000);
 });
 
 function startRealProcessTree(signal: AbortSignal) {

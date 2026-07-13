@@ -53,8 +53,8 @@ describe("compareEditorBehaviorObservations", () => {
         ({ caseId, checkpoint, aspect }) => `${caseId}:${checkpoint}:${aspect}`
       )
     );
-    expect(editorBehaviorKnownDefectObservations).toHaveLength(540);
-    expect(editorBehaviorRunnerVerifiedTargets).toHaveLength(2_001);
+    expect(editorBehaviorKnownDefectObservations).toHaveLength(534);
+    expect(editorBehaviorRunnerVerifiedTargets).toHaveLength(2_007);
     expect(defectKeys.size).toBe(editorBehaviorKnownDefectObservations.length);
 
     let gaps = 0;
@@ -87,7 +87,7 @@ describe("compareEditorBehaviorObservations", () => {
     }
 
     expect(gaps).toBe(0);
-    expect(observedDefects).toBe(540);
+    expect(observedDefects).toBe(534);
   });
 
   it("accounts for all 2,541 full-manifest targets", () => {
@@ -211,7 +211,8 @@ describe("compareEditorBehaviorObservations", () => {
     const calibration = {
       manifestHash: plan.manifestHash,
       contractHash: plan.contractHash,
-      runId: "calibration-run"
+      runId: "calibration-run",
+      calibrationHash: "fnv1a32-37c614c6"
     };
     const allTargets = behaviorCase.checkpoints.flatMap((checkpoint) =>
       editorBehaviorAspects.map((aspect) => ({
@@ -239,6 +240,10 @@ describe("compareEditorBehaviorObservations", () => {
       }
     }
 
+    const defectCalibration = {
+      ...calibration,
+      calibrationHash: "fnv1a32-d18451f4"
+    };
     const [withDefect] = composeEditorBehaviorRunnerEvidence(
       [behaviorCase],
       allTargets.filter(
@@ -251,7 +256,7 @@ describe("compareEditorBehaviorObservations", () => {
         observed: "current product source",
         reason: "Exact current source differs from the desired RF-001 contract."
       }],
-      calibration
+      defectCalibration
     );
     expect(withDefect!.classification.evidence.primary.source).toMatchObject({
       status: "known-defect-observed",

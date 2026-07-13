@@ -106,9 +106,28 @@ export const editorBehaviorAspects = [
 
 export type EditorBehaviorAspect = (typeof editorBehaviorAspects)[number];
 
+export type EditorBehaviorOracleCoverage = "captured-exact" | "not-captured";
+export type EditorBehaviorOracleResultCoverage = Readonly<
+  Record<
+    Exclude<EditorBehaviorAspect, "command-plan">,
+    EditorBehaviorOracleCoverage
+  >
+>;
+
 export type EditorBehaviorContractReference =
   | { readonly kind: "roadmap"; readonly section: string }
-  | { readonly kind: "typora-oracle"; readonly file: string }
+  | {
+      readonly kind: "typora-oracle";
+      readonly file: string;
+      readonly capturedCheckpoint: "primary" | "repeat";
+      readonly coverage: {
+        readonly initial: EditorBehaviorOracleResultCoverage;
+        readonly actions: EditorBehaviorOracleCoverage;
+        readonly primary: EditorBehaviorOracleResultCoverage;
+        readonly repeat: EditorBehaviorOracleResultCoverage;
+        readonly undo: EditorBehaviorOracleResultCoverage;
+      };
+    }
   | { readonly kind: "repository-test"; readonly file: string; readonly testName: string };
 
 export type EditorBehaviorEvidenceTargetIdentity = {

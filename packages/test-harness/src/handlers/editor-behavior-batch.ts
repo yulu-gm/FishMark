@@ -1,4 +1,5 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
+import { createRequire } from "node:module";
 import { resolve } from "node:path";
 
 import type { RunContext, StepHandlerMap } from "../runner";
@@ -17,22 +18,42 @@ export type BatchProcessInput = {
   readonly stdio?: "ignore" | "inherit";
 };
 
+type TrackedProcess = {
+  readonly child: ChildProcess;
+  readonly terminate: () => Promise<void>;
+  readonly verifyStopped: () => Promise<void>;
+};
+
+type ProcessTreeModule = {
+  readonly spawnTrackedProcess: (
+    command: string,
+    args: readonly string[],
+    options: {
+      readonly cwd: string;
+      readonly stdio: "ignore" | "inherit";
+      readonly windowsHide: boolean;
+    }
+  ) => TrackedProcess;
+};
+
+const loadModule = createRequire(resolve(process.cwd(), "package.json"));
+
 export async function runBatchProcess(input: BatchProcessInput): Promise<void> {
   if (input.signal.aborted) {
     throw input.signal.reason ?? new Error("Editor behavior batch was aborted before start.");
   }
 
   await new Promise<void>((resolveRun, rejectRun) => {
-    const child = spawn(
+    const processTree = loadProcessTreeModule(input.cwd).spawnTrackedProcess(
       input.command,
       [...input.args],
       {
         cwd: input.cwd,
-        detached: process.platform !== "win32",
         stdio: input.stdio ?? "inherit",
         windowsHide: true
       }
     );
+    const { child } = processTree;
     let settled = false;
     let aborting = false;
     const settle = (error?: Error) => {
@@ -48,7 +69,7 @@ export async function runBatchProcess(input: BatchProcessInput): Promise<void> {
         input.signal.reason instanceof Error
           ? input.signal.reason
           : new Error("Editor behavior batch was aborted.");
-      void terminateProcessTree(child).then(
+      void processTree.terminate().then(
         () => settle(abortError),
         (cleanupError: unknown) =>
           settle(
@@ -66,20 +87,34 @@ export async function runBatchProcess(input: BatchProcessInput): Promise<void> {
       onAbort();
     }
     child.once("error", (error) => {
-      if (!aborting) settle(error);
+      if (aborting) return;
+      void processTree.terminate().then(
+        () => settle(error),
+        (cleanupError: unknown) => settle(withCleanupFailure(error, cleanupError))
+      );
     });
     child.once("exit", (code, signal) => {
       if (aborting) return;
       if (code === 0) {
-        settle();
+        void processTree.verifyStopped().then(
+          () => settle(),
+          (cleanupError: unknown) =>
+            processTree.terminate().then(
+              () => settle(cleanupError instanceof Error ? cleanupError : new Error(String(cleanupError))),
+              (terminateError: unknown) =>
+                settle(withCleanupFailure(cleanupError, terminateError))
+            )
+        );
         return;
       }
-      settle(
-        new Error(
-          `Editor behavior batch exited with ${
-            signal ? `signal ${signal}` : `code ${code ?? "unknown"}`
-          }.`
-        )
+      const exitError = new Error(
+        `Editor behavior batch exited with ${
+          signal ? `signal ${signal}` : `code ${code ?? "unknown"}`
+        }.`
+      );
+      void processTree.terminate().then(
+        () => settle(exitError),
+        (cleanupError: unknown) => settle(withCleanupFailure(exitError, cleanupError))
       );
     });
   });
@@ -98,69 +133,14 @@ export async function runEditorBehaviorBatch(input: {
   });
 }
 
-async function terminateProcessTree(child: ChildProcess): Promise<void> {
-  const pid = child.pid;
-  if (pid === undefined || child.exitCode !== null || child.signalCode !== null) {
-    return;
-  }
-
-  if (process.platform === "win32") {
-    await new Promise<void>((resolveTermination, rejectTermination) => {
-      const terminator = spawn(
-        "taskkill",
-        ["/pid", String(pid), "/T", "/F"],
-        { stdio: "ignore", windowsHide: true }
-      );
-      terminator.once("error", rejectTermination);
-      terminator.once("exit", (code) => {
-        if (code === 0 || child.exitCode !== null || child.signalCode !== null) {
-          resolveTermination();
-        } else {
-          rejectTermination(new Error(`taskkill exited with code ${code ?? "unknown"}.`));
-        }
-      });
-    });
-    return;
-  }
-
-  await terminatePosixProcessGroup(child, pid);
+function loadProcessTreeModule(cwd: string): ProcessTreeModule {
+  return loadModule(resolve(cwd, "scripts", "process-tree.cjs")) as ProcessTreeModule;
 }
 
-async function terminatePosixProcessGroup(child: ChildProcess, pid: number): Promise<void> {
-  signalProcessGroup(child, pid, "SIGTERM");
-  if (await waitForExit(child, 2_000)) return;
-  signalProcessGroup(child, pid, "SIGKILL");
-  if (!(await waitForExit(child, 2_000))) {
-    throw new Error(`Process group ${pid} did not exit after SIGKILL.`);
-  }
-}
-
-function signalProcessGroup(
-  child: ChildProcess,
-  pid: number,
-  signal: NodeJS.Signals
-): void {
-  try {
-    process.kill(-pid, signal);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ESRCH") return;
-    if (!child.kill(signal)) throw error;
-  }
-}
-
-async function waitForExit(child: ChildProcess, timeoutMs: number): Promise<boolean> {
-  if (child.exitCode !== null || child.signalCode !== null) return true;
-  return await new Promise<boolean>((resolveWait) => {
-    const timeout = setTimeout(() => {
-      child.removeListener("exit", onExit);
-      resolveWait(false);
-    }, timeoutMs);
-    const onExit = () => {
-      clearTimeout(timeout);
-      resolveWait(true);
-    };
-    child.once("exit", onExit);
-  });
+function withCleanupFailure(error: unknown, cleanupError: unknown): Error {
+  const primary = error instanceof Error ? error.message : String(error);
+  const cleanup = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
+  return new Error(`${primary} Process-tree cleanup failed: ${cleanup}`);
 }
 
 /**

@@ -1,15 +1,27 @@
-import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { createServer } from "vite";
+import { runEditorBehaviorProcess } from "./editor-behavior-process-launcher.mjs";
 
 const require = createRequire(import.meta.url);
 const electronBinary = require("electron");
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, "..");
-const HARD_TIMEOUT_MS = 180_000;
+const HARD_TIMEOUT_MS = parsePositiveInteger(
+  process.env.FISHMARK_EDITOR_BEHAVIOR_LAUNCHER_TIMEOUT_MS,
+  180_000
+);
+
+function parsePositiveInteger(value, fallback) {
+  if (value === undefined) return fallback;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new Error(`Expected a positive integer, received ${JSON.stringify(value)}.`);
+  }
+  return parsed;
+}
 
 function parseArgs(argv) {
   const options = {
@@ -57,14 +69,12 @@ const server = await createServer({
   logLevel: "silent"
 });
 
-let child;
-let timeout;
 try {
   await server.listen();
-  child = spawn(
-    electronBinary,
-    [resolve(projectRoot, "scripts", "electron-editor-behavior-main.cjs")],
-    {
+  const exitCode = await runEditorBehaviorProcess({
+    command: electronBinary,
+    args: [resolve(projectRoot, "scripts", "electron-editor-behavior-main.cjs")],
+    options: {
       cwd: projectRoot,
       env: {
         ...process.env,
@@ -74,30 +84,18 @@ try {
         FISHMARK_EDITOR_BEHAVIOR_HARD_TIMEOUT_MS: String(HARD_TIMEOUT_MS)
       },
       stdio: "inherit"
-    }
-  );
-
-  const exitCode = await new Promise((resolveExit) => {
-    let settled = false;
-    const finish = (code) => {
-      if (settled) return;
-      settled = true;
-      resolveExit(code);
-    };
-    timeout = setTimeout(() => {
+    },
+    timeoutMs: HARD_TIMEOUT_MS,
+    timeoutExitCode: 2,
+    onTimeout: () => {
       process.stderr.write(
         `Editor behavior manifest exceeded hard limit ${HARD_TIMEOUT_MS}ms.\n`
       );
-      child.kill();
-      finish(2);
-    }, HARD_TIMEOUT_MS + 5_000);
-    child.on("exit", (code) => finish(code ?? 1));
-    child.on("error", () => finish(1));
+    }
   });
 
   process.stdout.write(`editor-behavior report: ${reportPath}\n`);
   process.exitCode = exitCode;
 } finally {
-  if (timeout) clearTimeout(timeout);
   await server.close();
 }

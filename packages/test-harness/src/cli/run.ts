@@ -21,7 +21,6 @@ import { CLI_EXIT_CODES, exitCodeForStatus, type CliExitCode } from "./exit-code
 import { createCapabilityStepHandlers } from "../handlers/capability";
 import { createEditorBehaviorBatchStepHandlers } from "../handlers/editor-behavior-batch";
 import type { ScenarioRegistry } from "../registry";
-import { defaultScenarioRegistry } from "../index";
 import {
   runScenario,
   type RunnerEvent,
@@ -82,7 +81,8 @@ export async function runCli(deps: CliRunDeps): Promise<CliRunOutcome> {
   }
 
   const options = parsed.options;
-  const registry = deps.registry ?? defaultScenarioRegistry;
+  const registry =
+    deps.registry ?? (await import("../index")).defaultScenarioRegistry;
   const scenario = registry.get(options.scenarioId);
   if (!scenario) {
     deps.io.stderr(
@@ -126,7 +126,7 @@ export async function runCli(deps: CliRunDeps): Promise<CliRunOutcome> {
   const result = await runScenario(scenario, {
     handlers,
     stepTimeoutMs: options.stepTimeoutMs,
-    abortCleanupTimeoutMs: scenario.execution.kind === "electron-batch" ? 5_000 : undefined,
+    abortCleanupTimeoutMs: scenario.execution.kind === "electron-batch" ? null : undefined,
     signal: deps.signal,
     now: deps.now,
     onEvent: (event) => {

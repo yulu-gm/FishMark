@@ -101,8 +101,8 @@ export type RunScenarioOptions = {
   readonly onEvent?: (event: RunnerEvent) => void;
   /** Injection seam for tests. Defaults to {@link Date.now}. */
   readonly now?: () => number;
-  /** Bounded grace period for an aborted handler to finish resource cleanup. */
-  readonly abortCleanupTimeoutMs?: number;
+  /** Grace period for aborted-handler cleanup. null waits until cleanup settles. */
+  readonly abortCleanupTimeoutMs?: number | null;
 };
 
 type TerminalStop =
@@ -340,8 +340,16 @@ async function executeStep(
 
 async function waitForHandlerCleanup(
   handlerPromise: Promise<void>,
-  timeoutMs = 100
+  timeoutMs: number | null | undefined
 ): Promise<void> {
+  if (timeoutMs === null) {
+    await handlerPromise.then(
+      () => undefined,
+      () => undefined
+    );
+    return;
+  }
+  timeoutMs ??= 100;
   if (timeoutMs <= 0) return;
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {

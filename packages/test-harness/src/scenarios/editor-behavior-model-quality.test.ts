@@ -39,14 +39,19 @@ describe("RF-001 executable behavior model", () => {
       "manifest.ts",
       "model.ts",
       "nested-containers.ts",
-      "probe-cases.ts"
+      "probe-cases.ts",
+      "raw-cases.ts"
     ]) {
       expect(existsSync(path.join(canonicalDirectory, file)), file).toBe(true);
     }
     expect(existsSync(formerHarnessDirectory)).toBe(false);
     const manifestSource = readFileSync(path.join(canonicalDirectory, "manifest.ts"), "utf8");
     expect(manifestSource).not.toContain("packages/test-harness");
-    expect(manifestSource).toContain("assertFishMarkProbeCaseBindings");
+    const rawCasesSource = readFileSync(
+      path.join(canonicalDirectory, "raw-cases.ts"),
+      "utf8"
+    );
+    expect(rawCasesSource).toContain("assertFishMarkProbeCaseBindings");
 
     const modelSource = readFileSync(path.join(canonicalDirectory, "model.ts"), "utf8");
     const harnessIndexSource = readFileSync(
@@ -92,7 +97,9 @@ describe("RF-001 executable behavior model", () => {
     const compound = editorBehaviorCases.find(
       (behaviorCase) => behaviorCase.id === "empty-spaces-enter-text"
     )!;
+    expect(compound.initial).toMatchObject({ source: "", selection: sourceSelection(0) });
     expect(compound.checkpoints[0].actions).toEqual([
+      { kind: "insert-text", text: "   " },
       { kind: "press-key", key: "Enter" },
       { kind: "insert-text", text: "abc" }
     ]);
