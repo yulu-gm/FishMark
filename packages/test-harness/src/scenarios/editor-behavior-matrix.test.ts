@@ -459,7 +459,7 @@ describe("editor behavior matrix scenario", () => {
     ).toHaveLength(1);
   });
 
-  it("cannot be reported as passed by the metadata-only headless runner", () => {
+  it("cannot be reported as passed without its Electron batch runner", () => {
     const firstStep = editorBehaviorMatrixScenario.steps[0]!;
     const handler = createHeadlessStepHandlers(editorBehaviorMatrixScenario)[firstStep.id]!;
 
@@ -469,6 +469,6 @@ describe("editor behavior matrix scenario", () => {
         step: firstStep,
         signal: new AbortController().signal
       })
-    ).toThrow(/metadata-only/i);
+    ).toThrow(/requires Electron batch runner/i);
   });
 });

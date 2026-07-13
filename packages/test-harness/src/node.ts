@@ -36,3 +36,9 @@ export type { CliOptions, CliParseResult } from "./cli/args";
 
 export { runCli, CLI_VERSION } from "./cli/run";
 export type { CliRunDeps, CliRunOutcome, CliIo } from "./cli/run";
+
+export {
+  createEditorBehaviorBatchStepHandlers,
+  runEditorBehaviorBatch
+} from "./handlers/editor-behavior-batch";
+export type { RunEditorBehaviorBatch } from "./handlers/editor-behavior-batch";

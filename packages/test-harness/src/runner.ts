@@ -101,6 +101,8 @@ export type RunScenarioOptions = {
   readonly onEvent?: (event: RunnerEvent) => void;
   /** Injection seam for tests. Defaults to {@link Date.now}. */
   readonly now?: () => number;
+  /** Bounded grace period for an aborted handler to finish resource cleanup. */
+  readonly abortCleanupTimeoutMs?: number;
 };
 
 type TerminalStop =
@@ -218,11 +220,11 @@ async function executeStep(
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
   let timedOut = false;
 
-  try {
-    const handlerPromise = Promise.resolve().then(() =>
-      handler({ scenarioId, step, signal: controller.signal })
-    );
+  const handlerPromise = Promise.resolve().then(() =>
+    handler({ scenarioId, step, signal: controller.signal })
+  );
 
+  try {
     const racers: Promise<unknown>[] = [handlerPromise];
 
     const budget = options.stepTimeoutMs;
@@ -265,8 +267,9 @@ async function executeStep(
       stop: null
     };
   } catch (raw) {
-    const finishedAt = now();
     if (raw instanceof StepTimeoutError || timedOut) {
+      await waitForHandlerCleanup(handlerPromise, options.abortCleanupTimeoutMs);
+      const finishedAt = now();
       const error: RunErrorInfo = {
         message: raw instanceof Error ? raw.message : `Step ${step.id} timed out.`,
         kind: "timeout"
@@ -285,6 +288,8 @@ async function executeStep(
     }
 
     if (raw instanceof StepAbortError || external?.aborted) {
+      await waitForHandlerCleanup(handlerPromise, options.abortCleanupTimeoutMs);
+      const finishedAt = now();
       const error: RunErrorInfo = {
         message:
           raw instanceof Error
@@ -306,6 +311,7 @@ async function executeStep(
     }
 
     const err = raw instanceof Error ? raw : new Error(String(raw));
+    const finishedAt = now();
     const error: RunErrorInfo = {
       message: err.message,
       stack: err.stack,
@@ -329,6 +335,27 @@ async function executeStep(
     if (external) {
       external.removeEventListener("abort", onExternalAbort);
     }
+  }
+}
+
+async function waitForHandlerCleanup(
+  handlerPromise: Promise<void>,
+  timeoutMs = 100
+): Promise<void> {
+  if (timeoutMs <= 0) return;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      handlerPromise.then(
+        () => undefined,
+        () => undefined
+      ),
+      new Promise<void>((resolveCleanup) => {
+        timeout = setTimeout(resolveCleanup, timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
   }
 }
 

@@ -92,6 +92,37 @@ describe("runScenario", () => {
     expect(handlers.after).not.toHaveBeenCalled();
   });
 
+  it("waits for bounded abort-aware handler cleanup before returning", async () => {
+    const sc = scenario([{ id: "wait" }]);
+    const controller = new AbortController();
+    let cleanupFinished = false;
+    const handlers: StepHandlerMap = {
+      wait: ({ signal }) =>
+        new Promise<void>((_, reject) => {
+          signal.addEventListener(
+            "abort",
+            () => {
+              setTimeout(() => {
+                cleanupFinished = true;
+                reject(new Error("cleanup complete"));
+              }, 30);
+            },
+            { once: true }
+          );
+          setTimeout(() => controller.abort(new Error("stop")), 10);
+        })
+    };
+
+    const result = await runScenario(sc, {
+      handlers,
+      signal: controller.signal,
+      abortCleanupTimeoutMs: 1_000
+    });
+
+    expect(result.status).toBe("interrupted");
+    expect(cleanupFinished).toBe(true);
+  });
+
   it("returns interrupted without running any step if the signal is pre-aborted", async () => {
     const sc = scenario([{ id: "a" }]);
     const handler = vi.fn();

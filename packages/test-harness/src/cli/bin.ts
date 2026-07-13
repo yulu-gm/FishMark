@@ -13,6 +13,7 @@ import { buildStreamedEventLine, buildStreamedTerminalLine } from "./stream";
 import {
   createElectronStepHandlers
 } from "../handlers/electron";
+import { createEditorBehaviorBatchStepHandlers } from "../handlers/editor-behavior-batch";
 import {
   createProcessEditorCommandRunner,
   type EditorCommandRequestMessage
@@ -65,11 +66,13 @@ async function main(): Promise<void> {
         electronCommandRunner === null
           ? undefined
           : ({ scenario, cwd }) =>
-              createElectronStepHandlers({
-                scenario,
-                cwd,
-                runCommand: electronCommandRunner
-              }),
+              scenario.execution.kind === "electron-batch"
+                ? createEditorBehaviorBatchStepHandlers(scenario, cwd)
+                : createElectronStepHandlers({
+                    scenario,
+                    cwd,
+                    runCommand: electronCommandRunner
+                  }),
       onEvent: (event) => {
         const line = buildStreamedEventLine(process.env, event);
         if (line) {

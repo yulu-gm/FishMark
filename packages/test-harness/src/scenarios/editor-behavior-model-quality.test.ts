@@ -109,10 +109,8 @@ describe("RF-001 executable behavior model", () => {
         );
         for (const aspect of editorBehaviorAspects) {
           const state = behaviorCase.classification.evidence[checkpoint][aspect];
-          expect(["gap", "verified"]).toContain(state.status);
-          if (state.status === "gap") {
-            expect(state.reason.trim()).not.toBe("");
-          } else {
+          expect(["verified", "known-defect-observed"]).toContain(state.status);
+          if (state.status !== "gap") {
             expect(state.provenance).toBeDefined();
           }
         }
@@ -574,11 +572,10 @@ describe("RF-001 executable behavior model", () => {
 });
 
 describe("scenario execution capability", () => {
-  it("rejects metadata-only scenarios without inspecting their id", () => {
+  it("declares the Electron batch runner without inspecting the scenario id", () => {
     expect(editorBehaviorMatrixScenario.execution).toEqual({
-      kind: "metadata-only",
-      reason:
-        "The shared editor driver has not been implemented for typed RF-001 checkpoint assertions."
+      kind: "electron-batch",
+      runner: "editor-behavior-manifest"
     });
     const firstStep = editorBehaviorMatrixScenario.steps[0]!;
     const handler = createHeadlessStepHandlers(editorBehaviorMatrixScenario)[firstStep.id]!;
@@ -588,6 +585,6 @@ describe("scenario execution capability", () => {
         step: firstStep,
         signal: new AbortController().signal
       })
-    ).toThrow(/metadata-only/i);
+    ).toThrow(/requires Electron batch runner/i);
   });
 });

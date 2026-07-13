@@ -129,11 +129,21 @@ export type EditorBehaviorEvidenceProvenance = EditorBehaviorEvidenceTargetIdent
         readonly file: string;
         readonly testName: string;
       }
+    | {
+        readonly kind: "electron-manifest-runner";
+        readonly manifestHash: string;
+        readonly contractHash: string;
+        readonly runId: string;
+      }
   );
 
 export type EditorBehaviorEvidenceState =
   | { readonly status: "gap"; readonly reason: string }
-  | { readonly status: "verified"; readonly provenance: EditorBehaviorEvidenceProvenance };
+  | { readonly status: "verified"; readonly provenance: EditorBehaviorEvidenceProvenance }
+  | {
+      readonly status: "known-defect-observed";
+      readonly provenance: EditorBehaviorEvidenceProvenance;
+    };
 
 export type EditorBehaviorCheckpointEvidence = Readonly<
   Record<EditorBehaviorAspect, EditorBehaviorEvidenceState>
@@ -591,6 +601,12 @@ function validateProvenance(
     assertNonEmpty(provenance.assertion, "Probe assertion");
     return;
   }
+  if (provenance.kind === "electron-manifest-runner") {
+    assertNonEmpty(provenance.manifestHash, "Runner manifest hash");
+    assertNonEmpty(provenance.contractHash, "Runner contract hash");
+    assertNonEmpty(provenance.runId, "Runner run id");
+    return;
+  }
   assertNonEmpty(provenance.file, "Repository test file");
   assertNonEmpty(provenance.testName, "Repository test name");
 }
@@ -701,7 +717,7 @@ function validateEvidence(
       const state = checkpointEvidence[aspect];
       if (state.status === "gap") {
         assertNonEmpty(state.reason, `${checkpoint}:${aspect} gap reason`);
-      } else if (state.status === "verified") {
+      } else if (state.status === "verified" || state.status === "known-defect-observed") {
         validateProvenance(state.provenance, {
           caseId: caseId ?? state.provenance.caseId,
           checkpoint,
@@ -717,7 +733,7 @@ function validateEvidence(
   }
 }
 
-function statusForEvidence(evidence: EditorBehaviorEvidence): EditorBehaviorCurrentStatus {
+export function statusForEvidence(evidence: EditorBehaviorEvidence): EditorBehaviorCurrentStatus {
   const states = editorBehaviorCheckpointIds.flatMap((checkpoint) =>
     editorBehaviorAspects.map((aspect) => evidence[checkpoint][aspect])
   );

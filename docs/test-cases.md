@@ -602,15 +602,16 @@
 ### TC-017D 编辑行为契约矩阵
 
 步骤：
-1. 运行 `npm.cmd run test -- packages/test-harness src/renderer/editor-test-driver.test.ts`。
+1. 运行 `npm.cmd run test:editor-behavior`；确认真实 Electron/Chromium 在同一个 `BrowserWindow` 和同一个 `EditorView` 中执行完整 121 cases / 2,541 checkpoint-aspect targets。
 2. 检查 `fixtures/editor-behavior/manifest.ts` 暴露的 typed cases，确认每例都包含完整 initial result，以及按 `primary`、`repeat`、`undo` 排序且声明 `from` 关系的 checkpoints；每个 checkpoint 必须包含可执行 discriminated actions、源码 selection、实际 view mode 与逐物理行角色/几何。
-3. 检查每例的 `contractReferences` 与 evidence record，确认每个 checkpoint/aspect target 恰好为一个 `Gap` 或 `Verified`；typed observation 与持久化 provenance 必须同时精确携带 case/checkpoint/aspect，使用结构化相等比较并拒绝非有限数值；跨 case 的同值结果不得清除 gap，动态 replacement 不接受 catalog-owned probe provenance。
-4. 使用 `filterEditorBehaviorCases({ command: "Enter" })` 选择一个命令，再使用精确 `containerPath` 选择一个递归容器路径；确认组合过滤只返回同时匹配的 case，且顺序稳定。
-5. 检查唯一注册场景 `editor-behavior-matrix`，确认默认 step 顺序与完整 manifest 一致，过滤后的 scenario metadata 与所选 corpus 一致。
+3. 检查每例的 `contractReferences` 与 evidence record，确认 canonical manifest 的 2,541 targets 均为 `Verified` 或 `known-defect-observed`，静态 gap 数为零；Electron provenance 精确携带 case/checkpoint/aspect、稳定 execution manifest hash、desired contract hash 与校准 run ID。修改 action/initial 必须使两个 hash 失效，只修改 desired result 必须使 contract hash 失效。
+4. 检查 `fixtures/editor-behavior/current-observations.ts`，确认 2,001 条 verified targets 与 540 条 known defects 均绑定唯一 `(caseId, checkpoint, aspect)`，两组互斥且并集精确覆盖 2,541 targets；每条 defect 保存 exact structural actual value，不得使用 case allowlist、覆盖缺口推断或仅按 hash 放行。
+5. 分别运行 `npm.cmd run test:editor-behavior -- --case empty-type-hash`、`npm.cmd run test:editor-behavior -- --command Tab`、`npm.cmd run test:editor-behavior -- --container-path "Document > Blockquote > List > ListItem > Paragraph"`；确认过滤后的 cases/targets 精确、顺序稳定且无 `not-run`。未知 case、command、container path 或参数必须 fail-closed。
 6. 检查 required parity matrix，确认 Enter、Backspace、Tab、Shift+Tab、ArrowUp、ArrowDown、selection 每个 command 都覆盖十条 container paths，包括 Document/Paragraph、递归 List/ListItem、递归 Blockquote，以及 List/Blockquote 与 CodeFence、BlockMath 的混合路径。
 7. 检查 `fishMarkNamedProbeCatalog`，确认 33 个 named FishMark probes 均关联到 typed case，并由 catalog 声明真实 checkpoint/aspect capabilities；renderer registry 必须使用实际 `run.name` 与 catalog functionName 精确绑定，交换两个 run 时立即失败；没有完整 target assertion 的 probe 允许 capabilities 为空。
 8. 检查生成的代表性深度 case，确认语义容器深度 0 到 8 均存在；另确认 empty、whitespace-only、content、line-start、line-middle、line-end、range、source 和 WYSIWYM metadata 均有覆盖。
-9. 运行 `npm.cmd run test:editing-experience`，确认现有真实 Electron/Chromium 编辑探针没有因 RF-001 契约落地而回归。
+9. 运行 `npm.cmd run test:scenario -- --id editor-behavior-matrix --step-timeout 180000 --no-artifacts`，确认公共 `electron-batch` production adapter 只启动一次完整 formal gate，并让 121 个 scenario steps 共享同一原子结果。
+10. 运行 `npm.cmd run test -- packages/test-harness src/renderer/editor-test-driver.test.ts` 和 `npm.cmd run test:editing-experience`，确认 harness/driver 与既有 79-case Electron 编辑探针没有回归。
 
 预期：
 - manifest 不存 screenshot、DOM class name 或 generated artifact path，只记录 Markdown/source-selection/semantic geometry contract。
@@ -620,7 +621,9 @@
 - code fence / block math 的 opaque body 只消费 opening 时记录的 CommonMark 等价外层 quote/list 签名；容器不再 continuation 时必须退出 opaque 状态并把该行按普通 Markdown 重解析，closing delimiter 必须匹配完整外层签名且相对缩进不超过三空格。
 - `editor-behavior-matrix` 只注册一次，不建立第二套 runner；command/containerPath filtering 复用同一 typed corpus 与 scenario factory。
 - `fixtures/editor-behavior` 是 fixture types/data/helpers 的唯一公共入口；test-harness barrel 只暴露 scenario/runner 所需 API，不保留 fixture compatibility re-export。
-- 当前 driver 尚不能执行 geometry、undo 与 view-mode assertions 时，场景必须通过 `metadata-only` capability 拒绝 headless pass；70 个 parity case 的 evidence gaps 清除前，RF-001 保持 `IN_PROGRESS`。
+- scenario 通过 `electron-batch` capability 分派到生产 adapter；没有 adapter 时普通 headless handler 必须 fail-closed，不能把 metadata step 计作通过。生产 adapter 必须传播 abort/nonzero exit，且不能按 121 steps 重跑 121 次 Electron。
+- formal report 必须为 121/121 cases、2,541 targets、0 unexpected mismatch、0 not-run，并在 180 秒硬上限内完成。当前精确 baseline 为 79 repository/FishMark matches、1,922 runner-calibrated matches 与 540 known defects。
+- runner/observer 不能导入 desired result、physical-line expectation helper 或 case allowlist；观察值来自 live CodeMirror state、parser/source offsets、DOM computed style/rect 与实际 view-mode state。
 - 测试及 probe 通过，产品编辑源码、选择、undo history、IME 和渲染行为没有变化。
 
 ### TC-034 行内格式渲染

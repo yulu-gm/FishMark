@@ -13,9 +13,22 @@ import {
   type EditorBehaviorCaseQuery
 } from "./model";
 import { assertFishMarkProbeCaseBindings } from "./fishmark-probe-catalog";
+import {
+  editorBehaviorKnownDefectObservations,
+  editorBehaviorRunnerCalibration,
+  editorBehaviorRunnerVerifiedTargets
+} from "./current-observations";
+import { composeEditorBehaviorRunnerEvidence } from "./runner-protocol";
 
 export * from "./fishmark-probe-catalog";
 export * from "./model";
+export * from "./execution-plan";
+export * from "./runner-protocol";
+export {
+  editorBehaviorKnownDefectObservations,
+  editorBehaviorRunnerCalibration,
+  editorBehaviorRunnerVerifiedTargets
+} from "./current-observations";
 export {
   createRecursiveParityMatrixCases,
   createRepresentativeDepthCases,
@@ -34,7 +47,12 @@ const composedEditorBehaviorCases = assertFishMarkProbeCaseBindings([
   ...representativeDepthCases
 ] satisfies readonly EditorBehaviorCase[]);
 
-export const editorBehaviorCases = composedEditorBehaviorCases;
+export const editorBehaviorCases = composeEditorBehaviorRunnerEvidence(
+  composedEditorBehaviorCases,
+  editorBehaviorRunnerVerifiedTargets,
+  editorBehaviorKnownDefectObservations,
+  editorBehaviorRunnerCalibration
+);
 
 export function filterEditorBehaviorCases(
   query: EditorBehaviorCaseQuery = {}

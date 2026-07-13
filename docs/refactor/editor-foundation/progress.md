@@ -12,7 +12,7 @@
 
 **Current task:** `RF-001`
 
-**Next required skill:** `$fishmark-task-execution` for the executable RF-001 evidence runner
+**Next required skill:** `$fishmark-architecture-acceptance`, then `$fishmark-task-acceptance`
 
 ## 1. Status vocabulary
 
@@ -51,7 +51,7 @@ Evidence columns are filled only with fresh command output/report paths from the
 
 | ID | Task | Depends on | Status | Focused evidence | Full gates | Acceptance record | Commit/branch |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| RF-001 | Editing behavior baseline | — | `IN_PROGRESS` | Model quality + matrix: 2 files / 31 tests; CLI layout: 1 file / 31 tests; CLI scenario smoke passed through the new emitted bin. | lint: 0 errors (8 pre-existing warnings); typecheck passed; full test: 120 files / 1399 tests; build passed. Corpus: 121 cases, 79 verified checkpoint/aspect targets, 2462 explicit gaps. The prior long probe run remains historical evidence only. | Executable command-plan/semantic-path/geometry/view-mode/undo evidence pending before acceptance | `codex/editor-foundation-refactor` |
+| RF-001 | Editing behavior baseline | — | `DEV_DONE` | Runner/observer/protocol/launcher and explicit calibration: 8 files / 40 focused tests; harness + driver: 20 files / 124 tests; exact case/command/path filters passed and unknown case failed closed; public scenario capability passed 121/121 steps in one batch; real public-CLI abort/nonzero process boundaries passed. | Formal Electron gate: 121/121 cases, 2,541 targets, 79 existing + 1,922 runner matches, 540 exact known defects, 0 unexpected, 0 not-run, 25.735s. Explicit sets cover 2,541/2,541 with 0 gaps. Editing experience: 79/79 passed. lint 0 errors (8 pre-existing warnings); typecheck, 128-file/1,442-test suite, and build passed. | Architecture/task acceptance pending | `codex/editor-foundation-refactor` |
 | RF-002 | Architecture and performance guards | RF-001 | `PLANNED` | — | Test + perf baseline | — | — |
 | RF-101 | Extract workspace domain | RF-002 | `PLANNED` | — | lint/typecheck/test/build | — | — |
 | RF-102 | Extract workspace application ports/use cases | RF-101 | `PLANNED` | — | lint/typecheck/test/build | — | — |
@@ -131,7 +131,9 @@ Create one executable behavior corpus for structural Markdown editing before cha
 
 - `fixtures/editor-behavior/`
 - `packages/test-harness/src/scenarios/`
-- `src/renderer/editor-test-driver.ts`
+- `src/renderer/editor-behavior-manifest-runner.ts`
+- `src/renderer/editor-behavior-observer.ts`
+- `scripts/probe-editor-behavior.mjs`
 - `docs/test-cases.md`
 - `docs/refactor/editor-foundation/progress.md`
 
@@ -142,17 +144,18 @@ Create one executable behavior corpus for structural Markdown editing before cha
 - Cases at depth 0–8 exist for representative mixed containers.
 - Known defects are labeled and are not adopted as desired behavior.
 - Scenario filtering can select a command or container path.
-- Every checkpoint/aspect target is exactly one validated `Gap` or `Verified` value.
+- Every canonical checkpoint/aspect target is exactly one validated `Verified` or `known-defect-observed` value; pre-composition gaps are eliminated.
 - Typed observations and persisted provenance are bound to the exact case/checkpoint/aspect; equal values cannot be reused across cases, replacement uses structural equality against the checkpoint-owned expected result, and dynamic observations reject non-finite numbers and catalog-owned probe provenance.
 - Named probe registry entries are bound to the catalog through the actual `run.name`, and verified FishMark provenance is narrowed exactly during manifest composition without a generic model/catalog dependency cycle.
 - Opaque code/math projection consumes a CommonMark-equivalent ordered outer quote/list signature, exits and reprocesses a line when the container no longer continues, and only accepts closing delimiters with a matching prefix and 0–3 relative spaces.
 - `fixtures/editor-behavior` is the only fixture public entry; the test harness exposes scenario APIs but no fixture compatibility facade.
-- A test-only runner executes the matrix before RF-001 returns to `DEV_DONE`; metadata-only scenario steps are never counted as passes.
+- A test-only Electron batch runner re-executes every selected target; ordinary headless scenario steps fail closed and are never counted as passes.
 
 ### Verification
 
 ```powershell
 npm.cmd run test -- packages/test-harness src/renderer/editor-test-driver.test.ts
+npm.cmd run test:editor-behavior
 npm.cmd run test:editing-experience
 ```
 
@@ -171,7 +174,7 @@ npm.cmd run test:editing-experience
 
 ### Next skill
 
-`$fishmark-task-execution` for the executable evidence runner slice
+`$fishmark-architecture-acceptance`, followed by `$fishmark-task-acceptance`
 
 ## 6. Milestone deletion checklist
 
@@ -195,17 +198,11 @@ Append one entry when a task changes to `DEV_DONE`, then amend the same entry af
 | Date | Task | Change summary | Focused verification | Full gates | Acceptance | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
 | 2026-07-13 | RF-001 | Added the first typed recursive editing-behavior corpus, exact filtering, one harness scenario, and stable documentation; corrected one stale table-exit probe expectation without changing runtime behavior. | Matrix 1/13; harness + driver 14/81; defect evidence 2/78. | Editing experience 79 cases passed; lint, typecheck, 119-file/1380-test suite, and build passed. | Superseded before acceptance | A 2026-07-14 specification review found that metadata-only parity cases had been overstated as executable evidence. RF-001 returned to `IN_PROGRESS`; this row is historical regression evidence only. |
+| 2026-07-14 | RF-001 | Added the single-window Electron manifest runner, sanitized execution plan, independent live observer, exact target comparator/baseline, dual execution/contract hashes, explicit complete calibration sets, public Electron-batch adapter with cross-platform process-tree abort and bounded runner cleanup, atomic reports, actual window-count validation, and shared paintable test-window configuration; product editing behavior and APIs are unchanged. | Runner/observer/protocol/launcher 8 files / 40 focused tests; harness + driver 20 files / 124 tests; case/command/path filters, real public-CLI abort/nonzero child boundaries, and 121-step public scenario path passed. | Formal runner 121/121 and 2,541/2,541 in 25.735s with 79 existing/1,922 runner/540 known/0 unexpected/0 not-run; legacy 79/79; lint/typecheck/128-file 1,442-test suite/build passed. | Pending | Raw JSON remains ignored; calibration persists 2,001 explicit verified targets and 540 exact typed defect observations. |
 
 ## 8. Blockers and deviations
 
-There are no accepted external blockers or roadmap deviations.
-
-RF-001 has an internal execution gap that must be completed before acceptance:
-
-- all 70 required command/container-path pairs have executable action/checkpoint contracts but remain fully unverified by the current driver;
-- the 33 named FishMark probes are associated with catalog-owned capabilities; their executable pass conditions verify 75 source/selection/visible-role targets and do not overclaim command plan, semantic path, physical geometry, view mode, or undo;
-- the two current known defects expose only the actual planner result or semantic path proven by matching unit tests; they do not claim unmeasured editor geometry;
-- the next RF-001 slice must execute the canonical discriminated actions, rebuild checkpoints from their declared ancestry, return typed observations, and atomically replace matching evidence gaps without changing product IPC or runtime behavior.
+There are no accepted external blockers or roadmap deviations. RF-001 has no remaining implementation gap; its explicit 2,001 verified targets and 540 exact target mismatches cover the whole contract, and the mismatches are recorded current product defects for later roadmap tasks rather than unexecuted evidence. Formal architecture and task acceptance remain pending.
 
 Any deviation must record:
 

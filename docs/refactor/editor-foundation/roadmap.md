@@ -601,22 +601,33 @@ npm.cmd run build
 
 - Create: `fixtures/editor-behavior/manifest.ts`
 - Create: `fixtures/editor-behavior/nested-containers.ts`
+- Create: `fixtures/editor-behavior/execution-plan.ts`
+- Create: `fixtures/editor-behavior/runner-protocol.ts`
+- Create: `fixtures/editor-behavior/current-observations.ts`
 - Create: `packages/test-harness/src/scenarios/editor-behavior-matrix.ts`
+- Create: `packages/test-harness/src/handlers/editor-behavior-batch.ts`
+- Create: `src/renderer/editor-behavior-manifest-runner.ts`
+- Create: `src/renderer/editor-behavior-observer.ts`
+- Create: `scripts/probe-editor-behavior.mjs`
 - Modify: `docs/test-cases.md`
 
 **Steps:**
 
-- [ ] Convert existing Typora oracle cases and FishMark probes into typed behavior cases.
-- [ ] Add missing mixed-container cases from the recursive parity matrix.
-- [ ] Record expected source, selection, visible line roles, and undo result for every case.
-- [ ] Register one scenario runner entry that can filter by command and container path.
-- [ ] Run the matrix against the current implementation and classify intentional baseline versus known defect.
-- [ ] Store no screenshots or generated artifacts in the manifest itself.
+- [x] Convert existing Typora oracle cases and FishMark probes into typed behavior cases.
+- [x] Add missing mixed-container cases from the recursive parity matrix.
+- [x] Record expected source, selection, visible line roles, and undo result for every case.
+- [x] Register one Electron batch runner that filters by exact case, command, or container path.
+- [x] Run all 121 cases / 2,541 targets against the current implementation and store 2,001 explicit verified targets plus 540 exact target-level known-defect observations.
+- [x] Bind calibration to independent execution and desired-contract hashes; require the two explicit target sets to be unique, disjoint, and complete before persisting zero-gap evidence.
+- [x] Route the public `electron-batch` scenario capability to the same atomic formal runner and verify exactly one real `BrowserWindow`.
+- [x] Store no screenshots, raw reports, or generated artifacts in the manifest itself.
 
 **Verification:**
 
 ```powershell
 npm.cmd run test -- packages/test-harness src/renderer/editor-test-driver.test.ts
+npm.cmd run test:editor-behavior
+npm.cmd run test:scenario -- --id editor-behavior-matrix --step-timeout 180000 --no-artifacts
 npm.cmd run test:editing-experience
 ```
 

@@ -21,6 +21,12 @@ export function createHeadlessStepHandlers(
         throw new Error(`Scenario is metadata-only: ${scenario.execution.reason}`);
       }
 
+      if (scenario.execution.kind === "electron-batch") {
+        throw new Error(
+          `Scenario requires Electron batch runner: ${scenario.execution.runner}`
+        );
+      }
+
       const unsupportedReason = scenario.execution.unsupportedSteps?.[step.id];
       if (unsupportedReason) {
         throw new Error(unsupportedReason);

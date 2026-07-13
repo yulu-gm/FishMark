@@ -1,4 +1,10 @@
 const { app, BrowserWindow } = require("electron");
+const {
+  configurePaintableOffscreenTestApp,
+  createPaintableOffscreenTestWindow
+} = require("./electron-test-window.cjs");
+
+configurePaintableOffscreenTestApp(app);
 
 async function main() {
   const url = process.env.FISHMARK_MARKDOWN_EDITING_EXPERIENCE_PROBE_URL;
@@ -8,16 +14,7 @@ async function main() {
 
   await app.whenReady();
 
-  const window = new BrowserWindow({
-    width: 1280,
-    height: 900,
-    show: false,
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true
-    }
-  });
+  const window = createPaintableOffscreenTestWindow(BrowserWindow);
 
   await window.loadURL(url);
   const result = await window.webContents.executeJavaScript(

@@ -43,7 +43,11 @@ export type ScenarioExecutionCapability =
       /** Explicit CLI gaps keyed by step id; avoids scenario-id branches in the handler. */
       readonly unsupportedSteps?: Readonly<Record<string, string>>;
     }
-  | { readonly kind: "metadata-only"; readonly reason: string };
+  | { readonly kind: "metadata-only"; readonly reason: string }
+  | {
+      readonly kind: "electron-batch";
+      readonly runner: "editor-behavior-manifest";
+    };
 
 export type TestScenario = {
   /** Stable unique id across the whole registry. kebab-case. */

@@ -24,13 +24,12 @@ export function createEditorBehaviorMatrixScenario(
     surface: "editor",
     tags: ["editor", "rendering"],
     execution: {
-      kind: "metadata-only",
-      reason:
-        "The shared editor driver has not been implemented for typed RF-001 checkpoint assertions."
+      kind: "electron-batch",
+      runner: "editor-behavior-manifest"
     },
     preconditions: [
       "Typed behavior manifest is the contract source; generated screenshots and runtime artifacts remain external.",
-      "Coverage-gap evidence is not an executed pass; a later RF-001 runner slice must replace it with verified evidence."
+      "Coverage-gap evidence becomes verified only after the Electron manifest runner observes the exact target."
     ],
     steps: selectedCases.map((behaviorCase) => ({
       id: behaviorCase.id,

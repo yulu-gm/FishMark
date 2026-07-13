@@ -49,6 +49,10 @@ export {
 } from "./scenarios/editor-behavior-matrix";
 
 export { createHeadlessStepHandlers } from "./handlers/headless";
+export {
+  createCapabilityStepHandlers,
+  type CapabilityHandlerAdapters
+} from "./handlers/capability";
 
 // Browser-safe visual primitives only. The PNG codec, `runVisualCheck`, and
 // the node-backed visual api live under `./node` so importing this barrel

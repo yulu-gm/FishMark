@@ -18,7 +18,8 @@ import {
 } from "./artifacts";
 import { parseCliArgs, type CliOptions } from "./args";
 import { CLI_EXIT_CODES, exitCodeForStatus, type CliExitCode } from "./exit-codes";
-import { createHeadlessStepHandlers } from "../handlers/headless";
+import { createCapabilityStepHandlers } from "../handlers/capability";
+import { createEditorBehaviorBatchStepHandlers } from "../handlers/editor-behavior-batch";
 import type { ScenarioRegistry } from "../registry";
 import { defaultScenarioRegistry } from "../index";
 import {
@@ -111,7 +112,11 @@ export async function runCli(deps: CliRunDeps): Promise<CliRunOutcome> {
 
   const buildHandlers: (args: CliHandlerBuildArgs) => StepHandlerMap =
     deps.buildHandlers ??
-    (({ scenario: s }) => createHeadlessStepHandlers(s));
+    (({ scenario: s, cwd }) =>
+      createCapabilityStepHandlers(s, {
+        buildElectronBatch: (batchScenario) =>
+          createEditorBehaviorBatchStepHandlers(batchScenario, cwd)
+      }));
   const handlers = buildHandlers({
     scenario,
     cwd: deps.cwd
@@ -121,6 +126,7 @@ export async function runCli(deps: CliRunDeps): Promise<CliRunOutcome> {
   const result = await runScenario(scenario, {
     handlers,
     stepTimeoutMs: options.stepTimeoutMs,
+    abortCleanupTimeoutMs: scenario.execution.kind === "electron-batch" ? 5_000 : undefined,
     signal: deps.signal,
     now: deps.now,
     onEvent: (event) => {
