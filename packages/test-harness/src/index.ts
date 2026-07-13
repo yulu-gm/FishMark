@@ -49,22 +49,28 @@ export type {
   EditorBehaviorCommand,
   EditorBehaviorContainer,
   EditorBehaviorContainerPath,
+  EditorBehaviorContractReference,
+  EditorBehaviorCurrentEvidence,
+  EditorBehaviorCurrentObservation,
+  EditorBehaviorEvidenceAspect,
   EditorBehaviorResult,
   SourceSelection,
   VisiblePhysicalLineExpectation,
   VisiblePhysicalLineRole
-} from "./scenarios/editor-behavior-matrix";
+} from "./scenarios/editor-behavior/manifest";
 export {
-  createEditorBehaviorMatrixScenario,
   createRepresentativeDepthCases,
   createRecursiveParityMatrixCases,
   editorBehaviorCases,
-  editorBehaviorMatrixScenario,
   filterEditorBehaviorCases,
   formatContainerPath,
   representativeDepthCases,
   recursiveParityMatrixCases,
   requiredEditorBehaviorContainerPaths
+} from "./scenarios/editor-behavior/manifest";
+export {
+  createEditorBehaviorMatrixScenario,
+  editorBehaviorMatrixScenario
 } from "./scenarios/editor-behavior-matrix";
 
 export { createHeadlessStepHandlers } from "./handlers/headless";

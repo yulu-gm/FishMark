@@ -5,6 +5,11 @@ import "./styles/markdown-render.css";
 
 import { EditorView } from "@codemirror/view";
 
+import {
+  assertCompleteFishMarkProbeRegistry,
+  type FishMarkNamedProbeCaseId,
+  type FishMarkNamedProbeGroup
+} from "../../packages/test-harness/src/scenarios/editor-behavior/fishmark-probe-catalog";
 import { createCodeEditorController } from "./code-editor";
 
 type CaseResult = {
@@ -74,8 +79,8 @@ type OracleProbeAction =
   | { key: "ArrowDown" | "ArrowUp" | "Backspace" | "Enter"; type: "key" };
 
 type NamedProbeCase = {
-  caseId: string;
-  group: string;
+  caseId: FishMarkNamedProbeCaseId;
+  group: FishMarkNamedProbeGroup;
   run: () => Promise<CaseResult>;
 };
 
@@ -5012,7 +5017,7 @@ async function runBlockquoteDragSelectionCase(): Promise<CaseResult> {
   return result;
 }
 
-const namedProbeCases: NamedProbeCase[] = [
+const namedProbeCases = assertCompleteFishMarkProbeRegistry<NamedProbeCase>([
   { caseId: "empty-type-hash", group: "empty-document", run: runEmptyTypeHashCase },
   { caseId: "empty-type-one-space", group: "empty-document", run: runEmptyDocumentSpaceCaretCase },
   { caseId: "empty-type-three-spaces", group: "empty-document", run: runEmptyTypeThreeSpacesCase },
@@ -5046,7 +5051,7 @@ const namedProbeCases: NamedProbeCase[] = [
   { caseId: "blockquote-table-rendering", group: "blockquote", run: runBlockquoteTableRenderingCase },
   { caseId: "deep-ordered-list-repeated-enter-exit", group: "list", run: runDeepOrderedListRepeatedEnterExitCase },
   { caseId: "top-level-list-item-enter-body-upgrade", group: "list", run: runTopLevelListItemEnterBodyUpgradeCase }
-];
+]);
 
 const namedProbeAliases = new Map<string, string>([
   ["empty-document-space-caret", "empty-type-one-space"],

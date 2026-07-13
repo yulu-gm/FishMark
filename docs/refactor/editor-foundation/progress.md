@@ -6,13 +6,13 @@
 
 **Created:** 2026-07-11
 
-**Last updated:** 2026-07-13
+**Last updated:** 2026-07-14
 
 **Overall status:** `IN_PROGRESS`
 
 **Current task:** `RF-001`
 
-**Next required skill:** `$fishmark-architecture-acceptance` for formal `RF-001` review
+**Next required skill:** `$fishmark-task-execution` for the executable RF-001 evidence runner
 
 ## 1. Status vocabulary
 
@@ -51,7 +51,7 @@ Evidence columns are filled only with fresh command output/report paths from the
 
 | ID | Task | Depends on | Status | Focused evidence | Full gates | Acceptance record | Commit/branch |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| RF-001 | Editing behavior baseline | — | `DEV_DONE` | Matrix: 1 file / 13 tests; harness + driver: 14 files / 81 tests; defect evidence: 2 files / 78 tests. | Unfiltered editing experience: 79 cases, `pass: true`, no failures; lint: 0 errors (8 pre-existing warnings); typecheck passed; full test: 119 files / 1380 tests; build passed. | Architecture and task acceptance pending | `codex/editor-foundation-refactor` |
+| RF-001 | Editing behavior baseline | — | `IN_PROGRESS` | Evidence correction: matrix 1 file / 23 tests; harness + driver: 14 files / 91 tests; defect evidence: 2 files / 78 tests. | lint: 0 errors (8 pre-existing warnings); typecheck passed; full test: 119 files / 1390 tests; build passed. The prior 79-case probe run is historical regression evidence, not proof that all typed matrix aspects executed. | Executable geometry/repeat/undo/mode evidence pending before acceptance | `codex/editor-foundation-refactor` |
 | RF-002 | Architecture and performance guards | RF-001 | `PLANNED` | — | Test + perf baseline | — | — |
 | RF-101 | Extract workspace domain | RF-002 | `PLANNED` | — | lint/typecheck/test/build | — | — |
 | RF-102 | Extract workspace application ports/use cases | RF-101 | `PLANNED` | — | lint/typecheck/test/build | — | — |
@@ -142,7 +142,8 @@ Create one executable behavior corpus for structural Markdown editing before cha
 - Cases at depth 0–8 exist for representative mixed containers.
 - Known defects are labeled and are not adopted as desired behavior.
 - Scenario filtering can select a command or container path.
-- Focused test and editing-experience probe pass without product behavior changes.
+- Every current-evidence aspect is either verified by a matching probe/test or explicitly marked as a coverage gap.
+- A test-only runner executes the matrix before RF-001 returns to `DEV_DONE`; metadata-only scenario steps are never counted as passes.
 
 ### Verification
 
@@ -166,7 +167,7 @@ npm.cmd run test:editing-experience
 
 ### Next skill
 
-`$fishmark-task-execution`
+`$fishmark-task-execution` for the executable evidence runner slice
 
 ## 6. Milestone deletion checklist
 
@@ -189,11 +190,18 @@ Append one entry when a task changes to `DEV_DONE`, then amend the same entry af
 
 | Date | Task | Change summary | Focused verification | Full gates | Acceptance | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| 2026-07-13 | RF-001 | Added the typed recursive editing-behavior corpus, exact filtering, one harness scenario, current-defect evidence, and stable documentation; corrected one stale table-exit probe expectation without changing runtime behavior. | Matrix 1/13; harness + driver 14/81; defect evidence 2/78. | Editing experience 79 cases passed; lint, typecheck, 119-file/1380-test suite, and build passed. | Pending | No watchdog/progress diagnostics or other temporary compatibility code retained. |
+| 2026-07-13 | RF-001 | Added the first typed recursive editing-behavior corpus, exact filtering, one harness scenario, and stable documentation; corrected one stale table-exit probe expectation without changing runtime behavior. | Matrix 1/13; harness + driver 14/81; defect evidence 2/78. | Editing experience 79 cases passed; lint, typecheck, 119-file/1380-test suite, and build passed. | Superseded before acceptance | A 2026-07-14 specification review found that metadata-only parity cases had been overstated as executable evidence. RF-001 returned to `IN_PROGRESS`; this row is historical regression evidence only. |
 
 ## 8. Blockers and deviations
 
-There are no accepted blockers or roadmap deviations at program creation.
+There are no accepted external blockers or roadmap deviations.
+
+RF-001 has an internal execution gap that must be completed before acceptance:
+
+- all 70 required command/container-path pairs have typed desired expectations but the current driver does not execute their semantic geometry, repeat, undo, and view-mode assertions;
+- the 33 named FishMark probes are mapped to typed evidence, but each probe may verify only a subset of the RF-001 aspects;
+- the two current known defects expose only the actual planner result or semantic path proven by matching unit tests; they do not claim unmeasured editor geometry;
+- the next RF-001 slice must add one test-only manifest runner that returns source, selection, physical-line geometry, repeated-operation checkpoints, undo result, and view-mode result without changing product IPC or runtime behavior.
 
 Any deviation must record:
 

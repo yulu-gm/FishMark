@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  assertCompleteFishMarkProbeRegistry,
+  defineEditorBehaviorCase,
+  editorBehaviorEvidenceAspects,
   editorBehaviorCases,
+  fishMarkNamedProbeCatalog,
   filterEditorBehaviorCases,
   formatContainerPath,
   recursiveParityMatrixCases,
@@ -49,10 +53,14 @@ describe("editor behavior manifest", () => {
 
     for (const behaviorCase of editorBehaviorCases) {
       expect(["desired", "known-defect"]).toContain(behaviorCase.classification.kind);
-      expect(behaviorCase.classification.evidence.length).toBeGreaterThan(0);
-      expect(
-        behaviorCase.classification.evidence.every((entry) => entry.trim().length > 0)
-      ).toBe(true);
+      expect(behaviorCase.classification.contractReferences.length).toBeGreaterThan(0);
+      expect(behaviorCase.classification.currentEvidence.length).toBeGreaterThan(0);
+      const accountedAspects = new Set(
+        behaviorCase.classification.currentEvidence.flatMap((entry) =>
+          entry.kind === "coverage-gap" ? entry.missingAspects : entry.verifiedAspects
+        )
+      );
+      expect(accountedAspects).toEqual(new Set(editorBehaviorEvidenceAspects));
       expect(behaviorCase.initial.source).toEqual(expect.any(String));
       expect(behaviorCase.initial.selection).toEqual({
         anchor: expect.any(Number),
@@ -100,8 +108,11 @@ describe("editor behavior manifest", () => {
             line: index + 1,
             role: expect.any(String),
             geometry: {
-              containerDepth: expect.any(Number),
+              semanticDepth: expect.any(Number),
               contentColumn: expect.any(Number),
+              markerColumn: expect.toSatisfy(
+                (value: unknown) => value === null || typeof value === "number"
+              ),
               visibility: expect.stringMatching(/^(visible|collapsed)$/)
             }
           });
@@ -117,10 +128,10 @@ describe("editor behavior manifest", () => {
 
     expect(defects.length).toBeGreaterThan(0);
     for (const defect of defects) {
-      expect(defect.evidence.length).toBeGreaterThan(0);
-      expect(defect.observed.visibleLines).toHaveLength(defect.observed.source.split("\n").length);
-      expect(defect.observed.selection.anchor).toBeLessThanOrEqual(defect.observed.source.length);
-      expect(defect.observed.selection.head).toBeLessThanOrEqual(defect.observed.source.length);
+      expect(defect.currentEvidence.length).toBeGreaterThan(0);
+      expect(["planner-result", "semantic-path", "editor-result"]).toContain(
+        defect.observed.kind
+      );
     }
   });
 
@@ -155,6 +166,120 @@ describe("editor behavior manifest", () => {
     }
   });
 
+  it("maps every named FishMark probe to typed current evidence", () => {
+    const mappedProbeIds = new Set(
+      editorBehaviorCases.flatMap((behaviorCase) =>
+        behaviorCase.classification.currentEvidence.flatMap((entry) =>
+          entry.kind === "verified-probe" ? [entry.probeCaseId] : []
+        )
+      )
+    );
+
+    for (const { caseId } of fishMarkNamedProbeCatalog) {
+      expect(mappedProbeIds.has(caseId), caseId).toBe(true);
+    }
+  });
+
+  it("rejects executable probe registries that drift from the shared catalog", () => {
+    expect(assertCompleteFishMarkProbeRegistry(fishMarkNamedProbeCatalog)).toEqual(
+      fishMarkNamedProbeCatalog
+    );
+    expect(() =>
+      assertCompleteFishMarkProbeRegistry([
+        ...fishMarkNamedProbeCatalog.slice(0, -1),
+        fishMarkNamedProbeCatalog[0]!
+      ])
+    ).toThrow(/does not match the typed catalog/i);
+  });
+
+  it("marks all generated parity evidence as an explicit execution gap", () => {
+    for (const behaviorCase of recursiveParityMatrixCases) {
+      expect(behaviorCase.classification.currentEvidence).toEqual([
+        expect.objectContaining({
+          kind: "coverage-gap",
+          missingAspects: editorBehaviorEvidenceAspects
+        })
+      ]);
+      expect(
+        behaviorCase.classification.currentEvidence.some(
+          (entry) => entry.kind === "verified-probe" || entry.kind === "verified-test"
+        )
+      ).toBe(false);
+    }
+  });
+
+  it("requires repeat and undo operation counts instead of defaulting them", () => {
+    const valid = editorBehaviorCases[0]!;
+    expect(() =>
+      defineEditorBehaviorCase({
+        ...valid,
+        expected: {
+          ...valid.expected,
+          repeat: { ...valid.expected.repeat, operationCount: 1 }
+        }
+      })
+    ).toThrow(/at least two repeated operations/i);
+  });
+
+  it("splits paragraph content into list siblings on Enter at list-owned leaves", () => {
+    const expectedByPathIndex = new Map([
+      [1, "- al\n- pha"],
+      [2, "- - al\n  - pha"],
+      [5, "> - al\n> - pha"],
+      [8, "- > - al\n  > - pha"]
+    ]);
+
+    for (const [pathIndex, expectedSource] of expectedByPathIndex) {
+      const behaviorCase = recursiveParityMatrixCases.find(
+        (candidate) =>
+          candidate.command === "Enter" &&
+          formatContainerPath(candidate.containerPath) ===
+            formatContainerPath(requiredEditorBehaviorContainerPaths[pathIndex]!)
+      );
+      expect(behaviorCase?.expected.source, `path ${pathIndex + 1}`).toBe(expectedSource);
+    }
+  });
+
+  it("does not treat ordinary leading whitespace as semantic container depth", () => {
+    const whitespace = editorBehaviorCases.find(
+      (behaviorCase) => behaviorCase.id === "empty-type-three-spaces"
+    )!;
+
+    expect(whitespace.expected.visibleLines[0]?.geometry.semanticDepth).toBe(0);
+    expect(whitespace.expected.visibleLines[0]?.geometry.contentColumn).toBe(0);
+    expect(whitespace.expected.repeat.visibleLines[0]?.geometry.semanticDepth).toBe(0);
+    expect(whitespace.expected.repeat.visibleLines[0]?.geometry.contentColumn).toBe(0);
+  });
+
+  it("collapses non-active structural separator lines in projected mode", () => {
+    const quoteNavigation = editorBehaviorCases.find(
+      (behaviorCase) => behaviorCase.id === "blockquote-arrow-down"
+    )!;
+
+    expect(quoteNavigation.expected.visibleLines[1]).toMatchObject({
+      role: "structural-separator",
+      geometry: { visibility: "collapsed" }
+    });
+  });
+
+  it("keeps cursor placement metadata consistent with generated Shift+Tab selections", () => {
+    for (const behaviorCase of recursiveParityMatrixCases.filter(
+      (candidate) => candidate.command === "Shift+Tab"
+    )) {
+      expect(behaviorCase.cursorPlacement).toBe("line-end");
+    }
+  });
+
+  it("does not claim observed geometry for the unprobed nested block-math defect", () => {
+    const behaviorCase = editorBehaviorCases.find(
+      (candidate) => candidate.id === "nested-quote-list-block-math-selection"
+    )!;
+    expect(behaviorCase.classification.kind).toBe("known-defect");
+    if (behaviorCase.classification.kind === "known-defect") {
+      expect("visibleLines" in behaviorCase.classification.observed).toBe(false);
+    }
+  });
+
   it("keeps every physical-line geometry expectation within its source line", () => {
     for (const behaviorCase of editorBehaviorCases) {
       for (const result of [
@@ -176,8 +301,8 @@ describe("editor behavior manifest", () => {
       (behaviorCase) => behaviorCase.id === "blockquote-arrow-down"
     )!;
     expect(quoteNavigation.expected.visibleLines[1]).toMatchObject({
-      role: "container-marker",
-      geometry: { contentColumn: 1 }
+      role: "structural-separator",
+      geometry: { contentColumn: 1, markerColumn: 0, visibility: "collapsed" }
     });
   });
 
@@ -186,27 +311,27 @@ describe("editor behavior manifest", () => {
       (behaviorCase) => behaviorCase.id === "nested-list-item-tab"
     )!;
     expect(nestedTab.expected.visibleLines.map((line) => line.geometry)).toEqual([
-      { containerDepth: 1, contentColumn: 2, visibility: "visible" },
-      { containerDepth: 2, contentColumn: 4, visibility: "visible" },
-      { containerDepth: 3, contentColumn: 6, visibility: "visible" }
+      { semanticDepth: 1, contentColumn: 2, markerColumn: 0, visibility: "visible" },
+      { semanticDepth: 2, contentColumn: 4, markerColumn: 2, visibility: "visible" },
+      { semanticDepth: 3, contentColumn: 6, markerColumn: 4, visibility: "visible" }
     ]);
 
     const mixedTab = editorBehaviorCases.find(
       (behaviorCase) => behaviorCase.id === "list-blockquote-list-tab"
     )!;
     expect(mixedTab.expected.visibleLines.map((line) => line.geometry)).toEqual([
-      { containerDepth: 3, contentColumn: 6, visibility: "visible" },
-      { containerDepth: 3, contentColumn: 6, visibility: "visible" },
-      { containerDepth: 4, contentColumn: 8, visibility: "visible" }
+      { semanticDepth: 3, contentColumn: 6, markerColumn: 4, visibility: "visible" },
+      { semanticDepth: 3, contentColumn: 6, markerColumn: 4, visibility: "visible" },
+      { semanticDepth: 4, contentColumn: 8, markerColumn: 6, visibility: "visible" }
     ]);
 
     const nestedMath = editorBehaviorCases.find(
       (behaviorCase) => behaviorCase.id === "nested-quote-list-block-math-selection"
     )!;
     expect(nestedMath.expected.visibleLines.map((line) => line.geometry)).toEqual([
-      { containerDepth: 3, contentColumn: 6, visibility: "visible" },
-      { containerDepth: 3, contentColumn: 6, visibility: "visible" },
-      { containerDepth: 3, contentColumn: 6, visibility: "visible" }
+      { semanticDepth: 3, contentColumn: 6, markerColumn: 4, visibility: "visible" },
+      { semanticDepth: 3, contentColumn: 6, markerColumn: 2, visibility: "visible" },
+      { semanticDepth: 3, contentColumn: 6, markerColumn: 2, visibility: "visible" }
     ]);
 
     const ordered = representativeDepthCases.find((behaviorCase) =>
@@ -215,13 +340,13 @@ describe("editor behavior manifest", () => {
     const task = representativeDepthCases.find((behaviorCase) =>
       /(?:^|\s)- \[ \] /.test(behaviorCase.initial.source)
     )!;
-    expect(ordered.expected.visibleLines[0]?.geometry.containerDepth).toBe(
+    expect(ordered.expected.visibleLines[0]?.geometry.semanticDepth).toBe(
       ordered.containerDepth
     );
     expect(ordered.expected.visibleLines[0]?.geometry.contentColumn).toBe(
       ordered.initial.source.indexOf("leaf")
     );
-    expect(task.expected.visibleLines[0]?.geometry.containerDepth).toBe(task.containerDepth);
+    expect(task.expected.visibleLines[0]?.geometry.semanticDepth).toBe(task.containerDepth);
     expect(task.expected.visibleLines[0]?.geometry.contentColumn).toBe(
       task.initial.source.indexOf("leaf")
     );
@@ -248,6 +373,15 @@ describe("editor behavior manifest", () => {
     expect(initialSources.some((source) => /(?:^|\n)\s*(?:>\s*)*[-+*]\s\[[ xX]\]\s/.test(source))).toBe(
       true
     );
+  });
+
+  it("keeps declared semantic depth consistent with each container path", () => {
+    for (const behaviorCase of editorBehaviorCases) {
+      const pathDepth = behaviorCase.containerPath.filter(
+        (container) => container === "List" || container === "Blockquote"
+      ).length;
+      expect(pathDepth, behaviorCase.id).toBe(behaviorCase.containerDepth);
+    }
   });
 
   it("contains no screenshot or generated-artifact fields", () => {

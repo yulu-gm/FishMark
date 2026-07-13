@@ -1,13 +1,9 @@
-/** Focused recursive-container exports for consumers that do not need the full manifest. */
+/** Focused recursive-container entry point for RF-001 consumers. */
 export {
-  createRepresentativeDepthCases,
   createRecursiveParityMatrixCases,
-  representativeDepthCases,
+  createRepresentativeDepthCases,
+  focusedRecursiveCases,
   recursiveParityMatrixCases,
+  representativeDepthCases,
   requiredEditorBehaviorContainerPaths
-} from "../../packages/test-harness/src/scenarios/editor-behavior-matrix";
-
-export type {
-  EditorBehaviorContainer,
-  EditorBehaviorContainerPath
-} from "../../packages/test-harness/src/scenarios/editor-behavior-matrix";
+} from "../../packages/test-harness/src/scenarios/editor-behavior/nested-containers";
