@@ -47,7 +47,9 @@ function spawnTrackedProcess(command, args, options = {}, runtimeOverrides = {})
     child,
     registryPath,
     ownsRegistry,
-    registryDirectory
+    registryDirectory,
+    processGroupId:
+      runtime.platform !== "win32" && ownsRegistry ? child.pid : undefined
   };
   let termination;
   return {
@@ -58,8 +60,13 @@ function spawnTrackedProcess(command, args, options = {}, runtimeOverrides = {})
     },
     verifyStopped: async () => {
       const alive = readTrackedProcessIds(trackedInput, runtime).filter(runtime.isProcessAlive);
-      if (alive.length > 0) {
-        throw new Error(`Tracked processes are still alive: ${alive.join(", ")}.`);
+      const groupAlive = isOwnedPosixGroupAlive(trackedInput, runtime);
+      if (alive.length > 0 || groupAlive) {
+        const details = [
+          alive.length > 0 ? `tracked processes ${alive.join(", ")}` : null,
+          groupAlive ? `POSIX process group ${trackedInput.processGroupId}` : null
+        ].filter(Boolean);
+        throw new Error(`Process-tree members are still alive: ${details.join("; ")}.`);
       }
       if (ownsRegistry) removeRegistry(registryPath, registryDirectory);
     }
@@ -83,6 +90,11 @@ function createRuntime(overrides) {
     now: overrides.now ?? Date.now,
     delay: overrides.delay ?? ((durationMs) => new Promise((resolve) => setTimeout(resolve, durationMs))),
     isProcessAlive: overrides.isProcessAlive ?? isProcessAlive,
+    isProcessGroupAlive: overrides.isProcessGroupAlive ?? isProcessGroupAlive,
+    signalProcess: overrides.signalProcess ?? signalPosixProcess,
+    signalProcessGroup: overrides.signalProcessGroup ?? signalPosixProcessGroup,
+    setTimer: overrides.setTimer ?? setTimeout,
+    clearTimer: overrides.clearTimer ?? clearTimeout,
     spawnRoot: overrides.spawnRoot ?? spawn,
     spawnTerminator: overrides.spawnTerminator ?? spawn
   };
@@ -141,7 +153,8 @@ async function terminateTrackedProcess(input, runtime) {
   try {
     while (runtime.now() < deadline) {
       const alive = readTrackedProcessIds(input, runtime).filter(runtime.isProcessAlive);
-      if (alive.length === 0) break;
+      const groupAlive = isOwnedPosixGroupAlive(input, runtime);
+      if (alive.length === 0 && !groupAlive) break;
 
       if (runtime.platform === "win32") {
         const elapsed = runtime.now() - startedAt;
@@ -155,13 +168,13 @@ async function terminateTrackedProcess(input, runtime) {
           windowsAttempts += 1;
         }
       } else if (!sentTerm) {
-        terminatePosixProcesses(alive, input.child.pid, input.ownsRegistry, "SIGTERM");
+        terminatePosixProcesses(alive, input.processGroupId, groupAlive, runtime, "SIGTERM");
         sentTerm = true;
       } else if (
         !sentKill &&
-        runtime.now() - startedAt >= Math.min(2_000, runtime.cleanupTimeoutMs / 2)
+        runtime.now() - startedAt >= runtime.cleanupTimeoutMs / 2
       ) {
-        terminatePosixProcesses(alive, input.child.pid, input.ownsRegistry, "SIGKILL");
+        terminatePosixProcesses(alive, input.processGroupId, groupAlive, runtime, "SIGKILL");
         sentKill = true;
       }
 
@@ -171,8 +184,16 @@ async function terminateTrackedProcess(input, runtime) {
     }
 
     const alive = readTrackedProcessIds(input, runtime).filter(runtime.isProcessAlive);
+    const groupAlive = isOwnedPosixGroupAlive(input, runtime);
     if (alive.length > 0) {
       errors.push(new Error(`Tracked processes still alive at cleanup deadline: ${alive.join(", ")}.`));
+    }
+    if (groupAlive) {
+      errors.push(
+        new Error(
+          `POSIX process group ${input.processGroupId} still alive at cleanup deadline.`
+        )
+      );
     }
     if (errors.length > 0) {
       throw new Error(
@@ -208,55 +229,97 @@ async function runWindowsTerminator(pid, runtime, deadline) {
       { stdio: "ignore", windowsHide: true }
     );
     let settled = false;
+    let phase = "running";
+    let timeoutOutcome = null;
+    let timeout;
     const finish = (outcome) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timeout);
+      runtime.clearTimer(timeout);
       terminator.removeListener?.("error", onError);
       terminator.removeListener?.("exit", onExit);
+      terminator.removeListener?.("close", onClose);
       resolveTermination(outcome);
     };
-    const onError = (error) => finish(
-      new Error(`taskkill for ${pid} failed: ${errorMessage(error)}`)
-    );
+    const onError = (error) => {
+      if (phase === "running") {
+        finish(new Error(`taskkill for ${pid} failed: ${errorMessage(error)}`));
+      }
+    };
     const onExit = (code) => {
+      if (phase === "timed-out") {
+        finish(timeoutOutcome);
+        return;
+      }
       if (code === 0 || !runtime.isProcessAlive(pid)) {
         finish(null);
       } else {
         finish(new Error(`taskkill for ${pid} exited with code ${code ?? "unknown"}.`));
       }
     };
-    const timeout = setTimeout(() => {
+    const onClose = (code) => onExit(code);
+    timeout = runtime.setTimer(() => {
+      phase = "timed-out";
+      const timeoutMessage =
+        `taskkill for ${pid} timed out after ${timeoutMs}ms and was force-terminated.`;
+      timeoutOutcome = new Error(timeoutMessage);
       let killError;
       try {
-        terminator.kill?.("SIGKILL");
+        if (terminator.kill?.("SIGKILL") === false) {
+          killError = " Forced terminator shutdown returned false.";
+        }
       } catch (error) {
         killError = ` Forced terminator shutdown failed: ${errorMessage(error)}`;
       }
-      finish(
-        new Error(
-          `taskkill for ${pid} timed out after ${timeoutMs}ms and was force-terminated.${killError ?? ""}`
-        )
+      if (killError) timeoutOutcome = new Error(`${timeoutMessage}${killError}`);
+      if (settled) return;
+      const shutdownGraceMs = Math.max(0, deadline - runtime.now());
+      if (shutdownGraceMs === 0) {
+        finish(withUnconfirmedTerminatorExit(timeoutOutcome));
+        return;
+      }
+      timeout = runtime.setTimer(
+        () => finish(withUnconfirmedTerminatorExit(timeoutOutcome)),
+        shutdownGraceMs
       );
     }, timeoutMs);
     terminator.once("error", onError);
     terminator.once("exit", onExit);
+    terminator.once("close", onClose);
   });
 }
 
-function terminatePosixProcesses(processIds, rootPid, ownsRegistry, signal) {
-  if (ownsRegistry && rootPid !== undefined && processIds.includes(rootPid)) {
-    signalPosix(-rootPid, signal);
-  }
-  for (const pid of processIds) signalPosix(pid, signal);
+function withUnconfirmedTerminatorExit(timeoutError) {
+  return new Error(`${errorMessage(timeoutError)} Terminator exit unconfirmed before cleanup deadline.`);
 }
 
-function signalPosix(pid, signal) {
+function isOwnedPosixGroupAlive(input, runtime) {
+  return runtime.platform !== "win32" &&
+    input.processGroupId !== undefined &&
+    runtime.isProcessGroupAlive(input.processGroupId);
+}
+
+function terminatePosixProcesses(processIds, processGroupId, groupAlive, runtime, signal) {
+  if (groupAlive && processGroupId !== undefined) {
+    runtime.signalProcessGroup(processGroupId, signal);
+  }
+  for (const pid of processIds) runtime.signalProcess(pid, signal);
+}
+
+function signalPosixTarget(pid, signal) {
   try {
     process.kill(pid, signal);
   } catch (error) {
     if (error?.code !== "ESRCH") throw error;
   }
+}
+
+function signalPosixProcess(pid, signal) {
+  signalPosixTarget(pid, signal);
+}
+
+function signalPosixProcessGroup(groupId, signal) {
+  signalPosixTarget(-groupId, signal);
 }
 
 function isProcessAlive(pid) {
@@ -266,6 +329,10 @@ function isProcessAlive(pid) {
   } catch (error) {
     return error?.code === "EPERM";
   }
+}
+
+function isProcessGroupAlive(groupId) {
+  return isProcessAlive(-groupId);
 }
 
 function errorMessage(error) {
