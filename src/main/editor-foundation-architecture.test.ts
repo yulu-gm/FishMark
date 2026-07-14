@@ -862,9 +862,90 @@ describe("editor foundation architecture guard", () => {
   });
 
   it.each([
+    [
+      "direct require parse property extraction",
+      'const parse = require("micromark").parse; parse().document();'
+    ],
+    [
+      "renamed direct dynamic parse property extraction",
+      'const readMicromark = (await import("micromark")).parse; readMicromark().document();'
+    ],
+    [
+      "require namespace parse property extraction",
+      'const mm = require("micromark"); const parse = mm.parse; parse().document();'
+    ],
+    [
+      "dynamic namespace parse property extraction",
+      'const mm = await import("micromark"); const readMicromark = mm.parse; readMicromark().document();'
+    ],
+    [
+      "import-equals namespace parse property extraction",
+      'import mm = require("micromark"); const parse = mm.parse; parse().document();'
+    ],
+    [
+      "ES namespace parse property extraction",
+      'import * as mm from "micromark"; const parse = mm.parse; parse().document();'
+    ],
+    [
+      "confirmed namespace parse destructuring",
+      'const mm = require("micromark"); const { parse } = mm; parse().document();'
+    ],
+    [
+      "confirmed namespace renamed parse destructuring",
+      'const mm = await import("micromark"); const { parse: readMicromark } = mm; readMicromark().document();'
+    ],
+    [
+      "namespace alias propagation",
+      'const mm = require("micromark"); const mm2 = mm; mm2.parse().document();'
+    ],
+    [
+      "parse alias propagation",
+      'import { parse } from "micromark"; const p = parse; p().document();'
+    ],
+    [
+      "combined namespace destructuring and parse alias propagation",
+      'const mm = require("micromark"); const mm2 = mm; const { parse } = mm2; const p = parse; p().document();'
+    ],
+    [
+      "static parse element extraction",
+      'const mm = require("micromark"); const p = mm["parse"]; p().document();'
+    ],
+    [
+      "static parse element call",
+      'const mm = require("micromark"); mm["parse"]().document();'
+    ]
+  ])("rejects a propagated micromark document site through %s", (_name, source) => {
+    const repository = createSyntheticRepository({
+      "packages/markdown-engine/src/propagated-micromark-site.ts": source
+    });
+
+    expect(expectCodes(validateSynthetic(repository))).toContain("unregistered-micromark-document-site");
+  });
+
+  it.each([
     ["module import without document parse", 'const { parse } = require("micromark"); void parse();'],
     ["non-document parser call", 'const micromark = require("micromark"); micromark.parse().content();'],
     ["another package with matching names", 'const { parse } = require("other-parser"); parse().document();'],
+    [
+      "another package direct parse property",
+      'const parse = require("other-parser").parse; parse().document();'
+    ],
+    [
+      "another package namespace parse property",
+      'const other = require("other-parser"); const parse = other.parse; parse().document();'
+    ],
+    [
+      "another package namespace parse destructuring",
+      'const other = require("other-parser"); const { parse } = other; parse().document();'
+    ],
+    [
+      "micromark namespace non-parse property",
+      'const mm = require("micromark"); const build = mm.build; build().document();'
+    ],
+    [
+      "micromark aliases without document parse",
+      'const mm = require("micromark"); const mm2 = mm; const parse = mm2["parse"]; void parse;'
+    ],
     [
       "comments and strings",
       [

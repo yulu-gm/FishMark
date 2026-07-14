@@ -35,6 +35,8 @@ export type SourceModuleAnalysis = {
   reExports: readonly SourceReExport[];
 };
 
+type MicromarkBindingSource = "namespace" | "parse";
+
 const sourceFilePattern = /\.(?:[cm]?[jt]sx?)$/iu;
 
 export function collectSourceFiles(rootDir: string, sourcePath: string): string[] {
@@ -201,16 +203,20 @@ export function analyzeSourceModule(rootDir: string, path: string): SourceModule
       imports.push({ kind: "require-call", specifier: node.arguments[0].text });
     }
 
-    if (
-      ts.isVariableDeclaration(node) &&
-      node.initializer &&
-      isMicromarkModuleExpression(node.initializer)
-    ) {
-      collectMicromarkModuleBinding(
-        node.name,
+    if (ts.isVariableDeclaration(node) && node.initializer) {
+      const bindingSource = classifyMicromarkBindingSource(
+        node.initializer,
         micromarkParseAliases,
         micromarkNamespaceAliases
       );
+      if (bindingSource) {
+        collectMicromarkBinding(
+          node.name,
+          bindingSource,
+          micromarkParseAliases,
+          micromarkNamespaceAliases
+        );
+      }
     }
 
     if (
@@ -326,31 +332,41 @@ function isMicromarkParseCall(
   if (!ts.isCallExpression(candidate)) {
     return false;
   }
-  const callee = unwrapAwaitAndParentheses(candidate.expression);
-  if (ts.isIdentifier(callee)) {
-    return parseAliases.has(callee.text);
-  }
-  if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "parse") {
-    return false;
-  }
-
-  const receiver = unwrapAwaitAndParentheses(callee.expression);
-  return (
-    (ts.isIdentifier(receiver) && namespaceAliases.has(receiver.text)) ||
-    isMicromarkModuleExpression(receiver)
+  return isMicromarkParseReference(
+    candidate.expression,
+    parseAliases,
+    namespaceAliases
   );
 }
 
-function collectMicromarkModuleBinding(
+function classifyMicromarkBindingSource(
+  expression: ts.Expression,
+  parseAliases: ReadonlySet<string>,
+  namespaceAliases: ReadonlySet<string>
+): MicromarkBindingSource | null {
+  const candidate = unwrapAwaitAndParentheses(expression);
+  if (isMicromarkModuleExpression(candidate)) {
+    return "namespace";
+  }
+  if (isMicromarkParseReference(candidate, parseAliases, namespaceAliases)) {
+    return "parse";
+  }
+  return ts.isIdentifier(candidate) && namespaceAliases.has(candidate.text)
+    ? "namespace"
+    : null;
+}
+
+function collectMicromarkBinding(
   binding: ts.BindingName,
+  source: MicromarkBindingSource,
   parseAliases: Set<string>,
   namespaceAliases: Set<string>
 ): void {
   if (ts.isIdentifier(binding)) {
-    namespaceAliases.add(binding.text);
+    (source === "namespace" ? namespaceAliases : parseAliases).add(binding.text);
     return;
   }
-  if (!ts.isObjectBindingPattern(binding)) {
+  if (source !== "namespace" || !ts.isObjectBindingPattern(binding)) {
     return;
   }
 
@@ -365,6 +381,42 @@ function collectMicromarkModuleBinding(
       parseAliases.add(element.name.text);
     }
   }
+}
+
+function isMicromarkParseReference(
+  expression: ts.Expression,
+  parseAliases: ReadonlySet<string>,
+  namespaceAliases: ReadonlySet<string>
+): boolean {
+  const candidate = unwrapAwaitAndParentheses(expression);
+  if (ts.isIdentifier(candidate)) {
+    return parseAliases.has(candidate.text);
+  }
+  const access = readStaticPropertyAccess(candidate);
+  if (!access || access.name !== "parse") {
+    return false;
+  }
+
+  const receiver = unwrapAwaitAndParentheses(access.receiver);
+  return (
+    isMicromarkModuleExpression(receiver) ||
+    (ts.isIdentifier(receiver) && namespaceAliases.has(receiver.text))
+  );
+}
+
+function readStaticPropertyAccess(
+  expression: ts.Expression
+): { name: string; receiver: ts.Expression } | null {
+  if (ts.isPropertyAccessExpression(expression)) {
+    return { name: expression.name.text, receiver: expression.expression };
+  }
+  if (
+    ts.isElementAccessExpression(expression) &&
+    isStringLiteralLike(expression.argumentExpression)
+  ) {
+    return { name: expression.argumentExpression.text, receiver: expression.expression };
+  }
+  return null;
 }
 
 function isMicromarkModuleExpression(expression: ts.Expression): boolean {

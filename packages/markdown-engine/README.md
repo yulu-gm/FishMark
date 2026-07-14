@@ -7,7 +7,7 @@
 - `parseMarkdownDocument`：公开的 rich full-document entry，当前提供 document blocks、inline AST 和引用块 `innerBlocks` 等派生结构；保留到 `RF-405` hard cutover。
 - `parseBlockMap`：公开的 lean/legacy full-document entry；`parseTopLevelBlocks` 是同模块 internal export。二者保留到 `RF-405`，不能在更早任务中改名、复制或静默删除。
 - `parseInlineAst` 是 inline-range parser，不是第二个 full-document truth。
-- 当前直接调用 micromark document parse 的模块只有 `parse-markdown-document.ts` 与 `parse-block-map.ts`，并由 architecture guard 注册；新增调用点或 public parse entry 必须先进入同一 lifecycle manifest。site scanner 会沿 ES/import-equals namespace、literal `require` / awaited dynamic import 的 namespace 或 destructured/renamed `parse` binding，以及 direct module-expression `.parse()` 识别 `.document()`；这些形态不能绕过同一注册表。
+- 当前直接调用 micromark document parse 的模块只有 `parse-markdown-document.ts` 与 `parse-block-map.ts`，并由 architecture guard 注册；新增调用点或 public parse entry 必须先进入同一 lifecycle manifest。site scanner 会沿 ES/import-equals namespace、literal `require` / awaited dynamic import 的 namespace 或 destructured/renamed `parse` binding、确认后的 namespace/`parse` 同步变量别名、namespace destructuring、静态 `.parse` / `["parse"]` 提取，以及 direct module-expression `.parse()` 识别 `.document()`；这些形态不能绕过同一注册表。scanner 不声称分析 assignment、promise 或 callback flow。
 
 包边界禁止 React、Electron、CodeMirror、`@fishmark/editor-core`、`src/main`、`src/preload` 和 `src/renderer`。跨 package consumer 必须通过 `@fishmark/markdown-engine`，不得导入 `packages/markdown-engine/src/**`。
 
