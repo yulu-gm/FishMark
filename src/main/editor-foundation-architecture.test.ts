@@ -331,6 +331,22 @@ describe("editor foundation architecture guard", () => {
     expect(expectCodes(validateSynthetic(repository))).toContain("unsupported-parser-export-assignment");
   });
 
+  it.each([
+    ['export { default } from "./default-document-parser";', "default-document-parser.ts"],
+    ['export { parseMarkdownDocument as default } from "./parse-markdown-document";', null]
+  ])("rejects a named default export in the parser public entry: %s", (publicExport, moduleName) => {
+    const overrides: Record<string, string> = {
+      "packages/markdown-engine/src/index.ts": [syntheticPublicParserExports, publicExport].join("\n")
+    };
+    if (moduleName) {
+      overrides[`packages/markdown-engine/src/${moduleName}`] =
+        "export default function buildDocument(source: string): string { return source; }";
+    }
+    const repository = createSyntheticRepository(overrides);
+
+    expect(expectCodes(validateSynthetic(repository))).toContain("unsupported-parser-export-assignment");
+  });
+
   it("rejects a public alias of a registered document parser", () => {
     const repository = createSyntheticRepository({
       "packages/markdown-engine/src/index.ts": [

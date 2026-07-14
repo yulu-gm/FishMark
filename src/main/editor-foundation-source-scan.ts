@@ -129,6 +129,9 @@ export function analyzeSourceModule(rootDir: string, path: string): SourceModule
       if (ts.isNamedExports(statement.exportClause)) {
         for (const element of statement.exportClause.elements) {
           const exportedName = element.name.text;
+          if (exportedName === "default") {
+            hasDefaultOrExportAssignment = true;
+          }
           const localName = (element.propertyName ?? element.name).text;
           const importedBinding = specifier === null ? importedBindings.get(localName) : undefined;
           exportedSymbols.add(exportedName);
