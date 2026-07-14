@@ -8,6 +8,7 @@ import {
   resolveSourceModulePath,
   type SourceModuleAnalysis
 } from "./editor-foundation-source-scan";
+import { compareOrdinal } from "./editor-foundation-order";
 
 export type ArchitectureFinding = {
   code: string;
@@ -477,7 +478,7 @@ function validatePublicPackageImports(
     return;
   }
   const scannedFiles = new Set(sourcePaths.flatMap((sourcePath) => collectSources(context, sourcePath)));
-  for (const importer of [...scannedFiles].sort((left, right) => left.localeCompare(right))) {
+  for (const importer of [...scannedFiles].sort(compareOrdinal)) {
     for (const sourceImport of analyze(context, importer).imports) {
       let isViolation = false;
       if (sourceImport.specifier.startsWith(publicPrefix)) {
@@ -648,7 +649,7 @@ function validateParserPolicy(
 
   const governedFiles = [
     ...new Set(governedSourcePaths.flatMap((sourcePath) => collectSources(context, sourcePath)))
-  ].sort((left, right) => left.localeCompare(right));
+  ].sort(compareOrdinal);
   validateMicromarkDocumentSites(governedFiles, micromarkSites, context);
 }
 
@@ -1220,7 +1221,7 @@ function isString(value: string | null): value is string {
 
 function createResult(findings: ArchitectureFinding[]): EditorFoundationArchitectureResult {
   const sortedFindings = [...findings].sort((left, right) =>
-    findingSortKey(left).localeCompare(findingSortKey(right))
+    compareOrdinal(findingSortKey(left), findingSortKey(right))
   );
   return { findings: sortedFindings, ok: sortedFindings.length === 0 };
 }

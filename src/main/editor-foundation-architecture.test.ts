@@ -601,17 +601,16 @@ describe("editor foundation architecture guard", () => {
 
   it("sorts findings deterministically", () => {
     const repository = createSyntheticRepository({
-      "src/renderer/z-last.ts": 'import "../main/z";',
-      "src/renderer/a-first.ts": 'import "../main/a";'
+      "src/renderer/Z-first.ts": 'import "../main/z";',
+      "src/renderer/a-second.ts": 'import "../main/a";'
     });
     const result = validateSynthetic(repository);
-    const sorted = [...result.findings].sort((left, right) =>
-      [left.code, left.path ?? "", left.ruleId ?? "", left.message].join("|").localeCompare(
-        [right.code, right.path ?? "", right.ruleId ?? "", right.message].join("|")
-      )
-    );
 
-    expect(result.findings).toEqual(sorted);
+    expect(
+      result.findings
+        .filter((finding) => finding.code === "forbidden-import")
+        .map((finding) => finding.path)
+    ).toEqual(["src/renderer/Z-first.ts", "src/renderer/a-second.ts"]);
   });
 });
 

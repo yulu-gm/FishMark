@@ -3,6 +3,8 @@ import { dirname, extname, relative, resolve } from "node:path";
 
 import ts from "typescript";
 
+import { compareOrdinal } from "./editor-foundation-order";
+
 export type SourceImport = {
   kind: "dynamic-import" | "import" | "re-export";
   specifier: string;
@@ -48,7 +50,7 @@ export function collectSourceFiles(rootDir: string, sourcePath: string): string[
   const files: string[] = [];
   const visit = (directory: string): void => {
     for (const entry of readdirSync(directory, { withFileTypes: true }).sort((left, right) =>
-      left.name.localeCompare(right.name)
+      compareOrdinal(left.name, right.name)
     )) {
       const absolutePath = resolve(directory, entry.name);
       if (entry.isDirectory()) {
@@ -60,7 +62,7 @@ export function collectSourceFiles(rootDir: string, sourcePath: string): string[
   };
 
   visit(absoluteSourcePath);
-  return files.sort((left, right) => left.localeCompare(right));
+  return files.sort(compareOrdinal);
 }
 
 export function analyzeSourceModule(rootDir: string, path: string): SourceModuleAnalysis {
@@ -210,10 +212,10 @@ export function analyzeSourceModule(rootDir: string, path: string): SourceModule
     hasMicromarkDocumentParse,
     hasStarReExport,
     imports: imports.sort((left, right) =>
-      [left.kind, left.specifier].join("|").localeCompare([right.kind, right.specifier].join("|"))
+      compareOrdinal([left.kind, left.specifier].join("|"), [right.kind, right.specifier].join("|"))
     ),
     parseDiagnostics,
-    reExports: reExports.sort((left, right) => left.exportedName.localeCompare(right.exportedName))
+    reExports: reExports.sort((left, right) => compareOrdinal(left.exportedName, right.exportedName))
   };
 }
 
@@ -314,15 +316,22 @@ function normalizeParseDiagnostics(sourceFile: ts.SourceFile): SourceParseDiagno
   const diagnostics = (
     sourceFile as ts.SourceFile & { parseDiagnostics?: readonly ts.Diagnostic[] }
   ).parseDiagnostics ?? [];
-  return diagnostics.map((diagnostic) => {
-    const offset = diagnostic.start ?? 0;
-    const position = sourceFile.getLineAndCharacterOfPosition(offset);
-    return {
-      code: diagnostic.code,
-      column: position.character + 1,
-      line: position.line + 1,
-      message: ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
-      offset
-    };
-  });
+  return diagnostics
+    .map((diagnostic) => {
+      const offset = diagnostic.start ?? 0;
+      const position = sourceFile.getLineAndCharacterOfPosition(offset);
+      return {
+        code: diagnostic.code,
+        column: position.character + 1,
+        line: position.line + 1,
+        message: ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
+        offset
+      };
+    })
+    .sort(
+      (left, right) =>
+        left.offset - right.offset ||
+        left.code - right.code ||
+        compareOrdinal(left.message, right.message)
+    );
 }
