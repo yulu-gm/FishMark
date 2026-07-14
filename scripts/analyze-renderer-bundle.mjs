@@ -318,6 +318,8 @@ function validateSourceMapEvidence(map, generatedSource) {
   const issues = [];
   const hasVersion = Object.prototype.hasOwnProperty.call(map, "version");
   const hasMappings = Object.prototype.hasOwnProperty.call(map, "mappings");
+  const hasNames = Object.prototype.hasOwnProperty.call(map, "names");
+  const names = map.names;
   const sources = map.sources;
   const sourcesContent = map.sourcesContent;
 
@@ -331,6 +333,11 @@ function validateSourceMapEvidence(map, generatedSource) {
   } else if (typeof map.mappings !== "string") {
     issues.push("source-map-mappings-invalid");
   }
+  if (!hasNames) {
+    issues.push("source-map-names-missing");
+  } else if (!Array.isArray(names)) {
+    issues.push("source-map-names-invalid");
+  }
   if (!Array.isArray(sources)) {
     issues.push("source-map-sources-missing");
   }
@@ -339,7 +346,15 @@ function validateSourceMapEvidence(map, generatedSource) {
   }
 
   if (typeof map.mappings === "string") {
-    issues.push(...validateSourceMapMappings(map.mappings, generatedSource, sources));
+    issues.push(...validateSourceMapMappings(map.mappings, generatedSource, sources, names));
+  }
+
+  if (Array.isArray(names)) {
+    names.forEach((name, index) => {
+      if (typeof name !== "string" || name.length === 0) {
+        issues.push(`source-map-name-invalid:${index}`);
+      }
+    });
   }
 
   if (Array.isArray(sources) && Array.isArray(sourcesContent)) {
@@ -365,7 +380,7 @@ function validateSourceMapEvidence(map, generatedSource) {
   return sortUnique(issues);
 }
 
-function validateSourceMapMappings(mappings, generatedSource, sources) {
+function validateSourceMapMappings(mappings, generatedSource, sources, names) {
   if (generatedSource.length > 0 && mappings.length === 0) {
     return ["source-map-mappings-empty"];
   }
@@ -379,6 +394,7 @@ function validateSourceMapMappings(mappings, generatedSource, sources) {
   let previousOriginalColumn = 0;
   let previousNameIndex = 0;
   let hasSourceReference = false;
+  let hasInvalidNameReference = false;
   let hasInvalidSourceReference = false;
 
   try {
@@ -438,6 +454,9 @@ function validateSourceMapMappings(mappings, generatedSource, sources) {
           if (!Number.isSafeInteger(previousNameIndex) || previousNameIndex < 0) {
             throw new Error("invalid source-map name index");
           }
+          if (Array.isArray(names) && previousNameIndex >= names.length) {
+            hasInvalidNameReference = true;
+          }
         }
       }
     }
@@ -448,6 +467,9 @@ function validateSourceMapMappings(mappings, generatedSource, sources) {
   const issues = [];
   if (generatedSource.length > 0 && !hasSourceReference) {
     issues.push("source-map-mappings-unmapped");
+  }
+  if (hasInvalidNameReference) {
+    issues.push("source-map-name-reference-invalid");
   }
   if (hasInvalidSourceReference) {
     issues.push("source-map-source-reference-invalid");

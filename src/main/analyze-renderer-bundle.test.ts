@@ -326,6 +326,60 @@ describe("scripts/analyze-renderer-bundle.mjs", () => {
       ["source-map-mappings-invalid"]
     ],
     [
+      "missing names",
+      JSON.stringify({
+        mappings: "AAAA",
+        sources: ["../../src/renderer/App.tsx"],
+        sourcesContent: ["export const app = true;"],
+        version: 3
+      }),
+      ["source-map-names-missing"]
+    ],
+    [
+      "non-array names",
+      JSON.stringify({
+        mappings: "AAAA",
+        names: {},
+        sources: ["../../src/renderer/App.tsx"],
+        sourcesContent: ["export const app = true;"],
+        version: 3
+      }),
+      ["source-map-names-invalid"]
+    ],
+    [
+      "non-string name",
+      JSON.stringify({
+        mappings: "AAAA",
+        names: [1],
+        sources: ["../../src/renderer/App.tsx"],
+        sourcesContent: ["export const app = true;"],
+        version: 3
+      }),
+      ["source-map-name-invalid:0"]
+    ],
+    [
+      "empty name",
+      JSON.stringify({
+        mappings: "AAAA",
+        names: [""],
+        sources: ["../../src/renderer/App.tsx"],
+        sourcesContent: ["export const app = true;"],
+        version: 3
+      }),
+      ["source-map-name-invalid:0"]
+    ],
+    [
+      "out-of-range name reference",
+      JSON.stringify({
+        mappings: "AAAAC",
+        names: [],
+        sources: ["../../src/renderer/App.tsx"],
+        sourcesContent: ["export const app = true;"],
+        version: 3
+      }),
+      ["source-map-name-reference-invalid"]
+    ],
+    [
       "empty mappings for a non-empty chunk",
       JSON.stringify({
         mappings: "",
