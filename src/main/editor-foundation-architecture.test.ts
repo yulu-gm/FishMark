@@ -8,6 +8,7 @@ import {
   validateEditorFoundationArchitecture,
   type EditorFoundationArchitectureResult
 } from "./editor-foundation-architecture";
+import { collectSourceFiles } from "./editor-foundation-source-scan";
 
 type MutableRecord = Record<string, unknown>;
 
@@ -172,15 +173,66 @@ describe("editor foundation architecture guard", () => {
   });
 
   it("reports a roadmap path that is not a readable file without throwing", () => {
-    const repository = createSyntheticRepository();
+    const importer = "src/renderer/internal.ts";
+    const specifier = "../../packages/markdown-engine/src/parse-inline-ast";
+    const repository = createSyntheticRepository({
+      [importer]: `import { parseInlineAst } from "${specifier}"; void parseInlineAst;`,
+      "packages/editor-core/src/codemirror-current.ts":
+        'import type { Text } from "@codemirror/state"; export type CurrentText = Text;'
+    });
     const manifest = readSyntheticManifest(repository);
     manifest.roadmapPath = "docs/refactor/editor-foundation";
+    manifest.exceptions = [createException({ importer, specifier })];
+    const editorCoreRule = findRule(manifest, "boundary.editor-core");
+    editorCoreRule.forbiddenPackages = [
+      ...(editorCoreRule.forbiddenPackages as string[]),
+      "@codemirror/*"
+    ];
+    editorCoreRule.temporaryAllowedPackages = [createTemporaryAllowance()];
     let result: EditorFoundationArchitectureResult | undefined;
 
     expect(() => {
       result = validateSynthetic(repository, manifest);
     }).not.toThrow();
-    expect(expectCodes(result!)).toContain("roadmap-not-file");
+    expect(expectCodes(result!)).toEqual(["roadmap-not-file"]);
+  });
+
+  it("still rejects malformed retirement metadata when roadmap evidence is unavailable", () => {
+    const repository = createSyntheticRepository();
+    const manifest = readSyntheticManifest(repository);
+    manifest.roadmapPath = "docs/refactor/editor-foundation";
+    manifest.exceptions = [createException({ retireIn: "not-a-roadmap-task" })];
+
+    expect(expectCodes(validateSynthetic(repository, manifest))).toEqual([
+      "invalid-retirement-task",
+      "roadmap-not-file"
+    ]);
+  });
+
+  it("throws when direct source collection receives a missing scan root", () => {
+    const repository = createSyntheticRepository();
+
+    expect(() => collectSourceFiles(repository, "src/missing-scan-root")).toThrow();
+  });
+
+  it("marks a missing active scan root incomplete without declaring debt stale", () => {
+    const repository = createSyntheticRepository();
+    const manifest = readSyntheticManifest(repository);
+    findRule(manifest, "boundary.renderer").sourcePath = "src/renderer-missing";
+    manifest.exceptions = [createException()];
+    const editorCoreRule = findRule(manifest, "boundary.editor-core");
+    editorCoreRule.forbiddenPackages = [
+      ...(editorCoreRule.forbiddenPackages as string[]),
+      "@codemirror/*"
+    ];
+    editorCoreRule.temporaryAllowedPackages = [createTemporaryAllowance()];
+    const codes = expectCodes(validateSynthetic(repository, manifest));
+
+    expect(codes).toEqual(
+      expect.arrayContaining(["active-rule-path-missing", "source-walk-error"])
+    );
+    expect(codes).not.toContain("stale-exception");
+    expect(codes).not.toContain("stale-temporary-allowance");
   });
 
   it("detects string-literal dynamic imports and re-exports", () => {
@@ -260,12 +312,36 @@ describe("editor foundation architecture guard", () => {
     expect(expectCodes(validateSynthetic(repository, manifest))).toContain("stale-exception");
   });
 
+  it("does not declare exception or allowance debt stale when source parsing is incomplete", () => {
+    const repository = createSyntheticRepository({
+      "src/renderer/malformed-evidence.ts": "export const broken = ;"
+    });
+    const manifest = readSyntheticManifest(repository);
+    manifest.exceptions = [
+      createException(),
+      createException({ id: "exception.synthetic-malformed", owner: "" })
+    ];
+    const editorCoreRule = findRule(manifest, "boundary.editor-core");
+    editorCoreRule.forbiddenPackages = [
+      ...(editorCoreRule.forbiddenPackages as string[]),
+      "@codemirror/*"
+    ];
+    editorCoreRule.temporaryAllowedPackages = [createTemporaryAllowance()];
+    const codes = expectCodes(validateSynthetic(repository, manifest));
+
+    expect(codes).toContain("source-parse-error");
+    expect(codes).toContain("invalid-exception");
+    expect(codes).not.toContain("stale-exception");
+    expect(codes).not.toContain("stale-temporary-allowance");
+  });
+
   it.each([
     ["wildcard importer", { importer: "src/renderer/*.ts" }, "invalid-exception"],
     ["wildcard specifier", { specifier: "../../packages/*/src/index" }, "invalid-exception"],
     ["missing owner", { owner: "" }, "invalid-exception"],
     ["missing reason", { reason: "" }, "invalid-exception"],
     ["missing retirement", { retireIn: "" }, "missing-retirement-task"],
+    ["malformed retirement", { retireIn: "not-a-task" }, "invalid-retirement-task"],
     ["unknown retirement", { retireIn: "RF-999" }, "unknown-retirement-task"]
   ])("rejects a malformed exception: %s", (_name, change, expectedCode) => {
     const repository = createSyntheticRepository();
@@ -394,6 +470,16 @@ describe("editor foundation architecture guard", () => {
       "packages/markdown-engine/src/parse-inline-ast-missing.ts";
 
     expect(expectCodes(validateSynthetic(repository, manifest))).toContain("parser-module-missing");
+  });
+
+  it("does not infer a missing parser symbol from a module with incomplete parse evidence", () => {
+    const repository = createSyntheticRepository({
+      "packages/markdown-engine/src/parse-inline-ast.ts": "export const = true;"
+    });
+    const codes = expectCodes(validateSynthetic(repository));
+
+    expect(codes).toContain("source-parse-error");
+    expect(codes).not.toContain("required-parser-symbol-missing");
   });
 
   it.each(["present", "removed"])(
@@ -540,6 +626,17 @@ describe("editor foundation architecture guard", () => {
     });
 
     expect(expectCodes(validateSynthetic(repository))).toContain("unregistered-micromark-document-site");
+  });
+
+  it("does not infer a missing micromark site from a module with incomplete parse evidence", () => {
+    const repository = createSyntheticRepository({
+      "packages/markdown-engine/src/parse-block-map.ts": "export const = true;"
+    });
+    const codes = expectCodes(validateSynthetic(repository));
+
+    expect(codes).toContain("source-parse-error");
+    expect(codes).not.toContain("required-parser-symbol-missing");
+    expect(codes).not.toContain("required-micromark-document-site-missing");
   });
 
   it.each([

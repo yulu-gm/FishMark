@@ -1,6 +1,11 @@
-import { readFileSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 
+import { compareOrdinal } from "./editor-foundation-order";
+import {
+  inspectRepositoryPath,
+  normalizeFilesystemError,
+  readRepositoryText
+} from "./editor-foundation-repository-evidence";
 import {
   analyzeSourceModule,
   collectSourceFiles,
@@ -8,7 +13,6 @@ import {
   resolveSourceModulePath,
   type SourceModuleAnalysis
 } from "./editor-foundation-source-scan";
-import { compareOrdinal } from "./editor-foundation-order";
 
 export type ArchitectureFinding = {
   code: string;
@@ -42,16 +46,20 @@ type TemporaryPackageAllowance = {
   ruleId: string;
 };
 
-type RepositoryPathInspection =
-  | { kind: "directory" | "file" | "missing" | "other" }
-  | { errorCode: string; kind: "error" };
+type RoadmapTaskEvidence = {
+  complete: boolean;
+  tasks: ReadonlySet<string>;
+};
 
 type ValidationContext = {
-  analysisCache: Map<string, SourceModuleAnalysis>;
+  analysisCache: Map<string, SourceModuleAnalysis | null>;
+  failedSourceWalkPaths: Set<string>;
   findings: ArchitectureFinding[];
-  roadmapTasks: ReadonlySet<string>;
+  roadmapEvidence: RoadmapTaskEvidence;
   rootDir: string;
+  sourceEvidenceComplete: boolean;
   temporaryPackageAllowances: Map<string, readonly TemporaryPackageAllowance[]>;
+  usedExceptionIds: Set<string>;
   usedTemporaryAllowanceIds: Set<string>;
 };
 
@@ -81,13 +89,16 @@ export function validateEditorFoundationArchitecture(
     });
   }
 
-  const roadmapTasks = readRoadmapTasks(rootDir, manifest.roadmapPath, findings);
+  const roadmapEvidence = readRoadmapTasks(rootDir, manifest.roadmapPath, findings);
   const context: ValidationContext = {
     analysisCache: new Map(),
+    failedSourceWalkPaths: new Set(),
     findings,
-    roadmapTasks,
+    roadmapEvidence,
     rootDir,
+    sourceEvidenceComplete: true,
     temporaryPackageAllowances: new Map(),
+    usedExceptionIds: new Set(),
     usedTemporaryAllowanceIds: new Set()
   };
   const packages = readRecordArray(manifest, "packages", findings);
@@ -102,6 +113,7 @@ export function validateEditorFoundationArchitecture(
   const validExceptions = validateExceptions(exceptions, activeRules, context);
   validateImports(activeRules, validExceptions, context);
   validateParserPolicy(manifest.parserPolicy, parserEntries, micromarkSites, context);
+  validateStaleImportDebt(validExceptions, context);
 
   return createResult(findings);
 }
@@ -378,11 +390,10 @@ function validateImports(
   const exceptionsByTarget = new Map(
     exceptions.map((exception) => [exceptionTarget(exception.ruleId, exception.importer, exception.specifier), exception])
   );
-  const usedExceptionIds = new Set<string>();
   const reportViolation = (ruleId: string, importer: string, specifier: string, code: string, message: string): void => {
     const exception = exceptionsByTarget.get(exceptionTarget(ruleId, importer, specifier));
     if (exception) {
-      usedExceptionIds.add(exception.id);
+      context.usedExceptionIds.add(exception.id);
       return;
     }
     context.findings.push({ code, message, path: importer, ruleId });
@@ -400,9 +411,17 @@ function validateImports(
       validatePublicPackageImports(rule, id, reportViolation, context);
     }
   }
+}
 
+function validateStaleImportDebt(
+  exceptions: readonly ExactException[],
+  context: ValidationContext
+): void {
+  if (!context.sourceEvidenceComplete) {
+    return;
+  }
   for (const exception of exceptions) {
-    if (!usedExceptionIds.has(exception.id)) {
+    if (!context.usedExceptionIds.has(exception.id)) {
       context.findings.push({
         code: "stale-exception",
         message: `Exception ${exception.id} no longer matches a real architecture violation and must be removed.`,
@@ -439,7 +458,11 @@ function validateForbiddenImports(
   const forbiddenPaths = stringArray(rule.forbiddenPaths);
   const temporaryAllowances = context.temporaryPackageAllowances.get(ruleId) ?? [];
   for (const importer of collectSources(context, sourcePath)) {
-    for (const sourceImport of analyze(context, importer).imports) {
+    const analysis = analyze(context, importer);
+    if (!analysis) {
+      continue;
+    }
+    for (const sourceImport of analysis.imports) {
       const packageViolation = forbiddenPackages.some((pattern) => packagePatternMatches(pattern, sourceImport.specifier));
       const temporaryAllowance = packageViolation
         ? temporaryAllowances.find((allowance) =>
@@ -479,7 +502,11 @@ function validatePublicPackageImports(
   }
   const scannedFiles = new Set(sourcePaths.flatMap((sourcePath) => collectSources(context, sourcePath)));
   for (const importer of [...scannedFiles].sort(compareOrdinal)) {
-    for (const sourceImport of analyze(context, importer).imports) {
+    const analysis = analyze(context, importer);
+    if (!analysis) {
+      continue;
+    }
+    for (const sourceImport of analysis.imports) {
       let isViolation = false;
       if (sourceImport.specifier.startsWith(publicPrefix)) {
         const publicPackageName = sourceImport.specifier.slice(publicPrefix.length);
@@ -558,14 +585,15 @@ function validateParserPolicy(
   }
 
   const publicEntryAnalysis = analyze(context, publicEntryPath);
-  if (publicEntryAnalysis.hasStarReExport) {
+  const publicEntryEvidenceComplete = publicEntryAnalysis !== null;
+  if (publicEntryAnalysis?.hasStarReExport) {
     context.findings.push({
       code: "unsupported-parser-star-export",
       message: `${publicEntryPath} uses export *, which prevents exact parser entry validation.`,
       path: publicEntryPath
     });
   }
-  if (publicEntryAnalysis.hasDefaultOrExportAssignment) {
+  if (publicEntryAnalysis?.hasDefaultOrExportAssignment) {
     context.findings.push({
       code: "unsupported-parser-export-assignment",
       message: `${publicEntryPath} uses a default or export assignment, which prevents exact parser entry validation.`,
@@ -574,10 +602,10 @@ function validateParserPolicy(
   }
 
   const publicExports = new Map<string, string>();
-  for (const symbol of publicEntryAnalysis.exportedSymbols) {
+  for (const symbol of publicEntryAnalysis?.exportedSymbols ?? []) {
     publicExports.set(symbol, publicEntryPath);
   }
-  for (const reExport of publicEntryAnalysis.reExports) {
+  for (const reExport of publicEntryAnalysis?.reExports ?? []) {
     if (reExport.specifier) {
       publicExports.set(
         reExport.exportedName,
@@ -589,11 +617,18 @@ function validateParserPolicy(
   const registeredParserKeys = new Set<string>();
   const publicParserSymbols = new Set<string>();
   for (const entry of parserEntries) {
-    validateParserEntry(entry, publicExports, registeredParserKeys, publicParserSymbols, context);
+    validateParserEntry(
+      entry,
+      publicExports,
+      publicEntryEvidenceComplete,
+      registeredParserKeys,
+      publicParserSymbols,
+      context
+    );
   }
 
   const reExportedNames = new Set<string>();
-  for (const reExport of publicEntryAnalysis.reExports) {
+  for (const reExport of publicEntryAnalysis?.reExports ?? []) {
     if (!reExport.specifier) {
       continue;
     }
@@ -636,7 +671,11 @@ function validateParserPolicy(
     if (path === publicEntryPath) {
       continue;
     }
-    for (const symbol of analyze(context, path).exportedSymbols) {
+    const analysis = analyze(context, path);
+    if (!analysis) {
+      continue;
+    }
+    for (const symbol of analysis.exportedSymbols) {
       if (symbol.startsWith("parse") && !registeredParserKeys.has(parserKey(path, symbol))) {
         context.findings.push({
           code: "unregistered-document-parser-export",
@@ -656,6 +695,7 @@ function validateParserPolicy(
 function validateParserEntry(
   entry: ManifestRecord,
   publicExports: ReadonlyMap<string, string>,
+  publicEntryEvidenceComplete: boolean,
   registeredParserKeys: Set<string>,
   publicParserSymbols: Set<string>,
   context: ValidationContext
@@ -707,20 +747,21 @@ function validateParserEntry(
       path: module
     });
   }
+  const moduleEvidenceComplete = moduleInspection.kind === "file" && moduleAnalysis !== null;
   const moduleExportsSymbol = moduleAnalysis?.exportedSymbols.has(symbol) ?? false;
   const moduleDeclaresSymbol = moduleAnalysis?.declaredSymbols.has(symbol) ?? false;
   const publicExportModule = publicExports.get(symbol);
   const isPublic = publicExportModule !== undefined;
 
   if (lifecycle === "present" || lifecycle === "present-until") {
-    if (!moduleExportsSymbol) {
+    if (moduleEvidenceComplete && !moduleExportsSymbol) {
       context.findings.push({
         code: "required-parser-symbol-missing",
         message: `Parser ${id} requires exported symbol ${symbol} in ${module}.`,
         path: module
       });
     }
-    if (visibility === "public") {
+    if (visibility === "public" && publicEntryEvidenceComplete) {
       if (!isPublic) {
         context.findings.push({
           code: "required-public-parser-export-missing",
@@ -734,7 +775,7 @@ function validateParserEntry(
           path: module
         });
       }
-    } else if (isPublic) {
+    } else if (visibility !== "public" && publicEntryEvidenceComplete && isPublic) {
       context.findings.push({
         code: "internal-parser-publicly-exported",
         message: `Internal parser ${symbol} must not be exported by the public entry.`,
@@ -742,7 +783,9 @@ function validateParserEntry(
       });
     }
   } else if (lifecycle === "forbidden") {
-    const forbiddenPresent = visibility === "public" ? isPublic : moduleExportsSymbol;
+    const forbiddenPresent = visibility === "public"
+      ? publicEntryEvidenceComplete && isPublic
+      : moduleEvidenceComplete && moduleExportsSymbol;
     if (forbiddenPresent) {
       context.findings.push({
         code: "forbidden-parser-symbol-present",
@@ -750,7 +793,10 @@ function validateParserEntry(
         path: module
       });
     }
-  } else if (moduleDeclaresSymbol || moduleExportsSymbol || isPublic) {
+  } else if (
+    (moduleEvidenceComplete && (moduleDeclaresSymbol || moduleExportsSymbol)) ||
+    (publicEntryEvidenceComplete && isPublic)
+  ) {
     context.findings.push({
       code: "removed-parser-symbol-present",
       message: `Removed parser ${id} still exists in source or the public entry.`,
@@ -764,9 +810,14 @@ function validateMicromarkDocumentSites(
   sites: readonly ManifestRecord[],
   context: ValidationContext
 ): void {
-  const detectedSites = new Set(
-    engineFiles.filter((path) => analyze(context, path).hasMicromarkDocumentParse)
-  );
+  const detectedSites = new Set<string>();
+  for (const path of engineFiles) {
+    const analysis = analyze(context, path);
+    if (analysis?.hasMicromarkDocumentParse) {
+      detectedSites.add(path);
+    }
+  }
+  const detectionEvidenceComplete = context.sourceEvidenceComplete;
   const registeredPresentSites = new Set<string>();
   for (const site of sites) {
     const id = readNonEmptyString(site.id) ?? "<missing-id>";
@@ -778,7 +829,7 @@ function validateMicromarkDocumentSites(
     const detected = detectedSites.has(module);
     if (lifecycle === "present" || lifecycle === "present-until") {
       registeredPresentSites.add(module);
-      if (!detected) {
+      if (!detected && detectionEvidenceComplete) {
         context.findings.push({
           code: "required-micromark-document-site-missing",
           message: `Registered micromark document site ${id} is no longer present and its registry entry is stale.`,
@@ -871,7 +922,17 @@ function validateRetirementTask(value: unknown, ownerId: string | null, context:
     });
     return false;
   }
-  if (!context.roadmapTasks.has(retireIn)) {
+  if (!/^RF-\d{3}$/u.test(retireIn)) {
+    context.findings.push({
+      code: "invalid-retirement-task",
+      message: `${ownerId ?? "<missing-id>"} retirement task must use the RF-000 format.`
+    });
+    return false;
+  }
+  if (!context.roadmapEvidence.complete) {
+    return true;
+  }
+  if (!context.roadmapEvidence.tasks.has(retireIn)) {
     context.findings.push({
       code: "unknown-retirement-task",
       message: `${ownerId ?? "<missing-id>"} references retirement task ${retireIn}, which is absent from the roadmap.`
@@ -881,16 +942,20 @@ function validateRetirementTask(value: unknown, ownerId: string | null, context:
   return true;
 }
 
-function readRoadmapTasks(rootDir: string, value: unknown, findings: ArchitectureFinding[]): Set<string> {
+function readRoadmapTasks(
+  rootDir: string,
+  value: unknown,
+  findings: ArchitectureFinding[]
+): RoadmapTaskEvidence {
   const path = readNonEmptyString(value);
   if (!path || !isSafeManifestPath(rootDir, path)) {
     findings.push({ code: "invalid-path", message: `roadmapPath is invalid: ${String(value)}.` });
-    return new Set();
+    return { complete: false, tasks: new Set() };
   }
   const inspection = inspectRepositoryPath(rootDir, path);
   if (inspection.kind === "missing") {
     findings.push({ code: "roadmap-missing", message: `Architecture roadmap is missing at ${path}.`, path });
-    return new Set();
+    return { complete: false, tasks: new Set() };
   }
   if (inspection.kind === "error") {
     findings.push({
@@ -898,7 +963,7 @@ function readRoadmapTasks(rootDir: string, value: unknown, findings: Architectur
       message: `Architecture roadmap could not be inspected at ${path} (${inspection.errorCode}).`,
       path
     });
-    return new Set();
+    return { complete: false, tasks: new Set() };
   }
   if (inspection.kind !== "file") {
     findings.push({
@@ -906,27 +971,25 @@ function readRoadmapTasks(rootDir: string, value: unknown, findings: Architectur
       message: `Architecture roadmap must be a readable file at ${path}.`,
       path
     });
-    return new Set();
+    return { complete: false, tasks: new Set() };
   }
 
-  let source: string;
-  try {
-    source = readFileSync(resolve(rootDir, path), "utf8");
-  } catch (error) {
+  const textEvidence = readRepositoryText(rootDir, path);
+  if (textEvidence.kind === "unavailable") {
     findings.push({
       code: "roadmap-read-error",
-      message: `Architecture roadmap could not be read at ${path} (${normalizeFilesystemError(error)}).`,
+      message: `Architecture roadmap could not be read at ${path} (${textEvidence.errorCode}).`,
       path
     });
-    return new Set();
+    return { complete: false, tasks: new Set() };
   }
   const tasks = new Set<string>();
-  for (const match of source.matchAll(/^####\s+(RF-\d{3}):/gmu)) {
+  for (const match of textEvidence.source.matchAll(/^####\s+(RF-\d{3}):/gmu)) {
     if (match[1]) {
       tasks.add(match[1]);
     }
   }
-  return tasks;
+  return { complete: true, tasks };
 }
 
 function validateManifestPath(value: unknown, label: string, context: ValidationContext): string | null {
@@ -1067,23 +1130,23 @@ function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter(isString) : [];
 }
 
-function analyze(context: ValidationContext, path: string): SourceModuleAnalysis {
-  const cached = context.analysisCache.get(path);
-  if (cached) {
-    return cached;
+function analyze(context: ValidationContext, path: string): SourceModuleAnalysis | null {
+  if (context.analysisCache.has(path)) {
+    return context.analysisCache.get(path) ?? null;
   }
   let analysis: SourceModuleAnalysis;
   try {
     analysis = analyzeSourceModule(context.rootDir, path);
   } catch (error) {
+    context.sourceEvidenceComplete = false;
     context.findings.push({
       code: "source-analysis-error",
       message: `Source module ${path} could not be read or analyzed (${normalizeFilesystemError(error)}).`,
       path
     });
-    analysis = emptySourceModuleAnalysis();
+    context.analysisCache.set(path, null);
+    return null;
   }
-  context.analysisCache.set(path, analysis);
   for (const diagnostic of analysis.parseDiagnostics) {
     context.findings.push({
       code: "source-parse-error",
@@ -1091,6 +1154,12 @@ function analyze(context: ValidationContext, path: string): SourceModuleAnalysis
       path
     });
   }
+  if (analysis.parseDiagnostics.length > 0) {
+    context.sourceEvidenceComplete = false;
+    context.analysisCache.set(path, null);
+    return null;
+  }
+  context.analysisCache.set(path, analysis);
   return analysis;
 }
 
@@ -1099,43 +1168,16 @@ function collectSources(context: ValidationContext, sourcePath: string): string[
     return collectSourceFiles(context.rootDir, sourcePath);
   } catch (error) {
     const path = normalizeRepoPath(sourcePath);
-    context.findings.push({
-      code: "source-walk-error",
-      message: `Source path ${path} could not be scanned (${normalizeFilesystemError(error)}).`,
-      path
-    });
+    context.sourceEvidenceComplete = false;
+    if (!context.failedSourceWalkPaths.has(path)) {
+      context.failedSourceWalkPaths.add(path);
+      context.findings.push({
+        code: "source-walk-error",
+        message: `Source path ${path} could not be scanned (${normalizeFilesystemError(error)}).`,
+        path
+      });
+    }
     return [];
-  }
-}
-
-function emptySourceModuleAnalysis(): SourceModuleAnalysis {
-  return {
-    declaredSymbols: new Set(),
-    exportedSymbols: new Set(),
-    hasDefaultOrExportAssignment: false,
-    hasMicromarkDocumentParse: false,
-    hasStarReExport: false,
-    imports: [],
-    parseDiagnostics: [],
-    reExports: []
-  };
-}
-
-function inspectRepositoryPath(rootDir: string, path: string): RepositoryPathInspection {
-  try {
-    const stats = statSync(resolve(rootDir, path));
-    if (stats.isDirectory()) {
-      return { kind: "directory" };
-    }
-    if (stats.isFile()) {
-      return { kind: "file" };
-    }
-    return { kind: "other" };
-  } catch (error) {
-    const errorCode = normalizeFilesystemError(error);
-    return errorCode === "ENOENT" || errorCode === "ENOTDIR"
-      ? { kind: "missing" }
-      : { errorCode, kind: "error" };
   }
 }
 
@@ -1152,15 +1194,6 @@ function reportFilesystemAccessError(
   });
 }
 
-function normalizeFilesystemError(error: unknown): string {
-  if (isRecord(error) && typeof error.code === "string" && error.code.length > 0) {
-    return error.code;
-  }
-  if (error instanceof Error && error.name.length > 0) {
-    return error.name;
-  }
-  return "UNKNOWN";
-}
 
 function packagePatternMatches(pattern: string, specifier: string): boolean {
   if (pattern.endsWith("/*")) {

@@ -39,10 +39,6 @@ const sourceFilePattern = /\.(?:[cm]?[jt]sx?)$/iu;
 
 export function collectSourceFiles(rootDir: string, sourcePath: string): string[] {
   const absoluteSourcePath = resolve(rootDir, sourcePath);
-  if (!existsSync(absoluteSourcePath)) {
-    return [];
-  }
-
   if (statSync(absoluteSourcePath).isFile()) {
     return sourceFilePattern.test(absoluteSourcePath) ? [toRepoPath(rootDir, absoluteSourcePath)] : [];
   }
