@@ -1,5 +1,14 @@
-﻿# Markdown 引擎包
+# Markdown 引擎包
 
-这个目录预留给 Markdown 解析、round-trip 辅助工具以及其他文本引擎能力。
+`@fishmark/markdown-engine` 是当前唯一 public entry，落点为 `src/index.ts`。Markdown 文本仍是唯一事实来源；本包负责 parser-owned block/inline/document 结构、source range 与 round-trip 辅助语义，renderer 和 editor-core 只消费公开结果。
 
-具体实现会在后续 backlog 任务中补入；`TASK-002` 只负责建立工作区边界。
+当前 document parse lifecycle：
+
+- `parseMarkdownDocument`：公开的 rich full-document entry，当前提供 document blocks、inline AST 和引用块 `innerBlocks` 等派生结构；保留到 `RF-405` hard cutover。
+- `parseBlockMap`：公开的 lean/legacy full-document entry；`parseTopLevelBlocks` 是同模块 internal export。二者保留到 `RF-405`，不能在更早任务中改名、复制或静默删除。
+- `parseInlineAst` 是 inline-range parser，不是第二个 full-document truth。
+- 当前直接调用 micromark document parse 的模块只有 `parse-markdown-document.ts` 与 `parse-block-map.ts`，并由 architecture guard 注册；新增调用点或 public parse entry 必须先进入同一 lifecycle manifest。
+
+包边界禁止 React、Electron、CodeMirror、`@fishmark/editor-core`、`src/main`、`src/preload` 和 `src/renderer`。跨 package consumer 必须通过 `@fishmark/markdown-engine`，不得导入 `packages/markdown-engine/src/**`。
+
+计划中的 recursive node model、physical-line/prefix index、incremental structure cache 与 parser hard cutover 属于 `RF-401` 到 `RF-405`，当前尚未实现。现有引用块 `innerBlocks` 也不是最终通用 recursive container tree。

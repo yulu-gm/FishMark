@@ -5,6 +5,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const DEFAULT_TOP_GROUP_LIMIT = 20;
+const REPORT_SCHEMA_VERSION = 1;
+const BUNDLE_EVIDENCE_SCOPE = "emitted-renderer-output";
+const SOURCE_GRAPH_AUTHORITY = "editor-foundation-architecture-guard";
 
 function parseArguments(argv) {
   const options = {
@@ -110,6 +113,13 @@ function parseArguments(argv) {
     throw new Error(`Unknown argument: ${entry}`);
   }
 
+  options.budget.forbiddenInitialSourceGroups = sortUnique(
+    options.budget.forbiddenInitialSourceGroups
+  );
+  options.budget.requiredLazyChunkPatterns = sortUnique(
+    options.budget.requiredLazyChunkPatterns
+  );
+
   return options;
 }
 
@@ -135,14 +145,18 @@ function readRendererBundleReport(input) {
     : [];
   const chunks = readdirSync(assetsDir)
     .filter((fileName) => fileName.endsWith(".js"))
+    .sort(compareOrdinal)
     .map((fileName) => readChunk(path.join(assetsDir, fileName), fileName))
-    .sort((left, right) => right.bytes - left.bytes);
+    .sort(compareChunks);
   const chunkByName = new Map(chunks.map((chunk) => [chunk.name, chunk]));
-  const topSourceGroups = readTopSourceGroups(assetsDir, input.topGroupLimit);
+  const topSourceGroups = readTopSourceGroups(chunks, input.topGroupLimit);
   const editorChunk = chunks.find((chunk) => chunk.role === "editor") ?? chunks[0] ?? null;
+  const initialClosureRoots = sortUnique(
+    [...htmlInitialChunkNames, editorChunk?.name].filter(Boolean)
+  );
   const initialChunkNames = resolveStaticChunkClosure(
     chunkByName,
-    [...htmlInitialChunkNames, editorChunk?.name].filter(Boolean)
+    initialClosureRoots
   );
   for (const chunk of chunks) {
     chunk.isInitial = initialChunkNames.has(chunk.name);
@@ -155,6 +169,7 @@ function readRendererBundleReport(input) {
     chunks,
     editorChunk,
     htmlInitialChunks: chunks.filter((chunk) => htmlInitialChunkNames.includes(chunk.name)),
+    initialClosureRoots,
     initialChunks,
     lazyChunks,
     reactChunks,
@@ -168,6 +183,7 @@ function readRendererBundleReport(input) {
 function readChunk(filePath, fileName) {
   const source = readFileSync(filePath);
   const sourceText = source.toString("utf8");
+  const sourceMap = readChunkSourceGroups(`${filePath}.map`, `${fileName}.map`);
 
   return {
     bytes: statSync(filePath).size,
@@ -175,7 +191,8 @@ function readChunk(filePath, fileName) {
     staticImports: readStaticChunkImports(sourceText),
     name: fileName,
     role: classifyChunk(fileName),
-    sourceGroups: readChunkSourceGroups(`${filePath}.map`)
+    sourceGroups: sourceMap.sourceGroups,
+    sourceMapEvidence: sourceMap.evidence
   };
 }
 
@@ -212,7 +229,7 @@ function readHtmlInitialChunkNames(html) {
     }
   }
 
-  return Array.from(chunks);
+  return Array.from(chunks).sort(compareOrdinal);
 }
 
 function readStaticChunkImports(sourceText) {
@@ -232,12 +249,12 @@ function readStaticChunkImports(sourceText) {
     }
   }
 
-  return Array.from(imports);
+  return Array.from(imports).sort(compareOrdinal);
 }
 
 function resolveStaticChunkClosure(chunkByName, roots) {
   const visited = new Set();
-  const pending = roots.filter(Boolean);
+  const pending = sortUnique(roots.filter(Boolean)).reverse();
 
   while (pending.length > 0) {
     const name = pending.pop();
@@ -252,37 +269,102 @@ function resolveStaticChunkClosure(chunkByName, roots) {
     }
 
     visited.add(name);
-    pending.push(...chunk.staticImports);
+    pending.push(...[...chunk.staticImports].sort(compareOrdinal).reverse());
   }
 
   return visited;
 }
 
-function readChunkSourceGroups(mapPath) {
+function readChunkSourceGroups(mapPath, mapName) {
   if (!existsSync(mapPath)) {
-    return [];
+    return {
+      evidence: createSourceMapEvidence(mapName, ["source-map-missing"]),
+      sourceGroups: []
+    };
   }
 
-  const map = JSON.parse(readFileSync(mapPath, "utf8"));
-  return readSourceGroupsFromMap(map);
+  let map;
+  try {
+    map = JSON.parse(readFileSync(mapPath, "utf8"));
+  } catch {
+    return {
+      evidence: createSourceMapEvidence(mapName, ["source-map-json-invalid"]),
+      sourceGroups: []
+    };
+  }
+
+  const issues = validateSourceMapEvidence(map);
+  return {
+    evidence: createSourceMapEvidence(mapName, issues),
+    sourceGroups: issues.length === 0 ? readSourceGroupsFromMap(map) : []
+  };
 }
 
-function readTopSourceGroups(assetsDir, limit) {
+function createSourceMapEvidence(mapName, issues) {
+  const sortedIssues = sortUnique(issues);
+  return {
+    map: mapName,
+    issues: sortedIssues,
+    status: sortedIssues.length === 0 ? "COMPLETE" : "INCOMPLETE"
+  };
+}
+
+function validateSourceMapEvidence(map) {
+  if (!map || typeof map !== "object" || Array.isArray(map)) {
+    return ["source-map-root-invalid"];
+  }
+
+  const issues = [];
+  const sources = map.sources;
+  const sourcesContent = map.sourcesContent;
+
+  if (!Array.isArray(sources)) {
+    issues.push("source-map-sources-missing");
+  }
+  if (!Array.isArray(sourcesContent)) {
+    issues.push("source-map-sources-content-missing");
+  }
+  if (!Array.isArray(sources) || !Array.isArray(sourcesContent)) {
+    return sortUnique(issues);
+  }
+
+  if (sources.length === 0) {
+    issues.push("source-map-sources-empty");
+  }
+  if (sources.length !== sourcesContent.length) {
+    issues.push("source-map-source-count-mismatch");
+  }
+
+  sources.forEach((source, index) => {
+    if (typeof source !== "string" || source.length === 0) {
+      issues.push(`source-map-source-invalid:${index}`);
+    }
+    if (index >= sourcesContent.length || sourcesContent[index] === undefined || sourcesContent[index] === null) {
+      issues.push(`source-map-content-missing:${index}`);
+    } else if (typeof sourcesContent[index] !== "string") {
+      issues.push(`source-map-content-invalid:${index}`);
+    }
+  });
+
+  return sortUnique(issues);
+}
+
+function readTopSourceGroups(chunks, limit) {
   const sourceGroupBytes = new Map();
 
-  for (const fileName of readdirSync(assetsDir)) {
-    if (!fileName.endsWith(".js.map")) {
+  for (const chunk of chunks) {
+    if (chunk.sourceMapEvidence.status !== "COMPLETE") {
       continue;
     }
 
-    for (const group of readSourceGroupsFromMap(JSON.parse(readFileSync(path.join(assetsDir, fileName), "utf8")))) {
+    for (const group of chunk.sourceGroups) {
       sourceGroupBytes.set(group.group, (sourceGroupBytes.get(group.group) ?? 0) + group.bytes);
     }
   }
 
   return Array.from(sourceGroupBytes.entries())
     .map(([group, bytes]) => ({ bytes, group }))
-    .sort((left, right) => right.bytes - left.bytes || left.group.localeCompare(right.group))
+    .sort((left, right) => right.bytes - left.bytes || compareOrdinal(left.group, right.group))
     .slice(0, limit);
 }
 
@@ -299,7 +381,7 @@ function readSourceGroupsFromMap(map) {
 
   return Array.from(sourceGroupBytes.entries())
     .map(([group, bytes]) => ({ bytes, group }))
-    .sort((left, right) => right.bytes - left.bytes || left.group.localeCompare(right.group));
+    .sort((left, right) => right.bytes - left.bytes || compareOrdinal(left.group, right.group));
 }
 
 function resolveSourceGroup(source) {
@@ -367,33 +449,44 @@ function formatReport(report) {
 function evaluateBundleBudget(report, budgetOptions) {
   const checks = [];
 
-  addMaxCheck(checks, "editorChunkBytes", report.editorChunk?.bytes ?? 0, budgetOptions.maxEditorBytes);
   addMaxCheck(
     checks,
+    "bundle.max-editor-bytes",
+    "editorChunkBytes",
+    report.editorChunk?.bytes ?? 0,
+    budgetOptions.maxEditorBytes
+  );
+  addMaxCheck(
+    checks,
+    "bundle.max-editor-gzip-bytes",
     "editorChunkGzipBytes",
     report.editorChunk?.gzipBytes ?? 0,
     budgetOptions.maxEditorGzipBytes
   );
   addMaxCheck(
     checks,
+    "bundle.max-initial-chunk-bytes",
     "maxInitialChunkBytes",
     Math.max(0, ...report.initialChunks.map((chunk) => chunk.bytes)),
     budgetOptions.maxInitialChunkBytes
   );
   addMaxCheck(
     checks,
+    "bundle.max-initial-chunk-gzip-bytes",
     "maxInitialChunkGzipBytes",
     Math.max(0, ...report.initialChunks.map((chunk) => chunk.gzipBytes)),
     budgetOptions.maxInitialChunkGzipBytes
   );
   addMaxCheck(
     checks,
+    "bundle.max-initial-gzip-bytes",
     "totalInitialGzipBytes",
     report.totalInitialGzipBytes,
     budgetOptions.maxInitialGzipBytes
   );
   addMaxCheck(
     checks,
+    "bundle.max-total-gzip-bytes",
     "totalJsGzipBytes",
     report.totalJsGzipBytes,
     budgetOptions.maxTotalGzipBytes
@@ -401,25 +494,49 @@ function evaluateBundleBudget(report, budgetOptions) {
 
   for (const pattern of budgetOptions.requiredLazyChunkPatterns) {
     const matcher = new RegExp(pattern, "u");
-    const actual = report.lazyChunks.some((chunk) => matcher.test(chunk.name)) ? 1 : 0;
+    const matchingChunks = report.lazyChunks
+      .filter((chunk) => matcher.test(chunk.name))
+      .map((chunk) => chunk.name)
+      .sort(compareOrdinal);
     checks.push({
-      actual,
-      limit: 1,
+      actual: matchingChunks,
+      id: `bundle.required-lazy-chunk:${pattern}`,
+      kind: "required-lazy-chunk",
+      limit: { minimumMatchingChunks: 1 },
       name: `requiredLazyChunk:${pattern}`,
-      status: actual === 1 ? "PASS" : "FAIL"
+      pattern,
+      status: matchingChunks.length > 0 ? "PASS" : "FAIL"
     });
   }
 
   for (const group of budgetOptions.forbiddenInitialSourceGroups) {
-    const hasSourceMaps = report.initialChunks.some((chunk) => chunk.sourceGroups.length > 0);
     const matchingChunks = report.initialChunks
       .filter((chunk) => chunk.sourceGroups.some((sourceGroup) => sourceGroup.group === group))
-      .map((chunk) => chunk.name);
-    const failed = !hasSourceMaps || matchingChunks.length > 0;
+      .map((chunk) => chunk.name)
+      .sort(compareOrdinal);
+    const missingEvidenceChunks = report.initialChunks
+      .filter((chunk) => chunk.sourceMapEvidence.status !== "COMPLETE")
+      .map((chunk) => chunk.name)
+      .sort(compareOrdinal);
+    const evidenceStatus =
+      report.initialChunks.length > 0 && missingEvidenceChunks.length === 0
+        ? "COMPLETE"
+        : "INCOMPLETE";
+    const failed = evidenceStatus !== "COMPLETE" || matchingChunks.length > 0;
 
     checks.push({
-      actual: matchingChunks.join(", ") || (hasSourceMaps ? "none" : "missing sourcemaps"),
-      limit: "none",
+      actual: {
+        evidenceStatus,
+        matchingChunks,
+        missingEvidenceChunks
+      },
+      group,
+      id: `bundle.forbidden-initial-source-group:${group}`,
+      kind: "forbidden-initial-source-group",
+      limit: {
+        evidenceStatus: "COMPLETE",
+        matchingChunks: []
+      },
       name: `forbiddenInitialSourceGroup:${group}`,
       status: failed ? "FAIL" : "PASS"
     });
@@ -429,19 +546,23 @@ function evaluateBundleBudget(report, budgetOptions) {
     return null;
   }
 
+  checks.sort((left, right) => compareOrdinal(left.id, right.id));
+
   return {
     checks,
     status: checks.every((check) => check.status === "PASS") ? "PASS" : "FAIL"
   };
 }
 
-function addMaxCheck(checks, name, actual, limit) {
+function addMaxCheck(checks, id, name, actual, limit) {
   if (limit === null) {
     return;
   }
 
   checks.push({
     actual,
+    id,
+    kind: "maximum",
     limit,
     name,
     status: actual <= limit ? "PASS" : "FAIL"
@@ -457,9 +578,70 @@ function formatBudget(budget) {
     `bundleBudget=${budget.status}`,
     "budget:",
     ...budget.checks.map((check) =>
-      `  - ${check.name} actual=${check.actual} limit=${check.limit} status=${check.status}`
+      `  - ${check.name} actual=${formatCheckValue(check.actual)} limit=${formatCheckValue(check.limit)} status=${check.status}`
     )
   ].join("\n");
+}
+
+function formatCheckValue(value) {
+  return typeof value === "object" ? JSON.stringify(value) : String(value);
+}
+
+function buildBundleEvidence(report, budget) {
+  const checks = budget?.checks ?? [];
+  const initialChunks = [...report.initialChunks].sort((left, right) =>
+    compareOrdinal(left.name, right.name)
+  );
+  const lazyRequirements = checks
+    .filter((check) => check.kind === "required-lazy-chunk")
+    .map((check) => ({
+      checkId: check.id,
+      matchingChunks: check.actual,
+      pattern: check.pattern,
+      status: check.status
+    }));
+
+  return {
+    appliedCheckIds: checks.map((check) => check.id),
+    checks,
+    evidenceScope: BUNDLE_EVIDENCE_SCOPE,
+    initialSourceGroups: collectInitialSourceGroups(initialChunks),
+    initialStaticImportClosure: {
+      chunks: initialChunks.map((chunk) => ({
+        name: chunk.name,
+        staticImports: [...chunk.staticImports].sort(compareOrdinal)
+      })),
+      roots: [...report.initialClosureRoots].sort(compareOrdinal)
+    },
+    lazyRequirements,
+    sourceGraphAuthority: SOURCE_GRAPH_AUTHORITY,
+    sourceMapEvidence: initialChunks.map((chunk) => ({
+      chunk: chunk.name,
+      ...chunk.sourceMapEvidence
+    })),
+    status: budget?.status ?? "PASS"
+  };
+}
+
+function collectInitialSourceGroups(initialChunks) {
+  const groups = new Map();
+
+  for (const chunk of initialChunks) {
+    for (const sourceGroup of chunk.sourceGroups) {
+      const entry = groups.get(sourceGroup.group) ?? { bytes: 0, chunks: new Set() };
+      entry.bytes += sourceGroup.bytes;
+      entry.chunks.add(chunk.name);
+      groups.set(sourceGroup.group, entry);
+    }
+  }
+
+  return Array.from(groups.entries())
+    .map(([group, entry]) => ({
+      bytes: entry.bytes,
+      chunks: Array.from(entry.chunks).sort(compareOrdinal),
+      group
+    }))
+    .sort((left, right) => compareOrdinal(left.group, right.group));
 }
 
 function formatChunk(chunk) {
@@ -474,6 +656,18 @@ function sum(values) {
   return values.reduce((total, value) => total + value, 0);
 }
 
+function compareOrdinal(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function compareChunks(left, right) {
+  return right.bytes - left.bytes || compareOrdinal(left.name, right.name);
+}
+
+function sortUnique(values) {
+  return Array.from(new Set(values)).sort(compareOrdinal);
+}
+
 function main() {
   const options = parseArguments(process.argv.slice(2));
   const report = readRendererBundleReport({
@@ -482,8 +676,10 @@ function main() {
   });
   const budget = evaluateBundleBudget(report, options.budget);
   const output = {
+    schemaVersion: REPORT_SCHEMA_VERSION,
     ...report,
-    budget
+    budget,
+    bundleEvidence: buildBundleEvidence(report, budget)
   };
 
   if (options.json) {

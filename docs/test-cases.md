@@ -973,6 +973,26 @@
 - 应用保持可用
 - 输入体验没有明显卡顿
 
+### TC-060A 编辑器底层重构架构与性能基线
+
+步骤：
+1. 运行 `npm.cmd run test:editor-foundation`。
+2. 确认 architecture guard 校验 canonical manifest、active package/import boundaries、exact temporary allowance、parser entry/lifecycle 和 direct micromark document sites。
+3. 确认 performance baseline 在测量前读取 `fixtures/performance/complex-20000-lines.md`，并校验 identity 中的 SHA-256、20,000 logical lines、byte/source length 与 LF-only/no-final-newline policy。
+4. 检查 open、edit、selection、ordered-list edit、outline、metrics 的稳定 counters；确认不存在的 incremental structure cache 仍报告全零与 `incremental-structure-cache-not-implemented`。
+5. 运行 `npm.cmd run perf:baseline`，确认原有 Vite bundle budget、bundle evidence 和同一 focused contract 在一个公开命令内完成。
+6. 在 analyzer unit fixture 中分别移除一个 initial chunk map、写入非法 JSON、移除 `sourcesContent` 或让 source/content 数量不一致，再运行 `npm.cmd run test -- src/main/analyze-renderer-bundle.test.ts`。
+
+预期：
+- architecture manifest 是 package/import/parser lifecycle 的唯一规则源；planned package 不会因目录缺失被计为通过，新目录出现却未激活 rule 时立即失败。
+- committed 20,000-line Markdown 是 RF performance baseline 的唯一长文档输入；fixture bytes 或 identity 任一漂移都会在测量前失败，不会回退到 generated source。
+- duration 只作为有限、非负的信息字段；稳定 gate 使用 fixture identity、schema、integer counters、parser-entry provenance 和 capability reason，不使用跨机器毫秒阈值。
+- `selection` 不触发 full parse/decorations rebuild；其余 operation 必须如实匹配 committed current counter baseline，不能把尚不存在的 cache/window/node reuse 记为成功。
+- bundle JSON 顶层包含明确 `schemaVersion`，`bundleEvidence.evidenceScope` 为 `emitted-renderer-output`；source import graph 仍由 architecture guard 负责，bundle analyzer 不声称自己是 TypeScript dependency graph。
+- initial static-import closure、lazy requirement、initial source groups、stable applied check IDs、actual、limit 与 `PASS/FAIL` 都按 ordinal 顺序稳定输出；相同输入连续执行两次 JSON 必须逐字节一致。
+- 任一适用 initial chunk 的 source map 缺失、JSON 非法、`sources` / `sourcesContent` 形状或对应内容不完整时，requested forbidden source-group rule 必须 `FAIL` 且进程以非零退出；不能因其他 chunk 有 map 而通过。
+- sourcemap build 中的纯 Vite/Rolldown virtual runtime chunk 具有显式 virtual-source evidence map；普通 build 不生成这类证据 artifact，真实源码 chunk 也没有豁免路径。
+
 ## 8. 跨平台
 
 ### TC-070 Windows 启动

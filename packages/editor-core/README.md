@@ -1,14 +1,18 @@
-﻿# 编辑器核心包
+# 编辑器核心包
 
-这个目录承载 FishMark 编辑器运行时中可复用的编辑能力。当前它同时包含 Markdown 语义编辑逻辑、CodeMirror 6 adapter、decorations、commands 和 interaction runtime；它不是一个完全脱离 CodeMirror 的纯语义包。
+`@fishmark/editor-core` 是当前唯一 public entry，落点为 `src/index.ts`。当前包同时拥有 Markdown 语义编辑、CodeMirror 6 extension/adapter、decorations、commands、interaction runtime 与 test/performance probe，因此它还不是纯语义模型。
 
-当前已落地能力：
-- `TASK-009`：active block 解析与状态模型
+当前边界：
 
-约束：
-- Markdown 语义 helper 优先保持纯 TypeScript，便于后续按需拆成 `semantic-core`
-- CodeMirror extension / command / decoration / interaction 代码可以放在这里，但要集中在显式 runtime / adapter 边界内
-- Markdown 解析结果仍以 `packages/markdown-engine/` 为唯一来源
-- 不在这里放文件系统访问或 Electron bridge 代码
+- Markdown 结构与 inline 语义只消费 `@fishmark/markdown-engine` public entry，不在本包新增 document parser 或直接调用 micromark document parse。
+- 不得依赖 React、Electron、`src/main`、`src/preload` 或 `src/renderer`；跨 package consumer 不得穿透 `packages/editor-core/src/**`。
+- CodeMirror 依赖是 `fixtures/architecture/editor-foundation-guard.json` 中受执行检查的临时 allowance，owner 为 editor foundation refactor，必须在 `RF-604` adapter hard cutover 时删除；它不是永久架构许可。
+- 文件系统、workspace ownership、IPC 与持久化不属于本包。
+- `src/performance/editor-performance-probe.ts` 通过 public entry 暴露稳定 operation/counter probe；它只记录当前 open/edit/selection/ordered-list 行为，不宣称已经存在 incremental structure cache。
 
-后续如果这个包继续膨胀，可按 `semantic-core` / `codemirror-adapter` 两层拆分；当前先保留单包，避免为未稳定的编辑器边界提前拆目录。
+计划但尚未实现：
+
+- `RF-501` 到 `RF-506` 将纯 semantic context/planner 迁入独立 editor model。
+- `RF-601` 到 `RF-604` 将 CodeMirror transaction/history/IME/decorations/interaction 收敛到 thin adapter，并在 hard cutover 删除本包和所有旧 import。
+
+在对应 RF task 完成前，不要把上述 planned package 或 cutover 状态写成当前事实。

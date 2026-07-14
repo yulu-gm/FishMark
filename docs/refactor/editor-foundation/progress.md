@@ -12,7 +12,7 @@
 
 **Current task:** `RF-002` — Architecture and performance guards
 
-**Next required skill:** `$fishmark-task-execution` for `RF-002`
+**Next required skill:** `$fishmark-architecture-acceptance` for `RF-002`, followed by `$fishmark-task-acceptance`
 
 ## 1. Status vocabulary
 
@@ -52,7 +52,7 @@ Evidence columns are filled only with fresh command output/report paths from the
 | ID | Task | Depends on | Status | Focused evidence | Full gates | Acceptance record | Commit/branch |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | RF-001 | Editing behavior baseline | — | `COMPLETE` | Canonical/formal runner, observer, protocol, launcher, identity, Typora conversion, listener, and process-tree boundaries accepted; fresh harness + driver: 27 files / 165 tests; public scenario: 121/121 steps in one batch. | Fresh formal Electron gate: 121/121 cases, 2,541/2,541 targets, 79 existing + 1,928 runner matches, 534 exact known defects, 0 unexpected, 0 not-run, 24.573s; public scenario 25.351s; editing experience 79/79; lint 0 errors (8 pre-existing warnings), typecheck, 135-file/1,487-test suite, build, and diff check passed. | Architecture `PASS`; task `PASS`; `reports/task-summaries/RF-001.md` | `codex/editor-foundation-refactor` |
-| RF-002 | Architecture and performance guards | RF-001 | `IN_PROGRESS` | — | Test + perf baseline | — | `codex/editor-foundation-refactor` |
+| RF-002 | Architecture and performance guards | RF-001 | `DEV_DONE` | Slice A architecture/parser guard 73/73; Slice B committed 20,000-line fixture/current counters; final unified focused gate 6 files/101 tests; `perf:baseline` passed 23 emitted-bundle checks and the same 101 tests. | lint 0 errors/8 existing warnings; typecheck; 137-file/1,585-test suite; build; diff check; formal behavior 121/121 cases and 2,541/2,541 targets with 0 unexpected/not-run. | Pending architecture/task acceptance; `docs/plans/2026-07-14-rf-002-handoff.md` | `codex/editor-foundation-refactor` |
 | RF-101 | Extract workspace domain | RF-002 | `PLANNED` | — | lint/typecheck/test/build | — | — |
 | RF-102 | Extract workspace application ports/use cases | RF-101 | `PLANNED` | — | lint/typecheck/test/build | — | — |
 | RF-201 | Persistent text buffer and session revisions | RF-102 | `PLANNED` | — | typecheck/test/build | — | — |
@@ -111,7 +111,7 @@ Evidence columns are filled only with fresh command output/report paths from the
 
 ### Status
 
-`COMPLETE` — architecture and task acceptance passed on 2026-07-14. `RF-002` is now `IN_PROGRESS` under its separate intake.
+`COMPLETE` — architecture and task acceptance passed on 2026-07-14. `RF-002` is now `DEV_DONE` under its separate execution handoff and awaits formal acceptance.
 
 ### Goal
 
@@ -178,7 +178,7 @@ npm.cmd run test:editing-experience
 
 ### Next skill
 
-`$fishmark-task-execution` for `RF-002`
+`$fishmark-architecture-acceptance` for `RF-002`, followed by `$fishmark-task-acceptance`
 
 ## 6. Milestone deletion checklist
 
@@ -203,10 +203,11 @@ Append one entry when a task changes to `DEV_DONE`, then amend the same entry af
 | --- | --- | --- | --- | --- | --- | --- |
 | 2026-07-13 | RF-001 | Added the first typed recursive editing-behavior corpus, exact filtering, one harness scenario, and stable documentation; corrected one stale table-exit probe expectation without changing runtime behavior. | Matrix 1/13; harness + driver 14/81; defect evidence 2/78. | Editing experience 79 cases passed; lint, typecheck, 119-file/1380-test suite, and build passed. | Superseded before acceptance | A 2026-07-14 specification review found that metadata-only parity cases had been overstated as executable evidence. RF-001 returned to `IN_PROGRESS`; this row is historical regression evidence only. |
 | 2026-07-14 | RF-001 | Added the single-window Electron manifest runner and hardened it with canonical/formal support ports, line-local observation, aspect-mapped values, deterministic calibration identity, catalog-driven Typora conversion, calibration-independent raw cases, disposable step abort listeners, and bounded cross-platform process-tree ownership; corrected top-level and quoted nested-list Shift+Tab contracts without changing product runtime behavior. | Fresh harness + driver 27 files / 165 tests; public scenario 121/121 one batch; architecture review also confirmed formal identity, listener, timeout/abort/nonzero/root-exited descendant, hung Windows terminator, POSIX group escalation, test-window security, and no compatibility/dead path. | Fresh formal runner 121/121 and 2,541/2,541 in 24.573s with 79 existing/1,928 runner/534 known/0 unexpected/0 not-run; legacy 79/79; lint 0 errors/8 existing warnings; typecheck; 135-file/1,487-test suite; build; diff check all passed. | Architecture `PASS`; task `PASS`; `reports/task-summaries/RF-001.md` | Raw JSON remains ignored; calibration `fnv1a32-2a007600` persists 2,007 explicit verified targets and 534 exact typed defect observations from run `d7705d03-b141-46dd-8b4b-4559024c14bc`. The 534 observations are later-roadmap product work, not unexecuted RF-001 targets. |
+| 2026-07-14 | RF-002 | Slice A added the versioned fail-closed package/import/parser lifecycle guard; Slice B froze the single committed 20,000-line fixture, identity, operation report and honest current counters; Slice C extended the existing bundle analyzer with deterministic emitted-output evidence, per-initial-chunk sourcemap completeness, one public baseline command, package boundary docs and execution handoff. | Unified focused gate 6 files/101 tests; `perf:baseline` passed all 23 bundle rules plus the same 101 tests; analyzer RED initially exposed missing schema/evidence, any-map false passes and malformed-map handling, then GREEN 7/7. | lint 0 errors/8 existing warnings; typecheck; 137 files/1,585 tests; build and diff check passed. Formal behavior gate: 121/121 cases, 2,541/2,541 targets, 79 existing + 1,928 runner matches, 534 exact known defects, 0 unexpected, 0 not-run, 25.860s. | Pending architecture/task acceptance | No product editing behavior, Markdown fixture identity, stable counter baseline or roadmap target changed. Initial Vite/Rolldown virtual runtime chunks first failed strict map evidence; sourcemap builds now emit evidence only for all-virtual module chunks instead of adding analyzer exemptions. |
 
 ## 8. Blockers and deviations
 
-There are no accepted external blockers or roadmap deviations. RF-001 is complete: its explicit 2,007 verified targets and 534 exact target mismatches cover the whole contract, and the mismatches are recorded current product defects for later roadmap tasks rather than unexecuted evidence. RF-002 intake is complete and its architecture/performance guard implementation is the only active task.
+There are no accepted external blockers or roadmap deviations. RF-001 is complete: its explicit 2,007 verified targets and 534 exact target mismatches cover the whole contract, and the mismatches are recorded current product defects for later roadmap tasks rather than unexecuted evidence. RF-002 implementation is `DEV_DONE`; architecture acceptance and task acceptance are the only allowed next phases, and RF-101 must not start before both pass.
 
 Any deviation must record:
 
