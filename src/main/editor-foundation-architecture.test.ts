@@ -171,6 +171,18 @@ describe("editor foundation architecture guard", () => {
     expect(expectCodes(validateSynthetic(repository, manifest))).toContain(expectedCode);
   });
 
+  it("reports a roadmap path that is not a readable file without throwing", () => {
+    const repository = createSyntheticRepository();
+    const manifest = readSyntheticManifest(repository);
+    manifest.roadmapPath = "docs/refactor/editor-foundation";
+    let result: EditorFoundationArchitectureResult | undefined;
+
+    expect(() => {
+      result = validateSynthetic(repository, manifest);
+    }).not.toThrow();
+    expect(expectCodes(result!)).toContain("roadmap-not-file");
+  });
+
   it("detects string-literal dynamic imports and re-exports", () => {
     const dynamicRepository = createSyntheticRepository({
       "src/renderer/dynamic.ts": 'void import("../main/secret");'
@@ -374,6 +386,33 @@ describe("editor foundation architecture guard", () => {
     }).not.toThrow();
     expect(expectCodes(result!)).toContain("parser-public-entry-not-file");
   });
+
+  it("reports a missing required parser module", () => {
+    const repository = createSyntheticRepository();
+    const manifest = readSyntheticManifest(repository);
+    findParserEntry(manifest, "parser.parse-inline-ast").module =
+      "packages/markdown-engine/src/parse-inline-ast-missing.ts";
+
+    expect(expectCodes(validateSynthetic(repository, manifest))).toContain("parser-module-missing");
+  });
+
+  it.each(["present", "removed"])(
+    "reports a %s parser module that is not a readable file without throwing",
+    (state) => {
+      const repository = createSyntheticRepository();
+      const manifest = readSyntheticManifest(repository);
+      const module = "packages/markdown-engine/src/parse-inline-ast.ts";
+      rmSync(resolve(repository, module));
+      mkdirSync(resolve(repository, module));
+      findParserEntry(manifest, "parser.parse-inline-ast").lifecycle = { state };
+      let result: EditorFoundationArchitectureResult | undefined;
+
+      expect(() => {
+        result = validateSynthetic(repository, manifest);
+      }).not.toThrow();
+      expect(expectCodes(result!)).toContain("parser-module-not-file");
+    }
+  );
 
   it("rejects a new unregistered public parser re-export", () => {
     const repository = createSyntheticRepository({

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 
 import {
@@ -40,6 +40,10 @@ type TemporaryPackageAllowance = {
   packagePattern: string;
   ruleId: string;
 };
+
+type RepositoryPathInspection =
+  | { kind: "directory" | "file" | "missing" | "other" }
+  | { errorCode: string; kind: "error" };
 
 type ValidationContext = {
   analysisCache: Map<string, SourceModuleAnalysis>;
@@ -200,16 +204,17 @@ function validatePackages(
       continue;
     }
 
-    const absolutePath = resolve(context.rootDir, path);
-    const exists = existsSync(absolutePath);
     if (state === "active") {
-      if (!exists) {
+      const inspection = inspectRepositoryPath(context.rootDir, path);
+      if (inspection.kind === "missing") {
         context.findings.push({
           code: "active-package-missing",
           message: `Active package ${id} is missing at ${path}.`,
           path
         });
-      } else if (!statSync(absolutePath).isDirectory()) {
+      } else if (inspection.kind === "error") {
+        reportFilesystemAccessError(`active package ${id}`, path, inspection.errorCode, context);
+      } else if (inspection.kind !== "directory") {
         context.findings.push({
           code: "active-package-not-directory",
           message: `Active package ${id} must resolve to a directory at ${path}.`,
@@ -225,7 +230,10 @@ function validatePackages(
         });
       }
     } else if (state === "planned") {
-      if (exists) {
+      const inspection = inspectRepositoryPath(context.rootDir, path);
+      if (inspection.kind === "error") {
+        reportFilesystemAccessError(`planned package ${id}`, path, inspection.errorCode, context);
+      } else if (inspection.kind !== "missing") {
         context.findings.push({
           code: "planned-package-present",
           message: `Planned package ${id} now exists at ${path}; activate its package state and boundary rule in the same change.`,
@@ -429,7 +437,7 @@ function validateForbiddenImports(
   const forbiddenPackages = stringArray(rule.forbiddenPackages);
   const forbiddenPaths = stringArray(rule.forbiddenPaths);
   const temporaryAllowances = context.temporaryPackageAllowances.get(ruleId) ?? [];
-  for (const importer of collectSourceFiles(context.rootDir, sourcePath)) {
+  for (const importer of collectSources(context, sourcePath)) {
     for (const sourceImport of analyze(context, importer).imports) {
       const packageViolation = forbiddenPackages.some((pattern) => packagePatternMatches(pattern, sourceImport.specifier));
       const temporaryAllowance = packageViolation
@@ -468,7 +476,7 @@ function validatePublicPackageImports(
   if (!packagesPath || !publicPrefix) {
     return;
   }
-  const scannedFiles = new Set(sourcePaths.flatMap((sourcePath) => collectSourceFiles(context.rootDir, sourcePath)));
+  const scannedFiles = new Set(sourcePaths.flatMap((sourcePath) => collectSources(context, sourcePath)));
   for (const importer of [...scannedFiles].sort((left, right) => left.localeCompare(right))) {
     for (const sourceImport of analyze(context, importer).imports) {
       let isViolation = false;
@@ -622,7 +630,7 @@ function validateParserPolicy(
     }
   }
 
-  const engineFiles = collectSourceFiles(context.rootDir, enginePath);
+  const engineFiles = collectSources(context, enginePath);
   for (const path of engineFiles) {
     if (path === publicEntryPath) {
       continue;
@@ -639,7 +647,7 @@ function validateParserPolicy(
   }
 
   const governedFiles = [
-    ...new Set(governedSourcePaths.flatMap((sourcePath) => collectSourceFiles(context.rootDir, sourcePath)))
+    ...new Set(governedSourcePaths.flatMap((sourcePath) => collectSources(context, sourcePath)))
   ].sort((left, right) => left.localeCompare(right));
   validateMicromarkDocumentSites(governedFiles, micromarkSites, context);
 }
@@ -679,8 +687,25 @@ function validateParserEntry(
   if (!lifecycle) {
     return;
   }
-  const moduleExists = existsSync(resolve(context.rootDir, module));
-  const moduleAnalysis = moduleExists ? analyze(context, module) : null;
+  const moduleInspection = inspectRepositoryPath(context.rootDir, module);
+  let moduleAnalysis: SourceModuleAnalysis | null = null;
+  if (moduleInspection.kind === "file") {
+    moduleAnalysis = analyze(context, module);
+  } else if (moduleInspection.kind === "error") {
+    reportFilesystemAccessError(`parser ${id} module`, module, moduleInspection.errorCode, context);
+  } else if (moduleInspection.kind !== "missing") {
+    context.findings.push({
+      code: "parser-module-not-file",
+      message: `Parser ${id} module must be a readable file: ${module}.`,
+      path: module
+    });
+  } else if (lifecycle === "present" || lifecycle === "present-until") {
+    context.findings.push({
+      code: "parser-module-missing",
+      message: `Parser ${id} requires a module file at ${module}.`,
+      path: module
+    });
+  }
   const moduleExportsSymbol = moduleAnalysis?.exportedSymbols.has(symbol) ?? false;
   const moduleDeclaresSymbol = moduleAnalysis?.declaredSymbols.has(symbol) ?? false;
   const publicExportModule = publicExports.get(symbol);
@@ -861,13 +886,41 @@ function readRoadmapTasks(rootDir: string, value: unknown, findings: Architectur
     findings.push({ code: "invalid-path", message: `roadmapPath is invalid: ${String(value)}.` });
     return new Set();
   }
-  const absolutePath = resolve(rootDir, path);
-  if (!existsSync(absolutePath)) {
+  const inspection = inspectRepositoryPath(rootDir, path);
+  if (inspection.kind === "missing") {
     findings.push({ code: "roadmap-missing", message: `Architecture roadmap is missing at ${path}.`, path });
     return new Set();
   }
+  if (inspection.kind === "error") {
+    findings.push({
+      code: "roadmap-read-error",
+      message: `Architecture roadmap could not be inspected at ${path} (${inspection.errorCode}).`,
+      path
+    });
+    return new Set();
+  }
+  if (inspection.kind !== "file") {
+    findings.push({
+      code: "roadmap-not-file",
+      message: `Architecture roadmap must be a readable file at ${path}.`,
+      path
+    });
+    return new Set();
+  }
+
+  let source: string;
+  try {
+    source = readFileSync(resolve(rootDir, path), "utf8");
+  } catch (error) {
+    findings.push({
+      code: "roadmap-read-error",
+      message: `Architecture roadmap could not be read at ${path} (${normalizeFilesystemError(error)}).`,
+      path
+    });
+    return new Set();
+  }
   const tasks = new Set<string>();
-  for (const match of readFileSync(absolutePath, "utf8").matchAll(/^####\s+(RF-\d{3}):/gmu)) {
+  for (const match of source.matchAll(/^####\s+(RF-\d{3}):/gmu)) {
     if (match[1]) {
       tasks.add(match[1]);
     }
@@ -908,15 +961,20 @@ function validateExistingDirectory(
   if (!path) {
     return null;
   }
-  const absolutePath = resolve(context.rootDir, path);
-  if (!existsSync(absolutePath)) {
+  const inspection = inspectRepositoryPath(context.rootDir, path);
+  if (inspection.kind === "missing") {
     context.findings.push({
       code: missingCode,
       message: `${label} must exist as a directory: ${path}.`,
       path
     });
     return null;
-  } else if (!statSync(absolutePath).isDirectory()) {
+  }
+  if (inspection.kind === "error") {
+    reportFilesystemAccessError(label, path, inspection.errorCode, context);
+    return null;
+  }
+  if (inspection.kind !== "directory") {
     context.findings.push({
       code: wrongKindCode,
       message: `${label} must be a directory: ${path}.`,
@@ -938,8 +996,8 @@ function validateExistingFile(
   if (!path) {
     return null;
   }
-  const absolutePath = resolve(context.rootDir, path);
-  if (!existsSync(absolutePath)) {
+  const inspection = inspectRepositoryPath(context.rootDir, path);
+  if (inspection.kind === "missing") {
     context.findings.push({
       code: missingCode,
       message: `${label} must exist as a file: ${path}.`,
@@ -947,7 +1005,11 @@ function validateExistingFile(
     });
     return null;
   }
-  if (!statSync(absolutePath).isFile()) {
+  if (inspection.kind === "error") {
+    reportFilesystemAccessError(label, path, inspection.errorCode, context);
+    return null;
+  }
+  if (inspection.kind !== "file") {
     context.findings.push({
       code: wrongKindCode,
       message: `${label} must be a file: ${path}.`,
@@ -1009,7 +1071,17 @@ function analyze(context: ValidationContext, path: string): SourceModuleAnalysis
   if (cached) {
     return cached;
   }
-  const analysis = analyzeSourceModule(context.rootDir, path);
+  let analysis: SourceModuleAnalysis;
+  try {
+    analysis = analyzeSourceModule(context.rootDir, path);
+  } catch (error) {
+    context.findings.push({
+      code: "source-analysis-error",
+      message: `Source module ${path} could not be read or analyzed (${normalizeFilesystemError(error)}).`,
+      path
+    });
+    analysis = emptySourceModuleAnalysis();
+  }
   context.analysisCache.set(path, analysis);
   for (const diagnostic of analysis.parseDiagnostics) {
     context.findings.push({
@@ -1019,6 +1091,74 @@ function analyze(context: ValidationContext, path: string): SourceModuleAnalysis
     });
   }
   return analysis;
+}
+
+function collectSources(context: ValidationContext, sourcePath: string): string[] {
+  try {
+    return collectSourceFiles(context.rootDir, sourcePath);
+  } catch (error) {
+    const path = normalizeRepoPath(sourcePath);
+    context.findings.push({
+      code: "source-walk-error",
+      message: `Source path ${path} could not be scanned (${normalizeFilesystemError(error)}).`,
+      path
+    });
+    return [];
+  }
+}
+
+function emptySourceModuleAnalysis(): SourceModuleAnalysis {
+  return {
+    declaredSymbols: new Set(),
+    exportedSymbols: new Set(),
+    hasDefaultOrExportAssignment: false,
+    hasMicromarkDocumentParse: false,
+    hasStarReExport: false,
+    imports: [],
+    parseDiagnostics: [],
+    reExports: []
+  };
+}
+
+function inspectRepositoryPath(rootDir: string, path: string): RepositoryPathInspection {
+  try {
+    const stats = statSync(resolve(rootDir, path));
+    if (stats.isDirectory()) {
+      return { kind: "directory" };
+    }
+    if (stats.isFile()) {
+      return { kind: "file" };
+    }
+    return { kind: "other" };
+  } catch (error) {
+    const errorCode = normalizeFilesystemError(error);
+    return errorCode === "ENOENT" || errorCode === "ENOTDIR"
+      ? { kind: "missing" }
+      : { errorCode, kind: "error" };
+  }
+}
+
+function reportFilesystemAccessError(
+  label: string,
+  path: string,
+  errorCode: string,
+  context: ValidationContext
+): void {
+  context.findings.push({
+    code: "filesystem-access-error",
+    message: `${label} could not be inspected at ${path} (${errorCode}).`,
+    path
+  });
+}
+
+function normalizeFilesystemError(error: unknown): string {
+  if (isRecord(error) && typeof error.code === "string" && error.code.length > 0) {
+    return error.code;
+  }
+  if (error instanceof Error && error.name.length > 0) {
+    return error.name;
+  }
+  return "UNKNOWN";
 }
 
 function packagePatternMatches(pattern: string, specifier: string): boolean {
