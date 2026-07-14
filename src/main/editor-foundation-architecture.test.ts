@@ -236,6 +236,59 @@ describe("editor foundation architecture guard", () => {
     expect(expectCodes(validateSynthetic(repository))).toContain("planned-package-present");
   });
 
+  it("rejects an active package path that resolves to a file", () => {
+    const repository = createSyntheticRepository();
+    const manifest = readSyntheticManifest(repository);
+    const markdownEngine = (manifest.packages as MutableRecord[]).find(
+      (targetPackage) => targetPackage.id === "markdown-engine"
+    );
+    if (!markdownEngine) {
+      throw new Error("Missing synthetic markdown-engine package");
+    }
+    markdownEngine.path = "packages/markdown-engine/src/index.ts";
+
+    expect(expectCodes(validateSynthetic(repository, manifest))).toContain("active-package-not-directory");
+  });
+
+  it.each([
+    ["missing engine directory", "packages/markdown-engine-missing", "parser-engine-path-missing"],
+    ["engine path that is a file", "packages/markdown-engine/src/index.ts", "parser-engine-path-not-directory"]
+  ])("fails closed for parserPolicy %s", (_name, enginePath, expectedCode) => {
+    const repository = createSyntheticRepository();
+    const manifest = readSyntheticManifest(repository);
+    (manifest.parserPolicy as MutableRecord).enginePath = enginePath;
+
+    expect(expectCodes(validateSynthetic(repository, manifest))).toContain(expectedCode);
+  });
+
+  it("rejects an empty parserPolicy governedSourcePaths array", () => {
+    const repository = createSyntheticRepository();
+    const manifest = readSyntheticManifest(repository);
+    (manifest.parserPolicy as MutableRecord).governedSourcePaths = [];
+
+    expect(expectCodes(validateSynthetic(repository, manifest))).toContain("parser-governed-source-paths-empty");
+  });
+
+  it("rejects a parserPolicy governed source path that resolves to a file", () => {
+    const repository = createSyntheticRepository();
+    const manifest = readSyntheticManifest(repository);
+    (manifest.parserPolicy as MutableRecord).governedSourcePaths = ["src/renderer/index.ts", "packages"];
+
+    expect(expectCodes(validateSynthetic(repository, manifest))).toContain("active-rule-path-not-directory");
+  });
+
+  it("reports a parser public entry that is not a file without throwing", () => {
+    const repository = createSyntheticRepository();
+    const manifest = readSyntheticManifest(repository);
+    (manifest.parserPolicy as MutableRecord).publicEntryPath = "packages/markdown-engine/src";
+    let result: EditorFoundationArchitectureResult | undefined;
+
+    expect(() => {
+      result = validateSynthetic(repository, manifest);
+    }).not.toThrow();
+    expect(expectCodes(result!)).toContain("parser-public-entry-not-file");
+  });
+
   it("rejects a new unregistered public parser re-export", () => {
     const repository = createSyntheticRepository({
       "packages/markdown-engine/src/index.ts": [
@@ -254,6 +307,18 @@ describe("editor foundation architecture guard", () => {
       "packages/markdown-engine/src/index.ts": [
         syntheticPublicParserExports,
         'export { parseMarkdownDocument as readMarkdownDocument } from "./parse-markdown-document";'
+      ].join("\n")
+    });
+
+    expect(expectCodes(validateSynthetic(repository))).toContain("unregistered-public-parser");
+  });
+
+  it("rejects a local named parser export in the public entry", () => {
+    const repository = createSyntheticRepository({
+      "packages/markdown-engine/src/index.ts": [
+        syntheticPublicParserExports,
+        "const parseNewDocument = (source: string): string => source;",
+        "export { parseNewDocument };"
       ].join("\n")
     });
 

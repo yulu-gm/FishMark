@@ -183,12 +183,19 @@ function validatePackages(
       continue;
     }
 
-    const exists = existsSync(resolve(context.rootDir, path));
+    const absolutePath = resolve(context.rootDir, path);
+    const exists = existsSync(absolutePath);
     if (state === "active") {
       if (!exists) {
         context.findings.push({
           code: "active-package-missing",
           message: `Active package ${id} is missing at ${path}.`,
+          path
+        });
+      } else if (!statSync(absolutePath).isDirectory()) {
+        context.findings.push({
+          code: "active-package-not-directory",
+          message: `Active package ${id} must resolve to a directory at ${path}.`,
           path
         });
       }
@@ -453,8 +460,20 @@ function validateParserPolicy(
     context.findings.push({ code: "invalid-parser-policy", message: "Manifest parserPolicy must be an object." });
     return;
   }
-  const enginePath = validateManifestPath(value.enginePath, "parserPolicy enginePath", context);
-  const publicEntryPath = validateManifestPath(value.publicEntryPath, "parserPolicy publicEntryPath", context);
+  const enginePath = validateExistingDirectory(
+    value.enginePath,
+    "parserPolicy enginePath",
+    "parser-engine-path-missing",
+    "parser-engine-path-not-directory",
+    context
+  );
+  const publicEntryPath = validateExistingFile(
+    value.publicEntryPath,
+    "parserPolicy publicEntryPath",
+    "parser-public-entry-missing",
+    "parser-public-entry-not-file",
+    context
+  );
   const governedSourcePaths = validateStringArray(
     value.governedSourcePaths,
     "parserPolicy governedSourcePaths",
@@ -462,6 +481,12 @@ function validateParserPolicy(
   );
   for (const sourcePath of governedSourcePaths) {
     validateActiveRuleDirectory(sourcePath, "parserPolicy governed source path", context);
+  }
+  if (governedSourcePaths.length === 0) {
+    context.findings.push({
+      code: "parser-governed-source-paths-empty",
+      message: "parserPolicy must govern at least one existing source directory."
+    });
   }
   if (!enginePath || !publicEntryPath || governedSourcePaths.length === 0) {
     return;
@@ -476,17 +501,7 @@ function validateParserPolicy(
     });
   }
 
-  const publicEntryAnalysis = existsSync(resolve(context.rootDir, publicEntryPath))
-    ? analyze(context, publicEntryPath)
-    : null;
-  if (!publicEntryAnalysis) {
-    context.findings.push({
-      code: "parser-public-entry-missing",
-      message: `Parser public entry is missing at ${publicEntryPath}.`,
-      path: publicEntryPath
-    });
-    return;
-  }
+  const publicEntryAnalysis = analyze(context, publicEntryPath);
   if (publicEntryAnalysis.hasStarReExport) {
     context.findings.push({
       code: "unsupported-parser-star-export",
@@ -516,10 +531,10 @@ function validateParserPolicy(
 
   const reExportedNames = new Set<string>();
   for (const reExport of publicEntryAnalysis.reExports) {
-    reExportedNames.add(reExport.exportedName);
     if (!reExport.specifier) {
       continue;
     }
+    reExportedNames.add(reExport.exportedName);
     const sourceModule = resolveSourceModulePath(context.rootDir, publicEntryPath, reExport.specifier);
     if (!sourceModule) {
       continue;
@@ -815,6 +830,22 @@ function validateManifestPath(value: unknown, label: string, context: Validation
 }
 
 function validateActiveRuleDirectory(value: unknown, label: string, context: ValidationContext): string | null {
+  return validateExistingDirectory(
+    value,
+    label,
+    "active-rule-path-missing",
+    "active-rule-path-not-directory",
+    context
+  );
+}
+
+function validateExistingDirectory(
+  value: unknown,
+  label: string,
+  missingCode: string,
+  wrongKindCode: string,
+  context: ValidationContext
+): string | null {
   const path = validateManifestPath(value, label, context);
   if (!path) {
     return null;
@@ -822,16 +853,49 @@ function validateActiveRuleDirectory(value: unknown, label: string, context: Val
   const absolutePath = resolve(context.rootDir, path);
   if (!existsSync(absolutePath)) {
     context.findings.push({
-      code: "active-rule-path-missing",
-      message: `${label} must exist while its rule is active: ${path}.`,
+      code: missingCode,
+      message: `${label} must exist as a directory: ${path}.`,
       path
     });
+    return null;
   } else if (!statSync(absolutePath).isDirectory()) {
     context.findings.push({
-      code: "active-rule-path-not-directory",
-      message: `${label} must be a directory while its rule is active: ${path}.`,
+      code: wrongKindCode,
+      message: `${label} must be a directory: ${path}.`,
       path
     });
+    return null;
+  }
+  return path;
+}
+
+function validateExistingFile(
+  value: unknown,
+  label: string,
+  missingCode: string,
+  wrongKindCode: string,
+  context: ValidationContext
+): string | null {
+  const path = validateManifestPath(value, label, context);
+  if (!path) {
+    return null;
+  }
+  const absolutePath = resolve(context.rootDir, path);
+  if (!existsSync(absolutePath)) {
+    context.findings.push({
+      code: missingCode,
+      message: `${label} must exist as a file: ${path}.`,
+      path
+    });
+    return null;
+  }
+  if (!statSync(absolutePath).isFile()) {
+    context.findings.push({
+      code: wrongKindCode,
+      message: `${label} must be a file: ${path}.`,
+      path
+    });
+    return null;
   }
   return path;
 }
