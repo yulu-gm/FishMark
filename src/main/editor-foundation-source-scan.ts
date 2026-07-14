@@ -129,6 +129,8 @@ export function analyzeSourceModule(rootDir: string, path: string): SourceModule
             specifier: specifier ?? importedBinding?.specifier ?? null
           });
         }
+      } else if (ts.isNamespaceExport(statement.exportClause)) {
+        hasStarReExport = true;
       }
       continue;
     }

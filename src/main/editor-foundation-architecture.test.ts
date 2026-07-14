@@ -302,6 +302,17 @@ describe("editor foundation architecture guard", () => {
     expect(expectCodes(validateSynthetic(repository))).toContain("unregistered-public-parser");
   });
 
+  it("rejects a namespace re-export from a parser module", () => {
+    const repository = createSyntheticRepository({
+      "packages/markdown-engine/src/index.ts": [
+        syntheticPublicParserExports,
+        'export * as parsers from "./parse-markdown-document";'
+      ].join("\n")
+    });
+
+    expect(expectCodes(validateSynthetic(repository))).toContain("unsupported-parser-star-export");
+  });
+
   it("rejects a public alias of a registered document parser", () => {
     const repository = createSyntheticRepository({
       "packages/markdown-engine/src/index.ts": [
