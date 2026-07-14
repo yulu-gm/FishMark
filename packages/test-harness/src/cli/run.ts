@@ -30,6 +30,7 @@ import {
 import type { TestScenario } from "../scenario";
 
 export const CLI_VERSION = "0.2.0";
+const ELECTRON_BATCH_CLEANUP_TIMEOUT_MS = 10_000;
 
 export type CliIo = {
   readonly stdout: (line: string) => void;
@@ -57,6 +58,8 @@ export type CliRunDeps = {
   ) => WrittenArtifacts;
   readonly now?: () => number;
   readonly ensureDir?: (path: string) => void;
+  /** Test seam for the finite post-abort cleanup cutover. */
+  readonly abortCleanupTimeoutMs?: number;
 };
 
 export type CliRunOutcome = {
@@ -126,7 +129,11 @@ export async function runCli(deps: CliRunDeps): Promise<CliRunOutcome> {
   const result = await runScenario(scenario, {
     handlers,
     stepTimeoutMs: options.stepTimeoutMs,
-    abortCleanupTimeoutMs: scenario.execution.kind === "electron-batch" ? null : undefined,
+    abortCleanupTimeoutMs:
+      deps.abortCleanupTimeoutMs ??
+      (scenario.execution.kind === "electron-batch"
+        ? ELECTRON_BATCH_CLEANUP_TIMEOUT_MS
+        : undefined),
     signal: deps.signal,
     now: deps.now,
     onEvent: (event) => {

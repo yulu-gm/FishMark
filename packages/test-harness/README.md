@@ -15,7 +15,10 @@ Static scenario registry and (eventually) runner for the FishMark test workbench
 - `src/scenario.ts` — `TestScenario`, `TestStep` types and validation helpers.
 - `src/registry.ts` — `createScenarioRegistry()` factory with insertion-ordered list, tag / surface / search filtering, and id uniqueness enforcement.
 - `src/scenarios/` — first-party seed scenarios (`app-shell-startup`, `open-markdown-file-basic`).
-- `../../fixtures/editor-behavior/` — repository-owned RF-001 behavior corpus consumed by the matrix scenario and CLI build; import fixture types/data/helpers from its manifest directly because the harness barrel intentionally does not re-export them.
+- `../../fixtures/editor-behavior/manifest.ts` — canonical desired corpus for matrix/model tests; it composes and validates the complete static calibration before exporting cases.
+- `../../fixtures/editor-behavior/corpus.ts` — canonical composition owner; desired cases, explicit verified targets, exact known-defect observations, and calibration identity meet only at this boundary.
+- `../../fixtures/editor-behavior/formal-run-port.ts` — narrow formal Electron support port; validates canonical composition first, then exposes only a sanitized execution plan and an owner-held comparison closure.
+- `../../fixtures/editor-behavior/execution-plan.ts` / `runner-protocol.ts` — executor and observer wire contracts. Renderer imports from these modules are type-only except for the formal port; the independent observer never imports desired cases, calibration, current observations, or Typora capture data.
 - `src/runner.ts` — unified `runScenario()` state machine used by the workbench and the CLI.
 - `src/handlers/headless.ts` — headless handler map used by the CLI until a real driver exists.
 - `src/cli/` — agent-facing CLI (`bin.ts`, `run.ts`, `args.ts`, `exit-codes.ts`, `artifacts.ts`).

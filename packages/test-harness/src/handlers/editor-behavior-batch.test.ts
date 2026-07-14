@@ -158,7 +158,7 @@ describe("public CLI batch cleanup", () => {
           () => {
             cleanupTimer = setTimeout(
               () => delayedAbort.abort(new Error("delayed timeout cleanup")),
-              5_200
+              150
             );
           },
           { once: true }
@@ -176,7 +176,8 @@ describe("public CLI batch cleanup", () => {
       cwd: process.cwd(),
       io: { stdout: () => undefined, stderr: () => undefined },
       registry: createScenarioRegistry([scenario]),
-      buildHandlers: () => handlers
+      buildHandlers: () => handlers,
+      abortCleanupTimeoutMs: 2_000
     });
 
     try {
@@ -195,7 +196,7 @@ describe("public CLI batch cleanup", () => {
       await cliRun;
       processTree?.remove();
     }
-  }, 12_000);
+  }, 5_000);
 });
 
 function startRealProcessTree(signal: AbortSignal) {

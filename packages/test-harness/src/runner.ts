@@ -101,8 +101,8 @@ export type RunScenarioOptions = {
   readonly onEvent?: (event: RunnerEvent) => void;
   /** Injection seam for tests. Defaults to {@link Date.now}. */
   readonly now?: () => number;
-  /** Grace period for aborted-handler cleanup. null waits until cleanup settles. */
-  readonly abortCleanupTimeoutMs?: number | null;
+  /** Finite grace period for aborted-handler cleanup. */
+  readonly abortCleanupTimeoutMs?: number;
 };
 
 type TerminalStop =
@@ -208,13 +208,21 @@ async function executeStep(
 
   const controller = new AbortController();
   const external = options.signal;
-  const onExternalAbort = () => controller.abort(external?.reason);
+  let onExternalAbort: (() => void) | undefined;
+  let externalAbortPromise: Promise<never> | undefined;
   if (external) {
-    if (external.aborted) {
-      controller.abort(external.reason);
-    } else {
-      external.addEventListener("abort", onExternalAbort, { once: true });
-    }
+    externalAbortPromise = new Promise((_, reject) => {
+      onExternalAbort = () => {
+        controller.abort(external.reason);
+        reject(new StepAbortError(step.id, external.reason));
+      };
+      if (external.aborted) {
+        onExternalAbort();
+      } else {
+        external.addEventListener("abort", onExternalAbort, { once: true });
+        if (external.aborted) onExternalAbort();
+      }
+    });
   }
 
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -240,18 +248,7 @@ async function executeStep(
       );
     }
 
-    if (external) {
-      racers.push(
-        new Promise((_, reject) => {
-          const handleAbort = () => reject(new StepAbortError(step.id, external.reason));
-          if (external.aborted) {
-            handleAbort();
-          } else {
-            external.addEventListener("abort", handleAbort, { once: true });
-          }
-        })
-      );
-    }
+    if (externalAbortPromise) racers.push(externalAbortPromise);
 
     await Promise.race(racers);
 
@@ -268,10 +265,16 @@ async function executeStep(
     };
   } catch (raw) {
     if (raw instanceof StepTimeoutError || timedOut) {
-      await waitForHandlerCleanup(handlerPromise, options.abortCleanupTimeoutMs);
+      const cleanup = await waitForHandlerCleanup(
+        handlerPromise,
+        options.abortCleanupTimeoutMs
+      );
       const finishedAt = now();
       const error: RunErrorInfo = {
-        message: raw instanceof Error ? raw.message : `Step ${step.id} timed out.`,
+        message: withHandlerCleanupResult(
+          raw instanceof Error ? raw.message : `Step ${step.id} timed out.`,
+          cleanup
+        ),
         kind: "timeout"
       };
       return {
@@ -288,13 +291,18 @@ async function executeStep(
     }
 
     if (raw instanceof StepAbortError || external?.aborted) {
-      await waitForHandlerCleanup(handlerPromise, options.abortCleanupTimeoutMs);
+      const cleanup = await waitForHandlerCleanup(
+        handlerPromise,
+        options.abortCleanupTimeoutMs
+      );
       const finishedAt = now();
       const error: RunErrorInfo = {
-        message:
+        message: withHandlerCleanupResult(
           raw instanceof Error
             ? raw.message
             : `Step ${step.id} aborted by external signal.`,
+          cleanup
+        ),
         kind: "abort"
       };
       return {
@@ -332,39 +340,55 @@ async function executeStep(
     if (timeoutId !== null) {
       clearTimeout(timeoutId);
     }
-    if (external) {
+    if (external && onExternalAbort) {
       external.removeEventListener("abort", onExternalAbort);
     }
   }
 }
 
+type HandlerCleanupResult =
+  | { readonly status: "settled"; readonly error?: unknown }
+  | { readonly status: "timed-out"; readonly timeoutMs: number };
+
 async function waitForHandlerCleanup(
   handlerPromise: Promise<void>,
-  timeoutMs: number | null | undefined
-): Promise<void> {
-  if (timeoutMs === null) {
-    await handlerPromise.then(
-      () => undefined,
-      () => undefined
-    );
-    return;
-  }
+  timeoutMs: number | undefined
+): Promise<HandlerCleanupResult> {
   timeoutMs ??= 100;
-  if (timeoutMs <= 0) return;
+  if (timeoutMs <= 0) return { status: "timed-out", timeoutMs };
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
-    await Promise.race([
+    return await Promise.race([
       handlerPromise.then(
-        () => undefined,
-        () => undefined
+        (): HandlerCleanupResult => ({ status: "settled" }),
+        (error: unknown): HandlerCleanupResult => ({ status: "settled", error })
       ),
-      new Promise<void>((resolveCleanup) => {
-        timeout = setTimeout(resolveCleanup, timeoutMs);
+      new Promise<HandlerCleanupResult>((resolveCleanup) => {
+        timeout = setTimeout(
+          () => resolveCleanup({ status: "timed-out", timeoutMs }),
+          timeoutMs
+        );
       })
     ]);
   } finally {
     if (timeout !== undefined) clearTimeout(timeout);
   }
+}
+
+function withHandlerCleanupResult(
+  primaryMessage: string,
+  cleanup: HandlerCleanupResult
+): string {
+  if (cleanup.status === "timed-out") {
+    return `${primaryMessage} Handler cleanup did not settle within ${cleanup.timeoutMs}ms.`;
+  }
+  if (
+    cleanup.error instanceof Error &&
+    /process-tree cleanup failed/iu.test(cleanup.error.message)
+  ) {
+    return `${primaryMessage} ${cleanup.error.message}`;
+  }
+  return primaryMessage;
 }
 
 function finalize(

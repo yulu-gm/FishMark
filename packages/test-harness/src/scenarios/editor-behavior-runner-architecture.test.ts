@@ -30,6 +30,8 @@ describe("RF-001 Electron manifest runner architecture", () => {
   it("keeps execution planning and observation in independent test-only modules", () => {
     const requiredFiles = [
       "fixtures/editor-behavior/execution-plan.ts",
+      "fixtures/editor-behavior/corpus.ts",
+      "fixtures/editor-behavior/formal-run-port.ts",
       "fixtures/editor-behavior/runner-protocol.ts",
       "src/renderer/editor-behavior-observer.ts",
       "src/renderer/editor-behavior-manifest-runner.ts",
@@ -41,6 +43,20 @@ describe("RF-001 Electron manifest runner architecture", () => {
     for (const relativePath of requiredFiles) {
       expect(existsSync(path.join(root, relativePath)), relativePath).toBe(true);
     }
+  });
+
+  it("routes the formal renderer through canonical composition and narrow ports", () => {
+    const runnerSource = read("src/renderer/editor-behavior-manifest-runner.ts");
+    const formalPortSource = read("fixtures/editor-behavior/formal-run-port.ts");
+
+    expect(runnerSource).toContain("createEditorBehaviorFormalRun");
+    expect(runnerSource).not.toMatch(
+      /rawEditorBehaviorCases|current-observations|composeEditorBehaviorRunnerEvidence/u
+    );
+    expect(formalPortSource).toContain("composeEditorBehaviorCorpus(source)");
+    expect(formalPortSource.indexOf("composeEditorBehaviorCorpus(source)")).toBeLessThan(
+      formalPortSource.indexOf("createExecutionPlan(selectedCases)")
+    );
   });
 
   it("prevents the runner and observer from importing expected-result helpers", () => {

@@ -1,12 +1,81 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { EventEmitter } from "node:events";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
 import { runBatchProcess } from "./editor-behavior-batch";
 
+type HungTerminator = EventEmitter & {
+  killed: boolean;
+  kill: () => boolean;
+};
+
+type ProcessTreeModule = {
+  readonly spawnTrackedProcess: (
+    command: string,
+    args: readonly string[],
+    options: Record<string, unknown>,
+    runtime: {
+      readonly platform: "win32";
+      readonly cleanupTimeoutMs: number;
+      readonly terminatorTimeoutMs: number;
+      readonly pollMs: number;
+      readonly spawnTerminator: () => HungTerminator;
+    }
+  ) => {
+    readonly child: import("node:child_process").ChildProcess;
+    readonly terminate: () => Promise<void>;
+  };
+};
+
 describe("runBatchProcess process-tree cleanup", () => {
+  it("bounds a hung Windows terminator and reports the surviving target", async () => {
+    const require = createRequire(import.meta.url);
+    const processTree = require(
+      resolve(process.cwd(), "scripts", "process-tree.cjs")
+    ) as ProcessTreeModule;
+    const terminators: HungTerminator[] = [];
+    const tracked = processTree.spawnTrackedProcess(
+      process.execPath,
+      ["-e", "setInterval(() => {}, 1000)"],
+      { cwd: process.cwd(), stdio: "ignore", windowsHide: true },
+      {
+        platform: "win32",
+        cleanupTimeoutMs: 80,
+        terminatorTimeoutMs: 10,
+        pollMs: 1,
+        spawnTerminator: () => {
+          const terminator = Object.assign(new EventEmitter(), {
+            killed: false,
+            kill() {
+              this.killed = true;
+              return true;
+            }
+          }) as HungTerminator;
+          terminators.push(terminator);
+          return terminator;
+        }
+      }
+    );
+    const startedAt = Date.now();
+
+    try {
+      await expect(tracked.terminate()).rejects.toThrow(
+        /taskkill.*timed out.*still alive/iu
+      );
+      expect(Date.now() - startedAt).toBeLessThan(500);
+      expect(terminators.length).toBeGreaterThan(0);
+      expect(terminators.every(({ killed }) => killed)).toBe(true);
+    } finally {
+      if (tracked.child.pid && isProcessAlive(tracked.child.pid)) {
+        process.kill(tracked.child.pid, "SIGKILL");
+      }
+    }
+  });
+
   it("rejects a nonzero root only after its registered descendant exits", async () => {
     const tempDirectory = mkdtempSync(join(tmpdir(), "fishmark-batch-nonzero-"));
     const descendantPidPath = join(tempDirectory, "descendant.pid");

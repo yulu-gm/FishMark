@@ -156,6 +156,37 @@ describe("runCli", () => {
     expect(outcome.result?.status).toBe("timed-out");
   });
 
+  it("cuts off a hung Electron batch cleanup with an explicit failure", async () => {
+    const { io } = makeIo();
+    const electronScenario: TestScenario = {
+      ...makeScenario("hung-electron-cleanup", ["formal-run"]),
+      execution: { kind: "electron-batch", runner: "editor-behavior-manifest" }
+    };
+    const registry = createScenarioRegistry([electronScenario]);
+
+    const outcome = await runCli({
+      argv: [
+        "--id",
+        electronScenario.id,
+        "--step-timeout",
+        "5",
+        "--no-artifacts"
+      ],
+      cwd: "/tmp",
+      io,
+      registry,
+      buildHandlers: () => ({
+        "formal-run": () => new Promise<void>(() => undefined)
+      }),
+      abortCleanupTimeoutMs: 20
+    });
+
+    expect(outcome.exitCode).toBe(CLI_EXIT_CODES.timedOut);
+    expect(outcome.result?.error?.message).toMatch(
+      /cleanup did not settle within 20ms/u
+    );
+  }, 500);
+
   it("exits 3 when the external signal aborts", async () => {
     const { io } = makeIo();
     const scenario = makeScenario("interruptible", ["a"]);

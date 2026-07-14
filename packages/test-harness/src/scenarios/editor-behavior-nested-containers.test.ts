@@ -1,12 +1,42 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  focusedRecursiveCases,
   recursiveParityMatrixCases,
   requiredEditorBehaviorContainerPaths
 } from "../../../../fixtures/editor-behavior/nested-containers";
 import { formatContainerPath } from "../../../../fixtures/editor-behavior/model";
 
 describe("recursive editor behavior contracts", () => {
+  it("models quoted nested-list Shift+Tab before and after the legal outdent", () => {
+    const behaviorCase = focusedRecursiveCases.find(
+      ({ id }) => id === "blockquote-list-shift-tab"
+    )!;
+    const nestedPath = [
+      "Document",
+      "Blockquote",
+      "List",
+      "ListItem",
+      "List",
+      "ListItem",
+      "Paragraph"
+    ];
+    const outdentedPath = [
+      "Document",
+      "Blockquote",
+      "List",
+      "ListItem",
+      "Paragraph"
+    ];
+
+    expect(behaviorCase.containerDepth).toBe(3);
+    expect(behaviorCase.containerPath).toEqual(nestedPath);
+    expect(behaviorCase.initial.semanticPath).toEqual(nestedPath);
+    expect(behaviorCase.checkpoints[0].result.semanticPath).toEqual(outdentedPath);
+    expect(behaviorCase.checkpoints[1].result.semanticPath).toEqual(outdentedPath);
+    expect(behaviorCase.checkpoints[2].result.semanticPath).toEqual(nestedPath);
+  });
+
   it.each([
     { pathNumber: 2, primarySource: "- alpha", repeatSource: "- alpha", kind: "top-level list" },
     { pathNumber: 3, primarySource: "- alpha", repeatSource: "- alpha", kind: "nested list" },

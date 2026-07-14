@@ -1,3 +1,5 @@
+import { getEventListeners, setMaxListeners } from "node:events";
+
 import { describe, expect, it, vi } from "vitest";
 
 import { runScenario, type RunnerEvent, type StepHandlerMap } from "./runner";
@@ -121,6 +123,41 @@ describe("runScenario", () => {
 
     expect(result.status).toBe("interrupted");
     expect(cleanupFinished).toBe(true);
+  });
+
+  it("reports when aborted handler cleanup exceeds its finite budget", async () => {
+    const result = await runScenario(scenario([{ id: "never-cleans" }]), {
+      handlers: { "never-cleans": () => new Promise<void>(() => undefined) },
+      stepTimeoutMs: 5,
+      abortCleanupTimeoutMs: 20
+    });
+
+    expect(result.status).toBe("timed-out");
+    expect(result.error?.message).toMatch(/cleanup did not settle within 20ms/u);
+  });
+
+  it("returns external abort listeners to baseline after all 121 steps", async () => {
+    const steps = Array.from({ length: 121 }, (_, index) => ({ id: `step-${index + 1}` }));
+    const controller = new AbortController();
+    const signal = controller.signal;
+    setMaxListeners(0, signal);
+    const baseline = getEventListeners(signal, "abort").length;
+    const listenerCounts: number[] = [];
+
+    const result = await runScenario(scenario(steps), {
+      handlers: Object.fromEntries(steps.map(({ id }) => [id, () => undefined])),
+      signal,
+      onEvent: (event) => {
+        if (event.type === "step-end") {
+          listenerCounts.push(getEventListeners(signal, "abort").length);
+        }
+      }
+    });
+
+    expect(result.status).toBe("passed");
+    expect(listenerCounts).toHaveLength(121);
+    expect(new Set(listenerCounts)).toEqual(new Set([baseline]));
+    expect(getEventListeners(signal, "abort")).toHaveLength(baseline);
   });
 
   it("returns interrupted without running any step if the signal is pre-aborted", async () => {

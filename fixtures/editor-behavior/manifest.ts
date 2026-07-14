@@ -3,13 +3,7 @@ import {
   type EditorBehaviorCase,
   type EditorBehaviorCaseQuery
 } from "./model";
-import {
-  editorBehaviorKnownDefectObservations,
-  editorBehaviorRunnerCalibration,
-  editorBehaviorRunnerVerifiedTargets
-} from "./current-observations";
-import { composeEditorBehaviorRunnerEvidence } from "./runner-protocol";
-import { rawEditorBehaviorCases } from "./raw-cases";
+import { composeEditorBehaviorCorpus } from "./corpus";
 
 export * from "./fishmark-probe-catalog";
 export * from "./model";
@@ -31,12 +25,7 @@ export {
 } from "./nested-containers";
 export { capturedOracleAndProbeCases, namedFishMarkProbeCases } from "./probe-cases";
 
-export const editorBehaviorCases = composeEditorBehaviorRunnerEvidence(
-  rawEditorBehaviorCases,
-  editorBehaviorRunnerVerifiedTargets,
-  editorBehaviorKnownDefectObservations,
-  editorBehaviorRunnerCalibration
-);
+export const editorBehaviorCases = composeEditorBehaviorCorpus();
 
 export function filterEditorBehaviorCases(
   query: EditorBehaviorCaseQuery = {}

@@ -6,16 +6,16 @@ import type {
 
 /**
  * Exact per-target observations from the complete RF-001 Electron calibration.
- * Execution manifest: fnv1a32-fbeac900; desired contract: fnv1a32-aceda9f6.
- * Calibration identity: fnv1a32-ae988a59.
+ * Execution manifest: fnv1a32-fbeac900; desired contract: fnv1a32-3f037eee.
+ * Calibration identity: fnv1a32-2a007600.
  * Targets: 2541; verified: 2007; known defects: 534.
  * Values are structural baselines, never case-wide allowlists.
  */
 export const editorBehaviorRunnerCalibration = {
   manifestHash: "fnv1a32-fbeac900",
-  contractHash: "fnv1a32-aceda9f6",
-  runId: "29e6cd7a-3d85-4f7c-844e-63b42ddb2e80",
-  calibrationHash: "fnv1a32-ae988a59"
+  contractHash: "fnv1a32-3f037eee",
+  runId: "d7705d03-b141-46dd-8b4b-4559024c14bc",
+  calibrationHash: "fnv1a32-2a007600"
 } as const satisfies EditorBehaviorRunnerCalibration;
 
 export const editorBehaviorRunnerVerifiedTargets = [

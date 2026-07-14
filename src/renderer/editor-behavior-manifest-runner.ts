@@ -6,7 +6,6 @@ import "./styles/markdown-render.css";
 import { undoDepth } from "@codemirror/commands";
 import { EditorView } from "@codemirror/view";
 
-import type { EditorBehaviorCase } from "../../fixtures/editor-behavior/model";
 import type {
   EditorBehaviorExecutionCase,
   EditorBehaviorExecutionCheckpoint
@@ -16,11 +15,7 @@ import type {
   EditorBehaviorCheckpointObservation,
   EditorBehaviorRunReport
 } from "../../fixtures/editor-behavior/runner-protocol";
-import { compareEditorBehaviorObservations } from "../../fixtures/editor-behavior/runner-protocol";
-import { createExecutionPlan } from "../../fixtures/editor-behavior/execution-plan";
-import { editorBehaviorKnownDefectObservations } from "../../fixtures/editor-behavior/current-observations";
-import { rawEditorBehaviorCases } from "../../fixtures/editor-behavior/raw-cases";
-import { formatContainerPath } from "../../fixtures/editor-behavior/model";
+import { createEditorBehaviorFormalRun } from "../../fixtures/editor-behavior/formal-run-port";
 import { getMarkdownEditorViewMode } from "@fishmark/editor-core";
 import { createCodeEditorController } from "./code-editor";
 import { observeEditorBehaviorCheckpoint } from "./editor-behavior-observer";
@@ -100,38 +95,6 @@ async function executeActions(
     trace.push(await runtime.performAction(action, phase));
   }
   return trace;
-}
-
-export function selectEditorBehaviorCases(
-  search: URLSearchParams
-): readonly EditorBehaviorCase[] {
-  const requestedCase = search.get("case");
-  const requestedCommand = search.get("command");
-  const requestedPath = search.get("containerPath");
-  const commandValues = new Set(rawEditorBehaviorCases.map(({ command }) => command));
-
-  if (requestedCommand && !commandValues.has(requestedCommand as EditorBehaviorCase["command"])) {
-    throw new Error(`Unknown command ${requestedCommand}.`);
-  }
-
-  let selected = rawEditorBehaviorCases.filter(
-    ({ command }) => !requestedCommand || command === requestedCommand
-  );
-  if (requestedPath) {
-    selected = selected.filter(
-      ({ containerPath }) => formatContainerPath(containerPath) === requestedPath
-    );
-  }
-  if (requestedCase) {
-    if (!rawEditorBehaviorCases.some(({ id }) => id === requestedCase)) {
-      throw new Error(`Unknown editor behavior case ${requestedCase}.`);
-    }
-    selected = selected.filter(({ id }) => id === requestedCase);
-  }
-  if (selected.length === 0) {
-    throw new Error("Editor behavior filters selected no cases.");
-  }
-  return selected;
 }
 
 export function createBrowserEditorBehaviorRuntime(root: HTMLElement): {
@@ -307,8 +270,8 @@ function hashSource(source: string): string {
 
 export async function runEditorBehaviorManifest(): Promise<EditorBehaviorRunReport> {
   const search = new URLSearchParams(window.location.search);
-  const selectedCases = selectEditorBehaviorCases(search);
-  const plan = createExecutionPlan(selectedCases);
+  const formalRun = createEditorBehaviorFormalRun(search);
+  const plan = formalRun.executionPlan;
   const runId = createRunId();
   const root = document.getElementById("probe-root");
   if (!(root instanceof HTMLElement)) {
@@ -336,13 +299,7 @@ export async function runEditorBehaviorManifest(): Promise<EditorBehaviorRunRepo
       });
     }
 
-    const comparison = compareEditorBehaviorObservations(
-      selectedCases,
-      observations,
-      editorBehaviorKnownDefectObservations.filter((defect) =>
-        selectedCases.some(({ id }) => id === defect.caseId)
-      )
-    );
+    const comparison = formalRun.compare(observations);
     const finishedAtMs = Date.now();
     return {
       protocolVersion: 1,
@@ -369,7 +326,7 @@ export async function runEditorBehaviorManifest(): Promise<EditorBehaviorRunRepo
         cases: caseTimings
       },
       execution: {
-        selectedCases: selectedCases.length,
+        selectedCases: plan.cases.length,
         completedCases: caseTimings.length,
         observations: observations.length,
         windowCount: 1,
@@ -377,7 +334,7 @@ export async function runEditorBehaviorManifest(): Promise<EditorBehaviorRunRepo
       },
       observations,
       comparison,
-      pass: comparison.pass && caseTimings.length === selectedCases.length
+      pass: comparison.pass && caseTimings.length === plan.cases.length
     };
   } finally {
     session.destroy();

@@ -594,8 +594,16 @@ export const focusedRecursiveCases: readonly EditorBehaviorCase[] = [
     title: "Shift+Tab outdents one quoted list level without leaving the quote",
     origin: "recursive-parity",
     command: "Shift+Tab",
-    containerPath: requiredEditorBehaviorContainerPaths[5],
-    containerDepth: 2,
+    containerPath: [
+      "Document",
+      "Blockquote",
+      "List",
+      "ListItem",
+      "List",
+      "ListItem",
+      "Paragraph"
+    ],
+    containerDepth: 3,
     lineContent: "content",
     cursorPlacement: "line-middle",
     viewMode: "wysiwym",
@@ -606,6 +614,10 @@ export const focusedRecursiveCases: readonly EditorBehaviorCase[] = [
       )
     }),
     initial: { source: "> - first\n>   - second", selection: sourceSelection(17) },
+    semanticPaths: {
+      primary: requiredEditorBehaviorContainerPaths[5],
+      repeat: requiredEditorBehaviorContainerPaths[5]
+    },
     checkpointResults: checkpointResults(
       resultDraft("> - first\n> - second", sourceSelection(15), "wysiwym"),
       2,

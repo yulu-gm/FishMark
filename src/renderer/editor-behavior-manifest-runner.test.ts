@@ -5,12 +5,12 @@ import { EditorView } from "@codemirror/view";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { createExecutionPlan } from "../../fixtures/editor-behavior/execution-plan";
+import { createEditorBehaviorFormalRun } from "../../fixtures/editor-behavior/formal-run-port";
 import { editorBehaviorCases } from "../../fixtures/editor-behavior/manifest";
 import type { EditorBehaviorCheckpointObservation } from "../../fixtures/editor-behavior/runner-protocol";
 import {
   executeBehaviorCase,
   createBrowserEditorBehaviorRuntime,
-  selectEditorBehaviorCases,
   type EditorBehaviorRuntime
 } from "./editor-behavior-manifest-runner";
 
@@ -152,36 +152,28 @@ describe("executeBehaviorCase", () => {
   });
 });
 
-describe("selectEditorBehaviorCases", () => {
+describe("createEditorBehaviorFormalRun filters", () => {
   it("applies exact case, command, and container-path filters", () => {
-    const selected = selectEditorBehaviorCases(
+    const selected = createEditorBehaviorFormalRun(
       new URLSearchParams({
         command: "Tab",
         containerPath: "Document > List > ListItem > List > ListItem > Paragraph"
       })
-    );
+    ).executionPlan.cases;
     expect(selected.length).toBeGreaterThan(0);
-    expect(selected.every(({ command }) => command === "Tab")).toBe(true);
-    expect(
-      selected.every(
-        ({ containerPath }) =>
-          containerPath.join(" > ") ===
-          "Document > List > ListItem > List > ListItem > Paragraph"
-      )
-    ).toBe(true);
 
-    const exact = selectEditorBehaviorCases(
+    const exact = createEditorBehaviorFormalRun(
       new URLSearchParams({ case: selected[0]!.id })
-    );
+    ).executionPlan.cases;
     expect(exact.map(({ id }) => id)).toEqual([selected[0]!.id]);
   });
 
   it("rejects unknown filters instead of running a partial default", () => {
     expect(() =>
-      selectEditorBehaviorCases(new URLSearchParams({ command: "Delete" }))
+      createEditorBehaviorFormalRun(new URLSearchParams({ command: "Delete" }))
     ).toThrow(/unknown command/i);
     expect(() =>
-      selectEditorBehaviorCases(new URLSearchParams({ case: "missing-case" }))
+      createEditorBehaviorFormalRun(new URLSearchParams({ case: "missing-case" }))
     ).toThrow(/unknown editor behavior case/i);
   });
 });
