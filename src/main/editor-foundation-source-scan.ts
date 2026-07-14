@@ -17,6 +17,7 @@ export type SourceReExport = {
 export type SourceModuleAnalysis = {
   declaredSymbols: ReadonlySet<string>;
   exportedSymbols: ReadonlySet<string>;
+  hasDefaultOrExportAssignment: boolean;
   hasMicromarkDocumentParse: boolean;
   hasStarReExport: boolean;
   imports: readonly SourceImport[];
@@ -64,6 +65,7 @@ export function analyzeSourceModule(rootDir: string, path: string): SourceModule
   const micromarkParseAliases = new Set<string>();
   const micromarkNamespaceAliases = new Set<string>();
   const micromarkParserVariables = new Set<string>();
+  let hasDefaultOrExportAssignment = false;
   let hasStarReExport = false;
 
   for (const statement of sourceFile.statements) {
@@ -84,6 +86,13 @@ export function analyzeSourceModule(rootDir: string, path: string): SourceModule
   }
 
   for (const statement of sourceFile.statements) {
+    if (
+      ts.isExportAssignment(statement) ||
+      (ts.canHaveModifiers(statement) &&
+        (ts.getModifiers(statement)?.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword) ?? false))
+    ) {
+      hasDefaultOrExportAssignment = true;
+    }
     if (ts.isImportDeclaration(statement) && isStringLiteralLike(statement.moduleSpecifier)) {
       imports.push({ kind: "import", specifier: statement.moduleSpecifier.text });
       if (statement.moduleSpecifier.text === "micromark") {
@@ -184,6 +193,7 @@ export function analyzeSourceModule(rootDir: string, path: string): SourceModule
   return {
     declaredSymbols,
     exportedSymbols,
+    hasDefaultOrExportAssignment,
     hasMicromarkDocumentParse,
     hasStarReExport,
     imports: imports.sort((left, right) =>

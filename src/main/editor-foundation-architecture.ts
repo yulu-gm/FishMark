@@ -509,6 +509,13 @@ function validateParserPolicy(
       path: publicEntryPath
     });
   }
+  if (publicEntryAnalysis.hasDefaultOrExportAssignment) {
+    context.findings.push({
+      code: "unsupported-parser-export-assignment",
+      message: `${publicEntryPath} uses a default or export assignment, which prevents exact parser entry validation.`,
+      path: publicEntryPath
+    });
+  }
 
   const publicExports = new Map<string, string>();
   for (const symbol of publicEntryAnalysis.exportedSymbols) {
