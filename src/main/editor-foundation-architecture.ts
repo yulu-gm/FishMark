@@ -541,14 +541,18 @@ function validateParserPolicy(
     }
     const importsRegisteredParser = registeredParserKeys.has(parserKey(sourceModule, reExport.importedName));
     const importsParserNamedSymbol = reExport.importedName.startsWith("parse");
+    const exportsParserNamedSurface = reExport.exportedName.startsWith("parse");
     const isExactRegisteredPublicExport =
       reExport.exportedName === reExport.importedName &&
       publicParserSymbols.has(reExport.exportedName) &&
       publicExports.get(reExport.exportedName) === sourceModule;
-    if ((importsRegisteredParser || importsParserNamedSymbol) && !isExactRegisteredPublicExport) {
+    if (
+      (importsRegisteredParser || importsParserNamedSymbol || exportsParserNamedSurface) &&
+      !isExactRegisteredPublicExport
+    ) {
       context.findings.push({
         code: "unregistered-public-parser",
-        message: `${publicEntryPath} re-exports parser ${reExport.importedName} as unregistered public surface ${reExport.exportedName}.`,
+        message: `${publicEntryPath} re-exports ${reExport.importedName} as unregistered parser surface ${reExport.exportedName}.`,
         path: publicEntryPath
       });
     }

@@ -313,6 +313,21 @@ describe("editor foundation architecture guard", () => {
     expect(expectCodes(validateSynthetic(repository))).toContain("unregistered-public-parser");
   });
 
+  it.each([
+    ['export { buildDocument as parseNewDocument } from "./build-document";', "build-document.ts"],
+    ['export { default as parseNewDocument } from "./default-document-parser";', "default-document-parser.ts"]
+  ])("rejects an unregistered parse-named public alias: %s", (publicExport, moduleName) => {
+    const moduleSource = moduleName.startsWith("default-")
+      ? "export default function buildDocument(source: string): string { return source; }"
+      : "export function buildDocument(source: string): string { return source; }";
+    const repository = createSyntheticRepository({
+      "packages/markdown-engine/src/index.ts": [syntheticPublicParserExports, publicExport].join("\n"),
+      [`packages/markdown-engine/src/${moduleName}`]: moduleSource
+    });
+
+    expect(expectCodes(validateSynthetic(repository))).toContain("unregistered-public-parser");
+  });
+
   it("rejects a local named parser export in the public entry", () => {
     const repository = createSyntheticRepository({
       "packages/markdown-engine/src/index.ts": [
