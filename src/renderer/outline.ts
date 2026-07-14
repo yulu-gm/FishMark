@@ -1,4 +1,9 @@
-import type { HeadingBlock, InlineNode, InlineRoot } from "@fishmark/markdown-engine";
+import type {
+  HeadingBlock,
+  InlineNode,
+  InlineRoot,
+  MarkdownDocument
+} from "@fishmark/markdown-engine";
 import { parseMarkdownDocument } from "@fishmark/markdown-engine";
 
 export type OutlineItem = {
@@ -9,8 +14,17 @@ export type OutlineItem = {
   startLine: number;
 };
 
-export function deriveOutlineItems(source: string): OutlineItem[] {
-  return parseMarkdownDocument(source).blocks
+export type DeriveOutlineItemsOptions = {
+  parseMarkdownDocument?: (source: string) => MarkdownDocument;
+};
+
+export function deriveOutlineItems(
+  source: string,
+  options: DeriveOutlineItemsOptions = {}
+): OutlineItem[] {
+  const parseDocument = options.parseMarkdownDocument ?? parseMarkdownDocument;
+
+  return parseDocument(source).blocks
     .filter((block): block is HeadingBlock => block.type === "heading")
     .map((heading) => ({
       id: heading.id,

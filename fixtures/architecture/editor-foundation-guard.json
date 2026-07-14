@@ -150,26 +150,7 @@
       "publicPrefix": "@fishmark/"
     }
   ],
-  "exceptions": [
-    {
-      "id": "exception.renderer-performance-line-counter",
-      "ruleId": "boundary.public-package-entries",
-      "importer": "src/renderer/performance/document-derived-ui.ts",
-      "specifier": "../../../packages/editor-core/src/performance/long-document-fixtures",
-      "owner": "editor-foundation-refactor",
-      "reason": "The current renderer performance probe shares a helper from the mixed editor-core package until that package is removed.",
-      "retireIn": "RF-604"
-    },
-    {
-      "id": "exception.renderer-performance-fixture-test",
-      "ruleId": "boundary.public-package-entries",
-      "importer": "src/renderer/performance/document-derived-ui.perf.test.ts",
-      "specifier": "../../../packages/editor-core/src/performance/long-document-fixtures",
-      "owner": "editor-foundation-refactor",
-      "reason": "The legacy performance test still consumes the editor-core fixture generator until the adapter package hard cutover.",
-      "retireIn": "RF-604"
-    }
-  ],
+  "exceptions": [],
   "parserPolicy": {
     "enginePath": "packages/markdown-engine/src",
     "publicEntryPath": "packages/markdown-engine/src/index.ts",

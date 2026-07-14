@@ -1,37 +1,58 @@
 import { describe, expect, it } from "vitest";
 
-import { createLongMarkdownFixture } from "../../../packages/editor-core/src/performance/long-document-fixtures";
 import {
   formatRendererDerivedDataPerformanceReport,
   measureRendererDerivedDataPerformance
 } from "./document-derived-ui";
 
 describe("measureRendererDerivedDataPerformance", () => {
-  it("records outline and document metrics timings for a long Markdown document", () => {
-    const fixture = createLongMarkdownFixture({
-      kind: "mixed-blocks",
-      lineCount: 5000
-    });
-    const report = measureRendererDerivedDataPerformance(fixture.source);
+  it("records real outline and metrics parse-entry evidence", () => {
+    const source = createLegacyRendererPerformanceSource(5000);
+    const report = measureRendererDerivedDataPerformance(source);
 
     expect(report.lineCount).toBe(5000);
-    expect(report.sourceLength).toBe(fixture.source.length);
+    expect(report.sourceLength).toBe(source.length);
+    expect(report.outline.name).toBe("outline");
     expect(report.outline.itemCount).toBeGreaterThan(0);
-    expect(report.outline.durationMs).toBeGreaterThanOrEqual(0);
+    expect(report.metrics.name).toBe("metrics");
     expect(report.metrics.meaningfulCharacterCount).toBeGreaterThan(0);
-    expect(report.metrics.durationMs).toBeGreaterThanOrEqual(0);
-    expect(formatRendererDerivedDataPerformanceReport(report)).toContain("meaningfulCharacterCount");
 
-    if (shouldPrintPerformanceReport()) {
-      console.info(formatRendererDerivedDataPerformanceReport(report));
+    for (const operation of [report.outline, report.metrics]) {
+      expect(Number.isFinite(operation.durationMs)).toBe(true);
+      expect(operation.durationMs).toBeGreaterThanOrEqual(0);
+      expect(operation.parserEntries).toEqual({
+        parseMarkdownDocument: 1,
+        parseBlockMap: 0
+      });
+      expect(operation.counters).toEqual({
+        fullParse: 1,
+        incrementalParseWindow: 0,
+        cacheHit: 0,
+        invalidatedNodes: 0,
+        decorationRebuild: 0
+      });
+      expect(operation.unavailableCapabilityReason).toBe(
+        "incremental-structure-cache-not-implemented"
+      );
     }
+
+    expect(formatRendererDerivedDataPerformanceReport(report)).toContain('"parseMarkdownDocument": 1');
   }, 15_000);
 });
 
-function shouldPrintPerformanceReport(): boolean {
-  const globalWithProcess = globalThis as typeof globalThis & {
-    process?: { env?: Record<string, string | undefined> };
-  };
+function createLegacyRendererPerformanceSource(lineCount: number): string {
+  const block = [
+    "# Section",
+    "Paragraph with **bold** and [link](https://example.com).",
+    "1. Ordered item",
+    "2. Ordered item",
+    "- Bullet item",
+    "> Quoted note",
+    "```ts",
+    "const value = 1;",
+    "```",
+    ""
+  ];
 
-  return globalWithProcess.process?.env?.FISHMARK_PERF_REPORT === "1";
+  return Array.from({ length: lineCount }, (_value, index) => block[index % block.length]).join("\n");
 }

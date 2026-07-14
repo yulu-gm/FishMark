@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { parseMarkdownDocument } from "@fishmark/markdown-engine";
+
 import { getDocumentMetrics } from "./document-metrics";
 
 describe("getDocumentMetrics", () => {
@@ -25,5 +27,28 @@ describe("getDocumentMetrics", () => {
 
   it("does not count task list, heading, or inline Markdown syntax markers as meaningful characters", () => {
     expect(getDocumentMetrics("- [x] done\n# **标题**").meaningfulCharacterCount).toBe(6);
+  });
+
+  it("keeps the default parser behavior unchanged when parser instrumentation is omitted", () => {
+    const source = "# **Title**\n\n- item";
+
+    expect(getDocumentMetrics(source)).toEqual(
+      getDocumentMetrics(source, { parseMarkdownDocument })
+    );
+  });
+
+  it("uses an injected document parser exactly once", () => {
+    const source = "# Title";
+    let parseCalls = 0;
+
+    expect(
+      getDocumentMetrics(source, {
+        parseMarkdownDocument(value) {
+          parseCalls += 1;
+          return parseMarkdownDocument(value);
+        }
+      })
+    ).toEqual({ meaningfulCharacterCount: 5 });
+    expect(parseCalls).toBe(1);
   });
 });

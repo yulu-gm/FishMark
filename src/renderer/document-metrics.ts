@@ -8,6 +8,7 @@ import {
   type ListBlock,
   type ListItemBlock,
   type MarkdownBlock,
+  type MarkdownDocument,
   type TableCell
 } from "@fishmark/markdown-engine";
 
@@ -15,8 +16,18 @@ export type DocumentMetrics = {
   meaningfulCharacterCount: number;
 };
 
-export function getDocumentMetrics(content: string): DocumentMetrics {
-  const readableText = collectReadableMarkdownText(content);
+export type GetDocumentMetricsOptions = {
+  parseMarkdownDocument?: (source: string) => MarkdownDocument;
+};
+
+export function getDocumentMetrics(
+  content: string,
+  options: GetDocumentMetricsOptions = {}
+): DocumentMetrics {
+  const readableText = collectReadableMarkdownText(
+    content,
+    options.parseMarkdownDocument ?? parseMarkdownDocument
+  );
   return {
     meaningfulCharacterCount: countMeaningfulCharacters(readableText)
   };
@@ -27,9 +38,12 @@ function countMeaningfulCharacters(value: string): number {
   return meaningfulChars?.length ?? 0;
 }
 
-function collectReadableMarkdownText(source: string): string {
+function collectReadableMarkdownText(
+  source: string,
+  parseDocument: (source: string) => MarkdownDocument
+): string {
   const referenceDefinitions = collectReferenceDefinitions(source);
-  return parseMarkdownDocument(source)
+  return parseDocument(source)
     .blocks.map((block) => collectBlockReadableText(block, source, referenceDefinitions))
     .filter((text) => text.length > 0)
     .join("\n");

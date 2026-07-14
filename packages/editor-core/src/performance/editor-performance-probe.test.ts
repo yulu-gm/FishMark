@@ -4,12 +4,13 @@ import { describe, expect, it } from "vitest";
 
 import { createLongMarkdownFixture } from "./long-document-fixtures";
 import {
+  INCREMENTAL_STRUCTURE_CACHE_REASON,
   formatEditorPerformanceProbeReport,
   measureEditorPerformanceProbe
 } from "./editor-performance-probe";
 
 describe("measureEditorPerformanceProbe", () => {
-  it("records parse counts and durations for insert, selection move, and ordered-list edit", () => {
+  it("records honest open, edit, selection, and ordered-list operation evidence", () => {
     const fixture = createLongMarkdownFixture({
       kind: "mixed-blocks",
       lineCount: 5000
@@ -23,26 +24,48 @@ describe("measureEditorPerformanceProbe", () => {
       sourceLength: fixture.source.length
     });
     expect(report.operations.map((operation) => operation.name)).toEqual([
-      "insertText",
-      "selectionMove",
+      "open",
+      "edit",
+      "selection",
       "orderedListEdit"
     ]);
-    expect(report.operations.every((operation) => operation.durationMs >= 0)).toBe(true);
-    expect(report.operations.every((operation) => Number.isInteger(operation.parseCalls))).toBe(true);
-    expect(report.operations.some((operation) => operation.parseCalls > 0)).toBe(true);
-    expect(report.operations.find((operation) => operation.name === "orderedListEdit")?.parserCalls.blockMap).toBeGreaterThan(0);
-    expect(formatEditorPerformanceProbeReport(report)).toContain("parseCalls");
 
-    if (shouldPrintPerformanceReport()) {
-      console.info(formatEditorPerformanceProbeReport(report));
+    for (const operation of report.operations) {
+      expect(Number.isFinite(operation.durationMs)).toBe(true);
+      expect(operation.durationMs).toBeGreaterThanOrEqual(0);
+      expect(operation.capabilityRefs).toEqual(["incrementalStructureCache"]);
+      expect(operation.unavailableCapabilityReason).toBe(INCREMENTAL_STRUCTURE_CACHE_REASON);
+
+      for (const counter of Object.values(operation.counters)) {
+        expect(Number.isInteger(counter)).toBe(true);
+        expect(counter).toBeGreaterThanOrEqual(0);
+      }
+
+      for (const count of Object.values(operation.parserEntries)) {
+        expect(Number.isInteger(count)).toBe(true);
+        expect(count).toBeGreaterThanOrEqual(0);
+      }
+
+      expect(operation.counters.fullParse).toBe(
+        operation.parserEntries.parseMarkdownDocument + operation.parserEntries.parseBlockMap
+      );
+      expect(operation.counters.incrementalParseWindow).toBe(0);
+      expect(operation.counters.cacheHit).toBe(0);
+      expect(operation.counters.invalidatedNodes).toBe(0);
     }
+
+    const open = report.operations.find((operation) => operation.name === "open");
+    const edit = report.operations.find((operation) => operation.name === "edit");
+    const selection = report.operations.find((operation) => operation.name === "selection");
+    const orderedListEdit = report.operations.find(
+      (operation) => operation.name === "orderedListEdit"
+    );
+
+    expect(open?.parserEntries.parseMarkdownDocument).toBeGreaterThan(0);
+    expect(open?.counters.decorationRebuild).toBeGreaterThan(0);
+    expect(edit?.parserEntries.parseMarkdownDocument).toBeGreaterThan(0);
+    expect(selection?.counters.fullParse).toBe(0);
+    expect(orderedListEdit?.parserEntries.parseBlockMap).toBeGreaterThan(0);
+    expect(formatEditorPerformanceProbeReport(report)).toContain('"parserEntries"');
   }, 15_000);
 });
-
-function shouldPrintPerformanceReport(): boolean {
-  const globalWithProcess = globalThis as typeof globalThis & {
-    process?: { env?: Record<string, string | undefined> };
-  };
-
-  return globalWithProcess.process?.env?.FISHMARK_PERF_REPORT === "1";
-}

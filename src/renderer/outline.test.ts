@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { parseMarkdownDocument } from "@fishmark/markdown-engine";
+
 import { deriveOutlineItems } from "./outline";
 
 describe("deriveOutlineItems", () => {
@@ -36,5 +38,28 @@ describe("deriveOutlineItems", () => {
         startLine: 1
       }
     ]);
+  });
+
+  it("keeps the default parser behavior unchanged when parser instrumentation is omitted", () => {
+    const source = "# Title\n\n## Next";
+
+    expect(deriveOutlineItems(source)).toEqual(
+      deriveOutlineItems(source, { parseMarkdownDocument })
+    );
+  });
+
+  it("uses an injected document parser exactly once", () => {
+    const source = "# Title";
+    let parseCalls = 0;
+
+    expect(
+      deriveOutlineItems(source, {
+        parseMarkdownDocument(value) {
+          parseCalls += 1;
+          return parseMarkdownDocument(value);
+        }
+      })
+    ).toHaveLength(1);
+    expect(parseCalls).toBe(1);
   });
 });

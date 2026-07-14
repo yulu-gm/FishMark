@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "fixtureId": "fishmark-rf-complex-20000-lines-v1",
+  "path": "fixtures/performance/complex-20000-lines.md",
+  "sha256": "545601ad9d770898e23e5551e938bcaa4ebaecd8446941a4145a4db8777f6d37",
+  "lineCount": 20000,
+  "byteLength": 531783,
+  "sourceLength": 531783,
+  "encoding": "utf-8",
+  "newlinePolicy": "lf-only-no-final-newline",
+  "lineCountPolicy": "logical-lines-separated-by-lf",
+  "contentProfile": "Deterministic mixed Markdown with headings, paragraphs, ordinary blank lines, nested unordered and ordered lists, nested blockquotes, quoted lists and fenced code, ordinary fenced code, block math, tables, footnotes, reference definitions, inline formatting, and links."
+}

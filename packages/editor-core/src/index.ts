@@ -82,3 +82,13 @@ export {
   type CreateFishMarkMarkdownExtensionsOptions,
   type EditorViewMode
 } from "./extensions";
+export {
+  INCREMENTAL_STRUCTURE_CACHE_REASON,
+  formatEditorPerformanceProbeReport,
+  measureEditorPerformanceProbe,
+  type EditorPerformanceCounters,
+  type EditorPerformanceOperationName,
+  type EditorPerformanceOperationResult,
+  type EditorPerformanceParserEntries,
+  type EditorPerformanceProbeReport
+} from "./performance/editor-performance-probe";
