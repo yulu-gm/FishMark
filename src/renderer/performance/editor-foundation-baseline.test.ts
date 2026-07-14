@@ -17,7 +17,8 @@ import {
   INCREMENTAL_STRUCTURE_CACHE_REASON,
   formatEditorFoundationPerformanceReport,
   measureEditorFoundationPerformance,
-  toStableEditorFoundationBaseline
+  toStableEditorFoundationBaseline,
+  type EditorFoundationPerformanceReport
 } from "./editor-foundation-performance-report";
 
 describe("validatePerformanceFixture", () => {
@@ -62,6 +63,63 @@ describe("validatePerformanceFixture", () => {
     expect(() =>
       validatePerformanceFixture({ bytes, identity: createIdentity(bytes) })
     ).toThrow(/newline/i);
+  });
+
+  it("owns a frozen identity snapshot that cannot be changed through caller input", () => {
+    const bytes = Buffer.from("# One\nParagraph\n1. Ordered item", "utf8");
+    const inputIdentity = createIdentity(bytes);
+    const verified = validatePerformanceFixture({ bytes, identity: inputIdentity });
+    const report = measureEditorFoundationPerformance(verified);
+    const originalLineCount = verified.identity.lineCount;
+    const originalContentProfile = verified.identity.contentProfile;
+    const mutableInput = inputIdentity as MutableIdentity;
+
+    mutableInput.lineCount = 99;
+    mutableInput.contentProfile = "Caller mutation.";
+
+    expect(Object.isFrozen(verified.identity)).toBe(true);
+    expect(verified.identity.lineCount).toBe(originalLineCount);
+    expect(verified.identity.contentProfile).toBe(originalContentProfile);
+    expect(report.fixture.lineCount).toBe(originalLineCount);
+    expect(report.fixture.contentProfile).toBe(originalContentProfile);
+  });
+});
+
+describe("toStableEditorFoundationBaseline", () => {
+  it("owns every nested object and tuple independently from the live report", () => {
+    const report = createOwnershipReport();
+    const stable = toStableEditorFoundationBaseline(report);
+
+    expect(stable.fixture).not.toBe(report.fixture);
+    expect(stable.capabilities).not.toBe(report.capabilities);
+    expect(stable.capabilities.incrementalStructureCache).not.toBe(
+      report.capabilities.incrementalStructureCache
+    );
+    expect(stable.capabilities.incrementalStructureCache.zeroCounters).not.toBe(
+      report.capabilities.incrementalStructureCache.zeroCounters
+    );
+    expect(stable.operations).not.toBe(report.operations);
+    expect(stable.operations[0]).not.toBe(report.operations[0]);
+    expect(stable.operations[0]?.counters).not.toBe(report.operations[0]?.counters);
+    expect(stable.operations[0]?.parserEntries).not.toBe(report.operations[0]?.parserEntries);
+    expect(stable.operations[0]?.capabilityRefs).not.toBe(report.operations[0]?.capabilityRefs);
+
+    const mutableReport = report as unknown as MutableReport;
+    mutableReport.fixture.contentProfile = "Mutated live fixture.";
+    mutableReport.capabilities.incrementalStructureCache.zeroCounters[0] = "mutatedCounter";
+    mutableReport.operations[0]!.counters.fullParse = 99;
+    mutableReport.operations[0]!.parserEntries.parseMarkdownDocument = 99;
+    mutableReport.operations[0]!.capabilityRefs[0] = "mutatedCapability";
+
+    expect(stable.fixture.contentProfile).toBe("Ownership test fixture.");
+    expect(stable.capabilities.incrementalStructureCache.zeroCounters).toEqual([
+      "incrementalParseWindow",
+      "cacheHit",
+      "invalidatedNodes"
+    ]);
+    expect(stable.operations[0]?.counters.fullParse).toBe(2);
+    expect(stable.operations[0]?.parserEntries.parseMarkdownDocument).toBe(2);
+    expect(stable.operations[0]?.capabilityRefs).toEqual(["incrementalStructureCache"]);
   });
 });
 
@@ -140,3 +198,63 @@ function createIdentity(bytes: Buffer): PerformanceFixtureIdentity {
 function shouldPrintPerformanceReport(): boolean {
   return process.env.FISHMARK_PERF_REPORT === "1";
 }
+
+function createOwnershipReport(): EditorFoundationPerformanceReport {
+  return {
+    schemaVersion: 1,
+    fixture: {
+      ...createIdentity(Buffer.from("# Ownership", "utf8")),
+      contentProfile: "Ownership test fixture."
+    },
+    capabilities: {
+      incrementalStructureCache: {
+        available: false,
+        reason: INCREMENTAL_STRUCTURE_CACHE_REASON,
+        zeroCounters: ["incrementalParseWindow", "cacheHit", "invalidatedNodes"]
+      }
+    },
+    operations: [
+      {
+        name: "open",
+        durationMs: 1,
+        counters: {
+          fullParse: 2,
+          incrementalParseWindow: 0,
+          cacheHit: 0,
+          invalidatedNodes: 0,
+          decorationRebuild: 1
+        },
+        parserEntries: {
+          parseMarkdownDocument: 2,
+          parseBlockMap: 0
+        },
+        capabilityRefs: ["incrementalStructureCache"],
+        unavailableCapabilityReason: INCREMENTAL_STRUCTURE_CACHE_REASON
+      }
+    ]
+  };
+}
+
+type MutableIdentity = {
+  -readonly [Key in keyof PerformanceFixtureIdentity]: PerformanceFixtureIdentity[Key];
+};
+
+type MutableReport = {
+  fixture: {
+    contentProfile: string;
+  };
+  capabilities: {
+    incrementalStructureCache: {
+      zeroCounters: string[];
+    };
+  };
+  operations: Array<{
+    counters: {
+      fullParse: number;
+    };
+    parserEntries: {
+      parseMarkdownDocument: number;
+    };
+    capabilityRefs: string[];
+  }>;
+};

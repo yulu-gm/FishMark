@@ -92,19 +92,33 @@ function validateIdentity(value: unknown): PerformanceFixtureIdentity {
     PERFORMANCE_FIXTURE_LINE_COUNT_POLICY,
     "line count policy"
   );
-  assertNonNegativeInteger(value, "lineCount", "line count");
-  assertNonNegativeInteger(value, "byteLength", "byte length");
-  assertNonNegativeInteger(value, "sourceLength", "source length");
+  const lineCount = readNonNegativeInteger(value, "lineCount", "line count");
+  const byteLength = readNonNegativeInteger(value, "byteLength", "byte length");
+  const sourceLength = readNonNegativeInteger(value, "sourceLength", "source length");
+  const sha256 = value.sha256;
+  const contentProfile = value.contentProfile;
 
-  if (typeof value.sha256 !== "string" || !/^[a-f0-9]{64}$/u.test(value.sha256)) {
+  if (typeof sha256 !== "string" || !/^[a-f0-9]{64}$/u.test(sha256)) {
     throw new Error("Fixture identity SHA-256 must be 64 lowercase hexadecimal characters.");
   }
 
-  if (typeof value.contentProfile !== "string" || value.contentProfile.trim().length === 0) {
+  if (typeof contentProfile !== "string" || contentProfile.trim().length === 0) {
     throw new Error("Fixture identity content profile must be a non-empty string.");
   }
 
-  return value as PerformanceFixtureIdentity;
+  return Object.freeze({
+    schemaVersion: PERFORMANCE_FIXTURE_SCHEMA_VERSION,
+    fixtureId: CANONICAL_PERFORMANCE_FIXTURE_ID,
+    path: CANONICAL_PERFORMANCE_FIXTURE_PATH,
+    sha256,
+    lineCount,
+    byteLength,
+    sourceLength,
+    encoding: PERFORMANCE_FIXTURE_ENCODING,
+    newlinePolicy: PERFORMANCE_FIXTURE_NEWLINE_POLICY,
+    lineCountPolicy: PERFORMANCE_FIXTURE_LINE_COUNT_POLICY,
+    contentProfile
+  });
 }
 
 function assertEqual(
@@ -118,14 +132,16 @@ function assertEqual(
   }
 }
 
-function assertNonNegativeInteger(
+function readNonNegativeInteger(
   value: Record<string, unknown>,
   key: string,
   label: string
-): void {
+): number {
   if (!Number.isInteger(value[key]) || (value[key] as number) < 0) {
     throw new Error(`Fixture identity ${label} must be a non-negative integer.`);
   }
+
+  return value[key] as number;
 }
 
 function decodeUtf8(bytes: Uint8Array): string {

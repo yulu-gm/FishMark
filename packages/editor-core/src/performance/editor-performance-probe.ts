@@ -59,46 +59,51 @@ export function measureEditorPerformanceProbe(input: {
   source: string;
 }): EditorPerformanceProbeReport {
   const host = document.createElement("div");
-  document.body.appendChild(host);
-  const stats: ProbeStats = {
-    parseBlockMap: 0,
-    parseMarkdownDocument: 0,
-    decorationRebuild: 0
-  };
-  const parseMarkdownDocumentWithStats = (source: string): MarkdownDocument => {
-    stats.parseMarkdownDocument += 1;
-    return parseMarkdownDocument(source);
-  };
-  const parseBlockMapWithStats = (source: string): BlockMap => {
-    stats.parseBlockMap += 1;
-    return parseBlockMap(source);
-  };
-  const open = measureOperation(stats, "open", () =>
-    new EditorView({
-      state: EditorState.create({
-        doc: input.source,
-        extensions: createFishMarkMarkdownExtensions({
-          parseMarkdownDocument: parseMarkdownDocumentWithStats,
-          parseOrderedListNormalizationBlockMap: parseBlockMapWithStats,
-          onBlockDecorationsBuilt: () => {
-            stats.decorationRebuild += 1;
-          },
-          onContentChange: () => {}
-        })
-      }),
-      parent: host
-    })
-  );
-  const view = open.value;
+  const resources: { view: EditorView | null } = { view: null };
 
   try {
+    document.body.appendChild(host);
+    const stats: ProbeStats = {
+      parseBlockMap: 0,
+      parseMarkdownDocument: 0,
+      decorationRebuild: 0
+    };
+    const parseMarkdownDocumentWithStats = (source: string): MarkdownDocument => {
+      stats.parseMarkdownDocument += 1;
+      return parseMarkdownDocument(source);
+    };
+    const parseBlockMapWithStats = (source: string): BlockMap => {
+      stats.parseBlockMap += 1;
+      return parseBlockMap(source);
+    };
+    const open = measureOperation(stats, "open", () => {
+      const openedView = new EditorView({
+        state: EditorState.create({
+          doc: input.source,
+          extensions: createFishMarkMarkdownExtensions({
+            parseMarkdownDocument: parseMarkdownDocumentWithStats,
+            parseOrderedListNormalizationBlockMap: parseBlockMapWithStats,
+            onBlockDecorationsBuilt: () => {
+              stats.decorationRebuild += 1;
+            },
+            onContentChange: () => {}
+          })
+        }),
+        parent: host
+      });
+
+      resources.view = openedView;
+      return openedView;
+    });
+    const activeView = open.value;
     const operations: EditorPerformanceOperationResult[] = [
       open.operation,
       measureOperation(stats, "edit", () => {
-        const paragraphOffset = view.state.doc.toString().indexOf("Paragraph");
-        const insertionOffset = paragraphOffset >= 0 ? paragraphOffset : view.state.doc.length;
+        const paragraphOffset = activeView.state.doc.toString().indexOf("Paragraph");
+        const insertionOffset =
+          paragraphOffset >= 0 ? paragraphOffset : activeView.state.doc.length;
 
-        view.dispatch({
+        activeView.dispatch({
           changes: {
             from: insertionOffset,
             insert: "Updated "
@@ -109,18 +114,19 @@ export function measureEditorPerformanceProbe(input: {
         });
       }).operation,
       measureOperation(stats, "selection", () => {
-        view.dispatch({
+        activeView.dispatch({
           selection: {
-            anchor: Math.floor(view.state.doc.length / 2)
+            anchor: Math.floor(activeView.state.doc.length / 2)
           }
         });
       }).operation,
       measureOperation(stats, "orderedListEdit", () => {
-        const source = view.state.doc.toString();
+        const source = activeView.state.doc.toString();
         const orderedItemOffset = source.indexOf("Ordered item");
-        const insertionOffset = orderedItemOffset >= 0 ? orderedItemOffset : view.state.doc.length;
+        const insertionOffset =
+          orderedItemOffset >= 0 ? orderedItemOffset : activeView.state.doc.length;
 
-        view.dispatch({
+        activeView.dispatch({
           changes: {
             from: insertionOffset,
             insert: "updated "
@@ -140,8 +146,11 @@ export function measureEditorPerformanceProbe(input: {
       operations
     };
   } finally {
-    view.destroy();
-    host.remove();
+    try {
+      resources.view?.destroy();
+    } finally {
+      host.remove();
+    }
   }
 }
 

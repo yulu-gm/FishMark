@@ -84,13 +84,44 @@ export function toStableEditorFoundationBaseline(
 ): StableEditorFoundationPerformanceBaseline {
   return {
     schemaVersion: report.schemaVersion,
-    fixture: report.fixture,
-    capabilities: report.capabilities,
+    fixture: {
+      schemaVersion: report.fixture.schemaVersion,
+      fixtureId: report.fixture.fixtureId,
+      path: report.fixture.path,
+      sha256: report.fixture.sha256,
+      lineCount: report.fixture.lineCount,
+      byteLength: report.fixture.byteLength,
+      sourceLength: report.fixture.sourceLength,
+      encoding: report.fixture.encoding,
+      newlinePolicy: report.fixture.newlinePolicy,
+      lineCountPolicy: report.fixture.lineCountPolicy,
+      contentProfile: report.fixture.contentProfile
+    },
+    capabilities: {
+      incrementalStructureCache: {
+        available: report.capabilities.incrementalStructureCache.available,
+        reason: report.capabilities.incrementalStructureCache.reason,
+        zeroCounters: [
+          report.capabilities.incrementalStructureCache.zeroCounters[0],
+          report.capabilities.incrementalStructureCache.zeroCounters[1],
+          report.capabilities.incrementalStructureCache.zeroCounters[2]
+        ]
+      }
+    },
     operations: report.operations.map((operation) => ({
       name: operation.name,
-      counters: operation.counters,
-      parserEntries: operation.parserEntries,
-      capabilityRefs: operation.capabilityRefs,
+      counters: {
+        fullParse: operation.counters.fullParse,
+        incrementalParseWindow: operation.counters.incrementalParseWindow,
+        cacheHit: operation.counters.cacheHit,
+        invalidatedNodes: operation.counters.invalidatedNodes,
+        decorationRebuild: operation.counters.decorationRebuild
+      },
+      parserEntries: {
+        parseMarkdownDocument: operation.parserEntries.parseMarkdownDocument,
+        parseBlockMap: operation.parserEntries.parseBlockMap
+      },
+      capabilityRefs: [operation.capabilityRefs[0]],
       unavailableCapabilityReason: operation.unavailableCapabilityReason
     }))
   };

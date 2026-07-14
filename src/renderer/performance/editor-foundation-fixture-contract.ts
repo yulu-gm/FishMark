@@ -12,20 +12,20 @@ export const PERFORMANCE_FIXTURE_LINE_COUNT_POLICY =
   "logical-lines-separated-by-lf" as const;
 
 export type PerformanceFixtureIdentity = {
-  schemaVersion: typeof PERFORMANCE_FIXTURE_SCHEMA_VERSION;
-  fixtureId: typeof CANONICAL_PERFORMANCE_FIXTURE_ID;
-  path: typeof CANONICAL_PERFORMANCE_FIXTURE_PATH;
-  sha256: string;
-  lineCount: number;
-  byteLength: number;
-  sourceLength: number;
-  encoding: typeof PERFORMANCE_FIXTURE_ENCODING;
-  newlinePolicy: typeof PERFORMANCE_FIXTURE_NEWLINE_POLICY;
-  lineCountPolicy: typeof PERFORMANCE_FIXTURE_LINE_COUNT_POLICY;
-  contentProfile: string;
+  readonly schemaVersion: typeof PERFORMANCE_FIXTURE_SCHEMA_VERSION;
+  readonly fixtureId: typeof CANONICAL_PERFORMANCE_FIXTURE_ID;
+  readonly path: typeof CANONICAL_PERFORMANCE_FIXTURE_PATH;
+  readonly sha256: string;
+  readonly lineCount: number;
+  readonly byteLength: number;
+  readonly sourceLength: number;
+  readonly encoding: typeof PERFORMANCE_FIXTURE_ENCODING;
+  readonly newlinePolicy: typeof PERFORMANCE_FIXTURE_NEWLINE_POLICY;
+  readonly lineCountPolicy: typeof PERFORMANCE_FIXTURE_LINE_COUNT_POLICY;
+  readonly contentProfile: string;
 };
 
 export type VerifiedPerformanceFixture = {
-  identity: PerformanceFixtureIdentity;
-  source: string;
+  readonly identity: PerformanceFixtureIdentity;
+  readonly source: string;
 };
