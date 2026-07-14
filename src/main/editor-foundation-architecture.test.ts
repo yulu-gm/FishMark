@@ -812,6 +812,79 @@ describe("editor foundation architecture guard", () => {
     expect(expectCodes(validateSynthetic(repository))).toContain("unregistered-micromark-document-site");
   });
 
+  it.each([
+    [
+      "ES namespace import",
+      'import * as micromark from "micromark"; micromark.parse().document();'
+    ],
+    [
+      "import-equals namespace",
+      'import micromark = require("micromark"); micromark.parse().document();'
+    ],
+    [
+      "require namespace",
+      'const micromark = require("micromark"); micromark.parse().document();'
+    ],
+    [
+      "require destructured parse",
+      'const { parse } = require("micromark"); parse().document();'
+    ],
+    [
+      "require renamed destructured parse",
+      'const { parse: readMicromark } = require("micromark"); readMicromark().document();'
+    ],
+    [
+      "direct require parse",
+      'require("micromark").parse().document();'
+    ],
+    [
+      "dynamic import namespace",
+      'const micromark = await import("micromark"); micromark.parse().document();'
+    ],
+    [
+      "dynamic import destructured parse",
+      'const { parse } = await import("micromark"); parse().document();'
+    ],
+    [
+      "dynamic import renamed destructured parse",
+      'const { parse: readMicromark } = await import("micromark"); readMicromark().document();'
+    ],
+    [
+      "direct dynamic import parse",
+      '(await import("micromark")).parse().document();'
+    ]
+  ])("rejects an unregistered micromark document site loaded through %s", (_name, source) => {
+    const repository = createSyntheticRepository({
+      "packages/markdown-engine/src/runtime-micromark-site.ts": source
+    });
+
+    expect(expectCodes(validateSynthetic(repository))).toContain("unregistered-micromark-document-site");
+  });
+
+  it.each([
+    ["module import without document parse", 'const { parse } = require("micromark"); void parse();'],
+    ["non-document parser call", 'const micromark = require("micromark"); micromark.parse().content();'],
+    ["another package with matching names", 'const { parse } = require("other-parser"); parse().document();'],
+    [
+      "comments and strings",
+      [
+        '// const { parse } = require("micromark"); parse().document();',
+        'const sample = \'(await import("micromark")).parse().document()\';',
+        "void sample;"
+      ].join("\n")
+    ]
+  ])("does not mistake %s for a micromark document site", (_name, source) => {
+    const repository = createSyntheticRepository({
+      "packages/markdown-engine/src/runtime-micromark-nonsite.ts": source
+    });
+    const result = validateSynthetic(repository);
+
+    expect(result.findings.map((finding) => finding.code)).not.toContain(
+      "unregistered-micromark-document-site"
+    );
+    expect(result.ok).toBe(true);
+  });
+
   it("does not infer a missing micromark site from a module with incomplete parse evidence", () => {
     const repository = createSyntheticRepository({
       "packages/markdown-engine/src/parse-block-map.ts": "export const = true;"

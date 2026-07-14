@@ -164,7 +164,11 @@ export function analyzeSourceModule(rootDir: string, path: string): SourceModule
       ts.isExternalModuleReference(node.moduleReference) &&
       isStringLiteralLike(node.moduleReference.expression)
     ) {
-      imports.push({ kind: "import-equals", specifier: node.moduleReference.expression.text });
+      const specifier = node.moduleReference.expression.text;
+      imports.push({ kind: "import-equals", specifier });
+      if (specifier === "micromark") {
+        micromarkNamespaceAliases.add(node.name.text);
+      }
     }
 
     if (
@@ -195,6 +199,18 @@ export function analyzeSourceModule(rootDir: string, path: string): SourceModule
       isStringLiteralLike(node.arguments[0])
     ) {
       imports.push({ kind: "require-call", specifier: node.arguments[0].text });
+    }
+
+    if (
+      ts.isVariableDeclaration(node) &&
+      node.initializer &&
+      isMicromarkModuleExpression(node.initializer)
+    ) {
+      collectMicromarkModuleBinding(
+        node.name,
+        micromarkParseAliases,
+        micromarkNamespaceAliases
+      );
     }
 
     if (
@@ -305,19 +321,80 @@ function isMicromarkParseCall(
   expression: ts.Expression,
   parseAliases: ReadonlySet<string>,
   namespaceAliases: ReadonlySet<string>
-): expression is ts.CallExpression {
-  if (!ts.isCallExpression(expression)) {
+): boolean {
+  const candidate = unwrapAwaitAndParentheses(expression);
+  if (!ts.isCallExpression(candidate)) {
     return false;
   }
-  if (ts.isIdentifier(expression.expression)) {
-    return parseAliases.has(expression.expression.text);
+  const callee = unwrapAwaitAndParentheses(candidate.expression);
+  if (ts.isIdentifier(callee)) {
+    return parseAliases.has(callee.text);
   }
+  if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "parse") {
+    return false;
+  }
+
+  const receiver = unwrapAwaitAndParentheses(callee.expression);
   return (
-    ts.isPropertyAccessExpression(expression.expression) &&
-    expression.expression.name.text === "parse" &&
-    ts.isIdentifier(expression.expression.expression) &&
-    namespaceAliases.has(expression.expression.expression.text)
+    (ts.isIdentifier(receiver) && namespaceAliases.has(receiver.text)) ||
+    isMicromarkModuleExpression(receiver)
   );
+}
+
+function collectMicromarkModuleBinding(
+  binding: ts.BindingName,
+  parseAliases: Set<string>,
+  namespaceAliases: Set<string>
+): void {
+  if (ts.isIdentifier(binding)) {
+    namespaceAliases.add(binding.text);
+    return;
+  }
+  if (!ts.isObjectBindingPattern(binding)) {
+    return;
+  }
+
+  for (const element of binding.elements) {
+    if (element.dotDotDotToken || !ts.isIdentifier(element.name)) {
+      continue;
+    }
+    const importedName = element.propertyName
+      ? readStaticPropertyName(element.propertyName)
+      : element.name.text;
+    if (importedName === "parse") {
+      parseAliases.add(element.name.text);
+    }
+  }
+}
+
+function isMicromarkModuleExpression(expression: ts.Expression): boolean {
+  const candidate = unwrapAwaitAndParentheses(expression);
+  if (!ts.isCallExpression(candidate) || candidate.arguments.length < 1) {
+    return false;
+  }
+  const specifier = candidate.arguments[0];
+  if (!isStringLiteralLike(specifier) || specifier.text !== "micromark") {
+    return false;
+  }
+
+  return (
+    candidate.expression.kind === ts.SyntaxKind.ImportKeyword ||
+    (ts.isIdentifier(candidate.expression) &&
+      candidate.expression.text === "require" &&
+      candidate.arguments.length === 1)
+  );
+}
+
+function unwrapAwaitAndParentheses(expression: ts.Expression): ts.Expression {
+  let candidate = expression;
+  while (ts.isAwaitExpression(candidate) || ts.isParenthesizedExpression(candidate)) {
+    candidate = candidate.expression;
+  }
+  return candidate;
+}
+
+function readStaticPropertyName(name: ts.PropertyName): string | null {
+  return ts.isIdentifier(name) || isStringLiteralLike(name) ? name.text : null;
 }
 
 function isStringLiteralLike(node: ts.Node | undefined): node is ts.StringLiteralLike {
