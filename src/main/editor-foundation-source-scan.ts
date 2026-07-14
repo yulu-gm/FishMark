@@ -60,10 +60,28 @@ export function analyzeSourceModule(rootDir: string, path: string): SourceModule
   const exportedSymbols = new Set<string>();
   const imports: SourceImport[] = [];
   const reExports: SourceReExport[] = [];
+  const importedBindings = new Map<string, { importedName: string; specifier: string }>();
   const micromarkParseAliases = new Set<string>();
   const micromarkNamespaceAliases = new Set<string>();
   const micromarkParserVariables = new Set<string>();
   let hasStarReExport = false;
+
+  for (const statement of sourceFile.statements) {
+    if (
+      !ts.isImportDeclaration(statement) ||
+      !isStringLiteralLike(statement.moduleSpecifier) ||
+      !statement.importClause?.namedBindings ||
+      !ts.isNamedImports(statement.importClause.namedBindings)
+    ) {
+      continue;
+    }
+    for (const element of statement.importClause.namedBindings.elements) {
+      importedBindings.set(element.name.text, {
+        importedName: (element.propertyName ?? element.name).text,
+        specifier: statement.moduleSpecifier.text
+      });
+    }
+  }
 
   for (const statement of sourceFile.statements) {
     if (ts.isImportDeclaration(statement) && isStringLiteralLike(statement.moduleSpecifier)) {
@@ -102,11 +120,13 @@ export function analyzeSourceModule(rootDir: string, path: string): SourceModule
       if (ts.isNamedExports(statement.exportClause)) {
         for (const element of statement.exportClause.elements) {
           const exportedName = element.name.text;
+          const localName = (element.propertyName ?? element.name).text;
+          const importedBinding = specifier === null ? importedBindings.get(localName) : undefined;
           exportedSymbols.add(exportedName);
           reExports.push({
             exportedName,
-            importedName: (element.propertyName ?? element.name).text,
-            specifier
+            importedName: importedBinding?.importedName ?? localName,
+            specifier: specifier ?? importedBinding?.specifier ?? null
           });
         }
       }
@@ -120,7 +140,7 @@ export function analyzeSourceModule(rootDir: string, path: string): SourceModule
     if (
       ts.isCallExpression(node) &&
       node.expression.kind === ts.SyntaxKind.ImportKeyword &&
-      node.arguments.length === 1 &&
+      node.arguments.length >= 1 &&
       isStringLiteralLike(node.arguments[0])
     ) {
       imports.push({ kind: "dynamic-import", specifier: node.arguments[0].text });

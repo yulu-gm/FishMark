@@ -62,6 +62,50 @@ describe("editor foundation architecture guard", () => {
     expect(validateSynthetic(repository)).toEqual({ findings: [], ok: true });
   });
 
+  it.each([
+    [
+      "missing forbidden-import source directory",
+      (manifest: MutableRecord) => {
+        findRule(manifest, "boundary.renderer").sourcePath = "src/renderer-typo";
+      },
+      "active-rule-path-missing"
+    ],
+    [
+      "forbidden-import source that is a file",
+      (manifest: MutableRecord) => {
+        findRule(manifest, "boundary.renderer").sourcePath = "src/renderer/index.ts";
+      },
+      "active-rule-path-not-directory"
+    ],
+    [
+      "missing public-entry source directory",
+      (manifest: MutableRecord) => {
+        findRule(manifest, "boundary.public-package-entries").sourcePaths = ["src-typo", "packages"];
+      },
+      "active-rule-path-missing"
+    ],
+    [
+      "empty public-entry source directories",
+      (manifest: MutableRecord) => {
+        findRule(manifest, "boundary.public-package-entries").sourcePaths = [];
+      },
+      "active-rule-source-paths-empty"
+    ],
+    [
+      "public-entry packages path that is a file",
+      (manifest: MutableRecord) => {
+        findRule(manifest, "boundary.public-package-entries").packagesPath = "packages/editor-core/src/index.ts";
+      },
+      "active-rule-path-not-directory"
+    ]
+  ])("fails closed for an active rule with %s", (_name, mutate, expectedCode) => {
+    const repository = createSyntheticRepository();
+    const manifest = readSyntheticManifest(repository);
+    mutate(manifest);
+
+    expect(expectCodes(validateSynthetic(repository, manifest))).toContain(expectedCode);
+  });
+
   it("detects string-literal dynamic imports and re-exports", () => {
     const dynamicRepository = createSyntheticRepository({
       "src/renderer/dynamic.ts": 'void import("../main/secret");'
@@ -72,6 +116,14 @@ describe("editor foundation architecture guard", () => {
 
     expect(expectCodes(validateSynthetic(dynamicRepository))).toContain("forbidden-import");
     expect(expectCodes(validateSynthetic(reexportRepository))).toContain("forbidden-import");
+  });
+
+  it("detects a literal dynamic import that includes import attributes", () => {
+    const repository = createSyntheticRepository({
+      "src/renderer/dynamic-options.ts": 'void import("../main/secret", { with: {} });'
+    });
+
+    expect(expectCodes(validateSynthetic(repository))).toContain("forbidden-import");
   });
 
   it("ignores comments and arbitrary strings that resemble imports", () => {
@@ -197,11 +249,57 @@ describe("editor foundation architecture guard", () => {
     expect(expectCodes(validateSynthetic(repository))).toContain("unregistered-public-parser");
   });
 
+  it("rejects a public alias of a registered document parser", () => {
+    const repository = createSyntheticRepository({
+      "packages/markdown-engine/src/index.ts": [
+        syntheticPublicParserExports,
+        'export { parseMarkdownDocument as readMarkdownDocument } from "./parse-markdown-document";'
+      ].join("\n")
+    });
+
+    expect(expectCodes(validateSynthetic(repository))).toContain("unregistered-public-parser");
+  });
+
+  it("rejects a locally imported alias that is re-exported as a public parser surface", () => {
+    const repository = createSyntheticRepository({
+      "packages/markdown-engine/src/index.ts": [
+        syntheticPublicParserExports,
+        'import { parseMarkdownDocument as readDocument } from "./parse-markdown-document";',
+        "export { readDocument };"
+      ].join("\n")
+    });
+
+    expect(expectCodes(validateSynthetic(repository))).toContain("unregistered-public-parser");
+  });
+
+  it("rejects a new internal parse export without relying on document-name suffixes", () => {
+    const repository = createSyntheticRepository({
+      "packages/markdown-engine/src/parse-document-tree.ts":
+        "export function parseDocumentTree(source: string): string { return source; }"
+    });
+
+    expect(expectCodes(validateSynthetic(repository))).toContain("unregistered-document-parser-export");
+  });
+
   it("rejects a new direct micromark document parse site", () => {
     const repository = createSyntheticRepository({
       "packages/markdown-engine/src/parse-unregistered.ts": [
         'import { parse, preprocess } from "micromark";',
         'export function scan(source: string): unknown { return parse().document().write(preprocess()(source, "utf8", true)); }'
+      ].join("\n")
+    });
+
+    expect(expectCodes(validateSynthetic(repository))).toContain("unregistered-micromark-document-site");
+  });
+
+  it.each([
+    "src/renderer/direct-micromark.ts",
+    "packages/editor-core/src/direct-micromark.ts"
+  ])("rejects a direct micromark document parse outside markdown-engine at %s", (path) => {
+    const repository = createSyntheticRepository({
+      [path]: [
+        'import { parse } from "micromark";',
+        "export function parseCurrentDocument(source: string): unknown { return parse().document().write(source); }"
       ].join("\n")
     });
 
@@ -390,7 +488,8 @@ function createSyntheticManifest(): MutableRecord {
     exceptions: [],
     parserPolicy: {
       enginePath: "packages/markdown-engine/src",
-      publicEntryPath: "packages/markdown-engine/src/index.ts"
+      publicEntryPath: "packages/markdown-engine/src/index.ts",
+      governedSourcePaths: ["src", "packages"]
     },
     parserEntries: [
       createParserEntry(
@@ -498,6 +597,14 @@ function findParserEntry(manifest: MutableRecord, id: string): MutableRecord {
     throw new Error(`Missing synthetic parser entry: ${id}`);
   }
   return entry;
+}
+
+function findRule(manifest: MutableRecord, id: string): MutableRecord {
+  const rule = (manifest.rules as MutableRecord[]).find((candidate) => candidate.id === id);
+  if (!rule) {
+    throw new Error(`Missing synthetic rule: ${id}`);
+  }
+  return rule;
 }
 
 function expectCodes(result: EditorFoundationArchitectureResult): string[] {

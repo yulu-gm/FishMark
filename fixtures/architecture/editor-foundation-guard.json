@@ -171,7 +171,11 @@
   ],
   "parserPolicy": {
     "enginePath": "packages/markdown-engine/src",
-    "publicEntryPath": "packages/markdown-engine/src/index.ts"
+    "publicEntryPath": "packages/markdown-engine/src/index.ts",
+    "governedSourcePaths": [
+      "src",
+      "packages"
+    ]
   },
   "parserEntries": [
     {
@@ -227,6 +231,17 @@
       "symbol": "parseBlockquoteLinePrefix",
       "visibility": "public",
       "role": "line-prefix",
+      "scope": "fragment",
+      "lifecycle": {
+        "state": "present"
+      }
+    },
+    {
+      "id": "parser.parse-html-image-data",
+      "module": "packages/markdown-engine/src/html-image.ts",
+      "symbol": "parseHtmlImageData",
+      "visibility": "internal-export",
+      "role": "html-image-fragment",
       "scope": "fragment",
       "lifecycle": {
         "state": "present"

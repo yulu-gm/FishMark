@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 
 import {
@@ -116,7 +116,7 @@ function validateRules(rules: readonly ManifestRecord[], context: ValidationCont
     activeRules.push(rule);
 
     if (kind === "forbidden-imports") {
-      validateManifestPath(rule.sourcePath, `rule ${id ?? "<missing-id>"} sourcePath`, context);
+      validateActiveRuleDirectory(rule.sourcePath, `rule ${id ?? "<missing-id>"} sourcePath`, context);
       validateStringArray(rule.forbiddenPackages, `rule ${id ?? "<missing-id>"} forbiddenPackages`, context);
       for (const path of validateStringArray(
         rule.forbiddenPaths,
@@ -127,10 +127,22 @@ function validateRules(rules: readonly ManifestRecord[], context: ValidationCont
       }
       validateTemporaryAllowances(rule.temporaryAllowedPackages, id, context);
     } else {
-      for (const path of validateStringArray(rule.sourcePaths, `rule ${id ?? "<missing-id>"} sourcePaths`, context)) {
-        validateManifestPath(path, `rule ${id ?? "<missing-id>"} source path`, context);
+      const sourcePaths = validateStringArray(
+        rule.sourcePaths,
+        `rule ${id ?? "<missing-id>"} sourcePaths`,
+        context
+      );
+      if (sourcePaths.length === 0) {
+        context.findings.push({
+          code: "active-rule-source-paths-empty",
+          message: `Rule ${id ?? "<missing-id>"} must scan at least one source directory while active.`,
+          ruleId: id ?? undefined
+        });
       }
-      validateManifestPath(rule.packagesPath, `rule ${id ?? "<missing-id>"} packagesPath`, context);
+      for (const path of sourcePaths) {
+        validateActiveRuleDirectory(path, `rule ${id ?? "<missing-id>"} source path`, context);
+      }
+      validateActiveRuleDirectory(rule.packagesPath, `rule ${id ?? "<missing-id>"} packagesPath`, context);
       if (!readNonEmptyString(rule.publicPrefix)) {
         context.findings.push({
           code: "invalid-rule",
@@ -443,7 +455,15 @@ function validateParserPolicy(
   }
   const enginePath = validateManifestPath(value.enginePath, "parserPolicy enginePath", context);
   const publicEntryPath = validateManifestPath(value.publicEntryPath, "parserPolicy publicEntryPath", context);
-  if (!enginePath || !publicEntryPath) {
+  const governedSourcePaths = validateStringArray(
+    value.governedSourcePaths,
+    "parserPolicy governedSourcePaths",
+    context
+  );
+  for (const sourcePath of governedSourcePaths) {
+    validateActiveRuleDirectory(sourcePath, "parserPolicy governed source path", context);
+  }
+  if (!enginePath || !publicEntryPath || governedSourcePaths.length === 0) {
     return;
   }
   if (parserEntries.length === 0) {
@@ -494,8 +514,33 @@ function validateParserPolicy(
     validateParserEntry(entry, publicExports, registeredParserKeys, publicParserSymbols, context);
   }
 
+  const reExportedNames = new Set<string>();
+  for (const reExport of publicEntryAnalysis.reExports) {
+    reExportedNames.add(reExport.exportedName);
+    if (!reExport.specifier) {
+      continue;
+    }
+    const sourceModule = resolveSourceModulePath(context.rootDir, publicEntryPath, reExport.specifier);
+    if (!sourceModule) {
+      continue;
+    }
+    const importsRegisteredParser = registeredParserKeys.has(parserKey(sourceModule, reExport.importedName));
+    const importsParserNamedSymbol = reExport.importedName.startsWith("parse");
+    const isExactRegisteredPublicExport =
+      reExport.exportedName === reExport.importedName &&
+      publicParserSymbols.has(reExport.exportedName) &&
+      publicExports.get(reExport.exportedName) === sourceModule;
+    if ((importsRegisteredParser || importsParserNamedSymbol) && !isExactRegisteredPublicExport) {
+      context.findings.push({
+        code: "unregistered-public-parser",
+        message: `${publicEntryPath} re-exports parser ${reExport.importedName} as unregistered public surface ${reExport.exportedName}.`,
+        path: publicEntryPath
+      });
+    }
+  }
+
   for (const [symbol] of publicExports) {
-    if (symbol.startsWith("parse") && !publicParserSymbols.has(symbol)) {
+    if (!reExportedNames.has(symbol) && symbol.startsWith("parse") && !publicParserSymbols.has(symbol)) {
       context.findings.push({
         code: "unregistered-public-parser",
         message: `${publicEntryPath} publicly exports unregistered parser ${symbol}.`,
@@ -510,7 +555,7 @@ function validateParserPolicy(
       continue;
     }
     for (const symbol of analyze(context, path).exportedSymbols) {
-      if (isDocumentParserName(symbol) && !registeredParserKeys.has(parserKey(path, symbol))) {
+      if (symbol.startsWith("parse") && !registeredParserKeys.has(parserKey(path, symbol))) {
         context.findings.push({
           code: "unregistered-document-parser-export",
           message: `${path} exports document parser ${symbol} without a parser registry entry.`,
@@ -520,7 +565,10 @@ function validateParserPolicy(
     }
   }
 
-  validateMicromarkDocumentSites(engineFiles, micromarkSites, context);
+  const governedFiles = [
+    ...new Set(governedSourcePaths.flatMap((sourcePath) => collectSourceFiles(context.rootDir, sourcePath)))
+  ].sort((left, right) => left.localeCompare(right));
+  validateMicromarkDocumentSites(governedFiles, micromarkSites, context);
 }
 
 function validateParserEntry(
@@ -766,6 +814,28 @@ function validateManifestPath(value: unknown, label: string, context: Validation
   return normalizeRepoPath(path);
 }
 
+function validateActiveRuleDirectory(value: unknown, label: string, context: ValidationContext): string | null {
+  const path = validateManifestPath(value, label, context);
+  if (!path) {
+    return null;
+  }
+  const absolutePath = resolve(context.rootDir, path);
+  if (!existsSync(absolutePath)) {
+    context.findings.push({
+      code: "active-rule-path-missing",
+      message: `${label} must exist while its rule is active: ${path}.`,
+      path
+    });
+  } else if (!statSync(absolutePath).isDirectory()) {
+    context.findings.push({
+      code: "active-rule-path-not-directory",
+      message: `${label} must be a directory while its rule is active: ${path}.`,
+      path
+    });
+  }
+  return path;
+}
+
 function isSafeManifestPath(rootDir: string, path: string): boolean {
   if (isAbsolute(path) || hasWildcard(path)) {
     return false;
@@ -853,10 +923,6 @@ function pathIsWithin(path: string, parent: string): boolean {
 
 function parserKey(module: string, symbol: string): string {
   return `${module}#${symbol}`;
-}
-
-function isDocumentParserName(symbol: string): boolean {
-  return /^parse.*(?:Document|BlockMap|TopLevelBlocks)$/u.test(symbol);
 }
 
 function exceptionTarget(ruleId: string, importer: string, specifier: string): string {
