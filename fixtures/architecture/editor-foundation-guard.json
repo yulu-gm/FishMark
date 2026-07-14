@@ -1,0 +1,287 @@
+{
+  "schemaVersion": 1,
+  "roadmapPath": "docs/refactor/editor-foundation/roadmap.md",
+  "packages": [
+    {
+      "id": "markdown-engine",
+      "path": "packages/markdown-engine",
+      "publicEntry": "@fishmark/markdown-engine",
+      "state": "active",
+      "boundaryRuleId": "boundary.markdown-engine"
+    },
+    {
+      "id": "editor-core",
+      "path": "packages/editor-core",
+      "publicEntry": "@fishmark/editor-core",
+      "state": "active",
+      "boundaryRuleId": "boundary.editor-core"
+    },
+    {
+      "id": "workspace-domain",
+      "path": "packages/workspace-domain",
+      "publicEntry": "@fishmark/workspace-domain",
+      "state": "planned",
+      "boundaryRuleId": "boundary.workspace-domain"
+    },
+    {
+      "id": "workspace-application",
+      "path": "packages/workspace-application",
+      "publicEntry": "@fishmark/workspace-application",
+      "state": "planned",
+      "boundaryRuleId": "boundary.workspace-application"
+    },
+    {
+      "id": "workspace-infrastructure",
+      "path": "packages/workspace-infrastructure",
+      "publicEntry": "@fishmark/workspace-infrastructure",
+      "state": "planned",
+      "boundaryRuleId": "boundary.workspace-infrastructure"
+    },
+    {
+      "id": "editor-model",
+      "path": "packages/editor-model",
+      "publicEntry": "@fishmark/editor-model",
+      "state": "planned",
+      "boundaryRuleId": "boundary.editor-model"
+    },
+    {
+      "id": "markdown-presentation",
+      "path": "packages/markdown-presentation",
+      "publicEntry": "@fishmark/markdown-presentation",
+      "state": "planned",
+      "boundaryRuleId": "boundary.markdown-presentation"
+    },
+    {
+      "id": "codemirror-adapter",
+      "path": "packages/codemirror-adapter",
+      "publicEntry": "@fishmark/codemirror-adapter",
+      "state": "planned",
+      "boundaryRuleId": "boundary.codemirror-adapter"
+    }
+  ],
+  "rules": [
+    {
+      "id": "boundary.markdown-engine",
+      "kind": "forbidden-imports",
+      "state": "active",
+      "sourcePath": "packages/markdown-engine",
+      "forbiddenPackages": [
+        "react",
+        "react-dom",
+        "electron",
+        "@codemirror/*",
+        "@fishmark/editor-core"
+      ],
+      "forbiddenPaths": [
+        "src/main",
+        "src/preload",
+        "src/renderer",
+        "packages/editor-core"
+      ]
+    },
+    {
+      "id": "boundary.editor-core",
+      "kind": "forbidden-imports",
+      "state": "active",
+      "sourcePath": "packages/editor-core",
+      "forbiddenPackages": [
+        "react",
+        "react-dom",
+        "electron"
+      ],
+      "forbiddenPaths": [
+        "src/main",
+        "src/preload",
+        "src/renderer"
+      ],
+      "temporaryAllowedPackages": [
+        {
+          "id": "allow.editor-core-codemirror-until-adapter-cutover",
+          "package": "@codemirror/*",
+          "owner": "editor-foundation-refactor",
+          "reason": "The current editor-core still owns the CodeMirror adapter and will be deleted after adapter extraction.",
+          "retireIn": "RF-604"
+        }
+      ]
+    },
+    {
+      "id": "boundary.renderer",
+      "kind": "forbidden-imports",
+      "state": "active",
+      "sourcePath": "src/renderer",
+      "forbiddenPackages": [],
+      "forbiddenPaths": [
+        "src/main",
+        "src/preload"
+      ]
+    },
+    {
+      "id": "boundary.preload",
+      "kind": "forbidden-imports",
+      "state": "active",
+      "sourcePath": "src/preload",
+      "forbiddenPackages": [],
+      "forbiddenPaths": [
+        "src/main",
+        "src/renderer"
+      ]
+    },
+    {
+      "id": "boundary.main",
+      "kind": "forbidden-imports",
+      "state": "active",
+      "sourcePath": "src/main",
+      "forbiddenPackages": [],
+      "forbiddenPaths": [
+        "src/preload",
+        "src/renderer"
+      ]
+    },
+    {
+      "id": "boundary.public-package-entries",
+      "kind": "public-package-entry",
+      "state": "active",
+      "sourcePaths": [
+        "src",
+        "packages"
+      ],
+      "packagesPath": "packages",
+      "publicPrefix": "@fishmark/"
+    }
+  ],
+  "exceptions": [
+    {
+      "id": "exception.renderer-performance-line-counter",
+      "ruleId": "boundary.public-package-entries",
+      "importer": "src/renderer/performance/document-derived-ui.ts",
+      "specifier": "../../../packages/editor-core/src/performance/long-document-fixtures",
+      "owner": "editor-foundation-refactor",
+      "reason": "The current renderer performance probe shares a helper from the mixed editor-core package until that package is removed.",
+      "retireIn": "RF-604"
+    },
+    {
+      "id": "exception.renderer-performance-fixture-test",
+      "ruleId": "boundary.public-package-entries",
+      "importer": "src/renderer/performance/document-derived-ui.perf.test.ts",
+      "specifier": "../../../packages/editor-core/src/performance/long-document-fixtures",
+      "owner": "editor-foundation-refactor",
+      "reason": "The legacy performance test still consumes the editor-core fixture generator until the adapter package hard cutover.",
+      "retireIn": "RF-604"
+    }
+  ],
+  "parserPolicy": {
+    "enginePath": "packages/markdown-engine/src",
+    "publicEntryPath": "packages/markdown-engine/src/index.ts"
+  },
+  "parserEntries": [
+    {
+      "id": "parser.parse-markdown-document",
+      "module": "packages/markdown-engine/src/parse-markdown-document.ts",
+      "symbol": "parseMarkdownDocument",
+      "visibility": "public",
+      "role": "rich-document",
+      "scope": "full-document",
+      "lifecycle": {
+        "state": "present-until",
+        "retireIn": "RF-405"
+      }
+    },
+    {
+      "id": "parser.parse-block-map",
+      "module": "packages/markdown-engine/src/parse-block-map.ts",
+      "symbol": "parseBlockMap",
+      "visibility": "public",
+      "role": "lean-legacy-document",
+      "scope": "full-document",
+      "lifecycle": {
+        "state": "present-until",
+        "retireIn": "RF-405"
+      }
+    },
+    {
+      "id": "parser.parse-top-level-blocks",
+      "module": "packages/markdown-engine/src/parse-block-map.ts",
+      "symbol": "parseTopLevelBlocks",
+      "visibility": "internal-export",
+      "role": "legacy-top-level-document",
+      "scope": "full-document",
+      "lifecycle": {
+        "state": "present-until",
+        "retireIn": "RF-405"
+      }
+    },
+    {
+      "id": "parser.parse-inline-ast",
+      "module": "packages/markdown-engine/src/parse-inline-ast.ts",
+      "symbol": "parseInlineAst",
+      "visibility": "public",
+      "role": "inline-range",
+      "scope": "inline-range",
+      "lifecycle": {
+        "state": "present"
+      }
+    },
+    {
+      "id": "parser.parse-blockquote-line-prefix",
+      "module": "packages/markdown-engine/src/blockquote.ts",
+      "symbol": "parseBlockquoteLinePrefix",
+      "visibility": "public",
+      "role": "line-prefix",
+      "scope": "fragment",
+      "lifecycle": {
+        "state": "present"
+      }
+    },
+    {
+      "id": "parser.parse-table-alignment",
+      "module": "packages/markdown-engine/src/table-model.ts",
+      "symbol": "parseTableAlignment",
+      "visibility": "public",
+      "role": "table-alignment",
+      "scope": "fragment",
+      "lifecycle": {
+        "state": "present"
+      }
+    },
+    {
+      "id": "parser.parse-pipe-table",
+      "module": "packages/markdown-engine/src/table-model.ts",
+      "symbol": "parsePipeTable",
+      "visibility": "public",
+      "role": "table-fragment",
+      "scope": "fragment",
+      "lifecycle": {
+        "state": "present"
+      }
+    },
+    {
+      "id": "parser.parse-loose-pipe-table",
+      "module": "packages/markdown-engine/src/table-model.ts",
+      "symbol": "parseLoosePipeTable",
+      "visibility": "public",
+      "role": "table-fragment",
+      "scope": "fragment",
+      "lifecycle": {
+        "state": "present"
+      }
+    }
+  ],
+  "micromarkDocumentSites": [
+    {
+      "id": "micromark-document.parse-markdown-document",
+      "module": "packages/markdown-engine/src/parse-markdown-document.ts",
+      "lifecycle": {
+        "state": "present-until",
+        "retireIn": "RF-405"
+      }
+    },
+    {
+      "id": "micromark-document.parse-block-map",
+      "module": "packages/markdown-engine/src/parse-block-map.ts",
+      "lifecycle": {
+        "state": "present-until",
+        "retireIn": "RF-405"
+      }
+    }
+  ]
+}
