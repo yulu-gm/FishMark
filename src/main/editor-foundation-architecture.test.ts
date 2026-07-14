@@ -8,7 +8,7 @@ import {
   validateEditorFoundationArchitecture,
   type EditorFoundationArchitectureResult
 } from "./editor-foundation-architecture";
-import { collectSourceFiles } from "./editor-foundation-source-scan";
+import { analyzeSourceModule, collectSourceFiles } from "./editor-foundation-source-scan";
 
 type MutableRecord = Record<string, unknown>;
 
@@ -54,78 +54,98 @@ describe("editor foundation architecture guard", () => {
     expect(expectCodes(validateSynthetic(repository))).toContain("forbidden-import");
   });
 
-  it("keeps CodeMirror legal in editor-core until the registered adapter cutover", () => {
+  it("allows only the exact registered CodeMirror importer/specifier debt", () => {
+    const importer = "packages/editor-core/src/codemirror-current.ts";
+    const specifier = "@codemirror/state";
     const repository = createSyntheticRepository({
-      "packages/editor-core/src/codemirror-current.ts":
-        'import type { Text } from "@codemirror/state"; export type CurrentText = Text;'
-    });
-
-    expect(validateSynthetic(repository)).toEqual({ findings: [], ok: true });
-  });
-
-  it("rejects CodeMirror in editor-core when its temporary allowance is removed", () => {
-    const repository = createSyntheticRepository({
-      "packages/editor-core/src/codemirror-current.ts":
-        'import type { Text } from "@codemirror/state"; export type CurrentText = Text;'
+      [importer]: `import type { Text } from "${specifier}"; export type CurrentText = Text;`
     });
     const manifest = readSyntheticManifest(repository);
-    const editorCoreRule = findRule(manifest, "boundary.editor-core");
-    editorCoreRule.forbiddenPackages = [
-      ...(editorCoreRule.forbiddenPackages as string[]),
-      "@codemirror/*"
+    manifest.exceptions = [createCodeMirrorException({ importer, specifier })];
+
+    expect(validateSynthetic(repository, manifest)).toEqual({ findings: [], ok: true });
+  });
+
+  it("rejects a new CodeMirror package from an otherwise excepted importer", () => {
+    const importer = "packages/editor-core/src/codemirror-current.ts";
+    const repository = createSyntheticRepository({
+      [importer]: [
+        'import type { Text } from "@codemirror/state";',
+        'import type { EditorView } from "@codemirror/view";',
+        "export type CurrentText = Text | EditorView;"
+      ].join("\n")
+    });
+    const manifest = readSyntheticManifest(repository);
+    manifest.exceptions = [createCodeMirrorException({ importer, specifier: "@codemirror/state" })];
+
+    expect(expectCodes(validateSynthetic(repository, manifest))).toContain("forbidden-import");
+  });
+
+  it("rejects an excepted CodeMirror package from a new importer", () => {
+    const allowedImporter = "packages/editor-core/src/codemirror-current.ts";
+    const repository = createSyntheticRepository({
+      [allowedImporter]: 'import type { Text } from "@codemirror/state"; export type CurrentText = Text;',
+      "packages/editor-core/src/codemirror-new.ts":
+        'import type { Text } from "@codemirror/state"; export type NewText = Text;'
+    });
+    const manifest = readSyntheticManifest(repository);
+    manifest.exceptions = [
+      createCodeMirrorException({ importer: allowedImporter, specifier: "@codemirror/state" })
     ];
 
     expect(expectCodes(validateSynthetic(repository, manifest))).toContain("forbidden-import");
   });
 
-  it("uses a valid temporary package allowance to suppress its forbidden import", () => {
+  it("rejects wildcard CodeMirror debt declarations", () => {
+    const importer = "packages/editor-core/src/codemirror-current.ts";
     const repository = createSyntheticRepository({
-      "packages/editor-core/src/codemirror-current.ts":
-        'import type { Text } from "@codemirror/state"; export type CurrentText = Text;'
+      [importer]: 'import type { Text } from "@codemirror/state"; export type CurrentText = Text;'
     });
     const manifest = readSyntheticManifest(repository);
     const editorCoreRule = findRule(manifest, "boundary.editor-core");
-    editorCoreRule.forbiddenPackages = [
-      ...(editorCoreRule.forbiddenPackages as string[]),
-      "@codemirror/*"
-    ];
-    editorCoreRule.temporaryAllowedPackages = [createTemporaryAllowance()];
-
-    expect(validateSynthetic(repository, manifest)).toEqual({ findings: [], ok: true });
-  });
-
-  it("rejects a stale temporary package allowance", () => {
-    const repository = createSyntheticRepository();
-    const manifest = readSyntheticManifest(repository);
-    const editorCoreRule = findRule(manifest, "boundary.editor-core");
-    editorCoreRule.forbiddenPackages = [
-      ...(editorCoreRule.forbiddenPackages as string[]),
-      "@codemirror/*"
-    ];
-    editorCoreRule.temporaryAllowedPackages = [createTemporaryAllowance()];
-
-    expect(expectCodes(validateSynthetic(repository, manifest))).toContain("stale-temporary-allowance");
-  });
-
-  it("does not suppress a forbidden import with an invalid temporary package allowance", () => {
-    const repository = createSyntheticRepository({
-      "packages/editor-core/src/codemirror-current.ts":
-        'import type { Text } from "@codemirror/state"; export type CurrentText = Text;'
-    });
-    const manifest = readSyntheticManifest(repository);
-    const editorCoreRule = findRule(manifest, "boundary.editor-core");
-    editorCoreRule.forbiddenPackages = [
-      ...(editorCoreRule.forbiddenPackages as string[]),
-      "@codemirror/*"
-    ];
     editorCoreRule.temporaryAllowedPackages = [
-      createTemporaryAllowance({ retireIn: "RF-999" })
+      {
+        id: "allowance.synthetic-editor-core-codemirror",
+        owner: "editor-foundation-refactor",
+        package: "@codemirror/*",
+        reason: "A wildcard must never suppress CodeMirror debt.",
+        retireIn: "RF-604"
+      }
     ];
-    const result = validateSynthetic(repository, manifest);
+    manifest.exceptions = [createCodeMirrorException({ importer: "packages/editor-core/src/*.ts" })];
 
-    expect(expectCodes(result)).toEqual(
-      expect.arrayContaining(["forbidden-import", "unknown-retirement-task"])
+    expect(expectCodes(validateSynthetic(repository, manifest))).toEqual(
+      expect.arrayContaining(["forbidden-import", "invalid-exception", "unknown-rule-field"])
     );
+  });
+
+  it("rejects a stale exact CodeMirror exception", () => {
+    const importer = "packages/editor-core/src/codemirror-current.ts";
+    const repository = createSyntheticRepository({
+      [importer]: "export const clean = true;"
+    });
+    const manifest = readSyntheticManifest(repository);
+    manifest.exceptions = [createCodeMirrorException({ importer })];
+
+    expect(expectCodes(validateSynthetic(repository, manifest))).toContain("stale-exception");
+  });
+
+  it("keeps the canonical CodeMirror debt equal to scanner evidence", () => {
+    const manifest = readCanonicalManifest();
+    const actualTargets = collectSourceFiles(process.cwd(), "packages/editor-core")
+      .flatMap((importer) =>
+        analyzeSourceModule(process.cwd(), importer).imports
+          .filter(({ specifier }) => specifier.startsWith("@codemirror/"))
+          .map(({ specifier }) => `${importer}|${specifier}`)
+      )
+      .filter((target, index, targets) => targets.indexOf(target) === index)
+      .sort();
+    const declaredTargets = (manifest.exceptions as MutableRecord[])
+      .filter((exception) => exception.ruleId === "boundary.editor-core")
+      .map((exception) => `${String(exception.importer)}|${String(exception.specifier)}`)
+      .sort();
+
+    expect(declaredTargets).toEqual(actualTargets);
   });
 
   it.each([
@@ -172,23 +192,62 @@ describe("editor foundation architecture guard", () => {
     expect(expectCodes(validateSynthetic(repository, manifest))).toContain(expectedCode);
   });
 
+  it.each([
+    [
+      "a public-entry rule",
+      (manifest: MutableRecord) => {
+        findPackage(manifest, "editor-core").boundaryRuleId = "boundary.public-package-entries";
+      },
+      "package-boundary-rule-wrong-kind"
+    ],
+    [
+      "a forbidden-import rule for another source path",
+      (manifest: MutableRecord) => {
+        findPackage(manifest, "editor-core").boundaryRuleId = "boundary.markdown-engine";
+      },
+      "package-boundary-rule-source-mismatch"
+    ],
+    [
+      "a forbidden-import rule claimed by two packages",
+      (manifest: MutableRecord) => {
+        findPackage(manifest, "editor-core").boundaryRuleId = "boundary.markdown-engine";
+        findPackage(manifest, "editor-core").path = "packages/markdown-engine";
+      },
+      "package-boundary-rule-reused"
+    ]
+  ])("rejects an active package bound to %s", (_name, mutate, expectedCode) => {
+    const repository = createSyntheticRepository();
+    const manifest = readSyntheticManifest(repository);
+    mutate(manifest);
+
+    expect(expectCodes(validateSynthetic(repository, manifest))).toContain(expectedCode);
+  });
+
+  it("requires a planned package to activate with its own matching forbidden-import rule", () => {
+    const repository = createSyntheticRepository({
+      "packages/editor-model/src/index.ts": "export const editorModel = true;"
+    });
+    const manifest = readSyntheticManifest(repository);
+    findPackage(manifest, "editor-model").state = "active";
+    findPackage(manifest, "editor-model").boundaryRuleId = "boundary.editor-core";
+
+    expect(expectCodes(validateSynthetic(repository, manifest))).toEqual(
+      expect.arrayContaining([
+        "package-boundary-rule-reused",
+        "package-boundary-rule-source-mismatch"
+      ])
+    );
+  });
+
   it("reports a roadmap path that is not a readable file without throwing", () => {
     const importer = "src/renderer/internal.ts";
     const specifier = "../../packages/markdown-engine/src/parse-inline-ast";
     const repository = createSyntheticRepository({
-      [importer]: `import { parseInlineAst } from "${specifier}"; void parseInlineAst;`,
-      "packages/editor-core/src/codemirror-current.ts":
-        'import type { Text } from "@codemirror/state"; export type CurrentText = Text;'
+      [importer]: `import { parseInlineAst } from "${specifier}"; void parseInlineAst;`
     });
     const manifest = readSyntheticManifest(repository);
     manifest.roadmapPath = "docs/refactor/editor-foundation";
     manifest.exceptions = [createException({ importer, specifier })];
-    const editorCoreRule = findRule(manifest, "boundary.editor-core");
-    editorCoreRule.forbiddenPackages = [
-      ...(editorCoreRule.forbiddenPackages as string[]),
-      "@codemirror/*"
-    ];
-    editorCoreRule.temporaryAllowedPackages = [createTemporaryAllowance()];
     let result: EditorFoundationArchitectureResult | undefined;
 
     expect(() => {
@@ -220,19 +279,12 @@ describe("editor foundation architecture guard", () => {
     const manifest = readSyntheticManifest(repository);
     findRule(manifest, "boundary.renderer").sourcePath = "src/renderer-missing";
     manifest.exceptions = [createException()];
-    const editorCoreRule = findRule(manifest, "boundary.editor-core");
-    editorCoreRule.forbiddenPackages = [
-      ...(editorCoreRule.forbiddenPackages as string[]),
-      "@codemirror/*"
-    ];
-    editorCoreRule.temporaryAllowedPackages = [createTemporaryAllowance()];
     const codes = expectCodes(validateSynthetic(repository, manifest));
 
     expect(codes).toEqual(
       expect.arrayContaining(["active-rule-path-missing", "source-walk-error"])
     );
     expect(codes).not.toContain("stale-exception");
-    expect(codes).not.toContain("stale-temporary-allowance");
   });
 
   it("detects string-literal dynamic imports and re-exports", () => {
@@ -255,12 +307,72 @@ describe("editor foundation architecture guard", () => {
     expect(expectCodes(validateSynthetic(repository))).toContain("forbidden-import");
   });
 
-  it("ignores comments and arbitrary strings that resemble imports", () => {
+  it.each([
+    ["main require", "src/main/require.ts", 'require("../preload/secret");'],
+    ["preload import-equals", "src/preload/import-equals.ts", 'import secret = require("../renderer/secret"); void secret;'],
+    ["renderer require", "src/renderer/require.ts", 'require("../main/secret");'],
+    ["markdown-engine require", "packages/markdown-engine/src/require.ts", 'require("react");'],
+    ["editor-core import-equals", "packages/editor-core/src/import-equals.ts", 'import electron = require("electron"); void electron;']
+  ])("detects forbidden %s syntax", (_name, path, source) => {
+    const repository = createSyntheticRepository({ [path]: source });
+
+    expect(expectCodes(validateSynthetic(repository))).toContain("forbidden-import");
+  });
+
+  it.each([
+    ["require", 'const parser = require("../../packages/markdown-engine/src/parse-inline-ast"); void parser;'],
+    ["import-equals", 'import parser = require("../../packages/markdown-engine/src/parse-inline-ast"); void parser;']
+  ])("rejects a cross-package internal %s", (_name, source) => {
+    const repository = createSyntheticRepository({
+      "src/renderer/internal-require.ts": source
+    });
+
+    expect(expectCodes(validateSynthetic(repository))).toContain("non-public-package-import");
+  });
+
+  it("collects static require, import-equals, and import-type without text false positives", () => {
+    const path = "src/renderer/source-import-kinds.ts";
+    const repository = createSyntheticRepository({
+      [path]: [
+        'import state = require("@codemirror/state");',
+        'const view = require("@codemirror/view");',
+        'type Transaction = import("@codemirror/state").Transaction;',
+        'const dynamicName = "@codemirror/commands";',
+        "require(dynamicName);",
+        '// require("@codemirror/lang-markdown");',
+        'const sample = \'require("@codemirror/lang-json")\';',
+        "void state; void view; void sample;"
+      ].join("\n")
+    });
+
+    expect(analyzeSourceModule(repository, path).imports).toEqual([
+      { kind: "import-equals", specifier: "@codemirror/state" },
+      { kind: "import-type", specifier: "@codemirror/state" },
+      { kind: "require-call", specifier: "@codemirror/view" }
+    ]);
+  });
+
+  it("conservatively treats a shadowed literal require as dependency evidence", () => {
+    const repository = createSyntheticRepository({
+      "src/renderer/shadowed-require.ts": [
+        "function require(_specifier: string): unknown { return {}; }",
+        'require("../main/secret");'
+      ].join("\n")
+    });
+
+    expect(expectCodes(validateSynthetic(repository))).toContain("forbidden-import");
+  });
+
+  it("ignores comments, arbitrary strings, and non-literal require calls", () => {
     const repository = createSyntheticRepository({
       "src/renderer/not-an-import.ts": [
         '// import "../main/secret";',
+        '// require("../main/secret");',
         `const sample = 'import("../main/secret")';`,
-        "void sample;"
+        `const requireSample = 'require("../main/secret")';`,
+        'const dynamicName = "../main/secret";',
+        "require(dynamicName);",
+        "void sample; void requireSample;"
       ].join("\n")
     });
 
@@ -312,7 +424,7 @@ describe("editor foundation architecture guard", () => {
     expect(expectCodes(validateSynthetic(repository, manifest))).toContain("stale-exception");
   });
 
-  it("does not declare exception or allowance debt stale when source parsing is incomplete", () => {
+  it("does not declare exact exception debt stale when source parsing is incomplete", () => {
     const repository = createSyntheticRepository({
       "src/renderer/malformed-evidence.ts": "export const broken = ;"
     });
@@ -321,18 +433,11 @@ describe("editor foundation architecture guard", () => {
       createException(),
       createException({ id: "exception.synthetic-malformed", owner: "" })
     ];
-    const editorCoreRule = findRule(manifest, "boundary.editor-core");
-    editorCoreRule.forbiddenPackages = [
-      ...(editorCoreRule.forbiddenPackages as string[]),
-      "@codemirror/*"
-    ];
-    editorCoreRule.temporaryAllowedPackages = [createTemporaryAllowance()];
     const codes = expectCodes(validateSynthetic(repository, manifest));
 
     expect(codes).toContain("source-parse-error");
     expect(codes).toContain("invalid-exception");
     expect(codes).not.toContain("stale-exception");
-    expect(codes).not.toContain("stale-temporary-allowance");
   });
 
   it.each([
@@ -396,6 +501,85 @@ describe("editor foundation architecture guard", () => {
       "empty-active-rules"
     ]
   ])("fails closed for %s", (_name, mutate, expectedCode) => {
+    const repository = createSyntheticRepository();
+    const manifest = readSyntheticManifest(repository);
+    mutate(manifest);
+
+    expect(expectCodes(validateSynthetic(repository, manifest))).toContain(expectedCode);
+  });
+
+  it("owns the complete public bundle baseline in the canonical manifest", () => {
+    const manifest = readCanonicalManifest();
+    const bundlePolicy = manifest.bundlePolicy as MutableRecord;
+    const checks = bundlePolicy.checks as MutableRecord[];
+
+    expect(bundlePolicy.schemaVersion).toBe(1);
+    expect(checks).toHaveLength(23);
+    expect(checks.map((check) => check.id)).toEqual(
+      [...checks.map((check) => check.id)].sort()
+    );
+  });
+
+  it.each([
+    [
+      "a missing policy",
+      (manifest: MutableRecord) => {
+        delete manifest.bundlePolicy;
+      },
+      "invalid-bundle-policy"
+    ],
+    [
+      "an empty check list",
+      (manifest: MutableRecord) => {
+        (manifest.bundlePolicy as MutableRecord).checks = [];
+      },
+      "empty-bundle-policy-checks"
+    ],
+    [
+      "an unknown check kind",
+      (manifest: MutableRecord) => {
+        ((manifest.bundlePolicy as MutableRecord).checks as MutableRecord[])[0]!.kind = "allow";
+      },
+      "unknown-bundle-check-kind"
+    ],
+    [
+      "a non-positive maximum limit",
+      (manifest: MutableRecord) => {
+        ((manifest.bundlePolicy as MutableRecord).checks as MutableRecord[])[0]!.limit = 0;
+      },
+      "invalid-bundle-check"
+    ],
+    [
+      "an unexpected kind field",
+      (manifest: MutableRecord) => {
+        ((manifest.bundlePolicy as MutableRecord).checks as MutableRecord[])[0]!.pattern = "extra";
+      },
+      "invalid-bundle-check-field"
+    ],
+    [
+      "a non-canonical check id",
+      (manifest: MutableRecord) => {
+        ((manifest.bundlePolicy as MutableRecord).checks as MutableRecord[])[0]!.id = "bundle.custom";
+      },
+      "noncanonical-bundle-check-id"
+    ],
+    [
+      "a duplicate semantic target",
+      (manifest: MutableRecord) => {
+        const checks = (manifest.bundlePolicy as MutableRecord).checks as MutableRecord[];
+        checks.push({ ...checks[0], id: "bundle.duplicate" });
+      },
+      "duplicate-bundle-check-target"
+    ],
+    [
+      "an id duplicated outside bundle policy",
+      (manifest: MutableRecord) => {
+        ((manifest.bundlePolicy as MutableRecord).checks as MutableRecord[])[0]!.id =
+          "boundary.editor-core";
+      },
+      "duplicate-id"
+    ]
+  ])("fails closed for bundle policy with %s", (_name, mutate, expectedCode) => {
     const repository = createSyntheticRepository();
     const manifest = readSyntheticManifest(repository);
     mutate(manifest);
@@ -795,7 +979,7 @@ function createSyntheticManifest(): MutableRecord {
         kind: "forbidden-imports",
         state: "active",
         sourcePath: "packages/editor-core",
-        forbiddenPackages: ["react", "react-dom", "electron"],
+        forbiddenPackages: ["react", "react-dom", "electron", "@codemirror/*"],
         forbiddenPaths: ["src/main", "src/preload", "src/renderer"]
       },
       {
@@ -832,6 +1016,17 @@ function createSyntheticManifest(): MutableRecord {
       }
     ],
     exceptions: [],
+    bundlePolicy: {
+      schemaVersion: 1,
+      checks: [
+        {
+          id: "bundle.max-total-gzip-bytes",
+          kind: "maximum",
+          metric: "totalJsGzipBytes",
+          limit: 1_500_000
+        }
+      ]
+    },
     parserPolicy: {
       enginePath: "packages/markdown-engine/src",
       publicEntryPath: "packages/markdown-engine/src/index.ts",
@@ -921,13 +1116,15 @@ function createException(overrides: MutableRecord = {}): MutableRecord {
   };
 }
 
-function createTemporaryAllowance(overrides: MutableRecord = {}): MutableRecord {
+function createCodeMirrorException(overrides: MutableRecord = {}): MutableRecord {
   return {
-    id: "allowance.synthetic-editor-core-codemirror",
-    package: "@codemirror/*",
+    id: "exception.synthetic-editor-core-codemirror",
+    importer: "packages/editor-core/src/codemirror-current.ts",
     owner: "editor-foundation-refactor",
-    reason: "Synthetic current debt until the CodeMirror adapter cutover.",
+    reason: "Synthetic exact CodeMirror debt until the adapter cutover.",
     retireIn: "RF-604",
+    ruleId: "boundary.editor-core",
+    specifier: "@codemirror/state",
     ...overrides
   };
 }
@@ -962,6 +1159,14 @@ function findRule(manifest: MutableRecord, id: string): MutableRecord {
     throw new Error(`Missing synthetic rule: ${id}`);
   }
   return rule;
+}
+
+function findPackage(manifest: MutableRecord, id: string): MutableRecord {
+  const targetPackage = (manifest.packages as MutableRecord[]).find((candidate) => candidate.id === id);
+  if (!targetPackage) {
+    throw new Error(`Missing synthetic package: ${id}`);
+  }
+  return targetPackage;
 }
 
 function expectCodes(result: EditorFoundationArchitectureResult): string[] {

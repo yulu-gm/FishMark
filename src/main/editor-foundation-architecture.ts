@@ -40,12 +40,6 @@ type ExactException = {
   specifier: string;
 };
 
-type TemporaryPackageAllowance = {
-  id: string;
-  packagePattern: string;
-  ruleId: string;
-};
-
 type RoadmapTaskEvidence = {
   complete: boolean;
   tasks: ReadonlySet<string>;
@@ -58,14 +52,41 @@ type ValidationContext = {
   roadmapEvidence: RoadmapTaskEvidence;
   rootDir: string;
   sourceEvidenceComplete: boolean;
-  temporaryPackageAllowances: Map<string, readonly TemporaryPackageAllowance[]>;
   usedExceptionIds: Set<string>;
-  usedTemporaryAllowanceIds: Set<string>;
 };
 
 const supportedRuleKinds = new Set(["forbidden-imports", "public-package-entry"]);
+const supportedBundleCheckKinds = new Set([
+  "forbidden-initial-source-group",
+  "maximum",
+  "required-lazy-chunk"
+]);
+const bundleMaximumCheckIdsByMetric = new Map([
+  ["editorChunkBytes", "bundle.max-editor-bytes"],
+  ["editorChunkGzipBytes", "bundle.max-editor-gzip-bytes"],
+  ["maxInitialChunkBytes", "bundle.max-initial-chunk-bytes"],
+  ["maxInitialChunkGzipBytes", "bundle.max-initial-chunk-gzip-bytes"],
+  ["totalInitialGzipBytes", "bundle.max-initial-gzip-bytes"],
+  ["totalJsGzipBytes", "bundle.max-total-gzip-bytes"]
+]);
 const supportedLifecycleStates = new Set(["present", "present-until", "forbidden", "removed"]);
 const supportedParserVisibilities = new Set(["public", "internal-export"]);
+const forbiddenImportRuleFields = new Set([
+  "forbiddenPackages",
+  "forbiddenPaths",
+  "id",
+  "kind",
+  "sourcePath",
+  "state"
+]);
+const publicEntryRuleFields = new Set([
+  "id",
+  "kind",
+  "packagesPath",
+  "publicPrefix",
+  "sourcePaths",
+  "state"
+]);
 
 export function validateEditorFoundationArchitecture(
   options: ValidateEditorFoundationArchitectureOptions
@@ -97,17 +118,16 @@ export function validateEditorFoundationArchitecture(
     roadmapEvidence,
     rootDir,
     sourceEvidenceComplete: true,
-    temporaryPackageAllowances: new Map(),
-    usedExceptionIds: new Set(),
-    usedTemporaryAllowanceIds: new Set()
+    usedExceptionIds: new Set()
   };
   const packages = readRecordArray(manifest, "packages", findings);
   const rules = readRecordArray(manifest, "rules", findings);
   const exceptions = readRecordArray(manifest, "exceptions", findings);
   const parserEntries = readRecordArray(manifest, "parserEntries", findings);
   const micromarkSites = readRecordArray(manifest, "micromarkDocumentSites", findings);
+  const bundleChecks = validateBundlePolicy(manifest.bundlePolicy, context);
 
-  validateUniqueIds(packages, rules, exceptions, parserEntries, micromarkSites, findings);
+  validateUniqueIds(packages, rules, exceptions, parserEntries, micromarkSites, bundleChecks, findings);
   const activeRules = validateRules(rules, context);
   validatePackages(packages, activeRules, context);
   const validExceptions = validateExceptions(exceptions, activeRules, context);
@@ -116,6 +136,137 @@ export function validateEditorFoundationArchitecture(
   validateStaleImportDebt(validExceptions, context);
 
   return createResult(findings);
+}
+
+function validateBundlePolicy(value: unknown, context: ValidationContext): ManifestRecord[] {
+  if (!isRecord(value)) {
+    context.findings.push({
+      code: "invalid-bundle-policy",
+      message: "Architecture manifest must declare a bundlePolicy object."
+    });
+    return [];
+  }
+  validateRecordFields(
+    value,
+    new Set(["checks", "schemaVersion"]),
+    "invalid-bundle-policy-field",
+    "Bundle policy",
+    context
+  );
+  if (value.schemaVersion !== 1) {
+    context.findings.push({
+      code: "unsupported-bundle-policy-schema-version",
+      message: `Expected bundlePolicy schemaVersion 1, received ${String(value.schemaVersion)}.`
+    });
+  }
+  if (!Array.isArray(value.checks)) {
+    context.findings.push({
+      code: "invalid-bundle-policy",
+      message: "Bundle policy checks must be an array."
+    });
+    return [];
+  }
+  if (value.checks.length === 0) {
+    context.findings.push({
+      code: "empty-bundle-policy-checks",
+      message: "Bundle policy must contain at least one executable check."
+    });
+  }
+
+  const checks: ManifestRecord[] = [];
+  const semanticTargets = new Set<string>();
+  for (const [index, candidate] of value.checks.entries()) {
+    if (!isRecord(candidate)) {
+      context.findings.push({
+        code: "invalid-bundle-check",
+        message: `Bundle policy check at index ${index} must be an object.`
+      });
+      continue;
+    }
+    checks.push(candidate);
+    const id = readNonEmptyString(candidate.id);
+    const kind = readNonEmptyString(candidate.kind);
+    if (!kind || !supportedBundleCheckKinds.has(kind)) {
+      context.findings.push({
+        code: "unknown-bundle-check-kind",
+        message: `Bundle check ${id ?? "<missing-id>"} has unsupported kind ${String(candidate.kind)}.`
+      });
+      continue;
+    }
+
+    let target: string | null = null;
+    let canonicalId: string | null = null;
+    if (kind === "maximum") {
+      validateRecordFields(
+        candidate,
+        new Set(["id", "kind", "limit", "metric"]),
+        "invalid-bundle-check-field",
+        `Bundle check ${id ?? "<missing-id>"}`,
+        context
+      );
+      const metric = readNonEmptyString(candidate.metric);
+      const limit = candidate.limit;
+      canonicalId = metric ? bundleMaximumCheckIdsByMetric.get(metric) ?? null : null;
+      target = metric ? `${kind}|${metric}` : null;
+      if (!canonicalId || !Number.isInteger(limit) || Number(limit) < 1) {
+        context.findings.push({
+          code: "invalid-bundle-check",
+          message: `Maximum bundle check ${id ?? "<missing-id>"} requires a supported metric and positive integer limit.`
+        });
+      }
+    } else if (kind === "required-lazy-chunk") {
+      validateRecordFields(
+        candidate,
+        new Set(["id", "kind", "pattern"]),
+        "invalid-bundle-check-field",
+        `Bundle check ${id ?? "<missing-id>"}`,
+        context
+      );
+      const pattern = readStableBundleTarget(candidate.pattern);
+      canonicalId = pattern ? `bundle.required-lazy-chunk:${pattern}` : null;
+      target = pattern ? `${kind}|${pattern}` : null;
+      if (!pattern || !isValidRegularExpression(pattern)) {
+        context.findings.push({
+          code: "invalid-bundle-check",
+          message: `Required lazy chunk check ${id ?? "<missing-id>"} requires a stable valid pattern.`
+        });
+      }
+    } else {
+      validateRecordFields(
+        candidate,
+        new Set(["group", "id", "kind"]),
+        "invalid-bundle-check-field",
+        `Bundle check ${id ?? "<missing-id>"}`,
+        context
+      );
+      const group = readStableBundleTarget(candidate.group);
+      canonicalId = group ? `bundle.forbidden-initial-source-group:${group}` : null;
+      target = group ? `${kind}|${group}` : null;
+      if (!group) {
+        context.findings.push({
+          code: "invalid-bundle-check",
+          message: `Forbidden initial source group check ${id ?? "<missing-id>"} requires a stable group.`
+        });
+      }
+    }
+
+    if (id && canonicalId && id !== canonicalId) {
+      context.findings.push({
+        code: "noncanonical-bundle-check-id",
+        message: `Bundle check ${id} must use canonical id ${canonicalId}.`
+      });
+    }
+    if (target) {
+      if (semanticTargets.has(target)) {
+        context.findings.push({
+          code: "duplicate-bundle-check-target",
+          message: `Bundle policy repeats semantic target ${target}.`
+        });
+      }
+      semanticTargets.add(target);
+    }
+  }
+  return checks;
 }
 
 function validateRules(rules: readonly ManifestRecord[], context: ValidationContext): ManifestRecord[] {
@@ -140,6 +291,14 @@ function validateRules(rules: readonly ManifestRecord[], context: ValidationCont
       });
       continue;
     }
+    validateRecordFields(
+      rule,
+      kind === "forbidden-imports" ? forbiddenImportRuleFields : publicEntryRuleFields,
+      "unknown-rule-field",
+      `Rule ${id ?? "<missing-id>"}`,
+      context,
+      id
+    );
     activeRules.push(rule);
 
     if (kind === "forbidden-imports") {
@@ -151,14 +310,6 @@ function validateRules(rules: readonly ManifestRecord[], context: ValidationCont
         context
       )) {
         validateManifestPath(path, `rule ${id ?? "<missing-id>"} forbidden path`, context);
-      }
-      const temporaryAllowances = validateTemporaryAllowances(
-        rule.temporaryAllowedPackages,
-        id,
-        context
-      );
-      if (id && temporaryAllowances.length > 0) {
-        context.temporaryPackageAllowances.set(id, temporaryAllowances);
       }
     } else {
       const sourcePaths = validateStringArray(
@@ -201,7 +352,24 @@ function validatePackages(
   activeRules: readonly ManifestRecord[],
   context: ValidationContext
 ): void {
-  const activeRuleIds = new Set(activeRules.map((rule) => readNonEmptyString(rule.id)).filter(isString));
+  const activeRulesById = new Map(
+    activeRules
+      .map((rule) => [readNonEmptyString(rule.id), rule] as const)
+      .filter((entry): entry is readonly [string, ManifestRecord] => entry[0] !== null)
+  );
+  const boundaryRuleClaims = new Map<string, string[]>();
+  for (const targetPackage of packages) {
+    if (readNonEmptyString(targetPackage.state) !== "active") {
+      continue;
+    }
+    const boundaryRuleId = readNonEmptyString(targetPackage.boundaryRuleId);
+    const packageId = readNonEmptyString(targetPackage.id);
+    if (boundaryRuleId && packageId) {
+      const claims = boundaryRuleClaims.get(boundaryRuleId) ?? [];
+      claims.push(packageId);
+      boundaryRuleClaims.set(boundaryRuleId, claims);
+    }
+  }
   for (const targetPackage of packages) {
     const id = readNonEmptyString(targetPackage.id) ?? "<missing-id>";
     const path = validateManifestPath(targetPackage.path, `package ${id} path`, context);
@@ -234,13 +402,41 @@ function validatePackages(
           path
         });
       }
-      if (!boundaryRuleId || !activeRuleIds.has(boundaryRuleId)) {
+      const boundaryRule = boundaryRuleId ? activeRulesById.get(boundaryRuleId) : undefined;
+      if (!boundaryRuleId || !boundaryRule) {
         context.findings.push({
           code: "package-boundary-rule-missing",
           message: `Active package ${id} must reference an active boundary rule.`,
           path,
           ruleId: boundaryRuleId ?? undefined
         });
+      } else {
+        if (readNonEmptyString(boundaryRule.kind) !== "forbidden-imports") {
+          context.findings.push({
+            code: "package-boundary-rule-wrong-kind",
+            message: `Active package ${id} must reference an active forbidden-imports rule.`,
+            path,
+            ruleId: boundaryRuleId
+          });
+        }
+        const ruleSourcePath = readNonEmptyString(boundaryRule.sourcePath);
+        if (!ruleSourcePath || normalizeRepoPath(ruleSourcePath) !== normalizeRepoPath(path)) {
+          context.findings.push({
+            code: "package-boundary-rule-source-mismatch",
+            message: `Active package ${id} path ${path} must match boundary rule sourcePath ${ruleSourcePath ?? "<missing>"}.`,
+            path,
+            ruleId: boundaryRuleId
+          });
+        }
+        const claims = boundaryRuleClaims.get(boundaryRuleId) ?? [];
+        if (claims.length > 1) {
+          context.findings.push({
+            code: "package-boundary-rule-reused",
+            message: `Boundary rule ${boundaryRuleId} is claimed by multiple active packages: ${claims.sort(compareOrdinal).join(", ")}.`,
+            path,
+            ruleId: boundaryRuleId
+          });
+        }
       }
     } else if (state === "planned") {
       const inspection = inspectRepositoryPath(context.rootDir, path);
@@ -262,47 +458,6 @@ function validatePackages(
       });
     }
   }
-}
-
-function validateTemporaryAllowances(
-  value: unknown,
-  ruleId: string | null,
-  context: ValidationContext
-): TemporaryPackageAllowance[] {
-  const validAllowances: TemporaryPackageAllowance[] = [];
-  if (value === undefined) {
-    return validAllowances;
-  }
-  if (!Array.isArray(value)) {
-    context.findings.push({
-      code: "invalid-temporary-allowance",
-      message: `Rule ${ruleId ?? "<missing-id>"} temporaryAllowedPackages must be an array.`,
-      ruleId: ruleId ?? undefined
-    });
-    return validAllowances;
-  }
-  for (const allowance of value) {
-    const allowanceId = isRecord(allowance) ? readNonEmptyString(allowance.id) : null;
-    const packagePattern = isRecord(allowance) ? readNonEmptyString(allowance.package) : null;
-    if (
-      !isRecord(allowance) ||
-      !allowanceId ||
-      !packagePattern ||
-      !readNonEmptyString(allowance.owner) ||
-      !readNonEmptyString(allowance.reason)
-    ) {
-      context.findings.push({
-        code: "invalid-temporary-allowance",
-        message: `Rule ${ruleId ?? "<missing-id>"} has a malformed temporary package allowance.`,
-        ruleId: ruleId ?? undefined
-      });
-      continue;
-    }
-    if (ruleId && validateRetirementTask(allowance.retireIn, allowanceId, context)) {
-      validAllowances.push({ id: allowanceId, packagePattern, ruleId });
-    }
-  }
-  return validAllowances;
 }
 
 function validateExceptions(
@@ -431,17 +586,6 @@ function validateStaleImportDebt(
     }
   }
 
-  for (const allowances of context.temporaryPackageAllowances.values()) {
-    for (const allowance of allowances) {
-      if (!context.usedTemporaryAllowanceIds.has(allowance.id)) {
-        context.findings.push({
-          code: "stale-temporary-allowance",
-          message: `Temporary package allowance ${allowance.id} no longer suppresses a forbidden import and must be removed.`,
-          ruleId: allowance.ruleId
-        });
-      }
-    }
-  }
 }
 
 function validateForbiddenImports(
@@ -456,7 +600,6 @@ function validateForbiddenImports(
   }
   const forbiddenPackages = stringArray(rule.forbiddenPackages);
   const forbiddenPaths = stringArray(rule.forbiddenPaths);
-  const temporaryAllowances = context.temporaryPackageAllowances.get(ruleId) ?? [];
   for (const importer of collectSources(context, sourcePath)) {
     const analysis = analyze(context, importer);
     if (!analysis) {
@@ -464,18 +607,10 @@ function validateForbiddenImports(
     }
     for (const sourceImport of analysis.imports) {
       const packageViolation = forbiddenPackages.some((pattern) => packagePatternMatches(pattern, sourceImport.specifier));
-      const temporaryAllowance = packageViolation
-        ? temporaryAllowances.find((allowance) =>
-            packagePatternMatches(allowance.packagePattern, sourceImport.specifier)
-          )
-        : undefined;
-      if (temporaryAllowance) {
-        context.usedTemporaryAllowanceIds.add(temporaryAllowance.id);
-      }
       const resolvedPath = resolveImportRepoPath(context.rootDir, importer, sourceImport.specifier);
       const pathViolation =
         resolvedPath !== null && forbiddenPaths.some((path) => pathIsWithin(resolvedPath, normalizeRepoPath(path)));
-      if ((packageViolation && !temporaryAllowance) || pathViolation) {
+      if (packageViolation || pathViolation) {
         reportViolation(
           ruleId,
           importer,
@@ -883,6 +1018,7 @@ function validateUniqueIds(
   exceptions: readonly ManifestRecord[],
   parserEntries: readonly ManifestRecord[],
   micromarkSites: readonly ManifestRecord[],
+  bundleChecks: readonly ManifestRecord[],
   findings: ArchitectureFinding[]
 ): void {
   const seen = new Set<string>();
@@ -898,19 +1034,11 @@ function validateUniqueIds(
     seen.add(id);
   };
   packages.forEach((record) => register(record, "package"));
-  rules.forEach((record) => {
-    register(record, "rule");
-    if (Array.isArray(record.temporaryAllowedPackages)) {
-      for (const allowance of record.temporaryAllowedPackages) {
-        if (isRecord(allowance)) {
-          register(allowance, "temporary allowance");
-        }
-      }
-    }
-  });
+  rules.forEach((record) => register(record, "rule"));
   exceptions.forEach((record) => register(record, "exception"));
   parserEntries.forEach((record) => register(record, "parser"));
   micromarkSites.forEach((record) => register(record, "micromark site"));
+  bundleChecks.forEach((record) => register(record, "bundle check"));
 }
 
 function validateRetirementTask(value: unknown, ownerId: string | null, context: ValidationContext): boolean {
@@ -1126,6 +1254,25 @@ function validateStringArray(value: unknown, label: string, context: ValidationC
   return value as string[];
 }
 
+function validateRecordFields(
+  record: ManifestRecord,
+  allowedFields: ReadonlySet<string>,
+  code: string,
+  label: string,
+  context: ValidationContext,
+  ruleId?: string | null
+): void {
+  for (const field of Object.keys(record).sort(compareOrdinal)) {
+    if (!allowedFields.has(field)) {
+      context.findings.push({
+        code,
+        message: `${label} declares unsupported field ${field}.`,
+        ruleId: ruleId ?? undefined
+      });
+    }
+  }
+}
+
 function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter(isString) : [];
 }
@@ -1242,6 +1389,20 @@ function normalizeRepoPath(path: string): string {
 
 function readNonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function readStableBundleTarget(value: unknown): string | null {
+  const target = readNonEmptyString(value);
+  return target && /^[A-Za-z0-9@._/+*-]+$/u.test(target) ? target : null;
+}
+
+function isValidRegularExpression(value: string): boolean {
+  try {
+    void new RegExp(value, "u");
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function isRecord(value: unknown): value is ManifestRecord {

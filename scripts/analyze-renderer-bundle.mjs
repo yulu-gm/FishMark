@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
@@ -9,6 +10,28 @@ const REPORT_SCHEMA_VERSION = 1;
 const BUNDLE_EVIDENCE_SCOPE = "emitted-renderer-output";
 const SOURCE_GRAPH_AUTHORITY = "editor-foundation-architecture-guard";
 const BASE64_VLQ_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const CONTRACT_SCHEMA_VERSION = 1;
+const MAXIMUM_CHECK_BY_METRIC = new Map([
+  ["editorChunkBytes", { id: "bundle.max-editor-bytes", optionName: "maxEditorBytes" }],
+  ["editorChunkGzipBytes", { id: "bundle.max-editor-gzip-bytes", optionName: "maxEditorGzipBytes" }],
+  ["maxInitialChunkBytes", { id: "bundle.max-initial-chunk-bytes", optionName: "maxInitialChunkBytes" }],
+  [
+    "maxInitialChunkGzipBytes",
+    { id: "bundle.max-initial-chunk-gzip-bytes", optionName: "maxInitialChunkGzipBytes" }
+  ],
+  ["totalInitialGzipBytes", { id: "bundle.max-initial-gzip-bytes", optionName: "maxInitialGzipBytes" }],
+  ["totalJsGzipBytes", { id: "bundle.max-total-gzip-bytes", optionName: "maxTotalGzipBytes" }]
+]);
+const AD_HOC_POLICY_FLAGS = new Set([
+  "--forbid-initial-source-group",
+  "--max-editor-bytes",
+  "--max-editor-gzip-bytes",
+  "--max-initial-chunk-bytes",
+  "--max-initial-chunk-gzip-bytes",
+  "--max-initial-gzip-bytes",
+  "--max-total-gzip-bytes",
+  "--require-lazy-chunk"
+]);
 
 function parseArguments(argv) {
   const options = {
@@ -22,13 +45,18 @@ function parseArguments(argv) {
       maxTotalGzipBytes: null,
       requiredLazyChunkPatterns: []
     },
+    contractPath: null,
     distDir: "dist",
     json: false,
+    policyArgumentCount: 0,
     topGroupLimit: DEFAULT_TOP_GROUP_LIMIT
   };
 
   for (let index = 0; index < argv.length; index += 1) {
     const entry = argv[index];
+    if (AD_HOC_POLICY_FLAGS.has(entry)) {
+      options.policyArgumentCount += 1;
+    }
 
     if (entry === "--json") {
       options.json = true;
@@ -41,6 +69,19 @@ function parseArguments(argv) {
         throw new Error("--dist requires a directory path.");
       }
       options.distDir = nextValue;
+      index += 1;
+      continue;
+    }
+
+    if (entry === "--contract") {
+      const nextValue = argv[index + 1];
+      if (!nextValue) {
+        throw new Error("--contract requires a manifest path.");
+      }
+      if (options.contractPath !== null) {
+        throw new Error("--contract may be declared only once.");
+      }
+      options.contractPath = nextValue;
       index += 1;
       continue;
     }
@@ -120,6 +161,9 @@ function parseArguments(argv) {
   options.budget.requiredLazyChunkPatterns = sortUnique(
     options.budget.requiredLazyChunkPatterns
   );
+  if (options.contractPath !== null && options.policyArgumentCount > 0) {
+    throw new Error("--contract cannot be combined with ad-hoc bundle policy flags.");
+  }
 
   return options;
 }
@@ -131,6 +175,151 @@ function parsePositiveIntegerArgument(argv, index, name) {
   }
 
   return nextValue;
+}
+
+function readBundleContract(contractPath) {
+  const absolutePath = path.resolve(process.cwd(), contractPath);
+  let source;
+  let manifest;
+  try {
+    source = readFileSync(absolutePath, "utf8");
+    manifest = JSON.parse(source);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Invalid bundle contract: cannot read ${displayContractPath(absolutePath)}: ${message}`);
+  }
+  if (!isRecord(manifest) || manifest.schemaVersion !== CONTRACT_SCHEMA_VERSION) {
+    throw new Error(
+      `Invalid bundle contract: architecture schemaVersion must be ${CONTRACT_SCHEMA_VERSION}.`
+    );
+  }
+  const policy = manifest.bundlePolicy;
+  if (!isRecord(policy)) {
+    throw new Error("Invalid bundle contract: bundlePolicy must be an object.");
+  }
+  assertOnlyFields(policy, new Set(["checks", "schemaVersion"]), "bundlePolicy");
+  if (policy.schemaVersion !== CONTRACT_SCHEMA_VERSION) {
+    throw new Error(
+      `Invalid bundle contract: bundlePolicy schemaVersion must be ${CONTRACT_SCHEMA_VERSION}.`
+    );
+  }
+  if (!Array.isArray(policy.checks) || policy.checks.length === 0) {
+    throw new Error("Invalid bundle contract: bundlePolicy checks must be a non-empty array.");
+  }
+
+  const budget = {
+    forbiddenInitialSourceGroups: [],
+    maxEditorBytes: null,
+    maxEditorGzipBytes: null,
+    maxInitialChunkBytes: null,
+    maxInitialChunkGzipBytes: null,
+    maxInitialGzipBytes: null,
+    maxTotalGzipBytes: null,
+    requiredLazyChunkPatterns: []
+  };
+  const checkIds = new Set();
+  const semanticTargets = new Set();
+  for (const [index, check] of policy.checks.entries()) {
+    if (!isRecord(check)) {
+      throw new Error(`Invalid bundle contract: check at index ${index} must be an object.`);
+    }
+    const id = readNonEmptyString(check.id);
+    const kind = readNonEmptyString(check.kind);
+    if (!id || !kind) {
+      throw new Error(`Invalid bundle contract: check at index ${index} requires id and kind.`);
+    }
+    if (checkIds.has(id)) {
+      throw new Error(`Invalid bundle contract: duplicate check id ${id}.`);
+    }
+    checkIds.add(id);
+
+    let canonicalId;
+    let semanticTarget;
+    if (kind === "maximum") {
+      assertOnlyFields(check, new Set(["id", "kind", "limit", "metric"]), `check ${id}`);
+      const metric = readNonEmptyString(check.metric);
+      const maximumCheck = metric ? MAXIMUM_CHECK_BY_METRIC.get(metric) : undefined;
+      if (!metric || !maximumCheck || !Number.isInteger(check.limit) || check.limit < 1) {
+        throw new Error(
+          `Invalid bundle contract: maximum check ${id} requires a supported metric and positive integer limit.`
+        );
+      }
+      canonicalId = maximumCheck.id;
+      semanticTarget = `${kind}|${metric}`;
+      budget[maximumCheck.optionName] = check.limit;
+    } else if (kind === "required-lazy-chunk") {
+      assertOnlyFields(check, new Set(["id", "kind", "pattern"]), `check ${id}`);
+      const pattern = readStableContractTarget(check.pattern);
+      if (!pattern) {
+        throw new Error(`Invalid bundle contract: required lazy chunk check ${id} has an invalid pattern.`);
+      }
+      try {
+        void new RegExp(pattern, "u");
+      } catch {
+        throw new Error(`Invalid bundle contract: required lazy chunk check ${id} has an invalid pattern.`);
+      }
+      canonicalId = `bundle.required-lazy-chunk:${pattern}`;
+      semanticTarget = `${kind}|${pattern}`;
+      budget.requiredLazyChunkPatterns.push(pattern);
+    } else if (kind === "forbidden-initial-source-group") {
+      assertOnlyFields(check, new Set(["group", "id", "kind"]), `check ${id}`);
+      const group = readStableContractTarget(check.group);
+      if (!group) {
+        throw new Error(`Invalid bundle contract: forbidden source group check ${id} has an invalid group.`);
+      }
+      canonicalId = `bundle.forbidden-initial-source-group:${group}`;
+      semanticTarget = `${kind}|${group}`;
+      budget.forbiddenInitialSourceGroups.push(group);
+    } else {
+      throw new Error(`Invalid bundle contract: check ${id} has unknown kind ${kind}.`);
+    }
+    if (id !== canonicalId) {
+      throw new Error(`Invalid bundle contract: check ${id} must use canonical id ${canonicalId}.`);
+    }
+    if (semanticTargets.has(semanticTarget)) {
+      throw new Error(`Invalid bundle contract: duplicate semantic target ${semanticTarget}.`);
+    }
+    semanticTargets.add(semanticTarget);
+  }
+
+  budget.forbiddenInitialSourceGroups.sort(compareOrdinal);
+  budget.requiredLazyChunkPatterns.sort(compareOrdinal);
+  return {
+    budget,
+    checkIds: [...checkIds].sort(compareOrdinal),
+    identity: {
+      architectureSchemaVersion: manifest.schemaVersion,
+      bundlePolicySchemaVersion: policy.schemaVersion,
+      path: displayContractPath(absolutePath),
+      sha256: createHash("sha256").update(source).digest("hex")
+    }
+  };
+}
+
+function assertOnlyFields(record, allowedFields, label) {
+  const unsupported = Object.keys(record).filter((field) => !allowedFields.has(field)).sort(compareOrdinal);
+  if (unsupported.length > 0) {
+    throw new Error(
+      `Invalid bundle contract: ${label} declares unsupported field(s): ${unsupported.join(", ")}.`
+    );
+  }
+}
+
+function readStableContractTarget(value) {
+  return typeof value === "string" && /^[A-Za-z0-9@._/+*-]+$/u.test(value) ? value : null;
+}
+
+function readNonEmptyString(value) {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function displayContractPath(absolutePath) {
+  const relativePath = path.relative(process.cwd(), absolutePath);
+  return (relativePath.startsWith("..") ? absolutePath : relativePath).replaceAll("\\", "/");
 }
 
 function readRendererBundleReport(input) {
@@ -838,16 +1027,25 @@ function sortUnique(values) {
 
 function main() {
   const options = parseArguments(process.argv.slice(2));
+  const contract = options.contractPath === null ? null : readBundleContract(options.contractPath);
   const report = readRendererBundleReport({
     distDir: path.resolve(process.cwd(), options.distDir),
     topGroupLimit: options.topGroupLimit
   });
-  const budget = evaluateBundleBudget(report, options.budget);
+  const budget = evaluateBundleBudget(report, contract?.budget ?? options.budget);
+  if (
+    contract &&
+    JSON.stringify(budget?.checks.map((check) => check.id) ?? []) !==
+      JSON.stringify(contract.checkIds)
+  ) {
+    throw new Error("Invalid bundle contract: not all declared checks were applied.");
+  }
   const output = {
     schemaVersion: REPORT_SCHEMA_VERSION,
     ...report,
     budget,
-    bundleEvidence: buildBundleEvidence(report, budget)
+    bundleEvidence: buildBundleEvidence(report, budget),
+    contract: contract?.identity ?? null
   };
 
   if (options.json) {
@@ -858,7 +1056,10 @@ function main() {
     return;
   }
 
-  process.stdout.write(`${formatReport(report)}\n${formatBudget(budget)}\n`);
+  const contractSummary = contract
+    ? `bundleContract=${contract.identity.path} sha256=${contract.identity.sha256}`
+    : "bundleContract=ad-hoc";
+  process.stdout.write(`${formatReport(report)}\n${contractSummary}\n${formatBudget(budget)}\n`);
   if (budget?.status === "FAIL") {
     process.exitCode = 1;
   }

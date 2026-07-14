@@ -11,4 +11,6 @@
 
 包边界禁止 React、Electron、CodeMirror、`@fishmark/editor-core`、`src/main`、`src/preload` 和 `src/renderer`。跨 package consumer 必须通过 `@fishmark/markdown-engine`，不得导入 `packages/markdown-engine/src/**`。
 
+architecture scanner 对 static import、re-export、literal dynamic import、TypeScript import-equals、import type 与 literal `require` 使用同一 forbidden/public-entry policy。无 type checker 时 shadowed literal `require` 也按保守依赖证据处理；注释、普通字符串和非 literal `require` 不会伪报。新增语法入口不能绕开 public package entry。
+
 计划中的 recursive node model、physical-line/prefix index、incremental structure cache 与 parser hard cutover 属于 `RF-401` 到 `RF-405`，当前尚未实现。现有引用块 `innerBlocks` 也不是最终通用 recursive container tree。

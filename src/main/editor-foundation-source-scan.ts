@@ -6,7 +6,7 @@ import ts from "typescript";
 import { compareOrdinal } from "./editor-foundation-order";
 
 export type SourceImport = {
-  kind: "dynamic-import" | "import" | "re-export";
+  kind: "dynamic-import" | "import" | "import-equals" | "import-type" | "re-export" | "require-call";
   specifier: string;
 };
 
@@ -160,12 +160,41 @@ export function analyzeSourceModule(rootDir: string, path: string): SourceModule
 
   const visit = (node: ts.Node): void => {
     if (
+      ts.isImportEqualsDeclaration(node) &&
+      ts.isExternalModuleReference(node.moduleReference) &&
+      isStringLiteralLike(node.moduleReference.expression)
+    ) {
+      imports.push({ kind: "import-equals", specifier: node.moduleReference.expression.text });
+    }
+
+    if (
+      ts.isImportTypeNode(node) &&
+      ts.isLiteralTypeNode(node.argument) &&
+      isStringLiteralLike(node.argument.literal)
+    ) {
+      imports.push({ kind: "import-type", specifier: node.argument.literal.text });
+    }
+
+    if (
       ts.isCallExpression(node) &&
       node.expression.kind === ts.SyntaxKind.ImportKeyword &&
       node.arguments.length >= 1 &&
       isStringLiteralLike(node.arguments[0])
     ) {
       imports.push({ kind: "dynamic-import", specifier: node.arguments[0].text });
+    }
+
+    // Without a type checker, a locally shadowed CommonJS loader cannot be
+    // distinguished from Node dependency loading reliably. Literal calls are
+    // treated conservatively as dependency evidence; non-literal calls are ignored.
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === "require" &&
+      node.arguments.length === 1 &&
+      isStringLiteralLike(node.arguments[0])
+    ) {
+      imports.push({ kind: "require-call", specifier: node.arguments[0].text });
     }
 
     if (

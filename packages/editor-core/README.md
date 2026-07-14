@@ -6,7 +6,8 @@
 
 - Markdown 结构与 inline 语义只消费 `@fishmark/markdown-engine` public entry，不在本包新增 document parser 或直接调用 micromark document parse。
 - 不得依赖 React、Electron、`src/main`、`src/preload` 或 `src/renderer`；跨 package consumer 不得穿透 `packages/editor-core/src/**`。
-- CodeMirror 依赖是 `fixtures/architecture/editor-foundation-guard.json` 中受执行检查的临时 allowance，owner 为 editor foundation refactor，必须在 `RF-604` adapter hard cutover 时删除；它不是永久架构许可。
+- CodeMirror 仍是 forbidden dependency；当前真实债务由 `fixtures/architecture/editor-foundation-guard.json` 中 73 个逐 `(boundary.editor-core, importer, specifier)` 的 exact exception 登记，统一由 `RF-604` adapter hard cutover 删除。新增 importer、同一 importer 新增 CodeMirror package、wildcard 或 stale exception 都会失败，不存在 package-wide temporary allowance。
+- active package 必须独占自己的 active `forbidden-imports` rule，且 package path 与 rule `sourcePath` 完全一致；另一个 package 或 `public-package-entry` rule 不能冒充本包边界。
 - 文件系统、workspace ownership、IPC 与持久化不属于本包。
 - `src/performance/editor-performance-probe.ts` 通过 public entry 暴露稳定 operation/counter probe；它只记录当前 open/edit/selection/ordered-list 行为，不宣称已经存在 incremental structure cache。
 

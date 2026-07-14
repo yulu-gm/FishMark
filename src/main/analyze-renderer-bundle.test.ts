@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -212,6 +212,180 @@ describe("scripts/analyze-renderer-bundle.mjs", () => {
           .sort((left, right) => right.bytes - left.bytes || compareOrdinal(left.name, right.name))
           .map((chunk) => chunk.name)
       );
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("keeps the public bundle baseline policy only in the architecture manifest", async () => {
+    const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
+      scripts: Record<string, string>;
+    };
+    const perfBundle = packageJson.scripts["perf:bundle"];
+
+    expect(perfBundle).toContain(
+      "--contract fixtures/architecture/editor-foundation-guard.json"
+    );
+    expect(perfBundle).not.toMatch(
+      /--max-|--require-lazy-chunk|--forbid-initial-source-group/u
+    );
+    expect(perfBundle).not.toMatch(/300000|90000|260000|1430000/u);
+  });
+
+  it("loads all 23 canonical checks from one contract and emits stable contract identity", async () => {
+    const root = await createContractBundle();
+    const args = [
+      "scripts/analyze-renderer-bundle.mjs",
+      "--dist",
+      root,
+      "--json",
+      "--contract",
+      "fixtures/architecture/editor-foundation-guard.json"
+    ];
+
+    try {
+      const firstRun = await execFileAsync(process.execPath, args, { cwd: process.cwd() });
+      const secondRun = await execFileAsync(process.execPath, args, { cwd: process.cwd() });
+      const report = JSON.parse(firstRun.stdout) as {
+        bundleEvidence: { appliedCheckIds: string[]; checks: unknown[]; status: string };
+        contract: {
+          architectureSchemaVersion: number;
+          bundlePolicySchemaVersion: number;
+          path: string;
+          sha256: string;
+        };
+      };
+
+      expect(secondRun.stdout).toBe(firstRun.stdout);
+      expect(report.bundleEvidence.status).toBe("PASS");
+      expect(report.bundleEvidence.appliedCheckIds).toHaveLength(23);
+      expect(report.bundleEvidence.checks).toHaveLength(23);
+      expect(report.contract).toEqual({
+        architectureSchemaVersion: 1,
+        bundlePolicySchemaVersion: 1,
+        path: "fixtures/architecture/editor-foundation-guard.json",
+        sha256: expect.stringMatching(/^[a-f0-9]{64}$/u)
+      });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it.each([
+    [
+      "missing bundle policy",
+      (contract: Record<string, unknown>) => {
+        delete contract.bundlePolicy;
+      }
+    ],
+    [
+      "empty bundle policy",
+      (contract: Record<string, unknown>) => {
+        (contract.bundlePolicy as Record<string, unknown>).checks = [];
+      }
+    ],
+    [
+      "unknown check kind",
+      (contract: Record<string, unknown>) => {
+        const checks = (contract.bundlePolicy as { checks: Array<Record<string, unknown>> }).checks;
+        checks[0]!.kind = "allow";
+      }
+    ],
+    [
+      "duplicate check",
+      (contract: Record<string, unknown>) => {
+        const checks = (contract.bundlePolicy as { checks: Array<Record<string, unknown>> }).checks;
+        checks.push({ ...checks[0] });
+      }
+    ],
+    [
+      "invalid maximum limit",
+      (contract: Record<string, unknown>) => {
+        const checks = (contract.bundlePolicy as { checks: Array<Record<string, unknown>> }).checks;
+        const maximum = checks.find((check) => check.kind === "maximum");
+        maximum!.limit = 0;
+      }
+    ],
+    [
+      "unexpected check field",
+      (contract: Record<string, unknown>) => {
+        const checks = (contract.bundlePolicy as { checks: Array<Record<string, unknown>> }).checks;
+        checks[0]!.override = true;
+      }
+    ]
+  ])("fails closed for a contract with %s", async (_name, mutate) => {
+    const root = await createContractBundle();
+    const contract = await readCanonicalContract();
+    const contractPath = path.join(root, "contract.json");
+    mutate(contract);
+    await writeFile(contractPath, JSON.stringify(contract));
+
+    try {
+      const failedRun = await expectCommandFailure([
+        "scripts/analyze-renderer-bundle.mjs",
+        "--dist",
+        root,
+        "--contract",
+        contractPath
+      ]);
+
+      expect(failedRun.code).toBe(1);
+      expect(failedRun.stderr).toContain("Invalid bundle contract:");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects contract mode mixed with ad-hoc policy flags", async () => {
+    const root = await createContractBundle();
+
+    try {
+      const failedRun = await expectCommandFailure([
+        "scripts/analyze-renderer-bundle.mjs",
+        "--dist",
+        root,
+        "--contract",
+        "fixtures/architecture/editor-foundation-guard.json",
+        "--max-total-gzip-bytes",
+        "2000000"
+      ]);
+
+      expect(failedRun.code).toBe(1);
+      expect(failedRun.stderr).toContain("cannot be combined");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("exits non-zero when a contract-owned check fails", async () => {
+    const root = await createContractBundle();
+    const contract = await readCanonicalContract();
+    const checks = (contract.bundlePolicy as { checks: Array<Record<string, unknown>> }).checks;
+    const maximum = checks.find((check) => check.id === "bundle.max-total-gzip-bytes");
+    maximum!.limit = 1;
+    const contractPath = path.join(root, "contract.json");
+    await writeFile(contractPath, JSON.stringify(contract));
+
+    try {
+      const failedRun = await expectAnalyzerFailure(root, [
+        "--json",
+        "--contract",
+        contractPath
+      ]);
+      const report = JSON.parse(failedRun.stdout) as {
+        bundleEvidence: {
+          checks: Array<{ actual: unknown; id: string; limit: unknown; status: string }>;
+          status: string;
+        };
+      };
+
+      expect(failedRun.code).toBe(1);
+      expect(report.bundleEvidence.status).toBe("FAIL");
+      expect(
+        report.bundleEvidence.checks.find(
+          (check) => check.id === "bundle.max-total-gzip-bytes"
+        )
+      ).toMatchObject({ actual: expect.any(Number), limit: 1, status: "FAIL" });
     } finally {
       await rm(root, { force: true, recursive: true });
     }
@@ -566,6 +740,35 @@ describe("scripts/analyze-renderer-bundle.mjs", () => {
   });
 });
 
+async function createContractBundle(): Promise<string> {
+  const root = await mkdtemp(path.join(tmpdir(), "fishmark-bundle-contract-"));
+  const assetsDir = path.join(root, "assets");
+  await mkdir(assetsDir);
+  await writeFile(
+    path.join(root, "index.html"),
+    '<script type="module" src="./assets/index-test.js"></script>'
+  );
+  await writeFile(path.join(assetsDir, "App-test.js"), "console.log('editor');");
+  await writeFile(path.join(assetsDir, "index-test.js"), "console.log('entry');");
+  for (const lazyChunk of [
+    "export-html-test.js",
+    "katex-test.js",
+    "mermaid-test.js",
+    "theme-surface-runtime-test.js"
+  ]) {
+    await writeFile(path.join(assetsDir, lazyChunk), "console.log('lazy');");
+  }
+  await writeCompleteSourceMap(assetsDir, "App-test.js");
+  await writeCompleteSourceMap(assetsDir, "index-test.js");
+  return root;
+}
+
+async function readCanonicalContract(): Promise<Record<string, unknown>> {
+  return JSON.parse(
+    await readFile("fixtures/architecture/editor-foundation-guard.json", "utf8")
+  ) as Record<string, unknown>;
+}
+
 async function writeCompleteSourceMap(
   assetsDir: string,
   chunkName: string,
@@ -581,6 +784,25 @@ async function writeCompleteSourceMap(
       version: 3
     })
   );
+}
+
+async function expectCommandFailure(
+  args: string[]
+): Promise<{ code?: number; stderr: string; stdout: string }> {
+  try {
+    await execFileAsync(process.execPath, args, { cwd: process.cwd() });
+    throw new Error("Expected command to fail.");
+  } catch (error) {
+    const failedRun = error as { code?: number; stderr?: string; stdout?: string };
+    if (failedRun.code === undefined) {
+      throw error;
+    }
+    return {
+      code: failedRun.code,
+      stderr: failedRun.stderr ?? "",
+      stdout: failedRun.stdout ?? ""
+    };
+  }
 }
 
 async function expectAnalyzerFailure(
