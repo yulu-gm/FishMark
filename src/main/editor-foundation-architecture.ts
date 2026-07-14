@@ -35,11 +35,19 @@ type ExactException = {
   specifier: string;
 };
 
+type TemporaryPackageAllowance = {
+  id: string;
+  packagePattern: string;
+  ruleId: string;
+};
+
 type ValidationContext = {
   analysisCache: Map<string, SourceModuleAnalysis>;
   findings: ArchitectureFinding[];
   roadmapTasks: ReadonlySet<string>;
   rootDir: string;
+  temporaryPackageAllowances: Map<string, readonly TemporaryPackageAllowance[]>;
+  usedTemporaryAllowanceIds: Set<string>;
 };
 
 const supportedRuleKinds = new Set(["forbidden-imports", "public-package-entry"]);
@@ -73,7 +81,9 @@ export function validateEditorFoundationArchitecture(
     analysisCache: new Map(),
     findings,
     roadmapTasks,
-    rootDir
+    rootDir,
+    temporaryPackageAllowances: new Map(),
+    usedTemporaryAllowanceIds: new Set()
   };
   const packages = readRecordArray(manifest, "packages", findings);
   const rules = readRecordArray(manifest, "rules", findings);
@@ -125,7 +135,14 @@ function validateRules(rules: readonly ManifestRecord[], context: ValidationCont
       )) {
         validateManifestPath(path, `rule ${id ?? "<missing-id>"} forbidden path`, context);
       }
-      validateTemporaryAllowances(rule.temporaryAllowedPackages, id, context);
+      const temporaryAllowances = validateTemporaryAllowances(
+        rule.temporaryAllowedPackages,
+        id,
+        context
+      );
+      if (id && temporaryAllowances.length > 0) {
+        context.temporaryPackageAllowances.set(id, temporaryAllowances);
+      }
     } else {
       const sourcePaths = validateStringArray(
         rule.sourcePaths,
@@ -226,9 +243,14 @@ function validatePackages(
   }
 }
 
-function validateTemporaryAllowances(value: unknown, ruleId: string | null, context: ValidationContext): void {
+function validateTemporaryAllowances(
+  value: unknown,
+  ruleId: string | null,
+  context: ValidationContext
+): TemporaryPackageAllowance[] {
+  const validAllowances: TemporaryPackageAllowance[] = [];
   if (value === undefined) {
-    return;
+    return validAllowances;
   }
   if (!Array.isArray(value)) {
     context.findings.push({
@@ -236,14 +258,15 @@ function validateTemporaryAllowances(value: unknown, ruleId: string | null, cont
       message: `Rule ${ruleId ?? "<missing-id>"} temporaryAllowedPackages must be an array.`,
       ruleId: ruleId ?? undefined
     });
-    return;
+    return validAllowances;
   }
   for (const allowance of value) {
     const allowanceId = isRecord(allowance) ? readNonEmptyString(allowance.id) : null;
+    const packagePattern = isRecord(allowance) ? readNonEmptyString(allowance.package) : null;
     if (
       !isRecord(allowance) ||
       !allowanceId ||
-      !readNonEmptyString(allowance.package) ||
+      !packagePattern ||
       !readNonEmptyString(allowance.owner) ||
       !readNonEmptyString(allowance.reason)
     ) {
@@ -254,8 +277,11 @@ function validateTemporaryAllowances(value: unknown, ruleId: string | null, cont
       });
       continue;
     }
-    validateRetirementTask(allowance.retireIn, allowanceId, context);
+    if (ruleId && validateRetirementTask(allowance.retireIn, allowanceId, context)) {
+      validAllowances.push({ id: allowanceId, packagePattern, ruleId });
+    }
   }
+  return validAllowances;
 }
 
 function validateExceptions(
@@ -376,6 +402,18 @@ function validateImports(
       });
     }
   }
+
+  for (const allowances of context.temporaryPackageAllowances.values()) {
+    for (const allowance of allowances) {
+      if (!context.usedTemporaryAllowanceIds.has(allowance.id)) {
+        context.findings.push({
+          code: "stale-temporary-allowance",
+          message: `Temporary package allowance ${allowance.id} no longer suppresses a forbidden import and must be removed.`,
+          ruleId: allowance.ruleId
+        });
+      }
+    }
+  }
 }
 
 function validateForbiddenImports(
@@ -390,13 +428,22 @@ function validateForbiddenImports(
   }
   const forbiddenPackages = stringArray(rule.forbiddenPackages);
   const forbiddenPaths = stringArray(rule.forbiddenPaths);
+  const temporaryAllowances = context.temporaryPackageAllowances.get(ruleId) ?? [];
   for (const importer of collectSourceFiles(context.rootDir, sourcePath)) {
     for (const sourceImport of analyze(context, importer).imports) {
       const packageViolation = forbiddenPackages.some((pattern) => packagePatternMatches(pattern, sourceImport.specifier));
+      const temporaryAllowance = packageViolation
+        ? temporaryAllowances.find((allowance) =>
+            packagePatternMatches(allowance.packagePattern, sourceImport.specifier)
+          )
+        : undefined;
+      if (temporaryAllowance) {
+        context.usedTemporaryAllowanceIds.add(temporaryAllowance.id);
+      }
       const resolvedPath = resolveImportRepoPath(context.rootDir, importer, sourceImport.specifier);
       const pathViolation =
         resolvedPath !== null && forbiddenPaths.some((path) => pathIsWithin(resolvedPath, normalizeRepoPath(path)));
-      if (packageViolation || pathViolation) {
+      if ((packageViolation && !temporaryAllowance) || pathViolation) {
         reportViolation(
           ruleId,
           importer,
@@ -964,6 +1011,13 @@ function analyze(context: ValidationContext, path: string): SourceModuleAnalysis
   }
   const analysis = analyzeSourceModule(context.rootDir, path);
   context.analysisCache.set(path, analysis);
+  for (const diagnostic of analysis.parseDiagnostics) {
+    context.findings.push({
+      code: "source-parse-error",
+      message: `${path}:${diagnostic.line}:${diagnostic.column} TS${diagnostic.code}: ${diagnostic.message}`,
+      path
+    });
+  }
   return analysis;
 }
 

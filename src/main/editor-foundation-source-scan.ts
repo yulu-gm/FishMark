@@ -14,6 +14,14 @@ export type SourceReExport = {
   specifier: string | null;
 };
 
+export type SourceParseDiagnostic = {
+  code: number;
+  column: number;
+  line: number;
+  message: string;
+  offset: number;
+};
+
 export type SourceModuleAnalysis = {
   declaredSymbols: ReadonlySet<string>;
   exportedSymbols: ReadonlySet<string>;
@@ -21,6 +29,7 @@ export type SourceModuleAnalysis = {
   hasMicromarkDocumentParse: boolean;
   hasStarReExport: boolean;
   imports: readonly SourceImport[];
+  parseDiagnostics: readonly SourceParseDiagnostic[];
   reExports: readonly SourceReExport[];
 };
 
@@ -57,6 +66,7 @@ export function collectSourceFiles(rootDir: string, sourcePath: string): string[
 export function analyzeSourceModule(rootDir: string, path: string): SourceModuleAnalysis {
   const source = readFileSync(resolve(rootDir, path), "utf8");
   const sourceFile = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, scriptKindForPath(path));
+  const parseDiagnostics = normalizeParseDiagnostics(sourceFile);
   const declaredSymbols = new Set<string>();
   const exportedSymbols = new Set<string>();
   const imports: SourceImport[] = [];
@@ -202,6 +212,7 @@ export function analyzeSourceModule(rootDir: string, path: string): SourceModule
     imports: imports.sort((left, right) =>
       [left.kind, left.specifier].join("|").localeCompare([right.kind, right.specifier].join("|"))
     ),
+    parseDiagnostics,
     reExports: reExports.sort((left, right) => left.exportedName.localeCompare(right.exportedName))
   };
 }
@@ -297,4 +308,21 @@ function scriptKindForPath(path: string): ts.ScriptKind {
     return ts.ScriptKind.JS;
   }
   return ts.ScriptKind.TS;
+}
+
+function normalizeParseDiagnostics(sourceFile: ts.SourceFile): SourceParseDiagnostic[] {
+  const diagnostics = (
+    sourceFile as ts.SourceFile & { parseDiagnostics?: readonly ts.Diagnostic[] }
+  ).parseDiagnostics ?? [];
+  return diagnostics.map((diagnostic) => {
+    const offset = diagnostic.start ?? 0;
+    const position = sourceFile.getLineAndCharacterOfPosition(offset);
+    return {
+      code: diagnostic.code,
+      column: position.character + 1,
+      line: position.line + 1,
+      message: ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
+      offset
+    };
+  });
 }

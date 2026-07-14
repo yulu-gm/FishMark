@@ -62,6 +62,71 @@ describe("editor foundation architecture guard", () => {
     expect(validateSynthetic(repository)).toEqual({ findings: [], ok: true });
   });
 
+  it("rejects CodeMirror in editor-core when its temporary allowance is removed", () => {
+    const repository = createSyntheticRepository({
+      "packages/editor-core/src/codemirror-current.ts":
+        'import type { Text } from "@codemirror/state"; export type CurrentText = Text;'
+    });
+    const manifest = readSyntheticManifest(repository);
+    const editorCoreRule = findRule(manifest, "boundary.editor-core");
+    editorCoreRule.forbiddenPackages = [
+      ...(editorCoreRule.forbiddenPackages as string[]),
+      "@codemirror/*"
+    ];
+
+    expect(expectCodes(validateSynthetic(repository, manifest))).toContain("forbidden-import");
+  });
+
+  it("uses a valid temporary package allowance to suppress its forbidden import", () => {
+    const repository = createSyntheticRepository({
+      "packages/editor-core/src/codemirror-current.ts":
+        'import type { Text } from "@codemirror/state"; export type CurrentText = Text;'
+    });
+    const manifest = readSyntheticManifest(repository);
+    const editorCoreRule = findRule(manifest, "boundary.editor-core");
+    editorCoreRule.forbiddenPackages = [
+      ...(editorCoreRule.forbiddenPackages as string[]),
+      "@codemirror/*"
+    ];
+    editorCoreRule.temporaryAllowedPackages = [createTemporaryAllowance()];
+
+    expect(validateSynthetic(repository, manifest)).toEqual({ findings: [], ok: true });
+  });
+
+  it("rejects a stale temporary package allowance", () => {
+    const repository = createSyntheticRepository();
+    const manifest = readSyntheticManifest(repository);
+    const editorCoreRule = findRule(manifest, "boundary.editor-core");
+    editorCoreRule.forbiddenPackages = [
+      ...(editorCoreRule.forbiddenPackages as string[]),
+      "@codemirror/*"
+    ];
+    editorCoreRule.temporaryAllowedPackages = [createTemporaryAllowance()];
+
+    expect(expectCodes(validateSynthetic(repository, manifest))).toContain("stale-temporary-allowance");
+  });
+
+  it("does not suppress a forbidden import with an invalid temporary package allowance", () => {
+    const repository = createSyntheticRepository({
+      "packages/editor-core/src/codemirror-current.ts":
+        'import type { Text } from "@codemirror/state"; export type CurrentText = Text;'
+    });
+    const manifest = readSyntheticManifest(repository);
+    const editorCoreRule = findRule(manifest, "boundary.editor-core");
+    editorCoreRule.forbiddenPackages = [
+      ...(editorCoreRule.forbiddenPackages as string[]),
+      "@codemirror/*"
+    ];
+    editorCoreRule.temporaryAllowedPackages = [
+      createTemporaryAllowance({ retireIn: "RF-999" })
+    ];
+    const result = validateSynthetic(repository, manifest);
+
+    expect(expectCodes(result)).toEqual(
+      expect.arrayContaining(["forbidden-import", "unknown-retirement-task"])
+    );
+  });
+
   it.each([
     [
       "missing forbidden-import source directory",
@@ -136,6 +201,27 @@ describe("editor foundation architecture guard", () => {
     });
 
     expect(validateSynthetic(repository)).toEqual({ findings: [], ok: true });
+  });
+
+  it("fails closed when malformed TypeScript disrupts a forbidden import", () => {
+    const repository = createSyntheticRepository({
+      "src/renderer/malformed.ts": 'import { secret from "../main/secret"; void secret;'
+    });
+    let result: EditorFoundationArchitectureResult | undefined;
+
+    expect(() => {
+      result = validateSynthetic(repository);
+    }).not.toThrow();
+    expect(expectCodes(result!)).toContain("source-parse-error");
+    const parseErrors = result!.findings.filter(
+      (finding) => finding.code === "source-parse-error"
+    );
+    expect(parseErrors).toHaveLength(1);
+    expect(parseErrors[0]).toMatchObject({ path: "src/renderer/malformed.ts" });
+    expect(parseErrors[0]?.message).toMatch(
+      /^src\/renderer\/malformed\.ts:\d+:\d+ TS\d+: .+/u
+    );
+    expect(parseErrors[0]?.message).not.toContain(repository.replaceAll("\\", "/"));
   });
 
   it("rejects a cross-package internal import without an exact exception", () => {
@@ -695,6 +781,17 @@ function createException(overrides: MutableRecord = {}): MutableRecord {
     specifier: "../../packages/markdown-engine/src/parse-inline-ast",
     owner: "editor-foundation-refactor",
     reason: "Synthetic current debt for exact exception validation.",
+    retireIn: "RF-604",
+    ...overrides
+  };
+}
+
+function createTemporaryAllowance(overrides: MutableRecord = {}): MutableRecord {
+  return {
+    id: "allowance.synthetic-editor-core-codemirror",
+    package: "@codemirror/*",
+    owner: "editor-foundation-refactor",
+    reason: "Synthetic current debt until the CodeMirror adapter cutover.",
     retireIn: "RF-604",
     ...overrides
   };

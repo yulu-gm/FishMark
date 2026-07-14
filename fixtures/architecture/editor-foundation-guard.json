@@ -87,7 +87,8 @@
       "forbiddenPackages": [
         "react",
         "react-dom",
-        "electron"
+        "electron",
+        "@codemirror/*"
       ],
       "forbiddenPaths": [
         "src/main",
