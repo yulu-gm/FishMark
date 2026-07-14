@@ -40,7 +40,7 @@ describe("scripts/analyze-renderer-bundle.mjs", () => {
           "export const app = 'x';"
         ],
         names: [],
-        mappings: ""
+        mappings: "AAAA"
       })
     );
     await writeCompleteSourceMap(assetsDir, "index-test.js", [["../../src/entry.ts", ""]]);
@@ -284,14 +284,100 @@ describe("scripts/analyze-renderer-bundle.mjs", () => {
   it.each([
     ["invalid JSON", "{", ["source-map-json-invalid"]],
     [
+      "missing version",
+      JSON.stringify({
+        mappings: "AAAA",
+        names: [],
+        sources: ["../../src/renderer/App.tsx"],
+        sourcesContent: ["export const app = true;"]
+      }),
+      ["source-map-version-missing"]
+    ],
+    [
+      "wrong version",
+      JSON.stringify({
+        mappings: "AAAA",
+        names: [],
+        sources: ["../../src/renderer/App.tsx"],
+        sourcesContent: ["export const app = true;"],
+        version: 2
+      }),
+      ["source-map-version-invalid"]
+    ],
+    [
+      "missing mappings",
+      JSON.stringify({
+        names: [],
+        sources: ["../../src/renderer/App.tsx"],
+        sourcesContent: ["export const app = true;"],
+        version: 3
+      }),
+      ["source-map-mappings-missing"]
+    ],
+    [
+      "non-string mappings",
+      JSON.stringify({
+        mappings: [],
+        names: [],
+        sources: ["../../src/renderer/App.tsx"],
+        sourcesContent: ["export const app = true;"],
+        version: 3
+      }),
+      ["source-map-mappings-invalid"]
+    ],
+    [
+      "empty mappings for a non-empty chunk",
+      JSON.stringify({
+        mappings: "",
+        names: [],
+        sources: ["../../src/renderer/App.tsx"],
+        sourcesContent: ["export const app = true;"],
+        version: 3
+      }),
+      ["source-map-mappings-empty"]
+    ],
+    [
+      "malformed mappings",
+      JSON.stringify({
+        mappings: "!",
+        names: [],
+        sources: ["../../src/renderer/App.tsx"],
+        sourcesContent: ["export const app = true;"],
+        version: 3
+      }),
+      ["source-map-mappings-malformed"]
+    ],
+    [
+      "mappings without a source reference",
+      JSON.stringify({
+        mappings: "A",
+        names: [],
+        sources: ["../../src/renderer/App.tsx"],
+        sourcesContent: ["export const app = true;"],
+        version: 3
+      }),
+      ["source-map-mappings-unmapped"]
+    ],
+    [
+      "out-of-range source reference",
+      JSON.stringify({
+        mappings: "ACAA",
+        names: [],
+        sources: ["../../src/renderer/App.tsx"],
+        sourcesContent: ["export const app = true;"],
+        version: 3
+      }),
+      ["source-map-source-reference-invalid"]
+    ],
+    [
       "missing sourcesContent",
-      JSON.stringify({ mappings: "", names: [], sources: ["../../src/renderer/App.tsx"], version: 3 }),
+      JSON.stringify({ mappings: "AAAA", names: [], sources: ["../../src/renderer/App.tsx"], version: 3 }),
       ["source-map-sources-content-missing"]
     ],
     [
       "missing corresponding source content",
       JSON.stringify({
-        mappings: "",
+        mappings: "AAAA",
         names: [],
         sources: ["../../src/renderer/App.tsx", "../../src/renderer/extra.ts"],
         sourcesContent: ["export const app = true;"],
@@ -354,7 +440,7 @@ describe("scripts/analyze-renderer-bundle.mjs", () => {
           "export const app = 'x';"
         ],
         names: [],
-        mappings: ""
+        mappings: "AAAA"
       })
     );
     await writeCompleteSourceMap(assetsDir, "index-test.js", [["../../src/entry.ts", ""]]);
@@ -434,7 +520,7 @@ async function writeCompleteSourceMap(
   await writeFile(
     path.join(assetsDir, `${chunkName}.map`),
     JSON.stringify({
-      mappings: "",
+      mappings: "AAAA",
       names: [],
       sources: sources.map(([source]) => source),
       sourcesContent: sources.map(([, content]) => content),

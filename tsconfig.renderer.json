@@ -13,6 +13,7 @@
     "src/shared",
     "packages/**/*.ts",
     "fixtures/editor-behavior/**/*.ts",
+    "scripts/virtual-runtime-source-map.ts",
     "vite.config.ts"
   ]
 }

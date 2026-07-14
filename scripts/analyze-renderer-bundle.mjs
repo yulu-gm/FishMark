@@ -8,6 +8,7 @@ const DEFAULT_TOP_GROUP_LIMIT = 20;
 const REPORT_SCHEMA_VERSION = 1;
 const BUNDLE_EVIDENCE_SCOPE = "emitted-renderer-output";
 const SOURCE_GRAPH_AUTHORITY = "editor-foundation-architecture-guard";
+const BASE64_VLQ_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 function parseArguments(argv) {
   const options = {
@@ -183,7 +184,7 @@ function readRendererBundleReport(input) {
 function readChunk(filePath, fileName) {
   const source = readFileSync(filePath);
   const sourceText = source.toString("utf8");
-  const sourceMap = readChunkSourceGroups(`${filePath}.map`, `${fileName}.map`);
+  const sourceMap = readChunkSourceGroups(`${filePath}.map`, `${fileName}.map`, sourceText);
 
   return {
     bytes: statSync(filePath).size,
@@ -275,7 +276,7 @@ function resolveStaticChunkClosure(chunkByName, roots) {
   return visited;
 }
 
-function readChunkSourceGroups(mapPath, mapName) {
+function readChunkSourceGroups(mapPath, mapName, generatedSource) {
   if (!existsSync(mapPath)) {
     return {
       evidence: createSourceMapEvidence(mapName, ["source-map-missing"]),
@@ -293,7 +294,7 @@ function readChunkSourceGroups(mapPath, mapName) {
     };
   }
 
-  const issues = validateSourceMapEvidence(map);
+  const issues = validateSourceMapEvidence(map, generatedSource);
   return {
     evidence: createSourceMapEvidence(mapName, issues),
     sourceGroups: issues.length === 0 ? readSourceGroupsFromMap(map) : []
@@ -309,44 +310,189 @@ function createSourceMapEvidence(mapName, issues) {
   };
 }
 
-function validateSourceMapEvidence(map) {
+function validateSourceMapEvidence(map, generatedSource) {
   if (!map || typeof map !== "object" || Array.isArray(map)) {
     return ["source-map-root-invalid"];
   }
 
   const issues = [];
+  const hasVersion = Object.prototype.hasOwnProperty.call(map, "version");
+  const hasMappings = Object.prototype.hasOwnProperty.call(map, "mappings");
   const sources = map.sources;
   const sourcesContent = map.sourcesContent;
 
+  if (!hasVersion) {
+    issues.push("source-map-version-missing");
+  } else if (map.version !== 3) {
+    issues.push("source-map-version-invalid");
+  }
+  if (!hasMappings) {
+    issues.push("source-map-mappings-missing");
+  } else if (typeof map.mappings !== "string") {
+    issues.push("source-map-mappings-invalid");
+  }
   if (!Array.isArray(sources)) {
     issues.push("source-map-sources-missing");
   }
   if (!Array.isArray(sourcesContent)) {
     issues.push("source-map-sources-content-missing");
   }
-  if (!Array.isArray(sources) || !Array.isArray(sourcesContent)) {
-    return sortUnique(issues);
+
+  if (typeof map.mappings === "string") {
+    issues.push(...validateSourceMapMappings(map.mappings, generatedSource, sources));
   }
 
-  if (sources.length === 0) {
-    issues.push("source-map-sources-empty");
-  }
-  if (sources.length !== sourcesContent.length) {
-    issues.push("source-map-source-count-mismatch");
-  }
+  if (Array.isArray(sources) && Array.isArray(sourcesContent)) {
+    if (sources.length === 0) {
+      issues.push("source-map-sources-empty");
+    }
+    if (sources.length !== sourcesContent.length) {
+      issues.push("source-map-source-count-mismatch");
+    }
 
-  sources.forEach((source, index) => {
-    if (typeof source !== "string" || source.length === 0) {
-      issues.push(`source-map-source-invalid:${index}`);
-    }
-    if (index >= sourcesContent.length || sourcesContent[index] === undefined || sourcesContent[index] === null) {
-      issues.push(`source-map-content-missing:${index}`);
-    } else if (typeof sourcesContent[index] !== "string") {
-      issues.push(`source-map-content-invalid:${index}`);
-    }
-  });
+    sources.forEach((source, index) => {
+      if (typeof source !== "string" || source.length === 0) {
+        issues.push(`source-map-source-invalid:${index}`);
+      }
+      if (index >= sourcesContent.length || sourcesContent[index] === undefined || sourcesContent[index] === null) {
+        issues.push(`source-map-content-missing:${index}`);
+      } else if (typeof sourcesContent[index] !== "string") {
+        issues.push(`source-map-content-invalid:${index}`);
+      }
+    });
+  }
 
   return sortUnique(issues);
+}
+
+function validateSourceMapMappings(mappings, generatedSource, sources) {
+  if (generatedSource.length > 0 && mappings.length === 0) {
+    return ["source-map-mappings-empty"];
+  }
+
+  if (mappings.length === 0) {
+    return [];
+  }
+
+  let previousSourceIndex = 0;
+  let previousOriginalLine = 0;
+  let previousOriginalColumn = 0;
+  let previousNameIndex = 0;
+  let hasSourceReference = false;
+  let hasInvalidSourceReference = false;
+
+  try {
+    for (const generatedLine of mappings.split(";")) {
+      let generatedColumn = 0;
+
+      if (generatedLine.length === 0) {
+        continue;
+      }
+
+      for (const encodedSegment of generatedLine.split(",")) {
+        if (encodedSegment.length === 0) {
+          throw new Error("empty source-map segment");
+        }
+
+        const segment = decodeBase64VlqSegment(encodedSegment);
+        if (segment.length !== 1 && segment.length !== 4 && segment.length !== 5) {
+          throw new Error("invalid source-map segment field count");
+        }
+        if (segment[0] < 0) {
+          throw new Error("generated columns must be ordinal");
+        }
+
+        generatedColumn += segment[0];
+        if (!Number.isSafeInteger(generatedColumn)) {
+          throw new Error("generated column overflow");
+        }
+
+        if (segment.length === 1) {
+          continue;
+        }
+
+        hasSourceReference = true;
+        previousSourceIndex += segment[1];
+        previousOriginalLine += segment[2];
+        previousOriginalColumn += segment[3];
+
+        if (
+          !Number.isSafeInteger(previousSourceIndex) ||
+          !Number.isSafeInteger(previousOriginalLine) ||
+          !Number.isSafeInteger(previousOriginalColumn) ||
+          previousOriginalLine < 0 ||
+          previousOriginalColumn < 0
+        ) {
+          throw new Error("invalid source-map source position");
+        }
+
+        if (
+          Array.isArray(sources) &&
+          (previousSourceIndex < 0 || previousSourceIndex >= sources.length)
+        ) {
+          hasInvalidSourceReference = true;
+        }
+
+        if (segment.length === 5) {
+          previousNameIndex += segment[4];
+          if (!Number.isSafeInteger(previousNameIndex) || previousNameIndex < 0) {
+            throw new Error("invalid source-map name index");
+          }
+        }
+      }
+    }
+  } catch {
+    return ["source-map-mappings-malformed"];
+  }
+
+  const issues = [];
+  if (generatedSource.length > 0 && !hasSourceReference) {
+    issues.push("source-map-mappings-unmapped");
+  }
+  if (hasInvalidSourceReference) {
+    issues.push("source-map-source-reference-invalid");
+  }
+  return issues;
+}
+
+function decodeBase64VlqSegment(encodedSegment) {
+  const values = [];
+  let value = 0;
+  let shift = 0;
+  let continuing = false;
+
+  for (const character of encodedSegment) {
+    const digit = BASE64_VLQ_ALPHABET.indexOf(character);
+    if (digit < 0) {
+      throw new Error("invalid base64 VLQ digit");
+    }
+
+    continuing = (digit & 32) !== 0;
+    value += (digit & 31) * 2 ** shift;
+    if (!Number.isSafeInteger(value)) {
+      throw new Error("base64 VLQ overflow");
+    }
+
+    if (continuing) {
+      shift += 5;
+      if (shift > 50) {
+        throw new Error("base64 VLQ overflow");
+      }
+      continue;
+    }
+
+    const isNegative = value % 2 === 1;
+    const magnitude = Math.floor(value / 2);
+    values.push(isNegative ? -magnitude : magnitude);
+    value = 0;
+    shift = 0;
+  }
+
+  if (continuing) {
+    throw new Error("unterminated base64 VLQ value");
+  }
+
+  return values;
 }
 
 function readTopSourceGroups(chunks, limit) {
