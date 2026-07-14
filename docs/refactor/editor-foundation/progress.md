@@ -10,9 +10,9 @@
 
 **Overall status:** `IN_PROGRESS`
 
-**Current task:** `none` — `RF-002` intake pending
+**Current task:** `RF-002` — Architecture and performance guards
 
-**Next required skill:** `$fishmark-task-intake` for `RF-002`
+**Next required skill:** `$fishmark-task-execution` for `RF-002`
 
 ## 1. Status vocabulary
 
@@ -52,7 +52,7 @@ Evidence columns are filled only with fresh command output/report paths from the
 | ID | Task | Depends on | Status | Focused evidence | Full gates | Acceptance record | Commit/branch |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | RF-001 | Editing behavior baseline | — | `COMPLETE` | Canonical/formal runner, observer, protocol, launcher, identity, Typora conversion, listener, and process-tree boundaries accepted; fresh harness + driver: 27 files / 165 tests; public scenario: 121/121 steps in one batch. | Fresh formal Electron gate: 121/121 cases, 2,541/2,541 targets, 79 existing + 1,928 runner matches, 534 exact known defects, 0 unexpected, 0 not-run, 24.573s; public scenario 25.351s; editing experience 79/79; lint 0 errors (8 pre-existing warnings), typecheck, 135-file/1,487-test suite, build, and diff check passed. | Architecture `PASS`; task `PASS`; `reports/task-summaries/RF-001.md` | `codex/editor-foundation-refactor` |
-| RF-002 | Architecture and performance guards | RF-001 | `PLANNED` | — | Test + perf baseline | — | — |
+| RF-002 | Architecture and performance guards | RF-001 | `IN_PROGRESS` | — | Test + perf baseline | — | `codex/editor-foundation-refactor` |
 | RF-101 | Extract workspace domain | RF-002 | `PLANNED` | — | lint/typecheck/test/build | — | — |
 | RF-102 | Extract workspace application ports/use cases | RF-101 | `PLANNED` | — | lint/typecheck/test/build | — | — |
 | RF-201 | Persistent text buffer and session revisions | RF-102 | `PLANNED` | — | typecheck/test/build | — | — |
@@ -111,7 +111,7 @@ Evidence columns are filled only with fresh command output/report paths from the
 
 ### Status
 
-`COMPLETE` — architecture and task acceptance passed on 2026-07-14. `RF-002` remains `PLANNED` until a separate intake.
+`COMPLETE` — architecture and task acceptance passed on 2026-07-14. `RF-002` is now `IN_PROGRESS` under its separate intake.
 
 ### Goal
 
@@ -178,7 +178,7 @@ npm.cmd run test:editing-experience
 
 ### Next skill
 
-`$fishmark-task-intake` for `RF-002`
+`$fishmark-task-execution` for `RF-002`
 
 ## 6. Milestone deletion checklist
 
@@ -206,7 +206,7 @@ Append one entry when a task changes to `DEV_DONE`, then amend the same entry af
 
 ## 8. Blockers and deviations
 
-There are no accepted external blockers or roadmap deviations. RF-001 is complete: its explicit 2,007 verified targets and 534 exact target mismatches cover the whole contract, and the mismatches are recorded current product defects for later roadmap tasks rather than unexecuted evidence. RF-002 remains planned and requires a separate intake before work starts.
+There are no accepted external blockers or roadmap deviations. RF-001 is complete: its explicit 2,007 verified targets and 534 exact target mismatches cover the whole contract, and the mismatches are recorded current product defects for later roadmap tasks rather than unexecuted evidence. RF-002 intake is complete and its architecture/performance guard implementation is the only active task.
 
 Any deviation must record:
 
