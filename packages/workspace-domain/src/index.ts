@@ -10,3 +10,14 @@ export type {
   WorkspaceDocumentData
 } from "./document-session";
 export { createStringTextBuffer, type TextBuffer, type TextChange } from "./text-buffer";
+export {
+  createWorkspaceState,
+  type CommitWorkspaceDocumentInput,
+  type DetachWorkspaceTabInput,
+  type MoveWorkspaceTabInput,
+  type WorkspaceDocumentProjection,
+  type WorkspaceMoveProjection,
+  type WorkspaceState,
+  type WorkspaceTabProjection,
+  type WorkspaceWindowProjection
+} from "./workspace-state";
