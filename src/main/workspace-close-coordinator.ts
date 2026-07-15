@@ -1,21 +1,20 @@
-import type { OpenMarkdownDocument } from "../shared/open-markdown-file";
+import type {
+  DocumentSessionProjection,
+  WorkspaceState,
+  WorkspaceWindowProjection
+} from "@fishmark/workspace-domain";
+
 import type { SaveMarkdownFileAsInput, SaveMarkdownFileInput, SaveMarkdownFileResult } from "../shared/save-markdown-file";
-import type { WorkspaceWindowSnapshot } from "../shared/workspace";
-import type { WorkspaceTabSessionSnapshot } from "./workspace-service";
 
 type DirtyWorkspaceTabChoice = "save" | "discard" | "cancel";
 
-type WorkspaceServiceLike = {
-  getTabSession: (tabId: string) => WorkspaceTabSessionSnapshot;
-  getWindowTabIds: (windowId: string) => string[];
-  saveTabDocument: (tabId: string, document: OpenMarkdownDocument) => WorkspaceWindowSnapshot;
-  closeTab: (tabId: string) => WorkspaceWindowSnapshot;
-};
-
 type WorkspaceCloseCoordinatorDependencies = {
-  workspaceService: WorkspaceServiceLike;
+  workspace: Pick<
+    WorkspaceState,
+    "getTabSession" | "getWindowTabIds" | "saveTabDocument" | "closeTab"
+  >;
   promptToSaveWorkspaceTab: (
-    tab: WorkspaceTabSessionSnapshot
+    tab: DocumentSessionProjection
   ) => Promise<DirtyWorkspaceTabChoice>;
   saveMarkdownFileToPath: (
     input: SaveMarkdownFileInput & { content: string }
@@ -28,7 +27,7 @@ type WorkspaceCloseCoordinatorDependencies = {
 type CloseWorkspaceTabResult =
   | {
       status: "closed";
-      snapshot: WorkspaceWindowSnapshot;
+      snapshot: WorkspaceWindowProjection;
     }
   | {
       status: "cancelled";
@@ -49,12 +48,12 @@ export function createWorkspaceCloseCoordinator(
 
     return {
       status: "closed",
-      snapshot: dependencies.workspaceService.closeTab(tabId)
+      snapshot: dependencies.workspace.closeTab(tabId)
     };
   }
 
   async function confirmWindowClose(windowId: string): Promise<boolean> {
-    for (const tabId of dependencies.workspaceService.getWindowTabIds(windowId)) {
+    for (const tabId of dependencies.workspace.getWindowTabIds(windowId)) {
       const shouldProceed = await confirmDirtyTab(tabId);
 
       if (!shouldProceed) {
@@ -66,7 +65,7 @@ export function createWorkspaceCloseCoordinator(
   }
 
   async function confirmDirtyTab(tabId: string): Promise<boolean> {
-    const tab = dependencies.workspaceService.getTabSession(tabId);
+    const tab = dependencies.workspace.getTabSession(tabId);
 
     if (!tab.isDirty) {
       return true;
@@ -82,23 +81,23 @@ export function createWorkspaceCloseCoordinator(
       return true;
     }
 
-    const latestTab = dependencies.workspaceService.getTabSession(tabId);
+    const checkpoint = dependencies.workspace.getTabSession(tabId);
 
-    if (!latestTab.isDirty) {
+    if (!checkpoint.isDirty) {
       return true;
     }
 
     const result =
-      latestTab.path === null
+      checkpoint.path === null
         ? await dependencies.showSaveMarkdownDialog({
-            tabId: latestTab.tabId,
+            tabId: checkpoint.tabId,
             currentPath: null,
-            content: latestTab.content
+            content: checkpoint.content
           })
         : await dependencies.saveMarkdownFileToPath({
-            tabId: latestTab.tabId,
-            path: latestTab.path,
-            content: latestTab.content
+            tabId: checkpoint.tabId,
+            path: checkpoint.path,
+            content: checkpoint.content
           });
 
     if (result.status === "cancelled") {
@@ -109,8 +108,13 @@ export function createWorkspaceCloseCoordinator(
       throw new Error(result.error.message);
     }
 
-    dependencies.workspaceService.saveTabDocument(latestTab.tabId, result.document);
-    return !dependencies.workspaceService.getTabSession(tabId).isDirty;
+    dependencies.workspace.saveTabDocument({
+      tabId: checkpoint.tabId,
+      capturedRevision: checkpoint.revision,
+      document: result.document,
+      diskVersion: null
+    });
+    return !dependencies.workspace.getTabSession(tabId).isDirty;
   }
 
   return {

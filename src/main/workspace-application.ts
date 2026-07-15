@@ -1,16 +1,15 @@
-import type { SaveMarkdownFileResult } from "../shared/save-markdown-file";
-import type { WorkspaceWindowSnapshot } from "../shared/workspace";
-import type { WorkspaceTabSessionSnapshot } from "./workspace-service";
+import type {
+  WorkspaceState,
+  WorkspaceWindowProjection
+} from "@fishmark/workspace-domain";
 
-type SavedWorkspaceDocument = Extract<SaveMarkdownFileResult, { status: "success" }>["document"];
+import type { SaveMarkdownFileResult } from "../shared/save-markdown-file";
 
 type WorkspaceApplicationDependencies = {
-  workspace: {
-    getWindowSnapshot: (windowId: string) => WorkspaceWindowSnapshot;
-    getTabSession: (tabId: string) => WorkspaceTabSessionSnapshot;
-    updateTabDraft: (tabId: string, content: string) => WorkspaceWindowSnapshot;
-    saveTabDocument: (tabId: string, document: SavedWorkspaceDocument) => WorkspaceWindowSnapshot;
-  };
+  workspace: Pick<
+    WorkspaceState,
+    "getTabSession" | "updateTabDraft" | "saveTabDocument"
+  >;
   saveMarkdownFileToPath: (input: {
     tabId: string;
     path: string;
@@ -20,7 +19,10 @@ type WorkspaceApplicationDependencies = {
 
 export function createWorkspaceApplication(dependencies: WorkspaceApplicationDependencies) {
   return {
-    updateDraft(input: { tabId: string; content: string }): WorkspaceWindowSnapshot {
+    updateDraft(input: {
+      tabId: string;
+      content: string;
+    }): WorkspaceWindowProjection {
       return dependencies.workspace.updateTabDraft(input.tabId, input.content);
     },
     async saveTab(input: { tabId: string; path: string }): Promise<SaveMarkdownFileResult> {
@@ -32,7 +34,12 @@ export function createWorkspaceApplication(dependencies: WorkspaceApplicationDep
       });
 
       if (result.status === "success") {
-        dependencies.workspace.saveTabDocument(input.tabId, result.document);
+        dependencies.workspace.saveTabDocument({
+          tabId: input.tabId,
+          capturedRevision: tab.revision,
+          document: result.document,
+          diskVersion: null
+        });
       }
 
       return result;

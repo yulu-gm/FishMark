@@ -1,9 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
   createWorkspaceState,
+  type CommitWorkspaceDocumentInput,
+  type DetachWorkspaceTabInput,
+  type DocumentSessionProjection,
   type DiskVersion,
-  type WorkspaceDocumentData
+  type MoveWorkspaceTabInput,
+  type WorkspaceDocumentData,
+  type WorkspaceDocumentProjection,
+  type WorkspaceMoveProjection,
+  type WorkspaceState,
+  type WorkspaceTabProjection,
+  type WorkspaceWindowProjection
 } from "@fishmark/workspace-domain";
 
 const diskVersion: DiskVersion = {
@@ -531,6 +540,64 @@ describe("WorkspaceState detach operations", () => {
 });
 
 describe("WorkspaceState projection isolation", () => {
+  it("exposes readonly projection, input, and state surface types", () => {
+    expectTypeOf<WorkspaceTabProjection>().toEqualTypeOf<{
+      readonly tabId: string;
+      readonly path: string | null;
+      readonly name: string;
+      readonly isDirty: boolean;
+      readonly saveState: "idle" | "manual-saving" | "autosaving";
+    }>();
+    expectTypeOf<WorkspaceDocumentProjection>().toEqualTypeOf<{
+      readonly tabId: string;
+      readonly path: string | null;
+      readonly name: string;
+      readonly content: string;
+      readonly encoding: "utf-8";
+      readonly isDirty: boolean;
+      readonly saveState: "idle" | "manual-saving" | "autosaving";
+    }>();
+    expectTypeOf<WorkspaceWindowProjection>().toEqualTypeOf<{
+      readonly windowId: string;
+      readonly activeTabId: string | null;
+      readonly tabs: readonly WorkspaceTabProjection[];
+      readonly activeDocument: WorkspaceDocumentProjection | null;
+    }>();
+    expectTypeOf<WorkspaceMoveProjection>().toEqualTypeOf<{
+      readonly sourceWindowSnapshot: WorkspaceWindowProjection;
+      readonly targetWindowSnapshot: WorkspaceWindowProjection;
+    }>();
+    expectTypeOf<WorkspaceState["getTabSession"]>().returns.toEqualTypeOf<
+      DocumentSessionProjection
+    >();
+
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const projection = workspace.createUntitledTab("window-1");
+    const assertReadonlySurface = (
+      state: WorkspaceState,
+      windowProjection: WorkspaceWindowProjection,
+      commitInput: CommitWorkspaceDocumentInput,
+      moveInput: MoveWorkspaceTabInput,
+      detachInput: DetachWorkspaceTabInput
+    ): void => {
+      // @ts-expect-error public state operations are readonly
+      state.registerWindow = () => windowProjection;
+      // @ts-expect-error projection fields are readonly
+      windowProjection.activeTabId = null;
+      // @ts-expect-error projection arrays are readonly
+      windowProjection.tabs.push(windowProjection.tabs[0]!);
+      // @ts-expect-error input fields are readonly
+      commitInput.tabId = "other-tab";
+      // @ts-expect-error optional input fields are readonly
+      moveInput.targetIndex = 1;
+      // @ts-expect-error detach input fields are readonly
+      detachInput.targetWindowId = "other-window";
+    };
+    expectTypeOf(assertReadonlySurface).toBeFunction();
+    expect(Object.isFrozen(projection)).toBe(true);
+  });
+
   it("returns fresh tab-id arrays that cannot pollute ownership", () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
@@ -538,6 +605,8 @@ describe("WorkspaceState projection isolation", () => {
 
     const first = workspace.getWindowTabIds("window-1");
     const second = workspace.getWindowTabIds("window-1");
+    expect(Object.isFrozen(first)).toBe(true);
+    expect(Object.isFrozen(second)).toBe(true);
     expect(second).toEqual([tabId]);
     expect(second).not.toBe(first);
 
@@ -551,6 +620,10 @@ describe("WorkspaceState projection isolation", () => {
     const tabId = workspace.openDocument("window-1", createDocument("safe.md", "safe")).activeTabId!;
 
     const firstWindow = workspace.getWindowProjection("window-1");
+    expect(Object.isFrozen(firstWindow)).toBe(true);
+    expect(Object.isFrozen(firstWindow.tabs)).toBe(true);
+    expect(Object.isFrozen(firstWindow.tabs[0])).toBe(true);
+    expect(Object.isFrozen(firstWindow.activeDocument)).toBe(true);
     const mutableWindow = firstWindow as unknown as {
       activeTabId: string | null;
       tabs: Array<{ name: string }>;
@@ -572,6 +645,7 @@ describe("WorkspaceState projection isolation", () => {
     });
 
     const firstSession = workspace.getTabSession(tabId);
+    expect(Object.isFrozen(firstSession)).toBe(true);
     tryMutation(() => {
       (firstSession as unknown as { content: string }).content = "mutated";
     });

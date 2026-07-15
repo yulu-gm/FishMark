@@ -1,28 +1,43 @@
-import { describe, expect, it } from "vitest";
+import { createWorkspaceState } from "@fishmark/workspace-domain";
+import { describe, expect, it, vi } from "vitest";
 
 import type { SaveMarkdownFileResult } from "../shared/save-markdown-file";
 import { createWorkspaceApplication } from "./workspace-application";
-import { createWorkspaceService } from "./workspace-service";
 
 describe("createWorkspaceApplication", () => {
-  it("saves the canonical draft even when the renderer payload is stale", async () => {
-    const workspace = createWorkspaceService();
+  it("delegates draft updates to the canonical workspace state", () => {
+    const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const snapshot = workspace.createUntitledTab("window-1");
-    const tabId = snapshot.activeTabId!;
-
-    workspace.updateTabDraft(tabId, "# Canonical\n");
-
-    const writes: string[] = [];
+    const tabId = workspace.createUntitledTab("window-1").activeTabId!;
+    const updateTabDraft = vi.spyOn(workspace, "updateTabDraft");
     const application = createWorkspaceApplication({
       workspace,
-      saveMarkdownFileToPath: async ({ content, path }) => {
-        writes.push(`${path}:${content}`);
-        return {
-          status: "success",
-          document: { path, name: "note.md", content, encoding: "utf-8" }
-        };
-      }
+      saveMarkdownFileToPath: vi.fn()
+    });
+
+    const projection = application.updateDraft({ tabId, content: "# Canonical\n" });
+
+    expect(updateTabDraft).toHaveBeenCalledWith(tabId, "# Canonical\n");
+    expect(projection.activeDocument).toMatchObject({
+      tabId,
+      content: "# Canonical\n",
+      isDirty: true
+    });
+  });
+
+  it("saves the canonical draft and commits the captured revision", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.createUntitledTab("window-1").activeTabId!;
+    workspace.updateTabDraft(tabId, "# Canonical\n");
+    const getTabSession = vi.spyOn(workspace, "getTabSession");
+    const saveTabDocument = vi.spyOn(workspace, "saveTabDocument");
+    const application = createWorkspaceApplication({
+      workspace,
+      saveMarkdownFileToPath: async ({ content, path }) => ({
+        status: "success",
+        document: { path, name: "note.md", content, encoding: "utf-8" }
+      })
     });
 
     await application.saveTab({
@@ -30,18 +45,27 @@ describe("createWorkspaceApplication", () => {
       path: "C:/notes/note.md"
     });
 
-    expect(writes).toEqual(["C:/notes/note.md:# Canonical\n"]);
+    expect(getTabSession).toHaveBeenCalledTimes(1);
+    expect(saveTabDocument).toHaveBeenCalledWith({
+      tabId,
+      capturedRevision: 1,
+      document: {
+        path: "C:/notes/note.md",
+        name: "note.md",
+        content: "# Canonical\n",
+        encoding: "utf-8"
+      },
+      diskVersion: null
+    });
   });
 
-  it("preserves a newer canonical draft when save completion races with another edit", async () => {
-    const workspace = createWorkspaceService();
+  it("preserves a newer canonical revision when save completion races with another edit", async () => {
+    const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const snapshot = workspace.createUntitledTab("window-1");
-    const tabId = snapshot.activeTabId!;
+    const tabId = workspace.createUntitledTab("window-1").activeTabId!;
     workspace.updateTabDraft(tabId, "# Saved draft\n");
-
+    const saveTabDocument = vi.spyOn(workspace, "saveTabDocument");
     let resolveSave!: (value: SaveMarkdownFileResult) => void;
-
     const application = createWorkspaceApplication({
       workspace,
       saveMarkdownFileToPath: ({ content, path }) =>
@@ -56,7 +80,6 @@ describe("createWorkspaceApplication", () => {
       tabId,
       path: "C:/notes/note.md"
     });
-
     workspace.updateTabDraft(tabId, "# Newer draft\n");
     resolveSave({
       status: "success",
@@ -70,11 +93,54 @@ describe("createWorkspaceApplication", () => {
 
     await savePromise;
 
+    expect(saveTabDocument).toHaveBeenCalledWith({
+      tabId,
+      capturedRevision: 1,
+      document: {
+        path: "C:/notes/note.md",
+        name: "note.md",
+        content: "# Saved draft\n",
+        encoding: "utf-8"
+      },
+      diskVersion: null
+    });
     expect(workspace.getTabSession(tabId)).toMatchObject({
       path: "C:/notes/note.md",
       name: "note.md",
       content: "# Newer draft\n",
-      lastSavedContent: "# Saved draft\n",
+      revision: 2,
+      savedRevision: 1,
+      isDirty: true
+    });
+  });
+
+  it("rejects adapter content that does not match the captured current revision", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.createUntitledTab("window-1").activeTabId!;
+    workspace.updateTabDraft(tabId, "# Current\n");
+    const application = createWorkspaceApplication({
+      workspace,
+      saveMarkdownFileToPath: async ({ path }) => ({
+        status: "success",
+        document: {
+          path,
+          name: "note.md",
+          content: "# Mismatched\n",
+          encoding: "utf-8"
+        }
+      })
+    });
+
+    await expect(
+      application.saveTab({ tabId, path: "C:/notes/note.md" })
+    ).rejects.toThrow(
+      "Saved document content must match the captured document revision."
+    );
+    expect(workspace.getTabSession(tabId)).toMatchObject({
+      content: "# Current\n",
+      revision: 1,
+      savedRevision: 0,
       isDirty: true
     });
   });

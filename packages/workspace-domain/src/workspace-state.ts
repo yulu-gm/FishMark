@@ -16,79 +16,92 @@ import {
 const UNTITLED_DOCUMENT_NAME = "Untitled.md";
 
 export interface WorkspaceTabProjection {
-  tabId: string;
-  path: string | null;
-  name: string;
-  isDirty: boolean;
-  saveState: DocumentSaveState;
+  readonly tabId: string;
+  readonly path: string | null;
+  readonly name: string;
+  readonly isDirty: boolean;
+  readonly saveState: DocumentSaveState;
 }
 
 export interface WorkspaceDocumentProjection {
-  tabId: string;
-  path: string | null;
-  name: string;
-  content: string;
-  encoding: "utf-8";
-  isDirty: boolean;
-  saveState: DocumentSaveState;
+  readonly tabId: string;
+  readonly path: string | null;
+  readonly name: string;
+  readonly content: string;
+  readonly encoding: "utf-8";
+  readonly isDirty: boolean;
+  readonly saveState: DocumentSaveState;
 }
 
 export interface WorkspaceWindowProjection {
-  windowId: string;
-  activeTabId: string | null;
-  tabs: WorkspaceTabProjection[];
-  activeDocument: WorkspaceDocumentProjection | null;
+  readonly windowId: string;
+  readonly activeTabId: string | null;
+  readonly tabs: readonly WorkspaceTabProjection[];
+  readonly activeDocument: WorkspaceDocumentProjection | null;
 }
 
 export interface WorkspaceMoveProjection {
-  sourceWindowSnapshot: WorkspaceWindowProjection;
-  targetWindowSnapshot: WorkspaceWindowProjection;
+  readonly sourceWindowSnapshot: WorkspaceWindowProjection;
+  readonly targetWindowSnapshot: WorkspaceWindowProjection;
 }
 
 export interface CommitWorkspaceDocumentInput {
-  tabId: string;
-  capturedRevision: DocumentRevision;
-  document: WorkspaceDocumentData;
-  diskVersion: DiskVersion | null;
+  readonly tabId: string;
+  readonly capturedRevision: DocumentRevision;
+  readonly document: WorkspaceDocumentData;
+  readonly diskVersion: DiskVersion | null;
 }
 
 export interface MoveWorkspaceTabInput {
-  tabId: string;
-  targetWindowId: string;
-  targetIndex?: number;
+  readonly tabId: string;
+  readonly targetWindowId: string;
+  readonly targetIndex?: number;
 }
 
 export interface DetachWorkspaceTabInput {
-  tabId: string;
-  targetWindowId: string;
-  targetIndex?: number;
+  readonly tabId: string;
+  readonly targetWindowId: string;
+  readonly targetIndex?: number;
 }
 
 export interface WorkspaceState {
-  registerWindow(windowId: string): WorkspaceWindowProjection;
-  unregisterWindow(windowId: string): void;
-  focusWindow(windowId: string): void;
-  getLastFocusedWindowId(): string | null;
-  getWindowProjection(windowId: string): WorkspaceWindowProjection;
-  getWindowTabIds(windowId: string): readonly string[];
-  getTabSession(tabId: string): DocumentSessionProjection;
-  getTabPath(tabId: string | null): string | null;
-  createUntitledTab(windowId: string): WorkspaceWindowProjection;
-  openDocument(
+  readonly registerWindow: (windowId: string) => WorkspaceWindowProjection;
+  readonly unregisterWindow: (windowId: string) => void;
+  readonly focusWindow: (windowId: string) => void;
+  readonly getLastFocusedWindowId: () => string | null;
+  readonly getWindowProjection: (windowId: string) => WorkspaceWindowProjection;
+  readonly getWindowTabIds: (windowId: string) => readonly string[];
+  readonly getTabSession: (tabId: string) => DocumentSessionProjection;
+  readonly getTabPath: (tabId: string | null) => string | null;
+  readonly createUntitledTab: (windowId: string) => WorkspaceWindowProjection;
+  readonly openDocument: (
     windowId: string,
     document: WorkspaceDocumentData
-  ): WorkspaceWindowProjection;
-  activateTab(windowId: string, tabId: string): WorkspaceWindowProjection;
-  updateTabDraft(tabId: string, content: string): WorkspaceWindowProjection;
-  saveTabDocument(input: CommitWorkspaceDocumentInput): WorkspaceWindowProjection;
-  replaceTabDocument(
+  ) => WorkspaceWindowProjection;
+  readonly activateTab: (
+    windowId: string,
+    tabId: string
+  ) => WorkspaceWindowProjection;
+  readonly updateTabDraft: (
+    tabId: string,
+    content: string
+  ) => WorkspaceWindowProjection;
+  readonly saveTabDocument: (
+    input: CommitWorkspaceDocumentInput
+  ) => WorkspaceWindowProjection;
+  readonly replaceTabDocument: (
     tabId: string,
     document: WorkspaceDocumentData
-  ): WorkspaceWindowProjection;
-  closeTab(tabId: string): WorkspaceWindowProjection;
-  reorderTab(tabId: string, targetIndex: number): WorkspaceWindowProjection;
-  moveTabToWindow(input: MoveWorkspaceTabInput): WorkspaceMoveProjection;
-  detachTabToWindow(input: DetachWorkspaceTabInput): WorkspaceMoveProjection;
+  ) => WorkspaceWindowProjection;
+  readonly closeTab: (tabId: string) => WorkspaceWindowProjection;
+  readonly reorderTab: (
+    tabId: string,
+    targetIndex: number
+  ) => WorkspaceWindowProjection;
+  readonly moveTabToWindow: (input: MoveWorkspaceTabInput) => WorkspaceMoveProjection;
+  readonly detachTabToWindow: (
+    input: DetachWorkspaceTabInput
+  ) => WorkspaceMoveProjection;
 }
 
 interface WindowSession {
@@ -460,6 +473,6 @@ function clampIndex(targetIndex: number, maximum: number): number {
   return Math.max(0, Math.min(targetIndex, maximum));
 }
 
-function freezeArray<T>(values: T[]): T[] {
-  return Object.freeze(values) as T[];
+function freezeArray<T>(values: T[]): readonly T[] {
+  return Object.freeze(values);
 }
