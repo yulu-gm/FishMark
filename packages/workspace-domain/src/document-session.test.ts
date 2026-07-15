@@ -33,6 +33,37 @@ function createSession() {
   });
 }
 
+type DiskVersionEntryPoint = readonly [
+  name: string,
+  apply: (input: DiskVersion) => ReturnType<typeof createSession>
+];
+
+const diskVersionEntryPoints: readonly DiskVersionEntryPoint[] = [
+  [
+    "commitSavedDocument",
+    (input) =>
+      commitSavedDocument(createSession(), {
+        capturedRevision: 0,
+        document: untitledDocument,
+        diskVersion: input
+      })
+  ],
+  [
+    "replaceDocumentFromDisk",
+    (input) =>
+      replaceDocumentFromDisk(
+        createSession(),
+        {
+          path: "C:/notes/alpha.md",
+          name: "alpha.md",
+          content: "alpha",
+          encoding: "utf-8"
+        },
+        input
+      )
+  ]
+];
+
 describe("document session revisions", () => {
   it("starts a new document at a clean zero revision", () => {
     const session = createSession();
@@ -167,6 +198,24 @@ describe("document session save checkpoints", () => {
       revision: 2,
       savedRevision: 2,
       isDirty: false
+    });
+  });
+
+  it("rejects saved content that does not match the current captured revision", () => {
+    const current = replaceDocumentText(createSession(), "current text");
+
+    expect(() =>
+      commitSavedDocument(current, {
+        capturedRevision: 1,
+        document: { ...untitledDocument, content: "different durable text" },
+        diskVersion
+      })
+    ).toThrow("Saved document content must match the captured document revision.");
+    expect(projectDocumentSession(current)).toMatchObject({
+      content: "current text",
+      revision: 1,
+      savedRevision: 0,
+      isDirty: true
     });
   });
 
@@ -346,6 +395,36 @@ describe("document session immutability", () => {
     expect(nextProjection.diskVersion).not.toBe(mutableInput);
     expect(nextProjection.diskVersion).not.toBe(firstProjection.diskVersion);
   });
+
+  it.each(diskVersionEntryPoints)(
+    "%s defensively copies and freezes disk versions",
+    (_name, applyEntryPoint) => {
+      const mutableInput = { ...diskVersion };
+      const session = applyEntryPoint(mutableInput);
+
+      expect(session.diskVersion).not.toBe(mutableInput);
+      expect(Object.isFrozen(session.diskVersion)).toBe(true);
+      mutableInput.contentHash = "mutated-input";
+
+      const firstProjection = projectDocumentSession(session);
+      const mutableProjection = firstProjection as unknown as {
+        diskVersion: { contentHash: string } | null;
+      };
+      try {
+        if (mutableProjection.diskVersion) {
+          mutableProjection.diskVersion.contentHash = "mutated-projection";
+        }
+      } catch {
+        // Frozen disk-version projections reject mutation.
+      }
+
+      const nextProjection = projectDocumentSession(session);
+      expect(nextProjection.diskVersion).toEqual(diskVersion);
+      expect(nextProjection.diskVersion).not.toBe(mutableInput);
+      expect(nextProjection.diskVersion).not.toBe(firstProjection.diskVersion);
+      expect(Object.isFrozen(nextProjection.diskVersion)).toBe(true);
+    }
+  );
 
   it("does not store redundant dirty or legacy content fields", () => {
     const session = createSession();

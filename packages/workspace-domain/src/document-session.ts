@@ -107,7 +107,12 @@ export function commitSavedDocument(
 ): DocumentSessionState {
   validateCapturedRevision(capturedRevision, session.revision);
 
-  const currentMatchesSavedDocument = session.text.toString() === document.content;
+  const currentContent = session.text.toString();
+  if (capturedRevision === session.revision && document.content !== currentContent) {
+    throw new Error("Saved document content must match the captured document revision.");
+  }
+
+  const currentMatchesSavedDocument = currentContent === document.content;
 
   return freezeSession({
     ...session,
