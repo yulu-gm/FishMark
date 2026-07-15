@@ -28,7 +28,7 @@
     {
       "name": "open",
       "counters": {
-        "fullParse": 2,
+        "fullParse": 504,
         "incrementalParseWindow": 0,
         "cacheHit": 0,
         "invalidatedNodes": 0,
@@ -46,7 +46,7 @@
     {
       "name": "edit",
       "counters": {
-        "fullParse": 1,
+        "fullParse": 502,
         "incrementalParseWindow": 0,
         "cacheHit": 0,
         "invalidatedNodes": 0,
@@ -82,7 +82,7 @@
     {
       "name": "orderedListEdit",
       "counters": {
-        "fullParse": 2,
+        "fullParse": 503,
         "incrementalParseWindow": 0,
         "cacheHit": 0,
         "invalidatedNodes": 0,
@@ -100,7 +100,7 @@
     {
       "name": "outline",
       "counters": {
-        "fullParse": 1,
+        "fullParse": 502,
         "incrementalParseWindow": 0,
         "cacheHit": 0,
         "invalidatedNodes": 0,
@@ -118,7 +118,7 @@
     {
       "name": "metrics",
       "counters": {
-        "fullParse": 1,
+        "fullParse": 503,
         "incrementalParseWindow": 0,
         "cacheHit": 0,
         "invalidatedNodes": 0,

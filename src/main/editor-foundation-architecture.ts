@@ -358,6 +358,21 @@ function validatePackages(
       .filter((entry): entry is readonly [string, ManifestRecord] => entry[0] !== null)
   );
   const boundaryRuleClaims = new Map<string, string[]>();
+  const forbiddenRulesBySourcePath = new Map<string, string[]>();
+  for (const rule of activeRules) {
+    if (readNonEmptyString(rule.kind) !== "forbidden-imports") {
+      continue;
+    }
+    const ruleId = readNonEmptyString(rule.id);
+    const sourcePath = readNonEmptyString(rule.sourcePath);
+    if (!ruleId || !sourcePath) {
+      continue;
+    }
+    const identity = repoPathComparisonIdentity(sourcePath);
+    const ruleIds = forbiddenRulesBySourcePath.get(identity) ?? [];
+    ruleIds.push(ruleId);
+    forbiddenRulesBySourcePath.set(identity, ruleIds);
+  }
   for (const targetPackage of packages) {
     if (readNonEmptyString(targetPackage.state) !== "active") {
       continue;
@@ -420,7 +435,7 @@ function validatePackages(
           });
         }
         const ruleSourcePath = readNonEmptyString(boundaryRule.sourcePath);
-        if (!ruleSourcePath || normalizeRepoPath(ruleSourcePath) !== normalizeRepoPath(path)) {
+        if (!ruleSourcePath || repoPathComparisonIdentity(ruleSourcePath) !== repoPathComparisonIdentity(path)) {
           context.findings.push({
             code: "package-boundary-rule-source-mismatch",
             message: `Active package ${id} path ${path} must match boundary rule sourcePath ${ruleSourcePath ?? "<missing>"}.`,
@@ -433,6 +448,15 @@ function validatePackages(
           context.findings.push({
             code: "package-boundary-rule-reused",
             message: `Boundary rule ${boundaryRuleId} is claimed by multiple active packages: ${claims.sort(compareOrdinal).join(", ")}.`,
+            path,
+            ruleId: boundaryRuleId
+          });
+        }
+        const rulesForPackagePath = forbiddenRulesBySourcePath.get(repoPathComparisonIdentity(path)) ?? [];
+        if (rulesForPackagePath.length > 1) {
+          context.findings.push({
+            code: "package-boundary-rule-source-reused",
+            message: `Active package ${id} path ${path} is governed by multiple active forbidden-import rules: ${rulesForPackagePath.sort(compareOrdinal).join(", ")}.`,
             path,
             ruleId: boundaryRuleId
           });
@@ -643,7 +667,9 @@ function validatePublicPackageImports(
     }
     for (const sourceImport of analysis.imports) {
       let isViolation = false;
-      if (sourceImport.specifier.startsWith(publicPrefix)) {
+      const specifierIdentity = asciiCaseFold(sourceImport.specifier);
+      const publicPrefixIdentity = asciiCaseFold(publicPrefix);
+      if (specifierIdentity.startsWith(publicPrefixIdentity)) {
         const publicPackageName = sourceImport.specifier.slice(publicPrefix.length);
         isViolation = publicPackageName.length === 0 || publicPackageName.includes("/");
       } else {
@@ -652,7 +678,9 @@ function validatePublicPackageImports(
           ? packageNameForInternalSource(resolvedPath, normalizeRepoPath(packagesPath))
           : null;
         const importerPackage = packageNameForImporter(importer, normalizeRepoPath(packagesPath));
-        isViolation = targetPackage !== null && targetPackage !== importerPackage;
+        isViolation =
+          targetPackage !== null &&
+          asciiCaseFold(targetPackage) !== asciiCaseFold(importerPackage ?? "");
       }
 
       if (isViolation) {
@@ -1343,32 +1371,38 @@ function reportFilesystemAccessError(
 
 
 function packagePatternMatches(pattern: string, specifier: string): boolean {
-  if (pattern.endsWith("/*")) {
-    return specifier.startsWith(pattern.slice(0, -1));
+  const patternIdentity = asciiCaseFold(pattern);
+  const specifierIdentity = asciiCaseFold(specifier);
+  if (patternIdentity.endsWith("/*")) {
+    return specifierIdentity.startsWith(patternIdentity.slice(0, -1));
   }
-  return specifier === pattern || specifier.startsWith(`${pattern}/`);
+  return specifierIdentity === patternIdentity || specifierIdentity.startsWith(`${patternIdentity}/`);
 }
 
 function packageNameForInternalSource(path: string, packagesPath: string): string | null {
-  const prefix = `${packagesPath}/`;
-  if (!path.startsWith(prefix)) {
+  const pathIdentity = repoPathComparisonIdentity(path);
+  const prefix = `${repoPathComparisonIdentity(packagesPath)}/`;
+  if (!pathIdentity.startsWith(prefix)) {
     return null;
   }
-  const remainder = path.slice(prefix.length);
+  const remainder = pathIdentity.slice(prefix.length);
   const [packageName, sourceDirectory] = remainder.split("/");
   return packageName && sourceDirectory === "src" ? packageName : null;
 }
 
 function packageNameForImporter(path: string, packagesPath: string): string | null {
-  const prefix = `${packagesPath}/`;
-  if (!path.startsWith(prefix)) {
+  const pathIdentity = repoPathComparisonIdentity(path);
+  const prefix = `${repoPathComparisonIdentity(packagesPath)}/`;
+  if (!pathIdentity.startsWith(prefix)) {
     return null;
   }
-  return path.slice(prefix.length).split("/")[0] ?? null;
+  return pathIdentity.slice(prefix.length).split("/")[0] ?? null;
 }
 
 function pathIsWithin(path: string, parent: string): boolean {
-  return path === parent || path.startsWith(`${parent}/`);
+  const pathIdentity = repoPathComparisonIdentity(path);
+  const parentIdentity = repoPathComparisonIdentity(parent);
+  return pathIdentity === parentIdentity || pathIdentity.startsWith(`${parentIdentity}/`);
 }
 
 function parserKey(module: string, symbol: string): string {
@@ -1385,6 +1419,14 @@ function hasWildcard(value: string): boolean {
 
 function normalizeRepoPath(path: string): string {
   return path.replaceAll("\\", "/").replace(/^\.\//u, "").replace(/\/$/u, "");
+}
+
+function repoPathComparisonIdentity(path: string): string {
+  return asciiCaseFold(normalizeRepoPath(path));
+}
+
+function asciiCaseFold(value: string): string {
+  return value.replace(/[A-Z]/gu, (character) => character.toLowerCase());
 }
 
 function readNonEmptyString(value: unknown): string | null {

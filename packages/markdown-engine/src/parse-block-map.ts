@@ -20,19 +20,20 @@ import type {
 } from "./block-map";
 import { parseBlockquoteLinePrefix } from "./blockquote";
 import { parseHtmlImageData } from "./html-image";
+import type { MarkdownParseInstrumentation, MarkdownParseOptions } from "./parse-instrumentation";
 import { isTableDelimiterLine, parseLoosePipeTable, parsePipeTable, splitTableLine } from "./table-model";
 
-export function parseBlockMap(source: string): BlockMap {
+export function parseBlockMap(source: string, options: MarkdownParseOptions = {}): BlockMap {
   return {
-    blocks: parseTopLevelBlocks(source)
+    blocks: parseTopLevelBlocks(source, options)
   };
 }
 
-export function parseTopLevelBlocks(source: string): MarkdownBlock[] {
+export function parseTopLevelBlocks(source: string, options: MarkdownParseOptions = {}): MarkdownBlock[] {
   const blocks: MarkdownBlock[] = [];
   let containerDepth = 0;
 
-  for (const [kind, token] of parseEvents(source)) {
+  for (const [kind, token] of parseEvents(source, options.instrumentation)) {
     if (kind === "enter") {
       if (token.type === "listOrdered" || token.type === "listUnordered") {
         if (containerDepth === 0) {
@@ -116,7 +117,8 @@ export function parseTopLevelBlocks(source: string): MarkdownBlock[] {
   return mergeLoosePipeTables(mergeContiguousListBlocks(blocks, source), source);
 }
 
-function parseEvents(source: string): Event[] {
+function parseEvents(source: string, instrumentation?: MarkdownParseInstrumentation): Event[] {
+  instrumentation?.onFullDocumentParse({ kind: "block-map", sourceLength: source.length });
   return postprocess(parse({ extensions: [math({ singleDollarTextMath: true })] }).document().write(preprocess()(source, "utf8", true)));
 }
 

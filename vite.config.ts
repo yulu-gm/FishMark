@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react";
 import { fileURLToPath, URL } from "node:url";
 import { readFileSync } from "node:fs";
 
-import { createVirtualRuntimeSourceMapEvidencePlugin } from "./scripts/virtual-runtime-source-map";
+import { createBundleProvenancePlugin } from "./scripts/vite-bundle-provenance";
 
 const devServerPort = Number(process.env.FISHMARK_DEV_SERVER_PORT ?? "5173");
 const packageJson = JSON.parse(
@@ -15,7 +15,10 @@ export default defineConfig({
   define: {
     __FISHMARK_APP_VERSION__: JSON.stringify(packageJson.version)
   },
-  plugins: [react(), createVirtualRuntimeSourceMapEvidencePlugin()],
+  plugins: [
+    react(),
+    createBundleProvenancePlugin()
+  ],
   resolve: {
     alias: {
       "@fishmark/editor-core": fileURLToPath(new URL("./packages/editor-core/src/index.ts", import.meta.url)),

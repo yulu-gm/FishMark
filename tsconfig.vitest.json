@@ -13,7 +13,7 @@
     "src/renderer/types.d.ts",
     "src/shared",
     "packages/**/*.ts",
-    "scripts/virtual-runtime-source-map.ts",
+    "scripts/vite-bundle-provenance.ts",
     "fixtures/editor-behavior/**/*.ts"
   ]
 }

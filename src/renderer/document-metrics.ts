@@ -17,6 +17,7 @@ export type DocumentMetrics = {
 };
 
 export type GetDocumentMetricsOptions = {
+  collectReferenceDefinitions?: typeof collectReferenceDefinitions;
   parseMarkdownDocument?: (source: string) => MarkdownDocument;
 };
 
@@ -26,7 +27,8 @@ export function getDocumentMetrics(
 ): DocumentMetrics {
   const readableText = collectReadableMarkdownText(
     content,
-    options.parseMarkdownDocument ?? parseMarkdownDocument
+    options.parseMarkdownDocument ?? parseMarkdownDocument,
+    options.collectReferenceDefinitions ?? collectReferenceDefinitions
   );
   return {
     meaningfulCharacterCount: countMeaningfulCharacters(readableText)
@@ -40,9 +42,10 @@ function countMeaningfulCharacters(value: string): number {
 
 function collectReadableMarkdownText(
   source: string,
-  parseDocument: (source: string) => MarkdownDocument
+  parseDocument: (source: string) => MarkdownDocument,
+  collectDefinitions: typeof collectReferenceDefinitions
 ): string {
-  const referenceDefinitions = collectReferenceDefinitions(source);
+  const referenceDefinitions = collectDefinitions(source);
   return parseDocument(source)
     .blocks.map((block) => collectBlockReadableText(block, source, referenceDefinitions))
     .filter((text) => text.length > 0)

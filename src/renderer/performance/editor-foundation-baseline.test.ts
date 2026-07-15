@@ -168,6 +168,11 @@ describe("editor foundation canonical performance baseline", () => {
     }
 
     expect(report.operations.find((operation) => operation.name === "selection")?.counters.fullParse).toBe(0);
+    for (const operation of report.operations.filter((candidate) => candidate.name !== "selection")) {
+      expect(operation.counters.fullParse).toBeGreaterThan(
+        operation.parserEntries.parseMarkdownDocument + operation.parserEntries.parseBlockMap
+      );
+    }
     expect(JSON.stringify(baseline)).not.toContain("durationMs");
     expect(toStableEditorFoundationBaseline(report)).toEqual(baseline);
 

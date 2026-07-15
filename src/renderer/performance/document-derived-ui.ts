@@ -3,7 +3,12 @@ import {
   type EditorPerformanceCounters,
   type EditorPerformanceParserEntries
 } from "@fishmark/editor-core";
-import { parseMarkdownDocument, type MarkdownDocument } from "@fishmark/markdown-engine";
+import {
+  collectReferenceDefinitions,
+  parseMarkdownDocument,
+  type MarkdownDocument,
+  type MarkdownParseInstrumentation
+} from "@fishmark/markdown-engine";
 
 import { getDocumentMetrics } from "../document-metrics";
 import { deriveOutlineItems } from "../outline";
@@ -33,19 +38,29 @@ export function measureRendererDerivedDataPerformance(
   source: string
 ): RendererDerivedDataPerformanceReport {
   let outlineParseCalls = 0;
+  let outlineFullDocumentParseCalls = 0;
+  const outlineInstrumentation = createInstrumentation(() => {
+    outlineFullDocumentParseCalls += 1;
+  });
   const outline = measure(() =>
     deriveOutlineItems(source, {
       parseMarkdownDocument: createParserProbe(() => {
         outlineParseCalls += 1;
-      })
+      }, outlineInstrumentation)
     })
   );
   let metricsParseCalls = 0;
+  let metricsFullDocumentParseCalls = 0;
+  const metricsInstrumentation = createInstrumentation(() => {
+    metricsFullDocumentParseCalls += 1;
+  });
   const metrics = measure(() =>
     getDocumentMetrics(source, {
+      collectReferenceDefinitions: (input) =>
+        collectReferenceDefinitions(input, { instrumentation: metricsInstrumentation }),
       parseMarkdownDocument: createParserProbe(() => {
         metricsParseCalls += 1;
-      })
+      }, metricsInstrumentation)
     })
   );
 
@@ -55,37 +70,35 @@ export function measureRendererDerivedDataPerformance(
       name: "metrics",
       durationMs: metrics.durationMs,
       meaningfulCharacterCount: metrics.value.meaningfulCharacterCount,
-      ...createOperationEvidence(metricsParseCalls)
+      ...createOperationEvidence(metricsParseCalls, metricsFullDocumentParseCalls)
     },
     outline: {
       name: "outline",
       durationMs: outline.durationMs,
       itemCount: outline.value.length,
-      ...createOperationEvidence(outlineParseCalls)
+      ...createOperationEvidence(outlineParseCalls, outlineFullDocumentParseCalls)
     },
     sourceLength: source.length
   };
 }
 
-export function formatRendererDerivedDataPerformanceReport(
-  report: RendererDerivedDataPerformanceReport
-): string {
-  return JSON.stringify(report, null, 2);
-}
-
-function createParserProbe(onParse: () => void): (source: string) => MarkdownDocument {
+function createParserProbe(
+  onParse: () => void,
+  instrumentation: MarkdownParseInstrumentation
+): (source: string) => MarkdownDocument {
   return (source) => {
     onParse();
-    return parseMarkdownDocument(source);
+    return parseMarkdownDocument(source, { instrumentation });
   };
 }
 
 function createOperationEvidence(
-  parseMarkdownDocumentCalls: number
+  parseMarkdownDocumentCalls: number,
+  fullDocumentParseCalls: number
 ): Omit<RendererDerivedDataOperationEvidence, "durationMs"> {
   return {
     counters: {
-      fullParse: parseMarkdownDocumentCalls,
+      fullParse: fullDocumentParseCalls,
       incrementalParseWindow: 0,
       cacheHit: 0,
       invalidatedNodes: 0,
@@ -98,6 +111,10 @@ function createOperationEvidence(
     capabilityRefs: ["incrementalStructureCache"],
     unavailableCapabilityReason: INCREMENTAL_STRUCTURE_CACHE_REASON
   };
+}
+
+function createInstrumentation(onFullDocumentParse: () => void): MarkdownParseInstrumentation {
+  return { onFullDocumentParse };
 }
 
 function countMarkdownLines(source: string): number {

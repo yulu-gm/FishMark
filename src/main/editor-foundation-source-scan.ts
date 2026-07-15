@@ -234,16 +234,17 @@ export function analyzeSourceModule(rootDir: string, path: string): SourceModule
 
   let hasMicromarkDocumentParse = false;
   const findDocumentParse = (node: ts.Node): void => {
-    if (
-      ts.isCallExpression(node) &&
-      ts.isPropertyAccessExpression(node.expression) &&
-      node.expression.name.text === "document"
-    ) {
-      const receiver = node.expression.expression;
+    if (ts.isCallExpression(node)) {
+      const documentAccess = readStaticPropertyAccess(unwrapTransparentExpression(node.expression));
+      const receiver = documentAccess
+        ? unwrapTransparentExpression(documentAccess.receiver)
+        : null;
       if (
-        (ts.isCallExpression(receiver) &&
+        documentAccess?.name === "document" &&
+        receiver !== null &&
+        ((ts.isCallExpression(receiver) &&
           isMicromarkParseCall(receiver, micromarkParseAliases, micromarkNamespaceAliases)) ||
-        (ts.isIdentifier(receiver) && micromarkParserVariables.has(receiver.text))
+          (ts.isIdentifier(receiver) && micromarkParserVariables.has(receiver.text)))
       ) {
         hasMicromarkDocumentParse = true;
       }
@@ -328,7 +329,7 @@ function isMicromarkParseCall(
   parseAliases: ReadonlySet<string>,
   namespaceAliases: ReadonlySet<string>
 ): boolean {
-  const candidate = unwrapAwaitAndParentheses(expression);
+  const candidate = unwrapTransparentExpression(expression);
   if (!ts.isCallExpression(candidate)) {
     return false;
   }
@@ -344,7 +345,7 @@ function classifyMicromarkBindingSource(
   parseAliases: ReadonlySet<string>,
   namespaceAliases: ReadonlySet<string>
 ): MicromarkBindingSource | null {
-  const candidate = unwrapAwaitAndParentheses(expression);
+  const candidate = unwrapTransparentExpression(expression);
   if (isMicromarkModuleExpression(candidate)) {
     return "namespace";
   }
@@ -388,7 +389,7 @@ function isMicromarkParseReference(
   parseAliases: ReadonlySet<string>,
   namespaceAliases: ReadonlySet<string>
 ): boolean {
-  const candidate = unwrapAwaitAndParentheses(expression);
+  const candidate = unwrapTransparentExpression(expression);
   if (ts.isIdentifier(candidate)) {
     return parseAliases.has(candidate.text);
   }
@@ -397,7 +398,7 @@ function isMicromarkParseReference(
     return false;
   }
 
-  const receiver = unwrapAwaitAndParentheses(access.receiver);
+  const receiver = unwrapTransparentExpression(access.receiver);
   return (
     isMicromarkModuleExpression(receiver) ||
     (ts.isIdentifier(receiver) && namespaceAliases.has(receiver.text))
@@ -407,20 +408,25 @@ function isMicromarkParseReference(
 function readStaticPropertyAccess(
   expression: ts.Expression
 ): { name: string; receiver: ts.Expression } | null {
-  if (ts.isPropertyAccessExpression(expression)) {
-    return { name: expression.name.text, receiver: expression.expression };
+  const candidate = unwrapTransparentExpression(expression);
+  if (ts.isPropertyAccessExpression(candidate)) {
+    return { name: candidate.name.text, receiver: candidate.expression };
   }
   if (
-    ts.isElementAccessExpression(expression) &&
-    isStringLiteralLike(expression.argumentExpression)
+    ts.isElementAccessExpression(candidate) &&
+    isStringLiteralLike(unwrapTransparentExpression(candidate.argumentExpression))
   ) {
-    return { name: expression.argumentExpression.text, receiver: expression.expression };
+    const argument = unwrapTransparentExpression(candidate.argumentExpression);
+    return {
+      name: (argument as ts.StringLiteralLike).text,
+      receiver: candidate.expression
+    };
   }
   return null;
 }
 
 function isMicromarkModuleExpression(expression: ts.Expression): boolean {
-  const candidate = unwrapAwaitAndParentheses(expression);
+  const candidate = unwrapTransparentExpression(expression);
   if (!ts.isCallExpression(candidate) || candidate.arguments.length < 1) {
     return false;
   }
@@ -437,16 +443,30 @@ function isMicromarkModuleExpression(expression: ts.Expression): boolean {
   );
 }
 
-function unwrapAwaitAndParentheses(expression: ts.Expression): ts.Expression {
+function unwrapTransparentExpression(expression: ts.Expression): ts.Expression {
   let candidate = expression;
-  while (ts.isAwaitExpression(candidate) || ts.isParenthesizedExpression(candidate)) {
+  while (
+    ts.isAwaitExpression(candidate) ||
+    ts.isParenthesizedExpression(candidate) ||
+    ts.isAsExpression(candidate) ||
+    ts.isTypeAssertionExpression(candidate) ||
+    ts.isNonNullExpression(candidate) ||
+    ts.isSatisfiesExpression(candidate)
+  ) {
     candidate = candidate.expression;
   }
   return candidate;
 }
 
 function readStaticPropertyName(name: ts.PropertyName): string | null {
-  return ts.isIdentifier(name) || isStringLiteralLike(name) ? name.text : null;
+  if (ts.isIdentifier(name) || isStringLiteralLike(name)) {
+    return name.text;
+  }
+  if (ts.isComputedPropertyName(name)) {
+    const expression = unwrapTransparentExpression(name.expression);
+    return isStringLiteralLike(expression) ? expression.text : null;
+  }
+  return null;
 }
 
 function isStringLiteralLike(node: ts.Node | undefined): node is ts.StringLiteralLike {

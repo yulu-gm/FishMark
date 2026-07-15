@@ -5,10 +5,13 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { readBundleProvenanceEvidence } from "./bundle-provenance-evidence.mjs";
+
 const DEFAULT_TOP_GROUP_LIMIT = 20;
 const REPORT_SCHEMA_VERSION = 1;
 const BUNDLE_EVIDENCE_SCOPE = "emitted-renderer-output";
 const SOURCE_GRAPH_AUTHORITY = "editor-foundation-architecture-guard";
+const SOURCE_GROUP_AUTHORITY = "bundle-provenance-module-ids";
 const BASE64_VLQ_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 const CONTRACT_SCHEMA_VERSION = 1;
 const MAXIMUM_CHECK_BY_METRIC = new Map([
@@ -338,6 +341,30 @@ function readRendererBundleReport(input) {
     .sort(compareOrdinal)
     .map((fileName) => readChunk(path.join(assetsDir, fileName), fileName))
     .sort(compareChunks);
+  const provenance = readBundleProvenanceEvidence(
+    input.distDir,
+    chunks.map((chunk) => ({
+      dynamicImports: chunk.dynamicImports,
+      fileName: `assets/${chunk.name}`,
+      source: chunk.source,
+      staticImports: chunk.staticImports
+    }))
+  );
+  for (const chunk of chunks) {
+    const provenanceFileName = `assets/${chunk.name}`;
+    const provenanceRecord = provenance.recordsByFileName.get(provenanceFileName);
+    chunk.provenanceEvidence = provenance.chunkEvidenceByFileName.get(provenanceFileName) ?? {
+      file: provenanceFileName,
+      issues: [...provenance.evidence.issues],
+      status: "INCOMPLETE"
+    };
+    chunk.provenanceSourceGroups = readProvenanceSourceGroups(provenanceRecord);
+    chunk.sourceMapEvidence = attestSourceMapEvidence(
+      chunk.sourceMapEvidence,
+      provenanceRecord
+    );
+    delete chunk.source;
+  }
   const chunkByName = new Map(chunks.map((chunk) => [chunk.name, chunk]));
   const topSourceGroups = readTopSourceGroups(chunks, input.topGroupLimit);
   const editorChunk = chunks.find((chunk) => chunk.role === "editor") ?? chunks[0] ?? null;
@@ -363,6 +390,7 @@ function readRendererBundleReport(input) {
     initialChunks,
     lazyChunks,
     reactChunks,
+    provenanceEvidence: provenance.evidence,
     topSourceGroups,
     totalInitialGzipBytes: sum(initialChunks.map((chunk) => chunk.gzipBytes)),
     totalJsBytes: sum(chunks.map((chunk) => chunk.bytes)),
@@ -377,10 +405,12 @@ function readChunk(filePath, fileName) {
 
   return {
     bytes: statSync(filePath).size,
+    dynamicImports: readDynamicChunkImports(sourceText),
     gzipBytes: gzipSync(source).length,
     staticImports: readStaticChunkImports(sourceText),
     name: fileName,
     role: classifyChunk(fileName),
+    source,
     sourceGroups: sourceMap.sourceGroups,
     sourceMapEvidence: sourceMap.evidence
   };
@@ -490,6 +520,19 @@ function readChunkSourceGroups(mapPath, mapName, generatedSource) {
   };
 }
 
+function readDynamicChunkImports(sourceText) {
+  const imports = new Set();
+  const dynamicImportPattern = /\bimport\s*\(\s*["'\x60]\.\/([^"'\x60]+\.js)["'\x60]\s*\)/gu;
+
+  for (const match of sourceText.matchAll(dynamicImportPattern)) {
+    if (match[1]) {
+      imports.add(match[1]);
+    }
+  }
+
+  return Array.from(imports).sort(compareOrdinal);
+}
+
 function createSourceMapEvidence(mapName, issues) {
   const sortedIssues = sortUnique(issues);
   return {
@@ -497,6 +540,22 @@ function createSourceMapEvidence(mapName, issues) {
     issues: sortedIssues,
     status: sortedIssues.length === 0 ? "COMPLETE" : "INCOMPLETE"
   };
+}
+
+function attestSourceMapEvidence(evidence, provenanceRecord) {
+  if (
+    isRecord(provenanceRecord) &&
+    provenanceRecord.hasSourceMap === false &&
+    evidence.status === "INCOMPLETE" &&
+    JSON.stringify(evidence.issues) === JSON.stringify(["source-map-missing"])
+  ) {
+    return {
+      map: null,
+      issues: [],
+      status: "NOT_EMITTED"
+    };
+  }
+  return evidence;
 }
 
 function validateSourceMapEvidence(map, generatedSource) {
@@ -566,7 +625,40 @@ function validateSourceMapEvidence(map, generatedSource) {
     });
   }
 
+  if (Object.prototype.hasOwnProperty.call(map, "ignoreList")) {
+    issues.push(...validateSourceMapIgnoreList(map.ignoreList, sources, "ignore-list"));
+  }
+  if (Object.prototype.hasOwnProperty.call(map, "x_google_ignoreList")) {
+    issues.push(
+      ...validateSourceMapIgnoreList(map.x_google_ignoreList, sources, "google-ignore-list")
+    );
+  }
+
   return sortUnique(issues);
+}
+
+function validateSourceMapIgnoreList(value, sources, label) {
+  if (!Array.isArray(value)) {
+    return [`source-map-${label}-invalid`];
+  }
+
+  const issues = [];
+  let previousIndex = -1;
+  for (const [entryIndex, sourceIndex] of value.entries()) {
+    if (
+      !Number.isInteger(sourceIndex) ||
+      sourceIndex < 0 ||
+      sourceIndex <= previousIndex
+    ) {
+      issues.push(`source-map-${label}-entry-invalid:${entryIndex}`);
+      continue;
+    }
+    previousIndex = sourceIndex;
+    if (Array.isArray(sources) && sourceIndex >= sources.length) {
+      issues.push(`source-map-${label}-reference-invalid:${entryIndex}`);
+    }
+  }
+  return issues;
 }
 
 function validateSourceMapMappings(mappings, generatedSource, sources, names) {
@@ -585,10 +677,14 @@ function validateSourceMapMappings(mappings, generatedSource, sources, names) {
   let hasSourceReference = false;
   let hasInvalidNameReference = false;
   let hasInvalidSourceReference = false;
+  const generatedLines = splitGeneratedSourceLines(generatedSource);
+  const segmentsByGeneratedLine = [];
 
   try {
-    for (const generatedLine of mappings.split(";")) {
+    for (const [generatedLineIndex, generatedLine] of mappings.split(";").entries()) {
       let generatedColumn = 0;
+      const decodedSegments = [];
+      segmentsByGeneratedLine[generatedLineIndex] = decodedSegments;
 
       if (generatedLine.length === 0) {
         continue;
@@ -613,10 +709,12 @@ function validateSourceMapMappings(mappings, generatedSource, sources, names) {
         }
 
         if (segment.length === 1) {
+          decodedSegments.push({ column: generatedColumn, hasSourceReference: false });
           continue;
         }
 
         hasSourceReference = true;
+        decodedSegments.push({ column: generatedColumn, hasSourceReference: true });
         previousSourceIndex += segment[1];
         previousOriginalLine += segment[2];
         previousOriginalColumn += segment[3];
@@ -663,7 +761,16 @@ function validateSourceMapMappings(mappings, generatedSource, sources, names) {
   if (hasInvalidSourceReference) {
     issues.push("source-map-source-reference-invalid");
   }
+  for (const [lineIndex, encodedSegments] of segmentsByGeneratedLine.entries()) {
+    if (lineIndex >= generatedLines.length && encodedSegments.length > 0) {
+      issues.push(`source-map-generated-line-reference-invalid:${lineIndex + 1}`);
+    }
+  }
   return issues;
+}
+
+function splitGeneratedSourceLines(source) {
+  return source.split(/\r\n|[\n\r\u2028\u2029]/u);
 }
 
 function decodeBase64VlqSegment(encodedSegment) {
@@ -741,7 +848,20 @@ function readSourceGroupsFromMap(map) {
     .sort((left, right) => right.bytes - left.bytes || compareOrdinal(left.group, right.group));
 }
 
+function readProvenanceSourceGroups(record) {
+  if (!isRecord(record) || !Array.isArray(record.moduleIds)) {
+    return [];
+  }
+
+  return sortUnique(
+    record.moduleIds
+      .filter((moduleId) => typeof moduleId === "string" && moduleId.length > 0)
+      .map((moduleId) => resolveSourceGroup(moduleId))
+  );
+}
+
 function resolveSourceGroup(source) {
+  source = source.replaceAll("\\", "/");
   const nodeModulesMarker = "node_modules/";
   const nodeModulesIndex = source.lastIndexOf(nodeModulesMarker);
 
@@ -868,22 +988,35 @@ function evaluateBundleBudget(report, budgetOptions) {
 
   for (const group of budgetOptions.forbiddenInitialSourceGroups) {
     const matchingChunks = report.initialChunks
-      .filter((chunk) => chunk.sourceGroups.some((sourceGroup) => sourceGroup.group === group))
+      .filter((chunk) => chunk.provenanceSourceGroups.includes(group))
       .map((chunk) => chunk.name)
       .sort(compareOrdinal);
     const missingEvidenceChunks = report.initialChunks
-      .filter((chunk) => chunk.sourceMapEvidence.status !== "COMPLETE")
+      .filter(
+        (chunk) =>
+          chunk.provenanceEvidence.status !== "COMPLETE"
+      )
       .map((chunk) => chunk.name)
       .sort(compareOrdinal);
     const evidenceStatus =
-      report.initialChunks.length > 0 && missingEvidenceChunks.length === 0
+      report.initialChunks.length > 0 &&
+      report.provenanceEvidence.status === "COMPLETE" &&
+      missingEvidenceChunks.length === 0
         ? "COMPLETE"
         : "INCOMPLETE";
-    const failed = evidenceStatus !== "COMPLETE" || matchingChunks.length > 0;
+    const invalidSourceMapChunks = report.initialChunks
+      .filter((chunk) => chunk.sourceMapEvidence.status === "INCOMPLETE")
+      .map((chunk) => chunk.name)
+      .sort(compareOrdinal);
+    const failed =
+      evidenceStatus !== "COMPLETE" ||
+      matchingChunks.length > 0 ||
+      invalidSourceMapChunks.length > 0;
 
     checks.push({
       actual: {
         evidenceStatus,
+        invalidSourceMapChunks,
         matchingChunks,
         missingEvidenceChunks
       },
@@ -971,7 +1104,13 @@ function buildBundleEvidence(report, budget) {
       roots: [...report.initialClosureRoots].sort(compareOrdinal)
     },
     lazyRequirements,
+    provenanceEvidence: report.provenanceEvidence,
+    provenanceChunkEvidence: initialChunks.map((chunk) => ({
+      chunk: chunk.name,
+      ...chunk.provenanceEvidence
+    })),
     sourceGraphAuthority: SOURCE_GRAPH_AUTHORITY,
+    sourceGroupAuthority: SOURCE_GROUP_AUTHORITY,
     sourceMapEvidence: initialChunks.map((chunk) => ({
       chunk: chunk.name,
       ...chunk.sourceMapEvidence
@@ -984,17 +1123,15 @@ function collectInitialSourceGroups(initialChunks) {
   const groups = new Map();
 
   for (const chunk of initialChunks) {
-    for (const sourceGroup of chunk.sourceGroups) {
-      const entry = groups.get(sourceGroup.group) ?? { bytes: 0, chunks: new Set() };
-      entry.bytes += sourceGroup.bytes;
+    for (const sourceGroup of chunk.provenanceSourceGroups) {
+      const entry = groups.get(sourceGroup) ?? { chunks: new Set() };
       entry.chunks.add(chunk.name);
-      groups.set(sourceGroup.group, entry);
+      groups.set(sourceGroup, entry);
     }
   }
 
   return Array.from(groups.entries())
     .map(([group, entry]) => ({
-      bytes: entry.bytes,
       chunks: Array.from(entry.chunks).sort(compareOrdinal),
       group
     }))

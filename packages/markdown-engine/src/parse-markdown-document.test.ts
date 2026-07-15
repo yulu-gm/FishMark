@@ -1,6 +1,31 @@
 import { describe, expect, it } from "vitest";
 
-import { collectFootnoteDefinitions, parseMarkdownDocument } from "./index";
+import {
+  collectFootnoteDefinitions,
+  collectReferenceDefinitions,
+  parseBlockMap,
+  parseMarkdownDocument
+} from "./index";
+
+describe("full-document parse instrumentation", () => {
+  it("reports each real micromark document scan instead of inferring scans from public entries", () => {
+    const scans: string[] = [];
+    const instrumentation = {
+      onFullDocumentParse: (event: { kind: string }) => scans.push(event.kind)
+    };
+
+    parseMarkdownDocument("> quoted paragraph", { instrumentation });
+    expect(scans).toEqual(["reference-definitions", "block-map", "block-map"]);
+
+    scans.length = 0;
+    collectReferenceDefinitions("[label]: /target", { instrumentation });
+    expect(scans).toEqual(["reference-definitions"]);
+
+    scans.length = 0;
+    parseBlockMap("# Heading", { instrumentation });
+    expect(scans).toEqual(["block-map"]);
+  });
+});
 
 describe("parseMarkdownDocument footnotes", () => {
   it("collects valid footnote definitions and parses references with absolute ranges", () => {

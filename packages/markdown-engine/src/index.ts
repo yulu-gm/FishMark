@@ -21,6 +21,12 @@ export type {
 } from "./block-map";
 export type { MarkdownDocument } from "./markdown-document";
 export type {
+  MarkdownFullDocumentParseEvent,
+  MarkdownFullDocumentParseKind,
+  MarkdownParseInstrumentation,
+  MarkdownParseOptions
+} from "./parse-instrumentation";
+export type {
   InlineASTNode,
   InlineBaseNode,
   InlineCodeSpan,

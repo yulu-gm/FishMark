@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  formatRendererDerivedDataPerformanceReport,
-  measureRendererDerivedDataPerformance
-} from "./document-derived-ui";
+import { measureRendererDerivedDataPerformance } from "./document-derived-ui";
 
 describe("measureRendererDerivedDataPerformance", () => {
   it("records real outline and metrics parse-entry evidence", () => {
@@ -24,8 +21,10 @@ describe("measureRendererDerivedDataPerformance", () => {
         parseMarkdownDocument: 1,
         parseBlockMap: 0
       });
-      expect(operation.counters).toEqual({
-        fullParse: 1,
+      expect(operation.counters.fullParse).toBeGreaterThan(
+        operation.parserEntries.parseMarkdownDocument + operation.parserEntries.parseBlockMap
+      );
+      expect(operation.counters).toMatchObject({
         incrementalParseWindow: 0,
         cacheHit: 0,
         invalidatedNodes: 0,
@@ -36,7 +35,7 @@ describe("measureRendererDerivedDataPerformance", () => {
       );
     }
 
-    expect(formatRendererDerivedDataPerformanceReport(report)).toContain('"parseMarkdownDocument": 1');
+    expect(report.metrics.counters.fullParse).toBe(report.outline.counters.fullParse + 1);
   }, 15_000);
 });
 

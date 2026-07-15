@@ -84,7 +84,6 @@ export {
 } from "./extensions";
 export {
   INCREMENTAL_STRUCTURE_CACHE_REASON,
-  formatEditorPerformanceProbeReport,
   measureEditorPerformanceProbe,
   type EditorPerformanceCounters,
   type EditorPerformanceOperationName,

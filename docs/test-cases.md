@@ -981,7 +981,7 @@
 3. 确认 performance baseline 在测量前读取 `fixtures/performance/complex-20000-lines.md`，并校验 identity 中的 SHA-256、20,000 logical lines、byte/source length 与 LF-only/no-final-newline policy。
 4. 检查 open、edit、selection、ordered-list edit、outline、metrics 的稳定 counters；确认不存在的 incremental structure cache 仍报告全零与 `incremental-structure-cache-not-implemented`。
 5. 运行 `npm.cmd run perf:baseline`，确认 `perf:bundle` 只传 architecture manifest contract 路径，manifest-owned 23 个 bundle checks、bundle evidence 和同一 focused contract 在一个公开命令内完成。
-6. 在 analyzer unit fixture 中分别移除一个 initial chunk map、写入非法 JSON、使用缺失/错误的 v3 `version`、缺失/非数组或含空/非字符串成员的 `names`、缺失/非字符串/空/非法或不引用 source 的 `mappings`、越界 source/name 引用、缺失 `sourcesContent` 或不一致的 source/content 数量，再运行 `npm.cmd run test -- src/main/analyze-renderer-bundle.test.ts src/main/virtual-runtime-source-map.test.ts`。
+6. 在 analyzer/provenance unit fixture 中覆盖 mapped、real-mapless、virtual-mapless 混合 closure；分别篡改最终 code/map、moduleIds/imports payload、`hasSourceMap` 与 nullable map 字段、缺失/额外 map、未知字段，以及非法 Source Map v3/VLQ/source/name/generated-line/ignore-list 结构，再运行 `npm.cmd run test -- src/main/analyze-renderer-bundle.test.ts src/main/vite-bundle-provenance.test.ts`。
 7. 在 synthetic repository 中分别新增同 importer 的新 CodeMirror package、新 importer 的既有 CodeMirror package、stale/wildcard exception、package rule 复用/错误 kind/sourcePath，以及 static literal `require` / import-equals / import type 的 forbidden/public-entry 穿透。
 8. 在未注册的 markdown-engine module 中分别用 import-equals namespace、literal `require` namespace/destructuring/property rename/direct call，以及 awaited dynamic import namespace/destructuring/property rename/direct call 执行 `micromark.parse().document()`；继续覆盖 direct module `.parse` extraction、确认后的 namespace `.parse` extraction、namespace destructuring/rename、namespace/`parse` 同步别名链与静态 `["parse"]` extraction/call。同时保留仅加载模块、非 document parser、其他包 property/destructure、micromark 非 `parse` property、alias 未调用 `.document()` 和注释/字符串的 negative cases。
 
@@ -995,8 +995,9 @@
 - bundle JSON 顶层包含明确 `schemaVersion`，`bundleEvidence.evidenceScope` 为 `emitted-renderer-output`；source import graph 仍由 architecture guard 负责，bundle analyzer 不声称自己是 TypeScript dependency graph。
 - bundle JSON 同时携带 contract path、architecture/bundle schema version 与 SHA-256；contract 缺失/非法/空、check kind/field/id/limit/target 重复或与 CLI policy flag 混用时必须非零失败。package script 中不得复制 23 条 policy flag 或数值。
 - initial static-import closure、lazy requirement、initial source groups、stable applied check IDs、actual、limit 与 `PASS/FAIL` 都按 ordinal 顺序稳定输出；相同输入连续执行两次 JSON 必须逐字节一致。
-- 任一适用 initial chunk 的 source map 缺失、JSON 非法、不是 Source Map v3、`names` 不是数组/包含空或非字符串成员/被 5-field segment 越界引用、`mappings` 为空/不可解析/没有 source reference/source 引用越界，或 `sources` / `sourcesContent` 形状及对应内容不完整时，requested forbidden source-group rule 必须 `FAIL` 且进程以非零退出；空 `names` 数组本身合法，不能因其他 chunk 有 map 或存在形式 JSON 而通过。
-- sourcemap build 中的纯 Vite/Rolldown virtual runtime chunk 具有真实 identity map：每个 generated line 都映射到单一 synthetic source 的对应行，`sourcesContent[0]` 等于完整 emitted code，module IDs 只进入稳定 `x_fishmark_*` metadata；普通 build 不生成这类证据 artifact，mixed/真实源码 chunk 也没有豁免路径。
+- Vite provenance 的 `moduleIds` 是 forbidden source-group authority。缺失/重复/额外 chunk record、payload/code/map hash 不匹配、imports/dynamicImports 与最终代码或 closure 不一致都必须 `FAIL`；Source Map `sources` 只用于已发出 map 的体积归因，不能隐藏 provenance 中的模块。
+- `hasSourceMap: true` 时最终 map 必须存在并通过 JSON/v3/VLQ/source/name/generated-line/ignore-list 完整性校验；`hasSourceMap: false` 时 map 字段必须为 `null` 且磁盘上不得出现 map。可信 mapless chunk 报告 `NOT_EMITTED`、`map: null`、空 issues，既不伪造 identity map，也不失去 moduleIds authority；安全 mapless closure 可通过，包含 forbidden module 的 mapless closure 必须失败。
+- 普通 build 与 `write:false` build 都不生成 filesystem provenance；普通 renderer build 完成后必须没有 `fishmark-bundle-provenance.json` 或 `.js.map` 残留。
 
 ## 8. 跨平台
 

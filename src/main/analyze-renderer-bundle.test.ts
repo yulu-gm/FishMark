@@ -1,10 +1,18 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
 import { describe, expect, it } from "vitest";
+
+import {
+  BUNDLE_PROVENANCE_FILE_NAME,
+  createBundleProvenanceAsset,
+  type BundleProvenanceChunkInput
+} from "../../scripts/vite-bundle-provenance";
 
 const execFileAsync = promisify(execFile);
 
@@ -124,6 +132,8 @@ describe("scripts/analyze-renderer-bundle.mjs", () => {
     await writeCompleteSourceMap(assetsDir, "index-test.js");
     await writeCompleteSourceMap(assetsDir, "z-shared.js");
     await writeCompleteSourceMap(assetsDir, "A-shared.js");
+    await writeCompleteSourceMap(assetsDir, "settings-view-test.js");
+    await writeBundleProvenance(root);
 
     const args = [
       "scripts/analyze-renderer-bundle.mjs",
@@ -403,6 +413,9 @@ describe("scripts/analyze-renderer-bundle.mjs", () => {
     await writeFile(path.join(assetsDir, "App-test.js"), "console.log('editor');");
     await writeFile(path.join(assetsDir, "index-test.js"), "console.log('react entry');");
     await writeCompleteSourceMap(assetsDir, "App-test.js");
+    await writeCompleteSourceMap(assetsDir, "index-test.js");
+    await writeBundleProvenance(root);
+    await rm(path.join(assetsDir, "index-test.js.map"));
 
     try {
       const failedRun = await expectAnalyzerFailure(root, [
@@ -449,6 +462,214 @@ describe("scripts/analyze-renderer-bundle.mjs", () => {
           missingEvidenceChunks: ["index-test.js"]
         },
         status: "FAIL"
+      });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("fails closed when source-group evidence has no versioned bundle provenance", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "fishmark-bundle-missing-provenance-"));
+    const assetsDir = path.join(root, "assets");
+    await mkdir(assetsDir);
+    await writeFile(path.join(assetsDir, "App-test.js"), "console.log('editor');");
+    await writeCompleteSourceMap(assetsDir, "App-test.js");
+
+    try {
+      const failedRun = await expectAnalyzerFailure(root, [
+        "--json",
+        "--forbid-initial-source-group",
+        "mermaid"
+      ]);
+      const report = JSON.parse(failedRun.stdout) as {
+        bundleEvidence: {
+          provenanceEvidence: { issues: string[]; status: string };
+          status: string;
+        };
+      };
+      expect(failedRun.code).toBe(1);
+      expect(report.bundleEvidence.status).toBe("FAIL");
+      expect(report.bundleEvidence.provenanceEvidence).toEqual({
+        file: "fishmark-bundle-provenance.json",
+        issues: ["bundle-provenance-missing"],
+        status: "INCOMPLETE"
+      });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it.each([
+    ["safe", ["../../src/renderer/App.tsx"], "PASS", []],
+    [
+      "forbidden",
+      ["../../node_modules/mermaid/dist/mermaid.js"],
+      "FAIL",
+      ["App-test.js"]
+    ]
+  ] as const)(
+    "keeps a %s mapless chunk authoritative through provenance moduleIds",
+    async (_name, moduleIds, expectedStatus, expectedMatches) => {
+      const root = await mkdtemp(path.join(tmpdir(), "fishmark-bundle-mapless-"));
+      const assetsDir = path.join(root, "assets");
+      await mkdir(assetsDir);
+      await writeFile(path.join(assetsDir, "App-test.js"), "const value = true;");
+      await writeBundleProvenance(root, { "App-test.js": [...moduleIds] });
+
+      try {
+        const command = [
+          "scripts/analyze-renderer-bundle.mjs",
+          "--dist",
+          root,
+          "--json",
+          "--forbid-initial-source-group",
+          "mermaid"
+        ];
+        const result = expectedStatus === "PASS"
+          ? await execFileAsync(process.execPath, command, { cwd: process.cwd() })
+          : await expectCommandFailure(command);
+        const report = JSON.parse(result.stdout) as {
+          bundleEvidence: {
+            checks: Array<{ actual: { evidenceStatus: string; matchingChunks: string[] } }>;
+            provenanceEvidence: { status: string };
+            sourceMapEvidence: Array<{ issues: string[]; map: string | null; status: string }>;
+            status: string;
+          };
+        };
+
+        expect(report.bundleEvidence).toMatchObject({
+          provenanceEvidence: { status: "COMPLETE" },
+          sourceMapEvidence: [{ issues: [], map: null, status: "NOT_EMITTED" }],
+          status: expectedStatus
+        });
+        expect(report.bundleEvidence.checks[0]?.actual).toMatchObject({
+          evidenceStatus: "COMPLETE",
+          matchingChunks: expectedMatches
+        });
+      } finally {
+        await rm(root, { force: true, recursive: true });
+      }
+    }
+  );
+
+  it("supports mapped, real-mapless, and virtual-mapless chunks in one initial closure", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "fishmark-bundle-mixed-map-state-"));
+    const assetsDir = path.join(root, "assets");
+    await mkdir(assetsDir);
+    await writeFile(
+      path.join(assetsDir, "App-test.js"),
+      'import "./real-runtime.js"; import "./virtual-runtime.js";'
+    );
+    await writeFile(path.join(assetsDir, "real-runtime.js"), "export const real = true;");
+    await writeFile(path.join(assetsDir, "virtual-runtime.js"), "export const virtual = true;");
+    await writeCompleteSourceMap(assetsDir, "App-test.js");
+    await writeBundleProvenance(root, {
+      "App-test.js": ["../../src/renderer/App.tsx"],
+      "real-runtime.js": ["../../node_modules/example-runtime/index.js"],
+      "virtual-runtime.js": ["\0virtual:runtime"]
+    });
+
+    try {
+      const { stdout } = await execFileAsync(process.execPath, [
+        "scripts/analyze-renderer-bundle.mjs",
+        "--dist",
+        root,
+        "--json",
+        "--forbid-initial-source-group",
+        "mermaid"
+      ], { cwd: process.cwd() });
+      const report = JSON.parse(stdout) as {
+        bundleEvidence: {
+          provenanceEvidence: { status: string };
+          sourceMapEvidence: Array<{ chunk: string; status: string }>;
+          status: string;
+        };
+      };
+      expect(report.bundleEvidence).toMatchObject({
+        provenanceEvidence: { status: "COMPLETE" },
+        status: "PASS"
+      });
+      expect(report.bundleEvidence.sourceMapEvidence).toEqual([
+        expect.objectContaining({ chunk: "App-test.js", status: "COMPLETE" }),
+        expect.objectContaining({ chunk: "real-runtime.js", status: "NOT_EMITTED" }),
+        expect.objectContaining({ chunk: "virtual-runtime.js", status: "NOT_EMITTED" })
+      ]);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("fails when a provenance-attested mapless chunk gains an unexpected map", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "fishmark-bundle-mapless-mismatch-"));
+    const assetsDir = path.join(root, "assets");
+    await mkdir(assetsDir);
+    await writeFile(path.join(assetsDir, "App-test.js"), "const value = true;");
+    await writeBundleProvenance(root);
+    await writeCompleteSourceMap(assetsDir, "App-test.js");
+
+    try {
+      const failedRun = await expectAnalyzerFailure(root, [
+        "--json",
+        "--forbid-initial-source-group",
+        "mermaid"
+      ]);
+      const report = JSON.parse(failedRun.stdout) as {
+        bundleEvidence: { provenanceEvidence: { issues: string[]; status: string } };
+      };
+      expect(report.bundleEvidence.provenanceEvidence).toMatchObject({
+        issues: expect.arrayContaining([
+          "bundle-provenance-mapless-disk-mismatch:assets/App-test.js"
+        ]),
+        status: "INCOMPLETE"
+      });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it.each([
+    [
+      "mapless fields are non-null",
+      (record: Record<string, unknown>) => {
+        record.mapFileName = "assets/App-test.js.map";
+        record.mapSha256 = "0".repeat(64);
+      },
+      "bundle-provenance-mapless-fields-invalid:assets/App-test.js"
+    ],
+    [
+      "mapped fields are null",
+      (record: Record<string, unknown>) => {
+        record.hasSourceMap = true;
+      },
+      "bundle-provenance-map-file-name-invalid:assets/App-test.js"
+    ],
+    [
+      "an unknown chunk field is present",
+      (record: Record<string, unknown>) => {
+        record.compatibility = true;
+      },
+      "bundle-provenance-chunk-fields-invalid:assets/App-test.js:compatibility"
+    ]
+  ])("fails closed when %s", async (_name, mutate, expectedIssue) => {
+    const root = await mkdtemp(path.join(tmpdir(), "fishmark-bundle-provenance-shape-"));
+    const assetsDir = path.join(root, "assets");
+    await mkdir(assetsDir);
+    await writeFile(path.join(assetsDir, "App-test.js"), "const value = true;");
+    await writeBundleProvenance(root);
+    await rewriteBundleProvenance(root, mutate);
+
+    try {
+      const failedRun = await expectAnalyzerFailure(root, [
+        "--json",
+        "--forbid-initial-source-group",
+        "mermaid"
+      ]);
+      const report = JSON.parse(failedRun.stdout) as {
+        bundleEvidence: { provenanceEvidence: { issues: string[]; status: string } };
+      };
+      expect(report.bundleEvidence.provenanceEvidence).toMatchObject({
+        issues: expect.arrayContaining([expectedIssue]),
+        status: "INCOMPLETE"
       });
     } finally {
       await rm(root, { force: true, recursive: true });
@@ -598,6 +819,53 @@ describe("scripts/analyze-renderer-bundle.mjs", () => {
       ["source-map-source-reference-invalid"]
     ],
     [
+      "non-array ignoreList",
+      JSON.stringify({
+        ignoreList: {},
+        mappings: "AAAA",
+        names: [],
+        sources: ["../../src/renderer/App.tsx"],
+        sourcesContent: ["export const app = true;"],
+        version: 3
+      }),
+      ["source-map-ignore-list-invalid"]
+    ],
+    [
+      "duplicate ignoreList entries",
+      JSON.stringify({
+        ignoreList: [0, 0],
+        mappings: "AAAA",
+        names: [],
+        sources: ["../../src/renderer/App.tsx"],
+        sourcesContent: ["export const app = true;"],
+        version: 3
+      }),
+      ["source-map-ignore-list-entry-invalid:1"]
+    ],
+    [
+      "out-of-range x_google_ignoreList entry",
+      JSON.stringify({
+        mappings: "AAAA",
+        names: [],
+        sources: ["../../src/renderer/App.tsx"],
+        sourcesContent: ["export const app = true;"],
+        version: 3,
+        x_google_ignoreList: [1]
+      }),
+      ["source-map-google-ignore-list-reference-invalid:0"]
+    ],
+    [
+      "mapping that references a generated line outside the chunk",
+      JSON.stringify({
+        mappings: "AAAA;AACA",
+        names: [],
+        sources: ["../../src/renderer/App.tsx"],
+        sourcesContent: ["export const app = true;"],
+        version: 3
+      }),
+      ["source-map-generated-line-reference-invalid:2"]
+    ],
+    [
       "missing sourcesContent",
       JSON.stringify({ mappings: "AAAA", names: [], sources: ["../../src/renderer/App.tsx"], version: 3 }),
       ["source-map-sources-content-missing"]
@@ -620,6 +888,7 @@ describe("scripts/analyze-renderer-bundle.mjs", () => {
     await mkdir(assetsDir);
     await writeFile(path.join(assetsDir, "App-test.js"), "console.log('editor');");
     await writeFile(path.join(assetsDir, "App-test.js.map"), mapSource);
+    await writeBundleProvenance(root);
 
     try {
       const failedRun = await expectAnalyzerFailure(root, [
@@ -640,6 +909,153 @@ describe("scripts/analyze-renderer-bundle.mjs", () => {
         issues: expectedIssues,
         status: "INCOMPLETE"
       });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it.each([
+    ["generated code", "App-test.js", "bundle-provenance-code-hash-mismatch:assets/App-test.js"],
+    ["source map", "App-test.js.map", "bundle-provenance-map-hash-mismatch:assets/App-test.js"]
+  ])("fails closed when provenance-bound %s is changed", async (_name, target, expectedIssue) => {
+    const root = await mkdtemp(path.join(tmpdir(), "fishmark-bundle-hash-tamper-"));
+    const assetsDir = path.join(root, "assets");
+    await mkdir(assetsDir);
+    await writeFile(path.join(assetsDir, "App-test.js"), "const value = true;");
+    await writeCompleteSourceMap(assetsDir, "App-test.js");
+    await writeBundleProvenance(root);
+    await writeFile(path.join(assetsDir, target), `${await readFile(path.join(assetsDir, target), "utf8")} `);
+
+    try {
+      const failedRun = await expectAnalyzerFailure(root, [
+        "--json",
+        "--forbid-initial-source-group",
+        "mermaid"
+      ]);
+      const report = JSON.parse(failedRun.stdout) as {
+        bundleEvidence: { provenanceEvidence: { issues: string[]; status: string } };
+      };
+      expect(failedRun.code).toBe(1);
+      expect(report.bundleEvidence.provenanceEvidence).toMatchObject({
+        issues: expect.arrayContaining([expectedIssue]),
+        status: "INCOMPLETE"
+      });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it.each(["moduleIds", "imports"] as const)(
+    "fails closed when the provenance %s payload is changed",
+    async (field) => {
+      const root = await mkdtemp(path.join(tmpdir(), "fishmark-bundle-payload-tamper-"));
+      const assetsDir = path.join(root, "assets");
+      await mkdir(assetsDir);
+      await writeFile(path.join(assetsDir, "App-test.js"), 'import "./shared-test.js";');
+      await writeFile(path.join(assetsDir, "shared-test.js"), "export const shared = true;");
+      await writeCompleteSourceMap(assetsDir, "App-test.js");
+      await writeCompleteSourceMap(assetsDir, "shared-test.js");
+      await writeBundleProvenance(root);
+      const provenancePath = path.join(root, BUNDLE_PROVENANCE_FILE_NAME);
+      const provenance = JSON.parse(await readFile(provenancePath, "utf8")) as {
+        chunks: Array<Record<string, unknown>>;
+      };
+      const appRecord = provenance.chunks.find(
+        (record) => record.fileName === "assets/App-test.js"
+      )!;
+      (appRecord[field] as string[]).push(field === "moduleIds" ? "src/tampered.ts" : "assets/tampered.js");
+      await writeFile(provenancePath, JSON.stringify(provenance));
+
+      try {
+        const failedRun = await expectAnalyzerFailure(root, [
+          "--json",
+          "--forbid-initial-source-group",
+          "mermaid"
+        ]);
+        const report = JSON.parse(failedRun.stdout) as {
+          bundleEvidence: { provenanceEvidence: { issues: string[]; status: string } };
+        };
+        expect(failedRun.code).toBe(1);
+        expect(report.bundleEvidence.provenanceEvidence).toMatchObject({
+          issues: expect.arrayContaining(["bundle-provenance-payload-hash-mismatch"]),
+          status: "INCOMPLETE"
+        });
+      } finally {
+        await rm(root, { force: true, recursive: true });
+      }
+    }
+  );
+
+  it("uses provenance moduleIds as the forbidden source-group authority", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "fishmark-bundle-module-authority-"));
+    const assetsDir = path.join(root, "assets");
+    await mkdir(assetsDir);
+    await writeFile(path.join(assetsDir, "App-test.js"), "const value = true;");
+    await writeCompleteSourceMap(assetsDir, "App-test.js", [
+      ["../../src/renderer/App.tsx", "export const app = true;"]
+    ]);
+    await writeBundleProvenance(root, {
+      "App-test.js": ["../../node_modules/mermaid/dist/mermaid.js"]
+    });
+
+    try {
+      const failedRun = await expectAnalyzerFailure(root, [
+        "--json",
+        "--forbid-initial-source-group",
+        "mermaid"
+      ]);
+      const report = JSON.parse(failedRun.stdout) as {
+        bundleEvidence: {
+          checks: Array<{ actual: { matchingChunks: string[] }; id: string }>;
+          sourceGroupAuthority: string;
+          sourceMapEvidence: Array<{ issues: string[]; status: string }>;
+        };
+      };
+      expect(report.bundleEvidence.sourceGroupAuthority).toBe("bundle-provenance-module-ids");
+      expect(report.bundleEvidence.sourceMapEvidence[0]).toMatchObject({ issues: [], status: "COMPLETE" });
+      expect(
+        report.bundleEvidence.checks.find(
+          (check) => check.id === "bundle.forbidden-initial-source-group:mermaid"
+        )?.actual.matchingChunks
+      ).toEqual(["App-test.js"]);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("accepts structurally valid mappings when code and map are provenance-bound", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "fishmark-bundle-line-map-"));
+    const assetsDir = path.join(root, "assets");
+    const generatedSource = "const first = 1;\n\n  const second = 2;";
+    await mkdir(assetsDir);
+    await writeFile(path.join(assetsDir, "App-test.js"), generatedSource);
+    await writeFile(
+      path.join(assetsDir, "App-test.js.map"),
+      JSON.stringify({
+        mappings: "AAAA;;EACA",
+        names: [],
+        sources: ["../../src/renderer/App.tsx"],
+        sourcesContent: [generatedSource],
+        version: 3
+      })
+    );
+    await writeBundleProvenance(root);
+
+    try {
+      const { stdout } = await execFileAsync(process.execPath, [
+        "scripts/analyze-renderer-bundle.mjs",
+        "--dist",
+        root,
+        "--json",
+        "--forbid-initial-source-group",
+        "mermaid"
+      ], { cwd: process.cwd() });
+      const report = JSON.parse(stdout) as {
+        bundleEvidence: { sourceMapEvidence: Array<{ issues: string[]; status: string }> };
+      };
+      expect(report.bundleEvidence.sourceMapEvidence[0]).toEqual(
+        expect.objectContaining({ issues: [], status: "COMPLETE" })
+      );
     } finally {
       await rm(root, { force: true, recursive: true });
     }
@@ -672,6 +1088,8 @@ describe("scripts/analyze-renderer-bundle.mjs", () => {
       })
     );
     await writeCompleteSourceMap(assetsDir, "index-test.js", [["../../src/entry.ts", ""]]);
+    await writeCompleteSourceMap(assetsDir, "export-html-test.js");
+    await writeBundleProvenance(root);
 
     try {
       const passResult = await execFileAsync(process.execPath, [
@@ -757,9 +1175,11 @@ async function createContractBundle(): Promise<string> {
     "theme-surface-runtime-test.js"
   ]) {
     await writeFile(path.join(assetsDir, lazyChunk), "console.log('lazy');");
+    await writeCompleteSourceMap(assetsDir, lazyChunk);
   }
   await writeCompleteSourceMap(assetsDir, "App-test.js");
   await writeCompleteSourceMap(assetsDir, "index-test.js");
+  await writeBundleProvenance(root);
   return root;
 }
 
@@ -784,6 +1204,100 @@ async function writeCompleteSourceMap(
       version: 3
     })
   );
+}
+
+async function writeBundleProvenance(
+  root: string,
+  moduleIdsByChunk: Record<string, string[]> = {}
+): Promise<void> {
+  const assetsDir = path.join(root, "assets");
+  const chunkNames = (await readdir(assetsDir))
+    .filter((fileName) => fileName.endsWith(".js"))
+    .sort(compareOrdinal);
+  const chunks: BundleProvenanceChunkInput[] = [];
+
+  for (const chunkName of chunkNames) {
+    const code = await readFile(path.join(assetsDir, chunkName), "utf8");
+    const mapPath = path.join(assetsDir, `${chunkName}.map`);
+    const hasSourceMap = existsSync(mapPath);
+    const mapSource = hasSourceMap ? await readFile(mapPath, "utf8") : null;
+    const staticImports = readFixtureStaticImports(code).map((dependency) => `assets/${dependency}`);
+    const dynamicImports = readFixtureDynamicImports(code).map(
+      (dependency) => `assets/${dependency}`
+    );
+    chunks.push({
+      code,
+      dynamicImports,
+      fileName: `assets/${chunkName}`,
+      hasSourceMap,
+      imports: staticImports,
+      isDynamicEntry: false,
+      isEntry: chunkName.startsWith("App-"),
+      map: mapSource === null ? null : { toString: () => mapSource },
+      moduleIds: moduleIdsByChunk[chunkName] ?? readFixtureModuleIds(mapSource)
+    });
+  }
+
+  const asset = createBundleProvenanceAsset(true, chunks);
+  await writeFile(path.join(root, BUNDLE_PROVENANCE_FILE_NAME), asset?.source ?? "");
+}
+
+async function rewriteBundleProvenance(
+  root: string,
+  mutate: (record: Record<string, unknown>) => void
+): Promise<void> {
+  const provenancePath = path.join(root, BUNDLE_PROVENANCE_FILE_NAME);
+  const provenance = JSON.parse(await readFile(provenancePath, "utf8")) as {
+    chunks: Array<Record<string, unknown>>;
+    payloadSha256: string;
+  };
+  mutate(provenance.chunks[0]!);
+  provenance.payloadSha256 = createHash("sha256")
+    .update(JSON.stringify(provenance.chunks))
+    .digest("hex");
+  await writeFile(provenancePath, JSON.stringify(provenance));
+}
+
+function readFixtureStaticImports(code: string): string[] {
+  const imports = new Set<string>();
+  for (const pattern of [
+    /\b(?:import|export)(?!\s*\()[^;]*?\bfrom\s*["']\.\/([^"']+\.js)["']/gu,
+    /\bimport\s*["']\.\/([^"']+\.js)["']/gu
+  ]) {
+    for (const match of code.matchAll(pattern)) {
+      if (match[1]) {
+        imports.add(match[1]);
+      }
+    }
+  }
+  return [...imports].sort(compareOrdinal);
+}
+
+function readFixtureDynamicImports(code: string): string[] {
+  return [...code.matchAll(/\bimport\s*\(\s*["'\x60]\.\/([^"'\x60]+\.js)["'\x60]\s*\)/gu)]
+    .map((match) => match[1])
+    .filter((value): value is string => value !== undefined)
+    .sort(compareOrdinal);
+}
+
+function readFixtureModuleIds(mapSource: string | null): string[] {
+  if (mapSource === null) {
+    return ["../../src/renderer/fixture.ts"];
+  }
+  try {
+    const sourceMap = JSON.parse(mapSource) as { sources?: unknown };
+    if (Array.isArray(sourceMap.sources)) {
+      const moduleIds = sourceMap.sources.filter(
+        (source): source is string => typeof source === "string" && source.length > 0
+      );
+      if (moduleIds.length > 0) {
+        return [...new Set(moduleIds)].sort(compareOrdinal);
+      }
+    }
+  } catch {
+    // Invalid source-map fixtures still need valid provenance so the map validator owns the failure.
+  }
+  return ["../../src/renderer/fixture.ts"];
 }
 
 async function expectCommandFailure(

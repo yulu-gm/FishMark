@@ -223,6 +223,67 @@ describe("editor foundation architecture guard", () => {
     expect(expectCodes(validateSynthetic(repository, manifest))).toContain(expectedCode);
   });
 
+  it("rejects a second active forbidden-import rule for the same active package path", () => {
+    const importer = "packages/editor-core/src/codemirror-current.ts";
+    const repository = createSyntheticRepository({
+      [importer]: 'import type { Text } from "@codemirror/state"; export type CurrentText = Text;'
+    });
+    const manifest = readSyntheticManifest(repository);
+    const duplicateRule = structuredClone(findRule(manifest, "boundary.editor-core"));
+    duplicateRule.id = "boundary.editor-core-shadow";
+    (manifest.rules as MutableRecord[]).push(duplicateRule);
+    manifest.exceptions = [
+      createCodeMirrorException(),
+      createCodeMirrorException({
+        id: "exception.synthetic-editor-core-codemirror-shadow",
+        ruleId: "boundary.editor-core-shadow"
+      })
+    ];
+
+    expect(expectCodes(validateSynthetic(repository, manifest))).toContain(
+      "package-boundary-rule-source-reused"
+    );
+  });
+
+  it.each([
+    ["React package", "packages/markdown-engine/src/case-package.ts", 'import "ReAcT";'],
+    [
+      "CodeMirror package",
+      "packages/markdown-engine/src/case-codemirror.ts",
+      'import type { Text } from "@CodeMirror/state"; export type CaseText = Text;'
+    ],
+    ["main path", "src/renderer/case-main.ts", 'import "../Main/secret";'],
+    ["renderer path", "src/main/case-renderer.ts", 'import "../Renderer/secret";']
+  ])("treats %s boundaries case-insensitively", (_name, path, source) => {
+    const repository = createSyntheticRepository({ [path]: source });
+
+    expect(expectCodes(validateSynthetic(repository))).toContain("forbidden-import");
+  });
+
+  it.each([
+    '../../Packages/markdown-engine/src/parse-inline-ast',
+    '@FishMark/markdown-engine/src/parse-inline-ast'
+  ])("rejects a case-variant package-internal import via %s", (specifier) => {
+    const repository = createSyntheticRepository({
+      "src/renderer/case-internal.ts": `import { parseInlineAst } from "${specifier}"; void parseInlineAst;`
+    });
+
+    expect(expectCodes(validateSynthetic(repository))).toContain("non-public-package-import");
+  });
+
+  it("does not let a case-variant specifier reuse an exact exception", () => {
+    const importer = "packages/editor-core/src/codemirror-current.ts";
+    const repository = createSyntheticRepository({
+      [importer]: 'import type { Text } from "@CodeMirror/state"; export type CurrentText = Text;'
+    });
+    const manifest = readSyntheticManifest(repository);
+    manifest.exceptions = [createCodeMirrorException({ specifier: "@codemirror/state" })];
+
+    const codes = expectCodes(validateSynthetic(repository, manifest));
+    expect(codes).toContain("forbidden-import");
+    expect(codes).toContain("stale-exception");
+  });
+
   it("requires a planned package to activate with its own matching forbidden-import rule", () => {
     const repository = createSyntheticRepository({
       "packages/editor-model/src/index.ts": "export const editorModel = true;"
@@ -923,6 +984,33 @@ describe("editor foundation architecture guard", () => {
   });
 
   it.each([
+    ["static document element access", 'import { parse } from "micromark"; parse()["document"]();'],
+    ["parenthesized parse receiver", 'import { parse } from "micromark"; (parse()).document();'],
+    [
+      "wrapped parser variable",
+      'import { parse } from "micromark"; const parser = parse(); (parser as any)["document"]();'
+    ],
+    [
+      "computed parse destructuring",
+      'const { ["parse"]: readMicromark } = require("micromark"); readMicromark().document();'
+    ],
+    [
+      "type assertion and non-null wrappers",
+      'const mm = <any>require("micromark"); (mm["parse"]()!)["document"]();'
+    ],
+    [
+      "satisfies and await wrappers",
+      'const mm = (await import("micromark")) satisfies object; (mm.parse() as any).document();'
+    ]
+  ])("rejects a transparent-wrapper micromark document site through %s", (_name, source) => {
+    const repository = createSyntheticRepository({
+      "packages/markdown-engine/src/wrapped-micromark-site.ts": source
+    });
+
+    expect(expectCodes(validateSynthetic(repository))).toContain("unregistered-micromark-document-site");
+  });
+
+  it.each([
     ["module import without document parse", 'const { parse } = require("micromark"); void parse();'],
     ["non-document parser call", 'const micromark = require("micromark"); micromark.parse().content();'],
     ["another package with matching names", 'const { parse } = require("other-parser"); parse().document();'],
@@ -953,6 +1041,18 @@ describe("editor foundation architecture guard", () => {
         'const sample = \'(await import("micromark")).parse().document()\';',
         "void sample;"
       ].join("\n")
+    ],
+    [
+      "assignment propagation outside the declared sync scope",
+      'import { parse } from "micromark"; let assigned: typeof parse; assigned = parse; assigned().document();'
+    ],
+    [
+      "callback propagation outside the declared sync scope",
+      'import { parse } from "micromark"; [parse].forEach((callbackParse) => callbackParse().document());'
+    ],
+    [
+      "promise propagation outside the declared sync scope",
+      'import { parse } from "micromark"; void Promise.resolve(parse).then((promiseParse) => promiseParse().document());'
     ]
   ])("does not mistake %s for a micromark document site", (_name, source) => {
     const repository = createSyntheticRepository({

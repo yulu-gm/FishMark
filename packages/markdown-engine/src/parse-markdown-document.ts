@@ -21,11 +21,12 @@ import type {
 } from "./inline-ast";
 import type { MarkdownDocument } from "./markdown-document";
 import { parseBlockMap, parseTopLevelBlocks } from "./parse-block-map";
+import type { MarkdownParseOptions } from "./parse-instrumentation";
 import { normalizeReferenceIdentifier, parseInlineAst } from "./parse-inline-ast";
 
-export function parseMarkdownDocument(source: string): MarkdownDocument {
-  const referenceDefinitions = collectReferenceDefinitions(source);
-  const blockMap = parseBlockMap(source);
+export function parseMarkdownDocument(source: string, options: MarkdownParseOptions = {}): MarkdownDocument {
+  const referenceDefinitions = collectReferenceDefinitions(source, options);
+  const blockMap = parseBlockMap(source, options);
   const footnoteDefinitionData = collectFootnoteDefinitionData(source, blockMap.blocks);
   const footnoteDefinitions = enrichFootnoteDefinitions(
     footnoteDefinitionData.definitions,
@@ -40,13 +41,18 @@ export function parseMarkdownDocument(source: string): MarkdownDocument {
   );
 
   return {
-    blocks: blocks.map((block) => attachInlineData(block, source, referenceDefinitions, footnoteDefinitions)),
+    blocks: blocks.map((block) =>
+      attachInlineData(block, source, referenceDefinitions, footnoteDefinitions, options)
+    ),
     referenceDefinitions,
     footnoteDefinitions
   };
 }
 
-export function collectReferenceDefinitions(source: string): Map<string, InlineReferenceDefinition> {
+export function collectReferenceDefinitions(
+  source: string,
+  options: MarkdownParseOptions = {}
+): Map<string, InlineReferenceDefinition> {
   const definitions = new Map<string, InlineReferenceDefinition>();
   let current: {
     destinationEndOffset: number | null;
@@ -59,6 +65,10 @@ export function collectReferenceDefinitions(source: string): Map<string, InlineR
     titleStartOffset: number | null;
   } | null = null;
 
+  options.instrumentation?.onFullDocumentParse({
+    kind: "reference-definitions",
+    sourceLength: source.length
+  });
   for (const [phase, token] of postprocess(parse().document().write(preprocess()(source, "utf8", true)))) {
     const tokenType = token.type as string;
 
@@ -141,8 +151,11 @@ type FootnoteDefinitionData = {
   definitions: Map<string, FootnoteDefinition>;
 };
 
-export function collectFootnoteDefinitions(source: string): Map<string, FootnoteDefinition> {
-  return collectFootnoteDefinitionData(source, parseBlockMap(source).blocks).definitions;
+export function collectFootnoteDefinitions(
+  source: string,
+  options: MarkdownParseOptions = {}
+): Map<string, FootnoteDefinition> {
+  return collectFootnoteDefinitionData(source, parseBlockMap(source, options).blocks).definitions;
 }
 
 function collectFootnoteDefinitionData(
@@ -537,7 +550,8 @@ function attachInlineData(
   block: MarkdownBlock,
   source: string,
   referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition>,
-  footnoteDefinitions: ReadonlyMap<string, FootnoteDefinition>
+  footnoteDefinitions: ReadonlyMap<string, FootnoteDefinition>,
+  options: MarkdownParseOptions
 ): MarkdownBlock {
   if (block.type === "heading") {
     const contentRange = getHeadingContentRange(block, source);
@@ -568,7 +582,13 @@ function attachInlineData(
     return {
       ...block,
       lines,
-      innerBlocks: createBlockquoteInnerBlocks(source, lines, referenceDefinitions, footnoteDefinitions)
+      innerBlocks: createBlockquoteInnerBlocks(
+        source,
+        lines,
+        referenceDefinitions,
+        footnoteDefinitions,
+        options
+      )
     };
   }
 
@@ -728,16 +748,19 @@ function createBlockquoteInnerBlocks(
   source: string,
   lines: readonly InlineLine[],
   referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition>,
-  footnoteDefinitions: ReadonlyMap<string, FootnoteDefinition>
+  footnoteDefinitions: ReadonlyMap<string, FootnoteDefinition>,
+  options: MarkdownParseOptions
 ): MarkdownBlock[] {
   if (lines.length === 0 || !lines.some((line) => line.quoteDepth > 0)) {
     return [];
   }
 
   const innerSource = createBlockquoteInnerSource(source, lines);
-  return parseTopLevelBlocks(innerSource.source)
+  return parseTopLevelBlocks(innerSource.source, options)
     .map((block) => normalizeBlockquoteInnerBlock(block, source, lines, innerSource))
-    .map((block) => attachInlineData(block, source, referenceDefinitions, footnoteDefinitions));
+    .map((block) =>
+      attachInlineData(block, source, referenceDefinitions, footnoteDefinitions, options)
+    );
 }
 
 type BlockquoteInnerSource = {

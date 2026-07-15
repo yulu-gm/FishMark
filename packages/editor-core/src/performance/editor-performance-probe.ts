@@ -2,7 +2,11 @@ import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
 import { parseBlockMap, parseMarkdownDocument } from "@fishmark/markdown-engine";
-import type { BlockMap, MarkdownDocument } from "@fishmark/markdown-engine";
+import type {
+  BlockMap,
+  MarkdownDocument,
+  MarkdownParseInstrumentation
+} from "@fishmark/markdown-engine";
 
 import { createFishMarkMarkdownExtensions } from "../extensions";
 import { countMarkdownLines } from "./long-document-fixtures";
@@ -48,6 +52,7 @@ export type EditorPerformanceProbeReport = {
 
 type ProbeStats = EditorPerformanceParserEntries & {
   decorationRebuild: number;
+  fullDocumentParse: number;
 };
 
 type MeasuredOperation<T> = {
@@ -66,15 +71,21 @@ export function measureEditorPerformanceProbe(input: {
     const stats: ProbeStats = {
       parseBlockMap: 0,
       parseMarkdownDocument: 0,
-      decorationRebuild: 0
+      decorationRebuild: 0,
+      fullDocumentParse: 0
+    };
+    const instrumentation: MarkdownParseInstrumentation = {
+      onFullDocumentParse: () => {
+        stats.fullDocumentParse += 1;
+      }
     };
     const parseMarkdownDocumentWithStats = (source: string): MarkdownDocument => {
       stats.parseMarkdownDocument += 1;
-      return parseMarkdownDocument(source);
+      return parseMarkdownDocument(source, { instrumentation });
     };
     const parseBlockMapWithStats = (source: string): BlockMap => {
       stats.parseBlockMap += 1;
-      return parseBlockMap(source);
+      return parseBlockMap(source, { instrumentation });
     };
     const open = measureOperation(stats, "open", () => {
       const openedView = new EditorView({
@@ -154,10 +165,6 @@ export function measureEditorPerformanceProbe(input: {
   }
 }
 
-export function formatEditorPerformanceProbeReport(report: EditorPerformanceProbeReport): string {
-  return JSON.stringify(report, null, 2);
-}
-
 function measureOperation<T>(
   stats: ProbeStats,
   name: EditorPerformanceOperationName,
@@ -176,7 +183,7 @@ function measureOperation<T>(
       name,
       durationMs: now() - startedAt,
       counters: {
-        fullParse: parserEntries.parseMarkdownDocument + parserEntries.parseBlockMap,
+        fullParse: stats.fullDocumentParse - before.fullDocumentParse,
         incrementalParseWindow: 0,
         cacheHit: 0,
         invalidatedNodes: 0,
