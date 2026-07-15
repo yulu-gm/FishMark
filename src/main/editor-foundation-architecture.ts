@@ -368,7 +368,10 @@ function validatePackages(
     if (!ruleId || !sourcePath) {
       continue;
     }
-    const identity = repoPathComparisonIdentity(sourcePath);
+    const identity = repoPathComparisonIdentity(context.rootDir, sourcePath);
+    if (!identity) {
+      continue;
+    }
     const ruleIds = forbiddenRulesBySourcePath.get(identity) ?? [];
     ruleIds.push(ruleId);
     forbiddenRulesBySourcePath.set(identity, ruleIds);
@@ -435,7 +438,11 @@ function validatePackages(
           });
         }
         const ruleSourcePath = readNonEmptyString(boundaryRule.sourcePath);
-        if (!ruleSourcePath || repoPathComparisonIdentity(ruleSourcePath) !== repoPathComparisonIdentity(path)) {
+        const packagePathIdentity = repoPathComparisonIdentity(context.rootDir, path);
+        const ruleSourcePathIdentity = ruleSourcePath
+          ? repoPathComparisonIdentity(context.rootDir, ruleSourcePath)
+          : null;
+        if (!ruleSourcePathIdentity || ruleSourcePathIdentity !== packagePathIdentity) {
           context.findings.push({
             code: "package-boundary-rule-source-mismatch",
             message: `Active package ${id} path ${path} must match boundary rule sourcePath ${ruleSourcePath ?? "<missing>"}.`,
@@ -452,7 +459,9 @@ function validatePackages(
             ruleId: boundaryRuleId
           });
         }
-        const rulesForPackagePath = forbiddenRulesBySourcePath.get(repoPathComparisonIdentity(path)) ?? [];
+        const rulesForPackagePath = packagePathIdentity
+          ? forbiddenRulesBySourcePath.get(packagePathIdentity) ?? []
+          : [];
         if (rulesForPackagePath.length > 1) {
           context.findings.push({
             code: "package-boundary-rule-source-reused",
@@ -619,12 +628,18 @@ function validateForbiddenImports(
   context: ValidationContext
 ): void {
   const sourcePath = readNonEmptyString(rule.sourcePath);
-  if (!sourcePath || !isSafeManifestPath(context.rootDir, sourcePath)) {
+  const canonicalSourcePath = sourcePath
+    ? resolveRepoRelativePath(context.rootDir, sourcePath)
+    : null;
+  if (!canonicalSourcePath) {
     return;
   }
   const forbiddenPackages = stringArray(rule.forbiddenPackages);
-  const forbiddenPaths = stringArray(rule.forbiddenPaths);
-  for (const importer of collectSources(context, sourcePath)) {
+  const forbiddenPaths = stringArray(rule.forbiddenPaths).flatMap((path) => {
+    const canonicalPath = resolveRepoRelativePath(context.rootDir, path);
+    return canonicalPath ? [canonicalPath] : [];
+  });
+  for (const importer of collectSources(context, canonicalSourcePath)) {
     const analysis = analyze(context, importer);
     if (!analysis) {
       continue;
@@ -633,7 +648,8 @@ function validateForbiddenImports(
       const packageViolation = forbiddenPackages.some((pattern) => packagePatternMatches(pattern, sourceImport.specifier));
       const resolvedPath = resolveImportRepoPath(context.rootDir, importer, sourceImport.specifier);
       const pathViolation =
-        resolvedPath !== null && forbiddenPaths.some((path) => pathIsWithin(resolvedPath, normalizeRepoPath(path)));
+        resolvedPath !== null &&
+        forbiddenPaths.some((path) => pathIsWithin(context.rootDir, resolvedPath, path));
       if (packageViolation || pathViolation) {
         reportViolation(
           ruleId,
@@ -656,10 +672,18 @@ function validatePublicPackageImports(
   const sourcePaths = stringArray(rule.sourcePaths);
   const packagesPath = readNonEmptyString(rule.packagesPath);
   const publicPrefix = readNonEmptyString(rule.publicPrefix);
-  if (!packagesPath || !publicPrefix) {
+  const canonicalPackagesPath = packagesPath
+    ? resolveRepoRelativePath(context.rootDir, packagesPath)
+    : null;
+  if (!canonicalPackagesPath || !publicPrefix) {
     return;
   }
-  const scannedFiles = new Set(sourcePaths.flatMap((sourcePath) => collectSources(context, sourcePath)));
+  const scannedFiles = new Set(
+    sourcePaths.flatMap((sourcePath) => {
+      const canonicalSourcePath = resolveRepoRelativePath(context.rootDir, sourcePath);
+      return canonicalSourcePath ? collectSources(context, canonicalSourcePath) : [];
+    })
+  );
   for (const importer of [...scannedFiles].sort(compareOrdinal)) {
     const analysis = analyze(context, importer);
     if (!analysis) {
@@ -675,9 +699,13 @@ function validatePublicPackageImports(
       } else {
         const resolvedPath = resolveImportRepoPath(context.rootDir, importer, sourceImport.specifier);
         const targetPackage = resolvedPath
-          ? packageNameForInternalSource(resolvedPath, normalizeRepoPath(packagesPath))
+          ? packageNameForInternalSource(context.rootDir, resolvedPath, canonicalPackagesPath)
           : null;
-        const importerPackage = packageNameForImporter(importer, normalizeRepoPath(packagesPath));
+        const importerPackage = packageNameForImporter(
+          context.rootDir,
+          importer,
+          canonicalPackagesPath
+        );
         isViolation =
           targetPackage !== null &&
           asciiCaseFold(targetPackage) !== asciiCaseFold(importerPackage ?? "");
@@ -1103,8 +1131,9 @@ function readRoadmapTasks(
   value: unknown,
   findings: ArchitectureFinding[]
 ): RoadmapTaskEvidence {
-  const path = readNonEmptyString(value);
-  if (!path || !isSafeManifestPath(rootDir, path)) {
+  const rawPath = readNonEmptyString(value);
+  const path = rawPath ? resolveRepoRelativePath(rootDir, rawPath) : null;
+  if (!path) {
     findings.push({ code: "invalid-path", message: `roadmapPath is invalid: ${String(value)}.` });
     return { complete: false, tasks: new Set() };
   }
@@ -1149,15 +1178,16 @@ function readRoadmapTasks(
 }
 
 function validateManifestPath(value: unknown, label: string, context: ValidationContext): string | null {
-  const path = readNonEmptyString(value);
-  if (!path || !isSafeManifestPath(context.rootDir, path)) {
+  const rawPath = readNonEmptyString(value);
+  const path = rawPath ? resolveRepoRelativePath(context.rootDir, rawPath) : null;
+  if (!path) {
     context.findings.push({
       code: "invalid-path",
       message: `${label} must be a repository-relative path that does not escape the root: ${String(value)}.`
     });
     return null;
   }
-  return normalizeRepoPath(path);
+  return path;
 }
 
 function validateActiveRuleDirectory(value: unknown, label: string, context: ValidationContext): string | null {
@@ -1240,12 +1270,21 @@ function validateExistingFile(
   return path;
 }
 
-function isSafeManifestPath(rootDir: string, path: string): boolean {
-  if (isAbsolute(path) || hasWildcard(path)) {
-    return false;
+function resolveRepoRelativePath(rootDir: string, path: string): string | null {
+  if (
+    isAbsolute(path) ||
+    /^[A-Za-z]:[\\/]/u.test(path) ||
+    /^(?:\\\\|\/\/)/u.test(path) ||
+    hasWildcard(path)
+  ) {
+    return null;
   }
-  const relativePath = relative(resolve(rootDir), resolve(rootDir, path));
-  return relativePath.length > 0 && !isEscapingRepoPath(relativePath);
+  const root = resolve(rootDir);
+  const relativePath = relative(root, resolve(root, path.replaceAll("\\", "/")));
+  if (relativePath.length === 0 || isEscapingRepoPath(relativePath)) {
+    return null;
+  }
+  return normalizeRepoPath(relativePath);
 }
 
 function isEscapingRepoPath(path: string): boolean {
@@ -1379,9 +1418,17 @@ function packagePatternMatches(pattern: string, specifier: string): boolean {
   return specifierIdentity === patternIdentity || specifierIdentity.startsWith(`${patternIdentity}/`);
 }
 
-function packageNameForInternalSource(path: string, packagesPath: string): string | null {
-  const pathIdentity = repoPathComparisonIdentity(path);
-  const prefix = `${repoPathComparisonIdentity(packagesPath)}/`;
+function packageNameForInternalSource(
+  rootDir: string,
+  path: string,
+  packagesPath: string
+): string | null {
+  const pathIdentity = repoPathComparisonIdentity(rootDir, path);
+  const packagesPathIdentity = repoPathComparisonIdentity(rootDir, packagesPath);
+  if (!pathIdentity || !packagesPathIdentity) {
+    return null;
+  }
+  const prefix = `${packagesPathIdentity}/`;
   if (!pathIdentity.startsWith(prefix)) {
     return null;
   }
@@ -1390,18 +1437,29 @@ function packageNameForInternalSource(path: string, packagesPath: string): strin
   return packageName && sourceDirectory === "src" ? packageName : null;
 }
 
-function packageNameForImporter(path: string, packagesPath: string): string | null {
-  const pathIdentity = repoPathComparisonIdentity(path);
-  const prefix = `${repoPathComparisonIdentity(packagesPath)}/`;
+function packageNameForImporter(
+  rootDir: string,
+  path: string,
+  packagesPath: string
+): string | null {
+  const pathIdentity = repoPathComparisonIdentity(rootDir, path);
+  const packagesPathIdentity = repoPathComparisonIdentity(rootDir, packagesPath);
+  if (!pathIdentity || !packagesPathIdentity) {
+    return null;
+  }
+  const prefix = `${packagesPathIdentity}/`;
   if (!pathIdentity.startsWith(prefix)) {
     return null;
   }
   return pathIdentity.slice(prefix.length).split("/")[0] ?? null;
 }
 
-function pathIsWithin(path: string, parent: string): boolean {
-  const pathIdentity = repoPathComparisonIdentity(path);
-  const parentIdentity = repoPathComparisonIdentity(parent);
+function pathIsWithin(rootDir: string, path: string, parent: string): boolean {
+  const pathIdentity = repoPathComparisonIdentity(rootDir, path);
+  const parentIdentity = repoPathComparisonIdentity(rootDir, parent);
+  if (!pathIdentity || !parentIdentity) {
+    return false;
+  }
   return pathIdentity === parentIdentity || pathIdentity.startsWith(`${parentIdentity}/`);
 }
 
@@ -1421,8 +1479,9 @@ function normalizeRepoPath(path: string): string {
   return path.replaceAll("\\", "/").replace(/^\.\//u, "").replace(/\/$/u, "");
 }
 
-function repoPathComparisonIdentity(path: string): string {
-  return asciiCaseFold(normalizeRepoPath(path));
+function repoPathComparisonIdentity(rootDir: string, path: string): string | null {
+  const canonicalPath = resolveRepoRelativePath(rootDir, path);
+  return canonicalPath ? asciiCaseFold(canonicalPath) : null;
 }
 
 function asciiCaseFold(value: string): string {

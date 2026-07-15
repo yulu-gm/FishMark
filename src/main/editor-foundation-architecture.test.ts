@@ -246,6 +246,49 @@ describe("editor foundation architecture guard", () => {
   });
 
   it.each([
+    ["dot segment", "packages/editor-core/."],
+    ["parent segment", "packages/markdown-engine/../editor-core"],
+    ["repeated separators", "packages//editor-core"],
+    ["backslashes", "packages\\editor-core\\."],
+    ["case and segment combination", "Packages\\markdown-engine\\..\\EDITOR-core\\."]
+  ])("rejects a second active rule using a canonical %s alias", (_name, sourcePath) => {
+    const importer = "packages/editor-core/src/codemirror-current.ts";
+    const repository = createSyntheticRepository({
+      [importer]: 'import type { Text } from "@codemirror/state"; export type CurrentText = Text;'
+    });
+    const manifest = readSyntheticManifest(repository);
+    const duplicateRule = structuredClone(findRule(manifest, "boundary.editor-core"));
+    duplicateRule.id = "boundary.editor-core-shadow";
+    duplicateRule.sourcePath = sourcePath;
+    (manifest.rules as MutableRecord[]).push(duplicateRule);
+    manifest.exceptions = [
+      createCodeMirrorException(),
+      createCodeMirrorException({
+        id: "exception.synthetic-editor-core-codemirror-shadow",
+        ruleId: "boundary.editor-core-shadow"
+      })
+    ];
+
+    expect(expectCodes(validateSynthetic(repository, manifest))).toContain(
+      "package-boundary-rule-source-reused"
+    );
+  });
+
+  it("accepts package and rule paths that resolve to the same normalized directory", () => {
+    const importer = "packages/editor-core/src/codemirror-current.ts";
+    const repository = createSyntheticRepository({
+      [importer]: 'import type { Text } from "@codemirror/state"; export type CurrentText = Text;'
+    });
+    const manifest = readSyntheticManifest(repository);
+    findPackage(manifest, "editor-core").path = "packages/editor-core/.";
+    findRule(manifest, "boundary.editor-core").sourcePath =
+      "packages/markdown-engine/../editor-core";
+    manifest.exceptions = [createCodeMirrorException()];
+
+    expect(validateSynthetic(repository, manifest)).toEqual({ findings: [], ok: true });
+  });
+
+  it.each([
     ["React package", "packages/markdown-engine/src/case-package.ts", 'import "ReAcT";'],
     [
       "CodeMirror package",
@@ -366,6 +409,75 @@ describe("editor foundation architecture guard", () => {
     });
 
     expect(expectCodes(validateSynthetic(repository))).toContain("forbidden-import");
+  });
+
+  it.each([
+    ["parenthesized dynamic import", "src/renderer/wrapped-dynamic.ts", 'void import(("../main/secret"));'],
+    ["as-const dynamic import", "src/renderer/wrapped-dynamic-as.ts", 'void import("../main/secret" as const);'],
+    ["parenthesized require", "packages/markdown-engine/src/wrapped-require.ts", 'void require(("react"));'],
+    [
+      "type-asserted require",
+      "packages/markdown-engine/src/wrapped-require-asserted.ts",
+      'void require(<const>"react");'
+    ],
+    [
+      "satisfies and non-null require",
+      "packages/markdown-engine/src/wrapped-require-satisfies.ts",
+      'void require(("react" satisfies string)!);'
+    ]
+  ])("detects a forbidden dependency through %s", (_name, path, source) => {
+    const repository = createSyntheticRepository({ [path]: source });
+
+    expect(expectCodes(validateSynthetic(repository))).toContain("forbidden-import");
+  });
+
+  it.each([
+    ["parenthesized require", 'const mm = require(("micromark")); mm.parse().document();'],
+    ["parenthesized import", 'const mm = await import(("micromark")); mm.parse().document();'],
+    ["as-const require", 'const mm = require("micromark" as const); mm.parse().document();'],
+    ["as-const import", 'const mm = await import("micromark" as const); mm.parse().document();'],
+    ["type assertion", 'const mm = require(<const>"micromark"); mm.parse().document();'],
+    [
+      "satisfies and non-null",
+      'const mm = require(("micromark" satisfies string)!); mm.parse().document();'
+    ]
+  ])("collects and classifies a micromark module through %s", (_name, source) => {
+    const path = "packages/markdown-engine/src/wrapped-micromark-module.ts";
+    const repository = createSyntheticRepository({ [path]: source });
+    const analysis = analyzeSourceModule(repository, path);
+
+    expect(analysis.parseDiagnostics).toEqual([]);
+    expect(analysis.imports).toEqual([
+      {
+        kind: source.includes("import(") ? "dynamic-import" : "require-call",
+        specifier: "micromark"
+      }
+    ]);
+    expect(analysis.hasMicromarkDocumentParse).toBe(true);
+    expect(expectCodes(validateSynthetic(repository))).toContain(
+      "unregistered-micromark-document-site"
+    );
+  });
+
+  it.each([
+    [
+      "non-literal module name",
+      'const moduleName = "micromark"; const mm = require(moduleName); mm.parse().document();',
+      []
+    ],
+    [
+      "wrapped other package",
+      'const mm = require(("other-parser" as const)); mm.parse().document();',
+      [{ kind: "require-call", specifier: "other-parser" }]
+    ]
+  ])("does not classify %s as a micromark module", (_name, source, expectedImports) => {
+    const path = "packages/markdown-engine/src/wrapped-micromark-negative.ts";
+    const repository = createSyntheticRepository({ [path]: source });
+    const analysis = analyzeSourceModule(repository, path);
+
+    expect(analysis.parseDiagnostics).toEqual([]);
+    expect(analysis.imports).toEqual(expectedImports);
+    expect(analysis.hasMicromarkDocumentParse).toBe(false);
   });
 
   it.each([

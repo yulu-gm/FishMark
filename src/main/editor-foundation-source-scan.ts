@@ -184,10 +184,12 @@ export function analyzeSourceModule(rootDir: string, path: string): SourceModule
     if (
       ts.isCallExpression(node) &&
       node.expression.kind === ts.SyntaxKind.ImportKeyword &&
-      node.arguments.length >= 1 &&
-      isStringLiteralLike(node.arguments[0])
+      node.arguments.length >= 1
     ) {
-      imports.push({ kind: "dynamic-import", specifier: node.arguments[0].text });
+      const specifier = readTransparentStringLiteral(node.arguments[0]);
+      if (specifier !== null) {
+        imports.push({ kind: "dynamic-import", specifier });
+      }
     }
 
     // Without a type checker, a locally shadowed CommonJS loader cannot be
@@ -197,10 +199,12 @@ export function analyzeSourceModule(rootDir: string, path: string): SourceModule
       ts.isCallExpression(node) &&
       ts.isIdentifier(node.expression) &&
       node.expression.text === "require" &&
-      node.arguments.length === 1 &&
-      isStringLiteralLike(node.arguments[0])
+      node.arguments.length === 1
     ) {
-      imports.push({ kind: "require-call", specifier: node.arguments[0].text });
+      const specifier = readTransparentStringLiteral(node.arguments[0]);
+      if (specifier !== null) {
+        imports.push({ kind: "require-call", specifier });
+      }
     }
 
     if (ts.isVariableDeclaration(node) && node.initializer) {
@@ -430,8 +434,8 @@ function isMicromarkModuleExpression(expression: ts.Expression): boolean {
   if (!ts.isCallExpression(candidate) || candidate.arguments.length < 1) {
     return false;
   }
-  const specifier = candidate.arguments[0];
-  if (!isStringLiteralLike(specifier) || specifier.text !== "micromark") {
+  const specifier = readTransparentStringLiteral(candidate.arguments[0]);
+  if (specifier !== "micromark") {
     return false;
   }
 
@@ -456,6 +460,14 @@ function unwrapTransparentExpression(expression: ts.Expression): ts.Expression {
     candidate = candidate.expression;
   }
   return candidate;
+}
+
+function readTransparentStringLiteral(expression: ts.Expression | undefined): string | null {
+  if (!expression) {
+    return null;
+  }
+  const candidate = unwrapTransparentExpression(expression);
+  return isStringLiteralLike(candidate) ? candidate.text : null;
 }
 
 function readStaticPropertyName(name: ts.PropertyName): string | null {
