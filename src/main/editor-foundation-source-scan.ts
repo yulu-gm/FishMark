@@ -195,15 +195,13 @@ export function analyzeSourceModule(rootDir: string, path: string): SourceModule
     // Without a type checker, a locally shadowed CommonJS loader cannot be
     // distinguished from Node dependency loading reliably. Literal calls are
     // treated conservatively as dependency evidence; non-literal calls are ignored.
-    if (
-      ts.isCallExpression(node) &&
-      ts.isIdentifier(node.expression) &&
-      node.expression.text === "require" &&
-      node.arguments.length === 1
-    ) {
-      const specifier = readTransparentStringLiteral(node.arguments[0]);
-      if (specifier !== null) {
-        imports.push({ kind: "require-call", specifier });
+    if (ts.isCallExpression(node) && node.arguments.length === 1) {
+      const callee = unwrapTransparentExpression(node.expression);
+      if (ts.isIdentifier(callee) && callee.text === "require") {
+        const specifier = readTransparentStringLiteral(node.arguments[0]);
+        if (specifier !== null) {
+          imports.push({ kind: "require-call", specifier });
+        }
       }
     }
 
@@ -439,10 +437,11 @@ function isMicromarkModuleExpression(expression: ts.Expression): boolean {
     return false;
   }
 
+  const callee = unwrapTransparentExpression(candidate.expression);
   return (
-    candidate.expression.kind === ts.SyntaxKind.ImportKeyword ||
-    (ts.isIdentifier(candidate.expression) &&
-      candidate.expression.text === "require" &&
+    callee.kind === ts.SyntaxKind.ImportKeyword ||
+    (ts.isIdentifier(callee) &&
+      callee.text === "require" &&
       candidate.arguments.length === 1)
   );
 }

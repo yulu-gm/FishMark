@@ -432,6 +432,26 @@ describe("editor foundation architecture guard", () => {
   });
 
   it.each([
+    ["parenthesized callee", '(require)("react");'],
+    ["as-asserted callee and argument", '(require as any)(("react" as const));'],
+    ["type-asserted callee and argument", '(<any>require)(<const>"react");'],
+    [
+      "satisfies and non-null callee and argument",
+      `((require satisfies any)!)(('react' satisfies string)!);`
+    ],
+    [
+      "awaited nested callee and argument",
+      `void ((await require) as any)!(('react' as const)!);`
+    ]
+  ])("detects a forbidden dependency through a %s", (_name, source) => {
+    const repository = createSyntheticRepository({
+      "packages/markdown-engine/src/wrapped-require-callee.ts": source
+    });
+
+    expect(expectCodes(validateSynthetic(repository))).toContain("forbidden-import");
+  });
+
+  it.each([
     ["parenthesized require", 'const mm = require(("micromark")); mm.parse().document();'],
     ["parenthesized import", 'const mm = await import(("micromark")); mm.parse().document();'],
     ["as-const require", 'const mm = require("micromark" as const); mm.parse().document();'],
@@ -457,6 +477,63 @@ describe("editor foundation architecture guard", () => {
     expect(expectCodes(validateSynthetic(repository))).toContain(
       "unregistered-micromark-document-site"
     );
+  });
+
+  it.each([
+    ["parenthesized callee", 'const mm = (require)("micromark"); mm.parse().document();'],
+    [
+      "as-asserted callee and argument",
+      'const mm = (require as any)(("micromark" as const)); mm.parse().document();'
+    ],
+    [
+      "satisfies callee",
+      '((require satisfies any))("micromark").parse().document();'
+    ],
+    [
+      "type-asserted non-null callee and argument",
+      'const mm = ((<any>require)!)(<const>"micromark"); mm.parse().document();'
+    ],
+    [
+      "awaited nested callee and argument",
+      `((await require) as any)!(('micromark' satisfies string)!).parse().document();`
+    ]
+  ])("collects and classifies micromark through a %s", (_name, source) => {
+    const path = "packages/markdown-engine/src/wrapped-micromark-callee.ts";
+    const repository = createSyntheticRepository({ [path]: source });
+    const analysis = analyzeSourceModule(repository, path);
+
+    expect(analysis.parseDiagnostics).toEqual([]);
+    expect(analysis.imports).toEqual([{ kind: "require-call", specifier: "micromark" }]);
+    expect(analysis.hasMicromarkDocumentParse).toBe(true);
+    expect(expectCodes(validateSynthetic(repository))).toContain(
+      "unregistered-micromark-document-site"
+    );
+  });
+
+  it.each([
+    [
+      "non-literal module name",
+      'const name = "micromark"; const mm = (require as any)(name); mm.parse().document();',
+      []
+    ],
+    [
+      "wrapped other package",
+      'const mm = (require as any)(("other-parser" as const)); mm.parse().document();',
+      [{ kind: "require-call", specifier: "other-parser" }]
+    ],
+    [
+      "property require",
+      'globalThis.require(("micromark" as const)).parse().document();',
+      []
+    ]
+  ])("does not classify a wrapped callee with %s as micromark", (_name, source, expectedImports) => {
+    const path = "packages/markdown-engine/src/wrapped-micromark-callee-negative.ts";
+    const repository = createSyntheticRepository({ [path]: source });
+    const analysis = analyzeSourceModule(repository, path);
+
+    expect(analysis.parseDiagnostics).toEqual([]);
+    expect(analysis.imports).toEqual(expectedImports);
+    expect(analysis.hasMicromarkDocumentParse).toBe(false);
   });
 
   it.each([
