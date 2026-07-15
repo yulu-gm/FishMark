@@ -125,17 +125,31 @@ describe("WorkspaceState tab lifecycle", () => {
   it("reactivates only tabs owned by the requested window and updates focus", () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const firstTabId = workspace.createUntitledTab("window-1").activeTabId!;
+    const firstTabId = workspace.openDocument(
+      "window-1",
+      createDocument("first.md", "# First\n")
+    ).activeTabId!;
+    const secondTabId = workspace.openDocument(
+      "window-1",
+      createDocument("second.md", "# Second\n")
+    ).activeTabId!;
     workspace.registerWindow("window-2");
-    const secondTabId = workspace.createUntitledTab("window-2").activeTabId!;
+    const foreignTabId = workspace.createUntitledTab("window-2").activeTabId!;
 
-    expect(() => workspace.activateTab("window-1", secondTabId)).toThrow(
-      `Unknown tab '${secondTabId}' for window 'window-1'.`
+    expect(() => workspace.activateTab("window-1", foreignTabId)).toThrow(
+      `Unknown tab '${foreignTabId}' for window 'window-1'.`
     );
-    expect(workspace.getWindowProjection("window-1").activeTabId).toBe(firstTabId);
+    expect(workspace.getWindowProjection("window-1").activeTabId).toBe(secondTabId);
     expect(workspace.getLastFocusedWindowId()).toBe("window-2");
 
-    workspace.activateTab("window-1", firstTabId);
+    const activated = workspace.activateTab("window-1", firstTabId);
+
+    expect(activated.activeTabId).toBe(firstTabId);
+    expect(activated.activeDocument).toMatchObject({
+      tabId: firstTabId,
+      path: "C:/notes/first.md",
+      content: "# First\n"
+    });
     expect(workspace.getLastFocusedWindowId()).toBe("window-1");
   });
 
@@ -297,13 +311,24 @@ describe("WorkspaceState tab ordering and movement", () => {
     workspace.registerWindow("window-1");
     const firstTabId = workspace.openDocument("window-1", createDocument("first.md")).activeTabId!;
     const secondTabId = workspace.openDocument("window-1", createDocument("second.md")).activeTabId!;
-    workspace.openDocument("window-1", createDocument("third.md"));
+    const thirdTabId = workspace.openDocument(
+      "window-1",
+      createDocument("third.md", "# Third\n")
+    ).activeTabId!;
 
-    expect(workspace.reorderTab(firstTabId, 100).tabs.map((tab) => tab.name)).toEqual([
+    const movedToEnd = workspace.reorderTab(firstTabId, 100);
+
+    expect(movedToEnd.tabs.map((tab) => tab.name)).toEqual([
       "second.md",
       "third.md",
       "first.md"
     ]);
+    expect(movedToEnd.activeTabId).toBe(thirdTabId);
+    expect(movedToEnd.activeDocument).toMatchObject({
+      tabId: thirdTabId,
+      path: "C:/notes/third.md",
+      content: "# Third\n"
+    });
     expect(workspace.reorderTab(firstTabId, -100).tabs.map((tab) => tab.name)).toEqual([
       "first.md",
       "second.md",
@@ -354,7 +379,10 @@ describe("WorkspaceState tab ordering and movement", () => {
   it("moves a dirty tab across windows without losing text or revisions", () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    workspace.openDocument("window-1", createDocument("first.md"));
+    const firstTabId = workspace.openDocument(
+      "window-1",
+      createDocument("first.md", "# First\n")
+    ).activeTabId!;
     const movedTabId = workspace.openDocument("window-1", createDocument("second.md", "saved")).activeTabId!;
     workspace.updateTabDraft(movedTabId, "dirty draft");
     workspace.registerWindow("window-2");
@@ -367,10 +395,23 @@ describe("WorkspaceState tab ordering and movement", () => {
     });
 
     expect(moved.sourceWindowSnapshot.tabs.map((tab) => tab.name)).toEqual(["first.md"]);
+    expect(moved.sourceWindowSnapshot.activeTabId).toBe(firstTabId);
+    expect(moved.sourceWindowSnapshot.activeDocument).toMatchObject({
+      tabId: firstTabId,
+      path: "C:/notes/first.md",
+      content: "# First\n"
+    });
     expect(moved.targetWindowSnapshot.tabs.map((tab) => tab.name)).toEqual([
       "second.md",
       "other.md"
     ]);
+    expect(moved.targetWindowSnapshot.activeTabId).toBe(movedTabId);
+    expect(moved.targetWindowSnapshot.activeDocument).toMatchObject({
+      tabId: movedTabId,
+      path: "C:/notes/second.md",
+      content: "dirty draft",
+      isDirty: true
+    });
     expect(workspace.getTabSession(movedTabId)).toMatchObject({
       windowId: "window-2",
       content: "dirty draft",
@@ -438,18 +479,26 @@ describe("WorkspaceState detach operations", () => {
     workspace.registerWindow("window-1");
     const tabId = workspace.openDocument("window-1", createDocument("moved.md")).activeTabId!;
     workspace.registerWindow("window-2");
-    workspace.openDocument("window-2", createDocument("existing.md"));
+    workspace.openDocument("window-2", createDocument("existing-first.md"));
+    workspace.openDocument("window-2", createDocument("existing-second.md"));
 
     const detached = workspace.detachTabToWindow({
       tabId,
       targetWindowId: "window-2",
-      targetIndex: 0
+      targetIndex: 1
     });
 
     expect(detached.targetWindowSnapshot.tabs.map((tab) => tab.name)).toEqual([
+      "existing-first.md",
       "moved.md",
-      "existing.md"
+      "existing-second.md"
     ]);
+    expect(detached.targetWindowSnapshot.activeTabId).toBe(tabId);
+    expect(detached.targetWindowSnapshot.activeDocument).toMatchObject({
+      tabId,
+      path: "C:/notes/moved.md",
+      content: "# moved.md\n"
+    });
   });
 
   it("does not leave a target window behind for an invalid source or index", () => {
