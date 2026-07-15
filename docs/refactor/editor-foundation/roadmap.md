@@ -651,11 +651,11 @@ npm.cmd run test:editing-experience
 
 **Steps:**
 
-- [ ] Add import-boundary assertions for the target packages as they appear.
-- [ ] Add forbidden-symbol checks for retired APIs listed in each cutover task.
-- [ ] Move the stress document from `tmp/` into a deterministic fixture with a recorded hash.
-- [ ] Capture current open/edit/selection/derived-state counters as the comparison baseline.
-- [ ] Make reports distinguish full parse, incremental parse window, cache hit, invalidated nodes, and decoration rebuild.
+- [x] Add import-boundary assertions for the target packages as they appear.
+- [x] Add forbidden-symbol checks for retired APIs listed in each cutover task.
+- [x] Move the stress document from `tmp/` into a deterministic fixture with a recorded hash.
+- [x] Capture current open/edit/selection/derived-state counters as the comparison baseline.
+- [x] Make reports distinguish full parse, incremental parse window, cache hit, invalidated nodes, and decoration rebuild.
 
 **Verification:**
 

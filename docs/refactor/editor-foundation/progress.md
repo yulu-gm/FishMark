@@ -10,9 +10,9 @@
 
 **Overall status:** `IN_PROGRESS`
 
-**Current task:** `RF-002` — Architecture and performance guards
+**Current task:** None — `RF-002` accepted; `RF-101` remains `PLANNED`
 
-**Next required skill:** `$fishmark-architecture-acceptance` for `RF-002`, followed by `$fishmark-task-acceptance`
+**Next required skill:** `$fishmark-task-intake` for `RF-101`
 
 ## 1. Status vocabulary
 
@@ -31,7 +31,7 @@ At most one `RF-xxx` task may be `IN_PROGRESS` or `ACCEPTING` at a time. A later
 
 | Milestone | Purpose | Status | Complete | Total | Blocking gate |
 | --- | --- | --- | ---: | ---: | --- |
-| M0 | Invariants and executable baselines | `IN_PROGRESS` | 1 | 2 | Behavior matrix and architecture/performance baseline exist |
+| M0 | Invariants and executable baselines | `COMPLETE` | 2 | 2 | Behavior matrix and architecture/performance baseline exist |
 | M1 | Canonical workspace domain | `PLANNED` | 0 | 2 | Old main-local workspace service/application removed |
 | M2 | Revisioned edit transport | `PLANNED` | 0 | 4 | Full-draft sync and renderer writable projection removed |
 | M3 | Data safety and recovery | `PLANNED` | 0 | 4 | Inactive files protected; save/recovery/close are canonical |
@@ -43,7 +43,7 @@ At most one `RF-xxx` task may be `IN_PROGRESS` or `ACCEPTING` at a time. A later
 | M9 | Performance, E2E, and security | `PLANNED` | 0 | 3 | Budgets, Playwright flows, and Electron security pass |
 | M10 | Purge and final acceptance | `PLANNED` | 0 | 2 | No compatibility/dead code; final verdict `PASS` |
 
-**Program completion:** 1 / 38 tasks.
+**Program completion:** 2 / 38 tasks.
 
 ## 3. Task ledger
 
@@ -52,7 +52,7 @@ Evidence columns are filled only with fresh command output/report paths from the
 | ID | Task | Depends on | Status | Focused evidence | Full gates | Acceptance record | Commit/branch |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | RF-001 | Editing behavior baseline | — | `COMPLETE` | Canonical/formal runner, observer, protocol, launcher, identity, Typora conversion, listener, and process-tree boundaries accepted; fresh harness + driver: 27 files / 165 tests; public scenario: 121/121 steps in one batch. | Fresh formal Electron gate: 121/121 cases, 2,541/2,541 targets, 79 existing + 1,928 runner matches, 534 exact known defects, 0 unexpected, 0 not-run, 24.573s; public scenario 25.351s; editing experience 79/79; lint 0 errors (8 pre-existing warnings), typecheck, 135-file/1,487-test suite, build, and diff check passed. | Architecture `PASS`; task `PASS`; `reports/task-summaries/RF-001.md` | `codex/editor-foundation-refactor` |
-| RF-002 | Architecture and performance guards | RF-001 | `DEV_DONE` | Architecture guard 177/177; public foundation gate 7 files/253 tests; analyzer 48/48; provenance plugin 7/7; final `perf:baseline` 7 files/240 tests. The manifest owns 23 bundle checks and 73 exact CodeMirror targets; real micromark scan counters, resolved/case-folded repository paths, transparent dependency/site module arguments and literal `require` callees, and schema-v1 Vite module provenance close the reviewed evidence gaps. | lint 0 errors/8 pre-existing warnings; typecheck; 138-file/1,738-test suite; renderer/Electron/CLI build; formal behavior baseline 121/121 cases and 2,541/2,541 targets with 79 existing + 1,928 runner + 534 known + 0 unexpected/not-run; ordinary dist 0 maps/0 provenance; diff check all passed. The final scanner-only delta has documented performance and behavior waivers because no performance or product editor path changed. | Earlier architecture `FAIL` at `869b9f9`, `b870a36`, `fe26b6a`, `3e0c34e` and `3d8c2b4`; all findings plus the final evidence-completeness reviews are repaired. Architecture re-review, then task acceptance, remains required; `docs/plans/2026-07-14-rf-002-handoff.md` | `codex/editor-foundation-refactor` |
+| RF-002 | Architecture and performance guards | RF-001 | `COMPLETE` | Fresh public foundation gate 7 files/253 tests; fresh `perf:baseline` 23/23 contract checks and 7 files/253 tests. The manifest owns 73 exact CodeMirror targets; real micromark scan counters, resolved/case-folded repository paths, transparent dependency/site module arguments and literal `require` callees, and schema-v1 Vite module provenance close the reviewed evidence gaps. | Fresh lint 0 errors/8 pre-existing warnings; typecheck; 138-file/1,738-test suite; renderer/Electron/CLI build; exclusive formal behavior 121/121 cases and 2,541/2,541 targets with 79 existing + 1,928 runner + 534 known + 0 unexpected/not-run in 24.570s; ordinary dist 0 maps/0 provenance; diff check all passed. | Architecture `PASS` over `a6da237..53824a7`, 0 blocking findings/no open questions; task `PASS`; `reports/task-summaries/RF-002.md` | `codex/editor-foundation-refactor` at implementation head `53824a7` |
 | RF-101 | Extract workspace domain | RF-002 | `PLANNED` | — | lint/typecheck/test/build | — | — |
 | RF-102 | Extract workspace application ports/use cases | RF-101 | `PLANNED` | — | lint/typecheck/test/build | — | — |
 | RF-201 | Persistent text buffer and session revisions | RF-102 | `PLANNED` | — | typecheck/test/build | — | — |
@@ -107,78 +107,83 @@ Evidence columns are filled only with fresh command output/report paths from the
 
 ### Task
 
-`RF-001 — Editing behavior baseline`
+`RF-002 — Architecture and performance guards`
 
 ### Status
 
-`COMPLETE` — architecture and task acceptance passed on 2026-07-14. `RF-002` is `DEV_DONE` under its separate execution handoff; all earlier review findings and the final evidence-completeness closure are implemented, and the task is pending a fresh architecture re-review.
+`COMPLETE` — independent architecture acceptance and formal task acceptance passed on 2026-07-15. M0 is 2/2 complete. `RF-101` remains `PLANNED` and has not started.
 
 ### Goal
 
-Create one executable behavior corpus for structural Markdown editing before changing parser, document ownership, semantic commands, or CodeMirror integration.
+Freeze current dependency/parser lifecycle, one canonical 20,000-line RF fixture, honest operation counters, and deterministic emitted-bundle evidence before moving editor foundations.
 
 ### In scope
 
-- Consolidating existing Typora oracle cases, FishMark editing probes, and relevant unit cases.
-- Adding recursive list/blockquote/code-fence paths required by the roadmap.
-- Recording source, selection, visible-line role, repeat-operation, and undo expectations.
-- Separating intended behavior from current known defects.
+- One fail-closed architecture manifest for active/planned packages, parser lifecycle, exact debt exceptions, retirements, and public bundle checks.
+- Registered public/internal document parser surfaces and supported direct micromark document-site forms.
+- One committed, hash-bound 20,000-line Markdown fixture.
+- Real current open/edit/selection/ordered-list/outline/metrics counters with explicit unavailable capability reasons.
+- Schema-v1 Vite provenance and strict emitted Source Map validation, with `moduleIds` as forbidden source-group authority.
 
 ### Out of scope
 
-- Changing editor behavior.
-- Fixing current defects.
-- Introducing new parser/cache/domain packages.
-- Changing product UI.
+- Recursive parser/cache implementation, parser worker, semantic command refactor, CodeMirror adapter extraction, workspace ownership migration, and persistence changes.
+- Millisecond CI thresholds or claims of incremental reuse that does not exist yet.
+- User-visible syntax, formatting, selection, IME, undo, autosave, or save behavior changes.
 
 ### Landing area
 
-- `fixtures/editor-behavior/`
-- `packages/test-harness/src/scenarios/`
-- `src/renderer/editor-behavior-manifest-runner.ts`
-- `src/renderer/editor-behavior-observer.ts`
-- `scripts/probe-editor-behavior.mjs`
-- `docs/test-cases.md`
-- `docs/refactor/editor-foundation/progress.md`
+- `fixtures/architecture/editor-foundation-guard.json`
+- `fixtures/performance/complex-20000-lines.md`
+- `fixtures/performance/editor-foundation-current-baseline.json`
+- `src/main/editor-foundation-architecture*.ts`
+- `packages/markdown-engine/src/parse-instrumentation.ts`
+- `packages/editor-core/src/performance/`
+- `src/renderer/performance/`
+- `scripts/analyze-renderer-bundle.mjs`
+- `scripts/bundle-provenance-evidence.mjs`
+- `scripts/vite-bundle-provenance.ts`
 
 ### Acceptance
 
-- Every command/container path in roadmap section 7.7 has at least one typed case.
-- Enter, Backspace, Tab, Shift+Tab, ArrowUp/Down, selection, repeat, and undo expectations are explicit.
-- Cases at depth 0–8 exist for representative mixed containers.
-- Known defects are labeled and are not adopted as desired behavior.
-- Scenario filtering can select a command or container path.
-- Every canonical checkpoint/aspect target is exactly one validated `Verified` or `known-defect-observed` value; pre-composition gaps are eliminated.
-- Typed observations and persisted provenance are bound to the exact case/checkpoint/aspect; equal values cannot be reused across cases, replacement uses structural equality against the checkpoint-owned expected result, and dynamic observations reject non-finite numbers and catalog-owned probe provenance.
-- Named probe registry entries are bound to the catalog through the actual `run.name`, and verified FishMark provenance is narrowed exactly during manifest composition without a generic model/catalog dependency cycle.
-- Opaque code/math projection consumes a CommonMark-equivalent ordered outer quote/list signature, exits and reprocesses a line when the container no longer continues, and only accepts closing delimiters with a matching prefix and 0–3 relative spaces.
-- `fixtures/editor-behavior` is the only fixture public entry; the test harness exposes scenario APIs but no fixture compatibility facade.
-- A test-only Electron batch runner re-executes every selected target; ordinary headless scenario steps fail closed and are never counted as passes.
+- The canonical manifest is versioned, non-empty, exact, lifecycle-owned, and fail-closed for invalid paths/rules, stale debt, boundary bypasses, and unauthorized parser surfaces/sites.
+- The committed RF fixture is exactly 20,000 LF-only lines and matches SHA-256 `545601ad9d770898e23e5551e938bcaa4ebaecd8446941a4145a4db8777f6d37` before measurement.
+- Every operation exposes deterministic integer counters. Unavailable incremental behavior remains zero with `incremental-structure-cache-not-implemented`.
+- Bundle JSON/provenance are deterministic, schema-versioned, hash-bound, graph-authoritative, and explicit about emitted maps versus `NOT_EMITTED`.
+- No compatibility identity-map/helper or dead subordinate formatter remains in RF-002 scope.
+- Product behavior remains unchanged under the formal Electron gate.
 
 ### Verification
 
 ```powershell
-npm.cmd run test -- packages/test-harness src/renderer/editor-test-driver.test.ts
+npm.cmd run test:editor-foundation
+npm.cmd run perf:baseline
+npm.cmd run lint
+npm.cmd run typecheck
+npm.cmd test
+npm.cmd run build
 npm.cmd run test:editor-behavior
-npm.cmd run test:editing-experience
+git diff --check
 ```
 
 ### Risks
 
-- Accidentally treating current implementation quirks as the target contract.
-- Overfitting to Typora where FishMark has an explicit round-trip or cross-platform requirement.
-- Capturing DOM classes instead of source/selection/geometry semantics.
+- Current full scans are intentionally high and incremental reuse remains unavailable until RF-404/RF-405.
+- The 73 exact CodeMirror edges remain RF-604 deletion debt.
+- Timing remains machine-dependent until RF-901.
+- The 534 known editing defects remain later-roadmap work.
+- Focus-derived geometry observation settlement should be hardened separately without changing calibration or editor behavior.
 
 ### Documentation updates
 
-- Update this task row and evidence fields.
-- Add stable manual behavior cases to `docs/test-cases.md`.
-- Record implementation evidence in `docs/test-report.md` only after execution.
-- Add a task summary under `reports/task-summaries/` after acceptance.
+- Architecture decision and `TC-060A` are recorded.
+- Fresh evidence is in `docs/test-report.md`.
+- Formal result and manual steps are in `reports/task-summaries/RF-002.md`.
+- The independent RF roadmap/progress ledger is complete for RF-002; unrelated MVP backlog/progress were intentionally not changed.
 
 ### Next skill
 
-`$fishmark-architecture-acceptance` for `RF-002`, followed by `$fishmark-task-acceptance`
+`$fishmark-task-intake` for `RF-101`
 
 ## 6. Milestone deletion checklist
 
@@ -203,11 +208,11 @@ Append one entry when a task changes to `DEV_DONE`, then amend the same entry af
 | --- | --- | --- | --- | --- | --- | --- |
 | 2026-07-13 | RF-001 | Added the first typed recursive editing-behavior corpus, exact filtering, one harness scenario, and stable documentation; corrected one stale table-exit probe expectation without changing runtime behavior. | Matrix 1/13; harness + driver 14/81; defect evidence 2/78. | Editing experience 79 cases passed; lint, typecheck, 119-file/1380-test suite, and build passed. | Superseded before acceptance | A 2026-07-14 specification review found that metadata-only parity cases had been overstated as executable evidence. RF-001 returned to `IN_PROGRESS`; this row is historical regression evidence only. |
 | 2026-07-14 | RF-001 | Added the single-window Electron manifest runner and hardened it with canonical/formal support ports, line-local observation, aspect-mapped values, deterministic calibration identity, catalog-driven Typora conversion, calibration-independent raw cases, disposable step abort listeners, and bounded cross-platform process-tree ownership; corrected top-level and quoted nested-list Shift+Tab contracts without changing product runtime behavior. | Fresh harness + driver 27 files / 165 tests; public scenario 121/121 one batch; architecture review also confirmed formal identity, listener, timeout/abort/nonzero/root-exited descendant, hung Windows terminator, POSIX group escalation, test-window security, and no compatibility/dead path. | Fresh formal runner 121/121 and 2,541/2,541 in 24.573s with 79 existing/1,928 runner/534 known/0 unexpected/0 not-run; legacy 79/79; lint 0 errors/8 existing warnings; typecheck; 135-file/1,487-test suite; build; diff check all passed. | Architecture `PASS`; task `PASS`; `reports/task-summaries/RF-001.md` | Raw JSON remains ignored; calibration `fnv1a32-2a007600` persists 2,007 explicit verified targets and 534 exact typed defect observations from run `d7705d03-b141-46dd-8b4b-4559024c14bc`. The 534 observations are later-roadmap product work, not unexecuted RF-001 targets. |
-| 2026-07-15 | RF-002 | Final architecture closure added transparent-wrapper/computed-property micromark detection, transparent literal module-argument and literal `require` callee evidence, reverse-unique active package rules and resolved/case-folded repository path identities; replaced inferred parse-entry counts with explicit micromark document-scan instrumentation; deleted subordinate formatters; and replaced Source Map text-coverage/identity-map assumptions with schema-v1 two-phase Vite provenance. Provenance `moduleIds` are the only forbidden source-group authority; emitted maps are integrity validated and attested mapless chunks are `NOT_EMITTED`. | Initial architecture RED 145/131 pass + 14 expected failures -> GREEN 145/145. Post-`3e0c34e` RED 164/146 pass + 18 expected failures -> GREEN 164/164. Post-`3d8c2b4` RED 177/166 pass + 11 expected failures -> GREEN 177/177; public foundation gate 7 files/253 tests. Instrumentation RED 57/50 pass + 7 expected failures -> GREEN 57/57. Provenance RED accepted missing provenance -> GREEN analyzer 48/48 plus plugin 7/7. Final `perf:baseline` passed the canonical 23 checks and 7 files/240 tests; exact full scans are open 504, edit 502, selection 0, ordered-list 503, outline 502, metrics 503. | lint 0 errors/8 pre-existing warnings; typecheck; 138 files/1,738 tests; renderer/Electron/CLI build; formal behavior baseline 121/121 cases and 2,541/2,541 targets with 0 unexpected/not-run; ordinary dist 0 maps/0 provenance; diff check PASS. Scanner-only final delta performance and behavior waivers recorded in handoff. | Architecture re-review, then task acceptance | M0 remains 1/2 and program 1/38. The final delta touches scanner/tests/docs only; no editor behavior, performance fixture/baseline, Markdown fixture identity or roadmap ordering changed, and exact exception identity remains lexical. Two earlier full behavior attempts showed focus-derived visibility-only observation flakes; later isolated/full runs passed. A separate runner-hardening task should add condition-based focus/decoration settlement and diagnostics without changing calibration. |
+| 2026-07-15 | RF-002 | Final architecture closure added transparent-wrapper/computed-property micromark detection, transparent literal module-argument and literal `require` callee evidence, reverse-unique active package rules and resolved/case-folded repository path identities; replaced inferred parse-entry counts with explicit micromark document-scan instrumentation; deleted subordinate formatters; and replaced Source Map text-coverage/identity-map assumptions with schema-v1 two-phase Vite provenance. Provenance `moduleIds` are the only forbidden source-group authority; emitted maps are integrity validated and attested mapless chunks are `NOT_EMITTED`. | Initial architecture RED 145/131 pass + 14 expected failures -> GREEN 145/145. Post-`3e0c34e` RED 164/146 pass + 18 expected failures -> GREEN 164/164. Post-`3d8c2b4` RED 177/166 pass + 11 expected failures -> GREEN 177/177. Fresh public foundation 7 files/253 tests; fresh `perf:baseline` passed all 23 canonical checks and 7 files/253 tests. Exact full scans are open 504, edit 502, selection 0, ordered-list 503, outline 502, metrics 503. | Fresh lint 0 errors/8 pre-existing warnings; typecheck; 138 files/1,738 tests; renderer/Electron/CLI build; exclusive formal behavior 121/121 cases and 2,541/2,541 targets with 79 existing/1,928 runner/534 known/0 unexpected/0 not-run in 24.570s; ordinary dist 0 maps/0 provenance; diff check PASS. | Architecture `PASS` over `a6da237..53824a7`, 0 blocking findings/no open questions; task `PASS`; `reports/task-summaries/RF-002.md` | M0 is 2/2 `COMPLETE` and program is 2/38. Final closure commits: `3e0c34e`, `3d8c2b4`, `53824a7`. Earlier execution-phase focus-derived visibility-only flakes were isolated and followed by clean repeats; the first exclusive formal acceptance run was clean. No calibration/runtime change was made. |
 
 ## 8. Blockers and deviations
 
-There are no accepted external blockers or roadmap deviations. RF-001 is complete: its explicit 2,007 verified targets and 534 exact target mismatches cover the whole contract, and the mismatches are recorded current product defects for later roadmap tasks rather than unexecuted evidence. RF-002 implementation is `DEV_DONE`; architecture re-review and task acceptance are the only allowed next phases, and RF-101 must not start before both pass. M0 remains 1/2 and program completion remains 1/38 until acceptance succeeds.
+There are no accepted external blockers or roadmap deviations. RF-001 and RF-002 are complete. M0 is 2/2 `COMPLETE`, and program completion is 2/38. `RF-101` remains `PLANNED`, has not started, and must begin with `$fishmark-task-intake`.
 
 Any deviation must record:
 
