@@ -6,13 +6,13 @@
 
 **Created:** 2026-07-11
 
-**Last updated:** 2026-07-15
+**Last updated:** 2026-07-16
 
 **Overall status:** `IN_PROGRESS`
 
-**Current task:** None — `RF-002` accepted; `RF-101` remains `PLANNED`
+**Current task:** `RF-101` — intake/design complete; implementation plan in progress
 
-**Next required skill:** `$fishmark-task-intake` for `RF-101`
+**Next required skill:** `$fishmark-task-execution` for `RF-101` after implementation-plan self-review
 
 ## 1. Status vocabulary
 
@@ -32,7 +32,7 @@ At most one `RF-xxx` task may be `IN_PROGRESS` or `ACCEPTING` at a time. A later
 | Milestone | Purpose | Status | Complete | Total | Blocking gate |
 | --- | --- | --- | ---: | ---: | --- |
 | M0 | Invariants and executable baselines | `COMPLETE` | 2 | 2 | Behavior matrix and architecture/performance baseline exist |
-| M1 | Canonical workspace domain | `PLANNED` | 0 | 2 | Old main-local workspace service/application removed |
+| M1 | Canonical workspace domain | `IN_PROGRESS` | 0 | 2 | Old main-local workspace service/application removed |
 | M2 | Revisioned edit transport | `PLANNED` | 0 | 4 | Full-draft sync and renderer writable projection removed |
 | M3 | Data safety and recovery | `PLANNED` | 0 | 4 | Inactive files protected; save/recovery/close are canonical |
 | M4 | Recursive parser and incremental cache | `PLANNED` | 0 | 5 | One recursive parser remains; differential cache tests pass |
@@ -53,7 +53,7 @@ Evidence columns are filled only with fresh command output/report paths from the
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | RF-001 | Editing behavior baseline | — | `COMPLETE` | Canonical/formal runner, observer, protocol, launcher, identity, Typora conversion, listener, and process-tree boundaries accepted; fresh harness + driver: 27 files / 165 tests; public scenario: 121/121 steps in one batch. | Fresh formal Electron gate: 121/121 cases, 2,541/2,541 targets, 79 existing + 1,928 runner matches, 534 exact known defects, 0 unexpected, 0 not-run, 24.573s; public scenario 25.351s; editing experience 79/79; lint 0 errors (8 pre-existing warnings), typecheck, 135-file/1,487-test suite, build, and diff check passed. | Architecture `PASS`; task `PASS`; `reports/task-summaries/RF-001.md` | `codex/editor-foundation-refactor` |
 | RF-002 | Architecture and performance guards | RF-001 | `COMPLETE` | Fresh public foundation gate 7 files/253 tests; fresh `perf:baseline` 23/23 contract checks and 7 files/253 tests. The manifest owns 73 exact CodeMirror targets; real micromark scan counters, resolved/case-folded repository paths, transparent dependency/site module arguments and literal `require` callees, and schema-v1 Vite module provenance close the reviewed evidence gaps. | Fresh lint 0 errors/8 pre-existing warnings; typecheck; 138-file/1,738-test suite; renderer/Electron/CLI build; exclusive formal behavior 121/121 cases and 2,541/2,541 targets with 79 existing + 1,928 runner + 534 known + 0 unexpected/not-run in 24.570s; ordinary dist 0 maps/0 provenance; diff check all passed. | Architecture `PASS` over `a6da237..53824a7`, 0 blocking findings/no open questions; task `PASS`; `reports/task-summaries/RF-002.md` | `codex/editor-foundation-refactor` at implementation head `53824a7` |
-| RF-101 | Extract workspace domain | RF-002 | `PLANNED` | — | lint/typecheck/test/build | — | — |
+| RF-101 | Extract workspace domain | RF-002 | `IN_PROGRESS` | Design and intake: `docs/superpowers/specs/2026-07-16-rf-101-workspace-domain-design.md`, `docs/plans/2026-07-16-rf-101-intake.md`; implementation not started. | lint/typecheck/test/build | — | `codex/editor-foundation-refactor` |
 | RF-102 | Extract workspace application ports/use cases | RF-101 | `PLANNED` | — | lint/typecheck/test/build | — | — |
 | RF-201 | Persistent text buffer and session revisions | RF-102 | `PLANNED` | — | typecheck/test/build | — | — |
 | RF-202 | Shared edit contract and main handler | RF-201 | `PLANNED` | — | typecheck/test | — | — |
@@ -111,7 +111,7 @@ Evidence columns are filled only with fresh command output/report paths from the
 
 ### Status
 
-`COMPLETE` — independent architecture acceptance and formal task acceptance passed on 2026-07-15. M0 is 2/2 complete. `RF-101` remains `PLANNED` and has not started.
+`COMPLETE` — independent architecture acceptance and formal task acceptance passed on 2026-07-15. M0 is 2/2 complete. At that acceptance checkpoint, `RF-101` had not started; it is now tracked as the active task in the dashboard and ledger above.
 
 ### Goal
 
@@ -183,7 +183,7 @@ git diff --check
 
 ### Next skill
 
-`$fishmark-task-intake` for `RF-101`
+`$fishmark-task-execution` for `RF-101` after the implementation plan is written and self-reviewed.
 
 ## 6. Milestone deletion checklist
 
@@ -212,7 +212,7 @@ Append one entry when a task changes to `DEV_DONE`, then amend the same entry af
 
 ## 8. Blockers and deviations
 
-There are no accepted external blockers or roadmap deviations. RF-001 and RF-002 are complete. M0 is 2/2 `COMPLETE`, and program completion is 2/38. `RF-101` remains `PLANNED`, has not started, and must begin with `$fishmark-task-intake`.
+There are no accepted external blockers or roadmap deviations. RF-001 and RF-002 are complete. M0 is 2/2 `COMPLETE`, and program completion is 2/38. `RF-101` is the only active task; its design and intake are complete, implementation has not started, and the next phase is `$fishmark-task-execution` after implementation-plan self-review.
 
 Any deviation must record:
 
