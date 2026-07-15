@@ -249,6 +249,50 @@ describe("document session disk replacement and movement", () => {
     expect(reloaded.savedText).toBe(reloaded.text);
   });
 
+  it("marks dirty equal disk text clean without advancing the revision", () => {
+    const opened = createDocumentSession({
+      tabId: "tab-1",
+      windowId: "window-1",
+      document: {
+        path: "C:/notes/saved.md",
+        name: "saved.md",
+        content: "# Saved\n",
+        encoding: "utf-8"
+      },
+      diskVersion
+    });
+    const dirty = replaceDocumentText(opened, "# Current dirty\n");
+    const incomingDiskVersion: DiskVersion = {
+      normalizedPath: "C:/notes/current-dirty.md",
+      mtimeMs: 1_700_000_000_100,
+      size: "# Current dirty\n".length,
+      contentHash: "sha256:current-dirty"
+    };
+
+    const reloaded = replaceDocumentFromDisk(
+      dirty,
+      {
+        path: "C:/notes/current-dirty.md",
+        name: "current-dirty.md",
+        content: "# Current dirty\n",
+        encoding: "utf-8"
+      },
+      incomingDiskVersion
+    );
+
+    expect(projectDocumentSession(reloaded)).toMatchObject({
+      path: "C:/notes/current-dirty.md",
+      name: "current-dirty.md",
+      content: "# Current dirty\n",
+      revision: 1,
+      savedRevision: 1,
+      isDirty: false,
+      diskVersion: incomingDiskVersion
+    });
+    expect(reloaded.text).toBe(dirty.text);
+    expect(reloaded.savedText).toBe(reloaded.text);
+  });
+
   it("moves only the owning window", () => {
     const dirty = replaceDocumentText(createSession(), "draft");
     const moved = moveDocumentSession(dirty, "window-2");
