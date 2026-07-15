@@ -3,6 +3,8 @@ node_modules
 dist
 dist-electron
 dist-cli
+packages/*/dist
+packages/*/*.tsbuildinfo
 release
 .artifacts
 build/icons

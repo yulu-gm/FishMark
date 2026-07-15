@@ -4,6 +4,12 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "paths": {
+      "@fishmark/editor-core": ["./packages/editor-core/src/index.ts"],
+      "@fishmark/markdown-engine": ["./packages/markdown-engine/src/index.ts"],
+      "@fishmark/test-harness": ["./packages/test-harness/src/index.ts"],
+      "@fishmark/workspace-domain": ["./packages/workspace-domain/src/index.ts"]
+    },
     "jsx": "react-jsx",
     "types": ["node", "vitest/globals", "vite/client"]
   },

@@ -6,7 +6,15 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["dist", "dist-electron", "dist-cli", "node_modules", ".worktrees"]
+    ignores: [
+      "dist",
+      "dist-electron",
+      "dist-cli",
+      "packages/*/dist",
+      "packages/*/*.tsbuildinfo",
+      "node_modules",
+      ".worktrees"
+    ]
   },
   {
     files: ["**/*.{ts,tsx}"],

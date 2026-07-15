@@ -32,6 +32,57 @@ describe("editor foundation architecture guard", () => {
     });
   });
 
+  it("binds the active workspace-domain package to exactly one matching active rule", () => {
+    const manifest = readCanonicalManifest();
+    const workspacePackages = (manifest.packages as MutableRecord[]).filter(
+      (targetPackage) => targetPackage.id === "workspace-domain"
+    );
+    const workspaceRules = (manifest.rules as MutableRecord[]).filter(
+      (rule) => rule.id === "boundary.workspace-domain"
+    );
+
+    expect(workspacePackages).toEqual([
+      expect.objectContaining({
+        boundaryRuleId: "boundary.workspace-domain",
+        path: "packages/workspace-domain",
+        state: "active"
+      })
+    ]);
+    expect(workspaceRules).toEqual([
+      expect.objectContaining({
+        kind: "forbidden-imports",
+        sourcePath: "packages/workspace-domain",
+        state: "active"
+      })
+    ]);
+  });
+
+  it.each([
+    ["Electron", 'import { app } from "electron"; void app;'],
+    ["React", 'import React from "react"; void React;'],
+    [
+      "CodeMirror",
+      'import type { Text } from "@codemirror/state"; export type Forbidden = Text;'
+    ],
+    ["main source", 'import "../../../src/main/main";']
+  ])("rejects a workspace-domain import of %s", (_name, source) => {
+    const repository = createSyntheticRepository({
+      "packages/workspace-domain/src/forbidden.ts": source
+    });
+
+    expect(expectCodes(validateSynthetic(repository))).toContain("forbidden-import");
+  });
+
+  it("allows workspace-domain runtime-neutral local imports", () => {
+    const repository = createSyntheticRepository({
+      "packages/workspace-domain/src/local-value.ts": "export const localValue = 1;",
+      "packages/workspace-domain/src/runtime-neutral.ts":
+        'import { localValue } from "./local-value"; export const value = localValue;'
+    });
+
+    expect(validateSynthetic(repository)).toEqual({ findings: [], ok: true });
+  });
+
   it.each([
     ["markdown-engine", "packages/markdown-engine/src/forbidden.ts", 'import React from "react";'],
     [
@@ -1363,6 +1414,7 @@ function createSyntheticRepository(overrides: Record<string, string> = {}): stri
       'import { parse } from "micromark";',
       "export function parseMarkdownDocument(source: string): unknown { return parse().document().write(source); }"
     ].join("\n"),
+    "packages/workspace-domain/src/index.ts": "export const workspaceDomain = true;",
     "src/main/index.ts": "export const main = true;",
     "src/preload/index.ts": "export const preload = true;",
     "src/renderer/index.ts": "export const renderer = true;"
@@ -1401,6 +1453,13 @@ function createSyntheticManifest(): MutableRecord {
         boundaryRuleId: "boundary.editor-core"
       },
       {
+        id: "workspace-domain",
+        path: "packages/workspace-domain",
+        publicEntry: "@fishmark/workspace-domain",
+        state: "active",
+        boundaryRuleId: "boundary.workspace-domain"
+      },
+      {
         id: "editor-model",
         path: "packages/editor-model",
         publicEntry: "@fishmark/editor-model",
@@ -1424,6 +1483,21 @@ function createSyntheticManifest(): MutableRecord {
         sourcePath: "packages/editor-core",
         forbiddenPackages: ["react", "react-dom", "electron", "@codemirror/*"],
         forbiddenPaths: ["src/main", "src/preload", "src/renderer"]
+      },
+      {
+        id: "boundary.workspace-domain",
+        kind: "forbidden-imports",
+        state: "active",
+        sourcePath: "packages/workspace-domain",
+        forbiddenPackages: ["react", "react-dom", "electron", "@codemirror/*"],
+        forbiddenPaths: [
+          "src/main",
+          "src/preload",
+          "src/renderer",
+          "packages/editor-core",
+          "packages/workspace-application",
+          "packages/workspace-infrastructure"
+        ]
       },
       {
         id: "boundary.renderer",

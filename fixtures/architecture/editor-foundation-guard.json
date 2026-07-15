@@ -20,7 +20,7 @@
       "id": "workspace-domain",
       "path": "packages/workspace-domain",
       "publicEntry": "@fishmark/workspace-domain",
-      "state": "planned",
+      "state": "active",
       "boundaryRuleId": "boundary.workspace-domain"
     },
     {
@@ -94,6 +94,26 @@
         "src/main",
         "src/preload",
         "src/renderer"
+      ]
+    },
+    {
+      "id": "boundary.workspace-domain",
+      "kind": "forbidden-imports",
+      "state": "active",
+      "sourcePath": "packages/workspace-domain",
+      "forbiddenPackages": [
+        "react",
+        "react-dom",
+        "electron",
+        "@codemirror/*"
+      ],
+      "forbiddenPaths": [
+        "src/main",
+        "src/preload",
+        "src/renderer",
+        "packages/editor-core",
+        "packages/workspace-application",
+        "packages/workspace-infrastructure"
       ]
     },
     {
