@@ -2,7 +2,20 @@ import { createWorkspaceState } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 
 import type { SaveMarkdownFileResult } from "../shared/save-markdown-file";
-import { createWorkspaceApplication } from "./workspace-application";
+import { createWorkspaceApplication as createWorkspaceApplicationWithOperations } from "./workspace-application";
+import { createWorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
+
+function createWorkspaceApplication(
+  dependencies: Omit<
+    Parameters<typeof createWorkspaceApplicationWithOperations>[0],
+    "documentOperations"
+  >
+) {
+  return createWorkspaceApplicationWithOperations({
+    ...dependencies,
+    documentOperations: createWorkspaceDocumentOperationCoordinator()
+  });
+}
 
 describe("createWorkspaceApplication", () => {
   it("delegates draft updates to the canonical workspace state", () => {
@@ -83,6 +96,7 @@ describe("createWorkspaceApplication", () => {
       expectedWindowId: "window-1",
       path: "C:/notes/note.md"
     });
+    await vi.waitFor(() => expect(resolveSave).toBeTypeOf("function"));
     workspace.updateTabDraft(tabId, "# Newer draft\n");
     resolveSave({
       status: "success",
@@ -178,6 +192,7 @@ describe("createWorkspaceApplication", () => {
       expectedWindowId: "window-1",
       path: "C:/notes/move.md"
     });
+    await vi.waitFor(() => expect(resolveSave).toBeTypeOf("function"));
     workspace.moveTabToWindow({ tabId, targetWindowId: "window-2" });
     resolveSave({
       status: "success",
@@ -218,6 +233,7 @@ describe("createWorkspaceApplication", () => {
       expectedWindowId: "window-1",
       path: "C:/notes/closed-window.md"
     });
+    await vi.waitFor(() => expect(resolveSave).toBeTypeOf("function"));
     workspace.unregisterWindow("window-1");
     resolveSave({
       status: "success",

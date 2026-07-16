@@ -10,6 +10,7 @@ import type {
   SaveMarkdownFileInput,
   SaveMarkdownFileResult
 } from "../shared/save-markdown-file";
+import type { WorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
 
 type DirtyWorkspaceTabChoice = "save" | "discard" | "cancel";
 
@@ -27,6 +28,10 @@ type WorkspaceCloseCoordinatorDependencies = {
     | "getWindowTabIds"
     | "saveTabDocument"
     | "closeTab"
+  >;
+  documentOperations: Pick<
+    WorkspaceDocumentOperationCoordinator,
+    "runExclusive"
   >;
   promptToSaveWorkspaceTab: (
     tab: DocumentSessionProjection
@@ -53,21 +58,23 @@ export function createWorkspaceCloseCoordinator(
   async function closeTab(
     input: CloseWorkspaceTabRequest
   ): Promise<CloseWorkspaceTabResult> {
-    const shouldProceed = await confirmTabCheckpoint(input);
-    if (!shouldProceed || getMatchingCheckpoint(input) === null) {
-      return cancelledResult(input.expectedWindowId);
-    }
+    return dependencies.documentOperations.runExclusive(input.tabId, async () => {
+      const shouldProceed = await confirmTabCheckpoint(input);
+      if (!shouldProceed || getMatchingCheckpoint(input) === null) {
+        return cancelledResult(input.expectedWindowId);
+      }
 
-    const result = dependencies.workspace.closeTab(input);
-    if (result.kind === "applied") {
-      return { status: "closed", snapshot: result.projection };
-    }
-    if (result.projection === null) {
-      throw new Error(
-        `Workspace window '${input.expectedWindowId}' no longer exists.`
-      );
-    }
-    return { status: "cancelled", snapshot: result.projection };
+      const result = dependencies.workspace.closeTab(input);
+      if (result.kind === "applied") {
+        return { status: "closed", snapshot: result.projection };
+      }
+      if (result.projection === null) {
+        throw new Error(
+          `Workspace window '${input.expectedWindowId}' no longer exists.`
+        );
+      }
+      return { status: "cancelled", snapshot: result.projection };
+    });
   }
 
   async function confirmWindowClose(windowId: string): Promise<boolean> {

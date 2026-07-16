@@ -5,7 +5,20 @@ import {
 } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 
-import { createWorkspaceCloseCoordinator } from "./workspace-close-coordinator";
+import { createWorkspaceCloseCoordinator as createWorkspaceCloseCoordinatorWithOperations } from "./workspace-close-coordinator";
+import { createWorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
+
+function createWorkspaceCloseCoordinator(
+  dependencies: Omit<
+    Parameters<typeof createWorkspaceCloseCoordinatorWithOperations>[0],
+    "documentOperations"
+  >
+) {
+  return createWorkspaceCloseCoordinatorWithOperations({
+    ...dependencies,
+    documentOperations: createWorkspaceDocumentOperationCoordinator()
+  });
+}
 
 function createDocument(
   name: string,

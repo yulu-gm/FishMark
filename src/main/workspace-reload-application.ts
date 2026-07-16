@@ -4,11 +4,16 @@ import type {
 } from "@fishmark/workspace-domain";
 
 import type { OpenMarkdownFileResult } from "../shared/open-markdown-file";
+import type { WorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
 
 type WorkspaceReloadApplicationDependencies = {
   workspace: Pick<
     WorkspaceState,
     "getTabSession" | "replaceTabDocument"
+  >;
+  documentOperations: Pick<
+    WorkspaceDocumentOperationCoordinator,
+    "runExclusive"
   >;
   openMarkdownFileFromPath: (
     targetPath: string
@@ -25,34 +30,36 @@ export function createWorkspaceReloadApplication(
       readonly expectedWindowId: string;
       readonly targetPath: string;
     }): Promise<WorkspaceWindowProjection> {
-      const checkpoint = dependencies.workspace.getTabSession(input.tabId);
-      if (checkpoint.windowId !== input.expectedWindowId) {
-        throw new Error(
-          `Workspace tab '${input.tabId}' does not belong to window '${input.expectedWindowId}'.`
-        );
-      }
-
-      const result = await dependencies.openMarkdownFileFromPath(input.targetPath);
-      if (result.status !== "success") {
-        if (result.status === "error") {
-          throw new Error(result.error.message);
+      return dependencies.documentOperations.runExclusive(input.tabId, async () => {
+        const checkpoint = dependencies.workspace.getTabSession(input.tabId);
+        if (checkpoint.windowId !== input.expectedWindowId) {
+          throw new Error(
+            `Workspace tab '${input.tabId}' does not belong to window '${input.expectedWindowId}'.`
+          );
         }
-        throw new Error(`Unable to reload Markdown file '${input.targetPath}'.`);
-      }
 
-      await dependencies.recordRecentFilePath(result.document.path ?? input.targetPath);
-      const mutation = dependencies.workspace.replaceTabDocument({
-        tabId: input.tabId,
-        expectedWindowId: input.expectedWindowId,
-        expectedRevision: checkpoint.revision,
-        document: result.document
+        const result = await dependencies.openMarkdownFileFromPath(input.targetPath);
+        if (result.status !== "success") {
+          if (result.status === "error") {
+            throw new Error(result.error.message);
+          }
+          throw new Error(`Unable to reload Markdown file '${input.targetPath}'.`);
+        }
+
+        await dependencies.recordRecentFilePath(result.document.path ?? input.targetPath);
+        const mutation = dependencies.workspace.replaceTabDocument({
+          tabId: input.tabId,
+          expectedWindowId: input.expectedWindowId,
+          expectedRevision: checkpoint.revision,
+          document: result.document
+        });
+        if (mutation.projection === null) {
+          throw new Error(
+            `Workspace window '${input.expectedWindowId}' no longer exists.`
+          );
+        }
+        return mutation.projection;
       });
-      if (mutation.projection === null) {
-        throw new Error(
-          `Workspace window '${input.expectedWindowId}' no longer exists.`
-        );
-      }
-      return mutation.projection;
     }
   };
 }

@@ -2,7 +2,20 @@ import { createWorkspaceState, type WorkspaceDocumentData } from "@fishmark/work
 import { describe, expect, it, vi } from "vitest";
 
 import type { OpenMarkdownFileResult } from "../shared/open-markdown-file";
-import { createWorkspaceReloadApplication } from "./workspace-reload-application";
+import { createWorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
+import { createWorkspaceReloadApplication as createWorkspaceReloadApplicationWithOperations } from "./workspace-reload-application";
+
+function createWorkspaceReloadApplication(
+  dependencies: Omit<
+    Parameters<typeof createWorkspaceReloadApplicationWithOperations>[0],
+    "documentOperations"
+  >
+) {
+  return createWorkspaceReloadApplicationWithOperations({
+    ...dependencies,
+    documentOperations: createWorkspaceDocumentOperationCoordinator()
+  });
+}
 
 function document(name: string, content: string): WorkspaceDocumentData {
   return {
@@ -66,6 +79,7 @@ describe("createWorkspaceReloadApplication", () => {
       expectedWindowId: "window-1",
       targetPath: "C:/notes/edit-race.md"
     });
+    await vi.waitFor(() => expect(resolveRead).toBeTypeOf("function"));
     workspace.updateTabDraft(tabId, "new draft");
     resolveRead({
       status: "success",
@@ -108,6 +122,7 @@ describe("createWorkspaceReloadApplication", () => {
       expectedWindowId: "window-1",
       targetPath: "C:/notes/move-race.md"
     });
+    await vi.waitFor(() => expect(resolveRead).toBeTypeOf("function"));
     workspace.moveTabToWindow({ tabId, targetWindowId: "window-2" });
     resolveRead({
       status: "success",
@@ -149,6 +164,7 @@ describe("createWorkspaceReloadApplication", () => {
       expectedWindowId: "window-1",
       targetPath: "C:/notes/closed-window.md"
     });
+    await vi.waitFor(() => expect(resolveRead).toBeTypeOf("function"));
     workspace.unregisterWindow("window-1");
     resolveRead({
       status: "success",

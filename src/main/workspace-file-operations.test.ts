@@ -2,8 +2,33 @@ import { createWorkspaceState } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 
 import type { SaveMarkdownFileResult } from "../shared/save-markdown-file";
-import { createWorkspaceApplication } from "./workspace-application";
-import { createWorkspaceFileOperations } from "./workspace-file-operations";
+import { createWorkspaceApplication as createWorkspaceApplicationWithOperations } from "./workspace-application";
+import { createWorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
+import { createWorkspaceFileOperations as createWorkspaceFileOperationsWithOperations } from "./workspace-file-operations";
+
+function createWorkspaceApplication(
+  dependencies: Omit<
+    Parameters<typeof createWorkspaceApplicationWithOperations>[0],
+    "documentOperations"
+  >
+) {
+  return createWorkspaceApplicationWithOperations({
+    ...dependencies,
+    documentOperations: createWorkspaceDocumentOperationCoordinator()
+  });
+}
+
+function createWorkspaceFileOperations<TSender>(
+  dependencies: Omit<
+    Parameters<typeof createWorkspaceFileOperationsWithOperations<TSender>>[0],
+    "documentOperations"
+  >
+) {
+  return createWorkspaceFileOperationsWithOperations({
+    ...dependencies,
+    documentOperations: createWorkspaceDocumentOperationCoordinator()
+  });
+}
 
 const document = (name: string, content: string) => ({
   path: `C:/notes/${name}`,
@@ -13,6 +38,52 @@ const document = (name: string, content: string) => ({
 });
 
 describe("createWorkspaceFileOperations", () => {
+  it("serializes Save As dialog, commit, and cleanup with other tab IO", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.createUntitledTab("window-1").activeTabId!;
+    workspace.updateTabDraft(tabId, "draft");
+    const documentOperations = createWorkspaceDocumentOperationCoordinator();
+    const lease = await documentOperations.acquireExclusive([tabId]);
+    const showSaveMarkdownDialog = vi.fn(async () => ({
+      status: "success" as const,
+      document: document("saved-as.md", "draft")
+    }));
+    const syncDocumentPath = vi.fn(async () => undefined);
+    const operations = createWorkspaceFileOperationsWithOperations({
+      workspace,
+      documentOperations,
+      saveTab: vi.fn(),
+      showSaveMarkdownDialog,
+      beginInternalWrite: vi.fn(),
+      completeInternalWrite: vi.fn(),
+      syncDocumentPath,
+      recordRecentFilePath: vi.fn(async () => undefined),
+      reportCleanupError: vi.fn()
+    });
+
+    const saveAsPromise = operations.saveAs({
+      sender: { id: 0 },
+      expectedWindowId: "window-1",
+      tabId,
+      currentPath: null
+    });
+    await Promise.resolve();
+
+    expect(showSaveMarkdownDialog).not.toHaveBeenCalled();
+    expect(syncDocumentPath).not.toHaveBeenCalled();
+
+    lease.release();
+    await saveAsPromise;
+    expect(showSaveMarkdownDialog).toHaveBeenCalledOnce();
+    expect(syncDocumentPath).toHaveBeenCalledOnce();
+    expect(workspace.getTabSession(tabId)).toMatchObject({
+      path: "C:/notes/saved-as.md",
+      content: "draft",
+      isDirty: false
+    });
+  });
+
   it("completes write tracking and rebinds the sender watch after a save-time move", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
@@ -53,6 +124,7 @@ describe("createWorkspaceFileOperations", () => {
       tabId,
       path: "C:/notes/moved.md"
     });
+    await vi.waitFor(() => expect(resolveWrite).toBeTypeOf("function"));
     workspace.moveTabToWindow({ tabId, targetWindowId: "window-2" });
     resolveWrite({
       status: "success",
@@ -194,6 +266,7 @@ describe("createWorkspaceFileOperations", () => {
       tabId,
       currentPath: null
     });
+    await vi.waitFor(() => expect(resolveDialog).toBeTypeOf("function"));
     workspace.moveTabToWindow({ tabId, targetWindowId: "window-2" });
     resolveDialog({
       status: "success",
@@ -255,6 +328,7 @@ describe("createWorkspaceFileOperations", () => {
       tabId,
       path: "C:/notes/closed-save.md"
     });
+    await vi.waitFor(() => expect(resolveWrite).toBeTypeOf("function"));
     workspace.unregisterWindow("window-1");
     resolveWrite({
       status: "success",
@@ -303,6 +377,7 @@ describe("createWorkspaceFileOperations", () => {
       tabId,
       currentPath: null
     });
+    await vi.waitFor(() => expect(resolveDialog).toBeTypeOf("function"));
     workspace.unregisterWindow("window-1");
     resolveDialog({
       status: "success",

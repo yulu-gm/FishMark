@@ -43,8 +43,10 @@ import { createExternalFileWatchService } from "./external-file-watch-service";
 import { createWorkspaceApplication } from "./workspace-application";
 import { createWorkspaceCloseCoordinator } from "./workspace-close-coordinator";
 import { createWorkspaceDetachApplication } from "./workspace-detach-application";
+import { createWorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
 import { createWorkspaceFileOperations } from "./workspace-file-operations";
 import { createWorkspaceReloadApplication } from "./workspace-reload-application";
+import { createWorkspaceWindowCloseApplication } from "./workspace-window-close-application";
 import {
   toWorkspaceMoveTabResult,
   toWorkspaceWindowSnapshot
@@ -312,12 +314,15 @@ app.whenReady().then(async () => {
   });
   const externalFileWatchService = createExternalFileWatchService();
   const workspaceState = createWorkspaceState();
+  const workspaceDocumentOperations = createWorkspaceDocumentOperationCoordinator();
   const workspaceApplication = createWorkspaceApplication({
     workspace: workspaceState,
+    documentOperations: workspaceDocumentOperations,
     saveMarkdownFileToPath
   });
   const workspaceCloseCoordinator = createWorkspaceCloseCoordinator({
     workspace: workspaceState,
+    documentOperations: workspaceDocumentOperations,
     promptToSaveWorkspaceTab: async (tab) => {
       const result = await dialog.showMessageBox({
         type: "warning",
@@ -342,9 +347,15 @@ app.whenReady().then(async () => {
     saveMarkdownFileToPath,
     showSaveMarkdownDialog
   });
+  const workspaceWindowCloseApplication = createWorkspaceWindowCloseApplication({
+    workspace: workspaceState,
+    documentOperations: workspaceDocumentOperations,
+    requestWorkspaceWindowClose
+  });
   const workspaceWindowBindings = new Set<string>();
   const pendingWorkspaceWindowCloseIds = new Set<string>();
   const pendingWorkspaceWindowCloseResponses = new Map<string, (shouldClose: boolean) => void>();
+  const heldWorkspaceWindowCloseReleases = new Map<string, () => void>();
   let nextWorkspaceWindowCloseRequestId = 0;
   let appUpdaterPromise: Promise<AppUpdaterController> | null = null;
 
@@ -458,14 +469,25 @@ app.whenReady().then(async () => {
 
         void (async () => {
           try {
-            const shouldClose = await requestWorkspaceWindowClose(ownerWindow);
+            const heldLease = await workspaceWindowCloseApplication.requestWindowClose({
+              windowId,
+              ownerWindow
+            });
 
-            if (!shouldClose) {
+            if (heldLease === null) {
               return;
             }
 
+            heldWorkspaceWindowCloseReleases.set(windowId, heldLease.release);
             pendingWorkspaceWindowCloseIds.add(windowId);
-            ownerWindow.close();
+            try {
+              ownerWindow.close();
+            } catch (error) {
+              pendingWorkspaceWindowCloseIds.delete(windowId);
+              heldWorkspaceWindowCloseReleases.delete(windowId);
+              heldLease.release();
+              throw error;
+            }
           } catch (error) {
             await dialog.showMessageBox({
               type: "error",
@@ -486,7 +508,13 @@ app.whenReady().then(async () => {
           }
         }
         workspaceWindowBindings.delete(windowId);
-        workspaceState.unregisterWindow(windowId);
+        const heldRelease = heldWorkspaceWindowCloseReleases.get(windowId);
+        try {
+          workspaceState.unregisterWindow(windowId);
+        } finally {
+          heldWorkspaceWindowCloseReleases.delete(windowId);
+          heldRelease?.();
+        }
       });
       workspaceWindowBindings.add(windowId);
     }
@@ -601,11 +629,13 @@ app.whenReady().then(async () => {
 
   const workspaceReloadApplication = createWorkspaceReloadApplication({
     workspace: workspaceState,
+    documentOperations: workspaceDocumentOperations,
     openMarkdownFileFromPath,
     recordRecentFilePath
   });
   const workspaceFileOperations = createWorkspaceFileOperations({
     workspace: workspaceState,
+    documentOperations: workspaceDocumentOperations,
     saveTab: workspaceApplication.saveTab,
     showSaveMarkdownDialog,
     beginInternalWrite: externalFileWatchService.beginInternalWrite,
