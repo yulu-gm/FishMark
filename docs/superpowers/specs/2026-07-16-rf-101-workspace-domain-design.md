@@ -159,13 +159,13 @@ Before an asynchronous write starts, the application captures the canonical `{ t
 
 Captured revision guards do not order two distinct IO operations when a successful save itself does not advance text revision. Therefore main owns one permanent per-document FIFO operation coordinator:
 
-- Save, Save As, reload, and individual close acquire the same tab key for their entire canonical checkpoint, disk/dialog IO, and domain mutation transaction.
+- Save, Save As, reload, and individual close acquire the same tab key for their entire canonical checkpoint, disk/dialog IO, and domain mutation transaction. For ordinary Save this includes watcher `beginInternalWrite`, write, commit, recent-file recording, `completeInternalWrite`, and watch resync; cleanup finishes before the lease is released.
 - Different tab keys remain independent, and high-frequency `updateDraft` never waits for this coordinator.
 - Multi-tab acquisition deduplicates and sorts keys before acquiring them; release is idempotent and operation errors always release.
-- Native window close acquires the current window tab set before the renderer flush/confirm handshake, revalidates the ordered set after acquisition and again after positive confirmation, and retains the lease until `WorkspaceState.unregisterWindow()` completes on the real `closed` event. Either validation mismatch cancels and releases.
+- Native window close acquires the current window tab set before the renderer flush/confirm handshake. Confirmation returns a frozen ordered `{ tabId, expectedWindowId, expectedRevision }` checkpoint set rather than a bare boolean. The main-only request broker stores that confirmation while preserving the boolean IPC wire, bounds the request to 15 seconds, and aborts on renderer-process loss, web-contents destruction, or window close. The application revalidates exact order, owner, and revision immediately after positive COMPLETE and retains the lease until `WorkspaceState.unregisterWindow()` completes on the real `closed` event. Any mismatch, timeout, abort, or late completion cancels and releases exactly once.
 - Cancel, handshake error, and native `ownerWindow.close()` failure release the lease. A confirmed discard does not release early, so a queued autosave resumes only after unregister and fails before disk IO.
 
-`workspace-application.ts`, `workspace-reload-application.ts`, `workspace-file-operations.ts`, and `workspace-close-coordinator.ts` must pass captured revisions and share this one coordinator. `confirmWindowClose` does not reacquire because the native window-close application owns the outer multi-tab lease. This is a required correctness change inside RF-101, not the RF-102 application extraction.
+`workspace-application.ts` now owns only synchronous draft updates. `workspace-file-operations.ts` directly owns the ordinary Save port and its complete watcher transaction; reload, file operations, and close coordination share the one coordinator. `confirmWindowClose` does not reacquire because the native window-close application owns the outer multi-tab lease. This is a required correctness change inside RF-101, not the RF-102 application extraction.
 
 ## 9. Workspace operations
 

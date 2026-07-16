@@ -678,7 +678,7 @@ npm.cmd run perf:baseline
 
 - Create: the production `packages/workspace-domain/` package, with public-entry-only imports, revision/session/buffer/state modules, declarations, tests, and an emitted-runtime verifier.
 - Create: `src/main/workspace-ipc-projection.ts` as the immutable domain projection to mutable shared IPC DTO boundary.
-- Create: focused main use cases for reload, detach, file operations, per-document IO coordination, and native window-close leases, each operating on the one injected `WorkspaceState` and coordinator where IO is involved.
+- Create: focused main use cases for reload, detach, file operations, per-document IO coordination, native window-close leases, and a bounded close-request broker, each operating on the one injected `WorkspaceState` and coordinator where IO is involved.
 - Modify: package/build configuration, architecture guards, main composition, workspace application, and close coordination.
 - Delete after cutover: `src/main/workspace-service.ts` and `src/main/workspace-service.test.ts`.
 
@@ -690,7 +690,8 @@ npm.cmd run perf:baseline
 - [x] Update main callers to consume only the package public API and map projections at the main IPC boundary.
 - [x] Bind Save, Save As, reload, and close IO/confirmation workflows to captured owner/revision and the relevant checkpoint so stale completion fails closed.
 - [x] Serialize Save, Save As, reload, and individual close per tab through one main-owned FIFO coordinator while allowing unrelated tabs to proceed independently.
-- [x] Hold a stable multi-tab lease across the native window-close renderer handshake until the window is unregistered, so discard cannot be followed by a queued disk write.
+- [x] Keep each ordinary Save's watcher begin/write/commit/recent/complete/resync lifecycle inside that same per-tab lease, so a second save cannot open or write before the first watcher transaction is closed.
+- [x] Hold a stable multi-tab lease across the native window-close renderer handshake until the window is unregistered; carry an immutable ordered owner/revision confirmation through a bounded, abortable request broker and revalidate it immediately before native close.
 - [x] Make detach a ready-gated two-phase operation: keep the tab in the source before ready, revalidate source ownership at ready, then atomically move the latest canonical session; timeout, load failure, or target close does not move it.
 - [x] Delete the old service, test, types, imports, and exports in the same task.
 - [x] Verify no renderer imports internal session types and the shared/preload/renderer wire remains unchanged.
@@ -698,7 +699,7 @@ npm.cmd run perf:baseline
 **Verification:**
 
 ```powershell
-npm.cmd run test -- packages/workspace-domain src/main/workspace-document-operation-coordinator.test.ts src/main/workspace-window-close-application.test.ts src/main/workspace-document-io.integration.test.ts src/main/workspace-application.test.ts src/main/workspace-close-coordinator.test.ts
+npm.cmd run test -- packages/workspace-domain src/main/workspace-document-operation-coordinator.test.ts src/main/workspace-window-close-application.test.ts src/main/workspace-window-close-request-broker.test.ts src/main/workspace-document-io.integration.test.ts src/main/workspace-application.test.ts src/main/workspace-close-coordinator.test.ts src/main/workspace-file-operations.test.ts
 npm.cmd run lint
 npm.cmd run typecheck
 npm.cmd run build
