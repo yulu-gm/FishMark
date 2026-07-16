@@ -162,7 +162,7 @@ Captured revision guards do not order two distinct IO operations when a successf
 - Save, Save As, reload, and individual close acquire the same tab key for their entire canonical checkpoint, disk/dialog IO, and domain mutation transaction.
 - Different tab keys remain independent, and high-frequency `updateDraft` never waits for this coordinator.
 - Multi-tab acquisition deduplicates and sorts keys before acquiring them; release is idempotent and operation errors always release.
-- Native window close acquires the current window tab set before the renderer flush/confirm handshake, revalidates the ordered set after acquisition, and retains the lease until `WorkspaceState.unregisterWindow()` completes on the real `closed` event.
+- Native window close acquires the current window tab set before the renderer flush/confirm handshake, revalidates the ordered set after acquisition and again after positive confirmation, and retains the lease until `WorkspaceState.unregisterWindow()` completes on the real `closed` event. Either validation mismatch cancels and releases.
 - Cancel, handshake error, and native `ownerWindow.close()` failure release the lease. A confirmed discard does not release early, so a queued autosave resumes only after unregister and fails before disk IO.
 
 `workspace-application.ts`, `workspace-reload-application.ts`, `workspace-file-operations.ts`, and `workspace-close-coordinator.ts` must pass captured revisions and share this one coordinator. `confirmWindowClose` does not reacquire because the native window-close application owns the outer multi-tab lease. This is a required correctness change inside RF-101, not the RF-102 application extraction.
