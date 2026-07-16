@@ -59,14 +59,26 @@ export function createWorkspaceCloseCoordinator(
     }
 
     const result = dependencies.workspace.closeTab(input);
-    return result.kind === "applied"
-      ? { status: "closed", snapshot: result.projection }
-      : { status: "cancelled", snapshot: result.projection };
+    if (result.kind === "applied") {
+      return { status: "closed", snapshot: result.projection };
+    }
+    if (result.projection === null) {
+      throw new Error(
+        `Workspace window '${input.expectedWindowId}' no longer exists.`
+      );
+    }
+    return { status: "cancelled", snapshot: result.projection };
   }
 
   async function confirmWindowClose(windowId: string): Promise<boolean> {
+    let initialTabIds: readonly string[];
+    try {
+      initialTabIds = dependencies.workspace.getWindowTabIds(windowId);
+    } catch {
+      return false;
+    }
     const checkpoints: CloseWorkspaceTabRequest[] = [];
-    for (const tabId of dependencies.workspace.getWindowTabIds(windowId)) {
+    for (const tabId of initialTabIds) {
       const tab = dependencies.workspace.getTabSession(tabId);
       if (tab.windowId !== windowId) {
         return false;
@@ -84,9 +96,28 @@ export function createWorkspaceCloseCoordinator(
       }
     }
 
+    if (!hasSameOrderedTabs(windowId, initialTabIds)) {
+      return false;
+    }
+
     return checkpoints.every(
       (checkpoint) => getMatchingCheckpoint(checkpoint) !== null
     );
+  }
+
+  function hasSameOrderedTabs(
+    windowId: string,
+    expectedTabIds: readonly string[]
+  ): boolean {
+    let currentTabIds: readonly string[];
+    try {
+      currentTabIds = dependencies.workspace.getWindowTabIds(windowId);
+    } catch {
+      return false;
+    }
+
+    return currentTabIds.length === expectedTabIds.length &&
+      currentTabIds.every((tabId, index) => tabId === expectedTabIds[index]);
   }
 
   async function confirmTabCheckpoint(
@@ -140,6 +171,9 @@ export function createWorkspaceCloseCoordinator(
       diskVersion: null
     });
     if (commit.kind === "stale") {
+      if (commit.projection === null) {
+        return false;
+      }
       return false;
     }
 

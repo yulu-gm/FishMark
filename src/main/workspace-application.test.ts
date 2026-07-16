@@ -198,4 +198,39 @@ describe("createWorkspaceApplication", () => {
       isDirty: true
     });
   });
+
+  it("explicitly rejects a save commit after the expected window closes", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.createUntitledTab("window-1").activeTabId!;
+    workspace.updateTabDraft(tabId, "captured dirty");
+    let resolveSave!: (value: SaveMarkdownFileResult) => void;
+    const application = createWorkspaceApplication({
+      workspace,
+      saveMarkdownFileToPath: () =>
+        new Promise((resolve) => {
+          resolveSave = resolve;
+        })
+    });
+
+    const savePromise = application.saveTab({
+      tabId,
+      expectedWindowId: "window-1",
+      path: "C:/notes/closed-window.md"
+    });
+    workspace.unregisterWindow("window-1");
+    resolveSave({
+      status: "success",
+      document: {
+        path: "C:/notes/closed-window.md",
+        name: "closed-window.md",
+        content: "captured dirty",
+        encoding: "utf-8"
+      }
+    });
+
+    await expect(savePromise).rejects.toThrow(
+      "Workspace window 'window-1' no longer exists."
+    );
+  });
 });

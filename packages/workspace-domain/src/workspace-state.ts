@@ -68,6 +68,7 @@ export interface CloseWorkspaceTabInput {
 
 export type WorkspaceMutationStaleReason =
   | "tab-missing"
+  | "window-missing"
   | "window-changed"
   | "revision-changed";
 
@@ -79,7 +80,7 @@ export type WorkspaceMutationResult =
   | {
       readonly kind: "stale";
       readonly reason: WorkspaceMutationStaleReason;
-      readonly projection: WorkspaceWindowProjection;
+      readonly projection: WorkspaceWindowProjection | null;
     };
 
 export interface MoveWorkspaceTabInput {
@@ -516,6 +517,14 @@ class CanonicalWorkspaceState implements WorkspaceState {
     expectedWindowId: string,
     reason: WorkspaceMutationStaleReason
   ): WorkspaceMutationResult {
+    if (!this.windows.has(expectedWindowId)) {
+      return Object.freeze({
+        kind: "stale",
+        reason: "window-missing",
+        projection: null
+      });
+    }
+
     return Object.freeze({
       kind: "stale",
       reason,

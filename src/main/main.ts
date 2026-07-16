@@ -430,8 +430,8 @@ app.whenReady().then(async () => {
 
   function ensureWorkspaceWindow(sender: Electron.WebContents): string {
     const windowId = resolveWorkspaceWindowId(sender);
-    workspaceState.registerWindow(windowId);
     workspaceDetachApplication.markWindowReady(windowId);
+    workspaceState.registerWindow(windowId);
 
     if (!workspaceWindowBindings.has(windowId)) {
       const ownerWindow = BrowserWindow.fromWebContents(sender);
@@ -792,7 +792,7 @@ app.whenReady().then(async () => {
     DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL,
     async (event, input: DetachWorkspaceTabToNewWindowInput) => {
       const windowId = ensureWorkspaceWindow(event.sender);
-      const projection = workspaceDetachApplication.detachTab({
+      const projection = await workspaceDetachApplication.detachTab({
         tabId: input.tabId,
         expectedWindowId: windowId
       });

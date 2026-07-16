@@ -41,12 +41,18 @@ export function createWorkspaceReloadApplication(
       }
 
       await dependencies.recordRecentFilePath(result.document.path ?? input.targetPath);
-      return dependencies.workspace.replaceTabDocument({
+      const mutation = dependencies.workspace.replaceTabDocument({
         tabId: input.tabId,
         expectedWindowId: input.expectedWindowId,
         expectedRevision: checkpoint.revision,
         document: result.document
-      }).projection;
+      });
+      if (mutation.projection === null) {
+        throw new Error(
+          `Workspace window '${input.expectedWindowId}' no longer exists.`
+        );
+      }
+      return mutation.projection;
     }
   };
 }

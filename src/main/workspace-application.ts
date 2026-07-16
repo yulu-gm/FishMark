@@ -43,13 +43,18 @@ export function createWorkspaceApplication(dependencies: WorkspaceApplicationDep
       });
 
       if (result.status === "success") {
-        dependencies.workspace.saveTabDocument({
+        const commit = dependencies.workspace.saveTabDocument({
           tabId: input.tabId,
           expectedWindowId: input.expectedWindowId,
           capturedRevision: tab.revision,
           document: result.document,
           diskVersion: null
         });
+        if (commit.projection === null) {
+          throw new Error(
+            `Workspace window '${input.expectedWindowId}' no longer exists.`
+          );
+        }
       }
 
       return result;

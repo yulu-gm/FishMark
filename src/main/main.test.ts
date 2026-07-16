@@ -64,6 +64,10 @@ describe("main process window wiring", () => {
 
   it("wires the workspace domain state, application boundary, and IPC handlers", () => {
     const mainSource = readMainSource();
+    const ensureWorkspaceSource = mainSource.slice(
+      mainSource.indexOf("function ensureWorkspaceWindow"),
+      mainSource.indexOf("if (!workspaceWindowBindings.has(windowId))")
+    );
     const legacyModule = ["workspace", "service"].join("-");
     const legacyFactory = ["create", "Workspace", "Service"].join("");
 
@@ -112,7 +116,12 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain("workspaceFileOperations.saveAs({");
     expect(mainSource).toContain("workspaceReloadApplication.reloadTab({");
     expect(mainSource).toContain("toWorkspaceMoveTabResult(workspaceState.moveTabToWindow(input))");
-    expect(mainSource).toContain("workspaceDetachApplication.detachTab({");
+    expect(mainSource).toContain(
+      "const projection = await workspaceDetachApplication.detachTab({"
+    );
+    expect(ensureWorkspaceSource.indexOf("workspaceDetachApplication.markWindowReady(windowId)")).toBeLessThan(
+      ensureWorkspaceSource.indexOf("workspaceState.registerWindow(windowId)")
+    );
     expect(mainSource).not.toContain("workspaceState.registerWindow(detachedWindowId)");
     expect(mainSource).toContain("workspaceState.getWindowProjection(windowId)");
     expect(mainSource).not.toContain("workspaceState.replaceTabDocument(input.tabId");

@@ -12,6 +12,7 @@ import {
   type WorkspaceDocumentData,
   type WorkspaceDocumentProjection,
   type WorkspaceMoveProjection,
+  type WorkspaceMutationResult,
   type WorkspaceState,
   type WorkspaceTabProjection,
   type WorkspaceWindowProjection
@@ -205,6 +206,9 @@ describe("WorkspaceState tab lifecycle", () => {
     });
 
     expect(closed.kind).toBe("applied");
+    if (closed.kind !== "applied") {
+      throw new Error("Expected close to apply.");
+    }
     expect(closed.projection.tabs.map((tab) => tab.name)).toEqual([
       "first.md",
       "third.md"
@@ -226,6 +230,9 @@ describe("WorkspaceState tab lifecycle", () => {
     });
 
     expect(closed.kind).toBe("applied");
+    if (closed.kind !== "applied") {
+      throw new Error("Expected close to apply.");
+    }
     expect(closed.projection.activeTabId).toBe(activeTabId);
     expect(closed.projection.activeDocument?.name).toBe("second.md");
   });
@@ -248,6 +255,9 @@ describe("WorkspaceState save and reload transitions", () => {
 
     expect(saved.kind).toBe("applied");
     expect(Object.isFrozen(saved)).toBe(true);
+    if (saved.kind !== "applied") {
+      throw new Error("Expected save to apply.");
+    }
     expect(saved.projection.activeDocument).toEqual({
       tabId,
       ...createDocument("saved.md", "# Saved\n"),
@@ -462,6 +472,44 @@ describe("WorkspaceState save and reload transitions", () => {
       revision: 1,
       isDirty: true
     });
+  });
+
+  it("returns a total window-missing stale result after the expected window closes", () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.createUntitledTab("window-1").activeTabId!;
+    workspace.updateTabDraft(tabId, "captured dirty");
+    workspace.unregisterWindow("window-1");
+
+    const results: WorkspaceMutationResult[] = [
+      workspace.saveTabDocument({
+        tabId,
+        expectedWindowId: "window-1",
+        capturedRevision: 1,
+        document: createDocument("saved.md", "captured dirty"),
+        diskVersion
+      }),
+      workspace.replaceTabDocument({
+        tabId,
+        expectedWindowId: "window-1",
+        expectedRevision: 1,
+        document: createDocument("reloaded.md", "disk content")
+      }),
+      workspace.closeTab({
+        tabId,
+        expectedWindowId: "window-1",
+        expectedRevision: 1
+      })
+    ];
+
+    for (const result of results) {
+      expect(result).toEqual({
+        kind: "stale",
+        reason: "window-missing",
+        projection: null
+      });
+      expect(Object.isFrozen(result)).toBe(true);
+    }
   });
 });
 
@@ -718,6 +766,12 @@ describe("WorkspaceState projection isolation", () => {
       readonly sourceWindowSnapshot: WorkspaceWindowProjection;
       readonly targetWindowSnapshot: WorkspaceWindowProjection;
     }>();
+    expectTypeOf<
+      Extract<WorkspaceMutationResult, { kind: "applied" }>["projection"]
+    >().toEqualTypeOf<WorkspaceWindowProjection>();
+    expectTypeOf<
+      Extract<WorkspaceMutationResult, { kind: "stale" }>["projection"]
+    >().toEqualTypeOf<WorkspaceWindowProjection | null>();
     expectTypeOf<WorkspaceState["getTabSession"]>().returns.toEqualTypeOf<
       DocumentSessionProjection
     >();

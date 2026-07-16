@@ -126,4 +126,37 @@ describe("createWorkspaceReloadApplication", () => {
       isDirty: false
     });
   });
+
+  it("explicitly rejects a stale reload after the expected window closes", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.openDocument(
+      "window-1",
+      document("closed-window.md", "before")
+    ).activeTabId!;
+    let resolveRead!: (result: OpenMarkdownFileResult) => void;
+    const application = createWorkspaceReloadApplication({
+      workspace,
+      openMarkdownFileFromPath: () =>
+        new Promise((resolve) => {
+          resolveRead = resolve;
+        }),
+      recordRecentFilePath: vi.fn(async () => undefined)
+    });
+
+    const reloadPromise = application.reloadTab({
+      tabId,
+      expectedWindowId: "window-1",
+      targetPath: "C:/notes/closed-window.md"
+    });
+    workspace.unregisterWindow("window-1");
+    resolveRead({
+      status: "success",
+      document: document("closed-window.md", "disk after")
+    });
+
+    await expect(reloadPromise).rejects.toThrow(
+      "Workspace window 'window-1' no longer exists."
+    );
+  });
 });
