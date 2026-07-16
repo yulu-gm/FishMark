@@ -41,22 +41,22 @@ export function createWorkspaceDetachApplication<TWindow>(
 
       const window = dependencies.openWindow();
       const targetWindowId = dependencies.lifecycle.getWindowId(window);
+      const cleanup = createPostDetachCleanup({
+        targetWindowId,
+        tabId: input.tabId,
+        sourceWindowId: input.expectedWindowId
+      });
       try {
         const projection = dependencies.workspace.detachTabToWindow({
           tabId: input.tabId,
           targetWindowId
         });
         pendingRendererWindowIds.add(targetWindowId);
-        bindEarlyCleanup(
-          window,
-          targetWindowId,
-          input.tabId,
-          input.expectedWindowId
-        );
+        bindEarlyCleanup(window, targetWindowId, cleanup);
         return projection;
       } catch (error) {
-        dependencies.workspace.unregisterWindow(targetWindowId);
-        dependencies.lifecycle.destroyWindow(window);
+        cleanup("rollback");
+        destroyWindowSafely(window);
         throw error;
       }
     },
@@ -68,40 +68,92 @@ export function createWorkspaceDetachApplication<TWindow>(
   function bindEarlyCleanup(
     window: TWindow,
     targetWindowId: string,
-    tabId: string,
-    sourceWindowId: string
+    cleanup: (intent: "rollback" | "close") => void
   ): void {
-    let hasCleaned = false;
-    const cleanup = () => {
-      if (hasCleaned) {
-        return;
-      }
-      hasCleaned = true;
-      const shouldRestore = pendingRendererWindowIds.delete(targetWindowId);
-      try {
-        if (
-          shouldRestore &&
-          dependencies.workspace.getTabSession(tabId).windowId === targetWindowId
-        ) {
-          dependencies.workspace.moveTabToWindow({
-            tabId,
-            targetWindowId: sourceWindowId
-          });
-        }
-      } catch {
-        // The target cleanup below remains the fail-closed fallback.
-      } finally {
-        dependencies.workspace.unregisterWindow(targetWindowId);
-      }
-    };
-
-    dependencies.lifecycle.bindClosed(window, cleanup);
+    dependencies.lifecycle.bindClosed(window, () => {
+      cleanup(
+        pendingRendererWindowIds.has(targetWindowId) ? "rollback" : "close"
+      );
+    });
     dependencies.lifecycle.bindLoadFailure(window, () => {
       if (!pendingRendererWindowIds.has(targetWindowId)) {
         return;
       }
-      cleanup();
-      dependencies.lifecycle.destroyWindow(window);
+      cleanup("rollback");
+      destroyWindowSafely(window);
     });
+  }
+
+  function createPostDetachCleanup(input: {
+    readonly targetWindowId: string;
+    readonly tabId: string;
+    readonly sourceWindowId: string;
+  }): (intent: "rollback" | "close") => void {
+    let hasCleaned = false;
+
+    return (intent) => {
+      if (hasCleaned) {
+        return;
+      }
+      hasCleaned = true;
+      pendingRendererWindowIds.delete(input.targetWindowId);
+
+      if (intent === "close") {
+        unregisterWindowSafely(input.targetWindowId);
+        return;
+      }
+
+      rollbackCanonicalOwnership(input);
+    };
+  }
+
+  function rollbackCanonicalOwnership(input: {
+    readonly targetWindowId: string;
+    readonly tabId: string;
+    readonly sourceWindowId: string;
+  }): void {
+    let currentWindowId: string;
+    try {
+      currentWindowId = dependencies.workspace.getTabSession(input.tabId).windowId;
+    } catch {
+      return;
+    }
+
+    if (currentWindowId === input.targetWindowId) {
+      try {
+        dependencies.workspace.moveTabToWindow({
+          tabId: input.tabId,
+          targetWindowId: input.sourceWindowId
+        });
+      } catch {
+        return;
+      }
+
+      try {
+        currentWindowId = dependencies.workspace.getTabSession(input.tabId).windowId;
+      } catch {
+        return;
+      }
+    }
+
+    if (currentWindowId !== input.targetWindowId) {
+      unregisterWindowSafely(input.targetWindowId);
+    }
+  }
+
+  function unregisterWindowSafely(windowId: string): void {
+    try {
+      dependencies.workspace.unregisterWindow(windowId);
+    } catch {
+      // Lifecycle cleanup must never replace the detach/binding failure.
+    }
+  }
+
+  function destroyWindowSafely(window: TWindow): void {
+    try {
+      dependencies.lifecycle.destroyWindow(window);
+    } catch {
+      // Preserve the original detach/binding failure and canonical workspace state.
+    }
   }
 }

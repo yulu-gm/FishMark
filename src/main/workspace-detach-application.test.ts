@@ -54,6 +54,9 @@ describe("createWorkspaceDetachApplication", () => {
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
     const window = createWindow(3);
     const detachError = new Error("detach failed");
+    const unregisterWindow = vi.fn(() => {
+      throw new Error("target did not exist");
+    });
     const application = createWorkspaceDetachApplication({
       workspace: {
         getTabSession: workspace.getTabSession.bind(workspace),
@@ -61,7 +64,7 @@ describe("createWorkspaceDetachApplication", () => {
           throw detachError;
         }),
         moveTabToWindow: workspace.moveTabToWindow.bind(workspace),
-        unregisterWindow: workspace.unregisterWindow.bind(workspace)
+        unregisterWindow
       },
       openWindow: () => window,
       lifecycle: createLifecycle()
@@ -70,6 +73,7 @@ describe("createWorkspaceDetachApplication", () => {
     expect(() =>
       application.detachTab({ tabId, expectedWindowId: "window-1" })
     ).toThrow(detachError);
+    expect(unregisterWindow).toHaveBeenCalledWith("3");
     expect(window.destroy).toHaveBeenCalledTimes(1);
   });
 
@@ -120,6 +124,174 @@ describe("createWorkspaceDetachApplication", () => {
     expect(workspace.getTabSession(tabId).windowId).toBe("window-1");
   });
 
+  it("preserves the detached canonical tab when the source is gone before a pre-ready close", () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.createUntitledTab("window-1").activeTabId!;
+    workspace.updateTabDraft(tabId, "unsaved detached draft");
+    const window = createWindow(3);
+    const moveTabToWindow = vi.spyOn(workspace, "moveTabToWindow");
+    const unregisterWindow = vi.spyOn(workspace, "unregisterWindow");
+    const application = createWorkspaceDetachApplication({
+      workspace,
+      openWindow: () => window,
+      lifecycle: createLifecycle()
+    });
+
+    application.detachTab({ tabId, expectedWindowId: "window-1" });
+    workspace.unregisterWindow("window-1");
+    window.closedListener?.();
+    window.closedListener?.();
+
+    expect(moveTabToWindow).toHaveBeenCalledTimes(1);
+    expect(unregisterWindow).not.toHaveBeenCalledWith("3");
+    expect(window.destroy).not.toHaveBeenCalled();
+    expect(workspace.getTabSession(tabId)).toMatchObject({
+      windowId: "3",
+      content: "unsaved detached draft",
+      revision: 1,
+      savedRevision: 0,
+      isDirty: true
+    });
+    expect(workspace.getWindowProjection("3")).toMatchObject({
+      windowId: "3",
+      tabs: [{ tabId, isDirty: true }],
+      activeDocument: {
+        tabId,
+        content: "unsaved detached draft",
+        isDirty: true
+      }
+    });
+  });
+
+  it("preserves the detached canonical tab when the source is gone before a pre-ready load failure", () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.createUntitledTab("window-1").activeTabId!;
+    workspace.updateTabDraft(tabId, "unsaved detached draft");
+    const window = createWindow(3);
+    const moveTabToWindow = vi.spyOn(workspace, "moveTabToWindow");
+    const unregisterWindow = vi.spyOn(workspace, "unregisterWindow");
+    const application = createWorkspaceDetachApplication({
+      workspace,
+      openWindow: () => window,
+      lifecycle: createLifecycle()
+    });
+
+    application.detachTab({ tabId, expectedWindowId: "window-1" });
+    workspace.unregisterWindow("window-1");
+    window.loadFailureListener?.();
+    window.closedListener?.();
+    window.loadFailureListener?.();
+
+    expect(moveTabToWindow).toHaveBeenCalledTimes(1);
+    expect(unregisterWindow).not.toHaveBeenCalledWith("3");
+    expect(window.destroy).toHaveBeenCalledTimes(1);
+    expect(workspace.getTabSession(tabId)).toMatchObject({
+      windowId: "3",
+      content: "unsaved detached draft",
+      revision: 1,
+      savedRevision: 0,
+      isDirty: true
+    });
+    expect(workspace.getWindowProjection("3")).toMatchObject({
+      windowId: "3",
+      tabs: [{ tabId, isDirty: true }],
+      activeDocument: {
+        tabId,
+        content: "unsaved detached draft",
+        isDirty: true
+      }
+    });
+  });
+
+  it("rolls back and destroys the detached window when binding closed fails", () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.createUntitledTab("window-1").activeTabId!;
+    workspace.updateTabDraft(tabId, "unsaved detached draft");
+    const window = createWindow(3);
+    const bindError = new Error("bind closed failed");
+    const moveTabToWindow = vi.spyOn(workspace, "moveTabToWindow");
+    const unregisterWindow = vi.spyOn(workspace, "unregisterWindow");
+    const lifecycle = createLifecycle();
+    lifecycle.bindClosed = vi.fn(() => {
+      throw bindError;
+    });
+    const application = createWorkspaceDetachApplication({
+      workspace,
+      openWindow: () => window,
+      lifecycle
+    });
+
+    expect(() =>
+      application.detachTab({ tabId, expectedWindowId: "window-1" })
+    ).toThrow(bindError);
+    application.markWindowReady("3");
+
+    expect(moveTabToWindow).toHaveBeenCalledTimes(1);
+    expect(unregisterWindow).toHaveBeenCalledWith("3");
+    expect(window.destroy).toHaveBeenCalledTimes(1);
+    expect(workspace.getTabSession(tabId)).toMatchObject({
+      windowId: "window-1",
+      content: "unsaved detached draft",
+      revision: 1,
+      savedRevision: 0,
+      isDirty: true
+    });
+    expect(() => workspace.getWindowProjection("3")).toThrow(
+      "Unknown workspace window '3'."
+    );
+  });
+
+  it("uses one idempotent rollback when binding load failure fails after binding closed", () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.createUntitledTab("window-1").activeTabId!;
+    workspace.updateTabDraft(tabId, "unsaved detached draft");
+    const window = createWindow(3);
+    window.destroy = vi.fn(() => window.closedListener?.());
+    const bindError = new Error("bind load failure failed");
+    const moveTabToWindow = vi.spyOn(workspace, "moveTabToWindow");
+    const unregisterWindow = vi.spyOn(workspace, "unregisterWindow");
+    const lifecycle = createLifecycle();
+    lifecycle.bindLoadFailure = vi.fn(() => {
+      workspace.unregisterWindow("window-1");
+      throw bindError;
+    });
+    const application = createWorkspaceDetachApplication({
+      workspace,
+      openWindow: () => window,
+      lifecycle
+    });
+
+    expect(() =>
+      application.detachTab({ tabId, expectedWindowId: "window-1" })
+    ).toThrow(bindError);
+    window.closedListener?.();
+
+    expect(moveTabToWindow).toHaveBeenCalledTimes(1);
+    expect(unregisterWindow).toHaveBeenCalledTimes(1);
+    expect(unregisterWindow).not.toHaveBeenCalledWith("3");
+    expect(window.destroy).toHaveBeenCalledTimes(1);
+    expect(workspace.getTabSession(tabId)).toMatchObject({
+      windowId: "3",
+      content: "unsaved detached draft",
+      revision: 1,
+      savedRevision: 0,
+      isDirty: true
+    });
+    expect(workspace.getWindowProjection("3")).toMatchObject({
+      windowId: "3",
+      tabs: [{ tabId, isDirty: true }],
+      activeDocument: {
+        tabId,
+        content: "unsaved detached draft",
+        isDirty: true
+      }
+    });
+  });
+
   it("disarms load-failure rollback after the detached renderer reaches IPC", () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
@@ -137,5 +309,34 @@ describe("createWorkspaceDetachApplication", () => {
 
     expect(window.destroy).not.toHaveBeenCalled();
     expect(workspace.getTabSession(tabId).windowId).toBe("3");
+  });
+
+  it("normally unregisters a ready detached window without restoring its tab", () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.createUntitledTab("window-1").activeTabId!;
+    const window = createWindow(3);
+    const moveTabToWindow = vi.spyOn(workspace, "moveTabToWindow");
+    const unregisterWindow = vi.spyOn(workspace, "unregisterWindow");
+    const application = createWorkspaceDetachApplication({
+      workspace,
+      openWindow: () => window,
+      lifecycle: createLifecycle()
+    });
+
+    application.detachTab({ tabId, expectedWindowId: "window-1" });
+    application.markWindowReady("3");
+    window.closedListener?.();
+    window.closedListener?.();
+
+    expect(moveTabToWindow).not.toHaveBeenCalled();
+    expect(unregisterWindow).toHaveBeenCalledTimes(1);
+    expect(unregisterWindow).toHaveBeenCalledWith("3");
+    expect(() => workspace.getTabSession(tabId)).toThrow(
+      `Unknown workspace tab '${tabId}'.`
+    );
+    expect(() => workspace.getWindowProjection("3")).toThrow(
+      "Unknown workspace window '3'."
+    );
   });
 });
