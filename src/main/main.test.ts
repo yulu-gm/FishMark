@@ -93,6 +93,20 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain("const workspaceDetachApplication = createWorkspaceDetachApplication({");
     expect(mainSource).toContain("const workspaceFileOperations = createWorkspaceFileOperations({");
     expect(mainSource).toContain("const workspaceReloadApplication = createWorkspaceReloadApplication({");
+    expect(mainSource).toContain(
+      "const WORKSPACE_DETACH_READY_TIMEOUT_MS = 15_000"
+    );
+    expect(mainSource).toContain("reportCleanupError: (error) => {");
+    expect(mainSource).toContain(
+      '"[fishmark] workspace file operation cleanup failed.",'
+    );
+    expect(mainSource).toContain(
+      "scheduleReadyTimeout: (listener) => {"
+    );
+    expect(mainSource).toContain(
+      "setTimeout(listener, WORKSPACE_DETACH_READY_TIMEOUT_MS)"
+    );
+    expect(mainSource).toContain("return () => clearTimeout(timeout)");
     expect(mainSource).toContain("workspace: workspaceState");
     expect(mainSource).toContain("ipcMain.handle(GET_WORKSPACE_SNAPSHOT_CHANNEL");
     expect(mainSource).toContain("ipcMain.handle(CREATE_WORKSPACE_TAB_CHANNEL");

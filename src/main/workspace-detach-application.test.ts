@@ -27,6 +27,25 @@ function createLifecycle() {
   };
 }
 
+function createReadyScheduler() {
+  let listener: (() => void) | undefined;
+  const cancel = vi.fn();
+  const scheduleReadyTimeout = vi.fn((nextListener: () => void) => {
+    listener = nextListener;
+    return cancel;
+  });
+
+  return {
+    cancel,
+    fire: () => listener?.(),
+    scheduleReadyTimeout
+  };
+}
+
+function scheduleReadyTimeout(): () => void {
+  return vi.fn();
+}
+
 function createDirtySource() {
   const workspace = createWorkspaceState();
   workspace.registerWindow("window-1");
@@ -66,6 +85,7 @@ describe("createWorkspaceDetachApplication", () => {
     const application = createWorkspaceDetachApplication({
       workspace,
       openWindow,
+      scheduleReadyTimeout,
       lifecycle: createLifecycle()
     });
 
@@ -80,10 +100,12 @@ describe("createWorkspaceDetachApplication", () => {
   it("keeps the source canonical until ready then atomically moves and resolves", async () => {
     const { workspace, tabId } = createDirtySource();
     const window = createWindow(3);
+    const scheduler = createReadyScheduler();
     const detachTabToWindow = vi.spyOn(workspace, "detachTabToWindow");
     const application = createWorkspaceDetachApplication({
       workspace,
       openWindow: () => window,
+      scheduleReadyTimeout: scheduler.scheduleReadyTimeout,
       lifecycle: createLifecycle()
     });
 
@@ -134,16 +156,51 @@ describe("createWorkspaceDetachApplication", () => {
       savedRevision: 0,
       isDirty: true
     });
+    expect(scheduler.cancel).toHaveBeenCalledOnce();
+  });
+
+  it("times out a window that never becomes ready without moving the source tab", async () => {
+    const { workspace, tabId } = createDirtySource();
+    const window = createWindow(3);
+    const scheduler = createReadyScheduler();
+    const detachTabToWindow = vi.spyOn(workspace, "detachTabToWindow");
+    const application = createWorkspaceDetachApplication({
+      workspace,
+      openWindow: () => window,
+      scheduleReadyTimeout: scheduler.scheduleReadyTimeout,
+      lifecycle: createLifecycle()
+    });
+
+    const detachPromise = application.detachTab({
+      tabId,
+      expectedWindowId: "window-1"
+    });
+    expect(scheduler.scheduleReadyTimeout).toHaveBeenCalledOnce();
+    const rejection = expect(detachPromise).rejects.toThrow(
+      "Detached workspace window '3' did not become ready before the timeout."
+    );
+
+    scheduler.fire();
+    await rejection;
+
+    expect(scheduler.cancel).toHaveBeenCalledOnce();
+    expect(detachTabToWindow).not.toHaveBeenCalled();
+    expect(window.destroy).toHaveBeenCalledOnce();
+    expectDirtySourceTab(workspace, tabId);
+    expectNoTargetWindow(workspace);
+    expect(() => application.markWindowReady("3")).not.toThrow();
   });
 
   it("rejects ready when the tab moved away from the expected source while waiting", async () => {
     const { workspace, tabId } = createDirtySource();
     workspace.registerWindow("window-2");
     const window = createWindow(3);
+    const scheduler = createReadyScheduler();
     const detachTabToWindow = vi.spyOn(workspace, "detachTabToWindow");
     const application = createWorkspaceDetachApplication({
       workspace,
       openWindow: () => window,
+      scheduleReadyTimeout: scheduler.scheduleReadyTimeout,
       lifecycle: createLifecycle()
     });
 
@@ -169,15 +226,18 @@ describe("createWorkspaceDetachApplication", () => {
       isDirty: true
     });
     expectNoTargetWindow(workspace);
+    expect(scheduler.cancel).toHaveBeenCalledOnce();
   });
 
   it("rejects exactly once on a pre-ready close and leaves the source untouched", async () => {
     const { workspace, tabId } = createDirtySource();
     const window = createWindow(3);
+    const scheduler = createReadyScheduler();
     const detachTabToWindow = vi.spyOn(workspace, "detachTabToWindow");
     const application = createWorkspaceDetachApplication({
       workspace,
       openWindow: () => window,
+      scheduleReadyTimeout: scheduler.scheduleReadyTimeout,
       lifecycle: createLifecycle()
     });
 
@@ -197,16 +257,19 @@ describe("createWorkspaceDetachApplication", () => {
     expect(window.destroy).toHaveBeenCalledOnce();
     expectDirtySourceTab(workspace, tabId);
     expectNoTargetWindow(workspace);
+    expect(scheduler.cancel).toHaveBeenCalledOnce();
     expect(() => application.markWindowReady("3")).not.toThrow();
   });
 
   it("rejects exactly once on a pre-ready main-frame load failure", async () => {
     const { workspace, tabId } = createDirtySource();
     const window = createWindow(3);
+    const scheduler = createReadyScheduler();
     const detachTabToWindow = vi.spyOn(workspace, "detachTabToWindow");
     const application = createWorkspaceDetachApplication({
       workspace,
       openWindow: () => window,
+      scheduleReadyTimeout: scheduler.scheduleReadyTimeout,
       lifecycle: createLifecycle()
     });
 
@@ -226,6 +289,7 @@ describe("createWorkspaceDetachApplication", () => {
     expect(window.destroy).toHaveBeenCalledOnce();
     expectDirtySourceTab(workspace, tabId);
     expectNoTargetWindow(workspace);
+    expect(scheduler.cancel).toHaveBeenCalledOnce();
   });
 
   it("destroys the opened window and preserves the getWindowId error", async () => {
@@ -243,6 +307,7 @@ describe("createWorkspaceDetachApplication", () => {
     const application = createWorkspaceDetachApplication({
       workspace,
       openWindow: () => window,
+      scheduleReadyTimeout,
       lifecycle
     });
 
@@ -258,6 +323,7 @@ describe("createWorkspaceDetachApplication", () => {
     const { workspace, tabId } = createDirtySource();
     const window = createWindow(3);
     const adapterError = new Error("bind closed failed");
+    const scheduler = createReadyScheduler();
     const detachTabToWindow = vi.spyOn(workspace, "detachTabToWindow");
     const lifecycle = createLifecycle();
     lifecycle.bindClosed = vi.fn(() => {
@@ -266,6 +332,7 @@ describe("createWorkspaceDetachApplication", () => {
     const application = createWorkspaceDetachApplication({
       workspace,
       openWindow: () => window,
+      scheduleReadyTimeout: scheduler.scheduleReadyTimeout,
       lifecycle
     });
 
@@ -276,6 +343,7 @@ describe("createWorkspaceDetachApplication", () => {
     expect(window.destroy).toHaveBeenCalledOnce();
     expectDirtySourceTab(workspace, tabId);
     expectNoTargetWindow(workspace);
+    expect(scheduler.cancel).toHaveBeenCalledOnce();
   });
 
   it("rejects a bindLoadFailure error once when destroy re-enters closed", async () => {
@@ -283,6 +351,7 @@ describe("createWorkspaceDetachApplication", () => {
     const window = createWindow(3);
     window.destroy = vi.fn(() => window.closedListener?.());
     const adapterError = new Error("bind load failure failed");
+    const scheduler = createReadyScheduler();
     const detachTabToWindow = vi.spyOn(workspace, "detachTabToWindow");
     const lifecycle = createLifecycle();
     lifecycle.bindLoadFailure = vi.fn(() => {
@@ -291,6 +360,7 @@ describe("createWorkspaceDetachApplication", () => {
     const application = createWorkspaceDetachApplication({
       workspace,
       openWindow: () => window,
+      scheduleReadyTimeout: scheduler.scheduleReadyTimeout,
       lifecycle
     });
 
@@ -302,12 +372,14 @@ describe("createWorkspaceDetachApplication", () => {
     expect(window.destroy).toHaveBeenCalledOnce();
     expectDirtySourceTab(workspace, tabId);
     expectNoTargetWindow(workspace);
+    expect(scheduler.cancel).toHaveBeenCalledOnce();
   });
 
   it("rejects and destroys when the ready-time domain detach fails", async () => {
     const { workspace, tabId } = createDirtySource();
     const window = createWindow(3);
     const domainError = new Error("detach failed");
+    const scheduler = createReadyScheduler();
     const detachTabToWindow = vi.fn(() => {
       throw domainError;
     });
@@ -317,6 +389,7 @@ describe("createWorkspaceDetachApplication", () => {
         detachTabToWindow
       },
       openWindow: () => window,
+      scheduleReadyTimeout: scheduler.scheduleReadyTimeout,
       lifecycle: createLifecycle()
     });
 
@@ -332,15 +405,18 @@ describe("createWorkspaceDetachApplication", () => {
     expect(window.destroy).toHaveBeenCalledOnce();
     expectDirtySourceTab(workspace, tabId);
     expectNoTargetWindow(workspace);
+    expect(scheduler.cancel).toHaveBeenCalledOnce();
     expect(() => application.markWindowReady("3")).not.toThrow();
   });
 
   it("rejects ready when the source was normally unregistered while waiting", async () => {
     const { workspace, tabId } = createDirtySource();
     const window = createWindow(3);
+    const scheduler = createReadyScheduler();
     const application = createWorkspaceDetachApplication({
       workspace,
       openWindow: () => window,
+      scheduleReadyTimeout: scheduler.scheduleReadyTimeout,
       lifecycle: createLifecycle()
     });
 
@@ -359,15 +435,18 @@ describe("createWorkspaceDetachApplication", () => {
     await rejection;
     expect(window.destroy).toHaveBeenCalledOnce();
     expectNoTargetWindow(workspace);
+    expect(scheduler.cancel).toHaveBeenCalledOnce();
   });
 
   it("makes early lifecycle events and duplicate ready notifications no-ops after success", async () => {
     const { workspace, tabId } = createDirtySource();
     const window = createWindow(3);
+    const scheduler = createReadyScheduler();
     const detachTabToWindow = vi.spyOn(workspace, "detachTabToWindow");
     const application = createWorkspaceDetachApplication({
       workspace,
       openWindow: () => window,
+      scheduleReadyTimeout: scheduler.scheduleReadyTimeout,
       lifecycle: createLifecycle()
     });
 
@@ -379,11 +458,14 @@ describe("createWorkspaceDetachApplication", () => {
     application.markWindowReady("3");
     await detachPromise;
 
+    scheduler.fire();
+    scheduler.fire();
     window.closedListener?.();
     window.loadFailureListener?.();
     application.markWindowReady("3");
 
     expect(detachTabToWindow).toHaveBeenCalledOnce();
+    expect(scheduler.cancel).toHaveBeenCalledOnce();
     expect(window.destroy).not.toHaveBeenCalled();
     expect(workspace.getTabSession(tabId).windowId).toBe("3");
     expect(workspace.getWindowProjection("3").activeTabId).toBe(tabId);

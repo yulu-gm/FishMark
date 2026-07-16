@@ -43,7 +43,8 @@ describe("createWorkspaceFileOperations", () => {
       beginInternalWrite,
       completeInternalWrite,
       syncDocumentPath,
-      recordRecentFilePath
+      recordRecentFilePath,
+      reportCleanupError: vi.fn()
     });
 
     const savePromise = operations.save({
@@ -92,7 +93,8 @@ describe("createWorkspaceFileOperations", () => {
       beginInternalWrite: vi.fn(),
       completeInternalWrite,
       syncDocumentPath,
-      recordRecentFilePath: vi.fn(async () => undefined)
+      recordRecentFilePath: vi.fn(async () => undefined),
+      reportCleanupError: vi.fn()
     });
 
     await expect(
@@ -136,7 +138,8 @@ describe("createWorkspaceFileOperations", () => {
       beginInternalWrite: vi.fn(),
       completeInternalWrite,
       syncDocumentPath,
-      recordRecentFilePath: vi.fn(async () => undefined)
+      recordRecentFilePath: vi.fn(async () => undefined),
+      reportCleanupError: vi.fn()
     });
 
     await expect(
@@ -181,7 +184,8 @@ describe("createWorkspaceFileOperations", () => {
       beginInternalWrite: vi.fn(),
       completeInternalWrite: vi.fn(),
       syncDocumentPath,
-      recordRecentFilePath
+      recordRecentFilePath,
+      reportCleanupError: vi.fn()
     });
 
     const savePromise = operations.saveAs({
@@ -241,7 +245,8 @@ describe("createWorkspaceFileOperations", () => {
       }),
       completeInternalWrite,
       syncDocumentPath,
-      recordRecentFilePath
+      recordRecentFilePath,
+      reportCleanupError: vi.fn()
     });
 
     const savePromise = operations.save({
@@ -288,7 +293,8 @@ describe("createWorkspaceFileOperations", () => {
       beginInternalWrite: vi.fn(),
       completeInternalWrite: vi.fn(),
       syncDocumentPath,
-      recordRecentFilePath
+      recordRecentFilePath,
+      reportCleanupError: vi.fn()
     });
 
     const savePromise = operations.saveAs({
@@ -315,5 +321,145 @@ describe("createWorkspaceFileOperations", () => {
     });
     expect(recordRecentFilePath).not.toHaveBeenCalled();
     expect(syncDocumentPath).toHaveBeenCalledWith(sender, null);
+  });
+
+  it("preserves the primary save error while reporting every independent cleanup error", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.createUntitledTab("window-1").activeTabId!;
+    const sender = { id: 7 };
+    const primaryError = new Error("primary save failed");
+    const completeError = new Error("complete failed");
+    const syncError = new Error("watch sync failed");
+    const completeInternalWrite = vi.fn(async () => {
+      throw completeError;
+    });
+    const syncDocumentPath = vi.fn(async () => {
+      throw syncError;
+    });
+    const reportCleanupError = vi.fn(() => {
+      throw new Error("reporter failed");
+    });
+    const operations = createWorkspaceFileOperations({
+      workspace,
+      saveTab: vi.fn(async () => {
+        throw primaryError;
+      }),
+      showSaveMarkdownDialog: vi.fn(),
+      beginInternalWrite: vi.fn(),
+      completeInternalWrite,
+      syncDocumentPath,
+      recordRecentFilePath: vi.fn(async () => undefined),
+      reportCleanupError
+    });
+
+    await expect(
+      operations.save({
+        sender,
+        expectedWindowId: "window-1",
+        tabId,
+        path: "C:/notes/primary.md"
+      })
+    ).rejects.toBe(primaryError);
+
+    expect(completeInternalWrite).toHaveBeenCalledWith(
+      sender,
+      "C:/notes/primary.md"
+    );
+    expect(syncDocumentPath).toHaveBeenCalledWith(sender, null);
+    expect(reportCleanupError.mock.calls).toEqual([
+      [completeError],
+      [syncError]
+    ]);
+  });
+
+  it("preserves the primary Save As error when watch cleanup and its reporter fail", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.createUntitledTab("window-1").activeTabId!;
+    const sender = { id: 8 };
+    const primaryError = new Error("dialog failed");
+    const syncError = new Error("watch sync failed");
+    const syncDocumentPath = vi.fn(async () => {
+      throw syncError;
+    });
+    const reportCleanupError = vi.fn(() => {
+      throw new Error("reporter failed");
+    });
+    const operations = createWorkspaceFileOperations({
+      workspace,
+      saveTab: vi.fn(),
+      showSaveMarkdownDialog: vi.fn(async () => {
+        throw primaryError;
+      }),
+      beginInternalWrite: vi.fn(),
+      completeInternalWrite: vi.fn(),
+      syncDocumentPath,
+      recordRecentFilePath: vi.fn(async () => undefined),
+      reportCleanupError
+    });
+
+    await expect(
+      operations.saveAs({
+        sender,
+        expectedWindowId: "window-1",
+        tabId,
+        currentPath: null
+      })
+    ).rejects.toBe(primaryError);
+
+    expect(syncDocumentPath).toHaveBeenCalledWith(sender, null);
+    expect(reportCleanupError).toHaveBeenCalledOnce();
+    expect(reportCleanupError).toHaveBeenCalledWith(syncError);
+  });
+
+  it("aggregates every cleanup error after a successful save operation", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.createUntitledTab("window-1").activeTabId!;
+    const sender = { id: 9 };
+    const completeError = new Error("complete failed");
+    const syncError = new Error("watch sync failed");
+    const completeInternalWrite = vi.fn(async () => {
+      throw completeError;
+    });
+    const syncDocumentPath = vi.fn(async () => {
+      throw syncError;
+    });
+    const reportCleanupError = vi.fn();
+    const operations = createWorkspaceFileOperations({
+      workspace,
+      saveTab: vi.fn(async () => ({ status: "cancelled" as const })),
+      showSaveMarkdownDialog: vi.fn(),
+      beginInternalWrite: vi.fn(),
+      completeInternalWrite,
+      syncDocumentPath,
+      recordRecentFilePath: vi.fn(async () => undefined),
+      reportCleanupError
+    });
+
+    let caught: unknown;
+    try {
+      await operations.save({
+        sender,
+        expectedWindowId: "window-1",
+        tabId,
+        path: "C:/notes/success.md"
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(AggregateError);
+    expect((caught as AggregateError).errors).toEqual([
+      completeError,
+      syncError
+    ]);
+    expect(completeInternalWrite).toHaveBeenCalledOnce();
+    expect(syncDocumentPath).toHaveBeenCalledOnce();
+    expect(reportCleanupError.mock.calls).toEqual([
+      [completeError],
+      [syncError]
+    ]);
   });
 });

@@ -171,9 +171,6 @@ export function createWorkspaceCloseCoordinator(
       diskVersion: null
     });
     if (commit.kind === "stale") {
-      if (commit.projection === null) {
-        return false;
-      }
       return false;
     }
 

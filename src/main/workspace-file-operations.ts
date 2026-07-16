@@ -31,6 +31,7 @@ type WorkspaceFileOperationsDependencies<TSender> = {
     targetPath: string | null
   ) => Promise<void>;
   recordRecentFilePath: (targetPath: string | null) => Promise<void>;
+  reportCleanupError: (error: unknown) => void;
 };
 
 export function createWorkspaceFileOperations<TSender>(
@@ -51,6 +52,43 @@ export function createWorkspaceFileOperations<TSender>(
     );
   }
 
+  async function runWithCleanup<TResult>(
+    operation: () => Promise<TResult>,
+    cleanupOperations: readonly (() => Promise<void>)[],
+    aggregateMessage: string
+  ): Promise<TResult> {
+    let outcome:
+      | { readonly kind: "success"; readonly result: TResult }
+      | { readonly kind: "failure"; readonly error: unknown };
+    try {
+      outcome = { kind: "success", result: await operation() };
+    } catch (error) {
+      outcome = { kind: "failure", error };
+    }
+
+    const cleanupErrors: unknown[] = [];
+    for (const cleanup of cleanupOperations) {
+      try {
+        await cleanup();
+      } catch (error) {
+        cleanupErrors.push(error);
+        try {
+          dependencies.reportCleanupError(error);
+        } catch {
+          // Reporting cleanup failures must not replace operation/cleanup errors.
+        }
+      }
+    }
+
+    if (outcome.kind === "failure") {
+      throw outcome.error;
+    }
+    if (cleanupErrors.length > 0) {
+      throw new AggregateError(cleanupErrors, aggregateMessage);
+    }
+    return outcome.result;
+  }
+
   return {
     async save(input: {
       readonly sender: TSender;
@@ -58,24 +96,25 @@ export function createWorkspaceFileOperations<TSender>(
       readonly tabId: string;
       readonly path: string;
     }): Promise<SaveMarkdownFileResult> {
-      dependencies.beginInternalWrite(input.sender, input.path);
-      try {
-        const result = await dependencies.saveTab({
-          tabId: input.tabId,
-          expectedWindowId: input.expectedWindowId,
-          path: input.path
-        });
-        if (result.status === "success") {
-          await dependencies.recordRecentFilePath(result.document.path);
-        }
-        return result;
-      } finally {
-        try {
-          await dependencies.completeInternalWrite(input.sender, input.path);
-        } finally {
-          await syncSenderWindowWatch(input.sender, input.expectedWindowId);
-        }
-      }
+      return runWithCleanup(
+        async () => {
+          dependencies.beginInternalWrite(input.sender, input.path);
+          const result = await dependencies.saveTab({
+            tabId: input.tabId,
+            expectedWindowId: input.expectedWindowId,
+            path: input.path
+          });
+          if (result.status === "success") {
+            await dependencies.recordRecentFilePath(result.document.path);
+          }
+          return result;
+        },
+        [
+          () => dependencies.completeInternalWrite(input.sender, input.path),
+          () => syncSenderWindowWatch(input.sender, input.expectedWindowId)
+        ],
+        "Workspace save cleanup failed."
+      );
     },
 
     async saveAs(input: {
@@ -84,38 +123,40 @@ export function createWorkspaceFileOperations<TSender>(
       readonly tabId: string;
       readonly currentPath: string | null;
     }): Promise<SaveMarkdownFileResult> {
-      const checkpoint = dependencies.workspace.getTabSession(input.tabId);
-      if (checkpoint.windowId !== input.expectedWindowId) {
-        throw new Error(
-          `Workspace tab '${input.tabId}' does not belong to window '${input.expectedWindowId}'.`
-        );
-      }
-
-      try {
-        const result = await dependencies.showSaveMarkdownDialog({
-          tabId: input.tabId,
-          currentPath: input.currentPath,
-          content: checkpoint.content
-        });
-        if (result.status === "success") {
-          const commit = dependencies.workspace.saveTabDocument({
-            tabId: input.tabId,
-            expectedWindowId: input.expectedWindowId,
-            capturedRevision: checkpoint.revision,
-            document: result.document,
-            diskVersion: null
-          });
-          if (commit.projection === null) {
+      return runWithCleanup(
+        async () => {
+          const checkpoint = dependencies.workspace.getTabSession(input.tabId);
+          if (checkpoint.windowId !== input.expectedWindowId) {
             throw new Error(
-              `Workspace window '${input.expectedWindowId}' no longer exists.`
+              `Workspace tab '${input.tabId}' does not belong to window '${input.expectedWindowId}'.`
             );
           }
-          await dependencies.recordRecentFilePath(result.document.path);
-        }
-        return result;
-      } finally {
-        await syncSenderWindowWatch(input.sender, input.expectedWindowId);
-      }
+
+          const result = await dependencies.showSaveMarkdownDialog({
+            tabId: input.tabId,
+            currentPath: input.currentPath,
+            content: checkpoint.content
+          });
+          if (result.status === "success") {
+            const commit = dependencies.workspace.saveTabDocument({
+              tabId: input.tabId,
+              expectedWindowId: input.expectedWindowId,
+              capturedRevision: checkpoint.revision,
+              document: result.document,
+              diskVersion: null
+            });
+            if (commit.projection === null) {
+              throw new Error(
+                `Workspace window '${input.expectedWindowId}' no longer exists.`
+              );
+            }
+            await dependencies.recordRecentFilePath(result.document.path);
+          }
+          return result;
+        },
+        [() => syncSenderWindowWatch(input.sender, input.expectedWindowId)],
+        "Workspace Save As cleanup failed."
+      );
     },
 
     syncSenderWindowWatch

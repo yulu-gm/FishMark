@@ -13,6 +13,7 @@ type DetachedWindowLifecycle<TWindow> = {
 type WorkspaceDetachApplicationDependencies<TWindow> = {
   workspace: Pick<WorkspaceState, "getTabSession" | "detachTabToWindow">;
   openWindow: () => TWindow;
+  scheduleReadyTimeout: (listener: () => void) => () => void;
   lifecycle: DetachedWindowLifecycle<TWindow>;
 };
 
@@ -23,6 +24,7 @@ type PendingWorkspaceDetach<TWindow> = {
   readonly window: TWindow;
   readonly resolve: (projection: WorkspaceMoveProjection) => void;
   readonly reject: (error: unknown) => void;
+  cancelReadyTimeout: () => void;
 };
 
 export function createWorkspaceDetachApplication<TWindow>(
@@ -57,11 +59,25 @@ export function createWorkspaceDetachApplication<TWindow>(
         targetWindowId,
         window,
         resolve,
-        reject
+        reject,
+        cancelReadyTimeout: () => undefined
       };
       pendingDetaches.set(targetWindowId, pending);
 
       try {
+        const cancelReadyTimeout = dependencies.scheduleReadyTimeout(() => {
+          rejectPending(
+            targetWindowId,
+            new Error(
+              `Detached workspace window '${targetWindowId}' did not become ready before the timeout.`
+            )
+          );
+        });
+        if (pendingDetaches.get(targetWindowId) !== pending) {
+          cancelReadyTimeoutSafely(cancelReadyTimeout);
+          return;
+        }
+        pending.cancelReadyTimeout = cancelReadyTimeout;
         dependencies.lifecycle.bindClosed(window, () => {
           rejectPending(
             targetWindowId,
@@ -104,25 +120,46 @@ export function createWorkspaceDetachApplication<TWindow>(
         tabId: pending.tabId,
         targetWindowId: pending.targetWindowId
       });
-      pendingDetaches.delete(windowId);
-      pending.resolve(projection);
+      takePending(windowId)?.resolve(projection);
     } catch (error) {
-      pendingDetaches.delete(windowId);
-      destroyWindowSafely(pending.window);
-      pending.reject(error);
+      const rejectedPending = takePending(windowId);
+      if (rejectedPending !== undefined) {
+        destroyWindowSafely(rejectedPending.window);
+        rejectedPending.reject(error);
+      }
       throw error;
     }
   }
 
   function rejectPending(windowId: string, error: unknown): void {
-    const pending = pendingDetaches.get(windowId);
+    const pending = takePending(windowId);
     if (pending === undefined) {
       return;
     }
 
-    pendingDetaches.delete(windowId);
     destroyWindowSafely(pending.window);
     pending.reject(error);
+  }
+
+  function takePending(
+    windowId: string
+  ): PendingWorkspaceDetach<TWindow> | undefined {
+    const pending = pendingDetaches.get(windowId);
+    if (pending === undefined) {
+      return undefined;
+    }
+
+    pendingDetaches.delete(windowId);
+    cancelReadyTimeoutSafely(pending.cancelReadyTimeout);
+    return pending;
+  }
+
+  function cancelReadyTimeoutSafely(cancelReadyTimeout: () => void): void {
+    try {
+      cancelReadyTimeout();
+    } catch {
+      // Settlement already has an authoritative result; cancellation is best effort.
+    }
   }
 
   function destroyWindowSafely(window: TWindow): void {

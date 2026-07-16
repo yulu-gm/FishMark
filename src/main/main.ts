@@ -148,6 +148,7 @@ import {
 } from "../shared/workspace";
 
 const AUTO_UPDATE_STARTUP_DELAY_MS = 5000;
+const WORKSPACE_DETACH_READY_TIMEOUT_MS = 15_000;
 registerPreviewAssetScheme({ protocol });
 configureMainProcessRuntime(app, process.env);
 const hasSingleInstanceLock = shouldRequestSingleInstanceLock(process.env)
@@ -610,11 +611,21 @@ app.whenReady().then(async () => {
     beginInternalWrite: externalFileWatchService.beginInternalWrite,
     completeInternalWrite: externalFileWatchService.completeInternalWrite,
     syncDocumentPath: externalFileWatchService.syncDocumentPath,
-    recordRecentFilePath
+    recordRecentFilePath,
+    reportCleanupError: (error) => {
+      console.error(
+        "[fishmark] workspace file operation cleanup failed.",
+        error
+      );
+    }
   });
   const workspaceDetachApplication = createWorkspaceDetachApplication({
     workspace: workspaceState,
     openWindow: () => windowManager.openEditorWindow(),
+    scheduleReadyTimeout: (listener) => {
+      const timeout = setTimeout(listener, WORKSPACE_DETACH_READY_TIMEOUT_MS);
+      return () => clearTimeout(timeout);
+    },
     lifecycle: {
       getWindowId: (window) => String(window.id),
       destroyWindow: (window) => {
