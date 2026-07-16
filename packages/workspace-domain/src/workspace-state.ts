@@ -60,6 +60,12 @@ export interface ReplaceWorkspaceDocumentInput {
   readonly document: WorkspaceDocumentData;
 }
 
+export interface UpdateWorkspaceTabDraftInput {
+  readonly tabId: string;
+  readonly expectedWindowId: string;
+  readonly content: string;
+}
+
 export interface CloseWorkspaceTabInput {
   readonly tabId: string;
   readonly expectedWindowId: string;
@@ -117,9 +123,8 @@ export interface WorkspaceState {
     tabId: string
   ) => WorkspaceWindowProjection;
   readonly updateTabDraft: (
-    tabId: string,
-    content: string
-  ) => WorkspaceWindowProjection;
+    input: UpdateWorkspaceTabDraftInput
+  ) => WorkspaceMutationResult;
   readonly saveTabDocument: (
     input: CommitWorkspaceDocumentInput
   ) => WorkspaceMutationResult;
@@ -255,11 +260,19 @@ class CanonicalWorkspaceState implements WorkspaceState {
     return this.getWindowProjection(windowId);
   }
 
-  updateTabDraft(tabId: string, content: string): WorkspaceWindowProjection {
-    const context = this.getTabContext(tabId);
+  updateTabDraft({
+    tabId,
+    expectedWindowId,
+    content
+  }: UpdateWorkspaceTabDraftInput): WorkspaceMutationResult {
+    const resolved = this.resolveExpectedTabOwner(tabId, expectedWindowId);
+    if (resolved.kind === "stale") {
+      return this.createStaleMutationResult(expectedWindowId, resolved.reason);
+    }
+    const { context } = resolved;
     const nextSession = replaceDocumentText(context.session, content);
     this.tabs.set(tabId, nextSession);
-    return this.getWindowProjection(context.windowId);
+    return createAppliedMutationResult(this.getWindowProjection(context.windowId));
   }
 
   saveTabDocument({

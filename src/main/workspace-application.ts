@@ -1,6 +1,6 @@
 import type {
+  WorkspaceMutationResult,
   WorkspaceState,
-  WorkspaceWindowProjection
 } from "@fishmark/workspace-domain";
 
 type WorkspaceApplicationDependencies = {
@@ -11,9 +11,10 @@ export function createWorkspaceApplication(dependencies: WorkspaceApplicationDep
   return {
     updateDraft(input: {
       tabId: string;
+      expectedWindowId: string;
       content: string;
-    }): WorkspaceWindowProjection {
-      return dependencies.workspace.updateTabDraft(input.tabId, input.content);
+    }): WorkspaceMutationResult {
+      return dependencies.workspace.updateTabDraft(input);
     }
   };
 }

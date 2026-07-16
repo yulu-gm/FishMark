@@ -21,7 +21,7 @@ describe("createWorkspaceWindowCloseConfirmationHandler", () => {
       "window-1",
       document("saved")
     ).activeTabId!;
-    workspace.updateTabDraft(tabId, "dirty");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "dirty" });
     let resolvePrompt!: (choice: "discard") => void;
     const prompt = vi.fn(
       () =>
@@ -43,7 +43,8 @@ describe("createWorkspaceWindowCloseConfirmationHandler", () => {
       scheduleTimeout: (listener) => {
         timeouts.push(listener);
         return vi.fn();
-      }
+      },
+      schedulePostConfirmationWatchdog: () => vi.fn()
     });
     const first = broker.request({
       windowId: "window-1",

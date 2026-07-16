@@ -2,6 +2,7 @@ import type {
   WorkspaceMoveProjection,
   WorkspaceState
 } from "@fishmark/workspace-domain";
+import type { WorkspaceTabTransferApplication } from "./workspace-tab-transfer-application";
 
 type DetachedWindowLifecycle<TWindow> = {
   getWindowId: (window: TWindow) => string;
@@ -11,7 +12,8 @@ type DetachedWindowLifecycle<TWindow> = {
 };
 
 type WorkspaceDetachApplicationDependencies<TWindow> = {
-  workspace: Pick<WorkspaceState, "getTabSession" | "detachTabToWindow">;
+  workspace: Pick<WorkspaceState, "getTabSession">;
+  tabTransfer: Pick<WorkspaceTabTransferApplication, "detach">;
   openWindow: () => TWindow;
   scheduleReadyTimeout: (listener: () => void) => () => void;
   lifecycle: DetachedWindowLifecycle<TWindow>;
@@ -25,6 +27,7 @@ type PendingWorkspaceDetach<TWindow> = {
   readonly resolve: (projection: WorkspaceMoveProjection) => void;
   readonly reject: (error: unknown) => void;
   cancelReadyTimeout: () => void;
+  readyStarted: boolean;
 };
 
 export function createWorkspaceDetachApplication<TWindow>(
@@ -60,7 +63,8 @@ export function createWorkspaceDetachApplication<TWindow>(
         window,
         resolve,
         reject,
-        cancelReadyTimeout: () => undefined
+        cancelReadyTimeout: () => undefined,
+        readyStarted: false
       };
       pendingDetaches.set(targetWindowId, pending);
 
@@ -103,22 +107,19 @@ export function createWorkspaceDetachApplication<TWindow>(
     });
   }
 
-  function markWindowReady(windowId: string): void {
+  async function markWindowReady(windowId: string): Promise<void> {
     const pending = pendingDetaches.get(windowId);
-    if (pending === undefined) {
+    if (pending === undefined || pending.readyStarted) {
       return;
     }
+    pending.readyStarted = true;
 
     try {
-      const checkpoint = dependencies.workspace.getTabSession(pending.tabId);
-      if (checkpoint.windowId !== pending.sourceWindowId) {
-        throw new Error(
-          `Workspace tab '${pending.tabId}' does not belong to window '${pending.sourceWindowId}'.`
-        );
-      }
-      const projection = dependencies.workspace.detachTabToWindow({
+      const projection = await dependencies.tabTransfer.detach({
         tabId: pending.tabId,
-        targetWindowId: pending.targetWindowId
+        expectedWindowId: pending.sourceWindowId,
+        targetWindowId: pending.targetWindowId,
+        isActive: () => pendingDetaches.get(windowId) === pending
       });
       takePending(windowId)?.resolve(projection);
     } catch (error) {
@@ -126,8 +127,8 @@ export function createWorkspaceDetachApplication<TWindow>(
       if (rejectedPending !== undefined) {
         destroyWindowSafely(rejectedPending.window);
         rejectedPending.reject(error);
+        throw error;
       }
-      throw error;
     }
   }
 

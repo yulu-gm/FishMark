@@ -171,6 +171,42 @@ describe("useWorkspaceController", () => {
     });
   });
 
+  it("does not apply another window snapshot when a late draft is rejected after ownership transfer", async () => {
+    const updateWorkspaceTabDraft = vi.fn(async () => {
+      throw new Error("Workspace draft owner changed.");
+    });
+    const sourceSnapshot = createWorkspaceSnapshot({
+      tabs: [
+        {
+          tabId: "tab-1",
+          path: "C:/notes/source.md",
+          name: "source.md",
+          content: "source draft"
+        }
+      ]
+    });
+    const { latestRef, root } = renderController({
+      fishmark: {
+        updateWorkspaceTabDraft
+      } as unknown as Window["fishmark"],
+      initialSnapshot: sourceSnapshot,
+      getEditorContent: () => "late source draft",
+      showNotification: vi.fn()
+    });
+
+    await expect(
+      act(async () => {
+        await latestRef.current?.flushActiveWorkspaceDraft();
+      })
+    ).rejects.toThrow("Workspace draft owner changed.");
+
+    expect(latestRef.current?.workspaceSnapshot).toEqual(sourceSnapshot);
+    expect(latestRef.current?.workspaceSnapshot?.windowId).toBe("window-1");
+    act(() => {
+      root.unmount();
+    });
+  });
+
   it("flushes the active draft before switching tabs", async () => {
     const updateWorkspaceTabDraft = vi.fn(async () =>
       createWorkspaceSnapshot({

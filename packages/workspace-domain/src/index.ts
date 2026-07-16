@@ -17,6 +17,7 @@ export {
   type DetachWorkspaceTabInput,
   type MoveWorkspaceTabInput,
   type ReplaceWorkspaceDocumentInput,
+  type UpdateWorkspaceTabDraftInput,
   type WorkspaceDocumentProjection,
   type WorkspaceMoveProjection,
   type WorkspaceMutationResult,

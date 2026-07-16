@@ -107,6 +107,10 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain(
       "const WORKSPACE_WINDOW_CLOSE_REQUEST_TIMEOUT_MS = 15_000"
     );
+    expect(mainSource).toContain(
+      "const WORKSPACE_WINDOW_CLOSE_POST_CONFIRM_WATCHDOG_MS = 15_000"
+    );
+    expect(mainSource).toContain("schedulePostConfirmationWatchdog: (listener) => {");
     expect(mainSource).toContain("reportCleanupError: (error) => {");
     expect(mainSource).toContain(
       '"[fishmark] workspace file operation cleanup failed.",'
@@ -125,7 +129,9 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain("ipcMain.handle(OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL");
     expect(mainSource).toContain("ipcMain.handle(ACTIVATE_WORKSPACE_TAB_CHANNEL");
     expect(mainSource).toContain("ipcMain.handle(CLOSE_WORKSPACE_TAB_CHANNEL");
-    expect(mainSource).toContain("ipcMain.handle(UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL");
+    expect(mainSource).toContain(
+      "ipcMain.handle(\n    UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL"
+    );
     expect(mainSource).toContain('ownerWindow.on("close", (event) => {');
     expect(mainSource).toContain("workspaceWindowCloseRequestBroker.hasPending(windowId)");
     expect(mainSource).toContain("workspaceWindowCloseApplication.requestWindowClose({");
@@ -157,13 +163,24 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain("workspaceCloseCoordinator.closeTab({");
     expect(mainSource).toContain("expectedWindowId: windowId");
     expect(mainSource).toContain("expectedRevision: checkpoint.revision");
-    expect(mainSource).toContain("toWorkspaceWindowSnapshot(workspaceApplication.updateDraft(input))");
+    expect(mainSource).toContain(
+      "const windowId = await ensureWorkspaceWindow(event.sender)"
+    );
+    expect(mainSource).toContain("workspaceApplication.updateDraft({");
+    expect(mainSource).toContain("expectedWindowId: windowId");
+    expect(mainSource).toContain("requireAppliedWorkspaceMutation(");
+    expect(mainSource).not.toContain(
+      "toWorkspaceWindowSnapshot(workspaceApplication.updateDraft(input))"
+    );
     expect(mainSource).toContain("workspaceFileOperations.save({");
     expect(mainSource).toContain("workspaceFileOperations.saveAs({");
     expect(mainSource).toContain("saveMarkdownFileToPath,");
     expect(mainSource).not.toContain("saveTab: workspaceApplication.saveTab");
     expect(mainSource).toContain("workspaceReloadApplication.reloadTab({");
-    expect(mainSource).toContain("toWorkspaceMoveTabResult(workspaceState.moveTabToWindow(input))");
+    expect(mainSource).toContain("workspaceTabTransferApplication.move({");
+    expect(mainSource).not.toContain(
+      "toWorkspaceMoveTabResult(workspaceState.moveTabToWindow(input))"
+    );
     expect(mainSource).toContain(
       "const projection = await workspaceDetachApplication.detachTab({"
     );

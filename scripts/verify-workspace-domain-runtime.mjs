@@ -17,7 +17,14 @@ if (tabId === null) {
   throw new Error("workspace-domain runtime entry did not create an active tab");
 }
 
-workspace.updateTabDraft(tabId, "# FishMark\n");
+const update = workspace.updateTabDraft({
+  tabId,
+  expectedWindowId: "window-1",
+  content: "# FishMark\n"
+});
+if (update.kind !== "applied") {
+  throw new Error("workspace-domain runtime entry rejected its current owner");
+}
 const session = workspace.getTabSession(tabId);
 const projection = workspace.getWindowProjection("window-1");
 

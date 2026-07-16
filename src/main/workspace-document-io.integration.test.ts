@@ -7,6 +7,7 @@ import { createWorkspaceCloseCoordinator } from "./workspace-close-coordinator";
 import { createWorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
 import { createWorkspaceFileOperations } from "./workspace-file-operations";
 import { createWorkspaceReloadApplication } from "./workspace-reload-application";
+import { createWorkspaceTabTransferApplication } from "./workspace-tab-transfer-application";
 import { createWorkspaceWindowCloseApplication } from "./workspace-window-close-application";
 import { createWorkspaceWindowCloseConfirmationHandler } from "./workspace-window-close-confirmation-handler";
 import { createWorkspaceWindowCloseRequestBroker } from "./workspace-window-close-request-broker";
@@ -43,6 +44,190 @@ function createSaveOperations(
 const sender = { id: 1 };
 
 describe("workspace document IO transactions", () => {
+  it("commits an in-flight save before a queued move transfers the clean session", async () => {
+    const workspace = createWorkspaceState();
+    const documentOperations = createWorkspaceDocumentOperationCoordinator();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.openDocument(
+      "window-1",
+      document("saved")
+    ).activeTabId!;
+    workspace.updateTabDraft({
+      tabId,
+      expectedWindowId: "window-1",
+      content: "dirty"
+    });
+    workspace.registerWindow("window-2");
+    let resolveWrite!: (result: SaveMarkdownFileResult) => void;
+    const save = createSaveOperations(
+      workspace,
+      documentOperations,
+      () =>
+        new Promise((resolve) => {
+          resolveWrite = resolve;
+        })
+    );
+    const transfer = createWorkspaceTabTransferApplication({
+      workspace,
+      documentOperations
+    });
+
+    const savePromise = save.save({
+      sender,
+      tabId,
+      expectedWindowId: "window-1",
+      path: "C:/notes/race.md"
+    });
+    await vi.waitFor(() => expect(resolveWrite).toBeTypeOf("function"));
+    const movePromise = transfer.move({
+      tabId,
+      expectedWindowId: "window-1",
+      targetWindowId: "window-2"
+    });
+    expect(workspace.getTabSession(tabId).windowId).toBe("window-1");
+
+    resolveWrite({ status: "success", document: document("dirty") });
+    await savePromise;
+    await movePromise;
+
+    expect(workspace.getTabSession(tabId)).toMatchObject({
+      windowId: "window-2",
+      content: "dirty",
+      savedRevision: 1,
+      isDirty: false
+    });
+  });
+
+  it("rejects an old-owner save before writing when a queued move wins the lease", async () => {
+    const workspace = createWorkspaceState();
+    const documentOperations = createWorkspaceDocumentOperationCoordinator();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.openDocument(
+      "window-1",
+      document("saved")
+    ).activeTabId!;
+    workspace.registerWindow("window-2");
+    const write = vi.fn(async () => ({
+      status: "success" as const,
+      document: document("should not write")
+    }));
+    const save = createSaveOperations(workspace, documentOperations, write);
+    const transfer = createWorkspaceTabTransferApplication({
+      workspace,
+      documentOperations
+    });
+    const held = await documentOperations.acquireExclusive([tabId]);
+    const movePromise = transfer.move({
+      tabId,
+      expectedWindowId: "window-1",
+      targetWindowId: "window-2"
+    });
+    const savePromise = save.save({
+      sender,
+      tabId,
+      expectedWindowId: "window-1",
+      path: "C:/notes/race.md"
+    });
+
+    held.release();
+    await movePromise;
+    await expect(savePromise).rejects.toThrow(
+      `Workspace tab '${tabId}' does not belong to window 'window-1'.`
+    );
+    expect(write).not.toHaveBeenCalled();
+    expect(workspace.getTabSession(tabId).windowId).toBe("window-2");
+  });
+
+  it("commits an in-flight reload before a queued detach transfers disk content", async () => {
+    const workspace = createWorkspaceState();
+    const documentOperations = createWorkspaceDocumentOperationCoordinator();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.openDocument(
+      "window-1",
+      document("before")
+    ).activeTabId!;
+    let resolveRead!: (result: OpenMarkdownFileResult) => void;
+    const reload = createWorkspaceReloadApplication({
+      workspace,
+      documentOperations,
+      openMarkdownFileFromPath: () =>
+        new Promise((resolve) => {
+          resolveRead = resolve;
+        }),
+      recordRecentFilePath: vi.fn(async () => undefined)
+    });
+    const transfer = createWorkspaceTabTransferApplication({
+      workspace,
+      documentOperations
+    });
+
+    const reloadPromise = reload.reloadTab({
+      tabId,
+      expectedWindowId: "window-1",
+      targetPath: "C:/notes/race.md"
+    });
+    await vi.waitFor(() => expect(resolveRead).toBeTypeOf("function"));
+    const detachPromise = transfer.detach({
+      tabId,
+      expectedWindowId: "window-1",
+      targetWindowId: "window-2"
+    });
+    expect(workspace.getTabSession(tabId).windowId).toBe("window-1");
+
+    resolveRead({ status: "success", document: document("disk after") });
+    await reloadPromise;
+    await detachPromise;
+
+    expect(workspace.getTabSession(tabId)).toMatchObject({
+      windowId: "window-2",
+      content: "disk after",
+      isDirty: false
+    });
+  });
+
+  it("rejects an old-owner reload before reading when a queued detach wins the lease", async () => {
+    const workspace = createWorkspaceState();
+    const documentOperations = createWorkspaceDocumentOperationCoordinator();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.openDocument(
+      "window-1",
+      document("before")
+    ).activeTabId!;
+    const read = vi.fn(async () => ({
+      status: "success" as const,
+      document: document("should not read")
+    }));
+    const reload = createWorkspaceReloadApplication({
+      workspace,
+      documentOperations,
+      openMarkdownFileFromPath: read,
+      recordRecentFilePath: vi.fn(async () => undefined)
+    });
+    const transfer = createWorkspaceTabTransferApplication({
+      workspace,
+      documentOperations
+    });
+    const held = await documentOperations.acquireExclusive([tabId]);
+    const detachPromise = transfer.detach({
+      tabId,
+      expectedWindowId: "window-1",
+      targetWindowId: "window-2"
+    });
+    const reloadPromise = reload.reloadTab({
+      tabId,
+      expectedWindowId: "window-1",
+      targetPath: "C:/notes/race.md"
+    });
+
+    held.release();
+    await detachPromise;
+    await expect(reloadPromise).rejects.toThrow(
+      `Workspace tab '${tabId}' does not belong to window 'window-1'.`
+    );
+    expect(read).not.toHaveBeenCalled();
+    expect(workspace.getTabSession(tabId).windowId).toBe("window-2");
+  });
+
   it("does not let a save overtake an in-flight reload of the same tab", async () => {
     const workspace = createWorkspaceState();
     const documentOperations = createWorkspaceDocumentOperationCoordinator();
@@ -97,7 +282,7 @@ describe("workspace document IO transactions", () => {
     const documentOperations = createWorkspaceDocumentOperationCoordinator();
     workspace.registerWindow("window-1");
     const tabId = workspace.openDocument("window-1", document("before")).activeTabId!;
-    workspace.updateTabDraft(tabId, "A");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "A" });
     let diskContent = "before";
     let resolveWrite!: (result: SaveMarkdownFileResult) => void;
     const write = vi.fn(
@@ -150,7 +335,7 @@ describe("workspace document IO transactions", () => {
     const documentOperations = createWorkspaceDocumentOperationCoordinator();
     workspace.registerWindow("window-1");
     const tabId = workspace.openDocument("window-1", document("saved")).activeTabId!;
-    workspace.updateTabDraft(tabId, "dirty");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "dirty" });
     let resolvePrompt!: (choice: "discard") => void;
     const write = vi.fn<
       (input: { readonly content: string }) => Promise<SaveMarkdownFileResult>
@@ -193,7 +378,7 @@ describe("workspace document IO transactions", () => {
     const documentOperations = createWorkspaceDocumentOperationCoordinator();
     workspace.registerWindow("window-1");
     const tabId = workspace.openDocument("window-1", document("saved")).activeTabId!;
-    workspace.updateTabDraft(tabId, "dirty");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "dirty" });
     let resolveWrite!: (result: SaveMarkdownFileResult) => void;
     const write = vi.fn(
       () =>
@@ -248,7 +433,7 @@ describe("workspace document IO transactions", () => {
         "window-1",
         document("saved")
       ).activeTabId!;
-      workspace.updateTabDraft(tabId, "dirty");
+      workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "dirty" });
       let resolvePrompt!: (value: "save" | "discard") => void;
       const closeWrite = vi.fn();
       const closeCoordinator = createWorkspaceCloseCoordinator({
@@ -267,7 +452,8 @@ describe("workspace document IO transactions", () => {
           Awaited<ReturnType<typeof closeCoordinator.confirmWindowClose>>
         >
       >({
-        scheduleTimeout: () => vi.fn()
+        scheduleTimeout: () => vi.fn(),
+        schedulePostConfirmationWatchdog: () => vi.fn()
       });
       let requestId = "";
       const windowClose = createWorkspaceWindowCloseApplication({
@@ -350,7 +536,7 @@ describe("workspace document IO transactions", () => {
       "window-1",
       document("saved")
     ).activeTabId!;
-    workspace.updateTabDraft(tabId, "dirty");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "dirty" });
     let resolveCloseWrite!: (result: SaveMarkdownFileResult) => void;
     const closeWrite = vi.fn(
       () =>
@@ -370,7 +556,8 @@ describe("workspace document IO transactions", () => {
     const broker = createWorkspaceWindowCloseRequestBroker<
       NonNullable<Awaited<ReturnType<typeof closeCoordinator.confirmWindowClose>>>
     >({
-      scheduleTimeout: () => vi.fn()
+      scheduleTimeout: () => vi.fn(),
+      schedulePostConfirmationWatchdog: () => vi.fn()
     });
     let requestId = "";
     const windowClose = createWorkspaceWindowCloseApplication({
@@ -453,7 +640,7 @@ describe("workspace document IO transactions", () => {
         "window-1",
         document("saved")
       ).activeTabId!;
-      workspace.updateTabDraft(tabId, "dirty");
+      workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "dirty" });
       let resolvePrompt!: (choice: "save") => void;
       const saveTabDocument = vi.spyOn(workspace, "saveTabDocument");
       const closeCoordinator = createWorkspaceCloseCoordinator({
@@ -477,7 +664,8 @@ describe("workspace document IO transactions", () => {
         scheduleTimeout: (listener) => {
           const timeout = setTimeout(listener, 15_000);
           return () => clearTimeout(timeout);
-        }
+        },
+        schedulePostConfirmationWatchdog: () => vi.fn()
       });
       let requestId = "";
       const windowClose = createWorkspaceWindowCloseApplication({

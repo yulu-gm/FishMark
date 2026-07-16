@@ -57,7 +57,7 @@ describe("createWorkspaceWindowCloseApplication", () => {
     const documentOperations = createWorkspaceDocumentOperationCoordinator();
     workspace.registerWindow("window-1");
     const tabId = workspace.openDocument("window-1", document("saved")).activeTabId!;
-    workspace.updateTabDraft(tabId, "dirty");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "dirty" });
     let resolvePrompt!: (choice: "discard") => void;
     const closeCoordinator = createWorkspaceCloseCoordinator({
       workspace,
@@ -114,7 +114,7 @@ describe("createWorkspaceWindowCloseApplication", () => {
     const documentOperations = createWorkspaceDocumentOperationCoordinator();
     workspace.registerWindow("window-1");
     const tabId = workspace.openDocument("window-1", document("saved")).activeTabId!;
-    workspace.updateTabDraft(tabId, "dirty");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "dirty" });
     let resolveRequest!: (
       confirmation: WorkspaceWindowCloseConfirmation | null
     ) => void;
@@ -254,7 +254,7 @@ describe("createWorkspaceWindowCloseApplication", () => {
       "window-1",
       document("saved")
     ).activeTabId!;
-    workspace.updateTabDraft(tabId, "confirmed revision");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "confirmed revision" });
     const confirmation = closeConfirmation("window-1", [
       {
           tabId,
@@ -279,7 +279,7 @@ describe("createWorkspaceWindowCloseApplication", () => {
       ownerWindow: { id: 1 }
     });
     await vi.waitFor(() => expect(resolveRequest).toBeTypeOf("function"));
-    workspace.updateTabDraft(tabId, "late revision");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "late revision" });
     const queuedOperation = vi.fn(async () => "continued");
     const queuedPromise = documentOperations.runExclusive(
       tabId,
@@ -317,7 +317,7 @@ describe("createWorkspaceWindowCloseApplication", () => {
       workspace,
       documentOperations,
       requestWorkspaceWindowClose: async () => {
-        workspace.updateTabDraft(tabId, "flushed before confirm");
+        workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "flushed before confirm" });
         return closeCoordinator.confirmWindowClose({
           windowId: "window-1",
           isActive: () => true

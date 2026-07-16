@@ -187,11 +187,15 @@ describe("WorkspaceState tab lifecycle", () => {
     workspace.registerWindow("window-1");
     const tabId = workspace.openDocument("window-1", createDocument("draft.md", "saved")).activeTabId!;
 
-    const noOp = workspace.updateTabDraft(tabId, "saved");
-    expect(noOp.activeDocument).toMatchObject({ content: "saved", isDirty: false });
+    const noOp = workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "saved" });
+    expect(noOp.kind).toBe("applied");
+    expect(noOp.projection?.activeDocument).toMatchObject({
+      content: "saved",
+      isDirty: false
+    });
     expect(workspace.getTabSession(tabId)).toMatchObject({ revision: 0, savedRevision: 0 });
 
-    workspace.updateTabDraft(tabId, "draft");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "draft" });
     expect(workspace.getTabSession(tabId)).toMatchObject({
       content: "draft",
       revision: 1,
@@ -199,7 +203,7 @@ describe("WorkspaceState tab lifecycle", () => {
       isDirty: true
     });
 
-    workspace.updateTabDraft(tabId, "saved");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "saved" });
     expect(workspace.getTabSession(tabId)).toMatchObject({
       content: "saved",
       revision: 2,
@@ -260,7 +264,7 @@ describe("WorkspaceState save and reload transitions", () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
-    workspace.updateTabDraft(tabId, "# Saved\n");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "# Saved\n" });
 
     const saved = workspace.saveTabDocument({
       tabId,
@@ -295,8 +299,8 @@ describe("WorkspaceState save and reload transitions", () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
     const tabId = workspace.openDocument("window-1", createDocument("race.md", "saved")).activeTabId!;
-    workspace.updateTabDraft(tabId, "captured");
-    workspace.updateTabDraft(tabId, "newer draft");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "captured" });
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "newer draft" });
 
     workspace.saveTabDocument({
       tabId,
@@ -319,7 +323,7 @@ describe("WorkspaceState save and reload transitions", () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
     const tabId = workspace.openDocument("window-1", createDocument("current.md", "saved")).activeTabId!;
-    workspace.updateTabDraft(tabId, "current");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "current" });
     const before = workspace.getTabSession(tabId);
 
     expect(() =>
@@ -338,7 +342,7 @@ describe("WorkspaceState save and reload transitions", () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
     const tabId = workspace.openDocument("window-1", createDocument("reload.md", "saved")).activeTabId!;
-    workspace.updateTabDraft(tabId, "draft");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "draft" });
 
     const equalReload = workspace.replaceTabDocument({
       tabId,
@@ -379,7 +383,7 @@ describe("WorkspaceState save and reload transitions", () => {
       "window-1",
       createDocument("reload-edit.md", "disk before")
     ).activeTabId!;
-    workspace.updateTabDraft(tabId, "new draft");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "new draft" });
 
     const result = workspace.replaceTabDocument({
       tabId,
@@ -412,7 +416,7 @@ describe("WorkspaceState save and reload transitions", () => {
       "window-1",
       createDocument("moved.md", "saved")
     ).activeTabId!;
-    workspace.updateTabDraft(tabId, "captured dirty");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "captured dirty" });
     workspace.registerWindow("window-2");
     workspace.moveTabToWindow({ tabId, targetWindowId: "window-2" });
 
@@ -455,7 +459,7 @@ describe("WorkspaceState save and reload transitions", () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
     const editedTabId = workspace.createUntitledTab("window-1").activeTabId!;
-    workspace.updateTabDraft(editedTabId, "new edit");
+    workspace.updateTabDraft({ tabId: editedTabId, expectedWindowId: "window-1", content: "new edit" });
 
     const editedResult = workspace.closeTab({
       tabId: editedTabId,
@@ -495,7 +499,7 @@ describe("WorkspaceState save and reload transitions", () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
-    workspace.updateTabDraft(tabId, "captured dirty");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "captured dirty" });
     workspace.unregisterWindow("window-1");
 
     const results: WorkspaceMutationResult[] = [
@@ -609,7 +613,7 @@ describe("WorkspaceState tab ordering and movement", () => {
       createDocument("first.md", "# First\n")
     ).activeTabId!;
     const movedTabId = workspace.openDocument("window-1", createDocument("second.md", "saved")).activeTabId!;
-    workspace.updateTabDraft(movedTabId, "dirty draft");
+    workspace.updateTabDraft({ tabId: movedTabId, expectedWindowId: "window-1", content: "dirty draft" });
     workspace.registerWindow("window-2");
     workspace.openDocument("window-2", createDocument("other.md"));
 
@@ -725,6 +729,41 @@ describe("WorkspaceState detach operations", () => {
       content: "# moved.md\n"
     });
   });
+
+  it.each(["move", "detach"] as const)(
+    "rejects a late draft from the previous owner after a cross-window %s",
+    (transfer) => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.openDocument(
+      "window-1",
+      createDocument("late-draft.md", "current")
+    ).activeTabId!;
+    if (transfer === "move") {
+      workspace.registerWindow("window-2");
+      workspace.moveTabToWindow({ tabId, targetWindowId: "window-2" });
+    } else {
+      workspace.detachTabToWindow({ tabId, targetWindowId: "window-2" });
+    }
+    const before = workspace.getTabSession(tabId);
+
+    const result = workspace.updateTabDraft({
+      tabId,
+      expectedWindowId: "window-1",
+      content: "stale source draft"
+    });
+
+    expect(result).toMatchObject({
+      kind: "stale",
+      reason: "window-changed"
+    });
+    expect(result.projection?.windowId).toBe("window-1");
+    expect(workspace.getTabSession(tabId)).toEqual(before);
+    expect(workspace.getWindowProjection("window-2").activeDocument).toMatchObject({
+      content: "current"
+    });
+    }
+  );
 
   it("does not leave a target window behind for an invalid source or index", () => {
     const workspace = createWorkspaceState();

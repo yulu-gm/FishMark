@@ -1,10 +1,105 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createWorkspaceWindowCloseRequestBroker } from "./workspace-window-close-request-broker";
+import { createWorkspaceWindowCloseRequestBroker as createBrokerWithSchedulers } from "./workspace-window-close-request-broker";
 
 type Confirmation = Readonly<{ token: string }>;
 
+function createWorkspaceWindowCloseRequestBroker<TConfirmation>(dependencies: {
+  readonly scheduleTimeout: (listener: () => void) => () => void;
+  readonly schedulePostConfirmationWatchdog?: (
+    listener: () => void
+  ) => () => void;
+}) {
+  return createBrokerWithSchedulers<TConfirmation>({
+    scheduleTimeout: dependencies.scheduleTimeout,
+    schedulePostConfirmationWatchdog:
+      dependencies.schedulePostConfirmationWatchdog ?? (() => vi.fn())
+  });
+}
+
 describe("createWorkspaceWindowCloseRequestBroker", () => {
+  it("fails closed and releases the request when COMPLETE never follows confirmation", async () => {
+    let postConfirmationWatchdog!: () => void;
+    const cancelPostConfirmationWatchdog = vi.fn();
+    const broker = createWorkspaceWindowCloseRequestBroker<Confirmation>({
+      scheduleTimeout: () => vi.fn(),
+      schedulePostConfirmationWatchdog: (listener) => {
+        postConfirmationWatchdog = listener;
+        return cancelPostConfirmationWatchdog;
+      }
+    });
+    const handle = broker.request({
+      windowId: "window-1",
+      sendRequest: vi.fn(),
+      bindAbort: () => vi.fn()
+    });
+    const identity = {
+      requestId: handle.requestId,
+      windowId: "window-1"
+    };
+    const scope = broker.beginConfirmation(identity);
+    broker.setConfirmation({
+      ...identity,
+      confirmation: { token: "confirmed" }
+    });
+
+    expect(postConfirmationWatchdog).toBeUndefined();
+    scope?.finish();
+    expect(postConfirmationWatchdog).toBeTypeOf("function");
+    expect(broker.hasPending("window-1")).toBe(true);
+
+    postConfirmationWatchdog();
+    await expect(handle.result).resolves.toBeNull();
+    await expect(handle.drained).resolves.toBeUndefined();
+    expect(broker.hasPending("window-1")).toBe(false);
+    expect(cancelPostConfirmationWatchdog).toHaveBeenCalledOnce();
+    expect(broker.complete(handle.requestId, "window-1", true)).toBe(false);
+  });
+
+  it.each(["complete", "abort"] as const)(
+    "cancels the post-confirmation watchdog exactly once on %s",
+    async (settlement) => {
+      let postConfirmationWatchdog!: () => void;
+      const cancelPostConfirmationWatchdog = vi.fn();
+      const broker = createWorkspaceWindowCloseRequestBroker<Confirmation>({
+        scheduleTimeout: () => vi.fn(),
+        schedulePostConfirmationWatchdog: (listener) => {
+          postConfirmationWatchdog = listener;
+          return cancelPostConfirmationWatchdog;
+        }
+      });
+      const handle = broker.request({
+        windowId: "window-1",
+        sendRequest: vi.fn(),
+        bindAbort: () => vi.fn()
+      });
+      const identity = {
+        requestId: handle.requestId,
+        windowId: "window-1"
+      };
+      const confirmation = { token: "confirmed" };
+      const scope = broker.beginConfirmation(identity);
+      broker.setConfirmation({ ...identity, confirmation });
+      scope?.finish();
+      expect(postConfirmationWatchdog).toBeTypeOf("function");
+
+      if (settlement === "complete") {
+        expect(broker.complete(handle.requestId, "window-1", true)).toBe(true);
+        await expect(handle.result).resolves.toBe(confirmation);
+      } else {
+        broker.abortWindow("window-1");
+        await expect(handle.result).resolves.toBeNull();
+      }
+      await handle.drained;
+      postConfirmationWatchdog();
+      broker.abortWindow("window-1");
+
+      expect(cancelPostConfirmationWatchdog).toHaveBeenCalledOnce();
+      expect(broker.hasPending("window-1")).toBe(false);
+      expect(broker.complete(handle.requestId, "window-1", true)).toBe(false);
+    }
+  );
+
   it("bounds a never-confirmed request and drains it immediately", async () => {
     let timeout!: () => void;
     const cancelTimeout = vi.fn();
@@ -134,11 +229,13 @@ describe("createWorkspaceWindowCloseRequestBroker", () => {
   it("disarms the transport timeout at the first exact confirmation and rejects duplicates", async () => {
     vi.useFakeTimers();
     try {
+      const schedulePostConfirmationWatchdog = vi.fn(() => vi.fn());
       const broker = createWorkspaceWindowCloseRequestBroker<Confirmation>({
         scheduleTimeout: (listener) => {
           const timeout = setTimeout(listener, 15_000);
           return () => clearTimeout(timeout);
-        }
+        },
+        schedulePostConfirmationWatchdog
       });
       const handle = broker.request({
         windowId: "window-1",
@@ -157,12 +254,14 @@ describe("createWorkspaceWindowCloseRequestBroker", () => {
       expect(broker.hasPending("window-1")).toBe(true);
       expect(scope?.isActive()).toBe(true);
       expect(broker.beginConfirmation(identity)).toBeNull();
+      expect(schedulePostConfirmationWatchdog).not.toHaveBeenCalled();
 
       const confirmation = { token: "after-long-prompt" };
       expect(
         broker.setConfirmation({ ...identity, confirmation })
       ).toBe(true);
       scope?.finish();
+      expect(schedulePostConfirmationWatchdog).toHaveBeenCalledOnce();
       expect(broker.beginConfirmation(identity)).toBeNull();
       expect(broker.complete(handle.requestId, "window-1", true)).toBe(true);
       await expect(handle.result).resolves.toBe(confirmation);

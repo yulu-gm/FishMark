@@ -6,6 +6,7 @@ import type {
   SaveMarkdownFileResult
 } from "../shared/save-markdown-file";
 import type { WorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
+import { requireAppliedWorkspaceMutation } from "./workspace-mutation-result";
 
 type WorkspaceFileOperationsDependencies<TSender> = {
   workspace: Pick<
@@ -124,11 +125,7 @@ export function createWorkspaceFileOperations<TSender>(
                 document: result.document,
                 diskVersion: null
               });
-              if (commit.projection === null) {
-                throw new Error(
-                  `Workspace window '${input.expectedWindowId}' no longer exists.`
-                );
-              }
+              requireAppliedWorkspaceMutation(commit, "save");
               await dependencies.recordRecentFilePath(result.document.path);
             }
             return result;
@@ -171,11 +168,7 @@ export function createWorkspaceFileOperations<TSender>(
                 document: result.document,
                 diskVersion: null
               });
-              if (commit.projection === null) {
-                throw new Error(
-                  `Workspace window '${input.expectedWindowId}' no longer exists.`
-                );
-              }
+              requireAppliedWorkspaceMutation(commit, "Save As");
               await dependencies.recordRecentFilePath(result.document.path);
             }
             return result;

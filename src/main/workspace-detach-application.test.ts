@@ -2,6 +2,8 @@ import { createWorkspaceState } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 
 import { createWorkspaceDetachApplication } from "./workspace-detach-application";
+import { createWorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
+import { createWorkspaceTabTransferApplication } from "./workspace-tab-transfer-application";
 
 type FakeWindow = {
   id: number;
@@ -46,11 +48,20 @@ function scheduleReadyTimeout(): () => void {
   return vi.fn();
 }
 
+function createTabTransfer(
+  workspace: ReturnType<typeof createWorkspaceState>
+) {
+  return createWorkspaceTabTransferApplication({
+    workspace,
+    documentOperations: createWorkspaceDocumentOperationCoordinator()
+  });
+}
+
 function createDirtySource() {
   const workspace = createWorkspaceState();
   workspace.registerWindow("window-1");
   const tabId = workspace.createUntitledTab("window-1").activeTabId!;
-  workspace.updateTabDraft(tabId, "unsaved detached draft");
+  workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "unsaved detached draft" });
   return { workspace, tabId };
 }
 
@@ -76,6 +87,42 @@ function expectNoTargetWindow(
 }
 
 describe("createWorkspaceDetachApplication", () => {
+  it("routes the ready-time transfer through the shared tab transfer application", async () => {
+    const { workspace, tabId } = createDirtySource();
+    const window = createWindow(3);
+    const detach = vi.fn(async (input: {
+      readonly tabId: string;
+      readonly expectedWindowId: string;
+      readonly targetWindowId: string;
+    }) =>
+      workspace.detachTabToWindow({
+        tabId: input.tabId,
+        targetWindowId: input.targetWindowId
+      })
+    );
+    const application = createWorkspaceDetachApplication({
+      workspace,
+      tabTransfer: { detach },
+      openWindow: () => window,
+      scheduleReadyTimeout,
+      lifecycle: createLifecycle()
+    });
+
+    const detachPromise = application.detachTab({
+      tabId,
+      expectedWindowId: "window-1"
+    });
+    await application.markWindowReady("3");
+    await detachPromise;
+
+    expect(detach).toHaveBeenCalledWith({
+      tabId,
+      expectedWindowId: "window-1",
+      targetWindowId: "3",
+      isActive: expect.any(Function)
+    });
+  });
+
   it("rejects foreign ownership before creating a window", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
@@ -84,6 +131,7 @@ describe("createWorkspaceDetachApplication", () => {
     const openWindow = vi.fn(() => createWindow(3));
     const application = createWorkspaceDetachApplication({
       workspace,
+      tabTransfer: createTabTransfer(workspace),
       openWindow,
       scheduleReadyTimeout,
       lifecycle: createLifecycle()
@@ -104,6 +152,7 @@ describe("createWorkspaceDetachApplication", () => {
     const detachTabToWindow = vi.spyOn(workspace, "detachTabToWindow");
     const application = createWorkspaceDetachApplication({
       workspace,
+      tabTransfer: createTabTransfer(workspace),
       openWindow: () => window,
       scheduleReadyTimeout: scheduler.scheduleReadyTimeout,
       lifecycle: createLifecycle()
@@ -128,7 +177,7 @@ describe("createWorkspaceDetachApplication", () => {
     expect(detachTabToWindow).not.toHaveBeenCalled();
     expectDirtySourceTab(workspace, tabId);
     expectNoTargetWindow(workspace);
-    workspace.updateTabDraft(tabId, "latest draft while waiting");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "latest draft while waiting" });
 
     application.markWindowReady("3");
 
@@ -166,6 +215,7 @@ describe("createWorkspaceDetachApplication", () => {
     const detachTabToWindow = vi.spyOn(workspace, "detachTabToWindow");
     const application = createWorkspaceDetachApplication({
       workspace,
+      tabTransfer: createTabTransfer(workspace),
       openWindow: () => window,
       scheduleReadyTimeout: scheduler.scheduleReadyTimeout,
       lifecycle: createLifecycle()
@@ -188,7 +238,7 @@ describe("createWorkspaceDetachApplication", () => {
     expect(window.destroy).toHaveBeenCalledOnce();
     expectDirtySourceTab(workspace, tabId);
     expectNoTargetWindow(workspace);
-    expect(() => application.markWindowReady("3")).not.toThrow();
+    await expect(application.markWindowReady("3")).resolves.toBeUndefined();
   });
 
   it("rejects ready when the tab moved away from the expected source while waiting", async () => {
@@ -199,6 +249,7 @@ describe("createWorkspaceDetachApplication", () => {
     const detachTabToWindow = vi.spyOn(workspace, "detachTabToWindow");
     const application = createWorkspaceDetachApplication({
       workspace,
+      tabTransfer: createTabTransfer(workspace),
       openWindow: () => window,
       scheduleReadyTimeout: scheduler.scheduleReadyTimeout,
       lifecycle: createLifecycle()
@@ -213,7 +264,7 @@ describe("createWorkspaceDetachApplication", () => {
       `Workspace tab '${tabId}' does not belong to window 'window-1'.`
     );
 
-    expect(() => application.markWindowReady("3")).toThrow(
+    await expect(application.markWindowReady("3")).rejects.toThrow(
       `Workspace tab '${tabId}' does not belong to window 'window-1'.`
     );
     await rejection;
@@ -236,6 +287,7 @@ describe("createWorkspaceDetachApplication", () => {
     const detachTabToWindow = vi.spyOn(workspace, "detachTabToWindow");
     const application = createWorkspaceDetachApplication({
       workspace,
+      tabTransfer: createTabTransfer(workspace),
       openWindow: () => window,
       scheduleReadyTimeout: scheduler.scheduleReadyTimeout,
       lifecycle: createLifecycle()
@@ -258,7 +310,7 @@ describe("createWorkspaceDetachApplication", () => {
     expectDirtySourceTab(workspace, tabId);
     expectNoTargetWindow(workspace);
     expect(scheduler.cancel).toHaveBeenCalledOnce();
-    expect(() => application.markWindowReady("3")).not.toThrow();
+    await expect(application.markWindowReady("3")).resolves.toBeUndefined();
   });
 
   it("rejects exactly once on a pre-ready main-frame load failure", async () => {
@@ -268,6 +320,7 @@ describe("createWorkspaceDetachApplication", () => {
     const detachTabToWindow = vi.spyOn(workspace, "detachTabToWindow");
     const application = createWorkspaceDetachApplication({
       workspace,
+      tabTransfer: createTabTransfer(workspace),
       openWindow: () => window,
       scheduleReadyTimeout: scheduler.scheduleReadyTimeout,
       lifecycle: createLifecycle()
@@ -306,6 +359,7 @@ describe("createWorkspaceDetachApplication", () => {
     });
     const application = createWorkspaceDetachApplication({
       workspace,
+      tabTransfer: createTabTransfer(workspace),
       openWindow: () => window,
       scheduleReadyTimeout,
       lifecycle
@@ -331,6 +385,7 @@ describe("createWorkspaceDetachApplication", () => {
     });
     const application = createWorkspaceDetachApplication({
       workspace,
+      tabTransfer: createTabTransfer(workspace),
       openWindow: () => window,
       scheduleReadyTimeout: scheduler.scheduleReadyTimeout,
       lifecycle
@@ -359,6 +414,7 @@ describe("createWorkspaceDetachApplication", () => {
     });
     const application = createWorkspaceDetachApplication({
       workspace,
+      tabTransfer: createTabTransfer(workspace),
       openWindow: () => window,
       scheduleReadyTimeout: scheduler.scheduleReadyTimeout,
       lifecycle
@@ -385,9 +441,9 @@ describe("createWorkspaceDetachApplication", () => {
     });
     const application = createWorkspaceDetachApplication({
       workspace: {
-        getTabSession: workspace.getTabSession.bind(workspace),
-        detachTabToWindow
+        getTabSession: workspace.getTabSession.bind(workspace)
       },
+      tabTransfer: { detach: detachTabToWindow },
       openWindow: () => window,
       scheduleReadyTimeout: scheduler.scheduleReadyTimeout,
       lifecycle: createLifecycle()
@@ -399,14 +455,14 @@ describe("createWorkspaceDetachApplication", () => {
     });
     const rejection = expect(detachPromise).rejects.toBe(domainError);
 
-    expect(() => application.markWindowReady("3")).toThrow(domainError);
+    await expect(application.markWindowReady("3")).rejects.toBe(domainError);
     await rejection;
     expect(detachTabToWindow).toHaveBeenCalledOnce();
     expect(window.destroy).toHaveBeenCalledOnce();
     expectDirtySourceTab(workspace, tabId);
     expectNoTargetWindow(workspace);
     expect(scheduler.cancel).toHaveBeenCalledOnce();
-    expect(() => application.markWindowReady("3")).not.toThrow();
+    await expect(application.markWindowReady("3")).resolves.toBeUndefined();
   });
 
   it("rejects ready when the source was normally unregistered while waiting", async () => {
@@ -415,6 +471,7 @@ describe("createWorkspaceDetachApplication", () => {
     const scheduler = createReadyScheduler();
     const application = createWorkspaceDetachApplication({
       workspace,
+      tabTransfer: createTabTransfer(workspace),
       openWindow: () => window,
       scheduleReadyTimeout: scheduler.scheduleReadyTimeout,
       lifecycle: createLifecycle()
@@ -429,7 +486,7 @@ describe("createWorkspaceDetachApplication", () => {
     );
     workspace.unregisterWindow("window-1");
 
-    expect(() => application.markWindowReady("3")).toThrow(
+    await expect(application.markWindowReady("3")).rejects.toThrow(
       `Unknown workspace tab '${tabId}'.`
     );
     await rejection;
@@ -445,6 +502,7 @@ describe("createWorkspaceDetachApplication", () => {
     const detachTabToWindow = vi.spyOn(workspace, "detachTabToWindow");
     const application = createWorkspaceDetachApplication({
       workspace,
+      tabTransfer: createTabTransfer(workspace),
       openWindow: () => window,
       scheduleReadyTimeout: scheduler.scheduleReadyTimeout,
       lifecycle: createLifecycle()

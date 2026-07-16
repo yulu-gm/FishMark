@@ -36,7 +36,7 @@ describe("createWorkspaceFileOperations", () => {
       "window-1",
       document("serial.md", "saved")
     ).activeTabId!;
-    workspace.updateTabDraft(tabId, "dirty");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "dirty" });
     const documentOperations = createWorkspaceDocumentOperationCoordinator();
     let resolveFirstSave!: (result: SaveMarkdownFileResult) => void;
     let resolveFirstCleanup!: () => void;
@@ -116,7 +116,7 @@ describe("createWorkspaceFileOperations", () => {
       "window-1",
       document("watch.md", "saved")
     ).activeTabId!;
-    workspace.updateTabDraft(tabId, "dirty");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "dirty" });
     const documentOperations = createWorkspaceDocumentOperationCoordinator();
     const watchCallbacks = new Map<
       string,
@@ -200,7 +200,7 @@ describe("createWorkspaceFileOperations", () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
-    workspace.updateTabDraft(tabId, "draft");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "draft" });
     const documentOperations = createWorkspaceDocumentOperationCoordinator();
     const lease = await documentOperations.acquireExclusive([tabId]);
     const showSaveMarkdownDialog = vi.fn(async () => ({
@@ -242,7 +242,7 @@ describe("createWorkspaceFileOperations", () => {
     });
   });
 
-  it("completes write tracking and rebinds the sender watch after a save-time move", async () => {
+  it("rejects a save commit after an out-of-band owner change and still completes cleanup", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
     workspace.openDocument("window-1", document("source.md", "source"));
@@ -250,7 +250,7 @@ describe("createWorkspaceFileOperations", () => {
       "window-1",
       document("moved.md", "saved")
     ).activeTabId!;
-    workspace.updateTabDraft(tabId, "captured dirty");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "captured dirty" });
     workspace.registerWindow("window-2");
     let resolveWrite!: (result: SaveMarkdownFileResult) => void;
     const saveMarkdownFileToPath = vi.fn(
@@ -288,13 +288,15 @@ describe("createWorkspaceFileOperations", () => {
       document: document("moved.md", "captured dirty")
     });
 
-    await expect(savePromise).resolves.toMatchObject({ status: "success" });
+    await expect(savePromise).rejects.toThrow(
+      "Workspace save rejected: tab owner changed."
+    );
     expect(beginInternalWrite).toHaveBeenCalledWith(sender, "C:/notes/moved.md");
     expect(completeInternalWrite).toHaveBeenCalledWith(
       sender,
       "C:/notes/moved.md"
     );
-    expect(recordRecentFilePath).toHaveBeenCalledWith("C:/notes/moved.md");
+    expect(recordRecentFilePath).not.toHaveBeenCalled();
     expect(syncDocumentPath).toHaveBeenCalledWith(sender, "C:/notes/source.md");
     expect(workspace.getTabSession(tabId)).toMatchObject({
       windowId: "window-2",
@@ -349,7 +351,7 @@ describe("createWorkspaceFileOperations", () => {
       "window-1",
       document("commit-throw.md", "saved")
     ).activeTabId!;
-    workspace.updateTabDraft(tabId, "current");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "current" });
     const saveMarkdownFileToPath = vi.fn(async () => ({
         status: "success" as const,
         document: document("commit-throw.md", "mismatched")
@@ -389,12 +391,12 @@ describe("createWorkspaceFileOperations", () => {
     );
   });
 
-  it("keeps a moved Save As tab dirty and rebinds the source watch", async () => {
+  it("rejects a Save As commit after an out-of-band owner change", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
     workspace.openDocument("window-1", document("source.md", "source"));
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
-    workspace.updateTabDraft(tabId, "untitled dirty");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "untitled dirty" });
     workspace.registerWindow("window-2");
     let resolveDialog!: (result: SaveMarkdownFileResult) => void;
     const sender = { id: 4 };
@@ -427,8 +429,10 @@ describe("createWorkspaceFileOperations", () => {
       document: document("saved-as.md", "untitled dirty")
     });
 
-    await expect(savePromise).resolves.toMatchObject({ status: "success" });
-    expect(recordRecentFilePath).toHaveBeenCalledWith("C:/notes/saved-as.md");
+    await expect(savePromise).rejects.toThrow(
+      "Workspace Save As rejected: tab owner changed."
+    );
+    expect(recordRecentFilePath).not.toHaveBeenCalled();
     expect(syncDocumentPath).toHaveBeenCalledWith(sender, "C:/notes/source.md");
     expect(workspace.getTabSession(tabId)).toMatchObject({
       windowId: "window-2",
@@ -445,7 +449,7 @@ describe("createWorkspaceFileOperations", () => {
       "window-1",
       document("closed-save.md", "saved")
     ).activeTabId!;
-    workspace.updateTabDraft(tabId, "captured dirty");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "captured dirty" });
     let resolveWrite!: (result: SaveMarkdownFileResult) => void;
     const saveMarkdownFileToPath = vi.fn(
       () =>
@@ -489,7 +493,7 @@ describe("createWorkspaceFileOperations", () => {
     });
 
     await expect(savePromise).rejects.toThrow(
-      "Workspace window 'window-1' no longer exists."
+      "Workspace save rejected: owner window no longer exists."
     );
     expect(callOrder).toEqual(["begin", "complete", "sync:null"]);
     expect(completeInternalWrite).toHaveBeenCalledWith(
@@ -504,7 +508,7 @@ describe("createWorkspaceFileOperations", () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
-    workspace.updateTabDraft(tabId, "captured dirty");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "captured dirty" });
     let resolveDialog!: (result: SaveMarkdownFileResult) => void;
     const sender = { id: 6 };
     const saveTabDocument = vi.spyOn(workspace, "saveTabDocument");
@@ -538,7 +542,7 @@ describe("createWorkspaceFileOperations", () => {
     });
 
     await expect(savePromise).rejects.toThrow(
-      "Workspace window 'window-1' no longer exists."
+      "Workspace Save As rejected: owner window no longer exists."
     );
     expect(saveTabDocument).toHaveBeenCalledWith({
       tabId,

@@ -80,7 +80,7 @@ describe("createWorkspaceReloadApplication", () => {
       targetPath: "C:/notes/edit-race.md"
     });
     await vi.waitFor(() => expect(resolveRead).toBeTypeOf("function"));
-    workspace.updateTabDraft(tabId, "new draft");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "new draft" });
     resolveRead({
       status: "success",
       document: document("edit-race.md", "disk after")
@@ -98,7 +98,7 @@ describe("createWorkspaceReloadApplication", () => {
     });
   });
 
-  it("returns the sender projection and leaves the target unchanged after a move", async () => {
+  it("rejects a reload commit after an out-of-band owner change", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
     workspace.openDocument("window-1", document("source.md", "source"));
@@ -129,10 +129,9 @@ describe("createWorkspaceReloadApplication", () => {
       document: document("move-race.md", "disk after")
     });
 
-    await expect(reloadPromise).resolves.toMatchObject({
-      windowId: "window-1",
-      activeDocument: { name: "source.md", content: "source" }
-    });
+    await expect(reloadPromise).rejects.toThrow(
+      "Workspace reload rejected: tab owner changed."
+    );
     expect(workspace.getTabSession(tabId)).toMatchObject({
       windowId: "window-2",
       content: "before",
@@ -172,7 +171,7 @@ describe("createWorkspaceReloadApplication", () => {
     });
 
     await expect(reloadPromise).rejects.toThrow(
-      "Workspace window 'window-1' no longer exists."
+      "Workspace reload rejected: owner window no longer exists."
     );
   });
 });

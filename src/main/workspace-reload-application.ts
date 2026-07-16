@@ -5,6 +5,7 @@ import type {
 
 import type { OpenMarkdownFileResult } from "../shared/open-markdown-file";
 import type { WorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
+import { requireAppliedWorkspaceMutation } from "./workspace-mutation-result";
 
 type WorkspaceReloadApplicationDependencies = {
   workspace: Pick<
@@ -53,12 +54,9 @@ export function createWorkspaceReloadApplication(
           expectedRevision: checkpoint.revision,
           document: result.document
         });
-        if (mutation.projection === null) {
-          throw new Error(
-            `Workspace window '${input.expectedWindowId}' no longer exists.`
-          );
-        }
-        return mutation.projection;
+        return requireAppliedWorkspaceMutation(mutation, "reload", {
+          allowRevisionChanged: true
+        });
       });
     }
   };

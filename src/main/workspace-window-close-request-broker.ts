@@ -1,5 +1,8 @@
 type WorkspaceWindowCloseRequestBrokerDependencies = {
   scheduleTimeout: (listener: () => void) => () => void;
+  schedulePostConfirmationWatchdog: (
+    listener: () => void
+  ) => () => void;
 };
 
 type WorkspaceWindowCloseRequestInput = {
@@ -33,6 +36,7 @@ type PendingWorkspaceWindowCloseRequest<TConfirmation> = {
   activeConfirmations: number;
   drained: boolean;
   cancelTimeout: (() => void) | null;
+  cancelPostConfirmationWatchdog: (() => void) | null;
   unbindAbort: (() => void) | null;
   resolveResult: (confirmation: TConfirmation | null) => void;
   rejectResult: (error: unknown) => void;
@@ -56,11 +60,18 @@ export function createWorkspaceWindowCloseRequestBroker<TConfirmation>(
     pending: PendingWorkspaceWindowCloseRequest<TConfirmation>
   ): void {
     const cancelTimeout = pending.cancelTimeout;
+    const cancelPostConfirmationWatchdog =
+      pending.cancelPostConfirmationWatchdog;
     const unbindAbort = pending.unbindAbort;
     pending.cancelTimeout = null;
+    pending.cancelPostConfirmationWatchdog = null;
     pending.unbindAbort = null;
 
-    for (const dispose of [cancelTimeout, unbindAbort]) {
+    for (const dispose of [
+      cancelTimeout,
+      cancelPostConfirmationWatchdog,
+      unbindAbort
+    ]) {
       try {
         dispose?.();
       } catch {
@@ -115,7 +126,10 @@ export function createWorkspaceWindowCloseRequestBroker<TConfirmation>(
 
   function installCleanup(
     pending: PendingWorkspaceWindowCloseRequest<TConfirmation>,
-    field: "cancelTimeout" | "unbindAbort",
+    field:
+      | "cancelTimeout"
+      | "cancelPostConfirmationWatchdog"
+      | "unbindAbort",
     dispose: () => void
   ): void {
     if (pending.settled) {
@@ -139,6 +153,30 @@ export function createWorkspaceWindowCloseRequestBroker<TConfirmation>(
       pendingByWindowId.get(identity.windowId) === pending
       ? pending
       : null;
+  }
+
+  function armPostConfirmationWatchdog(
+    pending: PendingWorkspaceWindowCloseRequest<TConfirmation>
+  ): void {
+    if (
+      pending.settled ||
+      pending.activeConfirmations !== 0 ||
+      pending.cancelPostConfirmationWatchdog !== null
+    ) {
+      return;
+    }
+
+    try {
+      installCleanup(
+        pending,
+        "cancelPostConfirmationWatchdog",
+        dependencies.schedulePostConfirmationWatchdog(() => {
+          settle(pending, { kind: "resolve", confirmation: null });
+        })
+      );
+    } catch (error) {
+      settle(pending, { kind: "reject", error });
+    }
   }
 
   return {
@@ -173,6 +211,7 @@ export function createWorkspaceWindowCloseRequestBroker<TConfirmation>(
         activeConfirmations: 0,
         drained: false,
         cancelTimeout: null,
+        cancelPostConfirmationWatchdog: null,
         unbindAbort: null,
         resolveResult,
         rejectResult,
@@ -246,6 +285,7 @@ export function createWorkspaceWindowCloseRequestBroker<TConfirmation>(
           }
           finished = true;
           pending.activeConfirmations -= 1;
+          armPostConfirmationWatchdog(pending);
           drainIfIdle(pending);
         }
       });

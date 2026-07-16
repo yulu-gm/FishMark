@@ -45,8 +45,8 @@ describe("createWorkspaceCloseCoordinator", () => {
       "window-1",
       createDocument("second.md", "second")
     ).activeTabId!;
-    workspace.updateTabDraft(firstTabId, "first dirty");
-    workspace.updateTabDraft(secondTabId, "second dirty");
+    workspace.updateTabDraft({ tabId: firstTabId, expectedWindowId: "window-1", content: "first dirty" });
+    workspace.updateTabDraft({ tabId: secondTabId, expectedWindowId: "window-1", content: "second dirty" });
     const prompt = vi.fn(async () => "discard" as const);
     const coordinator = createWorkspaceCloseCoordinator({
       workspace,
@@ -90,8 +90,8 @@ describe("createWorkspaceCloseCoordinator", () => {
       "window-1",
       createDocument("third.md", "third")
     ).activeTabId!;
-    workspace.updateTabDraft(firstTabId, "first dirty");
-    workspace.updateTabDraft(thirdTabId, "third dirty");
+    workspace.updateTabDraft({ tabId: firstTabId, expectedWindowId: "window-1", content: "first dirty" });
+    workspace.updateTabDraft({ tabId: thirdTabId, expectedWindowId: "window-1", content: "third dirty" });
     const prompt = vi
       .fn<
         (tab: DocumentSessionProjection) => Promise<"save" | "discard" | "cancel">
@@ -167,12 +167,12 @@ describe("createWorkspaceCloseCoordinator", () => {
       "window-1",
       createDocument("cancel.md", "saved")
     ).activeTabId!;
-    workspace.updateTabDraft(tabId, "dirty");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "dirty" });
     const getTabSession = vi.spyOn(workspace, "getTabSession");
     const coordinator = createWorkspaceCloseCoordinator({
       workspace,
       promptToSaveWorkspaceTab: async () => {
-        workspace.updateTabDraft(tabId, "changed during cancel prompt");
+        workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "changed during cancel prompt" });
         return "cancel";
       },
       saveMarkdownFileToPath: vi.fn(),
@@ -199,7 +199,7 @@ describe("createWorkspaceCloseCoordinator", () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
-    workspace.updateTabDraft(tabId, "untitled dirty");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "untitled dirty" });
     const showSaveMarkdownDialog = vi.fn(async ({ content }) => ({
       status: "success" as const,
       document: createDocument("saved.md", content)
@@ -241,7 +241,7 @@ describe("createWorkspaceCloseCoordinator", () => {
       "window-1",
       createDocument("move-prompt.md", "saved")
     ).activeTabId!;
-    workspace.updateTabDraft(tabId, "dirty");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "dirty" });
     workspace.registerWindow("window-2");
     let resolvePrompt!: (choice: "discard") => void;
     const closeTab = vi.spyOn(workspace, "closeTab");
@@ -282,7 +282,7 @@ describe("createWorkspaceCloseCoordinator", () => {
       "window-1",
       createDocument("edit-save.md", "saved")
     ).activeTabId!;
-    workspace.updateTabDraft(tabId, "captured dirty");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "captured dirty" });
     let resolveSave!: (value: {
       status: "success";
       document: WorkspaceDocumentData;
@@ -304,7 +304,7 @@ describe("createWorkspaceCloseCoordinator", () => {
       expectedRevision: 1
     });
     await vi.waitFor(() => expect(resolveSave).toBeTypeOf("function"));
-    workspace.updateTabDraft(tabId, "newer dirty");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "newer dirty" });
     resolveSave({
       status: "success",
       document: createDocument("edit-save.md", "captured dirty")
@@ -332,7 +332,7 @@ describe("createWorkspaceCloseCoordinator", () => {
       "window-1",
       createDocument("move-save.md", "saved")
     ).activeTabId!;
-    workspace.updateTabDraft(tabId, "captured dirty");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "captured dirty" });
     workspace.registerWindow("window-2");
     let resolveSave!: (value: {
       status: "success";
@@ -384,15 +384,15 @@ describe("createWorkspaceCloseCoordinator", () => {
       "window-1",
       createDocument("second.md", "second")
     ).activeTabId!;
-    workspace.updateTabDraft(firstTabId, "first dirty");
-    workspace.updateTabDraft(secondTabId, "second dirty");
+    workspace.updateTabDraft({ tabId: firstTabId, expectedWindowId: "window-1", content: "first dirty" });
+    workspace.updateTabDraft({ tabId: secondTabId, expectedWindowId: "window-1", content: "second dirty" });
     const coordinator = createWorkspaceCloseCoordinator({
       workspace,
       promptToSaveWorkspaceTab: vi
         .fn()
         .mockResolvedValueOnce("discard")
         .mockImplementationOnce(async () => {
-          workspace.updateTabDraft(firstTabId, "first changed again");
+          workspace.updateTabDraft({ tabId: firstTabId, expectedWindowId: "window-1", content: "first changed again" });
           return "discard";
         }),
       saveMarkdownFileToPath: vi.fn(),
@@ -411,7 +411,7 @@ describe("createWorkspaceCloseCoordinator", () => {
       "window-1",
       createDocument("inactive.md", "saved")
     ).activeTabId!;
-    workspace.updateTabDraft(tabId, "dirty");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "dirty" });
     const prompt = vi.fn(async () => "discard" as const);
     const coordinator = createWorkspaceCloseCoordinator({
       workspace,
@@ -435,7 +435,7 @@ describe("createWorkspaceCloseCoordinator", () => {
       "window-1",
       createDocument("prompt-timeout.md", "saved")
     ).activeTabId!;
-    workspace.updateTabDraft(tabId, "dirty");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "dirty" });
     let active = true;
     let resolvePrompt!: (choice: "save") => void;
     const saveMarkdownFileToPath = vi.fn();
@@ -468,7 +468,7 @@ describe("createWorkspaceCloseCoordinator", () => {
       "window-1",
       createDocument("write-timeout.md", "saved")
     ).activeTabId!;
-    workspace.updateTabDraft(tabId, "dirty");
+    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "dirty" });
     let active = true;
     let resolveWrite!: (result: {
       readonly status: "success";
@@ -512,7 +512,7 @@ describe("createWorkspaceCloseCoordinator", () => {
       "window-1",
       createDocument("first.md", "first")
     ).activeTabId!;
-    workspace.updateTabDraft(firstTabId, "first dirty");
+    workspace.updateTabDraft({ tabId: firstTabId, expectedWindowId: "window-1", content: "first dirty" });
     let resolvePrompt!: (choice: "discard") => void;
     const coordinator = createWorkspaceCloseCoordinator({
       workspace,
@@ -529,7 +529,7 @@ describe("createWorkspaceCloseCoordinator", () => {
     );
     await vi.waitFor(() => expect(resolvePrompt).toBeTypeOf("function"));
     const newTabId = workspace.createUntitledTab("window-1").activeTabId!;
-    workspace.updateTabDraft(newTabId, "new dirty tab");
+    workspace.updateTabDraft({ tabId: newTabId, expectedWindowId: "window-1", content: "new dirty tab" });
     resolvePrompt("discard");
 
     await expect(confirmPromise).resolves.toBeNull();
@@ -555,7 +555,7 @@ describe("createWorkspaceCloseCoordinator", () => {
       "window-1",
       createDocument("second.md", "second")
     ).activeTabId!;
-    workspace.updateTabDraft(firstTabId, "first dirty");
+    workspace.updateTabDraft({ tabId: firstTabId, expectedWindowId: "window-1", content: "first dirty" });
     let resolvePrompt!: (choice: "discard") => void;
     const coordinator = createWorkspaceCloseCoordinator({
       workspace,
@@ -625,7 +625,7 @@ describe("createWorkspaceCloseCoordinator", () => {
       "window-1",
       createDocument("remaining.md", "remaining")
     ).activeTabId!;
-    workspace.updateTabDraft(closingTabId, "dirty");
+    workspace.updateTabDraft({ tabId: closingTabId, expectedWindowId: "window-1", content: "dirty" });
     let resolvePrompt!: (choice: "discard") => void;
     const coordinator = createWorkspaceCloseCoordinator({
       workspace,
@@ -666,7 +666,7 @@ describe("createWorkspaceCloseCoordinator", () => {
       "window-1",
       createDocument("remaining.md", "remaining")
     ).activeTabId!;
-    workspace.updateTabDraft(movingTabId, "dirty");
+    workspace.updateTabDraft({ tabId: movingTabId, expectedWindowId: "window-1", content: "dirty" });
     workspace.registerWindow("window-2");
     let resolvePrompt!: (choice: "discard") => void;
     const coordinator = createWorkspaceCloseCoordinator({
