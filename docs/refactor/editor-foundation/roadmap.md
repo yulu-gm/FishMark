@@ -691,7 +691,7 @@ npm.cmd run perf:baseline
 - [x] Bind Save, Save As, reload, and close IO/confirmation workflows to captured owner/revision and the relevant checkpoint so stale completion fails closed.
 - [x] Serialize Save, Save As, reload, and individual close per tab through one main-owned FIFO coordinator while allowing unrelated tabs to proceed independently.
 - [x] Keep each ordinary Save's watcher begin/write/commit/recent/complete/resync lifecycle inside that same per-tab lease, so a second save cannot open or write before the first watcher transaction is closed.
-- [x] Hold a stable multi-tab lease across the native window-close renderer handshake until the window is unregistered; carry an immutable ordered owner/revision confirmation through a bounded, abortable request broker and revalidate it immediately before native close.
+- [x] Hold a stable multi-tab lease across the native window-close renderer handshake until the window is unregistered; bind the immutable ordered owner/revision confirmation to an exact `{ windowId, requestId }` generation, and keep the lease until every active confirmation scope drains even after timeout/abort.
 - [x] Make detach a ready-gated two-phase operation: keep the tab in the source before ready, revalidate source ownership at ready, then atomically move the latest canonical session; timeout, load failure, or target close does not move it.
 - [x] Delete the old service, test, types, imports, and exports in the same task.
 - [x] Verify no renderer imports internal session types and the shared/preload/renderer wire remains unchanged.
