@@ -146,6 +146,52 @@ describe("createWorkspaceWindowCloseApplication", () => {
     ).resolves.toBe("released");
   });
 
+  it("cancels after a successful handshake when a tab is added while confirmation is pending", async () => {
+    const workspace = createWorkspaceState();
+    const documentOperations = createWorkspaceDocumentOperationCoordinator();
+    workspace.registerWindow("window-1");
+    const firstTabId = workspace.openDocument(
+      "window-1",
+      document("first")
+    ).activeTabId!;
+    let resolveRequest!: (shouldClose: boolean) => void;
+    const application = createWorkspaceWindowCloseApplication({
+      workspace,
+      documentOperations,
+      requestWorkspaceWindowClose: () =>
+        new Promise((resolve) => {
+          resolveRequest = resolve;
+        })
+    });
+
+    const closePromise = application.requestWindowClose({
+      windowId: "window-1",
+      ownerWindow: { id: 1 }
+    });
+    await vi.waitFor(() => expect(resolveRequest).toBeTypeOf("function"));
+    const secondTabId = workspace.openDocument("window-1", {
+      ...document("second"),
+      path: "C:/notes/second.md",
+      name: "second.md"
+    }).activeTabId!;
+    const queuedOperation = vi.fn(async () => "continued");
+    const queuedPromise = documentOperations.runExclusive(
+      firstTabId,
+      queuedOperation
+    );
+    expect(queuedOperation).not.toHaveBeenCalled();
+
+    resolveRequest(true);
+
+    await expect(closePromise).resolves.toBeNull();
+    await expect(queuedPromise).resolves.toBe("continued");
+    expect(queuedOperation).toHaveBeenCalledOnce();
+    expect(workspace.getWindowTabIds("window-1")).toEqual([
+      firstTabId,
+      secondTabId
+    ]);
+  });
+
   it("releases every lease when the renderer handshake rejects", async () => {
     const workspace = createWorkspaceState();
     const documentOperations = createWorkspaceDocumentOperationCoordinator();

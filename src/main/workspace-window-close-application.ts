@@ -49,6 +49,10 @@ export function createWorkspaceWindowCloseApplication<TOwnerWindow>(
           lease.release();
           return null;
         }
+        if (!hasSameOrderedTabs(input.windowId, initialTabIds)) {
+          lease.release();
+          return null;
+        }
         return keepHeld(lease);
       } catch (error) {
         lease.release();
