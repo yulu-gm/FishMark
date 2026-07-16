@@ -25,8 +25,17 @@ export function createWorkspaceApplication(dependencies: WorkspaceApplicationDep
     }): WorkspaceWindowProjection {
       return dependencies.workspace.updateTabDraft(input.tabId, input.content);
     },
-    async saveTab(input: { tabId: string; path: string }): Promise<SaveMarkdownFileResult> {
+    async saveTab(input: {
+      tabId: string;
+      expectedWindowId: string;
+      path: string;
+    }): Promise<SaveMarkdownFileResult> {
       const tab = dependencies.workspace.getTabSession(input.tabId);
+      if (tab.windowId !== input.expectedWindowId) {
+        throw new Error(
+          `Workspace tab '${input.tabId}' does not belong to window '${input.expectedWindowId}'.`
+        );
+      }
       const result = await dependencies.saveMarkdownFileToPath({
         tabId: input.tabId,
         path: input.path,
@@ -36,6 +45,7 @@ export function createWorkspaceApplication(dependencies: WorkspaceApplicationDep
       if (result.status === "success") {
         dependencies.workspace.saveTabDocument({
           tabId: input.tabId,
+          expectedWindowId: input.expectedWindowId,
           capturedRevision: tab.revision,
           document: result.document,
           diskVersion: null

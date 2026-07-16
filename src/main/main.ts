@@ -1,7 +1,6 @@
 import path from "node:path";
 import {
   createWorkspaceState,
-  type WorkspaceMoveProjection,
   type WorkspaceWindowProjection
 } from "@fishmark/workspace-domain";
 import {
@@ -43,6 +42,9 @@ import { resolveAutoUpdaterModule } from "./resolve-auto-updater-module";
 import { createExternalFileWatchService } from "./external-file-watch-service";
 import { createWorkspaceApplication } from "./workspace-application";
 import { createWorkspaceCloseCoordinator } from "./workspace-close-coordinator";
+import { createWorkspaceDetachApplication } from "./workspace-detach-application";
+import { createWorkspaceFileOperations } from "./workspace-file-operations";
+import { createWorkspaceReloadApplication } from "./workspace-reload-application";
 import {
   toWorkspaceMoveTabResult,
   toWorkspaceWindowSnapshot
@@ -429,6 +431,7 @@ app.whenReady().then(async () => {
   function ensureWorkspaceWindow(sender: Electron.WebContents): string {
     const windowId = resolveWorkspaceWindowId(sender);
     workspaceState.registerWindow(windowId);
+    workspaceDetachApplication.markWindowReady(windowId);
 
     if (!workspaceWindowBindings.has(windowId)) {
       const ownerWindow = BrowserWindow.fromWebContents(sender);
@@ -595,6 +598,46 @@ app.whenReady().then(async () => {
     }
   }
 
+  const workspaceReloadApplication = createWorkspaceReloadApplication({
+    workspace: workspaceState,
+    openMarkdownFileFromPath,
+    recordRecentFilePath
+  });
+  const workspaceFileOperations = createWorkspaceFileOperations({
+    workspace: workspaceState,
+    saveTab: workspaceApplication.saveTab,
+    showSaveMarkdownDialog,
+    beginInternalWrite: externalFileWatchService.beginInternalWrite,
+    completeInternalWrite: externalFileWatchService.completeInternalWrite,
+    syncDocumentPath: externalFileWatchService.syncDocumentPath,
+    recordRecentFilePath
+  });
+  const workspaceDetachApplication = createWorkspaceDetachApplication({
+    workspace: workspaceState,
+    openWindow: () => windowManager.openEditorWindow(),
+    lifecycle: {
+      getWindowId: (window) => String(window.id),
+      destroyWindow: (window) => {
+        if (!window.isDestroyed()) {
+          window.destroy();
+        }
+      },
+      bindClosed: (window, listener) => {
+        window.once("closed", listener);
+      },
+      bindLoadFailure: (window, listener) => {
+        window.webContents.on(
+          "did-fail-load",
+          (_event, _errorCode, _errorDescription, _validatedUrl, isMainFrame) => {
+            if (isMainFrame) {
+              listener();
+            }
+          }
+        );
+      }
+    }
+  });
+
   ipcMain.handle(GET_WORKSPACE_SNAPSHOT_CHANNEL, async (event) => {
     const windowId = ensureWorkspaceWindow(event.sender);
     return syncWorkspaceWatch(
@@ -700,27 +743,14 @@ app.whenReady().then(async () => {
     RELOAD_WORKSPACE_TAB_FROM_PATH_CHANNEL,
     async (event, input: ReloadWorkspaceTabFromPathInput) => {
       const windowId = ensureWorkspaceWindow(event.sender);
-      const tabSession = workspaceState.getTabSession(input.tabId);
-
-      if (tabSession.windowId !== windowId) {
-        throw new Error(`Workspace tab '${input.tabId}' does not belong to window '${windowId}'.`);
-      }
-
-      const result = await openMarkdownFileFromPath(input.targetPath);
-
-      if (result.status !== "success") {
-        if (result.status === "error") {
-          throw new Error(result.error.message);
-        }
-
-        throw new Error(`Unable to reload Markdown file '${input.targetPath}'.`);
-      }
-
-      await recordRecentFilePath(result.document.path);
-
+      const projection = await workspaceReloadApplication.reloadTab({
+        tabId: input.tabId,
+        expectedWindowId: windowId,
+        targetPath: input.targetPath
+      });
       return syncWorkspaceWatch(
         event.sender,
-        workspaceState.replaceTabDocument(input.tabId, result.document)
+        projection
       );
     }
   );
@@ -732,17 +762,18 @@ app.whenReady().then(async () => {
     );
   });
   ipcMain.handle(CLOSE_WORKSPACE_TAB_CHANNEL, async (event, input: CloseWorkspaceTabInput) => {
-    ensureWorkspaceWindow(event.sender);
-    const windowId = workspaceState.getTabSession(input.tabId).windowId;
-    const result = await workspaceCloseCoordinator.closeTab(input.tabId);
-
-    if (result.status === "cancelled") {
-      return syncWorkspaceWatch(
-        event.sender,
-        workspaceState.getWindowProjection(windowId)
+    const windowId = ensureWorkspaceWindow(event.sender);
+    const checkpoint = workspaceState.getTabSession(input.tabId);
+    if (checkpoint.windowId !== windowId) {
+      throw new Error(
+        `Workspace tab '${input.tabId}' does not belong to window '${windowId}'.`
       );
     }
-
+    const result = await workspaceCloseCoordinator.closeTab({
+      tabId: input.tabId,
+      expectedWindowId: windowId,
+      expectedRevision: checkpoint.revision
+    });
     return syncWorkspaceWatch(event.sender, result.snapshot);
   });
   ipcMain.handle(REORDER_WORKSPACE_TAB_CHANNEL, async (event, input: ReorderWorkspaceTabInput) => {
@@ -760,12 +791,10 @@ app.whenReady().then(async () => {
   ipcMain.handle(
     DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL,
     async (event, input: DetachWorkspaceTabToNewWindowInput) => {
-      ensureWorkspaceWindow(event.sender);
-      const detachedWindow = windowManager.openEditorWindow();
-      const detachedWindowId = String(detachedWindow.id);
-      const projection: WorkspaceMoveProjection = workspaceState.detachTabToWindow({
+      const windowId = ensureWorkspaceWindow(event.sender);
+      const projection = workspaceDetachApplication.detachTab({
         tabId: input.tabId,
-        targetWindowId: detachedWindowId
+        expectedWindowId: windowId
       });
       return syncWorkspaceWatch(
         event.sender,
@@ -792,44 +821,22 @@ app.whenReady().then(async () => {
     }
   );
   ipcMain.handle(SAVE_MARKDOWN_FILE_CHANNEL, async (event, input: SaveMarkdownFileInput) => {
-    externalFileWatchService.beginInternalWrite(event.sender, input.path);
-    const result = await workspaceApplication.saveTab(input);
-
-    if (result.status === "success") {
-      await recordRecentFilePath(workspaceState.getTabPath(input.tabId));
-      await externalFileWatchService.completeInternalWrite(event.sender, input.path);
-      await externalFileWatchService.syncDocumentPath(
-        event.sender,
-        workspaceState.getTabPath(input.tabId)
-      );
-      return result;
-    }
-
-    await externalFileWatchService.completeInternalWrite(event.sender, input.path);
-    return result;
+    const windowId = ensureWorkspaceWindow(event.sender);
+    return workspaceFileOperations.save({
+      sender: event.sender,
+      expectedWindowId: windowId,
+      tabId: input.tabId,
+      path: input.path
+    });
   });
   ipcMain.handle(SAVE_MARKDOWN_FILE_AS_CHANNEL, async (event, input: SaveMarkdownFileAsInput) => {
-    const tabSession = workspaceState.getTabSession(input.tabId);
-    const result = await showSaveMarkdownDialog({
-      ...input,
-      content: tabSession.content
+    const windowId = ensureWorkspaceWindow(event.sender);
+    return workspaceFileOperations.saveAs({
+      sender: event.sender,
+      expectedWindowId: windowId,
+      tabId: input.tabId,
+      currentPath: input.currentPath
     });
-
-    if (result.status === "success") {
-      workspaceState.saveTabDocument({
-        tabId: input.tabId,
-        capturedRevision: tabSession.revision,
-        document: result.document,
-        diskVersion: null
-      });
-      await recordRecentFilePath(result.document.path);
-      await externalFileWatchService.syncDocumentPath(
-        event.sender,
-        workspaceState.getTabPath(input.tabId)
-      );
-    }
-
-    return result;
   });
   ipcMain.handle(EXPORT_HTML_FILE_CHANNEL, async (_event, input: ExportHtmlFileInput) =>
     showExportHtmlDialog(input)

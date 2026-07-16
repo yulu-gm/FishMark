@@ -7,404 +7,354 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createWorkspaceCloseCoordinator } from "./workspace-close-coordinator";
 
-function createDocument(input: {
-  path: string;
-  name: string;
-  content: string;
-}): WorkspaceDocumentData {
-  return {
-    path: input.path,
-    name: input.name,
-    content: input.content,
-    encoding: "utf-8"
-  };
+function createDocument(
+  name: string,
+  content: string,
+  path: string | null = `C:/notes/${name}`
+): WorkspaceDocumentData {
+  return { path, name, content, encoding: "utf-8" };
 }
 
 describe("createWorkspaceCloseCoordinator", () => {
-  it("only prompts for the target dirty tab when closing a single tab", async () => {
+  it("closes only the requested tab after an unchanged discard decision", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const first = workspace.openDocument(
+    const firstTabId = workspace.openDocument(
       "window-1",
-      createDocument({
-        path: "C:/notes/first.md",
-        name: "first.md",
-        content: "# First\n"
-      })
-    );
-    const second = workspace.openDocument(
+      createDocument("first.md", "first")
+    ).activeTabId!;
+    const secondTabId = workspace.openDocument(
       "window-1",
-      createDocument({
-        path: "C:/notes/second.md",
-        name: "second.md",
-        content: "# Second\n"
-      })
-    );
-    workspace.updateTabDraft(first.activeTabId!, "# First dirty\n");
-    workspace.updateTabDraft(second.activeTabId!, "# Second dirty\n");
-    const promptToSaveWorkspaceTab = vi
-      .fn<
-        (tab: DocumentSessionProjection) => Promise<"save" | "discard" | "cancel">
-      >()
-      .mockResolvedValue("discard");
-    const saveMarkdownFileToPath = vi.fn();
-    const showSaveMarkdownDialog = vi.fn();
-    const closeCoordinator = createWorkspaceCloseCoordinator({
+      createDocument("second.md", "second")
+    ).activeTabId!;
+    workspace.updateTabDraft(firstTabId, "first dirty");
+    workspace.updateTabDraft(secondTabId, "second dirty");
+    const prompt = vi.fn(async () => "discard" as const);
+    const coordinator = createWorkspaceCloseCoordinator({
       workspace,
-      promptToSaveWorkspaceTab,
-      saveMarkdownFileToPath,
-      showSaveMarkdownDialog
+      promptToSaveWorkspaceTab: prompt,
+      saveMarkdownFileToPath: vi.fn(),
+      showSaveMarkdownDialog: vi.fn()
     });
 
-    const result = await closeCoordinator.closeTab(first.activeTabId!);
+    const result = await coordinator.closeTab({
+      tabId: firstTabId,
+      expectedWindowId: "window-1",
+      expectedRevision: 1
+    });
 
-    expect(result).toMatchObject({ status: "closed" });
-    expect(promptToSaveWorkspaceTab).toHaveBeenCalledTimes(1);
-    expect(promptToSaveWorkspaceTab).toHaveBeenCalledWith(
+    expect(result).toMatchObject({
+      status: "closed",
+      snapshot: { windowId: "window-1", activeTabId: secondTabId }
+    });
+    expect(prompt).toHaveBeenCalledWith(
       expect.objectContaining({
-        tabId: first.activeTabId,
-        name: "first.md",
-        content: "# First dirty\n",
+        tabId: firstTabId,
         revision: 1,
         savedRevision: 0,
         isDirty: true
       })
     );
-    expect(saveMarkdownFileToPath).not.toHaveBeenCalled();
-    expect(showSaveMarkdownDialog).not.toHaveBeenCalled();
-    expect(
-      workspace.getWindowProjection("window-1").tabs.map((tab) => tab.tabId)
-    ).toEqual([second.activeTabId]);
-    expect(workspace.getTabSession(second.activeTabId!)).toMatchObject({
-      content: "# Second dirty\n",
-      revision: 1,
-      isDirty: true
-    });
+    expect(workspace.getWindowProjection("window-1").tabs.map((tab) => tab.tabId)).toEqual([
+      secondTabId
+    ]);
   });
 
-  it("iterates dirty tabs in window order before allowing the window to close", async () => {
+  it("confirms a window in tab order and commits the captured owner and revision", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const first = workspace.openDocument(
+    const firstTabId = workspace.openDocument(
       "window-1",
-      createDocument({
-        path: "C:/notes/first.md",
-        name: "first.md",
-        content: "# First\n"
-      })
-    );
-    const second = workspace.openDocument(
+      createDocument("first.md", "first")
+    ).activeTabId!;
+    workspace.openDocument("window-1", createDocument("clean.md", "clean"));
+    const thirdTabId = workspace.openDocument(
       "window-1",
-      createDocument({
-        path: "C:/notes/second.md",
-        name: "second.md",
-        content: "# Second\n"
-      })
-    );
-    const third = workspace.openDocument(
-      "window-1",
-      createDocument({
-        path: "C:/notes/third.md",
-        name: "third.md",
-        content: "# Third\n"
-      })
-    );
-    workspace.updateTabDraft(first.activeTabId!, "# First dirty\n");
-    workspace.updateTabDraft(third.activeTabId!, "# Third dirty\n");
-    const promptToSaveWorkspaceTab = vi
+      createDocument("third.md", "third")
+    ).activeTabId!;
+    workspace.updateTabDraft(firstTabId, "first dirty");
+    workspace.updateTabDraft(thirdTabId, "third dirty");
+    const prompt = vi
       .fn<
         (tab: DocumentSessionProjection) => Promise<"save" | "discard" | "cancel">
       >()
       .mockResolvedValueOnce("save")
       .mockResolvedValueOnce("discard");
-    const saveMarkdownFileToPath = vi.fn(
-      async (input: { tabId: string; path: string; content: string }) => ({
-        status: "success" as const,
-        document: {
-          path: input.path,
-          name: input.path.split("/").at(-1) ?? "saved.md",
-          content: input.content,
-          encoding: "utf-8" as const
-        }
-      })
-    );
     const saveTabDocument = vi.spyOn(workspace, "saveTabDocument");
-    const closeCoordinator = createWorkspaceCloseCoordinator({
+    const coordinator = createWorkspaceCloseCoordinator({
       workspace,
-      promptToSaveWorkspaceTab,
-      saveMarkdownFileToPath,
+      promptToSaveWorkspaceTab: prompt,
+      saveMarkdownFileToPath: vi.fn(async ({ tabId, path, content }) => ({
+        status: "success" as const,
+        document: createDocument(path.split("/").at(-1) ?? `${tabId}.md`, content, path)
+      })),
       showSaveMarkdownDialog: vi.fn()
     });
 
-    await expect(closeCoordinator.confirmWindowClose("window-1")).resolves.toBe(
-      true
-    );
+    await expect(coordinator.confirmWindowClose("window-1")).resolves.toBe(true);
 
-    expect(promptToSaveWorkspaceTab.mock.calls.map((call) => call[0]?.tabId)).toEqual([
-      first.activeTabId,
-      third.activeTabId
+    expect(prompt.mock.calls.map(([tab]) => tab.tabId)).toEqual([
+      firstTabId,
+      thirdTabId
     ]);
-    expect(saveMarkdownFileToPath).toHaveBeenCalledWith({
-      tabId: first.activeTabId,
-      path: "C:/notes/first.md",
-      content: "# First dirty\n"
-    });
     expect(saveTabDocument).toHaveBeenCalledWith({
-      tabId: first.activeTabId,
+      tabId: firstTabId,
+      expectedWindowId: "window-1",
       capturedRevision: 1,
-      document: createDocument({
-        path: "C:/notes/first.md",
-        name: "first.md",
-        content: "# First dirty\n"
-      }),
+      document: createDocument("first.md", "first dirty"),
       diskVersion: null
     });
-    expect(workspace.getTabSession(first.activeTabId!)).toMatchObject({
+    expect(workspace.getTabSession(firstTabId)).toMatchObject({
       revision: 1,
       savedRevision: 1,
       isDirty: false
     });
-    expect(workspace.getTabSession(second.activeTabId!)).toMatchObject({
-      revision: 0,
-      savedRevision: 0,
-      isDirty: false
-    });
-    expect(workspace.getTabSession(third.activeTabId!)).toMatchObject({
+    expect(workspace.getTabSession(thirdTabId)).toMatchObject({
       revision: 1,
       savedRevision: 0,
       isDirty: true
     });
   });
 
-  it("cancels window close when a dirty tab save prompt is aborted", async () => {
+  it("revalidates after cancel before returning the sender projection", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const first = workspace.openDocument(
+    const tabId = workspace.openDocument(
       "window-1",
-      createDocument({
-        path: "C:/notes/first.md",
-        name: "first.md",
-        content: "# First\n"
-      })
-    );
-    const second = workspace.openDocument(
-      "window-1",
-      createDocument({
-        path: "C:/notes/second.md",
-        name: "second.md",
-        content: "# Second\n"
-      })
-    );
-    workspace.updateTabDraft(first.activeTabId!, "# First dirty\n");
-    workspace.updateTabDraft(second.activeTabId!, "# Second dirty\n");
-    const promptToSaveWorkspaceTab = vi
-      .fn<
-        (tab: DocumentSessionProjection) => Promise<"save" | "discard" | "cancel">
-      >()
-      .mockResolvedValueOnce("save")
-      .mockResolvedValueOnce("cancel");
-    const saveMarkdownFileToPath = vi.fn(
-      async (input: { tabId: string; path: string; content: string }) => ({
-        status: "success" as const,
-        document: {
-          path: input.path,
-          name: input.path.split("/").at(-1) ?? "saved.md",
-          content: input.content,
-          encoding: "utf-8" as const
-        }
-      })
-    );
-    const closeCoordinator = createWorkspaceCloseCoordinator({
+      createDocument("cancel.md", "saved")
+    ).activeTabId!;
+    workspace.updateTabDraft(tabId, "dirty");
+    const getTabSession = vi.spyOn(workspace, "getTabSession");
+    const coordinator = createWorkspaceCloseCoordinator({
       workspace,
-      promptToSaveWorkspaceTab,
-      saveMarkdownFileToPath,
+      promptToSaveWorkspaceTab: async () => {
+        workspace.updateTabDraft(tabId, "changed during cancel prompt");
+        return "cancel";
+      },
+      saveMarkdownFileToPath: vi.fn(),
       showSaveMarkdownDialog: vi.fn()
     });
 
-    await expect(closeCoordinator.confirmWindowClose("window-1")).resolves.toBe(
-      false
-    );
-
-    expect(promptToSaveWorkspaceTab.mock.calls.map((call) => call[0]?.tabId)).toEqual([
-      first.activeTabId,
-      second.activeTabId
-    ]);
-    expect(saveMarkdownFileToPath).toHaveBeenCalledTimes(1);
-    expect(
-      workspace.getWindowProjection("window-1").tabs.map((tab) => tab.tabId)
-    ).toEqual([first.activeTabId, second.activeTabId]);
-    expect(workspace.getTabSession(second.activeTabId!)).toMatchObject({
-      revision: 1,
-      savedRevision: 0,
-      isDirty: true
+    const result = await coordinator.closeTab({
+      tabId,
+      expectedWindowId: "window-1",
+      expectedRevision: 1
     });
+
+    expect(result).toMatchObject({
+      status: "cancelled",
+      snapshot: {
+        windowId: "window-1",
+        activeDocument: { content: "changed during cancel prompt" }
+      }
+    });
+    expect(getTabSession).toHaveBeenCalledTimes(2);
   });
 
-  it("routes untitled dirty tabs through Save As before closing them", async () => {
+  it("routes an unchanged untitled checkpoint through Save As before closing", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const untitled = workspace.createUntitledTab("window-1");
-    const tabId = untitled.activeTabId!;
-    workspace.updateTabDraft(tabId, "# Untitled dirty\n");
-    const showSaveMarkdownDialog = vi.fn(
-      async (input: {
-        tabId: string;
-        currentPath: string | null;
-        content: string;
-      }) => ({
-        status: "success" as const,
-        document: {
-          path: "C:/notes/untitled-saved.md",
-          name: "untitled-saved.md",
-          content: input.content,
-          encoding: "utf-8" as const
-        }
-      })
-    );
+    const tabId = workspace.createUntitledTab("window-1").activeTabId!;
+    workspace.updateTabDraft(tabId, "untitled dirty");
+    const showSaveMarkdownDialog = vi.fn(async ({ content }) => ({
+      status: "success" as const,
+      document: createDocument("saved.md", content)
+    }));
     const saveTabDocument = vi.spyOn(workspace, "saveTabDocument");
-    const closeCoordinator = createWorkspaceCloseCoordinator({
+    const coordinator = createWorkspaceCloseCoordinator({
       workspace,
-      promptToSaveWorkspaceTab: vi.fn(async () => "save" as const),
+      promptToSaveWorkspaceTab: async () => "save",
       saveMarkdownFileToPath: vi.fn(),
       showSaveMarkdownDialog
     });
 
-    const result = await closeCoordinator.closeTab(tabId);
+    await expect(
+      coordinator.closeTab({
+        tabId,
+        expectedWindowId: "window-1",
+        expectedRevision: 1
+      })
+    ).resolves.toMatchObject({ status: "closed" });
 
-    expect(result).toMatchObject({ status: "closed" });
     expect(showSaveMarkdownDialog).toHaveBeenCalledWith({
       tabId,
       currentPath: null,
-      content: "# Untitled dirty\n"
+      content: "untitled dirty"
     });
     expect(saveTabDocument).toHaveBeenCalledWith({
       tabId,
+      expectedWindowId: "window-1",
       capturedRevision: 1,
-      document: createDocument({
-        path: "C:/notes/untitled-saved.md",
-        name: "untitled-saved.md",
-        content: "# Untitled dirty\n"
-      }),
+      document: createDocument("saved.md", "untitled dirty"),
       diskVersion: null
     });
-    expect(workspace.getWindowProjection("window-1").tabs).toHaveLength(0);
   });
 
-  it("re-reads and saves the latest canonical checkpoint after the prompt", async () => {
+  it("cancels discard when the tab moves during the prompt", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
     const tabId = workspace.openDocument(
       "window-1",
-      createDocument({
-        path: "C:/notes/note.md",
-        name: "note.md",
-        content: "# Saved\n"
-      })
+      createDocument("move-prompt.md", "saved")
     ).activeTabId!;
-    workspace.updateTabDraft(tabId, "# Dirty from main\n");
-    const saveMarkdownFileToPath = vi.fn(
-      async (input: { tabId: string; path: string; content: string }) => ({
-        status: "success" as const,
-        document: {
-          path: input.path,
-          name: "note.md",
-          content: input.content,
-          encoding: "utf-8" as const
-        }
-      })
-    );
-    const saveTabDocument = vi.spyOn(workspace, "saveTabDocument");
+    workspace.updateTabDraft(tabId, "dirty");
+    workspace.registerWindow("window-2");
+    let resolvePrompt!: (choice: "discard") => void;
+    const closeTab = vi.spyOn(workspace, "closeTab");
     const coordinator = createWorkspaceCloseCoordinator({
       workspace,
-      promptToSaveWorkspaceTab: async () => {
-        workspace.updateTabDraft(tabId, "# Dirty from main, latest\n");
-        return "save";
-      },
-      saveMarkdownFileToPath,
+      promptToSaveWorkspaceTab: () =>
+        new Promise((resolve) => {
+          resolvePrompt = resolve;
+        }),
+      saveMarkdownFileToPath: vi.fn(),
       showSaveMarkdownDialog: vi.fn()
     });
 
-    await coordinator.closeTab(tabId);
-
-    expect(saveMarkdownFileToPath).toHaveBeenCalledWith({
+    const closePromise = coordinator.closeTab({
       tabId,
-      path: "C:/notes/note.md",
-      content: "# Dirty from main, latest\n"
+      expectedWindowId: "window-1",
+      expectedRevision: 1
     });
-    expect(saveTabDocument).toHaveBeenCalledWith({
-      tabId,
-      capturedRevision: 2,
-      document: createDocument({
-        path: "C:/notes/note.md",
-        name: "note.md",
-        content: "# Dirty from main, latest\n"
-      }),
-      diskVersion: null
+    await vi.waitFor(() => expect(resolvePrompt).toBeTypeOf("function"));
+    workspace.moveTabToWindow({ tabId, targetWindowId: "window-2" });
+    resolvePrompt("discard");
+
+    await expect(closePromise).resolves.toMatchObject({
+      status: "cancelled",
+      snapshot: { windowId: "window-1", tabs: [] }
+    });
+    expect(closeTab).not.toHaveBeenCalled();
+    expect(workspace.getTabSession(tabId)).toMatchObject({
+      windowId: "window-2",
+      isDirty: true
     });
   });
 
-  it("does not close when a newer canonical revision arrives during save-on-close", async () => {
+  it("cancels close when an edit arrives during save", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
     const tabId = workspace.openDocument(
       "window-1",
-      createDocument({
-        path: "C:/notes/race.md",
-        name: "race.md",
-        content: "# Saved\n"
-      })
+      createDocument("edit-save.md", "saved")
     ).activeTabId!;
-    workspace.updateTabDraft(tabId, "# Dirty before close\n");
+    workspace.updateTabDraft(tabId, "captured dirty");
     let resolveSave!: (value: {
       status: "success";
       document: WorkspaceDocumentData;
     }) => void;
-    const saveTabDocument = vi.spyOn(workspace, "saveTabDocument");
     const closeTab = vi.spyOn(workspace, "closeTab");
     const coordinator = createWorkspaceCloseCoordinator({
       workspace,
       promptToSaveWorkspaceTab: async () => "save",
-      saveMarkdownFileToPath: ({ content, path }) =>
+      saveMarkdownFileToPath: () =>
         new Promise((resolve) => {
           resolveSave = resolve;
-          expect(content).toBe("# Dirty before close\n");
-          expect(path).toBe("C:/notes/race.md");
         }),
       showSaveMarkdownDialog: vi.fn()
     });
 
-    const closePromise = coordinator.closeTab(tabId);
-    await Promise.resolve();
-    workspace.updateTabDraft(tabId, "# Dirty after save started\n");
+    const closePromise = coordinator.closeTab({
+      tabId,
+      expectedWindowId: "window-1",
+      expectedRevision: 1
+    });
+    await vi.waitFor(() => expect(resolveSave).toBeTypeOf("function"));
+    workspace.updateTabDraft(tabId, "newer dirty");
     resolveSave({
       status: "success",
-      document: createDocument({
-        path: "C:/notes/race.md",
-        name: "race.md",
-        content: "# Dirty before close\n"
-      })
+      document: createDocument("edit-save.md", "captured dirty")
     });
 
-    await expect(closePromise).resolves.toEqual({ status: "cancelled" });
-    expect(saveTabDocument).toHaveBeenCalledWith({
-      tabId,
-      capturedRevision: 1,
-      document: createDocument({
-        path: "C:/notes/race.md",
-        name: "race.md",
-        content: "# Dirty before close\n"
-      }),
-      diskVersion: null
+    await expect(closePromise).resolves.toMatchObject({
+      status: "cancelled",
+      snapshot: {
+        windowId: "window-1",
+        activeDocument: { content: "newer dirty", isDirty: true }
+      }
     });
     expect(closeTab).not.toHaveBeenCalled();
-    expect(workspace.getWindowProjection("window-1").tabs.map((tab) => tab.tabId)).toEqual([
-      tabId
-    ]);
     expect(workspace.getTabSession(tabId)).toMatchObject({
-      content: "# Dirty after save started\n",
       revision: 2,
       savedRevision: 1,
       isDirty: true
     });
+  });
+
+  it("cancels close and leaves the target dirty when the tab moves during save", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.openDocument(
+      "window-1",
+      createDocument("move-save.md", "saved")
+    ).activeTabId!;
+    workspace.updateTabDraft(tabId, "captured dirty");
+    workspace.registerWindow("window-2");
+    let resolveSave!: (value: {
+      status: "success";
+      document: WorkspaceDocumentData;
+    }) => void;
+    const closeTab = vi.spyOn(workspace, "closeTab");
+    const coordinator = createWorkspaceCloseCoordinator({
+      workspace,
+      promptToSaveWorkspaceTab: async () => "save",
+      saveMarkdownFileToPath: () =>
+        new Promise((resolve) => {
+          resolveSave = resolve;
+        }),
+      showSaveMarkdownDialog: vi.fn()
+    });
+
+    const closePromise = coordinator.closeTab({
+      tabId,
+      expectedWindowId: "window-1",
+      expectedRevision: 1
+    });
+    await vi.waitFor(() => expect(resolveSave).toBeTypeOf("function"));
+    workspace.moveTabToWindow({ tabId, targetWindowId: "window-2" });
+    resolveSave({
+      status: "success",
+      document: createDocument("move-save.md", "captured dirty")
+    });
+
+    await expect(closePromise).resolves.toMatchObject({
+      status: "cancelled",
+      snapshot: { windowId: "window-1", tabs: [] }
+    });
+    expect(closeTab).not.toHaveBeenCalled();
+    expect(workspace.getTabSession(tabId)).toMatchObject({
+      windowId: "window-2",
+      savedRevision: 0,
+      isDirty: true
+    });
+  });
+
+  it("revalidates earlier window checkpoints after later prompts", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const firstTabId = workspace.openDocument(
+      "window-1",
+      createDocument("first.md", "first")
+    ).activeTabId!;
+    const secondTabId = workspace.openDocument(
+      "window-1",
+      createDocument("second.md", "second")
+    ).activeTabId!;
+    workspace.updateTabDraft(firstTabId, "first dirty");
+    workspace.updateTabDraft(secondTabId, "second dirty");
+    const coordinator = createWorkspaceCloseCoordinator({
+      workspace,
+      promptToSaveWorkspaceTab: vi
+        .fn()
+        .mockResolvedValueOnce("discard")
+        .mockImplementationOnce(async () => {
+          workspace.updateTabDraft(firstTabId, "first changed again");
+          return "discard";
+        }),
+      saveMarkdownFileToPath: vi.fn(),
+      showSaveMarkdownDialog: vi.fn()
+    });
+
+    await expect(coordinator.confirmWindowClose("window-1")).resolves.toBe(false);
   });
 });

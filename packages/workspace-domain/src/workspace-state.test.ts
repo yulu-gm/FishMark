@@ -2,11 +2,13 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
   createWorkspaceState,
+  type CloseWorkspaceTabInput,
   type CommitWorkspaceDocumentInput,
   type DetachWorkspaceTabInput,
   type DocumentSessionProjection,
   type DiskVersion,
   type MoveWorkspaceTabInput,
+  type ReplaceWorkspaceDocumentInput,
   type WorkspaceDocumentData,
   type WorkspaceDocumentProjection,
   type WorkspaceMoveProjection,
@@ -196,10 +198,18 @@ describe("WorkspaceState tab lifecycle", () => {
     workspace.openDocument("window-1", createDocument("third.md"));
     workspace.activateTab("window-1", secondTabId);
 
-    const closed = workspace.closeTab(secondTabId);
+    const closed = workspace.closeTab({
+      tabId: secondTabId,
+      expectedWindowId: "window-1",
+      expectedRevision: 0
+    });
 
-    expect(closed.tabs.map((tab) => tab.name)).toEqual(["first.md", "third.md"]);
-    expect(closed.activeDocument?.name).toBe("third.md");
+    expect(closed.kind).toBe("applied");
+    expect(closed.projection.tabs.map((tab) => tab.name)).toEqual([
+      "first.md",
+      "third.md"
+    ]);
+    expect(closed.projection.activeDocument?.name).toBe("third.md");
     expect(() => workspace.getTabSession(secondTabId)).toThrow("Unknown workspace tab");
   });
 
@@ -209,10 +219,15 @@ describe("WorkspaceState tab lifecycle", () => {
     const firstTabId = workspace.openDocument("window-1", createDocument("first.md")).activeTabId!;
     const activeTabId = workspace.openDocument("window-1", createDocument("second.md")).activeTabId!;
 
-    const closed = workspace.closeTab(firstTabId);
+    const closed = workspace.closeTab({
+      tabId: firstTabId,
+      expectedWindowId: "window-1",
+      expectedRevision: 0
+    });
 
-    expect(closed.activeTabId).toBe(activeTabId);
-    expect(closed.activeDocument?.name).toBe("second.md");
+    expect(closed.kind).toBe("applied");
+    expect(closed.projection.activeTabId).toBe(activeTabId);
+    expect(closed.projection.activeDocument?.name).toBe("second.md");
   });
 });
 
@@ -225,12 +240,15 @@ describe("WorkspaceState save and reload transitions", () => {
 
     const saved = workspace.saveTabDocument({
       tabId,
+      expectedWindowId: "window-1",
       capturedRevision: 1,
       document: createDocument("saved.md", "# Saved\n"),
       diskVersion
     });
 
-    expect(saved.activeDocument).toEqual({
+    expect(saved.kind).toBe("applied");
+    expect(Object.isFrozen(saved)).toBe(true);
+    expect(saved.projection.activeDocument).toEqual({
       tabId,
       ...createDocument("saved.md", "# Saved\n"),
       isDirty: false,
@@ -255,6 +273,7 @@ describe("WorkspaceState save and reload transitions", () => {
 
     workspace.saveTabDocument({
       tabId,
+      expectedWindowId: "window-1",
       capturedRevision: 1,
       document: createDocument("race.md", "captured"),
       diskVersion
@@ -279,6 +298,7 @@ describe("WorkspaceState save and reload transitions", () => {
     expect(() =>
       workspace.saveTabDocument({
         tabId,
+        expectedWindowId: "window-1",
         capturedRevision: 1,
         document: createDocument("current.md", "different"),
         diskVersion
@@ -293,7 +313,13 @@ describe("WorkspaceState save and reload transitions", () => {
     const tabId = workspace.openDocument("window-1", createDocument("reload.md", "saved")).activeTabId!;
     workspace.updateTabDraft(tabId, "draft");
 
-    workspace.replaceTabDocument(tabId, createDocument("reload.md", "draft"));
+    const equalReload = workspace.replaceTabDocument({
+      tabId,
+      expectedWindowId: "window-1",
+      expectedRevision: 1,
+      document: createDocument("reload.md", "draft")
+    });
+    expect(equalReload.kind).toBe("applied");
     expect(workspace.getTabSession(tabId)).toMatchObject({
       content: "draft",
       revision: 1,
@@ -302,7 +328,13 @@ describe("WorkspaceState save and reload transitions", () => {
       diskVersion: null
     });
 
-    workspace.replaceTabDocument(tabId, createDocument("changed.md", "disk change"));
+    const changedReload = workspace.replaceTabDocument({
+      tabId,
+      expectedWindowId: "window-1",
+      expectedRevision: 1,
+      document: createDocument("changed.md", "disk change")
+    });
+    expect(changedReload.kind).toBe("applied");
     expect(workspace.getTabSession(tabId)).toMatchObject({
       path: "C:/notes/changed.md",
       content: "disk change",
@@ -310,6 +342,125 @@ describe("WorkspaceState save and reload transitions", () => {
       savedRevision: 2,
       isDirty: false,
       diskVersion: null
+    });
+  });
+
+  it("rejects a reload when an edit advances the captured revision", () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.openDocument(
+      "window-1",
+      createDocument("reload-edit.md", "disk before")
+    ).activeTabId!;
+    workspace.updateTabDraft(tabId, "new draft");
+
+    const result = workspace.replaceTabDocument({
+      tabId,
+      expectedWindowId: "window-1",
+      expectedRevision: 0,
+      document: createDocument("reload-edit.md", "disk after")
+    });
+
+    expect(result).toMatchObject({
+      kind: "stale",
+      reason: "revision-changed",
+      projection: {
+        windowId: "window-1",
+        activeDocument: { content: "new draft", isDirty: true }
+      }
+    });
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(workspace.getTabSession(tabId)).toMatchObject({
+      content: "new draft",
+      revision: 1,
+      savedRevision: 0,
+      isDirty: true
+    });
+  });
+
+  it("rejects reload and save commits after the tab moves away", () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.openDocument(
+      "window-1",
+      createDocument("moved.md", "saved")
+    ).activeTabId!;
+    workspace.updateTabDraft(tabId, "captured dirty");
+    workspace.registerWindow("window-2");
+    workspace.moveTabToWindow({ tabId, targetWindowId: "window-2" });
+
+    const reloadResult = workspace.replaceTabDocument({
+      tabId,
+      expectedWindowId: "window-1",
+      expectedRevision: 1,
+      document: createDocument("moved.md", "disk reload")
+    });
+    const saveResult = workspace.saveTabDocument({
+      tabId,
+      expectedWindowId: "window-1",
+      capturedRevision: 1,
+      document: createDocument("moved.md", "captured dirty"),
+      diskVersion
+    });
+
+    expect(reloadResult).toMatchObject({
+      kind: "stale",
+      reason: "window-changed",
+      projection: { windowId: "window-1", tabs: [] }
+    });
+    expect(saveResult).toMatchObject({
+      kind: "stale",
+      reason: "window-changed",
+      projection: { windowId: "window-1", tabs: [] }
+    });
+    expect(workspace.getTabSession(tabId)).toMatchObject({
+      windowId: "window-2",
+      path: "C:/notes/moved.md",
+      content: "captured dirty",
+      revision: 1,
+      savedRevision: 0,
+      isDirty: true,
+      diskVersion: null
+    });
+  });
+
+  it("rejects close when the owner or revision no longer matches", () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const editedTabId = workspace.createUntitledTab("window-1").activeTabId!;
+    workspace.updateTabDraft(editedTabId, "new edit");
+
+    const editedResult = workspace.closeTab({
+      tabId: editedTabId,
+      expectedWindowId: "window-1",
+      expectedRevision: 0
+    });
+
+    workspace.registerWindow("window-2");
+    workspace.moveTabToWindow({
+      tabId: editedTabId,
+      targetWindowId: "window-2"
+    });
+    const movedResult = workspace.closeTab({
+      tabId: editedTabId,
+      expectedWindowId: "window-1",
+      expectedRevision: 1
+    });
+
+    expect(editedResult).toMatchObject({
+      kind: "stale",
+      reason: "revision-changed",
+      projection: { windowId: "window-1" }
+    });
+    expect(movedResult).toMatchObject({
+      kind: "stale",
+      reason: "window-changed",
+      projection: { windowId: "window-1" }
+    });
+    expect(workspace.getTabSession(editedTabId)).toMatchObject({
+      windowId: "window-2",
+      revision: 1,
+      isDirty: true
     });
   });
 });
@@ -578,6 +729,8 @@ describe("WorkspaceState projection isolation", () => {
       state: WorkspaceState,
       windowProjection: WorkspaceWindowProjection,
       commitInput: CommitWorkspaceDocumentInput,
+      replaceInput: ReplaceWorkspaceDocumentInput,
+      closeInput: CloseWorkspaceTabInput,
       moveInput: MoveWorkspaceTabInput,
       detachInput: DetachWorkspaceTabInput
     ): void => {
@@ -589,6 +742,10 @@ describe("WorkspaceState projection isolation", () => {
       windowProjection.tabs.push(windowProjection.tabs[0]!);
       // @ts-expect-error input fields are readonly
       commitInput.tabId = "other-tab";
+      // @ts-expect-error guarded reload fields are readonly
+      replaceInput.expectedRevision = 1;
+      // @ts-expect-error guarded close fields are readonly
+      closeInput.expectedWindowId = "other-window";
       // @ts-expect-error optional input fields are readonly
       moveInput.targetIndex = 1;
       // @ts-expect-error detach input fields are readonly

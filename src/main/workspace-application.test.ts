@@ -42,12 +42,14 @@ describe("createWorkspaceApplication", () => {
 
     await application.saveTab({
       tabId,
+      expectedWindowId: "window-1",
       path: "C:/notes/note.md"
     });
 
     expect(getTabSession).toHaveBeenCalledTimes(1);
     expect(saveTabDocument).toHaveBeenCalledWith({
       tabId,
+      expectedWindowId: "window-1",
       capturedRevision: 1,
       document: {
         path: "C:/notes/note.md",
@@ -78,6 +80,7 @@ describe("createWorkspaceApplication", () => {
 
     const savePromise = application.saveTab({
       tabId,
+      expectedWindowId: "window-1",
       path: "C:/notes/note.md"
     });
     workspace.updateTabDraft(tabId, "# Newer draft\n");
@@ -95,6 +98,7 @@ describe("createWorkspaceApplication", () => {
 
     expect(saveTabDocument).toHaveBeenCalledWith({
       tabId,
+      expectedWindowId: "window-1",
       capturedRevision: 1,
       document: {
         path: "C:/notes/note.md",
@@ -133,12 +137,62 @@ describe("createWorkspaceApplication", () => {
     });
 
     await expect(
-      application.saveTab({ tabId, path: "C:/notes/note.md" })
+      application.saveTab({
+        tabId,
+        expectedWindowId: "window-1",
+        path: "C:/notes/note.md"
+      })
     ).rejects.toThrow(
       "Saved document content must match the captured document revision."
     );
     expect(workspace.getTabSession(tabId)).toMatchObject({
       content: "# Current\n",
+      revision: 1,
+      savedRevision: 0,
+      isDirty: true
+    });
+  });
+
+  it("returns disk success but leaves a tab dirty when it moves during save", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.openDocument("window-1", {
+      path: "C:/notes/move.md",
+      name: "move.md",
+      content: "saved",
+      encoding: "utf-8"
+    }).activeTabId!;
+    workspace.updateTabDraft(tabId, "captured dirty");
+    workspace.registerWindow("window-2");
+    let resolveSave!: (value: SaveMarkdownFileResult) => void;
+    const application = createWorkspaceApplication({
+      workspace,
+      saveMarkdownFileToPath: () =>
+        new Promise((resolve) => {
+          resolveSave = resolve;
+        })
+    });
+
+    const savePromise = application.saveTab({
+      tabId,
+      expectedWindowId: "window-1",
+      path: "C:/notes/move.md"
+    });
+    workspace.moveTabToWindow({ tabId, targetWindowId: "window-2" });
+    resolveSave({
+      status: "success",
+      document: {
+        path: "C:/notes/move.md",
+        name: "move.md",
+        content: "captured dirty",
+        encoding: "utf-8"
+      }
+    });
+
+    await expect(savePromise).resolves.toMatchObject({ status: "success" });
+    expect(workspace.getTabSession(tabId)).toMatchObject({
+      windowId: "window-2",
+      content: "captured dirty",
       revision: 1,
       savedRevision: 0,
       isDirty: true

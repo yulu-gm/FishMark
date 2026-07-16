@@ -47,10 +47,40 @@ export interface WorkspaceMoveProjection {
 
 export interface CommitWorkspaceDocumentInput {
   readonly tabId: string;
+  readonly expectedWindowId: string;
   readonly capturedRevision: DocumentRevision;
   readonly document: WorkspaceDocumentData;
   readonly diskVersion: DiskVersion | null;
 }
+
+export interface ReplaceWorkspaceDocumentInput {
+  readonly tabId: string;
+  readonly expectedWindowId: string;
+  readonly expectedRevision: DocumentRevision;
+  readonly document: WorkspaceDocumentData;
+}
+
+export interface CloseWorkspaceTabInput {
+  readonly tabId: string;
+  readonly expectedWindowId: string;
+  readonly expectedRevision: DocumentRevision;
+}
+
+export type WorkspaceMutationStaleReason =
+  | "tab-missing"
+  | "window-changed"
+  | "revision-changed";
+
+export type WorkspaceMutationResult =
+  | {
+      readonly kind: "applied";
+      readonly projection: WorkspaceWindowProjection;
+    }
+  | {
+      readonly kind: "stale";
+      readonly reason: WorkspaceMutationStaleReason;
+      readonly projection: WorkspaceWindowProjection;
+    };
 
 export interface MoveWorkspaceTabInput {
   readonly tabId: string;
@@ -88,12 +118,11 @@ export interface WorkspaceState {
   ) => WorkspaceWindowProjection;
   readonly saveTabDocument: (
     input: CommitWorkspaceDocumentInput
-  ) => WorkspaceWindowProjection;
+  ) => WorkspaceMutationResult;
   readonly replaceTabDocument: (
-    tabId: string,
-    document: WorkspaceDocumentData
-  ) => WorkspaceWindowProjection;
-  readonly closeTab: (tabId: string) => WorkspaceWindowProjection;
+    input: ReplaceWorkspaceDocumentInput
+  ) => WorkspaceMutationResult;
+  readonly closeTab: (input: CloseWorkspaceTabInput) => WorkspaceMutationResult;
   readonly reorderTab: (
     tabId: string,
     targetIndex: number
@@ -225,32 +254,59 @@ class CanonicalWorkspaceState implements WorkspaceState {
 
   saveTabDocument({
     tabId,
+    expectedWindowId,
     capturedRevision,
     document,
     diskVersion
-  }: CommitWorkspaceDocumentInput): WorkspaceWindowProjection {
-    const context = this.getTabContext(tabId);
+  }: CommitWorkspaceDocumentInput): WorkspaceMutationResult {
+    const resolved = this.resolveExpectedTabOwner(tabId, expectedWindowId);
+    if (resolved.kind === "stale") {
+      return this.createStaleMutationResult(expectedWindowId, resolved.reason);
+    }
+    const { context } = resolved;
     const nextSession = commitSavedDocument(context.session, {
       capturedRevision,
       document,
       diskVersion
     });
     this.tabs.set(tabId, nextSession);
-    return this.getWindowProjection(context.windowId);
+    return createAppliedMutationResult(this.getWindowProjection(context.windowId));
   }
 
-  replaceTabDocument(
-    tabId: string,
-    document: WorkspaceDocumentData
-  ): WorkspaceWindowProjection {
-    const context = this.getTabContext(tabId);
+  replaceTabDocument({
+    tabId,
+    expectedWindowId,
+    expectedRevision,
+    document
+  }: ReplaceWorkspaceDocumentInput): WorkspaceMutationResult {
+    const resolved = this.resolveExpectedTabCheckpoint(
+      tabId,
+      expectedWindowId,
+      expectedRevision
+    );
+    if (resolved.kind === "stale") {
+      return this.createStaleMutationResult(expectedWindowId, resolved.reason);
+    }
+    const { context } = resolved;
     const nextSession = replaceDocumentFromDisk(context.session, document, null);
     this.tabs.set(tabId, nextSession);
-    return this.getWindowProjection(context.windowId);
+    return createAppliedMutationResult(this.getWindowProjection(context.windowId));
   }
 
-  closeTab(tabId: string): WorkspaceWindowProjection {
-    const context = this.getTabContext(tabId);
+  closeTab({
+    tabId,
+    expectedWindowId,
+    expectedRevision
+  }: CloseWorkspaceTabInput): WorkspaceMutationResult {
+    const resolved = this.resolveExpectedTabCheckpoint(
+      tabId,
+      expectedWindowId,
+      expectedRevision
+    );
+    if (resolved.kind === "stale") {
+      return this.createStaleMutationResult(expectedWindowId, resolved.reason);
+    }
+    const { context } = resolved;
 
     context.window.tabIds.splice(context.index, 1);
     this.tabs.delete(tabId);
@@ -265,7 +321,7 @@ class CanonicalWorkspaceState implements WorkspaceState {
             ] ?? null);
     }
 
-    return this.getWindowProjection(context.windowId);
+    return createAppliedMutationResult(this.getWindowProjection(context.windowId));
   }
 
   reorderTab(tabId: string, targetIndex: number): WorkspaceWindowProjection {
@@ -421,6 +477,51 @@ class CanonicalWorkspaceState implements WorkspaceState {
     }
     return { session, windowId, window, index };
   }
+
+  private resolveExpectedTabOwner(
+    tabId: string,
+    expectedWindowId: string
+  ):
+    | { readonly kind: "current"; readonly context: TabContext }
+    | { readonly kind: "stale"; readonly reason: WorkspaceMutationStaleReason } {
+    if (!this.tabs.has(tabId)) {
+      return { kind: "stale", reason: "tab-missing" };
+    }
+
+    if (this.tabToWindowId.get(tabId) !== expectedWindowId) {
+      return { kind: "stale", reason: "window-changed" };
+    }
+
+    return { kind: "current", context: this.getTabContext(tabId) };
+  }
+
+  private resolveExpectedTabCheckpoint(
+    tabId: string,
+    expectedWindowId: string,
+    expectedRevision: DocumentRevision
+  ):
+    | { readonly kind: "current"; readonly context: TabContext }
+    | { readonly kind: "stale"; readonly reason: WorkspaceMutationStaleReason } {
+    const resolved = this.resolveExpectedTabOwner(tabId, expectedWindowId);
+    if (resolved.kind === "stale") {
+      return resolved;
+    }
+
+    return resolved.context.session.revision === expectedRevision
+      ? resolved
+      : { kind: "stale", reason: "revision-changed" };
+  }
+
+  private createStaleMutationResult(
+    expectedWindowId: string,
+    reason: WorkspaceMutationStaleReason
+  ): WorkspaceMutationResult {
+    return Object.freeze({
+      kind: "stale",
+      reason,
+      projection: this.getWindowProjection(expectedWindowId)
+    });
+  }
 }
 
 export function createWorkspaceState(): WorkspaceState {
@@ -475,4 +576,10 @@ function clampIndex(targetIndex: number, maximum: number): number {
 
 function freezeArray<T>(values: T[]): readonly T[] {
   return Object.freeze(values);
+}
+
+function createAppliedMutationResult(
+  projection: WorkspaceWindowProjection
+): WorkspaceMutationResult {
+  return Object.freeze({ kind: "applied", projection });
 }

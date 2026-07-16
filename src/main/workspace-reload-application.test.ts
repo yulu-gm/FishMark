@@ -1,0 +1,129 @@
+import { createWorkspaceState, type WorkspaceDocumentData } from "@fishmark/workspace-domain";
+import { describe, expect, it, vi } from "vitest";
+
+import type { OpenMarkdownFileResult } from "../shared/open-markdown-file";
+import { createWorkspaceReloadApplication } from "./workspace-reload-application";
+
+function document(name: string, content: string): WorkspaceDocumentData {
+  return {
+    path: `C:/notes/${name}`,
+    name,
+    content,
+    encoding: "utf-8"
+  };
+}
+
+describe("createWorkspaceReloadApplication", () => {
+  it("replaces an unchanged captured checkpoint after deferred IO", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.openDocument(
+      "window-1",
+      document("reload.md", "before")
+    ).activeTabId!;
+    const recordRecentFilePath = vi.fn(async () => undefined);
+    const application = createWorkspaceReloadApplication({
+      workspace,
+      openMarkdownFileFromPath: vi.fn(async () => ({
+        status: "success" as const,
+        document: document("reload.md", "after")
+      })),
+      recordRecentFilePath
+    });
+
+    const projection = await application.reloadTab({
+      tabId,
+      expectedWindowId: "window-1",
+      targetPath: "C:/notes/reload.md"
+    });
+
+    expect(projection).toMatchObject({
+      windowId: "window-1",
+      activeDocument: { content: "after", isDirty: false }
+    });
+    expect(recordRecentFilePath).toHaveBeenCalledWith("C:/notes/reload.md");
+  });
+
+  it("returns the sender projection without overwriting an edit during IO", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.openDocument(
+      "window-1",
+      document("edit-race.md", "before")
+    ).activeTabId!;
+    let resolveRead!: (result: OpenMarkdownFileResult) => void;
+    const application = createWorkspaceReloadApplication({
+      workspace,
+      openMarkdownFileFromPath: () =>
+        new Promise((resolve) => {
+          resolveRead = resolve;
+        }),
+      recordRecentFilePath: vi.fn(async () => undefined)
+    });
+
+    const reloadPromise = application.reloadTab({
+      tabId,
+      expectedWindowId: "window-1",
+      targetPath: "C:/notes/edit-race.md"
+    });
+    workspace.updateTabDraft(tabId, "new draft");
+    resolveRead({
+      status: "success",
+      document: document("edit-race.md", "disk after")
+    });
+
+    await expect(reloadPromise).resolves.toMatchObject({
+      windowId: "window-1",
+      activeDocument: { content: "new draft", isDirty: true }
+    });
+    expect(workspace.getTabSession(tabId)).toMatchObject({
+      content: "new draft",
+      revision: 1,
+      savedRevision: 0,
+      isDirty: true
+    });
+  });
+
+  it("returns the sender projection and leaves the target unchanged after a move", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    workspace.openDocument("window-1", document("source.md", "source"));
+    const tabId = workspace.openDocument(
+      "window-1",
+      document("move-race.md", "before")
+    ).activeTabId!;
+    workspace.registerWindow("window-2");
+    let resolveRead!: (result: OpenMarkdownFileResult) => void;
+    const application = createWorkspaceReloadApplication({
+      workspace,
+      openMarkdownFileFromPath: () =>
+        new Promise((resolve) => {
+          resolveRead = resolve;
+        }),
+      recordRecentFilePath: vi.fn(async () => undefined)
+    });
+
+    const reloadPromise = application.reloadTab({
+      tabId,
+      expectedWindowId: "window-1",
+      targetPath: "C:/notes/move-race.md"
+    });
+    workspace.moveTabToWindow({ tabId, targetWindowId: "window-2" });
+    resolveRead({
+      status: "success",
+      document: document("move-race.md", "disk after")
+    });
+
+    await expect(reloadPromise).resolves.toMatchObject({
+      windowId: "window-1",
+      activeDocument: { name: "source.md", content: "source" }
+    });
+    expect(workspace.getTabSession(tabId)).toMatchObject({
+      windowId: "window-2",
+      content: "before",
+      revision: 0,
+      savedRevision: 0,
+      isDirty: false
+    });
+  });
+});

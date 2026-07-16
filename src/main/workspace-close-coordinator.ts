@@ -1,17 +1,32 @@
 import type {
+  DocumentRevision,
   DocumentSessionProjection,
   WorkspaceState,
   WorkspaceWindowProjection
 } from "@fishmark/workspace-domain";
 
-import type { SaveMarkdownFileAsInput, SaveMarkdownFileInput, SaveMarkdownFileResult } from "../shared/save-markdown-file";
+import type {
+  SaveMarkdownFileAsInput,
+  SaveMarkdownFileInput,
+  SaveMarkdownFileResult
+} from "../shared/save-markdown-file";
 
 type DirtyWorkspaceTabChoice = "save" | "discard" | "cancel";
+
+export type CloseWorkspaceTabRequest = {
+  readonly tabId: string;
+  readonly expectedWindowId: string;
+  readonly expectedRevision: DocumentRevision;
+};
 
 type WorkspaceCloseCoordinatorDependencies = {
   workspace: Pick<
     WorkspaceState,
-    "getTabSession" | "getWindowTabIds" | "saveTabDocument" | "closeTab"
+    | "getTabSession"
+    | "getWindowProjection"
+    | "getWindowTabIds"
+    | "saveTabDocument"
+    | "closeTab"
   >;
   promptToSaveWorkspaceTab: (
     tab: DocumentSessionProjection
@@ -24,66 +39,76 @@ type WorkspaceCloseCoordinatorDependencies = {
   ) => Promise<SaveMarkdownFileResult>;
 };
 
-type CloseWorkspaceTabResult =
-  | {
-      status: "closed";
-      snapshot: WorkspaceWindowProjection;
-    }
-  | {
-      status: "cancelled";
-    };
+export type CloseWorkspaceTabResult = {
+  readonly status: "closed" | "cancelled";
+  readonly snapshot: WorkspaceWindowProjection;
+};
 
 export function createWorkspaceCloseCoordinator(
   dependencies: WorkspaceCloseCoordinatorDependencies
 ): {
-  closeTab: (tabId: string) => Promise<CloseWorkspaceTabResult>;
+  closeTab: (input: CloseWorkspaceTabRequest) => Promise<CloseWorkspaceTabResult>;
   confirmWindowClose: (windowId: string) => Promise<boolean>;
 } {
-  async function closeTab(tabId: string): Promise<CloseWorkspaceTabResult> {
-    const shouldProceed = await confirmDirtyTab(tabId);
-
-    if (!shouldProceed) {
-      return { status: "cancelled" };
+  async function closeTab(
+    input: CloseWorkspaceTabRequest
+  ): Promise<CloseWorkspaceTabResult> {
+    const shouldProceed = await confirmTabCheckpoint(input);
+    if (!shouldProceed || getMatchingCheckpoint(input) === null) {
+      return cancelledResult(input.expectedWindowId);
     }
 
-    return {
-      status: "closed",
-      snapshot: dependencies.workspace.closeTab(tabId)
-    };
+    const result = dependencies.workspace.closeTab(input);
+    return result.kind === "applied"
+      ? { status: "closed", snapshot: result.projection }
+      : { status: "cancelled", snapshot: result.projection };
   }
 
   async function confirmWindowClose(windowId: string): Promise<boolean> {
+    const checkpoints: CloseWorkspaceTabRequest[] = [];
     for (const tabId of dependencies.workspace.getWindowTabIds(windowId)) {
-      const shouldProceed = await confirmDirtyTab(tabId);
+      const tab = dependencies.workspace.getTabSession(tabId);
+      if (tab.windowId !== windowId) {
+        return false;
+      }
+      checkpoints.push({
+        tabId,
+        expectedWindowId: windowId,
+        expectedRevision: tab.revision
+      });
+    }
 
-      if (!shouldProceed) {
+    for (const checkpoint of checkpoints) {
+      if (!(await confirmTabCheckpoint(checkpoint))) {
         return false;
       }
     }
 
-    return true;
+    return checkpoints.every(
+      (checkpoint) => getMatchingCheckpoint(checkpoint) !== null
+    );
   }
 
-  async function confirmDirtyTab(tabId: string): Promise<boolean> {
-    const tab = dependencies.workspace.getTabSession(tabId);
-
-    if (!tab.isDirty) {
+  async function confirmTabCheckpoint(
+    input: CloseWorkspaceTabRequest
+  ): Promise<boolean> {
+    const initial = getMatchingCheckpoint(input);
+    if (initial === null) {
+      return false;
+    }
+    if (!initial.isDirty) {
       return true;
     }
 
-    const choice = await dependencies.promptToSaveWorkspaceTab(tab);
-
+    const choice = await dependencies.promptToSaveWorkspaceTab(initial);
+    const checkpoint = getMatchingCheckpoint(input);
+    if (checkpoint === null) {
+      return false;
+    }
     if (choice === "cancel") {
       return false;
     }
-
     if (choice === "discard") {
-      return true;
-    }
-
-    const checkpoint = dependencies.workspace.getTabSession(tabId);
-
-    if (!checkpoint.isDirty) {
       return true;
     }
 
@@ -103,22 +128,47 @@ export function createWorkspaceCloseCoordinator(
     if (result.status === "cancelled") {
       return false;
     }
-
     if (result.status === "error") {
       throw new Error(result.error.message);
     }
 
-    dependencies.workspace.saveTabDocument({
+    const commit = dependencies.workspace.saveTabDocument({
       tabId: checkpoint.tabId,
+      expectedWindowId: input.expectedWindowId,
       capturedRevision: checkpoint.revision,
       document: result.document,
       diskVersion: null
     });
-    return !dependencies.workspace.getTabSession(tabId).isDirty;
+    if (commit.kind === "stale") {
+      return false;
+    }
+
+    const finalCheckpoint = getMatchingCheckpoint(input);
+    return finalCheckpoint !== null && !finalCheckpoint.isDirty;
   }
 
-  return {
-    closeTab,
-    confirmWindowClose
-  };
+  function getMatchingCheckpoint(
+    input: CloseWorkspaceTabRequest
+  ): DocumentSessionProjection | null {
+    let tab: DocumentSessionProjection;
+    try {
+      tab = dependencies.workspace.getTabSession(input.tabId);
+    } catch {
+      return null;
+    }
+
+    return tab.windowId === input.expectedWindowId &&
+      tab.revision === input.expectedRevision
+      ? tab
+      : null;
+  }
+
+  function cancelledResult(expectedWindowId: string): CloseWorkspaceTabResult {
+    return {
+      status: "cancelled",
+      snapshot: dependencies.workspace.getWindowProjection(expectedWindowId)
+    };
+  }
+
+  return { closeTab, confirmWindowClose };
 }

@@ -12,11 +12,15 @@ export type {
 export { createStringTextBuffer, type TextBuffer, type TextChange } from "./text-buffer";
 export {
   createWorkspaceState,
+  type CloseWorkspaceTabInput,
   type CommitWorkspaceDocumentInput,
   type DetachWorkspaceTabInput,
   type MoveWorkspaceTabInput,
+  type ReplaceWorkspaceDocumentInput,
   type WorkspaceDocumentProjection,
   type WorkspaceMoveProjection,
+  type WorkspaceMutationResult,
+  type WorkspaceMutationStaleReason,
   type WorkspaceState,
   type WorkspaceTabProjection,
   type WorkspaceWindowProjection
