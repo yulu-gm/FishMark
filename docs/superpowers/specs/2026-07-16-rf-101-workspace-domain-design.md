@@ -51,9 +51,9 @@ Rules:
 - `workspace-domain` depends only on TypeScript and runtime-neutral utilities.
 - It cannot import React, Electron, DOM, CodeMirror, filesystem, dialog, watcher, IPC, `src/main`, `src/preload`, or `src/renderer`.
 - Main owns the only live `WorkspaceState` instance and therefore the only writable workspace/session truth.
-- Shared IPC contracts retain their current wire shape and do not import domain internals.
+- Shared workspace snapshot contracts retain their current wire shape and do not import domain internals. Native-window-close control uses one hard-cut request-bearing protocol: REQUEST, CONFIRM, and COMPLETE carry the same `requestId` without a parameterless compatibility route.
 - Renderer does not import `DocumentSession`, `TextBuffer`, or mutable workspace state.
-- Domain projections are structurally mapped to the existing shared snapshots at the main boundary; no new renderer contract is introduced.
+- Domain projections are structurally mapped to the existing shared snapshots at the main boundary; the close request identity is control-plane data and never becomes domain truth.
 
 ## 5. Package and file responsibilities
 
@@ -162,7 +162,7 @@ Captured revision guards do not order two distinct IO operations when a successf
 - Save, Save As, reload, and individual close acquire the same tab key for their entire canonical checkpoint, disk/dialog IO, and domain mutation transaction. For ordinary Save this includes watcher `beginInternalWrite`, write, commit, recent-file recording, `completeInternalWrite`, and watch resync; cleanup finishes before the lease is released.
 - Different tab keys remain independent, and high-frequency `updateDraft` never waits for this coordinator.
 - Multi-tab acquisition deduplicates and sorts keys before acquiring them; release is idempotent and operation errors always release.
-- Native window close acquires the current window tab set before the renderer flush/confirm handshake. Confirmation returns a frozen ordered `{ tabId, expectedWindowId, expectedRevision }` checkpoint set rather than a bare boolean. The main-only broker returns a request handle `{ requestId, result, drained }`; confirmation storage and COMPLETE both match the exact `{ windowId, requestId }` generation, so a timed-out request cannot contaminate its successor. Timeout/abort settles `result` and removes the pending generation immediately, while `drained` waits for every active confirmation scope to finish. Main awaits both before returning to the window-close application, so the outer multi-tab lease still covers an in-flight prompt or disk write. The coordinator checks scope activity at entry, between tabs, after prompts, before writes, after writes before commit, and before final confirmation. The application then revalidates exact order, owner, and revision after positive COMPLETE and retains the lease until `WorkspaceState.unregisterWindow()` completes on `closed`.
+- Native window close acquires the current window tab set before the renderer flush/confirm handshake. REQUEST supplies a `requestId`; renderer first flushes its draft and then sends that same ID in CONFIRM. The first exact `{ windowId, requestId }` confirmation begin is atomic, admits only one confirmation scope, and disarms the 15-second transport timer. That timer bounds only delivery, renderer draft flush, and arrival of the first valid CONFIRM; native prompts and Save As dialogs may remain open beyond it. Confirmation returns a frozen ordered `{ tabId, expectedWindowId, expectedRevision }` checkpoint set rather than a bare boolean, and COMPLETE must match the same generation. Renderer abort, destruction, or window close settles `result` fail-closed and removes the pending generation immediately, while `drained` waits for the active confirmation scope to finish. Main awaits both before returning to the window-close application, so the outer multi-tab lease still covers an in-flight prompt or disk write. The coordinator checks scope activity at entry, between tabs, after prompts, before writes, after writes before commit, and before final confirmation. The application then revalidates exact order, owner, and revision after positive COMPLETE and retains the lease until `WorkspaceState.unregisterWindow()` completes on `closed`.
 - Cancel, handshake error, and native `ownerWindow.close()` failure release the lease. A confirmed discard does not release early, so a queued autosave resumes only after unregister and fails before disk IO.
 
 `workspace-application.ts` now owns only synchronous draft updates. `workspace-file-operations.ts` directly owns the ordinary Save port and its complete watcher transaction; reload, file operations, and close coordination share the one coordinator. `confirmWindowClose` does not reacquire because the native window-close application owns the outer multi-tab lease. This is a required correctness change inside RF-101, not the RF-102 application extraction.
@@ -197,7 +197,7 @@ The following shared shapes remain unchanged in RF-101:
 - IPC channel names;
 - `UpdateWorkspaceTabDraftInput` full-content payload.
 
-Domain projection types may be structurally identical, but `src/shared/workspace.ts` remains the IPC contract owner. Main is the mapping/composition boundary. No renderer controller, autosave state machine, optimistic projection, or preload method is redesigned in this task.
+Native-close control is the only wire exception: REQUEST now supplies its generation identity to the listener and CONFIRM must return the same `requestId`; the parameterless form is deleted rather than supported in parallel. Domain projection types may be structurally identical, but `src/shared/workspace.ts` remains the IPC contract owner. Main is the mapping/composition boundary. No autosave state machine or optimistic projection is redesigned in this task.
 
 ## 11. Runtime package and Electron build
 
@@ -235,7 +235,7 @@ Create the real package, buffer, revision, session, workspace state, architectur
 
 ### Slice B — Main hard cutover
 
-Switch application, close coordinator, main composition, save/reload/close transactions, move, and detach to the package public API. Preserve IPC wire behavior.
+Switch application, close coordinator, main composition, save/reload/close transactions, move, and detach to the package public API. Preserve workspace snapshot DTOs and hard-cut the native-close control wire to request identity end to end.
 
 ### Slice C — Deletion and closure
 
@@ -292,7 +292,7 @@ RF-101 does not:
 - remove full-draft synchronization;
 - use CodeMirror `Text` in production;
 - redesign autosave, recent files, external conflict, or watch registry;
-- modify shared IPC wire shapes, preload bridge, or renderer controllers;
+- otherwise redesign shared IPC wire shapes, preload bridge, or renderer controllers beyond the required native-close request identity hard cut;
 - change Enter, Backspace, Delete, Tab, navigation, selection, IME, undo, or nested Markdown semantics;
 - claim long-document transport or structure-cache performance improvements.
 
@@ -306,7 +306,7 @@ RF-101 is complete only when:
 4. Save completion cannot overwrite or incorrectly clean newer text.
 5. Same-tab document IO is FIFO-serialized without a global mutex or `updateDraft` queue.
 6. Native window close retains all tab leases through unregister, so confirmed discard cannot be followed by a queued write.
-7. Shared IPC behavior remains compatible without a compatibility layer.
+7. Shared workspace DTO behavior remains stable, while the native-close control wire has one request-bearing form and no compatibility layer.
 8. `src/main/workspace-service.ts`, its old test, old type exports, and all imports are absent.
 9. The architecture package/rule is active and passing.
 10. Focused tests, lint, typecheck, full tests, build, and diff check pass.
