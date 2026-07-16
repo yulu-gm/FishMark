@@ -206,4 +206,114 @@ describe("createWorkspaceFileOperations", () => {
       isDirty: true
     });
   });
+
+  it("preserves an ordinary save window-missing error while completing and unbinding", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.openDocument(
+      "window-1",
+      document("closed-save.md", "saved")
+    ).activeTabId!;
+    workspace.updateTabDraft(tabId, "captured dirty");
+    let resolveWrite!: (result: SaveMarkdownFileResult) => void;
+    const workspaceApplication = createWorkspaceApplication({
+      workspace,
+      saveMarkdownFileToPath: () =>
+        new Promise((resolve) => {
+          resolveWrite = resolve;
+        })
+    });
+    const sender = { id: 5 };
+    const callOrder: string[] = [];
+    const completeInternalWrite = vi.fn(async () => {
+      callOrder.push("complete");
+    });
+    const syncDocumentPath = vi.fn(async (_sender, targetPath: string | null) => {
+      callOrder.push(`sync:${String(targetPath)}`);
+    });
+    const recordRecentFilePath = vi.fn(async () => undefined);
+    const operations = createWorkspaceFileOperations({
+      workspace,
+      saveTab: workspaceApplication.saveTab,
+      showSaveMarkdownDialog: vi.fn(),
+      beginInternalWrite: vi.fn(() => {
+        callOrder.push("begin");
+      }),
+      completeInternalWrite,
+      syncDocumentPath,
+      recordRecentFilePath
+    });
+
+    const savePromise = operations.save({
+      sender,
+      expectedWindowId: "window-1",
+      tabId,
+      path: "C:/notes/closed-save.md"
+    });
+    workspace.unregisterWindow("window-1");
+    resolveWrite({
+      status: "success",
+      document: document("closed-save.md", "captured dirty")
+    });
+
+    await expect(savePromise).rejects.toThrow(
+      "Workspace window 'window-1' no longer exists."
+    );
+    expect(callOrder).toEqual(["begin", "complete", "sync:null"]);
+    expect(completeInternalWrite).toHaveBeenCalledWith(
+      sender,
+      "C:/notes/closed-save.md"
+    );
+    expect(syncDocumentPath).toHaveBeenCalledWith(sender, null);
+    expect(recordRecentFilePath).not.toHaveBeenCalled();
+  });
+
+  it("rejects a window-missing Save As commit before recording recent and safely unbinds", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.createUntitledTab("window-1").activeTabId!;
+    workspace.updateTabDraft(tabId, "captured dirty");
+    let resolveDialog!: (result: SaveMarkdownFileResult) => void;
+    const sender = { id: 6 };
+    const saveTabDocument = vi.spyOn(workspace, "saveTabDocument");
+    const syncDocumentPath = vi.fn(async () => undefined);
+    const recordRecentFilePath = vi.fn(async () => undefined);
+    const operations = createWorkspaceFileOperations({
+      workspace,
+      saveTab: vi.fn(),
+      showSaveMarkdownDialog: () =>
+        new Promise((resolve) => {
+          resolveDialog = resolve;
+        }),
+      beginInternalWrite: vi.fn(),
+      completeInternalWrite: vi.fn(),
+      syncDocumentPath,
+      recordRecentFilePath
+    });
+
+    const savePromise = operations.saveAs({
+      sender,
+      expectedWindowId: "window-1",
+      tabId,
+      currentPath: null
+    });
+    workspace.unregisterWindow("window-1");
+    resolveDialog({
+      status: "success",
+      document: document("closed-save-as.md", "captured dirty")
+    });
+
+    await expect(savePromise).rejects.toThrow(
+      "Workspace window 'window-1' no longer exists."
+    );
+    expect(saveTabDocument).toHaveBeenCalledWith({
+      tabId,
+      expectedWindowId: "window-1",
+      capturedRevision: 1,
+      document: document("closed-save-as.md", "captured dirty"),
+      diskVersion: null
+    });
+    expect(recordRecentFilePath).not.toHaveBeenCalled();
+    expect(syncDocumentPath).toHaveBeenCalledWith(sender, null);
+  });
 });

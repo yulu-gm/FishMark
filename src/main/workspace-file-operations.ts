@@ -8,7 +8,10 @@ import type {
 type WorkspaceFileOperationsDependencies<TSender> = {
   workspace: Pick<
     WorkspaceState,
-    "getTabPath" | "getTabSession" | "getWindowProjection" | "saveTabDocument"
+    | "getTabPath"
+    | "getTabSession"
+    | "getWindowProjectionOrNull"
+    | "saveTabDocument"
   >;
   saveTab: (input: {
     readonly tabId: string;
@@ -37,12 +40,14 @@ export function createWorkspaceFileOperations<TSender>(
     sender: TSender,
     expectedWindowId: string
   ): Promise<void> {
-    const projection = dependencies.workspace.getWindowProjection(
+    const projection = dependencies.workspace.getWindowProjectionOrNull(
       expectedWindowId
     );
     await dependencies.syncDocumentPath(
       sender,
-      dependencies.workspace.getTabPath(projection.activeTabId)
+      projection === null
+        ? null
+        : dependencies.workspace.getTabPath(projection.activeTabId)
     );
   }
 
@@ -93,13 +98,18 @@ export function createWorkspaceFileOperations<TSender>(
           content: checkpoint.content
         });
         if (result.status === "success") {
-          dependencies.workspace.saveTabDocument({
+          const commit = dependencies.workspace.saveTabDocument({
             tabId: input.tabId,
             expectedWindowId: input.expectedWindowId,
             capturedRevision: checkpoint.revision,
             document: result.document,
             diskVersion: null
           });
+          if (commit.projection === null) {
+            throw new Error(
+              `Workspace window '${input.expectedWindowId}' no longer exists.`
+            );
+          }
           await dependencies.recordRecentFilePath(result.document.path);
         }
         return result;

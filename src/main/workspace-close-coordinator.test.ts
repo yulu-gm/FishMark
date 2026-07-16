@@ -462,4 +462,86 @@ describe("createWorkspaceCloseCoordinator", () => {
       })
     ).rejects.toThrow("Workspace window 'window-1' no longer exists.");
   });
+
+  it("fails closed when an initial dirty tab closes while its prompt is pending", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const closingTabId = workspace.openDocument(
+      "window-1",
+      createDocument("closing.md", "saved")
+    ).activeTabId!;
+    const remainingTabId = workspace.openDocument(
+      "window-1",
+      createDocument("remaining.md", "remaining")
+    ).activeTabId!;
+    workspace.updateTabDraft(closingTabId, "dirty");
+    let resolvePrompt!: (choice: "discard") => void;
+    const coordinator = createWorkspaceCloseCoordinator({
+      workspace,
+      promptToSaveWorkspaceTab: () =>
+        new Promise((resolve) => {
+          resolvePrompt = resolve;
+        }),
+      saveMarkdownFileToPath: vi.fn(),
+      showSaveMarkdownDialog: vi.fn()
+    });
+
+    const confirmPromise = coordinator.confirmWindowClose("window-1");
+    await vi.waitFor(() => expect(resolvePrompt).toBeTypeOf("function"));
+    workspace.closeTab({
+      tabId: closingTabId,
+      expectedWindowId: "window-1",
+      expectedRevision: 1
+    });
+    resolvePrompt("discard");
+
+    await expect(confirmPromise).resolves.toBe(false);
+    expect(() => workspace.getTabSession(closingTabId)).toThrow(
+      `Unknown workspace tab '${closingTabId}'.`
+    );
+    expect(workspace.getWindowTabIds("window-1")).toEqual([remainingTabId]);
+  });
+
+  it("fails closed when an initial dirty tab moves while its prompt is pending", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const movingTabId = workspace.openDocument(
+      "window-1",
+      createDocument("moving.md", "saved")
+    ).activeTabId!;
+    const remainingTabId = workspace.openDocument(
+      "window-1",
+      createDocument("remaining.md", "remaining")
+    ).activeTabId!;
+    workspace.updateTabDraft(movingTabId, "dirty");
+    workspace.registerWindow("window-2");
+    let resolvePrompt!: (choice: "discard") => void;
+    const coordinator = createWorkspaceCloseCoordinator({
+      workspace,
+      promptToSaveWorkspaceTab: () =>
+        new Promise((resolve) => {
+          resolvePrompt = resolve;
+        }),
+      saveMarkdownFileToPath: vi.fn(),
+      showSaveMarkdownDialog: vi.fn()
+    });
+
+    const confirmPromise = coordinator.confirmWindowClose("window-1");
+    await vi.waitFor(() => expect(resolvePrompt).toBeTypeOf("function"));
+    workspace.moveTabToWindow({
+      tabId: movingTabId,
+      targetWindowId: "window-2"
+    });
+    resolvePrompt("discard");
+
+    await expect(confirmPromise).resolves.toBe(false);
+    expect(workspace.getWindowTabIds("window-1")).toEqual([remainingTabId]);
+    expect(workspace.getWindowTabIds("window-2")).toEqual([movingTabId]);
+    expect(workspace.getTabSession(movingTabId)).toMatchObject({
+      windowId: "window-2",
+      content: "dirty",
+      revision: 1,
+      isDirty: true
+    });
+  });
 });

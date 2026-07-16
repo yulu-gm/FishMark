@@ -79,6 +79,23 @@ describe("WorkspaceState window lifecycle", () => {
     expect(workspace.getLastFocusedWindowId()).toBe("window-1");
   });
 
+  it("provides a total readonly window projection query", () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.createUntitledTab("window-1").activeTabId!;
+
+    const projection = workspace.getWindowProjectionOrNull("window-1");
+
+    expect(projection).toMatchObject({
+      windowId: "window-1",
+      activeTabId: tabId
+    });
+    expect(Object.isFrozen(projection)).toBe(true);
+    workspace.unregisterWindow("window-1");
+    expect(workspace.getWindowProjectionOrNull("window-1")).toBeNull();
+    expect(workspace.getWindowProjectionOrNull("missing-window")).toBeNull();
+  });
+
   it("unregisters owned sessions and repairs focus without disturbing other windows", () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
@@ -775,6 +792,9 @@ describe("WorkspaceState projection isolation", () => {
     expectTypeOf<WorkspaceState["getTabSession"]>().returns.toEqualTypeOf<
       DocumentSessionProjection
     >();
+    expectTypeOf<
+      WorkspaceState["getWindowProjectionOrNull"]
+    >().returns.toEqualTypeOf<WorkspaceWindowProjection | null>();
 
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
@@ -790,6 +810,8 @@ describe("WorkspaceState projection isolation", () => {
     ): void => {
       // @ts-expect-error public state operations are readonly
       state.registerWindow = () => windowProjection;
+      // @ts-expect-error total projection query is readonly
+      state.getWindowProjectionOrNull = () => windowProjection;
       // @ts-expect-error projection fields are readonly
       windowProjection.activeTabId = null;
       // @ts-expect-error projection arrays are readonly

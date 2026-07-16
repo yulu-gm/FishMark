@@ -101,6 +101,9 @@ export interface WorkspaceState {
   readonly focusWindow: (windowId: string) => void;
   readonly getLastFocusedWindowId: () => string | null;
   readonly getWindowProjection: (windowId: string) => WorkspaceWindowProjection;
+  readonly getWindowProjectionOrNull: (
+    windowId: string
+  ) => WorkspaceWindowProjection | null;
   readonly getWindowTabIds: (windowId: string) => readonly string[];
   readonly getTabSession: (tabId: string) => DocumentSessionProjection;
   readonly getTabPath: (tabId: string | null) => string | null;
@@ -205,6 +208,12 @@ class CanonicalWorkspaceState implements WorkspaceState {
       tabs,
       activeDocument
     });
+  }
+
+  getWindowProjectionOrNull(windowId: string): WorkspaceWindowProjection | null {
+    return this.windows.has(windowId)
+      ? this.getWindowProjection(windowId)
+      : null;
   }
 
   getWindowTabIds(windowId: string): readonly string[] {
@@ -517,7 +526,8 @@ class CanonicalWorkspaceState implements WorkspaceState {
     expectedWindowId: string,
     reason: WorkspaceMutationStaleReason
   ): WorkspaceMutationResult {
-    if (!this.windows.has(expectedWindowId)) {
+    const projection = this.getWindowProjectionOrNull(expectedWindowId);
+    if (projection === null) {
       return Object.freeze({
         kind: "stale",
         reason: "window-missing",
@@ -528,7 +538,7 @@ class CanonicalWorkspaceState implements WorkspaceState {
     return Object.freeze({
       kind: "stale",
       reason,
-      projection: this.getWindowProjection(expectedWindowId)
+      projection
     });
   }
 }
