@@ -1,8 +1,8 @@
 # RF-101 Workspace Domain Design
 
-**Date:** 2026-07-16  
-**Task:** RF-101 — Extract workspace domain  
-**Status:** APPROVED FOR PLANNING  
+**Date:** 2026-07-16
+**Task:** RF-101 — Extract workspace domain
+**Status:** APPROVED FOR PLANNING
 **Roadmap:** `docs/refactor/editor-foundation/roadmap.md`
 
 ## 1. Decision
@@ -147,7 +147,7 @@ The following behavior is approved because editing experience takes precedence:
 
 This preserves the current intuitive restore-to-clean behavior while making revision equality the only dirty calculation.
 
-## 8. Save race semantics
+## 8. Document IO transaction semantics
 
 Before an asynchronous write starts, the application captures the canonical `{ tabId, text, revision }`. A successful write commits the returned document metadata together with that captured revision.
 
@@ -157,7 +157,15 @@ Before an asynchronous write starts, the application captures the canonical `{ t
 - Save completion may update path, name, encoding, saved checkpoint, and `savedRevision`; it may never replace a newer current buffer.
 - Reload/replace intentionally replaces canonical text, advances revision when content changes, and marks the resulting revision saved.
 
-`workspace-application.ts`, `workspace-close-coordinator.ts`, and the direct Save As handler in `main.ts` must pass captured revisions. This is a required correctness change inside RF-101, not the RF-102 application extraction.
+Captured revision guards do not order two distinct IO operations when a successful save itself does not advance text revision. Therefore main owns one permanent per-document FIFO operation coordinator:
+
+- Save, Save As, reload, and individual close acquire the same tab key for their entire canonical checkpoint, disk/dialog IO, and domain mutation transaction.
+- Different tab keys remain independent, and high-frequency `updateDraft` never waits for this coordinator.
+- Multi-tab acquisition deduplicates and sorts keys before acquiring them; release is idempotent and operation errors always release.
+- Native window close acquires the current window tab set before the renderer flush/confirm handshake, revalidates the ordered set after acquisition, and retains the lease until `WorkspaceState.unregisterWindow()` completes on the real `closed` event.
+- Cancel, handshake error, and native `ownerWindow.close()` failure release the lease. A confirmed discard does not release early, so a queued autosave resumes only after unregister and fails before disk IO.
+
+`workspace-application.ts`, `workspace-reload-application.ts`, `workspace-file-operations.ts`, and `workspace-close-coordinator.ts` must pass captured revisions and share this one coordinator. `confirmWindowClose` does not reacquire because the native window-close application owns the outer multi-tab lease. This is a required correctness change inside RF-101, not the RF-102 application extraction.
 
 ## 9. Workspace operations
 
@@ -227,7 +235,7 @@ Create the real package, buffer, revision, session, workspace state, architectur
 
 ### Slice B — Main hard cutover
 
-Switch application, close coordinator, main composition, save races, move, and detach to the package public API. Preserve IPC wire behavior.
+Switch application, close coordinator, main composition, save/reload/close transactions, move, and detach to the package public API. Preserve IPC wire behavior.
 
 ### Slice C — Deletion and closure
 
@@ -252,12 +260,16 @@ Domain tests cover:
 - no-op draft revision behavior;
 - one increment per changed draft;
 - exact restore-to-saved becoming clean;
-- normal save, Save As, reload, and save-completion races.
+- normal save, Save As, reload, and save-completion races;
+- reload-first/save-first ordering on one real shared coordinator;
+- individual close before/after save, including discard followed by queued autosave;
+- native confirmed/cancel window close with lease retention through unregister;
+- FIFO, independent-tab, stable multi-tab, idempotent-release, and error-release coordinator behavior.
 
 Required verification:
 
 ```powershell
-npm.cmd run test -- packages/workspace-domain src/main/workspace-application.test.ts src/main/workspace-close-coordinator.test.ts src/main/main.test.ts
+npm.cmd run test -- packages/workspace-domain src/main/workspace-document-operation-coordinator.test.ts src/main/workspace-window-close-application.test.ts src/main/workspace-document-io.integration.test.ts src/main/workspace-application.test.ts src/main/workspace-close-coordinator.test.ts src/main/main.test.ts
 npm.cmd run test -- src/renderer/editor/useWorkspaceController.test.tsx src/renderer/app.autosave.test.ts
 npm.cmd run test:editor-foundation
 npm.cmd run lint
@@ -292,8 +304,10 @@ RF-101 is complete only when:
 2. Main resolves the real package at runtime.
 3. Dirty state is derived only from revisions and restore-to-saved is clean.
 4. Save completion cannot overwrite or incorrectly clean newer text.
-5. Shared IPC behavior remains compatible without a compatibility layer.
-6. `src/main/workspace-service.ts`, its old test, old type exports, and all imports are absent.
-7. The architecture package/rule is active and passing.
-8. Focused tests, lint, typecheck, full tests, build, and diff check pass.
-9. Documentation records the new ownership and all deferred work honestly.
+5. Same-tab document IO is FIFO-serialized without a global mutex or `updateDraft` queue.
+6. Native window close retains all tab leases through unregister, so confirmed discard cannot be followed by a queued write.
+7. Shared IPC behavior remains compatible without a compatibility layer.
+8. `src/main/workspace-service.ts`, its old test, old type exports, and all imports are absent.
+9. The architecture package/rule is active and passing.
+10. Focused tests, lint, typecheck, full tests, build, and diff check pass.
+11. Documentation records the new ownership and all deferred work honestly.

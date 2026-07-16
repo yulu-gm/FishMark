@@ -678,7 +678,7 @@ npm.cmd run perf:baseline
 
 - Create: the production `packages/workspace-domain/` package, with public-entry-only imports, revision/session/buffer/state modules, declarations, tests, and an emitted-runtime verifier.
 - Create: `src/main/workspace-ipc-projection.ts` as the immutable domain projection to mutable shared IPC DTO boundary.
-- Create: focused main use cases for reload, detach, and file operations, each operating on the one injected `WorkspaceState`.
+- Create: focused main use cases for reload, detach, file operations, per-document IO coordination, and native window-close leases, each operating on the one injected `WorkspaceState` and coordinator where IO is involved.
 - Modify: package/build configuration, architecture guards, main composition, workspace application, and close coordination.
 - Delete after cutover: `src/main/workspace-service.ts` and `src/main/workspace-service.test.ts`.
 
@@ -689,6 +689,8 @@ npm.cmd run perf:baseline
 - [x] Port create/open/activate/close/reorder/move/detach rules into pure domain operations.
 - [x] Update main callers to consume only the package public API and map projections at the main IPC boundary.
 - [x] Bind Save, Save As, reload, and close IO/confirmation workflows to captured owner/revision and the relevant checkpoint so stale completion fails closed.
+- [x] Serialize Save, Save As, reload, and individual close per tab through one main-owned FIFO coordinator while allowing unrelated tabs to proceed independently.
+- [x] Hold a stable multi-tab lease across the native window-close renderer handshake until the window is unregistered, so discard cannot be followed by a queued disk write.
 - [x] Make detach a ready-gated two-phase operation: keep the tab in the source before ready, revalidate source ownership at ready, then atomically move the latest canonical session; timeout, load failure, or target close does not move it.
 - [x] Delete the old service, test, types, imports, and exports in the same task.
 - [x] Verify no renderer imports internal session types and the shared/preload/renderer wire remains unchanged.
@@ -696,13 +698,13 @@ npm.cmd run perf:baseline
 **Verification:**
 
 ```powershell
-npm.cmd run test -- packages/workspace-domain src/main/workspace-application.test.ts src/main/workspace-close-coordinator.test.ts
+npm.cmd run test -- packages/workspace-domain src/main/workspace-document-operation-coordinator.test.ts src/main/workspace-window-close-application.test.ts src/main/workspace-document-io.integration.test.ts src/main/workspace-application.test.ts src/main/workspace-close-coordinator.test.ts
 npm.cmd run lint
 npm.cmd run typecheck
 npm.cmd run build
 ```
 
-**Exit:** development evidence shows one pure workspace implementation, one live main-owned `WorkspaceState`, immutable domain projections, captured-revision save semantics, and no compatibility wrapper or obsolete service symbol. Independent acceptance must confirm this before the task becomes `COMPLETE`; `RF-102` is the next dependency-ready task after that acceptance.
+**Exit:** development evidence shows one pure workspace implementation, one live main-owned `WorkspaceState`, immutable domain projections, captured-revision save semantics, one per-document IO transaction owner, a native-close lease held through unregister, and no compatibility wrapper or obsolete service symbol. Independent acceptance must confirm this before the task becomes `COMPLETE`; `RF-102` is the next dependency-ready task after that acceptance.
 
 #### RF-102: Extract workspace application ports and use cases
 
