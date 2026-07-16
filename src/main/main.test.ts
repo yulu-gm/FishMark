@@ -73,12 +73,13 @@ describe("main process window wiring", () => {
 
     expect(mainSource).toContain('from "@fishmark/workspace-domain"');
     expect(mainSource).toContain('import { createWorkspaceApplication } from "./workspace-application"');
-    expect(mainSource).toContain('import { createWorkspaceCloseCoordinator } from "./workspace-close-coordinator"');
+    expect(mainSource).toContain('from "./workspace-close-coordinator"');
     expect(mainSource).toContain('import { createWorkspaceDetachApplication } from "./workspace-detach-application"');
     expect(mainSource).toContain('import { createWorkspaceFileOperations } from "./workspace-file-operations"');
     expect(mainSource).toContain('import { createWorkspaceReloadApplication } from "./workspace-reload-application"');
     expect(mainSource).toContain('import { createWorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator"');
     expect(mainSource).toContain('import { createWorkspaceWindowCloseApplication } from "./workspace-window-close-application"');
+    expect(mainSource).toContain('import { createWorkspaceWindowCloseRequestBroker } from "./workspace-window-close-request-broker"');
     expect(mainSource).toContain('import {\n  toWorkspaceMoveTabResult,\n  toWorkspaceWindowSnapshot\n} from "./workspace-ipc-projection"');
     expect(mainSource).not.toContain(legacyModule);
     expect(mainSource).not.toContain(legacyFactory);
@@ -96,10 +97,14 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain("const workspaceDetachApplication = createWorkspaceDetachApplication({");
     expect(mainSource).toContain("const workspaceFileOperations = createWorkspaceFileOperations({");
     expect(mainSource).toContain("const workspaceReloadApplication = createWorkspaceReloadApplication({");
-    expect(mainSource).toContain("const workspaceWindowCloseApplication = createWorkspaceWindowCloseApplication({");
+    expect(mainSource).toContain("createWorkspaceWindowCloseApplication<BrowserWindow>({");
+    expect(mainSource).toContain("createWorkspaceWindowCloseRequestBroker<WorkspaceWindowCloseConfirmation>({");
     expect(mainSource).toContain("const heldWorkspaceWindowCloseReleases = new Map<string, () => void>()");
     expect(mainSource).toContain(
       "const WORKSPACE_DETACH_READY_TIMEOUT_MS = 15_000"
+    );
+    expect(mainSource).toContain(
+      "const WORKSPACE_WINDOW_CLOSE_REQUEST_TIMEOUT_MS = 15_000"
     );
     expect(mainSource).toContain("reportCleanupError: (error) => {");
     expect(mainSource).toContain(
@@ -121,14 +126,20 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain("ipcMain.handle(CLOSE_WORKSPACE_TAB_CHANNEL");
     expect(mainSource).toContain("ipcMain.handle(UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL");
     expect(mainSource).toContain('ownerWindow.on("close", (event) => {');
-    expect(mainSource).toContain("hasPendingWorkspaceWindowCloseRequest(windowId)");
+    expect(mainSource).toContain("workspaceWindowCloseRequestBroker.hasPending(windowId)");
     expect(mainSource).toContain("workspaceWindowCloseApplication.requestWindowClose({");
     expect(mainSource).toContain("heldWorkspaceWindowCloseReleases.set(");
     expect(mainSource).toContain("heldWorkspaceWindowCloseReleases.delete(windowId)");
     expect(mainSource).toContain("ownerWindow.webContents.send(REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT");
+    expect(mainSource).toContain('ownerWindow.webContents.on("render-process-gone", abort)');
+    expect(mainSource).toContain('ownerWindow.webContents.on("destroyed", abort)');
     expect(mainSource).toContain("ipcMain.handle(CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL");
     expect(mainSource).toContain("ipcMain.handle(\n    COMPLETE_WORKSPACE_WINDOW_CLOSE_CHANNEL");
-    expect(mainSource).toContain("workspaceCloseCoordinator.confirmWindowClose(windowId)");
+    expect(mainSource).toContain("workspaceCloseCoordinator.confirmWindowClose(");
+    expect(mainSource).toContain("workspaceWindowCloseRequestBroker.setConfirmation(");
+    expect(mainSource).toContain("workspaceWindowCloseRequestBroker.complete(");
+    expect(mainSource).toContain("workspaceWindowCloseRequestBroker.abortWindow(windowId)");
+    expect(mainSource).not.toContain("pendingWorkspaceWindowCloseResponses");
     const closedHandlerStart = mainSource.indexOf('ownerWindow.once("closed", () => {');
     const closedHandlerSource = mainSource.slice(
       closedHandlerStart,
@@ -143,6 +154,8 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain("toWorkspaceWindowSnapshot(workspaceApplication.updateDraft(input))");
     expect(mainSource).toContain("workspaceFileOperations.save({");
     expect(mainSource).toContain("workspaceFileOperations.saveAs({");
+    expect(mainSource).toContain("saveMarkdownFileToPath,");
+    expect(mainSource).not.toContain("saveTab: workspaceApplication.saveTab");
     expect(mainSource).toContain("workspaceReloadApplication.reloadTab({");
     expect(mainSource).toContain("toWorkspaceMoveTabResult(workspaceState.moveTabToWindow(input))");
     expect(mainSource).toContain(

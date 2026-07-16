@@ -2,6 +2,7 @@ import type { WorkspaceState } from "@fishmark/workspace-domain";
 
 import type {
   SaveMarkdownFileAsInput,
+  SaveMarkdownFileInput,
   SaveMarkdownFileResult
 } from "../shared/save-markdown-file";
 import type { WorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
@@ -18,11 +19,9 @@ type WorkspaceFileOperationsDependencies<TSender> = {
     WorkspaceDocumentOperationCoordinator,
     "runExclusive"
   >;
-  saveTab: (input: {
-    readonly tabId: string;
-    readonly expectedWindowId: string;
-    readonly path: string;
-  }) => Promise<SaveMarkdownFileResult>;
+  saveMarkdownFileToPath: (
+    input: SaveMarkdownFileInput & { readonly content: string }
+  ) => Promise<SaveMarkdownFileResult>;
   showSaveMarkdownDialog: (
     input: SaveMarkdownFileAsInput & { readonly content: string }
   ) => Promise<SaveMarkdownFileResult>;
@@ -101,24 +100,45 @@ export function createWorkspaceFileOperations<TSender>(
       readonly tabId: string;
       readonly path: string;
     }): Promise<SaveMarkdownFileResult> {
-      return runWithCleanup(
-        async () => {
-          dependencies.beginInternalWrite(input.sender, input.path);
-          const result = await dependencies.saveTab({
-            tabId: input.tabId,
-            expectedWindowId: input.expectedWindowId,
-            path: input.path
-          });
-          if (result.status === "success") {
-            await dependencies.recordRecentFilePath(result.document.path);
-          }
-          return result;
-        },
-        [
-          () => dependencies.completeInternalWrite(input.sender, input.path),
-          () => syncSenderWindowWatch(input.sender, input.expectedWindowId)
-        ],
-        "Workspace save cleanup failed."
+      return dependencies.documentOperations.runExclusive(input.tabId, () =>
+        runWithCleanup(
+          async () => {
+            dependencies.beginInternalWrite(input.sender, input.path);
+            const checkpoint = dependencies.workspace.getTabSession(input.tabId);
+            if (checkpoint.windowId !== input.expectedWindowId) {
+              throw new Error(
+                `Workspace tab '${input.tabId}' does not belong to window '${input.expectedWindowId}'.`
+              );
+            }
+
+            const result = await dependencies.saveMarkdownFileToPath({
+              tabId: input.tabId,
+              path: input.path,
+              content: checkpoint.content
+            });
+            if (result.status === "success") {
+              const commit = dependencies.workspace.saveTabDocument({
+                tabId: input.tabId,
+                expectedWindowId: input.expectedWindowId,
+                capturedRevision: checkpoint.revision,
+                document: result.document,
+                diskVersion: null
+              });
+              if (commit.projection === null) {
+                throw new Error(
+                  `Workspace window '${input.expectedWindowId}' no longer exists.`
+                );
+              }
+              await dependencies.recordRecentFilePath(result.document.path);
+            }
+            return result;
+          },
+          [
+            () => dependencies.completeInternalWrite(input.sender, input.path),
+            () => syncSenderWindowWatch(input.sender, input.expectedWindowId)
+          ],
+          "Workspace save cleanup failed."
+        )
       );
     },
 

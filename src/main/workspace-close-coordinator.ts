@@ -20,6 +20,11 @@ export type CloseWorkspaceTabRequest = {
   readonly expectedRevision: DocumentRevision;
 };
 
+export type WorkspaceWindowCloseConfirmation = Readonly<{
+  windowId: string;
+  checkpoints: readonly CloseWorkspaceTabRequest[];
+}>;
+
 type WorkspaceCloseCoordinatorDependencies = {
   workspace: Pick<
     WorkspaceState,
@@ -53,7 +58,9 @@ export function createWorkspaceCloseCoordinator(
   dependencies: WorkspaceCloseCoordinatorDependencies
 ): {
   closeTab: (input: CloseWorkspaceTabRequest) => Promise<CloseWorkspaceTabResult>;
-  confirmWindowClose: (windowId: string) => Promise<boolean>;
+  confirmWindowClose: (
+    windowId: string
+  ) => Promise<WorkspaceWindowCloseConfirmation | null>;
 } {
   async function closeTab(
     input: CloseWorkspaceTabRequest
@@ -77,18 +84,20 @@ export function createWorkspaceCloseCoordinator(
     });
   }
 
-  async function confirmWindowClose(windowId: string): Promise<boolean> {
+  async function confirmWindowClose(
+    windowId: string
+  ): Promise<WorkspaceWindowCloseConfirmation | null> {
     let initialTabIds: readonly string[];
     try {
       initialTabIds = dependencies.workspace.getWindowTabIds(windowId);
     } catch {
-      return false;
+      return null;
     }
     const checkpoints: CloseWorkspaceTabRequest[] = [];
     for (const tabId of initialTabIds) {
       const tab = dependencies.workspace.getTabSession(tabId);
       if (tab.windowId !== windowId) {
-        return false;
+        return null;
       }
       checkpoints.push({
         tabId,
@@ -99,17 +108,28 @@ export function createWorkspaceCloseCoordinator(
 
     for (const checkpoint of checkpoints) {
       if (!(await confirmTabCheckpoint(checkpoint))) {
-        return false;
+        return null;
       }
     }
 
     if (!hasSameOrderedTabs(windowId, initialTabIds)) {
-      return false;
+      return null;
     }
 
-    return checkpoints.every(
-      (checkpoint) => getMatchingCheckpoint(checkpoint) !== null
-    );
+    if (
+      !checkpoints.every(
+        (checkpoint) => getMatchingCheckpoint(checkpoint) !== null
+      )
+    ) {
+      return null;
+    }
+
+    return Object.freeze({
+      windowId,
+      checkpoints: Object.freeze(
+        checkpoints.map((checkpoint) => Object.freeze({ ...checkpoint }))
+      )
+    });
   }
 
   function hasSameOrderedTabs(

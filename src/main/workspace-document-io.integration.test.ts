@@ -3,9 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { OpenMarkdownFileResult } from "../shared/open-markdown-file";
 import type { SaveMarkdownFileResult } from "../shared/save-markdown-file";
-import { createWorkspaceApplication } from "./workspace-application";
 import { createWorkspaceCloseCoordinator } from "./workspace-close-coordinator";
 import { createWorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
+import { createWorkspaceFileOperations } from "./workspace-file-operations";
 import { createWorkspaceReloadApplication } from "./workspace-reload-application";
 
 const document = (content: string) => ({
@@ -14,6 +14,30 @@ const document = (content: string) => ({
   content,
   encoding: "utf-8" as const
 });
+
+function createSaveOperations(
+  workspace: ReturnType<typeof createWorkspaceState>,
+  documentOperations: ReturnType<
+    typeof createWorkspaceDocumentOperationCoordinator
+  >,
+  saveMarkdownFileToPath: (
+    input: { readonly content: string; readonly tabId: string; readonly path: string }
+  ) => Promise<SaveMarkdownFileResult>
+) {
+  return createWorkspaceFileOperations({
+    workspace,
+    documentOperations,
+    saveMarkdownFileToPath,
+    showSaveMarkdownDialog: vi.fn(),
+    beginInternalWrite: vi.fn(),
+    completeInternalWrite: vi.fn(async () => undefined),
+    syncDocumentPath: vi.fn(async () => undefined),
+    recordRecentFilePath: vi.fn(async () => undefined),
+    reportCleanupError: vi.fn()
+  });
+}
+
+const sender = { id: 1 };
 
 describe("workspace document IO transactions", () => {
   it("does not let a save overtake an in-flight reload of the same tab", async () => {
@@ -35,11 +59,7 @@ describe("workspace document IO transactions", () => {
         }),
       recordRecentFilePath: vi.fn(async () => undefined)
     });
-    const save = createWorkspaceApplication({
-      workspace,
-      documentOperations,
-      saveMarkdownFileToPath: write
-    });
+    const save = createSaveOperations(workspace, documentOperations, write);
 
     const reloadPromise = reload.reloadTab({
       tabId,
@@ -47,7 +67,8 @@ describe("workspace document IO transactions", () => {
       targetPath: "C:/notes/race.md"
     });
     await vi.waitFor(() => expect(resolveRead).toBeTypeOf("function"));
-    const savePromise = save.saveTab({
+    const savePromise = save.save({
+      sender,
       tabId,
       expectedWindowId: "window-1",
       path: "C:/notes/race.md"
@@ -87,11 +108,7 @@ describe("workspace document IO transactions", () => {
       status: "success" as const,
       document: document(diskContent)
     }));
-    const save = createWorkspaceApplication({
-      workspace,
-      documentOperations,
-      saveMarkdownFileToPath: write
-    });
+    const save = createSaveOperations(workspace, documentOperations, write);
     const reload = createWorkspaceReloadApplication({
       workspace,
       documentOperations,
@@ -99,7 +116,8 @@ describe("workspace document IO transactions", () => {
       recordRecentFilePath: vi.fn(async () => undefined)
     });
 
-    const savePromise = save.saveTab({
+    const savePromise = save.save({
+      sender,
       tabId,
       expectedWindowId: "window-1",
       path: "C:/notes/race.md"
@@ -144,11 +162,7 @@ describe("workspace document IO transactions", () => {
       saveMarkdownFileToPath: write,
       showSaveMarkdownDialog: vi.fn()
     });
-    const save = createWorkspaceApplication({
-      workspace,
-      documentOperations,
-      saveMarkdownFileToPath: write
-    });
+    const save = createSaveOperations(workspace, documentOperations, write);
 
     const closePromise = close.closeTab({
       tabId,
@@ -156,7 +170,8 @@ describe("workspace document IO transactions", () => {
       expectedRevision: 1
     });
     await vi.waitFor(() => expect(resolvePrompt).toBeTypeOf("function"));
-    const savePromise = save.saveTab({
+    const savePromise = save.save({
+      sender,
       tabId,
       expectedWindowId: "window-1",
       path: "C:/notes/race.md"
@@ -184,11 +199,7 @@ describe("workspace document IO transactions", () => {
         })
     );
     const prompt = vi.fn(async () => "discard" as const);
-    const save = createWorkspaceApplication({
-      workspace,
-      documentOperations,
-      saveMarkdownFileToPath: write
-    });
+    const save = createSaveOperations(workspace, documentOperations, write);
     const close = createWorkspaceCloseCoordinator({
       workspace,
       documentOperations,
@@ -197,7 +208,8 @@ describe("workspace document IO transactions", () => {
       showSaveMarkdownDialog: vi.fn()
     });
 
-    const savePromise = save.saveTab({
+    const savePromise = save.save({
+      sender,
       tabId,
       expectedWindowId: "window-1",
       path: "C:/notes/race.md"

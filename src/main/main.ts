@@ -41,12 +41,16 @@ import { createAppUpdateCheckRunner } from "./app-update-check-runner";
 import { resolveAutoUpdaterModule } from "./resolve-auto-updater-module";
 import { createExternalFileWatchService } from "./external-file-watch-service";
 import { createWorkspaceApplication } from "./workspace-application";
-import { createWorkspaceCloseCoordinator } from "./workspace-close-coordinator";
+import {
+  createWorkspaceCloseCoordinator,
+  type WorkspaceWindowCloseConfirmation
+} from "./workspace-close-coordinator";
 import { createWorkspaceDetachApplication } from "./workspace-detach-application";
 import { createWorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
 import { createWorkspaceFileOperations } from "./workspace-file-operations";
 import { createWorkspaceReloadApplication } from "./workspace-reload-application";
 import { createWorkspaceWindowCloseApplication } from "./workspace-window-close-application";
+import { createWorkspaceWindowCloseRequestBroker } from "./workspace-window-close-request-broker";
 import {
   toWorkspaceMoveTabResult,
   toWorkspaceWindowSnapshot
@@ -151,6 +155,7 @@ import {
 
 const AUTO_UPDATE_STARTUP_DELAY_MS = 5000;
 const WORKSPACE_DETACH_READY_TIMEOUT_MS = 15_000;
+const WORKSPACE_WINDOW_CLOSE_REQUEST_TIMEOUT_MS = 15_000;
 registerPreviewAssetScheme({ protocol });
 configureMainProcessRuntime(app, process.env);
 const hasSingleInstanceLock = shouldRequestSingleInstanceLock(process.env)
@@ -316,9 +321,7 @@ app.whenReady().then(async () => {
   const workspaceState = createWorkspaceState();
   const workspaceDocumentOperations = createWorkspaceDocumentOperationCoordinator();
   const workspaceApplication = createWorkspaceApplication({
-    workspace: workspaceState,
-    documentOperations: workspaceDocumentOperations,
-    saveMarkdownFileToPath
+    workspace: workspaceState
   });
   const workspaceCloseCoordinator = createWorkspaceCloseCoordinator({
     workspace: workspaceState,
@@ -347,16 +350,48 @@ app.whenReady().then(async () => {
     saveMarkdownFileToPath,
     showSaveMarkdownDialog
   });
-  const workspaceWindowCloseApplication = createWorkspaceWindowCloseApplication({
-    workspace: workspaceState,
-    documentOperations: workspaceDocumentOperations,
-    requestWorkspaceWindowClose
-  });
+  const workspaceWindowCloseRequestBroker =
+    createWorkspaceWindowCloseRequestBroker<WorkspaceWindowCloseConfirmation>({
+      scheduleTimeout: (listener) => {
+        const timeout = setTimeout(
+          listener,
+          WORKSPACE_WINDOW_CLOSE_REQUEST_TIMEOUT_MS
+        );
+        return () => clearTimeout(timeout);
+      }
+    });
+  const workspaceWindowCloseApplication =
+    createWorkspaceWindowCloseApplication<BrowserWindow>({
+      workspace: workspaceState,
+      documentOperations: workspaceDocumentOperations,
+      requestWorkspaceWindowClose: (ownerWindow) => {
+        if (ownerWindow.webContents.isDestroyed()) {
+          return Promise.resolve(null);
+        }
+
+        const windowId = String(ownerWindow.id);
+        return workspaceWindowCloseRequestBroker.request({
+          windowId,
+          sendRequest: (requestId) => {
+            ownerWindow.webContents.send(REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT, {
+              requestId
+            } satisfies WorkspaceWindowCloseRequest);
+          },
+          bindAbort: (listener) => {
+            const abort = () => listener();
+            ownerWindow.webContents.on("render-process-gone", abort);
+            ownerWindow.webContents.on("destroyed", abort);
+            return () => {
+              ownerWindow.webContents.removeListener("render-process-gone", abort);
+              ownerWindow.webContents.removeListener("destroyed", abort);
+            };
+          }
+        });
+      }
+    });
   const workspaceWindowBindings = new Set<string>();
   const pendingWorkspaceWindowCloseIds = new Set<string>();
-  const pendingWorkspaceWindowCloseResponses = new Map<string, (shouldClose: boolean) => void>();
   const heldWorkspaceWindowCloseReleases = new Map<string, () => void>();
-  let nextWorkspaceWindowCloseRequestId = 0;
   let appUpdaterPromise: Promise<AppUpdaterController> | null = null;
 
   if (initialPreferences.source === "recovered-from-corrupt") {
@@ -463,7 +498,7 @@ app.whenReady().then(async () => {
 
         event.preventDefault();
 
-        if (hasPendingWorkspaceWindowCloseRequest(windowId)) {
+        if (workspaceWindowCloseRequestBroker.hasPending(windowId)) {
           return;
         }
 
@@ -489,24 +524,27 @@ app.whenReady().then(async () => {
               throw error;
             }
           } catch (error) {
-            await dialog.showMessageBox({
-              type: "error",
-              buttons: ["OK"],
-              defaultId: 0,
-              title: "Unable to close window",
-              message: error instanceof Error ? error.message : String(error)
-            });
+            try {
+              await dialog.showMessageBox({
+                type: "error",
+                buttons: ["OK"],
+                defaultId: 0,
+                title: "Unable to close window",
+                message: error instanceof Error ? error.message : String(error)
+              });
+            } catch (reportingError) {
+              console.error(
+                "[fishmark] unable to report workspace window close failure.",
+                error,
+                reportingError
+              );
+            }
           }
         })();
       });
       ownerWindow.once("closed", () => {
         pendingWorkspaceWindowCloseIds.delete(windowId);
-        for (const [requestId, resolve] of pendingWorkspaceWindowCloseResponses) {
-          if (requestId.startsWith(`${windowId}:`)) {
-            pendingWorkspaceWindowCloseResponses.delete(requestId);
-            resolve(false);
-          }
-        }
+        workspaceWindowCloseRequestBroker.abortWindow(windowId);
         workspaceWindowBindings.delete(windowId);
         const heldRelease = heldWorkspaceWindowCloseReleases.get(windowId);
         try {
@@ -521,31 +559,6 @@ app.whenReady().then(async () => {
 
     workspaceState.focusWindow(windowId);
     return windowId;
-  }
-
-  function requestWorkspaceWindowClose(ownerWindow: BrowserWindow): Promise<boolean> {
-    if (ownerWindow.webContents.isDestroyed()) {
-      return Promise.resolve(false);
-    }
-
-    const requestId = `${ownerWindow.id}:${++nextWorkspaceWindowCloseRequestId}`;
-
-    return new Promise((resolve) => {
-      pendingWorkspaceWindowCloseResponses.set(requestId, resolve);
-      ownerWindow.webContents.send(REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT, {
-        requestId
-      } satisfies WorkspaceWindowCloseRequest);
-    });
-  }
-
-  function hasPendingWorkspaceWindowCloseRequest(windowId: string): boolean {
-    for (const requestId of pendingWorkspaceWindowCloseResponses.keys()) {
-      if (requestId.startsWith(`${windowId}:`)) {
-        return true;
-      }
-    }
-
-    return false;
   }
 
   function getWorkspaceWindowById(windowId: string): BrowserWindow | null {
@@ -636,7 +649,7 @@ app.whenReady().then(async () => {
   const workspaceFileOperations = createWorkspaceFileOperations({
     workspace: workspaceState,
     documentOperations: workspaceDocumentOperations,
-    saveTab: workspaceApplication.saveTab,
+    saveMarkdownFileToPath,
     showSaveMarkdownDialog,
     beginInternalWrite: externalFileWatchService.beginInternalWrite,
     completeInternalWrite: externalFileWatchService.completeInternalWrite,
@@ -688,25 +701,28 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle(CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL, async (event) => {
     const windowId = ensureWorkspaceWindow(event.sender);
-    return workspaceCloseCoordinator.confirmWindowClose(windowId);
+    if (!workspaceWindowCloseRequestBroker.hasPending(windowId)) {
+      return false;
+    }
+    const confirmation = await workspaceCloseCoordinator.confirmWindowClose(
+      windowId
+    );
+    const recorded = workspaceWindowCloseRequestBroker.setConfirmation(
+      windowId,
+      confirmation
+    );
+    return recorded && confirmation !== null;
   });
   ipcMain.handle(
     COMPLETE_WORKSPACE_WINDOW_CLOSE_CHANNEL,
     async (event, input: CompleteWorkspaceWindowCloseInput) => {
       const windowId = ensureWorkspaceWindow(event.sender);
 
-      if (!input.requestId.startsWith(`${windowId}:`)) {
-        return;
-      }
-
-      const resolve = pendingWorkspaceWindowCloseResponses.get(input.requestId);
-
-      if (!resolve) {
-        return;
-      }
-
-      pendingWorkspaceWindowCloseResponses.delete(input.requestId);
-      resolve(input.shouldClose);
+      workspaceWindowCloseRequestBroker.complete(
+        input.requestId,
+        windowId,
+        input.shouldClose
+      );
     }
   );
   ipcMain.handle(CREATE_WORKSPACE_TAB_CHANNEL, async (event, input: CreateWorkspaceTabInput) => {

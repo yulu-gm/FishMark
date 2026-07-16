@@ -1,22 +1,13 @@
+import type { Stats } from "node:fs";
+
 import { createWorkspaceState } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 
+import { EXTERNAL_MARKDOWN_FILE_CHANGED_EVENT } from "../shared/external-file-change";
 import type { SaveMarkdownFileResult } from "../shared/save-markdown-file";
-import { createWorkspaceApplication as createWorkspaceApplicationWithOperations } from "./workspace-application";
+import { createExternalFileWatchService } from "./external-file-watch-service";
 import { createWorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
 import { createWorkspaceFileOperations as createWorkspaceFileOperationsWithOperations } from "./workspace-file-operations";
-
-function createWorkspaceApplication(
-  dependencies: Omit<
-    Parameters<typeof createWorkspaceApplicationWithOperations>[0],
-    "documentOperations"
-  >
-) {
-  return createWorkspaceApplicationWithOperations({
-    ...dependencies,
-    documentOperations: createWorkspaceDocumentOperationCoordinator()
-  });
-}
 
 function createWorkspaceFileOperations<TSender>(
   dependencies: Omit<
@@ -38,6 +29,173 @@ const document = (name: string, content: string) => ({
 });
 
 describe("createWorkspaceFileOperations", () => {
+  it("does not begin a second ordinary save before the first watcher transaction finishes", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.openDocument(
+      "window-1",
+      document("serial.md", "saved")
+    ).activeTabId!;
+    workspace.updateTabDraft(tabId, "dirty");
+    const documentOperations = createWorkspaceDocumentOperationCoordinator();
+    let resolveFirstSave!: (result: SaveMarkdownFileResult) => void;
+    let resolveFirstCleanup!: () => void;
+    const write = vi
+      .fn<
+        (input: {
+          readonly tabId: string;
+          readonly path: string;
+          readonly content: string;
+        }) => Promise<SaveMarkdownFileResult>
+      >()
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirstSave = resolve;
+          })
+      )
+      .mockResolvedValue({
+        status: "success",
+        document: document("serial.md", "dirty")
+      });
+    const beginInternalWrite = vi.fn();
+    const completeInternalWrite = vi
+      .fn<(sender: { id: number }, targetPath: string) => Promise<void>>()
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirstCleanup = resolve;
+          })
+      )
+      .mockResolvedValue(undefined);
+    const operations = createWorkspaceFileOperationsWithOperations({
+      workspace,
+      documentOperations,
+      saveMarkdownFileToPath: write,
+      showSaveMarkdownDialog: vi.fn(),
+      beginInternalWrite,
+      completeInternalWrite,
+      syncDocumentPath: vi.fn(async () => undefined),
+      recordRecentFilePath: vi.fn(async () => undefined),
+      reportCleanupError: vi.fn()
+    });
+    const input = {
+      sender: { id: 1 },
+      expectedWindowId: "window-1",
+      tabId,
+      path: "C:/notes/serial.md"
+    };
+
+    const firstSave = operations.save(input);
+    await vi.waitFor(() => expect(resolveFirstSave).toBeTypeOf("function"));
+    const secondSave = operations.save(input);
+    await Promise.resolve();
+
+    expect(beginInternalWrite).toHaveBeenCalledTimes(1);
+    expect(write).toHaveBeenCalledTimes(1);
+
+    resolveFirstSave({
+      status: "success",
+      document: document("serial.md", "dirty")
+    });
+    await vi.waitFor(() => expect(resolveFirstCleanup).toBeTypeOf("function"));
+    expect(beginInternalWrite).toHaveBeenCalledTimes(1);
+    expect(write).toHaveBeenCalledTimes(1);
+
+    resolveFirstCleanup();
+    await Promise.all([firstSave, secondSave]);
+    expect(beginInternalWrite).toHaveBeenCalledTimes(2);
+    expect(write).toHaveBeenCalledTimes(2);
+    expect(completeInternalWrite).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps consecutive ordinary saves inside distinct real watcher transactions", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.openDocument(
+      "window-1",
+      document("watch.md", "saved")
+    ).activeTabId!;
+    workspace.updateTabDraft(tabId, "dirty");
+    const documentOperations = createWorkspaceDocumentOperationCoordinator();
+    const watchCallbacks = new Map<
+      string,
+      (eventType: "change" | "rename") => void
+    >();
+    let currentSnapshot = { mtimeMs: 1, size: 5 };
+    const stat = vi.fn(async () => ({ ...currentSnapshot }) as Stats);
+    const sender = {
+      id: 2,
+      send: vi.fn<(channel: string, payload: unknown) => void>(),
+      once: vi.fn<(event: "destroyed", listener: () => void) => void>()
+    };
+    const watchService = createExternalFileWatchService({
+      watch: vi.fn((targetPath, listener) => {
+        watchCallbacks.set(targetPath, listener);
+        return { close: vi.fn() };
+      }),
+      stat
+    });
+    await watchService.syncDocumentPath(sender, "C:/notes/watch.md");
+    let writeCount = 0;
+    let releaseFirstWrite!: () => void;
+    const write = vi.fn(async () => {
+      writeCount += 1;
+      currentSnapshot = {
+        mtimeMs: writeCount + 1,
+        size: 5 + writeCount
+      };
+      await watchCallbacks.get("C:/notes/watch.md")?.("change");
+      if (writeCount === 1) {
+        await new Promise<void>((resolve) => {
+          releaseFirstWrite = resolve;
+        });
+      }
+      return {
+        status: "success" as const,
+        document: document("watch.md", "dirty")
+      };
+    });
+    const beginInternalWrite = vi.fn(watchService.beginInternalWrite);
+    const completeInternalWrite = vi.fn(watchService.completeInternalWrite);
+    const operations = createWorkspaceFileOperationsWithOperations({
+      workspace,
+      documentOperations,
+      saveMarkdownFileToPath: write,
+      showSaveMarkdownDialog: vi.fn(),
+      beginInternalWrite,
+      completeInternalWrite,
+      syncDocumentPath: watchService.syncDocumentPath,
+      recordRecentFilePath: vi.fn(async () => undefined),
+      reportCleanupError: vi.fn()
+    });
+    const input = {
+      sender,
+      expectedWindowId: "window-1",
+      tabId,
+      path: "C:/notes/watch.md"
+    };
+
+    const firstSave = operations.save(input);
+    await vi.waitFor(() => expect(releaseFirstWrite).toBeTypeOf("function"));
+    const secondSave = operations.save(input);
+    await Promise.resolve();
+
+    expect(beginInternalWrite).toHaveBeenCalledTimes(1);
+    expect(write).toHaveBeenCalledTimes(1);
+
+    releaseFirstWrite();
+    await Promise.all([firstSave, secondSave]);
+
+    expect(beginInternalWrite).toHaveBeenCalledTimes(2);
+    expect(completeInternalWrite).toHaveBeenCalledTimes(2);
+    expect(stat).toHaveBeenCalledTimes(7);
+    expect(sender.send).not.toHaveBeenCalledWith(
+      EXTERNAL_MARKDOWN_FILE_CHANGED_EVENT,
+      expect.anything()
+    );
+  });
+
   it("serializes Save As dialog, commit, and cleanup with other tab IO", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
@@ -53,7 +211,7 @@ describe("createWorkspaceFileOperations", () => {
     const operations = createWorkspaceFileOperationsWithOperations({
       workspace,
       documentOperations,
-      saveTab: vi.fn(),
+      saveMarkdownFileToPath: vi.fn(),
       showSaveMarkdownDialog,
       beginInternalWrite: vi.fn(),
       completeInternalWrite: vi.fn(),
@@ -95,13 +253,12 @@ describe("createWorkspaceFileOperations", () => {
     workspace.updateTabDraft(tabId, "captured dirty");
     workspace.registerWindow("window-2");
     let resolveWrite!: (result: SaveMarkdownFileResult) => void;
-    const workspaceApplication = createWorkspaceApplication({
-      workspace,
-      saveMarkdownFileToPath: () =>
-        new Promise((resolve) => {
+    const saveMarkdownFileToPath = vi.fn(
+      () =>
+        new Promise<SaveMarkdownFileResult>((resolve) => {
           resolveWrite = resolve;
         })
-    });
+    );
     const sender = { id: 1 };
     const beginInternalWrite = vi.fn();
     const completeInternalWrite = vi.fn(async () => undefined);
@@ -109,7 +266,7 @@ describe("createWorkspaceFileOperations", () => {
     const recordRecentFilePath = vi.fn(async () => undefined);
     const operations = createWorkspaceFileOperations({
       workspace,
-      saveTab: workspaceApplication.saveTab,
+      saveMarkdownFileToPath,
       showSaveMarkdownDialog: vi.fn(),
       beginInternalWrite,
       completeInternalWrite,
@@ -158,7 +315,7 @@ describe("createWorkspaceFileOperations", () => {
     const syncDocumentPath = vi.fn(async () => undefined);
     const operations = createWorkspaceFileOperations({
       workspace,
-      saveTab: vi.fn(async () => {
+      saveMarkdownFileToPath: vi.fn(async () => {
         throw new Error("write exploded");
       }),
       showSaveMarkdownDialog: vi.fn(),
@@ -193,19 +350,16 @@ describe("createWorkspaceFileOperations", () => {
       document("commit-throw.md", "saved")
     ).activeTabId!;
     workspace.updateTabDraft(tabId, "current");
-    const workspaceApplication = createWorkspaceApplication({
-      workspace,
-      saveMarkdownFileToPath: vi.fn(async () => ({
+    const saveMarkdownFileToPath = vi.fn(async () => ({
         status: "success" as const,
         document: document("commit-throw.md", "mismatched")
-      }))
-    });
+      }));
     const sender = { id: 3 };
     const completeInternalWrite = vi.fn(async () => undefined);
     const syncDocumentPath = vi.fn(async () => undefined);
     const operations = createWorkspaceFileOperations({
       workspace,
-      saveTab: workspaceApplication.saveTab,
+      saveMarkdownFileToPath,
       showSaveMarkdownDialog: vi.fn(),
       beginInternalWrite: vi.fn(),
       completeInternalWrite,
@@ -248,7 +402,7 @@ describe("createWorkspaceFileOperations", () => {
     const recordRecentFilePath = vi.fn(async () => undefined);
     const operations = createWorkspaceFileOperations({
       workspace,
-      saveTab: vi.fn(),
+      saveMarkdownFileToPath: vi.fn(),
       showSaveMarkdownDialog: () =>
         new Promise((resolve) => {
           resolveDialog = resolve;
@@ -293,13 +447,12 @@ describe("createWorkspaceFileOperations", () => {
     ).activeTabId!;
     workspace.updateTabDraft(tabId, "captured dirty");
     let resolveWrite!: (result: SaveMarkdownFileResult) => void;
-    const workspaceApplication = createWorkspaceApplication({
-      workspace,
-      saveMarkdownFileToPath: () =>
-        new Promise((resolve) => {
+    const saveMarkdownFileToPath = vi.fn(
+      () =>
+        new Promise<SaveMarkdownFileResult>((resolve) => {
           resolveWrite = resolve;
         })
-    });
+    );
     const sender = { id: 5 };
     const callOrder: string[] = [];
     const completeInternalWrite = vi.fn(async () => {
@@ -311,7 +464,7 @@ describe("createWorkspaceFileOperations", () => {
     const recordRecentFilePath = vi.fn(async () => undefined);
     const operations = createWorkspaceFileOperations({
       workspace,
-      saveTab: workspaceApplication.saveTab,
+      saveMarkdownFileToPath,
       showSaveMarkdownDialog: vi.fn(),
       beginInternalWrite: vi.fn(() => {
         callOrder.push("begin");
@@ -359,7 +512,7 @@ describe("createWorkspaceFileOperations", () => {
     const recordRecentFilePath = vi.fn(async () => undefined);
     const operations = createWorkspaceFileOperations({
       workspace,
-      saveTab: vi.fn(),
+      saveMarkdownFileToPath: vi.fn(),
       showSaveMarkdownDialog: () =>
         new Promise((resolve) => {
           resolveDialog = resolve;
@@ -417,7 +570,7 @@ describe("createWorkspaceFileOperations", () => {
     });
     const operations = createWorkspaceFileOperations({
       workspace,
-      saveTab: vi.fn(async () => {
+      saveMarkdownFileToPath: vi.fn(async () => {
         throw primaryError;
       }),
       showSaveMarkdownDialog: vi.fn(),
@@ -463,7 +616,7 @@ describe("createWorkspaceFileOperations", () => {
     });
     const operations = createWorkspaceFileOperations({
       workspace,
-      saveTab: vi.fn(),
+      saveMarkdownFileToPath: vi.fn(),
       showSaveMarkdownDialog: vi.fn(async () => {
         throw primaryError;
       }),
@@ -504,7 +657,7 @@ describe("createWorkspaceFileOperations", () => {
     const reportCleanupError = vi.fn();
     const operations = createWorkspaceFileOperations({
       workspace,
-      saveTab: vi.fn(async () => ({ status: "cancelled" as const })),
+      saveMarkdownFileToPath: vi.fn(async () => ({ status: "cancelled" as const })),
       showSaveMarkdownDialog: vi.fn(),
       beginInternalWrite: vi.fn(),
       completeInternalWrite,

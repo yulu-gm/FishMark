@@ -104,7 +104,31 @@ describe("createWorkspaceCloseCoordinator", () => {
       showSaveMarkdownDialog: vi.fn()
     });
 
-    await expect(coordinator.confirmWindowClose("window-1")).resolves.toBe(true);
+    const confirmation = await coordinator.confirmWindowClose("window-1");
+
+    expect(confirmation).toEqual({
+      windowId: "window-1",
+      checkpoints: [
+        {
+          tabId: firstTabId,
+          expectedWindowId: "window-1",
+          expectedRevision: 1
+        },
+        {
+          tabId: expect.any(String),
+          expectedWindowId: "window-1",
+          expectedRevision: 0
+        },
+        {
+          tabId: thirdTabId,
+          expectedWindowId: "window-1",
+          expectedRevision: 1
+        }
+      ]
+    });
+    expect(Object.isFrozen(confirmation)).toBe(true);
+    expect(Object.isFrozen(confirmation?.checkpoints)).toBe(true);
+    expect(confirmation?.checkpoints.every(Object.isFrozen)).toBe(true);
 
     expect(prompt.mock.calls.map(([tab]) => tab.tabId)).toEqual([
       firstTabId,
@@ -368,7 +392,7 @@ describe("createWorkspaceCloseCoordinator", () => {
       showSaveMarkdownDialog: vi.fn()
     });
 
-    await expect(coordinator.confirmWindowClose("window-1")).resolves.toBe(false);
+    await expect(coordinator.confirmWindowClose("window-1")).resolves.toBeNull();
   });
 
   it("fails closed when a dirty tab is added while the first prompt is pending", async () => {
@@ -396,7 +420,7 @@ describe("createWorkspaceCloseCoordinator", () => {
     workspace.updateTabDraft(newTabId, "new dirty tab");
     resolvePrompt("discard");
 
-    await expect(confirmPromise).resolves.toBe(false);
+    await expect(confirmPromise).resolves.toBeNull();
     expect(workspace.getWindowTabIds("window-1")).toEqual([
       firstTabId,
       newTabId
@@ -436,7 +460,7 @@ describe("createWorkspaceCloseCoordinator", () => {
     workspace.reorderTab(secondTabId, 0);
     resolvePrompt("discard");
 
-    await expect(confirmPromise).resolves.toBe(false);
+    await expect(confirmPromise).resolves.toBeNull();
     expect(workspace.getWindowTabIds("window-1")).toEqual([
       secondTabId,
       firstTabId
@@ -508,7 +532,7 @@ describe("createWorkspaceCloseCoordinator", () => {
     });
     resolvePrompt("discard");
 
-    await expect(confirmPromise).resolves.toBe(false);
+    await expect(confirmPromise).resolves.toBeNull();
     expect(() => workspace.getTabSession(closingTabId)).toThrow(
       `Unknown workspace tab '${closingTabId}'.`
     );
@@ -547,7 +571,7 @@ describe("createWorkspaceCloseCoordinator", () => {
     });
     resolvePrompt("discard");
 
-    await expect(confirmPromise).resolves.toBe(false);
+    await expect(confirmPromise).resolves.toBeNull();
     expect(workspace.getWindowTabIds("window-1")).toEqual([remainingTabId]);
     expect(workspace.getWindowTabIds("window-2")).toEqual([movingTabId]);
     expect(workspace.getTabSession(movingTabId)).toMatchObject({

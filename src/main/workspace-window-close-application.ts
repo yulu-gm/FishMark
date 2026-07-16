@@ -1,17 +1,20 @@
 import type { WorkspaceState } from "@fishmark/workspace-domain";
 
+import type { WorkspaceWindowCloseConfirmation } from "./workspace-close-coordinator";
 import type {
   WorkspaceDocumentOperationCoordinator,
   WorkspaceDocumentOperationLease
 } from "./workspace-document-operation-coordinator";
 
 type WorkspaceWindowCloseApplicationDependencies<TOwnerWindow> = {
-  workspace: Pick<WorkspaceState, "getWindowTabIds">;
+  workspace: Pick<WorkspaceState, "getTabSession" | "getWindowTabIds">;
   documentOperations: Pick<
     WorkspaceDocumentOperationCoordinator,
     "acquireExclusive"
   >;
-  requestWorkspaceWindowClose: (ownerWindow: TOwnerWindow) => Promise<boolean>;
+  requestWorkspaceWindowClose: (
+    ownerWindow: TOwnerWindow
+  ) => Promise<WorkspaceWindowCloseConfirmation | null>;
 };
 
 export interface HeldWorkspaceWindowCloseLease {
@@ -42,14 +45,24 @@ export function createWorkspaceWindowCloseApplication<TOwnerWindow>(
       }
 
       try {
-        const shouldClose = await dependencies.requestWorkspaceWindowClose(
+        const confirmation = await dependencies.requestWorkspaceWindowClose(
           input.ownerWindow
         );
-        if (!shouldClose) {
+        if (confirmation === null) {
           lease.release();
           return null;
         }
         if (!hasSameOrderedTabs(input.windowId, initialTabIds)) {
+          lease.release();
+          return null;
+        }
+        if (
+          !matchesConfirmation(
+            input.windowId,
+            initialTabIds,
+            confirmation
+          )
+        ) {
           lease.release();
           return null;
         }
@@ -73,6 +86,36 @@ export function createWorkspaceWindowCloseApplication<TOwnerWindow>(
     }
     return currentTabIds.length === expectedTabIds.length &&
       currentTabIds.every((tabId, index) => tabId === expectedTabIds[index]);
+  }
+
+  function matchesConfirmation(
+    windowId: string,
+    expectedTabIds: readonly string[],
+    confirmation: WorkspaceWindowCloseConfirmation
+  ): boolean {
+    if (
+      confirmation.windowId !== windowId ||
+      confirmation.checkpoints.length !== expectedTabIds.length
+    ) {
+      return false;
+    }
+
+    return confirmation.checkpoints.every((checkpoint, index) => {
+      if (
+        checkpoint.tabId !== expectedTabIds[index] ||
+        checkpoint.expectedWindowId !== windowId
+      ) {
+        return false;
+      }
+
+      try {
+        const tab = dependencies.workspace.getTabSession(checkpoint.tabId);
+        return tab.windowId === checkpoint.expectedWindowId &&
+          tab.revision === checkpoint.expectedRevision;
+      } catch {
+        return false;
+      }
+    });
   }
 }
 

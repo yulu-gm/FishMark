@@ -2,9 +2,12 @@ import { createWorkspaceState } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 
 import type { SaveMarkdownFileResult } from "../shared/save-markdown-file";
-import { createWorkspaceApplication } from "./workspace-application";
-import { createWorkspaceCloseCoordinator } from "./workspace-close-coordinator";
+import {
+  createWorkspaceCloseCoordinator,
+  type WorkspaceWindowCloseConfirmation
+} from "./workspace-close-coordinator";
 import { createWorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
+import { createWorkspaceFileOperations } from "./workspace-file-operations";
 import { createWorkspaceWindowCloseApplication } from "./workspace-window-close-application";
 
 const document = (content: string) => ({
@@ -13,6 +16,40 @@ const document = (content: string) => ({
   content,
   encoding: "utf-8" as const
 });
+
+function closeConfirmation(
+  windowId: string,
+  checkpoints: WorkspaceWindowCloseConfirmation["checkpoints"]
+): WorkspaceWindowCloseConfirmation {
+  return Object.freeze({
+    windowId,
+    checkpoints: Object.freeze(
+      checkpoints.map((checkpoint) => Object.freeze({ ...checkpoint }))
+    )
+  });
+}
+
+function createSaveOperations(
+  workspace: ReturnType<typeof createWorkspaceState>,
+  documentOperations: ReturnType<
+    typeof createWorkspaceDocumentOperationCoordinator
+  >,
+  saveMarkdownFileToPath: (
+    input: { readonly content: string; readonly tabId: string; readonly path: string }
+  ) => Promise<SaveMarkdownFileResult>
+) {
+  return createWorkspaceFileOperations({
+    workspace,
+    documentOperations,
+    saveMarkdownFileToPath,
+    showSaveMarkdownDialog: vi.fn(),
+    beginInternalWrite: vi.fn(),
+    completeInternalWrite: vi.fn(async () => undefined),
+    syncDocumentPath: vi.fn(async () => undefined),
+    recordRecentFilePath: vi.fn(async () => undefined),
+    reportCleanupError: vi.fn()
+  });
+}
 
 describe("createWorkspaceWindowCloseApplication", () => {
   it("holds every tab lease through confirmed discard until unregister", async () => {
@@ -42,11 +79,7 @@ describe("createWorkspaceWindowCloseApplication", () => {
       status: "success" as const,
       document: document(content)
     }));
-    const save = createWorkspaceApplication({
-      workspace,
-      documentOperations,
-      saveMarkdownFileToPath: write
-    });
+    const save = createSaveOperations(workspace, documentOperations, write);
     const ownerWindow = { id: 1 };
 
     const closePromise = application.requestWindowClose({
@@ -54,7 +87,8 @@ describe("createWorkspaceWindowCloseApplication", () => {
       ownerWindow
     });
     await vi.waitFor(() => expect(resolvePrompt).toBeTypeOf("function"));
-    const savePromise = save.saveTab({
+    const savePromise = save.save({
+      sender: { id: 1 },
       tabId,
       expectedWindowId: "window-1",
       path: "C:/notes/window-close.md"
@@ -78,7 +112,9 @@ describe("createWorkspaceWindowCloseApplication", () => {
     workspace.registerWindow("window-1");
     const tabId = workspace.openDocument("window-1", document("saved")).activeTabId!;
     workspace.updateTabDraft(tabId, "dirty");
-    let resolveRequest!: (shouldClose: boolean) => void;
+    let resolveRequest!: (
+      confirmation: WorkspaceWindowCloseConfirmation | null
+    ) => void;
     const application = createWorkspaceWindowCloseApplication({
       workspace,
       documentOperations,
@@ -90,25 +126,22 @@ describe("createWorkspaceWindowCloseApplication", () => {
     const write = vi.fn<
       (input: { readonly content: string }) => Promise<SaveMarkdownFileResult>
     >(async ({ content }) => ({ status: "success", document: document(content) }));
-    const save = createWorkspaceApplication({
-      workspace,
-      documentOperations,
-      saveMarkdownFileToPath: write
-    });
+    const save = createSaveOperations(workspace, documentOperations, write);
 
     const closePromise = application.requestWindowClose({
       windowId: "window-1",
       ownerWindow: { id: 1 }
     });
     await vi.waitFor(() => expect(resolveRequest).toBeTypeOf("function"));
-    const savePromise = save.saveTab({
+    const savePromise = save.save({
+      sender: { id: 1 },
       tabId,
       expectedWindowId: "window-1",
       path: "C:/notes/window-close.md"
     });
     expect(write).not.toHaveBeenCalled();
 
-    resolveRequest(false);
+    resolveRequest(null);
     await expect(closePromise).resolves.toBeNull();
     await expect(savePromise).resolves.toMatchObject({ status: "success" });
     expect(write).toHaveBeenCalledOnce();
@@ -121,7 +154,15 @@ describe("createWorkspaceWindowCloseApplication", () => {
     workspace.registerWindow("window-1");
     const tabId = workspace.openDocument("window-1", document("first")).activeTabId!;
     const blocker = await documentOperations.acquireExclusive([tabId]);
-    const requestWorkspaceWindowClose = vi.fn(async () => true);
+    const requestWorkspaceWindowClose = vi.fn(async () =>
+      closeConfirmation("window-1", [
+        {
+          tabId,
+          expectedWindowId: "window-1",
+          expectedRevision: 0
+        }
+      ])
+    );
     const application = createWorkspaceWindowCloseApplication({
       workspace,
       documentOperations,
@@ -154,7 +195,9 @@ describe("createWorkspaceWindowCloseApplication", () => {
       "window-1",
       document("first")
     ).activeTabId!;
-    let resolveRequest!: (shouldClose: boolean) => void;
+    let resolveRequest!: (
+      confirmation: WorkspaceWindowCloseConfirmation | null
+    ) => void;
     const application = createWorkspaceWindowCloseApplication({
       workspace,
       documentOperations,
@@ -181,7 +224,15 @@ describe("createWorkspaceWindowCloseApplication", () => {
     );
     expect(queuedOperation).not.toHaveBeenCalled();
 
-    resolveRequest(true);
+    resolveRequest(
+      closeConfirmation("window-1", [
+        {
+          tabId: firstTabId,
+          expectedWindowId: "window-1",
+          expectedRevision: 0
+        }
+      ])
+    );
 
     await expect(closePromise).resolves.toBeNull();
     await expect(queuedPromise).resolves.toBe("continued");
@@ -190,6 +241,95 @@ describe("createWorkspaceWindowCloseApplication", () => {
       firstTabId,
       secondTabId
     ]);
+  });
+
+  it("cancels when a confirmed tab revision changes before the handshake completes", async () => {
+    const workspace = createWorkspaceState();
+    const documentOperations = createWorkspaceDocumentOperationCoordinator();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.openDocument(
+      "window-1",
+      document("saved")
+    ).activeTabId!;
+    workspace.updateTabDraft(tabId, "confirmed revision");
+    const confirmation = closeConfirmation("window-1", [
+      {
+          tabId,
+          expectedWindowId: "window-1",
+          expectedRevision: 1
+      }
+    ]);
+    let resolveRequest!: (
+      value: WorkspaceWindowCloseConfirmation | null
+    ) => void;
+    const application = createWorkspaceWindowCloseApplication({
+      workspace,
+      documentOperations,
+      requestWorkspaceWindowClose: () =>
+        new Promise((resolve) => {
+          resolveRequest = resolve;
+        })
+    });
+
+    const closePromise = application.requestWindowClose({
+      windowId: "window-1",
+      ownerWindow: { id: 1 }
+    });
+    await vi.waitFor(() => expect(resolveRequest).toBeTypeOf("function"));
+    workspace.updateTabDraft(tabId, "late revision");
+    const queuedOperation = vi.fn(async () => "continued");
+    const queuedPromise = documentOperations.runExclusive(
+      tabId,
+      queuedOperation
+    );
+    expect(queuedOperation).not.toHaveBeenCalled();
+
+    resolveRequest(confirmation);
+
+    await expect(closePromise).resolves.toBeNull();
+    await expect(queuedPromise).resolves.toBe("continued");
+    expect(workspace.getTabSession(tabId)).toMatchObject({
+      content: "late revision",
+      revision: 2,
+      isDirty: true
+    });
+  });
+
+  it("accepts a draft revision flushed before close confirmation", async () => {
+    const workspace = createWorkspaceState();
+    const documentOperations = createWorkspaceDocumentOperationCoordinator();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.openDocument(
+      "window-1",
+      document("saved")
+    ).activeTabId!;
+    const closeCoordinator = createWorkspaceCloseCoordinator({
+      workspace,
+      documentOperations,
+      promptToSaveWorkspaceTab: vi.fn(async () => "discard" as const),
+      saveMarkdownFileToPath: vi.fn(),
+      showSaveMarkdownDialog: vi.fn()
+    });
+    const application = createWorkspaceWindowCloseApplication({
+      workspace,
+      documentOperations,
+      requestWorkspaceWindowClose: async () => {
+        workspace.updateTabDraft(tabId, "flushed before confirm");
+        return closeCoordinator.confirmWindowClose("window-1");
+      }
+    });
+
+    const heldLease = await application.requestWindowClose({
+      windowId: "window-1",
+      ownerWindow: { id: 1 }
+    });
+
+    expect(heldLease).not.toBeNull();
+    expect(workspace.getTabSession(tabId)).toMatchObject({
+      content: "flushed before confirm",
+      revision: 1
+    });
+    heldLease?.release();
   });
 
   it("releases every lease when the renderer handshake rejects", async () => {
