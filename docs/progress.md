@@ -6,6 +6,12 @@
 
 ## 当前项目判断
 
+### 2026-07-16 RF-101 Workspace Domain 开发交接
+
+Editor Foundation 重构中的 `RF-101` 已进入 `DEV_DONE`，等待独立架构验收与任务验收。生产级 `@fishmark/workspace-domain` 现在是 workspace/window/tab/document session 的唯一 canonical state；main 持有唯一 live `WorkspaceState`，通过显式 mapper 输出原有 shared IPC DTO。dirty 由 revision equality 派生，精确 saved-text checkpoint 支持恢复到已保存内容即 clean，所有异步 save/reload/close/file/detach 完成都绑定捕获的 owner/revision 并 fail closed。旧 `src/main/workspace-service.ts`、对应测试、compatibility facade 和双状态路径均不存在。
+
+新鲜开发门禁：focused domain/main 10 文件 / 128 测试，renderer 回归 4 / 177，editor-foundation 7 / 259，全量 Vitest 144 / 1,845；lint 0 error / 8 个既有 warning，typecheck、renderer/Electron/CLI build、workspace-domain emitted runtime verifier 均通过；正式 editor behavior 为 121/121 cases、2,541/2,541 targets、0 unexpected/not-run。总重构进度仍为 2/38，M1 仍为 0/2，只有验收通过后才能标记 `RF-101 COMPLETE` 并开始 `RF-102`。
+
 ### 2026-06-23 TASK-061 引用列表 Tab 与尾部 separator 回归修复
 
 补齐单层引用中 padded empty list item（`> - `）的真实 Tab 覆盖；统一列表命令可将其缩进为 `>   - `。同时修复引用列表退出后尾部 `>` 累积：同深度的结构分隔行和活动空引用行现在成对退出，顶层 `>\n> ` 收敛为普通结构空行，嵌套层级则两行一起逐级 outdent，不再留下孤立 quote marker。对于已经残留在列表项之间的隐藏 `>`，Tab 会在确认上下都是同深度、同缩进、同列表类别后清理连续 separator，再复用正文列表缩进算法；列表命令也不再被暂时陈旧的 active-block cache 提前拒绝。

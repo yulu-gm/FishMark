@@ -670,29 +670,27 @@ npm.cmd run perf:baseline
 
 #### RF-101: Extract workspace domain
 
+**Development status:** `DEV_DONE` on 2026-07-16; independent architecture acceptance and task acceptance are pending.
+
 **Outcome:** workspace/tab/session rules are pure and no longer owned by `src/main/workspace-service.ts`.
 
 **Files:**
 
-- Create: `packages/workspace-domain/src/document-revision.ts`
-- Create: `packages/workspace-domain/src/disk-version.ts`
-- Create: `packages/workspace-domain/src/text-buffer.ts`
-- Create: `packages/workspace-domain/src/document-session.ts`
-- Create: `packages/workspace-domain/src/workspace-state.ts`
-- Create: `packages/workspace-domain/src/index.ts`
-- Create: `packages/workspace-domain/src/workspace-state.test.ts`
-- Modify: TypeScript/Vite/Vitest path aliases.
-- Delete after cutover: `src/main/workspace-service.ts`
-- Move/replace: `src/main/workspace-service.test.ts`
+- Create: the production `packages/workspace-domain/` package, with public-entry-only imports, revision/session/buffer/state modules, declarations, tests, and an emitted-runtime verifier.
+- Create: `src/main/workspace-ipc-projection.ts` as the immutable domain projection to mutable shared IPC DTO boundary.
+- Create: focused main use cases for reload, detach, and file operations, each operating on the one injected `WorkspaceState`.
+- Modify: package/build configuration, architecture guards, main composition, workspace application, and close coordination.
+- Delete after cutover: `src/main/workspace-service.ts` and `src/main/workspace-service.test.ts`.
 
 **Steps:**
 
-- [ ] Define immutable projections and internal mutable session ownership separately.
-- [ ] Derive dirty state from revision equality.
-- [ ] Port create/open/activate/close/reorder/move/detach rules into pure domain operations.
-- [ ] Update main callers to consume the package public API.
-- [ ] Delete the old service and its exports in the same task.
-- [ ] Verify no renderer imports internal session types.
+- [x] Define immutable projections and internal mutable session ownership separately.
+- [x] Derive dirty state from revision equality and retain an exact saved-text checkpoint.
+- [x] Port create/open/activate/close/reorder/move/detach rules into pure domain operations.
+- [x] Update main callers to consume only the package public API and map projections at the main IPC boundary.
+- [x] Bind every asynchronous save/reload/detach/file operation to its captured owner/revision and fail closed on stale completion.
+- [x] Delete the old service, test, types, imports, and exports in the same task.
+- [x] Verify no renderer imports internal session types and the shared/preload/renderer wire remains unchanged.
 
 **Verification:**
 
@@ -703,7 +701,7 @@ npm.cmd run typecheck
 npm.cmd run build
 ```
 
-**Exit:** workspace ownership has one pure domain implementation and no compatibility wrapper.
+**Exit:** development evidence shows one pure workspace implementation, one live main-owned `WorkspaceState`, immutable domain projections, captured-revision save semantics, and no compatibility wrapper or obsolete service symbol. Independent acceptance must confirm this before the task becomes `COMPLETE`; `RF-102` is the next dependency-ready task after that acceptance.
 
 #### RF-102: Extract workspace application ports and use cases
 

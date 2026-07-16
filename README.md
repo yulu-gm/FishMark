@@ -58,6 +58,7 @@ npm run package:win         # 打包 Windows 安装产物
 - `src/renderer/`：React UI、编辑器视图、测试工作台界面
 - `packages/editor-core/`：编辑器状态与纯逻辑
 - `packages/markdown-engine/`：Markdown 解析与 block map
+- `packages/workspace-domain/`：runtime-neutral workspace/window/tab/document session canonical state；消费者只使用 package public entry
 - `packages/test-harness/`：场景注册表、CLI 与测试运行基础设施
 - `site/`：GitHub Pages 静态项目主页
 - `docs/`：设计、计划、验收与进展文档
@@ -68,6 +69,7 @@ npm run package:win         # 打包 Windows 安装产物
 - 优先 WYSIWYM，而不是完整 WYSIWYG
 - 严格分离 `main / preload / renderer`
 - 不向 renderer 暴露不受限制的 Node API
+- main 持有唯一 live workspace state；domain projection 只在 main IPC 边界映射为 shared DTO
 - 保存时避免自动重排整个文档
 
 更多背景可参考 `docs/design.md` 和 `MVP_BACKLOG.md`。
