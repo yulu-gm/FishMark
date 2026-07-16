@@ -364,13 +364,13 @@ app.whenReady().then(async () => {
     createWorkspaceWindowCloseApplication<BrowserWindow>({
       workspace: workspaceState,
       documentOperations: workspaceDocumentOperations,
-      requestWorkspaceWindowClose: (ownerWindow) => {
+      requestWorkspaceWindowClose: async (ownerWindow) => {
         if (ownerWindow.webContents.isDestroyed()) {
           return Promise.resolve(null);
         }
 
         const windowId = String(ownerWindow.id);
-        return workspaceWindowCloseRequestBroker.request({
+        const handle = workspaceWindowCloseRequestBroker.request({
           windowId,
           sendRequest: (requestId) => {
             ownerWindow.webContents.send(REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT, {
@@ -387,6 +387,11 @@ app.whenReady().then(async () => {
             };
           }
         });
+        try {
+          return await handle.result;
+        } finally {
+          await handle.drained;
+        }
       }
     });
   const workspaceWindowBindings = new Set<string>();
@@ -701,17 +706,29 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle(CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL, async (event) => {
     const windowId = ensureWorkspaceWindow(event.sender);
-    if (!workspaceWindowCloseRequestBroker.hasPending(windowId)) {
-      return false;
-    }
-    const confirmation = await workspaceCloseCoordinator.confirmWindowClose(
+    const identity = workspaceWindowCloseRequestBroker.getPendingIdentity(
       windowId
     );
-    const recorded = workspaceWindowCloseRequestBroker.setConfirmation(
-      windowId,
-      confirmation
-    );
-    return recorded && confirmation !== null;
+    if (identity === null) {
+      return false;
+    }
+    const scope = workspaceWindowCloseRequestBroker.beginConfirmation(identity);
+    if (scope === null) {
+      return false;
+    }
+    try {
+      const confirmation = await workspaceCloseCoordinator.confirmWindowClose({
+        windowId,
+        isActive: scope.isActive
+      });
+      return confirmation !== null &&
+        workspaceWindowCloseRequestBroker.setConfirmation({
+          ...identity,
+          confirmation
+        });
+    } finally {
+      scope.finish();
+    }
   });
   ipcMain.handle(
     COMPLETE_WORKSPACE_WINDOW_CLOSE_CHANNEL,

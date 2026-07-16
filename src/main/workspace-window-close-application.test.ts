@@ -73,7 +73,10 @@ describe("createWorkspaceWindowCloseApplication", () => {
       workspace,
       documentOperations,
       requestWorkspaceWindowClose: () =>
-        closeCoordinator.confirmWindowClose("window-1")
+        closeCoordinator.confirmWindowClose({
+          windowId: "window-1",
+          isActive: () => true
+        })
     });
     const write = vi.fn(async ({ content }: { readonly content: string }) => ({
       status: "success" as const,
@@ -315,7 +318,10 @@ describe("createWorkspaceWindowCloseApplication", () => {
       documentOperations,
       requestWorkspaceWindowClose: async () => {
         workspace.updateTabDraft(tabId, "flushed before confirm");
-        return closeCoordinator.confirmWindowClose("window-1");
+        return closeCoordinator.confirmWindowClose({
+          windowId: "window-1",
+          isActive: () => true
+        });
       }
     });
 

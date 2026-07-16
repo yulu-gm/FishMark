@@ -28,6 +28,11 @@ function createDocument(
   return { path, name, content, encoding: "utf-8" };
 }
 
+const windowCloseRequest = (
+  windowId: string,
+  isActive: () => boolean = () => true
+) => ({ windowId, isActive });
+
 describe("createWorkspaceCloseCoordinator", () => {
   it("closes only the requested tab after an unchanged discard decision", async () => {
     const workspace = createWorkspaceState();
@@ -104,7 +109,9 @@ describe("createWorkspaceCloseCoordinator", () => {
       showSaveMarkdownDialog: vi.fn()
     });
 
-    const confirmation = await coordinator.confirmWindowClose("window-1");
+    const confirmation = await coordinator.confirmWindowClose(
+      windowCloseRequest("window-1")
+    );
 
     expect(confirmation).toEqual({
       windowId: "window-1",
@@ -392,7 +399,110 @@ describe("createWorkspaceCloseCoordinator", () => {
       showSaveMarkdownDialog: vi.fn()
     });
 
-    await expect(coordinator.confirmWindowClose("window-1")).resolves.toBeNull();
+    await expect(
+      coordinator.confirmWindowClose(windowCloseRequest("window-1"))
+    ).resolves.toBeNull();
+  });
+
+  it("cancels an inactive window confirmation before prompting", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.openDocument(
+      "window-1",
+      createDocument("inactive.md", "saved")
+    ).activeTabId!;
+    workspace.updateTabDraft(tabId, "dirty");
+    const prompt = vi.fn(async () => "discard" as const);
+    const coordinator = createWorkspaceCloseCoordinator({
+      workspace,
+      promptToSaveWorkspaceTab: prompt,
+      saveMarkdownFileToPath: vi.fn(),
+      showSaveMarkdownDialog: vi.fn()
+    });
+
+    await expect(
+      coordinator.confirmWindowClose(
+        windowCloseRequest("window-1", () => false)
+      )
+    ).resolves.toBeNull();
+    expect(prompt).not.toHaveBeenCalled();
+  });
+
+  it("does not start a close save after confirmation becomes inactive during the prompt", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.openDocument(
+      "window-1",
+      createDocument("prompt-timeout.md", "saved")
+    ).activeTabId!;
+    workspace.updateTabDraft(tabId, "dirty");
+    let active = true;
+    let resolvePrompt!: (choice: "save") => void;
+    const saveMarkdownFileToPath = vi.fn();
+    const coordinator = createWorkspaceCloseCoordinator({
+      workspace,
+      promptToSaveWorkspaceTab: () =>
+        new Promise((resolve) => {
+          resolvePrompt = resolve;
+        }),
+      saveMarkdownFileToPath,
+      showSaveMarkdownDialog: vi.fn()
+    });
+
+    const confirmation = coordinator.confirmWindowClose(
+      windowCloseRequest("window-1", () => active)
+    );
+    await vi.waitFor(() => expect(resolvePrompt).toBeTypeOf("function"));
+    active = false;
+    resolvePrompt("save");
+
+    await expect(confirmation).resolves.toBeNull();
+    expect(saveMarkdownFileToPath).not.toHaveBeenCalled();
+    expect(workspace.getTabSession(tabId)).toMatchObject({ isDirty: true });
+  });
+
+  it("does not commit a close save that returns after confirmation becomes inactive", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.openDocument(
+      "window-1",
+      createDocument("write-timeout.md", "saved")
+    ).activeTabId!;
+    workspace.updateTabDraft(tabId, "dirty");
+    let active = true;
+    let resolveWrite!: (result: {
+      readonly status: "success";
+      readonly document: WorkspaceDocumentData;
+    }) => void;
+    const saveTabDocument = vi.spyOn(workspace, "saveTabDocument");
+    const coordinator = createWorkspaceCloseCoordinator({
+      workspace,
+      promptToSaveWorkspaceTab: vi.fn(async () => "save" as const),
+      saveMarkdownFileToPath: () =>
+        new Promise((resolve) => {
+          resolveWrite = resolve;
+        }),
+      showSaveMarkdownDialog: vi.fn()
+    });
+
+    const confirmation = coordinator.confirmWindowClose(
+      windowCloseRequest("window-1", () => active)
+    );
+    await vi.waitFor(() => expect(resolveWrite).toBeTypeOf("function"));
+    active = false;
+    resolveWrite({
+      status: "success",
+      document: createDocument("write-timeout.md", "dirty")
+    });
+
+    await expect(confirmation).resolves.toBeNull();
+    expect(saveTabDocument).not.toHaveBeenCalled();
+    expect(workspace.getTabSession(tabId)).toMatchObject({
+      content: "dirty",
+      revision: 1,
+      savedRevision: 0,
+      isDirty: true
+    });
   });
 
   it("fails closed when a dirty tab is added while the first prompt is pending", async () => {
@@ -414,7 +524,9 @@ describe("createWorkspaceCloseCoordinator", () => {
       showSaveMarkdownDialog: vi.fn()
     });
 
-    const confirmPromise = coordinator.confirmWindowClose("window-1");
+    const confirmPromise = coordinator.confirmWindowClose(
+      windowCloseRequest("window-1")
+    );
     await vi.waitFor(() => expect(resolvePrompt).toBeTypeOf("function"));
     const newTabId = workspace.createUntitledTab("window-1").activeTabId!;
     workspace.updateTabDraft(newTabId, "new dirty tab");
@@ -455,7 +567,9 @@ describe("createWorkspaceCloseCoordinator", () => {
       showSaveMarkdownDialog: vi.fn()
     });
 
-    const confirmPromise = coordinator.confirmWindowClose("window-1");
+    const confirmPromise = coordinator.confirmWindowClose(
+      windowCloseRequest("window-1")
+    );
     await vi.waitFor(() => expect(resolvePrompt).toBeTypeOf("function"));
     workspace.reorderTab(secondTabId, 0);
     resolvePrompt("discard");
@@ -523,7 +637,9 @@ describe("createWorkspaceCloseCoordinator", () => {
       showSaveMarkdownDialog: vi.fn()
     });
 
-    const confirmPromise = coordinator.confirmWindowClose("window-1");
+    const confirmPromise = coordinator.confirmWindowClose(
+      windowCloseRequest("window-1")
+    );
     await vi.waitFor(() => expect(resolvePrompt).toBeTypeOf("function"));
     workspace.closeTab({
       tabId: closingTabId,
@@ -563,7 +679,9 @@ describe("createWorkspaceCloseCoordinator", () => {
       showSaveMarkdownDialog: vi.fn()
     });
 
-    const confirmPromise = coordinator.confirmWindowClose("window-1");
+    const confirmPromise = coordinator.confirmWindowClose(
+      windowCloseRequest("window-1")
+    );
     await vi.waitFor(() => expect(resolvePrompt).toBeTypeOf("function"));
     workspace.moveTabToWindow({
       tabId: movingTabId,

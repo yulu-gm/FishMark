@@ -8,15 +8,34 @@ type WorkspaceWindowCloseRequestInput = {
   readonly bindAbort: (listener: () => void) => () => void;
 };
 
+export type WorkspaceWindowCloseRequestIdentity = Readonly<{
+  requestId: string;
+  windowId: string;
+}>;
+
+export type WorkspaceWindowCloseRequestHandle<TConfirmation> = Readonly<{
+  requestId: string;
+  result: Promise<TConfirmation | null>;
+  drained: Promise<void>;
+}>;
+
+export type WorkspaceWindowCloseConfirmationScope = Readonly<{
+  isActive(): boolean;
+  finish(): void;
+}>;
+
 type PendingWorkspaceWindowCloseRequest<TConfirmation> = {
   readonly requestId: string;
   readonly windowId: string;
   confirmation: TConfirmation | null | undefined;
   settled: boolean;
+  activeConfirmations: number;
+  drained: boolean;
   cancelTimeout: (() => void) | null;
   unbindAbort: (() => void) | null;
-  resolve: (confirmation: TConfirmation | null) => void;
-  reject: (error: unknown) => void;
+  resolveResult: (confirmation: TConfirmation | null) => void;
+  rejectResult: (error: unknown) => void;
+  resolveDrained: () => void;
 };
 
 export function createWorkspaceWindowCloseRequestBroker<TConfirmation>(
@@ -49,6 +68,19 @@ export function createWorkspaceWindowCloseRequestBroker<TConfirmation>(
     }
   }
 
+  function drainIfIdle(
+    pending: PendingWorkspaceWindowCloseRequest<TConfirmation>
+  ): void {
+    if (
+      pending.settled &&
+      pending.activeConfirmations === 0 &&
+      !pending.drained
+    ) {
+      pending.drained = true;
+      pending.resolveDrained();
+    }
+  }
+
   function settle(
     pending: PendingWorkspaceWindowCloseRequest<TConfirmation>,
     outcome:
@@ -72,10 +104,11 @@ export function createWorkspaceWindowCloseRequestBroker<TConfirmation>(
     cleanup(pending);
 
     if (outcome.kind === "reject") {
-      pending.reject(outcome.error);
+      pending.rejectResult(outcome.error);
     } else {
-      pending.resolve(outcome.confirmation);
+      pending.resolveResult(outcome.confirmation);
     }
+    drainIfIdle(pending);
     return true;
   }
 
@@ -95,31 +128,55 @@ export function createWorkspaceWindowCloseRequestBroker<TConfirmation>(
     pending[field] = dispose;
   }
 
+  function getMatchingPending(
+    identity: WorkspaceWindowCloseRequestIdentity
+  ): PendingWorkspaceWindowCloseRequest<TConfirmation> | null {
+    const pending = pendingByRequestId.get(identity.requestId);
+    return pending !== undefined &&
+      !pending.settled &&
+      pending.windowId === identity.windowId &&
+      pendingByWindowId.get(identity.windowId) === pending
+      ? pending
+      : null;
+  }
+
   return {
     request(
       input: WorkspaceWindowCloseRequestInput
-    ): Promise<TConfirmation | null> {
+    ): WorkspaceWindowCloseRequestHandle<TConfirmation> {
+      const requestId = `${input.windowId}:${nextRequestId++}`;
       if (pendingByWindowId.has(input.windowId)) {
-        return Promise.resolve(null);
+        return Object.freeze({
+          requestId,
+          result: Promise.resolve(null),
+          drained: Promise.resolve()
+        });
       }
 
-      const requestId = `${input.windowId}:${nextRequestId++}`;
-      let resolveRequest!: (confirmation: TConfirmation | null) => void;
-      let rejectRequest!: (error: unknown) => void;
-      const request = new Promise<TConfirmation | null>((resolve, reject) => {
-        resolveRequest = resolve;
-        rejectRequest = reject;
+      let resolveResult!: (confirmation: TConfirmation | null) => void;
+      let rejectResult!: (error: unknown) => void;
+      const result = new Promise<TConfirmation | null>((resolve, reject) => {
+        resolveResult = resolve;
+        rejectResult = reject;
+      });
+      let resolveDrained!: () => void;
+      const drained = new Promise<void>((resolve) => {
+        resolveDrained = resolve;
       });
       const pending: PendingWorkspaceWindowCloseRequest<TConfirmation> = {
         requestId,
         windowId: input.windowId,
         confirmation: undefined,
         settled: false,
+        activeConfirmations: 0,
+        drained: false,
         cancelTimeout: null,
         unbindAbort: null,
-        resolve: resolveRequest,
-        reject: rejectRequest
+        resolveResult,
+        rejectResult,
+        resolveDrained
       };
+      const handle = Object.freeze({ requestId, result, drained });
       pendingByRequestId.set(requestId, pending);
       pendingByWindowId.set(input.windowId, pending);
 
@@ -132,7 +189,7 @@ export function createWorkspaceWindowCloseRequestBroker<TConfirmation>(
           })
         );
         if (pending.settled) {
-          return request;
+          return handle;
         }
 
         installCleanup(
@@ -143,7 +200,7 @@ export function createWorkspaceWindowCloseRequestBroker<TConfirmation>(
           })
         );
         if (pending.settled) {
-          return request;
+          return handle;
         }
 
         input.sendRequest(requestId);
@@ -151,22 +208,56 @@ export function createWorkspaceWindowCloseRequestBroker<TConfirmation>(
         settle(pending, { kind: "reject", error });
       }
 
-      return request;
+      return handle;
     },
 
     hasPending(windowId: string): boolean {
       return pendingByWindowId.has(windowId);
     },
 
-    setConfirmation(
-      windowId: string,
-      confirmation: TConfirmation | null
-    ): boolean {
+    getPendingIdentity(
+      windowId: string
+    ): WorkspaceWindowCloseRequestIdentity | null {
       const pending = pendingByWindowId.get(windowId);
-      if (pending === undefined || pending.settled) {
+      return pending === undefined || pending.settled
+        ? null
+        : Object.freeze({ requestId: pending.requestId, windowId });
+    },
+
+    beginConfirmation(
+      identity: WorkspaceWindowCloseRequestIdentity
+    ): WorkspaceWindowCloseConfirmationScope | null {
+      const pending = getMatchingPending(identity);
+      if (pending === null) {
+        return null;
+      }
+      pending.activeConfirmations += 1;
+      let finished = false;
+      return Object.freeze({
+        isActive(): boolean {
+          return !finished && getMatchingPending(identity) === pending;
+        },
+        finish(): void {
+          if (finished) {
+            return;
+          }
+          finished = true;
+          pending.activeConfirmations -= 1;
+          drainIfIdle(pending);
+        }
+      });
+    },
+
+    setConfirmation(input: {
+      readonly requestId: string;
+      readonly windowId: string;
+      readonly confirmation: TConfirmation | null;
+    }): boolean {
+      const pending = getMatchingPending(input);
+      if (pending === null) {
         return false;
       }
-      pending.confirmation = confirmation;
+      pending.confirmation = input.confirmation;
       return true;
     },
 
@@ -175,12 +266,8 @@ export function createWorkspaceWindowCloseRequestBroker<TConfirmation>(
       windowId: string,
       shouldClose: boolean
     ): boolean {
-      const pending = pendingByRequestId.get(requestId);
-      if (
-        pending === undefined ||
-        pending.windowId !== windowId ||
-        pending.settled
-      ) {
+      const pending = getMatchingPending({ requestId, windowId });
+      if (pending === null) {
         return false;
       }
       return settle(pending, {

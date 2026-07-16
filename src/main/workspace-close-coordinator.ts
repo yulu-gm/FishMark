@@ -25,6 +25,11 @@ export type WorkspaceWindowCloseConfirmation = Readonly<{
   checkpoints: readonly CloseWorkspaceTabRequest[];
 }>;
 
+export type ConfirmWorkspaceWindowCloseRequest = Readonly<{
+  windowId: string;
+  isActive: () => boolean;
+}>;
+
 type WorkspaceCloseCoordinatorDependencies = {
   workspace: Pick<
     WorkspaceState,
@@ -59,14 +64,14 @@ export function createWorkspaceCloseCoordinator(
 ): {
   closeTab: (input: CloseWorkspaceTabRequest) => Promise<CloseWorkspaceTabResult>;
   confirmWindowClose: (
-    windowId: string
+    input: ConfirmWorkspaceWindowCloseRequest
   ) => Promise<WorkspaceWindowCloseConfirmation | null>;
 } {
   async function closeTab(
     input: CloseWorkspaceTabRequest
   ): Promise<CloseWorkspaceTabResult> {
     return dependencies.documentOperations.runExclusive(input.tabId, async () => {
-      const shouldProceed = await confirmTabCheckpoint(input);
+      const shouldProceed = await confirmTabCheckpoint(input, () => true);
       if (!shouldProceed || getMatchingCheckpoint(input) === null) {
         return cancelledResult(input.expectedWindowId);
       }
@@ -85,34 +90,52 @@ export function createWorkspaceCloseCoordinator(
   }
 
   async function confirmWindowClose(
-    windowId: string
+    input: ConfirmWorkspaceWindowCloseRequest
   ): Promise<WorkspaceWindowCloseConfirmation | null> {
+    if (!input.isActive()) {
+      return null;
+    }
     let initialTabIds: readonly string[];
     try {
-      initialTabIds = dependencies.workspace.getWindowTabIds(windowId);
+      initialTabIds = dependencies.workspace.getWindowTabIds(input.windowId);
     } catch {
       return null;
     }
     const checkpoints: CloseWorkspaceTabRequest[] = [];
     for (const tabId of initialTabIds) {
-      const tab = dependencies.workspace.getTabSession(tabId);
-      if (tab.windowId !== windowId) {
+      if (!input.isActive()) {
+        return null;
+      }
+      let tab: DocumentSessionProjection;
+      try {
+        tab = dependencies.workspace.getTabSession(tabId);
+      } catch {
+        return null;
+      }
+      if (tab.windowId !== input.windowId) {
         return null;
       }
       checkpoints.push({
         tabId,
-        expectedWindowId: windowId,
+        expectedWindowId: input.windowId,
         expectedRevision: tab.revision
       });
     }
 
     for (const checkpoint of checkpoints) {
-      if (!(await confirmTabCheckpoint(checkpoint))) {
+      if (
+        !input.isActive() ||
+        !(await confirmTabCheckpoint(checkpoint, input.isActive)) ||
+        !input.isActive()
+      ) {
         return null;
       }
     }
 
-    if (!hasSameOrderedTabs(windowId, initialTabIds)) {
+    if (
+      !input.isActive() ||
+      !hasSameOrderedTabs(input.windowId, initialTabIds)
+    ) {
       return null;
     }
 
@@ -124,8 +147,12 @@ export function createWorkspaceCloseCoordinator(
       return null;
     }
 
+    if (!input.isActive()) {
+      return null;
+    }
+
     return Object.freeze({
-      windowId,
+      windowId: input.windowId,
       checkpoints: Object.freeze(
         checkpoints.map((checkpoint) => Object.freeze({ ...checkpoint }))
       )
@@ -148,17 +175,24 @@ export function createWorkspaceCloseCoordinator(
   }
 
   async function confirmTabCheckpoint(
-    input: CloseWorkspaceTabRequest
+    input: CloseWorkspaceTabRequest,
+    isActive: () => boolean
   ): Promise<boolean> {
+    if (!isActive()) {
+      return false;
+    }
     const initial = getMatchingCheckpoint(input);
     if (initial === null) {
       return false;
     }
     if (!initial.isDirty) {
-      return true;
+      return isActive();
     }
 
     const choice = await dependencies.promptToSaveWorkspaceTab(initial);
+    if (!isActive()) {
+      return false;
+    }
     const checkpoint = getMatchingCheckpoint(input);
     if (checkpoint === null) {
       return false;
@@ -167,7 +201,11 @@ export function createWorkspaceCloseCoordinator(
       return false;
     }
     if (choice === "discard") {
-      return true;
+      return isActive();
+    }
+
+    if (!isActive()) {
+      return false;
     }
 
     const result =
@@ -182,6 +220,10 @@ export function createWorkspaceCloseCoordinator(
             path: checkpoint.path,
             content: checkpoint.content
           });
+
+    if (!isActive()) {
+      return false;
+    }
 
     if (result.status === "cancelled") {
       return false;
@@ -202,7 +244,7 @@ export function createWorkspaceCloseCoordinator(
     }
 
     const finalCheckpoint = getMatchingCheckpoint(input);
-    return finalCheckpoint !== null && !finalCheckpoint.isDirty;
+    return isActive() && finalCheckpoint !== null && !finalCheckpoint.isDirty;
   }
 
   function getMatchingCheckpoint(

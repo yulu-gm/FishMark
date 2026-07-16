@@ -136,7 +136,15 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain("ipcMain.handle(CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL");
     expect(mainSource).toContain("ipcMain.handle(\n    COMPLETE_WORKSPACE_WINDOW_CLOSE_CHANNEL");
     expect(mainSource).toContain("workspaceCloseCoordinator.confirmWindowClose(");
+    expect(mainSource).toContain("const handle = workspaceWindowCloseRequestBroker.request({");
+    expect(mainSource).toContain("return await handle.result");
+    expect(mainSource).toContain("await handle.drained");
+    expect(mainSource).toContain("workspaceWindowCloseRequestBroker.getPendingIdentity(");
+    expect(mainSource).toContain("workspaceWindowCloseRequestBroker.beginConfirmation(identity)");
+    expect(mainSource).toContain("isActive: scope.isActive");
     expect(mainSource).toContain("workspaceWindowCloseRequestBroker.setConfirmation(");
+    expect(mainSource).toContain("...identity,");
+    expect(mainSource).toContain("scope.finish()");
     expect(mainSource).toContain("workspaceWindowCloseRequestBroker.complete(");
     expect(mainSource).toContain("workspaceWindowCloseRequestBroker.abortWindow(windowId)");
     expect(mainSource).not.toContain("pendingWorkspaceWindowCloseResponses");
