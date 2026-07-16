@@ -8,7 +8,7 @@
 
 ### 2026-07-16 RF-101 Workspace Domain 开发交接
 
-Editor Foundation 重构中的 `RF-101` 已进入 `DEV_DONE`，等待独立架构验收与任务验收。生产级 `@fishmark/workspace-domain` 现在是 workspace/window/tab/document session 的唯一 canonical state；main 持有唯一 live `WorkspaceState`，通过显式 mapper 输出原有 shared IPC DTO。dirty 由 revision equality 派生，精确 saved-text checkpoint 支持恢复到已保存内容即 clean，所有异步 save/reload/close/file/detach 完成都绑定捕获的 owner/revision 并 fail closed。旧 `src/main/workspace-service.ts`、对应测试、compatibility facade 和双状态路径均不存在。
+Editor Foundation 重构中的 `RF-101` 已进入 `DEV_DONE`，等待独立架构验收与任务验收。生产级 `@fishmark/workspace-domain` 现在是 workspace/window/tab/document session 的唯一 canonical state；main 持有唯一 live `WorkspaceState`，通过显式 mapper 输出原有 shared IPC DTO。dirty 由 revision equality 派生，精确 saved-text checkpoint 支持恢复到已保存内容即 clean；Save、Save As、reload、close 等异步 IO/确认流程使用 captured owner/revision 和相应 checkpoint fail closed。Detach 不使用 revision mismatch guard：ready 前 tab 留在 source，ready 时重新验证 source owner 并原子移动当前最新 canonical session，因此等待期间的新 revision/content 会随 tab 迁移；timeout、load failure 或 target close 不会 move。旧 `src/main/workspace-service.ts`、对应测试、compatibility facade 和双状态路径均不存在。
 
 新鲜开发门禁：focused domain/main 10 文件 / 128 测试，renderer 回归 4 / 177，editor-foundation 7 / 259，全量 Vitest 144 / 1,845；lint 0 error / 8 个既有 warning，typecheck、renderer/Electron/CLI build、workspace-domain emitted runtime verifier 均通过；正式 editor behavior 为 121/121 cases、2,541/2,541 targets、0 unexpected/not-run。总重构进度仍为 2/38，M1 仍为 0/2，只有验收通过后才能标记 `RF-101 COMPLETE` 并开始 `RF-102`。
 

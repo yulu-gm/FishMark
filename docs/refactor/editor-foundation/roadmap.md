@@ -688,7 +688,8 @@ npm.cmd run perf:baseline
 - [x] Derive dirty state from revision equality and retain an exact saved-text checkpoint.
 - [x] Port create/open/activate/close/reorder/move/detach rules into pure domain operations.
 - [x] Update main callers to consume only the package public API and map projections at the main IPC boundary.
-- [x] Bind every asynchronous save/reload/detach/file operation to its captured owner/revision and fail closed on stale completion.
+- [x] Bind Save, Save As, reload, and close IO/confirmation workflows to captured owner/revision and the relevant checkpoint so stale completion fails closed.
+- [x] Make detach a ready-gated two-phase operation: keep the tab in the source before ready, revalidate source ownership at ready, then atomically move the latest canonical session; timeout, load failure, or target close does not move it.
 - [x] Delete the old service, test, types, imports, and exports in the same task.
 - [x] Verify no renderer imports internal session types and the shared/preload/renderer wire remains unchanged.
 
