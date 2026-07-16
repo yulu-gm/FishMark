@@ -101,6 +101,10 @@ export type WorkspaceWindowCloseRequest = {
   requestId: string;
 };
 
+export type ConfirmWorkspaceWindowCloseInput = {
+  requestId: string;
+};
+
 export type CompleteWorkspaceWindowCloseInput = {
   requestId: string;
   shouldClose: boolean;

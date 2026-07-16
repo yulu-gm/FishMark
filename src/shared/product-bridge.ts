@@ -5,6 +5,7 @@ import type {
 import type {
   ActivateWorkspaceTabInput,
   CloseWorkspaceTabInput,
+  ConfirmWorkspaceWindowCloseInput,
   CreateWorkspaceTabInput,
   DetachWorkspaceTabToNewWindowInput,
   MoveWorkspaceTabToWindowInput,
@@ -14,6 +15,7 @@ import type {
   ReorderWorkspaceTabInput,
   UpdateWorkspaceTabDraftInput,
   WorkspaceMoveTabResult,
+  WorkspaceWindowCloseRequest,
   WorkspaceWindowSnapshot
 } from "./workspace";
 import type {
@@ -76,8 +78,12 @@ export interface ProductBridge {
   importClipboardImage: (input: ImportClipboardImageInput) => Promise<ImportClipboardImageResult>;
   onMenuCommand: (listener: (command: AppMenuCommand) => void) => () => void;
   onOpenWorkspacePath: (listener: (payload: OpenWorkspacePathRequest) => void) => () => void;
-  confirmWorkspaceWindowClose: () => Promise<boolean>;
-  onWorkspaceWindowCloseRequest: (listener: () => Promise<boolean>) => () => void;
+  confirmWorkspaceWindowClose: (
+    input: ConfirmWorkspaceWindowCloseInput
+  ) => Promise<boolean>;
+  onWorkspaceWindowCloseRequest: (
+    listener: (input: WorkspaceWindowCloseRequest) => Promise<boolean>
+  ) => () => void;
   getPreferences: () => Promise<Preferences>;
   updatePreferences: (patch: PreferencesUpdate) => Promise<UpdatePreferencesResult>;
   selectTemporaryImageDirectory: () => Promise<string | null>;

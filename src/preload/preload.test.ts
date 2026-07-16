@@ -209,7 +209,7 @@ describe("preload bridge", () => {
     void api.detachWorkspaceTabToNewWindow({ tabId: "tab-1" });
     void api.onOpenWorkspacePath(() => {});
     void api.updateWorkspaceTabDraft({ tabId: "tab-1", content: "# Updated\n" });
-    void api.confirmWorkspaceWindowClose();
+    void api.confirmWorkspaceWindowClose({ requestId: "window-1:close-1" });
     void api.onWorkspaceWindowCloseRequest(async () => false);
 
     expect(invoke.mock.calls).toContainEqual([GET_WORKSPACE_SNAPSHOT_CHANNEL]);
@@ -237,7 +237,10 @@ describe("preload bridge", () => {
       UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL,
       { tabId: "tab-1", content: "# Updated\n" }
     ]);
-    expect(invoke.mock.calls).toContainEqual([CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL]);
+    expect(invoke.mock.calls).toContainEqual([
+      CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL,
+      { requestId: "window-1:close-1" }
+    ]);
     expect(on.mock.calls.some(([channel]) => channel === REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT)).toBe(true);
   });
 
@@ -246,8 +249,10 @@ describe("preload bridge", () => {
     const closeListener = vi.fn(async () => true);
 
     (api as unknown as {
-      onWorkspaceWindowCloseRequest: (listener: () => Promise<boolean>) => () => void;
-      confirmWorkspaceWindowClose: () => Promise<boolean>;
+      onWorkspaceWindowCloseRequest: (
+        listener: (input: { requestId: string }) => Promise<boolean>
+      ) => () => void;
+      confirmWorkspaceWindowClose: (input: { requestId: string }) => Promise<boolean>;
     }).onWorkspaceWindowCloseRequest(closeListener);
 
     const closeRequestCall = on.mock.calls.find(
@@ -262,17 +267,20 @@ describe("preload bridge", () => {
 
     await handleCloseRequest({}, { requestId: "close-1" });
 
-    expect(closeListener).toHaveBeenCalledTimes(1);
+    expect(closeListener).toHaveBeenCalledWith({ requestId: "close-1" });
     expect(invoke.mock.calls).toContainEqual([
       COMPLETE_WORKSPACE_WINDOW_CLOSE_CHANNEL,
       { requestId: "close-1", shouldClose: true }
     ]);
 
     void (api as unknown as {
-      confirmWorkspaceWindowClose: () => Promise<boolean>;
-    }).confirmWorkspaceWindowClose();
+      confirmWorkspaceWindowClose: (input: { requestId: string }) => Promise<boolean>;
+    }).confirmWorkspaceWindowClose({ requestId: "close-1" });
 
-    expect(invoke.mock.calls).toContainEqual([CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL]);
+    expect(invoke.mock.calls).toContainEqual([
+      CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL,
+      { requestId: "close-1" }
+    ]);
   });
 
   it("exposes an openThemesDirectory bridge for the native themes folder action", async () => {

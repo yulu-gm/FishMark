@@ -18,6 +18,7 @@ import {
 } from "@fishmark/editor-core";
 import type { AppNotification, AppUpdateState } from "../../shared/app-update";
 import type { AppMenuCommand } from "../../shared/menu-command";
+import type { WorkspaceWindowCloseRequest } from "../../shared/workspace";
 import {
   DEFAULT_PREFERENCES,
   type Preferences,
@@ -675,9 +676,11 @@ function EditorShell({
     setRecentFiles(nextRecentFiles);
   });
 
-  const handleWorkspaceWindowCloseRequest = useEffectEvent(async (): Promise<boolean> => {
-    return editorCommands.confirmWorkspaceWindowClose();
-  });
+  const handleWorkspaceWindowCloseRequest = useEffectEvent(
+    async (input: WorkspaceWindowCloseRequest): Promise<boolean> => {
+      return editorCommands.confirmWorkspaceWindowClose(input.requestId);
+    }
+  );
 
   const handleAppMenuCommand = useEffectEvent((command: AppMenuCommand): void => {
     if (command === "new-markdown-document") {
@@ -1019,7 +1022,9 @@ function EditorShell({
   }, [fishmark, handleOpenMarkdownFromPath]);
 
   useEffect(() => {
-    return fishmark.onWorkspaceWindowCloseRequest(() => handleWorkspaceWindowCloseRequest());
+    return fishmark.onWorkspaceWindowCloseRequest((input) =>
+      handleWorkspaceWindowCloseRequest(input)
+    );
   }, [fishmark]);
 
   useEffect(() => {

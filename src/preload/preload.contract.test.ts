@@ -330,6 +330,7 @@ describe("preload contract", () => {
       theme: { effectsMode: "off" }
     };
     const clearRecentFileInput = { path: "D:/fixtures/missing.md" };
+    const confirmWindowCloseInput = { requestId: "window-1:close-1" };
 
     void api.handleDroppedMarkdownFile(droppedMarkdownInput);
     void api.getWorkspaceSnapshot();
@@ -343,7 +344,7 @@ describe("preload contract", () => {
     void api.moveWorkspaceTabToWindow(moveWorkspaceTabToWindowInput);
     void api.detachWorkspaceTabToNewWindow(detachWorkspaceTabToNewWindowInput);
     void api.updateWorkspaceTabDraft(updateWorkspaceTabDraftInput);
-    void api.confirmWorkspaceWindowClose();
+    void api.confirmWorkspaceWindowClose(confirmWindowCloseInput);
     void api.saveMarkdownFile(saveInput);
     void api.saveMarkdownFileAs(saveAsInput);
     void api.exportHtmlFile(exportHtmlInput);
@@ -394,7 +395,10 @@ describe("preload contract", () => {
       UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL,
       updateWorkspaceTabDraftInput
     ]);
-    expect(invoke.mock.calls).toContainEqual([CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL]);
+    expect(invoke.mock.calls).toContainEqual([
+      CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL,
+      confirmWindowCloseInput
+    ]);
     expect(invoke.mock.calls).toContainEqual([SAVE_MARKDOWN_FILE_CHANNEL, saveInput]);
     expect(invoke.mock.calls).toContainEqual([SAVE_MARKDOWN_FILE_AS_CHANNEL, saveAsInput]);
     expect(invoke.mock.calls).toContainEqual([EXPORT_HTML_FILE_CHANNEL, exportHtmlInput]);
@@ -560,6 +564,9 @@ describe("preload contract", () => {
     expect(notificationListener).toHaveBeenCalledWith(notificationPayload);
     expect(externalFileListener).toHaveBeenCalledWith(externalFilePayload);
     expect(workspaceWindowCloseListener).toHaveBeenCalledTimes(1);
+    expect(workspaceWindowCloseListener).toHaveBeenCalledWith({
+      requestId: "window-1:close-1"
+    });
     expect(invoke.mock.calls).toContainEqual([
       COMPLETE_WORKSPACE_WINDOW_CLOSE_CHANNEL,
       { requestId: "window-1:close-1", shouldClose: true }

@@ -50,6 +50,7 @@ import { createWorkspaceDocumentOperationCoordinator } from "./workspace-documen
 import { createWorkspaceFileOperations } from "./workspace-file-operations";
 import { createWorkspaceReloadApplication } from "./workspace-reload-application";
 import { createWorkspaceWindowCloseApplication } from "./workspace-window-close-application";
+import { createWorkspaceWindowCloseConfirmationHandler } from "./workspace-window-close-confirmation-handler";
 import { createWorkspaceWindowCloseRequestBroker } from "./workspace-window-close-request-broker";
 import {
   toWorkspaceMoveTabResult,
@@ -141,6 +142,7 @@ import {
   type ActivateWorkspaceTabInput,
   type CloseWorkspaceTabInput,
   type CompleteWorkspaceWindowCloseInput,
+  type ConfirmWorkspaceWindowCloseInput,
   type CreateWorkspaceTabInput,
   type DetachWorkspaceTabToNewWindowInput,
   type MoveWorkspaceTabToWindowInput,
@@ -359,6 +361,11 @@ app.whenReady().then(async () => {
         );
         return () => clearTimeout(timeout);
       }
+    });
+  const handleWorkspaceWindowCloseConfirmation =
+    createWorkspaceWindowCloseConfirmationHandler({
+      broker: workspaceWindowCloseRequestBroker,
+      closeCoordinator: workspaceCloseCoordinator
     });
   const workspaceWindowCloseApplication =
     createWorkspaceWindowCloseApplication<BrowserWindow>({
@@ -704,32 +711,16 @@ app.whenReady().then(async () => {
       workspaceState.getWindowProjection(windowId)
     );
   });
-  ipcMain.handle(CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL, async (event) => {
-    const windowId = ensureWorkspaceWindow(event.sender);
-    const identity = workspaceWindowCloseRequestBroker.getPendingIdentity(
-      windowId
-    );
-    if (identity === null) {
-      return false;
-    }
-    const scope = workspaceWindowCloseRequestBroker.beginConfirmation(identity);
-    if (scope === null) {
-      return false;
-    }
-    try {
-      const confirmation = await workspaceCloseCoordinator.confirmWindowClose({
+  ipcMain.handle(
+    CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL,
+    async (event, input: ConfirmWorkspaceWindowCloseInput) => {
+      const windowId = ensureWorkspaceWindow(event.sender);
+      return handleWorkspaceWindowCloseConfirmation({
         windowId,
-        isActive: scope.isActive
+        requestId: input.requestId
       });
-      return confirmation !== null &&
-        workspaceWindowCloseRequestBroker.setConfirmation({
-          ...identity,
-          confirmation
-        });
-    } finally {
-      scope.finish();
     }
-  });
+  );
   ipcMain.handle(
     COMPLETE_WORKSPACE_WINDOW_CLOSE_CHANNEL,
     async (event, input: CompleteWorkspaceWindowCloseInput) => {

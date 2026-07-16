@@ -206,10 +206,12 @@ export function useEditorApplicationController(input: {
     showNotification
   ]);
 
-  const confirmWorkspaceWindowClose = useCallback(async (): Promise<boolean> => {
+  const confirmWorkspaceWindowClose = useCallback(async (
+    requestId: string
+  ): Promise<boolean> => {
     try {
       await flushActiveWorkspaceDraft();
-      return await confirmWorkspaceWindowCloseBridge();
+      return await confirmWorkspaceWindowCloseBridge({ requestId });
     } catch (error) {
       showNotification({
         kind: "error",

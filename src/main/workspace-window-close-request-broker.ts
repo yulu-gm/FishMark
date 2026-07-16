@@ -29,6 +29,7 @@ type PendingWorkspaceWindowCloseRequest<TConfirmation> = {
   readonly windowId: string;
   confirmation: TConfirmation | null | undefined;
   settled: boolean;
+  confirmationStarted: boolean;
   activeConfirmations: number;
   drained: boolean;
   cancelTimeout: (() => void) | null;
@@ -168,6 +169,7 @@ export function createWorkspaceWindowCloseRequestBroker<TConfirmation>(
         windowId: input.windowId,
         confirmation: undefined,
         settled: false,
+        confirmationStarted: false,
         activeConfirmations: 0,
         drained: false,
         cancelTimeout: null,
@@ -196,7 +198,9 @@ export function createWorkspaceWindowCloseRequestBroker<TConfirmation>(
           pending,
           "cancelTimeout",
           dependencies.scheduleTimeout(() => {
-            settle(pending, { kind: "resolve", confirmation: null });
+            if (!pending.confirmationStarted) {
+              settle(pending, { kind: "resolve", confirmation: null });
+            }
           })
         );
         if (pending.settled) {
@@ -215,21 +219,20 @@ export function createWorkspaceWindowCloseRequestBroker<TConfirmation>(
       return pendingByWindowId.has(windowId);
     },
 
-    getPendingIdentity(
-      windowId: string
-    ): WorkspaceWindowCloseRequestIdentity | null {
-      const pending = pendingByWindowId.get(windowId);
-      return pending === undefined || pending.settled
-        ? null
-        : Object.freeze({ requestId: pending.requestId, windowId });
-    },
-
     beginConfirmation(
       identity: WorkspaceWindowCloseRequestIdentity
     ): WorkspaceWindowCloseConfirmationScope | null {
       const pending = getMatchingPending(identity);
-      if (pending === null) {
+      if (pending === null || pending.confirmationStarted) {
         return null;
+      }
+      pending.confirmationStarted = true;
+      const cancelTimeout = pending.cancelTimeout;
+      pending.cancelTimeout = null;
+      try {
+        cancelTimeout?.();
+      } catch {
+        // Entering confirmation still disarms the transport timeout logically.
       }
       pending.activeConfirmations += 1;
       let finished = false;
@@ -254,7 +257,11 @@ export function createWorkspaceWindowCloseRequestBroker<TConfirmation>(
       readonly confirmation: TConfirmation | null;
     }): boolean {
       const pending = getMatchingPending(input);
-      if (pending === null) {
+      if (
+        pending === null ||
+        !pending.confirmationStarted ||
+        pending.activeConfirmations !== 1
+      ) {
         return false;
       }
       pending.confirmation = input.confirmation;

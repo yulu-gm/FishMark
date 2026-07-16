@@ -22,10 +22,6 @@ describe("createWorkspaceWindowCloseRequestBroker", () => {
       bindAbort: () => unbindAbort
     });
 
-    expect(broker.getPendingIdentity("window-1")).toEqual({
-      requestId: handle.requestId,
-      windowId: "window-1"
-    });
     expect(sendRequest).toHaveBeenCalledWith(handle.requestId);
     timeout();
 
@@ -56,6 +52,18 @@ describe("createWorkspaceWindowCloseRequestBroker", () => {
       bindAbort: () => unbindAbort
     });
     const confirmation = Object.freeze({ token: "confirmed" });
+    expect(
+      broker.setConfirmation({
+        requestId: handle.requestId,
+        windowId: "window-1",
+        confirmation
+      })
+    ).toBe(false);
+    const scope = broker.beginConfirmation({
+      requestId: handle.requestId,
+      windowId: "window-1"
+    });
+    expect(scope).not.toBeNull();
 
     expect(
       broker.setConfirmation({
@@ -64,6 +72,7 @@ describe("createWorkspaceWindowCloseRequestBroker", () => {
         confirmation
       })
     ).toBe(true);
+    scope?.finish();
     expect(broker.complete(handle.requestId, "another-window", true)).toBe(false);
     expect(broker.complete(handle.requestId, "window-1", true)).toBe(true);
 
@@ -96,6 +105,11 @@ describe("createWorkspaceWindowCloseRequestBroker", () => {
       bindAbort: () => vi.fn()
     });
     const secondConfirmation = { token: "second" };
+    const secondScope = broker.beginConfirmation({
+      requestId: second.requestId,
+      windowId: "window-1"
+    });
+    expect(secondScope).not.toBeNull();
 
     expect(
       broker.setConfirmation({
@@ -112,20 +126,58 @@ describe("createWorkspaceWindowCloseRequestBroker", () => {
         confirmation: secondConfirmation
       })
     ).toBe(true);
+    secondScope?.finish();
     expect(broker.complete(second.requestId, "window-1", true)).toBe(true);
     await expect(second.result).resolves.toBe(secondConfirmation);
   });
 
-  it.each(["timeout", "abort"] as const)(
-    "keeps an active confirmation drain pending after %s",
-    async (mode) => {
-      let timeout!: () => void;
-      let abort!: () => void;
+  it("disarms the transport timeout at the first exact confirmation and rejects duplicates", async () => {
+    vi.useFakeTimers();
+    try {
       const broker = createWorkspaceWindowCloseRequestBroker<Confirmation>({
         scheduleTimeout: (listener) => {
-          timeout = listener;
-          return vi.fn();
+          const timeout = setTimeout(listener, 15_000);
+          return () => clearTimeout(timeout);
         }
+      });
+      const handle = broker.request({
+        windowId: "window-1",
+        sendRequest: vi.fn(),
+        bindAbort: () => vi.fn()
+      });
+      const identity = {
+        requestId: handle.requestId,
+        windowId: "window-1"
+      };
+      const scope = broker.beginConfirmation(identity);
+      expect(scope).not.toBeNull();
+      expect(broker.beginConfirmation(identity)).toBeNull();
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(broker.hasPending("window-1")).toBe(true);
+      expect(scope?.isActive()).toBe(true);
+      expect(broker.beginConfirmation(identity)).toBeNull();
+
+      const confirmation = { token: "after-long-prompt" };
+      expect(
+        broker.setConfirmation({ ...identity, confirmation })
+      ).toBe(true);
+      scope?.finish();
+      expect(broker.beginConfirmation(identity)).toBeNull();
+      expect(broker.complete(handle.requestId, "window-1", true)).toBe(true);
+      await expect(handle.result).resolves.toBe(confirmation);
+      await expect(handle.drained).resolves.toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(["renderer-abort", "window-close"] as const)(
+    "keeps an active confirmation drain pending after %s",
+    async (mode) => {
+      let abort!: () => void;
+      const broker = createWorkspaceWindowCloseRequestBroker<Confirmation>({
+        scheduleTimeout: () => vi.fn()
       });
       const handle = broker.request({
         windowId: "window-1",
@@ -145,10 +197,10 @@ describe("createWorkspaceWindowCloseRequestBroker", () => {
         drained = true;
       });
 
-      if (mode === "timeout") {
-        timeout();
-      } else {
+      if (mode === "renderer-abort") {
         abort();
+      } else {
+        broker.abortWindow("window-1");
       }
 
       await expect(handle.result).resolves.toBeNull();
@@ -178,12 +230,17 @@ describe("createWorkspaceWindowCloseRequestBroker", () => {
       sendRequest: vi.fn(),
       bindAbort: () => vi.fn()
     });
+    const scope = broker.beginConfirmation({
+      requestId: handle.requestId,
+      windowId: "window-1"
+    });
 
     broker.setConfirmation({
       requestId: handle.requestId,
       windowId: "window-1",
       confirmation: { token: "ignored" }
     });
+    scope?.finish();
     expect(broker.complete(handle.requestId, "window-1", false)).toBe(true);
 
     await expect(handle.result).resolves.toBeNull();

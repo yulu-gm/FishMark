@@ -30,6 +30,7 @@ import {
 import type {
   ActivateWorkspaceTabInput,
   CloseWorkspaceTabInput,
+  ConfirmWorkspaceWindowCloseInput,
   CompleteWorkspaceWindowCloseInput,
   CreateWorkspaceTabInput,
   DetachWorkspaceTabToNewWindowInput,
@@ -232,9 +233,13 @@ const productApi: ProductBridge = {
       ipcRenderer.off(OPEN_WORKSPACE_PATH_EVENT, handleOpenWorkspacePath);
     };
   },
-  confirmWorkspaceWindowClose: (): Promise<boolean> =>
-    ipcRenderer.invoke(CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL),
-  onWorkspaceWindowCloseRequest: (listener: () => Promise<boolean>) => {
+  confirmWorkspaceWindowClose: (
+    input: ConfirmWorkspaceWindowCloseInput
+  ): Promise<boolean> =>
+    ipcRenderer.invoke(CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL, input),
+  onWorkspaceWindowCloseRequest: (
+    listener: (input: WorkspaceWindowCloseRequest) => Promise<boolean>
+  ) => {
     const handleWorkspaceWindowCloseRequest = async (
       _event: unknown,
       payload: WorkspaceWindowCloseRequest
@@ -242,7 +247,7 @@ const productApi: ProductBridge = {
       let shouldClose = false;
 
       try {
-        shouldClose = await listener();
+        shouldClose = await listener(payload);
       } finally {
         await completeWorkspaceWindowClose({
           requestId: payload.requestId,
