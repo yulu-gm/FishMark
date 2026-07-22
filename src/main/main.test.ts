@@ -64,10 +64,6 @@ describe("main process window wiring", () => {
 
   it("wires the workspace domain state, application boundary, and IPC handlers", () => {
     const mainSource = readMainSource();
-    const ensureWorkspaceSource = mainSource.slice(
-      mainSource.indexOf("function ensureWorkspaceWindow"),
-      mainSource.indexOf("if (!workspaceWindowBindings.has(windowId))")
-    );
     const legacyModule = ["workspace", "service"].join("-");
     const legacyFactory = ["create", "Workspace", "Service"].join("");
 
@@ -81,6 +77,7 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain('import { createWorkspaceWindowCloseApplication } from "./workspace-window-close-application"');
     expect(mainSource).toContain('import { createWorkspaceWindowCloseConfirmationHandler } from "./workspace-window-close-confirmation-handler"');
     expect(mainSource).toContain('import { createWorkspaceWindowCloseRequestBroker } from "./workspace-window-close-request-broker"');
+    expect(mainSource).toContain('import { createWorkspaceWindowRegistrationApplication } from "./workspace-window-registration-application"');
     expect(mainSource).toContain('import {\n  toWorkspaceMoveTabResult,\n  toWorkspaceWindowSnapshot\n} from "./workspace-ipc-projection"');
     expect(mainSource).not.toContain(legacyModule);
     expect(mainSource).not.toContain(legacyFactory);
@@ -96,6 +93,13 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain("const workspaceApplication = createWorkspaceApplication({");
     expect(mainSource).toContain("const workspaceCloseCoordinator = createWorkspaceCloseCoordinator({");
     expect(mainSource).toContain("const workspaceDetachApplication = createWorkspaceDetachApplication({");
+    expect(mainSource).toContain("createWorkspaceWindowRegistrationApplication<Electron.WebContents, BrowserWindow>({");
+    expect(mainSource).toContain("resolveOwnerWindow: (sender) => BrowserWindow.fromWebContents(sender)");
+    expect(mainSource).toContain("isOwnerWindowForSender: (ownerWindow, sender) =>");
+    expect(mainSource).toContain("markWindowReady: workspaceDetachApplication.markWindowReady");
+    expect(mainSource).toContain("registerWindow: (windowId) => workspaceState.registerWindow(windowId)");
+    expect(mainSource).toContain("bindWindow: bindWorkspaceWindow");
+    expect(mainSource).toContain("focusWindow: (windowId) => workspaceState.focusWindow(windowId)");
     expect(mainSource).toContain("const workspaceFileOperations = createWorkspaceFileOperations({");
     expect(mainSource).toContain("const workspaceReloadApplication = createWorkspaceReloadApplication({");
     expect(mainSource).toContain("createWorkspaceWindowCloseApplication<BrowserWindow>({");
@@ -164,7 +168,7 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain("expectedWindowId: windowId");
     expect(mainSource).toContain("expectedRevision: checkpoint.revision");
     expect(mainSource).toContain(
-      "const windowId = await ensureWorkspaceWindow(event.sender)"
+      "const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender)"
     );
     expect(mainSource).toContain("workspaceApplication.updateDraft({");
     expect(mainSource).toContain("expectedWindowId: windowId");
@@ -184,16 +188,9 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain(
       "const projection = await workspaceDetachApplication.detachTab({"
     );
-    expect(ensureWorkspaceSource.indexOf("workspaceDetachApplication.markWindowReady(windowId)")).toBeLessThan(
-      ensureWorkspaceSource.indexOf("workspaceState.registerWindow(windowId)")
-    );
-    expect(
-      ensureWorkspaceSource.match(/requireLiveWorkspaceOwnerWindow\(sender\)/g)
-    ).toHaveLength(2);
-    expect(ensureWorkspaceSource).not.toContain("sender.id");
-    expect(ensureWorkspaceSource.lastIndexOf("requireLiveWorkspaceOwnerWindow(sender)")).toBeLessThan(
-      ensureWorkspaceSource.indexOf("workspaceState.registerWindow(windowId)")
-    );
+    expect(mainSource).not.toContain("function requireLiveWorkspaceOwnerWindow");
+    expect(mainSource).not.toContain("function ensureWorkspaceWindow");
+    expect(mainSource).not.toContain("sender.id");
     expect(mainSource).not.toContain("workspaceState.registerWindow(detachedWindowId)");
     expect(mainSource).toContain("workspaceState.getWindowProjection(windowId)");
     expect(mainSource).not.toContain("workspaceState.replaceTabDocument(input.tabId");

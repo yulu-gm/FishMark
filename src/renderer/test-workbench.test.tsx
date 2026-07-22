@@ -108,7 +108,7 @@ describe("Test workbench shell", () => {
     scenarioRunEventListener = null;
     scenarioRunTerminalListener = null;
 
-    window.fishmark = {
+    const fishmarkFixture = {
       platform: "win32",
       runtimeMode: "test-workbench",
       startupOpenPath: null,
@@ -130,7 +130,10 @@ describe("Test workbench shell", () => {
       }),
       detachWorkspaceTabToNewWindow: vi.fn().mockResolvedValue(EMPTY_WORKSPACE_SNAPSHOT),
       updateWorkspaceTabDraft: vi.fn().mockResolvedValue(EMPTY_WORKSPACE_SNAPSHOT),
-      reloadWorkspaceTabFromPath: vi.fn().mockResolvedValue(EMPTY_WORKSPACE_SNAPSHOT),
+      reloadWorkspaceTabFromPath: vi.fn().mockResolvedValue({
+        kind: "success",
+        snapshot: EMPTY_WORKSPACE_SNAPSHOT
+      }),
       handleDroppedMarkdownFile: vi.fn().mockResolvedValue({
         disposition: "open-in-place"
       }),
@@ -162,7 +165,8 @@ describe("Test workbench shell", () => {
       onAppUpdateState: vi.fn(() => () => {}),
       onAppNotification: vi.fn(() => () => {}),
       onExternalMarkdownFileChanged: vi.fn(() => () => {})
-    } as Window["fishmark"];
+    } satisfies Window["fishmark"];
+    window.fishmark = fishmarkFixture;
 
     window.fishmarkTest = {
       openEditorTestWindow,

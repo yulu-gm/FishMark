@@ -53,6 +53,7 @@ import { createWorkspaceTabTransferApplication } from "./workspace-tab-transfer-
 import { createWorkspaceWindowCloseApplication } from "./workspace-window-close-application";
 import { createWorkspaceWindowCloseConfirmationHandler } from "./workspace-window-close-confirmation-handler";
 import { createWorkspaceWindowCloseRequestBroker } from "./workspace-window-close-request-broker";
+import { createWorkspaceWindowRegistrationApplication } from "./workspace-window-registration-application";
 import {
   toWorkspaceMoveTabResult,
   toWorkspaceWindowSnapshot
@@ -497,38 +498,10 @@ app.whenReady().then(async () => {
     windowManager.openEditorWindow();
   };
 
-  function requireLiveWorkspaceOwnerWindow(
-    sender: Electron.WebContents
-  ): BrowserWindow {
-    if (sender.isDestroyed()) {
-      throw new Error("Workspace renderer is no longer available.");
-    }
-
-    const ownerWindow = BrowserWindow.fromWebContents(sender);
-    if (
-      ownerWindow === null ||
-      ownerWindow.isDestroyed() ||
-      ownerWindow.webContents !== sender ||
-      ownerWindow.webContents.isDestroyed()
-    ) {
-      throw new Error("Workspace renderer does not belong to a live window.");
-    }
-
-    return ownerWindow;
-  }
-
-  async function ensureWorkspaceWindow(
-    sender: Electron.WebContents
-  ): Promise<string> {
-    const initialOwnerWindow = requireLiveWorkspaceOwnerWindow(sender);
-    const windowId = String(initialOwnerWindow.id);
-    await workspaceDetachApplication.markWindowReady(windowId);
-    const ownerWindow = requireLiveWorkspaceOwnerWindow(sender);
-    if (String(ownerWindow.id) !== windowId) {
-      throw new Error("Workspace renderer owner changed while becoming ready.");
-    }
-    workspaceState.registerWindow(windowId);
-
+  function bindWorkspaceWindow(
+    ownerWindow: BrowserWindow,
+    windowId: string
+  ): void {
     if (!workspaceWindowBindings.has(windowId)) {
       ownerWindow.on("focus", () => {
         workspaceState.focusWindow(windowId);
@@ -599,9 +572,6 @@ app.whenReady().then(async () => {
       });
       workspaceWindowBindings.add(windowId);
     }
-
-    workspaceState.focusWindow(windowId);
-    return windowId;
   }
 
   function getWorkspaceWindowById(windowId: string): BrowserWindow | null {
@@ -735,9 +705,23 @@ app.whenReady().then(async () => {
       }
     }
   });
+  const workspaceWindowRegistrationApplication =
+    createWorkspaceWindowRegistrationApplication<Electron.WebContents, BrowserWindow>({
+      isSenderDestroyed: (sender) => sender.isDestroyed(),
+      resolveOwnerWindow: (sender) => BrowserWindow.fromWebContents(sender),
+      isOwnerWindowDestroyed: (ownerWindow) =>
+        ownerWindow.isDestroyed() || ownerWindow.webContents.isDestroyed(),
+      isOwnerWindowForSender: (ownerWindow, sender) =>
+        ownerWindow.webContents === sender,
+      getWindowId: (ownerWindow) => String(ownerWindow.id),
+      markWindowReady: workspaceDetachApplication.markWindowReady,
+      registerWindow: (windowId) => workspaceState.registerWindow(windowId),
+      bindWindow: bindWorkspaceWindow,
+      focusWindow: (windowId) => workspaceState.focusWindow(windowId)
+    });
 
   ipcMain.handle(GET_WORKSPACE_SNAPSHOT_CHANNEL, async (event) => {
-    const windowId = await ensureWorkspaceWindow(event.sender);
+    const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
     return syncWorkspaceWatch(
       event.sender,
       workspaceState.getWindowProjection(windowId)
@@ -746,7 +730,7 @@ app.whenReady().then(async () => {
   ipcMain.handle(
     CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL,
     async (event, input: ConfirmWorkspaceWindowCloseInput) => {
-      const windowId = await ensureWorkspaceWindow(event.sender);
+      const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
       return handleWorkspaceWindowCloseConfirmation({
         windowId,
         requestId: input.requestId
@@ -756,7 +740,7 @@ app.whenReady().then(async () => {
   ipcMain.handle(
     COMPLETE_WORKSPACE_WINDOW_CLOSE_CHANNEL,
     async (event, input: CompleteWorkspaceWindowCloseInput) => {
-      const windowId = await ensureWorkspaceWindow(event.sender);
+      const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
 
       workspaceWindowCloseRequestBroker.complete(
         input.requestId,
@@ -766,7 +750,7 @@ app.whenReady().then(async () => {
     }
   );
   ipcMain.handle(CREATE_WORKSPACE_TAB_CHANNEL, async (event, input: CreateWorkspaceTabInput) => {
-    const windowId = await ensureWorkspaceWindow(event.sender);
+    const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
 
     if (input.kind !== "untitled") {
       throw new Error(`Unsupported workspace tab kind: ${String((input as { kind?: unknown }).kind)}`);
@@ -775,7 +759,7 @@ app.whenReady().then(async () => {
     return syncWorkspaceWatch(event.sender, workspaceState.createUntitledTab(windowId));
   });
   ipcMain.handle(OPEN_WORKSPACE_FILE_CHANNEL, async (event) => {
-    const windowId = await ensureWorkspaceWindow(event.sender);
+    const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
     const result = await showOpenMarkdownDialog();
 
     if (result.status !== "success") {
@@ -803,7 +787,7 @@ app.whenReady().then(async () => {
     } satisfies OpenWorkspaceFileResult;
   });
   ipcMain.handle(OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL, async (event, input: { targetPath: string }) => {
-    const windowId = await ensureWorkspaceWindow(event.sender);
+    const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
     const result = await openMarkdownFileFromPath(input.targetPath);
 
     if (result.status !== "success") {
@@ -839,7 +823,7 @@ app.whenReady().then(async () => {
   ipcMain.handle(
     RELOAD_WORKSPACE_TAB_FROM_PATH_CHANNEL,
     async (event, input: ReloadWorkspaceTabFromPathInput) => {
-      const windowId = await ensureWorkspaceWindow(event.sender);
+      const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
       const result = await workspaceReloadApplication.reloadTab({
         tabId: input.tabId,
         expectedWindowId: windowId,
@@ -856,14 +840,14 @@ app.whenReady().then(async () => {
     }
   );
   ipcMain.handle(ACTIVATE_WORKSPACE_TAB_CHANNEL, async (event, input: ActivateWorkspaceTabInput) => {
-    const windowId = await ensureWorkspaceWindow(event.sender);
+    const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
     return syncWorkspaceWatch(
       event.sender,
       workspaceState.activateTab(windowId, input.tabId)
     );
   });
   ipcMain.handle(CLOSE_WORKSPACE_TAB_CHANNEL, async (event, input: CloseWorkspaceTabInput) => {
-    const windowId = await ensureWorkspaceWindow(event.sender);
+    const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
     const checkpoint = workspaceState.getTabSession(input.tabId);
     if (checkpoint.windowId !== windowId) {
       throw new Error(
@@ -878,7 +862,7 @@ app.whenReady().then(async () => {
     return syncWorkspaceWatch(event.sender, result.snapshot);
   });
   ipcMain.handle(REORDER_WORKSPACE_TAB_CHANNEL, async (event, input: ReorderWorkspaceTabInput) => {
-    await ensureWorkspaceWindow(event.sender);
+    await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
     return syncWorkspaceWatch(
       event.sender,
       workspaceState.reorderTab(input.tabId, input.toIndex)
@@ -887,7 +871,7 @@ app.whenReady().then(async () => {
   ipcMain.handle(
     MOVE_WORKSPACE_TAB_TO_WINDOW_CHANNEL,
     async (event, input: MoveWorkspaceTabToWindowInput) => {
-      const windowId = await ensureWorkspaceWindow(event.sender);
+      const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
       return toWorkspaceMoveTabResult(
         await workspaceTabTransferApplication.move({
           tabId: input.tabId,
@@ -901,7 +885,7 @@ app.whenReady().then(async () => {
   ipcMain.handle(
     DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL,
     async (event, input: DetachWorkspaceTabToNewWindowInput) => {
-      const windowId = await ensureWorkspaceWindow(event.sender);
+      const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
       const projection = await workspaceDetachApplication.detachTab({
         tabId: input.tabId,
         expectedWindowId: windowId
@@ -915,7 +899,7 @@ app.whenReady().then(async () => {
   ipcMain.handle(
     UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL,
     async (event, input: UpdateWorkspaceTabDraftInput) => {
-      const windowId = await ensureWorkspaceWindow(event.sender);
+      const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
       const projection = requireAppliedWorkspaceMutation(
         workspaceApplication.updateDraft({
           tabId: input.tabId,
@@ -943,7 +927,7 @@ app.whenReady().then(async () => {
     }
   );
   ipcMain.handle(SAVE_MARKDOWN_FILE_CHANNEL, async (event, input: SaveMarkdownFileInput) => {
-    const windowId = await ensureWorkspaceWindow(event.sender);
+    const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
     return workspaceFileOperations.save({
       sender: event.sender,
       expectedWindowId: windowId,
@@ -952,7 +936,7 @@ app.whenReady().then(async () => {
     });
   });
   ipcMain.handle(SAVE_MARKDOWN_FILE_AS_CHANNEL, async (event, input: SaveMarkdownFileAsInput) => {
-    const windowId = await ensureWorkspaceWindow(event.sender);
+    const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
     return workspaceFileOperations.saveAs({
       sender: event.sender,
       expectedWindowId: windowId,
