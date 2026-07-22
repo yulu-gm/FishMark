@@ -1028,8 +1028,23 @@ function EditorShell({
   }, [fishmark]);
 
   useEffect(() => {
-    void fishmark.syncWatchedMarkdownFile();
-  }, [activeDocument?.path, activeDocument?.tabId, fishmark]);
+    let isCancelled = false;
+
+    void fishmark.syncWatchedMarkdownFile().catch((error) => {
+      if (isCancelled) {
+        return;
+      }
+
+      showNotification({
+        kind: "error",
+        message: error instanceof Error ? error.message : String(error)
+      });
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeDocument?.path, activeDocument?.tabId, fishmark, showNotification]);
 
   useEffect(() => {
     let isCancelled = false;

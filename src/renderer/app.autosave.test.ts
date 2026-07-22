@@ -2614,6 +2614,40 @@ describe("App autosave", () => {
     expect(syncWatchedMarkdownFile).toHaveBeenCalledWith();
   });
 
+  it("reports a watched-file synchronization failure through the application notification", async () => {
+    syncWatchedMarkdownFile.mockRejectedValueOnce(new Error("watcher sync failed"));
+
+    await renderAndOpenDocument();
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-fishmark-region="app-notification-banner"]')?.textContent).toContain(
+      "watcher sync failed"
+    );
+  });
+
+  it("ignores a watched-file synchronization failure after the app unmounts", async () => {
+    const deferredSync = createDeferred<void>();
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    syncWatchedMarkdownFile.mockImplementationOnce(() => deferredSync.promise);
+
+    await renderAndOpenDocument();
+
+    await act(async () => {
+      root.unmount();
+    });
+
+    await act(async () => {
+      deferredSync.reject(new Error("watcher sync failed"));
+      await Promise.resolve();
+    });
+
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
+  });
+
   it("reloads the disk version when the user accepts the external-change prompt", async () => {
     queueWorkspaceOpenDocuments({
       path: "C:/notes/today.md",
