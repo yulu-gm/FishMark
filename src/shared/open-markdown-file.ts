@@ -6,7 +6,7 @@ export type OpenMarkdownFileErrorCode =
   | "non-utf8";
 
 export type OpenMarkdownDocument = {
-  path: string | null;
+  path: string;
   name: string;
   content: string;
   encoding: "utf-8";

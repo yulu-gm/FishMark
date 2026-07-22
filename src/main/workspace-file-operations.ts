@@ -6,6 +6,7 @@ import type {
   ShowSaveMarkdownDialogInput
 } from "./save-markdown-file";
 import type { WorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
+import { requirePersistedMarkdownDocument } from "./persisted-markdown-document";
 import { requireAppliedWorkspaceMutation } from "./workspace-mutation-result";
 
 type WorkspaceFileOperationsDependencies<TSender> = {
@@ -23,7 +24,7 @@ type WorkspaceFileOperationsDependencies<TSender> = {
   showSaveMarkdownDialog: (
     input: ShowSaveMarkdownDialogInput
   ) => Promise<SaveMarkdownFileResult>;
-  beginInternalWrite: (sender: TSender, targetPath: string) => void;
+  beginInternalWrite: (sender: TSender, targetPath: string) => Promise<void>;
   completeInternalWrite: (
     sender: TSender,
     targetPath: string
@@ -96,7 +97,7 @@ export function createWorkspaceFileOperations<TSender>(
               );
             }
             targetPath = checkpoint.path;
-            dependencies.beginInternalWrite(input.sender, targetPath);
+            await dependencies.beginInternalWrite(input.sender, targetPath);
             writeStarted = true;
 
             const result = await dependencies.saveMarkdownFileToPath({
@@ -105,15 +106,36 @@ export function createWorkspaceFileOperations<TSender>(
               content: checkpoint.content
             });
             if (result.status === "success") {
+              const savedDocument = requirePersistedMarkdownDocument(
+                result.document,
+                "Ordinary save adapter"
+              );
+              if (savedDocument.path !== checkpoint.path) {
+                throw new Error(
+                  "Ordinary save adapter path does not match the canonical save checkpoint."
+                );
+              }
+              if (savedDocument.content !== checkpoint.content) {
+                throw new Error(
+                  "Ordinary save adapter content does not match the captured save content."
+                );
+              }
+              const canonicalDocument = {
+                path: checkpoint.path,
+                name: checkpoint.name,
+                content: checkpoint.content,
+                encoding: checkpoint.encoding
+              };
               const commit = dependencies.workspace.saveTabDocument({
                 tabId: input.tabId,
                 expectedWindowId: input.expectedWindowId,
                 capturedRevision: checkpoint.revision,
-                document: result.document,
+                document: canonicalDocument,
                 diskVersion: null
               });
               requireAppliedWorkspaceMutation(commit, "save");
-              await dependencies.recordRecentFilePath(result.document.path);
+              await dependencies.recordRecentFilePath(checkpoint.path);
+              return { status: "success", document: canonicalDocument };
             }
             return result;
           },
@@ -150,15 +172,25 @@ export function createWorkspaceFileOperations<TSender>(
               content: checkpoint.content
             });
             if (result.status === "success") {
+              const savedDocument = requirePersistedMarkdownDocument(
+                result.document,
+                "Save As adapter"
+              );
+              if (savedDocument.content !== checkpoint.content) {
+                throw new Error(
+                  "Save As adapter content does not match the captured save content."
+                );
+              }
               const commit = dependencies.workspace.saveTabDocument({
                 tabId: input.tabId,
                 expectedWindowId: input.expectedWindowId,
                 capturedRevision: checkpoint.revision,
-                document: result.document,
+                document: savedDocument,
                 diskVersion: null
               });
               requireAppliedWorkspaceMutation(commit, "Save As");
-              await dependencies.recordRecentFilePath(result.document.path);
+              await dependencies.recordRecentFilePath(savedDocument.path);
+              return { status: "success", document: savedDocument };
             }
             return result;
           },

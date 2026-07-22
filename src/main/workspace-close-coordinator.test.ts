@@ -1,10 +1,10 @@
 import {
   createWorkspaceState,
-  type DocumentSessionProjection,
-  type WorkspaceDocumentData
+  type DocumentSessionProjection
 } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 
+import type { OpenMarkdownDocument } from "../shared/open-markdown-file";
 import { createWorkspaceCloseCoordinator as createWorkspaceCloseCoordinatorWithOperations } from "./workspace-close-coordinator";
 import { createWorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
 
@@ -23,8 +23,8 @@ function createWorkspaceCloseCoordinator(
 function createDocument(
   name: string,
   content: string,
-  path: string | null = `C:/notes/${name}`
-): WorkspaceDocumentData {
+  path: string = `C:/notes/${name}`
+): OpenMarkdownDocument {
   return { path, name, content, encoding: "utf-8" };
 }
 
@@ -234,6 +234,86 @@ describe("createWorkspaceCloseCoordinator", () => {
     });
   });
 
+  it("rejects a close-save adapter path that differs from the canonical checkpoint", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.openDocument(
+      "window-1",
+      createDocument("canonical.md", "saved")
+    ).activeTabId!;
+    workspace.updateTabDraft({
+      tabId,
+      expectedWindowId: "window-1",
+      content: "dirty"
+    });
+    const coordinator = createWorkspaceCloseCoordinator({
+      workspace,
+      promptToSaveWorkspaceTab: async () => "save",
+      saveMarkdownFileToPath: vi.fn(async () => ({
+        status: "success" as const,
+        document: createDocument("other.md", "dirty")
+      })),
+      showSaveMarkdownDialog: vi.fn()
+    });
+
+    await expect(
+      coordinator.closeTab({
+        tabId,
+        expectedWindowId: "window-1",
+        expectedRevision: 1
+      })
+    ).rejects.toThrow("canonical close-save checkpoint");
+    expect(workspace.getTabSession(tabId)).toMatchObject({
+      path: "C:/notes/canonical.md",
+      name: "canonical.md",
+      content: "dirty",
+      isDirty: true
+    });
+  });
+
+  it("rejects an untitled close Save As result without a persisted path", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.createUntitledTab("window-1").activeTabId!;
+    workspace.updateTabDraft({
+      tabId,
+      expectedWindowId: "window-1",
+      content: "dirty"
+    });
+    const coordinator = createWorkspaceCloseCoordinator({
+      workspace,
+      promptToSaveWorkspaceTab: async () => "save",
+      saveMarkdownFileToPath: vi.fn(),
+      showSaveMarkdownDialog: vi.fn(async () =>
+        JSON.parse(
+          JSON.stringify({
+            status: "success",
+            document: {
+              path: "",
+              name: "saved.md",
+              content: "dirty",
+              encoding: "utf-8"
+            }
+          })
+        )
+      )
+    });
+
+    await expect(
+      coordinator.closeTab({
+        tabId,
+        expectedWindowId: "window-1",
+        expectedRevision: 1
+      })
+    ).rejects.toThrow("Close Save As adapter");
+    expect(workspace.getTabSession(tabId)).toMatchObject({
+      path: null,
+      name: "Untitled.md",
+      content: "dirty",
+      isDirty: true
+    });
+  });
+
   it("cancels discard when the tab moves during the prompt", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
@@ -285,7 +365,7 @@ describe("createWorkspaceCloseCoordinator", () => {
     workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "captured dirty" });
     let resolveSave!: (value: {
       status: "success";
-      document: WorkspaceDocumentData;
+      document: OpenMarkdownDocument;
     }) => void;
     const closeTab = vi.spyOn(workspace, "closeTab");
     const coordinator = createWorkspaceCloseCoordinator({
@@ -336,7 +416,7 @@ describe("createWorkspaceCloseCoordinator", () => {
     workspace.registerWindow("window-2");
     let resolveSave!: (value: {
       status: "success";
-      document: WorkspaceDocumentData;
+      document: OpenMarkdownDocument;
     }) => void;
     const closeTab = vi.spyOn(workspace, "closeTab");
     const coordinator = createWorkspaceCloseCoordinator({
@@ -472,7 +552,7 @@ describe("createWorkspaceCloseCoordinator", () => {
     let active = true;
     let resolveWrite!: (result: {
       readonly status: "success";
-      readonly document: WorkspaceDocumentData;
+      readonly document: OpenMarkdownDocument;
     }) => void;
     const saveTabDocument = vi.spyOn(workspace, "saveTabDocument");
     const coordinator = createWorkspaceCloseCoordinator({

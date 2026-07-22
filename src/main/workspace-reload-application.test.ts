@@ -1,7 +1,10 @@
-import { createWorkspaceState, type WorkspaceDocumentData } from "@fishmark/workspace-domain";
+import { createWorkspaceState } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 
-import type { OpenMarkdownFileResult } from "../shared/open-markdown-file";
+import type {
+  OpenMarkdownDocument,
+  OpenMarkdownFileResult
+} from "../shared/open-markdown-file";
 import { createWorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
 import { createWorkspaceReloadApplication as createWorkspaceReloadApplicationWithOperations } from "./workspace-reload-application";
 
@@ -17,7 +20,7 @@ function createWorkspaceReloadApplication(
   });
 }
 
-function document(name: string, content: string): WorkspaceDocumentData {
+function document(name: string, content: string): OpenMarkdownDocument {
   return {
     path: `C:/notes/${name}`,
     name,
@@ -27,6 +30,48 @@ function document(name: string, content: string): WorkspaceDocumentData {
 }
 
 describe("createWorkspaceReloadApplication", () => {
+  it.each([
+    ["null", null],
+    ["different", "C:/notes/other.md"]
+  ])(
+    "rejects a reload adapter result with a %s path without recording or mutating",
+    async (_caseName, returnedPath) => {
+      const workspace = createWorkspaceState();
+      workspace.registerWindow("window-1");
+      const tabId = workspace.openDocument(
+        "window-1",
+        document("canonical.md", "before")
+      ).activeTabId!;
+      const recordRecentFilePath = vi.fn(async () => undefined);
+      const application = createWorkspaceReloadApplication({
+        workspace,
+        openMarkdownFileFromPath: vi.fn(async () => JSON.parse(JSON.stringify({
+          status: "success" as const,
+          document: {
+            path: returnedPath,
+            name: "adapter.md",
+            content: "disk",
+            encoding: "utf-8" as const
+          }
+        }))),
+        recordRecentFilePath
+      });
+
+      await expect(
+        application.reloadTab({ tabId, expectedWindowId: "window-1" })
+      ).rejects.toThrow(/Reload adapter/);
+      expect(workspace.getTabSession(tabId)).toMatchObject({
+        path: "C:/notes/canonical.md",
+        name: "canonical.md",
+        content: "before",
+        revision: 0,
+        savedRevision: 0,
+        isDirty: false
+      });
+      expect(recordRecentFilePath).not.toHaveBeenCalled();
+    }
+  );
+
   it("reads only the canonical path after Save As retargets the document", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");

@@ -994,11 +994,14 @@ describe("App autosave", () => {
         const activeTab = workspaceTabs.find((tab) => tab.tabId === workspaceActiveTabId) ?? null;
         const savedTab = workspaceTabs.find((tab) => tab.tabId === input.tabId) ?? null;
         const content = getWorkspaceTabContent(input.tabId);
+        if (!savedTab?.path) {
+          throw new Error(`Workspace tab '${input.tabId}' has no saved path.`);
+        }
 
         return {
           status: "success",
           document: {
-            path: savedTab?.path ?? null,
+            path: savedTab.path,
             name: activeTab?.name ?? "today.md",
             content,
             encoding: "utf-8"

@@ -1,4 +1,4 @@
-import type { OpenMarkdownDocument, OpenMarkdownFileErrorCode } from "./open-markdown-file";
+import type { OpenMarkdownFileErrorCode } from "./open-markdown-file";
 
 export type WorkspaceTabSaveState = "idle" | "manual-saving" | "autosaving";
 
@@ -10,8 +10,12 @@ export type WorkspaceTabStripItem = {
   saveState: WorkspaceTabSaveState;
 };
 
-export type WorkspaceDocumentSnapshot = OpenMarkdownDocument & {
+export type WorkspaceDocumentSnapshot = {
   tabId: string;
+  path: string | null;
+  name: string;
+  content: string;
+  encoding: "utf-8";
   isDirty: boolean;
   saveState: WorkspaceTabSaveState;
 };

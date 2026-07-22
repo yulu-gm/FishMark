@@ -5,6 +5,7 @@ import type {
 
 import type { OpenMarkdownFileResult } from "../shared/open-markdown-file";
 import type { WorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
+import { requirePersistedMarkdownDocument } from "./persisted-markdown-document";
 import { requireAppliedWorkspaceMutation } from "./workspace-mutation-result";
 
 export type WorkspaceReloadResult =
@@ -60,18 +61,33 @@ export function createWorkspaceReloadApplication(
           throw new Error(`Unable to reload Markdown file '${checkpoint.path}'.`);
         }
 
+        const diskDocument = requirePersistedMarkdownDocument(
+          result.document,
+          "Reload adapter"
+        );
+        if (diskDocument.path !== checkpoint.path) {
+          throw new Error(
+            "Reload adapter path does not match the canonical reload checkpoint."
+          );
+        }
+        const canonicalDocument = {
+          path: checkpoint.path,
+          name: checkpoint.name,
+          content: diskDocument.content,
+          encoding: checkpoint.encoding
+        };
         const mutation = dependencies.workspace.replaceTabDocument({
           tabId: input.tabId,
           expectedWindowId: input.expectedWindowId,
           expectedRevision: checkpoint.revision,
-          document: result.document
+          document: canonicalDocument
         });
         if (mutation.kind === "stale" && mutation.reason === "revision-changed") {
           return { kind: "revision-stale" };
         }
 
         const projection = requireAppliedWorkspaceMutation(mutation, "reload");
-        await dependencies.recordRecentFilePath(result.document.path ?? checkpoint.path);
+        await dependencies.recordRecentFilePath(checkpoint.path);
         return {
           kind: "success",
           projection

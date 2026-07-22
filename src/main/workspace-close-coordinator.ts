@@ -11,6 +11,7 @@ import type {
   ShowSaveMarkdownDialogInput
 } from "./save-markdown-file";
 import type { WorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
+import { requirePersistedMarkdownDocument } from "./persisted-markdown-document";
 
 type DirtyWorkspaceTabChoice = "save" | "discard" | "cancel";
 
@@ -232,11 +233,37 @@ export function createWorkspaceCloseCoordinator(
       throw new Error(result.error.message);
     }
 
+    const savedDocument = requirePersistedMarkdownDocument(
+      result.document,
+      checkpoint.path === null
+        ? "Close Save As adapter"
+        : "Close save adapter"
+    );
+    if (savedDocument.content !== checkpoint.content) {
+      throw new Error(
+        "Close save adapter content does not match the captured close-save content."
+      );
+    }
+    if (checkpoint.path !== null && savedDocument.path !== checkpoint.path) {
+      throw new Error(
+        "Close save adapter path does not match the canonical close-save checkpoint."
+      );
+    }
+    const canonicalDocument =
+      checkpoint.path === null
+        ? savedDocument
+        : {
+            path: checkpoint.path,
+            name: checkpoint.name,
+            content: checkpoint.content,
+            encoding: checkpoint.encoding
+          };
+
     const commit = dependencies.workspace.saveTabDocument({
       tabId: checkpoint.tabId,
       expectedWindowId: input.expectedWindowId,
       capturedRevision: checkpoint.revision,
-      document: result.document,
+      document: canonicalDocument,
       diskVersion: null
     });
     if (commit.kind === "stale") {
