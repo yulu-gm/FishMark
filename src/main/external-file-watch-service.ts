@@ -16,35 +16,54 @@ type FileSnapshot = {
   size: number;
 };
 
+type FSWatcherLike = {
+  close: () => void;
+};
+
 type WatchDependencies = {
   watch: (
     targetPath: string,
     listener: (eventType: ExternalWatchEventType) => void
   ) => FSWatcherLike;
   stat: (targetPath: string) => Promise<Stats>;
+  reportCleanupError?: (error: unknown) => void;
 };
 
-type FSWatcherLike = {
-  close: () => void;
+type InternalWrite = {
+  readonly token: number;
+  readonly entryIdentity: number;
+  readonly path: string;
+  completionObservationToken: number | null;
 };
 
 type WatchEntry = {
-  readonly pathGeneration: number;
+  readonly identity: number;
+  readonly pathEpoch: number;
   readonly path: string;
   watcher: FSWatcherLike | null;
   baseline: FileSnapshot | null;
-  internalWritePath: string | null;
-  deferredSnapshot: FileSnapshot | null | undefined;
+  internalWrite: InternalWrite | null;
+};
+
+type PendingSync = {
+  readonly token: number;
+  readonly pathEpoch: number;
+  readonly path: string | null;
+  readonly observationToken: number | null;
+  readonly admission: Promise<void>;
+  settleAdmission: () => void;
 };
 
 type WatchController = {
   readonly webContents: WatchedWebContents;
-  pathGeneration: number;
-  syncGeneration: number;
   desiredPath: string | null;
+  pathEpoch: number;
+  latestSyncToken: number;
+  pendingSync: PendingSync | null;
   entry: WatchEntry | null;
-  stateQueue: Promise<void>;
-  pendingSync: Promise<void> | null;
+  latestObservationToken: number;
+  nextEntryIdentity: number;
+  nextInternalWriteToken: number;
   destroyed: boolean;
 };
 
@@ -86,43 +105,29 @@ export function createExternalFileWatchService(
     }
     if (existing) {
       destroyedWebContents.add(existing.webContents);
-      destroyController(existing);
+      tombstoneController(existing);
     }
 
     const controller: WatchController = {
       webContents,
-      pathGeneration: 0,
-      syncGeneration: 0,
       desiredPath: null,
-      entry: null,
-      stateQueue: Promise.resolve(),
+      pathEpoch: 0,
+      latestSyncToken: 0,
       pendingSync: null,
+      entry: null,
+      latestObservationToken: 0,
+      nextEntryIdentity: 0,
+      nextInternalWriteToken: 0,
       destroyed: false
     };
     controllers.set(webContents.id, controller);
     webContents.once?.("destroyed", () => {
       destroyedWebContents.add(webContents);
       if (controllers.get(webContents.id) === controller) {
-        destroyController(controller);
-        controllers.delete(webContents.id);
+        tombstoneController(controller);
       }
     });
     return controller;
-  }
-
-  function enqueueStateTransition(
-    controller: WatchController,
-    transition: () => void
-  ): Promise<void> {
-    const result = controller.stateQueue
-      .catch(() => undefined)
-      .then(() => {
-        if (isLiveController(controller)) {
-          transition();
-        }
-      });
-    controller.stateQueue = result.catch(() => undefined);
-    return result;
   }
 
   function syncDocumentPath(
@@ -137,123 +142,99 @@ export function createExternalFileWatchService(
     const normalizedPath = targetPath && targetPath.length > 0 ? targetPath : null;
     if (controller.desiredPath !== normalizedPath) {
       controller.desiredPath = normalizedPath;
-      controller.pathGeneration += 1;
+      controller.pathEpoch += 1;
     }
-    controller.syncGeneration += 1;
-    const syncGeneration = controller.syncGeneration;
-    const pathGeneration = controller.pathGeneration;
-    const sync = performSync(
-      controller,
-      syncGeneration,
-      pathGeneration,
-      normalizedPath
+
+    const currentEntry = controller.entry;
+    const isOwnWriteObservation =
+      currentEntry !== null &&
+      isCurrentEntry(controller, currentEntry) &&
+      currentEntry.path === normalizedPath &&
+      currentEntry.internalWrite !== null;
+    const observationToken = isOwnWriteObservation
+      ? null
+      : issueObservation(controller);
+    const pending = createPendingSync(
+      ++controller.latestSyncToken,
+      controller.pathEpoch,
+      normalizedPath,
+      observationToken
     );
-    controller.pendingSync = sync;
-    const clearPendingSync = () => {
-      if (controller.pendingSync === sync) {
+    controller.pendingSync?.settleAdmission();
+    controller.pendingSync = pending;
+
+    return performSync(controller, pending).finally(() => {
+      if (controller.pendingSync === pending) {
         controller.pendingSync = null;
       }
-    };
-    void sync.then(clearPendingSync, clearPendingSync);
-    return sync;
+      pending.settleAdmission();
+    });
   }
 
   async function performSync(
     controller: WatchController,
-    syncGeneration: number,
-    pathGeneration: number,
-    normalizedPath: string | null
+    pending: PendingSync
   ): Promise<void> {
-    if (normalizedPath === null) {
-      await enqueueStateTransition(controller, () => {
-        if (
-          !isCurrentSyncIntent(
-            controller,
-            syncGeneration,
-            pathGeneration,
-            normalizedPath
-          )
-        ) {
-          return;
-        }
-        closeEntry(controller.entry);
+    if (pending.path === null) {
+      if (isCommittableSync(controller, pending)) {
+        const oldEntry = controller.entry;
         controller.entry = null;
-      });
+        closeEntrySafely(oldEntry);
+      }
       return;
     }
 
-    const started: { work: Promise<FileSnapshot | null> | null } = {
-      work: null
+    let baseline: FileSnapshot | null;
+    try {
+      baseline = await readSnapshot(pending.path, dependencies.stat);
+    } catch (error) {
+      rollbackFailedCurrentSync(controller, pending);
+      throw error;
+    }
+
+    if (pending.observationToken === null || !isCommittableSync(controller, pending)) {
+      return;
+    }
+
+    const currentEntry = controller.entry;
+    if (
+      currentEntry?.path === pending.path &&
+      currentEntry.pathEpoch === pending.pathEpoch
+    ) {
+      currentEntry.baseline = baseline;
+      return;
+    }
+
+    const nextEntry: WatchEntry = {
+      identity: ++controller.nextEntryIdentity,
+      pathEpoch: pending.pathEpoch,
+      path: pending.path,
+      watcher: null,
+      baseline,
+      internalWrite: null
     };
-    await enqueueStateTransition(controller, () => {
-      if (
-        isCurrentSyncIntent(
-          controller,
-          syncGeneration,
-          pathGeneration,
-          normalizedPath
-        )
-      ) {
-        started.work = readSnapshot(normalizedPath, dependencies.stat);
-      }
-    });
-    if (started.work === null) {
+    let watcher: FSWatcherLike;
+    try {
+      watcher = dependencies.watch(pending.path, () => {
+        const handled = handleWatchEvent(controller, nextEntry).catch(
+          () => undefined
+        );
+        void handled;
+        return handled;
+      });
+    } catch (error) {
+      rollbackFailedCurrentSync(controller, pending);
+      throw error;
+    }
+
+    if (!isCommittableSync(controller, pending)) {
+      closeWatcherSafely(watcher);
       return;
     }
 
-    const baseline = await started.work;
-    await enqueueStateTransition(controller, () => {
-      if (
-        !isCurrentSyncIntent(
-          controller,
-          syncGeneration,
-          pathGeneration,
-          normalizedPath
-        )
-      ) {
-        return;
-      }
-
-      const currentEntry = controller.entry;
-      if (
-        currentEntry?.path === normalizedPath &&
-        currentEntry.pathGeneration === pathGeneration
-      ) {
-        currentEntry.baseline = baseline;
-        return;
-      }
-
-      const nextEntry: WatchEntry = {
-        pathGeneration,
-        path: normalizedPath,
-        watcher: null,
-        baseline,
-        internalWritePath: null,
-        deferredSnapshot: undefined
-      };
-      const watcher = dependencies.watch(normalizedPath, () => {
-        const handledCallback = handleWatchEvent(
-          controller,
-          nextEntry
-        ).catch(() => undefined);
-        void handledCallback;
-        return handledCallback;
-      });
-      if (
-        !isCurrentSyncIntent(
-          controller,
-          syncGeneration,
-          pathGeneration,
-          normalizedPath
-        )
-      ) {
-        watcher.close();
-        return;
-      }
-      nextEntry.watcher = watcher;
-      closeEntry(currentEntry);
-      controller.entry = nextEntry;
-    });
+    nextEntry.watcher = watcher;
+    controller.entry = nextEntry;
+    closeEntrySafely(currentEntry);
   }
 
   async function beginInternalWrite(
@@ -264,18 +245,29 @@ export function createExternalFileWatchService(
     if (!controller) {
       return;
     }
-    const pendingSync = controller.pendingSync;
-    if (pendingSync) {
-      await pendingSync;
-    }
-    await enqueueStateTransition(controller, () => {
-      const entry = controller.entry;
-      if (!entry || !isCurrentEntry(controller, entry) || entry.path !== targetPath) {
-        return;
+
+    while (isLiveController(controller)) {
+      const pending = controller.pendingSync;
+      if (pending === null) {
+        break;
       }
-      entry.internalWritePath = targetPath;
-      entry.deferredSnapshot = undefined;
-    });
+      await pending.admission;
+    }
+    if (!isLiveController(controller)) {
+      return;
+    }
+
+    const entry = controller.entry;
+    if (!entry || !isCurrentEntry(controller, entry) || entry.path !== targetPath) {
+      return;
+    }
+    issueObservation(controller);
+    entry.internalWrite = {
+      token: ++controller.nextInternalWriteToken,
+      entryIdentity: entry.identity,
+      path: targetPath,
+      completionObservationToken: null
+    };
   }
 
   async function completeInternalWrite(
@@ -286,95 +278,74 @@ export function createExternalFileWatchService(
     if (!controller) {
       return;
     }
-    const started: {
-      entry: WatchEntry | null;
-      work: Promise<FileSnapshot | null> | null;
-    } = { entry: null, work: null };
-    await enqueueStateTransition(controller, () => {
-      const entry = controller.entry;
-      if (
-        !entry ||
-        !isCurrentEntry(controller, entry) ||
-        entry.path !== targetPath ||
-        entry.internalWritePath !== targetPath
-      ) {
-        return;
-      }
-      started.entry = entry;
-      started.work = readSnapshot(targetPath, dependencies.stat);
-    });
-    if (started.entry === null || started.work === null) {
+    const entry = controller.entry;
+    const write = entry?.internalWrite;
+    if (
+      !entry ||
+      !write ||
+      !isCurrentEntry(controller, entry) ||
+      entry.path !== targetPath ||
+      write.path !== targetPath ||
+      write.entryIdentity !== entry.identity
+    ) {
       return;
     }
-    const entry = started.entry;
-    const work = started.work;
 
-    let currentSnapshot: FileSnapshot | null;
+    const observationToken = issueObservation(controller);
+    write.completionObservationToken = observationToken;
     try {
-      currentSnapshot = await work;
-    } catch (error) {
-      await enqueueStateTransition(controller, () => {
-        if (isSameLiveEntry(controller, entry)) {
-          entry.internalWritePath = null;
-          entry.deferredSnapshot = undefined;
-        }
-      });
-      throw error;
-    }
-
-    await enqueueStateTransition(controller, () => {
-      try {
-        if (!isCurrentEntry(controller, entry)) {
-          return;
-        }
-        const deferredSnapshot = entry.deferredSnapshot;
+      const currentSnapshot = await readSnapshot(targetPath, dependencies.stat);
+      if (
+        isCurrentEntry(controller, entry) &&
+        entry.internalWrite === write &&
+        write.completionObservationToken === observationToken &&
+        controller.latestObservationToken === observationToken
+      ) {
         entry.baseline = currentSnapshot;
-        if (
-          deferredSnapshot !== undefined &&
-          !snapshotsEqual(deferredSnapshot, currentSnapshot)
-        ) {
-          sendExternalChange(controller.webContents, targetPath, currentSnapshot);
-        }
-      } finally {
-        if (isSameLiveEntry(controller, entry)) {
-          entry.internalWritePath = null;
-          entry.deferredSnapshot = undefined;
-        }
       }
-    });
+    } finally {
+      if (
+        controller.entry === entry &&
+        entry.internalWrite === write &&
+        write.completionObservationToken === observationToken
+      ) {
+        entry.internalWrite = null;
+      }
+    }
   }
 
   async function handleWatchEvent(
     controller: WatchController,
     entry: WatchEntry
   ): Promise<void> {
-    const started: { work: Promise<FileSnapshot | null> | null } = {
-      work: null
-    };
-    await enqueueStateTransition(controller, () => {
-      if (isCurrentEntry(controller, entry)) {
-        started.work = readSnapshot(entry.path, dependencies.stat);
-      }
-    });
-    if (started.work === null) {
+    if (!isCurrentEntry(controller, entry)) {
       return;
     }
 
-    const nextSnapshot = await started.work;
-    await enqueueStateTransition(controller, () => {
-      if (!isCurrentEntry(controller, entry)) {
-        return;
-      }
-      if (entry.internalWritePath === entry.path) {
-        entry.deferredSnapshot = nextSnapshot;
-        return;
-      }
-      if (snapshotsEqual(entry.baseline, nextSnapshot)) {
-        return;
-      }
-      entry.baseline = nextSnapshot;
-      sendExternalChange(controller.webContents, entry.path, nextSnapshot);
-    });
+    const writeAtStart = entry.internalWrite;
+    const observationToken = writeAtStart === null
+      ? issueObservation(controller)
+      : null;
+    const nextSnapshot = await readSnapshot(entry.path, dependencies.stat);
+
+    if (observationToken === null) {
+      return;
+    }
+    if (
+      !isCurrentEntry(controller, entry) ||
+      entry.internalWrite !== null ||
+      controller.latestObservationToken !== observationToken ||
+      snapshotsEqual(entry.baseline, nextSnapshot)
+    ) {
+      return;
+    }
+    entry.baseline = nextSnapshot;
+    sendExternalChange(controller.webContents, entry.path, nextSnapshot);
+  }
+
+  function issueObservation(controller: WatchController): number {
+    controller.latestObservationToken += 1;
+    return controller.latestObservationToken;
   }
 
   function isLiveController(controller: WatchController): boolean {
@@ -386,25 +357,31 @@ export function createExternalFileWatchService(
 
   function isCurrentPathIntent(
     controller: WatchController,
-    pathGeneration: number,
+    pathEpoch: number,
     targetPath: string | null
   ): boolean {
     return (
       isLiveController(controller) &&
-      controller.pathGeneration === pathGeneration &&
+      controller.pathEpoch === pathEpoch &&
       controller.desiredPath === targetPath
     );
   }
 
-  function isCurrentSyncIntent(
+  function isCurrentSync(controller: WatchController, pending: PendingSync): boolean {
+    return (
+      isCurrentPathIntent(controller, pending.pathEpoch, pending.path) &&
+      controller.latestSyncToken === pending.token
+    );
+  }
+
+  function isCommittableSync(
     controller: WatchController,
-    syncGeneration: number,
-    pathGeneration: number,
-    targetPath: string | null
+    pending: PendingSync
   ): boolean {
     return (
-      isCurrentPathIntent(controller, pathGeneration, targetPath) &&
-      controller.syncGeneration === syncGeneration
+      isCurrentSync(controller, pending) &&
+      pending.observationToken !== null &&
+      controller.latestObservationToken === pending.observationToken
     );
   }
 
@@ -413,31 +390,100 @@ export function createExternalFileWatchService(
     entry: WatchEntry
   ): boolean {
     return (
-      isCurrentPathIntent(controller, entry.pathGeneration, entry.path) &&
+      isCurrentPathIntent(controller, entry.pathEpoch, entry.path) &&
       controller.entry === entry
     );
   }
 
-  function isSameLiveEntry(
+  function rollbackFailedCurrentSync(
     controller: WatchController,
-    entry: WatchEntry
-  ): boolean {
-    return isLiveController(controller) && controller.entry === entry;
+    pending: PendingSync
+  ): void {
+    if (!isCurrentSync(controller, pending)) {
+      return;
+    }
+    const entry = controller.entry;
+    if (entry && !isCurrentEntry(controller, entry)) {
+      controller.entry = null;
+      closeEntrySafely(entry);
+    }
   }
 
-  function destroyController(controller: WatchController): void {
+  function tombstoneController(controller: WatchController): void {
+    if (controller.destroyed) {
+      return;
+    }
     controller.destroyed = true;
-    controller.pathGeneration += 1;
-    controller.syncGeneration += 1;
+    controller.pathEpoch += 1;
+    controller.latestSyncToken += 1;
+    controller.latestObservationToken += 1;
     controller.desiredPath = null;
-    closeEntry(controller.entry);
+    const pending = controller.pendingSync;
+    controller.pendingSync = null;
+    pending?.settleAdmission();
+    const entry = controller.entry;
     controller.entry = null;
+    if (controllers.get(controller.webContents.id) === controller) {
+      controllers.delete(controller.webContents.id);
+    }
+    closeEntrySafely(entry);
+  }
+
+  function closeEntrySafely(entry: WatchEntry | null): void {
+    if (!entry) {
+      return;
+    }
+    const watcher = entry.watcher;
+    entry.watcher = null;
+    entry.internalWrite = null;
+    closeWatcherSafely(watcher);
+  }
+
+  function closeWatcherSafely(watcher: FSWatcherLike | null): void {
+    if (!watcher) {
+      return;
+    }
+    try {
+      watcher.close();
+    } catch (error) {
+      try {
+        dependencies.reportCleanupError?.(error);
+      } catch {
+        // Cleanup reporting cannot corrupt authoritative watcher state.
+      }
+    }
   }
 
   return {
     syncDocumentPath,
     beginInternalWrite,
     completeInternalWrite
+  };
+}
+
+function createPendingSync(
+  token: number,
+  pathEpoch: number,
+  path: string | null,
+  observationToken: number | null
+): PendingSync {
+  let settleAdmission!: () => void;
+  const admission = new Promise<void>((resolve) => {
+    let settled = false;
+    settleAdmission = () => {
+      if (!settled) {
+        settled = true;
+        resolve();
+      }
+    };
+  });
+  return {
+    token,
+    pathEpoch,
+    path,
+    observationToken,
+    admission,
+    settleAdmission
   };
 }
 
@@ -465,15 +511,6 @@ function sendExternalChange(
     path: targetPath,
     kind: snapshot === null ? "deleted" : "modified"
   });
-}
-
-function closeEntry(entry: WatchEntry | null): void {
-  entry?.watcher?.close();
-  if (entry) {
-    entry.watcher = null;
-    entry.internalWritePath = null;
-    entry.deferredSnapshot = undefined;
-  }
 }
 
 function snapshotsEqual(left: FileSnapshot | null, right: FileSnapshot | null): boolean {

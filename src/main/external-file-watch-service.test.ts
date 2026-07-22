@@ -189,6 +189,104 @@ describe("createExternalFileWatchService", () => {
     expect(webContents.send).not.toHaveBeenCalled();
   });
 
+  it("commits only the latest initiated callback when same-entry stats finish out of order", async () => {
+    const watchCallbacks = new Map<string, WatchCallback>();
+    const olderCallback = createDeferred<Stats>();
+    const stat = vi
+      .fn<(targetPath: string) => Promise<Stats>>()
+      .mockResolvedValueOnce(createStats({ mtimeMs: 1, size: 10 }))
+      .mockReturnValueOnce(olderCallback.promise)
+      .mockResolvedValueOnce(createStats({ mtimeMs: 3, size: 30 }))
+      .mockResolvedValueOnce(createStats({ mtimeMs: 3, size: 30 }));
+    const webContents = createWebContents();
+    const service = createExternalFileWatchService({
+      watch: vi.fn((targetPath: string, listener: WatchCallback) => {
+        watchCallbacks.set(targetPath, listener);
+        return { close: vi.fn() };
+      }),
+      stat
+    });
+
+    await service.syncDocumentPath(webContents, "C:/notes/today.md");
+    const callback = watchCallbacks.get("C:/notes/today.md")!;
+    const first = Promise.resolve(callback("change"));
+    await vi.waitFor(() => expect(stat).toHaveBeenCalledTimes(2));
+    await callback("change");
+    olderCallback.resolve(createStats({ mtimeMs: 2, size: 20 }));
+    await first;
+    await callback("change");
+
+    expect(webContents.send).toHaveBeenCalledTimes(1);
+    expect(webContents.send).toHaveBeenCalledWith(
+      EXTERNAL_MARKDOWN_FILE_CHANGED_EVENT,
+      { path: "C:/notes/today.md", kind: "modified" }
+    );
+  });
+
+  it("does not let an own-write callback finishing after completion roll back the final baseline", async () => {
+    const watchCallbacks = new Map<string, WatchCallback>();
+    const partialCallback = createDeferred<Stats>();
+    const stat = vi
+      .fn<(targetPath: string) => Promise<Stats>>()
+      .mockResolvedValueOnce(createStats({ mtimeMs: 1, size: 10 }))
+      .mockReturnValueOnce(partialCallback.promise)
+      .mockResolvedValueOnce(createStats({ mtimeMs: 3, size: 30 }))
+      .mockResolvedValueOnce(createStats({ mtimeMs: 3, size: 30 }));
+    const webContents = createWebContents();
+    const service = createExternalFileWatchService({
+      watch: vi.fn((targetPath: string, listener: WatchCallback) => {
+        watchCallbacks.set(targetPath, listener);
+        return { close: vi.fn() };
+      }),
+      stat
+    });
+
+    await service.syncDocumentPath(webContents, "C:/notes/today.md");
+    await service.beginInternalWrite(webContents, "C:/notes/today.md");
+    const callback = watchCallbacks.get("C:/notes/today.md")!;
+    const partial = Promise.resolve(callback("change"));
+    await vi.waitFor(() => expect(stat).toHaveBeenCalledTimes(2));
+    await service.completeInternalWrite(webContents, "C:/notes/today.md");
+    partialCallback.resolve(createStats({ mtimeMs: 2, size: 20 }));
+    await partial;
+    await callback("change");
+
+    expect(webContents.send).not.toHaveBeenCalled();
+  });
+
+  it("silently absorbs an own-write callback that starts after completion I/O", async () => {
+    const watchCallbacks = new Map<string, WatchCallback>();
+    const finalSnapshot = createDeferred<Stats>();
+    const stat = vi
+      .fn<(targetPath: string) => Promise<Stats>>()
+      .mockResolvedValueOnce(createStats({ mtimeMs: 1, size: 10 }))
+      .mockReturnValueOnce(finalSnapshot.promise)
+      .mockResolvedValueOnce(createStats({ mtimeMs: 2, size: 20 }))
+      .mockResolvedValueOnce(createStats({ mtimeMs: 3, size: 30 }));
+    const webContents = createWebContents();
+    const service = createExternalFileWatchService({
+      watch: vi.fn((targetPath: string, listener: WatchCallback) => {
+        watchCallbacks.set(targetPath, listener);
+        return { close: vi.fn() };
+      }),
+      stat
+    });
+
+    await service.syncDocumentPath(webContents, "C:/notes/today.md");
+    await service.beginInternalWrite(webContents, "C:/notes/today.md");
+    const completion = service.completeInternalWrite(
+      webContents,
+      "C:/notes/today.md"
+    );
+    await vi.waitFor(() => expect(stat).toHaveBeenCalledTimes(2));
+    await watchCallbacks.get("C:/notes/today.md")!("change");
+    finalSnapshot.resolve(createStats({ mtimeMs: 3, size: 30 }));
+    await completion;
+    await watchCallbacks.get("C:/notes/today.md")!("change");
+
+    expect(webContents.send).not.toHaveBeenCalled();
+  });
+
   it("admits an internal write after the newest same-path sync settles", async () => {
     const olderSnapshot = createDeferred<Stats>();
     const stat = vi
@@ -223,6 +321,39 @@ describe("createExternalFileWatchService", () => {
 
     olderSnapshot.resolve(createStats({ mtimeMs: 1, size: 10 }));
     await Promise.all([syncA, begin]);
+  });
+
+  it("stops awaiting an older sync when a newer relevant sync settles", async () => {
+    const olderSnapshot = createDeferred<Stats>();
+    const stat = vi
+      .fn<(targetPath: string) => Promise<Stats>>()
+      .mockResolvedValueOnce(createStats({ mtimeMs: 1, size: 10 }))
+      .mockReturnValueOnce(olderSnapshot.promise)
+      .mockResolvedValueOnce(createStats({ mtimeMs: 2, size: 20 }));
+    const webContents = createWebContents();
+    const service = createExternalFileWatchService({
+      watch: vi.fn(() => ({ close: vi.fn() })),
+      stat
+    });
+
+    await service.syncDocumentPath(webContents, "C:/notes/today.md");
+    const olderSync = service.syncDocumentPath(webContents, "C:/notes/today.md");
+    await vi.waitFor(() => expect(stat).toHaveBeenCalledTimes(2));
+    let admitted = false;
+    const begin = service
+      .beginInternalWrite(webContents, "C:/notes/today.md")
+      .then(() => {
+        admitted = true;
+      });
+    const newerSync = service.syncDocumentPath(
+      webContents,
+      "C:/notes/today.md"
+    );
+    await newerSync;
+    await vi.waitFor(() => expect(admitted).toBe(true));
+
+    olderSnapshot.resolve(createStats({ mtimeMs: 1, size: 10 }));
+    await Promise.all([olderSync, begin]);
   });
 
   it("does not let a deferred write completion mutate a newer path generation", async () => {
@@ -329,6 +460,41 @@ describe("createExternalFileWatchService", () => {
     );
   });
 
+  it("does not let an older failed completion clear a newer write transaction", async () => {
+    const callbacks = new Map<string, WatchCallback>();
+    const olderCompletion = createDeferred<Stats>();
+    const completionError = new Error("older completion failed");
+    const stat = vi
+      .fn<(targetPath: string) => Promise<Stats>>()
+      .mockResolvedValueOnce(createStats({ mtimeMs: 1, size: 10 }))
+      .mockReturnValueOnce(olderCompletion.promise)
+      .mockResolvedValueOnce(createStats({ mtimeMs: 2, size: 20 }))
+      .mockResolvedValueOnce(createStats({ mtimeMs: 3, size: 30 }));
+    const webContents = createWebContents();
+    const service = createExternalFileWatchService({
+      watch: vi.fn((targetPath: string, listener: WatchCallback) => {
+        callbacks.set(targetPath, listener);
+        return { close: vi.fn() };
+      }),
+      stat
+    });
+
+    await service.syncDocumentPath(webContents, "C:/notes/a.md");
+    await service.beginInternalWrite(webContents, "C:/notes/a.md");
+    const firstCompletion = service.completeInternalWrite(
+      webContents,
+      "C:/notes/a.md"
+    );
+    await vi.waitFor(() => expect(stat).toHaveBeenCalledTimes(2));
+    await service.beginInternalWrite(webContents, "C:/notes/a.md");
+    await callbacks.get("C:/notes/a.md")!("change");
+    olderCompletion.reject(completionError);
+    await expect(firstCompletion).rejects.toBe(completionError);
+    await service.completeInternalWrite(webContents, "C:/notes/a.md");
+
+    expect(webContents.send).not.toHaveBeenCalled();
+  });
+
   it("does not install or retain a watcher when web contents is destroyed during sync", async () => {
     const baseline = createDeferred<Stats>();
     let destroyed!: () => void;
@@ -353,6 +519,136 @@ describe("createExternalFileWatchService", () => {
     await sync;
 
     expect(watch).not.toHaveBeenCalled();
+    expect(webContents.send).not.toHaveBeenCalled();
+  });
+
+  it("keeps the replacement authoritative when closing the old watcher throws", async () => {
+    const callbacks = new Map<string, WatchCallback>();
+    const oldCloseError = new Error("old close failed");
+    const stat = vi
+      .fn<(targetPath: string) => Promise<Stats>>()
+      .mockResolvedValueOnce(createStats({ mtimeMs: 1, size: 10 }))
+      .mockResolvedValueOnce(createStats({ mtimeMs: 2, size: 20 }))
+      .mockResolvedValueOnce(createStats({ mtimeMs: 3, size: 30 }));
+    const webContents = createWebContents();
+    const service = createExternalFileWatchService({
+      watch: vi.fn((targetPath: string, listener: WatchCallback) => {
+        callbacks.set(targetPath, listener);
+        return {
+          close:
+            targetPath === "C:/notes/a.md"
+              ? () => {
+                  throw oldCloseError;
+                }
+              : vi.fn()
+        };
+      }),
+      stat
+    });
+
+    await service.syncDocumentPath(webContents, "C:/notes/a.md");
+    await expect(
+      service.syncDocumentPath(webContents, "C:/notes/b.md")
+    ).resolves.toBeUndefined();
+    await callbacks.get("C:/notes/b.md")!("change");
+
+    expect(webContents.send).toHaveBeenCalledWith(
+      EXTERNAL_MARKDOWN_FILE_CHANGED_EVENT,
+      { path: "C:/notes/b.md", kind: "modified" }
+    );
+  });
+
+  it("closes the old watcher and leaves no entry when replacement creation throws", async () => {
+    const oldClose = vi.fn();
+    const createError = new Error("watch create failed");
+    const watch = vi
+      .fn<(targetPath: string, listener: WatchCallback) => { close: () => void }>()
+      .mockReturnValueOnce({ close: oldClose })
+      .mockImplementationOnce(() => {
+        throw createError;
+      })
+      .mockReturnValueOnce({ close: vi.fn() });
+    const webContents = createWebContents();
+    const service = createExternalFileWatchService({
+      watch,
+      stat: vi.fn(async () => createStats({ mtimeMs: 1, size: 10 }))
+    });
+
+    await service.syncDocumentPath(webContents, "C:/notes/a.md");
+    await expect(
+      service.syncDocumentPath(webContents, "C:/notes/b.md")
+    ).rejects.toBe(createError);
+    expect(oldClose).toHaveBeenCalledOnce();
+    await expect(
+      service.syncDocumentPath(webContents, "C:/notes/b.md")
+    ).resolves.toBeUndefined();
+  });
+
+  it("tombstones and deletes a destroyed controller even when close throws", async () => {
+    const callbackSnapshot = createDeferred<Stats>();
+    let destroyed!: () => void;
+    let callback!: WatchCallback;
+    const webContents = {
+      id: 9,
+      send: vi.fn<(channel: string, payload: unknown) => void>(),
+      once: vi.fn((event: "destroyed", listener: () => void) => {
+        expect(event).toBe("destroyed");
+        destroyed = listener;
+      })
+    };
+    const stat = vi
+      .fn<(targetPath: string) => Promise<Stats>>()
+      .mockResolvedValueOnce(createStats({ mtimeMs: 1, size: 10 }))
+      .mockReturnValueOnce(callbackSnapshot.promise);
+    const service = createExternalFileWatchService({
+      watch: vi.fn((_targetPath, listener) => {
+        callback = listener;
+        return {
+          close: () => {
+            throw new Error("destroy close failed");
+          }
+        };
+      }),
+      stat
+    });
+
+    await service.syncDocumentPath(webContents, "C:/notes/a.md");
+    const pendingCallback = Promise.resolve(callback("change"));
+    await vi.waitFor(() => expect(stat).toHaveBeenCalledTimes(2));
+    expect(() => destroyed()).not.toThrow();
+    callbackSnapshot.resolve(createStats({ mtimeMs: 2, size: 20 }));
+    await pendingCallback;
+    await service.syncDocumentPath(webContents, "C:/notes/a.md");
+
+    expect(webContents.send).not.toHaveBeenCalled();
+    expect(stat).toHaveBeenCalledTimes(2);
+  });
+
+  it("rolls back a newly-created watcher when destruction happens during creation", async () => {
+    let destroyed!: () => void;
+    const newClose = vi.fn(() => {
+      throw new Error("rollback close failed");
+    });
+    const webContents = {
+      id: 10,
+      send: vi.fn<(channel: string, payload: unknown) => void>(),
+      once: vi.fn((_event: "destroyed", listener: () => void) => {
+        destroyed = listener;
+      })
+    };
+    const service = createExternalFileWatchService({
+      watch: vi.fn(() => {
+        destroyed();
+        return { close: newClose };
+      }),
+      stat: vi.fn(async () => createStats({ mtimeMs: 1, size: 10 }))
+    });
+
+    await expect(
+      service.syncDocumentPath(webContents, "C:/notes/a.md")
+    ).resolves.toBeUndefined();
+
+    expect(newClose).toHaveBeenCalledOnce();
     expect(webContents.send).not.toHaveBeenCalled();
   });
 

@@ -1,7 +1,10 @@
+import type { Stats } from "node:fs";
+
 import { createWorkspaceState } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 
 import { createWorkspaceFileWatchApplication } from "./workspace-file-watch-application";
+import { createExternalFileWatchService } from "./external-file-watch-service";
 
 const document = (name: string) => ({
   path: `C:/notes/${name}`,
@@ -24,22 +27,28 @@ function deferred(): {
 }
 
 describe("createWorkspaceFileWatchApplication", () => {
-  it("serializes one window so a deferred old path cannot replace its newest active path", async () => {
+  it("forwards a newer window intent without waiting for an older service I/O", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
     const tabA = workspace.openDocument("window-1", document("a.md")).activeTabId!;
     const tabB = workspace.openDocument("window-1", document("b.md")).activeTabId!;
     workspace.activateTab("window-1", tabA);
-    const firstSync = deferred();
-    const syncDocumentPath = vi
-      .fn<(sender: { id: number }, path: string | null) => Promise<void>>()
-      .mockImplementationOnce(() => firstSync.promise)
-      .mockResolvedValue(undefined);
+    const firstSnapshot = deferred();
+    const stat = vi.fn((targetPath: string): Promise<Stats> =>
+      targetPath.endsWith("a.md")
+        ? firstSnapshot.promise.then(
+            () => ({ mtimeMs: 1, size: 10 }) as Stats
+          )
+        : Promise.resolve({ mtimeMs: 2, size: 20 } as Stats)
+    );
+    const watch = vi.fn(() => ({ close: vi.fn() }));
+    const service = createExternalFileWatchService({ watch, stat });
+    const syncDocumentPath = vi.fn(service.syncDocumentPath);
     const application = createWorkspaceFileWatchApplication({
       workspace,
       syncDocumentPath
     });
-    const sender = { id: 1 };
+    const sender = { id: 1, send: vi.fn() };
 
     const syncA = application.syncWindow({ sender, windowId: "window-1" });
     await vi.waitFor(() =>
@@ -47,16 +56,19 @@ describe("createWorkspaceFileWatchApplication", () => {
     );
     workspace.activateTab("window-1", tabB);
     const syncB = application.syncWindow({ sender, windowId: "window-1" });
-    await Promise.resolve();
-    expect(syncDocumentPath).toHaveBeenCalledTimes(1);
-
-    firstSync.resolve();
-    await Promise.all([syncA, syncB]);
+    await expect(syncB).resolves.toBeUndefined();
+    await expect(
+      service.beginInternalWrite(sender, "C:/notes/b.md")
+    ).resolves.toBeUndefined();
+    expect(stat).toHaveBeenCalledWith("C:/notes/b.md");
+    expect(watch).toHaveBeenCalledWith("C:/notes/b.md", expect.any(Function));
 
     expect(syncDocumentPath.mock.calls).toEqual([
       [sender, "C:/notes/a.md"],
       [sender, "C:/notes/b.md"]
     ]);
+    firstSnapshot.resolve();
+    await syncA;
   });
 
   it("syncs missing windows and pathless active documents to null", async () => {
@@ -79,7 +91,7 @@ describe("createWorkspaceFileWatchApplication", () => {
     ]);
   });
 
-  it("continues a window queue after failure and cleans it up", async () => {
+  it("forwards a later intent after a service failure", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
     workspace.openDocument("window-1", document("a.md"));
