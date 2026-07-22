@@ -60,6 +60,12 @@ export type ReloadWorkspaceTabFromPathInput = {
   targetPath: string;
 };
 
+export type ReloadWorkspaceTabFromPathResult =
+  | WorkspaceCommandSuccess<WorkspaceWindowSnapshot>
+  | {
+      kind: "revision-stale";
+    };
+
 export type WorkspaceMoveTabResult = {
   sourceWindowSnapshot: WorkspaceWindowSnapshot;
   targetWindowSnapshot: WorkspaceWindowSnapshot;

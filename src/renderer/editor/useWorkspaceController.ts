@@ -421,8 +421,17 @@ export function useWorkspaceController(input: {
       setWorkspaceOpenState("opening");
 
       try {
-        const snapshot = await fishmark.reloadWorkspaceTabFromPath(inputValue);
-        applyWorkspaceWindowSnapshot(snapshot);
+        const result = await fishmark.reloadWorkspaceTabFromPath(inputValue);
+        if (result.kind === "revision-stale") {
+          setWorkspaceOpenState("idle");
+          showNotification({
+            kind: "warning",
+            message: "重新加载期间检测到新的编辑，已保留当前内容。请重试。"
+          });
+          return false;
+        }
+
+        applyWorkspaceWindowSnapshot(result.snapshot);
         return true;
       } catch (error) {
         setWorkspaceOpenState("idle");

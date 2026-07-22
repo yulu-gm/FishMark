@@ -12,6 +12,7 @@ import type {
   OpenWorkspaceFileFromPathResult,
   OpenWorkspaceFileResult,
   ReloadWorkspaceTabFromPathInput,
+  ReloadWorkspaceTabFromPathResult,
   ReorderWorkspaceTabInput,
   UpdateWorkspaceTabDraftInput,
   WorkspaceMoveTabResult,
@@ -62,7 +63,9 @@ export interface ProductBridge {
   createWorkspaceTab: (input: CreateWorkspaceTabInput) => Promise<WorkspaceWindowSnapshot>;
   openWorkspaceFile: () => Promise<OpenWorkspaceFileResult>;
   openWorkspaceFileFromPath: (targetPath: string) => Promise<OpenWorkspaceFileFromPathResult>;
-  reloadWorkspaceTabFromPath: (input: ReloadWorkspaceTabFromPathInput) => Promise<WorkspaceWindowSnapshot>;
+  reloadWorkspaceTabFromPath: (
+    input: ReloadWorkspaceTabFromPathInput
+  ) => Promise<ReloadWorkspaceTabFromPathResult>;
   activateWorkspaceTab: (input: ActivateWorkspaceTabInput) => Promise<WorkspaceWindowSnapshot>;
   closeWorkspaceTab: (input: CloseWorkspaceTabInput) => Promise<WorkspaceWindowSnapshot>;
   reorderWorkspaceTab: (input: ReorderWorkspaceTabInput) => Promise<WorkspaceWindowSnapshot>;

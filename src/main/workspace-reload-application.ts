@@ -7,6 +7,15 @@ import type { OpenMarkdownFileResult } from "../shared/open-markdown-file";
 import type { WorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
 import { requireAppliedWorkspaceMutation } from "./workspace-mutation-result";
 
+export type WorkspaceReloadResult =
+  | {
+      readonly kind: "success";
+      readonly projection: WorkspaceWindowProjection;
+    }
+  | {
+      readonly kind: "revision-stale";
+    };
+
 type WorkspaceReloadApplicationDependencies = {
   workspace: Pick<
     WorkspaceState,
@@ -30,7 +39,7 @@ export function createWorkspaceReloadApplication(
       readonly tabId: string;
       readonly expectedWindowId: string;
       readonly targetPath: string;
-    }): Promise<WorkspaceWindowProjection> {
+    }): Promise<WorkspaceReloadResult> {
       return dependencies.documentOperations.runExclusive(input.tabId, async () => {
         const checkpoint = dependencies.workspace.getTabSession(input.tabId);
         if (checkpoint.windowId !== input.expectedWindowId) {
@@ -47,16 +56,22 @@ export function createWorkspaceReloadApplication(
           throw new Error(`Unable to reload Markdown file '${input.targetPath}'.`);
         }
 
-        await dependencies.recordRecentFilePath(result.document.path ?? input.targetPath);
         const mutation = dependencies.workspace.replaceTabDocument({
           tabId: input.tabId,
           expectedWindowId: input.expectedWindowId,
           expectedRevision: checkpoint.revision,
           document: result.document
         });
-        return requireAppliedWorkspaceMutation(mutation, "reload", {
-          allowRevisionChanged: true
-        });
+        if (mutation.kind === "stale" && mutation.reason === "revision-changed") {
+          return { kind: "revision-stale" };
+        }
+
+        const projection = requireAppliedWorkspaceMutation(mutation, "reload");
+        await dependencies.recordRecentFilePath(result.document.path ?? input.targetPath);
+        return {
+          kind: "success",
+          projection
+        };
       });
     }
   };

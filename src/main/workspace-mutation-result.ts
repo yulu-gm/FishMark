@@ -15,17 +15,9 @@ const STALE_REASON_MESSAGES: Readonly<
 
 export function requireAppliedWorkspaceMutation(
   result: WorkspaceMutationResult,
-  operation: string,
-  options: { readonly allowRevisionChanged?: boolean } = {}
+  operation: string
 ): WorkspaceWindowProjection {
   if (result.kind === "applied") {
-    return result.projection;
-  }
-  if (
-    result.reason === "revision-changed" &&
-    options.allowRevisionChanged === true &&
-    result.projection !== null
-  ) {
     return result.projection;
   }
 

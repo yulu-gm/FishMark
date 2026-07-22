@@ -152,6 +152,7 @@ import {
   type OpenWorkspaceFileFromPathResult,
   type OpenWorkspaceFileResult,
   type ReloadWorkspaceTabFromPathInput,
+  type ReloadWorkspaceTabFromPathResult,
   type ReorderWorkspaceTabInput,
   type UpdateWorkspaceTabDraftInput,
   type WorkspaceWindowCloseRequest
@@ -496,25 +497,39 @@ app.whenReady().then(async () => {
     windowManager.openEditorWindow();
   };
 
-  function resolveWorkspaceWindowId(sender: Electron.WebContents): string {
+  function requireLiveWorkspaceOwnerWindow(
+    sender: Electron.WebContents
+  ): BrowserWindow {
+    if (sender.isDestroyed()) {
+      throw new Error("Workspace renderer is no longer available.");
+    }
+
     const ownerWindow = BrowserWindow.fromWebContents(sender);
-    return String(ownerWindow?.id ?? sender.id);
+    if (
+      ownerWindow === null ||
+      ownerWindow.isDestroyed() ||
+      ownerWindow.webContents !== sender ||
+      ownerWindow.webContents.isDestroyed()
+    ) {
+      throw new Error("Workspace renderer does not belong to a live window.");
+    }
+
+    return ownerWindow;
   }
 
   async function ensureWorkspaceWindow(
     sender: Electron.WebContents
   ): Promise<string> {
-    const windowId = resolveWorkspaceWindowId(sender);
+    const initialOwnerWindow = requireLiveWorkspaceOwnerWindow(sender);
+    const windowId = String(initialOwnerWindow.id);
     await workspaceDetachApplication.markWindowReady(windowId);
+    const ownerWindow = requireLiveWorkspaceOwnerWindow(sender);
+    if (String(ownerWindow.id) !== windowId) {
+      throw new Error("Workspace renderer owner changed while becoming ready.");
+    }
     workspaceState.registerWindow(windowId);
 
     if (!workspaceWindowBindings.has(windowId)) {
-      const ownerWindow = BrowserWindow.fromWebContents(sender);
-      if (!ownerWindow) {
-        workspaceWindowBindings.add(windowId);
-        return windowId;
-      }
-
       ownerWindow.on("focus", () => {
         workspaceState.focusWindow(windowId);
       });
@@ -825,15 +840,19 @@ app.whenReady().then(async () => {
     RELOAD_WORKSPACE_TAB_FROM_PATH_CHANNEL,
     async (event, input: ReloadWorkspaceTabFromPathInput) => {
       const windowId = await ensureWorkspaceWindow(event.sender);
-      const projection = await workspaceReloadApplication.reloadTab({
+      const result = await workspaceReloadApplication.reloadTab({
         tabId: input.tabId,
         expectedWindowId: windowId,
         targetPath: input.targetPath
       });
-      return syncWorkspaceWatch(
-        event.sender,
-        projection
-      );
+      if (result.kind === "revision-stale") {
+        return { kind: "revision-stale" } satisfies ReloadWorkspaceTabFromPathResult;
+      }
+
+      return {
+        kind: "success",
+        snapshot: await syncWorkspaceWatch(event.sender, result.projection)
+      } satisfies ReloadWorkspaceTabFromPathResult;
     }
   );
   ipcMain.handle(ACTIVATE_WORKSPACE_TAB_CHANNEL, async (event, input: ActivateWorkspaceTabInput) => {

@@ -41,18 +41,4 @@ describe("requireAppliedWorkspaceMutation", () => {
       `Workspace draft update rejected: ${message}.`
     );
   });
-
-  it("can return the current dirty projection for a revision-only race", () => {
-    const result: WorkspaceMutationResult = {
-      kind: "stale",
-      reason: "revision-changed",
-      projection: emptyProjection
-    };
-
-    expect(
-      requireAppliedWorkspaceMutation(result, "reload", {
-        allowRevisionChanged: true
-      })
-    ).toBe(emptyProjection);
-  });
 });

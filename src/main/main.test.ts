@@ -187,6 +187,13 @@ describe("main process window wiring", () => {
     expect(ensureWorkspaceSource.indexOf("workspaceDetachApplication.markWindowReady(windowId)")).toBeLessThan(
       ensureWorkspaceSource.indexOf("workspaceState.registerWindow(windowId)")
     );
+    expect(
+      ensureWorkspaceSource.match(/requireLiveWorkspaceOwnerWindow\(sender\)/g)
+    ).toHaveLength(2);
+    expect(ensureWorkspaceSource).not.toContain("sender.id");
+    expect(ensureWorkspaceSource.lastIndexOf("requireLiveWorkspaceOwnerWindow(sender)")).toBeLessThan(
+      ensureWorkspaceSource.indexOf("workspaceState.registerWindow(windowId)")
+    );
     expect(mainSource).not.toContain("workspaceState.registerWindow(detachedWindowId)");
     expect(mainSource).toContain("workspaceState.getWindowProjection(windowId)");
     expect(mainSource).not.toContain("workspaceState.replaceTabDocument(input.tabId");

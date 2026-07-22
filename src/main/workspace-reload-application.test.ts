@@ -44,20 +44,23 @@ describe("createWorkspaceReloadApplication", () => {
       recordRecentFilePath
     });
 
-    const projection = await application.reloadTab({
+    const result = await application.reloadTab({
       tabId,
       expectedWindowId: "window-1",
       targetPath: "C:/notes/reload.md"
     });
 
-    expect(projection).toMatchObject({
-      windowId: "window-1",
-      activeDocument: { content: "after", isDirty: false }
+    expect(result).toMatchObject({
+      kind: "success",
+      projection: {
+        windowId: "window-1",
+        activeDocument: { content: "after", isDirty: false }
+      }
     });
     expect(recordRecentFilePath).toHaveBeenCalledWith("C:/notes/reload.md");
   });
 
-  it("returns the sender projection without overwriting an edit during IO", async () => {
+  it("returns an explicit revision-stale result without recording recent or overwriting an edit during IO", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
     const tabId = workspace.openDocument(
@@ -65,13 +68,14 @@ describe("createWorkspaceReloadApplication", () => {
       document("edit-race.md", "before")
     ).activeTabId!;
     let resolveRead!: (result: OpenMarkdownFileResult) => void;
+    const recordRecentFilePath = vi.fn(async () => undefined);
     const application = createWorkspaceReloadApplication({
       workspace,
       openMarkdownFileFromPath: () =>
         new Promise((resolve) => {
           resolveRead = resolve;
         }),
-      recordRecentFilePath: vi.fn(async () => undefined)
+      recordRecentFilePath
     });
 
     const reloadPromise = application.reloadTab({
@@ -86,16 +90,14 @@ describe("createWorkspaceReloadApplication", () => {
       document: document("edit-race.md", "disk after")
     });
 
-    await expect(reloadPromise).resolves.toMatchObject({
-      windowId: "window-1",
-      activeDocument: { content: "new draft", isDirty: true }
-    });
+    await expect(reloadPromise).resolves.toEqual({ kind: "revision-stale" });
     expect(workspace.getTabSession(tabId)).toMatchObject({
       content: "new draft",
       revision: 1,
       savedRevision: 0,
       isDirty: true
     });
+    expect(recordRecentFilePath).not.toHaveBeenCalled();
   });
 
   it("rejects a reload commit after an out-of-band owner change", async () => {

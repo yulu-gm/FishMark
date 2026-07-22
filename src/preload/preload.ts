@@ -39,6 +39,7 @@ import type {
   OpenWorkspaceFileResult,
   OpenWorkspacePathRequest,
   ReloadWorkspaceTabFromPathInput,
+  ReloadWorkspaceTabFromPathResult,
   ReorderWorkspaceTabInput,
   UpdateWorkspaceTabDraftInput,
   WorkspaceMoveTabResult,
@@ -186,7 +187,8 @@ const productApi: ProductBridge = {
     ipcRenderer.invoke(OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL, { targetPath }),
   reloadWorkspaceTabFromPath: (
     input: ReloadWorkspaceTabFromPathInput
-  ): Promise<WorkspaceWindowSnapshot> => ipcRenderer.invoke(RELOAD_WORKSPACE_TAB_FROM_PATH_CHANNEL, input),
+  ): Promise<ReloadWorkspaceTabFromPathResult> =>
+    ipcRenderer.invoke(RELOAD_WORKSPACE_TAB_FROM_PATH_CHANNEL, input),
   activateWorkspaceTab: (input: ActivateWorkspaceTabInput): Promise<WorkspaceWindowSnapshot> =>
     ipcRenderer.invoke(ACTIVATE_WORKSPACE_TAB_CHANNEL, input),
   closeWorkspaceTab: (input: CloseWorkspaceTabInput): Promise<WorkspaceWindowSnapshot> =>

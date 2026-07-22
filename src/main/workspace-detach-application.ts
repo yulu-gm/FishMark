@@ -28,6 +28,7 @@ type PendingWorkspaceDetach<TWindow> = {
   readonly reject: (error: unknown) => void;
   cancelReadyTimeout: () => void;
   readyStarted: boolean;
+  cancellationError: unknown | null;
 };
 
 export function createWorkspaceDetachApplication<TWindow>(
@@ -64,7 +65,8 @@ export function createWorkspaceDetachApplication<TWindow>(
         resolve,
         reject,
         cancelReadyTimeout: () => undefined,
-        readyStarted: false
+        readyStarted: false,
+        cancellationError: null
       };
       pendingDetaches.set(targetWindowId, pending);
 
@@ -127,8 +129,8 @@ export function createWorkspaceDetachApplication<TWindow>(
       if (rejectedPending !== undefined) {
         destroyWindowSafely(rejectedPending.window);
         rejectedPending.reject(error);
-        throw error;
       }
+      throw pending.cancellationError ?? error;
     }
   }
 
@@ -137,6 +139,8 @@ export function createWorkspaceDetachApplication<TWindow>(
     if (pending === undefined) {
       return;
     }
+
+    pending.cancellationError = error;
 
     destroyWindowSafely(pending.window);
     pending.reject(error);

@@ -688,6 +688,100 @@ describe("useWorkspaceController", () => {
       root.unmount();
     });
   });
+
+  it("keeps the current workspace and reports retryable revision staleness without applying a reload snapshot", async () => {
+    const showNotification = vi.fn();
+    const initialSnapshot = createWorkspaceSnapshot({
+      tabs: [
+        {
+          tabId: "tab-1",
+          path: "C:/notes/note.md",
+          name: "note.md",
+          content: "# Local draft\n",
+          isDirty: true
+        }
+      ]
+    });
+    const reloadWorkspaceTabFromPath = vi.fn(async () => ({
+      kind: "revision-stale" as const
+    }));
+    const { latestRef, root } = renderController({
+      fishmark: {
+        reloadWorkspaceTabFromPath
+      } as unknown as Window["fishmark"],
+      initialSnapshot,
+      getEditorContent: () => "# Newer local draft\n",
+      showNotification
+    });
+
+    let didReload: boolean | undefined;
+    await act(async () => {
+      didReload = await latestRef.current?.reloadWorkspaceTabFromPath({
+        tabId: "tab-1",
+        targetPath: "C:/notes/note.md"
+      });
+    });
+
+    expect(didReload).toBe(false);
+    expect(latestRef.current?.workspaceSnapshot).toEqual(initialSnapshot);
+    expect(showNotification).toHaveBeenCalledWith({
+      kind: "warning",
+      message: "重新加载期间检测到新的编辑，已保留当前内容。请重试。"
+    });
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it("applies only an explicit successful reload result", async () => {
+    const reloadedSnapshot = createWorkspaceSnapshot({
+      tabs: [
+        {
+          tabId: "tab-1",
+          path: "C:/notes/note.md",
+          name: "note.md",
+          content: "# Disk content\n"
+        }
+      ]
+    });
+    const reloadWorkspaceTabFromPath = vi.fn(async () => ({
+      kind: "success" as const,
+      snapshot: reloadedSnapshot
+    }));
+    const { latestRef, root } = renderController({
+      fishmark: {
+        reloadWorkspaceTabFromPath
+      } as unknown as Window["fishmark"],
+      initialSnapshot: createWorkspaceSnapshot({
+        tabs: [
+          {
+            tabId: "tab-1",
+            path: "C:/notes/note.md",
+            name: "note.md",
+            content: "# Before\n"
+          }
+        ]
+      }),
+      getEditorContent: () => "# Before\n",
+      showNotification: vi.fn()
+    });
+
+    let didReload: boolean | undefined;
+    await act(async () => {
+      didReload = await latestRef.current?.reloadWorkspaceTabFromPath({
+        tabId: "tab-1",
+        targetPath: "C:/notes/note.md"
+      });
+    });
+
+    expect(didReload).toBe(true);
+    expect(latestRef.current?.workspaceSnapshot).toEqual(reloadedSnapshot);
+
+    act(() => {
+      root.unmount();
+    });
+  });
 });
 
 describe("useEditorWorkflowController", () => {

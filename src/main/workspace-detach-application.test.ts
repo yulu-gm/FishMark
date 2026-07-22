@@ -87,6 +87,75 @@ function expectNoTargetWindow(
 }
 
 describe("createWorkspaceDetachApplication", () => {
+  it.each([
+    {
+      name: "timeout",
+      cancel: (_window: FakeWindow, scheduler: ReturnType<typeof createReadyScheduler>) =>
+        scheduler.fire(),
+      message: "Detached workspace window '3' did not become ready before the timeout."
+    },
+    {
+      name: "window close",
+      cancel: (window: FakeWindow) => window.closedListener?.(),
+      message: "Detached workspace window '3' closed before it became ready."
+    },
+    {
+      name: "main-frame load failure",
+      cancel: (window: FakeWindow) => window.loadFailureListener?.(),
+      message: "Detached workspace window '3' failed to load before it became ready."
+    }
+  ])(
+    "rejects detach and ready without a ghost binding when $name cancels while transfer is queued",
+    async ({ cancel, message }) => {
+      const { workspace, tabId } = createDirtySource();
+      const window = createWindow(3);
+      const scheduler = createReadyScheduler();
+      const documentOperations = createWorkspaceDocumentOperationCoordinator();
+      let releaseBlockingOperation!: () => void;
+      const blockingOperation = documentOperations.runExclusive(
+        tabId,
+        () =>
+          new Promise<void>((resolve) => {
+            releaseBlockingOperation = resolve;
+          })
+      );
+      await vi.waitFor(() => expect(releaseBlockingOperation).toBeTypeOf("function"));
+      const application = createWorkspaceDetachApplication({
+        workspace,
+        tabTransfer: createWorkspaceTabTransferApplication({
+          workspace,
+          documentOperations
+        }),
+        openWindow: () => window,
+        scheduleReadyTimeout: scheduler.scheduleReadyTimeout,
+        lifecycle: createLifecycle()
+      });
+      const ghostBindings = new Set<string>();
+
+      const detachPromise = application.detachTab({
+        tabId,
+        expectedWindowId: "window-1"
+      });
+      const readyPromise = application.markWindowReady("3").then(() => {
+        ghostBindings.add("3");
+      });
+      await Promise.resolve();
+
+      cancel(window, scheduler);
+      const detachRejection = expect(detachPromise).rejects.toThrow(message);
+      releaseBlockingOperation();
+
+      await detachRejection;
+      await expect(readyPromise).rejects.toThrow(message);
+      await blockingOperation;
+      expect(window.destroy).toHaveBeenCalledOnce();
+      expectDirtySourceTab(workspace, tabId);
+      expectNoTargetWindow(workspace);
+      expect(workspace.getLastFocusedWindowId()).toBe("window-1");
+      expect(ghostBindings).toEqual(new Set());
+    }
+  );
+
   it("routes the ready-time transfer through the shared tab transfer application", async () => {
     const { workspace, tabId } = createDirtySource();
     const window = createWindow(3);

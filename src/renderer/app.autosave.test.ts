@@ -36,6 +36,7 @@ import type {
   UpdateWorkspaceTabDraftInput,
   OpenWorkspaceFileResult,
   OpenWorkspaceFileFromPathResult,
+  ReloadWorkspaceTabFromPathResult,
   WorkspaceDocumentSnapshot,
   WorkspaceWindowSnapshot
 } from "../shared/workspace";
@@ -557,7 +558,7 @@ describe("App autosave", () => {
   >;
   let reloadWorkspaceTabFromPath: ReturnType<
     typeof vi.fn<
-      (input: { tabId: string; targetPath: string }) => Promise<WorkspaceWindowSnapshot>
+      (input: { tabId: string; targetPath: string }) => Promise<ReloadWorkspaceTabFromPathResult>
     >
   >;
   let handleDroppedMarkdownFile: ReturnType<
@@ -964,15 +965,21 @@ describe("App autosave", () => {
       .fn<(input: UpdateWorkspaceTabDraftInput) => Promise<WorkspaceWindowSnapshot>>()
       .mockImplementation(async (input) => updateWorkspaceDraft(input.tabId, input.content));
     reloadWorkspaceTabFromPath = vi
-      .fn<(input: { tabId: string; targetPath: string }) => Promise<WorkspaceWindowSnapshot>>()
+      .fn<
+        (input: { tabId: string; targetPath: string }) =>
+          Promise<ReloadWorkspaceTabFromPathResult>
+      >()
       .mockImplementation(async (input) => {
         const document = getQueuedWorkspaceDocument(input.targetPath);
-        return replaceWorkspaceDocument({
-          tabId: input.tabId,
-          path: document.path ?? input.targetPath,
-          name: document.name,
-          content: document.content
-        });
+        return {
+          kind: "success",
+          snapshot: replaceWorkspaceDocument({
+            tabId: input.tabId,
+            path: document.path ?? input.targetPath,
+            name: document.name,
+            content: document.content
+          })
+        };
       });
 
     saveMarkdownFile = vi
@@ -2643,6 +2650,60 @@ describe("App autosave", () => {
     });
     expect(container.querySelectorAll('[data-fishmark-region="workspace-tab"]')).toHaveLength(1);
     expect(container.textContent).not.toContain("当前文件已被外部修改");
+  });
+
+  it("keeps conflict save protections when a reload becomes revision-stale during its deferred read", async () => {
+    let resolveReload!: (result: ReloadWorkspaceTabFromPathResult) => void;
+    reloadWorkspaceTabFromPath.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveReload = resolve;
+        })
+    );
+    saveMarkdownFileAs.mockResolvedValueOnce({ status: "cancelled" });
+
+    await renderAndOpenDocument();
+
+    await act(async () => {
+      externalMarkdownFileChangedListener?.({
+        path: "C:/notes/today.md",
+        kind: "modified"
+      });
+      await Promise.resolve();
+    });
+    await act(async () => {
+      findButtonByText("重载磁盘版本")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+    await vi.waitFor(() => expect(resolveReload).toBeTypeOf("function"));
+
+    await act(async () => {
+      codeEditorMock.changeContent("# New draft during reload\n");
+      resolveReload({ kind: "revision-stale" });
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("当前文件已被外部修改");
+    expect(container.textContent).toContain(
+      "重新加载期间检测到新的编辑，已保留当前内容。请重试。"
+    );
+
+    saveMarkdownFile.mockClear();
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+    expect(saveMarkdownFile).not.toHaveBeenCalled();
+
+    await act(async () => {
+      menuCommandListener?.("save-markdown-file");
+      await Promise.resolve();
+    });
+    expect(saveMarkdownFile).not.toHaveBeenCalled();
+    expect(saveMarkdownFileAs).toHaveBeenCalledWith({
+      tabId: "tab-1",
+      currentPath: "C:/notes/today.md"
+    });
   });
 
   it("applies initial theme and typography preferences to the document root", async () => {
