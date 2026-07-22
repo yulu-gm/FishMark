@@ -146,9 +146,10 @@ describe("createExternalFileWatchService", () => {
     watchCallbacks.get("C:/notes/a.md")?.("change");
     await vi.waitFor(() => expect(stat).toHaveBeenCalledTimes(2));
     const syncB = service.syncDocumentPath(webContents, "C:/notes/b.md");
-    await Promise.resolve();
+    await vi.waitFor(() => expect(watch).toHaveBeenCalledTimes(2));
 
-    expect(watch).toHaveBeenCalledTimes(1);
+    expect(watch).toHaveBeenCalledTimes(2);
+    expect(webContents.send).not.toHaveBeenCalled();
     callbackSnapshot.resolve(createStats({ mtimeMs: 2, size: 11 }));
     await syncB;
     await callbackCompletion;
@@ -165,7 +166,8 @@ describe("createExternalFileWatchService", () => {
       .mockResolvedValueOnce(createStats({ mtimeMs: 1, size: 10 }))
       .mockReturnValueOnce(completionSnapshot.promise)
       .mockResolvedValueOnce(createStats({ mtimeMs: 10, size: 20 }))
-      .mockResolvedValueOnce(createStats({ mtimeMs: 10, size: 20 }));
+      .mockResolvedValueOnce(createStats({ mtimeMs: 11, size: 21 }))
+      .mockResolvedValueOnce(createStats({ mtimeMs: 11, size: 21 }));
     const webContents = createWebContents();
     const service = createExternalFileWatchService({
       watch: vi.fn((targetPath: string, listener: WatchCallback) => {
@@ -180,14 +182,51 @@ describe("createExternalFileWatchService", () => {
     const completeA = service.completeInternalWrite(webContents, "C:/notes/a.md");
     await vi.waitFor(() => expect(stat).toHaveBeenCalledTimes(2));
     const syncB = service.syncDocumentPath(webContents, "C:/notes/b.md");
-    await Promise.resolve();
-    expect(stat).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(stat).toHaveBeenCalledTimes(3));
+    expect(stat).toHaveBeenCalledTimes(3);
+    await service.beginInternalWrite(webContents, "C:/notes/b.md");
     completionSnapshot.resolve(createStats({ mtimeMs: 2, size: 11 }));
     await Promise.all([completeA, syncB]);
 
     watchCallbacks.get("C:/notes/b.md")?.("change");
     await vi.waitFor(() => expect(stat).toHaveBeenCalledTimes(4));
+    await service.completeInternalWrite(webContents, "C:/notes/b.md");
+    expect(webContents.send).not.toHaveBeenCalled();
+  });
+
+  it("awaits a pending path sync before admitting an internal write", async () => {
+    const watchCallbacks = new Map<string, WatchCallback>();
+    const baseline = createDeferred<Stats>();
+    const stat = vi
+      .fn<(targetPath: string) => Promise<Stats>>()
+      .mockReturnValueOnce(baseline.promise)
+      .mockResolvedValueOnce(createStats({ mtimeMs: 2, size: 11 }))
+      .mockResolvedValueOnce(createStats({ mtimeMs: 2, size: 11 }));
+    const webContents = createWebContents();
+    const service = createExternalFileWatchService({
+      watch: vi.fn((targetPath: string, listener: WatchCallback) => {
+        watchCallbacks.set(targetPath, listener);
+        return { close: vi.fn() };
+      }),
+      stat
+    });
+
+    const sync = service.syncDocumentPath(webContents, "C:/notes/a.md");
+    let admitted = false;
+    const begin = service
+      .beginInternalWrite(webContents, "C:/notes/a.md")
+      .then(() => {
+        admitted = true;
+      });
     await Promise.resolve();
+    expect(admitted).toBe(false);
+
+    baseline.resolve(createStats({ mtimeMs: 1, size: 10 }));
+    await Promise.all([sync, begin]);
+    watchCallbacks.get("C:/notes/a.md")?.("change");
+    await vi.waitFor(() => expect(stat).toHaveBeenCalledTimes(2));
+    await service.completeInternalWrite(webContents, "C:/notes/a.md");
+
     expect(webContents.send).not.toHaveBeenCalled();
   });
 

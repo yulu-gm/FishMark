@@ -42,7 +42,8 @@ type WatchController = {
   generation: number;
   desiredPath: string | null;
   entry: WatchEntry | null;
-  queue: Promise<void>;
+  stateQueue: Promise<void>;
+  pendingSync: Promise<void> | null;
   destroyed: boolean;
 };
 
@@ -92,7 +93,8 @@ export function createExternalFileWatchService(
       generation: 0,
       desiredPath: null,
       entry: null,
-      queue: Promise.resolve(),
+      stateQueue: Promise.resolve(),
+      pendingSync: null,
       destroyed: false
     };
     controllers.set(webContents.id, controller);
@@ -106,19 +108,19 @@ export function createExternalFileWatchService(
     return controller;
   }
 
-  function enqueue(
+  function enqueueStateTransition(
     controller: WatchController,
-    operation: () => Promise<void> | void
+    transition: () => void
   ): Promise<void> {
-    const queued = controller.queue
+    const result = controller.stateQueue
       .catch(() => undefined)
-      .then(async () => {
+      .then(() => {
         if (isLiveController(controller)) {
-          await operation();
+          transition();
         }
       });
-    controller.queue = queued;
-    return queued;
+    controller.stateQueue = result.catch(() => undefined);
+    return result;
   }
 
   function syncDocumentPath(
@@ -136,18 +138,47 @@ export function createExternalFileWatchService(
       controller.generation += 1;
     }
     const generation = controller.generation;
-
-    return enqueue(controller, async () => {
-      if (!isCurrentIntent(controller, generation, normalizedPath)) {
-        return;
+    const sync = performSync(controller, generation, normalizedPath);
+    controller.pendingSync = sync;
+    const clearPendingSync = () => {
+      if (controller.pendingSync === sync) {
+        controller.pendingSync = null;
       }
-      if (normalizedPath === null) {
+    };
+    void sync.then(clearPendingSync, clearPendingSync);
+    return sync;
+  }
+
+  async function performSync(
+    controller: WatchController,
+    generation: number,
+    normalizedPath: string | null
+  ): Promise<void> {
+    if (normalizedPath === null) {
+      await enqueueStateTransition(controller, () => {
+        if (!isCurrentIntent(controller, generation, normalizedPath)) {
+          return;
+        }
         closeEntry(controller.entry);
         controller.entry = null;
-        return;
-      }
+      });
+      return;
+    }
 
-      const baseline = await readSnapshot(normalizedPath, dependencies.stat);
+    const started: { work: Promise<FileSnapshot | null> | null } = {
+      work: null
+    };
+    await enqueueStateTransition(controller, () => {
+      if (isCurrentIntent(controller, generation, normalizedPath)) {
+        started.work = readSnapshot(normalizedPath, dependencies.stat);
+      }
+    });
+    if (started.work === null) {
+      return;
+    }
+
+    const baseline = await started.work;
+    await enqueueStateTransition(controller, () => {
       if (!isCurrentIntent(controller, generation, normalizedPath)) {
         return;
       }
@@ -170,10 +201,10 @@ export function createExternalFileWatchService(
         deferredSnapshot: undefined
       };
       const watcher = dependencies.watch(normalizedPath, () => {
-        const callback = enqueue(controller, () =>
-          handleWatchEvent(controller, nextEntry)
-        );
-        const handledCallback = callback.catch(() => undefined);
+        const handledCallback = handleWatchEvent(
+          controller,
+          nextEntry
+        ).catch(() => undefined);
         void handledCallback;
         return handledCallback;
       });
@@ -187,15 +218,19 @@ export function createExternalFileWatchService(
     });
   }
 
-  function beginInternalWrite(
+  async function beginInternalWrite(
     webContents: WatchedWebContents,
     targetPath: string
   ): Promise<void> {
     const controller = getController(webContents);
     if (!controller) {
-      return Promise.resolve();
+      return;
     }
-    return enqueue(controller, () => {
+    const pendingSync = controller.pendingSync;
+    if (pendingSync) {
+      await pendingSync;
+    }
+    await enqueueStateTransition(controller, () => {
       const entry = controller.entry;
       if (!entry || !isCurrentEntry(controller, entry) || entry.path !== targetPath) {
         return;
@@ -205,15 +240,19 @@ export function createExternalFileWatchService(
     });
   }
 
-  function completeInternalWrite(
+  async function completeInternalWrite(
     webContents: WatchedWebContents,
     targetPath: string
   ): Promise<void> {
     const controller = getController(webContents);
     if (!controller) {
-      return Promise.resolve();
+      return;
     }
-    return enqueue(controller, async () => {
+    const started: {
+      entry: WatchEntry | null;
+      work: Promise<FileSnapshot | null> | null;
+    } = { entry: null, work: null };
+    await enqueueStateTransition(controller, () => {
       const entry = controller.entry;
       if (
         !entry ||
@@ -223,9 +262,30 @@ export function createExternalFileWatchService(
       ) {
         return;
       }
+      started.entry = entry;
+      started.work = readSnapshot(targetPath, dependencies.stat);
+    });
+    if (started.entry === null || started.work === null) {
+      return;
+    }
+    const entry = started.entry;
+    const work = started.work;
 
+    let currentSnapshot: FileSnapshot | null;
+    try {
+      currentSnapshot = await work;
+    } catch (error) {
+      await enqueueStateTransition(controller, () => {
+        if (isSameLiveEntry(controller, entry)) {
+          entry.internalWritePath = null;
+          entry.deferredSnapshot = undefined;
+        }
+      });
+      throw error;
+    }
+
+    await enqueueStateTransition(controller, () => {
       try {
-        const currentSnapshot = await readSnapshot(targetPath, dependencies.stat);
         if (!isCurrentEntry(controller, entry)) {
           return;
         }
@@ -238,7 +298,7 @@ export function createExternalFileWatchService(
           sendExternalChange(controller.webContents, targetPath, currentSnapshot);
         }
       } finally {
-        if (isCurrentEntry(controller, entry)) {
+        if (isSameLiveEntry(controller, entry)) {
           entry.internalWritePath = null;
           entry.deferredSnapshot = undefined;
         }
@@ -250,22 +310,33 @@ export function createExternalFileWatchService(
     controller: WatchController,
     entry: WatchEntry
   ): Promise<void> {
-    if (!isCurrentEntry(controller, entry)) {
+    const started: { work: Promise<FileSnapshot | null> | null } = {
+      work: null
+    };
+    await enqueueStateTransition(controller, () => {
+      if (isCurrentEntry(controller, entry)) {
+        started.work = readSnapshot(entry.path, dependencies.stat);
+      }
+    });
+    if (started.work === null) {
       return;
     }
-    const nextSnapshot = await readSnapshot(entry.path, dependencies.stat);
-    if (!isCurrentEntry(controller, entry)) {
-      return;
-    }
-    if (entry.internalWritePath === entry.path) {
-      entry.deferredSnapshot = nextSnapshot;
-      return;
-    }
-    if (snapshotsEqual(entry.baseline, nextSnapshot)) {
-      return;
-    }
-    entry.baseline = nextSnapshot;
-    sendExternalChange(controller.webContents, entry.path, nextSnapshot);
+
+    const nextSnapshot = await started.work;
+    await enqueueStateTransition(controller, () => {
+      if (!isCurrentEntry(controller, entry)) {
+        return;
+      }
+      if (entry.internalWritePath === entry.path) {
+        entry.deferredSnapshot = nextSnapshot;
+        return;
+      }
+      if (snapshotsEqual(entry.baseline, nextSnapshot)) {
+        return;
+      }
+      entry.baseline = nextSnapshot;
+      sendExternalChange(controller.webContents, entry.path, nextSnapshot);
+    });
   }
 
   function isLiveController(controller: WatchController): boolean {
@@ -295,6 +366,13 @@ export function createExternalFileWatchService(
       isCurrentIntent(controller, entry.generation, entry.path) &&
       controller.entry === entry
     );
+  }
+
+  function isSameLiveEntry(
+    controller: WatchController,
+    entry: WatchEntry
+  ): boolean {
+    return isLiveController(controller) && controller.entry === entry;
   }
 
   function destroyController(controller: WatchController): void {
