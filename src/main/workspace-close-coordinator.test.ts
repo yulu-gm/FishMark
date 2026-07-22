@@ -571,7 +571,11 @@ describe("createWorkspaceCloseCoordinator", () => {
       windowCloseRequest("window-1")
     );
     await vi.waitFor(() => expect(resolvePrompt).toBeTypeOf("function"));
-    workspace.reorderTab(secondTabId, 0);
+    workspace.reorderTab({
+      tabId: secondTabId,
+      expectedWindowId: "window-1",
+      targetIndex: 0
+    });
     resolvePrompt("discard");
 
     await expect(confirmPromise).resolves.toBeNull();

@@ -50,6 +50,7 @@ import { createWorkspaceDocumentOperationCoordinator } from "./workspace-documen
 import { createWorkspaceFileOperations } from "./workspace-file-operations";
 import { createWorkspaceReloadApplication } from "./workspace-reload-application";
 import { createWorkspaceTabTransferApplication } from "./workspace-tab-transfer-application";
+import { createWorkspaceTabReorderApplication } from "./workspace-tab-reorder-application";
 import { createWorkspaceWindowCloseApplication } from "./workspace-window-close-application";
 import { createWorkspaceWindowCloseConfirmationHandler } from "./workspace-window-close-confirmation-handler";
 import { createWorkspaceWindowCloseRequestBroker } from "./workspace-window-close-request-broker";
@@ -331,6 +332,10 @@ app.whenReady().then(async () => {
     workspace: workspaceState
   });
   const workspaceTabTransferApplication = createWorkspaceTabTransferApplication({
+    workspace: workspaceState,
+    documentOperations: workspaceDocumentOperations
+  });
+  const workspaceTabReorderApplication = createWorkspaceTabReorderApplication({
     workspace: workspaceState,
     documentOperations: workspaceDocumentOperations
   });
@@ -862,10 +867,14 @@ app.whenReady().then(async () => {
     return syncWorkspaceWatch(event.sender, result.snapshot);
   });
   ipcMain.handle(REORDER_WORKSPACE_TAB_CHANNEL, async (event, input: ReorderWorkspaceTabInput) => {
-    await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
+    const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
     return syncWorkspaceWatch(
       event.sender,
-      workspaceState.reorderTab(input.tabId, input.toIndex)
+      await workspaceTabReorderApplication.reorder({
+        tabId: input.tabId,
+        expectedWindowId: windowId,
+        targetIndex: input.toIndex
+      })
     );
   });
   ipcMain.handle(

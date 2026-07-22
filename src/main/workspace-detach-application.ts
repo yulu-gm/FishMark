@@ -27,8 +27,14 @@ type PendingWorkspaceDetach<TWindow> = {
   readonly resolve: (projection: WorkspaceMoveProjection) => void;
   readonly reject: (error: unknown) => void;
   cancelReadyTimeout: () => void;
-  readyStarted: boolean;
+  ready: PendingWorkspaceReady | null;
   cancellationError: unknown | null;
+};
+
+type PendingWorkspaceReady = {
+  readonly promise: Promise<void>;
+  readonly resolve: () => void;
+  readonly reject: (error: unknown) => void;
 };
 
 export function createWorkspaceDetachApplication<TWindow>(
@@ -65,7 +71,7 @@ export function createWorkspaceDetachApplication<TWindow>(
         resolve,
         reject,
         cancelReadyTimeout: () => undefined,
-        readyStarted: false,
+        ready: null,
         cancellationError: null
       };
       pendingDetaches.set(targetWindowId, pending);
@@ -109,28 +115,54 @@ export function createWorkspaceDetachApplication<TWindow>(
     });
   }
 
-  async function markWindowReady(windowId: string): Promise<void> {
+  function markWindowReady(windowId: string): Promise<void> {
     const pending = pendingDetaches.get(windowId);
-    if (pending === undefined || pending.readyStarted) {
-      return;
+    if (pending === undefined) {
+      return Promise.resolve();
     }
-    pending.readyStarted = true;
+    if (pending.ready !== null) {
+      return pending.ready.promise;
+    }
 
+    let resolveReady!: () => void;
+    let rejectReady!: (error: unknown) => void;
+    const readyPromise = new Promise<void>((resolve, reject) => {
+      resolveReady = resolve;
+      rejectReady = reject;
+    });
+    pending.ready = {
+      promise: readyPromise,
+      resolve: resolveReady,
+      reject: rejectReady
+    };
+    void transferPending(pending);
+    return readyPromise;
+  }
+
+  async function transferPending(
+    pending: PendingWorkspaceDetach<TWindow>
+  ): Promise<void> {
     try {
       const projection = await dependencies.tabTransfer.detach({
         tabId: pending.tabId,
         expectedWindowId: pending.sourceWindowId,
         targetWindowId: pending.targetWindowId,
-        isActive: () => pendingDetaches.get(windowId) === pending
+        isActive: () =>
+          pendingDetaches.get(pending.targetWindowId) === pending
       });
-      takePending(windowId)?.resolve(projection);
-    } catch (error) {
-      const rejectedPending = takePending(windowId);
-      if (rejectedPending !== undefined) {
-        destroyWindowSafely(rejectedPending.window);
-        rejectedPending.reject(error);
+      const completedPending = takePending(pending.targetWindowId, pending);
+      if (completedPending !== undefined) {
+        completedPending.resolve(projection);
+        completedPending.ready?.resolve();
       }
-      throw pending.cancellationError ?? error;
+    } catch (error) {
+      const rejectedPending = takePending(pending.targetWindowId, pending);
+      if (rejectedPending !== undefined) {
+        const rejection = rejectedPending.cancellationError ?? error;
+        destroyWindowSafely(rejectedPending.window);
+        rejectedPending.reject(rejection);
+        rejectedPending.ready?.reject(rejection);
+      }
     }
   }
 
@@ -144,13 +176,15 @@ export function createWorkspaceDetachApplication<TWindow>(
 
     destroyWindowSafely(pending.window);
     pending.reject(error);
+    pending.ready?.reject(error);
   }
 
   function takePending(
-    windowId: string
+    windowId: string,
+    expected?: PendingWorkspaceDetach<TWindow>
   ): PendingWorkspaceDetach<TWindow> | undefined {
     const pending = pendingDetaches.get(windowId);
-    if (pending === undefined) {
+    if (pending === undefined || (expected !== undefined && pending !== expected)) {
       return undefined;
     }
 

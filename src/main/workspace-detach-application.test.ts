@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createWorkspaceDetachApplication } from "./workspace-detach-application";
 import { createWorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
 import { createWorkspaceTabTransferApplication } from "./workspace-tab-transfer-application";
+import { createWorkspaceWindowRegistrationApplication } from "./workspace-window-registration-application";
 
 type FakeWindow = {
   id: number;
@@ -105,7 +106,7 @@ describe("createWorkspaceDetachApplication", () => {
       message: "Detached workspace window '3' failed to load before it became ready."
     }
   ])(
-    "rejects detach and ready without a ghost binding when $name cancels while transfer is queued",
+    "rejects detach and every concurrent registration without a ghost binding when $name cancels while transfer is queued",
     async ({ cancel, message }) => {
       const { workspace, tabId } = createDirtySource();
       const window = createWindow(3);
@@ -130,31 +131,118 @@ describe("createWorkspaceDetachApplication", () => {
         scheduleReadyTimeout: scheduler.scheduleReadyTimeout,
         lifecycle: createLifecycle()
       });
-      const ghostBindings = new Set<string>();
+      const sender = { destroyed: false };
+      const trace: string[] = [];
+      const registration = createWorkspaceWindowRegistrationApplication<
+        { destroyed: boolean },
+        FakeWindow
+      >({
+        isSenderDestroyed: (candidate) => candidate.destroyed,
+        resolveOwnerWindow: () => window,
+        isOwnerWindowDestroyed: () => false,
+        isOwnerWindowForSender: () => true,
+        getWindowId: (ownerWindow) => String(ownerWindow.id),
+        markWindowReady: application.markWindowReady,
+        registerWindow: (windowId) => trace.push(`register:${windowId}`),
+        bindWindow: (_ownerWindow, windowId) => trace.push(`bind:${windowId}`),
+        focusWindow: (windowId) => trace.push(`focus:${windowId}`)
+      });
 
       const detachPromise = application.detachTab({
         tabId,
         expectedWindowId: "window-1"
       });
-      const readyPromise = application.markWindowReady("3").then(() => {
-        ghostBindings.add("3");
-      });
+      const firstRegistration = registration.ensureWindow(sender);
+      const secondRegistration = registration.ensureWindow(sender);
       await Promise.resolve();
+
+      expect(trace).toEqual([]);
 
       cancel(window, scheduler);
       const detachRejection = expect(detachPromise).rejects.toThrow(message);
       releaseBlockingOperation();
 
       await detachRejection;
-      await expect(readyPromise).rejects.toThrow(message);
+      await expect(firstRegistration).rejects.toThrow(message);
+      await expect(secondRegistration).rejects.toThrow(message);
       await blockingOperation;
       expect(window.destroy).toHaveBeenCalledOnce();
       expectDirtySourceTab(workspace, tabId);
       expectNoTargetWindow(workspace);
       expect(workspace.getLastFocusedWindowId()).toBe("window-1");
-      expect(ghostBindings).toEqual(new Set());
+      expect(trace).toEqual([]);
     }
   );
+
+  it("shares one in-flight ready transaction across concurrent registrations", async () => {
+    const { workspace, tabId } = createDirtySource();
+    const window = createWindow(3);
+    const documentOperations = createWorkspaceDocumentOperationCoordinator();
+    const transfer = createWorkspaceTabTransferApplication({
+      workspace,
+      documentOperations
+    });
+    const detach = vi.spyOn(transfer, "detach");
+    const lease = await documentOperations.acquireExclusive([tabId]);
+    const application = createWorkspaceDetachApplication({
+      workspace,
+      tabTransfer: transfer,
+      openWindow: () => window,
+      scheduleReadyTimeout,
+      lifecycle: createLifecycle()
+    });
+    const trace: string[] = [];
+    const sender = {};
+    const registration = createWorkspaceWindowRegistrationApplication<
+      object,
+      FakeWindow
+    >({
+      isSenderDestroyed: () => false,
+      resolveOwnerWindow: () => window,
+      isOwnerWindowDestroyed: () => false,
+      isOwnerWindowForSender: () => true,
+      getWindowId: (ownerWindow) => String(ownerWindow.id),
+      markWindowReady: application.markWindowReady,
+      registerWindow: (windowId) => trace.push(`register:${windowId}`),
+      bindWindow: (_ownerWindow, windowId) => trace.push(`bind:${windowId}`),
+      focusWindow: (windowId) => trace.push(`focus:${windowId}`)
+    });
+
+    const detachPromise = application.detachTab({
+      tabId,
+      expectedWindowId: "window-1"
+    });
+    const firstReady = application.markWindowReady("3");
+    const secondReady = application.markWindowReady("3");
+    const firstRegistration = registration.ensureWindow(sender);
+    const secondRegistration = registration.ensureWindow(sender);
+    await Promise.resolve();
+
+    expect(secondReady).toBe(firstReady);
+    expect(trace).toEqual([]);
+    expect(detach).toHaveBeenCalledOnce();
+
+    lease.release();
+    await Promise.all([
+      firstReady,
+      secondReady,
+      firstRegistration,
+      secondRegistration,
+      detachPromise
+    ]);
+
+    expect(detach).toHaveBeenCalledOnce();
+    expect(trace).toEqual([
+      "register:3",
+      "bind:3",
+      "focus:3",
+      "register:3",
+      "bind:3",
+      "focus:3"
+    ]);
+    expect(workspace.getTabSession(tabId).windowId).toBe("3");
+    expect(window.destroy).not.toHaveBeenCalled();
+  });
 
   it("routes the ready-time transfer through the shared tab transfer application", async () => {
     const { workspace, tabId } = createDirtySource();

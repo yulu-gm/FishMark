@@ -72,6 +72,12 @@ export interface CloseWorkspaceTabInput {
   readonly expectedRevision: DocumentRevision;
 }
 
+export interface ReorderWorkspaceTabInput {
+  readonly tabId: string;
+  readonly expectedWindowId: string;
+  readonly targetIndex: number;
+}
+
 export type WorkspaceMutationStaleReason =
   | "tab-missing"
   | "window-missing"
@@ -133,9 +139,8 @@ export interface WorkspaceState {
   ) => WorkspaceMutationResult;
   readonly closeTab: (input: CloseWorkspaceTabInput) => WorkspaceMutationResult;
   readonly reorderTab: (
-    tabId: string,
-    targetIndex: number
-  ) => WorkspaceWindowProjection;
+    input: ReorderWorkspaceTabInput
+  ) => WorkspaceMutationResult;
   readonly moveTabToWindow: (input: MoveWorkspaceTabInput) => WorkspaceMoveProjection;
   readonly detachTabToWindow: (
     input: DetachWorkspaceTabInput
@@ -347,9 +352,27 @@ class CanonicalWorkspaceState implements WorkspaceState {
     return createAppliedMutationResult(this.getWindowProjection(context.windowId));
   }
 
-  reorderTab(tabId: string, targetIndex: number): WorkspaceWindowProjection {
-    const context = this.getTabContext(tabId);
+  reorderTab({
+    tabId,
+    expectedWindowId,
+    targetIndex
+  }: ReorderWorkspaceTabInput): WorkspaceMutationResult {
+    const resolved = this.resolveExpectedTabOwner(tabId, expectedWindowId);
+    if (resolved.kind === "stale") {
+      return this.createStaleMutationResult(expectedWindowId, resolved.reason);
+    }
+    const { context } = resolved;
     validateTargetIndex(targetIndex);
+    return createAppliedMutationResult(
+      this.reorderWithinWindow(tabId, targetIndex, context)
+    );
+  }
+
+  private reorderWithinWindow(
+    tabId: string,
+    targetIndex: number,
+    context: TabContext
+  ): WorkspaceWindowProjection {
     const clampedIndex = clampIndex(targetIndex, context.window.tabIds.length - 1);
 
     if (context.index !== clampedIndex) {
@@ -366,9 +389,10 @@ class CanonicalWorkspaceState implements WorkspaceState {
     validateOptionalTargetIndex(input.targetIndex);
 
     if (source.windowId === input.targetWindowId) {
-      const sourceWindowSnapshot = this.reorderTab(
+      const sourceWindowSnapshot = this.reorderWithinWindow(
         input.tabId,
-        input.targetIndex ?? source.index
+        input.targetIndex ?? source.index,
+        source
       );
       return Object.freeze({
         sourceWindowSnapshot,
@@ -386,9 +410,10 @@ class CanonicalWorkspaceState implements WorkspaceState {
 
     if (existingTarget !== undefined) {
       if (source.windowId === input.targetWindowId) {
-        const sourceWindowSnapshot = this.reorderTab(
+        const sourceWindowSnapshot = this.reorderWithinWindow(
           input.tabId,
-          input.targetIndex ?? source.index
+          input.targetIndex ?? source.index,
+          source
         );
         return Object.freeze({
           sourceWindowSnapshot,

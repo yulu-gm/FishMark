@@ -9,6 +9,7 @@ import {
   type DiskVersion,
   type MoveWorkspaceTabInput,
   type ReplaceWorkspaceDocumentInput,
+  type ReorderWorkspaceTabInput,
   type WorkspaceDocumentData,
   type WorkspaceDocumentProjection,
   type WorkspaceMoveProjection,
@@ -545,27 +546,44 @@ describe("WorkspaceState tab ordering and movement", () => {
       createDocument("third.md", "# Third\n")
     ).activeTabId!;
 
-    const movedToEnd = workspace.reorderTab(firstTabId, 100);
+    const movedToEnd = workspace.reorderTab({
+      tabId: firstTabId,
+      expectedWindowId: "window-1",
+      targetIndex: 100
+    });
 
-    expect(movedToEnd.tabs.map((tab) => tab.name)).toEqual([
+    expect(movedToEnd).toMatchObject({ kind: "applied" });
+    expect(movedToEnd.projection!.tabs.map((tab) => tab.name)).toEqual([
       "second.md",
       "third.md",
       "first.md"
     ]);
-    expect(movedToEnd.activeTabId).toBe(thirdTabId);
-    expect(movedToEnd.activeDocument).toMatchObject({
+    expect(movedToEnd.projection!.activeTabId).toBe(thirdTabId);
+    expect(movedToEnd.projection!.activeDocument).toMatchObject({
       tabId: thirdTabId,
       path: "C:/notes/third.md",
       content: "# Third\n"
     });
-    expect(workspace.reorderTab(firstTabId, -100).tabs.map((tab) => tab.name)).toEqual([
+    expect(workspace.reorderTab({
+      tabId: firstTabId,
+      expectedWindowId: "window-1",
+      targetIndex: -100
+    }).projection!.tabs.map((tab) => tab.name)).toEqual([
       "first.md",
       "second.md",
       "third.md"
     ]);
 
-    const firstNoOp = workspace.reorderTab(secondTabId, 1);
-    const secondNoOp = workspace.reorderTab(secondTabId, 1);
+    const firstNoOp = workspace.reorderTab({
+      tabId: secondTabId,
+      expectedWindowId: "window-1",
+      targetIndex: 1
+    });
+    const secondNoOp = workspace.reorderTab({
+      tabId: secondTabId,
+      expectedWindowId: "window-1",
+      targetIndex: 1
+    });
     expect(secondNoOp).toEqual(firstNoOp);
     expect(secondNoOp).not.toBe(firstNoOp);
   });
@@ -578,12 +596,75 @@ describe("WorkspaceState tab ordering and movement", () => {
       const tabId = workspace.createUntitledTab("window-1").activeTabId!;
       const before = workspace.getWindowProjection("window-1");
 
-      expect(() => workspace.reorderTab(tabId, targetIndex)).toThrow(
+      expect(() => workspace.reorderTab({
+        tabId,
+        expectedWindowId: "window-1",
+        targetIndex
+      })).toThrow(
         "Workspace tab index must be a finite integer."
       );
       expect(workspace.getWindowProjection("window-1")).toEqual(before);
     }
   );
+
+  it("rejects a reorder from the old owner without exposing or mutating the new owner", () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const movedTabId = workspace.openDocument(
+      "window-1",
+      createDocument("moved.md")
+    ).activeTabId!;
+    workspace.openDocument("window-1", createDocument("source.md"));
+    workspace.registerWindow("window-2");
+    workspace.openDocument("window-2", createDocument("target.md"));
+    workspace.moveTabToWindow({
+      tabId: movedTabId,
+      targetWindowId: "window-2",
+      targetIndex: 0
+    });
+    const targetBefore = workspace.getWindowProjection("window-2");
+
+    const result = workspace.reorderTab({
+      tabId: movedTabId,
+      expectedWindowId: "window-1",
+      targetIndex: 1
+    });
+
+    expect(result).toMatchObject({
+      kind: "stale",
+      reason: "window-changed",
+      projection: { windowId: "window-1" }
+    });
+    expect(result.projection?.windowId).not.toBe("window-2");
+    expect(workspace.getWindowProjection("window-2")).toEqual(targetBefore);
+  });
+
+  it("returns total stale results for a missing reorder tab or owner window", () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.createUntitledTab("window-1").activeTabId!;
+
+    expect(workspace.reorderTab({
+      tabId: "missing-tab",
+      expectedWindowId: "window-1",
+      targetIndex: 0
+    })).toMatchObject({
+      kind: "stale",
+      reason: "tab-missing",
+      projection: { windowId: "window-1" }
+    });
+
+    workspace.unregisterWindow("window-1");
+    expect(workspace.reorderTab({
+      tabId,
+      expectedWindowId: "window-1",
+      targetIndex: 0
+    })).toEqual({
+      kind: "stale",
+      reason: "window-missing",
+      projection: null
+    });
+  });
 
   it("uses reorder semantics when moving within the same window", () => {
     const workspace = createWorkspaceState();
@@ -844,6 +925,7 @@ describe("WorkspaceState projection isolation", () => {
       commitInput: CommitWorkspaceDocumentInput,
       replaceInput: ReplaceWorkspaceDocumentInput,
       closeInput: CloseWorkspaceTabInput,
+      reorderInput: ReorderWorkspaceTabInput,
       moveInput: MoveWorkspaceTabInput,
       detachInput: DetachWorkspaceTabInput
     ): void => {
@@ -861,6 +943,8 @@ describe("WorkspaceState projection isolation", () => {
       replaceInput.expectedRevision = 1;
       // @ts-expect-error guarded close fields are readonly
       closeInput.expectedWindowId = "other-window";
+      // @ts-expect-error guarded reorder fields are readonly
+      reorderInput.expectedWindowId = "other-window";
       // @ts-expect-error optional input fields are readonly
       moveInput.targetIndex = 1;
       // @ts-expect-error detach input fields are readonly

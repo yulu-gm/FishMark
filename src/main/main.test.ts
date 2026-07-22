@@ -78,6 +78,7 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain('import { createWorkspaceWindowCloseConfirmationHandler } from "./workspace-window-close-confirmation-handler"');
     expect(mainSource).toContain('import { createWorkspaceWindowCloseRequestBroker } from "./workspace-window-close-request-broker"');
     expect(mainSource).toContain('import { createWorkspaceWindowRegistrationApplication } from "./workspace-window-registration-application"');
+    expect(mainSource).toContain('import { createWorkspaceTabReorderApplication } from "./workspace-tab-reorder-application"');
     expect(mainSource).toContain('import {\n  toWorkspaceMoveTabResult,\n  toWorkspaceWindowSnapshot\n} from "./workspace-ipc-projection"');
     expect(mainSource).not.toContain(legacyModule);
     expect(mainSource).not.toContain(legacyFactory);
@@ -90,6 +91,7 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain("UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL");
     expect(mainSource).toContain("const workspaceState = createWorkspaceState()");
     expect(mainSource).toContain("const workspaceDocumentOperations = createWorkspaceDocumentOperationCoordinator()");
+    expect(mainSource).toContain("const workspaceTabReorderApplication = createWorkspaceTabReorderApplication({");
     expect(mainSource).toContain("const workspaceApplication = createWorkspaceApplication({");
     expect(mainSource).toContain("const workspaceCloseCoordinator = createWorkspaceCloseCoordinator({");
     expect(mainSource).toContain("const workspaceDetachApplication = createWorkspaceDetachApplication({");
@@ -133,6 +135,9 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain("ipcMain.handle(OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL");
     expect(mainSource).toContain("ipcMain.handle(ACTIVATE_WORKSPACE_TAB_CHANNEL");
     expect(mainSource).toContain("ipcMain.handle(CLOSE_WORKSPACE_TAB_CHANNEL");
+    expect(mainSource).toContain("await workspaceTabReorderApplication.reorder({");
+    expect(mainSource).toContain("expectedWindowId: windowId");
+    expect(mainSource).not.toContain("workspaceState.reorderTab(input.tabId, input.toIndex)");
     expect(mainSource).toContain(
       "ipcMain.handle(\n    UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL"
     );

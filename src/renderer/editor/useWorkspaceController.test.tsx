@@ -203,6 +203,54 @@ describe("useWorkspaceController", () => {
     expect(latestRef.current?.workspaceSnapshot).toEqual(sourceSnapshot);
     expect(latestRef.current?.workspaceSnapshot?.windowId).toBe("window-1");
     act(() => {
+    root.unmount();
+    });
+  });
+
+  it("keeps the source snapshot when an old-owner reorder is rejected", async () => {
+    const reorderWorkspaceTab = vi.fn(async () => {
+      throw new Error("Workspace tab reorder rejected: tab owner changed.");
+    });
+    const showNotification = vi.fn();
+    const sourceSnapshot = createWorkspaceSnapshot({
+      tabs: [
+        {
+          tabId: "tab-1",
+          path: "C:/notes/first.md",
+          name: "first.md",
+          content: "first"
+        },
+        {
+          tabId: "tab-2",
+          path: "C:/notes/second.md",
+          name: "second.md",
+          content: "second"
+        }
+      ]
+    });
+    const { latestRef, root } = renderController({
+      fishmark: {
+        reorderWorkspaceTab
+      } as unknown as Window["fishmark"],
+      initialSnapshot: sourceSnapshot,
+      getEditorContent: () => "first",
+      showNotification
+    });
+
+    await act(async () => {
+      await latestRef.current?.reorderWorkspaceTab("tab-1", 1);
+    });
+
+    expect(reorderWorkspaceTab).toHaveBeenCalledWith({
+      tabId: "tab-1",
+      toIndex: 1
+    });
+    expect(latestRef.current?.workspaceSnapshot).toEqual(sourceSnapshot);
+    expect(showNotification).toHaveBeenCalledWith({
+      kind: "error",
+      message: "Workspace tab reorder rejected: tab owner changed."
+    });
+    act(() => {
       root.unmount();
     });
   });
