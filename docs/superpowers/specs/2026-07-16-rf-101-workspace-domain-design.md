@@ -51,7 +51,7 @@ Rules:
 - `workspace-domain` depends only on TypeScript and runtime-neutral utilities.
 - It cannot import React, Electron, DOM, CodeMirror, filesystem, dialog, watcher, IPC, `src/main`, `src/preload`, or `src/renderer`.
 - Main owns the only live `WorkspaceState` instance and therefore the only writable workspace/session truth.
-- Shared workspace snapshot contracts retain their current wire shape and do not import domain internals. Native-window-close control uses one hard-cut request-bearing protocol: REQUEST, CONFIRM, and COMPLETE carry the same `requestId` without a parameterless compatibility route.
+- Shared workspace snapshot contracts retain their current shape and do not import domain internals. Reload uses one hard-cut discriminated command result, `success(snapshot) | revision-stale`, so a rejected revision is never disguised as a current snapshot. Native-window-close control uses one hard-cut request-bearing protocol: REQUEST, CONFIRM, and COMPLETE carry the same `requestId` without a parameterless compatibility route.
 - Renderer does not import `DocumentSession`, `TextBuffer`, or mutable workspace state.
 - Domain projections are structurally mapped to the existing shared snapshots at the main boundary; the close request identity is control-plane data and never becomes domain truth.
 
@@ -161,8 +161,8 @@ Captured revision guards do not order two distinct IO operations when a successf
 
 - Save, Save As, reload, and individual close acquire the same tab key for their entire canonical checkpoint, disk/dialog IO, and domain mutation transaction. For ordinary Save this includes watcher `beginInternalWrite`, write, commit, recent-file recording, `completeInternalWrite`, and watch resync; cleanup finishes before the lease is released.
 - Different tab keys remain independent. High-frequency `updateDraft` never waits for this coordinator, but it is not owner-blind: main derives `expectedWindowId` from the invoking renderer and the domain performs an owner compare-and-set. A stale result is rejected at the IPC boundary and never returns the current owner's projection to the stale renderer.
-- Cross-window move and ready-time detach transfer acquire the same tab key as document IO. Source ownership is revalidated inside the lease before the atomic domain mutation. Detach waits for target readiness without holding the lease, then competes normally with Save/Save As/reload for the tab transaction; target cancellation while queued prevents transfer.
-- Save, Save As, and reload interpret the domain's total mutation result explicitly. `owner-changed` and `missing` fail the operation instead of reporting false success or recording a recent path. Reload alone may retain a newer dirty projection after a deliberate revision-only race, because replacing that newer canonical edit would be destructive.
+- Cross-window move and ready-time detach transfer acquire the same tab key as document IO. Source ownership is revalidated inside the lease before the atomic domain mutation. Detach waits for target readiness without holding the lease, then competes normally with Save/Save As/reload for the tab transaction. Timeout, target close, or main-frame load failure while queued records the authoritative cancellation on the in-flight ready operation, so both detach and ready reject, the target is destroyed, and lease release cannot create a target domain window. Main resolves no sender-ID fallback and revalidates the live sender-owned `BrowserWindow` on both sides of the ready await before register/focus/bind.
+- Save, Save As, and reload interpret the domain's total mutation result explicitly. `owner-changed` and `missing` fail the operation instead of reporting false success or recording a recent path. A reload revision race returns `revision-stale` without exposing a projection or recording a recent path; renderer retains its newer draft and external-conflict state, reports a retryable warning, and keeps autosave/manual-save conflict protection active. Only an applied domain reload records recent history and returns `success(snapshot)`.
 - Multi-tab acquisition deduplicates and sorts keys before acquiring them; release is idempotent and operation errors always release.
 - Native window close acquires the current window tab set before the renderer flush/confirm handshake. REQUEST supplies a `requestId`; renderer first flushes its draft and then sends that same ID in CONFIRM. The first exact `{ windowId, requestId }` confirmation begin is atomic, admits only one confirmation scope, and disarms the 15-second transport timer. That timer bounds only delivery, renderer draft flush, and arrival of the first valid CONFIRM; native prompts and Save As dialogs may remain open beyond it. When the active confirmation scope finishes, an independent post-confirm watchdog starts only if COMPLETE is still missing; expiry settles fail-closed, removes listeners/maps, resolves `drained`, and releases the outer lease. COMPLETE or abort cancels that watchdog exactly once, and late callbacks are no-ops. Confirmation returns a frozen ordered `{ tabId, expectedWindowId, expectedRevision }` checkpoint set rather than a bare boolean, and COMPLETE must match the same generation. Renderer abort, destruction, or window close settles `result` fail-closed and removes the pending generation immediately, while `drained` waits for the active confirmation scope to finish. Main awaits both before returning to the window-close application, so the outer multi-tab lease still covers an in-flight prompt or disk write. The coordinator checks scope activity at entry, between tabs, after prompts, before writes, after writes before commit, and before final confirmation. The application then revalidates exact order, owner, and revision after positive COMPLETE and retains the lease until `WorkspaceState.unregisterWindow()` completes on `closed`.
 - Cancel, handshake error, and native `ownerWindow.close()` failure release the lease. A confirmed discard does not release early, so a queued autosave resumes only after unregister and fails before disk IO.
@@ -190,16 +190,16 @@ Unknown windows, unknown tabs, invalid ownership, and invalid text changes fail 
 
 ## 10. Shared DTO and renderer stability
 
-The following shared shapes remain unchanged in RF-101:
+The following shared snapshot and ordinary command shapes remain unchanged in RF-101:
 
 - `WorkspaceWindowSnapshot`;
 - `WorkspaceDocumentSnapshot`;
 - `WorkspaceTabStripItem`;
-- command input/result DTOs;
+- ordinary command input/result DTOs;
 - IPC channel names;
 - `UpdateWorkspaceTabDraftInput` full-content payload.
 
-Native-close control is the only wire exception: REQUEST now supplies its generation identity to the listener and CONFIRM must return the same `requestId`; the parameterless form is deleted rather than supported in parallel. Domain projection types may be structurally identical, but `src/shared/workspace.ts` remains the IPC contract owner. Main is the mapping/composition boundary. No autosave state machine or optimistic projection is redesigned in this task.
+There are two intentional hard-cut control/result exceptions. Reload now returns `ReloadWorkspaceTabFromPathResult = success(snapshot) | revision-stale`; no legacy bare-snapshot route remains. Native-close REQUEST supplies its generation identity to the listener and CONFIRM must return the same `requestId`; the parameterless form is deleted rather than supported in parallel. Domain projection types may be structurally identical, but `src/shared/workspace.ts` remains the IPC contract owner. Main is the mapping/composition boundary. Autosave is not redesigned: the new stale branch deliberately keeps the existing external-conflict block active.
 
 ## 11. Runtime package and Electron build
 
@@ -266,7 +266,9 @@ Domain tests cover:
 - normal save, Save As, reload, and save-completion races;
 - reload-first/save-first ordering on one real shared coordinator;
 - save-first/move-first and reload-first/detach-first ordering on one real shared coordinator;
-- owner/missing mutation failure and the explicit reload revision-only preservation policy;
+- owner/missing mutation failure and the explicit reload revision-stale policy;
+- reload revision-stale propagation through shared/preload/main/renderer, including no recent-file update, no snapshot application, retained conflict UI, blocked autosave, protected manual save, and normal success conflict clearing;
+- ready-time detach cancellation while waiting for the shared per-tab lease, covering timeout, target close, and main-frame load failure with rejected ready, destroyed target, unchanged source/last-focus, and no ghost domain/main binding;
 - individual close before/after save, including discard followed by queued autosave;
 - native confirmed/cancel window close with lease retention through unregister, transport timeout, unbounded active prompt, and post-confirm missing-COMPLETE watchdog;
 - FIFO, independent-tab, stable multi-tab, idempotent-release, and error-release coordinator behavior.
@@ -297,7 +299,7 @@ RF-101 does not:
 - remove full-draft synchronization;
 - use CodeMirror `Text` in production;
 - redesign autosave, recent files, external conflict, or watch registry;
-- otherwise redesign shared IPC wire shapes, preload bridge, or renderer controllers beyond the required native-close request identity hard cut;
+- otherwise redesign shared IPC wire shapes, preload bridge, or renderer controllers beyond the required reload discriminated-result and native-close request-identity hard cuts;
 - change Enter, Backspace, Delete, Tab, navigation, selection, IME, undo, or nested Markdown semantics;
 - claim long-document transport or structure-cache performance improvements.
 
@@ -312,7 +314,7 @@ RF-101 is complete only when:
 5. Same-tab document IO and cross-window ownership transfer share one FIFO transaction owner without a global mutex or `updateDraft` queue.
 6. Draft updates are owner-aware, and a stale renderer can neither mutate nor observe the new owner's document projection.
 7. Native window close retains all tab leases through unregister, so confirmed discard cannot be followed by a queued write; missing transport and missing post-confirm COMPLETE both fail closed without timing out active native UI.
-8. Shared workspace DTO behavior remains stable, while the native-close control wire has one request-bearing form and no compatibility layer.
+8. Shared workspace snapshots remain stable; reload has one discriminated success/stale result, and native-close control has one request-bearing form, with no compatibility layer for either hard cut.
 9. `src/main/workspace-service.ts`, its old test, old type exports, and all imports are absent.
 10. The architecture package/rule is active and passing.
 11. Focused tests, lint, typecheck, full tests, build, and diff check pass.

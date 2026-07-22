@@ -678,7 +678,7 @@ npm.cmd run perf:baseline
 
 - Create: the production `packages/workspace-domain/` package, with public-entry-only imports, revision/session/buffer/state modules, declarations, tests, and an emitted-runtime verifier.
 - Create: `src/main/workspace-ipc-projection.ts` as the immutable domain projection to mutable shared IPC DTO boundary.
-- Create: focused main use cases for reload, detach/transfer, file operations, owner-aware mutation results, per-document IO coordination, native window-close leases, and a bounded close-request broker, each operating on the one injected `WorkspaceState` and coordinator where ownership or IO is involved.
+- Create: focused main use cases for reload, detach/transfer, file operations, owner-aware mutation results, per-document IO coordination, native window-close leases, and a bounded close-request broker, each operating on the one injected `WorkspaceState` and coordinator where ownership or IO is involved. Reload exposes one explicit `success | revision-stale` result from main through renderer instead of treating a newer draft as a successful snapshot.
 - Modify: package/build configuration, architecture guards, main composition, workspace application, and close coordination.
 - Delete after cutover: `src/main/workspace-service.ts` and `src/main/workspace-service.test.ts`.
 
@@ -693,12 +693,12 @@ npm.cmd run perf:baseline
 - [x] Keep each ordinary Save's watcher begin/write/commit/recent/complete/resync lifecycle inside that same per-tab lease, so a second save cannot open or write before the first watcher transaction is closed.
 - [x] Make full-draft mutation an owner-aware compare-and-set: main derives `expectedWindowId` only from the invoking renderer, the domain returns a total applied/stale result, and a stale renderer cannot mutate or receive the new owner's projection.
 - [x] Serialize cross-window move and ready-time detach transfer through the same per-tab coordinator used by document IO, with source ownership revalidated inside the lease; waiting for detach target readiness never holds the lease.
-- [x] Treat owner/missing mutation results after Save, Save As, and reload as explicit failures instead of false success; only reload's post-read revision race may deliberately preserve the newer dirty projection.
+- [x] Treat owner/missing mutation results after Save, Save As, and reload as explicit failures instead of false success. A reload post-read revision race returns `revision-stale` without a projection, recent-file update, conflict clear, or autosave unblock; only an applied reload returns `success` and replaces renderer state.
 - [x] Hold a stable multi-tab lease across the native window-close renderer handshake until the window is unregistered; carry the same `requestId` from REQUEST through renderer draft flush and CONFIRM, bind the immutable ordered owner/revision confirmation to that exact `{ windowId, requestId }` generation, permit only one confirmation scope per generation, and keep the lease until that scope drains after renderer abort/window destruction.
 - [x] Split native-close liveness into two bounded phases: the transport timer ends at the first exact CONFIRM begin, active native UI has no timer, and an independent post-confirm watchdog begins only after the confirmation scope finishes while COMPLETE is still missing.
-- [x] Make detach a ready-gated two-phase operation: keep the tab in the source before ready, revalidate source ownership at ready, then atomically move the latest canonical session; timeout, load failure, or target close does not move it.
+- [x] Make detach a ready-gated two-phase operation: keep the tab in the source before ready, revalidate source ownership at ready, then atomically move the latest canonical session. Timeout, load failure, or target close while transfer waits for its shared tab lease rejects both detach and ready, destroys the target, and cannot create a domain window or main binding; main also revalidates the live sender-owned `BrowserWindow` before and after ready.
 - [x] Delete the old service, test, types, imports, and exports in the same task.
-- [x] Verify no renderer imports internal session types; preserve workspace snapshot DTOs while hard-cutting the native-close bridge to the single request-bearing protocol with no parameterless compatibility path.
+- [x] Verify no renderer imports internal session types; preserve workspace snapshot DTOs, hard-cut reload to its single discriminated result, and hard-cut the native-close bridge to the single request-bearing protocol with no parameterless compatibility path.
 
 **Verification:**
 
@@ -709,7 +709,7 @@ npm.cmd run typecheck
 npm.cmd run build
 ```
 
-**Exit:** development evidence shows one pure workspace implementation, one live main-owned `WorkspaceState`, immutable domain projections, sender-derived owner CAS for draft updates, captured-revision save semantics, one per-document transaction owner shared by IO and ownership transfer, a native-close lease held through unregister with bounded transport and post-confirm phases, and no compatibility wrapper or obsolete service symbol. Independent acceptance must confirm this before the task becomes `COMPLETE`; `RF-102` is the next dependency-ready task after that acceptance.
+**Exit:** development evidence shows one pure workspace implementation, one live main-owned `WorkspaceState`, immutable domain projections, sender-derived owner CAS for draft updates, captured-revision save semantics, explicit reload staleness that retains external-conflict protections, one per-document transaction owner shared by IO and ownership transfer, fail-closed queued detach cancellation with no ghost target binding, a native-close lease held through unregister with bounded transport and post-confirm phases, and no compatibility wrapper or obsolete service symbol. Independent acceptance must confirm this before the task becomes `COMPLETE`; `RF-102` is the next dependency-ready task after that acceptance.
 
 #### RF-102: Extract workspace application ports and use cases
 
