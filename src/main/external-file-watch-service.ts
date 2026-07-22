@@ -29,7 +29,7 @@ type FSWatcherLike = {
 };
 
 type WatchEntry = {
-  readonly generation: number;
+  readonly pathGeneration: number;
   readonly path: string;
   watcher: FSWatcherLike | null;
   baseline: FileSnapshot | null;
@@ -39,7 +39,8 @@ type WatchEntry = {
 
 type WatchController = {
   readonly webContents: WatchedWebContents;
-  generation: number;
+  pathGeneration: number;
+  syncGeneration: number;
   desiredPath: string | null;
   entry: WatchEntry | null;
   stateQueue: Promise<void>;
@@ -90,7 +91,8 @@ export function createExternalFileWatchService(
 
     const controller: WatchController = {
       webContents,
-      generation: 0,
+      pathGeneration: 0,
+      syncGeneration: 0,
       desiredPath: null,
       entry: null,
       stateQueue: Promise.resolve(),
@@ -135,10 +137,17 @@ export function createExternalFileWatchService(
     const normalizedPath = targetPath && targetPath.length > 0 ? targetPath : null;
     if (controller.desiredPath !== normalizedPath) {
       controller.desiredPath = normalizedPath;
-      controller.generation += 1;
+      controller.pathGeneration += 1;
     }
-    const generation = controller.generation;
-    const sync = performSync(controller, generation, normalizedPath);
+    controller.syncGeneration += 1;
+    const syncGeneration = controller.syncGeneration;
+    const pathGeneration = controller.pathGeneration;
+    const sync = performSync(
+      controller,
+      syncGeneration,
+      pathGeneration,
+      normalizedPath
+    );
     controller.pendingSync = sync;
     const clearPendingSync = () => {
       if (controller.pendingSync === sync) {
@@ -151,12 +160,20 @@ export function createExternalFileWatchService(
 
   async function performSync(
     controller: WatchController,
-    generation: number,
+    syncGeneration: number,
+    pathGeneration: number,
     normalizedPath: string | null
   ): Promise<void> {
     if (normalizedPath === null) {
       await enqueueStateTransition(controller, () => {
-        if (!isCurrentIntent(controller, generation, normalizedPath)) {
+        if (
+          !isCurrentSyncIntent(
+            controller,
+            syncGeneration,
+            pathGeneration,
+            normalizedPath
+          )
+        ) {
           return;
         }
         closeEntry(controller.entry);
@@ -169,7 +186,14 @@ export function createExternalFileWatchService(
       work: null
     };
     await enqueueStateTransition(controller, () => {
-      if (isCurrentIntent(controller, generation, normalizedPath)) {
+      if (
+        isCurrentSyncIntent(
+          controller,
+          syncGeneration,
+          pathGeneration,
+          normalizedPath
+        )
+      ) {
         started.work = readSnapshot(normalizedPath, dependencies.stat);
       }
     });
@@ -179,21 +203,28 @@ export function createExternalFileWatchService(
 
     const baseline = await started.work;
     await enqueueStateTransition(controller, () => {
-      if (!isCurrentIntent(controller, generation, normalizedPath)) {
+      if (
+        !isCurrentSyncIntent(
+          controller,
+          syncGeneration,
+          pathGeneration,
+          normalizedPath
+        )
+      ) {
         return;
       }
 
       const currentEntry = controller.entry;
       if (
         currentEntry?.path === normalizedPath &&
-        currentEntry.generation === generation
+        currentEntry.pathGeneration === pathGeneration
       ) {
         currentEntry.baseline = baseline;
         return;
       }
 
       const nextEntry: WatchEntry = {
-        generation,
+        pathGeneration,
         path: normalizedPath,
         watcher: null,
         baseline,
@@ -208,7 +239,14 @@ export function createExternalFileWatchService(
         void handledCallback;
         return handledCallback;
       });
-      if (!isCurrentIntent(controller, generation, normalizedPath)) {
+      if (
+        !isCurrentSyncIntent(
+          controller,
+          syncGeneration,
+          pathGeneration,
+          normalizedPath
+        )
+      ) {
         watcher.close();
         return;
       }
@@ -346,15 +384,27 @@ export function createExternalFileWatchService(
     );
   }
 
-  function isCurrentIntent(
+  function isCurrentPathIntent(
     controller: WatchController,
-    generation: number,
+    pathGeneration: number,
     targetPath: string | null
   ): boolean {
     return (
       isLiveController(controller) &&
-      controller.generation === generation &&
+      controller.pathGeneration === pathGeneration &&
       controller.desiredPath === targetPath
+    );
+  }
+
+  function isCurrentSyncIntent(
+    controller: WatchController,
+    syncGeneration: number,
+    pathGeneration: number,
+    targetPath: string | null
+  ): boolean {
+    return (
+      isCurrentPathIntent(controller, pathGeneration, targetPath) &&
+      controller.syncGeneration === syncGeneration
     );
   }
 
@@ -363,7 +413,7 @@ export function createExternalFileWatchService(
     entry: WatchEntry
   ): boolean {
     return (
-      isCurrentIntent(controller, entry.generation, entry.path) &&
+      isCurrentPathIntent(controller, entry.pathGeneration, entry.path) &&
       controller.entry === entry
     );
   }
@@ -377,7 +427,8 @@ export function createExternalFileWatchService(
 
   function destroyController(controller: WatchController): void {
     controller.destroyed = true;
-    controller.generation += 1;
+    controller.pathGeneration += 1;
+    controller.syncGeneration += 1;
     controller.desiredPath = null;
     closeEntry(controller.entry);
     controller.entry = null;

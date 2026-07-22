@@ -158,6 +158,73 @@ describe("createExternalFileWatchService", () => {
     expect(watch).toHaveBeenLastCalledWith("C:/notes/b.md", expect.any(Function));
   });
 
+  it("does not let an older same-path sync overwrite a newer baseline", async () => {
+    const watchCallbacks = new Map<string, WatchCallback>();
+    const olderSnapshot = createDeferred<Stats>();
+    const stat = vi
+      .fn<(targetPath: string) => Promise<Stats>>()
+      .mockResolvedValueOnce(createStats({ mtimeMs: 1, size: 10 }))
+      .mockReturnValueOnce(olderSnapshot.promise)
+      .mockResolvedValueOnce(createStats({ mtimeMs: 2, size: 20 }))
+      .mockResolvedValueOnce(createStats({ mtimeMs: 2, size: 20 }));
+    const webContents = createWebContents();
+    const service = createExternalFileWatchService({
+      watch: vi.fn((targetPath: string, listener: WatchCallback) => {
+        watchCallbacks.set(targetPath, listener);
+        return { close: vi.fn() };
+      }),
+      stat
+    });
+
+    await service.syncDocumentPath(webContents, "C:/notes/today.md");
+    const syncA = service.syncDocumentPath(webContents, "C:/notes/today.md");
+    await vi.waitFor(() => expect(stat).toHaveBeenCalledTimes(2));
+    const syncB = service.syncDocumentPath(webContents, "C:/notes/today.md");
+    await syncB;
+
+    olderSnapshot.resolve(createStats({ mtimeMs: 1, size: 10 }));
+    await syncA;
+    await watchCallbacks.get("C:/notes/today.md")?.("change");
+
+    expect(webContents.send).not.toHaveBeenCalled();
+  });
+
+  it("admits an internal write after the newest same-path sync settles", async () => {
+    const olderSnapshot = createDeferred<Stats>();
+    const stat = vi
+      .fn<(targetPath: string) => Promise<Stats>>()
+      .mockResolvedValueOnce(createStats({ mtimeMs: 1, size: 10 }))
+      .mockReturnValueOnce(olderSnapshot.promise)
+      .mockResolvedValueOnce(createStats({ mtimeMs: 2, size: 20 }));
+    const webContents = createWebContents();
+    const service = createExternalFileWatchService({
+      watch: vi.fn(() => ({ close: vi.fn() })),
+      stat
+    });
+
+    await service.syncDocumentPath(webContents, "C:/notes/today.md");
+    const syncA = service.syncDocumentPath(webContents, "C:/notes/today.md");
+    await vi.waitFor(() => expect(stat).toHaveBeenCalledTimes(2));
+    const syncB = service.syncDocumentPath(webContents, "C:/notes/today.md");
+    await syncB;
+
+    let olderSyncSettled = false;
+    void syncA.then(() => {
+      olderSyncSettled = true;
+    });
+    let admitted = false;
+    const begin = service
+      .beginInternalWrite(webContents, "C:/notes/today.md")
+      .then(() => {
+        admitted = true;
+      });
+    await vi.waitFor(() => expect(admitted).toBe(true));
+    expect(olderSyncSettled).toBe(false);
+
+    olderSnapshot.resolve(createStats({ mtimeMs: 1, size: 10 }));
+    await Promise.all([syncA, begin]);
+  });
+
   it("does not let a deferred write completion mutate a newer path generation", async () => {
     const watchCallbacks = new Map<string, WatchCallback>();
     const completionSnapshot = createDeferred<Stats>();
