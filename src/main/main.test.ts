@@ -48,8 +48,12 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain('ipcMain.handle(LIST_THEME_PACKAGES_CHANNEL');
     expect(mainSource).toContain('ipcMain.handle(REFRESH_THEME_PACKAGES_CHANNEL');
     expect(mainSource).toContain('ipcMain.handle(OPEN_THEMES_DIRECTORY_CHANNEL');
-    expect(mainSource).toContain('workspaceState.getTabPath(input.tabId)');
-    expect(mainSource).toContain('externalFileWatchService.syncDocumentPath(');
+    expect(mainSource).toContain("createWorkspaceFileWatchApplication({");
+    expect(mainSource).toContain(
+      "workspaceWindowRegistrationApplication.ensureWindow("
+    );
+    expect(mainSource).toContain("workspaceFileWatchApplication.syncWindow({");
+    expect(mainSource).not.toContain("workspaceState.getTabPath(input.tabId)");
     expect(mainSource).toContain('temporaryDirectory: resolveTemporaryImageDirectory(');
   });
 

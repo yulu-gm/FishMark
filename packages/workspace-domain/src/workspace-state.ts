@@ -118,7 +118,6 @@ export interface WorkspaceState {
   ) => WorkspaceWindowProjection | null;
   readonly getWindowTabIds: (windowId: string) => readonly string[];
   readonly getTabSession: (tabId: string) => DocumentSessionProjection;
-  readonly getTabPath: (tabId: string | null) => string | null;
   readonly createUntitledTab: (windowId: string) => WorkspaceWindowProjection;
   readonly openDocument: (
     windowId: string,
@@ -232,10 +231,6 @@ class CanonicalWorkspaceState implements WorkspaceState {
 
   getTabSession(tabId: string): DocumentSessionProjection {
     return projectDocumentSession(this.getTab(tabId));
-  }
-
-  getTabPath(tabId: string | null): string | null {
-    return tabId === null ? null : this.getTab(tabId).path;
   }
 
   createUntitledTab(windowId: string): WorkspaceWindowProjection {

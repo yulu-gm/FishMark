@@ -2,8 +2,7 @@ import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { AppNotification, AppUpdateState } from "../shared/app-update";
 import type { EditorTestCommandEnvelope, EditorTestCommandResultEnvelope } from "../shared/editor-test-command";
 import type {
-  ExternalMarkdownFileChangedEvent,
-  SyncWatchedMarkdownFileInput
+  ExternalMarkdownFileChangedEvent
 } from "../shared/external-file-change";
 import { APP_MENU_COMMAND_EVENT, type AppMenuCommand } from "../shared/menu-command";
 import type {
@@ -81,8 +80,7 @@ export type {
   ImportClipboardImageResult as PreloadImportClipboardImageResult
 } from "../shared/clipboard-image-import";
 export type {
-  ExternalMarkdownFileChangedEvent as PreloadExternalMarkdownFileChangedEvent,
-  SyncWatchedMarkdownFileInput as PreloadSyncWatchedMarkdownFileInput
+  ExternalMarkdownFileChangedEvent as PreloadExternalMarkdownFileChangedEvent
 } from "../shared/external-file-change";
 
 import {
@@ -209,8 +207,8 @@ const productApi: ProductBridge = {
     ipcRenderer.invoke(SAVE_MARKDOWN_FILE_AS_CHANNEL, input),
   exportHtmlFile: (input: ExportHtmlFileInput) =>
     ipcRenderer.invoke(EXPORT_HTML_FILE_CHANNEL, input),
-  syncWatchedMarkdownFile: (input: SyncWatchedMarkdownFileInput): Promise<void> =>
-    ipcRenderer.invoke(SYNC_WATCHED_MARKDOWN_FILE_CHANNEL, input),
+  syncWatchedMarkdownFile: (): Promise<void> =>
+    ipcRenderer.invoke(SYNC_WATCHED_MARKDOWN_FILE_CHANNEL),
   importClipboardImage: (input: ImportClipboardImageInput): Promise<ImportClipboardImageResult> =>
     ipcRenderer.invoke(IMPORT_CLIPBOARD_IMAGE_CHANNEL, input),
   onMenuCommand: (listener: (command: AppMenuCommand) => void) => {

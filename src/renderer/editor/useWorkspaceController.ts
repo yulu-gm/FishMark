@@ -417,7 +417,7 @@ export function useWorkspaceController(input: {
   );
 
   const reloadWorkspaceTabFromPath = useCallback(
-    async (inputValue: { tabId: string; targetPath: string }): Promise<boolean> => {
+    async (inputValue: { tabId: string }): Promise<boolean> => {
       setWorkspaceOpenState("opening");
 
       try {

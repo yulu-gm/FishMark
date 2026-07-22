@@ -558,7 +558,7 @@ describe("App autosave", () => {
   >;
   let reloadWorkspaceTabFromPath: ReturnType<
     typeof vi.fn<
-      (input: { tabId: string; targetPath: string }) => Promise<ReloadWorkspaceTabFromPathResult>
+      (input: { tabId: string }) => Promise<ReloadWorkspaceTabFromPathResult>
     >
   >;
   let handleDroppedMarkdownFile: ReturnType<
@@ -576,7 +576,7 @@ describe("App autosave", () => {
     typeof vi.fn<(input: SaveMarkdownFileAsInput) => Promise<SaveMarkdownFileResult>>
   >;
   let syncWatchedMarkdownFile: ReturnType<
-    typeof vi.fn<(input: { tabId: string | null }) => Promise<void>>
+    typeof vi.fn<() => Promise<void>>
   >;
   let importClipboardImage: ReturnType<
     typeof vi.fn<Window["fishmark"]["importClipboardImage"]>
@@ -802,13 +802,12 @@ describe("App autosave", () => {
     return workspaceTabs.find((tab) => tab.tabId === tabId)?.content ?? "";
   }
 
-  function commitWorkspaceSave(input: { tabId: string; path: string }): void {
+  function commitWorkspaceSave(input: { tabId: string }): void {
     const content = getWorkspaceTabContent(input.tabId);
     workspaceTabs = workspaceTabs.map((tab) =>
       tab.tabId === input.tabId
         ? {
             ...tab,
-            path: input.path,
             content,
             isDirty: false,
             lastSavedContent: content
@@ -966,16 +965,22 @@ describe("App autosave", () => {
       .mockImplementation(async (input) => updateWorkspaceDraft(input.tabId, input.content));
     reloadWorkspaceTabFromPath = vi
       .fn<
-        (input: { tabId: string; targetPath: string }) =>
+        (input: { tabId: string }) =>
           Promise<ReloadWorkspaceTabFromPathResult>
       >()
       .mockImplementation(async (input) => {
-        const document = getQueuedWorkspaceDocument(input.targetPath);
+        const currentPath = workspaceTabs.find(
+          (tab) => tab.tabId === input.tabId
+        )?.path;
+        if (!currentPath) {
+          throw new Error(`Workspace tab '${input.tabId}' has no path.`);
+        }
+        const document = getQueuedWorkspaceDocument(currentPath);
         return {
           kind: "success",
           snapshot: replaceWorkspaceDocument({
             tabId: input.tabId,
-            path: document.path ?? input.targetPath,
+            path: document.path ?? currentPath,
             name: document.name,
             content: document.content
           })
@@ -987,12 +992,13 @@ describe("App autosave", () => {
       .mockImplementation(async (input) => {
         commitWorkspaceSave(input);
         const activeTab = workspaceTabs.find((tab) => tab.tabId === workspaceActiveTabId) ?? null;
+        const savedTab = workspaceTabs.find((tab) => tab.tabId === input.tabId) ?? null;
         const content = getWorkspaceTabContent(input.tabId);
 
         return {
           status: "success",
           document: {
-            path: input.path,
+            path: savedTab?.path ?? null,
             name: activeTab?.name ?? "today.md",
             content,
             encoding: "utf-8"
@@ -1008,7 +1014,7 @@ describe("App autosave", () => {
       return fileWithPath.path ?? "";
     });
     saveMarkdownFileAs = vi.fn<(input: SaveMarkdownFileAsInput) => Promise<SaveMarkdownFileResult>>();
-    syncWatchedMarkdownFile = vi.fn<(input: { tabId: string | null }) => Promise<void>>().mockResolvedValue(
+    syncWatchedMarkdownFile = vi.fn<() => Promise<void>>().mockResolvedValue(
       undefined
     );
     importClipboardImage = vi.fn().mockResolvedValue({
@@ -1653,8 +1659,7 @@ describe("App autosave", () => {
     expect(saveMarkdownFile).not.toHaveBeenCalled();
     expect(saveMarkdownFileAs).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFileAs).toHaveBeenCalledWith({
-      tabId: "tab-1",
-      currentPath: null
+      tabId: "tab-1"
     });
     expect(container.textContent).toContain("untitled.md");
   });
@@ -1691,8 +1696,7 @@ describe("App autosave", () => {
     expect(updateWorkspaceTabDraft).toHaveBeenCalledTimes(2);
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
-      tabId: "tab-1",
-      path: "C:/notes/today.md"
+      tabId: "tab-1"
     });
     expect(container.querySelector('[data-fishmark-region="app-notification-banner"]')?.textContent).toContain(
       "draft sync failed"
@@ -1729,8 +1733,7 @@ describe("App autosave", () => {
     });
 
     expect(saveMarkdownFile).toHaveBeenCalledWith({
-      tabId: "tab-2",
-      path: "C:/notes/second.md"
+      tabId: "tab-2"
     });
   });
 
@@ -2164,8 +2167,7 @@ describe("App autosave", () => {
 
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
-      tabId: "tab-1",
-      path: "C:/notes/today.md"
+      tabId: "tab-1"
     });
   });
 
@@ -2189,8 +2191,7 @@ describe("App autosave", () => {
 
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
-      tabId: "tab-1",
-      path: "C:/notes/today.md"
+      tabId: "tab-1"
     });
   });
 
@@ -2205,8 +2206,7 @@ describe("App autosave", () => {
 
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
-      tabId: "tab-1",
-      path: "C:/notes/today.md"
+      tabId: "tab-1"
     });
   });
 
@@ -2233,8 +2233,7 @@ describe("App autosave", () => {
 
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
-      tabId: "tab-1",
-      path: "C:/notes/today.md"
+      tabId: "tab-1"
     });
   });
 
@@ -2355,8 +2354,7 @@ describe("App autosave", () => {
 
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
-      tabId: "tab-1",
-      path: "C:/notes/today.md"
+      tabId: "tab-1"
     });
 
     await act(async () => {
@@ -2390,8 +2388,7 @@ describe("App autosave", () => {
 
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenNthCalledWith(1, {
-      tabId: "tab-1",
-      path: "C:/notes/today.md"
+      tabId: "tab-1"
     });
 
     await act(async () => {
@@ -2416,8 +2413,7 @@ describe("App autosave", () => {
 
     expect(saveMarkdownFile).toHaveBeenCalledTimes(2);
     expect(saveMarkdownFile).toHaveBeenNthCalledWith(2, {
-      tabId: "tab-1",
-      path: "C:/notes/today.md"
+      tabId: "tab-1"
     });
   });
 
@@ -2449,8 +2445,7 @@ describe("App autosave", () => {
 
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
-      tabId: "tab-1",
-      path: "C:/notes/today.md"
+      tabId: "tab-1"
     });
   });
 
@@ -2494,15 +2489,14 @@ describe("App autosave", () => {
 
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
-      tabId: "tab-1",
-      path: "C:/notes/today.md"
+      tabId: "tab-1"
     });
   });
 
   it("pauses autosave and shows recovery actions after an external modification", async () => {
     await renderAndOpenDocument();
 
-    expect(syncWatchedMarkdownFile).toHaveBeenCalledWith({ tabId: "tab-1" });
+    expect(syncWatchedMarkdownFile).toHaveBeenCalledWith();
     expect(externalMarkdownFileChangedListener).not.toBeNull();
 
     await act(async () => {
@@ -2576,8 +2570,7 @@ describe("App autosave", () => {
 
     expect(saveMarkdownFile).not.toHaveBeenCalled();
     expect(saveMarkdownFileAs).toHaveBeenCalledWith({
-      tabId: "tab-1",
-      currentPath: "C:/notes/today.md"
+      tabId: "tab-1"
     });
   });
 
@@ -2615,7 +2608,7 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
-    expect(syncWatchedMarkdownFile).toHaveBeenCalledWith({ tabId: "tab-1" });
+    expect(syncWatchedMarkdownFile).toHaveBeenCalledWith();
   });
 
   it("reloads the disk version when the user accepts the external-change prompt", async () => {
@@ -2645,8 +2638,7 @@ describe("App autosave", () => {
     });
 
     expect(reloadWorkspaceTabFromPath).toHaveBeenCalledWith({
-      tabId: "tab-1",
-      targetPath: "C:/notes/today.md"
+      tabId: "tab-1"
     });
     expect(container.querySelectorAll('[data-fishmark-region="workspace-tab"]')).toHaveLength(1);
     expect(container.textContent).not.toContain("当前文件已被外部修改");
@@ -2701,8 +2693,7 @@ describe("App autosave", () => {
     });
     expect(saveMarkdownFile).not.toHaveBeenCalled();
     expect(saveMarkdownFileAs).toHaveBeenCalledWith({
-      tabId: "tab-1",
-      currentPath: "C:/notes/today.md"
+      tabId: "tab-1"
     });
   });
 
@@ -3915,8 +3906,7 @@ describe("App autosave", () => {
 
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
-      tabId: "tab-1",
-      path: "C:/notes/today.md"
+      tabId: "tab-1"
     });
     expect(container.querySelector('[data-fishmark-dialog="settings-drawer"]')).not.toBeNull();
 

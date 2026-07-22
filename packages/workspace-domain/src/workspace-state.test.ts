@@ -292,8 +292,6 @@ describe("WorkspaceState save and reload transitions", () => {
       isDirty: false,
       diskVersion
     });
-    expect(workspace.getTabPath(tabId)).toBe("C:/notes/saved.md");
-    expect(workspace.getTabPath(null)).toBeNull();
   });
 
   it("keeps a newer draft dirty when an older captured revision finishes saving", () => {

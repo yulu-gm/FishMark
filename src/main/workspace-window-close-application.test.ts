@@ -45,7 +45,7 @@ function createSaveOperations(
     showSaveMarkdownDialog: vi.fn(),
     beginInternalWrite: vi.fn(),
     completeInternalWrite: vi.fn(async () => undefined),
-    syncDocumentPath: vi.fn(async () => undefined),
+    syncWindowWatch: vi.fn(async () => undefined),
     recordRecentFilePath: vi.fn(async () => undefined),
     reportCleanupError: vi.fn()
   });
@@ -93,8 +93,7 @@ describe("createWorkspaceWindowCloseApplication", () => {
     const savePromise = save.save({
       sender: { id: 1 },
       tabId,
-      expectedWindowId: "window-1",
-      path: "C:/notes/window-close.md"
+      expectedWindowId: "window-1"
     });
     expect(write).not.toHaveBeenCalled();
 
@@ -139,8 +138,7 @@ describe("createWorkspaceWindowCloseApplication", () => {
     const savePromise = save.save({
       sender: { id: 1 },
       tabId,
-      expectedWindowId: "window-1",
-      path: "C:/notes/window-close.md"
+      expectedWindowId: "window-1"
     });
     expect(write).not.toHaveBeenCalled();
 

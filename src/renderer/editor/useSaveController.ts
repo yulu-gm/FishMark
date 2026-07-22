@@ -133,8 +133,7 @@ export function useSaveController(input: {
 
     try {
       const result = await fishmark.saveMarkdownFile({
-        tabId: currentDocument.tabId,
-        path: currentDocument.path
+        tabId: currentDocument.tabId
       });
 
       if (result.status === "error") {
@@ -214,13 +213,11 @@ export function useSaveController(input: {
       try {
         const result = shouldForceSaveAs
           ? await fishmark.saveMarkdownFileAs({
-              tabId: currentDocument.tabId,
-              currentPath: currentDocument.path
+              tabId: currentDocument.tabId
             })
           : currentDocument.path
             ? await fishmark.saveMarkdownFile({
-                tabId: currentDocument.tabId,
-                path: currentDocument.path
+                tabId: currentDocument.tabId
               })
             : { status: "cancelled" as const };
 

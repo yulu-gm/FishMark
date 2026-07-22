@@ -4,9 +4,7 @@ import { dialog } from "electron";
 
 import {
   SAVE_MARKDOWN_FILE_ERROR_MESSAGES,
-  type SaveMarkdownFileAsInput,
   type SaveMarkdownFileErrorCode,
-  type SaveMarkdownFileInput,
   type SaveMarkdownFileResult
 } from "../shared/save-markdown-file";
 
@@ -28,11 +26,15 @@ export type SaveMarkdownDialogDependencies = {
   showSaveDialog: () => Promise<SaveDialogResult>;
 };
 
-type SaveMarkdownFileContentInput = SaveMarkdownFileInput & {
+export type SaveMarkdownFileToPathInput = {
+  tabId: string;
+  path: string;
   content: string;
 };
 
-type SaveMarkdownFileAsRuntimeInput = SaveMarkdownFileAsInput & {
+export type ShowSaveMarkdownDialogInput = {
+  tabId: string;
+  currentPath: string | null;
   content: string;
 };
 
@@ -41,7 +43,7 @@ const defaultDependencies: SaveMarkdownFileDependencies = {
 };
 
 export async function saveMarkdownFileToPath(
-  input: SaveMarkdownFileContentInput,
+  input: SaveMarkdownFileToPathInput,
   dependencies: SaveMarkdownFileDependencies = defaultDependencies
 ): Promise<SaveMarkdownFileResult> {
   try {
@@ -62,7 +64,7 @@ export async function saveMarkdownFileToPath(
 }
 
 export async function showSaveMarkdownDialog(
-  input: SaveMarkdownFileAsRuntimeInput,
+  input: ShowSaveMarkdownDialogInput,
   dependencies: SaveMarkdownDialogDependencies = {
     saveMarkdownFileToPath,
     showSaveDialog: () =>

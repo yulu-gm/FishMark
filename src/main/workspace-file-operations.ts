@@ -1,40 +1,34 @@
 import type { WorkspaceState } from "@fishmark/workspace-domain";
 
+import type { SaveMarkdownFileResult } from "../shared/save-markdown-file";
 import type {
-  SaveMarkdownFileAsInput,
-  SaveMarkdownFileInput,
-  SaveMarkdownFileResult
-} from "../shared/save-markdown-file";
+  SaveMarkdownFileToPathInput,
+  ShowSaveMarkdownDialogInput
+} from "./save-markdown-file";
 import type { WorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
 import { requireAppliedWorkspaceMutation } from "./workspace-mutation-result";
 
 type WorkspaceFileOperationsDependencies<TSender> = {
   workspace: Pick<
     WorkspaceState,
-    | "getTabPath"
-    | "getTabSession"
-    | "getWindowProjectionOrNull"
-    | "saveTabDocument"
+    "getTabSession" | "saveTabDocument"
   >;
   documentOperations: Pick<
     WorkspaceDocumentOperationCoordinator,
     "runExclusive"
   >;
   saveMarkdownFileToPath: (
-    input: SaveMarkdownFileInput & { readonly content: string }
+    input: SaveMarkdownFileToPathInput
   ) => Promise<SaveMarkdownFileResult>;
   showSaveMarkdownDialog: (
-    input: SaveMarkdownFileAsInput & { readonly content: string }
+    input: ShowSaveMarkdownDialogInput
   ) => Promise<SaveMarkdownFileResult>;
   beginInternalWrite: (sender: TSender, targetPath: string) => void;
   completeInternalWrite: (
     sender: TSender,
     targetPath: string
   ) => Promise<void>;
-  syncDocumentPath: (
-    sender: TSender,
-    targetPath: string | null
-  ) => Promise<void>;
+  syncWindowWatch: (sender: TSender, windowId: string) => Promise<void>;
   recordRecentFilePath: (targetPath: string | null) => Promise<void>;
   reportCleanupError: (error: unknown) => void;
 };
@@ -42,21 +36,6 @@ type WorkspaceFileOperationsDependencies<TSender> = {
 export function createWorkspaceFileOperations<TSender>(
   dependencies: WorkspaceFileOperationsDependencies<TSender>
 ) {
-  async function syncSenderWindowWatch(
-    sender: TSender,
-    expectedWindowId: string
-  ): Promise<void> {
-    const projection = dependencies.workspace.getWindowProjectionOrNull(
-      expectedWindowId
-    );
-    await dependencies.syncDocumentPath(
-      sender,
-      projection === null
-        ? null
-        : dependencies.workspace.getTabPath(projection.activeTabId)
-    );
-  }
-
   async function runWithCleanup<TResult>(
     operation: () => Promise<TResult>,
     cleanupOperations: readonly (() => Promise<void>)[],
@@ -99,22 +78,30 @@ export function createWorkspaceFileOperations<TSender>(
       readonly sender: TSender;
       readonly expectedWindowId: string;
       readonly tabId: string;
-      readonly path: string;
     }): Promise<SaveMarkdownFileResult> {
-      return dependencies.documentOperations.runExclusive(input.tabId, () =>
-        runWithCleanup(
+      return dependencies.documentOperations.runExclusive(input.tabId, async () => {
+        let targetPath: string | null = null;
+        let writeStarted = false;
+        return runWithCleanup(
           async () => {
-            dependencies.beginInternalWrite(input.sender, input.path);
             const checkpoint = dependencies.workspace.getTabSession(input.tabId);
             if (checkpoint.windowId !== input.expectedWindowId) {
               throw new Error(
                 `Workspace tab '${input.tabId}' does not belong to window '${input.expectedWindowId}'.`
               );
             }
+            if (checkpoint.path === null) {
+              throw new Error(
+                `Workspace tab '${input.tabId}' has no canonical file path.`
+              );
+            }
+            targetPath = checkpoint.path;
+            dependencies.beginInternalWrite(input.sender, targetPath);
+            writeStarted = true;
 
             const result = await dependencies.saveMarkdownFileToPath({
               tabId: input.tabId,
-              path: input.path,
+              path: targetPath,
               content: checkpoint.content
             });
             if (result.status === "success") {
@@ -131,19 +118,21 @@ export function createWorkspaceFileOperations<TSender>(
             return result;
           },
           [
-            () => dependencies.completeInternalWrite(input.sender, input.path),
-            () => syncSenderWindowWatch(input.sender, input.expectedWindowId)
+            () =>
+              writeStarted && targetPath !== null
+                ? dependencies.completeInternalWrite(input.sender, targetPath)
+                : Promise.resolve(),
+            () => dependencies.syncWindowWatch(input.sender, input.expectedWindowId)
           ],
           "Workspace save cleanup failed."
-        )
-      );
+        );
+      });
     },
 
     async saveAs(input: {
       readonly sender: TSender;
       readonly expectedWindowId: string;
       readonly tabId: string;
-      readonly currentPath: string | null;
     }): Promise<SaveMarkdownFileResult> {
       return dependencies.documentOperations.runExclusive(input.tabId, () =>
         runWithCleanup(
@@ -157,7 +146,7 @@ export function createWorkspaceFileOperations<TSender>(
 
             const result = await dependencies.showSaveMarkdownDialog({
               tabId: input.tabId,
-              currentPath: input.currentPath,
+              currentPath: checkpoint.path,
               content: checkpoint.content
             });
             if (result.status === "success") {
@@ -173,12 +162,10 @@ export function createWorkspaceFileOperations<TSender>(
             }
             return result;
           },
-          [() => syncSenderWindowWatch(input.sender, input.expectedWindowId)],
+          [() => dependencies.syncWindowWatch(input.sender, input.expectedWindowId)],
           "Workspace Save As cleanup failed."
         )
       );
-    },
-
-    syncSenderWindowWatch
+    }
   };
 }

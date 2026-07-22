@@ -138,8 +138,7 @@ describe("useEditorApplicationController", () => {
       content: "# Saved\n"
     });
     expect(saveMarkdownFile).toHaveBeenCalledWith({
-      tabId: "tab-1",
-      path: "C:/notes/note.md"
+      tabId: "tab-1"
     });
     expect(getWorkspaceSnapshot).toHaveBeenCalledTimes(1);
 
@@ -307,8 +306,7 @@ describe("useEditorApplicationController", () => {
     });
 
     expect(saveMarkdownFile).toHaveBeenCalledWith({
-      tabId: "tab-1",
-      path: "C:/notes/first.md"
+      tabId: "tab-1"
     });
 
     act(() => {

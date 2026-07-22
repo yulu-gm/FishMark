@@ -38,7 +38,6 @@ export function createWorkspaceReloadApplication(
     async reloadTab(input: {
       readonly tabId: string;
       readonly expectedWindowId: string;
-      readonly targetPath: string;
     }): Promise<WorkspaceReloadResult> {
       return dependencies.documentOperations.runExclusive(input.tabId, async () => {
         const checkpoint = dependencies.workspace.getTabSession(input.tabId);
@@ -47,13 +46,18 @@ export function createWorkspaceReloadApplication(
             `Workspace tab '${input.tabId}' does not belong to window '${input.expectedWindowId}'.`
           );
         }
+        if (checkpoint.path === null) {
+          throw new Error(
+            `Workspace tab '${input.tabId}' has no canonical file path.`
+          );
+        }
 
-        const result = await dependencies.openMarkdownFileFromPath(input.targetPath);
+        const result = await dependencies.openMarkdownFileFromPath(checkpoint.path);
         if (result.status !== "success") {
           if (result.status === "error") {
             throw new Error(result.error.message);
           }
-          throw new Error(`Unable to reload Markdown file '${input.targetPath}'.`);
+          throw new Error(`Unable to reload Markdown file '${checkpoint.path}'.`);
         }
 
         const mutation = dependencies.workspace.replaceTabDocument({
@@ -67,7 +71,7 @@ export function createWorkspaceReloadApplication(
         }
 
         const projection = requireAppliedWorkspaceMutation(mutation, "reload");
-        await dependencies.recordRecentFilePath(result.document.path ?? input.targetPath);
+        await dependencies.recordRecentFilePath(result.document.path ?? checkpoint.path);
         return {
           kind: "success",
           projection

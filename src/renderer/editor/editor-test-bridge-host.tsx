@@ -27,7 +27,7 @@ export type EditorTestBridgeHostProps = {
   editor: EditorBridge;
   setEditorContentSnapshot: (content: string) => void;
   openWorkspaceFileFromPath: (targetPath: string) => Promise<OpenWorkspaceFileFromPathResult>;
-  saveMarkdownFile: (input: { tabId: string; path: string }) => Promise<SaveMarkdownFileResult>;
+  saveMarkdownFile: (input: { tabId: string }) => Promise<SaveMarkdownFileResult>;
   updateWorkspaceTabDraft: (input: { tabId: string; content: string }) => Promise<WorkspaceWindowSnapshot>;
   getWorkspaceSnapshot: () => Promise<WorkspaceWindowSnapshot>;
 };

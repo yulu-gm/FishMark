@@ -34,8 +34,7 @@ import type {
 } from "./app-update";
 import type { AppMenuCommand } from "./menu-command";
 import type {
-  ExternalMarkdownFileChangedEvent,
-  SyncWatchedMarkdownFileInput
+  ExternalMarkdownFileChangedEvent
 } from "./external-file-change";
 import type { ImportClipboardImageInput, ImportClipboardImageResult } from "./clipboard-image-import";
 import type {
@@ -77,7 +76,7 @@ export interface ProductBridge {
   saveMarkdownFile: (input: SaveMarkdownFileInput) => Promise<SaveMarkdownFileResult>;
   saveMarkdownFileAs: (input: SaveMarkdownFileAsInput) => Promise<SaveMarkdownFileResult>;
   exportHtmlFile: (input: ExportHtmlFileInput) => Promise<ExportHtmlFileResult>;
-  syncWatchedMarkdownFile: (input: SyncWatchedMarkdownFileInput) => Promise<void>;
+  syncWatchedMarkdownFile: () => Promise<void>;
   importClipboardImage: (input: ImportClipboardImageInput) => Promise<ImportClipboardImageResult>;
   onMenuCommand: (listener: (command: AppMenuCommand) => void) => () => void;
   onOpenWorkspacePath: (listener: (payload: OpenWorkspacePathRequest) => void) => () => void;

@@ -48,6 +48,7 @@ import {
 import { createWorkspaceDetachApplication } from "./workspace-detach-application";
 import { createWorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
 import { createWorkspaceFileOperations } from "./workspace-file-operations";
+import { createWorkspaceFileWatchApplication } from "./workspace-file-watch-application";
 import { createWorkspaceReloadApplication } from "./workspace-reload-application";
 import { createWorkspaceTabTransferApplication } from "./workspace-tab-transfer-application";
 import { createWorkspaceTabReorderApplication } from "./workspace-tab-reorder-application";
@@ -107,10 +108,7 @@ import {
   EXPORT_HTML_FILE_CHANNEL,
   type ExportHtmlFileInput
 } from "../shared/export-html-file";
-import {
-  SYNC_WATCHED_MARKDOWN_FILE_CHANNEL,
-  type SyncWatchedMarkdownFileInput
-} from "../shared/external-file-change";
+import { SYNC_WATCHED_MARKDOWN_FILE_CHANNEL } from "../shared/external-file-change";
 import {
   APP_NOTIFICATION_EVENT,
   APP_UPDATE_STATE_EVENT,
@@ -327,6 +325,10 @@ app.whenReady().then(async () => {
   });
   const externalFileWatchService = createExternalFileWatchService();
   const workspaceState = createWorkspaceState();
+  const workspaceFileWatchApplication = createWorkspaceFileWatchApplication({
+    workspace: workspaceState,
+    syncDocumentPath: externalFileWatchService.syncDocumentPath
+  });
   const workspaceDocumentOperations = createWorkspaceDocumentOperationCoordinator();
   const workspaceApplication = createWorkspaceApplication({
     workspace: workspaceState
@@ -637,10 +639,10 @@ app.whenReady().then(async () => {
     sender: Electron.WebContents,
     projection: WorkspaceWindowProjection
   ): Promise<ReturnType<typeof toWorkspaceWindowSnapshot>> {
-    await externalFileWatchService.syncDocumentPath(
+    await workspaceFileWatchApplication.syncWindow({
       sender,
-      workspaceState.getTabPath(projection.activeTabId)
-    );
+      windowId: projection.windowId
+    });
     return toWorkspaceWindowSnapshot(projection);
   }
 
@@ -671,7 +673,8 @@ app.whenReady().then(async () => {
     showSaveMarkdownDialog,
     beginInternalWrite: externalFileWatchService.beginInternalWrite,
     completeInternalWrite: externalFileWatchService.completeInternalWrite,
-    syncDocumentPath: externalFileWatchService.syncDocumentPath,
+    syncWindowWatch: (sender, windowId) =>
+      workspaceFileWatchApplication.syncWindow({ sender, windowId }),
     recordRecentFilePath,
     reportCleanupError: (error) => {
       console.error(
@@ -831,8 +834,7 @@ app.whenReady().then(async () => {
       const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
       const result = await workspaceReloadApplication.reloadTab({
         tabId: input.tabId,
-        expectedWindowId: windowId,
-        targetPath: input.targetPath
+        expectedWindowId: windowId
       });
       if (result.kind === "revision-stale") {
         return { kind: "revision-stale" } satisfies ReloadWorkspaceTabFromPathResult;
@@ -940,8 +942,7 @@ app.whenReady().then(async () => {
     return workspaceFileOperations.save({
       sender: event.sender,
       expectedWindowId: windowId,
-      tabId: input.tabId,
-      path: input.path
+      tabId: input.tabId
     });
   });
   ipcMain.handle(SAVE_MARKDOWN_FILE_AS_CHANNEL, async (event, input: SaveMarkdownFileAsInput) => {
@@ -949,8 +950,7 @@ app.whenReady().then(async () => {
     return workspaceFileOperations.saveAs({
       sender: event.sender,
       expectedWindowId: windowId,
-      tabId: input.tabId,
-      currentPath: input.currentPath
+      tabId: input.tabId
     });
   });
   ipcMain.handle(EXPORT_HTML_FILE_CHANNEL, async (_event, input: ExportHtmlFileInput) =>
@@ -958,11 +958,15 @@ app.whenReady().then(async () => {
   );
   ipcMain.handle(
     SYNC_WATCHED_MARKDOWN_FILE_CHANNEL,
-    async (event, input: SyncWatchedMarkdownFileInput) =>
-      externalFileWatchService.syncDocumentPath(
-        event.sender,
-        workspaceState.getTabPath(input.tabId)
-      )
+    async (event) => {
+      const windowId = await workspaceWindowRegistrationApplication.ensureWindow(
+        event.sender
+      );
+      return workspaceFileWatchApplication.syncWindow({
+        sender: event.sender,
+        windowId
+      });
+    }
   );
   ipcMain.handle(IMPORT_CLIPBOARD_IMAGE_CHANNEL, async (_event, input: ImportClipboardImageInput) =>
     importClipboardImage(input, {

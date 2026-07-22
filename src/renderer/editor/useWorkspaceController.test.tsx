@@ -765,8 +765,7 @@ describe("useWorkspaceController", () => {
     let didReload: boolean | undefined;
     await act(async () => {
       didReload = await latestRef.current?.reloadWorkspaceTabFromPath({
-        tabId: "tab-1",
-        targetPath: "C:/notes/note.md"
+        tabId: "tab-1"
       });
     });
 
@@ -818,8 +817,7 @@ describe("useWorkspaceController", () => {
     let didReload: boolean | undefined;
     await act(async () => {
       didReload = await latestRef.current?.reloadWorkspaceTabFromPath({
-        tabId: "tab-1",
-        targetPath: "C:/notes/note.md"
+        tabId: "tab-1"
       });
     });
 

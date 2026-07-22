@@ -27,6 +27,42 @@ function document(name: string, content: string): WorkspaceDocumentData {
 }
 
 describe("createWorkspaceReloadApplication", () => {
+  it("reads only the canonical path after Save As retargets the document", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.openDocument(
+      "window-1",
+      document("before.md", "before")
+    ).activeTabId!;
+    workspace.saveTabDocument({
+      tabId,
+      expectedWindowId: "window-1",
+      capturedRevision: 0,
+      document: document("after.md", "before"),
+      diskVersion: null
+    });
+    const openMarkdownFileFromPath = vi.fn(async () => ({
+      status: "success" as const,
+      document: document("after.md", "disk")
+    }));
+    const application = createWorkspaceReloadApplication({
+      workspace,
+      openMarkdownFileFromPath,
+      recordRecentFilePath: vi.fn(async () => undefined)
+    });
+
+    await application.reloadTab({
+      tabId,
+      expectedWindowId: "window-1"
+    });
+
+    expect(openMarkdownFileFromPath).toHaveBeenCalledWith("C:/notes/after.md");
+    expect(workspace.getTabSession(tabId)).toMatchObject({
+      path: "C:/notes/after.md",
+      content: "disk"
+    });
+  });
+
   it("replaces an unchanged captured checkpoint after deferred IO", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
@@ -46,8 +82,7 @@ describe("createWorkspaceReloadApplication", () => {
 
     const result = await application.reloadTab({
       tabId,
-      expectedWindowId: "window-1",
-      targetPath: "C:/notes/reload.md"
+      expectedWindowId: "window-1"
     });
 
     expect(result).toMatchObject({
@@ -80,8 +115,7 @@ describe("createWorkspaceReloadApplication", () => {
 
     const reloadPromise = application.reloadTab({
       tabId,
-      expectedWindowId: "window-1",
-      targetPath: "C:/notes/edit-race.md"
+      expectedWindowId: "window-1"
     });
     await vi.waitFor(() => expect(resolveRead).toBeTypeOf("function"));
     workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "new draft" });
@@ -121,8 +155,7 @@ describe("createWorkspaceReloadApplication", () => {
 
     const reloadPromise = application.reloadTab({
       tabId,
-      expectedWindowId: "window-1",
-      targetPath: "C:/notes/move-race.md"
+      expectedWindowId: "window-1"
     });
     await vi.waitFor(() => expect(resolveRead).toBeTypeOf("function"));
     workspace.moveTabToWindow({ tabId, targetWindowId: "window-2" });
@@ -162,8 +195,7 @@ describe("createWorkspaceReloadApplication", () => {
 
     const reloadPromise = application.reloadTab({
       tabId,
-      expectedWindowId: "window-1",
-      targetPath: "C:/notes/closed-window.md"
+      expectedWindowId: "window-1"
     });
     await vi.waitFor(() => expect(resolveRead).toBeTypeOf("function"));
     workspace.unregisterWindow("window-1");

@@ -53,8 +53,7 @@ export function useEditorApplicationController(input: {
       }
 
       return workspaceController.reloadWorkspaceTabFromPath({
-        tabId: activeDocument.tabId,
-        targetPath: activeDocument.path
+        tabId: activeDocument.tabId
       });
     },
     resetAutosaveRuntime: saveController.resetAutosaveRuntime,

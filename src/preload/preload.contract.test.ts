@@ -50,8 +50,7 @@ import {
 import {
   EXTERNAL_MARKDOWN_FILE_CHANGED_EVENT,
   SYNC_WATCHED_MARKDOWN_FILE_CHANNEL,
-  type ExternalMarkdownFileChangedEvent,
-  type SyncWatchedMarkdownFileInput
+  type ExternalMarkdownFileChangedEvent
 } from "../shared/external-file-change";
 import {
   INTERRUPT_SCENARIO_RUN_CHANNEL,
@@ -284,8 +283,8 @@ describe("preload contract", () => {
       targetPaths: ["D:/fixtures/drop.md", "D:/fixtures/second-drop.md"],
       hasOpenDocument: true
     };
-    const saveInput = { tabId: "tab-2", path: "D:/fixtures/note.md" };
-    const saveAsInput = { tabId: "tab-2", currentPath: "D:/fixtures/note.md" };
+    const saveInput = { tabId: "tab-2" };
+    const saveAsInput = { tabId: "tab-2" };
     const exportHtmlInput: ExportHtmlFileInput = {
       tabId: "tab-2",
       currentPath: "D:/fixtures/note.md",
@@ -305,10 +304,6 @@ describe("preload contract", () => {
       content: "# Updated note\n"
     };
     const reloadWorkspaceTabFromPathInput = {
-      tabId: "tab-2",
-      targetPath: "D:/fixtures/reload.md"
-    };
-    const syncWatchedFileInput: SyncWatchedMarkdownFileInput = {
       tabId: "tab-2"
     };
     const importClipboardImageInput: ImportClipboardImageInput = {
@@ -351,7 +346,7 @@ describe("preload contract", () => {
     void (api as ProductBridge & {
       openExternalLink: (href: string) => Promise<void>;
     }).openExternalLink("https://fishmark.app");
-    void api.syncWatchedMarkdownFile(syncWatchedFileInput);
+    void api.syncWatchedMarkdownFile();
     void api.importClipboardImage(importClipboardImageInput);
     void testApi.openEditorTestWindow();
     void testApi.startScenarioRun(startRunInput);
@@ -406,7 +401,7 @@ describe("preload contract", () => {
       OPEN_EXTERNAL_LINK_CHANNEL,
       { href: "https://fishmark.app" }
     ]);
-    expect(invoke.mock.calls).toContainEqual([SYNC_WATCHED_MARKDOWN_FILE_CHANNEL, syncWatchedFileInput]);
+    expect(invoke.mock.calls).toContainEqual([SYNC_WATCHED_MARKDOWN_FILE_CHANNEL]);
     expect(invoke.mock.calls).toContainEqual([IMPORT_CLIPBOARD_IMAGE_CHANNEL, importClipboardImageInput]);
     expect(invoke.mock.calls).toContainEqual([OPEN_EDITOR_TEST_WINDOW_CHANNEL]);
     expect(invoke.mock.calls).toContainEqual([START_SCENARIO_RUN_CHANNEL, startRunInput]);

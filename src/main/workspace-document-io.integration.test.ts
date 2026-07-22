@@ -35,7 +35,7 @@ function createSaveOperations(
     showSaveMarkdownDialog: vi.fn(),
     beginInternalWrite: vi.fn(),
     completeInternalWrite: vi.fn(async () => undefined),
-    syncDocumentPath: vi.fn(async () => undefined),
+    syncWindowWatch: vi.fn(async () => undefined),
     recordRecentFilePath: vi.fn(async () => undefined),
     reportCleanupError: vi.fn()
   });
@@ -75,8 +75,7 @@ describe("workspace document IO transactions", () => {
     const savePromise = save.save({
       sender,
       tabId,
-      expectedWindowId: "window-1",
-      path: "C:/notes/race.md"
+      expectedWindowId: "window-1"
     });
     await vi.waitFor(() => expect(resolveWrite).toBeTypeOf("function"));
     const movePromise = transfer.move({
@@ -125,8 +124,7 @@ describe("workspace document IO transactions", () => {
     const savePromise = save.save({
       sender,
       tabId,
-      expectedWindowId: "window-1",
-      path: "C:/notes/race.md"
+      expectedWindowId: "window-1"
     });
 
     held.release();
@@ -163,8 +161,7 @@ describe("workspace document IO transactions", () => {
 
     const reloadPromise = reload.reloadTab({
       tabId,
-      expectedWindowId: "window-1",
-      targetPath: "C:/notes/race.md"
+      expectedWindowId: "window-1"
     });
     await vi.waitFor(() => expect(resolveRead).toBeTypeOf("function"));
     const detachPromise = transfer.detach({
@@ -215,8 +212,7 @@ describe("workspace document IO transactions", () => {
     });
     const reloadPromise = reload.reloadTab({
       tabId,
-      expectedWindowId: "window-1",
-      targetPath: "C:/notes/race.md"
+      expectedWindowId: "window-1"
     });
 
     held.release();
@@ -251,15 +247,13 @@ describe("workspace document IO transactions", () => {
 
     const reloadPromise = reload.reloadTab({
       tabId,
-      expectedWindowId: "window-1",
-      targetPath: "C:/notes/race.md"
+      expectedWindowId: "window-1"
     });
     await vi.waitFor(() => expect(resolveRead).toBeTypeOf("function"));
     const savePromise = save.save({
       sender,
       tabId,
-      expectedWindowId: "window-1",
-      path: "C:/notes/race.md"
+      expectedWindowId: "window-1"
     });
 
     expect(write).not.toHaveBeenCalled();
@@ -307,14 +301,12 @@ describe("workspace document IO transactions", () => {
     const savePromise = save.save({
       sender,
       tabId,
-      expectedWindowId: "window-1",
-      path: "C:/notes/race.md"
+      expectedWindowId: "window-1"
     });
     await vi.waitFor(() => expect(resolveWrite).toBeTypeOf("function"));
     const reloadPromise = reload.reloadTab({
       tabId,
-      expectedWindowId: "window-1",
-      targetPath: "C:/notes/race.md"
+      expectedWindowId: "window-1"
     });
 
     expect(read).not.toHaveBeenCalled();
@@ -361,8 +353,7 @@ describe("workspace document IO transactions", () => {
     const savePromise = save.save({
       sender,
       tabId,
-      expectedWindowId: "window-1",
-      path: "C:/notes/race.md"
+      expectedWindowId: "window-1"
     });
 
     expect(write).not.toHaveBeenCalled();
@@ -399,8 +390,7 @@ describe("workspace document IO transactions", () => {
     const savePromise = save.save({
       sender,
       tabId,
-      expectedWindowId: "window-1",
-      path: "C:/notes/race.md"
+      expectedWindowId: "window-1"
     });
     await vi.waitFor(() => expect(resolveWrite).toBeTypeOf("function"));
     const closePromise = close.closeTab({
@@ -501,8 +491,7 @@ describe("workspace document IO transactions", () => {
       ).save({
         sender,
         tabId,
-        expectedWindowId: "window-1",
-        path: "C:/notes/race.md"
+        expectedWindowId: "window-1"
       });
       let closeSettled = false;
       void closePromise.then(() => {
@@ -607,8 +596,7 @@ describe("workspace document IO transactions", () => {
     ).save({
       sender,
       tabId,
-      expectedWindowId: "window-1",
-      path: "C:/notes/race.md"
+      expectedWindowId: "window-1"
     });
 
     abort();

@@ -27,7 +27,7 @@ export function createEditorTestDriver(input: {
   editor: EditorHandle;
   setEditorContentSnapshot: (content: string) => void;
   openWorkspaceFileFromPath: (targetPath: string) => Promise<OpenWorkspaceFileFromPathResult>;
-  saveMarkdownFile: (args: { tabId: string; path: string }) => Promise<SaveMarkdownFileResult>;
+  saveMarkdownFile: (args: { tabId: string }) => Promise<SaveMarkdownFileResult>;
   updateWorkspaceTabDraft: (input: { tabId: string; content: string }) => Promise<WorkspaceWindowSnapshot>;
   getWorkspaceSnapshot: () => Promise<WorkspaceWindowSnapshot>;
 }) {
@@ -234,8 +234,7 @@ export function createEditorTestDriver(input: {
 
         const content = input.editor.getContent();
         const result = await input.saveMarkdownFile({
-          tabId: activeDocument.tabId,
-          path: activeDocument.path
+          tabId: activeDocument.tabId
         });
 
         if (result.status !== "success") {

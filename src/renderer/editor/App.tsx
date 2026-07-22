@@ -995,7 +995,7 @@ function EditorShell({
       },
       openWorkspaceFileFromPath: (targetPath: string) =>
         fishmark.openWorkspaceFileFromPath(targetPath),
-      saveMarkdownFile: (input: { tabId: string; path: string }) => fishmark.saveMarkdownFile(input),
+      saveMarkdownFile: (input: { tabId: string }) => fishmark.saveMarkdownFile(input),
       updateWorkspaceTabDraft: (input: { tabId: string; content: string }) =>
         fishmark.updateWorkspaceTabDraft(input),
       getWorkspaceSnapshot: () => fishmark.getWorkspaceSnapshot()
@@ -1028,9 +1028,7 @@ function EditorShell({
   }, [fishmark]);
 
   useEffect(() => {
-    void fishmark.syncWatchedMarkdownFile({
-      tabId: activeDocument?.tabId ?? null
-    });
+    void fishmark.syncWatchedMarkdownFile();
   }, [activeDocument?.path, activeDocument?.tabId, fishmark]);
 
   useEffect(() => {

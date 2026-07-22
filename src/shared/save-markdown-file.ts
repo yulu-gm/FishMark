@@ -6,12 +6,10 @@ export type SaveMarkdownDocument = OpenMarkdownDocument;
 
 export type SaveMarkdownFileInput = {
   tabId: string;
-  path: string;
 };
 
 export type SaveMarkdownFileAsInput = {
   tabId: string;
-  currentPath: string | null;
 };
 
 export type SaveMarkdownFileResult =

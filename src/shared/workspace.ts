@@ -57,7 +57,6 @@ export type UpdateWorkspaceTabDraftInput = {
 
 export type ReloadWorkspaceTabFromPathInput = {
   tabId: string;
-  targetPath: string;
 };
 
 export type ReloadWorkspaceTabFromPathResult =

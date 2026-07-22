@@ -5,11 +5,11 @@ import type {
   WorkspaceWindowProjection
 } from "@fishmark/workspace-domain";
 
+import type { SaveMarkdownFileResult } from "../shared/save-markdown-file";
 import type {
-  SaveMarkdownFileAsInput,
-  SaveMarkdownFileInput,
-  SaveMarkdownFileResult
-} from "../shared/save-markdown-file";
+  SaveMarkdownFileToPathInput,
+  ShowSaveMarkdownDialogInput
+} from "./save-markdown-file";
 import type { WorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
 
 type DirtyWorkspaceTabChoice = "save" | "discard" | "cancel";
@@ -47,10 +47,10 @@ type WorkspaceCloseCoordinatorDependencies = {
     tab: DocumentSessionProjection
   ) => Promise<DirtyWorkspaceTabChoice>;
   saveMarkdownFileToPath: (
-    input: SaveMarkdownFileInput & { content: string }
+    input: SaveMarkdownFileToPathInput
   ) => Promise<SaveMarkdownFileResult>;
   showSaveMarkdownDialog: (
-    input: SaveMarkdownFileAsInput & { content: string }
+    input: ShowSaveMarkdownDialogInput
   ) => Promise<SaveMarkdownFileResult>;
 };
 

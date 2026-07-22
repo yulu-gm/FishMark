@@ -112,8 +112,7 @@ describe("useSaveController", () => {
 
     expect(flushActiveWorkspaceDraft).toHaveBeenCalledTimes(2);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
-      tabId: "tab-1",
-      path: "C:/notes/note.md"
+      tabId: "tab-1"
     });
     expect(refreshWorkspaceSnapshot).toHaveBeenCalledTimes(1);
     expect(refreshWorkspaceSnapshot.mock.invocationCallOrder[0]).toBeGreaterThan(
@@ -299,8 +298,7 @@ describe("useSaveController", () => {
     expect(flushActiveWorkspaceDraft).toHaveBeenCalledTimes(2);
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
-      tabId: "tab-1",
-      path: "C:/notes/note.md"
+      tabId: "tab-1"
     });
 
     act(() => {
@@ -404,8 +402,7 @@ describe("useSaveController", () => {
 
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
-      tabId: "tab-1",
-      path: "C:/notes/untitled.md"
+      tabId: "tab-1"
     });
 
     act(() => {

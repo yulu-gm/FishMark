@@ -29,6 +29,70 @@ const document = (name: string, content: string) => ({
 });
 
 describe("createWorkspaceFileOperations", () => {
+  it("uses the canonical Save As path for an ordinary save that was queued while the dialog was open", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = workspace.openDocument(
+      "window-1",
+      document("before.md", "saved")
+    ).activeTabId!;
+    workspace.updateTabDraft({
+      tabId,
+      expectedWindowId: "window-1",
+      content: "dirty"
+    });
+    const documentOperations = createWorkspaceDocumentOperationCoordinator();
+    let resolveDialog!: (result: SaveMarkdownFileResult) => void;
+    const write = vi.fn(async ({ path, content }: { path: string; content: string }) => ({
+      status: "success" as const,
+      document: {
+        path,
+        name: path.split("/").at(-1)!,
+        content,
+        encoding: "utf-8" as const
+      }
+    }));
+    const operations = createWorkspaceFileOperationsWithOperations({
+      workspace,
+      documentOperations,
+      saveMarkdownFileToPath: write,
+      showSaveMarkdownDialog: () =>
+        new Promise((resolve) => {
+          resolveDialog = resolve;
+        }),
+      beginInternalWrite: vi.fn(),
+      completeInternalWrite: vi.fn(async () => undefined),
+      syncWindowWatch: vi.fn(async () => undefined),
+      recordRecentFilePath: vi.fn(async () => undefined),
+      reportCleanupError: vi.fn()
+    });
+
+    const saveAs = operations.saveAs({
+      sender: { id: 1 },
+      expectedWindowId: "window-1",
+      tabId
+    });
+    await vi.waitFor(() => expect(resolveDialog).toBeTypeOf("function"));
+    const queuedSave = operations.save({
+      sender: { id: 1 },
+      expectedWindowId: "window-1",
+      tabId
+    });
+    resolveDialog({
+      status: "success",
+      document: document("after.md", "dirty")
+    });
+
+    await Promise.all([saveAs, queuedSave]);
+
+    expect(write).toHaveBeenCalledWith({
+      tabId,
+      path: "C:/notes/after.md",
+      content: "dirty"
+    });
+    expect(workspace.getTabSession(tabId).path).toBe("C:/notes/after.md");
+  });
+
   it("does not begin a second ordinary save before the first watcher transaction finishes", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
@@ -75,15 +139,14 @@ describe("createWorkspaceFileOperations", () => {
       showSaveMarkdownDialog: vi.fn(),
       beginInternalWrite,
       completeInternalWrite,
-      syncDocumentPath: vi.fn(async () => undefined),
+      syncWindowWatch: vi.fn(async () => undefined),
       recordRecentFilePath: vi.fn(async () => undefined),
       reportCleanupError: vi.fn()
     });
     const input = {
       sender: { id: 1 },
       expectedWindowId: "window-1",
-      tabId,
-      path: "C:/notes/serial.md"
+      tabId
     };
 
     const firstSave = operations.save(input);
@@ -165,15 +228,20 @@ describe("createWorkspaceFileOperations", () => {
       showSaveMarkdownDialog: vi.fn(),
       beginInternalWrite,
       completeInternalWrite,
-      syncDocumentPath: watchService.syncDocumentPath,
+      syncWindowWatch: async (candidate, windowId) => {
+        const projection = workspace.getWindowProjectionOrNull(windowId);
+        await watchService.syncDocumentPath(
+          candidate,
+          projection?.activeDocument?.path ?? null
+        );
+      },
       recordRecentFilePath: vi.fn(async () => undefined),
       reportCleanupError: vi.fn()
     });
     const input = {
       sender,
       expectedWindowId: "window-1",
-      tabId,
-      path: "C:/notes/watch.md"
+      tabId
     };
 
     const firstSave = operations.save(input);
@@ -207,7 +275,7 @@ describe("createWorkspaceFileOperations", () => {
       status: "success" as const,
       document: document("saved-as.md", "draft")
     }));
-    const syncDocumentPath = vi.fn(async () => undefined);
+    const syncWindowWatch = vi.fn(async () => undefined);
     const operations = createWorkspaceFileOperationsWithOperations({
       workspace,
       documentOperations,
@@ -215,7 +283,7 @@ describe("createWorkspaceFileOperations", () => {
       showSaveMarkdownDialog,
       beginInternalWrite: vi.fn(),
       completeInternalWrite: vi.fn(),
-      syncDocumentPath,
+      syncWindowWatch,
       recordRecentFilePath: vi.fn(async () => undefined),
       reportCleanupError: vi.fn()
     });
@@ -223,18 +291,17 @@ describe("createWorkspaceFileOperations", () => {
     const saveAsPromise = operations.saveAs({
       sender: { id: 0 },
       expectedWindowId: "window-1",
-      tabId,
-      currentPath: null
+      tabId
     });
     await Promise.resolve();
 
     expect(showSaveMarkdownDialog).not.toHaveBeenCalled();
-    expect(syncDocumentPath).not.toHaveBeenCalled();
+    expect(syncWindowWatch).not.toHaveBeenCalled();
 
     lease.release();
     await saveAsPromise;
     expect(showSaveMarkdownDialog).toHaveBeenCalledOnce();
-    expect(syncDocumentPath).toHaveBeenCalledOnce();
+    expect(syncWindowWatch).toHaveBeenCalledOnce();
     expect(workspace.getTabSession(tabId)).toMatchObject({
       path: "C:/notes/saved-as.md",
       content: "draft",
@@ -262,7 +329,7 @@ describe("createWorkspaceFileOperations", () => {
     const sender = { id: 1 };
     const beginInternalWrite = vi.fn();
     const completeInternalWrite = vi.fn(async () => undefined);
-    const syncDocumentPath = vi.fn(async () => undefined);
+    const syncWindowWatch = vi.fn(async () => undefined);
     const recordRecentFilePath = vi.fn(async () => undefined);
     const operations = createWorkspaceFileOperations({
       workspace,
@@ -270,7 +337,7 @@ describe("createWorkspaceFileOperations", () => {
       showSaveMarkdownDialog: vi.fn(),
       beginInternalWrite,
       completeInternalWrite,
-      syncDocumentPath,
+      syncWindowWatch,
       recordRecentFilePath,
       reportCleanupError: vi.fn()
     });
@@ -278,8 +345,7 @@ describe("createWorkspaceFileOperations", () => {
     const savePromise = operations.save({
       sender,
       expectedWindowId: "window-1",
-      tabId,
-      path: "C:/notes/moved.md"
+      tabId
     });
     await vi.waitFor(() => expect(resolveWrite).toBeTypeOf("function"));
     workspace.moveTabToWindow({ tabId, targetWindowId: "window-2" });
@@ -297,7 +363,7 @@ describe("createWorkspaceFileOperations", () => {
       "C:/notes/moved.md"
     );
     expect(recordRecentFilePath).not.toHaveBeenCalled();
-    expect(syncDocumentPath).toHaveBeenCalledWith(sender, "C:/notes/source.md");
+    expect(syncWindowWatch).toHaveBeenCalledWith(sender, "window-1");
     expect(workspace.getTabSession(tabId)).toMatchObject({
       windowId: "window-2",
       savedRevision: 0,
@@ -314,7 +380,7 @@ describe("createWorkspaceFileOperations", () => {
     ).activeTabId!;
     const sender = { id: 2 };
     const completeInternalWrite = vi.fn(async () => undefined);
-    const syncDocumentPath = vi.fn(async () => undefined);
+    const syncWindowWatch = vi.fn(async () => undefined);
     const operations = createWorkspaceFileOperations({
       workspace,
       saveMarkdownFileToPath: vi.fn(async () => {
@@ -323,7 +389,7 @@ describe("createWorkspaceFileOperations", () => {
       showSaveMarkdownDialog: vi.fn(),
       beginInternalWrite: vi.fn(),
       completeInternalWrite,
-      syncDocumentPath,
+      syncWindowWatch,
       recordRecentFilePath: vi.fn(async () => undefined),
       reportCleanupError: vi.fn()
     });
@@ -332,8 +398,7 @@ describe("createWorkspaceFileOperations", () => {
       operations.save({
         sender,
         expectedWindowId: "window-1",
-        tabId,
-        path: "C:/notes/throw.md"
+        tabId
       })
     ).rejects.toThrow("write exploded");
 
@@ -341,7 +406,7 @@ describe("createWorkspaceFileOperations", () => {
       sender,
       "C:/notes/throw.md"
     );
-    expect(syncDocumentPath).toHaveBeenCalledWith(sender, "C:/notes/throw.md");
+    expect(syncWindowWatch).toHaveBeenCalledWith(sender, "window-1");
   });
 
   it("completes write tracking when the domain commit throws", async () => {
@@ -358,14 +423,14 @@ describe("createWorkspaceFileOperations", () => {
       }));
     const sender = { id: 3 };
     const completeInternalWrite = vi.fn(async () => undefined);
-    const syncDocumentPath = vi.fn(async () => undefined);
+    const syncWindowWatch = vi.fn(async () => undefined);
     const operations = createWorkspaceFileOperations({
       workspace,
       saveMarkdownFileToPath,
       showSaveMarkdownDialog: vi.fn(),
       beginInternalWrite: vi.fn(),
       completeInternalWrite,
-      syncDocumentPath,
+      syncWindowWatch,
       recordRecentFilePath: vi.fn(async () => undefined),
       reportCleanupError: vi.fn()
     });
@@ -374,8 +439,7 @@ describe("createWorkspaceFileOperations", () => {
       operations.save({
         sender,
         expectedWindowId: "window-1",
-        tabId,
-        path: "C:/notes/commit-throw.md"
+        tabId
       })
     ).rejects.toThrow(
       "Saved document content must match the captured document revision."
@@ -385,10 +449,7 @@ describe("createWorkspaceFileOperations", () => {
       sender,
       "C:/notes/commit-throw.md"
     );
-    expect(syncDocumentPath).toHaveBeenCalledWith(
-      sender,
-      "C:/notes/commit-throw.md"
-    );
+    expect(syncWindowWatch).toHaveBeenCalledWith(sender, "window-1");
   });
 
   it("rejects a Save As commit after an out-of-band owner change", async () => {
@@ -400,7 +461,7 @@ describe("createWorkspaceFileOperations", () => {
     workspace.registerWindow("window-2");
     let resolveDialog!: (result: SaveMarkdownFileResult) => void;
     const sender = { id: 4 };
-    const syncDocumentPath = vi.fn(async () => undefined);
+    const syncWindowWatch = vi.fn(async () => undefined);
     const recordRecentFilePath = vi.fn(async () => undefined);
     const operations = createWorkspaceFileOperations({
       workspace,
@@ -411,7 +472,7 @@ describe("createWorkspaceFileOperations", () => {
         }),
       beginInternalWrite: vi.fn(),
       completeInternalWrite: vi.fn(),
-      syncDocumentPath,
+      syncWindowWatch,
       recordRecentFilePath,
       reportCleanupError: vi.fn()
     });
@@ -419,8 +480,7 @@ describe("createWorkspaceFileOperations", () => {
     const savePromise = operations.saveAs({
       sender,
       expectedWindowId: "window-1",
-      tabId,
-      currentPath: null
+      tabId
     });
     await vi.waitFor(() => expect(resolveDialog).toBeTypeOf("function"));
     workspace.moveTabToWindow({ tabId, targetWindowId: "window-2" });
@@ -433,7 +493,7 @@ describe("createWorkspaceFileOperations", () => {
       "Workspace Save As rejected: tab owner changed."
     );
     expect(recordRecentFilePath).not.toHaveBeenCalled();
-    expect(syncDocumentPath).toHaveBeenCalledWith(sender, "C:/notes/source.md");
+    expect(syncWindowWatch).toHaveBeenCalledWith(sender, "window-1");
     expect(workspace.getTabSession(tabId)).toMatchObject({
       windowId: "window-2",
       path: null,
@@ -462,8 +522,8 @@ describe("createWorkspaceFileOperations", () => {
     const completeInternalWrite = vi.fn(async () => {
       callOrder.push("complete");
     });
-    const syncDocumentPath = vi.fn(async (_sender, targetPath: string | null) => {
-      callOrder.push(`sync:${String(targetPath)}`);
+    const syncWindowWatch = vi.fn(async (_sender, windowId: string) => {
+      callOrder.push(`sync:${windowId}`);
     });
     const recordRecentFilePath = vi.fn(async () => undefined);
     const operations = createWorkspaceFileOperations({
@@ -474,7 +534,7 @@ describe("createWorkspaceFileOperations", () => {
         callOrder.push("begin");
       }),
       completeInternalWrite,
-      syncDocumentPath,
+      syncWindowWatch,
       recordRecentFilePath,
       reportCleanupError: vi.fn()
     });
@@ -482,8 +542,7 @@ describe("createWorkspaceFileOperations", () => {
     const savePromise = operations.save({
       sender,
       expectedWindowId: "window-1",
-      tabId,
-      path: "C:/notes/closed-save.md"
+      tabId
     });
     await vi.waitFor(() => expect(resolveWrite).toBeTypeOf("function"));
     workspace.unregisterWindow("window-1");
@@ -495,12 +554,12 @@ describe("createWorkspaceFileOperations", () => {
     await expect(savePromise).rejects.toThrow(
       "Workspace save rejected: owner window no longer exists."
     );
-    expect(callOrder).toEqual(["begin", "complete", "sync:null"]);
+    expect(callOrder).toEqual(["begin", "complete", "sync:window-1"]);
     expect(completeInternalWrite).toHaveBeenCalledWith(
       sender,
       "C:/notes/closed-save.md"
     );
-    expect(syncDocumentPath).toHaveBeenCalledWith(sender, null);
+    expect(syncWindowWatch).toHaveBeenCalledWith(sender, "window-1");
     expect(recordRecentFilePath).not.toHaveBeenCalled();
   });
 
@@ -512,7 +571,7 @@ describe("createWorkspaceFileOperations", () => {
     let resolveDialog!: (result: SaveMarkdownFileResult) => void;
     const sender = { id: 6 };
     const saveTabDocument = vi.spyOn(workspace, "saveTabDocument");
-    const syncDocumentPath = vi.fn(async () => undefined);
+    const syncWindowWatch = vi.fn(async () => undefined);
     const recordRecentFilePath = vi.fn(async () => undefined);
     const operations = createWorkspaceFileOperations({
       workspace,
@@ -523,7 +582,7 @@ describe("createWorkspaceFileOperations", () => {
         }),
       beginInternalWrite: vi.fn(),
       completeInternalWrite: vi.fn(),
-      syncDocumentPath,
+      syncWindowWatch,
       recordRecentFilePath,
       reportCleanupError: vi.fn()
     });
@@ -531,8 +590,7 @@ describe("createWorkspaceFileOperations", () => {
     const savePromise = operations.saveAs({
       sender,
       expectedWindowId: "window-1",
-      tabId,
-      currentPath: null
+      tabId
     });
     await vi.waitFor(() => expect(resolveDialog).toBeTypeOf("function"));
     workspace.unregisterWindow("window-1");
@@ -552,13 +610,16 @@ describe("createWorkspaceFileOperations", () => {
       diskVersion: null
     });
     expect(recordRecentFilePath).not.toHaveBeenCalled();
-    expect(syncDocumentPath).toHaveBeenCalledWith(sender, null);
+    expect(syncWindowWatch).toHaveBeenCalledWith(sender, "window-1");
   });
 
   it("preserves the primary save error while reporting every independent cleanup error", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const tabId = workspace.createUntitledTab("window-1").activeTabId!;
+    const tabId = workspace.openDocument(
+      "window-1",
+      document("primary.md", "saved")
+    ).activeTabId!;
     const sender = { id: 7 };
     const primaryError = new Error("primary save failed");
     const completeError = new Error("complete failed");
@@ -566,7 +627,7 @@ describe("createWorkspaceFileOperations", () => {
     const completeInternalWrite = vi.fn(async () => {
       throw completeError;
     });
-    const syncDocumentPath = vi.fn(async () => {
+    const syncWindowWatch = vi.fn(async () => {
       throw syncError;
     });
     const reportCleanupError = vi.fn(() => {
@@ -580,7 +641,7 @@ describe("createWorkspaceFileOperations", () => {
       showSaveMarkdownDialog: vi.fn(),
       beginInternalWrite: vi.fn(),
       completeInternalWrite,
-      syncDocumentPath,
+      syncWindowWatch,
       recordRecentFilePath: vi.fn(async () => undefined),
       reportCleanupError
     });
@@ -589,8 +650,7 @@ describe("createWorkspaceFileOperations", () => {
       operations.save({
         sender,
         expectedWindowId: "window-1",
-        tabId,
-        path: "C:/notes/primary.md"
+        tabId
       })
     ).rejects.toBe(primaryError);
 
@@ -598,7 +658,7 @@ describe("createWorkspaceFileOperations", () => {
       sender,
       "C:/notes/primary.md"
     );
-    expect(syncDocumentPath).toHaveBeenCalledWith(sender, null);
+    expect(syncWindowWatch).toHaveBeenCalledWith(sender, "window-1");
     expect(reportCleanupError.mock.calls).toEqual([
       [completeError],
       [syncError]
@@ -612,7 +672,7 @@ describe("createWorkspaceFileOperations", () => {
     const sender = { id: 8 };
     const primaryError = new Error("dialog failed");
     const syncError = new Error("watch sync failed");
-    const syncDocumentPath = vi.fn(async () => {
+    const syncWindowWatch = vi.fn(async () => {
       throw syncError;
     });
     const reportCleanupError = vi.fn(() => {
@@ -626,7 +686,7 @@ describe("createWorkspaceFileOperations", () => {
       }),
       beginInternalWrite: vi.fn(),
       completeInternalWrite: vi.fn(),
-      syncDocumentPath,
+      syncWindowWatch,
       recordRecentFilePath: vi.fn(async () => undefined),
       reportCleanupError
     });
@@ -635,12 +695,11 @@ describe("createWorkspaceFileOperations", () => {
       operations.saveAs({
         sender,
         expectedWindowId: "window-1",
-        tabId,
-        currentPath: null
+        tabId
       })
     ).rejects.toBe(primaryError);
 
-    expect(syncDocumentPath).toHaveBeenCalledWith(sender, null);
+    expect(syncWindowWatch).toHaveBeenCalledWith(sender, "window-1");
     expect(reportCleanupError).toHaveBeenCalledOnce();
     expect(reportCleanupError).toHaveBeenCalledWith(syncError);
   });
@@ -648,14 +707,17 @@ describe("createWorkspaceFileOperations", () => {
   it("aggregates every cleanup error after a successful save operation", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const tabId = workspace.createUntitledTab("window-1").activeTabId!;
+    const tabId = workspace.openDocument(
+      "window-1",
+      document("success.md", "saved")
+    ).activeTabId!;
     const sender = { id: 9 };
     const completeError = new Error("complete failed");
     const syncError = new Error("watch sync failed");
     const completeInternalWrite = vi.fn(async () => {
       throw completeError;
     });
-    const syncDocumentPath = vi.fn(async () => {
+    const syncWindowWatch = vi.fn(async () => {
       throw syncError;
     });
     const reportCleanupError = vi.fn();
@@ -665,7 +727,7 @@ describe("createWorkspaceFileOperations", () => {
       showSaveMarkdownDialog: vi.fn(),
       beginInternalWrite: vi.fn(),
       completeInternalWrite,
-      syncDocumentPath,
+      syncWindowWatch,
       recordRecentFilePath: vi.fn(async () => undefined),
       reportCleanupError
     });
@@ -675,8 +737,7 @@ describe("createWorkspaceFileOperations", () => {
       await operations.save({
         sender,
         expectedWindowId: "window-1",
-        tabId,
-        path: "C:/notes/success.md"
+        tabId
       });
     } catch (error) {
       caught = error;
@@ -688,7 +749,7 @@ describe("createWorkspaceFileOperations", () => {
       syncError
     ]);
     expect(completeInternalWrite).toHaveBeenCalledOnce();
-    expect(syncDocumentPath).toHaveBeenCalledOnce();
+    expect(syncWindowWatch).toHaveBeenCalledOnce();
     expect(reportCleanupError.mock.calls).toEqual([
       [completeError],
       [syncError]
