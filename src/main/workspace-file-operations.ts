@@ -233,7 +233,10 @@ export function createWorkspaceFileOperations<TSender>(
             return saveError("file-identity-changed");
           }
           const owner = dependencies.workspace.getFileOwner(stable.identity);
-          if (owner !== null && owner.tabId !== input.tabId) {
+          if (
+            owner.kind === "ambiguous" ||
+            (owner.kind === "owned" && owner.owner.tabId !== input.tabId)
+          ) {
             return saveError("file-identity-conflict");
           }
         }
@@ -289,7 +292,10 @@ export function createWorkspaceFileOperations<TSender>(
             }
           }
           const owner = dependencies.workspace.getFileOwner(persisted.identity);
-          if (owner !== null && owner.tabId !== input.tabId) {
+          if (
+            owner.kind === "ambiguous" ||
+            (owner.kind === "owned" && owner.owner.tabId !== input.tabId)
+          ) {
             return saveError("file-identity-conflict");
           }
 

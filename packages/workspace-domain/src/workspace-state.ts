@@ -117,12 +117,22 @@ export type OpenWorkspaceDocumentResult =
   | {
       readonly kind: "owned-by-other-window";
       readonly ownerWindowId: string;
-    };
+    }
+  | { readonly kind: "file-identity-conflict" };
 
 export interface WorkspaceFileOwner {
   readonly tabId: string;
   readonly windowId: string;
 }
+
+export type WorkspaceFileOwnerLookup =
+  | { readonly kind: "none" }
+  | { readonly kind: "owned"; readonly owner: WorkspaceFileOwner }
+  | {
+      readonly kind: "ambiguous";
+      readonly locationOwner: WorkspaceFileOwner;
+      readonly objectOwner: WorkspaceFileOwner;
+    };
 
 export interface MoveWorkspaceTabInput {
   readonly tabId: string;
@@ -147,7 +157,7 @@ export interface WorkspaceState {
   ) => WorkspaceWindowProjection | null;
   readonly getWindowTabIds: (windowId: string) => readonly string[];
   readonly getTabSession: (tabId: string) => DocumentSessionProjection;
-  readonly getFileOwner: (fileIdentity: FileIdentity) => WorkspaceFileOwner | null;
+  readonly getFileOwner: (fileIdentity: FileIdentity) => WorkspaceFileOwnerLookup;
   readonly createUntitledTab: (windowId: string) => WorkspaceWindowProjection;
   readonly openDocument: (
     windowId: string,
@@ -269,16 +279,27 @@ class CanonicalWorkspaceState implements WorkspaceState {
     return projectDocumentSession(this.getTab(tabId));
   }
 
-  getFileOwner(fileIdentity: FileIdentity): WorkspaceFileOwner | null {
-    const tabId = this.findIdentityOwnerTabId(fileIdentity);
-    if (tabId === undefined) {
-      return null;
+  getFileOwner(fileIdentity: FileIdentity): WorkspaceFileOwnerLookup {
+    const locationTabId = this.fileLocationToTabId.get(fileIdentity.location);
+    const objectTabId = this.fileObjectToTabId.get(fileIdentity.object);
+    if (locationTabId === undefined && objectTabId === undefined) {
+      return Object.freeze({ kind: "none" });
     }
-    const windowId = this.tabToWindowId.get(tabId);
-    if (windowId === undefined) {
-      throw new Error("File identity has no workspace owner.");
+    if (
+      locationTabId !== undefined &&
+      objectTabId !== undefined &&
+      locationTabId !== objectTabId
+    ) {
+      return Object.freeze({
+        kind: "ambiguous",
+        locationOwner: this.getOwner(locationTabId),
+        objectOwner: this.getOwner(objectTabId)
+      });
     }
-    return Object.freeze({ tabId, windowId });
+    return Object.freeze({
+      kind: "owned",
+      owner: this.getOwner(locationTabId ?? objectTabId!)
+    });
   }
 
   createUntitledTab(windowId: string): WorkspaceWindowProjection {
@@ -299,16 +320,19 @@ class CanonicalWorkspaceState implements WorkspaceState {
       throw new TypeError("Opened files require a physical file identity.");
     }
     const owner = this.getFileOwner(document.fileIdentity);
-    if (owner !== null) {
-      if (owner.windowId !== windowId) {
+    if (owner.kind === "ambiguous") {
+      return Object.freeze({ kind: "file-identity-conflict" });
+    }
+    if (owner.kind === "owned") {
+      if (owner.owner.windowId !== windowId) {
         return Object.freeze({
           kind: "owned-by-other-window",
-          ownerWindowId: owner.windowId
+          ownerWindowId: owner.owner.windowId
         });
       }
       return Object.freeze({
         kind: "activated-existing",
-        projection: this.activateTab(windowId, owner.tabId)
+        projection: this.activateTab(windowId, owner.owner.tabId)
       });
     }
     return Object.freeze({
@@ -591,11 +615,6 @@ class CanonicalWorkspaceState implements WorkspaceState {
     });
   }
 
-  private findIdentityOwnerTabId(identity: FileIdentity): string | undefined {
-    return this.fileLocationToTabId.get(identity.location) ??
-      this.fileObjectToTabId.get(identity.object);
-  }
-
   private claimFileIdentity(identity: FileIdentity, tabId: string): void {
     if (this.hasIdentityConflict(identity, tabId)) {
       throw new Error("Cannot claim a file identity owned by another tab.");
@@ -618,6 +637,14 @@ class CanonicalWorkspaceState implements WorkspaceState {
     const objectOwner = this.fileObjectToTabId.get(identity.object);
     return (locationOwner !== undefined && locationOwner !== tabId) ||
       (objectOwner !== undefined && objectOwner !== tabId);
+  }
+
+  private getOwner(tabId: string): WorkspaceFileOwner {
+    const windowId = this.tabToWindowId.get(tabId);
+    if (windowId === undefined) {
+      throw new Error("File identity has no workspace owner.");
+    }
+    return Object.freeze({ tabId, windowId });
   }
 
   private selectNeighborAfterMove(source: TabContext): void {

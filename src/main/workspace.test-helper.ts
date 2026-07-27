@@ -10,8 +10,8 @@ export function openTestDocument(
   document: WorkspaceDocumentData
 ): WorkspaceWindowProjection {
   const result = workspace.openDocument(windowId, document);
-  if (result.kind === "owned-by-other-window") {
-    throw new Error(`Test document is owned by '${result.ownerWindowId}'.`);
+  if (result.kind !== "opened" && result.kind !== "activated-existing") {
+    throw new Error(`Unexpected test document open result '${result.kind}'.`);
   }
   return result.projection;
 }

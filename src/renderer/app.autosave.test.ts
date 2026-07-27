@@ -1138,7 +1138,7 @@ describe("App autosave", () => {
           }
         };
       },
-      onWorkspaceWindowSnapshot(listener: (snapshot: WorkspaceWindowSnapshot) => void) {
+      onWorkspaceOwnerTabActivationRequest(listener) {
         void listener;
         return () => {};
       },

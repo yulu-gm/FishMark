@@ -55,7 +55,10 @@ describe("workspace physical file identity transactions", () => {
 
     expect(write).toHaveBeenCalledOnce();
     expect(results.map((result) => result.status).sort()).toEqual(["error", "success"]);
-    expect(workspace.getFileOwner(identity)).toMatchObject({ tabId: firstTabId });
+    expect(workspace.getFileOwner(identity)).toMatchObject({
+      kind: "owned",
+      owner: { tabId: firstTabId }
+    });
     expect(workspace.getTabSession(secondTabId)).toMatchObject({ path: null, isDirty: true });
   });
 
@@ -70,6 +73,25 @@ describe("workspace physical file identity transactions", () => {
     const identity = fileIdentity("path:c:/notes/created.md", "inode:7:99");
     let exists = false;
     const resolver = createStatefulResolver("C:/notes/created.md", identity, () => exists);
+    let releaseOpenProspective!: () => void;
+    let openObservedMissing!: () => void;
+    const openObservedMissingPromise = new Promise<void>((resolve) => {
+      openObservedMissing = resolve;
+    });
+    let firstOpenProspective = true;
+    const resolveOpenProspective = vi.fn(async (targetPath: string) => {
+      const prospective = await resolver.resolveProspective(targetPath);
+      if (!firstOpenProspective) {
+        return prospective;
+      }
+      firstOpenProspective = false;
+      expect(prospective.exists).toBe(false);
+      openObservedMissing();
+      await new Promise<void>((resolve) => {
+        releaseOpenProspective = resolve;
+      });
+      return prospective;
+    });
     let finishWrite!: () => void;
     const saveOperations = createWorkspaceFileOperations({
       workspace,
@@ -95,29 +117,31 @@ describe("workspace physical file identity transactions", () => {
       reportCleanupError: vi.fn()
     });
     const read = vi.fn();
-    const activateOwnerWindowTab = vi.fn(async () => undefined);
+    const activateOwnerWindowTab = vi.fn(async () => "activated" as const);
     const openApplication = createWorkspaceOpenApplication({
       workspace,
       tabOperations: createKeyedOperationCoordinator(),
       fileLocationOperations: locationOperations,
       fileObjectOperations: objectOperations,
       resolveExisting: resolver.resolveExisting,
-      resolveProspective: resolver.resolveProspective,
+      resolveProspective: resolveOpenProspective,
       openMarkdownFileFromPath: read,
       activateOwnerWindowTab,
       recordRecentFilePath: vi.fn()
     });
 
+    const opening = openApplication.openPath({
+      windowId: "window-2",
+      targetPath: "C:/notes/created.md"
+    });
+    await openObservedMissingPromise;
     const saving = saveOperations.saveAs({
       sender,
       expectedWindowId: "window-1",
       tabId
     });
     await vi.waitFor(() => expect(finishWrite).toBeTypeOf("function"));
-    const opening = openApplication.openPath({
-      windowId: "window-2",
-      targetPath: "C:/notes/created.md"
-    });
+    releaseOpenProspective();
     await Promise.resolve();
     expect(read).not.toHaveBeenCalled();
     finishWrite();
@@ -126,7 +150,11 @@ describe("workspace physical file identity transactions", () => {
     expect(saveResult.status).toBe("success");
     expect(openResult).toEqual({ kind: "focused-existing" });
     expect(read).not.toHaveBeenCalled();
-    expect(activateOwnerWindowTab).toHaveBeenCalledWith("window-1", tabId);
+    expect(activateOwnerWindowTab).toHaveBeenCalledWith(
+      "window-1",
+      tabId,
+      identity
+    );
     expect(workspace.getWindowTabIds("window-2")).toHaveLength(0);
   });
 
@@ -182,8 +210,14 @@ describe("workspace physical file identity transactions", () => {
 
     expect(write).toHaveBeenCalledOnce();
     expect(results.map((result) => result.status).sort()).toEqual(["error", "success"]);
-    expect(workspace.getFileOwner(firstIdentity)).toMatchObject({ tabId: firstTabId });
-    expect(workspace.getFileOwner(secondIdentity)).toMatchObject({ tabId: firstTabId });
+    expect(workspace.getFileOwner(firstIdentity)).toMatchObject({
+      kind: "owned",
+      owner: { tabId: firstTabId }
+    });
+    expect(workspace.getFileOwner(secondIdentity)).toMatchObject({
+      kind: "owned",
+      owner: { tabId: firstTabId }
+    });
   });
 
   it("rejects a Save As identity change before writing", async () => {
@@ -363,7 +397,12 @@ function createStatefulResolver(
     physicalKey: identity.object
   });
   return {
-    resolveExisting: vi.fn(async () => existing()),
+    resolveExisting: vi.fn(async () => {
+      if (!exists()) {
+        throw Object.assign(new Error("missing"), { code: "ENOENT" });
+      }
+      return existing();
+    }),
     resolveProspective: vi.fn(async () => exists()
       ? existing()
       : {

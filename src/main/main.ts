@@ -65,6 +65,7 @@ import { createWorkspaceTabReorderApplication } from "./workspace-tab-reorder-ap
 import { createWorkspaceWindowCloseApplication } from "./workspace-window-close-application";
 import { createWorkspaceWindowCloseConfirmationHandler } from "./workspace-window-close-confirmation-handler";
 import { createWorkspaceWindowCloseRequestBroker } from "./workspace-window-close-request-broker";
+import { createWorkspaceOwnerTabActivationRequestBroker } from "./workspace-owner-tab-activation-request-broker";
 import { createWorkspaceWindowRegistrationApplication } from "./workspace-window-registration-application";
 import {
   toWorkspaceMoveTabResult,
@@ -139,6 +140,7 @@ import {
   ACTIVATE_WORKSPACE_TAB_CHANNEL,
   CLOSE_WORKSPACE_TAB_CHANNEL,
   COMPLETE_WORKSPACE_WINDOW_CLOSE_CHANNEL,
+  CONFIRM_WORKSPACE_OWNER_TAB_ACTIVATION_CHANNEL,
   CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL,
   CREATE_WORKSPACE_TAB_CHANNEL,
   DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL,
@@ -150,10 +152,11 @@ import {
   RELOAD_WORKSPACE_TAB_FROM_PATH_CHANNEL,
   REORDER_WORKSPACE_TAB_CHANNEL,
   REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT,
+  REQUEST_WORKSPACE_OWNER_TAB_ACTIVATION_EVENT,
   UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL,
-  WORKSPACE_WINDOW_SNAPSHOT_EVENT,
   type ActivateWorkspaceTabInput,
   type CloseWorkspaceTabInput,
+  type ConfirmWorkspaceOwnerTabActivationInput,
   type CompleteWorkspaceWindowCloseInput,
   type ConfirmWorkspaceWindowCloseInput,
   type CreateWorkspaceTabInput,
@@ -173,6 +176,7 @@ const AUTO_UPDATE_STARTUP_DELAY_MS = 5000;
 const WORKSPACE_DETACH_READY_TIMEOUT_MS = 15_000;
 const WORKSPACE_WINDOW_CLOSE_REQUEST_TIMEOUT_MS = 15_000;
 const WORKSPACE_WINDOW_CLOSE_POST_CONFIRM_WATCHDOG_MS = 15_000;
+const WORKSPACE_OWNER_TAB_ACTIVATION_REQUEST_TIMEOUT_MS = 15_000;
 registerPreviewAssetScheme({ protocol });
 configureMainProcessRuntime(app, process.env);
 const hasSingleInstanceLock = shouldRequestSingleInstanceLock(process.env)
@@ -374,6 +378,16 @@ app.whenReady().then(async () => {
         return () => clearTimeout(timeout);
       }
     });
+  const workspaceOwnerTabActivationRequestBroker =
+    createWorkspaceOwnerTabActivationRequestBroker({
+      scheduleTimeout: (listener) => {
+        const timeout = setTimeout(
+          listener,
+          WORKSPACE_OWNER_TAB_ACTIVATION_REQUEST_TIMEOUT_MS
+        );
+        return () => clearTimeout(timeout);
+      }
+    });
   const workspaceWindowCloseLeases = new Map<
     string,
     KeyedOperationLease<string>
@@ -560,6 +574,7 @@ app.whenReady().then(async () => {
       ownerWindow.once("closed", () => {
         pendingWorkspaceWindowCloseIds.delete(windowId);
         workspaceWindowCloseRequestBroker.abortWindow(windowId);
+        workspaceOwnerTabActivationRequestBroker.abortWindow(windowId);
         workspaceWindowBindings.delete(windowId);
         const heldRelease = heldWorkspaceWindowCloseReleases.get(windowId);
         try {
@@ -660,17 +675,47 @@ app.whenReady().then(async () => {
     resolveExisting: fileIdentityResolver.resolveExisting,
     resolveProspective: fileIdentityResolver.resolveProspective,
     openMarkdownFileFromPath,
-    activateOwnerWindowTab: async (windowId, tabId) => {
+    activateOwnerWindowTab: async (windowId, tabId, identity) => {
       const ownerWindow = getWorkspaceWindowById(windowId);
       if (ownerWindow === null || ownerWindow.webContents.isDestroyed()) {
-        throw new Error(`Workspace window '${windowId}' no longer exists.`);
+        return "retry";
       }
-      const snapshot = await syncWorkspaceWatch(
-        ownerWindow.webContents,
-        workspaceState.activateTab(windowId, tabId)
-      );
-      ownerWindow.webContents.send(WORKSPACE_WINDOW_SNAPSHOT_EVENT, snapshot);
-      ownerWindow.focus();
+      const activation = workspaceOwnerTabActivationRequestBroker.request({
+        windowId,
+        tabId,
+        sendRequest: (request) => {
+          ownerWindow.webContents.send(
+            REQUEST_WORKSPACE_OWNER_TAB_ACTIVATION_EVENT,
+            request
+          );
+        },
+        bindAbort: (listener) => {
+          ownerWindow.webContents.on("render-process-gone", listener);
+          ownerWindow.webContents.on("destroyed", listener);
+          return () => {
+            ownerWindow.webContents.removeListener("render-process-gone", listener);
+            ownerWindow.webContents.removeListener("destroyed", listener);
+          };
+        }
+      });
+      if (!(await activation.result)) {
+        return "failed";
+      }
+      return workspaceTabOperations.runExclusive(tabId, async () => {
+        const owner = workspaceState.getFileOwner(identity);
+        const currentWindow = getWorkspaceWindowById(windowId);
+        if (
+          owner.kind !== "owned" ||
+          owner.owner.tabId !== tabId ||
+          owner.owner.windowId !== windowId ||
+          currentWindow === null ||
+          currentWindow.webContents.isDestroyed()
+        ) {
+          return "retry";
+        }
+        currentWindow.focus();
+        return "activated";
+      });
     },
     recordRecentFilePath
   });
@@ -806,6 +851,18 @@ app.whenReady().then(async () => {
     );
   });
   ipcMain.handle(
+    CONFIRM_WORKSPACE_OWNER_TAB_ACTIVATION_CHANNEL,
+    async (event, input: ConfirmWorkspaceOwnerTabActivationInput) => {
+      const windowId = await workspaceWindowRegistrationApplication.ensureWindow(
+        event.sender
+      );
+      return workspaceOwnerTabActivationRequestBroker.complete({
+        ...input,
+        windowId
+      });
+    }
+  );
+  ipcMain.handle(
     CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL,
     async (event, input: ConfirmWorkspaceWindowCloseInput) => {
       const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
@@ -896,10 +953,18 @@ app.whenReady().then(async () => {
   );
   ipcMain.handle(ACTIVATE_WORKSPACE_TAB_CHANNEL, async (event, input: ActivateWorkspaceTabInput) => {
     const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
-    return syncWorkspaceWatch(
-      event.sender,
-      workspaceState.activateTab(windowId, input.tabId)
-    );
+    return workspaceTabOperations.runExclusive(input.tabId, async () => {
+      const checkpoint = workspaceState.getTabSession(input.tabId);
+      if (checkpoint.windowId !== windowId) {
+        throw new Error(
+          `Workspace tab '${input.tabId}' does not belong to window '${windowId}'.`
+        );
+      }
+      return syncWorkspaceWatch(
+        event.sender,
+        workspaceState.activateTab(windowId, input.tabId)
+      );
+    });
   });
   ipcMain.handle(CLOSE_WORKSPACE_TAB_CHANNEL, async (event, input: CloseWorkspaceTabInput) => {
     const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);

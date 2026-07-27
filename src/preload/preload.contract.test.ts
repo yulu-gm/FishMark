@@ -610,52 +610,37 @@ describe("preload contract", () => {
     ]);
   });
 
-  it("forwards main-driven workspace snapshots and detaches the exact handler", async () => {
+  it("confirms owner-tab activation requests and detaches the exact handler", async () => {
     const { api } = await loadApi();
-    const listener = vi.fn();
-    const snapshot = {
-      windowId: "window-2",
-      activeTabId: "tab-2",
-      tabs: [
-        {
-          tabId: "tab-2",
-          path: "D:/fixtures/note.md",
-          name: "note.md",
-          isDirty: false,
-          saveState: "idle" as const
-        }
-      ],
-      activeDocument: {
-        tabId: "tab-2",
-        path: "D:/fixtures/note.md",
-        name: "note.md",
-        content: "# Note\n",
-        encoding: "utf-8" as const,
-        isDirty: false,
-        saveState: "idle" as const
-      }
-    };
+    const listener = vi.fn(async () => true);
+    const request = { requestId: "window-2:1", tabId: "tab-2" };
     const detach = (api as unknown as {
-      onWorkspaceWindowSnapshot: (listener: (payload: typeof snapshot) => void) => () => void;
-    }).onWorkspaceWindowSnapshot(listener);
+      onWorkspaceOwnerTabActivationRequest: (
+        listener: (payload: typeof request) => Promise<boolean>
+      ) => () => void;
+    }).onWorkspaceOwnerTabActivationRequest(listener);
     const eventCall = on.mock.calls.find(
-      ([channel]) => channel === "fishmark:workspace-window-snapshot"
+      ([channel]) => channel === "fishmark:request-workspace-owner-tab-activation"
     );
 
     expect(eventCall).toBeDefined();
-    const [, handleSnapshot] = eventCall as [
+    const [, handleRequest] = eventCall as [
       string,
-      (_event: unknown, payload: typeof snapshot) => void
+      (_event: unknown, payload: typeof request) => Promise<void>
     ];
-    handleSnapshot({}, snapshot);
+    await handleRequest({}, request);
 
-    expect(listener).toHaveBeenCalledWith(snapshot);
+    expect(listener).toHaveBeenCalledWith(request);
+    expect(invoke).toHaveBeenCalledWith(
+      "fishmark:confirm-workspace-owner-tab-activation",
+      { ...request, success: true }
+    );
 
     detach();
 
     expect(off).toHaveBeenCalledWith(
-      "fishmark:workspace-window-snapshot",
-      handleSnapshot
+      "fishmark:request-workspace-owner-tab-activation",
+      handleRequest
     );
   });
 });

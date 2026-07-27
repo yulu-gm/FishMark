@@ -29,6 +29,7 @@ import {
 import type {
   ActivateWorkspaceTabInput,
   CloseWorkspaceTabInput,
+  ConfirmWorkspaceOwnerTabActivationInput,
   ConfirmWorkspaceWindowCloseInput,
   CompleteWorkspaceWindowCloseInput,
   CreateWorkspaceTabInput,
@@ -42,6 +43,7 @@ import type {
   ReorderWorkspaceTabInput,
   UpdateWorkspaceTabDraftInput,
   WorkspaceMoveTabResult,
+  WorkspaceOwnerTabActivationRequest,
   WorkspaceWindowCloseRequest,
   WorkspaceWindowSnapshot
 } from "../shared/workspace";
@@ -87,6 +89,7 @@ import {
   ACTIVATE_WORKSPACE_TAB_CHANNEL,
   CLOSE_WORKSPACE_TAB_CHANNEL,
   COMPLETE_WORKSPACE_WINDOW_CLOSE_CHANNEL,
+  CONFIRM_WORKSPACE_OWNER_TAB_ACTIVATION_CHANNEL,
   CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL,
   CREATE_WORKSPACE_TAB_CHANNEL,
   DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL,
@@ -97,9 +100,9 @@ import {
   RELOAD_WORKSPACE_TAB_FROM_PATH_CHANNEL,
   REORDER_WORKSPACE_TAB_CHANNEL,
   REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT,
+  REQUEST_WORKSPACE_OWNER_TAB_ACTIVATION_EVENT,
   UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL,
-  MOVE_WORKSPACE_TAB_TO_WINDOW_CHANNEL,
-  WORKSPACE_WINDOW_SNAPSHOT_EVENT
+  MOVE_WORKSPACE_TAB_TO_WINDOW_CHANNEL
 } from "../shared/workspace";
 import {
   APP_NOTIFICATION_EVENT,
@@ -234,18 +237,43 @@ const productApi: ProductBridge = {
       ipcRenderer.off(OPEN_WORKSPACE_PATH_EVENT, handleOpenWorkspacePath);
     };
   },
-  onWorkspaceWindowSnapshot: (listener: (snapshot: WorkspaceWindowSnapshot) => void) => {
-    const handleWorkspaceWindowSnapshot = (
+  onWorkspaceOwnerTabActivationRequest: (
+    listener: (request: WorkspaceOwnerTabActivationRequest) => Promise<boolean>
+  ) => {
+    const handleWorkspaceOwnerTabActivationRequest = async (
       _event: unknown,
-      snapshot: WorkspaceWindowSnapshot
+      request: WorkspaceOwnerTabActivationRequest
     ) => {
-      listener(snapshot);
+      let success = false;
+      try {
+        success = await listener(request);
+      } catch {
+        success = false;
+      }
+      try {
+        await ipcRenderer.invoke(
+          CONFIRM_WORKSPACE_OWNER_TAB_ACTIVATION_CHANNEL,
+          {
+            requestId: request.requestId,
+            tabId: request.tabId,
+            success
+          } satisfies ConfirmWorkspaceOwnerTabActivationInput
+        );
+      } catch {
+        // Main owns timeout/abort settlement when confirmation transport fails.
+      }
     };
 
-    ipcRenderer.on(WORKSPACE_WINDOW_SNAPSHOT_EVENT, handleWorkspaceWindowSnapshot);
+    ipcRenderer.on(
+      REQUEST_WORKSPACE_OWNER_TAB_ACTIVATION_EVENT,
+      handleWorkspaceOwnerTabActivationRequest
+    );
 
     return () => {
-      ipcRenderer.off(WORKSPACE_WINDOW_SNAPSHOT_EVENT, handleWorkspaceWindowSnapshot);
+      ipcRenderer.off(
+        REQUEST_WORKSPACE_OWNER_TAB_ACTIVATION_EVENT,
+        handleWorkspaceOwnerTabActivationRequest
+      );
     };
   },
   confirmWorkspaceWindowClose: (

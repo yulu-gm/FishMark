@@ -22,7 +22,7 @@ describe("workspace open application", () => {
       status: "success" as const,
       document: { path: resolved.canonicalPath, name: "note.md", content: "body", encoding: "utf-8" as const }
     }));
-    const activateOwnerWindowTab = vi.fn(async () => undefined);
+    const activateOwnerWindowTab = vi.fn(async () => "activated" as const);
     const recordRecentFilePath = vi.fn(async () => undefined);
     const application = createWorkspaceOpenApplication({
       workspace,
@@ -44,7 +44,11 @@ describe("workspace open application", () => {
     expect(first.kind).toBe("success");
     expect(second).toEqual({ kind: "focused-existing" });
     expect(read).toHaveBeenCalledTimes(1);
-    expect(activateOwnerWindowTab).toHaveBeenCalledWith("window-1", expect.any(String));
+    expect(activateOwnerWindowTab).toHaveBeenCalledWith(
+      "window-1",
+      expect.any(String),
+      resolved.identity
+    );
     expect(recordRecentFilePath).toHaveBeenCalledTimes(2);
     expect(workspace.getWindowTabIds("window-1")).toHaveLength(1);
     expect(workspace.getWindowTabIds("window-2")).toHaveLength(0);
@@ -70,7 +74,7 @@ describe("workspace open application", () => {
       resolveExisting: vi.fn(async () => resolved),
       resolveProspective: vi.fn(async () => resolved),
       openMarkdownFileFromPath: read,
-      activateOwnerWindowTab: vi.fn(),
+      activateOwnerWindowTab: vi.fn(async () => "activated" as const),
       recordRecentFilePath: vi.fn()
     });
 
@@ -95,7 +99,7 @@ describe("workspace open application", () => {
       ? workspace.getWindowProjection("window-1").activeTabId!
       : "unreachable";
     workspace.createUntitledTab("window-1");
-    const activateOwnerWindowTab = vi.fn();
+    const activateOwnerWindowTab = vi.fn(async () => "activated" as const);
     const application = createWorkspaceOpenApplication({
       workspace,
       tabOperations: createKeyedOperationCoordinator(),
@@ -111,7 +115,11 @@ describe("workspace open application", () => {
     await expect(
       application.openPath({ windowId: "window-2", targetPath: "alias.md" })
     ).resolves.toEqual({ kind: "focused-existing" });
-    expect(activateOwnerWindowTab).toHaveBeenCalledWith("window-1", ownerTabId);
+    expect(activateOwnerWindowTab).toHaveBeenCalledWith(
+      "window-1",
+      ownerTabId,
+      resolved.identity
+    );
   });
 
   it("re-resolves identity after acquiring the location lease", async () => {
@@ -148,7 +156,7 @@ describe("workspace open application", () => {
           encoding: "utf-8" as const
         }
       })),
-      activateOwnerWindowTab: vi.fn(),
+      activateOwnerWindowTab: vi.fn(async () => "activated" as const),
       recordRecentFilePath: vi.fn()
     });
 
@@ -197,7 +205,7 @@ describe("workspace open application", () => {
           encoding: "utf-8" as const
         }
       })),
-      activateOwnerWindowTab: vi.fn(),
+      activateOwnerWindowTab: vi.fn(async () => "activated" as const),
       recordRecentFilePath: vi.fn()
     });
 
@@ -233,7 +241,7 @@ describe("workspace open application", () => {
         encoding: "utf-8" as const
       }
     }));
-    const activateOwnerWindowTab = vi.fn();
+    const activateOwnerWindowTab = vi.fn(async () => "activated" as const);
     const application = createWorkspaceOpenApplication({
       workspace,
       tabOperations,
@@ -262,5 +270,164 @@ describe("workspace open application", () => {
     expect(activateOwnerWindowTab).not.toHaveBeenCalled();
     expect(read).toHaveBeenCalledOnce();
     expect(workspace.getWindowTabIds("window-2")).toHaveLength(1);
+  });
+
+  it("fails closed when location and object identities have different owners", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    workspace.registerWindow("window-2");
+    const firstIdentity = fileIdentity("path:c:/first.md", "inode:7:first");
+    const secondIdentity = fileIdentity("path:c:/second.md", "inode:7:second");
+    workspace.openDocument("window-1", {
+      fileIdentity: firstIdentity,
+      path: "C:/first.md",
+      name: "first.md",
+      content: "first",
+      encoding: "utf-8"
+    });
+    workspace.openDocument("window-1", {
+      fileIdentity: secondIdentity,
+      path: "C:/second.md",
+      name: "second.md",
+      content: "second",
+      encoding: "utf-8"
+    });
+    const ambiguousIdentity = fileIdentity(
+      firstIdentity.location,
+      secondIdentity.object
+    );
+    const ambiguous = {
+      ...resolved,
+      identity: ambiguousIdentity,
+      pathKey: ambiguousIdentity.location,
+      physicalKey: ambiguousIdentity.object
+    };
+    const read = vi.fn();
+    const activateOwnerWindowTab = vi.fn(async () => "failed" as const);
+    const application = createWorkspaceOpenApplication({
+      workspace,
+      tabOperations: createKeyedOperationCoordinator(),
+      fileLocationOperations: createKeyedOperationCoordinator(),
+      fileObjectOperations: createKeyedOperationCoordinator(),
+      resolveExisting: vi.fn(async () => ambiguous),
+      resolveProspective: vi.fn(async () => ambiguous),
+      openMarkdownFileFromPath: read,
+      activateOwnerWindowTab,
+      recordRecentFilePath: vi.fn()
+    });
+
+    await expect(application.openPath({
+      windowId: "window-2",
+      targetPath: ambiguous.canonicalPath
+    })).resolves.toMatchObject({ kind: "error", error: { code: "read-failed" } });
+    expect(read).not.toHaveBeenCalled();
+    expect(activateOwnerWindowTab).not.toHaveBeenCalled();
+  });
+
+  it("fails closed after the bounded owner retry budget is exhausted", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    workspace.registerWindow("window-2");
+    workspace.openDocument("window-1", {
+      fileIdentity: resolved.identity,
+      path: resolved.canonicalPath,
+      name: "note.md",
+      content: "body",
+      encoding: "utf-8"
+    });
+    const activateOwnerWindowTab = vi.fn(async () => "retry" as const);
+    const application = createWorkspaceOpenApplication({
+      workspace,
+      tabOperations: createKeyedOperationCoordinator(),
+      fileLocationOperations: createKeyedOperationCoordinator(),
+      fileObjectOperations: createKeyedOperationCoordinator(),
+      resolveExisting: vi.fn(async () => resolved),
+      resolveProspective: vi.fn(async () => resolved),
+      openMarkdownFileFromPath: vi.fn(),
+      activateOwnerWindowTab,
+      recordRecentFilePath: vi.fn()
+    });
+
+    await expect(application.openPath({
+      windowId: "window-2",
+      targetPath: resolved.canonicalPath
+    })).resolves.toMatchObject({ kind: "error", error: { code: "read-failed" } });
+    expect(activateOwnerWindowTab).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not report focused-existing when owner renderer activation fails", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    workspace.registerWindow("window-2");
+    workspace.openDocument("window-1", {
+      fileIdentity: resolved.identity,
+      path: resolved.canonicalPath,
+      name: "note.md",
+      content: "body",
+      encoding: "utf-8"
+    });
+    const recordRecentFilePath = vi.fn();
+    const application = createWorkspaceOpenApplication({
+      workspace,
+      tabOperations: createKeyedOperationCoordinator(),
+      fileLocationOperations: createKeyedOperationCoordinator(),
+      fileObjectOperations: createKeyedOperationCoordinator(),
+      resolveExisting: vi.fn(async () => resolved),
+      resolveProspective: vi.fn(async () => resolved),
+      openMarkdownFileFromPath: vi.fn(),
+      activateOwnerWindowTab: vi.fn(async () => "failed" as const),
+      recordRecentFilePath
+    });
+
+    await expect(application.openPath({
+      windowId: "window-2",
+      targetPath: resolved.canonicalPath
+    })).resolves.toMatchObject({ kind: "error", error: { code: "read-failed" } });
+    expect(recordRecentFilePath).not.toHaveBeenCalled();
+  });
+
+  it("retries against the new owner when the tab moves before activation confirmation", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    workspace.registerWindow("window-2");
+    workspace.registerWindow("window-3");
+    workspace.openDocument("window-1", {
+      fileIdentity: resolved.identity,
+      path: resolved.canonicalPath,
+      name: "note.md",
+      content: "body",
+      encoding: "utf-8"
+    });
+    const ownerTabId = workspace.getWindowTabIds("window-1")[0]!;
+    const activateOwnerWindowTab = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        workspace.moveTabToWindow({
+          tabId: ownerTabId,
+          targetWindowId: "window-3"
+        });
+        return "retry" as const;
+      })
+      .mockResolvedValue("activated" as const);
+    const application = createWorkspaceOpenApplication({
+      workspace,
+      tabOperations: createKeyedOperationCoordinator(),
+      fileLocationOperations: createKeyedOperationCoordinator(),
+      fileObjectOperations: createKeyedOperationCoordinator(),
+      resolveExisting: vi.fn(async () => resolved),
+      resolveProspective: vi.fn(async () => resolved),
+      openMarkdownFileFromPath: vi.fn(),
+      activateOwnerWindowTab,
+      recordRecentFilePath: vi.fn()
+    });
+
+    await expect(application.openPath({
+      windowId: "window-2",
+      targetPath: resolved.canonicalPath
+    })).resolves.toEqual({ kind: "focused-existing" });
+    expect(activateOwnerWindowTab.mock.calls.map(([windowId]) => windowId)).toEqual([
+      "window-1",
+      "window-3"
+    ]);
   });
 });

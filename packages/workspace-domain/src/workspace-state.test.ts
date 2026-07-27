@@ -46,8 +46,8 @@ function openProjection(
   document: WorkspaceDocumentData
 ): WorkspaceWindowProjection {
   const result = workspace.openDocument(windowId, document);
-  if (result.kind === "owned-by-other-window") {
-    throw new Error(`Unexpected owner '${result.ownerWindowId}'.`);
+  if (result.kind !== "opened" && result.kind !== "activated-existing") {
+    throw new Error(`Unexpected open result '${result.kind}'.`);
   }
   return result.projection;
 }
@@ -115,8 +115,31 @@ describe("WorkspaceState physical file ownership", () => {
     expect(workspace.getFileOwner(
       fileIdentity("location:third-alias", secondIdentity.object)
     )).toEqual({
-      tabId: second.activeTabId,
-      windowId: "window-1"
+      kind: "owned",
+      owner: { tabId: second.activeTabId, windowId: "window-1" }
+    });
+  });
+
+  it("reports an ambiguous owner when location and object belong to different tabs", () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const first = fileIdentity("path:c:/first.md", "inode:7:first");
+    const second = fileIdentity("path:c:/second.md", "inode:7:second");
+    workspace.openDocument("window-1", {
+      ...createDocument("first.md", "first"),
+      fileIdentity: first
+    });
+    const firstTabId = workspace.getWindowProjection("window-1").activeTabId!;
+    workspace.openDocument("window-1", {
+      ...createDocument("second.md", "second"),
+      fileIdentity: second
+    });
+    const secondTabId = workspace.getWindowProjection("window-1").activeTabId!;
+
+    expect(workspace.getFileOwner(fileIdentity(first.location, second.object))).toEqual({
+      kind: "ambiguous",
+      locationOwner: { windowId: "window-1", tabId: firstTabId },
+      objectOwner: { windowId: "window-1", tabId: secondTabId }
     });
   });
 
@@ -172,9 +195,9 @@ describe("WorkspaceState physical file ownership", () => {
 
     expect(first.kind).toBe("opened");
     expect(duplicate.kind).toBe("activated-existing");
-    expect(duplicate.kind !== "owned-by-other-window" && duplicate.projection).toEqual(
-      first.kind !== "owned-by-other-window" ? first.projection : null
-    );
+    expect(
+      duplicate.kind === "activated-existing" ? duplicate.projection : null
+    ).toEqual(first.kind === "opened" ? first.projection : null);
     expect(workspace.getWindowTabIds("window-1")).toHaveLength(1);
   });
 
@@ -211,8 +234,8 @@ describe("WorkspaceState physical file ownership", () => {
     expect(result.kind).toBe("file-identity-conflict");
     expect(workspace.getTabSession(secondTabId)).toEqual(before);
     expect(workspace.getFileOwner(fileIdentity("file:first.md"))).toEqual({
-      tabId: first.activeTabId,
-      windowId: "window-1"
+      kind: "owned",
+      owner: { tabId: first.activeTabId, windowId: "window-1" }
     });
   });
 
@@ -225,8 +248,8 @@ describe("WorkspaceState physical file ownership", () => {
 
     workspace.moveTabToWindow({ tabId, targetWindowId: "window-2" });
     expect(workspace.getFileOwner(fileIdentity("file:move.md"))).toEqual({
-      tabId,
-      windowId: "window-2"
+      kind: "owned",
+      owner: { tabId, windowId: "window-2" }
     });
 
     const checkpoint = workspace.getTabSession(tabId);
@@ -235,7 +258,9 @@ describe("WorkspaceState physical file ownership", () => {
       expectedWindowId: "window-2",
       expectedRevision: checkpoint.revision
     });
-    expect(workspace.getFileOwner(fileIdentity("file:move.md"))).toBeNull();
+    expect(workspace.getFileOwner(fileIdentity("file:move.md"))).toEqual({
+      kind: "none"
+    });
     expect(workspace.openDocument("window-1", createDocument("move.md")).kind).toBe("opened");
   });
 });

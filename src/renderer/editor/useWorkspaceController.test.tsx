@@ -60,7 +60,7 @@ function renderController(input: Parameters<typeof useWorkspaceController>[0]): 
   const controllerInput = {
     ...input,
     fishmark: Object.assign(
-      { onWorkspaceWindowSnapshot: () => () => {} },
+      { onWorkspaceOwnerTabActivationRequest: () => () => {} },
       input.fishmark
     )
   };
@@ -113,12 +113,14 @@ afterEach(() => {
 });
 
 describe("useWorkspaceController", () => {
-  it("applies main-driven owner window snapshots and detaches the subscription", () => {
-    let snapshotListener: ((snapshot: WorkspaceWindowSnapshot) => void) | undefined;
+  it("flushes the active local draft before confirming an owner-tab activation request", async () => {
+    let activationListener:
+      | ((request: { requestId: string; tabId: string }) => Promise<boolean>)
+      | undefined;
     const detach = vi.fn();
-    const onWorkspaceWindowSnapshot = vi.fn(
-      (listener: (snapshot: WorkspaceWindowSnapshot) => void) => {
-        snapshotListener = listener;
+    const onWorkspaceOwnerTabActivationRequest = vi.fn(
+      (listener: (request: { requestId: string; tabId: string }) => Promise<boolean>) => {
+        activationListener = listener;
         return detach;
       }
     );
@@ -155,21 +157,41 @@ describe("useWorkspaceController", () => {
         }
       ]
     });
+    const calls: string[] = [];
+    const updateWorkspaceTabDraft = vi.fn(async () => {
+      calls.push("flush");
+      return initialSnapshot;
+    });
+    const activateWorkspaceTab = vi.fn(async () => {
+      calls.push("activate");
+      return ownerSnapshot;
+    });
     const { latestRef, root } = renderController({
       fishmark: {
-        onWorkspaceWindowSnapshot
+        onWorkspaceOwnerTabActivationRequest,
+        updateWorkspaceTabDraft,
+        activateWorkspaceTab
       } as unknown as Window["fishmark"],
       initialSnapshot,
-      getEditorContent: () => "# First\n",
+      getEditorContent: () => "# Local pending draft\n",
       showNotification: vi.fn()
     });
 
-    expect(onWorkspaceWindowSnapshot).toHaveBeenCalledTimes(1);
+    expect(onWorkspaceOwnerTabActivationRequest).toHaveBeenCalledTimes(1);
 
-    act(() => {
-      snapshotListener?.(ownerSnapshot);
+    await act(async () => {
+      await expect(activationListener?.({
+        requestId: "request-1",
+        tabId: "tab-2"
+      })).resolves.toBe(true);
     });
 
+    expect(updateWorkspaceTabDraft).toHaveBeenCalledWith({
+      tabId: "tab-1",
+      content: "# Local pending draft\n"
+    });
+    expect(activateWorkspaceTab).toHaveBeenCalledWith({ tabId: "tab-2" });
+    expect(calls).toEqual(["flush", "activate"]);
     expect(latestRef.current?.workspaceSnapshot).toEqual(ownerSnapshot);
     expect(latestRef.current?.activeTabId).toBe("tab-2");
 
@@ -178,6 +200,54 @@ describe("useWorkspaceController", () => {
     });
 
     expect(detach).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects owner-tab activation when the active draft cannot flush", async () => {
+    let activationListener:
+      | ((request: { requestId: string; tabId: string }) => Promise<boolean>)
+      | undefined;
+    const activateWorkspaceTab = vi.fn();
+    const initialSnapshot = createWorkspaceSnapshot({
+      tabs: [{
+        tabId: "tab-1",
+        path: "C:/notes/first.md",
+        name: "first.md",
+        content: "# First\n"
+      }, {
+        tabId: "tab-2",
+        path: "C:/notes/second.md",
+        name: "second.md",
+        content: "# Second\n"
+      }]
+    });
+    const { latestRef, root } = renderController({
+      fishmark: {
+        onWorkspaceOwnerTabActivationRequest: (
+          listener: (request: { requestId: string; tabId: string }) => Promise<boolean>
+        ) => {
+          activationListener = listener;
+          return () => {};
+        },
+        updateWorkspaceTabDraft: vi.fn(async () => {
+          throw new Error("draft flush failed");
+        }),
+        activateWorkspaceTab
+      } as unknown as Window["fishmark"],
+      initialSnapshot,
+      getEditorContent: () => "# Local pending draft\n",
+      showNotification: vi.fn()
+    });
+
+    await act(async () => {
+      await expect(activationListener?.({
+        requestId: "request-1",
+        tabId: "tab-2"
+      })).resolves.toBe(false);
+    });
+
+    expect(activateWorkspaceTab).not.toHaveBeenCalled();
+    expect(latestRef.current?.activeTabId).toBe("tab-1");
+    act(() => root.unmount());
   });
 
   it("keeps active draft changes renderer-local until an explicit flush syncs the latest content", async () => {

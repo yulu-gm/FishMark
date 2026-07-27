@@ -67,7 +67,9 @@ export function useEditorApplicationController(input: {
     resetAutosaveRuntime: saveController.resetAutosaveRuntime,
     getActiveTabId: workspaceController.getActiveTabId,
     updateDraft: workspaceController.updateDraft,
-    activateWorkspaceTab: workspaceController.activateWorkspaceTab,
+    activateWorkspaceTab: async (tabId) => {
+      await workspaceController.activateWorkspaceTab(tabId);
+    },
     closeWorkspaceTab: workspaceController.closeWorkspaceTab,
     detachWorkspaceTab: workspaceController.detachWorkspaceTab
   });

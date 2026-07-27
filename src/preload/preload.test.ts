@@ -193,7 +193,7 @@ describe("preload bridge", () => {
       moveWorkspaceTabToWindow: expect.any(Function),
       detachWorkspaceTabToNewWindow: expect.any(Function),
       onOpenWorkspacePath: expect.any(Function),
-      onWorkspaceWindowSnapshot: expect.any(Function),
+      onWorkspaceOwnerTabActivationRequest: expect.any(Function),
       updateWorkspaceTabDraft: expect.any(Function),
       confirmWorkspaceWindowClose: expect.any(Function),
       onWorkspaceWindowCloseRequest: expect.any(Function)

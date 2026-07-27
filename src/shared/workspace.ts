@@ -143,6 +143,17 @@ export type WorkspaceWindowCloseRequest = {
   requestId: string;
 };
 
+export type WorkspaceOwnerTabActivationRequest = {
+  requestId: string;
+  tabId: string;
+};
+
+export type ConfirmWorkspaceOwnerTabActivationInput = {
+  requestId: string;
+  tabId: string;
+  success: boolean;
+};
+
 export type ConfirmWorkspaceWindowCloseInput = {
   requestId: string;
 };
@@ -164,7 +175,10 @@ export const DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL = "fishmark:detach-works
 export const UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL = "fishmark:update-workspace-tab-draft";
 export const RELOAD_WORKSPACE_TAB_FROM_PATH_CHANNEL = "fishmark:reload-workspace-tab-from-path";
 export const OPEN_WORKSPACE_PATH_EVENT = "fishmark:open-workspace-path";
-export const WORKSPACE_WINDOW_SNAPSHOT_EVENT = "fishmark:workspace-window-snapshot";
+export const REQUEST_WORKSPACE_OWNER_TAB_ACTIVATION_EVENT =
+  "fishmark:request-workspace-owner-tab-activation";
+export const CONFIRM_WORKSPACE_OWNER_TAB_ACTIVATION_CHANNEL =
+  "fishmark:confirm-workspace-owner-tab-activation";
 export const REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT = "fishmark:request-workspace-window-close";
 export const CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL = "fishmark:confirm-workspace-window-close";
 export const COMPLETE_WORKSPACE_WINDOW_CLOSE_CHANNEL = "fishmark:complete-workspace-window-close";

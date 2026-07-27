@@ -147,7 +147,7 @@ describe("Test workbench shell", () => {
       importClipboardImage: vi.fn(),
       onMenuCommand: vi.fn(() => () => {}),
       onOpenWorkspacePath: vi.fn(() => () => {}),
-      onWorkspaceWindowSnapshot: vi.fn(() => () => {}),
+      onWorkspaceOwnerTabActivationRequest: vi.fn(() => () => {}),
       confirmWorkspaceWindowClose: vi.fn().mockResolvedValue(true),
       onWorkspaceWindowCloseRequest: vi.fn(() => () => {}),
       getPreferences: vi.fn(),

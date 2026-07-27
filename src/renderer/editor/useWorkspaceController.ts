@@ -78,14 +78,6 @@ export function useWorkspaceController(input: {
     [applyState, getEditorContent]
   );
 
-  useEffect(
-    () =>
-      fishmark.onWorkspaceWindowSnapshot((snapshot) => {
-        applyWorkspaceWindowSnapshot(snapshot);
-      }),
-    [applyWorkspaceWindowSnapshot, fishmark]
-  );
-
   const syncActiveWorkspaceDraft = useCallback(
     async (tabId: string, content: string): Promise<void> => {
       try {
@@ -374,23 +366,33 @@ export function useWorkspaceController(input: {
   }, [applyWorkspaceWindowSnapshot, fishmark, flushActiveWorkspaceDraft, showNotification]);
 
   const activateWorkspaceTab = useCallback(
-    async (tabId: string): Promise<void> => {
+    async (tabId: string): Promise<boolean> => {
       if (getActiveTabId(stateRef.current) === tabId) {
-        return;
+        return true;
       }
 
       try {
         await flushActiveWorkspaceDraft();
         const snapshot = await fishmark.activateWorkspaceTab({ tabId });
         applyWorkspaceWindowSnapshot(snapshot);
+        return true;
       } catch (error) {
         showNotification({
           kind: "error",
           message: error instanceof Error ? error.message : String(error)
         });
+        return false;
       }
     },
     [applyWorkspaceWindowSnapshot, fishmark, flushActiveWorkspaceDraft, showNotification]
+  );
+
+  useEffect(
+    () =>
+      fishmark.onWorkspaceOwnerTabActivationRequest(({ tabId }) =>
+        activateWorkspaceTab(tabId)
+      ),
+    [activateWorkspaceTab, fishmark]
   );
 
   const closeWorkspaceTab = useCallback(

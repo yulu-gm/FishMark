@@ -32,6 +32,7 @@ export {
   type WorkspaceMutationResult,
   type WorkspaceSaveMutationResult,
   type WorkspaceFileOwner,
+  type WorkspaceFileOwnerLookup,
   type WorkspaceMutationStaleReason,
   type WorkspaceState,
   type WorkspaceTabProjection,

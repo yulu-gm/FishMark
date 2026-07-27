@@ -55,27 +55,45 @@ type Dependencies = {
   readonly openMarkdownFileFromPath: (targetPath: string) => Promise<OpenMarkdownFileResult>;
   readonly activateOwnerWindowTab: (
     windowId: string,
-    tabId: string
-  ) => Promise<void>;
+    tabId: string,
+    identity: FileIdentity
+  ) => Promise<"activated" | "retry" | "failed">;
   readonly recordRecentFilePath: (targetPath: string) => Promise<void>;
 };
 
 export function createWorkspaceOpenApplication(dependencies: Dependencies) {
+  const ownerRetryBudget = 3;
   return {
     async openPath(input: {
       readonly windowId: string;
       readonly targetPath: string;
     }): Promise<WorkspaceOpenResult> {
-      for (;;) {
+      for (let attempt = 0; attempt < ownerRetryBudget; attempt += 1) {
         const scanned = await scanAndOpen(input);
         if (scanned.kind !== "owner-candidate") {
           return scanned;
         }
-        const focused = await focusStableOwner(input, scanned);
-        if (focused !== null) {
-          return focused;
+        const validated = await validateStableOwner(input, scanned);
+        if (validated === null) {
+          continue;
+        }
+        if (validated.kind !== "owner-candidate") {
+          return validated;
+        }
+        const activation = await dependencies.activateOwnerWindowTab(
+          validated.owner.windowId,
+          validated.owner.tabId,
+          validated.identity
+        );
+        if (activation === "activated") {
+          await dependencies.recordRecentFilePath(validated.canonicalPath);
+          return { kind: "focused-existing" };
+        }
+        if (activation === "failed") {
+          return readFailure(input.targetPath);
         }
       }
+      return readFailure(input.targetPath);
     }
   };
 
@@ -115,8 +133,11 @@ export function createWorkspaceOpenApplication(dependencies: Dependencies) {
               return readFailure(input.targetPath);
             }
             const owner = dependencies.workspace.getFileOwner(stable.identity);
-            if (owner !== null) {
-              return ownerCandidate(stable, owner);
+            if (owner.kind === "ambiguous") {
+              return readFailure(input.targetPath);
+            }
+            if (owner.kind === "owned") {
+              return ownerCandidate(stable, owner.owner);
             }
 
             const readResult = await dependencies.openMarkdownFileFromPath(
@@ -151,10 +172,13 @@ export function createWorkspaceOpenApplication(dependencies: Dependencies) {
               const currentOwner = dependencies.workspace.getFileOwner(
                 finalIdentity.identity
               );
-              if (currentOwner === null) {
-                throw new Error("Physical file ownership changed during open commit.");
+              if (currentOwner.kind !== "owned") {
+                return readFailure(input.targetPath);
               }
-              return ownerCandidate(finalIdentity, currentOwner);
+              return ownerCandidate(finalIdentity, currentOwner.owner);
+            }
+            if (result.kind === "file-identity-conflict") {
+              return readFailure(input.targetPath);
             }
             await dependencies.recordRecentFilePath(finalIdentity.canonicalPath);
             return { kind: "success", projection: result.projection };
@@ -164,10 +188,10 @@ export function createWorkspaceOpenApplication(dependencies: Dependencies) {
     );
   }
 
-  async function focusStableOwner(
+  async function validateStableOwner(
     input: { readonly windowId: string; readonly targetPath: string },
     candidate: OwnerCandidate
-  ): Promise<WorkspaceOpenResult | null> {
+  ): Promise<WorkspaceOpenResult | OwnerCandidate | null> {
     return dependencies.tabOperations.runExclusive(candidate.owner.tabId, async () => {
       let prospective: ResolvedFileIdentity;
       try {
@@ -203,23 +227,24 @@ export function createWorkspaceOpenApplication(dependencies: Dependencies) {
                 return null;
               }
               const owner = dependencies.workspace.getFileOwner(stable.identity);
-              if (owner === null || owner.tabId !== candidate.owner.tabId) {
+              if (
+                owner.kind !== "owned" ||
+                owner.owner.tabId !== candidate.owner.tabId
+              ) {
                 return null;
               }
-              if (owner.windowId === input.windowId) {
+              if (owner.owner.windowId === input.windowId) {
                 const result: WorkspaceOpenResult = {
                   kind: "success",
                   projection: dependencies.workspace.activateTab(
-                    owner.windowId,
-                    owner.tabId
+                    owner.owner.windowId,
+                    owner.owner.tabId
                   )
                 };
                 await dependencies.recordRecentFilePath(stable.canonicalPath);
                 return result;
               }
-              await dependencies.activateOwnerWindowTab(owner.windowId, owner.tabId);
-              await dependencies.recordRecentFilePath(stable.canonicalPath);
-              return { kind: "focused-existing" };
+              return ownerCandidate(stable, owner.owner);
             }
           );
         }

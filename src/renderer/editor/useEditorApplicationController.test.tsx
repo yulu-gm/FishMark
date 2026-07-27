@@ -114,7 +114,7 @@ describe("useEditorApplicationController", () => {
         saveMarkdownFile,
         getWorkspaceSnapshot,
         onExternalMarkdownFileChanged: vi.fn(() => () => {}),
-        onWorkspaceWindowSnapshot: vi.fn(() => () => {})
+        onWorkspaceOwnerTabActivationRequest: vi.fn(() => () => {})
       } as unknown as Window["fishmark"],
       getEditorContent: () => "# Saved\n",
       setEditorContentSnapshot: vi.fn(),
@@ -174,7 +174,7 @@ describe("useEditorApplicationController", () => {
         exportHtmlFile,
         getWorkspaceSnapshot: vi.fn(async () => savedSnapshot),
         onExternalMarkdownFileChanged: vi.fn(() => () => {}),
-        onWorkspaceWindowSnapshot: vi.fn(() => () => {})
+        onWorkspaceOwnerTabActivationRequest: vi.fn(() => () => {})
       } as unknown as Window["fishmark"],
       getEditorContent: () => "# Exported\n",
       setEditorContentSnapshot: vi.fn(),
@@ -227,7 +227,7 @@ describe("useEditorApplicationController", () => {
         openWorkspaceFile,
         updateWorkspaceTabDraft: vi.fn(async () => emptySnapshot),
         onExternalMarkdownFileChanged: vi.fn(() => () => {}),
-        onWorkspaceWindowSnapshot: vi.fn(() => () => {})
+        onWorkspaceOwnerTabActivationRequest: vi.fn(() => () => {})
       } as unknown as Window["fishmark"],
       getEditorContent: () => "",
       setEditorContentSnapshot: vi.fn(),
@@ -293,7 +293,7 @@ describe("useEditorApplicationController", () => {
         saveMarkdownFile,
         getWorkspaceSnapshot,
         onExternalMarkdownFileChanged: vi.fn(() => () => {}),
-        onWorkspaceWindowSnapshot: vi.fn(() => () => {})
+        onWorkspaceOwnerTabActivationRequest: vi.fn(() => () => {})
       } as unknown as Window["fishmark"],
       getEditorContent: () => "# First dirty\n",
       setEditorContentSnapshot: vi.fn(),
@@ -358,7 +358,7 @@ describe("useEditorApplicationController", () => {
         clearRecentFile,
         updateWorkspaceTabDraft: vi.fn(async () => emptySnapshot),
         onExternalMarkdownFileChanged: vi.fn(() => () => {}),
-        onWorkspaceWindowSnapshot: vi.fn(() => () => {})
+        onWorkspaceOwnerTabActivationRequest: vi.fn(() => () => {})
       } as unknown as Window["fishmark"],
       getEditorContent: () => "",
       setEditorContentSnapshot: vi.fn(),

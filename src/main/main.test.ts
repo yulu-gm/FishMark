@@ -223,7 +223,7 @@ describe("main process window wiring", () => {
     expect(mainSource).not.toContain('disposition: "opened-in-new-window"');
   });
 
-  it("sends the activated owner snapshot before focusing its window", () => {
+  it("awaits owner-renderer activation and revalidates ownership before focus", () => {
     const mainSource = readMainSource();
     const activationStart = mainSource.indexOf("activateOwnerWindowTab: async");
     const activationSource = mainSource.slice(
@@ -231,13 +231,14 @@ describe("main process window wiring", () => {
       mainSource.indexOf("recordRecentFilePath", activationStart)
     );
 
-    expect(mainSource).toContain("WORKSPACE_WINDOW_SNAPSHOT_EVENT");
-    expect(activationSource).toContain("const snapshot = await syncWorkspaceWatch(");
-    expect(activationSource).toContain(
-      "ownerWindow.webContents.send(WORKSPACE_WINDOW_SNAPSHOT_EVENT, snapshot)"
-    );
-    expect(activationSource.indexOf("webContents.send")).toBeLessThan(
-      activationSource.indexOf("ownerWindow.focus()")
+    expect(mainSource).not.toContain("WORKSPACE_WINDOW_SNAPSHOT_EVENT");
+    expect(mainSource).toContain("createWorkspaceOwnerTabActivationRequestBroker");
+    expect(activationSource).toContain("REQUEST_WORKSPACE_OWNER_TAB_ACTIVATION_EVENT");
+    expect(activationSource).toContain("if (!(await activation.result))");
+    expect(activationSource).toContain("workspaceTabOperations.runExclusive(tabId");
+    expect(activationSource).toContain("workspaceState.getFileOwner(identity)");
+    expect(activationSource.indexOf("await activation.result")).toBeLessThan(
+      activationSource.indexOf("currentWindow.focus()")
     );
   });
 

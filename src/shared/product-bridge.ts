@@ -16,6 +16,7 @@ import type {
   ReorderWorkspaceTabInput,
   UpdateWorkspaceTabDraftInput,
   WorkspaceMoveTabResult,
+  WorkspaceOwnerTabActivationRequest,
   WorkspaceWindowCloseRequest,
   WorkspaceWindowSnapshot
 } from "./workspace";
@@ -80,8 +81,8 @@ export interface ProductBridge {
   importClipboardImage: (input: ImportClipboardImageInput) => Promise<ImportClipboardImageResult>;
   onMenuCommand: (listener: (command: AppMenuCommand) => void) => () => void;
   onOpenWorkspacePath: (listener: (payload: OpenWorkspacePathRequest) => void) => () => void;
-  onWorkspaceWindowSnapshot: (
-    listener: (snapshot: WorkspaceWindowSnapshot) => void
+  onWorkspaceOwnerTabActivationRequest: (
+    listener: (request: WorkspaceOwnerTabActivationRequest) => Promise<boolean>
   ) => () => void;
   confirmWorkspaceWindowClose: (
     input: ConfirmWorkspaceWindowCloseInput
