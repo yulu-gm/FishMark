@@ -77,7 +77,8 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain('import { createWorkspaceDetachApplication } from "./workspace-detach-application"');
     expect(mainSource).toContain('import { createWorkspaceFileOperations } from "./workspace-file-operations"');
     expect(mainSource).toContain('import { createWorkspaceReloadApplication } from "./workspace-reload-application"');
-    expect(mainSource).toContain('import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator"');
+    expect(mainSource).toContain("createKeyedOperationCoordinator,");
+    expect(mainSource).toContain('from "./keyed-operation-coordinator"');
     expect(mainSource).toContain('import { createWorkspaceWindowCloseApplication } from "./workspace-window-close-application"');
     expect(mainSource).toContain('import { createWorkspaceWindowCloseConfirmationHandler } from "./workspace-window-close-confirmation-handler"');
     expect(mainSource).toContain('import { createWorkspaceWindowCloseRequestBroker } from "./workspace-window-close-request-broker"');
@@ -220,6 +221,24 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain("window.webContents.send(OPEN_WORKSPACE_PATH_EVENT");
     expect(mainSource).toContain('disposition: "open-in-place"');
     expect(mainSource).not.toContain('disposition: "opened-in-new-window"');
+  });
+
+  it("sends the activated owner snapshot before focusing its window", () => {
+    const mainSource = readMainSource();
+    const activationStart = mainSource.indexOf("activateOwnerWindowTab: async");
+    const activationSource = mainSource.slice(
+      activationStart,
+      mainSource.indexOf("recordRecentFilePath", activationStart)
+    );
+
+    expect(mainSource).toContain("WORKSPACE_WINDOW_SNAPSHOT_EVENT");
+    expect(activationSource).toContain("const snapshot = await syncWorkspaceWatch(");
+    expect(activationSource).toContain(
+      "ownerWindow.webContents.send(WORKSPACE_WINDOW_SNAPSHOT_EVENT, snapshot)"
+    );
+    expect(activationSource.indexOf("webContents.send")).toBeLessThan(
+      activationSource.indexOf("ownerWindow.focus()")
+    );
   });
 
   it("only initializes the scenario runner stack in test-workbench mode", () => {

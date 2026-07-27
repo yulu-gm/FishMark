@@ -98,7 +98,8 @@ import {
   REORDER_WORKSPACE_TAB_CHANNEL,
   REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT,
   UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL,
-  MOVE_WORKSPACE_TAB_TO_WINDOW_CHANNEL
+  MOVE_WORKSPACE_TAB_TO_WINDOW_CHANNEL,
+  WORKSPACE_WINDOW_SNAPSHOT_EVENT
 } from "../shared/workspace";
 import {
   APP_NOTIFICATION_EVENT,
@@ -231,6 +232,20 @@ const productApi: ProductBridge = {
 
     return () => {
       ipcRenderer.off(OPEN_WORKSPACE_PATH_EVENT, handleOpenWorkspacePath);
+    };
+  },
+  onWorkspaceWindowSnapshot: (listener: (snapshot: WorkspaceWindowSnapshot) => void) => {
+    const handleWorkspaceWindowSnapshot = (
+      _event: unknown,
+      snapshot: WorkspaceWindowSnapshot
+    ) => {
+      listener(snapshot);
+    };
+
+    ipcRenderer.on(WORKSPACE_WINDOW_SNAPSHOT_EVENT, handleWorkspaceWindowSnapshot);
+
+    return () => {
+      ipcRenderer.off(WORKSPACE_WINDOW_SNAPSHOT_EVENT, handleWorkspaceWindowSnapshot);
     };
   },
   confirmWorkspaceWindowClose: (

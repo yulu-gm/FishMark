@@ -4,7 +4,10 @@ import { describe, expect, it, vi } from "vitest";
 import type { OpenMarkdownFileResult } from "../shared/open-markdown-file";
 import type { SaveMarkdownFileResult } from "../shared/save-markdown-file";
 import { createTestWorkspaceCloseCoordinator as createWorkspaceCloseCoordinator } from "./workspace-close-coordinator.test-helper";
-import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator";
+import {
+  createKeyedOperationCoordinator,
+  type KeyedOperationLease
+} from "./keyed-operation-coordinator";
 import { createWorkspaceFileOperations } from "./workspace-file-operations";
 import { createWorkspaceReloadApplication as createWorkspaceReloadApplicationWithOperations } from "./workspace-reload-application";
 import { createWorkspaceTabTransferApplication } from "./workspace-tab-transfer-application";
@@ -476,10 +479,12 @@ describe("workspace document IO transactions", () => {
         schedulePostConfirmationWatchdog: () => vi.fn()
       });
       let requestId = "";
+      let closeLease!: KeyedOperationLease<string>;
       const windowClose = createWorkspaceWindowCloseApplication({
         workspace,
         documentOperations,
-        requestWorkspaceWindowClose: async () => {
+        requestWorkspaceWindowClose: async (_ownerWindow, tabLease) => {
+          closeLease = tabLease;
           const handle = broker.request({
             windowId: "window-1",
             sendRequest: (id) => {
@@ -507,7 +512,10 @@ describe("workspace document IO transactions", () => {
       const confirmationPromise =
         createWorkspaceWindowCloseConfirmationHandler({
           broker,
-          closeCoordinator
+          closeCoordinator: {
+            confirmWindowClose: (input) =>
+              closeCoordinator.confirmWindowClose(input, closeLease)
+          }
         })(identity);
       await vi.waitFor(() => expect(resolvePrompt).toBeTypeOf("function"));
       const queuedWrite = vi.fn(async () => ({
@@ -578,10 +586,12 @@ describe("workspace document IO transactions", () => {
       schedulePostConfirmationWatchdog: () => vi.fn()
     });
     let requestId = "";
+    let closeLease!: KeyedOperationLease<string>;
     const windowClose = createWorkspaceWindowCloseApplication({
       workspace,
       documentOperations,
-      requestWorkspaceWindowClose: async () => {
+      requestWorkspaceWindowClose: async (_ownerWindow, tabLease) => {
+        closeLease = tabLease;
         const handle = broker.request({
           windowId: "window-1",
           sendRequest: (id) => {
@@ -608,7 +618,10 @@ describe("workspace document IO transactions", () => {
     const confirmationPromise =
       createWorkspaceWindowCloseConfirmationHandler({
         broker,
-        closeCoordinator
+        closeCoordinator: {
+          confirmWindowClose: (input) =>
+            closeCoordinator.confirmWindowClose(input, closeLease)
+        }
       })(identity);
     await vi.waitFor(() => expect(resolveCloseWrite).toBeTypeOf("function"));
     let resolveQueuedWrite!: (result: SaveMarkdownFileResult) => void;
@@ -684,10 +697,12 @@ describe("workspace document IO transactions", () => {
         schedulePostConfirmationWatchdog: () => vi.fn()
       });
       let requestId = "";
+      let closeLease!: KeyedOperationLease<string>;
       const windowClose = createWorkspaceWindowCloseApplication({
         workspace,
         documentOperations,
-        requestWorkspaceWindowClose: async () => {
+        requestWorkspaceWindowClose: async (_ownerWindow, tabLease) => {
+          closeLease = tabLease;
           const handle = broker.request({
             windowId: "window-1",
             sendRequest: (id) => {
@@ -705,7 +720,10 @@ describe("workspace document IO transactions", () => {
       const handleConfirmation =
         createWorkspaceWindowCloseConfirmationHandler({
           broker,
-          closeCoordinator
+          closeCoordinator: {
+            confirmWindowClose: (input) =>
+              closeCoordinator.confirmWindowClose(input, closeLease)
+          }
         });
 
       const closePromise = windowClose.requestWindowClose({

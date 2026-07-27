@@ -18,19 +18,28 @@ function createWorkspaceCloseCoordinator(
   > & {
     workspace: Parameters<typeof createWorkspaceCloseCoordinatorWithOperations>[0]["workspace"] &
       Pick<ReturnType<typeof createWorkspaceState>, "saveTabDocument">;
-    saveMarkdownFileToPath: (input: { tabId: string; path: string; content: string }) => Promise<SaveMarkdownFileResult>;
-    showSaveMarkdownDialog: (input: { tabId: string; currentPath: string | null; content: string }) => Promise<SaveMarkdownFileResult>;
+    persistSavedWorkspaceTab: (
+      tab: DocumentSessionProjection
+    ) => Promise<SaveMarkdownFileResult>;
+    persistUntitledWorkspaceTab: (
+      tab: DocumentSessionProjection
+    ) => Promise<SaveMarkdownFileResult>;
   }
 ) {
-  const { saveMarkdownFileToPath, showSaveMarkdownDialog, workspace, ...rest } = dependencies;
+  const {
+    persistSavedWorkspaceTab,
+    persistUntitledWorkspaceTab,
+    workspace,
+    ...rest
+  } = dependencies;
   return createWorkspaceCloseCoordinatorWithOperations({
     ...rest,
     workspace,
     documentOperations: createKeyedOperationCoordinator(),
     persistWorkspaceTab: async (tab, commitGuard) => {
       const result = tab.path === null
-        ? await showSaveMarkdownDialog({ tabId: tab.tabId, currentPath: null, content: tab.content })
-        : await saveMarkdownFileToPath({ tabId: tab.tabId, path: tab.path, content: tab.content });
+        ? await persistUntitledWorkspaceTab(tab)
+        : await persistSavedWorkspaceTab(tab);
       if (result.status === "success") {
         if (!commitGuard()) {
           return { status: "cancelled" };
@@ -87,8 +96,8 @@ describe("createWorkspaceCloseCoordinator", () => {
     const coordinator = createWorkspaceCloseCoordinator({
       workspace,
       promptToSaveWorkspaceTab: prompt,
-      saveMarkdownFileToPath: vi.fn(),
-      showSaveMarkdownDialog: vi.fn()
+      persistSavedWorkspaceTab: vi.fn(),
+      persistUntitledWorkspaceTab: vi.fn()
     });
 
     const result = await coordinator.closeTab({
@@ -138,11 +147,11 @@ describe("createWorkspaceCloseCoordinator", () => {
     const coordinator = createWorkspaceCloseCoordinator({
       workspace,
       promptToSaveWorkspaceTab: prompt,
-      saveMarkdownFileToPath: vi.fn(async ({ tabId, path, content }) => ({
+      persistSavedWorkspaceTab: vi.fn(async ({ tabId, path, content }) => ({
         status: "success" as const,
         document: createDocument(path.split("/").at(-1) ?? `${tabId}.md`, content, path)
       })),
-      showSaveMarkdownDialog: vi.fn()
+      persistUntitledWorkspaceTab: vi.fn()
     });
 
     const confirmation = await coordinator.confirmWindowClose(
@@ -211,8 +220,8 @@ describe("createWorkspaceCloseCoordinator", () => {
         workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "changed during cancel prompt" });
         return "cancel";
       },
-      saveMarkdownFileToPath: vi.fn(),
-      showSaveMarkdownDialog: vi.fn()
+      persistSavedWorkspaceTab: vi.fn(),
+      persistUntitledWorkspaceTab: vi.fn()
     });
 
     const result = await coordinator.closeTab({
@@ -236,7 +245,7 @@ describe("createWorkspaceCloseCoordinator", () => {
     workspace.registerWindow("window-1");
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
     workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "untitled dirty" });
-    const showSaveMarkdownDialog = vi.fn(async ({ content }) => ({
+    const persistUntitledWorkspaceTab = vi.fn(async ({ content }) => ({
       status: "success" as const,
       document: createDocument("saved.md", content)
     }));
@@ -244,8 +253,8 @@ describe("createWorkspaceCloseCoordinator", () => {
     const coordinator = createWorkspaceCloseCoordinator({
       workspace,
       promptToSaveWorkspaceTab: async () => "save",
-      saveMarkdownFileToPath: vi.fn(),
-      showSaveMarkdownDialog
+      persistSavedWorkspaceTab: vi.fn(),
+      persistUntitledWorkspaceTab
     });
 
     await expect(
@@ -256,11 +265,11 @@ describe("createWorkspaceCloseCoordinator", () => {
       })
     ).resolves.toMatchObject({ status: "closed" });
 
-    expect(showSaveMarkdownDialog).toHaveBeenCalledWith({
+    expect(persistUntitledWorkspaceTab).toHaveBeenCalledWith(expect.objectContaining({
       tabId,
-      currentPath: null,
+      path: null,
       content: "untitled dirty"
-    });
+    }));
     expect(saveTabDocument).toHaveBeenCalledWith({
       tabId,
       expectedWindowId: "window-1",
@@ -285,11 +294,11 @@ describe("createWorkspaceCloseCoordinator", () => {
     const coordinator = createWorkspaceCloseCoordinator({
       workspace,
       promptToSaveWorkspaceTab: async () => "save",
-      saveMarkdownFileToPath: vi.fn(async () => ({
+      persistSavedWorkspaceTab: vi.fn(async () => ({
         status: "success" as const,
         document: createDocument("other.md", "dirty")
       })),
-      showSaveMarkdownDialog: vi.fn()
+      persistUntitledWorkspaceTab: vi.fn()
     });
 
     await expect(
@@ -319,8 +328,8 @@ describe("createWorkspaceCloseCoordinator", () => {
     const coordinator = createWorkspaceCloseCoordinator({
       workspace,
       promptToSaveWorkspaceTab: async () => "save",
-      saveMarkdownFileToPath: vi.fn(),
-      showSaveMarkdownDialog: vi.fn(async () =>
+      persistSavedWorkspaceTab: vi.fn(),
+      persistUntitledWorkspaceTab: vi.fn(async () =>
         JSON.parse(
           JSON.stringify({
             status: "success",
@@ -367,8 +376,8 @@ describe("createWorkspaceCloseCoordinator", () => {
         new Promise((resolve) => {
           resolvePrompt = resolve;
         }),
-      saveMarkdownFileToPath: vi.fn(),
-      showSaveMarkdownDialog: vi.fn()
+      persistSavedWorkspaceTab: vi.fn(),
+      persistUntitledWorkspaceTab: vi.fn()
     });
 
     const closePromise = coordinator.closeTab({
@@ -407,11 +416,11 @@ describe("createWorkspaceCloseCoordinator", () => {
     const coordinator = createWorkspaceCloseCoordinator({
       workspace,
       promptToSaveWorkspaceTab: async () => "save",
-      saveMarkdownFileToPath: () =>
+      persistSavedWorkspaceTab: () =>
         new Promise((resolve) => {
           resolveSave = resolve;
         }),
-      showSaveMarkdownDialog: vi.fn()
+      persistUntitledWorkspaceTab: vi.fn()
     });
 
     const closePromise = coordinator.closeTab({
@@ -458,11 +467,11 @@ describe("createWorkspaceCloseCoordinator", () => {
     const coordinator = createWorkspaceCloseCoordinator({
       workspace,
       promptToSaveWorkspaceTab: async () => "save",
-      saveMarkdownFileToPath: () =>
+      persistSavedWorkspaceTab: () =>
         new Promise((resolve) => {
           resolveSave = resolve;
         }),
-      showSaveMarkdownDialog: vi.fn()
+      persistUntitledWorkspaceTab: vi.fn()
     });
 
     const closePromise = coordinator.closeTab({
@@ -511,8 +520,8 @@ describe("createWorkspaceCloseCoordinator", () => {
           workspace.updateTabDraft({ tabId: firstTabId, expectedWindowId: "window-1", content: "first changed again" });
           return "discard";
         }),
-      saveMarkdownFileToPath: vi.fn(),
-      showSaveMarkdownDialog: vi.fn()
+      persistSavedWorkspaceTab: vi.fn(),
+      persistUntitledWorkspaceTab: vi.fn()
     });
 
     await expect(
@@ -532,8 +541,8 @@ describe("createWorkspaceCloseCoordinator", () => {
     const coordinator = createWorkspaceCloseCoordinator({
       workspace,
       promptToSaveWorkspaceTab: prompt,
-      saveMarkdownFileToPath: vi.fn(),
-      showSaveMarkdownDialog: vi.fn()
+      persistSavedWorkspaceTab: vi.fn(),
+      persistUntitledWorkspaceTab: vi.fn()
     });
 
     await expect(
@@ -554,15 +563,15 @@ describe("createWorkspaceCloseCoordinator", () => {
     workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "dirty" });
     let active = true;
     let resolvePrompt!: (choice: "save") => void;
-    const saveMarkdownFileToPath = vi.fn();
+    const persistSavedWorkspaceTab = vi.fn();
     const coordinator = createWorkspaceCloseCoordinator({
       workspace,
       promptToSaveWorkspaceTab: () =>
         new Promise((resolve) => {
           resolvePrompt = resolve;
         }),
-      saveMarkdownFileToPath,
-      showSaveMarkdownDialog: vi.fn()
+      persistSavedWorkspaceTab,
+      persistUntitledWorkspaceTab: vi.fn()
     });
 
     const confirmation = coordinator.confirmWindowClose(
@@ -573,7 +582,7 @@ describe("createWorkspaceCloseCoordinator", () => {
     resolvePrompt("save");
 
     await expect(confirmation).resolves.toBeNull();
-    expect(saveMarkdownFileToPath).not.toHaveBeenCalled();
+    expect(persistSavedWorkspaceTab).not.toHaveBeenCalled();
     expect(workspace.getTabSession(tabId)).toMatchObject({ isDirty: true });
   });
 
@@ -594,11 +603,11 @@ describe("createWorkspaceCloseCoordinator", () => {
     const coordinator = createWorkspaceCloseCoordinator({
       workspace,
       promptToSaveWorkspaceTab: vi.fn(async () => "save" as const),
-      saveMarkdownFileToPath: () =>
+      persistSavedWorkspaceTab: () =>
         new Promise((resolve) => {
           resolveWrite = resolve;
         }),
-      showSaveMarkdownDialog: vi.fn()
+      persistUntitledWorkspaceTab: vi.fn()
     });
 
     const confirmation = coordinator.confirmWindowClose(
@@ -636,8 +645,8 @@ describe("createWorkspaceCloseCoordinator", () => {
         new Promise((resolve) => {
           resolvePrompt = resolve;
         }),
-      saveMarkdownFileToPath: vi.fn(),
-      showSaveMarkdownDialog: vi.fn()
+      persistSavedWorkspaceTab: vi.fn(),
+      persistUntitledWorkspaceTab: vi.fn()
     });
 
     const confirmPromise = coordinator.confirmWindowClose(
@@ -679,8 +688,8 @@ describe("createWorkspaceCloseCoordinator", () => {
         new Promise((resolve) => {
           resolvePrompt = resolve;
         }),
-      saveMarkdownFileToPath: vi.fn(),
-      showSaveMarkdownDialog: vi.fn()
+      persistSavedWorkspaceTab: vi.fn(),
+      persistUntitledWorkspaceTab: vi.fn()
     });
 
     const confirmPromise = coordinator.confirmWindowClose(
@@ -721,8 +730,8 @@ describe("createWorkspaceCloseCoordinator", () => {
         }))
       },
       promptToSaveWorkspaceTab: vi.fn(),
-      saveMarkdownFileToPath: vi.fn(),
-      showSaveMarkdownDialog: vi.fn()
+      persistSavedWorkspaceTab: vi.fn(),
+      persistUntitledWorkspaceTab: vi.fn()
     });
 
     await expect(
@@ -753,8 +762,8 @@ describe("createWorkspaceCloseCoordinator", () => {
         new Promise((resolve) => {
           resolvePrompt = resolve;
         }),
-      saveMarkdownFileToPath: vi.fn(),
-      showSaveMarkdownDialog: vi.fn()
+      persistSavedWorkspaceTab: vi.fn(),
+      persistUntitledWorkspaceTab: vi.fn()
     });
 
     const confirmPromise = coordinator.confirmWindowClose(
@@ -795,8 +804,8 @@ describe("createWorkspaceCloseCoordinator", () => {
         new Promise((resolve) => {
           resolvePrompt = resolve;
         }),
-      saveMarkdownFileToPath: vi.fn(),
-      showSaveMarkdownDialog: vi.fn()
+      persistSavedWorkspaceTab: vi.fn(),
+      persistUntitledWorkspaceTab: vi.fn()
     });
 
     const confirmPromise = coordinator.confirmWindowClose(

@@ -113,7 +113,8 @@ describe("useEditorApplicationController", () => {
         updateWorkspaceTabDraft,
         saveMarkdownFile,
         getWorkspaceSnapshot,
-        onExternalMarkdownFileChanged: vi.fn(() => () => {})
+        onExternalMarkdownFileChanged: vi.fn(() => () => {}),
+        onWorkspaceWindowSnapshot: vi.fn(() => () => {})
       } as unknown as Window["fishmark"],
       getEditorContent: () => "# Saved\n",
       setEditorContentSnapshot: vi.fn(),
@@ -172,7 +173,8 @@ describe("useEditorApplicationController", () => {
         saveMarkdownFile,
         exportHtmlFile,
         getWorkspaceSnapshot: vi.fn(async () => savedSnapshot),
-        onExternalMarkdownFileChanged: vi.fn(() => () => {})
+        onExternalMarkdownFileChanged: vi.fn(() => () => {}),
+        onWorkspaceWindowSnapshot: vi.fn(() => () => {})
       } as unknown as Window["fishmark"],
       getEditorContent: () => "# Exported\n",
       setEditorContentSnapshot: vi.fn(),
@@ -224,7 +226,8 @@ describe("useEditorApplicationController", () => {
         getWorkspaceSnapshot: vi.fn(async () => emptySnapshot),
         openWorkspaceFile,
         updateWorkspaceTabDraft: vi.fn(async () => emptySnapshot),
-        onExternalMarkdownFileChanged: vi.fn(() => () => {})
+        onExternalMarkdownFileChanged: vi.fn(() => () => {}),
+        onWorkspaceWindowSnapshot: vi.fn(() => () => {})
       } as unknown as Window["fishmark"],
       getEditorContent: () => "",
       setEditorContentSnapshot: vi.fn(),
@@ -289,7 +292,8 @@ describe("useEditorApplicationController", () => {
         updateWorkspaceTabDraft,
         saveMarkdownFile,
         getWorkspaceSnapshot,
-        onExternalMarkdownFileChanged: vi.fn(() => () => {})
+        onExternalMarkdownFileChanged: vi.fn(() => () => {}),
+        onWorkspaceWindowSnapshot: vi.fn(() => () => {})
       } as unknown as Window["fishmark"],
       getEditorContent: () => "# First dirty\n",
       setEditorContentSnapshot: vi.fn(),
@@ -353,7 +357,8 @@ describe("useEditorApplicationController", () => {
         openWorkspaceFileFromPath,
         clearRecentFile,
         updateWorkspaceTabDraft: vi.fn(async () => emptySnapshot),
-        onExternalMarkdownFileChanged: vi.fn(() => () => {})
+        onExternalMarkdownFileChanged: vi.fn(() => () => {}),
+        onWorkspaceWindowSnapshot: vi.fn(() => () => {})
       } as unknown as Window["fishmark"],
       getEditorContent: () => "",
       setEditorContentSnapshot: vi.fn(),

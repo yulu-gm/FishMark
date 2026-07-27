@@ -1,4 +1,7 @@
-import type { OpenMarkdownFileErrorCode } from "./open-markdown-file";
+import {
+  OPEN_MARKDOWN_FILE_ERROR_MESSAGES,
+  type OpenMarkdownFileErrorCode
+} from "./open-markdown-file";
 
 export type WorkspaceTabSaveState = "idle" | "manual-saving" | "autosaving";
 
@@ -63,11 +66,35 @@ export type ReloadWorkspaceTabFromPathInput = {
   tabId: string;
 };
 
+export type ReloadWorkspaceTabFromPathErrorCode =
+  | OpenMarkdownFileErrorCode
+  | "file-identity-changed"
+  | "file-identity-conflict";
+
+export type ReloadWorkspaceTabFromPathError = {
+  code: ReloadWorkspaceTabFromPathErrorCode;
+  message: string;
+};
+
 export type ReloadWorkspaceTabFromPathResult =
   | WorkspaceCommandSuccess<WorkspaceWindowSnapshot>
   | {
       kind: "revision-stale";
+    }
+  | {
+      kind: "error";
+      error: ReloadWorkspaceTabFromPathError;
     };
+
+export const RELOAD_WORKSPACE_TAB_FROM_PATH_ERROR_MESSAGES: Record<
+  ReloadWorkspaceTabFromPathErrorCode,
+  string
+> = {
+  ...OPEN_MARKDOWN_FILE_ERROR_MESSAGES,
+  "file-identity-changed":
+    "The Markdown file changed while reloading. Please try again.",
+  "file-identity-conflict": "That file is already open in another tab."
+};
 
 export type WorkspaceMoveTabResult = {
   sourceWindowSnapshot: WorkspaceWindowSnapshot;
@@ -137,6 +164,7 @@ export const DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL = "fishmark:detach-works
 export const UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL = "fishmark:update-workspace-tab-draft";
 export const RELOAD_WORKSPACE_TAB_FROM_PATH_CHANNEL = "fishmark:reload-workspace-tab-from-path";
 export const OPEN_WORKSPACE_PATH_EVENT = "fishmark:open-workspace-path";
+export const WORKSPACE_WINDOW_SNAPSHOT_EVENT = "fishmark:workspace-window-snapshot";
 export const REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT = "fishmark:request-workspace-window-close";
 export const CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL = "fishmark:confirm-workspace-window-close";
 export const COMPLETE_WORKSPACE_WINDOW_CLOSE_CHANNEL = "fishmark:complete-workspace-window-close";

@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { AppNotification } from "../../shared/app-update";
-import type { WorkspaceWindowSnapshot } from "../../shared/workspace";
+import {
+  RELOAD_WORKSPACE_TAB_FROM_PATH_ERROR_MESSAGES,
+  type WorkspaceWindowSnapshot
+} from "../../shared/workspace";
 import {
   applyWorkspaceSnapshot,
   createInitialEditorShellState,
@@ -73,6 +76,14 @@ export function useWorkspaceController(input: {
       return nextState;
     },
     [applyState, getEditorContent]
+  );
+
+  useEffect(
+    () =>
+      fishmark.onWorkspaceWindowSnapshot((snapshot) => {
+        applyWorkspaceWindowSnapshot(snapshot);
+      }),
+    [applyWorkspaceWindowSnapshot, fishmark]
   );
 
   const syncActiveWorkspaceDraft = useCallback(
@@ -441,6 +452,14 @@ export function useWorkspaceController(input: {
           showNotification({
             kind: "warning",
             message: "重新加载期间检测到新的编辑，已保留当前内容。请重试。"
+          });
+          return false;
+        }
+        if (result.kind === "error") {
+          setWorkspaceOpenState("idle");
+          showNotification({
+            kind: "error",
+            message: RELOAD_WORKSPACE_TAB_FROM_PATH_ERROR_MESSAGES[result.error.code]
           });
           return false;
         }

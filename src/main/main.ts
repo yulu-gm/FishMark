@@ -51,7 +51,10 @@ import {
   type WorkspaceWindowCloseConfirmation
 } from "./workspace-close-coordinator";
 import { createWorkspaceDetachApplication } from "./workspace-detach-application";
-import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator";
+import {
+  createKeyedOperationCoordinator,
+  type KeyedOperationLease
+} from "./keyed-operation-coordinator";
 import { createFileIdentityResolver } from "./file-identity-resolver";
 import { createWorkspaceOpenApplication } from "./workspace-open-application";
 import { createWorkspaceFileOperations } from "./workspace-file-operations";
@@ -148,6 +151,7 @@ import {
   REORDER_WORKSPACE_TAB_CHANNEL,
   REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT,
   UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL,
+  WORKSPACE_WINDOW_SNAPSHOT_EVENT,
   type ActivateWorkspaceTabInput,
   type CloseWorkspaceTabInput,
   type CompleteWorkspaceWindowCloseInput,
@@ -370,16 +374,21 @@ app.whenReady().then(async () => {
         return () => clearTimeout(timeout);
       }
     });
+  const workspaceWindowCloseLeases = new Map<
+    string,
+    KeyedOperationLease<string>
+  >();
   const workspaceWindowCloseApplication =
     createWorkspaceWindowCloseApplication<BrowserWindow>({
       workspace: workspaceState,
       documentOperations: workspaceTabOperations,
-      requestWorkspaceWindowClose: async (ownerWindow) => {
+      requestWorkspaceWindowClose: async (ownerWindow, tabLease) => {
         if (ownerWindow.webContents.isDestroyed()) {
           return Promise.resolve(null);
         }
 
         const windowId = String(ownerWindow.id);
+        workspaceWindowCloseLeases.set(windowId, tabLease);
         const handle = workspaceWindowCloseRequestBroker.request({
           windowId,
           sendRequest: (requestId) => {
@@ -401,6 +410,9 @@ app.whenReady().then(async () => {
           return await handle.result;
         } finally {
           await handle.drained;
+          if (workspaceWindowCloseLeases.get(windowId) === tabLease) {
+            workspaceWindowCloseLeases.delete(windowId);
+          }
         }
       }
     });
@@ -642,19 +654,22 @@ app.whenReady().then(async () => {
 
   const workspaceOpenApplication = createWorkspaceOpenApplication({
     workspace: workspaceState,
+    tabOperations: workspaceTabOperations,
     fileLocationOperations: workspaceFileLocationOperations,
     fileObjectOperations: workspaceFileObjectOperations,
     resolveExisting: fileIdentityResolver.resolveExisting,
+    resolveProspective: fileIdentityResolver.resolveProspective,
     openMarkdownFileFromPath,
     activateOwnerWindowTab: async (windowId, tabId) => {
       const ownerWindow = getWorkspaceWindowById(windowId);
       if (ownerWindow === null || ownerWindow.webContents.isDestroyed()) {
         throw new Error(`Workspace window '${windowId}' no longer exists.`);
       }
-      await syncWorkspaceWatch(
+      const snapshot = await syncWorkspaceWatch(
         ownerWindow.webContents,
         workspaceState.activateTab(windowId, tabId)
       );
+      ownerWindow.webContents.send(WORKSPACE_WINDOW_SNAPSHOT_EVENT, snapshot);
       ownerWindow.focus();
     },
     recordRecentFilePath
@@ -689,23 +704,6 @@ app.whenReady().then(async () => {
       );
     }
   });
-  const workspaceCloseFileOperations = createWorkspaceFileOperations({
-    workspace: workspaceState,
-    tabOperations: workspaceTabOperations,
-    fileLocationOperations: workspaceFileLocationOperations,
-    fileObjectOperations: workspaceFileObjectOperations,
-    fileIdentityResolver,
-    saveMarkdownFileToPath,
-    showSaveMarkdownPathDialog,
-    beginInternalWrite: externalFileWatchService.beginInternalWrite,
-    completeInternalWrite: externalFileWatchService.completeInternalWrite,
-    syncWindowWatch: (sender, windowId) =>
-      workspaceFileWatchApplication.syncWindow({ sender, windowId }),
-    recordRecentFilePath,
-    reportCleanupError: (error) => {
-      console.error("[fishmark] workspace close-save cleanup failed.", error);
-    }
-  });
   const workspaceCloseCoordinator = createWorkspaceCloseCoordinator({
     workspace: workspaceState,
     documentOperations: workspaceTabOperations,
@@ -722,30 +720,38 @@ app.whenReady().then(async () => {
       });
       return result.response === 0 ? "save" : result.response === 1 ? "discard" : "cancel";
     },
-    persistWorkspaceTab: async (tab, commitGuard) => {
+    persistWorkspaceTab: async (tab, commitGuard, tabLease) => {
       const ownerWindow = getWorkspaceWindowById(tab.windowId);
       if (ownerWindow === null || ownerWindow.webContents.isDestroyed()) {
         throw new Error(`Workspace window '${tab.windowId}' no longer exists.`);
       }
       return tab.path === null
-        ? workspaceCloseFileOperations.saveAsWithHeldTabLease({
+        ? workspaceFileOperations.saveAsWithHeldTabLease({
             sender: ownerWindow.webContents,
             expectedWindowId: tab.windowId,
             tabId: tab.tabId,
             commitGuard
-          })
-        : workspaceCloseFileOperations.saveWithHeldTabLease({
+          }, tabLease)
+        : workspaceFileOperations.saveWithHeldTabLease({
             sender: ownerWindow.webContents,
             expectedWindowId: tab.windowId,
             tabId: tab.tabId,
             commitGuard
-          });
+          }, tabLease);
     }
   });
   const handleWorkspaceWindowCloseConfirmation =
     createWorkspaceWindowCloseConfirmationHandler({
       broker: workspaceWindowCloseRequestBroker,
-      closeCoordinator: workspaceCloseCoordinator
+      closeCoordinator: {
+        confirmWindowClose(input) {
+          const lease = workspaceWindowCloseLeases.get(input.windowId);
+          if (lease === undefined) {
+            return Promise.resolve(null);
+          }
+          return workspaceCloseCoordinator.confirmWindowClose(input, lease);
+        }
+      }
     });
   const workspaceDetachApplication = createWorkspaceDetachApplication({
     workspace: workspaceState,
@@ -878,8 +884,8 @@ app.whenReady().then(async () => {
         tabId: input.tabId,
         expectedWindowId: windowId
       });
-      if (result.kind === "revision-stale") {
-        return { kind: "revision-stale" } satisfies ReloadWorkspaceTabFromPathResult;
+      if (result.kind !== "success") {
+        return result satisfies ReloadWorkspaceTabFromPathResult;
       }
 
       return {

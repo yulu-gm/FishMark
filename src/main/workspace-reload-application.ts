@@ -1,11 +1,17 @@
-import type {
-  FileLocationIdentity,
-  FileObjectIdentity,
-  WorkspaceState,
-  WorkspaceWindowProjection
+import {
+  sameFileIdentity,
+  type FileLocationIdentity,
+  type FileObjectIdentity,
+  type WorkspaceState,
+  type WorkspaceWindowProjection
 } from "@fishmark/workspace-domain";
 
 import type { OpenMarkdownFileResult } from "../shared/open-markdown-file";
+import {
+  RELOAD_WORKSPACE_TAB_FROM_PATH_ERROR_MESSAGES,
+  type ReloadWorkspaceTabFromPathError,
+  type ReloadWorkspaceTabFromPathErrorCode
+} from "../shared/workspace";
 import type { FileIdentityResolver } from "./file-identity-resolver";
 import type { KeyedOperationCoordinator } from "./keyed-operation-coordinator";
 import { requirePersistedMarkdownDocument } from "./persisted-markdown-document";
@@ -13,7 +19,11 @@ import { requireAppliedWorkspaceMutation } from "./workspace-mutation-result";
 
 export type WorkspaceReloadResult =
   | { readonly kind: "success"; readonly projection: WorkspaceWindowProjection }
-  | { readonly kind: "revision-stale" };
+  | { readonly kind: "revision-stale" }
+  | {
+      readonly kind: "error";
+      readonly error: ReloadWorkspaceTabFromPathError;
+    };
 
 type WorkspaceReloadApplicationDependencies = {
   workspace: Pick<WorkspaceState, "getTabSession" | "replaceTabDocument">;
@@ -58,38 +68,62 @@ export function createWorkspaceReloadApplication(
         return dependencies.fileLocationOperations.runExclusive(
           checkpoint.fileIdentity.location,
           async () => {
-            const resolved = await dependencies.fileIdentityResolver.resolveExisting(
-              targetPath
-            );
+            let resolved: Awaited<
+              ReturnType<FileIdentityResolver["resolveExisting"]>
+            >;
+            try {
+              resolved = await dependencies.fileIdentityResolver.resolveExisting(
+                targetPath
+              );
+            } catch {
+              return reloadError("read-failed");
+            }
             if (resolved.pathKey !== checkpoint.fileIdentity!.location) {
-              throw new Error("Workspace reload file location changed.");
+              return reloadError("file-identity-changed");
             }
 
             return dependencies.fileObjectOperations.runExclusive(
               resolved.physicalKey,
               async () => {
-                const stable = await dependencies.fileIdentityResolver.resolveExisting(
-                  targetPath
-                );
-                if (stable.identity.object !== resolved.identity.object) {
-                  throw new Error("Workspace reload file identity changed before read.");
+                let stable: Awaited<
+                  ReturnType<FileIdentityResolver["resolveExisting"]>
+                >;
+                try {
+                  stable = await dependencies.fileIdentityResolver.resolveExisting(
+                    targetPath
+                  );
+                } catch {
+                  return reloadError("file-identity-changed");
                 }
-                const result = await dependencies.openMarkdownFileFromPath(
-                  resolved.canonicalPath
-                );
+                if (!sameFileIdentity(stable.identity, resolved.identity)) {
+                  return reloadError("file-identity-changed");
+                }
+                let result: OpenMarkdownFileResult;
+                try {
+                  result = await dependencies.openMarkdownFileFromPath(
+                    resolved.canonicalPath
+                  );
+                } catch {
+                  return reloadError("read-failed");
+                }
                 if (result.status !== "success") {
                   if (result.status === "error") {
-                    throw new Error(result.error.message);
+                    return reloadError(result.error.code);
                   }
-                  throw new Error(
-                    `Unable to reload Markdown file '${resolved.canonicalPath}'.`
-                  );
+                  return reloadError("read-failed");
                 }
-                const finalIdentity = await dependencies.fileIdentityResolver.resolveExisting(
-                  resolved.canonicalPath
-                );
-                if (finalIdentity.identity.object !== resolved.identity.object) {
-                  throw new Error("Workspace reload file identity changed during read.");
+                let finalIdentity: Awaited<
+                  ReturnType<FileIdentityResolver["resolveExisting"]>
+                >;
+                try {
+                  finalIdentity = await dependencies.fileIdentityResolver.resolveExisting(
+                    resolved.canonicalPath
+                  );
+                } catch {
+                  return reloadError("file-identity-changed");
+                }
+                if (!sameFileIdentity(finalIdentity.identity, resolved.identity)) {
+                  return reloadError("file-identity-changed");
                 }
 
                 const diskDocument = requirePersistedMarkdownDocument(
@@ -114,9 +148,7 @@ export function createWorkspaceReloadApplication(
                   }
                 });
                 if (mutation.kind === "file-identity-conflict") {
-                  throw new Error(
-                    "Workspace reload rejected: physical file is owned by another tab."
-                  );
+                  return reloadError("file-identity-conflict");
                 }
                 if (mutation.kind === "stale" && mutation.reason === "revision-changed") {
                   return { kind: "revision-stale" };
@@ -129,6 +161,18 @@ export function createWorkspaceReloadApplication(
           }
         );
       });
+    }
+  };
+}
+
+function reloadError(
+  code: ReloadWorkspaceTabFromPathErrorCode
+): Extract<WorkspaceReloadResult, { readonly kind: "error" }> {
+  return {
+    kind: "error",
+    error: {
+      code,
+      message: RELOAD_WORKSPACE_TAB_FROM_PATH_ERROR_MESSAGES[code]
     }
   };
 }

@@ -99,4 +99,23 @@ describe("createKeyedOperationCoordinator", () => {
     expect(secondAcquired).toBe(true);
     second.release();
   });
+
+  it("recognizes an active lease capability only for its owned keys", async () => {
+    const coordinator = createKeyedOperationCoordinator<string>();
+    const lease = await coordinator.acquireExclusive(["tab-a"]);
+
+    expect(coordinator.isLeaseHeld(lease, "tab-a")).toBe(true);
+    expect(coordinator.isLeaseHeld(lease, "tab-b")).toBe(false);
+
+    lease.release();
+    expect(coordinator.isLeaseHeld(lease, "tab-a")).toBe(false);
+  });
+
+  it("passes a verifiable lease through runExclusiveWithLease", async () => {
+    const coordinator = createKeyedOperationCoordinator<string>();
+
+    await coordinator.runExclusiveWithLease("tab-a", async (lease) => {
+      expect(coordinator.isLeaseHeld(lease, "tab-a")).toBe(true);
+    });
+  });
 });

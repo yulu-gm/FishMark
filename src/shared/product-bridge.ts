@@ -80,6 +80,9 @@ export interface ProductBridge {
   importClipboardImage: (input: ImportClipboardImageInput) => Promise<ImportClipboardImageResult>;
   onMenuCommand: (listener: (command: AppMenuCommand) => void) => () => void;
   onOpenWorkspacePath: (listener: (payload: OpenWorkspacePathRequest) => void) => () => void;
+  onWorkspaceWindowSnapshot: (
+    listener: (snapshot: WorkspaceWindowSnapshot) => void
+  ) => () => void;
   confirmWorkspaceWindowClose: (
     input: ConfirmWorkspaceWindowCloseInput
   ) => Promise<boolean>;

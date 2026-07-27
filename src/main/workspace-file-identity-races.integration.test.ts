@@ -1,4 +1,9 @@
-import { createWorkspaceState, fileIdentity } from "@fishmark/workspace-domain";
+import {
+  createWorkspaceState,
+  fileIdentity,
+  type FileLocationIdentity,
+  type FileObjectIdentity
+} from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 
 import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator";
@@ -16,8 +21,8 @@ describe("workspace physical file identity transactions", () => {
     const secondTabId = workspace.createUntitledTab("window-2").activeTabId!;
     workspace.updateTabDraft({ tabId: firstTabId, expectedWindowId: "window-1", content: "first" });
     workspace.updateTabDraft({ tabId: secondTabId, expectedWindowId: "window-2", content: "second" });
-    const locationOperations = createKeyedOperationCoordinator();
-    const objectOperations = createKeyedOperationCoordinator();
+    const locationOperations = createKeyedOperationCoordinator<FileLocationIdentity>();
+    const objectOperations = createKeyedOperationCoordinator<FileObjectIdentity>();
     const identity = fileIdentity("path:c:/notes/shared.md", "inode:7:42");
     let exists = false;
     const resolver = createStatefulResolver("C:/notes/shared.md", identity, () => exists);
@@ -60,8 +65,8 @@ describe("workspace physical file identity transactions", () => {
     workspace.registerWindow("window-2");
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
     workspace.updateTabDraft({ tabId, expectedWindowId: "window-1", content: "draft" });
-    const locationOperations = createKeyedOperationCoordinator();
-    const objectOperations = createKeyedOperationCoordinator();
+    const locationOperations = createKeyedOperationCoordinator<FileLocationIdentity>();
+    const objectOperations = createKeyedOperationCoordinator<FileObjectIdentity>();
     const identity = fileIdentity("path:c:/notes/created.md", "inode:7:99");
     let exists = false;
     const resolver = createStatefulResolver("C:/notes/created.md", identity, () => exists);
@@ -93,9 +98,11 @@ describe("workspace physical file identity transactions", () => {
     const activateOwnerWindowTab = vi.fn(async () => undefined);
     const openApplication = createWorkspaceOpenApplication({
       workspace,
+      tabOperations: createKeyedOperationCoordinator(),
       fileLocationOperations: locationOperations,
       fileObjectOperations: objectOperations,
       resolveExisting: resolver.resolveExisting,
+      resolveProspective: resolver.resolveProspective,
       openMarkdownFileFromPath: read,
       activateOwnerWindowTab,
       recordRecentFilePath: vi.fn()

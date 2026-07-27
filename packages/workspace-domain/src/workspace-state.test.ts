@@ -53,6 +53,73 @@ function openProjection(
 }
 
 describe("WorkspaceState physical file ownership", () => {
+  it("rejects a save whose location is self-owned but object is owned by another tab", () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const firstIdentity = fileIdentity("location:first", "object:first");
+    const secondIdentity = fileIdentity("location:second", "object:second");
+    const first = openProjection(workspace, "window-1", {
+      ...createDocument("first.md", "first"),
+      fileIdentity: firstIdentity
+    });
+    openProjection(workspace, "window-1", {
+      ...createDocument("second.md", "second"),
+      fileIdentity: secondIdentity
+    });
+    const tabId = first.activeTabId!;
+    const result = workspace.saveTabDocument({
+      tabId,
+      expectedWindowId: "window-1",
+      capturedRevision: 0,
+      document: {
+        ...createDocument("first.md", "first"),
+        fileIdentity: fileIdentity(firstIdentity.location, secondIdentity.object)
+      },
+      diskVersion: null
+    });
+
+    expect(result.kind).toBe("file-identity-conflict");
+    expect(workspace.getTabSession(tabId).fileIdentity).toEqual(firstIdentity);
+  });
+
+  it("rejects a reload object migration owned by another tab and preserves its index on release", () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const firstIdentity = fileIdentity("location:first", "object:first");
+    const secondIdentity = fileIdentity("location:second", "object:second");
+    const first = openProjection(workspace, "window-1", {
+      ...createDocument("first.md", "first"),
+      fileIdentity: firstIdentity
+    });
+    const second = openProjection(workspace, "window-1", {
+      ...createDocument("second.md", "second"),
+      fileIdentity: secondIdentity
+    });
+    const firstTabId = first.activeTabId!;
+    const result = workspace.replaceTabDocument({
+      tabId: firstTabId,
+      expectedWindowId: "window-1",
+      expectedRevision: 0,
+      document: {
+        ...createDocument("first.md", "replacement"),
+        fileIdentity: fileIdentity(firstIdentity.location, secondIdentity.object)
+      }
+    });
+
+    expect(result.kind).toBe("file-identity-conflict");
+    workspace.closeTab({
+      tabId: firstTabId,
+      expectedWindowId: "window-1",
+      expectedRevision: 0
+    });
+    expect(workspace.getFileOwner(
+      fileIdentity("location:third-alias", secondIdentity.object)
+    )).toEqual({
+      tabId: second.activeTabId,
+      windowId: "window-1"
+    });
+  });
+
   it("treats different locations for the same filesystem object as one document", () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");

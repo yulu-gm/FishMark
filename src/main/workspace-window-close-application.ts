@@ -13,7 +13,8 @@ type WorkspaceWindowCloseApplicationDependencies<TOwnerWindow> = {
     "acquireExclusive"
   >;
   requestWorkspaceWindowClose: (
-    ownerWindow: TOwnerWindow
+    ownerWindow: TOwnerWindow,
+    tabLease: KeyedOperationLease<string>
   ) => Promise<WorkspaceWindowCloseConfirmation | null>;
 };
 
@@ -46,7 +47,8 @@ export function createWorkspaceWindowCloseApplication<TOwnerWindow>(
 
       try {
         const confirmation = await dependencies.requestWorkspaceWindowClose(
-          input.ownerWindow
+          input.ownerWindow,
+          lease
         );
         if (confirmation === null) {
           lease.release();
@@ -120,7 +122,7 @@ export function createWorkspaceWindowCloseApplication<TOwnerWindow>(
 }
 
 function keepHeld(
-  lease: KeyedOperationLease
+  lease: KeyedOperationLease<string>
 ): HeldWorkspaceWindowCloseLease {
   return { release: () => lease.release() };
 }

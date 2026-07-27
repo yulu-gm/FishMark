@@ -92,7 +92,8 @@ import {
   REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT,
   REORDER_WORKSPACE_TAB_CHANNEL,
   UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL,
-  type OpenWorkspacePathRequest
+  type OpenWorkspacePathRequest,
+  type ReloadWorkspaceTabFromPathResult
 } from "../shared/workspace";
 import type { ProductBridge } from "../shared/product-bridge";
 import type { TestBridge } from "../shared/test-bridge";
@@ -221,6 +222,21 @@ describe("preload contract", () => {
 
     expect(openResult.kind).toBe("error");
     expect(openFromPathResult.kind).toBe("success");
+  });
+
+  it("keeps reload failures inside the typed preload result contract", () => {
+    const result: ReloadWorkspaceTabFromPathResult = {
+      kind: "error",
+      error: {
+        code: "file-identity-changed",
+        message: "The Markdown file changed while reloading. Please try again."
+      }
+    };
+
+    expect(result).toMatchObject({
+      kind: "error",
+      error: { code: "file-identity-changed" }
+    });
   });
 
   it("aligns editor-test command types with shared contract types", () => {
@@ -592,5 +608,54 @@ describe("preload contract", () => {
       [EXTERNAL_MARKDOWN_FILE_CHANGED_EVENT, externalFileHandler],
       [REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT, workspaceWindowCloseHandler]
     ]);
+  });
+
+  it("forwards main-driven workspace snapshots and detaches the exact handler", async () => {
+    const { api } = await loadApi();
+    const listener = vi.fn();
+    const snapshot = {
+      windowId: "window-2",
+      activeTabId: "tab-2",
+      tabs: [
+        {
+          tabId: "tab-2",
+          path: "D:/fixtures/note.md",
+          name: "note.md",
+          isDirty: false,
+          saveState: "idle" as const
+        }
+      ],
+      activeDocument: {
+        tabId: "tab-2",
+        path: "D:/fixtures/note.md",
+        name: "note.md",
+        content: "# Note\n",
+        encoding: "utf-8" as const,
+        isDirty: false,
+        saveState: "idle" as const
+      }
+    };
+    const detach = (api as unknown as {
+      onWorkspaceWindowSnapshot: (listener: (payload: typeof snapshot) => void) => () => void;
+    }).onWorkspaceWindowSnapshot(listener);
+    const eventCall = on.mock.calls.find(
+      ([channel]) => channel === "fishmark:workspace-window-snapshot"
+    );
+
+    expect(eventCall).toBeDefined();
+    const [, handleSnapshot] = eventCall as [
+      string,
+      (_event: unknown, payload: typeof snapshot) => void
+    ];
+    handleSnapshot({}, snapshot);
+
+    expect(listener).toHaveBeenCalledWith(snapshot);
+
+    detach();
+
+    expect(off).toHaveBeenCalledWith(
+      "fishmark:workspace-window-snapshot",
+      handleSnapshot
+    );
   });
 });

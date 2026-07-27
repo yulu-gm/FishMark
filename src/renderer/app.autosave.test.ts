@@ -1138,6 +1138,10 @@ describe("App autosave", () => {
           }
         };
       },
+      onWorkspaceWindowSnapshot(listener: (snapshot: WorkspaceWindowSnapshot) => void) {
+        void listener;
+        return () => {};
+      },
       onWorkspaceWindowCloseRequest(listener: WorkspaceWindowCloseRequestListener) {
         workspaceWindowCloseRequestListener = listener;
         return () => {

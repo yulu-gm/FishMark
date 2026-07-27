@@ -24,7 +24,10 @@ type SaveInput<TSender> = {
 
 type WorkspaceFileOperationsDependencies<TSender> = {
   workspace: Pick<WorkspaceState, "getFileOwner" | "getTabSession" | "saveTabDocument">;
-  tabOperations: Pick<KeyedOperationCoordinator<string>, "runExclusive">;
+  tabOperations: Pick<
+    KeyedOperationCoordinator<string>,
+    "runExclusiveWithLease" | "isLeaseHeld"
+  >;
   fileLocationOperations: Pick<
     KeyedOperationCoordinator<FileLocationIdentity>,
     "runExclusive"
@@ -88,8 +91,10 @@ export function createWorkspaceFileOperations<TSender>(
   }
 
   async function saveWithHeldTabLease(
-    input: SaveInput<TSender>
+    input: SaveInput<TSender>,
+    tabLease: KeyedOperationLease<string>
   ): Promise<SaveMarkdownFileResult> {
+    requireHeldTabLease(tabLease, input.tabId);
     const checkpoint = dependencies.workspace.getTabSession(input.tabId);
     requireOwnedCheckpoint(checkpoint, input.expectedWindowId);
     if (checkpoint.path === null || checkpoint.fileIdentity === null) {
@@ -189,8 +194,10 @@ export function createWorkspaceFileOperations<TSender>(
 
   async function saveAsWithHeldTabLease(
     input: SaveInput<TSender>,
+    tabLease: KeyedOperationLease<string>,
     selectedPath?: string
   ): Promise<SaveMarkdownFileResult> {
+    requireHeldTabLease(tabLease, input.tabId);
     const initialTab = dependencies.workspace.getTabSession(input.tabId);
     requireOwnedCheckpoint(initialTab, input.expectedWindowId);
     const selected = selectedPath === undefined
@@ -316,8 +323,8 @@ export function createWorkspaceFileOperations<TSender>(
 
   return {
     save(input: SaveInput<TSender>): Promise<SaveMarkdownFileResult> {
-      return dependencies.tabOperations.runExclusive(input.tabId, () =>
-        saveWithHeldTabLease(input)
+      return dependencies.tabOperations.runExclusiveWithLease(input.tabId, (lease) =>
+        saveWithHeldTabLease(input, lease)
       );
     },
     saveAs(input: SaveInput<TSender>): Promise<SaveMarkdownFileResult> {
@@ -325,14 +332,23 @@ export function createWorkspaceFileOperations<TSender>(
       requireOwnedCheckpoint(checkpoint, input.expectedWindowId);
       return dependencies.showSaveMarkdownPathDialog({ currentPath: checkpoint.path })
         .then((selected) => selected.status === "success"
-          ? dependencies.tabOperations.runExclusive(input.tabId, () =>
-              saveAsWithHeldTabLease(input, selected.path)
+          ? dependencies.tabOperations.runExclusiveWithLease(input.tabId, (lease) =>
+              saveAsWithHeldTabLease(input, lease, selected.path)
             )
           : selected);
     },
     saveWithHeldTabLease,
     saveAsWithHeldTabLease
   };
+
+  function requireHeldTabLease(
+    lease: KeyedOperationLease<string>,
+    tabId: string
+  ): void {
+    if (!dependencies.tabOperations.isLeaseHeld(lease, tabId)) {
+      throw new Error(`Workspace tab '${tabId}' requires an active operation lease.`);
+    }
+  }
 }
 
 function requireOwnedCheckpoint(

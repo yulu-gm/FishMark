@@ -216,7 +216,7 @@ class CanonicalWorkspaceState implements WorkspaceState {
     for (const tabId of window.tabIds) {
       const identity = this.tabs.get(tabId)?.fileIdentity;
       if (identity !== null && identity !== undefined) {
-        this.releaseFileIdentity(identity);
+        this.releaseFileIdentity(identity, tabId);
       }
       this.tabs.delete(tabId);
       this.tabToWindowId.delete(tabId);
@@ -358,8 +358,7 @@ class CanonicalWorkspaceState implements WorkspaceState {
     const nextIdentity = document.fileIdentity;
     const currentIdentity = context.session.fileIdentity;
     if (nextIdentity !== null && !sameFileIdentity(nextIdentity, currentIdentity)) {
-      const existingTabId = this.findIdentityOwnerTabId(nextIdentity);
-      if (existingTabId !== undefined && existingTabId !== tabId) {
+      if (this.hasIdentityConflict(nextIdentity, tabId)) {
         return Object.freeze({
           kind: "file-identity-conflict",
           projection: this.getWindowProjection(context.windowId)
@@ -374,7 +373,7 @@ class CanonicalWorkspaceState implements WorkspaceState {
     this.tabs.set(tabId, nextSession);
     if (!sameFileIdentity(currentIdentity, nextIdentity)) {
       if (currentIdentity !== null) {
-        this.releaseFileIdentity(currentIdentity);
+        this.releaseFileIdentity(currentIdentity, tabId);
       }
       if (nextIdentity !== null) {
         this.claimFileIdentity(nextIdentity, tabId);
@@ -407,8 +406,7 @@ class CanonicalWorkspaceState implements WorkspaceState {
       throw new Error("Reload cannot change the canonical file location.");
     }
     if (!sameFileIdentity(nextIdentity, currentIdentity)) {
-      const existingTabId = this.findIdentityOwnerTabId(nextIdentity);
-      if (existingTabId !== undefined && existingTabId !== tabId) {
+      if (this.hasIdentityConflict(nextIdentity, tabId)) {
         return Object.freeze({
           kind: "file-identity-conflict",
           projection: this.getWindowProjection(context.windowId)
@@ -418,7 +416,7 @@ class CanonicalWorkspaceState implements WorkspaceState {
     const nextSession = replaceDocumentFromDisk(context.session, document, null);
     this.tabs.set(tabId, nextSession);
     if (!sameFileIdentity(nextIdentity, currentIdentity)) {
-      this.releaseFileIdentity(currentIdentity);
+      this.releaseFileIdentity(currentIdentity, tabId);
       this.claimFileIdentity(nextIdentity, tabId);
     }
     return createAppliedMutationResult(this.getWindowProjection(context.windowId));
@@ -440,7 +438,7 @@ class CanonicalWorkspaceState implements WorkspaceState {
     const { context } = resolved;
 
     if (context.session.fileIdentity !== null) {
-      this.releaseFileIdentity(context.session.fileIdentity);
+      this.releaseFileIdentity(context.session.fileIdentity, tabId);
     }
 
     context.window.tabIds.splice(context.index, 1);
@@ -599,13 +597,27 @@ class CanonicalWorkspaceState implements WorkspaceState {
   }
 
   private claimFileIdentity(identity: FileIdentity, tabId: string): void {
+    if (this.hasIdentityConflict(identity, tabId)) {
+      throw new Error("Cannot claim a file identity owned by another tab.");
+    }
     this.fileLocationToTabId.set(identity.location, tabId);
     this.fileObjectToTabId.set(identity.object, tabId);
   }
 
-  private releaseFileIdentity(identity: FileIdentity): void {
-    this.fileLocationToTabId.delete(identity.location);
-    this.fileObjectToTabId.delete(identity.object);
+  private releaseFileIdentity(identity: FileIdentity, tabId: string): void {
+    if (this.fileLocationToTabId.get(identity.location) === tabId) {
+      this.fileLocationToTabId.delete(identity.location);
+    }
+    if (this.fileObjectToTabId.get(identity.object) === tabId) {
+      this.fileObjectToTabId.delete(identity.object);
+    }
+  }
+
+  private hasIdentityConflict(identity: FileIdentity, tabId: string): boolean {
+    const locationOwner = this.fileLocationToTabId.get(identity.location);
+    const objectOwner = this.fileObjectToTabId.get(identity.object);
+    return (locationOwner !== undefined && locationOwner !== tabId) ||
+      (objectOwner !== undefined && objectOwner !== tabId);
   }
 
   private selectNeighborAfterMove(source: TabContext): void {

@@ -37,7 +37,7 @@ describe("file identity resolver", () => {
     }
   });
 
-  it("gives symlink aliases one physical identity when the platform permits symlinks", async () => {
+  it("gives symlink aliases one physical identity when the platform permits symlinks", async (context) => {
     const directory = await mkdtemp(path.join(tmpdir(), "fishmark-file-identity-"));
     try {
       const original = path.join(directory, "original.md");
@@ -47,6 +47,7 @@ describe("file identity resolver", () => {
         await symlink(original, alias, "file");
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "EPERM") {
+          context.skip("This Windows environment does not permit symlink creation.");
           return;
         }
         throw error;
@@ -58,7 +59,7 @@ describe("file identity resolver", () => {
         resolver.resolveExisting(alias)
       ]);
 
-      expect(first.identity).toBe(second.identity);
+      expect(first.identity).toEqual(second.identity);
       expect(first.canonicalPath).toBe(second.canonicalPath);
     } finally {
       await rm(directory, { recursive: true, force: true });
@@ -102,6 +103,23 @@ describe("file identity resolver", () => {
       }
     });
   });
+
+  it.each(["EACCES", "EIO", "UNKNOWN"])(
+    "fails closed when stat reports %s",
+    async (code) => {
+      const failure = Object.assign(new Error("stat failed"), { code });
+      const resolver = createFileIdentityResolver({
+        platform: "linux",
+        cwd: () => "/work",
+        realpath: vi.fn(async () => "/work/note.md"),
+        stat: vi.fn(async () => {
+          throw failure;
+        })
+      });
+
+      await expect(resolver.resolveExisting("note.md")).rejects.toBe(failure);
+    }
+  );
 
   it("resolves a prospective path from its deepest existing ancestor", async () => {
     const realpath = vi.fn(async (candidate: string) => {

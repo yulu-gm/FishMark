@@ -7,7 +7,10 @@ import { createWorkspaceFileOperations } from "./workspace-file-operations";
 
 type TestDependencies = {
   workspace: WorkspaceState;
-  documentOperations: Pick<KeyedOperationCoordinator<string>, "runExclusive">;
+  documentOperations: Pick<
+    KeyedOperationCoordinator<string>,
+    "acquireExclusive" | "runExclusiveWithLease" | "isLeaseHeld"
+  >;
   promptToSaveWorkspaceTab: Parameters<typeof createCoordinator>[0]["promptToSaveWorkspaceTab"];
   saveMarkdownFileToPath: (input: {
     tabId: string;
@@ -41,13 +44,13 @@ export function createTestWorkspaceCloseCoordinator(
     workspace: dependencies.workspace,
     documentOperations: dependencies.documentOperations,
     promptToSaveWorkspaceTab: dependencies.promptToSaveWorkspaceTab,
-    persistWorkspaceTab: (tab, commitGuard) =>
+    persistWorkspaceTab: (tab, commitGuard, tabLease) =>
       fileOperations.saveWithHeldTabLease({
         sender: undefined,
         expectedWindowId: tab.windowId,
         tabId: tab.tabId,
         commitGuard
-      })
+      }, tabLease)
   });
 }
 

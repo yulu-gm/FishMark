@@ -49,6 +49,173 @@ function document(name: string, content: string): OpenMarkdownDocument & { fileI
 }
 
 describe("createWorkspaceReloadApplication", () => {
+  it("returns a typed identity error when the file location changes before reload", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = openTestDocument(
+      workspace,
+      "window-1",
+      document("moved.md", "before")
+    ).activeTabId!;
+    const changedIdentity = fileIdentity(
+      "path:c:/different/moved.md",
+      "inode:7:2"
+    );
+    const application = createWorkspaceReloadApplicationWithOperations({
+      workspace,
+      tabOperations: createKeyedOperationCoordinator(),
+      fileLocationOperations: createKeyedOperationCoordinator(),
+      fileObjectOperations: createKeyedOperationCoordinator(),
+      fileIdentityResolver: {
+        resolveExisting: vi.fn(async () => ({
+          canonicalPath: "C:/different/moved.md",
+          identity: changedIdentity,
+          exists: true as const,
+          pathKey: changedIdentity.location,
+          physicalKey: changedIdentity.object
+        }))
+      },
+      openMarkdownFileFromPath: vi.fn(),
+      recordRecentFilePath: vi.fn(async () => undefined)
+    });
+
+    await expect(
+      application.reloadTab({ tabId, expectedWindowId: "window-1" })
+    ).resolves.toEqual({
+      kind: "error",
+      error: {
+        code: "file-identity-changed",
+        message: "The Markdown file changed while reloading. Please try again."
+      }
+    });
+    expect(workspace.getTabSession(tabId).content).toBe("before");
+  });
+
+  it("returns a typed read error instead of rejecting when disk IO fails", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = openTestDocument(
+      workspace,
+      "window-1",
+      document("unreadable.md", "before")
+    ).activeTabId!;
+    const application = createWorkspaceReloadApplication({
+      workspace,
+      openMarkdownFileFromPath: vi.fn(async () => ({
+        status: "error" as const,
+        error: {
+          code: "read-failed" as const,
+          message: "EACCES: internal filesystem details"
+        }
+      })),
+      recordRecentFilePath: vi.fn(async () => undefined)
+    });
+
+    await expect(
+      application.reloadTab({ tabId, expectedWindowId: "window-1" })
+    ).resolves.toEqual({
+      kind: "error",
+      error: {
+        code: "read-failed",
+        message: "The Markdown file could not be read."
+      }
+    });
+    expect(workspace.getTabSession(tabId).content).toBe("before");
+  });
+
+  it("returns a typed read error when the identity checkpoint cannot be resolved", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const tabId = openTestDocument(
+      workspace,
+      "window-1",
+      document("missing.md", "before")
+    ).activeTabId!;
+    const application = createWorkspaceReloadApplicationWithOperations({
+      workspace,
+      tabOperations: createKeyedOperationCoordinator(),
+      fileLocationOperations: createKeyedOperationCoordinator(),
+      fileObjectOperations: createKeyedOperationCoordinator(),
+      fileIdentityResolver: {
+        resolveExisting: vi.fn(async () => {
+          throw new Error("ENOENT: internal filesystem details");
+        })
+      },
+      openMarkdownFileFromPath: vi.fn(),
+      recordRecentFilePath: vi.fn(async () => undefined)
+    });
+
+    await expect(
+      application.reloadTab({ tabId, expectedWindowId: "window-1" })
+    ).resolves.toEqual({
+      kind: "error",
+      error: {
+        code: "read-failed",
+        message: "The Markdown file could not be read."
+      }
+    });
+  });
+
+  it("returns a typed ownership conflict without replacing either tab", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const sourceIdentity = fileIdentity(
+      "path:c:/notes/source.md",
+      "inode:7:1"
+    );
+    const ownedIdentity = fileIdentity(
+      "path:c:/notes/owned.md",
+      "inode:7:2"
+    );
+    const sourceTabId = openTestDocument(workspace, "window-1", {
+      ...document("source.md", "source before"),
+      fileIdentity: sourceIdentity
+    }).activeTabId!;
+    const ownerTabId = openTestDocument(workspace, "window-1", {
+      ...document("owned.md", "owner content"),
+      fileIdentity: ownedIdentity
+    }).activeTabId!;
+    const conflictingIdentity = fileIdentity(
+      sourceIdentity.location,
+      ownedIdentity.object
+    );
+    const application = createWorkspaceReloadApplicationWithOperations({
+      workspace,
+      tabOperations: createKeyedOperationCoordinator(),
+      fileLocationOperations: createKeyedOperationCoordinator(),
+      fileObjectOperations: createKeyedOperationCoordinator(),
+      fileIdentityResolver: {
+        resolveExisting: vi.fn(async () => ({
+          canonicalPath: "C:/notes/source.md",
+          identity: conflictingIdentity,
+          exists: true as const,
+          pathKey: conflictingIdentity.location,
+          physicalKey: conflictingIdentity.object
+        }))
+      },
+      openMarkdownFileFromPath: vi.fn(async () => ({
+        status: "success" as const,
+        document: document("source.md", "disk content")
+      })),
+      recordRecentFilePath: vi.fn(async () => undefined)
+    });
+
+    await expect(
+      application.reloadTab({
+        tabId: sourceTabId,
+        expectedWindowId: "window-1"
+      })
+    ).resolves.toEqual({
+      kind: "error",
+      error: {
+        code: "file-identity-conflict",
+        message: "That file is already open in another tab."
+      }
+    });
+    expect(workspace.getTabSession(sourceTabId).content).toBe("source before");
+    expect(workspace.getTabSession(ownerTabId).content).toBe("owner content");
+  });
+
   it("migrates the object identity when an explicit reload observes inode replacement", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");

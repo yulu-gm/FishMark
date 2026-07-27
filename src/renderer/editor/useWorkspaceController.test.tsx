@@ -57,9 +57,16 @@ function renderController(input: Parameters<typeof useWorkspaceController>[0]): 
   const latestRef = createRef<WorkspaceControllerValue>();
   const container = document.createElement("div");
   const root = createRoot(container);
+  const controllerInput = {
+    ...input,
+    fishmark: Object.assign(
+      { onWorkspaceWindowSnapshot: () => () => {} },
+      input.fishmark
+    )
+  };
 
   function Probe(): null {
-    const controller = useWorkspaceController(input);
+    const controller = useWorkspaceController(controllerInput);
 
     useEffect(() => {
       latestRef.current = controller;
@@ -106,6 +113,73 @@ afterEach(() => {
 });
 
 describe("useWorkspaceController", () => {
+  it("applies main-driven owner window snapshots and detaches the subscription", () => {
+    let snapshotListener: ((snapshot: WorkspaceWindowSnapshot) => void) | undefined;
+    const detach = vi.fn();
+    const onWorkspaceWindowSnapshot = vi.fn(
+      (listener: (snapshot: WorkspaceWindowSnapshot) => void) => {
+        snapshotListener = listener;
+        return detach;
+      }
+    );
+    const initialSnapshot = createWorkspaceSnapshot({
+      tabs: [
+        {
+          tabId: "tab-1",
+          path: "C:/notes/first.md",
+          name: "first.md",
+          content: "# First\n"
+        },
+        {
+          tabId: "tab-2",
+          path: "C:/notes/second.md",
+          name: "second.md",
+          content: "# Second\n"
+        }
+      ]
+    });
+    const ownerSnapshot = createWorkspaceSnapshot({
+      activeTabId: "tab-2",
+      tabs: [
+        {
+          tabId: "tab-1",
+          path: "C:/notes/first.md",
+          name: "first.md",
+          content: "# First\n"
+        },
+        {
+          tabId: "tab-2",
+          path: "C:/notes/second.md",
+          name: "second.md",
+          content: "# Second\n"
+        }
+      ]
+    });
+    const { latestRef, root } = renderController({
+      fishmark: {
+        onWorkspaceWindowSnapshot
+      } as unknown as Window["fishmark"],
+      initialSnapshot,
+      getEditorContent: () => "# First\n",
+      showNotification: vi.fn()
+    });
+
+    expect(onWorkspaceWindowSnapshot).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      snapshotListener?.(ownerSnapshot);
+    });
+
+    expect(latestRef.current?.workspaceSnapshot).toEqual(ownerSnapshot);
+    expect(latestRef.current?.activeTabId).toBe("tab-2");
+
+    act(() => {
+      root.unmount();
+    });
+
+    expect(detach).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps active draft changes renderer-local until an explicit flush syncs the latest content", async () => {
     const updateWorkspaceTabDraft = vi.fn(async (input: { tabId: string; content: string }) =>
       createWorkspaceSnapshot({
@@ -203,7 +277,7 @@ describe("useWorkspaceController", () => {
     expect(latestRef.current?.workspaceSnapshot).toEqual(sourceSnapshot);
     expect(latestRef.current?.workspaceSnapshot?.windowId).toBe("window-1");
     act(() => {
-    root.unmount();
+      root.unmount();
     });
   });
 
@@ -774,6 +848,53 @@ describe("useWorkspaceController", () => {
     expect(showNotification).toHaveBeenCalledWith({
       kind: "warning",
       message: "重新加载期间检测到新的编辑，已保留当前内容。请重试。"
+    });
+
+    act(() => {
+    root.unmount();
+    });
+  });
+
+  it("keeps the current workspace and reports a stable typed reload error", async () => {
+    const showNotification = vi.fn();
+    const initialSnapshot = createWorkspaceSnapshot({
+      tabs: [
+        {
+          tabId: "tab-1",
+          path: "C:/notes/note.md",
+          name: "note.md",
+          content: "# Local content\n"
+        }
+      ]
+    });
+    const reloadWorkspaceTabFromPath = vi.fn(async () => ({
+      kind: "error" as const,
+      error: {
+        code: "file-identity-changed" as const,
+        message: "internal text must not leak"
+      }
+    }));
+    const { latestRef, root } = renderController({
+      fishmark: {
+        reloadWorkspaceTabFromPath
+      } as unknown as Window["fishmark"],
+      initialSnapshot,
+      getEditorContent: () => "# Local content\n",
+      showNotification
+    });
+
+    let didReload: boolean | undefined;
+    await act(async () => {
+      didReload = await latestRef.current?.reloadWorkspaceTabFromPath({
+        tabId: "tab-1"
+      });
+    });
+
+    expect(didReload).toBe(false);
+    expect(latestRef.current?.workspaceSnapshot).toEqual(initialSnapshot);
+    expect(showNotification).toHaveBeenCalledWith({
+      kind: "error",
+      message: "The Markdown file changed while reloading. Please try again."
     });
 
     act(() => {

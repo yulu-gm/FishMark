@@ -1,10 +1,18 @@
-export interface KeyedOperationLease {
+declare const keyedOperationLeaseBrand: unique symbol;
+
+export interface KeyedOperationLease<TKey extends string = string> {
+  readonly [keyedOperationLeaseBrand]: TKey;
   release(): void;
 }
 
 export interface KeyedOperationCoordinator<TKey extends string> {
   runExclusive<T>(key: TKey, operation: () => Promise<T>): Promise<T>;
-  acquireExclusive(keys: readonly TKey[]): Promise<KeyedOperationLease>;
+  runExclusiveWithLease<T>(
+    key: TKey,
+    operation: (lease: KeyedOperationLease<TKey>) => Promise<T>
+  ): Promise<T>;
+  acquireExclusive(keys: readonly TKey[]): Promise<KeyedOperationLease<TKey>>;
+  isLeaseHeld(lease: KeyedOperationLease<TKey>, key: TKey): boolean;
 }
 
 type PendingOperation = {
@@ -13,8 +21,12 @@ type PendingOperation = {
 
 export function createKeyedOperationCoordinator<TKey extends string>(): KeyedOperationCoordinator<TKey> {
   const tails = new Map<TKey, PendingOperation>();
+  const capabilities = new WeakMap<
+    object,
+    { readonly keys: ReadonlySet<TKey>; active: boolean }
+  >();
 
-  async function acquireOne(key: TKey): Promise<KeyedOperationLease> {
+  async function acquireOne(key: TKey): Promise<{ release(): void }> {
     const previous = tails.get(key)?.completion ?? Promise.resolve();
     let releaseCurrent!: () => void;
     const currentGate = new Promise<void>((resolve) => {
@@ -46,16 +58,16 @@ export function createKeyedOperationCoordinator<TKey extends string>(): KeyedOpe
 
   async function acquireExclusive(
     keys: readonly TKey[]
-  ): Promise<KeyedOperationLease> {
+  ): Promise<KeyedOperationLease<TKey>> {
     const orderedKeys = [...new Set(keys)].sort();
-    const leases: KeyedOperationLease[] = [];
+    const leases: Array<{ release(): void }> = [];
 
     for (const key of orderedKeys) {
       leases.push(await acquireOne(key));
     }
 
     let released = false;
-    return {
+    const capability = {
       release(): void {
         if (released) {
           return;
@@ -65,7 +77,32 @@ export function createKeyedOperationCoordinator<TKey extends string>(): KeyedOpe
           leases[index]?.release();
         }
       }
+    } as KeyedOperationLease<TKey>;
+    capabilities.set(capability, {
+      keys: new Set(orderedKeys),
+      active: true
+    });
+    const release = capability.release.bind(capability);
+    capability.release = (): void => {
+      const state = capabilities.get(capability);
+      if (state !== undefined) {
+        state.active = false;
+      }
+      release();
     };
+    return capability;
+  }
+
+  async function runExclusiveWithLease<T>(
+    key: TKey,
+    operation: (lease: KeyedOperationLease<TKey>) => Promise<T>
+  ): Promise<T> {
+    const lease = await acquireExclusive([key]);
+    try {
+      return await operation(lease);
+    } finally {
+      lease.release();
+    }
   }
 
   return {
@@ -73,13 +110,13 @@ export function createKeyedOperationCoordinator<TKey extends string>(): KeyedOpe
       key: TKey,
       operation: () => Promise<T>
     ): Promise<T> {
-      const lease = await acquireExclusive([key]);
-      try {
-        return await operation();
-      } finally {
-        lease.release();
-      }
+      return runExclusiveWithLease(key, async () => operation());
     },
-    acquireExclusive
+    runExclusiveWithLease,
+    acquireExclusive,
+    isLeaseHeld(lease, key): boolean {
+      const state = capabilities.get(lease);
+      return state?.active === true && state.keys.has(key);
+    }
   };
 }

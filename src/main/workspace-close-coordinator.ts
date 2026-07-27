@@ -6,7 +6,10 @@ import type {
 } from "@fishmark/workspace-domain";
 
 import type { SaveMarkdownFileResult } from "../shared/save-markdown-file";
-import type { KeyedOperationCoordinator } from "./keyed-operation-coordinator";
+import type {
+  KeyedOperationCoordinator,
+  KeyedOperationLease
+} from "./keyed-operation-coordinator";
 
 type DirtyWorkspaceTabChoice = "save" | "discard" | "cancel";
 
@@ -36,14 +39,15 @@ type WorkspaceCloseCoordinatorDependencies = {
   >;
   documentOperations: Pick<
     KeyedOperationCoordinator<string>,
-    "runExclusive"
+    "acquireExclusive" | "runExclusiveWithLease"
   >;
   promptToSaveWorkspaceTab: (
     tab: DocumentSessionProjection
   ) => Promise<DirtyWorkspaceTabChoice>;
   persistWorkspaceTab: (
     tab: DocumentSessionProjection,
-    commitGuard: () => boolean
+    commitGuard: () => boolean,
+    tabLease: KeyedOperationLease<string>
   ) => Promise<SaveMarkdownFileResult>;
 };
 
@@ -57,14 +61,15 @@ export function createWorkspaceCloseCoordinator(
 ): {
   closeTab: (input: CloseWorkspaceTabRequest) => Promise<CloseWorkspaceTabResult>;
   confirmWindowClose: (
-    input: ConfirmWorkspaceWindowCloseRequest
+    input: ConfirmWorkspaceWindowCloseRequest,
+    tabLease?: KeyedOperationLease<string>
   ) => Promise<WorkspaceWindowCloseConfirmation | null>;
 } {
   async function closeTab(
     input: CloseWorkspaceTabRequest
   ): Promise<CloseWorkspaceTabResult> {
-    return dependencies.documentOperations.runExclusive(input.tabId, async () => {
-      const shouldProceed = await confirmTabCheckpoint(input, () => true);
+    return dependencies.documentOperations.runExclusiveWithLease(input.tabId, async (lease) => {
+      const shouldProceed = await confirmTabCheckpoint(input, () => true, lease);
       if (!shouldProceed || getMatchingCheckpoint(input) === null) {
         return cancelledResult(input.expectedWindowId);
       }
@@ -83,7 +88,29 @@ export function createWorkspaceCloseCoordinator(
   }
 
   async function confirmWindowClose(
-    input: ConfirmWorkspaceWindowCloseRequest
+    input: ConfirmWorkspaceWindowCloseRequest,
+    tabLease?: KeyedOperationLease<string>
+  ): Promise<WorkspaceWindowCloseConfirmation | null> {
+    if (tabLease !== undefined) {
+      return confirmWindowCloseWithLease(input, tabLease);
+    }
+    let tabIds: readonly string[];
+    try {
+      tabIds = dependencies.workspace.getWindowTabIds(input.windowId);
+    } catch {
+      return null;
+    }
+    const acquired = await dependencies.documentOperations.acquireExclusive(tabIds);
+    try {
+      return await confirmWindowCloseWithLease(input, acquired);
+    } finally {
+      acquired.release();
+    }
+  }
+
+  async function confirmWindowCloseWithLease(
+    input: ConfirmWorkspaceWindowCloseRequest,
+    tabLease: KeyedOperationLease<string>
   ): Promise<WorkspaceWindowCloseConfirmation | null> {
     if (!input.isActive()) {
       return null;
@@ -118,7 +145,7 @@ export function createWorkspaceCloseCoordinator(
     for (const checkpoint of checkpoints) {
       if (
         !input.isActive() ||
-        !(await confirmTabCheckpoint(checkpoint, input.isActive)) ||
+        !(await confirmTabCheckpoint(checkpoint, input.isActive, tabLease)) ||
         !input.isActive()
       ) {
         return null;
@@ -169,7 +196,8 @@ export function createWorkspaceCloseCoordinator(
 
   async function confirmTabCheckpoint(
     input: CloseWorkspaceTabRequest,
-    isActive: () => boolean
+    isActive: () => boolean,
+    tabLease: KeyedOperationLease<string>
   ): Promise<boolean> {
     if (!isActive()) {
       return false;
@@ -201,7 +229,11 @@ export function createWorkspaceCloseCoordinator(
       return false;
     }
 
-    const result = await dependencies.persistWorkspaceTab(checkpoint, isActive);
+    const result = await dependencies.persistWorkspaceTab(
+      checkpoint,
+      isActive,
+      tabLease
+    );
 
     if (!isActive()) {
       return false;

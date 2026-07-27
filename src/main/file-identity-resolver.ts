@@ -137,9 +137,21 @@ async function resolveFilesystemIdentity(
   }
   try {
     return reliableFilesystemIdentity(await stat(canonicalPath));
-  } catch {
-    return null;
+  } catch (error) {
+    if (isUnsupportedStatError(error)) {
+      return null;
+    }
+    throw error;
   }
+}
+
+function isUnsupportedStatError(error: unknown): boolean {
+  if (!(error instanceof Error) || !("code" in error)) {
+    return false;
+  }
+  return error.code === "ENOSYS" ||
+    error.code === "ENOTSUP" ||
+    error.code === "EOPNOTSUPP";
 }
 
 function reliableFilesystemIdentity(stat: {
