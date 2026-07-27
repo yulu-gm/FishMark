@@ -191,4 +191,29 @@ describe("workspace owner-tab activation application", () => {
     expect(focusWindow).not.toHaveBeenCalled();
     expect(workspace.getWindowProjection("window-1").activeTabId).toBe(latestTabId);
   });
+
+  it("retries when the same window id resolves to a different window instance after confirmation", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const identity = fileIdentity("location:note", "object:note");
+    const tabId = openDocument(workspace, "window-1", identity, "note.md");
+    const firstWindow = { windowId: "window-1", destroyed: false };
+    const replacementWindow = { windowId: "window-1", destroyed: false };
+    const windows = new Map([["window-1", firstWindow]]);
+    const confirmation = createDeferred<boolean>();
+    const focusWindow = vi.fn();
+    const application = createApplication({
+      workspace,
+      windows,
+      activationResult: confirmation.promise,
+      focusWindow
+    });
+
+    const result = application.activateOwnerWindowTab("window-1", tabId, identity);
+    windows.set("window-1", replacementWindow);
+    confirmation.resolve(true);
+
+    await expect(result).resolves.toBe("retry");
+    expect(focusWindow).not.toHaveBeenCalled();
+  });
 });

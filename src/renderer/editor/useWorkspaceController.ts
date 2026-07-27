@@ -14,10 +14,17 @@ import {
   setOpenState,
   type EditorShellState
 } from "./editor-shell-state";
+import { WorkspaceDraftOutbox } from "./workspace-draft-outbox";
+import { WorkspaceMutationCoordinator } from "./workspace-mutation-coordinator";
 
 type ShowNotification = (notification: AppNotification) => void;
 type OpenResult = "opened" | "cancelled" | "failed";
 const WORKSPACE_ACTIVATION_DRAFT_DRAIN_LIMIT = 16;
+const WORKSPACE_MUTATION_SUPERSEDED = Symbol("workspace-mutation-superseded");
+
+type WorkspaceMutationContext = Readonly<{
+  isCurrent: () => boolean;
+}>;
 
 export function useWorkspaceController(input: {
   fishmark: Window["fishmark"];
@@ -40,7 +47,12 @@ export function useWorkspaceController(input: {
   const workspaceDraftSyncFailureRef = useRef<unknown>(null);
   const workspaceDraftSyncRetryPendingRef = useRef(false);
   const lastDraftSyncRequestRef = useRef<{ tabId: string; content: string } | null>(null);
-  const pendingWorkspaceDraftRef = useRef<{ tabId: string; content: string } | null>(null);
+  const workspaceDraftOutboxRef = useRef(new WorkspaceDraftOutbox());
+  const canonicalWorkspaceSnapshotRef = useRef<WorkspaceWindowSnapshot | null>(
+    initialSnapshot ?? null
+  );
+  const editorContentTabIdRef = useRef(initialSnapshot?.activeTabId ?? null);
+  const workspaceMutationCoordinatorRef = useRef(new WorkspaceMutationCoordinator());
   const activationGenerationRef = useRef(0);
   const mountedRef = useRef(true);
 
@@ -62,6 +74,15 @@ export function useWorkspaceController(input: {
     };
   }, []);
 
+  const runWorkspaceMutation = useCallback(<T>(
+    operation: (context: WorkspaceMutationContext) => Promise<T>
+  ): Promise<T> => {
+    const context: WorkspaceMutationContext = {
+      isCurrent: () => mountedRef.current
+    };
+    return workspaceMutationCoordinatorRef.current.enqueue(() => operation(context));
+  }, []);
+
   const getState = useCallback((): EditorShellState => stateRef.current, []);
   const getCurrentActiveDocument = useCallback(() => getActiveDocument(stateRef.current), []);
   const getCurrentActiveTabId = useCallback(() => getActiveTabId(stateRef.current), []);
@@ -71,16 +92,28 @@ export function useWorkspaceController(input: {
       snapshot: WorkspaceWindowSnapshot,
       options: { preserveActiveDocumentDraft?: boolean } = {}
     ): EditorShellState => {
+      canonicalWorkspaceSnapshotRef.current = snapshot;
+      const previousActiveTabId = getActiveTabId(stateRef.current);
+      if (previousActiveTabId !== snapshot.activeTabId) {
+        editorContentTabIdRef.current = null;
+      }
       let nextState = stateRef.current;
 
       applyState((current) => {
-        nextState = setOpenState(
+        const canonicalState = setOpenState(
           applyWorkspaceSnapshot(current, snapshot, {
             currentEditorContent: getEditorContent(),
             preserveActiveDocumentDraft: options.preserveActiveDocumentDraft ?? false
           }),
           "idle"
         );
+        const activeTabId = getActiveTabId(canonicalState);
+        const pendingContent = activeTabId === null
+          ? undefined
+          : workspaceDraftOutboxRef.current.get(activeTabId);
+        nextState = activeTabId !== null && pendingContent !== undefined
+          ? applyRendererLocalWorkspaceDraft(canonicalState, activeTabId, pendingContent)
+          : canonicalState;
         return nextState;
       });
 
@@ -93,7 +126,10 @@ export function useWorkspaceController(input: {
     async (
       tabId: string,
       content: string,
-      options: { applySnapshot?: boolean } = {}
+      options: {
+        applySnapshot?: boolean;
+        canCommitSnapshot?: () => boolean;
+      } = {}
     ): Promise<WorkspaceWindowSnapshot> => {
       try {
         lastDraftSyncRequestRef.current = { tabId, content };
@@ -102,18 +138,15 @@ export function useWorkspaceController(input: {
           content
         });
 
-        if (
-          pendingWorkspaceDraftRef.current?.tabId === tabId &&
-          pendingWorkspaceDraftRef.current.content === content
-        ) {
-          pendingWorkspaceDraftRef.current = null;
-        }
+        workspaceDraftOutboxRef.current.acknowledge(tabId, content);
         workspaceDraftSyncFailureRef.current = null;
         workspaceDraftSyncRetryPendingRef.current = false;
-        if (options.applySnapshot ?? true) {
-          applyWorkspaceWindowSnapshot(snapshot, {
-            preserveActiveDocumentDraft: true
-          });
+        canonicalWorkspaceSnapshotRef.current = snapshot;
+        if (
+          (options.applySnapshot ?? true) &&
+          (options.canCommitSnapshot?.() ?? true)
+        ) {
+          applyWorkspaceWindowSnapshot(snapshot);
         }
         return snapshot;
       } catch (error) {
@@ -128,7 +161,10 @@ export function useWorkspaceController(input: {
     (
       tabId: string,
       content: string,
-      options: { applySnapshot?: boolean } = {}
+      options: {
+        applySnapshot?: boolean;
+        canCommitSnapshot?: () => boolean;
+      } = {}
     ): Promise<WorkspaceWindowSnapshot> => {
       const nextSync = workspaceDraftSyncQueueRef.current.then(() =>
         syncActiveWorkspaceDraft(tabId, content, options)
@@ -144,8 +180,12 @@ export function useWorkspaceController(input: {
     [syncActiveWorkspaceDraft]
   );
 
-  const flushActiveWorkspaceDraft = useCallback(async (
-    options: { maxSyncPasses?: number } = {}
+  const flushActiveWorkspaceDraftNow = useCallback(async (
+    options: {
+      maxSyncPasses?: number;
+      applySnapshots?: boolean;
+      context?: WorkspaceMutationContext;
+    } = {}
   ): Promise<void> => {
     let syncPasses = 0;
     const queueBoundedDraftSync = async (
@@ -161,7 +201,13 @@ export function useWorkspaceController(input: {
         );
       }
       syncPasses += 1;
-      await queueWorkspaceDraftSync(tabId, content);
+      await queueWorkspaceDraftSync(tabId, content, {
+        applySnapshot: options.applySnapshots ?? true,
+        canCommitSnapshot: options.context?.isCurrent
+      });
+      if (options.context !== undefined && !options.context.isCurrent()) {
+        throw WORKSPACE_MUTATION_SUPERSEDED;
+      }
     };
 
     while (true) {
@@ -177,16 +223,17 @@ export function useWorkspaceController(input: {
         return;
       }
 
-      const currentContent = getEditorContent();
+      const currentContent = editorContentTabIdRef.current === activeDocument.tabId
+        ? getEditorContent()
+        : workspaceDraftOutboxRef.current.get(activeDocument.tabId) ?? activeDocument.content;
       const lastDraftSyncRequest = lastDraftSyncRequestRef.current;
-      const pendingWorkspaceDraft = pendingWorkspaceDraftRef.current;
+      const pendingWorkspaceDraft = workspaceDraftOutboxRef.current.get(
+        activeDocument.tabId
+      );
 
-      if (pendingWorkspaceDraft?.tabId === activeDocument.tabId) {
-        if (pendingWorkspaceDraft.content !== currentContent) {
-          pendingWorkspaceDraftRef.current = {
-            tabId: activeDocument.tabId,
-            content: currentContent
-          };
+      if (pendingWorkspaceDraft !== undefined) {
+        if (pendingWorkspaceDraft !== currentContent) {
+          workspaceDraftOutboxRef.current.set(activeDocument.tabId, currentContent);
           applyState((current) =>
             applyRendererLocalWorkspaceDraft(current, activeDocument.tabId, currentContent)
           );
@@ -215,7 +262,10 @@ export function useWorkspaceController(input: {
           return;
         }
 
-        if (getEditorContent() === latestDocument.content) {
+        const latestEditorContent = editorContentTabIdRef.current === latestDocument.tabId
+          ? getEditorContent()
+          : workspaceDraftOutboxRef.current.get(latestDocument.tabId) ?? latestDocument.content;
+        if (latestEditorContent === latestDocument.content) {
           if (workspaceDraftSyncFailureRef.current !== null) {
             workspaceDraftSyncRetryPendingRef.current = true;
             throw workspaceDraftSyncFailureRef.current;
@@ -226,35 +276,91 @@ export function useWorkspaceController(input: {
         continue;
       }
 
+      workspaceDraftOutboxRef.current.set(activeDocument.tabId, currentContent);
+      applyState((current) =>
+        applyRendererLocalWorkspaceDraft(current, activeDocument.tabId, currentContent)
+      );
       await queueBoundedDraftSync(activeDocument.tabId, currentContent);
     }
   }, [applyState, getEditorContent, queueWorkspaceDraftSync]);
 
-  const updateDraft = useCallback(
-    async (content: string): Promise<void> => {
-      const activeTabId = getActiveTabId(stateRef.current);
-
-      if (!activeTabId) {
+  const drainPendingWorkspaceDraft = useCallback(async (
+    tabId: string,
+    context: WorkspaceMutationContext
+  ): Promise<void> => {
+    for (let pass = 0; pass < WORKSPACE_ACTIVATION_DRAFT_DRAIN_LIMIT; pass += 1) {
+      const pendingContent = workspaceDraftOutboxRef.current.get(tabId);
+      if (pendingContent === undefined) {
         return;
       }
 
-      pendingWorkspaceDraftRef.current = { tabId: activeTabId, content };
-      applyState((current) => applyRendererLocalWorkspaceDraft(current, activeTabId, content));
+      await queueWorkspaceDraftSync(tabId, pendingContent, {
+        applySnapshot: false,
+        canCommitSnapshot: context.isCurrent
+      });
+      if (!context.isCurrent()) {
+        throw WORKSPACE_MUTATION_SUPERSEDED;
+      }
+    }
+
+    if (workspaceDraftOutboxRef.current.has(tabId)) {
+      throw new Error(
+        "Workspace tab activation was cancelled because editing did not settle."
+      );
+    }
+  }, [queueWorkspaceDraftSync]);
+
+  const flushActiveWorkspaceDraft = useCallback(
+    (): Promise<void> => runWorkspaceMutation(async (context) => {
+      if (!context.isCurrent()) {
+        return;
+      }
+      await flushActiveWorkspaceDraftNow({ context });
+    }),
+    [flushActiveWorkspaceDraftNow, runWorkspaceMutation]
+  );
+
+  const updateDraft = useCallback(
+    async (inputValue: { tabId: string; content: string }): Promise<void> => {
+      if (!stateRef.current.workspaceSnapshot?.tabs.some(
+        (tab) => tab.tabId === inputValue.tabId
+      )) {
+        return;
+      }
+
+      workspaceDraftOutboxRef.current.set(inputValue.tabId, inputValue.content);
+      if (getActiveTabId(stateRef.current) === inputValue.tabId) {
+        editorContentTabIdRef.current = inputValue.tabId;
+      }
+      applyState((current) => applyRendererLocalWorkspaceDraft(
+        current,
+        inputValue.tabId,
+        inputValue.content
+      ));
     },
     [applyState]
   );
 
   const refreshWorkspaceSnapshot = useCallback(
-    async (
+    (
       options: { preserveActiveDocumentDraft?: boolean } = {}
-    ): Promise<WorkspaceWindowSnapshot | null> => {
+    ): Promise<WorkspaceWindowSnapshot | null> => runWorkspaceMutation(async (context) => {
+      if (!context.isCurrent()) {
+        return null;
+      }
+
       const snapshot = await fishmark.getWorkspaceSnapshot();
+      canonicalWorkspaceSnapshotRef.current = snapshot;
+      if (!context.isCurrent()) {
+        return null;
+      }
+
       applyWorkspaceWindowSnapshot(snapshot, {
         preserveActiveDocumentDraft: options.preserveActiveDocumentDraft ?? true
       });
       return snapshot;
-    },
-    [applyWorkspaceWindowSnapshot, fishmark]
+    }),
+    [applyWorkspaceWindowSnapshot, fishmark, runWorkspaceMutation]
   );
 
   const loadInitialWorkspaceSnapshot = useCallback(async (): Promise<void> => {
@@ -272,48 +378,72 @@ export function useWorkspaceController(input: {
     [applyState]
   );
 
-  const openMarkdown = useCallback(async (): Promise<OpenResult> => {
-    try {
-      await flushActiveWorkspaceDraft();
-      setWorkspaceOpenState("opening");
-      const result = await fishmark.openWorkspaceFile();
+  const openMarkdown = useCallback((): Promise<OpenResult> =>
+    runWorkspaceMutation(async (context) => {
+      try {
+        if (!context.isCurrent()) {
+          return "cancelled";
+        }
+        await flushActiveWorkspaceDraftNow({ context });
+        if (!context.isCurrent()) {
+          return "cancelled";
+        }
+        setWorkspaceOpenState("opening");
+        const result = await fishmark.openWorkspaceFile();
 
-      if (result.kind === "cancelled") {
-        setWorkspaceOpenState("idle");
-        return "cancelled";
-      }
+        if (result.kind === "cancelled") {
+          if (context.isCurrent()) {
+            setWorkspaceOpenState("idle");
+          }
+          return "cancelled";
+        }
 
-      if (result.kind === "error") {
-        throw new Error(result.error.message);
-      }
+        if (result.kind === "error") {
+          throw new Error(result.error.message);
+        }
 
-      if (result.kind === "focused-existing") {
-        setWorkspaceOpenState("idle");
+        if (result.kind === "focused-existing") {
+          if (context.isCurrent()) {
+            setWorkspaceOpenState("idle");
+          }
+          return "opened";
+        }
+
+        canonicalWorkspaceSnapshotRef.current = result.snapshot;
+        if (!context.isCurrent()) {
+          return "cancelled";
+        }
+        applyWorkspaceWindowSnapshot(result.snapshot);
         return "opened";
+      } catch (error) {
+        if (context.isCurrent()) {
+          setWorkspaceOpenState("idle");
+          showNotification({
+            kind: "error",
+            message: error instanceof Error ? error.message : String(error)
+          });
+        }
+        return error === WORKSPACE_MUTATION_SUPERSEDED ? "cancelled" : "failed";
       }
-
-      applyWorkspaceWindowSnapshot(result.snapshot);
-      return "opened";
-    } catch (error) {
-      setWorkspaceOpenState("idle");
-      showNotification({
-        kind: "error",
-        message: error instanceof Error ? error.message : String(error)
-      });
-      return "failed";
-    }
-  }, [
+    }), [
     applyWorkspaceWindowSnapshot,
     fishmark,
-    flushActiveWorkspaceDraft,
+    flushActiveWorkspaceDraftNow,
+    runWorkspaceMutation,
     setWorkspaceOpenState,
     showNotification
   ]);
 
   const openMarkdownFromPath = useCallback(
-    async (targetPath: string): Promise<boolean> => {
+    (targetPath: string): Promise<boolean> => runWorkspaceMutation(async (context) => {
       try {
-        await flushActiveWorkspaceDraft();
+        if (!context.isCurrent()) {
+          return false;
+        }
+        await flushActiveWorkspaceDraftNow({ context });
+        if (!context.isCurrent()) {
+          return false;
+        }
         setWorkspaceOpenState("opening");
         const result = await fishmark.openWorkspaceFileFromPath(targetPath);
 
@@ -322,38 +452,53 @@ export function useWorkspaceController(input: {
         }
 
         if (result.kind === "focused-existing") {
-          setWorkspaceOpenState("idle");
+          if (context.isCurrent()) {
+            setWorkspaceOpenState("idle");
+          }
           return true;
         }
 
+        canonicalWorkspaceSnapshotRef.current = result.snapshot;
+        if (!context.isCurrent()) {
+          return false;
+        }
         applyWorkspaceWindowSnapshot(result.snapshot);
         return true;
       } catch (error) {
-        setWorkspaceOpenState("idle");
-        showNotification({
-          kind: "error",
-          message: error instanceof Error ? error.message : String(error)
-        });
+        if (context.isCurrent()) {
+          setWorkspaceOpenState("idle");
+          showNotification({
+            kind: "error",
+            message: error instanceof Error ? error.message : String(error)
+          });
+        }
         return false;
       }
-    },
+    }),
     [
       applyWorkspaceWindowSnapshot,
       fishmark,
-      flushActiveWorkspaceDraft,
+      flushActiveWorkspaceDraftNow,
+      runWorkspaceMutation,
       setWorkspaceOpenState,
       showNotification
     ]
   );
 
   const openMarkdownFromPaths = useCallback(
-    async (targetPaths: string[]): Promise<boolean> => {
+    (targetPaths: string[]): Promise<boolean> => runWorkspaceMutation(async (context) => {
       if (targetPaths.length === 0) {
         return false;
       }
 
       try {
-        await flushActiveWorkspaceDraft();
+        if (!context.isCurrent()) {
+          return false;
+        }
+        await flushActiveWorkspaceDraftNow({ context });
+        if (!context.isCurrent()) {
+          return false;
+        }
         setWorkspaceOpenState("opening");
 
         for (const targetPath of targetPaths) {
@@ -367,108 +512,17 @@ export function useWorkspaceController(input: {
             continue;
           }
 
+          canonicalWorkspaceSnapshotRef.current = result.snapshot;
+          if (!context.isCurrent()) {
+            return false;
+          }
           applyWorkspaceWindowSnapshot(result.snapshot);
         }
 
         return true;
       } catch (error) {
-        setWorkspaceOpenState("idle");
-        showNotification({
-          kind: "error",
-          message: error instanceof Error ? error.message : String(error)
-        });
-        return false;
-      }
-    },
-    [
-      applyWorkspaceWindowSnapshot,
-      fishmark,
-      flushActiveWorkspaceDraft,
-      setWorkspaceOpenState,
-      showNotification
-    ]
-  );
-
-  const createUntitledMarkdown = useCallback(async (): Promise<boolean> => {
-    try {
-      await flushActiveWorkspaceDraft();
-      const snapshot = await fishmark.createWorkspaceTab({
-        kind: "untitled"
-      });
-      applyWorkspaceWindowSnapshot(snapshot);
-      return true;
-    } catch (error) {
-      showNotification({
-        kind: "error",
-        message: error instanceof Error ? error.message : String(error)
-      });
-      return false;
-    }
-  }, [applyWorkspaceWindowSnapshot, fishmark, flushActiveWorkspaceDraft, showNotification]);
-
-  const activateWorkspaceTab = useCallback(
-    async (tabId: string): Promise<boolean> => {
-      const sourceTabId = getActiveTabId(stateRef.current);
-      const activationGeneration = ++activationGenerationRef.current;
-      const isCurrentActivation = (): boolean =>
-        mountedRef.current && activationGenerationRef.current === activationGeneration;
-
-      try {
-        await flushActiveWorkspaceDraft({
-          maxSyncPasses: WORKSPACE_ACTIVATION_DRAFT_DRAIN_LIMIT
-        });
-        if (!isCurrentActivation()) {
-          return false;
-        }
-        if (sourceTabId === tabId) {
-          return getActiveTabId(stateRef.current) === tabId;
-        }
-
-        let snapshot = await fishmark.activateWorkspaceTab({ tabId });
-        if (!isCurrentActivation()) {
-          return false;
-        }
-
-        if (sourceTabId !== null) {
-          for (
-            let pass = 0;
-            pass < WORKSPACE_ACTIVATION_DRAFT_DRAIN_LIMIT;
-            pass += 1
-          ) {
-            const pendingDraft = pendingWorkspaceDraftRef.current;
-            if (pendingDraft?.tabId !== sourceTabId) {
-              break;
-            }
-            snapshot = await queueWorkspaceDraftSync(
-              sourceTabId,
-              pendingDraft.content,
-              { applySnapshot: false }
-            );
-            if (!isCurrentActivation()) {
-              return false;
-            }
-          }
-
-          if (pendingWorkspaceDraftRef.current?.tabId === sourceTabId) {
-            const rollbackSnapshot = await fishmark.activateWorkspaceTab({
-              tabId: sourceTabId
-            });
-            if (!isCurrentActivation()) {
-              return false;
-            }
-            applyWorkspaceWindowSnapshot(rollbackSnapshot, {
-              preserveActiveDocumentDraft: true
-            });
-            throw new Error(
-              "Workspace tab activation was cancelled because editing did not settle."
-            );
-          }
-        }
-
-        applyWorkspaceWindowSnapshot(snapshot);
-        return true;
-      } catch (error) {
-        if (isCurrentActivation()) {
+        if (context.isCurrent()) {
+          setWorkspaceOpenState("idle");
           showNotification({
             kind: "error",
             message: error instanceof Error ? error.message : String(error)
@@ -476,12 +530,158 @@ export function useWorkspaceController(input: {
         }
         return false;
       }
-    },
+    }),
     [
       applyWorkspaceWindowSnapshot,
       fishmark,
-      flushActiveWorkspaceDraft,
-      queueWorkspaceDraftSync,
+      flushActiveWorkspaceDraftNow,
+      runWorkspaceMutation,
+      setWorkspaceOpenState,
+      showNotification
+    ]
+  );
+
+  const createUntitledMarkdown = useCallback((): Promise<boolean> =>
+    runWorkspaceMutation(async (context) => {
+      try {
+        if (!context.isCurrent()) {
+          return false;
+        }
+        await flushActiveWorkspaceDraftNow({ context });
+        if (!context.isCurrent()) {
+          return false;
+        }
+        const snapshot = await fishmark.createWorkspaceTab({
+          kind: "untitled"
+        });
+        canonicalWorkspaceSnapshotRef.current = snapshot;
+        if (!context.isCurrent()) {
+          return false;
+        }
+        applyWorkspaceWindowSnapshot(snapshot);
+        return true;
+      } catch (error) {
+        if (context.isCurrent()) {
+          showNotification({
+            kind: "error",
+            message: error instanceof Error ? error.message : String(error)
+          });
+        }
+        return false;
+      }
+    }), [
+    applyWorkspaceWindowSnapshot,
+    fishmark,
+    flushActiveWorkspaceDraftNow,
+    runWorkspaceMutation,
+    showNotification
+  ]);
+
+  const activateWorkspaceTab = useCallback(
+    (tabId: string): Promise<boolean> => {
+      const sourceDocument = getActiveDocument(stateRef.current);
+      const sourceTabId = sourceDocument?.tabId ?? null;
+      if (
+        sourceDocument !== null &&
+        editorContentTabIdRef.current === sourceDocument.tabId
+      ) {
+        const sourceContent = getEditorContent();
+        if (
+          workspaceDraftOutboxRef.current.has(sourceDocument.tabId) ||
+          sourceContent !== sourceDocument.content
+        ) {
+          workspaceDraftOutboxRef.current.set(sourceDocument.tabId, sourceContent);
+          applyState((current) =>
+            applyRendererLocalWorkspaceDraft(current, sourceDocument.tabId, sourceContent)
+          );
+        }
+      }
+      const activationGeneration = ++activationGenerationRef.current;
+      const isLatestActivation = (): boolean =>
+        activationGenerationRef.current === activationGeneration;
+
+      return runWorkspaceMutation(async (context) => {
+      let activationDispatched = false;
+      let activationConfirmed = false;
+
+      try {
+        if (!context.isCurrent() || !isLatestActivation()) {
+          return false;
+        }
+        if (sourceTabId !== null) {
+          await drainPendingWorkspaceDraft(sourceTabId, context);
+        }
+
+        const canonicalSnapshot = canonicalWorkspaceSnapshotRef.current;
+        if (canonicalSnapshot?.activeTabId !== tabId) {
+          activationDispatched = true;
+          const snapshot = await fishmark.activateWorkspaceTab({ tabId });
+          activationConfirmed = true;
+          canonicalWorkspaceSnapshotRef.current = snapshot;
+          if (!context.isCurrent()) {
+            return false;
+          }
+          applyWorkspaceWindowSnapshot(snapshot);
+        } else {
+          applyWorkspaceWindowSnapshot(canonicalSnapshot, {
+            preserveActiveDocumentDraft: false
+          });
+        }
+
+        if (!isLatestActivation()) {
+          return false;
+        }
+
+        const tabsToDrain = new Set<string>();
+        if (sourceTabId !== null) {
+          tabsToDrain.add(sourceTabId);
+        }
+        tabsToDrain.add(tabId);
+        for (const pendingTabId of tabsToDrain) {
+          await drainPendingWorkspaceDraft(pendingTabId, context);
+        }
+
+        const latestCanonicalSnapshot = canonicalWorkspaceSnapshotRef.current;
+        if (latestCanonicalSnapshot !== null && context.isCurrent()) {
+          applyWorkspaceWindowSnapshot(latestCanonicalSnapshot);
+        }
+        return context.isCurrent() &&
+          isLatestActivation() &&
+          getActiveTabId(stateRef.current) === tabId;
+      } catch (error) {
+        if (error === WORKSPACE_MUTATION_SUPERSEDED || !context.isCurrent()) {
+          return false;
+        }
+
+        if (activationDispatched && !activationConfirmed) {
+          try {
+            const snapshot = await fishmark.getWorkspaceSnapshot();
+            canonicalWorkspaceSnapshotRef.current = snapshot;
+            if (context.isCurrent()) {
+              applyWorkspaceWindowSnapshot(snapshot);
+            }
+          } catch {
+            // The per-tab outbox remains the renderer fallback until a later reconciliation.
+          }
+        }
+
+        if (context.isCurrent()) {
+          showNotification({
+            kind: "error",
+            message: error instanceof Error ? error.message : String(error)
+          });
+        }
+        return false;
+      }
+      });
+    },
+    [
+      applyState,
+      applyWorkspaceWindowSnapshot,
+      drainPendingWorkspaceDraft,
+      fishmark,
+      getEditorContent,
+      runWorkspaceMutation,
       showNotification
     ]
   );
@@ -494,89 +694,114 @@ export function useWorkspaceController(input: {
     [activateWorkspaceTab, fishmark]
   );
 
-  const closeWorkspaceTab = useCallback(
-    async (tabId: string): Promise<void> => {
+  const runFlushedWorkspaceSnapshotMutation = useCallback(
+    (
+      operation: () => Promise<WorkspaceWindowSnapshot>
+    ): Promise<void> => runWorkspaceMutation(async (context) => {
       try {
-        await flushActiveWorkspaceDraft();
-        const snapshot = await fishmark.closeWorkspaceTab({ tabId });
-        applyWorkspaceWindowSnapshot(snapshot);
+        if (!context.isCurrent()) {
+          return;
+        }
+        await flushActiveWorkspaceDraftNow({ context });
+        if (!context.isCurrent()) {
+          return;
+        }
+        const snapshot = await operation();
+        canonicalWorkspaceSnapshotRef.current = snapshot;
+        if (context.isCurrent()) {
+          applyWorkspaceWindowSnapshot(snapshot);
+        }
       } catch (error) {
-        showNotification({
-          kind: "error",
-          message: error instanceof Error ? error.message : String(error)
-        });
+        if (context.isCurrent()) {
+          showNotification({
+            kind: "error",
+            message: error instanceof Error ? error.message : String(error)
+          });
+        }
       }
-    },
-    [applyWorkspaceWindowSnapshot, fishmark, flushActiveWorkspaceDraft, showNotification]
+    }),
+    [
+      applyWorkspaceWindowSnapshot,
+      flushActiveWorkspaceDraftNow,
+      runWorkspaceMutation,
+      showNotification
+    ]
+  );
+
+  const closeWorkspaceTab = useCallback(
+    (tabId: string): Promise<void> => runFlushedWorkspaceSnapshotMutation(
+      () => fishmark.closeWorkspaceTab({ tabId })
+    ),
+    [fishmark, runFlushedWorkspaceSnapshotMutation]
   );
 
   const reorderWorkspaceTab = useCallback(
-    async (tabId: string, toIndex: number): Promise<void> => {
-      try {
-        await flushActiveWorkspaceDraft();
-        const snapshot = await fishmark.reorderWorkspaceTab({ tabId, toIndex });
-        applyWorkspaceWindowSnapshot(snapshot);
-      } catch (error) {
-        showNotification({
-          kind: "error",
-          message: error instanceof Error ? error.message : String(error)
-        });
-      }
-    },
-    [applyWorkspaceWindowSnapshot, fishmark, flushActiveWorkspaceDraft, showNotification]
+    (tabId: string, toIndex: number): Promise<void> => runFlushedWorkspaceSnapshotMutation(
+      () => fishmark.reorderWorkspaceTab({ tabId, toIndex })
+    ),
+    [fishmark, runFlushedWorkspaceSnapshotMutation]
   );
 
   const detachWorkspaceTab = useCallback(
-    async (tabId: string): Promise<void> => {
-      try {
-        await flushActiveWorkspaceDraft();
-        const snapshot = await fishmark.detachWorkspaceTabToNewWindow({ tabId });
-        applyWorkspaceWindowSnapshot(snapshot);
-      } catch (error) {
-        showNotification({
-          kind: "error",
-          message: error instanceof Error ? error.message : String(error)
-        });
-      }
-    },
-    [applyWorkspaceWindowSnapshot, fishmark, flushActiveWorkspaceDraft, showNotification]
+    (tabId: string): Promise<void> => runFlushedWorkspaceSnapshotMutation(
+      () => fishmark.detachWorkspaceTabToNewWindow({ tabId })
+    ),
+    [fishmark, runFlushedWorkspaceSnapshotMutation]
   );
 
   const reloadWorkspaceTabFromPath = useCallback(
-    async (inputValue: { tabId: string }): Promise<boolean> => {
-      setWorkspaceOpenState("opening");
-
+    (inputValue: { tabId: string }): Promise<boolean> => runWorkspaceMutation(async (context) => {
       try {
+        if (!context.isCurrent()) {
+          return false;
+        }
+        setWorkspaceOpenState("opening");
         const result = await fishmark.reloadWorkspaceTabFromPath(inputValue);
         if (result.kind === "revision-stale") {
-          setWorkspaceOpenState("idle");
-          showNotification({
-            kind: "warning",
-            message: "重新加载期间检测到新的编辑，已保留当前内容。请重试。"
-          });
+          if (context.isCurrent()) {
+            setWorkspaceOpenState("idle");
+            showNotification({
+              kind: "warning",
+              message: "重新加载期间检测到新的编辑，已保留当前内容。请重试。"
+            });
+          }
           return false;
         }
         if (result.kind === "error") {
-          setWorkspaceOpenState("idle");
-          showNotification({
-            kind: "error",
-            message: RELOAD_WORKSPACE_TAB_FROM_PATH_ERROR_MESSAGES[result.error.code]
-          });
+          if (context.isCurrent()) {
+            setWorkspaceOpenState("idle");
+            showNotification({
+              kind: "error",
+              message: RELOAD_WORKSPACE_TAB_FROM_PATH_ERROR_MESSAGES[result.error.code]
+            });
+          }
           return false;
         }
 
+        canonicalWorkspaceSnapshotRef.current = result.snapshot;
+        if (!context.isCurrent()) {
+          return false;
+        }
         applyWorkspaceWindowSnapshot(result.snapshot);
         return true;
       } catch (error) {
-        setWorkspaceOpenState("idle");
-        showNotification({
-          kind: "error",
-          message: error instanceof Error ? error.message : String(error)
-        });
+        if (context.isCurrent()) {
+          setWorkspaceOpenState("idle");
+          showNotification({
+            kind: "error",
+            message: error instanceof Error ? error.message : String(error)
+          });
+        }
         return false;
       }
-    },
-    [applyWorkspaceWindowSnapshot, fishmark, setWorkspaceOpenState, showNotification]
+    }),
+    [
+      applyWorkspaceWindowSnapshot,
+      fishmark,
+      runWorkspaceMutation,
+      setWorkspaceOpenState,
+      showNotification
+    ]
   );
 
   return {

@@ -119,6 +119,50 @@ function renderEditorWorkflowController(
   return { latestRef, root };
 }
 
+const workspaceMutationInterleavingCases: ReadonlyArray<{
+  readonly name: string;
+  readonly bridgeKey: string;
+  readonly bridgeResult: (snapshot: WorkspaceWindowSnapshot) => unknown;
+  readonly invoke: (controller: WorkspaceControllerValue) => Promise<unknown>;
+}> = [
+  {
+    name: "open",
+    bridgeKey: "openWorkspaceFile",
+    bridgeResult: (snapshot) => ({ kind: "success", snapshot }),
+    invoke: (controller) => controller.openMarkdown()
+  },
+  {
+    name: "create",
+    bridgeKey: "createWorkspaceTab",
+    bridgeResult: (snapshot) => snapshot,
+    invoke: (controller) => controller.createUntitledMarkdown()
+  },
+  {
+    name: "close",
+    bridgeKey: "closeWorkspaceTab",
+    bridgeResult: (snapshot) => snapshot,
+    invoke: (controller) => controller.closeWorkspaceTab("tab-1")
+  },
+  {
+    name: "reorder",
+    bridgeKey: "reorderWorkspaceTab",
+    bridgeResult: (snapshot) => snapshot,
+    invoke: (controller) => controller.reorderWorkspaceTab("tab-1", 1)
+  },
+  {
+    name: "detach",
+    bridgeKey: "detachWorkspaceTabToNewWindow",
+    bridgeResult: (snapshot) => snapshot,
+    invoke: (controller) => controller.detachWorkspaceTab("tab-1")
+  },
+  {
+    name: "save refresh",
+    bridgeKey: "getWorkspaceSnapshot",
+    bridgeResult: (snapshot) => snapshot,
+    invoke: (controller) => controller.refreshWorkspaceSnapshot()
+  }
+];
+
 afterEach(() => {
   document.body.innerHTML = "";
 });
@@ -328,7 +372,7 @@ describe("useWorkspaceController", () => {
 
     editorContent = "# Typed during activation\n";
     await act(async () => {
-      await latestRef.current?.updateDraft(editorContent);
+      await latestRef.current?.updateDraft({ tabId: "tab-1", content: editorContent });
     });
     activation.resolve(targetSnapshot);
 
@@ -380,7 +424,7 @@ describe("useWorkspaceController", () => {
     });
 
     await act(async () => {
-      await latestRef.current?.updateDraft("# Pending\n");
+      await latestRef.current?.updateDraft({ tabId: "tab-1", content: "# Pending\n" });
       await expect(latestRef.current?.activateWorkspaceTab("tab-1")).resolves.toBe(true);
     });
 
@@ -416,7 +460,7 @@ describe("useWorkspaceController", () => {
     });
 
     await act(async () => {
-      await latestRef.current?.updateDraft("# Pending\n");
+      await latestRef.current?.updateDraft({ tabId: "tab-1", content: "# Pending\n" });
       await expect(latestRef.current?.activateWorkspaceTab("tab-1")).resolves.toBe(false);
     });
 
@@ -481,7 +525,7 @@ describe("useWorkspaceController", () => {
     await expect(result).resolves.toBe(false);
   });
 
-  it("rolls main activation back to the source tab when post-activation draft draining cannot settle", async () => {
+  it("keeps the committed target canonical when source draft draining cannot settle", async () => {
     let editorContent = "# First\n";
     let controller: WorkspaceControllerValue | null = null;
     const sourceSnapshot = () => createWorkspaceSnapshot({
@@ -517,7 +561,7 @@ describe("useWorkspaceController", () => {
     const activateWorkspaceTab = vi.fn(async ({ tabId }: { tabId: string }) => {
       if (tabId === "tab-2") {
         editorContent = "# Churn 0\n";
-        await controller?.updateDraft(editorContent);
+        await controller?.updateDraft({ tabId: "tab-1", content: editorContent });
         return targetSnapshot();
       }
       return sourceSnapshot();
@@ -526,7 +570,7 @@ describe("useWorkspaceController", () => {
     const updateWorkspaceTabDraft = vi.fn(async () => {
       churn += 1;
       editorContent = `# Churn ${churn}\n`;
-      await controller?.updateDraft(editorContent);
+      await controller?.updateDraft({ tabId: "tab-1", content: editorContent });
       return targetSnapshot();
     });
     const showNotification = vi.fn();
@@ -559,13 +603,10 @@ describe("useWorkspaceController", () => {
     });
 
     expect(updateWorkspaceTabDraft.mock.calls.length).toBeGreaterThan(1);
-    expect(activateWorkspaceTab.mock.calls).toEqual([
-      [{ tabId: "tab-2" }],
-      [{ tabId: "tab-1" }]
-    ]);
-    expect(rendered.latestRef.current?.activeTabId).toBe("tab-1");
+    expect(activateWorkspaceTab.mock.calls).toEqual([[{ tabId: "tab-2" }]]);
+    expect(rendered.latestRef.current?.activeTabId).toBe("tab-2");
     expect(rendered.latestRef.current?.workspaceSnapshot?.activeDocument?.content).toBe(
-      editorContent
+      "# Second\n"
     );
     expect(showNotification).toHaveBeenCalledOnce();
     act(() => rendered.root.unmount());
@@ -579,7 +620,7 @@ describe("useWorkspaceController", () => {
       if (churn < 20) {
         churn += 1;
         editorContent = `# Pending ${churn}\n`;
-        await controller?.updateDraft(editorContent);
+        await controller?.updateDraft({ tabId: "tab-1", content: editorContent });
       }
       return createWorkspaceSnapshot({
         activeTabId: "tab-1",
@@ -623,7 +664,7 @@ describe("useWorkspaceController", () => {
     });
     controller = rendered.latestRef.current;
     await act(async () => {
-      await controller?.updateDraft(editorContent);
+      await controller?.updateDraft({ tabId: "tab-1", content: editorContent });
       await expect(controller?.activateWorkspaceTab("tab-2")).resolves.toBe(false);
     });
 
@@ -631,6 +672,463 @@ describe("useWorkspaceController", () => {
     expect(activateWorkspaceTab).not.toHaveBeenCalled();
     expect(rendered.latestRef.current?.activeTabId).toBe("tab-1");
     expect(showNotification).toHaveBeenCalledOnce();
+    act(() => rendered.root.unmount());
+  });
+
+  it("reconciles main back to the latest source intent when an older target activation was superseded", async () => {
+    let editorContent = "# First\n";
+    let controller: WorkspaceControllerValue | null = null;
+    const firstActivation = createDeferred<WorkspaceWindowSnapshot>();
+    const targetSnapshot = (sourceContent = "# First\n") => createWorkspaceSnapshot({
+      activeTabId: "tab-2",
+      tabs: [{
+        tabId: "tab-1",
+        path: "C:/notes/first.md",
+        name: "first.md",
+        content: sourceContent,
+        isDirty: sourceContent !== "# First\n"
+      }, {
+        tabId: "tab-2",
+        path: "C:/notes/second.md",
+        name: "second.md",
+        content: "# Second\n"
+      }]
+    });
+    const sourceSnapshot = () => createWorkspaceSnapshot({
+      activeTabId: "tab-1",
+      tabs: [{
+        tabId: "tab-1",
+        path: "C:/notes/first.md",
+        name: "first.md",
+        content: editorContent,
+        isDirty: true
+      }, {
+        tabId: "tab-2",
+        path: "C:/notes/second.md",
+        name: "second.md",
+        content: "# Second\n"
+      }]
+    });
+    const activateWorkspaceTab = vi
+      .fn()
+      .mockImplementationOnce(() => firstActivation.promise)
+      .mockImplementationOnce(async () => sourceSnapshot());
+    const updateWorkspaceTabDraft = vi.fn(async (input: { tabId: string; content: string }) =>
+      targetSnapshot(input.content)
+    );
+    const rendered = renderController({
+      fishmark: {
+        activateWorkspaceTab,
+        updateWorkspaceTabDraft
+      } as unknown as Window["fishmark"],
+      initialSnapshot: sourceSnapshot(),
+      getEditorContent: () => editorContent,
+      showNotification: vi.fn()
+    });
+    controller = rendered.latestRef.current;
+
+    const oldIntent = controller!.activateWorkspaceTab("tab-2");
+    await vi.waitFor(() => expect(activateWorkspaceTab).toHaveBeenCalledTimes(1));
+    editorContent = "# Latest source draft\n";
+    await act(async () => {
+      await controller!.updateDraft({ tabId: "tab-1", content: editorContent });
+    });
+    const latestIntent = controller!.activateWorkspaceTab("tab-1");
+    await act(async () => {
+      firstActivation.resolve(targetSnapshot());
+      await expect(oldIntent).resolves.toBe(false);
+      await expect(latestIntent).resolves.toBe(true);
+    });
+    expect(updateWorkspaceTabDraft).toHaveBeenCalledWith({
+      tabId: "tab-1",
+      content: "# Latest source draft\n"
+    });
+    expect(activateWorkspaceTab.mock.calls).toEqual([
+      [{ tabId: "tab-2" }],
+      [{ tabId: "tab-1" }]
+    ]);
+    expect(rendered.latestRef.current?.activeTabId).toBe("tab-1");
+    expect(rendered.latestRef.current?.workspaceSnapshot?.activeDocument?.content).toBe(
+      "# Latest source draft\n"
+    );
+    act(() => rendered.root.unmount());
+  });
+
+  it("keeps the committed target canonical when post-activation draft sync rejects", async () => {
+    let editorContent = "# First\n";
+    let controller: WorkspaceControllerValue | null = null;
+    const sourceSnapshot = () => createWorkspaceSnapshot({
+      activeTabId: "tab-1",
+      tabs: [{
+        tabId: "tab-1",
+        path: "C:/notes/first.md",
+        name: "first.md",
+        content: editorContent,
+        isDirty: true
+      }, {
+        tabId: "tab-2",
+        path: "C:/notes/second.md",
+        name: "second.md",
+        content: "# Second\n"
+      }]
+    });
+    const targetSnapshot = createWorkspaceSnapshot({
+      activeTabId: "tab-2",
+      tabs: [{
+        tabId: "tab-1",
+        path: "C:/notes/first.md",
+        name: "first.md",
+        content: "# First\n"
+      }, {
+        tabId: "tab-2",
+        path: "C:/notes/second.md",
+        name: "second.md",
+        content: "# Second\n"
+      }]
+    });
+    const activateWorkspaceTab = vi.fn(async ({ tabId }: { tabId: string }) => {
+      if (tabId === "tab-2") {
+        editorContent = "# Late source draft\n";
+        await controller?.updateDraft({ tabId: "tab-1", content: editorContent });
+        return targetSnapshot;
+      }
+      return sourceSnapshot();
+    });
+    const rendered = renderController({
+      fishmark: {
+        activateWorkspaceTab,
+        updateWorkspaceTabDraft: vi.fn(async () => {
+          throw new Error("draft sync rejected");
+        })
+      } as unknown as Window["fishmark"],
+      initialSnapshot: sourceSnapshot(),
+      getEditorContent: () => editorContent,
+      showNotification: vi.fn()
+    });
+    controller = rendered.latestRef.current;
+
+    await act(async () => {
+      await expect(controller!.activateWorkspaceTab("tab-2")).resolves.toBe(false);
+    });
+
+    expect(activateWorkspaceTab.mock.calls).toEqual([[{ tabId: "tab-2" }]]);
+    expect(rendered.latestRef.current?.activeTabId).toBe("tab-2");
+    expect(rendered.latestRef.current?.workspaceSnapshot?.activeDocument?.content).toBe(
+      "# Second\n"
+    );
+    act(() => rendered.root.unmount());
+  });
+
+  it("reconciles canonical state when activation transport fails after commit is unknown", async () => {
+    const targetSnapshot = createWorkspaceSnapshot({
+      activeTabId: "tab-2",
+      tabs: [{
+        tabId: "tab-1",
+        path: "C:/notes/first.md",
+        name: "first.md",
+        content: "# First\n"
+      }, {
+        tabId: "tab-2",
+        path: "C:/notes/second.md",
+        name: "second.md",
+        content: "# Second\n"
+      }]
+    });
+    const getWorkspaceSnapshot = vi.fn(async () => targetSnapshot);
+    const rendered = renderController({
+      fishmark: {
+        activateWorkspaceTab: vi.fn(async () => {
+          throw new Error("transport closed");
+        }),
+        getWorkspaceSnapshot
+      } as unknown as Window["fishmark"],
+      initialSnapshot: createWorkspaceSnapshot({
+        activeTabId: "tab-1",
+        tabs: [{
+          tabId: "tab-1",
+          path: "C:/notes/first.md",
+          name: "first.md",
+          content: "# First\n"
+        }, {
+          tabId: "tab-2",
+          path: "C:/notes/second.md",
+          name: "second.md",
+          content: "# Second\n"
+        }]
+      }),
+      getEditorContent: () => "# First\n",
+      showNotification: vi.fn()
+    });
+
+    await act(async () => {
+      await expect(
+        rendered.latestRef.current!.activateWorkspaceTab("tab-2")
+      ).resolves.toBe(false);
+    });
+
+    expect(getWorkspaceSnapshot).toHaveBeenCalledOnce();
+    expect(rendered.latestRef.current?.activeTabId).toBe("tab-2");
+    act(() => rendered.root.unmount());
+  });
+
+  it("retains a rejected source draft until a later activation can sync it", async () => {
+    let editorContent = "# First\n";
+    let controller: WorkspaceControllerValue | null = null;
+    const targetSnapshot = createWorkspaceSnapshot({
+      activeTabId: "tab-2",
+      tabs: [{
+        tabId: "tab-1",
+        path: "C:/notes/first.md",
+        name: "first.md",
+        content: "# First\n"
+      }, {
+        tabId: "tab-2",
+        path: "C:/notes/second.md",
+        name: "second.md",
+        content: "# Second\n"
+      }]
+    });
+    const sourceSnapshot = createWorkspaceSnapshot({
+      activeTabId: "tab-1",
+      tabs: [{
+        tabId: "tab-1",
+        path: "C:/notes/first.md",
+        name: "first.md",
+        content: "# Late source draft\n",
+        isDirty: true
+      }, {
+        tabId: "tab-2",
+        path: "C:/notes/second.md",
+        name: "second.md",
+        content: "# Second\n"
+      }]
+    });
+    const activateWorkspaceTab = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        editorContent = "# Late source draft\n";
+        await controller?.updateDraft({ tabId: "tab-1", content: editorContent });
+        return targetSnapshot;
+      })
+      .mockResolvedValueOnce(sourceSnapshot);
+    const updateWorkspaceTabDraft = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("draft sync rejected"))
+      .mockResolvedValueOnce(sourceSnapshot);
+    const rendered = renderController({
+      fishmark: {
+        activateWorkspaceTab,
+        updateWorkspaceTabDraft
+      } as unknown as Window["fishmark"],
+      initialSnapshot: createWorkspaceSnapshot({
+        activeTabId: "tab-1",
+        tabs: [{
+          tabId: "tab-1",
+          path: "C:/notes/first.md",
+          name: "first.md",
+          content: "# First\n"
+        }, {
+          tabId: "tab-2",
+          path: "C:/notes/second.md",
+          name: "second.md",
+          content: "# Second\n"
+        }]
+      }),
+      getEditorContent: () => editorContent,
+      showNotification: vi.fn()
+    });
+    controller = rendered.latestRef.current;
+
+    await act(async () => {
+      await expect(controller!.activateWorkspaceTab("tab-2")).resolves.toBe(false);
+    });
+    expect(rendered.latestRef.current?.activeTabId).toBe("tab-2");
+
+    editorContent = "# Second\n";
+    await act(async () => {
+      await expect(controller!.activateWorkspaceTab("tab-1")).resolves.toBe(true);
+    });
+
+    expect(updateWorkspaceTabDraft).toHaveBeenLastCalledWith({
+      tabId: "tab-1",
+      content: "# Late source draft\n"
+    });
+    expect(activateWorkspaceTab.mock.calls).toEqual([
+      [{ tabId: "tab-2" }],
+      [{ tabId: "tab-1" }]
+    ]);
+    expect(rendered.latestRef.current?.activeTabId).toBe("tab-1");
+    expect(rendered.latestRef.current?.workspaceSnapshot?.activeDocument?.content).toBe(
+      "# Late source draft\n"
+    );
+    act(() => rendered.root.unmount());
+  });
+
+  for (const mutationCase of workspaceMutationInterleavingCases) {
+    it(`serializes activation with newer ${mutationCase.name} snapshot ownership`, async () => {
+      const activation = createDeferred<WorkspaceWindowSnapshot>();
+      const newerMutation = createDeferred<unknown>();
+      const initialSnapshot = createWorkspaceSnapshot({
+        activeTabId: "tab-1",
+        tabs: [{
+          tabId: "tab-1",
+          path: "C:/notes/first.md",
+          name: "first.md",
+          content: "# First\n"
+        }, {
+          tabId: "tab-2",
+          path: "C:/notes/second.md",
+          name: "second.md",
+          content: "# Second\n"
+        }]
+      });
+      const oldActivationSnapshot = createWorkspaceSnapshot({
+        activeTabId: "tab-2",
+        tabs: [{
+          tabId: "tab-1",
+          path: "C:/notes/first.md",
+          name: "first.md",
+          content: "# First\n"
+        }, {
+          tabId: "tab-2",
+          path: "C:/notes/second.md",
+          name: "second.md",
+          content: "# Second\n"
+        }]
+      });
+      const newerSnapshot = createWorkspaceSnapshot({
+        activeTabId: "tab-3",
+        tabs: [{
+          tabId: "tab-1",
+          path: "C:/notes/first.md",
+          name: "first.md",
+          content: "# First\n"
+        }, {
+          tabId: "tab-2",
+          path: "C:/notes/second.md",
+          name: "second.md",
+          content: "# Second\n"
+        }, {
+          tabId: "tab-3",
+          path: "C:/notes/newer.md",
+          name: "newer.md",
+          content: "# Newer\n"
+        }]
+      });
+      const activateWorkspaceTab = vi.fn(() => activation.promise);
+      const mutationBridge = vi.fn(() => newerMutation.promise);
+      const rendered = renderController({
+        fishmark: {
+          activateWorkspaceTab,
+          [mutationCase.bridgeKey]: mutationBridge
+        } as unknown as Window["fishmark"],
+        initialSnapshot,
+        getEditorContent: () => "# First\n",
+        showNotification: vi.fn()
+      });
+
+      const oldIntent = rendered.latestRef.current!.activateWorkspaceTab("tab-2");
+      await vi.waitFor(() => expect(activateWorkspaceTab).toHaveBeenCalledOnce());
+      const newerIntent = mutationCase.invoke(rendered.latestRef.current!);
+      await Promise.resolve();
+      await Promise.resolve();
+      const newerStartedBeforeOldSettled = mutationBridge.mock.calls.length > 0;
+
+      if (newerStartedBeforeOldSettled) {
+        newerMutation.resolve(mutationCase.bridgeResult(newerSnapshot));
+        await newerIntent;
+        activation.resolve(oldActivationSnapshot);
+        await oldIntent;
+      } else {
+        await act(async () => {
+          activation.resolve(oldActivationSnapshot);
+          await oldIntent;
+        });
+        await vi.waitFor(() => expect(mutationBridge).toHaveBeenCalledOnce());
+        await act(async () => {
+          newerMutation.resolve(mutationCase.bridgeResult(newerSnapshot));
+          await newerIntent;
+        });
+      }
+
+      expect(newerStartedBeforeOldSettled).toBe(false);
+      expect(rendered.latestRef.current?.activeTabId).toBe("tab-3");
+      act(() => rendered.root.unmount());
+    });
+  }
+
+  it("serializes a late draft response before a queued activation", async () => {
+    const draftResponse = createDeferred<WorkspaceWindowSnapshot>();
+    const initialSnapshot = createWorkspaceSnapshot({
+      activeTabId: "tab-1",
+      tabs: [{
+        tabId: "tab-1",
+        path: "C:/notes/first.md",
+        name: "first.md",
+        content: "# First\n"
+      }, {
+        tabId: "tab-2",
+        path: "C:/notes/second.md",
+        name: "second.md",
+        content: "# Second\n"
+      }]
+    });
+    const flushedSnapshot = createWorkspaceSnapshot({
+      activeTabId: "tab-1",
+      tabs: [{
+        tabId: "tab-1",
+        path: "C:/notes/first.md",
+        name: "first.md",
+        content: "# Pending\n",
+        isDirty: true
+      }, {
+        tabId: "tab-2",
+        path: "C:/notes/second.md",
+        name: "second.md",
+        content: "# Second\n"
+      }]
+    });
+    const targetSnapshot = createWorkspaceSnapshot({
+      activeTabId: "tab-2",
+      tabs: [{
+        tabId: "tab-1",
+        path: "C:/notes/first.md",
+        name: "first.md",
+        content: "# Pending\n",
+        isDirty: true
+      }, {
+        tabId: "tab-2",
+        path: "C:/notes/second.md",
+        name: "second.md",
+        content: "# Second\n"
+      }]
+    });
+    const updateWorkspaceTabDraft = vi.fn(() => draftResponse.promise);
+    const activateWorkspaceTab = vi.fn(async () => targetSnapshot);
+    const rendered = renderController({
+      fishmark: {
+        updateWorkspaceTabDraft,
+        activateWorkspaceTab
+      } as unknown as Window["fishmark"],
+      initialSnapshot,
+      getEditorContent: () => "# Pending\n",
+      showNotification: vi.fn()
+    });
+
+    const flush = rendered.latestRef.current!.flushActiveWorkspaceDraft();
+    await vi.waitFor(() => expect(updateWorkspaceTabDraft).toHaveBeenCalledOnce());
+    const activation = rendered.latestRef.current!.activateWorkspaceTab("tab-2");
+    await Promise.resolve();
+    expect(activateWorkspaceTab).not.toHaveBeenCalled();
+
+    await act(async () => {
+      draftResponse.resolve(flushedSnapshot);
+      await flush;
+      await activation;
+    });
+
+    expect(activateWorkspaceTab).toHaveBeenCalledWith({ tabId: "tab-2" });
+    expect(rendered.latestRef.current?.activeTabId).toBe("tab-2");
     act(() => rendered.root.unmount());
   });
 
@@ -671,7 +1169,7 @@ describe("useWorkspaceController", () => {
     await act(async () => {
       for (let index = 1; index <= 100; index += 1) {
         editorContent = `# Updated ${index}\n`;
-        await latestRef.current?.updateDraft(editorContent);
+        await latestRef.current?.updateDraft({ tabId: "tab-1", content: editorContent });
       }
     });
 
@@ -1236,7 +1734,7 @@ describe("useWorkspaceController", () => {
     });
 
     await act(async () => {
-      await latestRef.current?.updateDraft("# Newer draft\n");
+      await latestRef.current?.updateDraft({ tabId: "tab-1", content: "# Newer draft\n" });
     });
 
     const draftRevision = latestRef.current?.editorLoadRevision;
@@ -1433,7 +1931,10 @@ describe("useEditorWorkflowController", () => {
     expect(setEditorContentSnapshot).toHaveBeenCalledWith("# Draft\n");
     expect(scheduleDocumentDerivedDataUpdate).toHaveBeenCalledWith("# Draft\n");
     expect(scheduleAutosave).toHaveBeenCalledTimes(1);
-    expect(updateDraft).toHaveBeenCalledWith("# Draft\n");
+    expect(updateDraft).toHaveBeenCalledWith({
+      tabId: "tab-1",
+      content: "# Draft\n"
+    });
     expect(scheduleAutosave.mock.invocationCallOrder[0]).toBeLessThan(
       updateDraft.mock.invocationCallOrder[0]!
     );
@@ -1478,5 +1979,28 @@ describe("useEditorWorkflowController", () => {
     act(() => {
       root.unmount();
     });
+  });
+
+  it("forwards an already-rendered tab intent so an in-flight workspace transaction can reconcile main", async () => {
+    const activateWorkspaceTab = vi.fn(async () => {});
+    const { latestRef, root } = renderEditorWorkflowController({
+      setEditorContentSnapshot: vi.fn(),
+      scheduleDocumentDerivedDataUpdate: vi.fn(),
+      scheduleAutosave: vi.fn(),
+      runAutosave: vi.fn(async () => {}),
+      resetAutosaveRuntime: vi.fn(),
+      getActiveTabId: () => "tab-1",
+      updateDraft: vi.fn(async () => {}),
+      activateWorkspaceTab,
+      closeWorkspaceTab: vi.fn(async () => {}),
+      detachWorkspaceTab: vi.fn(async () => {})
+    });
+
+    await act(async () => {
+      await latestRef.current?.activateWorkspaceTab("tab-1");
+    });
+
+    expect(activateWorkspaceTab).toHaveBeenCalledWith("tab-1");
+    act(() => root.unmount());
   });
 });

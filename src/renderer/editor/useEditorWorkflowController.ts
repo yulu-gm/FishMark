@@ -7,7 +7,7 @@ export function useEditorWorkflowController(input: {
   runAutosave: () => Promise<void>;
   resetAutosaveRuntime: () => void;
   getActiveTabId: () => string | null;
-  updateDraft: (content: string) => Promise<void>;
+  updateDraft: (input: { tabId: string; content: string }) => Promise<void>;
   activateWorkspaceTab: (tabId: string) => Promise<void>;
   closeWorkspaceTab: (tabId: string) => Promise<void>;
   detachWorkspaceTab: (tabId: string) => Promise<void>;
@@ -27,15 +27,24 @@ export function useEditorWorkflowController(input: {
 
   const handleEditorContentChange = useCallback(
     (nextContent: string): void => {
+      const activeTabId = getActiveTabId();
       setEditorContentSnapshot(nextContent);
       scheduleDocumentDerivedDataUpdate(nextContent);
       scheduleAutosave();
 
-      void updateDraft(nextContent).catch(() => {
-        // Draft sync failures are surfaced by explicit save/autosave flushes.
-      });
+      if (activeTabId !== null) {
+        void updateDraft({ tabId: activeTabId, content: nextContent }).catch(() => {
+          // Draft sync failures are surfaced by explicit save/autosave flushes.
+        });
+      }
     },
-    [scheduleAutosave, scheduleDocumentDerivedDataUpdate, setEditorContentSnapshot, updateDraft]
+    [
+      getActiveTabId,
+      scheduleAutosave,
+      scheduleDocumentDerivedDataUpdate,
+      setEditorContentSnapshot,
+      updateDraft
+    ]
   );
 
   const handleEditorBlur = useCallback((): void => {
@@ -44,15 +53,11 @@ export function useEditorWorkflowController(input: {
 
   const activateWorkspaceTab = useCallback(
     async (tabId: string): Promise<void> => {
-      if (getActiveTabId() === tabId) {
-        return;
-      }
-
       resetAutosaveRuntime();
       await activateWorkspaceTabCommand(tabId);
       scheduleAutosave();
     },
-    [activateWorkspaceTabCommand, getActiveTabId, resetAutosaveRuntime, scheduleAutosave]
+    [activateWorkspaceTabCommand, resetAutosaveRuntime, scheduleAutosave]
   );
 
   const closeWorkspaceTab = useCallback(

@@ -90,6 +90,7 @@ export function createWorkspaceOwnerTabActivationApplication<TOwnerWindow>(
         const currentWindow = dependencies.resolveWindow(windowId);
         if (
           currentWindow === null ||
+          currentWindow !== ownerWindow ||
           dependencies.isWindowUnavailable(currentWindow)
         ) {
           return "retry";
