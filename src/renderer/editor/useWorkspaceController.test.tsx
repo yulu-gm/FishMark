@@ -11,6 +11,17 @@ import { useWorkspaceController } from "./useWorkspaceController";
 type WorkspaceControllerValue = ReturnType<typeof useWorkspaceController>;
 type EditorWorkflowControllerValue = ReturnType<typeof useEditorWorkflowController>;
 
+function createDeferred<T>(): {
+  readonly promise: Promise<T>;
+  readonly resolve: (value: T) => void;
+} {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((settle) => {
+    resolve = settle;
+  });
+  return { promise, resolve };
+}
+
 function createWorkspaceSnapshot(input: {
   activeTabId?: string | null;
   tabs: Array<{
@@ -248,6 +259,379 @@ describe("useWorkspaceController", () => {
     expect(activateWorkspaceTab).not.toHaveBeenCalled();
     expect(latestRef.current?.activeTabId).toBe("tab-1");
     act(() => root.unmount());
+  });
+
+  it("drains source edits made while activation IPC is pending before applying the target snapshot", async () => {
+    let editorContent = "# First\n";
+    const activation = createDeferred<WorkspaceWindowSnapshot>();
+    const initialSnapshot = createWorkspaceSnapshot({
+      activeTabId: "tab-1",
+      tabs: [{
+        tabId: "tab-1",
+        path: "C:/notes/first.md",
+        name: "first.md",
+        content: "# First\n"
+      }, {
+        tabId: "tab-2",
+        path: "C:/notes/second.md",
+        name: "second.md",
+        content: "# Second\n"
+      }]
+    });
+    const targetSnapshot = createWorkspaceSnapshot({
+      activeTabId: "tab-2",
+      tabs: [{
+        tabId: "tab-1",
+        path: "C:/notes/first.md",
+        name: "first.md",
+        content: "# First\n"
+      }, {
+        tabId: "tab-2",
+        path: "C:/notes/second.md",
+        name: "second.md",
+        content: "# Second\n"
+      }]
+    });
+    const updateWorkspaceTabDraft = vi.fn(async (input: { tabId: string; content: string }) =>
+      createWorkspaceSnapshot({
+        activeTabId: "tab-2",
+        tabs: [{
+          tabId: "tab-1",
+          path: "C:/notes/first.md",
+          name: "first.md",
+          content: input.content,
+          isDirty: true
+        }, {
+          tabId: "tab-2",
+          path: "C:/notes/second.md",
+          name: "second.md",
+          content: "# Second\n"
+        }]
+      })
+    );
+    const activateWorkspaceTab = vi.fn(() => activation.promise);
+    const { latestRef, root } = renderController({
+      fishmark: {
+        updateWorkspaceTabDraft,
+        activateWorkspaceTab
+      } as unknown as Window["fishmark"],
+      initialSnapshot,
+      getEditorContent: () => editorContent,
+      showNotification: vi.fn()
+    });
+
+    let activationResult!: Promise<boolean>;
+    act(() => {
+      activationResult = latestRef.current!.activateWorkspaceTab("tab-2");
+    });
+    await vi.waitFor(() => expect(activateWorkspaceTab).toHaveBeenCalledWith({ tabId: "tab-2" }));
+
+    editorContent = "# Typed during activation\n";
+    await act(async () => {
+      await latestRef.current?.updateDraft(editorContent);
+    });
+    activation.resolve(targetSnapshot);
+
+    await act(async () => {
+      await expect(activationResult).resolves.toBe(true);
+    });
+
+    expect(updateWorkspaceTabDraft).toHaveBeenCalledWith({
+      tabId: "tab-1",
+      content: "# Typed during activation\n"
+    });
+    expect(activateWorkspaceTab.mock.invocationCallOrder[0]).toBeLessThan(
+      updateWorkspaceTabDraft.mock.invocationCallOrder[0]!
+    );
+    expect(latestRef.current?.activeTabId).toBe("tab-2");
+    act(() => root.unmount());
+  });
+
+  it("flushes a pending draft when activation targets the already-active tab without mutating main activation", async () => {
+    const updateWorkspaceTabDraft = vi.fn(async (input: { tabId: string; content: string }) =>
+      createWorkspaceSnapshot({
+        activeTabId: "tab-1",
+        tabs: [{
+          tabId: "tab-1",
+          path: "C:/notes/first.md",
+          name: "first.md",
+          content: input.content,
+          isDirty: true
+        }]
+      })
+    );
+    const activateWorkspaceTab = vi.fn();
+    const { latestRef, root } = renderController({
+      fishmark: {
+        updateWorkspaceTabDraft,
+        activateWorkspaceTab
+      } as unknown as Window["fishmark"],
+      initialSnapshot: createWorkspaceSnapshot({
+        activeTabId: "tab-1",
+        tabs: [{
+          tabId: "tab-1",
+          path: "C:/notes/first.md",
+          name: "first.md",
+          content: "# First\n"
+        }]
+      }),
+      getEditorContent: () => "# Pending\n",
+      showNotification: vi.fn()
+    });
+
+    await act(async () => {
+      await latestRef.current?.updateDraft("# Pending\n");
+      await expect(latestRef.current?.activateWorkspaceTab("tab-1")).resolves.toBe(true);
+    });
+
+    expect(updateWorkspaceTabDraft).toHaveBeenCalledWith({
+      tabId: "tab-1",
+      content: "# Pending\n"
+    });
+    expect(activateWorkspaceTab).not.toHaveBeenCalled();
+    expect(latestRef.current?.workspaceSnapshot?.activeDocument?.content).toBe("# Pending\n");
+    act(() => root.unmount());
+  });
+
+  it("rejects already-active activation when its pending draft cannot flush", async () => {
+    const activateWorkspaceTab = vi.fn();
+    const { latestRef, root } = renderController({
+      fishmark: {
+        updateWorkspaceTabDraft: vi.fn(async () => {
+          throw new Error("draft flush failed");
+        }),
+        activateWorkspaceTab
+      } as unknown as Window["fishmark"],
+      initialSnapshot: createWorkspaceSnapshot({
+        activeTabId: "tab-1",
+        tabs: [{
+          tabId: "tab-1",
+          path: "C:/notes/first.md",
+          name: "first.md",
+          content: "# First\n"
+        }]
+      }),
+      getEditorContent: () => "# Pending\n",
+      showNotification: vi.fn()
+    });
+
+    await act(async () => {
+      await latestRef.current?.updateDraft("# Pending\n");
+      await expect(latestRef.current?.activateWorkspaceTab("tab-1")).resolves.toBe(false);
+    });
+
+    expect(activateWorkspaceTab).not.toHaveBeenCalled();
+    expect(latestRef.current?.activeTabId).toBe("tab-1");
+    act(() => root.unmount());
+  });
+
+  it("does not confirm or apply an owner activation that finishes after unmount", async () => {
+    let activationListener:
+      | ((request: { requestId: string; tabId: string }) => Promise<boolean>)
+      | undefined;
+    const activation = createDeferred<WorkspaceWindowSnapshot>();
+    const targetSnapshot = createWorkspaceSnapshot({
+      activeTabId: "tab-2",
+      tabs: [{
+        tabId: "tab-1",
+        path: "C:/notes/first.md",
+        name: "first.md",
+        content: "# First\n"
+      }, {
+        tabId: "tab-2",
+        path: "C:/notes/second.md",
+        name: "second.md",
+        content: "# Second\n"
+      }]
+    });
+    const activateWorkspaceTab = vi.fn(() => activation.promise);
+    const { root } = renderController({
+      fishmark: {
+        onWorkspaceOwnerTabActivationRequest: (
+          listener: (request: { requestId: string; tabId: string }) => Promise<boolean>
+        ) => {
+          activationListener = listener;
+          return () => {};
+        },
+        activateWorkspaceTab
+      } as unknown as Window["fishmark"],
+      initialSnapshot: createWorkspaceSnapshot({
+        activeTabId: "tab-1",
+        tabs: [{
+          tabId: "tab-1",
+          path: "C:/notes/first.md",
+          name: "first.md",
+          content: "# First\n"
+        }, {
+          tabId: "tab-2",
+          path: "C:/notes/second.md",
+          name: "second.md",
+          content: "# Second\n"
+        }]
+      }),
+      getEditorContent: () => "# First\n",
+      showNotification: vi.fn()
+    });
+
+    const result = activationListener!({ requestId: "request-1", tabId: "tab-2" });
+    await vi.waitFor(() => expect(activateWorkspaceTab).toHaveBeenCalledOnce());
+    act(() => root.unmount());
+    activation.resolve(targetSnapshot);
+
+    await expect(result).resolves.toBe(false);
+  });
+
+  it("rolls main activation back to the source tab when post-activation draft draining cannot settle", async () => {
+    let editorContent = "# First\n";
+    let controller: WorkspaceControllerValue | null = null;
+    const sourceSnapshot = () => createWorkspaceSnapshot({
+      activeTabId: "tab-1",
+      tabs: [{
+        tabId: "tab-1",
+        path: "C:/notes/first.md",
+        name: "first.md",
+        content: editorContent,
+        isDirty: true
+      }, {
+        tabId: "tab-2",
+        path: "C:/notes/second.md",
+        name: "second.md",
+        content: "# Second\n"
+      }]
+    });
+    const targetSnapshot = () => createWorkspaceSnapshot({
+      activeTabId: "tab-2",
+      tabs: [{
+        tabId: "tab-1",
+        path: "C:/notes/first.md",
+        name: "first.md",
+        content: editorContent,
+        isDirty: true
+      }, {
+        tabId: "tab-2",
+        path: "C:/notes/second.md",
+        name: "second.md",
+        content: "# Second\n"
+      }]
+    });
+    const activateWorkspaceTab = vi.fn(async ({ tabId }: { tabId: string }) => {
+      if (tabId === "tab-2") {
+        editorContent = "# Churn 0\n";
+        await controller?.updateDraft(editorContent);
+        return targetSnapshot();
+      }
+      return sourceSnapshot();
+    });
+    let churn = 0;
+    const updateWorkspaceTabDraft = vi.fn(async () => {
+      churn += 1;
+      editorContent = `# Churn ${churn}\n`;
+      await controller?.updateDraft(editorContent);
+      return targetSnapshot();
+    });
+    const showNotification = vi.fn();
+    const rendered = renderController({
+      fishmark: {
+        updateWorkspaceTabDraft,
+        activateWorkspaceTab
+      } as unknown as Window["fishmark"],
+      initialSnapshot: createWorkspaceSnapshot({
+        activeTabId: "tab-1",
+        tabs: [{
+          tabId: "tab-1",
+          path: "C:/notes/first.md",
+          name: "first.md",
+          content: "# First\n"
+        }, {
+          tabId: "tab-2",
+          path: "C:/notes/second.md",
+          name: "second.md",
+          content: "# Second\n"
+        }]
+      }),
+      getEditorContent: () => editorContent,
+      showNotification
+    });
+    controller = rendered.latestRef.current;
+
+    await act(async () => {
+      await expect(controller?.activateWorkspaceTab("tab-2")).resolves.toBe(false);
+    });
+
+    expect(updateWorkspaceTabDraft.mock.calls.length).toBeGreaterThan(1);
+    expect(activateWorkspaceTab.mock.calls).toEqual([
+      [{ tabId: "tab-2" }],
+      [{ tabId: "tab-1" }]
+    ]);
+    expect(rendered.latestRef.current?.activeTabId).toBe("tab-1");
+    expect(rendered.latestRef.current?.workspaceSnapshot?.activeDocument?.content).toBe(
+      editorContent
+    );
+    expect(showNotification).toHaveBeenCalledOnce();
+    act(() => rendered.root.unmount());
+  });
+
+  it("fails before mutating main when the initial activation draft flush exceeds its budget", async () => {
+    let editorContent = "# Pending 0\n";
+    let controller: WorkspaceControllerValue | null = null;
+    let churn = 0;
+    const updateWorkspaceTabDraft = vi.fn(async () => {
+      if (churn < 20) {
+        churn += 1;
+        editorContent = `# Pending ${churn}\n`;
+        await controller?.updateDraft(editorContent);
+      }
+      return createWorkspaceSnapshot({
+        activeTabId: "tab-1",
+        tabs: [{
+          tabId: "tab-1",
+          path: "C:/notes/first.md",
+          name: "first.md",
+          content: editorContent,
+          isDirty: true
+        }, {
+          tabId: "tab-2",
+          path: "C:/notes/second.md",
+          name: "second.md",
+          content: "# Second\n"
+        }]
+      });
+    });
+    const activateWorkspaceTab = vi.fn();
+    const showNotification = vi.fn();
+    const rendered = renderController({
+      fishmark: {
+        updateWorkspaceTabDraft,
+        activateWorkspaceTab
+      } as unknown as Window["fishmark"],
+      initialSnapshot: createWorkspaceSnapshot({
+        activeTabId: "tab-1",
+        tabs: [{
+          tabId: "tab-1",
+          path: "C:/notes/first.md",
+          name: "first.md",
+          content: "# First\n"
+        }, {
+          tabId: "tab-2",
+          path: "C:/notes/second.md",
+          name: "second.md",
+          content: "# Second\n"
+        }]
+      }),
+      getEditorContent: () => editorContent,
+      showNotification
+    });
+    controller = rendered.latestRef.current;
+    await act(async () => {
+      await controller?.updateDraft(editorContent);
+      await expect(controller?.activateWorkspaceTab("tab-2")).resolves.toBe(false);
+    });
+
+    expect(updateWorkspaceTabDraft).toHaveBeenCalledTimes(16);
+    expect(activateWorkspaceTab).not.toHaveBeenCalled();
+    expect(rendered.latestRef.current?.activeTabId).toBe("tab-1");
+    expect(showNotification).toHaveBeenCalledOnce();
+    act(() => rendered.root.unmount());
   });
 
   it("keeps active draft changes renderer-local until an explicit flush syncs the latest content", async () => {

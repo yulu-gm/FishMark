@@ -65,6 +65,7 @@ import { createWorkspaceTabReorderApplication } from "./workspace-tab-reorder-ap
 import { createWorkspaceWindowCloseApplication } from "./workspace-window-close-application";
 import { createWorkspaceWindowCloseConfirmationHandler } from "./workspace-window-close-confirmation-handler";
 import { createWorkspaceWindowCloseRequestBroker } from "./workspace-window-close-request-broker";
+import { createWorkspaceOwnerTabActivationApplication } from "./workspace-owner-tab-activation-application";
 import { createWorkspaceOwnerTabActivationRequestBroker } from "./workspace-owner-tab-activation-request-broker";
 import { createWorkspaceWindowRegistrationApplication } from "./workspace-window-registration-application";
 import {
@@ -667,6 +668,31 @@ app.whenReady().then(async () => {
     }
   }
 
+  const workspaceOwnerTabActivationApplication =
+    createWorkspaceOwnerTabActivationApplication<BrowserWindow>({
+      workspace: workspaceState,
+      tabOperations: workspaceTabOperations,
+      activationRequestBroker: workspaceOwnerTabActivationRequestBroker,
+      resolveWindow: getWorkspaceWindowById,
+      isWindowUnavailable: (window) =>
+        window.isDestroyed() || window.webContents.isDestroyed(),
+      sendRequest: (window, request) => {
+        window.webContents.send(
+          REQUEST_WORKSPACE_OWNER_TAB_ACTIVATION_EVENT,
+          request
+        );
+      },
+      bindAbort: (window, listener) => {
+        window.webContents.on("render-process-gone", listener);
+        window.webContents.on("destroyed", listener);
+        return () => {
+          window.webContents.removeListener("render-process-gone", listener);
+          window.webContents.removeListener("destroyed", listener);
+        };
+      },
+      focusWindow: (window) => window.focus()
+    });
+
   const workspaceOpenApplication = createWorkspaceOpenApplication({
     workspace: workspaceState,
     tabOperations: workspaceTabOperations,
@@ -675,48 +701,8 @@ app.whenReady().then(async () => {
     resolveExisting: fileIdentityResolver.resolveExisting,
     resolveProspective: fileIdentityResolver.resolveProspective,
     openMarkdownFileFromPath,
-    activateOwnerWindowTab: async (windowId, tabId, identity) => {
-      const ownerWindow = getWorkspaceWindowById(windowId);
-      if (ownerWindow === null || ownerWindow.webContents.isDestroyed()) {
-        return "retry";
-      }
-      const activation = workspaceOwnerTabActivationRequestBroker.request({
-        windowId,
-        tabId,
-        sendRequest: (request) => {
-          ownerWindow.webContents.send(
-            REQUEST_WORKSPACE_OWNER_TAB_ACTIVATION_EVENT,
-            request
-          );
-        },
-        bindAbort: (listener) => {
-          ownerWindow.webContents.on("render-process-gone", listener);
-          ownerWindow.webContents.on("destroyed", listener);
-          return () => {
-            ownerWindow.webContents.removeListener("render-process-gone", listener);
-            ownerWindow.webContents.removeListener("destroyed", listener);
-          };
-        }
-      });
-      if (!(await activation.result)) {
-        return "failed";
-      }
-      return workspaceTabOperations.runExclusive(tabId, async () => {
-        const owner = workspaceState.getFileOwner(identity);
-        const currentWindow = getWorkspaceWindowById(windowId);
-        if (
-          owner.kind !== "owned" ||
-          owner.owner.tabId !== tabId ||
-          owner.owner.windowId !== windowId ||
-          currentWindow === null ||
-          currentWindow.webContents.isDestroyed()
-        ) {
-          return "retry";
-        }
-        currentWindow.focus();
-        return "activated";
-      });
-    },
+    activateOwnerWindowTab:
+      workspaceOwnerTabActivationApplication.activateOwnerWindowTab,
     recordRecentFilePath
   });
 

@@ -17,6 +17,7 @@ import {
 
 type ShowNotification = (notification: AppNotification) => void;
 type OpenResult = "opened" | "cancelled" | "failed";
+const WORKSPACE_ACTIVATION_DRAFT_DRAIN_LIMIT = 16;
 
 export function useWorkspaceController(input: {
   fishmark: Window["fishmark"];
@@ -40,6 +41,8 @@ export function useWorkspaceController(input: {
   const workspaceDraftSyncRetryPendingRef = useRef(false);
   const lastDraftSyncRequestRef = useRef<{ tabId: string; content: string } | null>(null);
   const pendingWorkspaceDraftRef = useRef<{ tabId: string; content: string } | null>(null);
+  const activationGenerationRef = useRef(0);
+  const mountedRef = useRef(true);
 
   const applyState = useCallback((updater: (current: EditorShellState) => EditorShellState): void => {
     const next = updater(stateRef.current);
@@ -50,6 +53,14 @@ export function useWorkspaceController(input: {
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      activationGenerationRef.current += 1;
+    };
+  }, []);
 
   const getState = useCallback((): EditorShellState => stateRef.current, []);
   const getCurrentActiveDocument = useCallback(() => getActiveDocument(stateRef.current), []);
@@ -79,7 +90,11 @@ export function useWorkspaceController(input: {
   );
 
   const syncActiveWorkspaceDraft = useCallback(
-    async (tabId: string, content: string): Promise<void> => {
+    async (
+      tabId: string,
+      content: string,
+      options: { applySnapshot?: boolean } = {}
+    ): Promise<WorkspaceWindowSnapshot> => {
       try {
         lastDraftSyncRequestRef.current = { tabId, content };
         const snapshot = await fishmark.updateWorkspaceTabDraft({
@@ -95,9 +110,12 @@ export function useWorkspaceController(input: {
         }
         workspaceDraftSyncFailureRef.current = null;
         workspaceDraftSyncRetryPendingRef.current = false;
-        applyWorkspaceWindowSnapshot(snapshot, {
-          preserveActiveDocumentDraft: true
-        });
+        if (options.applySnapshot ?? true) {
+          applyWorkspaceWindowSnapshot(snapshot, {
+            preserveActiveDocumentDraft: true
+          });
+        }
+        return snapshot;
       } catch (error) {
         workspaceDraftSyncFailureRef.current = error;
         throw error;
@@ -107,9 +125,13 @@ export function useWorkspaceController(input: {
   );
 
   const queueWorkspaceDraftSync = useCallback(
-    (tabId: string, content: string): Promise<void> => {
+    (
+      tabId: string,
+      content: string,
+      options: { applySnapshot?: boolean } = {}
+    ): Promise<WorkspaceWindowSnapshot> => {
       const nextSync = workspaceDraftSyncQueueRef.current.then(() =>
-        syncActiveWorkspaceDraft(tabId, content)
+        syncActiveWorkspaceDraft(tabId, content, options)
       );
 
       workspaceDraftSyncQueueRef.current = nextSync.then(
@@ -122,7 +144,26 @@ export function useWorkspaceController(input: {
     [syncActiveWorkspaceDraft]
   );
 
-  const flushActiveWorkspaceDraft = useCallback(async (): Promise<void> => {
+  const flushActiveWorkspaceDraft = useCallback(async (
+    options: { maxSyncPasses?: number } = {}
+  ): Promise<void> => {
+    let syncPasses = 0;
+    const queueBoundedDraftSync = async (
+      tabId: string,
+      content: string
+    ): Promise<void> => {
+      if (
+        options.maxSyncPasses !== undefined &&
+        syncPasses >= options.maxSyncPasses
+      ) {
+        throw new Error(
+          "Workspace draft flush was cancelled because editing did not settle."
+        );
+      }
+      syncPasses += 1;
+      await queueWorkspaceDraftSync(tabId, content);
+    };
+
     while (true) {
       const activeDocument = getActiveDocument(stateRef.current);
       const shouldForceCanonicalResync = workspaceDraftSyncRetryPendingRef.current;
@@ -151,7 +192,7 @@ export function useWorkspaceController(input: {
           );
         }
 
-        await queueWorkspaceDraftSync(activeDocument.tabId, currentContent);
+        await queueBoundedDraftSync(activeDocument.tabId, currentContent);
         continue;
       }
 
@@ -185,7 +226,7 @@ export function useWorkspaceController(input: {
         continue;
       }
 
-      await queueWorkspaceDraftSync(activeDocument.tabId, currentContent);
+      await queueBoundedDraftSync(activeDocument.tabId, currentContent);
     }
   }, [applyState, getEditorContent, queueWorkspaceDraftSync]);
 
@@ -367,24 +408,82 @@ export function useWorkspaceController(input: {
 
   const activateWorkspaceTab = useCallback(
     async (tabId: string): Promise<boolean> => {
-      if (getActiveTabId(stateRef.current) === tabId) {
-        return true;
-      }
+      const sourceTabId = getActiveTabId(stateRef.current);
+      const activationGeneration = ++activationGenerationRef.current;
+      const isCurrentActivation = (): boolean =>
+        mountedRef.current && activationGenerationRef.current === activationGeneration;
 
       try {
-        await flushActiveWorkspaceDraft();
-        const snapshot = await fishmark.activateWorkspaceTab({ tabId });
+        await flushActiveWorkspaceDraft({
+          maxSyncPasses: WORKSPACE_ACTIVATION_DRAFT_DRAIN_LIMIT
+        });
+        if (!isCurrentActivation()) {
+          return false;
+        }
+        if (sourceTabId === tabId) {
+          return getActiveTabId(stateRef.current) === tabId;
+        }
+
+        let snapshot = await fishmark.activateWorkspaceTab({ tabId });
+        if (!isCurrentActivation()) {
+          return false;
+        }
+
+        if (sourceTabId !== null) {
+          for (
+            let pass = 0;
+            pass < WORKSPACE_ACTIVATION_DRAFT_DRAIN_LIMIT;
+            pass += 1
+          ) {
+            const pendingDraft = pendingWorkspaceDraftRef.current;
+            if (pendingDraft?.tabId !== sourceTabId) {
+              break;
+            }
+            snapshot = await queueWorkspaceDraftSync(
+              sourceTabId,
+              pendingDraft.content,
+              { applySnapshot: false }
+            );
+            if (!isCurrentActivation()) {
+              return false;
+            }
+          }
+
+          if (pendingWorkspaceDraftRef.current?.tabId === sourceTabId) {
+            const rollbackSnapshot = await fishmark.activateWorkspaceTab({
+              tabId: sourceTabId
+            });
+            if (!isCurrentActivation()) {
+              return false;
+            }
+            applyWorkspaceWindowSnapshot(rollbackSnapshot, {
+              preserveActiveDocumentDraft: true
+            });
+            throw new Error(
+              "Workspace tab activation was cancelled because editing did not settle."
+            );
+          }
+        }
+
         applyWorkspaceWindowSnapshot(snapshot);
         return true;
       } catch (error) {
-        showNotification({
-          kind: "error",
-          message: error instanceof Error ? error.message : String(error)
-        });
+        if (isCurrentActivation()) {
+          showNotification({
+            kind: "error",
+            message: error instanceof Error ? error.message : String(error)
+          });
+        }
         return false;
       }
     },
-    [applyWorkspaceWindowSnapshot, fishmark, flushActiveWorkspaceDraft, showNotification]
+    [
+      applyWorkspaceWindowSnapshot,
+      fishmark,
+      flushActiveWorkspaceDraft,
+      queueWorkspaceDraftSync,
+      showNotification
+    ]
   );
 
   useEffect(

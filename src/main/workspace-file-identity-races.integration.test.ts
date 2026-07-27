@@ -397,21 +397,25 @@ function createStatefulResolver(
     physicalKey: identity.object
   });
   return {
-    resolveExisting: vi.fn(async () => {
+    resolveExisting: vi.fn(async (targetPath: string) => {
+      void targetPath;
       if (!exists()) {
         throw Object.assign(new Error("missing"), { code: "ENOENT" });
       }
       return existing();
     }),
-    resolveProspective: vi.fn(async () => exists()
-      ? existing()
-      : {
-          canonicalPath,
-          identity: null,
-          exists: false as const,
-          pathKey: identity.location,
-          physicalKey: null
-        })
+    resolveProspective: vi.fn(async (targetPath: string) => {
+      void targetPath;
+      return exists()
+        ? existing()
+        : {
+            canonicalPath,
+            identity: null,
+            exists: false as const,
+            pathKey: identity.location,
+            physicalKey: null
+          };
+    })
   };
 }
 

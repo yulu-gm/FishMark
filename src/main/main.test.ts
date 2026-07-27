@@ -223,23 +223,18 @@ describe("main process window wiring", () => {
     expect(mainSource).not.toContain('disposition: "opened-in-new-window"');
   });
 
-  it("awaits owner-renderer activation and revalidates ownership before focus", () => {
+  it("composes owner-renderer activation through the executable CAS application", () => {
     const mainSource = readMainSource();
-    const activationStart = mainSource.indexOf("activateOwnerWindowTab: async");
-    const activationSource = mainSource.slice(
-      activationStart,
-      mainSource.indexOf("recordRecentFilePath", activationStart)
-    );
 
     expect(mainSource).not.toContain("WORKSPACE_WINDOW_SNAPSHOT_EVENT");
     expect(mainSource).toContain("createWorkspaceOwnerTabActivationRequestBroker");
-    expect(activationSource).toContain("REQUEST_WORKSPACE_OWNER_TAB_ACTIVATION_EVENT");
-    expect(activationSource).toContain("if (!(await activation.result))");
-    expect(activationSource).toContain("workspaceTabOperations.runExclusive(tabId");
-    expect(activationSource).toContain("workspaceState.getFileOwner(identity)");
-    expect(activationSource.indexOf("await activation.result")).toBeLessThan(
-      activationSource.indexOf("currentWindow.focus()")
+    expect(mainSource).toContain("createWorkspaceOwnerTabActivationApplication");
+    expect(mainSource).toContain("activationRequestBroker: workspaceOwnerTabActivationRequestBroker");
+    expect(mainSource).toContain("REQUEST_WORKSPACE_OWNER_TAB_ACTIVATION_EVENT");
+    expect(mainSource).toMatch(
+      /activateOwnerWindowTab:\s*workspaceOwnerTabActivationApplication\.activateOwnerWindowTab/
     );
+    expect(mainSource).not.toContain("activateOwnerWindowTab: async");
   });
 
   it("only initializes the scenario runner stack in test-workbench mode", () => {
