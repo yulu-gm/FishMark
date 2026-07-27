@@ -1,22 +1,58 @@
 import {
   createWorkspaceState,
+  fileIdentity,
   type DocumentSessionProjection
 } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 
 import type { OpenMarkdownDocument } from "../shared/open-markdown-file";
+import type { SaveMarkdownFileResult } from "../shared/save-markdown-file";
 import { createWorkspaceCloseCoordinator as createWorkspaceCloseCoordinatorWithOperations } from "./workspace-close-coordinator";
-import { createWorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
+import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator";
+import { openTestDocument } from "./workspace.test-helper";
 
 function createWorkspaceCloseCoordinator(
   dependencies: Omit<
     Parameters<typeof createWorkspaceCloseCoordinatorWithOperations>[0],
-    "documentOperations"
-  >
+    "workspace" | "documentOperations" | "persistWorkspaceTab"
+  > & {
+    workspace: Parameters<typeof createWorkspaceCloseCoordinatorWithOperations>[0]["workspace"] &
+      Pick<ReturnType<typeof createWorkspaceState>, "saveTabDocument">;
+    saveMarkdownFileToPath: (input: { tabId: string; path: string; content: string }) => Promise<SaveMarkdownFileResult>;
+    showSaveMarkdownDialog: (input: { tabId: string; currentPath: string | null; content: string }) => Promise<SaveMarkdownFileResult>;
+  }
 ) {
+  const { saveMarkdownFileToPath, showSaveMarkdownDialog, workspace, ...rest } = dependencies;
   return createWorkspaceCloseCoordinatorWithOperations({
-    ...dependencies,
-    documentOperations: createWorkspaceDocumentOperationCoordinator()
+    ...rest,
+    workspace,
+    documentOperations: createKeyedOperationCoordinator(),
+    persistWorkspaceTab: async (tab, commitGuard) => {
+      const result = tab.path === null
+        ? await showSaveMarkdownDialog({ tabId: tab.tabId, currentPath: null, content: tab.content })
+        : await saveMarkdownFileToPath({ tabId: tab.tabId, path: tab.path, content: tab.content });
+      if (result.status === "success") {
+        if (!commitGuard()) {
+          return { status: "cancelled" };
+        }
+        if (!result.document.path || result.document.content !== tab.content) {
+          throw new Error("Close Save As adapter returned invalid document data.");
+        }
+        if (tab.path !== null && result.document.path !== tab.path) {
+          throw new Error("Close save adapter path does not match the canonical close-save checkpoint.");
+        }
+        const identity = (result.document as OpenMarkdownDocument & { fileIdentity?: ReturnType<typeof fileIdentity> }).fileIdentity
+          ?? tab.fileIdentity;
+        workspace.saveTabDocument({
+          tabId: tab.tabId,
+          expectedWindowId: tab.windowId,
+          capturedRevision: tab.revision,
+          document: { fileIdentity: identity, ...result.document },
+          diskVersion: null
+        });
+      }
+      return result;
+    }
   });
 }
 
@@ -24,8 +60,8 @@ function createDocument(
   name: string,
   content: string,
   path: string = `C:/notes/${name}`
-): OpenMarkdownDocument {
-  return { path, name, content, encoding: "utf-8" };
+): OpenMarkdownDocument & { fileIdentity: ReturnType<typeof fileIdentity> } {
+  return { fileIdentity: fileIdentity(`file:${path.toLowerCase()}`), path, name, content, encoding: "utf-8" };
 }
 
 const windowCloseRequest = (
@@ -37,11 +73,11 @@ describe("createWorkspaceCloseCoordinator", () => {
   it("closes only the requested tab after an unchanged discard decision", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const firstTabId = workspace.openDocument(
+    const firstTabId = openTestDocument(workspace,
       "window-1",
       createDocument("first.md", "first")
     ).activeTabId!;
-    const secondTabId = workspace.openDocument(
+    const secondTabId = openTestDocument(workspace,
       "window-1",
       createDocument("second.md", "second")
     ).activeTabId!;
@@ -81,12 +117,12 @@ describe("createWorkspaceCloseCoordinator", () => {
   it("confirms a window in tab order and commits the captured owner and revision", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const firstTabId = workspace.openDocument(
+    const firstTabId = openTestDocument(workspace,
       "window-1",
       createDocument("first.md", "first")
     ).activeTabId!;
-    workspace.openDocument("window-1", createDocument("clean.md", "clean"));
-    const thirdTabId = workspace.openDocument(
+    openTestDocument(workspace, "window-1", createDocument("clean.md", "clean"));
+    const thirdTabId = openTestDocument(workspace,
       "window-1",
       createDocument("third.md", "third")
     ).activeTabId!;
@@ -163,7 +199,7 @@ describe("createWorkspaceCloseCoordinator", () => {
   it("revalidates after cancel before returning the sender projection", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const tabId = workspace.openDocument(
+    const tabId = openTestDocument(workspace,
       "window-1",
       createDocument("cancel.md", "saved")
     ).activeTabId!;
@@ -237,7 +273,7 @@ describe("createWorkspaceCloseCoordinator", () => {
   it("rejects a close-save adapter path that differs from the canonical checkpoint", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const tabId = workspace.openDocument(
+    const tabId = openTestDocument(workspace,
       "window-1",
       createDocument("canonical.md", "saved")
     ).activeTabId!;
@@ -317,7 +353,7 @@ describe("createWorkspaceCloseCoordinator", () => {
   it("cancels discard when the tab moves during the prompt", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const tabId = workspace.openDocument(
+    const tabId = openTestDocument(workspace,
       "window-1",
       createDocument("move-prompt.md", "saved")
     ).activeTabId!;
@@ -358,7 +394,7 @@ describe("createWorkspaceCloseCoordinator", () => {
   it("cancels close when an edit arrives during save", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const tabId = workspace.openDocument(
+    const tabId = openTestDocument(workspace,
       "window-1",
       createDocument("edit-save.md", "saved")
     ).activeTabId!;
@@ -408,7 +444,7 @@ describe("createWorkspaceCloseCoordinator", () => {
   it("cancels close and leaves the target dirty when the tab moves during save", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const tabId = workspace.openDocument(
+    const tabId = openTestDocument(workspace,
       "window-1",
       createDocument("move-save.md", "saved")
     ).activeTabId!;
@@ -456,11 +492,11 @@ describe("createWorkspaceCloseCoordinator", () => {
   it("revalidates earlier window checkpoints after later prompts", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const firstTabId = workspace.openDocument(
+    const firstTabId = openTestDocument(workspace,
       "window-1",
       createDocument("first.md", "first")
     ).activeTabId!;
-    const secondTabId = workspace.openDocument(
+    const secondTabId = openTestDocument(workspace,
       "window-1",
       createDocument("second.md", "second")
     ).activeTabId!;
@@ -487,7 +523,7 @@ describe("createWorkspaceCloseCoordinator", () => {
   it("cancels an inactive window confirmation before prompting", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const tabId = workspace.openDocument(
+    const tabId = openTestDocument(workspace,
       "window-1",
       createDocument("inactive.md", "saved")
     ).activeTabId!;
@@ -511,7 +547,7 @@ describe("createWorkspaceCloseCoordinator", () => {
   it("does not start a close save after confirmation becomes inactive during the prompt", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const tabId = workspace.openDocument(
+    const tabId = openTestDocument(workspace,
       "window-1",
       createDocument("prompt-timeout.md", "saved")
     ).activeTabId!;
@@ -544,7 +580,7 @@ describe("createWorkspaceCloseCoordinator", () => {
   it("does not commit a close save that returns after confirmation becomes inactive", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const tabId = workspace.openDocument(
+    const tabId = openTestDocument(workspace,
       "window-1",
       createDocument("write-timeout.md", "saved")
     ).activeTabId!;
@@ -588,7 +624,7 @@ describe("createWorkspaceCloseCoordinator", () => {
   it("fails closed when a dirty tab is added while the first prompt is pending", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const firstTabId = workspace.openDocument(
+    const firstTabId = openTestDocument(workspace,
       "window-1",
       createDocument("first.md", "first")
     ).activeTabId!;
@@ -627,11 +663,11 @@ describe("createWorkspaceCloseCoordinator", () => {
   it("fails closed when the initial tab order changes during a prompt", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const firstTabId = workspace.openDocument(
+    const firstTabId = openTestDocument(workspace,
       "window-1",
       createDocument("first.md", "first")
     ).activeTabId!;
-    const secondTabId = workspace.openDocument(
+    const secondTabId = openTestDocument(workspace,
       "window-1",
       createDocument("second.md", "second")
     ).activeTabId!;
@@ -668,7 +704,7 @@ describe("createWorkspaceCloseCoordinator", () => {
   it("explicitly rejects a stale close result without a sender projection", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const tabId = workspace.openDocument(
+    const tabId = openTestDocument(workspace,
       "window-1",
       createDocument("clean.md", "clean")
     ).activeTabId!;
@@ -701,11 +737,11 @@ describe("createWorkspaceCloseCoordinator", () => {
   it("fails closed when an initial dirty tab closes while its prompt is pending", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const closingTabId = workspace.openDocument(
+    const closingTabId = openTestDocument(workspace,
       "window-1",
       createDocument("closing.md", "saved")
     ).activeTabId!;
-    const remainingTabId = workspace.openDocument(
+    const remainingTabId = openTestDocument(workspace,
       "window-1",
       createDocument("remaining.md", "remaining")
     ).activeTabId!;
@@ -742,11 +778,11 @@ describe("createWorkspaceCloseCoordinator", () => {
   it("fails closed when an initial dirty tab moves while its prompt is pending", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const movingTabId = workspace.openDocument(
+    const movingTabId = openTestDocument(workspace,
       "window-1",
       createDocument("moving.md", "saved")
     ).activeTabId!;
-    const remainingTabId = workspace.openDocument(
+    const remainingTabId = openTestDocument(workspace,
       "window-1",
       createDocument("remaining.md", "remaining")
     ).activeTabId!;

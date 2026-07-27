@@ -1,7 +1,7 @@
 import { createWorkspaceState } from "@fishmark/workspace-domain";
 import { describe, expect, it } from "vitest";
 
-import { createWorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
+import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator";
 import { createWorkspaceTabTransferApplication } from "./workspace-tab-transfer-application";
 
 describe("createWorkspaceTabTransferApplication", () => {
@@ -9,7 +9,7 @@ describe("createWorkspaceTabTransferApplication", () => {
     "runs %s owner transfer inside the tab document lease",
     async (kind) => {
       const workspace = createWorkspaceState();
-      const documentOperations = createWorkspaceDocumentOperationCoordinator();
+      const documentOperations = createKeyedOperationCoordinator();
       workspace.registerWindow("window-1");
       const tabId = workspace.createUntitledTab("window-1").activeTabId!;
       workspace.registerWindow("window-2");
@@ -38,7 +38,7 @@ describe("createWorkspaceTabTransferApplication", () => {
 
   it("rejects a stale source owner inside the lease before transfer", async () => {
     const workspace = createWorkspaceState();
-    const documentOperations = createWorkspaceDocumentOperationCoordinator();
+    const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
     workspace.registerWindow("window-2");

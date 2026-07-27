@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { openMarkdownFileFromPath, showOpenMarkdownDialog } from "./open-markdown-file";
+import { openMarkdownFileFromPath, showOpenMarkdownPathDialog } from "./open-markdown-file";
 
 describe("openMarkdownFileFromPath", () => {
   it("returns a success result for a UTF-8 markdown file", async () => {
@@ -115,10 +115,9 @@ describe("openMarkdownFileFromPath", () => {
   });
 });
 
-describe("showOpenMarkdownDialog", () => {
+describe("showOpenMarkdownPathDialog", () => {
   it("returns cancelled when the user closes the picker", async () => {
-    const result = await showOpenMarkdownDialog({
-      openMarkdownFileFromPath: vi.fn(),
+    const result = await showOpenMarkdownPathDialog({
       showOpenDialog: vi.fn().mockResolvedValue({ canceled: true, filePaths: [] })
     });
 
@@ -126,8 +125,7 @@ describe("showOpenMarkdownDialog", () => {
   });
 
   it("returns dialog-failed when the file picker throws", async () => {
-    const result = await showOpenMarkdownDialog({
-      openMarkdownFileFromPath: vi.fn(),
+    const result = await showOpenMarkdownPathDialog({
       showOpenDialog: vi.fn().mockRejectedValue(new Error("picker failed"))
     });
 
@@ -140,17 +138,8 @@ describe("showOpenMarkdownDialog", () => {
     });
   });
 
-  it("reads the selected file when the picker returns a path", async () => {
-    const result = await showOpenMarkdownDialog({
-      openMarkdownFileFromPath: vi.fn().mockResolvedValue({
-        status: "success",
-        document: {
-          path: "C:/notes/today.md",
-          name: "today.md",
-          content: "# Today\n",
-          encoding: "utf-8"
-        }
-      }),
+  it("returns the selected path without reading it", async () => {
+    const result = await showOpenMarkdownPathDialog({
       showOpenDialog: vi.fn().mockResolvedValue({
         canceled: false,
         filePaths: ["C:/notes/today.md"]
@@ -159,12 +148,7 @@ describe("showOpenMarkdownDialog", () => {
 
     expect(result).toEqual({
       status: "success",
-      document: {
-        path: "C:/notes/today.md",
-        name: "today.md",
-        content: "# Today\n",
-        encoding: "utf-8"
-      }
+      path: "C:/notes/today.md"
     });
   });
 });

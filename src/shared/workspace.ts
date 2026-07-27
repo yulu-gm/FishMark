@@ -88,6 +88,10 @@ export type WorkspaceCommandCancelled = {
   kind: "cancelled";
 };
 
+export type WorkspaceCommandFocusedExisting = {
+  kind: "focused-existing";
+};
+
 export type WorkspaceCommandError = {
   kind: "error";
   error: WorkspaceResultError;
@@ -96,10 +100,12 @@ export type WorkspaceCommandError = {
 export type OpenWorkspaceFileResult =
   | WorkspaceCommandSuccess<WorkspaceWindowSnapshot>
   | WorkspaceCommandCancelled
+  | WorkspaceCommandFocusedExisting
   | WorkspaceCommandError;
 
 export type OpenWorkspaceFileFromPathResult =
   | WorkspaceCommandSuccess<WorkspaceWindowSnapshot>
+  | WorkspaceCommandFocusedExisting
   | WorkspaceCommandError;
 
 export type OpenWorkspacePathRequest = {

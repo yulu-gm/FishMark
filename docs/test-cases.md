@@ -111,6 +111,25 @@
 - 当前文档路径更新为新路径
 - 原文件不会被本次另存为覆盖
 
+### TC-006A 物理文件唯一会话与并发文件事务
+
+步骤：
+1. 在临时目录创建一个 Markdown 文件，再分别创建指向它的硬链接和符号链接（平台不允许符号链接时记录该能力限制）。
+2. 从同一窗口和两个不同窗口分别打开原路径、硬链接路径和符号链接路径。
+3. 让 owner 窗口先激活其他标签，再从另一窗口重复打开上述任一别名。
+4. 新建两个未保存标签，同时将它们另存为同一新路径；再用两个现有硬链接路径重复该并发另存为。
+5. 在另存为创建新文件的写入期间，从另一窗口打开该路径。
+6. 打开一个已保存文档，在系统外部用新 inode 替换同一路径，再分别尝试普通保存与“重载磁盘版本”。
+
+预期：
+- 原路径、硬链接和符号链接全局只对应一个 editable session；hard link 通过可靠的 `dev + ino` 识别，无法绕过唯一 owner
+- 跨窗口重复打开会先激活 owner 的正确标签并同步 owner 窗口快照，再聚焦 owner 窗口；请求方只收到 `focused-existing`，不会得到 foreign projection
+- 同一路径或同一 inode 的并发 Save As 最多执行一次写入并提交一个 owner；另一个操作在写前返回 identity conflict
+- Open 会等待同 location 的 Save As 创建事务，完成后只激活已提交 owner，不重复读盘或创建第二个 session
+- 普通保存发现同 location 的 object identity 已变化时 fail closed、零写入且保持 dirty；显式 Reload 在稳定的 location/object lease 内读取并原子迁移到新 object identity
+- 所有交错均按 `tab -> location -> object` 锁序完成，不死锁；失败后 lease 可继续被后续操作获取
+- 文件系统不提供可靠 object id 时退回 canonical realpath identity；只在 Windows 做大小写折叠，不假设所有 macOS 文件系统都大小写不敏感
+
 ### TC-008 最近文件列表
 
 步骤：

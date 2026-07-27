@@ -6,12 +6,7 @@ import type {
 } from "@fishmark/workspace-domain";
 
 import type { SaveMarkdownFileResult } from "../shared/save-markdown-file";
-import type {
-  SaveMarkdownFileToPathInput,
-  ShowSaveMarkdownDialogInput
-} from "./save-markdown-file";
-import type { WorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
-import { requirePersistedMarkdownDocument } from "./persisted-markdown-document";
+import type { KeyedOperationCoordinator } from "./keyed-operation-coordinator";
 
 type DirtyWorkspaceTabChoice = "save" | "discard" | "cancel";
 
@@ -37,21 +32,18 @@ type WorkspaceCloseCoordinatorDependencies = {
     | "getTabSession"
     | "getWindowProjection"
     | "getWindowTabIds"
-    | "saveTabDocument"
     | "closeTab"
   >;
   documentOperations: Pick<
-    WorkspaceDocumentOperationCoordinator,
+    KeyedOperationCoordinator<string>,
     "runExclusive"
   >;
   promptToSaveWorkspaceTab: (
     tab: DocumentSessionProjection
   ) => Promise<DirtyWorkspaceTabChoice>;
-  saveMarkdownFileToPath: (
-    input: SaveMarkdownFileToPathInput
-  ) => Promise<SaveMarkdownFileResult>;
-  showSaveMarkdownDialog: (
-    input: ShowSaveMarkdownDialogInput
+  persistWorkspaceTab: (
+    tab: DocumentSessionProjection,
+    commitGuard: () => boolean
   ) => Promise<SaveMarkdownFileResult>;
 };
 
@@ -209,18 +201,7 @@ export function createWorkspaceCloseCoordinator(
       return false;
     }
 
-    const result =
-      checkpoint.path === null
-        ? await dependencies.showSaveMarkdownDialog({
-            tabId: checkpoint.tabId,
-            currentPath: null,
-            content: checkpoint.content
-          })
-        : await dependencies.saveMarkdownFileToPath({
-            tabId: checkpoint.tabId,
-            path: checkpoint.path,
-            content: checkpoint.content
-          });
+    const result = await dependencies.persistWorkspaceTab(checkpoint, isActive);
 
     if (!isActive()) {
       return false;
@@ -231,43 +212,6 @@ export function createWorkspaceCloseCoordinator(
     }
     if (result.status === "error") {
       throw new Error(result.error.message);
-    }
-
-    const savedDocument = requirePersistedMarkdownDocument(
-      result.document,
-      checkpoint.path === null
-        ? "Close Save As adapter"
-        : "Close save adapter"
-    );
-    if (savedDocument.content !== checkpoint.content) {
-      throw new Error(
-        "Close save adapter content does not match the captured close-save content."
-      );
-    }
-    if (checkpoint.path !== null && savedDocument.path !== checkpoint.path) {
-      throw new Error(
-        "Close save adapter path does not match the canonical close-save checkpoint."
-      );
-    }
-    const canonicalDocument =
-      checkpoint.path === null
-        ? savedDocument
-        : {
-            path: checkpoint.path,
-            name: checkpoint.name,
-            content: checkpoint.content,
-            encoding: checkpoint.encoding
-          };
-
-    const commit = dependencies.workspace.saveTabDocument({
-      tabId: checkpoint.tabId,
-      expectedWindowId: input.expectedWindowId,
-      capturedRevision: checkpoint.revision,
-      document: canonicalDocument,
-      diskVersion: null
-    });
-    if (commit.kind === "stale") {
-      return false;
     }
 
     const finalCheckpoint = getMatchingCheckpoint(input);

@@ -1,14 +1,14 @@
 import { createWorkspaceState } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 
-import { createWorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
+import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator";
 import { createWorkspaceTabReorderApplication } from "./workspace-tab-reorder-application";
 import { createWorkspaceTabTransferApplication } from "./workspace-tab-transfer-application";
 import { createWorkspaceWindowCloseApplication } from "./workspace-window-close-application";
 
 function createFixture() {
   const workspace = createWorkspaceState();
-  const documentOperations = createWorkspaceDocumentOperationCoordinator();
+  const documentOperations = createKeyedOperationCoordinator();
   workspace.registerWindow("window-1");
   const firstTabId = workspace.createUntitledTab("window-1").activeTabId!;
   const secondTabId = workspace.createUntitledTab("window-1").activeTabId!;

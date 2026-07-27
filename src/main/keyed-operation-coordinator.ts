@@ -1,23 +1,21 @@
-export interface WorkspaceDocumentOperationLease {
+export interface KeyedOperationLease {
   release(): void;
 }
 
-export interface WorkspaceDocumentOperationCoordinator {
-  runExclusive<T>(tabId: string, operation: () => Promise<T>): Promise<T>;
-  acquireExclusive(
-    tabIds: readonly string[]
-  ): Promise<WorkspaceDocumentOperationLease>;
+export interface KeyedOperationCoordinator<TKey extends string> {
+  runExclusive<T>(key: TKey, operation: () => Promise<T>): Promise<T>;
+  acquireExclusive(keys: readonly TKey[]): Promise<KeyedOperationLease>;
 }
 
 type PendingOperation = {
   readonly completion: Promise<void>;
 };
 
-export function createWorkspaceDocumentOperationCoordinator(): WorkspaceDocumentOperationCoordinator {
-  const tails = new Map<string, PendingOperation>();
+export function createKeyedOperationCoordinator<TKey extends string>(): KeyedOperationCoordinator<TKey> {
+  const tails = new Map<TKey, PendingOperation>();
 
-  async function acquireOne(tabId: string): Promise<WorkspaceDocumentOperationLease> {
-    const previous = tails.get(tabId)?.completion ?? Promise.resolve();
+  async function acquireOne(key: TKey): Promise<KeyedOperationLease> {
+    const previous = tails.get(key)?.completion ?? Promise.resolve();
     let releaseCurrent!: () => void;
     const currentGate = new Promise<void>((resolve) => {
       releaseCurrent = resolve;
@@ -25,7 +23,7 @@ export function createWorkspaceDocumentOperationCoordinator(): WorkspaceDocument
     const current: PendingOperation = {
       completion: previous.then(() => currentGate)
     };
-    tails.set(tabId, current);
+    tails.set(key, current);
 
     await previous;
 
@@ -38,8 +36,8 @@ export function createWorkspaceDocumentOperationCoordinator(): WorkspaceDocument
         released = true;
         releaseCurrent();
         void current.completion.then(() => {
-          if (tails.get(tabId) === current) {
-            tails.delete(tabId);
+          if (tails.get(key) === current) {
+            tails.delete(key);
           }
         });
       }
@@ -47,13 +45,13 @@ export function createWorkspaceDocumentOperationCoordinator(): WorkspaceDocument
   }
 
   async function acquireExclusive(
-    tabIds: readonly string[]
-  ): Promise<WorkspaceDocumentOperationLease> {
-    const orderedTabIds = [...new Set(tabIds)].sort();
-    const leases: WorkspaceDocumentOperationLease[] = [];
+    keys: readonly TKey[]
+  ): Promise<KeyedOperationLease> {
+    const orderedKeys = [...new Set(keys)].sort();
+    const leases: KeyedOperationLease[] = [];
 
-    for (const tabId of orderedTabIds) {
-      leases.push(await acquireOne(tabId));
+    for (const key of orderedKeys) {
+      leases.push(await acquireOne(key));
     }
 
     let released = false;
@@ -72,10 +70,10 @@ export function createWorkspaceDocumentOperationCoordinator(): WorkspaceDocument
 
   return {
     async runExclusive<T>(
-      tabId: string,
+      key: TKey,
       operation: () => Promise<T>
     ): Promise<T> {
-      const lease = await acquireExclusive([tabId]);
+      const lease = await acquireExclusive([key]);
       try {
         return await operation();
       } finally {

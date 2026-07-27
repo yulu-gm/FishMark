@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { saveMarkdownFileToPath, showSaveMarkdownDialog } from "./save-markdown-file";
+import {
+  saveMarkdownFileToPath,
+  showSaveMarkdownPathDialog
+} from "./save-markdown-file";
 
 describe("saveMarkdownFileToPath", () => {
   it("writes UTF-8 content to the target path and returns saved metadata", async () => {
@@ -49,20 +52,13 @@ describe("saveMarkdownFileToPath", () => {
   });
 });
 
-describe("showSaveMarkdownDialog", () => {
+describe("showSaveMarkdownPathDialog", () => {
   it("supports untitled documents by allowing a missing current path", async () => {
     const showSaveDialog = vi.fn().mockResolvedValue({ canceled: true, filePath: undefined });
 
-    const result = await showSaveMarkdownDialog(
-      {
-        tabId: "tab-1",
-        currentPath: null,
-        content: ""
-      },
-      {
-        saveMarkdownFileToPath: vi.fn(),
-        showSaveDialog
-      }
+    const result = await showSaveMarkdownPathDialog(
+      { currentPath: null },
+      { showSaveDialog }
     );
 
     expect(result).toEqual({ status: "cancelled" });
@@ -70,14 +66,9 @@ describe("showSaveMarkdownDialog", () => {
   });
 
   it("returns cancelled when the user closes the save dialog", async () => {
-    const result = await showSaveMarkdownDialog(
+    const result = await showSaveMarkdownPathDialog(
+      { currentPath: "C:/notes/today.md" },
       {
-        tabId: "tab-1",
-        currentPath: "C:/notes/today.md",
-        content: "# Updated\n"
-      },
-      {
-        saveMarkdownFileToPath: vi.fn(),
         showSaveDialog: vi.fn().mockResolvedValue({ canceled: true, filePath: undefined })
       }
     );
@@ -85,23 +76,10 @@ describe("showSaveMarkdownDialog", () => {
     expect(result).toEqual({ status: "cancelled" });
   });
 
-  it("writes the selected path and returns the updated metadata", async () => {
-    const result = await showSaveMarkdownDialog(
+  it("returns the selected path without writing the document", async () => {
+    const result = await showSaveMarkdownPathDialog(
+      { currentPath: "C:/notes/today.md" },
       {
-        tabId: "tab-1",
-        currentPath: "C:/notes/today.md",
-        content: "# Updated\n"
-      },
-      {
-        saveMarkdownFileToPath: vi.fn().mockResolvedValue({
-          status: "success",
-          document: {
-            path: "C:/archive/renamed.md",
-            name: "renamed.md",
-            content: "# Updated\n",
-            encoding: "utf-8"
-          }
-        }),
         showSaveDialog: vi.fn().mockResolvedValue({
           canceled: false,
           filePath: "C:/archive/renamed.md"
@@ -111,11 +89,26 @@ describe("showSaveMarkdownDialog", () => {
 
     expect(result).toEqual({
       status: "success",
-      document: {
-        path: "C:/archive/renamed.md",
-        name: "renamed.md",
-        content: "# Updated\n",
-        encoding: "utf-8"
+      path: "C:/archive/renamed.md"
+    });
+  });
+
+  it("returns dialog-failed when the dialog does not provide a path", async () => {
+    const result = await showSaveMarkdownPathDialog(
+      { currentPath: "C:/notes/today.md" },
+      {
+        showSaveDialog: vi.fn().mockResolvedValue({
+          canceled: false,
+          filePath: undefined
+        })
+      }
+    );
+
+    expect(result).toEqual({
+      status: "error",
+      error: {
+        code: "dialog-failed",
+        message: "The save dialog could not be opened."
       }
     });
   });

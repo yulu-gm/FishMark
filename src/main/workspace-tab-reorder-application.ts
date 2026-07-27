@@ -3,13 +3,13 @@ import type {
   WorkspaceWindowProjection
 } from "@fishmark/workspace-domain";
 
-import type { WorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
+import type { KeyedOperationCoordinator } from "./keyed-operation-coordinator";
 import { requireAppliedWorkspaceMutation } from "./workspace-mutation-result";
 
 type WorkspaceTabReorderApplicationDependencies = {
   workspace: Pick<WorkspaceState, "reorderTab">;
   documentOperations: Pick<
-    WorkspaceDocumentOperationCoordinator,
+    KeyedOperationCoordinator<string>,
     "runExclusive"
   >;
 };

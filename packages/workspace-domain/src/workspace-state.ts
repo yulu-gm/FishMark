@@ -1,6 +1,12 @@
 import type { DiskVersion } from "./disk-version";
 import type { DocumentRevision } from "./document-revision";
 import {
+  sameFileIdentity,
+  type FileIdentity,
+  type FileLocationIdentity,
+  type FileObjectIdentity
+} from "./file-identity";
+import {
   commitSavedDocument,
   createDocumentSession,
   moveDocumentSession,
@@ -95,6 +101,29 @@ export type WorkspaceMutationResult =
       readonly projection: WorkspaceWindowProjection | null;
     };
 
+export type WorkspaceSaveMutationResult =
+  | WorkspaceMutationResult
+  | {
+      readonly kind: "file-identity-conflict";
+      readonly projection: WorkspaceWindowProjection;
+    };
+
+export type OpenWorkspaceDocumentResult =
+  | { readonly kind: "opened"; readonly projection: WorkspaceWindowProjection }
+  | {
+      readonly kind: "activated-existing";
+      readonly projection: WorkspaceWindowProjection;
+    }
+  | {
+      readonly kind: "owned-by-other-window";
+      readonly ownerWindowId: string;
+    };
+
+export interface WorkspaceFileOwner {
+  readonly tabId: string;
+  readonly windowId: string;
+}
+
 export interface MoveWorkspaceTabInput {
   readonly tabId: string;
   readonly targetWindowId: string;
@@ -118,11 +147,12 @@ export interface WorkspaceState {
   ) => WorkspaceWindowProjection | null;
   readonly getWindowTabIds: (windowId: string) => readonly string[];
   readonly getTabSession: (tabId: string) => DocumentSessionProjection;
+  readonly getFileOwner: (fileIdentity: FileIdentity) => WorkspaceFileOwner | null;
   readonly createUntitledTab: (windowId: string) => WorkspaceWindowProjection;
   readonly openDocument: (
     windowId: string,
     document: WorkspaceDocumentData
-  ) => WorkspaceWindowProjection;
+  ) => OpenWorkspaceDocumentResult;
   readonly activateTab: (
     windowId: string,
     tabId: string
@@ -132,10 +162,10 @@ export interface WorkspaceState {
   ) => WorkspaceMutationResult;
   readonly saveTabDocument: (
     input: CommitWorkspaceDocumentInput
-  ) => WorkspaceMutationResult;
+  ) => WorkspaceSaveMutationResult;
   readonly replaceTabDocument: (
     input: ReplaceWorkspaceDocumentInput
-  ) => WorkspaceMutationResult;
+  ) => WorkspaceSaveMutationResult;
   readonly closeTab: (input: CloseWorkspaceTabInput) => WorkspaceMutationResult;
   readonly reorderTab: (
     input: ReorderWorkspaceTabInput
@@ -163,6 +193,8 @@ class CanonicalWorkspaceState implements WorkspaceState {
   private readonly windows = new Map<string, WindowSession>();
   private readonly tabs = new Map<string, DocumentSessionState>();
   private readonly tabToWindowId = new Map<string, string>();
+  private readonly fileLocationToTabId = new Map<FileLocationIdentity, string>();
+  private readonly fileObjectToTabId = new Map<FileObjectIdentity, string>();
   private nextTabId = 1;
   private lastFocusedWindowId: string | null = null;
 
@@ -182,6 +214,10 @@ class CanonicalWorkspaceState implements WorkspaceState {
     }
 
     for (const tabId of window.tabIds) {
+      const identity = this.tabs.get(tabId)?.fileIdentity;
+      if (identity !== null && identity !== undefined) {
+        this.releaseFileIdentity(identity);
+      }
       this.tabs.delete(tabId);
       this.tabToWindowId.delete(tabId);
     }
@@ -233,8 +269,21 @@ class CanonicalWorkspaceState implements WorkspaceState {
     return projectDocumentSession(this.getTab(tabId));
   }
 
+  getFileOwner(fileIdentity: FileIdentity): WorkspaceFileOwner | null {
+    const tabId = this.findIdentityOwnerTabId(fileIdentity);
+    if (tabId === undefined) {
+      return null;
+    }
+    const windowId = this.tabToWindowId.get(tabId);
+    if (windowId === undefined) {
+      throw new Error("File identity has no workspace owner.");
+    }
+    return Object.freeze({ tabId, windowId });
+  }
+
   createUntitledTab(windowId: string): WorkspaceWindowProjection {
     return this.appendDocument(windowId, {
+      fileIdentity: null,
       path: null,
       name: UNTITLED_DOCUMENT_NAME,
       content: "",
@@ -245,8 +294,27 @@ class CanonicalWorkspaceState implements WorkspaceState {
   openDocument(
     windowId: string,
     document: WorkspaceDocumentData
-  ): WorkspaceWindowProjection {
-    return this.appendDocument(windowId, document);
+  ): OpenWorkspaceDocumentResult {
+    if (document.fileIdentity === null) {
+      throw new TypeError("Opened files require a physical file identity.");
+    }
+    const owner = this.getFileOwner(document.fileIdentity);
+    if (owner !== null) {
+      if (owner.windowId !== windowId) {
+        return Object.freeze({
+          kind: "owned-by-other-window",
+          ownerWindowId: owner.windowId
+        });
+      }
+      return Object.freeze({
+        kind: "activated-existing",
+        projection: this.activateTab(windowId, owner.tabId)
+      });
+    }
+    return Object.freeze({
+      kind: "opened",
+      projection: this.appendDocument(windowId, document)
+    });
   }
 
   activateTab(windowId: string, tabId: string): WorkspaceWindowProjection {
@@ -281,18 +349,37 @@ class CanonicalWorkspaceState implements WorkspaceState {
     capturedRevision,
     document,
     diskVersion
-  }: CommitWorkspaceDocumentInput): WorkspaceMutationResult {
+  }: CommitWorkspaceDocumentInput): WorkspaceSaveMutationResult {
     const resolved = this.resolveExpectedTabOwner(tabId, expectedWindowId);
     if (resolved.kind === "stale") {
       return this.createStaleMutationResult(expectedWindowId, resolved.reason);
     }
     const { context } = resolved;
+    const nextIdentity = document.fileIdentity;
+    const currentIdentity = context.session.fileIdentity;
+    if (nextIdentity !== null && !sameFileIdentity(nextIdentity, currentIdentity)) {
+      const existingTabId = this.findIdentityOwnerTabId(nextIdentity);
+      if (existingTabId !== undefined && existingTabId !== tabId) {
+        return Object.freeze({
+          kind: "file-identity-conflict",
+          projection: this.getWindowProjection(context.windowId)
+        });
+      }
+    }
     const nextSession = commitSavedDocument(context.session, {
       capturedRevision,
       document,
       diskVersion
     });
     this.tabs.set(tabId, nextSession);
+    if (!sameFileIdentity(currentIdentity, nextIdentity)) {
+      if (currentIdentity !== null) {
+        this.releaseFileIdentity(currentIdentity);
+      }
+      if (nextIdentity !== null) {
+        this.claimFileIdentity(nextIdentity, tabId);
+      }
+    }
     return createAppliedMutationResult(this.getWindowProjection(context.windowId));
   }
 
@@ -301,7 +388,7 @@ class CanonicalWorkspaceState implements WorkspaceState {
     expectedWindowId,
     expectedRevision,
     document
-  }: ReplaceWorkspaceDocumentInput): WorkspaceMutationResult {
+  }: ReplaceWorkspaceDocumentInput): WorkspaceSaveMutationResult {
     const resolved = this.resolveExpectedTabCheckpoint(
       tabId,
       expectedWindowId,
@@ -311,8 +398,29 @@ class CanonicalWorkspaceState implements WorkspaceState {
       return this.createStaleMutationResult(expectedWindowId, resolved.reason);
     }
     const { context } = resolved;
+    const currentIdentity = context.session.fileIdentity;
+    const nextIdentity = document.fileIdentity;
+    if (currentIdentity === null || nextIdentity === null) {
+      throw new Error("Reload requires a physical file identity.");
+    }
+    if (nextIdentity.location !== currentIdentity.location) {
+      throw new Error("Reload cannot change the canonical file location.");
+    }
+    if (!sameFileIdentity(nextIdentity, currentIdentity)) {
+      const existingTabId = this.findIdentityOwnerTabId(nextIdentity);
+      if (existingTabId !== undefined && existingTabId !== tabId) {
+        return Object.freeze({
+          kind: "file-identity-conflict",
+          projection: this.getWindowProjection(context.windowId)
+        });
+      }
+    }
     const nextSession = replaceDocumentFromDisk(context.session, document, null);
     this.tabs.set(tabId, nextSession);
+    if (!sameFileIdentity(nextIdentity, currentIdentity)) {
+      this.releaseFileIdentity(currentIdentity);
+      this.claimFileIdentity(nextIdentity, tabId);
+    }
     return createAppliedMutationResult(this.getWindowProjection(context.windowId));
   }
 
@@ -330,6 +438,10 @@ class CanonicalWorkspaceState implements WorkspaceState {
       return this.createStaleMutationResult(expectedWindowId, resolved.reason);
     }
     const { context } = resolved;
+
+    if (context.session.fileIdentity !== null) {
+      this.releaseFileIdentity(context.session.fileIdentity);
+    }
 
     context.window.tabIds.splice(context.index, 1);
     this.tabs.delete(tabId);
@@ -447,6 +559,9 @@ class CanonicalWorkspaceState implements WorkspaceState {
 
     this.nextTabId += 1;
     this.tabs.set(tabId, session);
+    if (session.fileIdentity !== null) {
+      this.claimFileIdentity(session.fileIdentity, tabId);
+    }
     this.tabToWindowId.set(tabId, windowId);
     window.tabIds.push(tabId);
     window.activeTabId = tabId;
@@ -476,6 +591,21 @@ class CanonicalWorkspaceState implements WorkspaceState {
       sourceWindowSnapshot: this.getWindowProjection(source.windowId),
       targetWindowSnapshot: this.getWindowProjection(input.targetWindowId)
     });
+  }
+
+  private findIdentityOwnerTabId(identity: FileIdentity): string | undefined {
+    return this.fileLocationToTabId.get(identity.location) ??
+      this.fileObjectToTabId.get(identity.object);
+  }
+
+  private claimFileIdentity(identity: FileIdentity, tabId: string): void {
+    this.fileLocationToTabId.set(identity.location, tabId);
+    this.fileObjectToTabId.set(identity.object, tabId);
+  }
+
+  private releaseFileIdentity(identity: FileIdentity): void {
+    this.fileLocationToTabId.delete(identity.location);
+    this.fileObjectToTabId.delete(identity.object);
   }
 
   private selectNeighborAfterMove(source: TabContext): void {

@@ -3,7 +3,7 @@ import type {
   WorkspaceState
 } from "@fishmark/workspace-domain";
 
-import type { WorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
+import type { KeyedOperationCoordinator } from "./keyed-operation-coordinator";
 
 type WorkspaceTabTransferApplicationDependencies = {
   workspace: Pick<
@@ -11,7 +11,7 @@ type WorkspaceTabTransferApplicationDependencies = {
     "getTabSession" | "moveTabToWindow" | "detachTabToWindow"
   >;
   documentOperations: Pick<
-    WorkspaceDocumentOperationCoordinator,
+    KeyedOperationCoordinator<string>,
     "runExclusive"
   >;
 };

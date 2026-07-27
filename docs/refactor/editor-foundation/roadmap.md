@@ -672,6 +672,8 @@ npm.cmd run perf:baseline
 
 **Development status:** `DEV_DONE` on 2026-07-16; independent architecture acceptance and task acceptance are pending.
 
+2026-07-28 closure: main now resolves separate canonical-location and filesystem-object identities (`dev + ino` when reliable, canonical-path fallback otherwise), and the domain enforces one editable session through both registries across all windows. Duplicate open activates and synchronizes the owner tab before focus without foreign projection leakage. Open/Save/Save As/reload use typed `tab -> location -> object` transactions; hard-link aliases and prospective-to-existing identity migration cannot create two clean sessions. Status remains `DEV_DONE` until independent acceptance.
+
 **Outcome:** workspace/tab/session rules are pure and no longer owned by `src/main/workspace-service.ts`.
 
 **Files:**
@@ -708,7 +710,7 @@ npm.cmd run perf:baseline
 **Verification:**
 
 ```powershell
-npm.cmd run test -- packages/workspace-domain src/main/workspace-document-operation-coordinator.test.ts src/main/workspace-tab-reorder-application.test.ts src/main/workspace-tab-transfer-application.test.ts src/main/workspace-mutation-result.test.ts src/main/workspace-window-close-application.test.ts src/main/workspace-window-close-request-broker.test.ts src/main/workspace-window-registration-application.test.ts src/main/workspace-document-io.integration.test.ts src/main/workspace-application.test.ts src/main/workspace-reload-application.test.ts src/main/workspace-detach-application.test.ts src/main/workspace-close-coordinator.test.ts src/main/workspace-file-operations.test.ts
+npm.cmd run test -- packages/workspace-domain src/main/keyed-operation-coordinator.test.ts src/main/workspace-tab-reorder-application.test.ts src/main/workspace-tab-transfer-application.test.ts src/main/workspace-mutation-result.test.ts src/main/workspace-window-close-application.test.ts src/main/workspace-window-close-request-broker.test.ts src/main/workspace-window-registration-application.test.ts src/main/workspace-document-io.integration.test.ts src/main/workspace-application.test.ts src/main/workspace-reload-application.test.ts src/main/workspace-detach-application.test.ts src/main/workspace-close-coordinator.test.ts src/main/workspace-file-operations.test.ts
 npm.cmd run lint
 npm.cmd run typecheck
 npm.cmd run build

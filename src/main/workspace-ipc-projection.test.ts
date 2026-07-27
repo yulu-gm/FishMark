@@ -1,12 +1,14 @@
-import { createWorkspaceState } from "@fishmark/workspace-domain";
+import { createWorkspaceState, fileIdentity } from "@fishmark/workspace-domain";
 import { describe, expect, it } from "vitest";
 
 import {
   toWorkspaceMoveTabResult,
   toWorkspaceWindowSnapshot
 } from "./workspace-ipc-projection";
+import { openTestDocument } from "./workspace.test-helper";
 
 const document = (name: string, content: string) => ({
+  fileIdentity: fileIdentity(`file:c:/notes/${name.toLowerCase()}`),
   path: `C:/notes/${name}`,
   name,
   content,
@@ -17,7 +19,7 @@ describe("workspace IPC projection", () => {
   it("deep-copies a frozen domain window projection into a mutable IPC snapshot", () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const source = workspace.openDocument(
+    const source = openTestDocument(workspace,
       "window-1",
       document("note.md", "# Domain\n")
     );
@@ -47,13 +49,13 @@ describe("workspace IPC projection", () => {
   it("deep-copies both sides of a move projection", () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    workspace.openDocument("window-1", document("kept.md", "kept"));
-    const movedTabId = workspace.openDocument(
+    openTestDocument(workspace, "window-1", document("kept.md", "kept"));
+    const movedTabId = openTestDocument(workspace,
       "window-1",
       document("moved.md", "moved")
     ).activeTabId!;
     workspace.registerWindow("window-2");
-    workspace.openDocument("window-2", document("target.md", "target"));
+    openTestDocument(workspace, "window-2", document("target.md", "target"));
     const source = workspace.moveTabToWindow({
       tabId: movedTabId,
       targetWindowId: "window-2"

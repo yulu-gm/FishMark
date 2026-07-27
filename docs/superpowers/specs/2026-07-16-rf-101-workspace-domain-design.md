@@ -9,6 +9,8 @@
 
 RF-101 will replace `src/main/workspace-service.ts` with one runtime-neutral package, `@fishmark/workspace-domain`. The package will own canonical window, tab, session, revision, saved-checkpoint, ordering, move, detach, close, and projection rules. Main remains the only owner of the live `WorkspaceState`; renderer and preload continue to exchange the current shared IPC DTOs.
 
+Physical file identity is distinct from the display path and contains two opaque keys: canonical location plus filesystem object. Main resolves location from `realpath` (or the deepest existing ancestor for a prospective Save As target), folds case only on Windows, and uses reliable `dev + ino` values for object identity with an explicit canonical-path fallback. The domain keeps both location-to-tab and object-to-tab registries, so a reused path and hard-link aliases each preserve one editable `DocumentSession` across all windows. Duplicate open activates and synchronizes the existing owner tab before focusing its window, without returning the foreign document projection.
+
 The cutover is hard: the old service, old service tests, old internal session type, and all old imports are deleted before RF-101 can reach `DEV_DONE`. No facade, re-export, compatibility alias, dual write, feature flag, or fallback to the old service is permitted.
 
 ## 2. Why this task exists
@@ -280,7 +282,7 @@ Domain tests cover:
 Required verification:
 
 ```powershell
-npm.cmd run test -- packages/workspace-domain src/main/workspace-document-operation-coordinator.test.ts src/main/workspace-tab-transfer-application.test.ts src/main/workspace-mutation-result.test.ts src/main/workspace-window-close-application.test.ts src/main/workspace-window-close-request-broker.test.ts src/main/workspace-document-io.integration.test.ts src/main/workspace-application.test.ts src/main/workspace-reload-application.test.ts src/main/workspace-detach-application.test.ts src/main/workspace-close-coordinator.test.ts src/main/main.test.ts
+npm.cmd run test -- packages/workspace-domain src/main/keyed-operation-coordinator.test.ts src/main/workspace-tab-transfer-application.test.ts src/main/workspace-mutation-result.test.ts src/main/workspace-window-close-application.test.ts src/main/workspace-window-close-request-broker.test.ts src/main/workspace-document-io.integration.test.ts src/main/workspace-application.test.ts src/main/workspace-reload-application.test.ts src/main/workspace-detach-application.test.ts src/main/workspace-close-coordinator.test.ts src/main/main.test.ts
 npm.cmd run test -- src/renderer/editor/useWorkspaceController.test.tsx src/renderer/app.autosave.test.ts
 npm.cmd run test:editor-foundation
 npm.cmd run lint

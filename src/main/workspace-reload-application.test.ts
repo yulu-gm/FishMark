@@ -1,27 +1,46 @@
-import { createWorkspaceState } from "@fishmark/workspace-domain";
+import { createWorkspaceState, fileIdentity } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 
 import type {
   OpenMarkdownDocument,
   OpenMarkdownFileResult
 } from "../shared/open-markdown-file";
-import { createWorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
+import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator";
 import { createWorkspaceReloadApplication as createWorkspaceReloadApplicationWithOperations } from "./workspace-reload-application";
+import { openTestDocument } from "./workspace.test-helper";
 
 function createWorkspaceReloadApplication(
   dependencies: Omit<
     Parameters<typeof createWorkspaceReloadApplicationWithOperations>[0],
-    "documentOperations"
+    | "tabOperations"
+    | "fileLocationOperations"
+    | "fileObjectOperations"
+    | "fileIdentityResolver"
   >
 ) {
   return createWorkspaceReloadApplicationWithOperations({
     ...dependencies,
-    documentOperations: createWorkspaceDocumentOperationCoordinator()
+    tabOperations: createKeyedOperationCoordinator(),
+    fileLocationOperations: createKeyedOperationCoordinator(),
+    fileObjectOperations: createKeyedOperationCoordinator(),
+    fileIdentityResolver: { resolveExisting: async (targetPath) => resolvedTestFile(targetPath) }
   });
 }
 
-function document(name: string, content: string): OpenMarkdownDocument {
+function resolvedTestFile(targetPath: string) {
+  const identity = fileIdentity(`file:${targetPath.toLowerCase()}`);
   return {
+    canonicalPath: targetPath,
+    identity,
+    exists: true as const,
+    pathKey: identity.location,
+    physicalKey: identity.object
+  };
+}
+
+function document(name: string, content: string): OpenMarkdownDocument & { fileIdentity: ReturnType<typeof fileIdentity> } {
+  return {
+    fileIdentity: fileIdentity(`file:c:/notes/${name.toLowerCase()}`),
     path: `C:/notes/${name}`,
     name,
     content,
@@ -30,6 +49,45 @@ function document(name: string, content: string): OpenMarkdownDocument {
 }
 
 describe("createWorkspaceReloadApplication", () => {
+  it("migrates the object identity when an explicit reload observes inode replacement", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const location = "path:c:/notes/replaced.md";
+    const oldIdentity = fileIdentity(location, "inode:7:1");
+    const newIdentity = fileIdentity(location, "inode:7:2");
+    const tabId = openTestDocument(workspace, "window-1", {
+      ...document("replaced.md", "before"),
+      fileIdentity: oldIdentity
+    }).activeTabId!;
+    const resolved = {
+      canonicalPath: "C:/notes/replaced.md",
+      identity: newIdentity,
+      exists: true as const,
+      pathKey: newIdentity.location,
+      physicalKey: newIdentity.object
+    };
+    const application = createWorkspaceReloadApplicationWithOperations({
+      workspace,
+      tabOperations: createKeyedOperationCoordinator(),
+      fileLocationOperations: createKeyedOperationCoordinator(),
+      fileObjectOperations: createKeyedOperationCoordinator(),
+      fileIdentityResolver: { resolveExisting: vi.fn(async () => resolved) },
+      openMarkdownFileFromPath: vi.fn(async () => ({
+        status: "success" as const,
+        document: document("replaced.md", "after")
+      })),
+      recordRecentFilePath: vi.fn(async () => undefined)
+    });
+
+    await application.reloadTab({ tabId, expectedWindowId: "window-1" });
+
+    expect(workspace.getTabSession(tabId)).toMatchObject({
+      fileIdentity: newIdentity,
+      content: "after",
+      isDirty: false
+    });
+  });
+
   it.each([
     ["null", null],
     ["different", "C:/notes/other.md"]
@@ -38,7 +96,7 @@ describe("createWorkspaceReloadApplication", () => {
     async (_caseName, returnedPath) => {
       const workspace = createWorkspaceState();
       workspace.registerWindow("window-1");
-      const tabId = workspace.openDocument(
+      const tabId = openTestDocument(workspace,
         "window-1",
         document("canonical.md", "before")
       ).activeTabId!;
@@ -75,7 +133,7 @@ describe("createWorkspaceReloadApplication", () => {
   it("reads only the canonical path after Save As retargets the document", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const tabId = workspace.openDocument(
+    const tabId = openTestDocument(workspace,
       "window-1",
       document("before.md", "before")
     ).activeTabId!;
@@ -111,7 +169,7 @@ describe("createWorkspaceReloadApplication", () => {
   it("replaces an unchanged captured checkpoint after deferred IO", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const tabId = workspace.openDocument(
+    const tabId = openTestDocument(workspace,
       "window-1",
       document("reload.md", "before")
     ).activeTabId!;
@@ -143,7 +201,7 @@ describe("createWorkspaceReloadApplication", () => {
   it("returns an explicit revision-stale result without recording recent or overwriting an edit during IO", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const tabId = workspace.openDocument(
+    const tabId = openTestDocument(workspace,
       "window-1",
       document("edit-race.md", "before")
     ).activeTabId!;
@@ -182,8 +240,8 @@ describe("createWorkspaceReloadApplication", () => {
   it("rejects a reload commit after an out-of-band owner change", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    workspace.openDocument("window-1", document("source.md", "source"));
-    const tabId = workspace.openDocument(
+    openTestDocument(workspace, "window-1", document("source.md", "source"));
+    const tabId = openTestDocument(workspace,
       "window-1",
       document("move-race.md", "before")
     ).activeTabId!;
@@ -224,7 +282,7 @@ describe("createWorkspaceReloadApplication", () => {
   it("explicitly rejects a stale reload after the expected window closes", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const tabId = workspace.openDocument(
+    const tabId = openTestDocument(workspace,
       "window-1",
       document("closed-window.md", "before")
     ).activeTabId!;

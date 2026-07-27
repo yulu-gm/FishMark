@@ -1,12 +1,14 @@
-import { createWorkspaceState } from "@fishmark/workspace-domain";
+import { createWorkspaceState, fileIdentity } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 
-import { createWorkspaceCloseCoordinator } from "./workspace-close-coordinator";
-import { createWorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
+import { createTestWorkspaceCloseCoordinator as createWorkspaceCloseCoordinator } from "./workspace-close-coordinator.test-helper";
+import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator";
 import { createWorkspaceWindowCloseConfirmationHandler } from "./workspace-window-close-confirmation-handler";
 import { createWorkspaceWindowCloseRequestBroker } from "./workspace-window-close-request-broker";
+import { openTestDocument } from "./workspace.test-helper";
 
 const document = (content: string) => ({
+  fileIdentity: fileIdentity("file:c:/notes/request-generation.md"),
   path: "C:/notes/request-generation.md",
   name: "request-generation.md",
   content,
@@ -17,7 +19,7 @@ describe("createWorkspaceWindowCloseConfirmationHandler", () => {
   it("rejects a late generation and permits only one confirmation for its successor", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const tabId = workspace.openDocument(
+    const tabId = openTestDocument(workspace,
       "window-1",
       document("saved")
     ).activeTabId!;
@@ -31,10 +33,9 @@ describe("createWorkspaceWindowCloseConfirmationHandler", () => {
     );
     const coordinator = createWorkspaceCloseCoordinator({
       workspace,
-      documentOperations: createWorkspaceDocumentOperationCoordinator(),
+      documentOperations: createKeyedOperationCoordinator(),
       promptToSaveWorkspaceTab: prompt,
       saveMarkdownFileToPath: vi.fn(),
-      showSaveMarkdownDialog: vi.fn()
     });
     const timeouts: Array<() => void> = [];
     const broker = createWorkspaceWindowCloseRequestBroker<

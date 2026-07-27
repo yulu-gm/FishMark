@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createWorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
+import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator";
 
-describe("createWorkspaceDocumentOperationCoordinator", () => {
+describe("createKeyedOperationCoordinator", () => {
   it("runs operations for one tab in FIFO order", async () => {
-    const coordinator = createWorkspaceDocumentOperationCoordinator();
+    const coordinator = createKeyedOperationCoordinator<string>();
     const events: string[] = [];
     let releaseFirst!: () => void;
     const first = coordinator.runExclusive("tab-1", async () => {
@@ -27,7 +27,7 @@ describe("createWorkspaceDocumentOperationCoordinator", () => {
   });
 
   it("allows operations for different tabs to run independently", async () => {
-    const coordinator = createWorkspaceDocumentOperationCoordinator();
+    const coordinator = createKeyedOperationCoordinator<string>();
     let releaseFirst!: () => void;
     const first = coordinator.runExclusive("tab-1", () =>
       new Promise<void>((resolve) => {
@@ -45,7 +45,7 @@ describe("createWorkspaceDocumentOperationCoordinator", () => {
   });
 
   it("releases a tab after an operation rejects", async () => {
-    const coordinator = createWorkspaceDocumentOperationCoordinator();
+    const coordinator = createKeyedOperationCoordinator<string>();
     const failure = new Error("operation failed");
 
     await expect(
@@ -59,7 +59,7 @@ describe("createWorkspaceDocumentOperationCoordinator", () => {
   });
 
   it("deduplicates and stably acquires multiple tabs without blocking unrelated tabs", async () => {
-    const coordinator = createWorkspaceDocumentOperationCoordinator();
+    const coordinator = createKeyedOperationCoordinator<string>();
     const lease = await coordinator.acquireExclusive(["tab-b", "tab-a", "tab-b"]);
     const tabAOperation = vi.fn(async () => undefined);
     const tabBOperation = vi.fn(async () => undefined);
@@ -82,7 +82,7 @@ describe("createWorkspaceDocumentOperationCoordinator", () => {
   });
 
   it("serializes overlapping multi-tab leases acquired in opposite input order", async () => {
-    const coordinator = createWorkspaceDocumentOperationCoordinator();
+    const coordinator = createKeyedOperationCoordinator<string>();
     const first = await coordinator.acquireExclusive(["tab-b", "tab-a"]);
     let secondAcquired = false;
     const secondPromise = coordinator

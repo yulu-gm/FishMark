@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { DiskVersion } from "./disk-version";
+import { fileIdentity } from "./file-identity";
 import {
   commitSavedDocument,
   createDocumentSession,
@@ -12,6 +13,7 @@ import {
 } from "./document-session";
 
 const untitledDocument: WorkspaceDocumentData = {
+  fileIdentity: null,
   path: null,
   name: "Untitled",
   content: "alpha",
@@ -54,6 +56,7 @@ const diskVersionEntryPoints: readonly DiskVersionEntryPoint[] = [
       replaceDocumentFromDisk(
         createSession(),
         {
+          fileIdentity: fileIdentity("file:c:/notes/alpha.md"),
           path: "C:/notes/alpha.md",
           name: "alpha.md",
           content: "alpha",
@@ -71,6 +74,7 @@ describe("document session revisions", () => {
     expect(projectDocumentSession(session)).toEqual({
       tabId: "tab-1",
       windowId: "window-1",
+      fileIdentity: null,
       path: null,
       name: "Untitled",
       content: "alpha",
@@ -146,6 +150,7 @@ describe("document session save checkpoints", () => {
     const saved = commitSavedDocument(createSession(), {
       capturedRevision: 0,
       document: {
+        fileIdentity: fileIdentity("file:c:/notes/alpha.md"),
         path: "C:/notes/alpha.md",
         name: "alpha.md",
         content: "alpha",
@@ -249,6 +254,7 @@ describe("document session disk replacement and movement", () => {
     const reloaded = replaceDocumentFromDisk(
       dirty,
       {
+        fileIdentity: fileIdentity("file:c:/notes/reloaded.md"),
         path: "C:/notes/reloaded.md",
         name: "reloaded.md",
         content: "disk content",
@@ -277,6 +283,7 @@ describe("document session disk replacement and movement", () => {
     const reloaded = replaceDocumentFromDisk(
       dirtyThenRestored,
       {
+        fileIdentity: fileIdentity("file:c:/notes/alpha.md"),
         path: "C:/notes/alpha.md",
         name: "alpha.md",
         content: "alpha",
@@ -303,6 +310,7 @@ describe("document session disk replacement and movement", () => {
       tabId: "tab-1",
       windowId: "window-1",
       document: {
+        fileIdentity: fileIdentity("file:c:/notes/saved.md"),
         path: "C:/notes/saved.md",
         name: "saved.md",
         content: "# Saved\n",
@@ -321,6 +329,7 @@ describe("document session disk replacement and movement", () => {
     const reloaded = replaceDocumentFromDisk(
       dirty,
       {
+        fileIdentity: fileIdentity("file:c:/notes/saved.md"),
         path: "C:/notes/current-dirty.md",
         name: "current-dirty.md",
         content: "# Current dirty\n",

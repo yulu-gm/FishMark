@@ -1,17 +1,19 @@
-import { createWorkspaceState } from "@fishmark/workspace-domain";
+import { createWorkspaceState, fileIdentity } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 
 import type { SaveMarkdownFileResult } from "../shared/save-markdown-file";
 import {
-  createWorkspaceCloseCoordinator,
   type WorkspaceWindowCloseConfirmation
 } from "./workspace-close-coordinator";
-import { createWorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
+import { createTestWorkspaceCloseCoordinator as createWorkspaceCloseCoordinator } from "./workspace-close-coordinator.test-helper";
+import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator";
 import { createWorkspaceFileOperations } from "./workspace-file-operations";
 import { createWorkspaceWindowCloseApplication } from "./workspace-window-close-application";
+import { openTestDocument } from "./workspace.test-helper";
 
 const document = (content: string) => ({
-  path: "C:/notes/window-close.md",
+  fileIdentity: fileIdentity(`file:c:/notes/window-close-${content}.md`),
+  path: `C:/notes/window-close-${content}.md`,
   name: "window-close.md",
   content,
   encoding: "utf-8" as const
@@ -32,7 +34,7 @@ function closeConfirmation(
 function createSaveOperations(
   workspace: ReturnType<typeof createWorkspaceState>,
   documentOperations: ReturnType<
-    typeof createWorkspaceDocumentOperationCoordinator
+    typeof createKeyedOperationCoordinator
   >,
   saveMarkdownFileToPath: (
     input: { readonly content: string; readonly tabId: string; readonly path: string }
@@ -40,9 +42,15 @@ function createSaveOperations(
 ) {
   return createWorkspaceFileOperations({
     workspace,
-    documentOperations,
+    tabOperations: documentOperations,
+    fileLocationOperations: createKeyedOperationCoordinator(),
+    fileObjectOperations: createKeyedOperationCoordinator(),
+    fileIdentityResolver: {
+      resolveExisting: async (targetPath) => resolvedTestFile(targetPath),
+      resolveProspective: async (targetPath) => resolvedTestFile(targetPath)
+    },
     saveMarkdownFileToPath,
-    showSaveMarkdownDialog: vi.fn(),
+    showSaveMarkdownPathDialog: vi.fn(),
     beginInternalWrite: vi.fn(),
     completeInternalWrite: vi.fn(async () => undefined),
     syncWindowWatch: vi.fn(async () => undefined),
@@ -51,12 +59,23 @@ function createSaveOperations(
   });
 }
 
+function resolvedTestFile(targetPath: string) {
+  const identity = fileIdentity(`file:${targetPath.toLowerCase()}`);
+  return {
+    canonicalPath: targetPath,
+    identity,
+    exists: true as const,
+    pathKey: identity.location,
+    physicalKey: identity.object
+  };
+}
+
 describe("createWorkspaceWindowCloseApplication", () => {
   it("holds every tab lease through confirmed discard until unregister", async () => {
     const workspace = createWorkspaceState();
-    const documentOperations = createWorkspaceDocumentOperationCoordinator();
+    const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
-    const tabId = workspace.openDocument("window-1", document("saved")).activeTabId!;
+    const tabId = openTestDocument(workspace, "window-1", document("saved")).activeTabId!;
     workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "dirty" });
     let resolvePrompt!: (choice: "discard") => void;
     const closeCoordinator = createWorkspaceCloseCoordinator({
@@ -67,7 +86,6 @@ describe("createWorkspaceWindowCloseApplication", () => {
           resolvePrompt = resolve;
         }),
       saveMarkdownFileToPath: vi.fn(),
-      showSaveMarkdownDialog: vi.fn()
     });
     const application = createWorkspaceWindowCloseApplication({
       workspace,
@@ -78,9 +96,14 @@ describe("createWorkspaceWindowCloseApplication", () => {
           isActive: () => true
         })
     });
-    const write = vi.fn(async ({ content }: { readonly content: string }) => ({
+    const write = vi.fn(async ({ content, path }: { readonly content: string; readonly path: string }) => ({
       status: "success" as const,
-      document: document(content)
+      document: {
+        path,
+        name: path.split("/").at(-1)!,
+        content,
+        encoding: "utf-8" as const
+      }
     }));
     const save = createSaveOperations(workspace, documentOperations, write);
     const ownerWindow = { id: 1 };
@@ -110,9 +133,9 @@ describe("createWorkspaceWindowCloseApplication", () => {
 
   it("releases all tab leases when native close confirmation is cancelled", async () => {
     const workspace = createWorkspaceState();
-    const documentOperations = createWorkspaceDocumentOperationCoordinator();
+    const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
-    const tabId = workspace.openDocument("window-1", document("saved")).activeTabId!;
+    const tabId = openTestDocument(workspace, "window-1", document("saved")).activeTabId!;
     workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "dirty" });
     let resolveRequest!: (
       confirmation: WorkspaceWindowCloseConfirmation | null
@@ -126,8 +149,16 @@ describe("createWorkspaceWindowCloseApplication", () => {
         })
     });
     const write = vi.fn<
-      (input: { readonly content: string }) => Promise<SaveMarkdownFileResult>
-    >(async ({ content }) => ({ status: "success", document: document(content) }));
+      (input: { readonly content: string; readonly path: string }) => Promise<SaveMarkdownFileResult>
+    >(async ({ content, path }) => ({
+      status: "success",
+      document: {
+        path,
+        name: path.split("/").at(-1)!,
+        content,
+        encoding: "utf-8"
+      }
+    }));
     const save = createSaveOperations(workspace, documentOperations, write);
 
     const closePromise = application.requestWindowClose({
@@ -151,9 +182,9 @@ describe("createWorkspaceWindowCloseApplication", () => {
 
   it("cancels before the renderer handshake when the tab set changes during acquisition", async () => {
     const workspace = createWorkspaceState();
-    const documentOperations = createWorkspaceDocumentOperationCoordinator();
+    const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
-    const tabId = workspace.openDocument("window-1", document("first")).activeTabId!;
+    const tabId = openTestDocument(workspace, "window-1", document("first")).activeTabId!;
     const blocker = await documentOperations.acquireExclusive([tabId]);
     const requestWorkspaceWindowClose = vi.fn(async () =>
       closeConfirmation("window-1", [
@@ -174,7 +205,7 @@ describe("createWorkspaceWindowCloseApplication", () => {
       windowId: "window-1",
       ownerWindow: { id: 1 }
     });
-    workspace.openDocument("window-1", {
+    openTestDocument(workspace, "window-1", {
       ...document("second"),
       path: "C:/notes/second.md",
       name: "second.md"
@@ -190,9 +221,9 @@ describe("createWorkspaceWindowCloseApplication", () => {
 
   it("cancels after a successful handshake when a tab is added while confirmation is pending", async () => {
     const workspace = createWorkspaceState();
-    const documentOperations = createWorkspaceDocumentOperationCoordinator();
+    const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
-    const firstTabId = workspace.openDocument(
+    const firstTabId = openTestDocument(workspace,
       "window-1",
       document("first")
     ).activeTabId!;
@@ -213,7 +244,7 @@ describe("createWorkspaceWindowCloseApplication", () => {
       ownerWindow: { id: 1 }
     });
     await vi.waitFor(() => expect(resolveRequest).toBeTypeOf("function"));
-    const secondTabId = workspace.openDocument("window-1", {
+    const secondTabId = openTestDocument(workspace, "window-1", {
       ...document("second"),
       path: "C:/notes/second.md",
       name: "second.md"
@@ -246,9 +277,9 @@ describe("createWorkspaceWindowCloseApplication", () => {
 
   it("cancels when a confirmed tab revision changes before the handshake completes", async () => {
     const workspace = createWorkspaceState();
-    const documentOperations = createWorkspaceDocumentOperationCoordinator();
+    const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
-    const tabId = workspace.openDocument(
+    const tabId = openTestDocument(workspace,
       "window-1",
       document("saved")
     ).activeTabId!;
@@ -298,9 +329,9 @@ describe("createWorkspaceWindowCloseApplication", () => {
 
   it("accepts a draft revision flushed before close confirmation", async () => {
     const workspace = createWorkspaceState();
-    const documentOperations = createWorkspaceDocumentOperationCoordinator();
+    const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
-    const tabId = workspace.openDocument(
+    const tabId = openTestDocument(workspace,
       "window-1",
       document("saved")
     ).activeTabId!;
@@ -309,7 +340,6 @@ describe("createWorkspaceWindowCloseApplication", () => {
       documentOperations,
       promptToSaveWorkspaceTab: vi.fn(async () => "discard" as const),
       saveMarkdownFileToPath: vi.fn(),
-      showSaveMarkdownDialog: vi.fn()
     });
     const application = createWorkspaceWindowCloseApplication({
       workspace,
@@ -338,9 +368,9 @@ describe("createWorkspaceWindowCloseApplication", () => {
 
   it("releases every lease when the renderer handshake rejects", async () => {
     const workspace = createWorkspaceState();
-    const documentOperations = createWorkspaceDocumentOperationCoordinator();
+    const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
-    const tabId = workspace.openDocument("window-1", document("saved")).activeTabId!;
+    const tabId = openTestDocument(workspace, "window-1", document("saved")).activeTabId!;
     const failure = new Error("renderer handshake failed");
     const application = createWorkspaceWindowCloseApplication({
       workspace,

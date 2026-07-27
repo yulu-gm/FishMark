@@ -67,6 +67,11 @@ export function createEditorTestDriver(input: {
             path: command.fixturePath
           });
         }
+        if (response.kind === "focused-existing") {
+          return fail("Fixture file is already owned by another window.", {
+            path: command.fixturePath
+          });
+        }
 
         const activeDocument =
           response.snapshot.activeDocument ??

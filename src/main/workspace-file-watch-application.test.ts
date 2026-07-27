@@ -1,12 +1,14 @@
 import type { Stats } from "node:fs";
 
-import { createWorkspaceState } from "@fishmark/workspace-domain";
+import { createWorkspaceState, fileIdentity } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 
 import { createWorkspaceFileWatchApplication } from "./workspace-file-watch-application";
 import { createExternalFileWatchService } from "./external-file-watch-service";
+import { openTestDocument } from "./workspace.test-helper";
 
 const document = (name: string) => ({
+  fileIdentity: fileIdentity(`file:c:/notes/${name.toLowerCase()}`),
   path: `C:/notes/${name}`,
   name,
   content: name,
@@ -30,8 +32,8 @@ describe("createWorkspaceFileWatchApplication", () => {
   it("forwards a newer window intent without waiting for an older service I/O", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    const tabA = workspace.openDocument("window-1", document("a.md")).activeTabId!;
-    const tabB = workspace.openDocument("window-1", document("b.md")).activeTabId!;
+    const tabA = openTestDocument(workspace, "window-1", document("a.md")).activeTabId!;
+    const tabB = openTestDocument(workspace, "window-1", document("b.md")).activeTabId!;
     workspace.activateTab("window-1", tabA);
     const firstSnapshot = deferred();
     const stat = vi.fn((targetPath: string): Promise<Stats> =>
@@ -94,7 +96,7 @@ describe("createWorkspaceFileWatchApplication", () => {
   it("forwards a later intent after a service failure", async () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
-    workspace.openDocument("window-1", document("a.md"));
+    openTestDocument(workspace, "window-1", document("a.md"));
     const failure = new Error("stat failed");
     const syncDocumentPath = vi
       .fn<(sender: { id: number }, path: string | null) => Promise<void>>()
@@ -119,8 +121,8 @@ describe("createWorkspaceFileWatchApplication", () => {
     const workspace = createWorkspaceState();
     workspace.registerWindow("window-1");
     workspace.registerWindow("window-2");
-    workspace.openDocument("window-1", document("a.md"));
-    workspace.openDocument("window-2", document("b.md"));
+    openTestDocument(workspace, "window-1", document("a.md"));
+    openTestDocument(workspace, "window-2", document("b.md"));
     const firstSync = deferred();
     const syncDocumentPath = vi.fn(
       async (_sender: { id: number }, path: string | null) => {

@@ -1,6 +1,8 @@
 import path from "node:path";
 import {
   createWorkspaceState,
+  type FileLocationIdentity,
+  type FileObjectIdentity,
   type WorkspaceWindowProjection
 } from "@fishmark/workspace-domain";
 import {
@@ -17,12 +19,15 @@ import {
 import { createApplicationMenuTemplate } from "./application-menu";
 import { importClipboardImage } from "./clipboard-image-import";
 import { resolveMarkdownLaunchPathFromArgv } from "./launch-open-path";
-import { openMarkdownFileFromPath, showOpenMarkdownDialog } from "./open-markdown-file";
+import { openMarkdownFileFromPath, showOpenMarkdownPathDialog } from "./open-markdown-file";
 import {
   registerPreviewAssetProtocol,
   registerPreviewAssetScheme
 } from "./preview-asset-protocol";
-import { saveMarkdownFileToPath, showSaveMarkdownDialog } from "./save-markdown-file";
+import {
+  saveMarkdownFileToPath,
+  showSaveMarkdownPathDialog
+} from "./save-markdown-file";
 import { showExportHtmlDialog } from "./export-html-file";
 import { createPreferencesService } from "./preferences-service";
 import { createRecentFilesService } from "./recent-files-service";
@@ -46,7 +51,9 @@ import {
   type WorkspaceWindowCloseConfirmation
 } from "./workspace-close-coordinator";
 import { createWorkspaceDetachApplication } from "./workspace-detach-application";
-import { createWorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
+import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator";
+import { createFileIdentityResolver } from "./file-identity-resolver";
+import { createWorkspaceOpenApplication } from "./workspace-open-application";
 import { createWorkspaceFileOperations } from "./workspace-file-operations";
 import { createWorkspaceFileWatchApplication } from "./workspace-file-watch-application";
 import { createWorkspaceReloadApplication } from "./workspace-reload-application";
@@ -329,44 +336,22 @@ app.whenReady().then(async () => {
     workspace: workspaceState,
     syncDocumentPath: externalFileWatchService.syncDocumentPath
   });
-  const workspaceDocumentOperations = createWorkspaceDocumentOperationCoordinator();
+  const workspaceTabOperations = createKeyedOperationCoordinator<string>();
+  const workspaceFileLocationOperations =
+    createKeyedOperationCoordinator<FileLocationIdentity>();
+  const workspaceFileObjectOperations =
+    createKeyedOperationCoordinator<FileObjectIdentity>();
+  const fileIdentityResolver = createFileIdentityResolver();
   const workspaceApplication = createWorkspaceApplication({
     workspace: workspaceState
   });
   const workspaceTabTransferApplication = createWorkspaceTabTransferApplication({
     workspace: workspaceState,
-    documentOperations: workspaceDocumentOperations
+    documentOperations: workspaceTabOperations
   });
   const workspaceTabReorderApplication = createWorkspaceTabReorderApplication({
     workspace: workspaceState,
-    documentOperations: workspaceDocumentOperations
-  });
-  const workspaceCloseCoordinator = createWorkspaceCloseCoordinator({
-    workspace: workspaceState,
-    documentOperations: workspaceDocumentOperations,
-    promptToSaveWorkspaceTab: async (tab) => {
-      const result = await dialog.showMessageBox({
-        type: "warning",
-        buttons: ["Save", "Don't Save", "Cancel"],
-        defaultId: 0,
-        cancelId: 2,
-        noLink: true,
-        title: "Unsaved Changes",
-        message: `${tab.name} has unsaved changes.`,
-        detail: "Do you want to save your changes before closing?"
-      });
-
-      switch (result.response) {
-        case 0:
-          return "save";
-        case 1:
-          return "discard";
-        default:
-          return "cancel";
-      }
-    },
-    saveMarkdownFileToPath,
-    showSaveMarkdownDialog
+    documentOperations: workspaceTabOperations
   });
   const workspaceWindowCloseRequestBroker =
     createWorkspaceWindowCloseRequestBroker<WorkspaceWindowCloseConfirmation>({
@@ -385,15 +370,10 @@ app.whenReady().then(async () => {
         return () => clearTimeout(timeout);
       }
     });
-  const handleWorkspaceWindowCloseConfirmation =
-    createWorkspaceWindowCloseConfirmationHandler({
-      broker: workspaceWindowCloseRequestBroker,
-      closeCoordinator: workspaceCloseCoordinator
-    });
   const workspaceWindowCloseApplication =
     createWorkspaceWindowCloseApplication<BrowserWindow>({
       workspace: workspaceState,
-      documentOperations: workspaceDocumentOperations,
+      documentOperations: workspaceTabOperations,
       requestWorkspaceWindowClose: async (ownerWindow) => {
         if (ownerWindow.webContents.isDestroyed()) {
           return Promise.resolve(null);
@@ -660,17 +640,43 @@ app.whenReady().then(async () => {
     }
   }
 
+  const workspaceOpenApplication = createWorkspaceOpenApplication({
+    workspace: workspaceState,
+    fileLocationOperations: workspaceFileLocationOperations,
+    fileObjectOperations: workspaceFileObjectOperations,
+    resolveExisting: fileIdentityResolver.resolveExisting,
+    openMarkdownFileFromPath,
+    activateOwnerWindowTab: async (windowId, tabId) => {
+      const ownerWindow = getWorkspaceWindowById(windowId);
+      if (ownerWindow === null || ownerWindow.webContents.isDestroyed()) {
+        throw new Error(`Workspace window '${windowId}' no longer exists.`);
+      }
+      await syncWorkspaceWatch(
+        ownerWindow.webContents,
+        workspaceState.activateTab(windowId, tabId)
+      );
+      ownerWindow.focus();
+    },
+    recordRecentFilePath
+  });
+
   const workspaceReloadApplication = createWorkspaceReloadApplication({
     workspace: workspaceState,
-    documentOperations: workspaceDocumentOperations,
+    tabOperations: workspaceTabOperations,
+    fileLocationOperations: workspaceFileLocationOperations,
+    fileObjectOperations: workspaceFileObjectOperations,
+    fileIdentityResolver,
     openMarkdownFileFromPath,
     recordRecentFilePath
   });
   const workspaceFileOperations = createWorkspaceFileOperations({
     workspace: workspaceState,
-    documentOperations: workspaceDocumentOperations,
+    tabOperations: workspaceTabOperations,
+    fileLocationOperations: workspaceFileLocationOperations,
+    fileObjectOperations: workspaceFileObjectOperations,
+    fileIdentityResolver,
     saveMarkdownFileToPath,
-    showSaveMarkdownDialog,
+    showSaveMarkdownPathDialog,
     beginInternalWrite: externalFileWatchService.beginInternalWrite,
     completeInternalWrite: externalFileWatchService.completeInternalWrite,
     syncWindowWatch: (sender, windowId) =>
@@ -683,6 +689,64 @@ app.whenReady().then(async () => {
       );
     }
   });
+  const workspaceCloseFileOperations = createWorkspaceFileOperations({
+    workspace: workspaceState,
+    tabOperations: workspaceTabOperations,
+    fileLocationOperations: workspaceFileLocationOperations,
+    fileObjectOperations: workspaceFileObjectOperations,
+    fileIdentityResolver,
+    saveMarkdownFileToPath,
+    showSaveMarkdownPathDialog,
+    beginInternalWrite: externalFileWatchService.beginInternalWrite,
+    completeInternalWrite: externalFileWatchService.completeInternalWrite,
+    syncWindowWatch: (sender, windowId) =>
+      workspaceFileWatchApplication.syncWindow({ sender, windowId }),
+    recordRecentFilePath,
+    reportCleanupError: (error) => {
+      console.error("[fishmark] workspace close-save cleanup failed.", error);
+    }
+  });
+  const workspaceCloseCoordinator = createWorkspaceCloseCoordinator({
+    workspace: workspaceState,
+    documentOperations: workspaceTabOperations,
+    promptToSaveWorkspaceTab: async (tab) => {
+      const result = await dialog.showMessageBox({
+        type: "warning",
+        buttons: ["Save", "Don't Save", "Cancel"],
+        defaultId: 0,
+        cancelId: 2,
+        noLink: true,
+        title: "Unsaved Changes",
+        message: `${tab.name} has unsaved changes.`,
+        detail: "Do you want to save your changes before closing?"
+      });
+      return result.response === 0 ? "save" : result.response === 1 ? "discard" : "cancel";
+    },
+    persistWorkspaceTab: async (tab, commitGuard) => {
+      const ownerWindow = getWorkspaceWindowById(tab.windowId);
+      if (ownerWindow === null || ownerWindow.webContents.isDestroyed()) {
+        throw new Error(`Workspace window '${tab.windowId}' no longer exists.`);
+      }
+      return tab.path === null
+        ? workspaceCloseFileOperations.saveAsWithHeldTabLease({
+            sender: ownerWindow.webContents,
+            expectedWindowId: tab.windowId,
+            tabId: tab.tabId,
+            commitGuard
+          })
+        : workspaceCloseFileOperations.saveWithHeldTabLease({
+            sender: ownerWindow.webContents,
+            expectedWindowId: tab.windowId,
+            tabId: tab.tabId,
+            commitGuard
+          });
+    }
+  });
+  const handleWorkspaceWindowCloseConfirmation =
+    createWorkspaceWindowCloseConfirmationHandler({
+      broker: workspaceWindowCloseRequestBroker,
+      closeCoordinator: workspaceCloseCoordinator
+    });
   const workspaceDetachApplication = createWorkspaceDetachApplication({
     workspace: workspaceState,
     tabTransfer: workspaceTabTransferApplication,
@@ -768,64 +832,42 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle(OPEN_WORKSPACE_FILE_CHANNEL, async (event) => {
     const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
-    const result = await showOpenMarkdownDialog();
+    const selected = await showOpenMarkdownPathDialog();
 
-    if (result.status !== "success") {
-      if (result.status === "cancelled") {
+    if (selected.status !== "success") {
+      if (selected.status === "cancelled") {
         return { kind: "cancelled" } satisfies OpenWorkspaceFileResult;
       }
 
       return {
         kind: "error",
-        error: {
-          code: result.error.code,
-          message: result.error.message
-        }
+        error: selected.error
       } satisfies OpenWorkspaceFileResult;
     }
-
-    await recordRecentFilePath(result.document.path);
-
+    const result = await workspaceOpenApplication.openPath({
+      windowId,
+      targetPath: selected.path
+    });
+    if (result.kind !== "success") {
+      return result satisfies OpenWorkspaceFileResult;
+    }
     return {
       kind: "success",
-      snapshot: await syncWorkspaceWatch(
-        event.sender,
-        workspaceState.openDocument(windowId, result.document)
-      )
+      snapshot: await syncWorkspaceWatch(event.sender, result.projection)
     } satisfies OpenWorkspaceFileResult;
   });
   ipcMain.handle(OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL, async (event, input: { targetPath: string }) => {
     const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
-    const result = await openMarkdownFileFromPath(input.targetPath);
-
-    if (result.status !== "success") {
-      if (result.status === "cancelled") {
-        return {
-          kind: "error",
-          error: {
-            code: "read-failed",
-            message: `Unable to open Markdown file '${input.targetPath}'.`
-          }
-        } satisfies OpenWorkspaceFileFromPathResult;
-      }
-
-      return {
-        kind: "error",
-        error: {
-          code: result.error.code,
-          message: result.error.message
-        }
-      } satisfies OpenWorkspaceFileFromPathResult;
+    const result = await workspaceOpenApplication.openPath({
+      windowId,
+      targetPath: input.targetPath
+    });
+    if (result.kind !== "success") {
+      return result satisfies OpenWorkspaceFileFromPathResult;
     }
-
-    await recordRecentFilePath(result.document.path);
-
     return {
       kind: "success",
-      snapshot: await syncWorkspaceWatch(
-        event.sender,
-        workspaceState.openDocument(windowId, result.document)
-      )
+      snapshot: await syncWorkspaceWatch(event.sender, result.projection)
     } satisfies OpenWorkspaceFileFromPathResult;
   });
   ipcMain.handle(

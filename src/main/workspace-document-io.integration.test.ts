@@ -1,28 +1,44 @@
-import { createWorkspaceState } from "@fishmark/workspace-domain";
+import { createWorkspaceState, fileIdentity } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 
 import type { OpenMarkdownFileResult } from "../shared/open-markdown-file";
 import type { SaveMarkdownFileResult } from "../shared/save-markdown-file";
-import { createWorkspaceCloseCoordinator } from "./workspace-close-coordinator";
-import { createWorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
+import { createTestWorkspaceCloseCoordinator as createWorkspaceCloseCoordinator } from "./workspace-close-coordinator.test-helper";
+import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator";
 import { createWorkspaceFileOperations } from "./workspace-file-operations";
-import { createWorkspaceReloadApplication } from "./workspace-reload-application";
+import { createWorkspaceReloadApplication as createWorkspaceReloadApplicationWithOperations } from "./workspace-reload-application";
 import { createWorkspaceTabTransferApplication } from "./workspace-tab-transfer-application";
 import { createWorkspaceWindowCloseApplication } from "./workspace-window-close-application";
 import { createWorkspaceWindowCloseConfirmationHandler } from "./workspace-window-close-confirmation-handler";
 import { createWorkspaceWindowCloseRequestBroker } from "./workspace-window-close-request-broker";
+import { openTestDocument } from "./workspace.test-helper";
 
 const document = (content: string) => ({
+  fileIdentity: fileIdentity("file:c:/notes/race.md"),
   path: "C:/notes/race.md",
   name: "race.md",
   content,
   encoding: "utf-8" as const
 });
 
+function createWorkspaceReloadApplication(
+  dependencies: Omit<
+    Parameters<typeof createWorkspaceReloadApplicationWithOperations>[0],
+    "fileLocationOperations" | "fileObjectOperations" | "fileIdentityResolver"
+  >
+) {
+  return createWorkspaceReloadApplicationWithOperations({
+    ...dependencies,
+    fileLocationOperations: createKeyedOperationCoordinator(),
+    fileObjectOperations: createKeyedOperationCoordinator(),
+    fileIdentityResolver: { resolveExisting: async (targetPath) => resolvedTestFile(targetPath) }
+  });
+}
+
 function createSaveOperations(
   workspace: ReturnType<typeof createWorkspaceState>,
   documentOperations: ReturnType<
-    typeof createWorkspaceDocumentOperationCoordinator
+    typeof createKeyedOperationCoordinator
   >,
   saveMarkdownFileToPath: (
     input: { readonly content: string; readonly tabId: string; readonly path: string }
@@ -30,9 +46,15 @@ function createSaveOperations(
 ) {
   return createWorkspaceFileOperations({
     workspace,
-    documentOperations,
+    tabOperations: documentOperations,
+    fileLocationOperations: createKeyedOperationCoordinator(),
+    fileObjectOperations: createKeyedOperationCoordinator(),
+    fileIdentityResolver: {
+      resolveExisting: async (targetPath) => resolvedTestFile(targetPath),
+      resolveProspective: async (targetPath) => resolvedTestFile(targetPath)
+    },
     saveMarkdownFileToPath,
-    showSaveMarkdownDialog: vi.fn(),
+    showSaveMarkdownPathDialog: vi.fn(),
     beginInternalWrite: vi.fn(),
     completeInternalWrite: vi.fn(async () => undefined),
     syncWindowWatch: vi.fn(async () => undefined),
@@ -41,14 +63,25 @@ function createSaveOperations(
   });
 }
 
+function resolvedTestFile(targetPath: string) {
+  const identity = fileIdentity(`file:${targetPath.toLowerCase()}`);
+  return {
+    canonicalPath: targetPath,
+    identity,
+    exists: true as const,
+    pathKey: identity.location,
+    physicalKey: identity.object
+  };
+}
+
 const sender = { id: 1 };
 
 describe("workspace document IO transactions", () => {
   it("commits an in-flight save before a queued move transfers the clean session", async () => {
     const workspace = createWorkspaceState();
-    const documentOperations = createWorkspaceDocumentOperationCoordinator();
+    const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
-    const tabId = workspace.openDocument(
+    const tabId = openTestDocument(workspace,
       "window-1",
       document("saved")
     ).activeTabId!;
@@ -99,9 +132,9 @@ describe("workspace document IO transactions", () => {
 
   it("rejects an old-owner save before writing when a queued move wins the lease", async () => {
     const workspace = createWorkspaceState();
-    const documentOperations = createWorkspaceDocumentOperationCoordinator();
+    const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
-    const tabId = workspace.openDocument(
+    const tabId = openTestDocument(workspace,
       "window-1",
       document("saved")
     ).activeTabId!;
@@ -138,16 +171,16 @@ describe("workspace document IO transactions", () => {
 
   it("commits an in-flight reload before a queued detach transfers disk content", async () => {
     const workspace = createWorkspaceState();
-    const documentOperations = createWorkspaceDocumentOperationCoordinator();
+    const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
-    const tabId = workspace.openDocument(
+    const tabId = openTestDocument(workspace,
       "window-1",
       document("before")
     ).activeTabId!;
     let resolveRead!: (result: OpenMarkdownFileResult) => void;
     const reload = createWorkspaceReloadApplication({
       workspace,
-      documentOperations,
+      tabOperations: documentOperations,
       openMarkdownFileFromPath: () =>
         new Promise((resolve) => {
           resolveRead = resolve;
@@ -184,9 +217,9 @@ describe("workspace document IO transactions", () => {
 
   it("rejects an old-owner reload before reading when a queued detach wins the lease", async () => {
     const workspace = createWorkspaceState();
-    const documentOperations = createWorkspaceDocumentOperationCoordinator();
+    const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
-    const tabId = workspace.openDocument(
+    const tabId = openTestDocument(workspace,
       "window-1",
       document("before")
     ).activeTabId!;
@@ -196,7 +229,7 @@ describe("workspace document IO transactions", () => {
     }));
     const reload = createWorkspaceReloadApplication({
       workspace,
-      documentOperations,
+      tabOperations: documentOperations,
       openMarkdownFileFromPath: read,
       recordRecentFilePath: vi.fn(async () => undefined)
     });
@@ -226,9 +259,9 @@ describe("workspace document IO transactions", () => {
 
   it("does not let a save overtake an in-flight reload of the same tab", async () => {
     const workspace = createWorkspaceState();
-    const documentOperations = createWorkspaceDocumentOperationCoordinator();
+    const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
-    const tabId = workspace.openDocument("window-1", document("A")).activeTabId!;
+    const tabId = openTestDocument(workspace, "window-1", document("A")).activeTabId!;
     let resolveRead!: (result: OpenMarkdownFileResult) => void;
     const write = vi.fn(async ({ content }: { readonly content: string }) => ({
       status: "success" as const,
@@ -236,7 +269,7 @@ describe("workspace document IO transactions", () => {
     }));
     const reload = createWorkspaceReloadApplication({
       workspace,
-      documentOperations,
+      tabOperations: documentOperations,
       openMarkdownFileFromPath: () =>
         new Promise((resolve) => {
           resolveRead = resolve;
@@ -273,9 +306,9 @@ describe("workspace document IO transactions", () => {
 
   it("does not let a reload overtake an in-flight save of the same tab", async () => {
     const workspace = createWorkspaceState();
-    const documentOperations = createWorkspaceDocumentOperationCoordinator();
+    const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
-    const tabId = workspace.openDocument("window-1", document("before")).activeTabId!;
+    const tabId = openTestDocument(workspace, "window-1", document("before")).activeTabId!;
     workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "A" });
     let diskContent = "before";
     let resolveWrite!: (result: SaveMarkdownFileResult) => void;
@@ -293,7 +326,7 @@ describe("workspace document IO transactions", () => {
     const save = createSaveOperations(workspace, documentOperations, write);
     const reload = createWorkspaceReloadApplication({
       workspace,
-      documentOperations,
+      tabOperations: documentOperations,
       openMarkdownFileFromPath: read,
       recordRecentFilePath: vi.fn(async () => undefined)
     });
@@ -324,9 +357,9 @@ describe("workspace document IO transactions", () => {
 
   it("does not write a queued save after discard closes the tab", async () => {
     const workspace = createWorkspaceState();
-    const documentOperations = createWorkspaceDocumentOperationCoordinator();
+    const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
-    const tabId = workspace.openDocument("window-1", document("saved")).activeTabId!;
+    const tabId = openTestDocument(workspace, "window-1", document("saved")).activeTabId!;
     workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "dirty" });
     let resolvePrompt!: (choice: "discard") => void;
     const write = vi.fn<
@@ -340,7 +373,6 @@ describe("workspace document IO transactions", () => {
           resolvePrompt = resolve;
         }),
       saveMarkdownFileToPath: write,
-      showSaveMarkdownDialog: vi.fn()
     });
     const save = createSaveOperations(workspace, documentOperations, write);
 
@@ -366,9 +398,9 @@ describe("workspace document IO transactions", () => {
 
   it("waits for an in-flight save before closing the now-clean tab", async () => {
     const workspace = createWorkspaceState();
-    const documentOperations = createWorkspaceDocumentOperationCoordinator();
+    const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
-    const tabId = workspace.openDocument("window-1", document("saved")).activeTabId!;
+    const tabId = openTestDocument(workspace, "window-1", document("saved")).activeTabId!;
     workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "dirty" });
     let resolveWrite!: (result: SaveMarkdownFileResult) => void;
     const write = vi.fn(
@@ -384,7 +416,6 @@ describe("workspace document IO transactions", () => {
       documentOperations,
       promptToSaveWorkspaceTab: prompt,
       saveMarkdownFileToPath: write,
-      showSaveMarkdownDialog: vi.fn()
     });
 
     const savePromise = save.save({
@@ -417,9 +448,9 @@ describe("workspace document IO transactions", () => {
     "holds the window lease until a $lifecycle confirmation prompt drains",
     async ({ lifecycle, choice }) => {
       const workspace = createWorkspaceState();
-      const documentOperations = createWorkspaceDocumentOperationCoordinator();
+      const documentOperations = createKeyedOperationCoordinator();
       workspace.registerWindow("window-1");
-      const tabId = workspace.openDocument(
+      const tabId = openTestDocument(workspace,
         "window-1",
         document("saved")
       ).activeTabId!;
@@ -434,7 +465,6 @@ describe("workspace document IO transactions", () => {
             resolvePrompt = resolve;
           }),
         saveMarkdownFileToPath: closeWrite,
-        showSaveMarkdownDialog: vi.fn()
       });
       let abort!: () => void;
       const broker = createWorkspaceWindowCloseRequestBroker<
@@ -519,9 +549,9 @@ describe("workspace document IO transactions", () => {
 
   it("keeps queued IO blocked until an inactive close write returns and drains", async () => {
     const workspace = createWorkspaceState();
-    const documentOperations = createWorkspaceDocumentOperationCoordinator();
+    const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
-    const tabId = workspace.openDocument(
+    const tabId = openTestDocument(workspace,
       "window-1",
       document("saved")
     ).activeTabId!;
@@ -539,7 +569,6 @@ describe("workspace document IO transactions", () => {
       documentOperations,
       promptToSaveWorkspaceTab: vi.fn(async () => "save" as const),
       saveMarkdownFileToPath: closeWrite,
-      showSaveMarkdownDialog: vi.fn()
     });
     let abort!: () => void;
     const broker = createWorkspaceWindowCloseRequestBroker<
@@ -622,9 +651,9 @@ describe("workspace document IO transactions", () => {
     vi.useFakeTimers();
     try {
       const workspace = createWorkspaceState();
-      const documentOperations = createWorkspaceDocumentOperationCoordinator();
+      const documentOperations = createKeyedOperationCoordinator();
       workspace.registerWindow("window-1");
-      const tabId = workspace.openDocument(
+      const tabId = openTestDocument(workspace,
         "window-1",
         document("saved")
       ).activeTabId!;
@@ -642,7 +671,6 @@ describe("workspace document IO transactions", () => {
           status: "success" as const,
           document: document("dirty")
         })),
-        showSaveMarkdownDialog: vi.fn()
       });
       const broker = createWorkspaceWindowCloseRequestBroker<
         NonNullable<

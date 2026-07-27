@@ -28,9 +28,13 @@ type OpenDialogResult = {
 };
 
 export type OpenMarkdownDialogDependencies = {
-  openMarkdownFileFromPath: typeof openMarkdownFileFromPath;
   showOpenDialog: () => Promise<OpenDialogResult>;
 };
+
+export type OpenMarkdownPathDialogResult =
+  | { readonly status: "success"; readonly path: string }
+  | { readonly status: "cancelled" }
+  | { readonly status: "error"; readonly error: { readonly code: "dialog-failed"; readonly message: string } };
 
 export async function openMarkdownFileFromPath(
   targetPath: string,
@@ -64,9 +68,8 @@ export async function openMarkdownFileFromPath(
   }
 }
 
-export async function showOpenMarkdownDialog(
+export async function showOpenMarkdownPathDialog(
   dependencies: OpenMarkdownDialogDependencies = {
-    openMarkdownFileFromPath,
     showOpenDialog: () =>
       dialog.showOpenDialog({
         title: "Open Markdown",
@@ -74,7 +77,7 @@ export async function showOpenMarkdownDialog(
         filters: [{ name: "Markdown", extensions: ["md", "markdown"] }]
       })
   }
-): Promise<OpenMarkdownFileResult> {
+): Promise<OpenMarkdownPathDialogResult> {
   try {
     const dialogResult = await dependencies.showOpenDialog();
 
@@ -85,13 +88,26 @@ export async function showOpenMarkdownDialog(
     const [selectedPath] = dialogResult.filePaths;
 
     if (!selectedPath) {
-      return createErrorResult("read-failed");
+      return createDialogErrorResult();
     }
 
-    return dependencies.openMarkdownFileFromPath(selectedPath);
+    return { status: "success", path: selectedPath };
   } catch {
-    return createErrorResult("dialog-failed");
+    return createDialogErrorResult();
   }
+}
+
+function createDialogErrorResult(): Extract<
+  OpenMarkdownPathDialogResult,
+  { readonly status: "error" }
+> {
+  return {
+    status: "error",
+    error: {
+      code: "dialog-failed",
+      message: OPEN_MARKDOWN_FILE_ERROR_MESSAGES["dialog-failed"]
+    }
+  };
 }
 
 function decodeUtf8(fileBuffer: Buffer): string | null {

@@ -2,14 +2,14 @@ import type { WorkspaceState } from "@fishmark/workspace-domain";
 
 import type { WorkspaceWindowCloseConfirmation } from "./workspace-close-coordinator";
 import type {
-  WorkspaceDocumentOperationCoordinator,
-  WorkspaceDocumentOperationLease
-} from "./workspace-document-operation-coordinator";
+  KeyedOperationCoordinator,
+  KeyedOperationLease
+} from "./keyed-operation-coordinator";
 
 type WorkspaceWindowCloseApplicationDependencies<TOwnerWindow> = {
   workspace: Pick<WorkspaceState, "getTabSession" | "getWindowTabIds">;
   documentOperations: Pick<
-    WorkspaceDocumentOperationCoordinator,
+    KeyedOperationCoordinator<string>,
     "acquireExclusive"
   >;
   requestWorkspaceWindowClose: (
@@ -120,7 +120,7 @@ export function createWorkspaceWindowCloseApplication<TOwnerWindow>(
 }
 
 function keepHeld(
-  lease: WorkspaceDocumentOperationLease
+  lease: KeyedOperationLease
 ): HeldWorkspaceWindowCloseLease {
   return { release: () => lease.release() };
 }

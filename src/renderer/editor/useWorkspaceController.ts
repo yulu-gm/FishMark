@@ -243,6 +243,11 @@ export function useWorkspaceController(input: {
         throw new Error(result.error.message);
       }
 
+      if (result.kind === "focused-existing") {
+        setWorkspaceOpenState("idle");
+        return "opened";
+      }
+
       applyWorkspaceWindowSnapshot(result.snapshot);
       return "opened";
     } catch (error) {
@@ -270,6 +275,11 @@ export function useWorkspaceController(input: {
 
         if (result.kind === "error") {
           throw new Error(result.error.message);
+        }
+
+        if (result.kind === "focused-existing") {
+          setWorkspaceOpenState("idle");
+          return true;
         }
 
         applyWorkspaceWindowSnapshot(result.snapshot);
@@ -307,6 +317,10 @@ export function useWorkspaceController(input: {
 
           if (result.kind === "error") {
             throw new Error(result.error.message);
+          }
+
+          if (result.kind === "focused-existing") {
+            continue;
           }
 
           applyWorkspaceWindowSnapshot(result.snapshot);

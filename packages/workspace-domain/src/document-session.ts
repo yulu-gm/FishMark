@@ -5,8 +5,10 @@ import {
 } from "./document-revision";
 import type { DiskVersion } from "./disk-version";
 import { createStringTextBuffer, type TextBuffer } from "./text-buffer";
+import type { FileIdentity } from "./file-identity";
 
 export interface WorkspaceDocumentData {
+  readonly fileIdentity: FileIdentity | null;
   readonly path: string | null;
   readonly name: string;
   readonly content: string;
@@ -18,6 +20,7 @@ export type DocumentSaveState = "idle" | "manual-saving" | "autosaving";
 export interface DocumentSessionState {
   readonly tabId: string;
   readonly windowId: string;
+  readonly fileIdentity: FileIdentity | null;
   readonly path: string | null;
   readonly name: string;
   readonly encoding: "utf-8";
@@ -32,6 +35,7 @@ export interface DocumentSessionState {
 export interface DocumentSessionProjection {
   readonly tabId: string;
   readonly windowId: string;
+  readonly fileIdentity: FileIdentity | null;
   readonly path: string | null;
   readonly name: string;
   readonly content: string;
@@ -67,6 +71,7 @@ export function createDocumentSession({
   return freezeSession({
     tabId,
     windowId,
+    fileIdentity: document.fileIdentity,
     path: document.path,
     name: document.name,
     encoding: document.encoding,
@@ -116,6 +121,7 @@ export function commitSavedDocument(
 
   return freezeSession({
     ...session,
+    fileIdentity: document.fileIdentity,
     path: document.path,
     name: document.name,
     encoding: document.encoding,
@@ -145,6 +151,7 @@ export function replaceDocumentFromDisk(
 
   return freezeSession({
     ...session,
+    fileIdentity: document.fileIdentity,
     path: document.path,
     name: document.name,
     encoding: document.encoding,
@@ -174,6 +181,7 @@ export function projectDocumentSession(
   return Object.freeze({
     tabId: session.tabId,
     windowId: session.windowId,
+    fileIdentity: session.fileIdentity,
     path: session.path,
     name: session.name,
     content: session.text.toString(),

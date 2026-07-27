@@ -77,7 +77,7 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain('import { createWorkspaceDetachApplication } from "./workspace-detach-application"');
     expect(mainSource).toContain('import { createWorkspaceFileOperations } from "./workspace-file-operations"');
     expect(mainSource).toContain('import { createWorkspaceReloadApplication } from "./workspace-reload-application"');
-    expect(mainSource).toContain('import { createWorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator"');
+    expect(mainSource).toContain('import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator"');
     expect(mainSource).toContain('import { createWorkspaceWindowCloseApplication } from "./workspace-window-close-application"');
     expect(mainSource).toContain('import { createWorkspaceWindowCloseConfirmationHandler } from "./workspace-window-close-confirmation-handler"');
     expect(mainSource).toContain('import { createWorkspaceWindowCloseRequestBroker } from "./workspace-window-close-request-broker"');
@@ -94,7 +94,7 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain("CLOSE_WORKSPACE_TAB_CHANNEL");
     expect(mainSource).toContain("UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL");
     expect(mainSource).toContain("const workspaceState = createWorkspaceState()");
-    expect(mainSource).toContain("const workspaceDocumentOperations = createWorkspaceDocumentOperationCoordinator()");
+    expect(mainSource).toContain("const workspaceTabOperations = createKeyedOperationCoordinator<string>()");
     expect(mainSource).toContain("const workspaceTabReorderApplication = createWorkspaceTabReorderApplication({");
     expect(mainSource).toContain("const workspaceApplication = createWorkspaceApplication({");
     expect(mainSource).toContain("const workspaceCloseCoordinator = createWorkspaceCloseCoordinator({");

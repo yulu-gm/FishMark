@@ -2,7 +2,7 @@ import { createWorkspaceState } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 
 import { createWorkspaceDetachApplication } from "./workspace-detach-application";
-import { createWorkspaceDocumentOperationCoordinator } from "./workspace-document-operation-coordinator";
+import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator";
 import { createWorkspaceTabTransferApplication } from "./workspace-tab-transfer-application";
 import { createWorkspaceWindowRegistrationApplication } from "./workspace-window-registration-application";
 
@@ -54,7 +54,7 @@ function createTabTransfer(
 ) {
   return createWorkspaceTabTransferApplication({
     workspace,
-    documentOperations: createWorkspaceDocumentOperationCoordinator()
+    documentOperations: createKeyedOperationCoordinator()
   });
 }
 
@@ -111,7 +111,7 @@ describe("createWorkspaceDetachApplication", () => {
       const { workspace, tabId } = createDirtySource();
       const window = createWindow(3);
       const scheduler = createReadyScheduler();
-      const documentOperations = createWorkspaceDocumentOperationCoordinator();
+      const documentOperations = createKeyedOperationCoordinator();
       let releaseBlockingOperation!: () => void;
       const blockingOperation = documentOperations.runExclusive(
         tabId,
@@ -177,7 +177,7 @@ describe("createWorkspaceDetachApplication", () => {
   it("shares one in-flight ready transaction across concurrent registrations", async () => {
     const { workspace, tabId } = createDirtySource();
     const window = createWindow(3);
-    const documentOperations = createWorkspaceDocumentOperationCoordinator();
+    const documentOperations = createKeyedOperationCoordinator();
     const transfer = createWorkspaceTabTransferApplication({
       workspace,
       documentOperations

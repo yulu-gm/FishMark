@@ -21,8 +21,7 @@ type SaveDialogResult = {
   filePath?: string;
 };
 
-export type SaveMarkdownDialogDependencies = {
-  saveMarkdownFileToPath: typeof saveMarkdownFileToPath;
+export type SaveMarkdownPathDialogDependencies = {
   showSaveDialog: () => Promise<SaveDialogResult>;
 };
 
@@ -32,11 +31,14 @@ export type SaveMarkdownFileToPathInput = {
   content: string;
 };
 
-export type ShowSaveMarkdownDialogInput = {
-  tabId: string;
+export type ShowSaveMarkdownPathDialogInput = {
   currentPath: string | null;
-  content: string;
 };
+
+export type SaveMarkdownPathDialogResult =
+  | { status: "success"; path: string }
+  | { status: "cancelled" }
+  | { status: "error"; error: { code: "dialog-failed"; message: string } };
 
 const defaultDependencies: SaveMarkdownFileDependencies = {
   writeFile
@@ -63,10 +65,9 @@ export async function saveMarkdownFileToPath(
   }
 }
 
-export async function showSaveMarkdownDialog(
-  input: ShowSaveMarkdownDialogInput,
-  dependencies: SaveMarkdownDialogDependencies = {
-    saveMarkdownFileToPath,
+export async function showSaveMarkdownPathDialog(
+  input: ShowSaveMarkdownPathDialogInput,
+  dependencies: SaveMarkdownPathDialogDependencies = {
     showSaveDialog: () =>
       dialog.showSaveDialog({
         title: "Save Markdown As",
@@ -74,26 +75,28 @@ export async function showSaveMarkdownDialog(
         filters: [{ name: "Markdown", extensions: ["md", "markdown"] }]
       })
   }
-): Promise<SaveMarkdownFileResult> {
+): Promise<SaveMarkdownPathDialogResult> {
   try {
-    const dialogResult = await dependencies.showSaveDialog();
-
-    if (dialogResult.canceled) {
+    const result = await dependencies.showSaveDialog();
+    if (result.canceled) {
       return { status: "cancelled" };
     }
-
-    if (!dialogResult.filePath) {
-      return createErrorResult("dialog-failed");
-    }
-
-    return dependencies.saveMarkdownFileToPath({
-      tabId: input.tabId,
-      path: dialogResult.filePath,
-      content: input.content
-    });
+    return result.filePath
+      ? { status: "success", path: result.filePath }
+      : savePathDialogError();
   } catch {
-    return createErrorResult("dialog-failed");
+    return savePathDialogError();
   }
+}
+
+function savePathDialogError(): Extract<SaveMarkdownPathDialogResult, { status: "error" }> {
+  return {
+    status: "error",
+    error: {
+      code: "dialog-failed",
+      message: SAVE_MARKDOWN_FILE_ERROR_MESSAGES["dialog-failed"]
+    }
+  };
 }
 
 function createErrorResult(code: SaveMarkdownFileErrorCode): SaveMarkdownFileResult {
