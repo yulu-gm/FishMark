@@ -31,6 +31,7 @@ import type { ThemeSurfaceRuntimeMode } from "../shader/theme-surface-runtime";
 import { ThemeSurfaceHost, type ThemeSurfaceHostDescriptor } from "./ThemeSurfaceHost";
 import { TitlebarHost } from "./TitlebarHost";
 import type { ExternalMarkdownFileState } from "./editor-shell-state";
+import type { EditorLoadIdentity } from "./editor-load-identity";
 import { ShortcutHintOverlay } from "./shortcut-hint-overlay";
 import type { TitlebarLayoutDescriptor } from "./titlebar-layout";
 import type { ThemePackageEntry, ResolvedThemeMode } from "./useThemeController";
@@ -169,6 +170,8 @@ export type WorkspaceShellProps = {
   effectiveSaveState: "idle" | "manual-saving" | "autosaving";
   editorContainerRef: RefObject<HTMLDivElement | null>;
   editorLoadRevision: number;
+  editorEpoch: number;
+  editorTransition: "idle" | "reloading";
   editorRef: RefObject<CodeEditorHandle | null>;
   editorViewMode: EditorViewMode;
   externalFileConflictMessage: string;
@@ -205,7 +208,8 @@ export type WorkspaceShellProps = {
   onCloseSettingsDrawer: () => void;
   onCloseWorkspaceTab: (tabId: string) => void;
   onDismissExternalFileConflict: () => void;
-  onDraftChange: (content: string) => void;
+  onDraftChange: (content: string, identity: EditorLoadIdentity | null) => void;
+  onEditorLoadRevisionApplied: (identity: EditorLoadIdentity) => void;
   onEditorBlur: () => void;
   onEditorViewModeChange: (mode: EditorViewMode) => void;
   onImportClipboardImage: (input: { documentPath: string | null }) => Promise<string | null>;
@@ -322,6 +326,8 @@ export function WorkspaceShell({
   currentDocumentMetrics,
   editorContainerRef,
   editorLoadRevision,
+  editorEpoch,
+  editorTransition,
   editorRef,
   editorViewMode,
   externalFileConflictMessage,
@@ -363,6 +369,7 @@ export function WorkspaceShell({
   onDeleteTableRow,
   onDismissExternalFileConflict,
   onDraftChange,
+  onEditorLoadRevisionApplied,
   onEditorBlur,
   onEditorViewModeChange,
   onImportClipboardImage,
@@ -959,12 +966,16 @@ export function WorkspaceShell({
                       ref={editorRef}
                       initialContent={activeDocument.content}
                       documentPath={activeDocument.path}
+                      documentTabId={activeDocument.tabId}
+                      editorEpoch={editorEpoch}
                       loadRevision={editorLoadRevision}
+                      readOnly={editorTransition !== "idle"}
                       importClipboardImage={onImportClipboardImage}
                       openExternalLink={onOpenExternalLink}
                       viewMode={editorViewMode}
                       onActiveBlockChange={onActiveBlockChange}
                       onChange={onDraftChange}
+                      onLoadRevisionApplied={onEditorLoadRevisionApplied}
                       onBlur={onEditorBlur}
                     />
                   </div>

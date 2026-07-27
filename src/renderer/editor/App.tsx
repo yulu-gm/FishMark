@@ -1534,6 +1534,8 @@ function EditorShell({
         effectiveSaveState={effectiveSaveState}
         editorContainerRef={editorContainerRef}
         editorLoadRevision={state.editorLoadRevision}
+        editorEpoch={state.editorEpoch}
+        editorTransition={state.editorTransition}
         editorRef={editorRef}
         editorViewMode={editorViewMode}
         externalFileConflictMessage={externalFileConflictMessage}
@@ -1573,6 +1575,7 @@ function EditorShell({
         }}
         onDismissExternalFileConflict={externalConflictController.dismissConflict}
         onDraftChange={handleEditorContentChange}
+        onEditorLoadRevisionApplied={workspaceController.acknowledgeEditorLoad}
         onEditorBlur={handleEditorBlurFromShell}
         onEditorViewModeChange={setEditorViewMode}
         onImportClipboardImage={handleImportClipboardImage}

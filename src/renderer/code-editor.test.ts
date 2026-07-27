@@ -164,6 +164,24 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("makes the editor surface read-only during an application transition", () => {
+    const host = document.createElement("div");
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "# Draft\n",
+      onChange: vi.fn()
+    });
+    const content = host.querySelector<HTMLElement>(".cm-content");
+
+    expect(content?.getAttribute("contenteditable")).toBe("true");
+    controller.setReadOnly(true);
+    expect(content?.getAttribute("contenteditable")).toBe("false");
+    controller.setReadOnly(false);
+    expect(content?.getAttribute("contenteditable")).toBe("true");
+
+    controller.destroy();
+  });
+
   it("toggles source mode without changing content, selection, or onChange state", async () => {
     const host = document.createElement("div");
     const source = [

@@ -15,7 +15,11 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 vi.mock("../code-editor-view", () => ({
   CodeEditorView: ({ initialContent, onChange, viewMode }: {
     initialContent: string;
-    onChange: (content: string) => void;
+    onChange: (content: string, identity: {
+      tabId: string;
+      epoch: number;
+      loadRevision: number;
+    }) => void;
     viewMode?: "wysiwym" | "source";
   }) =>
     createElement(
@@ -33,7 +37,11 @@ vi.mock("../code-editor-view", () => ({
         "button",
         {
           type: "button",
-          onClick: () => onChange("# Changed\n")
+          onClick: () => onChange("# Changed\n", {
+            tabId: "tab-1",
+            epoch: 1,
+            loadRevision: 1
+          })
         },
         "Change draft"
       )
@@ -164,6 +172,8 @@ it("renders workspace tabs and delegates commands without owning persistence log
         titlebarHeight: 0,
         activeHeadingId: null,
         editorLoadRevision: 1,
+        editorEpoch: 1,
+        editorTransition: "idle",
         editorViewMode: "wysiwym",
         editorRef: { current: null },
         editorContainerRef: { current: null },
@@ -225,7 +235,8 @@ it("renders workspace tabs and delegates commands without owning persistence log
         onClearRecentFile: vi.fn(),
         onWorkbenchSurfaceRuntimeModeChange: vi.fn(),
         onNavigateToOutlineItem,
-        onDraftChange
+        onDraftChange,
+        onEditorLoadRevisionApplied: vi.fn()
       })
     );
   });
@@ -259,7 +270,11 @@ it("renders workspace tabs and delegates commands without owning persistence log
   });
 
   expect(onTabActivate).toHaveBeenCalledWith("tab-2");
-  expect(onDraftChange).toHaveBeenCalledWith("# Changed\n");
+  expect(onDraftChange).toHaveBeenCalledWith("# Changed\n", {
+    tabId: "tab-1",
+    epoch: 1,
+    loadRevision: 1
+  });
   expect(onNavigateToOutlineItem).toHaveBeenCalledWith(3);
   expect(onEditorViewModeChange).toHaveBeenCalledWith("source");
   expect(container.querySelector('[data-fishmark-region="workspace-header"]')).toBeNull();
@@ -347,6 +362,8 @@ it("opens find and replace controls and delegates search actions to the editor",
         titlebarHeight: 0,
         activeHeadingId: null,
         editorLoadRevision: 1,
+        editorEpoch: 1,
+        editorTransition: "idle",
         editorViewMode: "wysiwym",
         editorRef: {
           current: {
@@ -440,7 +457,8 @@ it("opens find and replace controls and delegates search actions to the editor",
         onClearRecentFile: vi.fn(),
         onWorkbenchSurfaceRuntimeModeChange: vi.fn(),
         onNavigateToOutlineItem: vi.fn(),
-        onDraftChange: vi.fn()
+        onDraftChange: vi.fn(),
+        onEditorLoadRevisionApplied: vi.fn()
       })
     );
   });
@@ -555,6 +573,8 @@ it("renders recent files without the old empty headline and delegates open and c
         titlebarHeight: 0,
         activeHeadingId: null,
         editorLoadRevision: 1,
+        editorEpoch: 1,
+        editorTransition: "idle",
         editorViewMode: "wysiwym",
         editorRef: { current: null },
         editorContainerRef: { current: null },
@@ -616,7 +636,8 @@ it("renders recent files without the old empty headline and delegates open and c
         onClearRecentFile,
         onWorkbenchSurfaceRuntimeModeChange: vi.fn(),
         onNavigateToOutlineItem: vi.fn(),
-        onDraftChange: vi.fn()
+        onDraftChange: vi.fn(),
+        onEditorLoadRevisionApplied: vi.fn()
       })
     );
   });

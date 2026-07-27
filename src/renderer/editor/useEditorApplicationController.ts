@@ -33,11 +33,8 @@ export function useEditorApplicationController(input: {
     showNotification
   });
   const saveController = useSaveController({
-    fishmark,
     getActiveDocument: workspaceController.getActiveDocument,
-    getEditorContent,
-    flushActiveWorkspaceDraft: workspaceController.flushActiveWorkspaceDraft,
-    refreshWorkspaceSnapshot: workspaceController.refreshWorkspaceSnapshot,
+    runSaveTransaction: workspaceController.runSaveTransaction,
     hasExternalFileConflict: () => externalConflictController.hasExternalFileConflict(),
     autosaveDelayMs,
     showNotification
@@ -73,9 +70,6 @@ export function useEditorApplicationController(input: {
     closeWorkspaceTab: workspaceController.closeWorkspaceTab,
     detachWorkspaceTab: workspaceController.detachWorkspaceTab
   });
-  const {
-    confirmWorkspaceWindowClose: confirmWorkspaceWindowCloseBridge
-  } = fishmark;
   const {
     createUntitledMarkdown: createUntitledWorkspaceTab,
     flushActiveWorkspaceDraft,
@@ -210,17 +204,8 @@ export function useEditorApplicationController(input: {
   const confirmWorkspaceWindowClose = useCallback(async (
     requestId: string
   ): Promise<boolean> => {
-    try {
-      await flushActiveWorkspaceDraft();
-      return await confirmWorkspaceWindowCloseBridge({ requestId });
-    } catch (error) {
-      showNotification({
-        kind: "error",
-        message: error instanceof Error ? error.message : String(error)
-      });
-      return false;
-    }
-  }, [confirmWorkspaceWindowCloseBridge, flushActiveWorkspaceDraft, showNotification]);
+    return workspaceController.confirmWorkspaceWindowClose(requestId);
+  }, [workspaceController]);
 
   const runMenuCommand = useCallback(
     (command: AppMenuCommand): boolean => {

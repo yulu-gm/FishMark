@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import type { EditorLoadIdentity } from "./editor-load-identity";
 
 export function useEditorWorkflowController(input: {
   setEditorContentSnapshot: (content: string) => void;
@@ -7,7 +8,7 @@ export function useEditorWorkflowController(input: {
   runAutosave: () => Promise<void>;
   resetAutosaveRuntime: () => void;
   getActiveTabId: () => string | null;
-  updateDraft: (input: { tabId: string; content: string }) => Promise<void>;
+  updateDraft: (input: { identity: EditorLoadIdentity; content: string }) => boolean;
   activateWorkspaceTab: (tabId: string) => Promise<void>;
   closeWorkspaceTab: (tabId: string) => Promise<void>;
   detachWorkspaceTab: (tabId: string) => Promise<void>;
@@ -26,20 +27,15 @@ export function useEditorWorkflowController(input: {
   } = input;
 
   const handleEditorContentChange = useCallback(
-    (nextContent: string): void => {
-      const activeTabId = getActiveTabId();
+    (nextContent: string, identity: EditorLoadIdentity | null): void => {
+      if (identity === null || !updateDraft({ identity, content: nextContent })) {
+        return;
+      }
       setEditorContentSnapshot(nextContent);
       scheduleDocumentDerivedDataUpdate(nextContent);
       scheduleAutosave();
-
-      if (activeTabId !== null) {
-        void updateDraft({ tabId: activeTabId, content: nextContent }).catch(() => {
-          // Draft sync failures are surfaced by explicit save/autosave flushes.
-        });
-      }
     },
     [
-      getActiveTabId,
       scheduleAutosave,
       scheduleDocumentDerivedDataUpdate,
       setEditorContentSnapshot,

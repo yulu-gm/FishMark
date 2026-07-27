@@ -13,6 +13,7 @@ import {
   type FindReplaceSnapshot
 } from "./code-editor";
 import type { ActiveBlockState, EditorViewMode } from "@fishmark/editor-core";
+import type { EditorLoadIdentity } from "./editor/editor-load-identity";
 
 export type CodeEditorHandle = {
   getContent: () => string;
@@ -50,7 +51,11 @@ type CodeEditorViewProps = {
   initialContent: string;
   documentPath: string | null;
   loadRevision: number;
-  onChange: (content: string) => void;
+  documentTabId: string | null;
+  editorEpoch: number;
+  readOnly: boolean;
+  onChange: (content: string, identity: EditorLoadIdentity | null) => void;
+  onLoadRevisionApplied: (identity: EditorLoadIdentity) => void;
   onBlur?: () => void;
   onActiveBlockChange?: (state: ActiveBlockState) => void;
   importClipboardImage?: (input: { documentPath: string | null }) => Promise<string | null>;
@@ -64,7 +69,11 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
       initialContent,
       documentPath,
       loadRevision,
+      documentTabId,
+      editorEpoch,
+      readOnly,
       onChange,
+      onLoadRevisionApplied,
       onBlur,
       onActiveBlockChange,
       importClipboardImage,
@@ -77,8 +86,14 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
     const controllerRef = useRef<CodeEditorController | null>(null);
     const initialContentRef = useRef(initialContent);
     const initialViewModeRef = useRef(viewMode);
+    const initialReadOnlyRef = useRef(readOnly);
     const latestLoadedContentRef = useRef(initialContent);
+    const appliedIdentityRef = useRef<EditorLoadIdentity | null>(null);
+    const appliedLoadRevisionRef = useRef<number | null>(null);
     const handleChange = useEffectEvent(onChange);
+    const handleLoadRevisionApplied = useEffectEvent((identity: EditorLoadIdentity) => {
+      onLoadRevisionApplied(identity);
+    });
     const handleBlur = useEffectEvent(() => onBlur?.());
     const handleActiveBlockChange = useEffectEvent((state: ActiveBlockState) =>
       onActiveBlockChange?.(state)
@@ -97,12 +112,13 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
         parent: hostRef.current,
         initialContent: initialContentRef.current,
         documentPath: null,
-        onChange: (content) => handleChange(content),
+        onChange: (content) => handleChange(content, appliedIdentityRef.current),
         onBlur: () => handleBlur(),
         onActiveBlockChange: (state) => handleActiveBlockChange(state),
         importClipboardImage: (input) => handleImportClipboardImage(input),
         openExternalLink: (href) => handleOpenExternalLink(href),
-        viewMode: initialViewModeRef.current
+        viewMode: initialViewModeRef.current,
+        readOnly: initialReadOnlyRef.current
       });
 
       controllerRef.current = controller;
@@ -121,8 +137,18 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
     }, [initialContent]);
 
     useEffect(() => {
-      controllerRef.current?.replaceDocument(latestLoadedContentRef.current);
-    }, [loadRevision]);
+      if (appliedLoadRevisionRef.current !== loadRevision) {
+        controllerRef.current?.replaceDocument(latestLoadedContentRef.current);
+        appliedLoadRevisionRef.current = loadRevision;
+      }
+      if (documentTabId === null) {
+        appliedIdentityRef.current = null;
+        return;
+      }
+      const identity = { tabId: documentTabId, epoch: editorEpoch, loadRevision };
+      appliedIdentityRef.current = identity;
+      handleLoadRevisionApplied(identity);
+    }, [documentTabId, editorEpoch, loadRevision]);
 
     useEffect(() => {
       controllerRef.current?.setDocumentPath(documentPath);
@@ -131,6 +157,10 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
     useEffect(() => {
       controllerRef.current?.setViewMode(viewMode);
     }, [viewMode]);
+
+    useEffect(() => {
+      controllerRef.current?.setReadOnly(readOnly);
+    }, [readOnly]);
 
     useImperativeHandle(
       ref,

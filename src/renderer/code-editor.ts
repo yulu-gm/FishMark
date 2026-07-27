@@ -1,4 +1,4 @@
-import { EditorState } from "@codemirror/state";
+import { Compartment, EditorState } from "@codemirror/state";
 import {
   closeSearchPanel,
   findNext,
@@ -44,6 +44,7 @@ export type CreateCodeEditorControllerOptions = {
   importClipboardImage?: (input: { documentPath: string | null }) => Promise<string | null>;
   openExternalLink?: (href: string) => void;
   viewMode?: EditorViewMode;
+  readOnly?: boolean;
 };
 
 export type CodeEditorController = {
@@ -58,6 +59,7 @@ export type CodeEditorController = {
   replaceDocument: (nextContent: string) => void;
   setDocumentPath: (nextDocumentPath: string | null) => void;
   setViewMode: (nextMode: EditorViewMode) => void;
+  setReadOnly: (readOnly: boolean) => void;
   focus: () => void;
   navigateToOffset: (offset: number) => void;
   insertText: (text: string) => void;
@@ -94,6 +96,8 @@ export function createCodeEditorController(
 ): CodeEditorController {
   let currentDocumentPath = options.documentPath ?? null;
   let currentViewMode = options.viewMode ?? "wysiwym";
+  let currentReadOnly = options.readOnly ?? false;
+  const editableCompartment = new Compartment();
   let isDestroyed = false;
   let activeBlockState: ActiveBlockState = {
     blockMap: parseMarkdownDocument(""),
@@ -109,6 +113,7 @@ export function createCodeEditorController(
     EditorState.create({
       doc: content,
       extensions: [
+        editableCompartment.of(EditorView.editable.of(!currentReadOnly)),
         createFishMarkMarkdownExtensions({
           parseMarkdownDocument,
           onContentChange: options.onChange,
@@ -324,6 +329,15 @@ export function createCodeEditorController(
     setViewMode(nextMode: EditorViewMode) {
       currentViewMode = nextMode;
       setMarkdownEditorViewMode(view, nextMode);
+    },
+    setReadOnly(readOnly: boolean) {
+      if (currentReadOnly === readOnly) {
+        return;
+      }
+      currentReadOnly = readOnly;
+      view.dispatch({
+        effects: editableCompartment.reconfigure(EditorView.editable.of(!readOnly))
+      });
     },
     focus() {
       view.focus();

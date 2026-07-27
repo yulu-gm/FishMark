@@ -2,411 +2,115 @@
 
 import { act, createElement, createRef, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { flushSync } from "react-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { WorkspaceDocumentSnapshot, WorkspaceWindowSnapshot } from "../../shared/workspace";
+import type { WorkspaceDocumentSnapshot } from "../../shared/workspace";
 import { useSaveController } from "./useSaveController";
 
-type SaveControllerValue = ReturnType<typeof useSaveController>;
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-function createActiveDocument(
-  input: Partial<WorkspaceDocumentSnapshot> & {
-    tabId?: string;
-    path?: string | null;
-    name?: string;
-    content?: string;
-    isDirty?: boolean;
-  } = {}
-): WorkspaceDocumentSnapshot {
+type Controller = ReturnType<typeof useSaveController>;
+
+function createDocument(): WorkspaceDocumentSnapshot {
   return {
-    tabId: input.tabId ?? "tab-1",
-    path: input.path === undefined ? "C:/notes/note.md" : input.path,
-    name: input.name ?? "note.md",
-    content: input.content ?? "# Note\n",
+    tabId: "tab-1",
+    path: "C:/notes/note.md",
+    name: "note.md",
+    content: "# Draft\n",
     encoding: "utf-8",
-    isDirty: input.isDirty ?? true,
-    saveState: input.saveState ?? "idle"
+    isDirty: true,
+    saveState: "idle"
   };
 }
 
-function renderController(input: Parameters<typeof useSaveController>[0]): {
-  latestRef: { current: SaveControllerValue | null };
-  root: Root;
-} {
-  const latestRef = createRef<SaveControllerValue>();
-  const root = createRoot(document.createElement("div"));
-
+function renderController(input: Parameters<typeof useSaveController>[0]) {
+  const latestRef = createRef<Controller>();
+  const root: Root = createRoot(document.createElement("div"));
   function Probe(): null {
     const controller = useSaveController(input);
-
     useEffect(() => {
       latestRef.current = controller;
     }, [controller]);
-
     return null;
   }
-
-  act(() => {
-    root.render(createElement(Probe));
-  });
-
+  act(() => flushSync(() => root.render(createElement(Probe))));
   return { latestRef, root };
 }
 
-afterEach(() => {
-  vi.useRealTimers();
-});
+afterEach(() => vi.useRealTimers());
 
 describe("useSaveController", () => {
-  it("runs manual saves from the canonical active document and refreshes the main-owned workspace snapshot after success", async () => {
-    const flushActiveWorkspaceDraft = vi.fn(async () => {});
-    const saveMarkdownFile = vi.fn(async () => ({
-      status: "success" as const,
-      document: {
-        path: "C:/notes/note.md",
-        name: "note.md",
-        content: "# Canonical\n",
-        encoding: "utf-8" as const
-      }
+  it("forwards a manual save as one application transaction", async () => {
+    const runSaveTransaction = vi.fn(async () => ({
+      kind: "committed" as const,
+      tabId: "tab-1",
+      value: { status: "cancelled" as const }
     }));
-    const refreshWorkspaceSnapshot = vi.fn(async (): Promise<WorkspaceWindowSnapshot> => ({
-      windowId: "window-1",
-      activeTabId: "tab-1",
-      tabs: [
-        {
-          tabId: "tab-1",
-          path: "C:/notes/note.md",
-          name: "note.md",
-          isDirty: false,
-          saveState: "idle"
-        }
-      ],
-      activeDocument: {
-        tabId: "tab-1",
-        path: "C:/notes/note.md",
-        name: "note.md",
-        content: "# Canonical\n",
-        encoding: "utf-8",
-        isDirty: false,
-        saveState: "idle"
-      }
-    }));
-    const getActiveDocument = vi.fn(() => createActiveDocument({ content: "# Canonical\n" }));
-
     const { latestRef, root } = renderController({
-      fishmark: {
-        saveMarkdownFile
-      } as unknown as Window["fishmark"],
-      getActiveDocument,
-      getEditorContent: () => "# Canonical\n",
-      flushActiveWorkspaceDraft,
-      refreshWorkspaceSnapshot,
-      hasExternalFileConflict: () => false,
+      getActiveDocument: () => createDocument(),
+      runSaveTransaction,
+      hasExternalFileConflict: () => true,
       autosaveDelayMs: 10,
       showNotification: vi.fn()
     });
 
-    await act(async () => {
-      await latestRef.current?.runManualSave();
+    await act(async () => latestRef.current!.runManualSave());
+    expect(runSaveTransaction).toHaveBeenCalledWith({
+      forceSaveAs: false,
+      hasExternalConflict: true
     });
-
-    expect(flushActiveWorkspaceDraft).toHaveBeenCalledTimes(2);
-    expect(saveMarkdownFile).toHaveBeenCalledWith({
-      tabId: "tab-1"
-    });
-    expect(refreshWorkspaceSnapshot).toHaveBeenCalledTimes(1);
-    expect(refreshWorkspaceSnapshot.mock.invocationCallOrder[0]).toBeGreaterThan(
-      saveMarkdownFile.mock.invocationCallOrder[0]!
-    );
-    expect(refreshWorkspaceSnapshot.mock.invocationCallOrder[0]).toBeGreaterThan(
-      flushActiveWorkspaceDraft.mock.invocationCallOrder[1]!
-    );
-
-    act(() => {
-      root.unmount();
-    });
+    act(() => root.unmount());
   });
 
-  it("flushes edits made during an in-flight save before refreshing the canonical snapshot", async () => {
+  it("does not clear a real in-flight save when navigation resets autosave runtime", async () => {
     let resolveSave!: (value: {
-      status: "success";
-      document: {
-        path: string;
-        name: string;
-        content: string;
-        encoding: "utf-8";
-      };
+      kind: "committed";
+      tabId: string;
+      value: { status: "cancelled" };
     }) => void;
-    const saveResultPromise = new Promise<{
-      status: "success";
-      document: {
-        path: string;
-        name: string;
-        content: string;
-        encoding: "utf-8";
-      };
-    }>((resolve) => {
-      resolveSave = resolve;
-    });
-    const flushActiveWorkspaceDraft = vi.fn(async () => {});
-    const saveMarkdownFile = vi.fn(() => saveResultPromise);
-    const refreshWorkspaceSnapshot = vi.fn(async () => null);
-    let editorContent = "# Saved draft\n";
-
+    const transaction = new Promise<{
+      kind: "committed";
+      tabId: string;
+      value: { status: "cancelled" };
+    }>((resolve) => { resolveSave = resolve; });
+    const runSaveTransaction = vi.fn(() => transaction);
     const { latestRef, root } = renderController({
-      fishmark: {
-        saveMarkdownFile
-      } as unknown as Window["fishmark"],
-      getActiveDocument: () => createActiveDocument({ content: "# Saved draft\n" }),
-      getEditorContent: () => editorContent,
-      flushActiveWorkspaceDraft,
-      refreshWorkspaceSnapshot,
+      getActiveDocument: () => createDocument(),
+      runSaveTransaction,
       hasExternalFileConflict: () => false,
       autosaveDelayMs: 10,
       showNotification: vi.fn()
     });
 
-    const savePromise = act(async () => {
-      await latestRef.current?.runManualSave();
-    });
-
-    await vi.waitFor(() => {
-      expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
-    });
-
-    editorContent = "# Newer draft\n";
-    resolveSave({
-      status: "success",
-      document: {
-        path: "C:/notes/note.md",
-        name: "note.md",
-        content: "# Saved draft\n",
-        encoding: "utf-8"
-      }
-    });
-
-    await savePromise;
-
-    expect(flushActiveWorkspaceDraft).toHaveBeenCalledTimes(2);
-    expect(refreshWorkspaceSnapshot).toHaveBeenCalledTimes(1);
-    expect(refreshWorkspaceSnapshot.mock.invocationCallOrder[0]).toBeGreaterThan(
-      flushActiveWorkspaceDraft.mock.invocationCallOrder[1]!
-    );
-
-    act(() => {
-      root.unmount();
-    });
+    const save = latestRef.current!.runManualSave();
+    await vi.waitFor(() => expect(latestRef.current!.isSaveInFlight()).toBe(true));
+    act(() => latestRef.current!.resetAutosaveRuntime());
+    expect(latestRef.current!.isSaveInFlight()).toBe(true);
+    resolveSave({ kind: "committed", tabId: "tab-1", value: { status: "cancelled" } });
+    await save;
+    act(() => root.unmount());
   });
 
-  it("schedules autosave from the current canonical projection and skips it when conflicts are active", async () => {
-    vi.useFakeTimers();
-
-    const flushActiveWorkspaceDraft = vi.fn(async () => {});
-    const saveMarkdownFile = vi.fn(async () => ({
-      status: "success" as const,
-      document: {
-        path: "C:/notes/note.md",
-        name: "note.md",
-        content: "# Saved\n",
-        encoding: "utf-8" as const
-      }
+  it("schedules autosave through the transaction boundary", async () => {
+    const runSaveTransaction = vi.fn(async () => ({
+      kind: "committed" as const,
+      tabId: "tab-1",
+      value: { status: "cancelled" as const }
     }));
-    const refreshWorkspaceSnapshot = vi.fn(async () => null);
-    const getActiveDocument = vi.fn(() => createActiveDocument({ content: "# Draft\n" }));
-    let hasConflict = false;
-
     const { latestRef, root } = renderController({
-      fishmark: {
-        saveMarkdownFile
-      } as unknown as Window["fishmark"],
-      getActiveDocument,
-      getEditorContent: () => "# Draft\n",
-      flushActiveWorkspaceDraft,
-      refreshWorkspaceSnapshot,
-      hasExternalFileConflict: () => hasConflict,
-      autosaveDelayMs: 25,
-      showNotification: vi.fn()
-    });
-
-    act(() => {
-      latestRef.current?.scheduleAutosave();
-    });
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(25);
-    });
-
-    expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
-
-    hasConflict = true;
-    saveMarkdownFile.mockClear();
-
-    act(() => {
-      latestRef.current?.scheduleAutosave();
-    });
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(25);
-    });
-
-    expect(saveMarkdownFile).not.toHaveBeenCalled();
-
-    act(() => {
-      root.unmount();
-    });
-  });
-
-  it("treats editor buffer changes as pending autosave work even before the canonical snapshot turns dirty", async () => {
-    vi.useFakeTimers();
-
-    const flushActiveWorkspaceDraft = vi.fn(async () => {});
-    const saveMarkdownFile = vi.fn(async () => ({
-      status: "success" as const,
-      document: {
-        path: "C:/notes/note.md",
-        name: "note.md",
-        content: "# Draft\n",
-        encoding: "utf-8" as const
-      }
-    }));
-    const refreshWorkspaceSnapshot = vi.fn(async () => null);
-    const getActiveDocument = vi.fn(() =>
-      createActiveDocument({ content: "# Canonical\n", isDirty: false })
-    );
-
-    const { latestRef, root } = renderController({
-      fishmark: {
-        saveMarkdownFile
-      } as unknown as Window["fishmark"],
-      getActiveDocument,
-      getEditorContent: () => "# Draft\n",
-      flushActiveWorkspaceDraft,
-      refreshWorkspaceSnapshot,
+      getActiveDocument: () => createDocument(),
+      runSaveTransaction,
       hasExternalFileConflict: () => false,
-      autosaveDelayMs: 25,
+      autosaveDelayMs: 1,
       showNotification: vi.fn()
     });
-
-    act(() => {
-      latestRef.current?.scheduleAutosave();
+    act(() => latestRef.current!.scheduleAutosave());
+    await vi.waitFor(() => expect(runSaveTransaction).toHaveBeenCalledTimes(1));
+    expect(runSaveTransaction).toHaveBeenCalledWith({
+      forceSaveAs: false,
+      hasExternalConflict: false
     });
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(25);
-    });
-
-    expect(flushActiveWorkspaceDraft).toHaveBeenCalledTimes(2);
-    expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
-    expect(saveMarkdownFile).toHaveBeenCalledWith({
-      tabId: "tab-1"
-    });
-
-    act(() => {
-      root.unmount();
-    });
-  });
-
-  it("replays autosave after first Save As when edits happen while the document is still untitled", async () => {
-    vi.useFakeTimers();
-
-    let resolveSaveAs!: (value: {
-      status: "success";
-      document: {
-        path: string;
-        name: string;
-        content: string;
-        encoding: "utf-8";
-      };
-    }) => void;
-    const saveAsPromise = new Promise<{
-      status: "success";
-      document: {
-        path: string;
-        name: string;
-        content: string;
-        encoding: "utf-8";
-      };
-    }>((resolve) => {
-      resolveSaveAs = resolve;
-    });
-    const flushActiveWorkspaceDraft = vi.fn(async () => {});
-    const saveMarkdownFileAs = vi.fn(() => saveAsPromise);
-    const saveMarkdownFile = vi.fn(async () => ({
-      status: "success" as const,
-      document: {
-        path: "C:/notes/untitled.md",
-        name: "untitled.md",
-        content: "# Newer draft\n",
-        encoding: "utf-8" as const
-      }
-    }));
-    const refreshWorkspaceSnapshot = vi.fn(async () => null);
-    let activeDocument = createActiveDocument({
-      path: null,
-      content: "# Saved draft\n",
-      isDirty: true
-    });
-    let editorContent = "# Saved draft\n";
-
-    const { latestRef, root } = renderController({
-      fishmark: {
-        saveMarkdownFile,
-        saveMarkdownFileAs
-      } as unknown as Window["fishmark"],
-      getActiveDocument: () => activeDocument,
-      getEditorContent: () => editorContent,
-      flushActiveWorkspaceDraft,
-      refreshWorkspaceSnapshot: async () => {
-        activeDocument = createActiveDocument({
-          path: "C:/notes/untitled.md",
-          name: "untitled.md",
-          content: editorContent,
-          isDirty: true
-        });
-        return refreshWorkspaceSnapshot();
-      },
-      hasExternalFileConflict: () => false,
-      autosaveDelayMs: 25,
-      showNotification: vi.fn()
-    });
-
-    const saveAsRun = act(async () => {
-      await latestRef.current?.runManualSave();
-    });
-
-    await vi.waitFor(() => {
-      expect(saveMarkdownFileAs).toHaveBeenCalledTimes(1);
-    });
-
-    editorContent = "# Newer draft\n";
-
-    act(() => {
-      latestRef.current?.scheduleAutosave();
-    });
-
-    resolveSaveAs({
-      status: "success",
-      document: {
-        path: "C:/notes/untitled.md",
-        name: "untitled.md",
-        content: "# Saved draft\n",
-        encoding: "utf-8"
-      }
-    });
-
-    await saveAsRun;
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(25);
-    });
-
-    expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
-    expect(saveMarkdownFile).toHaveBeenCalledWith({
-      tabId: "tab-1"
-    });
-
-    act(() => {
-      root.unmount();
-    });
+    act(() => root.unmount());
   });
 });

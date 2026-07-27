@@ -39,36 +39,6 @@ const savedSnapshot: WorkspaceWindowSnapshot = {
   }
 };
 
-const secondTabActiveSnapshot: WorkspaceWindowSnapshot = {
-  windowId: "window-1",
-  activeTabId: "tab-2",
-  tabs: [
-    {
-      tabId: "tab-1",
-      path: "C:/notes/first.md",
-      name: "first.md",
-      isDirty: false,
-      saveState: "idle"
-    },
-    {
-      tabId: "tab-2",
-      path: "C:/notes/second.md",
-      name: "second.md",
-      isDirty: false,
-      saveState: "idle"
-    }
-  ],
-  activeDocument: {
-    tabId: "tab-2",
-    path: "C:/notes/second.md",
-    name: "second.md",
-    content: "# Second\n",
-    encoding: "utf-8",
-    isDirty: false,
-    saveState: "idle"
-  }
-};
-
 function renderController(input: Parameters<typeof useEditorApplicationController>[0]): {
   latestRef: { current: EditorApplicationControllerValue | null };
   root: Root;
@@ -91,6 +61,18 @@ function renderController(input: Parameters<typeof useEditorApplicationControlle
   });
 
   return { latestRef, root };
+}
+
+function acknowledgeEditorLoad(controller: EditorApplicationControllerValue): void {
+  const activeDocument = controller.workspace.activeDocument;
+  if (!activeDocument) {
+    return;
+  }
+  controller.workspace.acknowledgeEditorLoad({
+    tabId: activeDocument.tabId,
+    epoch: controller.workspace.editorEpoch,
+    loadRevision: controller.workspace.editorLoadRevision
+  });
 }
 
 describe("useEditorApplicationController", () => {
@@ -129,6 +111,8 @@ describe("useEditorApplicationController", () => {
         }
       }
     });
+
+    acknowledgeEditorLoad(latestRef.current!);
 
     await act(async () => {
       await latestRef.current?.commands.saveMarkdown();
@@ -190,6 +174,8 @@ describe("useEditorApplicationController", () => {
       }
     });
 
+    acknowledgeEditorLoad(latestRef.current!);
+
     await act(async () => {
       await latestRef.current?.commands.exportHtml();
     });
@@ -244,102 +230,6 @@ describe("useEditorApplicationController", () => {
     });
   });
 
-  it("does not flush stale editor content into a different active tab when a save completes after tab switch", async () => {
-    const saveResult = createDeferred<{
-      status: "success";
-      document: {
-        path: string;
-        name: string;
-        content: string;
-        encoding: "utf-8";
-      };
-    }>();
-    const firstDirtySnapshot: WorkspaceWindowSnapshot = {
-      windowId: "window-1",
-      activeTabId: "tab-1",
-      tabs: [
-        {
-          tabId: "tab-1",
-          path: "C:/notes/first.md",
-          name: "first.md",
-          isDirty: true,
-          saveState: "idle"
-        }
-      ],
-      activeDocument: {
-        tabId: "tab-1",
-        path: "C:/notes/first.md",
-        name: "first.md",
-        content: "# First dirty\n",
-        encoding: "utf-8",
-        isDirty: true,
-        saveState: "idle"
-      }
-    };
-    const updateWorkspaceTabDraft = vi.fn(async (input: { tabId: string; content: string }) => {
-      if (input.tabId === "tab-2") {
-        throw new Error("stale editor content flushed into the new active tab");
-      }
-
-      return secondTabActiveSnapshot;
-    });
-    const saveMarkdownFile = vi.fn(() => saveResult.promise);
-    const getWorkspaceSnapshot = vi.fn(async () => secondTabActiveSnapshot);
-
-    const { latestRef, root } = renderController({
-      autosaveDelayMs: 25,
-      fishmark: {
-        updateWorkspaceTabDraft,
-        saveMarkdownFile,
-        getWorkspaceSnapshot,
-        onExternalMarkdownFileChanged: vi.fn(() => () => {}),
-        onWorkspaceOwnerTabActivationRequest: vi.fn(() => () => {})
-      } as unknown as Window["fishmark"],
-      getEditorContent: () => "# First dirty\n",
-      setEditorContentSnapshot: vi.fn(),
-      showNotification: vi.fn(),
-      scheduleDocumentDerivedDataUpdate: vi.fn(),
-      initialSnapshot: firstDirtySnapshot
-    });
-
-    let savePromise: Promise<void> | undefined;
-
-    await act(async () => {
-      savePromise = latestRef.current?.commands.saveMarkdown();
-      await Promise.resolve();
-    });
-
-    expect(saveMarkdownFile).toHaveBeenCalledWith({
-      tabId: "tab-1"
-    });
-
-    act(() => {
-      latestRef.current?.workspace.applyWorkspaceWindowSnapshot(secondTabActiveSnapshot);
-    });
-
-    await act(async () => {
-      saveResult.resolve({
-        status: "success",
-        document: {
-          path: "C:/notes/first.md",
-          name: "first.md",
-          content: "# First dirty\n",
-          encoding: "utf-8"
-        }
-      });
-      await savePromise;
-    });
-
-    expect(updateWorkspaceTabDraft).not.toHaveBeenCalledWith({
-      tabId: "tab-2",
-      content: "# First dirty\n"
-    });
-
-    act(() => {
-      root.unmount();
-    });
-  });
-
   it("clears a recent file entry when reopening it from disk fails", async () => {
     const clearRecentFile = vi.fn(async () => ({ version: 1, entries: [] }));
     const openWorkspaceFileFromPath = vi.fn(async () => ({
@@ -377,15 +267,3 @@ describe("useEditorApplicationController", () => {
     });
   });
 });
-
-function createDeferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
-
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-
-  return { promise, resolve, reject };
-}
