@@ -71,6 +71,7 @@ export function useEditorApplicationController(input: {
     detachWorkspaceTab: workspaceController.detachWorkspaceTab
   });
   const {
+    confirmWorkspaceWindowClose: confirmWorkspaceWindowCloseRequest,
     createUntitledMarkdown: createUntitledWorkspaceTab,
     flushActiveWorkspaceDraft,
     getActiveDocument,
@@ -204,8 +205,8 @@ export function useEditorApplicationController(input: {
   const confirmWorkspaceWindowClose = useCallback(async (
     requestId: string
   ): Promise<boolean> => {
-    return workspaceController.confirmWorkspaceWindowClose(requestId);
-  }, [workspaceController]);
+    return confirmWorkspaceWindowCloseRequest(requestId);
+  }, [confirmWorkspaceWindowCloseRequest]);
 
   const runMenuCommand = useCallback(
     (command: AppMenuCommand): boolean => {

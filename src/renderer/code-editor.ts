@@ -1,4 +1,4 @@
-import { Compartment, EditorState } from "@codemirror/state";
+import { Annotation, Compartment, EditorState, Transaction } from "@codemirror/state";
 import {
   closeSearchPanel,
   findNext,
@@ -56,6 +56,7 @@ export type CodeEditorController = {
   replaceCurrentMatch: () => FindReplaceSnapshot;
   replaceAllMatches: () => FindReplaceSnapshot;
   clearFindReplaceQuery: () => FindReplaceSnapshot;
+  setContent: (content: string) => void;
   replaceDocument: (nextContent: string) => void;
   setDocumentPath: (nextDocumentPath: string | null) => void;
   setViewMode: (nextMode: EditorViewMode) => void;
@@ -97,7 +98,9 @@ export function createCodeEditorController(
   let currentDocumentPath = options.documentPath ?? null;
   let currentViewMode = options.viewMode ?? "wysiwym";
   let currentReadOnly = options.readOnly ?? false;
-  const editableCompartment = new Compartment();
+  const readOnlyCompartment = new Compartment();
+  const canonicalDocumentReplacement = Annotation.define<boolean>();
+  let isCanonicalDocumentReplacement = false;
   let isDestroyed = false;
   let activeBlockState: ActiveBlockState = {
     blockMap: parseMarkdownDocument(""),
@@ -113,10 +116,24 @@ export function createCodeEditorController(
     EditorState.create({
       doc: content,
       extensions: [
-        editableCompartment.of(EditorView.editable.of(!currentReadOnly)),
+        readOnlyCompartment.of([
+          EditorState.readOnly.of(currentReadOnly),
+          EditorView.editable.of(!currentReadOnly)
+        ]),
+        EditorState.transactionFilter.of((transaction) =>
+          transaction.docChanged &&
+          transaction.startState.readOnly &&
+          transaction.annotation(canonicalDocumentReplacement) !== true
+            ? []
+            : transaction
+        ),
         createFishMarkMarkdownExtensions({
           parseMarkdownDocument,
-          onContentChange: options.onChange,
+          onContentChange: (nextContent) => {
+            if (!isCanonicalDocumentReplacement) {
+              options.onChange(nextContent);
+            }
+          },
           onActiveBlockChange: (nextState) => {
             activeBlockState = nextState;
             options.onActiveBlockChange?.(nextState);
@@ -318,9 +335,34 @@ export function createCodeEditorController(
       closeSearchPanel(view);
       return readFindReplaceSnapshot();
     },
+    setContent(content: string) {
+      view.dispatch({
+        changes: {
+          from: 0,
+          to: view.state.doc.length,
+          insert: content
+        },
+        selection: { anchor: 0 }
+      });
+    },
     replaceDocument(nextContent: string) {
-      const nextState = createState(nextContent);
-      view.setState(nextState);
+      isCanonicalDocumentReplacement = true;
+      try {
+        view.dispatch({
+          changes: {
+            from: 0,
+            to: view.state.doc.length,
+            insert: nextContent
+          },
+          selection: { anchor: 0 },
+          annotations: [
+            canonicalDocumentReplacement.of(true),
+            Transaction.addToHistory.of(false)
+          ]
+        });
+      } finally {
+        isCanonicalDocumentReplacement = false;
+      }
     },
     setDocumentPath(nextDocumentPath: string | null) {
       currentDocumentPath = nextDocumentPath;
@@ -336,7 +378,10 @@ export function createCodeEditorController(
       }
       currentReadOnly = readOnly;
       view.dispatch({
-        effects: editableCompartment.reconfigure(EditorView.editable.of(!readOnly))
+        effects: readOnlyCompartment.reconfigure([
+          EditorState.readOnly.of(readOnly),
+          EditorView.editable.of(!readOnly)
+        ])
       });
     },
     focus() {

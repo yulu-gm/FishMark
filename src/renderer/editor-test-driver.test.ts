@@ -1,81 +1,86 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { WorkspaceDocumentSnapshot, WorkspaceWindowSnapshot } from "../shared/workspace";
-import type { EditorShellState } from "./editor/editor-shell-state";
+import { getActiveDocument } from "./editor/editor-shell-state";
 import {
-  applyWorkspaceSnapshot,
-  createInitialEditorShellState,
-  getActiveDocument
-} from "./editor/editor-shell-state";
+  WorkspaceRendererApplication,
+  type WorkspaceRendererBridge
+} from "./editor/workspace-renderer-application";
 import { createEditorTestDriver } from "./editor-test-driver";
 
 function createHarness() {
-  let state: EditorShellState = createInitialEditorShellState();
   let editorContent = "";
+  const openWorkspaceFileFromPath = vi.fn();
+  const saveMarkdownFile = vi.fn();
+
+  const updateWorkspaceTabDraft = vi.fn(async (input: { tabId: string; content: string }) => {
+    const currentSnapshot = application.getState().workspaceSnapshot;
+    if (!currentSnapshot) {
+      throw new Error("No workspace snapshot to update.");
+    }
+    return {
+      windowId: currentSnapshot.windowId,
+      activeTabId: currentSnapshot.activeTabId,
+      tabs: currentSnapshot.tabs.map((tab) => tab.tabId === input.tabId
+        ? { ...tab, isDirty: true }
+        : tab),
+      activeDocument: currentSnapshot.activeDocument?.tabId === input.tabId
+        ? { ...currentSnapshot.activeDocument, content: input.content, isDirty: true }
+        : currentSnapshot.activeDocument
+    } satisfies WorkspaceWindowSnapshot;
+  });
+
+  const application = new WorkspaceRendererApplication({
+    bridge: {
+      openWorkspaceFileFromPath,
+      updateWorkspaceTabDraft,
+      saveMarkdownFile,
+      getWorkspaceSnapshot: vi.fn(async () =>
+        application.getState().workspaceSnapshot ?? EMPTY_WORKSPACE_SNAPSHOT
+      )
+    } as unknown as WorkspaceRendererBridge,
+    initialSnapshot: EMPTY_WORKSPACE_SNAPSHOT,
+    readEditorContent: () => editorContent
+  });
+
+  application.subscribe(() => {
+    const pending = application.getPendingEditorLoadIdentity();
+    if (pending === null) {
+      return;
+    }
+    editorContent = getActiveDocument(application.getState())?.content ?? "";
+    application.acknowledgeEditorLoad(pending);
+  });
+
+  const applyEditorContent = (content: string): void => {
+    editorContent = content;
+    const identity = application.getEditorBinding();
+    if (identity !== null) {
+      application.recordEditorChange({ identity, content });
+    }
+  };
 
   const harness = {
-    getState: () => state,
-    applyState: (updater: (current: EditorShellState) => EditorShellState) => {
-      state = updater(state);
-    },
+    workspace: application.getEditorTestAdapter(),
     resetAutosaveRuntime: vi.fn(),
     editor: {
       getContent: () => editorContent,
-      setContent: (content: string) => {
-        editorContent = content;
-      },
-      insertText: (text: string) => {
-        editorContent += text;
-      },
+      setContent: applyEditorContent,
+      insertText: (text: string) => applyEditorContent(editorContent + text),
       getSelection: vi.fn(() => ({ anchor: 0, head: 0 })),
       setSelection: vi.fn(),
       pressEnter: vi.fn(() => {
-        editorContent += "\n";
+        applyEditorContent(`${editorContent}\n`);
       }),
       pressBackspace: vi.fn(),
       pressTab: vi.fn(),
       pressArrowUp: vi.fn(),
       pressArrowDown: vi.fn()
     },
-    setEditorContentSnapshot: (content: string) => {
-      editorContent = content;
-    },
-    openWorkspaceFileFromPath: vi.fn(),
-    saveMarkdownFile: vi.fn(),
-    updateWorkspaceTabDraft: vi.fn(async (input: { tabId: string; content: string }) => {
-      const currentSnapshot = state.workspaceSnapshot;
-
-      if (!currentSnapshot) {
-        throw new Error("No workspace snapshot to update.");
-      }
-
-      const nextSnapshot: WorkspaceWindowSnapshot = {
-        windowId: currentSnapshot.windowId,
-        activeTabId: currentSnapshot.activeTabId,
-        tabs: currentSnapshot.tabs.map((tab) =>
-          tab.tabId === input.tabId
-            ? {
-                ...tab,
-                isDirty: true
-              }
-            : tab
-        ),
-        activeDocument:
-          currentSnapshot.activeDocument?.tabId === input.tabId
-            ? {
-                ...currentSnapshot.activeDocument,
-                content: input.content,
-                isDirty: true
-              }
-            : currentSnapshot.activeDocument
-      };
-
-      state = applyWorkspaceSnapshot(state, nextSnapshot, {
-        currentEditorContent: input.content
-      });
-      return nextSnapshot;
-    }),
-    getWorkspaceSnapshot: vi.fn(async () => state.workspaceSnapshot ?? EMPTY_WORKSPACE_SNAPSHOT)
+    openWorkspaceFileFromPath,
+    saveMarkdownFile,
+    updateWorkspaceTabDraft,
+    applyEditorContent
   };
 
   const driver = createEditorTestDriver(harness);
@@ -83,7 +88,7 @@ function createHarness() {
   return {
     ...harness,
     driver,
-    readState: () => state,
+    readState: application.getState,
     readEditorContent: () => editorContent
   };
 }
@@ -297,7 +302,7 @@ describe("createEditorTestDriver", () => {
       )
     );
     harness.editor.pressEnter = vi.fn(() => {
-      harness.setEditorContentSnapshot("- [ ] todo\n- [ ] ");
+      harness.applyEditorContent("- [ ] todo\n- [ ] ");
     });
 
     await harness.driver.run({

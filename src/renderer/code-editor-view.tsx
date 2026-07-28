@@ -54,7 +54,9 @@ type CodeEditorViewProps = {
   documentTabId: string | null;
   editorEpoch: number;
   readOnly: boolean;
+  editorTransitionToken: number | null;
   onChange: (content: string, identity: EditorLoadIdentity | null) => void;
+  onEditorTransitionApplied: (input: { token: number; readOnly: boolean }) => void;
   onLoadRevisionApplied: (identity: EditorLoadIdentity) => void;
   onBlur?: () => void;
   onActiveBlockChange?: (state: ActiveBlockState) => void;
@@ -72,7 +74,9 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
       documentTabId,
       editorEpoch,
       readOnly,
+      editorTransitionToken,
       onChange,
+      onEditorTransitionApplied,
       onLoadRevisionApplied,
       onBlur,
       onActiveBlockChange,
@@ -91,6 +95,7 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
     const appliedIdentityRef = useRef<EditorLoadIdentity | null>(null);
     const appliedLoadRevisionRef = useRef<number | null>(null);
     const handleChange = useEffectEvent(onChange);
+    const handleEditorTransitionApplied = useEffectEvent(onEditorTransitionApplied);
     const handleLoadRevisionApplied = useEffectEvent((identity: EditorLoadIdentity) => {
       onLoadRevisionApplied(identity);
     });
@@ -160,7 +165,10 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
 
     useEffect(() => {
       controllerRef.current?.setReadOnly(readOnly);
-    }, [readOnly]);
+      if (editorTransitionToken !== null) {
+        handleEditorTransitionApplied({ token: editorTransitionToken, readOnly });
+      }
+    }, [editorTransitionToken, readOnly]);
 
     useImperativeHandle(
       ref,
@@ -202,7 +210,7 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
             currentMatchIndex: null
           },
         setContent: (content: string) => {
-          controllerRef.current?.replaceDocument(content);
+          controllerRef.current?.setContent(content);
         },
         setDocumentPath: (nextDocumentPath: string | null) => {
           controllerRef.current?.setDocumentPath(nextDocumentPath);

@@ -105,9 +105,31 @@ describe("useWorkspaceController", () => {
     latestRef.current!.acknowledgeEditorLoad(identity);
     latestRef.current!.updateDraft({ identity, content: "# Draft\n" });
 
-    await act(async () => {
-      await latestRef.current!.closeWorkspaceTab("tab-1");
+    let close!: Promise<void>;
+    act(() => {
+      close = latestRef.current!.closeWorkspaceTab("tab-1");
     });
+    await vi.waitFor(() => {
+      expect(latestRef.current!.state.editorTransition?.phase).toBe("sealing");
+    });
+    act(() => {
+      const transition = latestRef.current!.state.editorTransition!;
+      latestRef.current!.acknowledgeEditorTransition({
+        token: transition.token,
+        readOnly: true
+      });
+    });
+    await vi.waitFor(() => {
+      expect(latestRef.current!.state.editorTransition?.phase).toBe("releasing");
+    });
+    act(() => {
+      const transition = latestRef.current!.state.editorTransition!;
+      latestRef.current!.acknowledgeEditorTransition({
+        token: transition.token,
+        readOnly: false
+      });
+    });
+    await act(async () => close);
 
     expect(showNotification).toHaveBeenCalledWith({ kind: "error", message: "draft rejected" });
     act(() => root.unmount());

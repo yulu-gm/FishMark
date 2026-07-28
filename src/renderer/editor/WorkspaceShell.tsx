@@ -32,6 +32,7 @@ import { ThemeSurfaceHost, type ThemeSurfaceHostDescriptor } from "./ThemeSurfac
 import { TitlebarHost } from "./TitlebarHost";
 import type { ExternalMarkdownFileState } from "./editor-shell-state";
 import type { EditorLoadIdentity } from "./editor-load-identity";
+import type { EditorTransition } from "./workspace-renderer-application";
 import { ShortcutHintOverlay } from "./shortcut-hint-overlay";
 import type { TitlebarLayoutDescriptor } from "./titlebar-layout";
 import type { ThemePackageEntry, ResolvedThemeMode } from "./useThemeController";
@@ -171,7 +172,7 @@ export type WorkspaceShellProps = {
   editorContainerRef: RefObject<HTMLDivElement | null>;
   editorLoadRevision: number;
   editorEpoch: number;
-  editorTransition: "idle" | "reloading";
+  editorTransition: EditorTransition | null;
   editorRef: RefObject<CodeEditorHandle | null>;
   editorViewMode: EditorViewMode;
   externalFileConflictMessage: string;
@@ -209,6 +210,7 @@ export type WorkspaceShellProps = {
   onCloseWorkspaceTab: (tabId: string) => void;
   onDismissExternalFileConflict: () => void;
   onDraftChange: (content: string, identity: EditorLoadIdentity | null) => void;
+  onEditorTransitionApplied: (input: { token: number; readOnly: boolean }) => void;
   onEditorLoadRevisionApplied: (identity: EditorLoadIdentity) => void;
   onEditorBlur: () => void;
   onEditorViewModeChange: (mode: EditorViewMode) => void;
@@ -369,6 +371,7 @@ export function WorkspaceShell({
   onDeleteTableRow,
   onDismissExternalFileConflict,
   onDraftChange,
+  onEditorTransitionApplied,
   onEditorLoadRevisionApplied,
   onEditorBlur,
   onEditorViewModeChange,
@@ -969,12 +972,14 @@ export function WorkspaceShell({
                       documentTabId={activeDocument.tabId}
                       editorEpoch={editorEpoch}
                       loadRevision={editorLoadRevision}
-                      readOnly={editorTransition !== "idle"}
+                      readOnly={editorTransition?.readOnly ?? false}
+                      editorTransitionToken={editorTransition?.token ?? null}
                       importClipboardImage={onImportClipboardImage}
                       openExternalLink={onOpenExternalLink}
                       viewMode={editorViewMode}
                       onActiveBlockChange={onActiveBlockChange}
                       onChange={onDraftChange}
+                      onEditorTransitionApplied={onEditorTransitionApplied}
                       onLoadRevisionApplied={onEditorLoadRevisionApplied}
                       onBlur={onEditorBlur}
                     />

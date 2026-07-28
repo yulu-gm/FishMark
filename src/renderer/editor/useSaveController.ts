@@ -110,7 +110,7 @@ export function useSaveController(input: {
     runAutosaveRef.current = runAutosave;
   }, [runAutosave]);
 
-  const scheduleAutosave = useCallback((): void => {
+  const scheduleAutosave = useCallback((delayMs = autosaveDelayMs): void => {
     clearAutosaveTimer();
     const activeDocument = getActiveDocument();
     if (inFlightSaveOriginRef.current !== null) {
@@ -128,7 +128,7 @@ export function useSaveController(input: {
     autosaveTimerRef.current = setTimeout(() => {
       autosaveTimerRef.current = null;
       void runAutosave();
-    }, autosaveDelayMs);
+    }, delayMs);
   }, [autosaveDelayMs, clearAutosaveTimer, getActiveDocument, runAutosave]);
 
   const runManualSave = useCallback(async (

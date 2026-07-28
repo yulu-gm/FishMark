@@ -325,12 +325,27 @@ vi.mock("./code-editor-view", async () => {
     | {
         initialContent: string;
         loadRevision: number;
-        onChange: (content: string) => void;
+        documentTabId: string | null;
+        editorEpoch: number;
+        readOnly: boolean;
+        editorTransitionToken: number | null;
+        onChange: (content: string, identity: {
+          tabId: string;
+          epoch: number;
+          loadRevision: number;
+        } | null) => void;
+        onLoadRevisionApplied: (identity: {
+          tabId: string;
+          epoch: number;
+          loadRevision: number;
+        }) => void;
+        onEditorTransitionApplied: (input: { token: number; readOnly: boolean }) => void;
         onBlur?: () => void;
         onActiveBlockChange?: (state: unknown) => void;
       }
     | undefined;
   let currentContent = "";
+  let appliedIdentity: { tabId: string; epoch: number; loadRevision: number } | null = null;
   let latestHostElement: HTMLDivElement | null = null;
   let latestScrollerElement: HTMLDivElement | null = null;
   let latestContentElement: HTMLDivElement | null = null;
@@ -377,7 +392,21 @@ vi.mock("./code-editor-view", async () => {
     props: {
       initialContent: string;
       loadRevision: number;
-        onChange: (content: string) => void;
+        documentTabId: string | null;
+        editorEpoch: number;
+        readOnly: boolean;
+        editorTransitionToken: number | null;
+        onChange: (content: string, identity: {
+          tabId: string;
+          epoch: number;
+          loadRevision: number;
+        } | null) => void;
+        onLoadRevisionApplied: (identity: {
+          tabId: string;
+          epoch: number;
+          loadRevision: number;
+        }) => void;
+        onEditorTransitionApplied: (input: { token: number; readOnly: boolean }) => void;
         onBlur?: () => void;
         onActiveBlockChange?: (state: unknown) => void;
       },
@@ -396,7 +425,16 @@ vi.mock("./code-editor-view", async () => {
       deleteTable: () => void;
     }>
   ) {
-    const { initialContent, loadRevision } = props;
+    const {
+      documentTabId,
+      editorEpoch,
+      editorTransitionToken,
+      initialContent,
+      loadRevision,
+      onEditorTransitionApplied,
+      onLoadRevisionApplied,
+      readOnly
+    } = props;
 
     React.useEffect(() => {
       renderCount += 1;
@@ -408,7 +446,26 @@ vi.mock("./code-editor-view", async () => {
 
     React.useEffect(() => {
       currentContent = initialContent;
-    }, [initialContent, loadRevision]);
+      if (documentTabId === null) {
+        appliedIdentity = null;
+        return;
+      }
+      appliedIdentity = {
+        tabId: documentTabId,
+        epoch: editorEpoch,
+        loadRevision
+      };
+      onLoadRevisionApplied(appliedIdentity);
+    }, [documentTabId, editorEpoch, initialContent, loadRevision, onLoadRevisionApplied]);
+
+    React.useEffect(() => {
+      if (editorTransitionToken !== null) {
+        onEditorTransitionApplied({
+          token: editorTransitionToken,
+          readOnly
+        });
+      }
+    }, [editorTransitionToken, onEditorTransitionApplied, readOnly]);
 
     React.useEffect(() => {
       const hostElement = document.querySelector('[data-testid="mock-code-editor"]');
@@ -463,7 +520,7 @@ vi.mock("./code-editor-view", async () => {
     __mock: {
       changeContent(content: string) {
         currentContent = content;
-        latestProps?.onChange(content);
+        latestProps?.onChange(content, appliedIdentity);
       },
       blur() {
         latestProps?.onBlur?.();

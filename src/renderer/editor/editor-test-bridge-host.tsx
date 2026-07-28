@@ -1,10 +1,8 @@
 import { useEffect, useEffectEvent } from "react";
 
 import type { EditorTestCommandEnvelope } from "../../shared/editor-test-command";
-import type { SaveMarkdownFileResult } from "../../shared/save-markdown-file";
-import type { OpenWorkspaceFileFromPathResult, WorkspaceWindowSnapshot } from "../../shared/workspace";
 import { createEditorTestDriver } from "../editor-test-driver";
-import type { EditorShellState } from "./editor-shell-state";
+import type { WorkspaceRendererTestAdapter } from "./workspace-renderer-application";
 
 type EditorBridge = {
   getContent: () => string;
@@ -21,15 +19,9 @@ type EditorBridge = {
 
 export type EditorTestBridgeHostProps = {
   fishmarkTest?: Window["fishmarkTest"];
-  getState: () => EditorShellState;
-  applyState: (updater: (current: EditorShellState) => EditorShellState) => void;
+  workspace: WorkspaceRendererTestAdapter;
   resetAutosaveRuntime: () => void;
   editor: EditorBridge;
-  setEditorContentSnapshot: (content: string) => void;
-  openWorkspaceFileFromPath: (targetPath: string) => Promise<OpenWorkspaceFileFromPathResult>;
-  saveMarkdownFile: (input: { tabId: string }) => Promise<SaveMarkdownFileResult>;
-  updateWorkspaceTabDraft: (input: { tabId: string; content: string }) => Promise<WorkspaceWindowSnapshot>;
-  getWorkspaceSnapshot: () => Promise<WorkspaceWindowSnapshot>;
 };
 
 export function EditorTestBridgeHost(props: EditorTestBridgeHostProps): null {
@@ -39,15 +31,9 @@ export function EditorTestBridgeHost(props: EditorTestBridgeHostProps): null {
     }
 
     const driver = createEditorTestDriver({
-      getState: props.getState,
-      applyState: props.applyState,
+      workspace: props.workspace,
       resetAutosaveRuntime: props.resetAutosaveRuntime,
-      editor: props.editor,
-      setEditorContentSnapshot: props.setEditorContentSnapshot,
-      openWorkspaceFileFromPath: props.openWorkspaceFileFromPath,
-      saveMarkdownFile: props.saveMarkdownFile,
-      updateWorkspaceTabDraft: props.updateWorkspaceTabDraft,
-      getWorkspaceSnapshot: props.getWorkspaceSnapshot
+      editor: props.editor
     });
 
     try {

@@ -21,6 +21,48 @@ afterEach(() => {
 });
 
 describe("editor foundation architecture guard", () => {
+  it("keeps the editor test bridge behind application-owned commands", () => {
+    const applicationSource = readFileSync(
+      resolve(process.cwd(), "src/renderer/editor/workspace-renderer-application.ts"),
+      "utf8"
+    );
+    const hookSource = readFileSync(
+      resolve(process.cwd(), "src/renderer/editor/useWorkspaceController.ts"),
+      "utf8"
+    );
+    const driverSource = readFileSync(
+      resolve(process.cwd(), "src/renderer/editor-test-driver.ts"),
+      "utf8"
+    );
+    const hostSource = readFileSync(
+      resolve(process.cwd(), "src/renderer/editor/editor-test-bridge-host.tsx"),
+      "utf8"
+    );
+    const appSource = readFileSync(
+      resolve(process.cwd(), "src/renderer/editor/App.tsx"),
+      "utf8"
+    );
+    const codeEditorSource = readFileSync(
+      resolve(process.cwd(), "src/renderer/code-editor.ts"),
+      "utf8"
+    );
+
+    expect(applicationSource).not.toContain("replaceViewState");
+    expect(hookSource).not.toContain("applyState");
+    for (const source of [driverSource, hostSource]) {
+      expect(source).not.toMatch(
+        /applyWorkspaceSnapshot|applyState|updateWorkspaceTabDraft|getWorkspaceSnapshot|saveMarkdownFile/
+      );
+    }
+    expect(appSource).not.toMatch(
+      /fishmark\.(?:openWorkspaceFileFromPath|saveMarkdownFile|updateWorkspaceTabDraft|getWorkspaceSnapshot)/
+    );
+    expect(codeEditorSource).toContain("EditorState.readOnly.of(readOnly)");
+    expect(codeEditorSource).toContain("EditorState.transactionFilter.of");
+    expect(codeEditorSource).toContain("canonicalDocumentReplacement.of(true)");
+    expect(codeEditorSource).not.toContain("view.setState(");
+  });
+
   it("accepts the real repository and canonical versioned manifest", () => {
     const manifest = readCanonicalManifest();
 

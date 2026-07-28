@@ -182,6 +182,35 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("blocks every imperative edit while read-only but still permits an internal replacement", () => {
+    const host = document.createElement("div");
+    const onChange = vi.fn();
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "Draft",
+      onChange
+    });
+    const editableController = controller as typeof controller & {
+      setContent: (content: string) => void;
+    };
+
+    controller.setSelection(5);
+    controller.setReadOnly(true);
+    controller.insertText(" late");
+    editableController.setContent("Replaced by imperative API");
+    controller.pressEnter();
+    controller.pressBackspace();
+
+    expect(controller.getContent()).toBe("Draft");
+    expect(onChange).not.toHaveBeenCalled();
+
+    controller.replaceDocument("Disk replacement");
+    expect(controller.getContent()).toBe("Disk replacement");
+    expect(onChange).not.toHaveBeenCalled();
+
+    controller.destroy();
+  });
+
   it("toggles source mode without changing content, selection, or onChange state", async () => {
     const host = document.createElement("div");
     const source = [

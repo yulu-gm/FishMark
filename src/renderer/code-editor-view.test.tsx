@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CodeEditorView, type CodeEditorHandle } from "./code-editor-view";
 
 const replaceDocumentMock = vi.fn<(content: string) => void>();
+const setContentMock = vi.fn<(content: string) => void>();
 const setDocumentPathMock = vi.fn<(documentPath: string | null) => void>();
 const setViewModeMock = vi.fn<(viewMode: "wysiwym" | "source") => void>();
 const setReadOnlyMock = vi.fn<(readOnly: boolean) => void>();
@@ -27,6 +28,8 @@ function createBindingProps() {
     documentTabId: "tab-1",
     editorEpoch: 1,
     readOnly: false,
+    editorTransitionToken: null,
+    onEditorTransitionApplied: vi.fn(),
     onLoadRevisionApplied: vi.fn()
   };
 }
@@ -46,6 +49,7 @@ describe("CodeEditorView", () => {
   beforeEach(() => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     replaceDocumentMock.mockReset();
+    setContentMock.mockReset();
     setDocumentPathMock.mockReset();
     setViewModeMock.mockReset();
     setReadOnlyMock.mockReset();
@@ -65,6 +69,7 @@ describe("CodeEditorView", () => {
     createCodeEditorControllerMock.mockReturnValue({
       getContent: getContentMock,
       getSelection: getSelectionMock,
+      setContent: setContentMock,
       replaceDocument: replaceDocumentMock,
       setDocumentPath: setDocumentPathMock,
       setViewMode: setViewModeMock,
@@ -193,10 +198,13 @@ describe("CodeEditorView", () => {
 
   it("acknowledges the exact editor identity only after replacing the document", async () => {
     const onLoadRevisionApplied = vi.fn();
+    const onEditorTransitionApplied = vi.fn();
     type ExtendedProps = ComponentProps<typeof CodeEditorView> & {
       documentTabId: string;
       editorEpoch: number;
       readOnly: boolean;
+      editorTransitionToken: number | null;
+      onEditorTransitionApplied: (input: { token: number; readOnly: boolean }) => void;
       onLoadRevisionApplied: (identity: {
         tabId: string;
         epoch: number;
@@ -214,6 +222,8 @@ describe("CodeEditorView", () => {
           editorEpoch: 1,
           loadRevision: 1,
           readOnly: false,
+          editorTransitionToken: null,
+          onEditorTransitionApplied,
           onLoadRevisionApplied,
           onChange: vi.fn()
         } as ExtendedProps)
@@ -221,6 +231,7 @@ describe("CodeEditorView", () => {
     });
     replaceDocumentMock.mockClear();
     onLoadRevisionApplied.mockClear();
+    onEditorTransitionApplied.mockClear();
 
     await act(async () => {
       root.render(
@@ -232,6 +243,8 @@ describe("CodeEditorView", () => {
           editorEpoch: 2,
           loadRevision: 2,
           readOnly: true,
+          editorTransitionToken: 41,
+          onEditorTransitionApplied,
           onLoadRevisionApplied,
           onChange: vi.fn()
         } as ExtendedProps)
@@ -248,6 +261,10 @@ describe("CodeEditorView", () => {
       onLoadRevisionApplied.mock.invocationCallOrder[0]!
     );
     expect(setReadOnlyMock).toHaveBeenLastCalledWith(true);
+    expect(onEditorTransitionApplied).toHaveBeenCalledWith({ token: 41, readOnly: true });
+    expect(setReadOnlyMock.mock.invocationCallOrder.at(-1)!).toBeLessThan(
+      onEditorTransitionApplied.mock.invocationCallOrder[0]!
+    );
   });
 
   it("exposes focus() on handle and forwards to editor host", async () => {

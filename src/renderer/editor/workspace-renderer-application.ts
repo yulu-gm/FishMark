@@ -25,6 +25,19 @@ export type { EditorLoadIdentity } from "./editor-load-identity";
 
 const DRAFT_DRAIN_LIMIT = 16;
 
+export type EditorTransitionReason =
+  | "reloading"
+  | "closing-tab"
+  | "detaching-tab"
+  | "closing-window";
+
+export type EditorTransition = Readonly<{
+  token: number;
+  phase: "sealing" | "sealed" | "releasing";
+  reason: EditorTransitionReason;
+  readOnly: boolean;
+}>;
+
 export type WorkspaceRendererBridge = Pick<
   Window["fishmark"],
   | "activateWorkspaceTab"
@@ -44,7 +57,7 @@ export type WorkspaceRendererBridge = Pick<
 
 export type WorkspaceRendererApplicationState = EditorShellState & Readonly<{
   editorEpoch: number;
-  editorTransition: "idle" | "reloading";
+  editorTransition: EditorTransition | null;
 }>;
 
 export type WorkspaceApplicationOutcome<T> =
@@ -71,6 +84,13 @@ export type WorkspaceSaveOutcome =
     }>
   | Exclude<WorkspaceApplicationOutcome<never>, { kind: "committed" }>;
 
+export type WorkspaceRendererTestAdapter = Readonly<{
+  readState: () => WorkspaceRendererApplicationState;
+  openFixture: (targetPath: string) => Promise<WorkspaceOpenOutcome>;
+  commitDraft: () => Promise<WorkspaceApplicationOutcome<void>>;
+  saveDocument: () => Promise<WorkspaceSaveOutcome>;
+}>;
+
 type CanonicalWorkspaceState =
   | Readonly<{ kind: "known"; snapshot: WorkspaceWindowSnapshot }>
   | Readonly<{
@@ -80,6 +100,13 @@ type CanonicalWorkspaceState =
     }>;
 
 type MutationFailureKind = "failed-reconciled" | "canonical-unavailable";
+
+type PendingEditorTransitionBarrier = Readonly<{
+  token: number;
+  readOnly: boolean;
+  promise: Promise<boolean>;
+  resolve: (applied: boolean) => void;
+}>;
 
 class WorkspaceMutationFailure extends Error {
   constructor(
@@ -101,6 +128,8 @@ export class WorkspaceRendererApplication {
   private editorBinding: EditorLoadIdentity | null = null;
   private pendingEditorLoadIdentity: EditorLoadIdentity | null;
   private activationGeneration = 0;
+  private editorTransitionSequence = 0;
+  private pendingEditorTransitionBarrier: PendingEditorTransitionBarrier | null = null;
   private disposed = false;
   private pendingOperationKind: string | null = null;
 
@@ -117,7 +146,7 @@ export class WorkspaceRendererApplication {
     this.state = {
       ...shellState,
       editorEpoch: 1,
-      editorTransition: "idle"
+      editorTransition: null
     };
     this.canonical = input.initialSnapshot
       ? { kind: "known", snapshot: input.initialSnapshot }
@@ -137,6 +166,8 @@ export class WorkspaceRendererApplication {
   dispose(): void {
     this.disposed = true;
     this.activationGeneration += 1;
+    this.pendingEditorTransitionBarrier?.resolve(false);
+    this.pendingEditorTransitionBarrier = null;
     this.listeners.clear();
   }
 
@@ -156,6 +187,18 @@ export class WorkspaceRendererApplication {
     return this.editorBinding;
   }
 
+  getEditorTestAdapter(): WorkspaceRendererTestAdapter {
+    return {
+      readState: this.getState,
+      openFixture: (targetPath) => this.openMarkdownFromPath(targetPath),
+      commitDraft: () => this.flushActiveWorkspaceDraft(),
+      saveDocument: () => this.runSaveTransaction({
+        forceSaveAs: false,
+        hasExternalConflict: false
+      })
+    };
+  }
+
   acknowledgeEditorLoad(identity: EditorLoadIdentity): boolean {
     if (
       this.pendingEditorLoadIdentity === null ||
@@ -172,12 +215,47 @@ export class WorkspaceRendererApplication {
     return true;
   }
 
+  acknowledgeEditorTransition(input: { token: number; readOnly: boolean }): boolean {
+    const transition = this.state.editorTransition;
+    const barrier = this.pendingEditorTransitionBarrier;
+    if (
+      transition === null ||
+      barrier === null ||
+      transition.token !== input.token ||
+      barrier.token !== input.token ||
+      transition.readOnly !== input.readOnly ||
+      barrier.readOnly !== input.readOnly
+    ) {
+      return false;
+    }
+
+    this.pendingEditorTransitionBarrier = null;
+    if (input.readOnly) {
+      this.captureCurrentEditorContent();
+      this.editorBinding = null;
+      this.pendingEditorLoadIdentity = null;
+      this.state = {
+        ...this.state,
+        editorTransition: {
+          ...transition,
+          phase: "sealed"
+        }
+      };
+      this.emit();
+    } else {
+      this.completeEditorRelease();
+    }
+    barrier.resolve(true);
+    return true;
+  }
+
   recordEditorChange(input: {
     identity: EditorLoadIdentity;
     content: string;
   }): boolean {
     if (
-      this.state.editorTransition !== "idle" ||
+      (this.state.editorTransition !== null &&
+        this.state.editorTransition.phase !== "sealing") ||
       this.editorBinding === null ||
       !isSameEditorLoadIdentity(this.editorBinding, input.identity)
     ) {
@@ -191,15 +269,6 @@ export class WorkspaceRendererApplication {
       input.content
     ));
     return true;
-  }
-
-  replaceViewState(updater: (current: EditorShellState) => EditorShellState): void {
-    const next = updater(this.state);
-    this.updateState({
-      ...next,
-      editorEpoch: this.state.editorEpoch,
-      editorTransition: this.state.editorTransition
-    });
   }
 
   private setOpenState(openState: "idle" | "opening"): void {
@@ -429,17 +498,19 @@ export class WorkspaceRendererApplication {
       if (known !== null) {
         return known;
       }
-      const cutoff = this.outbox.peek(tabId)?.generation ?? 0;
-      this.startEditorTransition("reloading");
+      const sealsActiveEditor = getActiveTabId(this.state) === tabId;
 
       try {
+        if (sealsActiveEditor) {
+          await this.sealEditor("reloading");
+        }
+        const cutoff = this.outbox.peek(tabId)?.generation ?? 0;
+        await this.drainTab(tabId);
         const result = await this.bridge.reloadWorkspaceTabFromPath({ tabId });
         if (result.kind === "revision-stale") {
-          this.finishEditorTransitionWithoutReplacement();
           return { kind: "revision-stale" };
         }
         if (result.kind === "error") {
-          this.finishEditorTransitionWithoutReplacement();
           return { kind: "reload-error", error: result.error };
         }
 
@@ -458,8 +529,11 @@ export class WorkspaceRendererApplication {
           return { kind: "failed-reconciled", error };
         } catch (reconcileError) {
           this.markCanonicalUnknown(reconcileError);
-          this.finishEditorTransitionWithoutReplacement();
           return { kind: "canonical-unavailable", error: reconcileError };
+        }
+      } finally {
+        if (sealsActiveEditor && this.state.editorTransition !== null) {
+          await this.releaseEditor();
         }
       }
     });
@@ -473,16 +547,25 @@ export class WorkspaceRendererApplication {
       if (known !== null) {
         return known;
       }
+      let shouldReleaseEditor = getActiveDocument(this.state) !== null;
       try {
-        this.captureCurrentEditorContent();
+        if (shouldReleaseEditor) {
+          await this.sealEditor("closing-window");
+        }
         await this.drainAllDrafts();
         const value = await this.bridge.confirmWorkspaceWindowClose({ requestId });
+        shouldReleaseEditor = !value;
         return { kind: "committed", value };
       } catch (error) {
+        shouldReleaseEditor = true;
         if (error instanceof WorkspaceMutationFailure) {
           return this.outcomeFromError(error);
         }
         return this.recoverMutationOutcome(error);
+      } finally {
+        if (shouldReleaseEditor && this.state.editorTransition !== null) {
+          await this.releaseEditor();
+        }
       }
     });
   }
@@ -569,9 +652,10 @@ export class WorkspaceRendererApplication {
       if (known !== null) {
         return known;
       }
+      const sealsActiveEditor = getActiveTabId(this.state) === tabId;
       try {
-        if (getActiveTabId(this.state) === tabId) {
-          this.captureCurrentEditorContent();
+        if (sealsActiveEditor) {
+          await this.sealEditor(kind === "close" ? "closing-tab" : "detaching-tab");
         }
         await this.drainTab(tabId);
         const snapshot = await operation();
@@ -586,13 +670,18 @@ export class WorkspaceRendererApplication {
         return { kind: "committed", value: undefined };
       } catch (error) {
         return this.recoverMutationOutcome(error);
+      } finally {
+        if (sealsActiveEditor && this.state.editorTransition !== null) {
+          await this.releaseEditor();
+        }
       }
     });
   }
 
   private captureCurrentEditorContent(): void {
     if (
-      this.state.editorTransition !== "idle" ||
+      (this.state.editorTransition !== null &&
+        this.state.editorTransition.phase !== "sealing") ||
       this.editorBinding === null ||
       this.editorBinding.tabId !== getActiveTabId(this.state)
     ) {
@@ -750,37 +839,84 @@ export class WorkspaceRendererApplication {
       this.editorBinding = null;
       this.state = {
         ...shellState,
-        editorEpoch: previousState.editorEpoch + 1,
-        editorTransition: "idle"
+        editorEpoch: previousState.editorTransition === null
+          ? previousState.editorEpoch + 1
+          : previousState.editorEpoch,
+        editorTransition: previousState.editorTransition
       };
-      this.pendingEditorLoadIdentity = this.createCurrentEditorLoadIdentity();
+      this.pendingEditorLoadIdentity = previousState.editorTransition === null
+        ? this.createCurrentEditorLoadIdentity()
+        : null;
     } else {
       this.state = {
         ...shellState,
         editorEpoch: previousState.editorEpoch,
-        editorTransition: "idle"
+        editorTransition: previousState.editorTransition
       };
     }
     this.emit();
   }
 
-  private startEditorTransition(transition: "reloading"): void {
+  private async sealEditor(reason: EditorTransitionReason): Promise<void> {
+    const token = ++this.editorTransitionSequence;
+    const barrier = createEditorTransitionBarrier(token, true);
+    this.pendingEditorTransitionBarrier = barrier;
+    this.updateState({
+      ...this.state,
+      editorTransition: {
+        token,
+        phase: "sealing",
+        reason,
+        readOnly: true
+      }
+    });
+    if (!await barrier.promise) {
+      throw new Error("Editor read-only transition was not applied.");
+    }
+  }
+
+  private async releaseEditor(): Promise<void> {
+    const current = this.state.editorTransition;
+    if (current === null) {
+      return;
+    }
+    if (this.disposed || getActiveDocument(this.state) === null) {
+      this.completeEditorRelease();
+      return;
+    }
+    const token = ++this.editorTransitionSequence;
+    const barrier = createEditorTransitionBarrier(token, false);
+    this.pendingEditorTransitionBarrier = barrier;
     this.editorBinding = null;
     this.pendingEditorLoadIdentity = null;
     this.updateState({
       ...this.state,
-      editorTransition: transition
+      editorEpoch: this.state.editorEpoch + 1,
+      editorTransition: {
+        token,
+        phase: "releasing",
+        reason: current.reason,
+        readOnly: false
+      }
     });
+    if (!await barrier.promise) {
+      this.completeEditorRelease();
+    }
   }
 
-  private finishEditorTransitionWithoutReplacement(): void {
+  private completeEditorRelease(): void {
+    this.pendingEditorTransitionBarrier = null;
+    const hasActiveEditor = getActiveDocument(this.state) !== null;
     this.state = {
       ...this.state,
-      editorEpoch: this.state.editorEpoch + 1,
-      editorTransition: "idle"
+      editorLoadRevision: hasActiveEditor
+        ? this.state.editorLoadRevision + 1
+        : this.state.editorLoadRevision,
+      editorTransition: null
     };
-    this.editorBinding = null;
-    this.pendingEditorLoadIdentity = this.createCurrentEditorLoadIdentity();
+    this.pendingEditorLoadIdentity = hasActiveEditor
+      ? this.createCurrentEditorLoadIdentity()
+      : null;
     this.emit();
   }
 
@@ -838,4 +974,15 @@ function applyRendererLocalWorkspaceDraft<TState extends EditorShellState>(
       }
     }
   };
+}
+
+function createEditorTransitionBarrier(
+  token: number,
+  readOnly: boolean
+): PendingEditorTransitionBarrier {
+  let resolve!: (applied: boolean) => void;
+  const promise = new Promise<boolean>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { token, readOnly, promise, resolve };
 }

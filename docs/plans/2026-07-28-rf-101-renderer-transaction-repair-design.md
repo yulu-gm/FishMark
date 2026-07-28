@@ -52,3 +52,11 @@ Application methods return operation-specific discriminated outcomes such as `co
 ## Scope
 
 This repair does not change shared IPC DTOs or replace the fixed Electron/React/CodeMirror stack. File dialogs remain inside the renderer FIFO transaction; a later RF-102 prepare/commit split may reduce head-of-line waiting only if it preserves these invariants.
+
+## Sixth-round implementation closure
+
+The implementation tightens the earlier visible reload transition into one application-owned barrier for every active destructive operation. A unique transition token moves through `sealing`, `sealed`, and `releasing`. Before the exact read-only acknowledgement, editor input remains accepted and destructive bridge calls are forbidden. The acknowledgement captures the last editor value, invalidates the binding, and permits drain/dispatch. A release acknowledgement creates the next epoch/load revision before normal editing resumes. Inactive targets do not freeze the active editor; empty-workspace, disposal, and unmount paths complete without waiting on an absent editor.
+
+CodeMirror now combines `EditorState.readOnly`, `EditorView.editable`, and a transaction filter. Only a private canonical-document annotation may change the document while sealed, and canonical replacement is excluded from undo history. Public imperative edits and every gesture/command path therefore obey the same structural guard.
+
+The test boundary is also hard-cut: `WorkspaceRendererApplication` exposes a typed editor-test adapter with owned read/open/draft/save commands, while the driver supplies real CodeMirror gestures. Raw workspace snapshot application, direct raw bridge mutations, `replaceViewState`, hook `applyState`, and dead state accessors are removed. The final focused gate is 13 files / 654 tests. The managed-sandbox full gate remains blocked—not passed—by five Windows process-tree cleanup failures in three test-harness files after the two code-related failures from that run were fixed.

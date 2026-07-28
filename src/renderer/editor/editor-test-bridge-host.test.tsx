@@ -5,7 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { EditorTestCommandEnvelope } from "../../shared/editor-test-command";
-import { createInitialEditorShellState, type EditorShellState } from "./editor-shell-state";
+import { createInitialEditorShellState } from "./editor-shell-state";
 import { EditorTestBridgeHost } from "./editor-test-bridge-host";
 
 const { createEditorTestDriver, run } = vi.hoisted(() => {
@@ -74,9 +74,15 @@ describe("EditorTestBridgeHost", () => {
       root.render(
         createElement(EditorTestBridgeHost, {
           fishmarkTest,
-          getState: () => createInitialEditorShellState() as EditorShellState,
-          applyState: (updater) => {
-            void updater(createInitialEditorShellState() as EditorShellState);
+          workspace: {
+            readState: () => ({
+              ...createInitialEditorShellState(),
+              editorEpoch: 1,
+              editorTransition: null
+            }),
+            openFixture: vi.fn(),
+            commitDraft: vi.fn(),
+            saveDocument: vi.fn()
           },
           resetAutosaveRuntime: vi.fn(),
           editor: {
@@ -90,38 +96,7 @@ describe("EditorTestBridgeHost", () => {
             pressTab: vi.fn(),
             pressArrowUp: vi.fn(),
             pressArrowDown: vi.fn()
-          },
-          setEditorContentSnapshot: vi.fn(),
-          openWorkspaceFileFromPath: vi.fn().mockResolvedValue({
-            kind: "success",
-            snapshot: {
-              windowId: "window-1",
-              activeTabId: null,
-              tabs: [],
-              activeDocument: null
-            }
-          }),
-          saveMarkdownFile: vi.fn().mockResolvedValue({
-            status: "success",
-            document: {
-              path: "C:/notes/test.md",
-              name: "test.md",
-              content: "",
-              encoding: "utf-8"
-            }
-          }),
-          updateWorkspaceTabDraft: vi.fn().mockResolvedValue({
-            windowId: "window-1",
-            activeTabId: null,
-            tabs: [],
-            activeDocument: null
-          }),
-          getWorkspaceSnapshot: vi.fn().mockResolvedValue({
-            windowId: "window-1",
-            activeTabId: null,
-            tabs: [],
-            activeDocument: null
-          })
+          }
         })
       );
     });

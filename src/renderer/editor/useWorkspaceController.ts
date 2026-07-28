@@ -7,8 +7,7 @@ import {
 } from "../../shared/workspace";
 import {
   getActiveDocument,
-  getActiveTabId,
-  type EditorShellState
+  getActiveTabId
 } from "./editor-shell-state";
 import type { EditorLoadIdentity } from "./editor-load-identity";
 import {
@@ -33,6 +32,7 @@ export function useWorkspaceController(input: {
     initialSnapshot,
     readEditorContent: getEditorContent
   }));
+  const [editorTestAdapter] = useState(() => application.getEditorTestAdapter());
   const state = useSyncExternalStore(
     application.subscribe,
     application.getState,
@@ -55,20 +55,12 @@ export function useWorkspaceController(input: {
     });
   }, [showNotification]);
 
-  const getState = application.getState;
   const getCurrentActiveDocument = useCallback(
     () => getActiveDocument(application.getState()),
     [application]
   );
   const getCurrentActiveTabId = useCallback(
     () => getActiveTabId(application.getState()),
-    [application]
-  );
-
-  const applyState = useCallback(
-    (updater: (current: EditorShellState) => EditorShellState): void => {
-      application.replaceViewState(updater);
-    },
     [application]
   );
 
@@ -91,6 +83,11 @@ export function useWorkspaceController(input: {
 
   const acknowledgeEditorLoad = useCallback(
     (identity: EditorLoadIdentity): boolean => application.acknowledgeEditorLoad(identity),
+    [application]
+  );
+  const acknowledgeEditorTransition = useCallback(
+    (transition: { token: number; readOnly: boolean }): boolean =>
+      application.acknowledgeEditorTransition(transition),
     [application]
   );
 
@@ -214,8 +211,7 @@ export function useWorkspaceController(input: {
 
   return {
     state,
-    applyState,
-    getState,
+    editorTestAdapter,
     getActiveDocument: getCurrentActiveDocument,
     getActiveTabId: getCurrentActiveTabId,
     activeDocument: getActiveDocument(state),
@@ -225,6 +221,7 @@ export function useWorkspaceController(input: {
     flushActiveWorkspaceDraft,
     updateDraft,
     acknowledgeEditorLoad,
+    acknowledgeEditorTransition,
     loadInitialWorkspaceSnapshot,
     openMarkdown,
     openMarkdownFromPath,

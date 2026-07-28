@@ -173,7 +173,7 @@ it("renders workspace tabs and delegates commands without owning persistence log
         activeHeadingId: null,
         editorLoadRevision: 1,
         editorEpoch: 1,
-        editorTransition: "idle",
+        editorTransition: null,
         editorViewMode: "wysiwym",
         editorRef: { current: null },
         editorContainerRef: { current: null },
@@ -236,6 +236,7 @@ it("renders workspace tabs and delegates commands without owning persistence log
         onWorkbenchSurfaceRuntimeModeChange: vi.fn(),
         onNavigateToOutlineItem,
         onDraftChange,
+        onEditorTransitionApplied: vi.fn(),
         onEditorLoadRevisionApplied: vi.fn()
       })
     );
@@ -363,7 +364,7 @@ it("opens find and replace controls and delegates search actions to the editor",
         activeHeadingId: null,
         editorLoadRevision: 1,
         editorEpoch: 1,
-        editorTransition: "idle",
+        editorTransition: null,
         editorViewMode: "wysiwym",
         editorRef: {
           current: {
@@ -458,6 +459,7 @@ it("opens find and replace controls and delegates search actions to the editor",
         onWorkbenchSurfaceRuntimeModeChange: vi.fn(),
         onNavigateToOutlineItem: vi.fn(),
         onDraftChange: vi.fn(),
+        onEditorTransitionApplied: vi.fn(),
         onEditorLoadRevisionApplied: vi.fn()
       })
     );
@@ -574,7 +576,7 @@ it("renders recent files without the old empty headline and delegates open and c
         activeHeadingId: null,
         editorLoadRevision: 1,
         editorEpoch: 1,
-        editorTransition: "idle",
+        editorTransition: null,
         editorViewMode: "wysiwym",
         editorRef: { current: null },
         editorContainerRef: { current: null },
@@ -637,6 +639,7 @@ it("renders recent files without the old empty headline and delegates open and c
         onWorkbenchSurfaceRuntimeModeChange: vi.fn(),
         onNavigateToOutlineItem: vi.fn(),
         onDraftChange: vi.fn(),
+        onEditorTransitionApplied: vi.fn(),
         onEditorLoadRevisionApplied: vi.fn()
       })
     );

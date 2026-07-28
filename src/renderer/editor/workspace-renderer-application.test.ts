@@ -84,6 +84,34 @@ function consumeEditorLoad(application: WorkspaceRendererApplication): EditorLoa
   return identity!;
 }
 
+async function acknowledgeEditorReadOnly(application: WorkspaceRendererApplication): Promise<number> {
+  await vi.waitFor(() => {
+    expect(application.getState().editorTransition?.phase).toBe("sealing");
+  });
+  const transition = application.getState().editorTransition;
+  expect(transition).not.toBeNull();
+  expect(transition?.readOnly).toBe(true);
+  expect(application.acknowledgeEditorTransition({
+    token: transition!.token,
+    readOnly: true
+  })).toBe(true);
+  return transition!.token;
+}
+
+async function acknowledgeEditorEditable(application: WorkspaceRendererApplication): Promise<number> {
+  await vi.waitFor(() => {
+    expect(application.getState().editorTransition?.phase).toBe("releasing");
+  });
+  const transition = application.getState().editorTransition;
+  expect(transition).not.toBeNull();
+  expect(transition?.readOnly).toBe(false);
+  expect(application.acknowledgeEditorTransition({
+    token: transition!.token,
+    readOnly: false
+  })).toBe(true);
+  return transition!.token;
+}
+
 describe("WorkspaceRendererApplication", () => {
   it.each(["close", "detach"] as const)(
     "drains an inactive target draft before %s and fails closed",
@@ -150,7 +178,9 @@ describe("WorkspaceRendererApplication", () => {
       kind: "committed"
     });
     updateWorkspaceTabDraft.mockClear();
-    await expect(application.confirmWorkspaceWindowClose("close-1")).resolves.toMatchObject({
+    const close = application.confirmWorkspaceWindowClose("close-1");
+    await acknowledgeEditorReadOnly(application);
+    await expect(close).resolves.toMatchObject({
       kind: "committed",
       value: true
     });
@@ -182,7 +212,11 @@ describe("WorkspaceRendererApplication", () => {
     editorContent = "# Second pending\n";
     application.recordEditorChange({ identity: secondIdentity, content: "# Second pending\n" });
 
-    await expect(application.confirmWorkspaceWindowClose("close-1")).resolves.toMatchObject({
+    const close = application.confirmWorkspaceWindowClose("close-1");
+    await acknowledgeEditorReadOnly(application);
+    await acknowledgeEditorEditable(application);
+    const closeOutcome = await close;
+    expect(closeOutcome).toMatchObject({
       kind: "failed-reconciled"
     });
 
@@ -191,6 +225,251 @@ describe("WorkspaceRendererApplication", () => {
       [{ tabId: "tab-2", content: "# Second pending\n" }]
     ]);
     expect(confirmWorkspaceWindowClose).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["close", "closing-tab"],
+    ["detach", "detaching-tab"]
+  ] as const)(
+    "seals the active editor before %s can drain or dispatch",
+    async (command, transition) => {
+      const pendingSnapshot = createSnapshot({ firstContent: "# Pending\n" });
+      const removedSnapshot = createSnapshot({ activeTabId: "tab-2", includeFirst: false });
+      const destructive = createDeferred<WorkspaceWindowSnapshot>();
+      const updateWorkspaceTabDraft = vi.fn(async () => pendingSnapshot);
+      let editorContent = "# Pending\n";
+      const closeWorkspaceTab = vi.fn(() => destructive.promise);
+      const detachWorkspaceTabToNewWindow = vi.fn(() => destructive.promise);
+      const application = createApplication({
+        bridge: {
+          updateWorkspaceTabDraft,
+          closeWorkspaceTab,
+          detachWorkspaceTabToNewWindow
+        },
+        readEditorContent: () => editorContent
+      });
+      const identity = consumeEditorLoad(application);
+      application.recordEditorChange({ identity, content: "# Pending\n" });
+
+      const operation = command === "close"
+        ? application.closeWorkspaceTab("tab-1")
+        : application.detachWorkspaceTab("tab-1");
+      await vi.waitFor(() => {
+        expect(application.getState().editorTransition).toMatchObject({
+          phase: "sealing",
+          reason: transition,
+          readOnly: true
+        });
+      });
+      expect(updateWorkspaceTabDraft).not.toHaveBeenCalled();
+      expect(closeWorkspaceTab).not.toHaveBeenCalled();
+      expect(detachWorkspaceTabToNewWindow).not.toHaveBeenCalled();
+      editorContent = "# Late destructive edit\n";
+      expect(application.recordEditorChange({
+        identity,
+        content: "# Late destructive edit\n"
+      })).toBe(true);
+
+      await acknowledgeEditorReadOnly(application);
+      await vi.waitFor(() => expect(updateWorkspaceTabDraft).toHaveBeenCalledWith({
+        tabId: "tab-1",
+        content: "# Late destructive edit\n"
+      }));
+      expect(application.getState().editorTransition?.phase).toBe("sealed");
+      expect(application.recordEditorChange({
+        identity,
+        content: "# Too late\n"
+      })).toBe(false);
+
+      destructive.resolve(removedSnapshot);
+      await acknowledgeEditorEditable(application);
+      await expect(operation).resolves.toMatchObject({ kind: "committed" });
+      expect(updateWorkspaceTabDraft).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it("completes an active last-tab close without waiting for an editor that unmounted", async () => {
+    const removedSnapshot = createSnapshot({
+      activeTabId: null,
+      includeFirst: false,
+      includeSecond: false
+    });
+    const closeWorkspaceTab = vi.fn(async () => removedSnapshot);
+    const application = createApplication({
+      initialSnapshot: createSnapshot({ includeSecond: false }),
+      bridge: {
+        closeWorkspaceTab,
+        updateWorkspaceTabDraft: vi.fn(async () => createSnapshot({ includeSecond: false }))
+      }
+    });
+    consumeEditorLoad(application);
+
+    const close = application.closeWorkspaceTab("tab-1");
+    await acknowledgeEditorReadOnly(application);
+
+    await expect(close).resolves.toMatchObject({ kind: "committed" });
+    expect(closeWorkspaceTab).toHaveBeenCalledWith({ tabId: "tab-1" });
+    expect(application.getState().workspaceSnapshot?.activeDocument).toBeNull();
+    expect(application.getState().editorTransition).toBeNull();
+  });
+
+  it("settles an operation when disposal interrupts a sealing barrier", async () => {
+    const application = createApplication({
+      bridge: {
+        closeWorkspaceTab: vi.fn(),
+        getWorkspaceSnapshot: vi.fn(async () => createSnapshot())
+      }
+    });
+    consumeEditorLoad(application);
+
+    const close = application.closeWorkspaceTab("tab-1");
+    await vi.waitFor(() => {
+      expect(application.getState().editorTransition?.phase).toBe("sealing");
+    });
+    application.dispose();
+
+    await expect(close).resolves.toMatchObject({ kind: "failed-reconciled" });
+  });
+
+  it("settles an operation when disposal interrupts an editable release barrier", async () => {
+    const removedSnapshot = createSnapshot({ activeTabId: "tab-2", includeFirst: false });
+    const application = createApplication({
+      bridge: {
+        closeWorkspaceTab: vi.fn(async () => removedSnapshot),
+        updateWorkspaceTabDraft: vi.fn(async () => createSnapshot())
+      }
+    });
+    consumeEditorLoad(application);
+
+    const close = application.closeWorkspaceTab("tab-1");
+    await acknowledgeEditorReadOnly(application);
+    await vi.waitFor(() => {
+      expect(application.getState().editorTransition?.phase).toBe("releasing");
+    });
+    application.dispose();
+
+    await expect(close).resolves.toMatchObject({ kind: "committed" });
+  });
+
+  it("restores a new editor epoch when active close fails", async () => {
+    const pendingSnapshot = createSnapshot({ firstContent: "# Pending\n" });
+    const application = createApplication({
+      bridge: {
+        updateWorkspaceTabDraft: vi.fn(async () => pendingSnapshot),
+        closeWorkspaceTab: vi.fn(async () => {
+          throw new Error("close failed");
+        }),
+        getWorkspaceSnapshot: vi.fn(async () => pendingSnapshot)
+      },
+      readEditorContent: () => "# Pending\n"
+    });
+    const oldIdentity = consumeEditorLoad(application);
+    application.recordEditorChange({ identity: oldIdentity, content: "# Pending\n" });
+
+    const close = application.closeWorkspaceTab("tab-1");
+    await acknowledgeEditorReadOnly(application);
+    await acknowledgeEditorEditable(application);
+    await expect(close).resolves.toMatchObject({
+      kind: "failed-reconciled"
+    });
+
+    expect(application.getState().editorTransition).toBeNull();
+    expect(application.recordEditorChange({
+      identity: oldIdentity,
+      content: "# Stale\n"
+    })).toBe(false);
+    const restoredIdentity = consumeEditorLoad(application);
+    expect(restoredIdentity.epoch).toBeGreaterThan(oldIdentity.epoch);
+    expect(application.recordEditorChange({
+      identity: restoredIdentity,
+      content: "# Editable again\n"
+    })).toBe(true);
+  });
+
+  it("freezes the active editor through native close confirmation and restores it on cancel", async () => {
+    const pendingSnapshot = createSnapshot({ firstContent: "# Pending\n" });
+    const confirmation = createDeferred<boolean>();
+    const updateWorkspaceTabDraft = vi.fn(async () => pendingSnapshot);
+    const application = createApplication({
+      bridge: {
+        updateWorkspaceTabDraft,
+        confirmWorkspaceWindowClose: vi.fn(() => confirmation.promise)
+      },
+      readEditorContent: () => "# Pending\n"
+    });
+    const oldIdentity = consumeEditorLoad(application);
+    application.recordEditorChange({ identity: oldIdentity, content: "# Pending\n" });
+
+    const close = application.confirmWorkspaceWindowClose("close-1");
+    await vi.waitFor(() => expect(application.getState().editorTransition).toMatchObject({
+      phase: "sealing",
+      reason: "closing-window",
+      readOnly: true
+    }));
+    expect(updateWorkspaceTabDraft).not.toHaveBeenCalled();
+    expect(application.recordEditorChange({
+      identity: oldIdentity,
+      content: "# Late window-close edit\n"
+    })).toBe(true);
+
+    await acknowledgeEditorReadOnly(application);
+    await vi.waitFor(() => expect(updateWorkspaceTabDraft).toHaveBeenCalledTimes(1));
+
+    confirmation.resolve(false);
+    await acknowledgeEditorEditable(application);
+    await expect(close).resolves.toMatchObject({ kind: "committed", value: false });
+    expect(application.getState().editorTransition).toBeNull();
+    const restoredIdentity = consumeEditorLoad(application);
+    expect(restoredIdentity.epoch).toBeGreaterThan(oldIdentity.epoch);
+    expect(application.recordEditorChange({
+      identity: restoredIdentity,
+      content: "# Editable after cancel\n"
+    })).toBe(true);
+  });
+
+  it("does not freeze the active editor while removing an inactive tab", async () => {
+    const activeSecond = createSnapshot({ activeTabId: "tab-2" });
+    const removedFirst = createSnapshot({ activeTabId: "tab-2", includeFirst: false });
+    const close = createDeferred<WorkspaceWindowSnapshot>();
+    const updateWorkspaceTabDraft = vi.fn(async (input: { tabId: string; content: string }) =>
+      input.tabId === "tab-1"
+        ? activeSecond
+        : createSnapshot({ activeTabId: "tab-2", secondContent: input.content })
+    );
+    const application = createApplication({
+      bridge: {
+        getWorkspaceSnapshot: vi.fn(async () => activeSecond),
+        updateWorkspaceTabDraft,
+        closeWorkspaceTab: vi.fn(() => close.promise),
+        confirmWorkspaceWindowClose: vi.fn(async () => false)
+      }
+    });
+    const firstIdentity = consumeEditorLoad(application);
+    application.recordEditorChange({ identity: firstIdentity, content: "# First pending\n" });
+    await application.refreshWorkspaceSnapshot();
+    const secondIdentity = consumeEditorLoad(application);
+
+    const removing = application.closeWorkspaceTab("tab-1");
+    await vi.waitFor(() => expect(updateWorkspaceTabDraft).toHaveBeenCalledWith({
+      tabId: "tab-1",
+      content: "# First pending\n"
+    }));
+    expect(application.getState().editorTransition).toBeNull();
+    expect(application.recordEditorChange({
+      identity: secondIdentity,
+      content: "# Second remains editable\n"
+    })).toBe(true);
+
+    close.resolve(removedFirst);
+    await removing;
+    const confirmClose = application.confirmWorkspaceWindowClose("close-1");
+    await acknowledgeEditorReadOnly(application);
+    await acknowledgeEditorEditable(application);
+    await confirmClose;
+    expect(updateWorkspaceTabDraft).toHaveBeenCalledWith({
+      tabId: "tab-2",
+      content: "# Second remains editable\n"
+    });
   });
 
   it("invalidates same-tab editor ownership until CodeMirror consumes canonical replacement", async () => {
@@ -229,7 +508,9 @@ describe("WorkspaceRendererApplication", () => {
       activeTabId: "tab-1",
       firstContent: "# Disk\n"
     });
-    const updateWorkspaceTabDraft = vi.fn();
+    const updateWorkspaceTabDraft = vi.fn(async (input: { content: string }) =>
+      createSnapshot({ activeTabId: "tab-1", firstContent: input.content })
+    );
     const saveMarkdownFile = vi.fn(async () => ({
       status: "success" as const,
       document: {
@@ -254,10 +535,13 @@ describe("WorkspaceRendererApplication", () => {
     const oldIdentity = consumeEditorLoad(application);
     application.recordEditorChange({ identity: oldIdentity, content: "# Discard me\n" });
 
-    await expect(application.reloadWorkspaceTabFromPath("tab-1")).resolves.toMatchObject({
+    const reload = application.reloadWorkspaceTabFromPath("tab-1");
+    await acknowledgeEditorReadOnly(application);
+    await acknowledgeEditorEditable(application);
+    await expect(reload).resolves.toMatchObject({
       kind: "committed"
     });
-    expect(application.getState().editorTransition).toBe("idle");
+    expect(application.getState().editorTransition).toBeNull();
     expect(application.getState().workspaceSnapshot?.activeDocument?.content).toBe("# Disk\n");
     expect(application.recordEditorChange({
       identity: oldIdentity,
@@ -268,7 +552,7 @@ describe("WorkspaceRendererApplication", () => {
       hasExternalConflict: false
     });
 
-    expect(updateWorkspaceTabDraft).not.toHaveBeenCalled();
+    expect(updateWorkspaceTabDraft).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({ tabId: "tab-1" });
   });
 
@@ -280,21 +564,35 @@ describe("WorkspaceRendererApplication", () => {
     const diskSnapshot = createSnapshot({ firstContent: "# Disk\n" });
     const application = createApplication({
       bridge: {
-        reloadWorkspaceTabFromPath: vi.fn(() => reload.promise)
+        reloadWorkspaceTabFromPath: vi.fn(() => reload.promise),
+        updateWorkspaceTabDraft: vi.fn(async (input: { content: string }) =>
+          createSnapshot({ firstContent: input.content })
+        )
       }
     });
     const oldIdentity = consumeEditorLoad(application);
 
     const pendingReload = application.reloadWorkspaceTabFromPath("tab-1");
-    await vi.waitFor(() => expect(application.getState().editorTransition).toBe("reloading"));
+    await vi.waitFor(() => expect(application.getState().editorTransition).toMatchObject({
+      phase: "sealing",
+      reason: "reloading",
+      readOnly: true
+    }));
+    expect(application.recordEditorChange({
+      identity: oldIdentity,
+      content: "# Typed before read-only ack\n"
+    })).toBe(true);
+    expect(application.getState().editorTransition?.phase).toBe("sealing");
+    await acknowledgeEditorReadOnly(application);
     expect(application.recordEditorChange({
       identity: oldIdentity,
       content: "# Typed during reload\n"
     })).toBe(false);
 
     reload.resolve({ kind: "success", snapshot: diskSnapshot });
+    await acknowledgeEditorEditable(application);
     await expect(pendingReload).resolves.toMatchObject({ kind: "committed" });
-    expect(application.getState().editorTransition).toBe("idle");
+    expect(application.getState().editorTransition).toBeNull();
     expect(application.getState().workspaceSnapshot?.activeDocument?.content).toBe("# Disk\n");
   });
 
@@ -303,7 +601,11 @@ describe("WorkspaceRendererApplication", () => {
       activeTabId: "tab-1",
       firstContent: "# Before reload\n"
     });
-    const updateWorkspaceTabDraft = vi.fn(async () => recoveredSnapshot);
+    let latestSnapshot = recoveredSnapshot;
+    const updateWorkspaceTabDraft = vi.fn(async (input: { content: string }) => {
+      latestSnapshot = createSnapshot({ activeTabId: "tab-1", firstContent: input.content });
+      return latestSnapshot;
+    });
     const confirmWorkspaceWindowClose = vi.fn(async () => true);
     const application = createApplication({
       initialSnapshot: recoveredSnapshot,
@@ -311,7 +613,7 @@ describe("WorkspaceRendererApplication", () => {
         reloadWorkspaceTabFromPath: vi.fn(async () => {
           throw new Error("transport failed before commit");
         }),
-        getWorkspaceSnapshot: vi.fn(async () => recoveredSnapshot),
+        getWorkspaceSnapshot: vi.fn(async () => latestSnapshot),
         updateWorkspaceTabDraft,
         confirmWorkspaceWindowClose
       },
@@ -320,11 +622,14 @@ describe("WorkspaceRendererApplication", () => {
     const oldIdentity = consumeEditorLoad(application);
     application.recordEditorChange({ identity: oldIdentity, content: "# Unsaved draft\n" });
 
-    await expect(application.reloadWorkspaceTabFromPath("tab-1")).resolves.toMatchObject({
+    const reload = application.reloadWorkspaceTabFromPath("tab-1");
+    await acknowledgeEditorReadOnly(application);
+    await acknowledgeEditorEditable(application);
+    await expect(reload).resolves.toMatchObject({
       kind: "failed-reconciled"
     });
 
-    expect(application.getState().editorTransition).toBe("idle");
+    expect(application.getState().editorTransition).toBeNull();
     expect(application.getState().workspaceSnapshot?.activeDocument?.content).toBe(
       "# Unsaved draft\n"
     );
@@ -333,7 +638,9 @@ describe("WorkspaceRendererApplication", () => {
       content: "# Stale buffer\n"
     })).toBe(false);
     consumeEditorLoad(application);
-    await application.confirmWorkspaceWindowClose("close-1");
+    const close = application.confirmWorkspaceWindowClose("close-1");
+    await acknowledgeEditorReadOnly(application);
+    await close;
     expect(updateWorkspaceTabDraft).toHaveBeenCalledWith({
       tabId: "tab-1",
       content: "# Unsaved draft\n"

@@ -1,11 +1,6 @@
 import type { EditorTestCommand, EditorTestCommandResult } from "../shared/editor-test-command";
-import type { SaveMarkdownFileResult } from "../shared/save-markdown-file";
-import type { OpenWorkspaceFileFromPathResult, WorkspaceWindowSnapshot } from "../shared/workspace";
-import {
-  applyWorkspaceSnapshot,
-  getActiveDocument,
-  type EditorShellState
-} from "./editor/editor-shell-state";
+import { getActiveDocument } from "./editor/editor-shell-state";
+import type { WorkspaceRendererTestAdapter } from "./editor/workspace-renderer-application";
 
 type EditorHandle = {
   getContent: () => string;
@@ -21,15 +16,9 @@ type EditorHandle = {
 };
 
 export function createEditorTestDriver(input: {
-  getState: () => EditorShellState;
-  applyState: (updater: (current: EditorShellState) => EditorShellState) => void;
+  workspace: WorkspaceRendererTestAdapter;
   resetAutosaveRuntime: () => void;
   editor: EditorHandle;
-  setEditorContentSnapshot: (content: string) => void;
-  openWorkspaceFileFromPath: (targetPath: string) => Promise<OpenWorkspaceFileFromPathResult>;
-  saveMarkdownFile: (args: { tabId: string }) => Promise<SaveMarkdownFileResult>;
-  updateWorkspaceTabDraft: (input: { tabId: string; content: string }) => Promise<WorkspaceWindowSnapshot>;
-  getWorkspaceSnapshot: () => Promise<WorkspaceWindowSnapshot>;
 }) {
   type ActiveDocument = NonNullable<ReturnType<typeof getActiveDocument>>;
 
@@ -45,13 +34,23 @@ export function createEditorTestDriver(input: {
     message: string,
     details?: Record<string, unknown>
   ): ActiveDocument | EditorTestCommandResult {
-    const activeDocument = getActiveDocument(input.getState());
+    const activeDocument = getActiveDocument(input.workspace.readState());
+    return activeDocument ?? fail(message, details);
+  }
 
-    if (!activeDocument) {
-      return fail(message, details);
+  async function commitEditorGesture(successMessage: string): Promise<EditorTestCommandResult> {
+    const outcome = await input.workspace.commitDraft();
+    if (outcome.kind === "committed") {
+      return ok(successMessage);
     }
-
-    return activeDocument;
+    const message = outcome.kind === "failed" ||
+      outcome.kind === "failed-reconciled" ||
+      outcome.kind === "canonical-unavailable"
+      ? outcome.error instanceof Error
+        ? outcome.error.message
+        : String(outcome.error)
+      : `Editor draft commit ended with ${outcome.kind}.`;
+    return fail(message);
   }
 
   return {
@@ -61,35 +60,23 @@ export function createEditorTestDriver(input: {
       }
 
       if (command.type === "open-fixture-file") {
-        const response = await input.openWorkspaceFileFromPath(command.fixturePath);
-        if (response.kind === "error") {
-          return fail(response.error.message, {
-            path: command.fixturePath
-          });
+        const outcome = await input.workspace.openFixture(command.fixturePath);
+        if (outcome.kind !== "committed") {
+          const message = outcome.kind === "failed" ||
+            outcome.kind === "failed-reconciled" ||
+            outcome.kind === "canonical-unavailable"
+            ? outcome.error instanceof Error
+              ? outcome.error.message
+              : String(outcome.error)
+            : `Fixture open ended with ${outcome.kind}.`;
+          return fail(message, { path: command.fixturePath });
         }
-        if (response.kind === "focused-existing") {
-          return fail("Fixture file is already owned by another window.", {
-            path: command.fixturePath
-          });
+        const activeDocument = getActiveDocument(input.workspace.readState());
+        if (activeDocument === null) {
+          return fail(`Workspace state for '${command.fixturePath}' is missing an active document.`);
         }
-
-        const activeDocument =
-          response.snapshot.activeDocument ??
-          (() => {
-            throw new Error(`Workspace snapshot for '${command.fixturePath}' is missing an active document.`);
-          })();
-
         input.resetAutosaveRuntime();
-        input.setEditorContentSnapshot(activeDocument.content);
-        input.applyState((current) =>
-          applyWorkspaceSnapshot(current, response.snapshot, {
-            currentEditorContent: activeDocument.content
-          })
-        );
-
-        return ok("Fixture file opened.", {
-          path: activeDocument.path
-        });
+        return ok("Fixture file opened.", { path: activeDocument.path });
       }
 
       if (command.type === "set-editor-content") {
@@ -97,19 +84,8 @@ export function createEditorTestDriver(input: {
         if ("ok" in activeDocument) {
           return activeDocument;
         }
-
         input.editor.setContent(command.content);
-        input.setEditorContentSnapshot(command.content);
-        const snapshot = await input.updateWorkspaceTabDraft({
-          tabId: activeDocument.tabId,
-          content: command.content
-        });
-        input.applyState((current) =>
-          applyWorkspaceSnapshot(current, snapshot, {
-            currentEditorContent: command.content
-          })
-        );
-        return ok("Editor content replaced.");
+        return commitEditorGesture("Editor content replaced.");
       }
 
       if (command.type === "insert-editor-text") {
@@ -117,20 +93,8 @@ export function createEditorTestDriver(input: {
         if ("ok" in activeDocument) {
           return activeDocument;
         }
-
         input.editor.insertText(command.text);
-        const nextContent = input.editor.getContent();
-        input.setEditorContentSnapshot(nextContent);
-        const snapshot = await input.updateWorkspaceTabDraft({
-          tabId: activeDocument.tabId,
-          content: nextContent
-        });
-        input.applyState((current) =>
-          applyWorkspaceSnapshot(current, snapshot, {
-            currentEditorContent: nextContent
-          })
-        );
-        return ok("Editor text inserted.");
+        return commitEditorGesture("Editor text inserted.");
       }
 
       if (command.type === "set-editor-selection") {
@@ -138,7 +102,6 @@ export function createEditorTestDriver(input: {
         if ("ok" in activeDocument) {
           return activeDocument;
         }
-
         input.editor.setSelection(command.anchor, command.head ?? command.anchor);
         return ok("Editor selection updated.");
       }
@@ -148,20 +111,8 @@ export function createEditorTestDriver(input: {
         if ("ok" in activeDocument) {
           return activeDocument;
         }
-
         input.editor.pressEnter();
-        const nextContent = input.editor.getContent();
-        input.setEditorContentSnapshot(nextContent);
-        const snapshot = await input.updateWorkspaceTabDraft({
-          tabId: activeDocument.tabId,
-          content: nextContent
-        });
-        input.applyState((current) =>
-          applyWorkspaceSnapshot(current, snapshot, {
-            currentEditorContent: nextContent
-          })
-        );
-        return ok("Editor Enter executed.");
+        return commitEditorGesture("Editor Enter executed.");
       }
 
       if (command.type === "press-editor-backspace") {
@@ -169,20 +120,8 @@ export function createEditorTestDriver(input: {
         if ("ok" in activeDocument) {
           return activeDocument;
         }
-
         input.editor.pressBackspace();
-        const nextContent = input.editor.getContent();
-        input.setEditorContentSnapshot(nextContent);
-        const snapshot = await input.updateWorkspaceTabDraft({
-          tabId: activeDocument.tabId,
-          content: nextContent
-        });
-        input.applyState((current) =>
-          applyWorkspaceSnapshot(current, snapshot, {
-            currentEditorContent: nextContent
-          })
-        );
-        return ok("Editor Backspace executed.");
+        return commitEditorGesture("Editor Backspace executed.");
       }
 
       if (command.type === "press-editor-tab") {
@@ -190,20 +129,10 @@ export function createEditorTestDriver(input: {
         if ("ok" in activeDocument) {
           return activeDocument;
         }
-
         input.editor.pressTab(command.shiftKey);
-        const nextContent = input.editor.getContent();
-        input.setEditorContentSnapshot(nextContent);
-        const snapshot = await input.updateWorkspaceTabDraft({
-          tabId: activeDocument.tabId,
-          content: nextContent
-        });
-        input.applyState((current) =>
-          applyWorkspaceSnapshot(current, snapshot, {
-            currentEditorContent: nextContent
-          })
+        return commitEditorGesture(
+          command.shiftKey ? "Editor Shift-Tab executed." : "Editor Tab executed."
         );
-        return ok(command.shiftKey ? "Editor Shift-Tab executed." : "Editor Tab executed.");
       }
 
       if (command.type === "press-editor-arrow-up") {
@@ -211,7 +140,6 @@ export function createEditorTestDriver(input: {
         if ("ok" in activeDocument) {
           return activeDocument;
         }
-
         input.editor.pressArrowUp();
         return ok("Editor ArrowUp executed.");
       }
@@ -221,7 +149,6 @@ export function createEditorTestDriver(input: {
         if ("ok" in activeDocument) {
           return activeDocument;
         }
-
         input.editor.pressArrowDown();
         return ok("Editor ArrowDown executed.");
       }
@@ -232,35 +159,27 @@ export function createEditorTestDriver(input: {
           return activeDocument;
         }
         if (!activeDocument.path) {
-          return fail("No persisted document path to save.", {
+          return fail("No persisted document path to save.", { path: activeDocument.path });
+        }
+        const outcome = await input.workspace.saveDocument();
+        if (outcome.kind !== "committed") {
+          return fail(`Workspace save ended with ${outcome.kind}.`, {
             path: activeDocument.path
           });
         }
-
-        const content = input.editor.getContent();
-        const result = await input.saveMarkdownFile({
-          tabId: activeDocument.tabId
-        });
-
-        if (result.status !== "success") {
-          return fail(result.status === "error" ? result.error.message : "Save was cancelled.", {
-            status: result.status,
-            path: activeDocument.path
-          });
+        if (outcome.value.status !== "success") {
+          return fail(
+            outcome.value.status === "error"
+              ? outcome.value.error.message
+              : "Save was cancelled.",
+            { status: outcome.value.status, path: activeDocument.path }
+          );
         }
-
-        input.setEditorContentSnapshot(content);
-        const snapshot = await input.getWorkspaceSnapshot();
-        input.applyState((current) =>
-          applyWorkspaceSnapshot(current, snapshot, {
-            currentEditorContent: content
-          })
-        );
         return ok("Document saved.");
       }
 
       if (command.type === "assert-document-path") {
-        const actualPath = getActiveDocument(input.getState())?.path ?? null;
+        const actualPath = getActiveDocument(input.workspace.readState())?.path ?? null;
         return actualPath === command.expectedPath
           ? ok("Document path matched.", { actualPath })
           : fail("Document path mismatch.", {
@@ -282,8 +201,8 @@ export function createEditorTestDriver(input: {
       if (command.type === "assert-editor-selection") {
         const actualSelection = input.editor.getSelection();
         const expectedHead = command.expectedHead ?? command.expectedAnchor;
-
-        return actualSelection.anchor === command.expectedAnchor && actualSelection.head === expectedHead
+        return actualSelection.anchor === command.expectedAnchor &&
+          actualSelection.head === expectedHead
           ? ok("Editor selection matched.")
           : fail("Editor selection mismatch.", {
               expectedAnchor: command.expectedAnchor,
@@ -294,7 +213,7 @@ export function createEditorTestDriver(input: {
       }
 
       if (command.type === "assert-dirty-state") {
-        const actualDirty = getActiveDocument(input.getState())?.isDirty ?? false;
+        const actualDirty = getActiveDocument(input.workspace.readState())?.isDirty ?? false;
         return actualDirty === command.expectedDirty
           ? ok("Dirty state matched.", { actualDirty })
           : fail("Dirty state mismatch.", {
@@ -304,11 +223,9 @@ export function createEditorTestDriver(input: {
       }
 
       if (command.type === "assert-empty-workspace") {
-        const activeDocument = getActiveDocument(input.getState());
+        const activeDocument = getActiveDocument(input.workspace.readState());
         return activeDocument
-          ? fail("Workspace is not empty.", {
-              documentPath: activeDocument.path
-            })
+          ? fail("Workspace is not empty.", { documentPath: activeDocument.path })
           : ok("Workspace is empty.");
       }
 

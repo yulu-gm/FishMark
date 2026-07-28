@@ -348,9 +348,7 @@ function EditorShell({
     editorLoadRevision,
     getActiveDocument: getWorkspaceActiveDocument,
     reorderWorkspaceTab,
-    loadInitialWorkspaceSnapshot,
-    applyState: applyWorkspaceState,
-    getState: getWorkspaceState
+    loadInitialWorkspaceSnapshot
   } = workspaceController;
   const {
     resetAutosaveRuntime,
@@ -669,7 +667,7 @@ function EditorShell({
   const handlePreferencesSync = useEffectEvent((nextPreferences: Preferences): void => {
     preferencesRef.current = nextPreferences;
     setPreferences(nextPreferences);
-    scheduleAutosave();
+    scheduleAutosave(nextPreferences.autosave.idleDelayMs);
   });
 
   const handleRecentFilesSync = useEffectEvent((nextRecentFiles: RecentFilesSnapshot): void => {
@@ -758,7 +756,7 @@ function EditorShell({
     const result = await fishmark.updatePreferences(patch);
     preferencesRef.current = result.preferences;
     setPreferences(result.preferences);
-    scheduleAutosave();
+    scheduleAutosave(result.preferences.autosave.idleDelayMs);
     return result;
   }
 
@@ -955,8 +953,7 @@ function EditorShell({
 
   const editorTestBridge = useMemo(
     () => ({
-      getState: getWorkspaceState,
-      applyState: applyWorkspaceState,
+      workspace: workspaceController.editorTestAdapter,
       resetAutosaveRuntime,
       editor: {
         getContent: getEditorContent,
@@ -989,23 +986,12 @@ function EditorShell({
         pressArrowDown: () => {
           editorRef.current?.pressArrowDown();
         }
-      },
-      setEditorContentSnapshot: (content: string) => {
-        editorContentRef.current = content;
-      },
-      openWorkspaceFileFromPath: (targetPath: string) =>
-        fishmark.openWorkspaceFileFromPath(targetPath),
-      saveMarkdownFile: (input: { tabId: string }) => fishmark.saveMarkdownFile(input),
-      updateWorkspaceTabDraft: (input: { tabId: string; content: string }) =>
-        fishmark.updateWorkspaceTabDraft(input),
-      getWorkspaceSnapshot: () => fishmark.getWorkspaceSnapshot()
+      }
     }),
     [
-      fishmark,
       getEditorContent,
-      applyWorkspaceState,
-      getWorkspaceState,
-      resetAutosaveRuntime
+      resetAutosaveRuntime,
+      workspaceController.editorTestAdapter
     ]
   );
 
@@ -1510,15 +1496,9 @@ function EditorShell({
     <>
       <EditorTestBridgeHost
         fishmarkTest={fishmarkTest}
-        getState={editorTestBridge.getState}
-        applyState={editorTestBridge.applyState}
+        workspace={editorTestBridge.workspace}
         resetAutosaveRuntime={editorTestBridge.resetAutosaveRuntime}
         editor={editorTestBridge.editor}
-        setEditorContentSnapshot={editorTestBridge.setEditorContentSnapshot}
-        openWorkspaceFileFromPath={editorTestBridge.openWorkspaceFileFromPath}
-        saveMarkdownFile={editorTestBridge.saveMarkdownFile}
-        updateWorkspaceTabDraft={editorTestBridge.updateWorkspaceTabDraft}
-        getWorkspaceSnapshot={editorTestBridge.getWorkspaceSnapshot}
       />
       <WorkspaceShell
         workspaceSnapshot={state.workspaceSnapshot}
@@ -1575,6 +1555,7 @@ function EditorShell({
         }}
         onDismissExternalFileConflict={externalConflictController.dismissConflict}
         onDraftChange={handleEditorContentChange}
+        onEditorTransitionApplied={workspaceController.acknowledgeEditorTransition}
         onEditorLoadRevisionApplied={workspaceController.acknowledgeEditorLoad}
         onEditorBlur={handleEditorBlurFromShell}
         onEditorViewModeChange={setEditorViewMode}
