@@ -1,4 +1,4 @@
-import { Annotation, Compartment, EditorState, Transaction } from "@codemirror/state";
+import { Compartment, EditorState } from "@codemirror/state";
 import {
   closeSearchPanel,
   findNext,
@@ -99,8 +99,6 @@ export function createCodeEditorController(
   let currentViewMode = options.viewMode ?? "wysiwym";
   let currentReadOnly = options.readOnly ?? false;
   const readOnlyCompartment = new Compartment();
-  const canonicalDocumentReplacement = Annotation.define<boolean>();
-  let isCanonicalDocumentReplacement = false;
   let isDestroyed = false;
   let activeBlockState: ActiveBlockState = {
     blockMap: parseMarkdownDocument(""),
@@ -121,18 +119,14 @@ export function createCodeEditorController(
           EditorView.editable.of(!currentReadOnly)
         ]),
         EditorState.transactionFilter.of((transaction) =>
-          transaction.docChanged &&
-          transaction.startState.readOnly &&
-          transaction.annotation(canonicalDocumentReplacement) !== true
+          transaction.docChanged && transaction.startState.readOnly
             ? []
             : transaction
         ),
         createFishMarkMarkdownExtensions({
           parseMarkdownDocument,
           onContentChange: (nextContent) => {
-            if (!isCanonicalDocumentReplacement) {
-              options.onChange(nextContent);
-            }
+            options.onChange(nextContent);
           },
           onActiveBlockChange: (nextState) => {
             activeBlockState = nextState;
@@ -346,23 +340,7 @@ export function createCodeEditorController(
       });
     },
     replaceDocument(nextContent: string) {
-      isCanonicalDocumentReplacement = true;
-      try {
-        view.dispatch({
-          changes: {
-            from: 0,
-            to: view.state.doc.length,
-            insert: nextContent
-          },
-          selection: { anchor: 0 },
-          annotations: [
-            canonicalDocumentReplacement.of(true),
-            Transaction.addToHistory.of(false)
-          ]
-        });
-      } finally {
-        isCanonicalDocumentReplacement = false;
-      }
+      view.setState(createState(nextContent));
     },
     setDocumentPath(nextDocumentPath: string | null) {
       currentDocumentPath = nextDocumentPath;

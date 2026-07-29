@@ -67,12 +67,12 @@ function createSnapshot(input: {
 
 function createApplication(input: {
   bridge?: Partial<Window["fishmark"]>;
-  initialSnapshot?: WorkspaceWindowSnapshot;
+  initialSnapshot?: WorkspaceWindowSnapshot | null;
   readEditorContent?: () => string;
 } = {}) {
   return new WorkspaceRendererApplication({
     bridge: input.bridge as Window["fishmark"],
-    initialSnapshot: input.initialSnapshot ?? createSnapshot(),
+    initialSnapshot: "initialSnapshot" in input ? input.initialSnapshot : createSnapshot(),
     readEditorContent: input.readEditorContent ?? (() => "# First\n")
   });
 }
@@ -328,7 +328,7 @@ describe("WorkspaceRendererApplication", () => {
     });
     application.dispose();
 
-    await expect(close).resolves.toMatchObject({ kind: "failed-reconciled" });
+    await expect(close).resolves.toMatchObject({ kind: "failed" });
   });
 
   it("settles an operation when disposal interrupts an editable release barrier", async () => {
@@ -351,6 +351,71 @@ describe("WorkspaceRendererApplication", () => {
     await expect(close).resolves.toMatchObject({ kind: "committed" });
   });
 
+  it.each(["reload", "close", "detach", "window-close"] as const)(
+    "does not create an editor barrier when a queued %s operation starts after disposal",
+    async (command) => {
+      const blocker = createDeferred<WorkspaceWindowSnapshot>();
+      const reloadWorkspaceTabFromPath = vi.fn();
+      const closeWorkspaceTab = vi.fn();
+      const detachWorkspaceTabToNewWindow = vi.fn();
+      const confirmWorkspaceWindowClose = vi.fn();
+      const application = createApplication({
+        bridge: {
+          getWorkspaceSnapshot: vi.fn(() => blocker.promise),
+          reloadWorkspaceTabFromPath,
+          closeWorkspaceTab,
+          detachWorkspaceTabToNewWindow,
+          confirmWorkspaceWindowClose
+        }
+      });
+      consumeEditorLoad(application);
+
+      const first = application.refreshWorkspaceSnapshot();
+      await vi.waitFor(() => expect(application.getPendingOperationKind()).toBe("refresh"));
+      const destructive = command === "reload"
+        ? application.reloadWorkspaceTabFromPath("tab-1")
+        : command === "close"
+          ? application.closeWorkspaceTab("tab-1")
+          : command === "detach"
+            ? application.detachWorkspaceTab("tab-1")
+            : application.confirmWorkspaceWindowClose("close-1");
+      application.dispose();
+      blocker.resolve(createSnapshot());
+
+      await expect(first).resolves.toMatchObject({ kind: "committed" });
+      await expect(destructive).resolves.toMatchObject({ kind: "failed" });
+      expect(application.getState().editorTransition).toBeNull();
+      expect(reloadWorkspaceTabFromPath).not.toHaveBeenCalled();
+      expect(closeWorkspaceTab).not.toHaveBeenCalled();
+      expect(detachWorkspaceTabToNewWindow).not.toHaveBeenCalled();
+      expect(confirmWorkspaceWindowClose).not.toHaveBeenCalled();
+    }
+  );
+
+  it("does not continue a destructive operation when disposal occurs during canonical reconciliation", async () => {
+    const snapshot = createSnapshot();
+    const reconcile = createDeferred<WorkspaceWindowSnapshot>();
+    const getWorkspaceSnapshot = vi.fn(() => reconcile.promise);
+    const closeWorkspaceTab = vi.fn();
+    const application = createApplication({
+      initialSnapshot: null,
+      bridge: {
+        getWorkspaceSnapshot,
+        closeWorkspaceTab
+      }
+    });
+
+    const close = application.closeWorkspaceTab("tab-1");
+    await vi.waitFor(() => expect(getWorkspaceSnapshot).toHaveBeenCalledTimes(1));
+    application.dispose();
+    reconcile.resolve(snapshot);
+
+    await expect(close).resolves.toMatchObject({ kind: "failed" });
+    expect(getWorkspaceSnapshot).toHaveBeenCalledTimes(1);
+    expect(closeWorkspaceTab).not.toHaveBeenCalled();
+    expect(application.getState().editorTransition).toBeNull();
+  });
+
   it("restores a new editor epoch when active close fails", async () => {
     const pendingSnapshot = createSnapshot({ firstContent: "# Pending\n" });
     const application = createApplication({
@@ -364,6 +429,7 @@ describe("WorkspaceRendererApplication", () => {
       readEditorContent: () => "# Pending\n"
     });
     const oldIdentity = consumeEditorLoad(application);
+    const oldLoadRevision = application.getState().editorLoadRevision;
     application.recordEditorChange({ identity: oldIdentity, content: "# Pending\n" });
 
     const close = application.closeWorkspaceTab("tab-1");
@@ -380,6 +446,7 @@ describe("WorkspaceRendererApplication", () => {
     })).toBe(false);
     const restoredIdentity = consumeEditorLoad(application);
     expect(restoredIdentity.epoch).toBeGreaterThan(oldIdentity.epoch);
+    expect(restoredIdentity.loadRevision).toBe(oldLoadRevision);
     expect(application.recordEditorChange({
       identity: restoredIdentity,
       content: "# Editable again\n"
@@ -398,6 +465,7 @@ describe("WorkspaceRendererApplication", () => {
       readEditorContent: () => "# Pending\n"
     });
     const oldIdentity = consumeEditorLoad(application);
+    const oldLoadRevision = application.getState().editorLoadRevision;
     application.recordEditorChange({ identity: oldIdentity, content: "# Pending\n" });
 
     const close = application.confirmWorkspaceWindowClose("close-1");
@@ -421,6 +489,7 @@ describe("WorkspaceRendererApplication", () => {
     expect(application.getState().editorTransition).toBeNull();
     const restoredIdentity = consumeEditorLoad(application);
     expect(restoredIdentity.epoch).toBeGreaterThan(oldIdentity.epoch);
+    expect(restoredIdentity.loadRevision).toBe(oldLoadRevision);
     expect(application.recordEditorChange({
       identity: restoredIdentity,
       content: "# Editable after cancel\n"
@@ -431,6 +500,7 @@ describe("WorkspaceRendererApplication", () => {
     const activeSecond = createSnapshot({ activeTabId: "tab-2" });
     const removedFirst = createSnapshot({ activeTabId: "tab-2", includeFirst: false });
     const close = createDeferred<WorkspaceWindowSnapshot>();
+    let editorContent = "# First\n";
     const updateWorkspaceTabDraft = vi.fn(async (input: { tabId: string; content: string }) =>
       input.tabId === "tab-1"
         ? activeSecond
@@ -442,7 +512,8 @@ describe("WorkspaceRendererApplication", () => {
         updateWorkspaceTabDraft,
         closeWorkspaceTab: vi.fn(() => close.promise),
         confirmWorkspaceWindowClose: vi.fn(async () => false)
-      }
+      },
+      readEditorContent: () => editorContent
     });
     const firstIdentity = consumeEditorLoad(application);
     application.recordEditorChange({ identity: firstIdentity, content: "# First pending\n" });
@@ -455,6 +526,7 @@ describe("WorkspaceRendererApplication", () => {
       content: "# First pending\n"
     }));
     expect(application.getState().editorTransition).toBeNull();
+    editorContent = "# Second remains editable\n";
     expect(application.recordEditorChange({
       identity: secondIdentity,
       content: "# Second remains editable\n"
@@ -596,6 +668,98 @@ describe("WorkspaceRendererApplication", () => {
     expect(application.getState().workspaceSnapshot?.activeDocument?.content).toBe("# Disk\n");
   });
 
+  it("advances the load boundary when a typed reload succeeds with identical content", async () => {
+    const sameSnapshot = createSnapshot({ firstContent: "# Same\n" });
+    const application = createApplication({
+      initialSnapshot: sameSnapshot,
+      bridge: {
+        reloadWorkspaceTabFromPath: vi.fn(async () => ({
+          kind: "success" as const,
+          snapshot: sameSnapshot
+        }))
+      },
+      readEditorContent: () => "# Same\n"
+    });
+    consumeEditorLoad(application);
+    const oldLoadRevision = application.getState().editorLoadRevision;
+
+    const reload = application.reloadWorkspaceTabFromPath("tab-1");
+    await acknowledgeEditorReadOnly(application);
+    await vi.waitFor(() => {
+      expect(application.getState().editorTransition?.phase).toBe("releasing");
+    });
+    const pendingIdentity = application.getPendingEditorLoadIdentity();
+
+    expect(pendingIdentity?.loadRevision).toBe(oldLoadRevision + 1);
+    await acknowledgeEditorEditable(application);
+    await expect(reload).resolves.toMatchObject({ kind: "committed" });
+  });
+
+  it("does not advance the active editor load boundary when an inactive reload succeeds", async () => {
+    const activeSecond = createSnapshot({ activeTabId: "tab-2" });
+    const application = createApplication({
+      initialSnapshot: activeSecond,
+      bridge: {
+        reloadWorkspaceTabFromPath: vi.fn(async () => ({
+          kind: "success" as const,
+          snapshot: activeSecond
+        }))
+      },
+      readEditorContent: () => "# Second\n"
+    });
+    const activeIdentity = consumeEditorLoad(application);
+    const oldLoadRevision = application.getState().editorLoadRevision;
+
+    await expect(application.reloadWorkspaceTabFromPath("tab-1")).resolves.toMatchObject({
+      kind: "committed"
+    });
+
+    expect(application.getState().editorTransition).toBeNull();
+    expect(application.getState().editorLoadRevision).toBe(oldLoadRevision);
+    expect(application.getEditorBinding()).toEqual(activeIdentity);
+    expect(application.getPendingEditorLoadIdentity()).toBeNull();
+  });
+
+  it.each(["revision-stale", "reload-error"] as const)(
+    "rebinds a %s reload without replacing unchanged editor content",
+    async (resultKind) => {
+      const initialSnapshot = createSnapshot({ firstContent: "# Draft\n" });
+      const application = createApplication({
+        initialSnapshot,
+        bridge: {
+          updateWorkspaceTabDraft: vi.fn(async () => initialSnapshot),
+          reloadWorkspaceTabFromPath: vi.fn(async () => resultKind === "revision-stale"
+            ? { kind: "revision-stale" as const }
+            : {
+                kind: "error" as const,
+                error: { code: "read-failed" as const, message: "read failed" }
+              })
+        },
+        readEditorContent: () => "# Draft\n"
+      });
+      const oldIdentity = consumeEditorLoad(application);
+      const oldLoadRevision = application.getState().editorLoadRevision;
+
+      const reload = application.reloadWorkspaceTabFromPath("tab-1");
+      await acknowledgeEditorReadOnly(application);
+      await vi.waitFor(() => {
+        expect(application.getState().editorTransition?.phase).toBe("releasing");
+      });
+      const pendingIdentity = application.getPendingEditorLoadIdentity();
+
+      expect(pendingIdentity).toMatchObject({
+        tabId: "tab-1",
+        epoch: oldIdentity.epoch + 1,
+        loadRevision: oldLoadRevision
+      });
+      expect(application.acknowledgeEditorLoad(pendingIdentity!)).toBe(true);
+      await acknowledgeEditorEditable(application);
+      await expect(reload).resolves.toMatchObject({ kind: resultKind });
+      expect(application.getEditorBinding()).toEqual(pendingIdentity);
+      expect(application.getState().editorLoadRevision).toBe(oldLoadRevision);
+    }
+  );
+
   it("preserves the cutoff draft when reload transport fails before commit", async () => {
     const recoveredSnapshot = createSnapshot({
       activeTabId: "tab-1",
@@ -646,6 +810,104 @@ describe("WorkspaceRendererApplication", () => {
       content: "# Unsaved draft\n"
     });
     expect(confirmWorkspaceWindowClose).toHaveBeenCalled();
+  });
+
+  it("restores the sealed cutoff draft when reload commits but its response is rejected", async () => {
+    const initialSnapshot = createSnapshot({ firstContent: "# Before reload\n" });
+    const diskSnapshot = createSnapshot({ firstContent: "# Disk after ambiguous reload\n" });
+    let latestSnapshot = initialSnapshot;
+    const updateWorkspaceTabDraft = vi.fn(async (input: { content: string }) => {
+      latestSnapshot = createSnapshot({ firstContent: input.content });
+      return latestSnapshot;
+    });
+    const application = createApplication({
+      initialSnapshot,
+      bridge: {
+        updateWorkspaceTabDraft,
+        reloadWorkspaceTabFromPath: vi.fn(async () => {
+          latestSnapshot = diskSnapshot;
+          throw new Error("reload committed but response was lost");
+        }),
+        getWorkspaceSnapshot: vi.fn(async () => latestSnapshot),
+        confirmWorkspaceWindowClose: vi.fn(async () => true)
+      },
+      readEditorContent: () => "# Unsaved draft\n"
+    });
+    const oldIdentity = consumeEditorLoad(application);
+    const oldLoadRevision = application.getState().editorLoadRevision;
+    application.recordEditorChange({ identity: oldIdentity, content: "# Unsaved draft\n" });
+
+    const reload = application.reloadWorkspaceTabFromPath("tab-1");
+    await acknowledgeEditorReadOnly(application);
+    await acknowledgeEditorEditable(application);
+    await expect(reload).resolves.toMatchObject({ kind: "failed-reconciled" });
+
+    expect(updateWorkspaceTabDraft).toHaveBeenNthCalledWith(1, {
+      tabId: "tab-1",
+      content: "# Unsaved draft\n"
+    });
+    expect(latestSnapshot).toEqual(diskSnapshot);
+    expect(application.getState().workspaceSnapshot?.activeDocument?.content).toBe(
+      "# Unsaved draft\n"
+    );
+    expect(application.getState().editorLoadRevision).toBe(oldLoadRevision);
+
+    const restoredIdentity = consumeEditorLoad(application);
+    const close = application.confirmWorkspaceWindowClose("close-ambiguous");
+    await acknowledgeEditorReadOnly(application);
+    await expect(close).resolves.toMatchObject({ kind: "committed", value: true });
+    expect(restoredIdentity.epoch).toBeGreaterThan(oldIdentity.epoch);
+    expect(updateWorkspaceTabDraft).toHaveBeenNthCalledWith(2, {
+      tabId: "tab-1",
+      content: "# Unsaved draft\n"
+    });
+  });
+
+  it("restores a pre-synced sealed draft when ambiguous reload reconciliation returns disk content", async () => {
+    const initialSnapshot = createSnapshot({ firstContent: "# Before reload\n" });
+    const syncedDraftSnapshot = createSnapshot({ firstContent: "# Pre-synced draft\n" });
+    const diskSnapshot = createSnapshot({ firstContent: "# Disk after reload\n" });
+    let latestSnapshot = initialSnapshot;
+    const updateWorkspaceTabDraft = vi.fn(async () => {
+      latestSnapshot = syncedDraftSnapshot;
+      return syncedDraftSnapshot;
+    });
+    const application = createApplication({
+      initialSnapshot,
+      bridge: {
+        updateWorkspaceTabDraft,
+        reloadWorkspaceTabFromPath: vi.fn(async () => {
+          latestSnapshot = diskSnapshot;
+          throw new Error("reload response lost");
+        }),
+        getWorkspaceSnapshot: vi.fn(async () => latestSnapshot),
+        confirmWorkspaceWindowClose: vi.fn(async () => true)
+      },
+      readEditorContent: () => "# Pre-synced draft\n"
+    });
+    const identity = consumeEditorLoad(application);
+    application.recordEditorChange({ identity, content: "# Pre-synced draft\n" });
+    await expect(application.flushActiveWorkspaceDraft()).resolves.toMatchObject({
+      kind: "committed"
+    });
+    expect(updateWorkspaceTabDraft).toHaveBeenCalledTimes(1);
+
+    const reload = application.reloadWorkspaceTabFromPath("tab-1");
+    await acknowledgeEditorReadOnly(application);
+    await acknowledgeEditorEditable(application);
+    await expect(reload).resolves.toMatchObject({ kind: "failed-reconciled" });
+    expect(application.getState().workspaceSnapshot?.activeDocument?.content).toBe(
+      "# Pre-synced draft\n"
+    );
+
+    consumeEditorLoad(application);
+    const close = application.confirmWorkspaceWindowClose("close-pre-synced");
+    await acknowledgeEditorReadOnly(application);
+    await expect(close).resolves.toMatchObject({ kind: "committed", value: true });
+    expect(updateWorkspaceTabDraft).toHaveBeenNthCalledWith(2, {
+      tabId: "tab-1",
+      content: "# Pre-synced draft\n"
+    });
   });
 
   it("blocks every later command while canonical state remains unknown", async () => {

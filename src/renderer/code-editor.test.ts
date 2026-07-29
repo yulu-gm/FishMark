@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { Transaction } from "@codemirror/state";
+import { isolateHistory, redo, redoDepth, undo, undoDepth } from "@codemirror/commands";
 import { EditorView } from "@codemirror/view";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -207,6 +208,65 @@ describe("createCodeEditorController", () => {
     controller.replaceDocument("Disk replacement");
     expect(controller.getContent()).toBe("Disk replacement");
     expect(onChange).not.toHaveBeenCalled();
+
+    controller.destroy();
+  });
+
+  it("clears undo and redo history when a canonical replacement loads an empty document", () => {
+    const host = document.createElement("div");
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "",
+      onChange: vi.fn()
+    });
+    const view = getEditorView(host);
+
+    view!.dispatch({
+      changes: { from: 0, insert: "X" },
+      annotations: isolateHistory.of("full")
+    });
+    view!.dispatch({
+      changes: { from: 0, to: 1 },
+      annotations: isolateHistory.of("full")
+    });
+    expect(controller.getContent()).toBe("");
+    expect(undoDepth(view!.state)).toBe(2);
+
+    controller.replaceDocument("");
+
+    expect(controller.getContent()).toBe("");
+    expect(undoDepth(view!.state)).toBe(0);
+    expect(redoDepth(view!.state)).toBe(0);
+    expect(undo(view!)).toBe(false);
+    expect(redo(view!)).toBe(false);
+    expect(controller.getContent()).toBe("");
+
+    controller.destroy();
+  });
+
+  it("clears prior undo and redo history when canonical content matches the current document", () => {
+    const host = document.createElement("div");
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "Old",
+      onChange: vi.fn()
+    });
+    const view = getEditorView(host);
+
+    controller.setSelection(3);
+    controller.insertText(" draft");
+    expect(undoDepth(view!.state)).toBeGreaterThan(0);
+    expect(undo(view!)).toBe(true);
+    expect(redoDepth(view!.state)).toBeGreaterThan(0);
+
+    controller.replaceDocument("Old");
+
+    expect(controller.getContent()).toBe("Old");
+    expect(undoDepth(view!.state)).toBe(0);
+    expect(redoDepth(view!.state)).toBe(0);
+    expect(undo(view!)).toBe(false);
+    expect(redo(view!)).toBe(false);
+    expect(controller.getContent()).toBe("Old");
 
     controller.destroy();
   });

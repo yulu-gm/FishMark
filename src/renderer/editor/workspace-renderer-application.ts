@@ -108,12 +108,23 @@ type PendingEditorTransitionBarrier = Readonly<{
   resolve: (applied: boolean) => void;
 }>;
 
+type ReloadDraftCheckpoint = Readonly<{
+  content: string;
+  cutoffGeneration: number;
+}>;
+
 class WorkspaceMutationFailure extends Error {
   constructor(
     readonly kind: MutationFailureKind,
     readonly causeValue: unknown
   ) {
     super(causeValue instanceof Error ? causeValue.message : String(causeValue));
+  }
+}
+
+class WorkspaceRendererApplicationDisposedError extends Error {
+  constructor() {
+    super("Workspace renderer application is disposed.");
   }
 }
 
@@ -494,17 +505,26 @@ export class WorkspaceRendererApplication {
 
   reloadWorkspaceTabFromPath(tabId: string): Promise<WorkspaceReloadOutcome> {
     return this.enqueue("reload", async () => {
+      const disposed = this.getDisposedOutcome();
+      if (disposed !== null) {
+        return disposed;
+      }
       const known = await this.ensureCanonicalKnown();
+      const disposedAfterReconciliation = this.getDisposedOutcome();
+      if (disposedAfterReconciliation !== null) {
+        return disposedAfterReconciliation;
+      }
       if (known !== null) {
         return known;
       }
       const sealsActiveEditor = getActiveTabId(this.state) === tabId;
+      let checkpoint: ReloadDraftCheckpoint | undefined;
 
       try {
         if (sealsActiveEditor) {
           await this.sealEditor("reloading");
         }
-        const cutoff = this.outbox.peek(tabId)?.generation ?? 0;
+        checkpoint = this.captureReloadDraftCheckpoint(tabId);
         await this.drainTab(tabId);
         const result = await this.bridge.reloadWorkspaceTabFromPath({ tabId });
         if (result.kind === "revision-stale") {
@@ -514,18 +534,27 @@ export class WorkspaceRendererApplication {
           return { kind: "reload-error", error: result.error };
         }
 
-        this.outbox.discardThrough(tabId, cutoff);
+        this.outbox.discardThrough(tabId, checkpoint?.cutoffGeneration ?? 0);
         const retainedNewerDraft = this.outbox.has(tabId);
-        this.recordCanonicalSnapshot(result.snapshot, { forceEditorReload: true });
+        this.recordCanonicalSnapshot(result.snapshot, {
+          forceEditorReload: sealsActiveEditor
+        });
         return {
           kind: "committed",
           value: { retainedNewerDraft }
         };
       } catch (error) {
+        if (this.disposed || error instanceof WorkspaceRendererApplicationDisposedError) {
+          return { kind: "failed", error: new WorkspaceRendererApplicationDisposedError() };
+        }
         this.markCanonicalUnknown(error);
+        this.restoreReloadDraftCheckpoint(tabId, checkpoint);
         try {
           const snapshot = await this.bridge.getWorkspaceSnapshot();
-          this.recordCanonicalSnapshot(snapshot, { forceEditorReload: true });
+          if (!snapshot.tabs.some((tab) => tab.tabId === tabId)) {
+            this.outbox.remove(tabId);
+          }
+          this.recordCanonicalSnapshot(snapshot);
           return { kind: "failed-reconciled", error };
         } catch (reconcileError) {
           this.markCanonicalUnknown(reconcileError);
@@ -543,7 +572,15 @@ export class WorkspaceRendererApplication {
     requestId: string
   ): Promise<WorkspaceApplicationOutcome<boolean>> {
     return this.enqueue("window-close", async () => {
+      const disposed = this.getDisposedOutcome();
+      if (disposed !== null) {
+        return disposed;
+      }
       const known = await this.ensureCanonicalKnown();
+      const disposedAfterReconciliation = this.getDisposedOutcome();
+      if (disposedAfterReconciliation !== null) {
+        return disposedAfterReconciliation;
+      }
       if (known !== null) {
         return known;
       }
@@ -558,6 +595,9 @@ export class WorkspaceRendererApplication {
         return { kind: "committed", value };
       } catch (error) {
         shouldReleaseEditor = true;
+        if (this.disposed || error instanceof WorkspaceRendererApplicationDisposedError) {
+          return { kind: "failed", error: new WorkspaceRendererApplicationDisposedError() };
+        }
         if (error instanceof WorkspaceMutationFailure) {
           return this.outcomeFromError(error);
         }
@@ -648,7 +688,15 @@ export class WorkspaceRendererApplication {
     operation: () => Promise<WorkspaceWindowSnapshot>
   ): Promise<WorkspaceApplicationOutcome<void>> {
     return this.enqueue(kind, async () => {
+      const disposed = this.getDisposedOutcome();
+      if (disposed !== null) {
+        return disposed;
+      }
       const known = await this.ensureCanonicalKnown();
+      const disposedAfterReconciliation = this.getDisposedOutcome();
+      if (disposedAfterReconciliation !== null) {
+        return disposedAfterReconciliation;
+      }
       if (known !== null) {
         return known;
       }
@@ -669,6 +717,9 @@ export class WorkspaceRendererApplication {
         this.outbox.remove(tabId);
         return { kind: "committed", value: undefined };
       } catch (error) {
+        if (this.disposed || error instanceof WorkspaceRendererApplicationDisposedError) {
+          return { kind: "failed", error: new WorkspaceRendererApplicationDisposedError() };
+        }
         return this.recoverMutationOutcome(error);
       } finally {
         if (sealsActiveEditor && this.state.editorTransition !== null) {
@@ -745,6 +796,9 @@ export class WorkspaceRendererApplication {
       this.outbox.acknowledge(entry);
       this.recordCanonicalSnapshot(snapshot);
     } catch (error) {
+      if (this.disposed) {
+        throw new WorkspaceRendererApplicationDisposedError();
+      }
       const outcome = await this.recoverMutationOutcome(error);
       throw new WorkspaceMutationFailure(
         outcome.kind === "canonical-unavailable" ? "canonical-unavailable" : "failed-reconciled",
@@ -814,6 +868,11 @@ export class WorkspaceRendererApplication {
     const previousState = this.state;
     const previousDocument = getActiveDocument(previousState);
     let shellState = applyWorkspaceSnapshot(previousState, snapshot);
+    const activeTabId = getActiveTabId(shellState);
+    const pendingContent = activeTabId === null ? undefined : this.outbox.get(activeTabId);
+    if (activeTabId !== null && pendingContent !== undefined) {
+      shellState = applyRendererLocalWorkspaceDraft(shellState, activeTabId, pendingContent);
+    }
     const nextDocument = getActiveDocument(shellState);
     const canonicalReplacement =
       previousDocument?.tabId !== nextDocument?.tabId ||
@@ -825,14 +884,14 @@ export class WorkspaceRendererApplication {
     ) {
       shellState = {
         ...shellState,
-        editorLoadRevision: shellState.editorLoadRevision + 1
+        editorLoadRevision: previousState.editorLoadRevision + 1
       };
     }
-
-    const activeTabId = getActiveTabId(shellState);
-    const pendingContent = activeTabId === null ? undefined : this.outbox.get(activeTabId);
-    if (activeTabId !== null && pendingContent !== undefined) {
-      shellState = applyRendererLocalWorkspaceDraft(shellState, activeTabId, pendingContent);
+    if (!canonicalReplacement && shellState.editorLoadRevision !== previousState.editorLoadRevision) {
+      shellState = {
+        ...shellState,
+        editorLoadRevision: previousState.editorLoadRevision
+      };
     }
 
     if (canonicalReplacement) {
@@ -858,6 +917,9 @@ export class WorkspaceRendererApplication {
   }
 
   private async sealEditor(reason: EditorTransitionReason): Promise<void> {
+    if (this.disposed) {
+      throw new WorkspaceRendererApplicationDisposedError();
+    }
     const token = ++this.editorTransitionSequence;
     const barrier = createEditorTransitionBarrier(token, true);
     this.pendingEditorTransitionBarrier = barrier;
@@ -871,6 +933,9 @@ export class WorkspaceRendererApplication {
       }
     });
     if (!await barrier.promise) {
+      if (this.disposed) {
+        throw new WorkspaceRendererApplicationDisposedError();
+      }
       throw new Error("Editor read-only transition was not applied.");
     }
   }
@@ -888,8 +953,7 @@ export class WorkspaceRendererApplication {
     const barrier = createEditorTransitionBarrier(token, false);
     this.pendingEditorTransitionBarrier = barrier;
     this.editorBinding = null;
-    this.pendingEditorLoadIdentity = null;
-    this.updateState({
+    const nextState: WorkspaceRendererApplicationState = {
       ...this.state,
       editorEpoch: this.state.editorEpoch + 1,
       editorTransition: {
@@ -898,7 +962,13 @@ export class WorkspaceRendererApplication {
         reason: current.reason,
         readOnly: false
       }
-    });
+    };
+    this.pendingEditorLoadIdentity = {
+      tabId: getActiveTabId(nextState)!,
+      epoch: nextState.editorEpoch,
+      loadRevision: nextState.editorLoadRevision
+    };
+    this.updateState(nextState);
     if (!await barrier.promise) {
       this.completeEditorRelease();
     }
@@ -909,15 +979,50 @@ export class WorkspaceRendererApplication {
     const hasActiveEditor = getActiveDocument(this.state) !== null;
     this.state = {
       ...this.state,
-      editorLoadRevision: hasActiveEditor
-        ? this.state.editorLoadRevision + 1
-        : this.state.editorLoadRevision,
       editorTransition: null
     };
-    this.pendingEditorLoadIdentity = hasActiveEditor
-      ? this.createCurrentEditorLoadIdentity()
-      : null;
+    if (!hasActiveEditor) {
+      this.editorBinding = null;
+      this.pendingEditorLoadIdentity = null;
+    } else if (this.editorBinding === null && this.pendingEditorLoadIdentity === null) {
+      this.pendingEditorLoadIdentity = this.createCurrentEditorLoadIdentity();
+    }
     this.emit();
+  }
+
+  private captureReloadDraftCheckpoint(tabId: string): ReloadDraftCheckpoint | undefined {
+    const entry = this.outbox.peek(tabId);
+    const activeDocument = getActiveDocument(this.state);
+    if (activeDocument?.tabId === tabId) {
+      return {
+        content: activeDocument.content,
+        cutoffGeneration: entry?.generation ?? 0
+      };
+    }
+    return entry === undefined
+      ? undefined
+      : {
+          content: entry.content,
+          cutoffGeneration: entry.generation
+        };
+  }
+
+  private restoreReloadDraftCheckpoint(
+    tabId: string,
+    checkpoint: ReloadDraftCheckpoint | undefined
+  ): void {
+    if (checkpoint === undefined || this.outbox.has(tabId)) {
+      return;
+    }
+    this.outbox.set(tabId, checkpoint.content);
+  }
+
+  private getDisposedOutcome():
+    | Extract<WorkspaceApplicationOutcome<never>, { kind: "failed" }>
+    | null {
+    return this.disposed
+      ? { kind: "failed", error: new WorkspaceRendererApplicationDisposedError() }
+      : null;
   }
 
   private createCurrentEditorLoadIdentity(): EditorLoadIdentity | null {

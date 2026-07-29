@@ -59,8 +59,9 @@ describe("editor foundation architecture guard", () => {
     );
     expect(codeEditorSource).toContain("EditorState.readOnly.of(readOnly)");
     expect(codeEditorSource).toContain("EditorState.transactionFilter.of");
-    expect(codeEditorSource).toContain("canonicalDocumentReplacement.of(true)");
-    expect(codeEditorSource).not.toContain("view.setState(");
+    expect(codeEditorSource).toContain("view.setState(createState(nextContent))");
+    expect(codeEditorSource).not.toContain("canonicalDocumentReplacement");
+    expect(codeEditorSource).not.toContain("Transaction.addToHistory.of(false)");
   });
 
   it("accepts the real repository and canonical versioned manifest", () => {
