@@ -416,6 +416,149 @@ describe("WorkspaceRendererApplication", () => {
     expect(application.getState().editorTransition).toBeNull();
   });
 
+  it.each(["reload", "close", "detach", "window-close"] as const)(
+    "does not dispatch %s after disposal while the sealed draft is synchronizing",
+    async (command) => {
+      const draftSync = createDeferred<WorkspaceWindowSnapshot>();
+      const removedSnapshot = createSnapshot({ activeTabId: "tab-2", includeFirst: false });
+      const reloadWorkspaceTabFromPath = vi.fn(async () => ({
+        kind: "success" as const,
+        snapshot: createSnapshot({ firstContent: "# Disk\n" })
+      }));
+      const closeWorkspaceTab = vi.fn(async () => removedSnapshot);
+      const detachWorkspaceTabToNewWindow = vi.fn(async () => removedSnapshot);
+      const confirmWorkspaceWindowClose = vi.fn(async () => true);
+      const application = createApplication({
+        bridge: {
+          updateWorkspaceTabDraft: vi.fn(() => draftSync.promise),
+          reloadWorkspaceTabFromPath,
+          closeWorkspaceTab,
+          detachWorkspaceTabToNewWindow,
+          confirmWorkspaceWindowClose
+        },
+        readEditorContent: () => "# Pending\n"
+      });
+      const identity = consumeEditorLoad(application);
+      application.recordEditorChange({ identity, content: "# Pending\n" });
+
+      const destructive = command === "reload"
+        ? application.reloadWorkspaceTabFromPath("tab-1")
+        : command === "close"
+          ? application.closeWorkspaceTab("tab-1")
+          : command === "detach"
+            ? application.detachWorkspaceTab("tab-1")
+            : application.confirmWorkspaceWindowClose("close-during-draft");
+      await acknowledgeEditorReadOnly(application);
+      await vi.waitFor(() => {
+        expect(application.getState().editorTransition?.phase).toBe("sealed");
+      });
+      application.dispose();
+      draftSync.resolve(createSnapshot({ firstContent: "# Pending\n" }));
+
+      await expect(destructive).resolves.toMatchObject({ kind: "failed" });
+      expect(reloadWorkspaceTabFromPath).not.toHaveBeenCalled();
+      expect(closeWorkspaceTab).not.toHaveBeenCalled();
+      expect(detachWorkspaceTabToNewWindow).not.toHaveBeenCalled();
+      expect(confirmWorkspaceWindowClose).not.toHaveBeenCalled();
+      expect(application.getState().editorTransition).toBeNull();
+    }
+  );
+
+  it("ignores a recovery snapshot that resolves after disposal", async () => {
+    const recovery = createDeferred<WorkspaceWindowSnapshot>();
+    const getWorkspaceSnapshot = vi.fn(() => recovery.promise);
+    const closeWorkspaceTab = vi.fn();
+    const application = createApplication({
+      bridge: {
+        updateWorkspaceTabDraft: vi.fn(async () => {
+          throw new Error("draft transport failed");
+        }),
+        getWorkspaceSnapshot,
+        closeWorkspaceTab
+      },
+      readEditorContent: () => "# Pending\n"
+    });
+    const identity = consumeEditorLoad(application);
+    application.recordEditorChange({ identity, content: "# Pending\n" });
+
+    const close = application.closeWorkspaceTab("tab-1");
+    await acknowledgeEditorReadOnly(application);
+    await vi.waitFor(() => expect(getWorkspaceSnapshot).toHaveBeenCalledTimes(1));
+    application.dispose();
+    recovery.resolve(createSnapshot({ firstContent: "# Late recovery\n" }));
+
+    await expect(close).resolves.toMatchObject({ kind: "failed" });
+    expect(application.getState().workspaceSnapshot?.activeDocument?.content).toBe("# Pending\n");
+    expect(application.getCanonicalStatus()).toBe("unknown");
+    expect(closeWorkspaceTab).not.toHaveBeenCalled();
+    expect(application.getState().editorTransition).toBeNull();
+  });
+
+  it.each(["reload", "close", "detach", "window-close"] as const)(
+    "does not reconcile a dispatched %s rejection delivered after disposal",
+    async (command) => {
+      const dispatched = createDeferred<never>();
+      const getWorkspaceSnapshot = vi.fn(async () => createSnapshot());
+      const reloadWorkspaceTabFromPath = vi.fn(() => dispatched.promise);
+      const closeWorkspaceTab = vi.fn(() => dispatched.promise);
+      const detachWorkspaceTabToNewWindow = vi.fn(() => dispatched.promise);
+      const confirmWorkspaceWindowClose = vi.fn(() => dispatched.promise);
+      const application = createApplication({
+        bridge: {
+          getWorkspaceSnapshot,
+          reloadWorkspaceTabFromPath,
+          closeWorkspaceTab,
+          detachWorkspaceTabToNewWindow,
+          confirmWorkspaceWindowClose
+        }
+      });
+      consumeEditorLoad(application);
+
+      const destructive = command === "reload"
+        ? application.reloadWorkspaceTabFromPath("tab-1")
+        : command === "close"
+          ? application.closeWorkspaceTab("tab-1")
+          : command === "detach"
+            ? application.detachWorkspaceTab("tab-1")
+            : application.confirmWorkspaceWindowClose("close-after-dispatch");
+      await acknowledgeEditorReadOnly(application);
+      const destructiveBridge = command === "reload"
+        ? reloadWorkspaceTabFromPath
+        : command === "close"
+          ? closeWorkspaceTab
+          : command === "detach"
+            ? detachWorkspaceTabToNewWindow
+            : confirmWorkspaceWindowClose;
+      await vi.waitFor(() => expect(destructiveBridge).toHaveBeenCalledTimes(1));
+      application.dispose();
+      dispatched.reject(new Error("late destructive rejection"));
+
+      await expect(destructive).resolves.toMatchObject({ kind: "failed" });
+      expect(getWorkspaceSnapshot).not.toHaveBeenCalled();
+      expect(application.getState().editorTransition).toBeNull();
+    }
+  );
+
+  it("does not start mutation recovery after an operation rejects into a disposed application", async () => {
+    const open = createDeferred<never>();
+    const getWorkspaceSnapshot = vi.fn(async () => createSnapshot());
+    const application = createApplication({
+      bridge: {
+        openWorkspaceFileFromPath: vi.fn(() => open.promise),
+        getWorkspaceSnapshot
+      }
+    });
+    consumeEditorLoad(application);
+
+    const opening = application.openMarkdownFromPath("C:/notes/opened.md");
+    await vi.waitFor(() => expect(application.getPendingOperationKind()).toBe("open"));
+    application.dispose();
+    open.reject(new Error("late open rejection"));
+
+    await expect(opening).resolves.toMatchObject({ kind: "failed" });
+    expect(getWorkspaceSnapshot).not.toHaveBeenCalled();
+  });
+
   it("restores a new editor epoch when active close fails", async () => {
     const pendingSnapshot = createSnapshot({ firstContent: "# Pending\n" });
     const application = createApplication({

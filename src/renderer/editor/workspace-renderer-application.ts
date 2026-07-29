@@ -526,7 +526,9 @@ export class WorkspaceRendererApplication {
         }
         checkpoint = this.captureReloadDraftCheckpoint(tabId);
         await this.drainTab(tabId);
+        this.assertActive();
         const result = await this.bridge.reloadWorkspaceTabFromPath({ tabId });
+        this.assertActive();
         if (result.kind === "revision-stale") {
           return { kind: "revision-stale" };
         }
@@ -551,12 +553,16 @@ export class WorkspaceRendererApplication {
         this.restoreReloadDraftCheckpoint(tabId, checkpoint);
         try {
           const snapshot = await this.bridge.getWorkspaceSnapshot();
+          this.assertActive();
           if (!snapshot.tabs.some((tab) => tab.tabId === tabId)) {
             this.outbox.remove(tabId);
           }
           this.recordCanonicalSnapshot(snapshot);
           return { kind: "failed-reconciled", error };
         } catch (reconcileError) {
+          if (this.disposed || reconcileError instanceof WorkspaceRendererApplicationDisposedError) {
+            return { kind: "failed", error: new WorkspaceRendererApplicationDisposedError() };
+          }
           this.markCanonicalUnknown(reconcileError);
           return { kind: "canonical-unavailable", error: reconcileError };
         }
@@ -590,7 +596,9 @@ export class WorkspaceRendererApplication {
           await this.sealEditor("closing-window");
         }
         await this.drainAllDrafts();
+        this.assertActive();
         const value = await this.bridge.confirmWorkspaceWindowClose({ requestId });
+        this.assertActive();
         shouldReleaseEditor = !value;
         return { kind: "committed", value };
       } catch (error) {
@@ -674,6 +682,12 @@ export class WorkspaceRendererApplication {
 
     try {
       const snapshot = await this.bridge.getWorkspaceSnapshot();
+      if (this.disposed) {
+        return {
+          kind: "canonical-unavailable",
+          error: new WorkspaceRendererApplicationDisposedError()
+        };
+      }
       this.recordCanonicalSnapshot(snapshot);
       return null;
     } catch (error) {
@@ -706,7 +720,9 @@ export class WorkspaceRendererApplication {
           await this.sealEditor(kind === "close" ? "closing-tab" : "detaching-tab");
         }
         await this.drainTab(tabId);
+        this.assertActive();
         const snapshot = await operation();
+        this.assertActive();
         this.recordCanonicalSnapshot(snapshot);
         if (snapshot.tabs.some((tab) => tab.tabId === tabId)) {
           return {
@@ -793,6 +809,7 @@ export class WorkspaceRendererApplication {
         tabId: entry.tabId,
         content: entry.content
       });
+      this.assertActive();
       this.outbox.acknowledge(entry);
       this.recordCanonicalSnapshot(snapshot);
     } catch (error) {
@@ -820,9 +837,14 @@ export class WorkspaceRendererApplication {
   private async recoverMutationOutcome(
     error: unknown
   ): Promise<
+    | Extract<WorkspaceApplicationOutcome<never>, { kind: "failed" }>
     | Extract<WorkspaceApplicationOutcome<never>, { kind: "failed-reconciled" }>
     | Extract<WorkspaceApplicationOutcome<never>, { kind: "canonical-unavailable" }>
   > {
+    const disposed = this.getDisposedOutcome();
+    if (disposed !== null) {
+      return disposed;
+    }
     if (error instanceof WorkspaceMutationFailure) {
       return error.kind === "canonical-unavailable"
         ? { kind: "canonical-unavailable", error: error.causeValue }
@@ -831,9 +853,15 @@ export class WorkspaceRendererApplication {
     this.markCanonicalUnknown(error);
     try {
       const snapshot = await this.bridge.getWorkspaceSnapshot();
+      if (this.disposed) {
+        return { kind: "failed", error: new WorkspaceRendererApplicationDisposedError() };
+      }
       this.recordCanonicalSnapshot(snapshot);
       return { kind: "failed-reconciled", error };
     } catch (reconcileError) {
+      if (this.disposed) {
+        return { kind: "failed", error: new WorkspaceRendererApplicationDisposedError() };
+      }
       this.markCanonicalUnknown(reconcileError);
       return { kind: "canonical-unavailable", error: reconcileError };
     }
@@ -938,6 +966,7 @@ export class WorkspaceRendererApplication {
       }
       throw new Error("Editor read-only transition was not applied.");
     }
+    this.assertActive();
   }
 
   private async releaseEditor(): Promise<void> {
@@ -1023,6 +1052,12 @@ export class WorkspaceRendererApplication {
     return this.disposed
       ? { kind: "failed", error: new WorkspaceRendererApplicationDisposedError() }
       : null;
+  }
+
+  private assertActive(): void {
+    if (this.disposed) {
+      throw new WorkspaceRendererApplicationDisposedError();
+    }
   }
 
   private createCurrentEditorLoadIdentity(): EditorLoadIdentity | null {
