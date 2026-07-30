@@ -5,12 +5,55 @@ import {
   type FileObjectIdentity
 } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
+import {
+  createSaveDocument,
+  createWorkspaceOpen
+} from "@fishmark/workspace-application";
 
 import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator";
-import { createWorkspaceFileOperations } from "./workspace-file-operations";
-import { createWorkspaceOpenApplication } from "./workspace-open-application";
 
 const sender = { id: 1 };
+
+function createSaveDocumentForTest(
+  dependencies: Omit<
+    Parameters<typeof createSaveDocument<typeof sender>>[0],
+    "fileIdentity" | "file" | "dialog" | "watcher" | "recentFiles" | "cleanupReporter"
+  > & {
+    fileIdentityResolver: Parameters<typeof createSaveDocument<typeof sender>>[0]["fileIdentity"];
+    saveMarkdownFileToPath: Parameters<typeof createSaveDocument<typeof sender>>[0]["file"]["write"];
+    showSaveMarkdownPathDialog: Parameters<typeof createSaveDocument<typeof sender>>[0]["dialog"]["chooseSavePath"];
+    beginInternalWrite: Parameters<typeof createSaveDocument<typeof sender>>[0]["watcher"]["beginInternalWrite"];
+    completeInternalWrite: Parameters<typeof createSaveDocument<typeof sender>>[0]["watcher"]["completeInternalWrite"];
+    syncWindowWatch: (context: typeof sender, windowId: string) => Promise<void>;
+    recordRecentFilePath: (targetPath: string) => Promise<void>;
+    reportCleanupError: (error: unknown) => void;
+  }
+) {
+  const {
+    fileIdentityResolver,
+    saveMarkdownFileToPath,
+    showSaveMarkdownPathDialog,
+    beginInternalWrite,
+    completeInternalWrite,
+    syncWindowWatch,
+    recordRecentFilePath,
+    reportCleanupError,
+    ...rest
+  } = dependencies;
+  return createSaveDocument({
+    ...rest,
+    fileIdentity: fileIdentityResolver,
+    file: { write: saveMarkdownFileToPath },
+    dialog: { chooseSavePath: showSaveMarkdownPathDialog },
+    watcher: {
+      beginInternalWrite,
+      completeInternalWrite,
+      syncDocumentPath: (context) => syncWindowWatch(context, "")
+    },
+    recentFiles: { record: recordRecentFilePath },
+    cleanupReporter: { report: reportCleanupError }
+  });
+}
 
 describe("workspace physical file identity transactions", () => {
   it("serializes two Save As operations targeting the same new location", async () => {
@@ -30,7 +73,7 @@ describe("workspace physical file identity transactions", () => {
       exists = true;
       return saved("C:/notes/shared.md", content);
     });
-    const operations = createWorkspaceFileOperations({
+    const operations = createSaveDocumentForTest({
       workspace,
       tabOperations: createKeyedOperationCoordinator(),
       fileLocationOperations: locationOperations,
@@ -49,8 +92,8 @@ describe("workspace physical file identity transactions", () => {
     });
 
     const results = await settleWithin(Promise.all([
-      operations.saveAs({ sender, expectedWindowId: "window-1", tabId: firstTabId }),
-      operations.saveAs({ sender, expectedWindowId: "window-2", tabId: secondTabId })
+      operations.saveAs({ context: sender, expectedWindowId: "window-1", tabId: firstTabId }),
+      operations.saveAs({ context: sender, expectedWindowId: "window-2", tabId: secondTabId })
     ]));
 
     expect(write).toHaveBeenCalledOnce();
@@ -93,7 +136,7 @@ describe("workspace physical file identity transactions", () => {
       return prospective;
     });
     let finishWrite!: () => void;
-    const saveOperations = createWorkspaceFileOperations({
+    const saveOperations = createSaveDocumentForTest({
       workspace,
       tabOperations: createKeyedOperationCoordinator(),
       fileLocationOperations: locationOperations,
@@ -118,16 +161,19 @@ describe("workspace physical file identity transactions", () => {
     });
     const read = vi.fn();
     const activateOwnerWindowTab = vi.fn(async () => "activated" as const);
-    const openApplication = createWorkspaceOpenApplication({
+    const openApplication = createWorkspaceOpen({
       workspace,
       tabOperations: createKeyedOperationCoordinator(),
       fileLocationOperations: locationOperations,
       fileObjectOperations: objectOperations,
-      resolveExisting: resolver.resolveExisting,
-      resolveProspective: resolveOpenProspective,
-      openMarkdownFileFromPath: read,
-      activateOwnerWindowTab,
-      recordRecentFilePath: vi.fn()
+      fileIdentity: {
+        resolveExisting: resolver.resolveExisting,
+        resolveProspective: resolveOpenProspective
+      },
+      file: { read },
+      ownerActivation: { activateOwnerWindowTab },
+      recentFiles: { record: vi.fn() },
+      chooseOpenPath: vi.fn()
     });
 
     const opening = openApplication.openPath({
@@ -136,7 +182,7 @@ describe("workspace physical file identity transactions", () => {
     });
     await openObservedMissingPromise;
     const saving = saveOperations.saveAs({
-      sender,
+      context: sender,
       expectedWindowId: "window-1",
       tabId
     });
@@ -182,7 +228,7 @@ describe("workspace physical file identity transactions", () => {
     const write = vi.fn(async ({ path, content }: { readonly path: string; readonly content: string }) =>
       saved(path, content)
     );
-    const operations = createWorkspaceFileOperations({
+    const operations = createSaveDocumentForTest({
       workspace,
       tabOperations: createKeyedOperationCoordinator(),
       fileLocationOperations: createKeyedOperationCoordinator(),
@@ -204,8 +250,8 @@ describe("workspace physical file identity transactions", () => {
     });
 
     const results = await settleWithin(Promise.all([
-      operations.saveAs({ sender, expectedWindowId: "window-1", tabId: firstTabId }),
-      operations.saveAs({ sender, expectedWindowId: "window-2", tabId: secondTabId })
+      operations.saveAs({ context: sender, expectedWindowId: "window-1", tabId: firstTabId }),
+      operations.saveAs({ context: sender, expectedWindowId: "window-2", tabId: secondTabId })
     ]));
 
     expect(write).toHaveBeenCalledOnce();
@@ -235,7 +281,7 @@ describe("workspace physical file identity transactions", () => {
       physicalKey: identity.object
     });
     const write = vi.fn();
-    const operations = createWorkspaceFileOperations({
+    const operations = createSaveDocumentForTest({
       workspace,
       tabOperations: createKeyedOperationCoordinator(),
       fileLocationOperations: createKeyedOperationCoordinator(),
@@ -259,7 +305,7 @@ describe("workspace physical file identity transactions", () => {
       reportCleanupError: vi.fn()
     });
 
-    await expect(operations.saveAs({ sender, expectedWindowId: "window-1", tabId }))
+    await expect(operations.saveAs({ context: sender, expectedWindowId: "window-1", tabId }))
       .resolves.toMatchObject({ status: "error", error: { code: "file-identity-changed" } });
     expect(write).not.toHaveBeenCalled();
     expect(workspace.getTabSession(tabId)).toMatchObject({ path: null, isDirty: true });
@@ -298,7 +344,7 @@ describe("workspace physical file identity transactions", () => {
       };
     };
     const write = vi.fn();
-    const operations = createWorkspaceFileOperations({
+    const operations = createSaveDocumentForTest({
       workspace,
       tabOperations: createKeyedOperationCoordinator(),
       fileLocationOperations: createKeyedOperationCoordinator(),
@@ -321,12 +367,12 @@ describe("workspace physical file identity transactions", () => {
 
     const results = await settleWithin(Promise.all([
       operations.saveAs({
-        sender,
+        context: sender,
         expectedWindowId: "window-1",
         tabId: first.projection.activeTabId!
       }),
       operations.saveAs({
-        sender,
+        context: sender,
         expectedWindowId: "window-2",
         tabId: second.projection.activeTabId!
       })
@@ -358,7 +404,7 @@ describe("workspace physical file identity transactions", () => {
     workspace.updateTabDraft({ tabId, expectedWindowId: "window-1", content: "dirty" });
     const write = vi.fn();
     const resolver = createStatefulResolver("C:/notes/replaced.md", newIdentity, () => true);
-    const operations = createWorkspaceFileOperations({
+    const operations = createSaveDocumentForTest({
       workspace,
       tabOperations: createKeyedOperationCoordinator(),
       fileLocationOperations: createKeyedOperationCoordinator(),
@@ -373,7 +419,7 @@ describe("workspace physical file identity transactions", () => {
       reportCleanupError: vi.fn()
     });
 
-    await expect(operations.save({ sender, expectedWindowId: "window-1", tabId }))
+    await expect(operations.save({ context: sender, expectedWindowId: "window-1", tabId }))
       .resolves.toMatchObject({ status: "error", error: { code: "file-identity-changed" } });
     expect(write).not.toHaveBeenCalled();
     expect(workspace.getTabSession(tabId)).toMatchObject({

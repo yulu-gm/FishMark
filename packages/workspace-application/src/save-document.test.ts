@@ -1,0 +1,89 @@
+import { createWorkspaceState, fileIdentity } from "@fishmark/workspace-domain";
+import { describe, expect, it, vi } from "vitest";
+
+import {
+  createSaveDocument,
+  type KeyedOperationCoordinator,
+  type KeyedOperationLease
+} from "./index";
+
+function createImmediateCoordinator<TKey extends string>(): KeyedOperationCoordinator<TKey> {
+  const createLease = () => ({ release() {} }) as KeyedOperationLease<TKey>;
+  return {
+    runExclusive: async <T>(_key: TKey, operation: () => Promise<T>) => operation(),
+    runExclusiveWithLease: async <T>(
+      _key: TKey,
+      operation: (lease: KeyedOperationLease<TKey>) => Promise<T>
+    ) => operation(createLease()),
+    acquireExclusive: async () => createLease(),
+    isLeaseHeld: () => true
+  };
+}
+
+describe("createSaveDocument", () => {
+  it("writes a captured canonical checkpoint and commits it clean", async () => {
+    const workspace = createWorkspaceState();
+    workspace.registerWindow("window-1");
+    const identity = fileIdentity("file:c:/notes/a.md");
+    const opened = workspace.openDocument("window-1", {
+      fileIdentity: identity,
+      path: "C:/notes/a.md",
+      name: "a.md",
+      content: "saved",
+      encoding: "utf-8"
+    });
+    if (opened.kind !== "opened") throw new Error("expected opened document");
+    const tabId = opened.projection.activeTabId!;
+    workspace.updateTabDraft({
+      tabId,
+      expectedWindowId: "window-1",
+      content: "captured"
+    });
+    const write = vi.fn(async (input: { path: string; content: string }) => ({
+      status: "success" as const,
+      document: {
+        path: input.path,
+        name: "a.md",
+        content: input.content,
+        encoding: "utf-8" as const
+      }
+    }));
+    const resolved = async () => ({
+      canonicalPath: "C:/notes/a.md",
+      identity,
+      exists: true as const,
+      pathKey: identity.location,
+      physicalKey: identity.object
+    });
+    const saveDocument = createSaveDocument({
+      workspace,
+      tabOperations: createImmediateCoordinator(),
+      fileLocationOperations: createImmediateCoordinator(),
+      fileObjectOperations: createImmediateCoordinator(),
+      fileIdentity: { resolveExisting: resolved, resolveProspective: resolved },
+      file: { write },
+      dialog: { chooseSavePath: vi.fn() },
+      watcher: {
+        beginInternalWrite: vi.fn(),
+        completeInternalWrite: vi.fn(),
+        syncDocumentPath: vi.fn()
+      },
+      recentFiles: { record: vi.fn() },
+      cleanupReporter: { report: vi.fn() }
+    });
+
+    const result = await saveDocument.save({
+      context: { id: 1 },
+      expectedWindowId: "window-1",
+      tabId
+    });
+
+    expect(result.status).toBe("success");
+    expect(write).toHaveBeenCalledWith({
+      tabId,
+      path: "C:/notes/a.md",
+      content: "captured"
+    });
+    expect(workspace.getTabSession(tabId).isDirty).toBe(false);
+  });
+});

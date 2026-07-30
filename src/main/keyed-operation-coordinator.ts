@@ -1,19 +1,7 @@
-declare const keyedOperationLeaseBrand: unique symbol;
-
-export interface KeyedOperationLease<TKey extends string = string> {
-  readonly [keyedOperationLeaseBrand]: TKey;
-  release(): void;
-}
-
-export interface KeyedOperationCoordinator<TKey extends string> {
-  runExclusive<T>(key: TKey, operation: () => Promise<T>): Promise<T>;
-  runExclusiveWithLease<T>(
-    key: TKey,
-    operation: (lease: KeyedOperationLease<TKey>) => Promise<T>
-  ): Promise<T>;
-  acquireExclusive(keys: readonly TKey[]): Promise<KeyedOperationLease<TKey>>;
-  isLeaseHeld(lease: KeyedOperationLease<TKey>, key: TKey): boolean;
-}
+import type {
+  KeyedOperationCoordinator,
+  KeyedOperationLease
+} from "@fishmark/workspace-application";
 
 type PendingOperation = {
   readonly completion: Promise<void>;

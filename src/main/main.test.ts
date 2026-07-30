@@ -4,8 +4,28 @@ import { describe, expect, it } from "vitest";
 
 const readMainSource = () =>
   readFileSync(path.join(process.cwd(), "src", "main", "main.ts"), "utf8").replace(/\r\n/g, "\n");
+const readCloseConfirmationHandlerSource = () =>
+  readFileSync(
+    path.join(process.cwd(), "src", "main", "workspace-window-close-confirmation-handler.ts"),
+    "utf8"
+  ).replace(/\r\n/g, "\n");
 
 describe("main process window wiring", () => {
+  it("keeps the window-close IPC result explicitly constrained to the shared transport DTO", () => {
+    const mainSource = readMainSource();
+    const handlerSource = readCloseConfirmationHandlerSource();
+
+    expect(mainSource).toMatch(
+      /async \(event, input: ConfirmWorkspaceWindowCloseInput\):\s*Promise<ConfirmWorkspaceWindowCloseResult> =>/
+    );
+    expect(handlerSource).not.toContain(
+      "export type WorkspaceWindowCloseConfirmationHandlerResult"
+    );
+    expect(handlerSource).toContain(
+      "satisfies ConfirmWorkspaceWindowCloseResult"
+    );
+  });
+
   it("passes the resolved window icon path into the runtime window manager", () => {
     const mainSource = readMainSource();
 
@@ -48,11 +68,11 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain('ipcMain.handle(LIST_THEME_PACKAGES_CHANNEL');
     expect(mainSource).toContain('ipcMain.handle(REFRESH_THEME_PACKAGES_CHANNEL');
     expect(mainSource).toContain('ipcMain.handle(OPEN_THEMES_DIRECTORY_CHANNEL');
-    expect(mainSource).toContain("createWorkspaceFileWatchApplication({");
+    expect(mainSource).toContain("const workspaceWatcher = {");
     expect(mainSource).toContain(
       "workspaceWindowRegistrationApplication.ensureWindow("
     );
-    expect(mainSource).toContain("workspaceFileWatchApplication.syncWindow({");
+    expect(mainSource).toContain("workspaceApplication.syncWindow({");
     expect(mainSource).not.toContain("workspaceState.getTabPath(input.tabId)");
     expect(mainSource).toContain('temporaryDirectory: resolveTemporaryImageDirectory(');
   });
@@ -68,25 +88,42 @@ describe("main process window wiring", () => {
 
   it("wires the workspace domain state, application boundary, and IPC handlers", () => {
     const mainSource = readMainSource();
-    const legacyModule = ["workspace", "service"].join("-");
-    const legacyFactory = ["create", "Workspace", "Service"].join("");
-
     expect(mainSource).toContain('from "@fishmark/workspace-domain"');
-    expect(mainSource).toContain('import { createWorkspaceApplication } from "./workspace-application"');
-    expect(mainSource).toContain('from "./workspace-close-coordinator"');
-    expect(mainSource).toContain('import { createWorkspaceDetachApplication } from "./workspace-detach-application"');
-    expect(mainSource).toContain('import { createWorkspaceFileOperations } from "./workspace-file-operations"');
-    expect(mainSource).toContain('import { createWorkspaceReloadApplication } from "./workspace-reload-application"');
-    expect(mainSource).toContain("createKeyedOperationCoordinator,");
+    expect(mainSource).toContain('from "@fishmark/workspace-application"');
+    for (const factory of [
+      "createApplyDocumentEdits",
+      "createCloseWorkspace",
+      "createSaveDocument",
+      "createWorkspaceApplication",
+      "createWorkspaceDetach",
+      "createWorkspaceOpen",
+      "createWorkspaceReload",
+      "createWorkspaceTabReorder",
+      "createWorkspaceTabTransfer",
+      "createWorkspaceWindowClose"
+    ]) {
+      expect(mainSource).toContain(factory);
+    }
+    for (const obsoletePath of [
+      "./workspace-application",
+      "./workspace-close-coordinator",
+      "./workspace-file-operations",
+      "./workspace-open-application",
+      "./workspace-reload-application",
+      "./workspace-tab-reorder-application",
+      "./workspace-tab-transfer-application",
+      "./workspace-detach-application",
+      "./workspace-owner-tab-activation-application",
+      "./workspace-window-close-application",
+      "./workspace-file-watch-application"
+    ]) {
+      expect(mainSource).not.toContain(obsoletePath);
+    }
     expect(mainSource).toContain('from "./keyed-operation-coordinator"');
-    expect(mainSource).toContain('import { createWorkspaceWindowCloseApplication } from "./workspace-window-close-application"');
     expect(mainSource).toContain('import { createWorkspaceWindowCloseConfirmationHandler } from "./workspace-window-close-confirmation-handler"');
     expect(mainSource).toContain('import { createWorkspaceWindowCloseRequestBroker } from "./workspace-window-close-request-broker"');
     expect(mainSource).toContain('import { createWorkspaceWindowRegistrationApplication } from "./workspace-window-registration-application"');
-    expect(mainSource).toContain('import { createWorkspaceTabReorderApplication } from "./workspace-tab-reorder-application"');
     expect(mainSource).toContain('import {\n  toWorkspaceMoveTabResult,\n  toWorkspaceWindowSnapshot\n} from "./workspace-ipc-projection"');
-    expect(mainSource).not.toContain(legacyModule);
-    expect(mainSource).not.toContain(legacyFactory);
     expect(mainSource).toContain("GET_WORKSPACE_SNAPSHOT_CHANNEL");
     expect(mainSource).toContain("CREATE_WORKSPACE_TAB_CHANNEL");
     expect(mainSource).toContain("OPEN_WORKSPACE_FILE_CHANNEL");
@@ -96,20 +133,20 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain("UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL");
     expect(mainSource).toContain("const workspaceState = createWorkspaceState()");
     expect(mainSource).toContain("const workspaceTabOperations = createKeyedOperationCoordinator<string>()");
-    expect(mainSource).toContain("const workspaceTabReorderApplication = createWorkspaceTabReorderApplication({");
+    expect(mainSource).toContain("const workspaceTabReorderApplication = createWorkspaceTabReorder({");
     expect(mainSource).toContain("const workspaceApplication = createWorkspaceApplication({");
-    expect(mainSource).toContain("const workspaceCloseCoordinator = createWorkspaceCloseCoordinator({");
-    expect(mainSource).toContain("const workspaceDetachApplication = createWorkspaceDetachApplication({");
+    expect(mainSource).toContain("const closeWorkspace = createCloseWorkspace({");
+    expect(mainSource).toContain("const workspaceDetachApplication = createWorkspaceDetach({");
     expect(mainSource).toContain("createWorkspaceWindowRegistrationApplication<Electron.WebContents, BrowserWindow>({");
     expect(mainSource).toContain("resolveOwnerWindow: (sender) => BrowserWindow.fromWebContents(sender)");
     expect(mainSource).toContain("isOwnerWindowForSender: (ownerWindow, sender) =>");
-    expect(mainSource).toContain("markWindowReady: workspaceDetachApplication.markWindowReady");
+    expect(mainSource).toContain("markWindowReady: workspaceApplication.markWindowReady");
     expect(mainSource).toContain("registerWindow: (windowId) => workspaceState.registerWindow(windowId)");
     expect(mainSource).toContain("bindWindow: bindWorkspaceWindow");
     expect(mainSource).toContain("focusWindow: (windowId) => workspaceState.focusWindow(windowId)");
-    expect(mainSource).toContain("const workspaceFileOperations = createWorkspaceFileOperations({");
-    expect(mainSource).toContain("const workspaceReloadApplication = createWorkspaceReloadApplication({");
-    expect(mainSource).toContain("createWorkspaceWindowCloseApplication<BrowserWindow>({");
+    expect(mainSource).toContain("const workspaceFileOperations = createSaveDocument({");
+    expect(mainSource).toContain("const workspaceReloadApplication = createWorkspaceReload({");
+    expect(mainSource).toContain("createWorkspaceWindowClose<BrowserWindow>({");
     expect(mainSource).toContain("createWorkspaceWindowCloseRequestBroker<WorkspaceWindowCloseConfirmation>({");
     expect(mainSource).toContain("const heldWorkspaceWindowCloseReleases = new Map<string, () => void>()");
     expect(mainSource).toContain(
@@ -122,7 +159,7 @@ describe("main process window wiring", () => {
       "const WORKSPACE_WINDOW_CLOSE_POST_CONFIRM_WATCHDOG_MS = 15_000"
     );
     expect(mainSource).toContain("schedulePostConfirmationWatchdog: (listener) => {");
-    expect(mainSource).toContain("reportCleanupError: (error) => {");
+    expect(mainSource).toContain("report: (error) => {");
     expect(mainSource).toContain(
       '"[fishmark] workspace file operation cleanup failed.",'
     );
@@ -140,7 +177,7 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain("ipcMain.handle(OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL");
     expect(mainSource).toContain("ipcMain.handle(ACTIVATE_WORKSPACE_TAB_CHANNEL");
     expect(mainSource).toContain("ipcMain.handle(CLOSE_WORKSPACE_TAB_CHANNEL");
-    expect(mainSource).toContain("await workspaceTabReorderApplication.reorder({");
+    expect(mainSource).toContain("await workspaceApplication.reorderTab({");
     expect(mainSource).toContain("expectedWindowId: windowId");
     expect(mainSource).not.toContain("workspaceState.reorderTab(input.tabId, input.toIndex)");
     expect(mainSource).toContain(
@@ -174,35 +211,33 @@ describe("main process window wiring", () => {
     expect(closedHandlerSource.indexOf("workspaceState.unregisterWindow(windowId)")).toBeLessThan(
       closedHandlerSource.indexOf("heldRelease?.()")
     );
-    expect(mainSource).toContain("workspaceCloseCoordinator.closeTab({");
+    expect(mainSource).toContain("await workspaceApplication.closeTab({");
     expect(mainSource).toContain("expectedWindowId: windowId");
-    expect(mainSource).toContain("expectedRevision: checkpoint.revision");
     expect(mainSource).toContain(
       "const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender)"
     );
-    expect(mainSource).toContain("workspaceApplication.updateDraft({");
+    expect(mainSource).toContain("workspaceApplication.applyDocumentEdits({");
     expect(mainSource).toContain("expectedWindowId: windowId");
-    expect(mainSource).toContain("requireAppliedWorkspaceMutation(");
-    expect(mainSource).not.toContain(
-      "toWorkspaceWindowSnapshot(workspaceApplication.updateDraft(input))"
-    );
-    expect(mainSource).toContain("workspaceFileOperations.save({");
-    expect(mainSource).toContain("workspaceFileOperations.saveAs({");
-    expect(mainSource).toContain("saveMarkdownFileToPath,");
+    expect(mainSource).not.toContain("workspaceState.updateTabDraft(");
+    expect(mainSource).toContain("workspaceApplication.saveDocument({");
+    expect(mainSource).toContain("workspaceApplication.saveDocumentAs({");
+    expect(mainSource).toContain("write: saveMarkdownFileToPath");
     expect(mainSource).not.toContain("saveTab: workspaceApplication.saveTab");
-    expect(mainSource).toContain("workspaceReloadApplication.reloadTab({");
-    expect(mainSource).toContain("workspaceTabTransferApplication.move({");
+    expect(mainSource).toContain("workspaceApplication.reloadTab({");
+    expect(mainSource).toContain("workspaceApplication.moveTab({");
     expect(mainSource).not.toContain(
       "toWorkspaceMoveTabResult(workspaceState.moveTabToWindow(input))"
     );
     expect(mainSource).toContain(
-      "const projection = await workspaceDetachApplication.detachTab({"
+      "const result = await workspaceApplication.detachTab({"
     );
     expect(mainSource).not.toContain("function requireLiveWorkspaceOwnerWindow");
     expect(mainSource).not.toContain("function ensureWorkspaceWindow");
     expect(mainSource).not.toContain("sender.id");
     expect(mainSource).not.toContain("workspaceState.registerWindow(detachedWindowId)");
-    expect(mainSource).toContain("workspaceState.getWindowProjection(windowId)");
+    expect(mainSource).not.toContain("workspaceState.createUntitledTab(");
+    expect(mainSource).not.toContain("workspaceState.activateTab(");
+    expect(mainSource).not.toContain("workspaceState.getTabSession(input.tabId)");
     expect(mainSource).not.toContain("workspaceState.replaceTabDocument(input.tabId");
   });
 
@@ -228,13 +263,10 @@ describe("main process window wiring", () => {
 
     expect(mainSource).not.toContain("WORKSPACE_WINDOW_SNAPSHOT_EVENT");
     expect(mainSource).toContain("createWorkspaceOwnerTabActivationRequestBroker");
-    expect(mainSource).toContain("createWorkspaceOwnerTabActivationApplication");
+    expect(mainSource).toContain("createWorkspaceOwnerTabActivation");
     expect(mainSource).toContain("activationRequestBroker: workspaceOwnerTabActivationRequestBroker");
     expect(mainSource).toContain("REQUEST_WORKSPACE_OWNER_TAB_ACTIVATION_EVENT");
-    expect(mainSource).toMatch(
-      /activateOwnerWindowTab:\s*workspaceOwnerTabActivationApplication\.activateOwnerWindowTab/
-    );
-    expect(mainSource).not.toContain("activateOwnerWindowTab: async");
+    expect(mainSource).toContain("ownerActivation: workspaceOwnerTabActivationApplication");
   });
 
   it("only initializes the scenario runner stack in test-workbench mode", () => {

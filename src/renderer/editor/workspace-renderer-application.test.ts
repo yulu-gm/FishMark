@@ -161,7 +161,7 @@ describe("WorkspaceRendererApplication", () => {
     const targetSnapshot = createSnapshot({ activeTabId: "tab-2" });
     const closedSnapshot = createSnapshot({ activeTabId: "tab-2", includeFirst: false });
     const updateWorkspaceTabDraft = vi.fn(async () => targetSnapshot);
-    const confirmWorkspaceWindowClose = vi.fn(async () => true);
+    const confirmWorkspaceWindowClose = vi.fn(async () => ({ status: "confirmed" as const }));
     const application = createApplication({
       bridge: {
         getWorkspaceSnapshot: vi.fn(async () => targetSnapshot),
@@ -196,7 +196,7 @@ describe("WorkspaceRendererApplication", () => {
       .fn()
       .mockResolvedValueOnce(targetSnapshot)
       .mockRejectedValueOnce(new Error("second draft rejected"));
-    const confirmWorkspaceWindowClose = vi.fn(async () => true);
+    const confirmWorkspaceWindowClose = vi.fn(async () => ({ status: "confirmed" as const }));
     const application = createApplication({
       bridge: {
         getWorkspaceSnapshot: vi.fn(async () => targetSnapshot),
@@ -427,7 +427,7 @@ describe("WorkspaceRendererApplication", () => {
       }));
       const closeWorkspaceTab = vi.fn(async () => removedSnapshot);
       const detachWorkspaceTabToNewWindow = vi.fn(async () => removedSnapshot);
-      const confirmWorkspaceWindowClose = vi.fn(async () => true);
+      const confirmWorkspaceWindowClose = vi.fn(async () => ({ status: "confirmed" as const }));
       const application = createApplication({
         bridge: {
           updateWorkspaceTabDraft: vi.fn(() => draftSync.promise),
@@ -598,7 +598,7 @@ describe("WorkspaceRendererApplication", () => {
 
   it("freezes the active editor through native close confirmation and restores it on cancel", async () => {
     const pendingSnapshot = createSnapshot({ firstContent: "# Pending\n" });
-    const confirmation = createDeferred<boolean>();
+    const confirmation = createDeferred<{ status: "cancelled" }>();
     const updateWorkspaceTabDraft = vi.fn(async () => pendingSnapshot);
     const application = createApplication({
       bridge: {
@@ -626,7 +626,7 @@ describe("WorkspaceRendererApplication", () => {
     await acknowledgeEditorReadOnly(application);
     await vi.waitFor(() => expect(updateWorkspaceTabDraft).toHaveBeenCalledTimes(1));
 
-    confirmation.resolve(false);
+    confirmation.resolve({ status: "cancelled" });
     await acknowledgeEditorEditable(application);
     await expect(close).resolves.toMatchObject({ kind: "committed", value: false });
     expect(application.getState().editorTransition).toBeNull();
@@ -637,6 +637,34 @@ describe("WorkspaceRendererApplication", () => {
       identity: restoredIdentity,
       content: "# Editable after cancel\n"
     })).toBe(true);
+  });
+
+  it("returns a typed close-confirmation error and restores the active editor", async () => {
+    const application = createApplication({
+      bridge: {
+        confirmWorkspaceWindowClose: vi.fn(async () => ({
+          status: "error" as const,
+          error: {
+            code: "file-identity-changed" as const,
+            message: "The selected file changed while preparing to save. Please try again."
+          }
+        }))
+      }
+    });
+    consumeEditorLoad(application);
+
+    const close = application.confirmWorkspaceWindowClose("close-1");
+    await acknowledgeEditorReadOnly(application);
+    await acknowledgeEditorEditable(application);
+
+    await expect(close).resolves.toEqual({
+      kind: "failed",
+      error: {
+        code: "file-identity-changed",
+        message: "The selected file changed while preparing to save. Please try again."
+      }
+    });
+    expect(application.getState().editorTransition).toBeNull();
   });
 
   it("does not freeze the active editor while removing an inactive tab", async () => {
@@ -654,7 +682,7 @@ describe("WorkspaceRendererApplication", () => {
         getWorkspaceSnapshot: vi.fn(async () => activeSecond),
         updateWorkspaceTabDraft,
         closeWorkspaceTab: vi.fn(() => close.promise),
-        confirmWorkspaceWindowClose: vi.fn(async () => false)
+        confirmWorkspaceWindowClose: vi.fn(async () => ({ status: "cancelled" as const }))
       },
       readEditorContent: () => editorContent
     });
@@ -913,7 +941,7 @@ describe("WorkspaceRendererApplication", () => {
       latestSnapshot = createSnapshot({ activeTabId: "tab-1", firstContent: input.content });
       return latestSnapshot;
     });
-    const confirmWorkspaceWindowClose = vi.fn(async () => true);
+    const confirmWorkspaceWindowClose = vi.fn(async () => ({ status: "confirmed" as const }));
     const application = createApplication({
       initialSnapshot: recoveredSnapshot,
       bridge: {
@@ -972,7 +1000,7 @@ describe("WorkspaceRendererApplication", () => {
           throw new Error("reload committed but response was lost");
         }),
         getWorkspaceSnapshot: vi.fn(async () => latestSnapshot),
-        confirmWorkspaceWindowClose: vi.fn(async () => true)
+        confirmWorkspaceWindowClose: vi.fn(async () => ({ status: "confirmed" as const }))
       },
       readEditorContent: () => "# Unsaved draft\n"
     });
@@ -1024,7 +1052,7 @@ describe("WorkspaceRendererApplication", () => {
           throw new Error("reload response lost");
         }),
         getWorkspaceSnapshot: vi.fn(async () => latestSnapshot),
-        confirmWorkspaceWindowClose: vi.fn(async () => true)
+        confirmWorkspaceWindowClose: vi.fn(async () => ({ status: "confirmed" as const }))
       },
       readEditorContent: () => "# Pre-synced draft\n"
     });

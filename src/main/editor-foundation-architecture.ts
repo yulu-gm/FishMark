@@ -1415,6 +1415,9 @@ function packagePatternMatches(pattern: string, specifier: string): boolean {
   if (patternIdentity.endsWith("/*")) {
     return specifierIdentity.startsWith(patternIdentity.slice(0, -1));
   }
+  if (patternIdentity.endsWith("*")) {
+    return specifierIdentity.startsWith(patternIdentity.slice(0, -1));
+  }
   return specifierIdentity === patternIdentity || specifierIdentity.startsWith(`${patternIdentity}/`);
 }
 

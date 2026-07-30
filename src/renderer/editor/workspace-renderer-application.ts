@@ -597,8 +597,13 @@ export class WorkspaceRendererApplication {
         }
         await this.drainAllDrafts();
         this.assertActive();
-        const value = await this.bridge.confirmWorkspaceWindowClose({ requestId });
+        const result = await this.bridge.confirmWorkspaceWindowClose({ requestId });
         this.assertActive();
+        if (result.status === "error") {
+          shouldReleaseEditor = true;
+          return { kind: "failed", error: result.error };
+        }
+        const value = result.status === "confirmed";
         shouldReleaseEditor = !value;
         return { kind: "committed", value };
       } catch (error) {

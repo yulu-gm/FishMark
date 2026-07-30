@@ -158,6 +158,29 @@ export type ConfirmWorkspaceWindowCloseInput = {
   requestId: string;
 };
 
+export type WorkspaceWindowCloseErrorCode =
+  | "dialog-failed"
+  | "write-failed"
+  | "file-identity-conflict"
+  | "file-identity-changed"
+  | "tab-missing"
+  | "window-missing"
+  | "window-changed"
+  | "revision-changed"
+  | "file-identity-missing"
+  | "runtime-context-unavailable";
+
+export type ConfirmWorkspaceWindowCloseResult =
+  | { status: "confirmed" }
+  | { status: "cancelled" }
+  | {
+      status: "error";
+      error: {
+        code: WorkspaceWindowCloseErrorCode;
+        message: string;
+      };
+    };
+
 export type CompleteWorkspaceWindowCloseInput = {
   requestId: string;
   shouldClose: boolean;

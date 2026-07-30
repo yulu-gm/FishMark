@@ -6,13 +6,13 @@
 
 **Created:** 2026-07-11
 
-**Last updated:** 2026-07-28
+**Last updated:** 2026-07-30
 
 **Overall status:** `IN_PROGRESS`
 
-**Current task:** none — `RF-101` is `COMPLETE`; dependency-ready `RF-102` has not started
+**Current task:** None
 
-**Next required skill:** `$fishmark-task-intake` when `RF-102` is intentionally started, followed by `$fishmark-task-execution` after scope is fixed
+**Next required skill:** `$fishmark-task-intake` for `RF-201` only when the user explicitly starts the next task; RF-201 is dependency-ready but not started
 
 ## 1. Status vocabulary
 
@@ -32,7 +32,7 @@ At most one `RF-xxx` task may be `IN_PROGRESS` or `ACCEPTING` at a time. A later
 | Milestone | Purpose | Status | Complete | Total | Blocking gate |
 | --- | --- | --- | ---: | ---: | --- |
 | M0 | Invariants and executable baselines | `COMPLETE` | 2 | 2 | Behavior matrix and architecture/performance baseline exist |
-| M1 | Canonical workspace domain | `IN_PROGRESS` | 1 | 2 | RF-101 accepted; RF-102 application ports/use cases remain |
+| M1 | Canonical workspace domain | `COMPLETE` | 2 | 2 | RF-101 and RF-102 accepted; domain and application boundaries are production dependencies |
 | M2 | Revisioned edit transport | `PLANNED` | 0 | 4 | Full-draft sync and renderer writable projection removed |
 | M3 | Data safety and recovery | `PLANNED` | 0 | 4 | Inactive files protected; save/recovery/close are canonical |
 | M4 | Recursive parser and incremental cache | `PLANNED` | 0 | 5 | One recursive parser remains; differential cache tests pass |
@@ -43,7 +43,7 @@ At most one `RF-xxx` task may be `IN_PROGRESS` or `ACCEPTING` at a time. A later
 | M9 | Performance, E2E, and security | `PLANNED` | 0 | 3 | Budgets, Playwright flows, and Electron security pass |
 | M10 | Purge and final acceptance | `PLANNED` | 0 | 2 | No compatibility/dead code; final verdict `PASS` |
 
-**Program completion:** 3 / 38 tasks.
+**Program completion:** 4 / 38 tasks.
 
 ## 3. Task ledger
 
@@ -54,7 +54,7 @@ Evidence columns are filled only with fresh command output/report paths from the
 | RF-001 | Editing behavior baseline | — | `COMPLETE` | Canonical/formal runner, observer, protocol, launcher, identity, Typora conversion, listener, and process-tree boundaries accepted; fresh harness + driver: 27 files / 165 tests; public scenario: 121/121 steps in one batch. | Fresh formal Electron gate: 121/121 cases, 2,541/2,541 targets, 79 existing + 1,928 runner matches, 534 exact known defects, 0 unexpected, 0 not-run, 24.573s; public scenario 25.351s; editing experience 79/79; lint 0 errors (8 pre-existing warnings), typecheck, 135-file/1,487-test suite, build, and diff check passed. | Architecture `PASS`; task `PASS`; `reports/task-summaries/RF-001.md` | `codex/editor-foundation-refactor` |
 | RF-002 | Architecture and performance guards | RF-001 | `COMPLETE` | Fresh public foundation gate 7 files/253 tests; fresh `perf:baseline` 23/23 contract checks and 7 files/253 tests. The manifest owns 73 exact CodeMirror targets; real micromark scan counters, resolved/case-folded repository paths, transparent dependency/site module arguments and literal `require` callees, and schema-v1 Vite module provenance close the reviewed evidence gaps. | Fresh lint 0 errors/8 pre-existing warnings; typecheck; 138-file/1,738-test suite; renderer/Electron/CLI build; exclusive formal behavior 121/121 cases and 2,541/2,541 targets with 79 existing + 1,928 runner + 534 known + 0 unexpected/not-run in 24.570s; ordinary dist 0 maps/0 provenance; diff check all passed. | Architecture `PASS` over `a6da237..53824a7`, 0 blocking findings/no open questions; task `PASS`; `reports/task-summaries/RF-002.md` | `codex/editor-foundation-refactor` at implementation head `53824a7` |
 | RF-101 | Extract workspace domain | RF-002 | `COMPLETE` | Production `@fishmark/workspace-domain`; independent location/object ownership registries and typed ambiguous-owner detection; fail-closed filesystem identity resolution; one non-React renderer transaction application with canonical known/unknown admission, strict FIFO, generated per-tab outbox, exact `{tabId, epoch, loadRevision}` CodeMirror ownership, target/all-tab drains, tokenized sealing/sealed/releasing editor-transition acknowledgement, structural CodeMirror hard read-only, fresh-state canonical undo boundaries, recoverable epoch-only rebind, operation-local reload checkpoint, post-await disposal fences, invocation-bound save transactions, and presentation-only hooks; typed application-owned editor test adapter; shell state is a canonical-only projector with no draft merge/reload bypass; exact confirmation and main owner/active-tab/exact-window-instance CAS before focus; opaque active close-save lease capability; one `tab -> location -> object` transaction order shared by open/save/reload/close and transfer; typed reload stale/error results; stateless latest-intent watcher ownership; old main service, renderer hook transaction lanes, split save orchestration, raw test snapshot/mutation paths, shell-state draft compatibility, direct snapshot-push event, rollback activation, duplicate close-save facade, legacy test dialog facade, and dead APIs deleted. | Fresh acceptance: renderer/editing focus 13 files / 863 tests; roadmap domain/main focus 16 files / 217 tests; editor-foundation 7 files / 260 tests; escalated full Vitest 163 files / 2,052 passed + 1 explicit skip; typecheck, lint (0 errors / 8 existing warnings), build, final formal behavior 121/121 cases and 2,541/2,541 targets with 0 unexpected/not-run, residue scans, and diff check passed. | Architecture `PASS` over `f5aa70b..003d4d5`, P0/P1/P2 = 0 and no open questions; task `PASS`; `reports/task-summaries/RF-101.md`; execution handoff: `docs/plans/2026-07-16-rf-101-handoff.md` | `codex/editor-foundation-refactor`, accepted implementation head `003d4d5` |
-| RF-102 | Extract workspace application ports/use cases | RF-101 | `PLANNED` | — | lint/typecheck/test/build | — | — |
+| RF-102 | Extract workspace application ports/use cases | RF-101 | `COMPLETE` | Production runtime-neutral `@fishmark/workspace-application`; explicit consumed ports; typed edit/save/close/open/reload/reorder/transfer/detach/owner-activation/watch orchestration; exhaustive native-close application-to-shared DTO mapping; 11 superseded main-local business modules and obsolete same-name tests deleted; fresh focused gate 23 files / 561 tests. | Editor-foundation 7 files / 267 tests; lint 0 errors / 8 existing warnings; typecheck; full Vitest 165 files / 2,066 passed + 1 skip; build with both workspace runtime verifiers; formal behavior 121/121 cases and 2,541/2,541 targets with 0 unexpected/not-run; forbidden/residue scans and diff check passed. | Architecture `PASS`, P0/P1/P2 = 0; final quality Critical/Important/Minor = 0, `Ready: Yes`; task `PASS`; `reports/task-summaries/RF-102.md`; handoff: `docs/plans/2026-07-30-rf-102-handoff.md` | `codex/editor-foundation-refactor` |
 | RF-201 | Persistent text buffer and session revisions | RF-102 | `PLANNED` | — | typecheck/test/build | — | — |
 | RF-202 | Shared edit contract and main handler | RF-201 | `PLANNED` | — | typecheck/test | — | — |
 | RF-203 | Renderer workspace client and pending queue | RF-202 | `PLANNED` | — | typecheck/test | — | — |
@@ -103,8 +103,40 @@ Evidence columns are filled only with fresh command output/report paths from the
 | 2026-07-11 | No permanent compatibility layer or dead code is allowed. | Every milestone ends with a hard cutover and deletion task. |
 | 2026-07-11 | No parser worker is introduced in this program. | The synchronous incremental model must first meet measured budgets; another process requires a separate decision. |
 | 2026-07-16 / amended 2026-07-28 | `@fishmark/workspace-domain` owns the single canonical workspace/session state; main owns its only live instance and maps immutable projections to shared workspace snapshot DTOs. File-backed ownership is the conjunction of canonical location and filesystem object identity, with ambiguous split ownership represented explicitly. | Draft mutation is a sender-derived owner compare-and-set; stale renderers neither mutate nor receive the target owner's projection. The coordinator owns tab/location/object lock ordering and issues opaque active capabilities for close-held IO. Duplicate open releases validation leases before requesting the owner renderer to flush and activate; main focuses only after exact confirmation and a fresh owner CAS. Reload revision staleness and stable identity/read/conflict errors are distinct no-projection results. Native close carries one request generation and its multi-tab capability through confirmation/save/drain. No direct snapshot-push event, service facade, reload allow-stale path, parameterless close compatibility path, duplicate close-save facade, dual state, or dead application Save API remains. |
+| 2026-07-30 | `@fishmark/workspace-application` is the single runtime-neutral owner of current workspace workflow orchestration and exposes only consumed ports through one public entry. | Main constructs native adapters and maps IPC DTOs only. Typed success/cancel/stale/conflict/error results cross explicit exhaustive mappings; application code cannot import Electron, React, DOM, Node, shared IPC DTOs, CodeMirror, or future infrastructure. Superseded main-local business modules and compatibility aliases are deleted. |
 
 ## 5. Latest accepted task handoff
+
+### Task
+
+`RF-102 — Extract workspace application ports and use cases`
+
+### Status
+
+`COMPLETE` — independent architecture acceptance and formal task acceptance passed on 2026-07-30. M1 is 2/2 `COMPLETE`, program completion is 4/38, and no RF task is active. `RF-201` is dependency-ready but has not started.
+
+### Goal and accepted result
+
+The production runtime-neutral `@fishmark/workspace-application` package now owns current workspace business workflows through explicit consumed ports and one public entry. Main is the composition/native/IPC adapter boundary. Typed outcomes, RF-101 owner/revision/identity/lease ordering, native-close broker drain, editor release, and exact error notification are preserved. All superseded main-local business implementations, obsolete tests/helpers, compatibility aliases, duplicate validators, and speculative ports are absent.
+
+### Verification
+
+- Focused application/main/integration/identity/architecture gate: 23 files / 561 tests.
+- Editor-foundation: 7 files / 267 tests.
+- Lint: 0 errors / 8 existing warnings; typecheck passed.
+- Full Vitest: 165 files / 2,066 passed + 1 explicit skip out of 2,067 total.
+- Build passed, including both workspace runtime verifiers.
+- Formal editor behavior: 121/121 cases, 2,541/2,541 targets, 79 existing, 1,928 runner, 534 known defects, 0 unexpected, 0 not-run.
+- Forbidden-import scan had no hits; retired paths appeared only in `src/main/main.test.ts`'s rejection list; `git diff --check` exited 0.
+- Architecture acceptance: `PASS`, P0/P1/P2 = 0. Final quality review: Critical/Important/Minor = 0, `Ready: Yes`. Formal task acceptance: `PASS`.
+
+### Documentation and next state
+
+- Formal record and manual steps: `reports/task-summaries/RF-102.md`.
+- Execution handoff: `docs/plans/2026-07-30-rf-102-handoff.md`.
+- No RF task is active. Start `RF-201` only through a separate intake turn.
+
+## 5A. Historical accepted task handoff
 
 ### Task
 
@@ -112,7 +144,7 @@ Evidence columns are filled only with fresh command output/report paths from the
 
 ### Status
 
-`COMPLETE` — independent architecture acceptance and formal task acceptance passed on 2026-07-15. M0 is 2/2 complete. At that acceptance checkpoint, `RF-101` had not started; it is now tracked as the active task in the dashboard and ledger above.
+`COMPLETE` — independent architecture acceptance and formal task acceptance passed on 2026-07-15. This RF-002 handoff is retained as historical context; the current latest accepted task is RF-102 above.
 
 ### Goal
 
@@ -190,7 +222,7 @@ git diff --check
 
 A milestone cannot become `COMPLETE` until its row below is checked.
 
-- [ ] M1: `src/main/workspace-service.ts`, main-local workspace application/coordinator, and obsolete tests are deleted.
+- [x] M1: `src/main/workspace-service.ts`, main-local workspace application/coordinator, and obsolete tests are deleted.
 - [ ] M2: full-draft update IPC, renderer local content projection mutation, snapshot-preservation logic, and old mocks are deleted.
 - [ ] M3: active-tab-only watcher and renderer-owned external conflict controller/state are deleted.
 - [ ] M4: old block-map parser, rich-parser stitching, container rescans, and duplicate inline parsing paths are deleted.
@@ -212,10 +244,11 @@ Append one entry when a task changes to `DEV_DONE`, then amend the same entry af
 | 2026-07-15 | RF-002 | Final architecture closure added transparent-wrapper/computed-property micromark detection, transparent literal module-argument and literal `require` callee evidence, reverse-unique active package rules and resolved/case-folded repository path identities; replaced inferred parse-entry counts with explicit micromark document-scan instrumentation; deleted subordinate formatters; and replaced Source Map text-coverage/identity-map assumptions with schema-v1 two-phase Vite provenance. Provenance `moduleIds` are the only forbidden source-group authority; emitted maps are integrity validated and attested mapless chunks are `NOT_EMITTED`. | Initial architecture RED 145/131 pass + 14 expected failures -> GREEN 145/145. Post-`3e0c34e` RED 164/146 pass + 18 expected failures -> GREEN 164/164. Post-`3d8c2b4` RED 177/166 pass + 11 expected failures -> GREEN 177/177. Fresh public foundation 7 files/253 tests; fresh `perf:baseline` passed all 23 canonical checks and 7 files/253 tests. Exact full scans are open 504, edit 502, selection 0, ordered-list 503, outline 502, metrics 503. | Fresh lint 0 errors/8 pre-existing warnings; typecheck; 138 files/1,738 tests; renderer/Electron/CLI build; exclusive formal behavior 121/121 cases and 2,541/2,541 targets with 79 existing/1,928 runner/534 known/0 unexpected/0 not-run in 24.570s; ordinary dist 0 maps/0 provenance; diff check PASS. | Architecture `PASS` over `a6da237..53824a7`, 0 blocking findings/no open questions; task `PASS`; `reports/task-summaries/RF-002.md` | M0 is 2/2 `COMPLETE` and program is 2/38. Final closure commits: `3e0c34e`, `3d8c2b4`, `53824a7`. Earlier execution-phase focus-derived visibility-only flakes were isolated and followed by clean repeats; the first exclusive formal acceptance run was clean. No calibration/runtime change was made. |
 | 2026-07-16 / amended 2026-07-28 | RF-101 | Added the production runtime-neutral workspace-domain package and hard-cut main from the old service. Post-review closure adds exact CodeMirror-acknowledged sealing/sealed/releasing transitions, structural hard read-only, fresh-state canonical undo boundaries, recoverable epoch-only rebind, a bounded reload ambiguity checkpoint, admission and post-await disposal fences, and a typed application-owned editor test adapter. The formal P1 closure deletes shell-state draft merge/reload compatibility and its dead tab getter so only the renderer application owns reconciliation. | Earlier RED covered transition/history/reload/disposal gaps. Formal-review RED then proved obsolete shell-state ownership tokens remained; GREEN makes snapshot application canonical-only and guards against reintroduction. Latest related focus is 4 files / 391 tests; renderer focus is 13 files / 677 tests. | Fresh typecheck, lint (0 errors / 8 existing warnings), and build passed. The preceding escalated full Vitest evidence is 163 files / 2,052 passed plus 1 explicit skip out of 2,053 total. | First formal architecture run failed on the now-fixed P1; architecture re-review and task acceptance remain pending, with no verdict recorded by execution. | M1 remains 0/2 complete and program remains 2/38 until acceptance. `RF-102` remains blocked on RF-101 `COMPLETE`; implementation closure is recorded in the task handoff. |
 | 2026-07-28 | RF-101 | Formal acceptance verified the complete workspace-domain, main transaction, renderer transaction, transition barrier, deletion, and documentation scope without changing implementation code. | Fresh renderer/editing focus 13 files / 863 tests; roadmap workspace-domain/main focus 16 files / 217 tests; editor-foundation 7 files / 260 tests. | Fresh escalated full Vitest 163 files / 2,052 passed + 1 skip; typecheck, lint 0 errors / 8 existing warnings, build, and final exclusive editor behavior 121/121 cases / 2,541/2,541 targets / 0 unexpected / 0 not-run passed. Residue and diff checks passed. | Independent architecture `PASS` over `f5aa70b..003d4d5`, P0/P1/P2 = 0, no open questions; formal task acceptance `PASS`; `reports/task-summaries/RF-101.md`. | M1 is 1/2 `IN_PROGRESS`; program is 3/38. No task is active. `RF-102` is dependency-ready but has not started. |
+| 2026-07-30 | RF-102 | Added the runtime-neutral workspace application package and hard-cut all RF-101 main-local workspace business implementations. The semantic workflow modules and complete façade own mutation-to-watcher order, typed stale/conflict/error outcomes, close Save/Save As routing, and exhaustive native-close result mapping; main owns native composition/adapters and IPC mapping only. | Focused application/main/integration/identity/architecture gate 23 files / 561 tests; editor-foundation 7 files / 267 tests. | Fresh lint 0 errors / 8 existing warnings; typecheck; full Vitest 165 files / 2,066 passed + 1 skip; build including both workspace runtime verifiers; formal behavior 121/121 cases and 2,541/2,541 targets with 0 unexpected/not-run; forbidden/residue scans and diff check passed. | Architecture `PASS`, P0/P1/P2 = 0; final quality Critical/Important/Minor = 0, `Ready: Yes`; task `PASS`; `reports/task-summaries/RF-102.md`. | RF-102 and M1 are `COMPLETE`; program is 4/38. No task is active; RF-201 is dependency-ready but not started. |
 
 ## 8. Blockers and deviations
 
-There are no accepted external blockers or roadmap deviations. RF-001, RF-002, and RF-101 are complete. M0 is 2/2 `COMPLETE`, M1 is 1/2 `IN_PROGRESS`, and program completion is 3/38. No task is active. `RF-102` is dependency-ready and has not started.
+There are no accepted external blockers or roadmap deviations. RF-001, RF-002, RF-101, and RF-102 are complete. M0 and M1 are both 2/2 `COMPLETE`, and program completion is 4/38. No RF task is active. `RF-201` is dependency-ready but remains `PLANNED` and has not started.
 
 Any deviation must record:
 

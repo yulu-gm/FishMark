@@ -6,6 +6,7 @@ import type {
   ActivateWorkspaceTabInput,
   CloseWorkspaceTabInput,
   ConfirmWorkspaceWindowCloseInput,
+  ConfirmWorkspaceWindowCloseResult,
   CreateWorkspaceTabInput,
   DetachWorkspaceTabToNewWindowInput,
   MoveWorkspaceTabToWindowInput,
@@ -86,7 +87,7 @@ export interface ProductBridge {
   ) => () => void;
   confirmWorkspaceWindowClose: (
     input: ConfirmWorkspaceWindowCloseInput
-  ) => Promise<boolean>;
+  ) => Promise<ConfirmWorkspaceWindowCloseResult>;
   onWorkspaceWindowCloseRequest: (
     listener: (input: WorkspaceWindowCloseRequest) => Promise<boolean>
   ) => () => void;

@@ -278,7 +278,7 @@ const productApi: ProductBridge = {
   },
   confirmWorkspaceWindowClose: (
     input: ConfirmWorkspaceWindowCloseInput
-  ): Promise<boolean> =>
+  ): ReturnType<ProductBridge["confirmWorkspaceWindowClose"]> =>
     ipcRenderer.invoke(CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL, input),
   onWorkspaceWindowCloseRequest: (
     listener: (input: WorkspaceWindowCloseRequest) => Promise<boolean>

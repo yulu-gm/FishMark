@@ -148,7 +148,7 @@ describe("Test workbench shell", () => {
       onMenuCommand: vi.fn(() => () => {}),
       onOpenWorkspacePath: vi.fn(() => () => {}),
       onWorkspaceOwnerTabActivationRequest: vi.fn(() => () => {}),
-      confirmWorkspaceWindowClose: vi.fn().mockResolvedValue(true),
+      confirmWorkspaceWindowClose: vi.fn().mockResolvedValue({ status: "confirmed" }),
       onWorkspaceWindowCloseRequest: vi.fn(() => () => {}),
       getPreferences: vi.fn(),
       updatePreferences: vi.fn(),

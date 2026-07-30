@@ -20,6 +20,19 @@ import {
 type ShowNotification = (notification: AppNotification) => void;
 type OpenResult = "opened" | "cancelled" | "failed";
 
+function getFailureMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return error.message;
+  }
+  return String(error);
+}
+
 export function useWorkspaceController(input: {
   fishmark: Window["fishmark"];
   initialSnapshot?: WorkspaceWindowSnapshot | null;
@@ -51,7 +64,7 @@ export function useWorkspaceController(input: {
     }
     showNotification({
       kind: "error",
-      message: outcome.error instanceof Error ? outcome.error.message : String(outcome.error)
+      message: getFailureMessage(outcome.error)
     });
   }, [showNotification]);
 

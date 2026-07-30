@@ -19,6 +19,9 @@ export default defineConfig({
       "@fishmark/test-harness": fileURLToPath(
         new URL("./packages/test-harness/src/index.ts", import.meta.url)
       ),
+      "@fishmark/workspace-application": fileURLToPath(
+        new URL("./packages/workspace-application/src/index.ts", import.meta.url)
+      ),
       "@fishmark/workspace-domain": fileURLToPath(
         new URL("./packages/workspace-domain/src/index.ts", import.meta.url)
       )

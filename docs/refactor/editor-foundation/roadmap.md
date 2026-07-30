@@ -724,7 +724,7 @@ npm.cmd run typecheck
 npm.cmd run build
 ```
 
-**Exit:** development evidence shows one pure workspace implementation, one live main-owned `WorkspaceState`, immutable domain projections, sender-derived owner CAS for draft updates and reorder, captured-revision save semantics, explicit reload staleness that retains external-conflict protections, one per-document transaction owner shared by IO, reorder, and ownership transfer, single-flight ready settlement with fail-closed queued detach cancellation and executable pre/post-ready live-owner validation, a native-close lease held through unregister with bounded transport and post-confirm phases, and no compatibility wrapper or obsolete service symbol. Independent acceptance must confirm this before the task becomes `COMPLETE`; `RF-102` is the next dependency-ready task after that acceptance.
+**Exit:** accepted on 2026-07-28. The implementation has one pure workspace domain, one live main-owned `WorkspaceState`, immutable projections, sender-derived owner CAS, captured-revision save semantics, explicit reload staleness, one coordinated transaction order, bounded native-close leases, and no compatibility wrapper or obsolete service symbol. RF-102 subsequently completed the M1 application boundary on 2026-07-30.
 
 #### RF-102: Extract workspace application ports and use cases
 
@@ -734,6 +734,12 @@ npm.cmd run build
 
 - Create: `packages/workspace-application/src/ports.ts`
 - Create: `packages/workspace-application/src/workspace-application.ts`
+- Create: `packages/workspace-application/src/open-workspace.ts`
+- Create: `packages/workspace-application/src/reload-document.ts`
+- Create: `packages/workspace-application/src/tab-reorder.ts`
+- Create: `packages/workspace-application/src/tab-transfer.ts`
+- Create: `packages/workspace-application/src/detach-workspace.ts`
+- Create: `packages/workspace-application/src/owner-activation.ts`
 - Create: `packages/workspace-application/src/apply-document-edits.ts`
 - Create: `packages/workspace-application/src/save-document.ts`
 - Create: `packages/workspace-application/src/close-workspace.ts`
@@ -748,11 +754,11 @@ npm.cmd run build
 
 **Steps:**
 
-- [ ] Define repository, dialog, watcher, journal, clock, and hash ports.
-- [ ] Move open/create/activate/move/close/save orchestration into use cases.
-- [ ] Return typed results for success, cancellation, conflict, and error.
-- [ ] Make `main.ts` construct dependencies and register handlers only.
-- [ ] Delete the old main-local application/coordinator implementations and tests.
+- [x] Define only the file, identity, dialog, watcher, lifecycle, and coordination ports consumed by RF-102 use cases.
+- [x] Move open/create/activate/move/close/save orchestration into use cases.
+- [x] Return typed results for success, cancellation, conflict, and error.
+- [x] Make `main.ts` construct dependencies and register handlers only.
+- [x] Delete the old main-local application/coordinator implementations and tests.
 
 **Verification:**
 
@@ -763,7 +769,9 @@ npm.cmd run typecheck
 npm.cmd run build
 ```
 
-**Exit:** workspace business workflows are independently testable without Electron or React.
+**Acceptance (2026-07-30):** `PASS`. Fresh focus passed 23 files / 561 tests; editor-foundation passed 7 files / 267 tests; lint, typecheck, the 165-file / 2,066-pass + 1-skip full suite, build with both workspace runtime verifiers, formal 121/121-case behavior gate, forbidden-import and retired-path scans, and diff check passed. Independent architecture acceptance reported P0/P1/P2 = 0; final quality review reported Critical/Important/Minor = 0 and `Ready: Yes`.
+
+**Exit:** accepted. Workspace business workflows are independently testable without Electron or React; M1 is 2/2 `COMPLETE`. `RF-201` is dependency-ready but has not started.
 
 ### Milestone 2 — Revisioned edit transport
 
@@ -937,6 +945,7 @@ npm.cmd run build
 **Steps:**
 
 - [ ] Read and hash the disk document when stat metadata differs.
+- [ ] Introduce clock and hash ports with the safe-save use cases that consume them.
 - [ ] Reject normal save when disk version differs from the session version.
 - [ ] Implement safe temporary-file write and platform-appropriate replace while preserving explicit error results.
 - [ ] Update saved revision/disk version only after durable success.
@@ -968,6 +977,7 @@ npm.cmd run build
 **Steps:**
 
 - [ ] Append accepted edit batches with tab/session/revision metadata.
+- [ ] Introduce the journal port with the recovery use cases that consume it; reuse the clock/hash contracts only where recovery needs them.
 - [ ] Compact journals into snapshots after a bounded number of batches.
 - [ ] Use checksums and atomic replacement for journal/snapshot files.
 - [ ] Mark clean shutdown and prune journals only after saved revisions are durable.

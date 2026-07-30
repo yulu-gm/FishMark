@@ -645,7 +645,7 @@ describe("App autosave", () => {
   let openExternalLink: ReturnType<typeof vi.fn<(href: string) => Promise<void>>>;
   let selectTemporaryImageDirectory: ReturnType<typeof vi.fn<() => Promise<string | null>>>;
   let confirmWorkspaceWindowClose: ReturnType<
-    typeof vi.fn<(input: { requestId: string }) => Promise<boolean>>
+    typeof vi.fn<Window["fishmark"]["confirmWorkspaceWindowClose"]>
   >;
   let colorSchemeMediaQuery: MockMediaQueryList;
   let workspaceWindowId: string;
@@ -1097,8 +1097,8 @@ describe("App autosave", () => {
     openExternalLink = vi.fn<(href: string) => Promise<void>>().mockResolvedValue(undefined);
     selectTemporaryImageDirectory = vi.fn<() => Promise<string | null>>().mockResolvedValue(null);
     confirmWorkspaceWindowClose = vi
-      .fn<(input: { requestId: string }) => Promise<boolean>>()
-      .mockResolvedValue(true);
+      .fn<Window["fishmark"]["confirmWorkspaceWindowClose"]>()
+      .mockResolvedValue({ status: "confirmed" });
 
     window.fishmark = {
       platform: "win32",
@@ -2369,6 +2369,29 @@ describe("App autosave", () => {
     expect(container.querySelector('[data-fishmark-region="app-notification-banner"]')?.textContent).toContain(
       "draft sync failed"
     );
+  });
+
+  it("shows the typed close-confirmation error message when saving during close fails", async () => {
+    await renderAndOpenDocument();
+    confirmWorkspaceWindowClose.mockResolvedValueOnce({
+      status: "error",
+      error: {
+        code: "file-identity-changed",
+        message: "The selected file changed while preparing to save. Please try again."
+      }
+    });
+
+    let shouldClose = true;
+    await act(async () => {
+      shouldClose = await (workspaceWindowCloseRequestListener?.({
+        requestId: "window-1:close-error"
+      }) ?? Promise.resolve(true));
+      await Promise.resolve();
+    });
+
+    expect(shouldClose).toBe(false);
+    expect(container.querySelector('[data-fishmark-region="app-notification-banner"]')?.textContent)
+      .toContain("The selected file changed while preparing to save. Please try again.");
   });
 
   it("shows an autosave error banner when the pre-save draft sync fails", async () => {

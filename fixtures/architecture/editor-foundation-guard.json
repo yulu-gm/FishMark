@@ -27,7 +27,7 @@
       "id": "workspace-application",
       "path": "packages/workspace-application",
       "publicEntry": "@fishmark/workspace-application",
-      "state": "planned",
+      "state": "active",
       "boundaryRuleId": "boundary.workspace-application"
     },
     {
@@ -113,6 +113,28 @@
         "src/renderer",
         "packages/editor-core",
         "packages/workspace-application",
+        "packages/workspace-infrastructure"
+      ]
+    },
+    {
+      "id": "boundary.workspace-application",
+      "kind": "forbidden-imports",
+      "state": "active",
+      "sourcePath": "packages/workspace-application",
+      "forbiddenPackages": [
+        "react",
+        "react-dom",
+        "electron",
+        "@codemirror/*",
+        "node:*"
+      ],
+      "forbiddenPaths": [
+        "src/main",
+        "src/preload",
+        "src/renderer",
+        "src/shared",
+        "packages/editor-core",
+        "packages/markdown-engine",
         "packages/workspace-infrastructure"
       ]
     },

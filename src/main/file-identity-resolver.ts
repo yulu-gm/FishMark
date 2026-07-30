@@ -6,36 +6,15 @@ import path from "node:path";
 
 import {
   fileIdentity,
-  type FileIdentity,
   type FileLocationIdentity,
   type FileObjectIdentity
 } from "@fishmark/workspace-domain";
+import type {
+  FileIdentityPort,
+  ResolvedExistingFileIdentity,
+  ResolvedFileIdentity
+} from "@fishmark/workspace-application";
 
-interface ResolvedFileLocation {
-  readonly canonicalPath: string;
-  readonly pathKey: FileLocationIdentity;
-}
-
-export interface ResolvedExistingFileIdentity extends ResolvedFileLocation {
-  readonly exists: true;
-  readonly identity: FileIdentity;
-  readonly physicalKey: FileObjectIdentity;
-}
-
-export interface ResolvedProspectiveFileIdentity extends ResolvedFileLocation {
-  readonly exists: false;
-  readonly identity: null;
-  readonly physicalKey: null;
-}
-
-export type ResolvedFileIdentity =
-  | ResolvedExistingFileIdentity
-  | ResolvedProspectiveFileIdentity;
-
-export interface FileIdentityResolver {
-  resolveExisting(targetPath: string): Promise<ResolvedExistingFileIdentity>;
-  resolveProspective(targetPath: string): Promise<ResolvedFileIdentity>;
-}
 
 type FileIdentityResolverDependencies = {
   readonly platform: NodeJS.Platform;
@@ -56,7 +35,7 @@ const defaultDependencies: FileIdentityResolverDependencies = {
 
 export function createFileIdentityResolver(
   dependencies: FileIdentityResolverDependencies = defaultDependencies
-): FileIdentityResolver {
+): FileIdentityPort {
   const pathApi = dependencies.platform === "win32" ? path.win32 : path.posix;
 
   async function resolved(

@@ -13,6 +13,7 @@ import {
   CLOSE_WORKSPACE_TAB_CHANNEL,
   COMPLETE_WORKSPACE_WINDOW_CLOSE_CHANNEL,
   CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL,
+  type ConfirmWorkspaceWindowCloseResult,
   CREATE_WORKSPACE_TAB_CHANNEL,
   DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL,
   GET_WORKSPACE_SNAPSHOT_CHANNEL,
@@ -253,7 +254,9 @@ describe("preload bridge", () => {
       onWorkspaceWindowCloseRequest: (
         listener: (input: { requestId: string }) => Promise<boolean>
       ) => () => void;
-      confirmWorkspaceWindowClose: (input: { requestId: string }) => Promise<boolean>;
+      confirmWorkspaceWindowClose: (
+        input: { requestId: string }
+      ) => Promise<ConfirmWorkspaceWindowCloseResult>;
     }).onWorkspaceWindowCloseRequest(closeListener);
 
     const closeRequestCall = on.mock.calls.find(
@@ -275,7 +278,9 @@ describe("preload bridge", () => {
     ]);
 
     void (api as unknown as {
-      confirmWorkspaceWindowClose: (input: { requestId: string }) => Promise<boolean>;
+      confirmWorkspaceWindowClose: (
+        input: { requestId: string }
+      ) => Promise<ConfirmWorkspaceWindowCloseResult>;
     }).confirmWorkspaceWindowClose({ requestId: "close-1" });
 
     expect(invoke.mock.calls).toContainEqual([

@@ -113,6 +113,47 @@ describe("editor foundation architecture guard", () => {
     ]);
   });
 
+  it("binds the active workspace-application package to exactly one matching active rule", () => {
+    const manifest = readCanonicalManifest();
+    const applicationPackages = (manifest.packages as MutableRecord[]).filter(
+      (targetPackage) => targetPackage.id === "workspace-application"
+    );
+    const applicationRules = (manifest.rules as MutableRecord[]).filter(
+      (rule) => rule.id === "boundary.workspace-application"
+    );
+
+    expect(applicationPackages).toEqual([
+      expect.objectContaining({
+        boundaryRuleId: "boundary.workspace-application",
+        path: "packages/workspace-application",
+        state: "active"
+      })
+    ]);
+    expect(applicationRules).toEqual([
+      expect.objectContaining({
+        forbiddenPackages: [
+          "react",
+          "react-dom",
+          "electron",
+          "@codemirror/*",
+          "node:*"
+        ],
+        forbiddenPaths: [
+          "src/main",
+          "src/preload",
+          "src/renderer",
+          "src/shared",
+          "packages/editor-core",
+          "packages/markdown-engine",
+          "packages/workspace-infrastructure"
+        ],
+        kind: "forbidden-imports",
+        sourcePath: "packages/workspace-application",
+        state: "active"
+      })
+    ]);
+  });
+
   it.each([
     ["Electron", 'import { app } from "electron"; void app;'],
     ["React", 'import React from "react"; void React;'],
@@ -127,6 +168,54 @@ describe("editor foundation architecture guard", () => {
     });
 
     expect(expectCodes(validateSynthetic(repository))).toContain("forbidden-import");
+  });
+
+  it.each([
+    ["Electron", 'import { app } from "electron"; void app;'],
+    ["React", 'import React from "react"; void React;'],
+    [
+      "CodeMirror",
+      'import type { Text } from "@codemirror/state"; export type Forbidden = Text;'
+    ],
+    ["Node API", 'import path from "node:path"; void path;'],
+    ["main source", 'import "../../../src/main/main";'],
+    ["shared source", 'import "../../../src/shared/workspace";']
+  ])("rejects a workspace-application import of %s", (_name, source) => {
+    const repository = createSyntheticRepository({
+      "packages/workspace-application/src/forbidden.ts": source
+    });
+    const manifest = readSyntheticManifest(repository);
+    (manifest.packages as MutableRecord[]).push({
+      id: "workspace-application",
+      path: "packages/workspace-application",
+      publicEntry: "@fishmark/workspace-application",
+      state: "active",
+      boundaryRuleId: "boundary.workspace-application"
+    });
+    (manifest.rules as MutableRecord[]).push({
+      id: "boundary.workspace-application",
+      kind: "forbidden-imports",
+      state: "active",
+      sourcePath: "packages/workspace-application",
+      forbiddenPackages: [
+        "react",
+        "react-dom",
+        "electron",
+        "@codemirror/*",
+        "node:*"
+      ],
+      forbiddenPaths: [
+        "src/main",
+        "src/preload",
+        "src/renderer",
+        "src/shared",
+        "packages/editor-core",
+        "packages/markdown-engine",
+        "packages/workspace-infrastructure"
+      ]
+    });
+
+    expect(expectCodes(validateSynthetic(repository, manifest))).toContain("forbidden-import");
   });
 
   it("allows workspace-domain runtime-neutral local imports", () => {

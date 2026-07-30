@@ -1,7 +1,9 @@
 import type {
   ConfirmWorkspaceWindowCloseRequest,
+  ConfirmWorkspaceWindowCloseResult as ApplicationConfirmWorkspaceWindowCloseResult,
   WorkspaceWindowCloseConfirmation
-} from "./workspace-close-coordinator";
+} from "@fishmark/workspace-application";
+import type { ConfirmWorkspaceWindowCloseResult } from "../shared/workspace";
 import type {
   WorkspaceWindowCloseConfirmationScope,
   WorkspaceWindowCloseRequestIdentity
@@ -16,35 +18,55 @@ type WorkspaceWindowCloseConfirmationHandlerDependencies = {
       readonly confirmation: WorkspaceWindowCloseConfirmation;
     }): boolean;
   };
-  closeCoordinator: {
+  closeWorkspace: {
     confirmWindowClose(
       input: ConfirmWorkspaceWindowCloseRequest
-    ): Promise<WorkspaceWindowCloseConfirmation | null>;
+    ): Promise<ApplicationConfirmWorkspaceWindowCloseResult>;
   };
 };
+
+function assertNever(value: never): never {
+  throw new Error(`Unexpected workspace close confirmation result: ${String(value)}`);
+}
 
 export function createWorkspaceWindowCloseConfirmationHandler(
   dependencies: WorkspaceWindowCloseConfirmationHandlerDependencies
 ) {
   return async function handleWorkspaceWindowCloseConfirmation(
     identity: WorkspaceWindowCloseRequestIdentity
-  ): Promise<boolean> {
+  ): Promise<ConfirmWorkspaceWindowCloseResult> {
     const scope = dependencies.broker.beginConfirmation(identity);
     if (scope === null) {
-      return false;
+      return { status: "cancelled" };
     }
 
     try {
-      const confirmation =
-        await dependencies.closeCoordinator.confirmWindowClose({
+      const result =
+        await dependencies.closeWorkspace.confirmWindowClose({
           windowId: identity.windowId,
           isActive: scope.isActive
         });
-      return confirmation !== null &&
-        dependencies.broker.setConfirmation({
-          ...identity,
-          confirmation
-        });
+      switch (result.status) {
+        case "cancelled":
+          return { status: "cancelled" } satisfies ConfirmWorkspaceWindowCloseResult;
+        case "error":
+          return {
+            status: "error",
+            error: {
+              code: result.error.code,
+              message: result.error.message
+            }
+          } satisfies ConfirmWorkspaceWindowCloseResult;
+        case "confirmed":
+          return dependencies.broker.setConfirmation({
+            ...identity,
+            confirmation: result.confirmation
+          })
+            ? { status: "confirmed" } satisfies ConfirmWorkspaceWindowCloseResult
+            : { status: "cancelled" } satisfies ConfirmWorkspaceWindowCloseResult;
+        default:
+          return assertNever(result);
+      }
     } finally {
       scope.finish();
     }
