@@ -1,7 +1,6 @@
 import type { ExternalMarkdownFileChangedEvent } from "../../shared/external-file-change";
 import type {
   WorkspaceDocumentSnapshot,
-  WorkspaceTabStripItem,
   WorkspaceWindowSnapshot
 } from "../../shared/workspace";
 
@@ -21,11 +20,6 @@ export type EditorShellState = {
   openState: OpenState;
 };
 
-type ApplyWorkspaceSnapshotOptions = {
-  currentEditorContent?: string;
-  preserveActiveDocumentDraft?: boolean;
-};
-
 export function createInitialEditorShellState(): EditorShellState {
   return {
     workspaceSnapshot: null,
@@ -38,84 +32,26 @@ export function getActiveDocument(state: EditorShellState): WorkspaceDocumentSna
   return state.workspaceSnapshot?.activeDocument ?? null;
 }
 
-export function getWorkspaceTabs(state: EditorShellState): WorkspaceTabStripItem[] {
-  return state.workspaceSnapshot?.tabs ?? [];
-}
-
 export function getActiveTabId(state: EditorShellState): string | null {
   return state.workspaceSnapshot?.activeTabId ?? null;
 }
 
 export function applyWorkspaceSnapshot(
   currentState: EditorShellState,
-  snapshot: WorkspaceWindowSnapshot,
-  options: ApplyWorkspaceSnapshotOptions = {}
+  snapshot: WorkspaceWindowSnapshot
 ): EditorShellState {
-  const effectiveSnapshot = options.preserveActiveDocumentDraft
-    ? preserveCurrentActiveDocumentDraft(currentState, snapshot, options.currentEditorContent)
-    : snapshot;
   const currentActiveDocument = getActiveDocument(currentState);
-  const nextActiveDocument = effectiveSnapshot.activeDocument;
+  const nextActiveDocument = snapshot.activeDocument;
   const activeDocumentChanged =
     currentActiveDocument?.tabId !== nextActiveDocument?.tabId ||
-    shouldReloadActiveDocumentFromSnapshot({
-      currentActiveDocument,
-      nextActiveDocument,
-      currentEditorContent: options.currentEditorContent
-    });
+    currentActiveDocument?.content !== nextActiveDocument?.content;
 
   return {
-    workspaceSnapshot: effectiveSnapshot,
+    workspaceSnapshot: snapshot,
     editorLoadRevision: activeDocumentChanged
       ? currentState.editorLoadRevision + 1
       : currentState.editorLoadRevision,
     openState: currentState.openState
-  };
-}
-
-function preserveCurrentActiveDocumentDraft(
-  currentState: EditorShellState,
-  snapshot: WorkspaceWindowSnapshot,
-  currentEditorContent: string | undefined
-): WorkspaceWindowSnapshot {
-  const currentActiveDocument = getActiveDocument(currentState);
-  const nextActiveDocument = snapshot.activeDocument;
-
-  if (
-    currentEditorContent === undefined ||
-    !currentState.workspaceSnapshot ||
-    !currentActiveDocument ||
-    !nextActiveDocument ||
-    currentActiveDocument.tabId !== nextActiveDocument.tabId ||
-    currentEditorContent === nextActiveDocument.content
-  ) {
-    return snapshot;
-  }
-
-  const hasNewerRendererDraft =
-    currentActiveDocument.isDirty || currentEditorContent !== currentActiveDocument.content;
-
-  if (!hasNewerRendererDraft) {
-    return snapshot;
-  }
-
-  return {
-    ...snapshot,
-    tabs: snapshot.tabs.map((tab) =>
-      tab.tabId === currentActiveDocument.tabId
-        ? {
-            ...tab,
-            isDirty: true,
-            saveState: tab.saveState === "idle" ? "idle" : tab.saveState
-          }
-        : tab
-    ),
-    activeDocument: {
-      ...nextActiveDocument,
-      content: currentEditorContent,
-      isDirty: true,
-      saveState: nextActiveDocument.saveState === "idle" ? "idle" : nextActiveDocument.saveState
-    }
   };
 }
 
@@ -161,24 +97,4 @@ export function keepExternalMarkdownMemoryVersion(
 
 export function clearExternalMarkdownFileState(): ExternalMarkdownFileState {
   return { status: "idle" };
-}
-
-function shouldReloadActiveDocumentFromSnapshot(input: {
-  currentActiveDocument: WorkspaceDocumentSnapshot | null;
-  nextActiveDocument: WorkspaceDocumentSnapshot | null;
-  currentEditorContent: string | undefined;
-}): boolean {
-  if (input.currentActiveDocument?.content === input.nextActiveDocument?.content) {
-    return false;
-  }
-
-  if (
-    input.currentEditorContent !== undefined &&
-    input.currentActiveDocument?.tabId === input.nextActiveDocument?.tabId &&
-    input.currentEditorContent !== input.currentActiveDocument?.content
-  ) {
-    return false;
-  }
-
-  return true;
 }

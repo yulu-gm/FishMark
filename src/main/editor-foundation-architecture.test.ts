@@ -46,6 +46,10 @@ describe("editor foundation architecture guard", () => {
       resolve(process.cwd(), "src/renderer/code-editor.ts"),
       "utf8"
     );
+    const editorShellStateSource = readFileSync(
+      resolve(process.cwd(), "src/renderer/editor/editor-shell-state.ts"),
+      "utf8"
+    );
 
     expect(applicationSource).not.toContain("replaceViewState");
     expect(hookSource).not.toContain("applyState");
@@ -62,6 +66,15 @@ describe("editor foundation architecture guard", () => {
     expect(codeEditorSource).toContain("view.setState(createState(nextContent))");
     expect(codeEditorSource).not.toContain("canonicalDocumentReplacement");
     expect(codeEditorSource).not.toContain("Transaction.addToHistory.of(false)");
+    for (const obsoleteToken of [
+      "ApplyWorkspaceSnapshotOptions",
+      "currentEditorContent",
+      "preserveActiveDocumentDraft",
+      "preserveCurrentActiveDocumentDraft",
+      "getWorkspaceTabs"
+    ]) {
+      expect(editorShellStateSource).not.toContain(obsoleteToken);
+    }
   });
 
   it("accepts the real repository and canonical versioned manifest", () => {
