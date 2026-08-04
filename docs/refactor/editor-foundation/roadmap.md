@@ -843,27 +843,30 @@ npm.cmd run typecheck
 
 #### RF-203: Renderer workspace client and pending edit queue
 
-**Status:** dependency-ready `PLANNED`; not started.
+**Status:** `IN_PROGRESS`; intake accepted on 2026-08-04.
 
 **Outcome:** CodeMirror stays responsive while main remains authoritative.
 
 **Files:**
 
-- Create: `src/renderer/application/workspace-client.ts`
+- Create: `src/renderer/application/workspace-edit-client.ts`
 - Create: `src/renderer/application/pending-edit-queue.ts`
-- Create: `src/renderer/application/workspace-client.test.ts`
+- Create: `src/renderer/application/workspace-edit-client.test.ts`
 - Create: `src/renderer/application/pending-edit-queue.test.ts`
 - Modify: `src/renderer/code-editor.ts`
 - Modify: `src/renderer/editor/useWorkspaceController.ts`
 
 **Steps:**
 
-- [ ] Serialize CodeMirror transactions into repository-owned `TextChange[]`.
+- [ ] Serialize CodeMirror transactions into repository-owned `DocumentTextChange[]`.
 - [ ] Batch edits per animation frame without changing undo grouping.
 - [ ] Send batches in client-sequence order and retain unacknowledged changes.
-- [ ] Implement `flushEdits()` for save, switch, move, detach, reload, and close barriers.
+- [ ] Implement composition-aware edit barriers for save, switch, detach-to-new-window, reload,
+  close, and every existing renderer ownership-transfer caller; do not claim a nonexistent
+  cross-existing-window move UI.
 - [ ] On conflict, reload canonical text and remap pending changes; if remapping is ambiguous, create a recovery tab containing the local text.
-- [ ] Keep dirty UI derived from confirmed revision plus non-empty pending queue.
+- [ ] Keep dirty UI derived from observed canonical dirty metadata plus non-empty pending/recovery
+  work, without advancing the acknowledged text/revision transport baseline from projections.
 
 **Verification:**
 

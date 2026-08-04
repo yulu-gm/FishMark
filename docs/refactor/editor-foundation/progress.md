@@ -10,9 +10,9 @@
 
 **Overall status:** `IN_PROGRESS`
 
-**Current task:** none
+**Current task:** `RF-203 — Renderer workspace client and pending edit queue` (`IN_PROGRESS`)
 
-**Next required skill:** `$fishmark-task-intake` for `RF-203 — Renderer workspace client and pending queue`
+**Next required skill:** `$superpowers:brainstorming`
 
 ## 1. Status vocabulary
 
@@ -33,7 +33,7 @@ At most one `RF-xxx` task may be `IN_PROGRESS` or `ACCEPTING` at a time. A later
 | --- | --- | --- | ---: | ---: | --- |
 | M0 | Invariants and executable baselines | `COMPLETE` | 2 | 2 | Behavior matrix and architecture/performance baseline exist |
 | M1 | Canonical workspace domain | `COMPLETE` | 2 | 2 | RF-101 and RF-102 accepted; domain and application boundaries are production dependencies |
-| M2 | Revisioned edit transport | `IN_PROGRESS` | 2 | 4 | RF-201 and RF-202 accepted; RF-203 is dependency-ready but not started |
+| M2 | Revisioned edit transport | `IN_PROGRESS` | 2 | 4 | RF-203 is the only active task; formal acceptance is required before RF-204 |
 | M3 | Data safety and recovery | `PLANNED` | 0 | 4 | Inactive files protected; save/recovery/close are canonical |
 | M4 | Recursive parser and incremental cache | `PLANNED` | 0 | 5 | One recursive parser remains; differential cache tests pass |
 | M5 | Pure semantic editor model | `PLANNED` | 0 | 6 | All semantic commands migrated; old command engine removed |
@@ -57,7 +57,7 @@ Evidence columns are filled only with fresh command output/report paths from the
 | RF-102 | Extract workspace application ports/use cases | RF-101 | `COMPLETE` | Production runtime-neutral `@fishmark/workspace-application`; explicit consumed ports; typed edit/save/close/open/reload/reorder/transfer/detach/owner-activation/watch orchestration; exhaustive native-close application-to-shared DTO mapping; 11 superseded main-local business modules and obsolete same-name tests deleted; fresh focused gate 23 files / 561 tests. | Editor-foundation 7 files / 267 tests; lint 0 errors / 8 existing warnings; typecheck; full Vitest 165 files / 2,066 passed + 1 skip; build with both workspace runtime verifiers; formal behavior 121/121 cases and 2,541/2,541 targets with 0 unexpected/not-run; forbidden/residue scans and diff check passed. | Architecture `PASS`, P0/P1/P2 = 0; final quality Critical/Important/Minor = 0, `Ready: Yes`; task `PASS`; `reports/task-summaries/RF-102.md`; handoff: `docs/plans/2026-07-30-rf-102-handoff.md` | `codex/editor-foundation-refactor` |
 | RF-201 | Persistent text buffer and session revisions | RF-102 | `COMPLETE` | Persistent CodeMirror `Text` production buffer behind runtime-neutral domain `TextBuffer`; explicit factory composition; revisioned/idempotent edit batches; contiguous client high-watermarks; malformed-input validation; public-entry/runtime guards and fail-closed source-root containment; handoff: `docs/plans/2026-08-04-rf-201-handoff.md`. | Post-fix domain/infrastructure 4 files / 163 tests; architecture 1 file / 209 tests; earlier cross-layer focus 63 files / 816 passed + 1 skip; editor-foundation 7 files / 285 tests; lint 0 errors / 8 existing warnings; typecheck; full Vitest 166 files / 2,162 passed + 1 skip; build with three workspace runtime verifiers; formal behavior 121/121 cases / 2,541/2,541 targets / 0 unexpected / 0 not-run; final acceptance-document diff check passed. | Specification/architecture `PASS`, P0/P1/P2 = 0 and no open questions; final quality Critical/Important/Minor = 0, `Ready: Yes`; task `PASS`; `reports/task-summaries/RF-201.md` | `codex/editor-foundation-refactor` |
 | RF-202 | Shared edit contract and main handler | RF-201 | `COMPLETE` | Repository-owned edit/flush/projection DTOs; revision-bearing snapshots; owner-aware metadata-only domain edit/checkpoint entries; apply and through-sequence flush under the same per-tab coordinator with mandatory in-critical-section sender authorization; exact IPC result reconstruction; one complete preload product builder protected by a fail-closed TypeScript symbol/owner invariant. The renamed `updateDocumentDraft` channel remains only as explicit RF-204 deletion debt; handoff: `docs/plans/2026-08-04-rf-202-handoff.md`. | Fresh focus 24 files / 529 tests; editor-foundation 7 files / 307 tests; lint 0 errors / 8 existing warnings; typecheck; full Vitest 172 files / 2,232 passed + 1 skip out of 2,233; renderer/Electron/CLI build with all three workspace runtime verifiers; formal behavior 121/121 cases / 2,541/2,541 targets / 0 unexpected / 0 not-run; diff check passed with line-ending warnings only. | Architecture `PASS`, P0/P1/P2 = 0, no open questions; final quality Critical 0, Important 0, Minor 1, `Ready: Yes`; task `PASS`; `reports/task-summaries/RF-202.md`. | `codex/editor-foundation-refactor` |
-| RF-203 | Renderer workspace client and pending queue | RF-202 | `PLANNED` | — | typecheck/test | — | — |
+| RF-203 | Renderer workspace client and pending queue | RF-202 | `IN_PROGRESS` | Intake: `docs/plans/2026-08-04-rf-203-intake.md`; implementation and focused evidence pending. | typecheck/test | — | `codex/editor-foundation-refactor` |
 | RF-204 | Full-draft synchronization hard cutover | RF-203 | `PLANNED` | — | lint/typecheck/test/build | — | — |
 | RF-301 | Per-document watch registry | RF-204 | `PLANNED` | — | typecheck/test/build | — | — |
 | RF-302 | Conflict-aware safe save | RF-301 | `PLANNED` | — | typecheck/test/build | — | — |
@@ -251,7 +251,7 @@ Append one entry when a task changes to `DEV_DONE`, then amend the same entry af
 
 ## 8. Blockers and deviations
 
-There are no accepted external blockers or roadmap deviations. RF-001, RF-002, RF-101, RF-102, RF-201, and RF-202 are complete. M0 and M1 are both 2/2 `COMPLETE`; M2 is 2/4 `IN_PROGRESS`; program completion is 6/38. No task is active. RF-203 is dependency-ready `PLANNED` and has not started.
+There are no accepted external blockers or roadmap deviations. RF-001, RF-002, RF-101, RF-102, RF-201, and RF-202 are complete. M0 and M1 are both 2/2 `COMPLETE`; M2 is 2/4 `IN_PROGRESS`; accepted program completion remains 6/38. RF-203 started after its one-time intake on 2026-08-04 and is the only active task; RF-204 cannot start until RF-203 formal acceptance passes.
 
 Any deviation must record:
 
