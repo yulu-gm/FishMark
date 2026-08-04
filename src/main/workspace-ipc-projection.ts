@@ -30,6 +30,8 @@ export function toWorkspaceWindowSnapshot(
             name: projection.activeDocument.name,
             content: projection.activeDocument.content,
             encoding: projection.activeDocument.encoding,
+            revision: projection.activeDocument.revision,
+            savedRevision: projection.activeDocument.savedRevision,
             isDirty: projection.activeDocument.isDirty,
             saveState: projection.activeDocument.saveState
           }

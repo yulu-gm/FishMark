@@ -54,7 +54,14 @@ function createWatchApplication<TContext>(input: {
       detachTab: async () => Promise.reject(new Error("unused")),
       markWindowReady: async () => undefined
     },
-    edits: { apply: (command) => workspace.updateTabDraft(command) },
+    drafts: { update: (command) => workspace.updateTabDraft(command) },
+    edits: {
+      apply: async (command) => workspace.applyDocumentEdits(command),
+      flush: async () => ({
+        kind: "error" as const,
+        error: { code: "unknown-tab" as const, message: "Unknown document tab." }
+      })
+    },
     save: {
       save: async () => ({ status: "cancelled" as const }),
       saveAs: async () => ({ status: "cancelled" as const })

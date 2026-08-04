@@ -130,6 +130,8 @@ it("renders workspace tabs and delegates commands without owning persistence log
             name: "note.md",
             content: "# Note\n",
             encoding: "utf-8",
+            revision: 1,
+            savedRevision: 0,
             isDirty: true,
             saveState: "idle"
           }
@@ -329,6 +331,8 @@ it("opens find and replace controls and delegates search actions to the editor",
             name: "note.md",
             content: "alpha beta\nBeta alpha\n",
             encoding: "utf-8",
+            revision: 0,
+            savedRevision: 0,
             isDirty: false,
             saveState: "idle"
           }

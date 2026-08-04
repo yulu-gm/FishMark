@@ -26,6 +26,8 @@ function createSnapshot(content = "# Initial\n"): WorkspaceWindowSnapshot {
       name: "note.md",
       content,
       encoding: "utf-8",
+      revision: 0,
+      savedRevision: 0,
       isDirty: false,
       saveState: "idle"
     }
@@ -150,6 +152,8 @@ describe("useWorkspaceController", () => {
         name: "Untitled",
         content: "",
         encoding: "utf-8",
+        revision: 0,
+        savedRevision: 0,
         isDirty: false,
         saveState: "idle"
       }

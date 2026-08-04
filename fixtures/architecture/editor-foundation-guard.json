@@ -164,6 +164,25 @@
       ]
     },
     {
+      "id": "boundary.shared",
+      "kind": "forbidden-imports",
+      "state": "active",
+      "sourcePath": "src/shared",
+      "forbiddenPackages": [
+        "electron",
+        "@codemirror/*",
+        "@fishmark/workspace-domain",
+        "@fishmark/workspace-application",
+        "@fishmark/workspace-infrastructure"
+      ],
+      "forbiddenPaths": [
+        "src/main",
+        "src/preload",
+        "src/renderer",
+        "packages"
+      ]
+    },
+    {
       "id": "boundary.renderer",
       "kind": "forbidden-imports",
       "state": "active",
@@ -179,11 +198,26 @@
       "kind": "forbidden-imports",
       "state": "active",
       "sourcePath": "src/preload",
-      "forbiddenPackages": [],
+      "forbiddenPackages": [
+        "@codemirror/*",
+        "@fishmark/workspace-domain",
+        "@fishmark/workspace-application",
+        "@fishmark/workspace-infrastructure"
+      ],
       "forbiddenPaths": [
         "src/main",
         "src/renderer"
       ]
+    },
+    {
+      "id": "invariant.preload-product-bridge-builder",
+      "kind": "unique-complete-interface-builder",
+      "state": "active",
+      "sourcePath": "src/preload",
+      "builderPath": "src/preload/product-api.ts",
+      "builderName": "createProductApi",
+      "interfacePath": "src/shared/product-bridge.ts",
+      "interfaceName": "ProductBridge"
     },
     {
       "id": "boundary.main",

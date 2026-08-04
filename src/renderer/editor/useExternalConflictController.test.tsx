@@ -19,6 +19,8 @@ function createActiveDocument(
     name: input.name ?? "note.md",
     content: input.content ?? "# Note\n",
     encoding: "utf-8",
+    revision: input.revision ?? (input.isDirty ? 1 : 0),
+    savedRevision: input.savedRevision ?? 0,
     isDirty: input.isDirty ?? false,
     saveState: input.saveState ?? "idle"
   };

@@ -30,8 +30,17 @@ describe("package scripts", () => {
     expect(packageJson.scripts?.["dev:electron"]).toContain(
       "dist-electron/shared/workspace.js"
     );
+    expect(packageJson.scripts?.["dev:electron"]).toContain(
+      "dist-electron/shared/document-edit.js"
+    );
+    expect(packageJson.scripts?.["dev:electron"]).toContain(
+      "dist-electron/shared/document-projection.js"
+    );
     expect(packageJson.scripts?.["dev:electron:test-workbench"]).toContain(
       "dist-electron/shared/workspace.js"
+    );
+    expect(packageJson.scripts?.["dev:electron:test-workbench"]).toContain(
+      "dist-electron/shared/document-edit.js"
     );
   });
 
@@ -156,7 +165,7 @@ describe("package scripts", () => {
     expect(viteConfigSource).toContain('base: "./"');
   });
 
-  it("only imports shared contracts from the preload source", () => {
+  it("keeps preload composition limited to shared contracts and the complete product builder", () => {
     const preloadPath = path.join(process.cwd(), "src", "preload", "preload.ts");
     const preloadSource = readFileSync(preloadPath, "utf8");
     const localImports = Array.from(preloadSource.matchAll(/from\s+["']([^"']+)["']/g))
@@ -165,7 +174,9 @@ describe("package scripts", () => {
       .filter((importPath) => importPath.startsWith("."));
 
     expect(localImports).not.toContain("./");
-    expect(localImports.filter((importPath) => !importPath.startsWith("../shared/"))).toEqual([]);
+    expect(localImports.filter((importPath) => !importPath.startsWith("../shared/"))).toEqual([
+      "./product-api"
+    ]);
   });
 
   it("defines a Windows packaging entry that builds before invoking electron-builder", () => {

@@ -19,6 +19,8 @@ export type WorkspaceDocumentSnapshot = {
   name: string;
   content: string;
   encoding: "utf-8";
+  revision: number;
+  savedRevision: number;
   isDirty: boolean;
   saveState: WorkspaceTabSaveState;
 };

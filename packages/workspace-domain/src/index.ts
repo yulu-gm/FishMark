@@ -30,6 +30,8 @@ export {
 } from "./text-buffer";
 export {
   createWorkspaceState,
+  type ApplyWorkspaceDocumentEditsInput,
+  type ApplyWorkspaceDocumentEditsResult,
   type CreateWorkspaceStateInput,
   type CloseWorkspaceTabInput,
   type CommitWorkspaceDocumentInput,
@@ -40,6 +42,11 @@ export {
   type ReorderWorkspaceTabInput,
   type UpdateWorkspaceTabDraftInput,
   type WorkspaceDocumentProjection,
+  type WorkspaceDocumentMetadataProjection,
+  type WorkspaceDocumentEditError,
+  type WorkspaceDocumentEditErrorCode,
+  type GetWorkspaceDocumentEditCheckpointInput,
+  type GetWorkspaceDocumentEditCheckpointResult,
   type WorkspaceMoveProjection,
   type WorkspaceMutationResult,
   type WorkspaceSaveMutationResult,

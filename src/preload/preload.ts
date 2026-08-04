@@ -1,67 +1,26 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
-import type { AppNotification, AppUpdateState } from "../shared/app-update";
-import type { EditorTestCommandEnvelope, EditorTestCommandResultEnvelope } from "../shared/editor-test-command";
-import type {
-  ExternalMarkdownFileChangedEvent
-} from "../shared/external-file-change";
-import { APP_MENU_COMMAND_EVENT, type AppMenuCommand } from "../shared/menu-command";
-import type {
-  Preferences,
-  PreferencesUpdate,
-  UpdatePreferencesResult
-} from "../shared/preferences";
-import type {
-  ClearRecentFileInput,
-  RecentFilesSnapshot
-} from "../shared/recent-files";
-import type { ProductBridge } from "../shared/product-bridge";
-import type { ExportHtmlFileInput } from "../shared/export-html-file";
-import type { SaveMarkdownFileAsInput, SaveMarkdownFileInput } from "../shared/save-markdown-file";
-import type {
-  RunnerEventEnvelope,
-  ScenarioRunTerminal
-} from "../shared/test-run-session";
-import type { TestBridge } from "../shared/test-bridge";
+
+import {
+  COMPLETE_EDITOR_TEST_COMMAND_CHANNEL,
+  EDITOR_TEST_COMMAND_EVENT,
+  type EditorTestCommandEnvelope,
+  type EditorTestCommandResultEnvelope
+} from "../shared/editor-test-command";
 import {
   resolvePreloadBridgeModeFromArgv,
   type PreloadBridgeMode
 } from "../shared/preload-bridge-mode";
-import type {
-  ActivateWorkspaceTabInput,
-  CloseWorkspaceTabInput,
-  ConfirmWorkspaceOwnerTabActivationInput,
-  ConfirmWorkspaceWindowCloseInput,
-  CompleteWorkspaceWindowCloseInput,
-  CreateWorkspaceTabInput,
-  DetachWorkspaceTabToNewWindowInput,
-  MoveWorkspaceTabToWindowInput,
-  OpenWorkspaceFileFromPathResult,
-  OpenWorkspaceFileResult,
-  OpenWorkspacePathRequest,
-  ReloadWorkspaceTabFromPathInput,
-  ReloadWorkspaceTabFromPathResult,
-  ReorderWorkspaceTabInput,
-  UpdateWorkspaceTabDraftInput,
-  WorkspaceMoveTabResult,
-  WorkspaceOwnerTabActivationRequest,
-  WorkspaceWindowCloseRequest,
-  WorkspaceWindowSnapshot
-} from "../shared/workspace";
-import type { HandleDroppedMarkdownFileInput } from "../shared/open-markdown-file";
+import type { TestBridge } from "../shared/test-bridge";
 import {
-  LIST_THEME_PACKAGES_CHANNEL,
-  OPEN_THEMES_DIRECTORY_CHANNEL,
-  REFRESH_THEME_PACKAGES_CHANNEL,
-  type ThemePackageDescriptor
-} from "../shared/theme-package";
-import {
-  HANDLE_DROPPED_MARKDOWN_FILE_CHANNEL
-} from "../shared/open-markdown-file";
-import { LIST_FONT_FAMILIES_CHANNEL } from "../shared/font-families";
-import {
-  OPEN_EXTERNAL_LINK_CHANNEL,
-  type OpenExternalLinkInput
-} from "../shared/external-link";
+  INTERRUPT_SCENARIO_RUN_CHANNEL,
+  OPEN_EDITOR_TEST_WINDOW_CHANNEL,
+  SCENARIO_RUN_EVENT,
+  SCENARIO_RUN_TERMINAL_EVENT,
+  START_SCENARIO_RUN_CHANNEL,
+  type RunnerEventEnvelope,
+  type ScenarioRunTerminal
+} from "../shared/test-run-session";
+import { createProductApi } from "./product-api";
 
 export type {
   EditorTestCommandEnvelope,
@@ -85,302 +44,19 @@ export type {
   ExternalMarkdownFileChangedEvent as PreloadExternalMarkdownFileChangedEvent
 } from "../shared/external-file-change";
 
-import {
-  ACTIVATE_WORKSPACE_TAB_CHANNEL,
-  CLOSE_WORKSPACE_TAB_CHANNEL,
-  COMPLETE_WORKSPACE_WINDOW_CLOSE_CHANNEL,
-  CONFIRM_WORKSPACE_OWNER_TAB_ACTIVATION_CHANNEL,
-  CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL,
-  CREATE_WORKSPACE_TAB_CHANNEL,
-  DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL,
-  GET_WORKSPACE_SNAPSHOT_CHANNEL,
-  OPEN_WORKSPACE_FILE_CHANNEL,
-  OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL,
-  OPEN_WORKSPACE_PATH_EVENT,
-  RELOAD_WORKSPACE_TAB_FROM_PATH_CHANNEL,
-  REORDER_WORKSPACE_TAB_CHANNEL,
-  REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT,
-  REQUEST_WORKSPACE_OWNER_TAB_ACTIVATION_EVENT,
-  UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL,
-  MOVE_WORKSPACE_TAB_TO_WINDOW_CHANNEL
-} from "../shared/workspace";
-import {
-  APP_NOTIFICATION_EVENT,
-  APP_UPDATE_STATE_EVENT,
-  CHECK_FOR_APP_UPDATES_CHANNEL
-} from "../shared/app-update";
-import {
-  COMPLETE_EDITOR_TEST_COMMAND_CHANNEL,
-  EDITOR_TEST_COMMAND_EVENT
-} from "../shared/editor-test-command";
-import {
-  EXTERNAL_MARKDOWN_FILE_CHANGED_EVENT,
-  SYNC_WATCHED_MARKDOWN_FILE_CHANNEL
-} from "../shared/external-file-change";
-import {
-  GET_PREFERENCES_CHANNEL,
-  PREFERENCES_CHANGED_EVENT,
-  SELECT_TEMPORARY_IMAGE_DIRECTORY_CHANNEL,
-  UPDATE_PREFERENCES_CHANNEL
-} from "../shared/preferences";
-import {
-  CLEAR_RECENT_FILE_CHANNEL,
-  GET_RECENT_FILES_CHANNEL,
-  RECENT_FILES_CHANGED_EVENT
-} from "../shared/recent-files";
-import {
-  IMPORT_CLIPBOARD_IMAGE_CHANNEL,
-  type ImportClipboardImageInput,
-  type ImportClipboardImageResult
-} from "../shared/clipboard-image-import";
-import {
-  INTERRUPT_SCENARIO_RUN_CHANNEL,
-  OPEN_EDITOR_TEST_WINDOW_CHANNEL,
-  SCENARIO_RUN_EVENT,
-  SCENARIO_RUN_TERMINAL_EVENT,
-  START_SCENARIO_RUN_CHANNEL
-} from "../shared/test-run-session";
-import { SAVE_MARKDOWN_FILE_AS_CHANNEL, SAVE_MARKDOWN_FILE_CHANNEL } from "../shared/save-markdown-file";
-import { EXPORT_HTML_FILE_CHANNEL } from "../shared/export-html-file";
-// Preload runs inside Electron's sandboxed environment, so only preload-local
-// runtime helpers stay here. Contract shapes and IPC names come from shared modules.
-const RUNTIME_MODE_ARGUMENT_PREFIX = "--fishmark-runtime-mode=";
-const STARTUP_OPEN_PATH_ARGUMENT_PREFIX = "--fishmark-startup-open-path=";
-
-function completeWorkspaceWindowClose(input: CompleteWorkspaceWindowCloseInput): Promise<void> {
-  return ipcRenderer.invoke(COMPLETE_WORKSPACE_WINDOW_CLOSE_CHANNEL, input);
-}
-
-function resolveRuntimeModeFromArgv(argv: string[]): "editor" | "test-workbench" {
-  const runtimeArgument = argv.find((entry) => entry.startsWith(RUNTIME_MODE_ARGUMENT_PREFIX));
-  const runtimeValue = runtimeArgument?.slice(RUNTIME_MODE_ARGUMENT_PREFIX.length);
-
-  return runtimeValue === "test-workbench" ? "test-workbench" : "editor";
-}
-
-function resolveStartupOpenPathFromArgv(argv: string[]): string | null {
-  const startupArgument = argv.find((entry) => entry.startsWith(STARTUP_OPEN_PATH_ARGUMENT_PREFIX));
-  const encodedPath = startupArgument?.slice(STARTUP_OPEN_PATH_ARGUMENT_PREFIX.length);
-
-  if (!encodedPath) {
-    return null;
-  }
-
-  try {
-    return decodeURIComponent(encodedPath);
-  } catch {
-    return encodedPath;
-  }
-}
-
-const productApi: ProductBridge = {
-  platform: process.platform,
-  runtimeMode: resolveRuntimeModeFromArgv(process.argv ?? []),
-  startupOpenPath: resolveStartupOpenPathFromArgv(process.argv ?? []),
-  handleDroppedMarkdownFile: (input: HandleDroppedMarkdownFileInput) =>
-    ipcRenderer.invoke(HANDLE_DROPPED_MARKDOWN_FILE_CHANNEL, input),
-  getWorkspaceSnapshot: (): Promise<WorkspaceWindowSnapshot> =>
-    ipcRenderer.invoke(GET_WORKSPACE_SNAPSHOT_CHANNEL),
-  createWorkspaceTab: (input: CreateWorkspaceTabInput): Promise<WorkspaceWindowSnapshot> =>
-    ipcRenderer.invoke(CREATE_WORKSPACE_TAB_CHANNEL, input),
-  openWorkspaceFile: (): Promise<OpenWorkspaceFileResult> =>
-    ipcRenderer.invoke(OPEN_WORKSPACE_FILE_CHANNEL),
-  openWorkspaceFileFromPath: (targetPath: string): Promise<OpenWorkspaceFileFromPathResult> =>
-    ipcRenderer.invoke(OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL, { targetPath }),
-  reloadWorkspaceTabFromPath: (
-    input: ReloadWorkspaceTabFromPathInput
-  ): Promise<ReloadWorkspaceTabFromPathResult> =>
-    ipcRenderer.invoke(RELOAD_WORKSPACE_TAB_FROM_PATH_CHANNEL, input),
-  activateWorkspaceTab: (input: ActivateWorkspaceTabInput): Promise<WorkspaceWindowSnapshot> =>
-    ipcRenderer.invoke(ACTIVATE_WORKSPACE_TAB_CHANNEL, input),
-  closeWorkspaceTab: (input: CloseWorkspaceTabInput): Promise<WorkspaceWindowSnapshot> =>
-    ipcRenderer.invoke(CLOSE_WORKSPACE_TAB_CHANNEL, input),
-  reorderWorkspaceTab: (input: ReorderWorkspaceTabInput): Promise<WorkspaceWindowSnapshot> =>
-    ipcRenderer.invoke(REORDER_WORKSPACE_TAB_CHANNEL, input),
-  moveWorkspaceTabToWindow: (input: MoveWorkspaceTabToWindowInput): Promise<WorkspaceMoveTabResult> =>
-    ipcRenderer.invoke(MOVE_WORKSPACE_TAB_TO_WINDOW_CHANNEL, input),
-  detachWorkspaceTabToNewWindow: (
-    input: DetachWorkspaceTabToNewWindowInput
-  ): Promise<WorkspaceWindowSnapshot> => ipcRenderer.invoke(DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL, input),
-  updateWorkspaceTabDraft: (input: UpdateWorkspaceTabDraftInput): Promise<WorkspaceWindowSnapshot> =>
-    ipcRenderer.invoke(UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL, input),
-  getPathForDroppedFile: (file: File) => webUtils.getPathForFile(file),
-  saveMarkdownFile: (input: SaveMarkdownFileInput) =>
-    ipcRenderer.invoke(SAVE_MARKDOWN_FILE_CHANNEL, input),
-  saveMarkdownFileAs: (input: SaveMarkdownFileAsInput) =>
-    ipcRenderer.invoke(SAVE_MARKDOWN_FILE_AS_CHANNEL, input),
-  exportHtmlFile: (input: ExportHtmlFileInput) =>
-    ipcRenderer.invoke(EXPORT_HTML_FILE_CHANNEL, input),
-  syncWatchedMarkdownFile: (): Promise<void> =>
-    ipcRenderer.invoke(SYNC_WATCHED_MARKDOWN_FILE_CHANNEL),
-  importClipboardImage: (input: ImportClipboardImageInput): Promise<ImportClipboardImageResult> =>
-    ipcRenderer.invoke(IMPORT_CLIPBOARD_IMAGE_CHANNEL, input),
-  onMenuCommand: (listener: (command: AppMenuCommand) => void) => {
-    const handleMenuCommand = (_event: unknown, command: AppMenuCommand) => {
-      listener(command);
-    };
-
-    ipcRenderer.on(APP_MENU_COMMAND_EVENT, handleMenuCommand);
-
-    return () => {
-      ipcRenderer.off(APP_MENU_COMMAND_EVENT, handleMenuCommand);
-    };
+const productApi = createProductApi({
+  ipc: {
+    invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args),
+    on: (channel, listener) => {
+      ipcRenderer.on(channel, listener as Parameters<typeof ipcRenderer.on>[1]);
+    },
+    off: (channel, listener) => {
+      ipcRenderer.off(channel, listener as Parameters<typeof ipcRenderer.off>[1]);
+    }
   },
-  onOpenWorkspacePath: (listener: (payload: OpenWorkspacePathRequest) => void) => {
-    const handleOpenWorkspacePath = (_event: unknown, payload: OpenWorkspacePathRequest) => {
-      listener(payload);
-    };
-
-    ipcRenderer.on(OPEN_WORKSPACE_PATH_EVENT, handleOpenWorkspacePath);
-
-    return () => {
-      ipcRenderer.off(OPEN_WORKSPACE_PATH_EVENT, handleOpenWorkspacePath);
-    };
-  },
-  onWorkspaceOwnerTabActivationRequest: (
-    listener: (request: WorkspaceOwnerTabActivationRequest) => Promise<boolean>
-  ) => {
-    const handleWorkspaceOwnerTabActivationRequest = async (
-      _event: unknown,
-      request: WorkspaceOwnerTabActivationRequest
-    ) => {
-      let success = false;
-      try {
-        success = await listener(request);
-      } catch {
-        success = false;
-      }
-      try {
-        await ipcRenderer.invoke(
-          CONFIRM_WORKSPACE_OWNER_TAB_ACTIVATION_CHANNEL,
-          {
-            requestId: request.requestId,
-            tabId: request.tabId,
-            success
-          } satisfies ConfirmWorkspaceOwnerTabActivationInput
-        );
-      } catch {
-        // Main owns timeout/abort settlement when confirmation transport fails.
-      }
-    };
-
-    ipcRenderer.on(
-      REQUEST_WORKSPACE_OWNER_TAB_ACTIVATION_EVENT,
-      handleWorkspaceOwnerTabActivationRequest
-    );
-
-    return () => {
-      ipcRenderer.off(
-        REQUEST_WORKSPACE_OWNER_TAB_ACTIVATION_EVENT,
-        handleWorkspaceOwnerTabActivationRequest
-      );
-    };
-  },
-  confirmWorkspaceWindowClose: (
-    input: ConfirmWorkspaceWindowCloseInput
-  ): ReturnType<ProductBridge["confirmWorkspaceWindowClose"]> =>
-    ipcRenderer.invoke(CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL, input),
-  onWorkspaceWindowCloseRequest: (
-    listener: (input: WorkspaceWindowCloseRequest) => Promise<boolean>
-  ) => {
-    const handleWorkspaceWindowCloseRequest = async (
-      _event: unknown,
-      payload: WorkspaceWindowCloseRequest
-    ) => {
-      let shouldClose = false;
-
-      try {
-        shouldClose = await listener(payload);
-      } finally {
-        await completeWorkspaceWindowClose({
-          requestId: payload.requestId,
-          shouldClose
-        });
-      }
-    };
-
-    ipcRenderer.on(REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT, handleWorkspaceWindowCloseRequest);
-
-    return () => {
-      ipcRenderer.off(REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT, handleWorkspaceWindowCloseRequest);
-    };
-  },
-  getPreferences: (): Promise<Preferences> => ipcRenderer.invoke(GET_PREFERENCES_CHANNEL),
-  updatePreferences: (patch: PreferencesUpdate): Promise<UpdatePreferencesResult> =>
-    ipcRenderer.invoke(UPDATE_PREFERENCES_CHANNEL, patch),
-  selectTemporaryImageDirectory: (): Promise<string | null> =>
-    ipcRenderer.invoke(SELECT_TEMPORARY_IMAGE_DIRECTORY_CHANNEL),
-  getRecentFiles: (): Promise<RecentFilesSnapshot> => ipcRenderer.invoke(GET_RECENT_FILES_CHANNEL),
-  clearRecentFile: (input: ClearRecentFileInput): Promise<RecentFilesSnapshot> =>
-    ipcRenderer.invoke(CLEAR_RECENT_FILE_CHANNEL, input),
-  listFontFamilies: (): Promise<string[]> => ipcRenderer.invoke(LIST_FONT_FAMILIES_CHANNEL),
-  listThemePackages: (): Promise<ThemePackageDescriptor[]> =>
-    ipcRenderer.invoke(LIST_THEME_PACKAGES_CHANNEL),
-  refreshThemePackages: (): Promise<ThemePackageDescriptor[]> =>
-    ipcRenderer.invoke(REFRESH_THEME_PACKAGES_CHANNEL),
-  openThemesDirectory: (): Promise<void> => ipcRenderer.invoke(OPEN_THEMES_DIRECTORY_CHANNEL),
-  checkForUpdates: (): Promise<void> => ipcRenderer.invoke(CHECK_FOR_APP_UPDATES_CHANNEL),
-  openExternalLink: (href: OpenExternalLinkInput["href"]): Promise<void> =>
-    ipcRenderer.invoke(OPEN_EXTERNAL_LINK_CHANNEL, { href }),
-  onPreferencesChanged: (listener: (preferences: Preferences) => void) => {
-    const handlePreferencesChanged = (_event: unknown, preferences: Preferences) => {
-      listener(preferences);
-    };
-
-    ipcRenderer.on(PREFERENCES_CHANGED_EVENT, handlePreferencesChanged);
-
-    return () => {
-      ipcRenderer.off(PREFERENCES_CHANGED_EVENT, handlePreferencesChanged);
-    };
-  },
-  onRecentFilesChanged: (listener: (snapshot: RecentFilesSnapshot) => void) => {
-    const handleRecentFilesChanged = (_event: unknown, snapshot: RecentFilesSnapshot) => {
-      listener(snapshot);
-    };
-
-    ipcRenderer.on(RECENT_FILES_CHANGED_EVENT, handleRecentFilesChanged);
-
-    return () => {
-      ipcRenderer.off(RECENT_FILES_CHANGED_EVENT, handleRecentFilesChanged);
-    };
-  },
-  onAppUpdateState: (listener: (state: AppUpdateState) => void) => {
-    const handleAppUpdateState = (_event: unknown, state: AppUpdateState) => {
-      listener(state);
-    };
-
-    ipcRenderer.on(APP_UPDATE_STATE_EVENT, handleAppUpdateState);
-
-    return () => {
-      ipcRenderer.off(APP_UPDATE_STATE_EVENT, handleAppUpdateState);
-    };
-  },
-  onAppNotification: (listener: (notification: AppNotification) => void) => {
-    const handleAppNotification = (_event: unknown, notification: AppNotification) => {
-      listener(notification);
-    };
-
-    ipcRenderer.on(APP_NOTIFICATION_EVENT, handleAppNotification);
-
-    return () => {
-      ipcRenderer.off(APP_NOTIFICATION_EVENT, handleAppNotification);
-    };
-  },
-  onExternalMarkdownFileChanged: (listener: (event: ExternalMarkdownFileChangedEvent) => void) => {
-    const handleExternalMarkdownFileChanged = (
-      _event: unknown,
-      payload: ExternalMarkdownFileChangedEvent
-    ) => {
-      listener(payload);
-    };
-
-    ipcRenderer.on(EXTERNAL_MARKDOWN_FILE_CHANGED_EVENT, handleExternalMarkdownFileChanged);
-
-    return () => {
-      ipcRenderer.off(EXTERNAL_MARKDOWN_FILE_CHANGED_EVENT, handleExternalMarkdownFileChanged);
-    };
-  }
-};
+  filePath: webUtils,
+  runtime: { platform: process.platform, argv: process.argv ?? [] }
+});
 
 const testApi: TestBridge = {
   openEditorTestWindow: () => ipcRenderer.invoke(OPEN_EDITOR_TEST_WINDOW_CHANNEL),
@@ -389,37 +65,19 @@ const testApi: TestBridge = {
   interruptScenarioRun: (input: { runId: string }) =>
     ipcRenderer.invoke(INTERRUPT_SCENARIO_RUN_CHANNEL, input),
   onScenarioRunEvent: (listener: (payload: RunnerEventEnvelope) => void) => {
-    const handleScenarioRunEvent = (_event: unknown, payload: RunnerEventEnvelope) => {
-      listener(payload);
-    };
-
-    ipcRenderer.on(SCENARIO_RUN_EVENT, handleScenarioRunEvent);
-
-    return () => {
-      ipcRenderer.off(SCENARIO_RUN_EVENT, handleScenarioRunEvent);
-    };
+    const callback = (_event: unknown, payload: RunnerEventEnvelope) => listener(payload);
+    ipcRenderer.on(SCENARIO_RUN_EVENT, callback);
+    return () => ipcRenderer.off(SCENARIO_RUN_EVENT, callback);
   },
   onScenarioRunTerminal: (listener: (payload: ScenarioRunTerminal) => void) => {
-    const handleScenarioRunTerminal = (_event: unknown, payload: ScenarioRunTerminal) => {
-      listener(payload);
-    };
-
-    ipcRenderer.on(SCENARIO_RUN_TERMINAL_EVENT, handleScenarioRunTerminal);
-
-    return () => {
-      ipcRenderer.off(SCENARIO_RUN_TERMINAL_EVENT, handleScenarioRunTerminal);
-    };
+    const callback = (_event: unknown, payload: ScenarioRunTerminal) => listener(payload);
+    ipcRenderer.on(SCENARIO_RUN_TERMINAL_EVENT, callback);
+    return () => ipcRenderer.off(SCENARIO_RUN_TERMINAL_EVENT, callback);
   },
   onEditorTestCommand: (listener: (payload: EditorTestCommandEnvelope) => void) => {
-    const handleEditorTestCommand = (_event: unknown, payload: EditorTestCommandEnvelope) => {
-      listener(payload);
-    };
-
-    ipcRenderer.on(EDITOR_TEST_COMMAND_EVENT, handleEditorTestCommand);
-
-    return () => {
-      ipcRenderer.off(EDITOR_TEST_COMMAND_EVENT, handleEditorTestCommand);
-    };
+    const callback = (_event: unknown, payload: EditorTestCommandEnvelope) => listener(payload);
+    ipcRenderer.on(EDITOR_TEST_COMMAND_EVENT, callback);
+    return () => ipcRenderer.off(EDITOR_TEST_COMMAND_EVENT, callback);
   },
   completeEditorTestCommand: (payload: EditorTestCommandResultEnvelope) =>
     ipcRenderer.invoke(COMPLETE_EDITOR_TEST_COMMAND_CHANNEL, payload)

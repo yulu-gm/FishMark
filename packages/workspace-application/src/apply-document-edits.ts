@@ -1,17 +1,31 @@
 import type {
-  UpdateWorkspaceTabDraftInput,
-  WorkspaceMutationResult,
-  WorkspaceState
+  ApplyWorkspaceDocumentEditsInput,
+  ApplyWorkspaceDocumentEditsResult
 } from "@fishmark/workspace-domain";
 
-export type ApplyDocumentDraftInput = UpdateWorkspaceTabDraftInput;
+import type { KeyedOperationCoordinator } from "./ports";
+
+export type ApplyDocumentEditsInput = ApplyWorkspaceDocumentEditsInput;
+export type ApplyDocumentEditsResult = ApplyWorkspaceDocumentEditsResult;
+export type DocumentEditAuthorization = () => void;
 
 export function createApplyDocumentEdits(dependencies: {
-  workspace: Pick<WorkspaceState, "updateTabDraft">;
+  workspace: {
+    applyDocumentEdits(
+      input: ApplyWorkspaceDocumentEditsInput
+    ): ApplyWorkspaceDocumentEditsResult | Promise<ApplyWorkspaceDocumentEditsResult>;
+  };
+  documentOperations: Pick<KeyedOperationCoordinator<string>, "runExclusive">;
 }) {
   return {
-    apply(input: ApplyDocumentDraftInput): WorkspaceMutationResult {
-      return dependencies.workspace.updateTabDraft(input);
+    apply(
+      input: ApplyDocumentEditsInput,
+      authorize: DocumentEditAuthorization
+    ): Promise<ApplyDocumentEditsResult> {
+      return dependencies.documentOperations.runExclusive(input.tabId, async () => {
+        authorize();
+        return dependencies.workspace.applyDocumentEdits(input);
+      });
     }
   };
 }

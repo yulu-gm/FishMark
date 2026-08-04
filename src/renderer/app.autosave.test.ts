@@ -182,6 +182,8 @@ function createWorkspaceTabRecord(input: {
     name: input.name,
     content: input.content,
     encoding: "utf-8",
+    revision: input.isDirty ? 1 : 0,
+    savedRevision: 0,
     isDirty: input.isDirty ?? false,
     saveState: input.saveState ?? "idle",
     lastSavedContent: input.content
@@ -696,6 +698,8 @@ describe("App autosave", () => {
             name: activeDocument.name,
             content: activeDocument.content,
             encoding: activeDocument.encoding,
+            revision: activeDocument.revision,
+            savedRevision: activeDocument.savedRevision,
             isDirty: activeDocument.isDirty,
             saveState: activeDocument.saveState
           }
@@ -1114,6 +1118,15 @@ describe("App autosave", () => {
       moveWorkspaceTabToWindow,
       detachWorkspaceTabToNewWindow,
       updateWorkspaceTabDraft,
+      applyDocumentEdits: vi.fn().mockResolvedValue({
+        kind: "error",
+        error: { code: "internal-error", message: "Not configured." }
+      }),
+      flushDocumentEdits: vi.fn().mockResolvedValue({
+        kind: "error",
+        error: { code: "internal-error", message: "Not configured." }
+      }),
+      onDocumentProjection: vi.fn(() => () => {}),
       reloadWorkspaceTabFromPath,
       handleDroppedMarkdownFile,
       getPathForDroppedFile,

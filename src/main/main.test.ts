@@ -219,7 +219,10 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain(
       "const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender)"
     );
-    expect(mainSource).toContain("workspaceApplication.applyDocumentEdits({");
+    expect(mainSource).toContain("workspaceApplication.updateDocumentDraft({");
+    expect(mainSource).toContain("registerWorkspaceHandlers<Electron.WebContents>({");
+    expect(mainSource).toContain("createApplyDocumentEdits({");
+    expect(mainSource).toContain("createFlushDocumentEdits({");
     expect(mainSource).toContain("expectedWindowId: windowId");
     expect(mainSource).not.toContain("workspaceState.updateTabDraft(");
     expect(mainSource).toContain("workspaceApplication.saveDocument({");

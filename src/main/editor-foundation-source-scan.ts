@@ -35,6 +35,15 @@ export type SourceModuleAnalysis = {
   reExports: readonly SourceReExport[];
 };
 
+export type CompleteInterfaceBuilderAnalysis = {
+  ambiguousCanonicalBuilderReturns: number;
+  canonicalBuilderDeclarations: number;
+  interfaceConstructions: number;
+  objectSpreadsInCanonicalBuilder: number;
+  partialInterfaceCompositions: number;
+  unsafeInterfaceAssertions: number;
+};
+
 type MicromarkBindingSource = "namespace" | "parse";
 
 const sourceFilePattern = /\.(?:[cm]?[jt]sx?)$/iu;
@@ -269,6 +278,446 @@ export function analyzeSourceModule(rootDir: string, path: string): SourceModule
   };
 }
 
+export function analyzeCompleteInterfaceBuilders(
+  rootDir: string,
+  paths: readonly string[],
+  interfacePath: string,
+  interfaceName: string,
+  builderName: string
+): ReadonlyMap<string, CompleteInterfaceBuilderAnalysis> {
+  const absoluteInterfacePath = resolve(rootDir, interfacePath);
+  const absolutePaths = [...new Set([...paths, interfacePath])].map((path) => resolve(rootDir, path));
+  const program = ts.createProgram({
+    rootNames: absolutePaths,
+    options: {
+      module: ts.ModuleKind.NodeNext,
+      moduleResolution: ts.ModuleResolutionKind.NodeNext,
+      skipLibCheck: true,
+      target: ts.ScriptTarget.Latest
+    }
+  });
+  const checker = program.getTypeChecker();
+  const interfaceSource = program.getSourceFile(absoluteInterfacePath);
+  if (!interfaceSource) {
+    throw new Error(`Interface source could not be resolved: ${interfacePath}`);
+  }
+  const targetSymbol = findExportedTypeSymbol(interfaceSource, interfaceName, checker);
+  if (!targetSymbol) {
+    throw new Error(`Interface symbol could not be resolved: ${interfacePath}#${interfaceName}`);
+  }
+
+  const analyses = new Map<string, CompleteInterfaceBuilderAnalysis>();
+  for (const path of paths) {
+    const sourceFile = program.getSourceFile(resolve(rootDir, path));
+    if (!sourceFile) {
+      throw new Error(`Source file could not be resolved: ${path}`);
+    }
+    analyses.set(path, analyzeProgramSourceFile(sourceFile, checker, targetSymbol, builderName));
+  }
+  return analyses;
+}
+
+function analyzeProgramSourceFile(
+  sourceFile: ts.SourceFile,
+  checker: ts.TypeChecker,
+  targetSymbol: ts.Symbol,
+  builderName: string
+): CompleteInterfaceBuilderAnalysis {
+  const canonicalBuilderNodes = new Set<RuntimeFunctionLike>();
+  const interfaceConstructionNodes = new Set<ts.Node>();
+  const returnedEvidenceOwners = new Map<ts.Node, RuntimeFunctionLike>();
+  const returnedLocalOwners = new Map<ts.VariableDeclaration, RuntimeFunctionLike>();
+  const returnAnalyses = new Map<RuntimeFunctionLike, RuntimeFunctionReturnAnalysis>();
+  let partialInterfaceCompositions = 0;
+  let unsafeInterfaceAssertions = 0;
+
+  const collectFunctions = (node: ts.Node): void => {
+    if (isRuntimeFunctionLike(node)) {
+      const returnAnalysis = analyzeRuntimeFunctionReturn(node, checker);
+      returnAnalyses.set(node, returnAnalysis);
+      const hasDeclaredTarget = typeReferencesTarget(node.type, checker, targetSymbol) ||
+        contextualFunctionTypeReturnsTarget(node, checker, targetSymbol);
+      const hasReturnedTarget = [...returnAnalysis.typeEvidence].some((evidence) =>
+        typeReferencesTarget(evidence.type, checker, targetSymbol)
+      ) || [...returnAnalysis.localDeclarations].some((declaration) =>
+        typeReferencesTarget(declaration.type, checker, targetSymbol)
+      );
+      if (hasDeclaredTarget || hasReturnedTarget) {
+        interfaceConstructionNodes.add(node);
+        for (const evidence of returnAnalysis.typeEvidence) {
+          returnedEvidenceOwners.set(evidence, node);
+        }
+        for (const declaration of returnAnalysis.localDeclarations) {
+          returnedLocalOwners.set(declaration, node);
+        }
+        if (readFunctionLikeName(node) === builderName) {
+          canonicalBuilderNodes.add(node);
+        }
+      }
+    }
+    ts.forEachChild(node, collectFunctions);
+  };
+  collectFunctions(sourceFile);
+
+  const visit = (node: ts.Node): void => {
+    if (ts.isVariableDeclaration(node) && node.initializer) {
+      if (
+        typeReferencesTarget(node.type, checker, targetSymbol) &&
+        !(node.type && ts.isFunctionTypeNode(node.type))
+      ) {
+        interfaceConstructionNodes.add(returnedLocalOwners.get(node) ?? node);
+      }
+      if (
+        node.type &&
+        ts.isFunctionTypeNode(node.type) &&
+        typeReferencesTarget(node.type.type, checker, targetSymbol)
+      ) {
+        const initializer = unwrapTransparentExpression(node.initializer);
+        const construction = isRuntimeFunctionLike(initializer) ? initializer : node;
+        interfaceConstructionNodes.add(construction);
+        if (isRuntimeFunctionLike(initializer) && readFunctionLikeName(initializer) === builderName) {
+          canonicalBuilderNodes.add(initializer);
+        }
+      }
+    }
+    if (ts.isSatisfiesExpression(node) && typeReferencesTarget(node.type, checker, targetSymbol)) {
+      interfaceConstructionNodes.add(
+        returnedEvidenceOwners.get(node) ?? findRuntimeConstructionOwner(node)
+      );
+    }
+    if (
+      (ts.isAsExpression(node) || ts.isTypeAssertionExpression(node)) &&
+      typeReferencesTarget(node.type, checker, targetSymbol)
+    ) {
+      interfaceConstructionNodes.add(
+        returnedEvidenceOwners.get(node) ?? findRuntimeConstructionOwner(node)
+      );
+      unsafeInterfaceAssertions += 1;
+    }
+    if (ts.isTypeReferenceNode(node) && typeIsPartialTarget(node, checker, targetSymbol)) {
+      partialInterfaceCompositions += 1;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+
+  let objectSpreadsInCanonicalBuilder = 0;
+  let ambiguousCanonicalBuilderReturns = 0;
+  for (const builder of canonicalBuilderNodes) {
+    const returnAnalysis = returnAnalyses.get(builder);
+    if (!returnAnalysis || returnAnalysis.ambiguous || !returnAnalysis.objectLiteral) {
+      ambiguousCanonicalBuilderReturns += 1;
+      continue;
+    }
+    objectSpreadsInCanonicalBuilder += returnAnalysis.objectLiteral.properties.filter(
+      ts.isSpreadAssignment
+    ).length;
+  }
+
+  return {
+    ambiguousCanonicalBuilderReturns,
+    canonicalBuilderDeclarations: canonicalBuilderNodes.size,
+    interfaceConstructions: interfaceConstructionNodes.size,
+    objectSpreadsInCanonicalBuilder,
+    partialInterfaceCompositions,
+    unsafeInterfaceAssertions
+  };
+}
+
+type TargetTypeEvidence = ts.AsExpression | ts.SatisfiesExpression | ts.TypeAssertion;
+
+type RuntimeFunctionReturnAnalysis = {
+  ambiguous: boolean;
+  localDeclarations: ReadonlySet<ts.VariableDeclaration>;
+  objectLiteral: ts.ObjectLiteralExpression | null;
+  typeEvidence: ReadonlySet<TargetTypeEvidence>;
+};
+
+function analyzeRuntimeFunctionReturn(
+  builder: RuntimeFunctionLike,
+  checker: ts.TypeChecker
+): RuntimeFunctionReturnAnalysis {
+  const returnedExpressions: ts.Expression[] = [];
+  let hasEmptyReturn = false;
+  if (ts.isBlock(builder.body)) {
+    const visit = (node: ts.Node): void => {
+      if (node !== builder.body && isRuntimeFunctionLike(node)) {
+        return;
+      }
+      if (ts.isReturnStatement(node)) {
+        if (node.expression) {
+          returnedExpressions.push(node.expression);
+        } else {
+          hasEmptyReturn = true;
+        }
+        return;
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(builder.body);
+  } else {
+    returnedExpressions.push(builder.body);
+  }
+
+  if (hasEmptyReturn || returnedExpressions.length !== 1) {
+    return {
+      ambiguous: true,
+      localDeclarations: new Set(),
+      objectLiteral: null,
+      typeEvidence: new Set()
+    };
+  }
+  return resolveReturnedExpression(returnedExpressions[0]!, builder, checker, new Set());
+}
+
+function resolveReturnedExpression(
+  expression: ts.Expression,
+  builder: RuntimeFunctionLike,
+  checker: ts.TypeChecker,
+  seenSymbols: Set<ts.Symbol>
+): RuntimeFunctionReturnAnalysis {
+  const typeEvidence = new Set<TargetTypeEvidence>();
+  let candidate = expression;
+  while (
+    ts.isAwaitExpression(candidate) ||
+    ts.isParenthesizedExpression(candidate) ||
+    ts.isAsExpression(candidate) ||
+    ts.isTypeAssertionExpression(candidate) ||
+    ts.isNonNullExpression(candidate) ||
+    ts.isSatisfiesExpression(candidate)
+  ) {
+    if (
+      ts.isAsExpression(candidate) ||
+      ts.isTypeAssertionExpression(candidate) ||
+      ts.isSatisfiesExpression(candidate)
+    ) {
+      typeEvidence.add(candidate);
+    }
+    candidate = candidate.expression;
+  }
+
+  if (ts.isObjectLiteralExpression(candidate)) {
+    return {
+      ambiguous: false,
+      localDeclarations: new Set(),
+      objectLiteral: candidate,
+      typeEvidence
+    };
+  }
+  if (!ts.isIdentifier(candidate)) {
+    return {
+      ambiguous: true,
+      localDeclarations: new Set(),
+      objectLiteral: null,
+      typeEvidence
+    };
+  }
+
+  const referencedSymbol = checker.getSymbolAtLocation(candidate);
+  if (!referencedSymbol) {
+    return {
+      ambiguous: true,
+      localDeclarations: new Set(),
+      objectLiteral: null,
+      typeEvidence
+    };
+  }
+  const symbol = resolveAliasedSymbol(referencedSymbol, checker);
+  if (seenSymbols.has(symbol)) {
+    return {
+      ambiguous: true,
+      localDeclarations: new Set(),
+      objectLiteral: null,
+      typeEvidence
+    };
+  }
+  seenSymbols.add(symbol);
+  const declarations = (symbol.declarations ?? []).filter(ts.isVariableDeclaration);
+  const declaration = declarations.length === 1 ? declarations[0] : undefined;
+  if (
+    !declaration?.initializer ||
+    !isConstVariableDeclaration(declaration) ||
+    findOwningRuntimeFunction(declaration) !== builder ||
+    declaration.pos >= expression.pos ||
+    isSymbolReassignedInBuilder(symbol, builder, checker)
+  ) {
+    return {
+      ambiguous: true,
+      localDeclarations: new Set(),
+      objectLiteral: null,
+      typeEvidence
+    };
+  }
+
+  const resolved = resolveReturnedExpression(declaration.initializer, builder, checker, seenSymbols);
+  return {
+    ambiguous: resolved.ambiguous,
+    localDeclarations: new Set([declaration, ...resolved.localDeclarations]),
+    objectLiteral: resolved.objectLiteral,
+    typeEvidence: new Set([...typeEvidence, ...resolved.typeEvidence])
+  };
+}
+
+function contextualFunctionTypeReturnsTarget(
+  node: RuntimeFunctionLike,
+  checker: ts.TypeChecker,
+  targetSymbol: ts.Symbol
+): boolean {
+  const parent = node.parent;
+  return ts.isVariableDeclaration(parent) &&
+    parent.type !== undefined &&
+    ts.isFunctionTypeNode(parent.type) &&
+    typeReferencesTarget(parent.type.type, checker, targetSymbol);
+}
+
+function findRuntimeConstructionOwner(node: ts.Node): ts.Node {
+  let candidate: ts.Node | undefined = node.parent;
+  while (candidate) {
+    if (isRuntimeFunctionLike(candidate)) {
+      return node;
+    }
+    if (ts.isVariableDeclaration(candidate) && candidate.initializer) {
+      return candidate;
+    }
+    candidate = candidate.parent;
+  }
+  return node;
+}
+
+function findOwningRuntimeFunction(node: ts.Node): RuntimeFunctionLike | null {
+  let candidate: ts.Node | undefined = node.parent;
+  while (candidate) {
+    if (isRuntimeFunctionLike(candidate)) {
+      return candidate;
+    }
+    candidate = candidate.parent;
+  }
+  return null;
+}
+
+function isConstVariableDeclaration(declaration: ts.VariableDeclaration): boolean {
+  return ts.isVariableDeclarationList(declaration.parent) &&
+    (declaration.parent.flags & ts.NodeFlags.Const) !== 0;
+}
+
+function isSymbolReassignedInBuilder(
+  symbol: ts.Symbol,
+  builder: RuntimeFunctionLike,
+  checker: ts.TypeChecker
+): boolean {
+  let reassigned = false;
+  const targetContainsSymbol = (node: ts.Node): boolean => {
+    if (ts.isIdentifier(node)) {
+      const candidate = checker.getSymbolAtLocation(node);
+      return candidate !== undefined && resolveAliasedSymbol(candidate, checker) === symbol;
+    }
+    return node.getChildren().some(targetContainsSymbol);
+  };
+  const visit = (node: ts.Node): void => {
+    if (reassigned || (node !== builder.body && isRuntimeFunctionLike(node))) {
+      return;
+    }
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+      node.operatorToken.kind <= ts.SyntaxKind.LastAssignment &&
+      targetContainsSymbol(node.left)
+    ) {
+      reassigned = true;
+      return;
+    }
+    if (
+      (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
+      (node.operator === ts.SyntaxKind.PlusPlusToken ||
+        node.operator === ts.SyntaxKind.MinusMinusToken) &&
+      targetContainsSymbol(node.operand)
+    ) {
+      reassigned = true;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(builder.body);
+  return reassigned;
+}
+
+function findExportedTypeSymbol(
+  sourceFile: ts.SourceFile,
+  interfaceName: string,
+  checker: ts.TypeChecker
+): ts.Symbol | null {
+  const moduleSymbol = checker.getSymbolAtLocation(sourceFile);
+  const exported = moduleSymbol
+    ? checker.getExportsOfModule(moduleSymbol).find((symbol) => symbol.name === interfaceName)
+    : undefined;
+  return exported ? resolveAliasedSymbol(exported, checker) : null;
+}
+
+function typeReferencesTarget(
+  type: ts.TypeNode | undefined,
+  checker: ts.TypeChecker,
+  targetSymbol: ts.Symbol,
+  seen = new Set<ts.Symbol>()
+): boolean {
+  if (!type) {
+    return false;
+  }
+  if (ts.isParenthesizedTypeNode(type) || ts.isTypeOperatorNode(type)) {
+    return typeReferencesTarget(type.type, checker, targetSymbol, seen);
+  }
+  if (!ts.isTypeReferenceNode(type)) {
+    return false;
+  }
+
+  const wrapperName = readEntityNameTail(type.typeName);
+  if (wrapperName === "Partial" || wrapperName === "Pick") {
+    return false;
+  }
+  if (wrapperName === "Readonly" || wrapperName === "Required") {
+    return typeReferencesTarget(type.typeArguments?.[0], checker, targetSymbol, seen);
+  }
+
+  const symbolAtReference = checker.getSymbolAtLocation(type.typeName);
+  if (!symbolAtReference) {
+    return false;
+  }
+  const symbol = resolveAliasedSymbol(symbolAtReference, checker);
+  if (symbol === targetSymbol) {
+    return true;
+  }
+  if (seen.has(symbol)) {
+    return false;
+  }
+  seen.add(symbol);
+  for (const declaration of symbol.declarations ?? []) {
+    if (
+      ts.isTypeAliasDeclaration(declaration) &&
+      typeReferencesTarget(declaration.type, checker, targetSymbol, seen)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function typeIsPartialTarget(
+  type: ts.TypeReferenceNode,
+  checker: ts.TypeChecker,
+  targetSymbol: ts.Symbol
+): boolean {
+  const wrapperName = readEntityNameTail(type.typeName);
+  return (wrapperName === "Partial" || wrapperName === "Pick") &&
+    typeReferencesTarget(type.typeArguments?.[0], checker, targetSymbol);
+}
+
+function resolveAliasedSymbol(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Symbol {
+  return (symbol.flags & ts.SymbolFlags.Alias) !== 0 ? checker.getAliasedSymbol(symbol) : symbol;
+}
+
+function readEntityNameTail(name: ts.EntityName): string {
+  return ts.isIdentifier(name) ? name.text : name.right.text;
+}
+
 export function resolveImportRepoPath(rootDir: string, importer: string, specifier: string): string | null {
   if (specifier.startsWith(".")) {
     return toRepoPath(rootDir, resolve(rootDir, dirname(importer), specifier));
@@ -482,6 +931,44 @@ function readStaticPropertyName(name: ts.PropertyName): string | null {
 
 function isStringLiteralLike(node: ts.Node | undefined): node is ts.StringLiteralLike {
   return node !== undefined && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node));
+}
+
+type RuntimeFunctionLike = (
+  | ts.ArrowFunction
+  | ts.FunctionDeclaration
+  | ts.FunctionExpression
+  | ts.GetAccessorDeclaration
+  | ts.MethodDeclaration
+) & { readonly body: ts.ConciseBody };
+
+function isRuntimeFunctionLike(node: ts.Node): node is RuntimeFunctionLike {
+  return (
+    ts.isArrowFunction(node) ||
+    ts.isFunctionExpression(node) ||
+    ts.isGetAccessorDeclaration(node) ||
+    ts.isMethodDeclaration(node) ||
+    ts.isFunctionDeclaration(node)
+  ) && node.body !== undefined;
+}
+
+function readFunctionLikeName(node: RuntimeFunctionLike): string | null {
+  if (
+    (ts.isFunctionDeclaration(node) ||
+      ts.isFunctionExpression(node) ||
+      ts.isGetAccessorDeclaration(node) ||
+      ts.isMethodDeclaration(node)) &&
+    node.name
+  ) {
+    return readStaticPropertyName(node.name);
+  }
+  const parent = node.parent;
+  if (ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) {
+    return parent.name.text;
+  }
+  if (ts.isPropertyAssignment(parent)) {
+    return readStaticPropertyName(parent.name);
+  }
+  return null;
 }
 
 function scriptKindForPath(path: string): ts.ScriptKind {

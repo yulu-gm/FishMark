@@ -12,7 +12,16 @@ import type {
   ConfirmWorkspaceWindowCloseRequest,
   ConfirmWorkspaceWindowCloseResult
 } from "./close-workspace";
-import type { ApplyDocumentDraftInput } from "./apply-document-edits";
+import type {
+  ApplyDocumentEditsInput,
+  ApplyDocumentEditsResult,
+  DocumentEditAuthorization
+} from "./apply-document-edits";
+import type {
+  FlushDocumentEditsInput,
+  FlushDocumentEditsResult
+} from "./flush-document-edits";
+import type { UpdateDocumentDraftInput } from "./update-document-draft";
 import type { SaveDocumentInput } from "./save-document";
 import type { WorkspaceOpenPathResult, WorkspaceOpenResult } from "./open-workspace";
 import type { WorkspaceReloadResult } from "./reload-document";
@@ -87,8 +96,18 @@ export function createWorkspaceApplication<TContext>(dependencies: {
     detachTab(input: Omit<WorkspaceTabTransferInput, "targetWindowId">): Promise<WorkspaceMoveProjection>;
     markWindowReady(windowId: string): Promise<void>;
   };
+  drafts: {
+    update(input: UpdateDocumentDraftInput): WorkspaceMutationResult;
+  };
   edits: {
-    apply(input: ApplyDocumentDraftInput): WorkspaceMutationResult;
+    apply(
+      input: ApplyDocumentEditsInput,
+      authorize: DocumentEditAuthorization
+    ): Promise<ApplyDocumentEditsResult>;
+    flush(
+      input: FlushDocumentEditsInput,
+      authorize: DocumentEditAuthorization
+    ): Promise<FlushDocumentEditsResult>;
   };
   save: {
     save(input: SaveDocumentInput<TContext>): Promise<SaveDocumentResult>;
@@ -261,8 +280,20 @@ export function createWorkspaceApplication<TContext>(dependencies: {
         await dependencies.detach.detachTab(input)
       );
     },
-    applyDocumentEdits(input: ApplyDocumentDraftInput): WorkspaceMutationResult {
-      return dependencies.edits.apply(input);
+    updateDocumentDraft(input: UpdateDocumentDraftInput): WorkspaceMutationResult {
+      return dependencies.drafts.update(input);
+    },
+    applyDocumentEdits(
+      input: ApplyDocumentEditsInput,
+      authorize: DocumentEditAuthorization
+    ): Promise<ApplyDocumentEditsResult> {
+      return dependencies.edits.apply(input, authorize);
+    },
+    flushDocumentEdits(
+      input: FlushDocumentEditsInput,
+      authorize: DocumentEditAuthorization
+    ): Promise<FlushDocumentEditsResult> {
+      return dependencies.edits.flush(input, authorize);
     },
     async saveDocument(input: SaveDocumentInput<TContext>): Promise<WorkspaceSaveCommandResult> {
       const result = await dependencies.save.save(input);

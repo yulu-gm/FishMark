@@ -59,6 +59,8 @@ function createSnapshot(input: {
       : {
           ...activeDocument,
           encoding: "utf-8",
+          revision: 0,
+          savedRevision: 0,
           isDirty: false,
           saveState: "idle"
         }

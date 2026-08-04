@@ -39,6 +39,9 @@ vi.mock("electron", () => ({
     invoke,
     on,
     off
+  },
+  webUtils: {
+    getPathForFile: vi.fn(() => "")
   }
 }));
 

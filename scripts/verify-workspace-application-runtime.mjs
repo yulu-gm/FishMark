@@ -4,6 +4,8 @@ const application = await import("@fishmark/workspace-application");
 
 assert.equal(typeof application.createWorkspaceApplication, "function");
 assert.equal(typeof application.createApplyDocumentEdits, "function");
+assert.equal(typeof application.createFlushDocumentEdits, "function");
+assert.equal(typeof application.createUpdateDocumentDraft, "function");
 assert.equal(typeof application.createSaveDocument, "function");
 assert.equal(typeof application.createCloseWorkspace, "function");
 assert.equal(typeof application.createWorkspaceOpen, "function");

@@ -28,9 +28,17 @@ function workflowDependencies(workspace: ReturnType<typeof createWorkspaceState>
       detachTab: async () => Promise.reject(new Error("unconfigured test detach")),
       markWindowReady: async () => undefined
     },
-    edits: {
-      apply: (input: Parameters<typeof workspace.updateTabDraft>[0]) =>
+    drafts: {
+      update: (input: Parameters<typeof workspace.updateTabDraft>[0]) =>
         workspace.updateTabDraft(input)
+    },
+    edits: {
+      apply: async (input: Parameters<typeof workspace.applyDocumentEdits>[0]) =>
+        workspace.applyDocumentEdits(input),
+      flush: async () => ({
+        kind: "error" as const,
+        error: { code: "unknown-tab" as const, message: "Unknown document tab." }
+      })
     },
     save: {
       save: async () => ({ status: "cancelled" as const }),

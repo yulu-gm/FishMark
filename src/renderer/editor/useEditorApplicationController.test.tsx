@@ -34,6 +34,8 @@ const savedSnapshot: WorkspaceWindowSnapshot = {
     name: "note.md",
     content: "# Saved\n",
     encoding: "utf-8",
+    revision: 0,
+    savedRevision: 0,
     isDirty: false,
     saveState: "idle"
   }

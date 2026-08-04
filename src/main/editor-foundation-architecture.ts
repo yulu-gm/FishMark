@@ -7,6 +7,7 @@ import {
   readRepositoryText
 } from "./editor-foundation-repository-evidence";
 import {
+  analyzeCompleteInterfaceBuilders,
   analyzeSourceModule,
   collectSourceFiles,
   resolveImportRepoPath,
@@ -55,7 +56,11 @@ type ValidationContext = {
   usedExceptionIds: Set<string>;
 };
 
-const supportedRuleKinds = new Set(["forbidden-imports", "public-package-entry"]);
+const supportedRuleKinds = new Set([
+  "forbidden-imports",
+  "public-package-entry",
+  "unique-complete-interface-builder"
+]);
 const supportedBundleCheckKinds = new Set([
   "forbidden-initial-source-group",
   "maximum",
@@ -86,6 +91,16 @@ const publicEntryRuleFields = new Set([
   "packagesPath",
   "publicPrefix",
   "sourcePaths",
+  "state"
+]);
+const uniqueCompleteInterfaceBuilderRuleFields = new Set([
+  "builderName",
+  "builderPath",
+  "id",
+  "interfacePath",
+  "interfaceName",
+  "kind",
+  "sourcePath",
   "state"
 ]);
 
@@ -292,9 +307,14 @@ function validateRules(rules: readonly ManifestRecord[], context: ValidationCont
       });
       continue;
     }
+    const ruleFields = kind === "forbidden-imports"
+      ? forbiddenImportRuleFields
+      : kind === "public-package-entry"
+        ? publicEntryRuleFields
+        : uniqueCompleteInterfaceBuilderRuleFields;
     validateRecordFields(
       rule,
-      kind === "forbidden-imports" ? forbiddenImportRuleFields : publicEntryRuleFields,
+      ruleFields,
       "unknown-rule-field",
       `Rule ${id ?? "<missing-id>"}`,
       context,
@@ -319,7 +339,7 @@ function validateRules(rules: readonly ManifestRecord[], context: ValidationCont
       )) {
         validateManifestPath(path, `rule ${id ?? "<missing-id>"} forbidden path`, context);
       }
-    } else {
+    } else if (kind === "public-package-entry") {
       const sourcePaths = validateStringArray(
         rule.sourcePaths,
         `rule ${id ?? "<missing-id>"} sourcePaths`,
@@ -342,6 +362,47 @@ function validateRules(rules: readonly ManifestRecord[], context: ValidationCont
           message: `Rule ${id ?? "<missing-id>"} must declare a non-empty publicPrefix.`,
           ruleId: id ?? undefined
         });
+      }
+    } else {
+      const sourcePath = validateActiveRuleDirectory(
+        rule.sourcePath,
+        `rule ${id ?? "<missing-id>"} sourcePath`,
+        context
+      );
+      const builderPath = validateExistingFile(
+        rule.builderPath,
+        `rule ${id ?? "<missing-id>"} builderPath`,
+        "active-rule-builder-missing",
+        "active-rule-builder-not-file",
+        context
+      );
+      validateExistingFile(
+        rule.interfacePath,
+        `rule ${id ?? "<missing-id>"} interfacePath`,
+        "active-rule-interface-missing",
+        "active-rule-interface-not-file",
+        context
+      );
+      if (
+        sourcePath &&
+        builderPath &&
+        !pathIsWithin(context.rootDir, builderPath, sourcePath)
+      ) {
+        context.findings.push({
+          code: "interface-builder-outside-source",
+          message: `Rule ${id ?? "<missing-id>"} builderPath must be inside sourcePath.`,
+          path: builderPath,
+          ruleId: id ?? undefined
+        });
+      }
+      for (const field of ["builderName", "interfaceName"] as const) {
+        if (!readIdentifier(rule[field])) {
+          context.findings.push({
+            code: "invalid-rule",
+            message: `Rule ${id ?? "<missing-id>"} must declare a valid ${field}.`,
+            ruleId: id ?? undefined
+          });
+        }
       }
     }
   }
@@ -603,9 +664,137 @@ function validateImports(
     }
     if (kind === "forbidden-imports") {
       validateForbiddenImports(rule, id, reportViolation, context);
-    } else {
+    } else if (kind === "public-package-entry") {
       validatePublicPackageImports(rule, id, reportViolation, context);
+    } else {
+      validateUniqueCompleteInterfaceBuilder(rule, id, context);
     }
+  }
+}
+
+function validateUniqueCompleteInterfaceBuilder(
+  rule: ManifestRecord,
+  ruleId: string,
+  context: ValidationContext
+): void {
+  const sourcePath = readNonEmptyString(rule.sourcePath);
+  const builderPath = readNonEmptyString(rule.builderPath);
+  const interfacePath = readNonEmptyString(rule.interfacePath);
+  const builderName = readIdentifier(rule.builderName);
+  const interfaceName = readIdentifier(rule.interfaceName);
+  const canonicalSourcePath = sourcePath
+    ? resolveRepoRelativePath(context.rootDir, sourcePath)
+    : null;
+  const canonicalBuilderPath = builderPath
+    ? resolveRepoRelativePath(context.rootDir, builderPath)
+    : null;
+  const canonicalInterfacePath = interfacePath
+    ? resolveRepoRelativePath(context.rootDir, interfacePath)
+    : null;
+  if (
+    !canonicalSourcePath ||
+    !canonicalBuilderPath ||
+    !canonicalInterfacePath ||
+    !builderName ||
+    !interfaceName
+  ) {
+    return;
+  }
+
+  let canonicalBuilderCount = 0;
+  let totalBuilderCount = 0;
+  const productionPaths = collectSources(context, canonicalSourcePath).filter(isProductionSource);
+  const analyzablePaths = productionPaths.filter((path) => analyze(context, path) !== null);
+  if (!analyze(context, canonicalInterfacePath)) {
+    return;
+  }
+
+  let evidenceByPath: ReadonlyMap<string, ReturnType<typeof analyzeCompleteInterfaceBuilders> extends ReadonlyMap<string, infer T> ? T : never>;
+  try {
+    evidenceByPath = analyzeCompleteInterfaceBuilders(
+      context.rootDir,
+      analyzablePaths,
+      canonicalInterfacePath,
+      interfaceName,
+      builderName
+    );
+  } catch (error) {
+    context.sourceEvidenceComplete = false;
+    context.findings.push({
+      code: "interface-builder-analysis-error",
+      message: `Rule ${ruleId} could not resolve ${interfacePath}#${interfaceName}: ${readErrorMessage(error)}.`,
+      path: canonicalInterfacePath,
+      ruleId
+    });
+    return;
+  }
+
+  for (const path of analyzablePaths) {
+    const evidence = evidenceByPath.get(path);
+    if (!evidence) {
+      context.sourceEvidenceComplete = false;
+      context.findings.push({
+        code: "interface-builder-analysis-error",
+        message: `Rule ${ruleId} produced no analysis for ${path}.`,
+        path,
+        ruleId
+      });
+      continue;
+    }
+    totalBuilderCount += evidence.interfaceConstructions;
+    if (repoPathComparisonIdentity(context.rootDir, path) ===
+        repoPathComparisonIdentity(context.rootDir, canonicalBuilderPath)) {
+      canonicalBuilderCount += evidence.canonicalBuilderDeclarations;
+      if (evidence.objectSpreadsInCanonicalBuilder > 0) {
+        context.findings.push({
+          code: "interface-builder-object-spread",
+          message: `${builderPath} composes ${interfaceName} through object spread instead of one complete literal.`,
+          path,
+          ruleId
+        });
+      }
+      if (evidence.ambiguousCanonicalBuilderReturns > 0) {
+        context.findings.push({
+          code: "interface-builder-return-analysis-ambiguous",
+          message: `${builderPath} must return one locally analyzable complete ${interfaceName} object literal.`,
+          path,
+          ruleId
+        });
+      }
+    }
+    if (evidence.partialInterfaceCompositions > 0) {
+      context.findings.push({
+        code: "partial-interface-composition",
+        message: `${path} declares a partial ${interfaceName} compatibility surface.`,
+        path,
+        ruleId
+      });
+    }
+    if (evidence.unsafeInterfaceAssertions > 0) {
+      context.findings.push({
+        code: "unsafe-interface-builder-assertion",
+        message: `${path} asserts ${interfaceName} instead of proving its complete surface.`,
+        path,
+        ruleId
+      });
+    }
+  }
+
+  if (canonicalBuilderCount !== 1) {
+    context.findings.push({
+      code: "canonical-interface-builder-count",
+      message: `${builderPath} must declare exactly one ${builderName} returning ${interfaceName}; found ${canonicalBuilderCount}.`,
+      path: canonicalBuilderPath,
+      ruleId
+    });
+  }
+  if (totalBuilderCount !== 1) {
+    context.findings.push({
+      code: "duplicate-interface-builder",
+      message: `${sourcePath} must contain exactly one ${interfaceName} construction; found ${totalBuilderCount}.`,
+      path: canonicalSourcePath,
+      ruleId
+    });
   }
 }
 
@@ -1441,6 +1630,16 @@ function isTestSource(path: string): boolean {
   return /\.test\.[cm]?[jt]sx?$/.test(path);
 }
 
+function isProductionSource(path: string): boolean {
+  return !/(?:^|\/)__tests__(?:\/|$)/.test(path) &&
+    !/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(path) &&
+    !/\.d\.[cm]?[jt]s$/.test(path);
+}
+
+function readErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function packagePatternMatches(pattern: string, specifier: string): boolean {
   const patternIdentity = asciiCaseFold(pattern);
   const specifierIdentity = asciiCaseFold(specifier);
@@ -1525,6 +1724,11 @@ function asciiCaseFold(value: string): string {
 
 function readNonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function readIdentifier(value: unknown): string | null {
+  const identifier = readNonEmptyString(value);
+  return identifier && /^[A-Za-z_$][\w$]*$/.test(identifier) ? identifier : null;
 }
 
 function readStableBundleTarget(value: unknown): string | null {

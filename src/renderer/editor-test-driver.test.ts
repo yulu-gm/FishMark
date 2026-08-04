@@ -464,6 +464,8 @@ function createWorkspaceDocument(input: {
     name: input.name,
     content: input.content,
     encoding: "utf-8",
+    revision: input.isDirty ? 1 : 0,
+    savedRevision: 0,
     isDirty: input.isDirty ?? false,
     saveState: "idle"
   };

@@ -418,6 +418,8 @@ describe("WorkspaceState tab lifecycle", () => {
       name: "Untitled.md",
       content: "",
       encoding: "utf-8",
+      revision: 0,
+      savedRevision: 0,
       isDirty: false,
       saveState: "idle"
     });
@@ -565,6 +567,8 @@ describe("WorkspaceState save and reload transitions", () => {
       name: "saved.md",
       content: "# Saved\n",
       encoding: "utf-8",
+      revision: 1,
+      savedRevision: 1,
       isDirty: false,
       saveState: "idle"
     });
@@ -1170,6 +1174,8 @@ describe("WorkspaceState projection isolation", () => {
       readonly name: string;
       readonly content: string;
       readonly encoding: "utf-8";
+      readonly revision: number;
+      readonly savedRevision: number;
       readonly isDirty: boolean;
       readonly saveState: "idle" | "manual-saving" | "autosaving";
     }>();

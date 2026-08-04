@@ -805,7 +805,7 @@ npm.cmd run build
 
 **Acceptance (2026-08-04):** `PASS`. Independent specification/architecture review finished P0/P1/P2 = 0 with no open questions after its initial progress-document P1 was corrected and re-reviewed. Final code-quality review finished Critical/Important/Minor = 0 and `Ready: Yes` after the malformed-insert Important and relative-import-containment Minor findings were repaired RED to GREEN. Fresh acceptance evidence passed post-fix domain/infrastructure 4 files / 163 tests, architecture 1 file / 209 tests, editor-foundation 7 files / 285 tests, lint with 0 errors / 8 existing warnings, typecheck, the 166-file / 2,162-pass + 1-skip full suite, build with all three workspace runtime verifiers, formal behavior 121/121 cases / 2,541/2,541 targets / 0 unexpected / 0 not-run in 24,614 ms, and the final acceptance-document diff check.
 
-**Exit:** accepted. Main has a persistent canonical text representation with no public CodeMirror type leakage; RF-201 is `COMPLETE`, M2 is 1/4 `IN_PROGRESS`, and RF-202 is dependency-ready but remains `PLANNED` and has not started.
+**Exit:** accepted. Main has a persistent canonical text representation with no public CodeMirror type leakage. RF-201 remains `COMPLETE`; RF-202 was subsequently accepted as recorded below.
 
 #### RF-202: Shared edit contract and main handler
 
@@ -824,11 +824,11 @@ npm.cmd run build
 
 **Steps:**
 
-- [ ] Define serializable edit/result/projection contracts.
-- [ ] Validate sender window, tab ownership, client identity, revision, and change bounds in main.
-- [ ] Add `applyDocumentEdits`, `flushDocumentEdits`, and projection subscription bridge methods.
-- [ ] Keep the existing full-draft channel only until RF-204 within this milestone.
-- [ ] Cover duplicate sequence and stale revision behavior.
+- [x] Define serializable edit/result/projection contracts.
+- [x] Validate sender window, tab ownership, client identity, revision, and change bounds in main.
+- [x] Add `applyDocumentEdits`, `flushDocumentEdits`, and projection subscription bridge methods.
+- [x] Keep the existing full-draft channel only until RF-204 within this milestone.
+- [x] Cover duplicate sequence and stale revision behavior.
 
 **Verification:**
 
@@ -837,9 +837,13 @@ npm.cmd run test -- src/preload src/main packages/workspace-application
 npm.cmd run typecheck
 ```
 
-**Exit:** revisioned edits cross a typed, sender-validated IPC boundary.
+**Acceptance (2026-08-04):** `PASS`. Fresh acceptance evidence passed the 24-file / 529-test RF-202 focus, editor-foundation 7 files / 307 tests, lint with 0 errors / 8 existing warnings, typecheck, full Vitest 172 files / 2,232 passed + 1 explicit skip out of 2,233, renderer/Electron/CLI build with all three workspace runtime verifiers, formal behavior 121/121 cases / 2,541/2,541 targets / 0 unexpected / 0 not-run, and diff check with line-ending warnings only. Independent architecture review reported P0/P1/P2 = 0 with no open questions. Final quality review reported Critical 0, Important 0, Minor 1 and `Ready: Yes`; the remaining direct-test coverage note is non-blocking.
+
+**Exit:** accepted. Revisioned edits cross a typed, sender-validated IPC boundary; normal acknowledgements and projection events remain metadata-only, while canonical text crosses only for explicit revision conflict. RF-202 is `COMPLETE`; M2 is 2/4 `IN_PROGRESS`; RF-203 is dependency-ready but remains `PLANNED` and has not started. The old full-draft channel remains only as explicit RF-204 deletion debt.
 
 #### RF-203: Renderer workspace client and pending edit queue
+
+**Status:** dependency-ready `PLANNED`; not started.
 
 **Outcome:** CodeMirror stays responsive while main remains authoritative.
 

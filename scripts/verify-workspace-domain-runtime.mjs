@@ -37,3 +37,23 @@ if (session.revision !== 1) {
 if (projection.activeTabId !== tabId || projection.activeDocument?.isDirty !== true) {
   throw new Error("workspace-domain runtime entry returned an invalid active document");
 }
+
+const edit = workspace.applyDocumentEdits({
+  tabId,
+  expectedWindowId: "window-1",
+  clientId: "runtime-verifier",
+  clientSequence: 1,
+  baseRevision: 1,
+  changes: [{ from: 0, to: 0, insert: "Verified " }]
+});
+if (edit.kind !== "applied" || "content" in edit || edit.projection.revision !== 2) {
+  throw new Error("workspace-domain runtime edit contract is invalid");
+}
+const checkpoint = workspace.getDocumentEditCheckpoint({
+  tabId,
+  expectedWindowId: "window-1",
+  clientId: "runtime-verifier"
+});
+if (checkpoint.kind !== "checkpoint" || checkpoint.acknowledgedSequence !== 1) {
+  throw new Error("workspace-domain runtime edit checkpoint is invalid");
+}

@@ -7,6 +7,7 @@ import {
 } from "@fishmark/workspace-domain";
 import {
   createApplyDocumentEdits,
+  createFlushDocumentEdits,
   createCloseWorkspace,
   createSaveDocument,
   createWorkspaceApplication,
@@ -17,6 +18,7 @@ import {
   createWorkspaceTabReorder,
   createWorkspaceTabTransfer,
   createWorkspaceWindowClose,
+  createUpdateDocumentDraft,
   type CloseWorkspaceTabResult,
   type KeyedOperationLease,
   type WorkspaceMoveCommandResult,
@@ -71,6 +73,7 @@ import { createWorkspaceWindowCloseConfirmationHandler } from "./workspace-windo
 import { createWorkspaceWindowCloseRequestBroker } from "./workspace-window-close-request-broker";
 import { createWorkspaceOwnerTabActivationRequestBroker } from "./workspace-owner-tab-activation-request-broker";
 import { createWorkspaceWindowRegistrationApplication } from "./workspace-window-registration-application";
+import { registerWorkspaceHandlers } from "./ipc/register-workspace-handlers";
 import {
   toWorkspaceMoveTabResult,
   toWorkspaceWindowSnapshot
@@ -390,7 +393,15 @@ app.whenReady().then(async () => {
   const workspaceFileObjectOperations =
     createKeyedOperationCoordinator<FileObjectIdentity>();
   const fileIdentityResolver = createFileIdentityResolver();
-  const applyDocumentEdits = createApplyDocumentEdits({ workspace: workspaceState });
+  const updateDocumentDraft = createUpdateDocumentDraft({ workspace: workspaceState });
+  const applyDocumentEdits = createApplyDocumentEdits({
+    workspace: workspaceState,
+    documentOperations: workspaceTabOperations
+  });
+  const flushDocumentEdits = createFlushDocumentEdits({
+    workspace: workspaceState,
+    documentOperations: workspaceTabOperations
+  });
   const workspaceTabTransferApplication = createWorkspaceTabTransfer({
     workspace: workspaceState,
     documentOperations: workspaceTabOperations
@@ -821,7 +832,11 @@ app.whenReady().then(async () => {
     reorder: workspaceTabReorderApplication,
     transfer: workspaceTabTransferApplication,
     detach: workspaceDetachApplication,
-    edits: applyDocumentEdits,
+    drafts: updateDocumentDraft,
+    edits: {
+      apply: applyDocumentEdits.apply,
+      flush: flushDocumentEdits.flush
+    },
     save: workspaceFileOperations,
     close: closeWorkspace
   });
@@ -838,6 +853,7 @@ app.whenReady().then(async () => {
         }
       }
     });
+
   const workspaceWindowRegistrationApplication =
     createWorkspaceWindowRegistrationApplication<Electron.WebContents, BrowserWindow>({
       isSenderDestroyed: (sender) => sender.isDestroyed(),
@@ -852,6 +868,26 @@ app.whenReady().then(async () => {
       bindWindow: bindWorkspaceWindow,
       focusWindow: (windowId) => workspaceState.focusWindow(windowId)
     });
+
+  registerWorkspaceHandlers<Electron.WebContents>({
+    register: (channel, handler) => {
+      ipcMain.handle(channel, handler);
+    },
+    ensureWindow: workspaceWindowRegistrationApplication.ensureWindow,
+    isCurrentSender: (sender, windowId) => {
+      if (sender.isDestroyed()) return false;
+      const ownerWindow = BrowserWindow.fromWebContents(sender);
+      return ownerWindow !== null &&
+        !ownerWindow.isDestroyed() &&
+        !ownerWindow.webContents.isDestroyed() &&
+        ownerWindow.webContents === sender &&
+        String(ownerWindow.id) === windowId;
+    },
+    application: workspaceApplication,
+    publish: (sender, channel, payload) => {
+      sender.send(channel, payload);
+    }
+  });
 
   ipcMain.handle(GET_WORKSPACE_SNAPSHOT_CHANNEL, async (event) => {
     const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
@@ -1028,7 +1064,7 @@ app.whenReady().then(async () => {
     UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL,
     async (event, input: UpdateWorkspaceTabDraftInput) => {
       const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
-      const result = workspaceApplication.applyDocumentEdits({
+      const result = workspaceApplication.updateDocumentDraft({
         tabId: input.tabId,
         expectedWindowId: windowId,
         content: input.content

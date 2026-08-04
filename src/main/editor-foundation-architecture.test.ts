@@ -154,6 +154,358 @@ describe("editor foundation architecture guard", () => {
     ]);
   });
 
+  it("guards RF-202 shared and preload adapters from reverse and editor dependencies", () => {
+    const manifest = readCanonicalManifest();
+    const rules = manifest.rules as MutableRecord[];
+
+    expect(rules).toContainEqual(expect.objectContaining({
+      id: "boundary.shared",
+      sourcePath: "src/shared",
+      forbiddenPackages: expect.arrayContaining([
+        "electron",
+        "@codemirror/*",
+        "@fishmark/workspace-domain",
+        "@fishmark/workspace-application"
+      ])
+    }));
+    expect(rules).toContainEqual(expect.objectContaining({
+      id: "boundary.preload",
+      forbiddenPackages: expect.arrayContaining([
+        "@codemirror/*",
+        "@fishmark/workspace-domain",
+        "@fishmark/workspace-application"
+      ])
+    }));
+
+    const productApiSource = readFileSync(
+      resolve(process.cwd(), "src/preload/product-api.ts"),
+      "utf8"
+    );
+    expect(productApiSource).not.toMatch(/from ["']electron["']/);
+    expect(productApiSource).not.toMatch(/@codemirror|workspace-domain|workspace-application/);
+  });
+
+  it("binds preload to one canonical complete ProductBridge builder", () => {
+    const manifest = readCanonicalManifest();
+
+    expect(manifest.rules).toContainEqual({
+      id: "invariant.preload-product-bridge-builder",
+      kind: "unique-complete-interface-builder",
+      state: "active",
+      sourcePath: "src/preload",
+      builderPath: "src/preload/product-api.ts",
+      builderName: "createProductApi",
+      interfacePath: "src/shared/product-bridge.ts",
+      interfaceName: "ProductBridge"
+    });
+  });
+
+  it.each([
+    {
+      label: "a second ProductBridge builder",
+      overrides: {
+        "src/preload/product-api.ts": [
+          'import type { ProductBridge } from "../shared/product-bridge";',
+          "export function createProductApi(): ProductBridge { return {} as ProductBridge; }"
+        ].join("\n"),
+        "src/preload/compat.ts": [
+          'import type { ProductBridge } from "../shared/product-bridge";',
+          "export function createCompatibilityApi(): ProductBridge { return {} as ProductBridge; }"
+        ].join("\n")
+      },
+      expectedCode: "duplicate-interface-builder"
+    },
+    {
+      label: "a second arrow ProductBridge builder",
+      overrides: {
+        "src/preload/product-api.ts": [
+          'import type { ProductBridge } from "../shared/product-bridge";',
+          "export function createProductApi(): ProductBridge { return {}; }"
+        ].join("\n"),
+        "src/preload/compat.ts": [
+          'import type { ProductBridge } from "../shared/product-bridge";',
+          "export const createCompatibilityApi = (): ProductBridge => ({});"
+        ].join("\n")
+      },
+      expectedCode: "duplicate-interface-builder"
+    },
+    {
+      label: "a second function-expression ProductBridge builder",
+      overrides: {
+        "src/preload/product-api.ts": [
+          'import type { ProductBridge } from "../shared/product-bridge";',
+          "export function createProductApi(): ProductBridge { return {}; }"
+        ].join("\n"),
+        "src/preload/compat.ts": [
+          'import type { ProductBridge } from "../shared/product-bridge";',
+          "export const createCompatibilityApi = function (): ProductBridge { return {}; };"
+        ].join("\n")
+      },
+      expectedCode: "duplicate-interface-builder"
+    },
+    {
+      label: "a second method ProductBridge builder",
+      overrides: {
+        "src/preload/product-api.ts": [
+          'import type { ProductBridge } from "../shared/product-bridge";',
+          "export function createProductApi(): ProductBridge { return {}; }"
+        ].join("\n"),
+        "src/preload/compat.ts": [
+          'import type { ProductBridge } from "../shared/product-bridge";',
+          "export const compatibility = { create(): ProductBridge { return {}; } };"
+        ].join("\n")
+      },
+      expectedCode: "duplicate-interface-builder"
+    },
+    {
+      label: "a second function-typed ProductBridge builder",
+      overrides: {
+        "src/preload/product-api.ts": [
+          'import type { ProductBridge } from "../shared/product-bridge";',
+          "export function createProductApi(): ProductBridge { return {}; }"
+        ].join("\n"),
+        "src/preload/compat.ts": [
+          'import type { ProductBridge } from "../shared/product-bridge";',
+          "export const createCompatibilityApi: () => ProductBridge = () => ({});"
+        ].join("\n")
+      },
+      expectedCode: "duplicate-interface-builder"
+    },
+    {
+      label: "an import-aliased ProductBridge builder",
+      overrides: {
+        "src/preload/product-api.ts": [
+          'import type { ProductBridge } from "../shared/product-bridge";',
+          "export function createProductApi(): ProductBridge { return {}; }"
+        ].join("\n"),
+        "src/preload/compat.ts": [
+          'import type { ProductBridge as Bridge } from "../shared/product-bridge";',
+          "export const createCompatibilityApi = (): Bridge => ({});"
+        ].join("\n")
+      },
+      expectedCode: "duplicate-interface-builder"
+    },
+    {
+      label: "a local type-aliased ProductBridge builder",
+      overrides: {
+        "src/preload/product-api.ts": [
+          'import type { ProductBridge } from "../shared/product-bridge";',
+          "export function createProductApi(): ProductBridge { return {}; }"
+        ].join("\n"),
+        "src/preload/compat.ts": [
+          'import type { ProductBridge } from "../shared/product-bridge";',
+          "type Bridge = ProductBridge;",
+          "export const createCompatibilityApi = (): Bridge => ({});"
+        ].join("\n")
+      },
+      expectedCode: "duplicate-interface-builder"
+    },
+    {
+      label: "a Readonly-wrapped ProductBridge builder",
+      overrides: {
+        "src/preload/product-api.ts": [
+          'import type { ProductBridge } from "../shared/product-bridge";',
+          "export function createProductApi(): ProductBridge { return {}; }"
+        ].join("\n"),
+        "src/preload/compat.ts": [
+          'import type { ProductBridge } from "../shared/product-bridge";',
+          "export const createCompatibilityApi = (): Readonly<ProductBridge> => ({});"
+        ].join("\n")
+      },
+      expectedCode: "duplicate-interface-builder"
+    },
+    {
+      label: "a qualified ProductBridge builder",
+      overrides: {
+        "src/preload/product-api.ts": [
+          'import type { ProductBridge } from "../shared/product-bridge";',
+          "export function createProductApi(): ProductBridge { return {}; }"
+        ].join("\n"),
+        "src/preload/compat.ts": [
+          'import type * as Contracts from "../shared/product-bridge";',
+          "export const createCompatibilityApi = (): Contracts.ProductBridge => ({});"
+        ].join("\n")
+      },
+      expectedCode: "duplicate-interface-builder"
+    },
+    {
+      label: "object-spread compatibility composition",
+      overrides: {
+        "src/preload/product-api.ts": [
+          'import type { ProductBridge } from "../shared/product-bridge";',
+          "const compatibility = {};",
+          "export function createProductApi(): ProductBridge { return { ...compatibility } as ProductBridge; }"
+        ].join("\n")
+      },
+      expectedCode: "interface-builder-object-spread"
+    },
+    {
+      label: "a partial compatibility object",
+      overrides: {
+        "src/preload/product-api.ts": [
+          'import type { ProductBridge } from "../shared/product-bridge";',
+          "export function createProductApi(): ProductBridge { return {} as ProductBridge; }"
+        ].join("\n"),
+        "src/preload/compat.ts": [
+          'import type { ProductBridge } from "../shared/product-bridge";',
+          "export const compatibility: Partial<ProductBridge> = {};"
+        ].join("\n")
+      },
+      expectedCode: "partial-interface-composition"
+    }
+  ])("rejects $label in production preload sources", ({ overrides, expectedCode }) => {
+    const repository = createSyntheticRepository(overrides as Record<string, string>);
+    const manifest = readSyntheticManifest(repository);
+    activateSyntheticProductBridgeInvariant(manifest);
+
+    expect(expectCodes(validateSynthetic(repository, manifest))).toContain(expectedCode);
+  });
+
+  it("rejects an unsafe ProductBridge assertion with its dedicated finding", () => {
+    const repository = createSyntheticRepository({
+      "src/preload/product-api.ts": [
+        'import type { ProductBridge } from "../shared/product-bridge";',
+        "export function createProductApi(): ProductBridge { return {}; }"
+      ].join("\n"),
+      "src/preload/compat.ts": [
+        'import type { ProductBridge } from "../shared/product-bridge";',
+        "export const compatibility = {} as ProductBridge;"
+      ].join("\n")
+    });
+    const manifest = readSyntheticManifest(repository);
+    activateSyntheticProductBridgeInvariant(manifest);
+
+    expect(expectCodes(validateSynthetic(repository, manifest))).toContain(
+      "unsafe-interface-builder-assertion"
+    );
+  });
+
+  it("allows unrelated nested object spread inside the canonical builder", () => {
+    const repository = createSyntheticRepository({
+      "src/preload/product-api.ts": [
+        'import type { ProductBridge } from "../shared/product-bridge";',
+        "export function createProductApi(): ProductBridge {",
+        "  const metadata = { ...{ source: 'runtime' } };",
+        "  return { metadata };",
+        "}"
+      ].join("\n")
+    });
+    const manifest = readSyntheticManifest(repository);
+    activateSyntheticProductBridgeInvariant(manifest);
+
+    expect(validateSynthetic(repository, manifest)).toEqual({ findings: [], ok: true });
+  });
+
+  it("counts returned satisfies evidence as the canonical runtime construction", () => {
+    const repository = createSyntheticRepository({
+      "src/preload/product-api.ts": [
+        'import type { ProductBridge } from "../shared/product-bridge";',
+        "export function createProductApi(): ProductBridge {",
+        "  return {} satisfies ProductBridge;",
+        "}"
+      ].join("\n")
+    });
+    const manifest = readSyntheticManifest(repository);
+    activateSyntheticProductBridgeInvariant(manifest);
+
+    expect(validateSynthetic(repository, manifest)).toEqual({ findings: [], ok: true });
+  });
+
+  it("rejects top-level spread reached through a returned local const", () => {
+    const repository = createSyntheticRepository({
+      "src/preload/product-api.ts": [
+        'import type { ProductBridge } from "../shared/product-bridge";',
+        "const compatibility = {};",
+        "export function createProductApi(): ProductBridge {",
+        "  const api = ({ ...compatibility } satisfies ProductBridge);",
+        "  return api;",
+        "}"
+      ].join("\n")
+    });
+    const manifest = readSyntheticManifest(repository);
+    activateSyntheticProductBridgeInvariant(manifest);
+
+    expect(expectCodes(validateSynthetic(repository, manifest))).toContain(
+      "interface-builder-object-spread"
+    );
+  });
+
+  it("fails closed when the canonical builder has multiple returns", () => {
+    const repository = createSyntheticRepository({
+      "src/preload/product-api.ts": [
+        'import type { ProductBridge } from "../shared/product-bridge";',
+        "export function createProductApi(flag = false): ProductBridge {",
+        "  if (flag) return {};",
+        "  return {};",
+        "}"
+      ].join("\n")
+    });
+    const manifest = readSyntheticManifest(repository);
+    activateSyntheticProductBridgeInvariant(manifest);
+
+    expect(expectCodes(validateSynthetic(repository, manifest))).toContain(
+      "interface-builder-return-analysis-ambiguous"
+    );
+  });
+
+  it("ignores spec and __tests__ ProductBridge builders as non-production sources", () => {
+    const repository = createSyntheticRepository({
+      "src/preload/product-api.ts": [
+        'import type { ProductBridge } from "../shared/product-bridge";',
+        "export function createProductApi(): ProductBridge { return {}; }"
+      ].join("\n"),
+      "src/preload/compat.spec.ts": [
+        'import type { ProductBridge } from "../shared/product-bridge";',
+        "export const createSpecApi = (): ProductBridge => ({});"
+      ].join("\n"),
+      "src/preload/__tests__/compat.ts": [
+        'import type { ProductBridge } from "../../shared/product-bridge";',
+        "export const createTestApi = (): ProductBridge => ({});"
+      ].join("\n")
+    });
+    const manifest = readSyntheticManifest(repository);
+    activateSyntheticProductBridgeInvariant(manifest);
+
+    expect(validateSynthetic(repository, manifest)).toEqual({ findings: [], ok: true });
+  });
+
+  it("fails closed when the canonical ProductBridge builder is missing", () => {
+    const repository = createSyntheticRepository({
+      "src/preload/product-api.ts": [
+        'import type { ProductBridge } from "../shared/product-bridge";',
+        "export function createRenamedApi(): ProductBridge { return {}; }"
+      ].join("\n")
+    });
+    const manifest = readSyntheticManifest(repository);
+    activateSyntheticProductBridgeInvariant(manifest);
+
+    expect(expectCodes(validateSynthetic(repository, manifest))).toContain(
+      "canonical-interface-builder-count"
+    );
+  });
+
+  it("fails closed when the canonical interface symbol cannot be resolved", () => {
+    const repository = createSyntheticRepository({
+      "src/shared/product-bridge.ts": "export interface OtherBridge {}"
+    });
+    const manifest = readSyntheticManifest(repository);
+    activateSyntheticProductBridgeInvariant(manifest);
+
+    expect(expectCodes(validateSynthetic(repository, manifest))).toContain(
+      "interface-builder-analysis-error"
+    );
+  });
+
+  it("fails closed when the canonical interface source cannot be parsed", () => {
+    const repository = createSyntheticRepository({
+      "src/shared/product-bridge.ts": "export interface ProductBridge {"
+    });
+    const manifest = readSyntheticManifest(repository);
+    activateSyntheticProductBridgeInvariant(manifest);
+
+    expect(expectCodes(validateSynthetic(repository, manifest))).toContain("source-parse-error");
+  });
+
   it("binds the active workspace-infrastructure package to one fail-closed rule", () => {
     const manifest = readCanonicalManifest();
     const infrastructurePackages = (manifest.packages as MutableRecord[]).filter(
@@ -1695,6 +2047,12 @@ function createSyntheticRepository(overrides: Record<string, string> = {}): stri
       "export function parseMarkdownDocument(source: string): unknown { return parse().document().write(source); }"
     ].join("\n"),
     "packages/workspace-domain/src/index.ts": "export const workspaceDomain = true;",
+    "src/shared/product-bridge.ts": [
+      "export interface ProductBridge {",
+      "  readonly platform?: string;",
+      "  readonly metadata?: unknown;",
+      "}"
+    ].join("\n"),
     "src/main/index.ts": "export const main = true;",
     "src/preload/index.ts": "export const preload = true;",
     "src/renderer/index.ts": "export const renderer = true;"
@@ -1904,6 +2262,19 @@ function activateSyntheticWorkspaceInfrastructure(manifest: MutableRecord): void
       "packages/markdown-engine",
       "packages/workspace-application"
     ]
+  });
+}
+
+function activateSyntheticProductBridgeInvariant(manifest: MutableRecord): void {
+  (manifest.rules as MutableRecord[]).push({
+    id: "invariant.preload-product-bridge-builder",
+    kind: "unique-complete-interface-builder",
+    state: "active",
+    sourcePath: "src/preload",
+    builderPath: "src/preload/product-api.ts",
+    builderName: "createProductApi",
+    interfacePath: "src/shared/product-bridge.ts",
+    interfaceName: "ProductBridge"
   });
 }
 

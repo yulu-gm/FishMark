@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 import type { DiskVersion } from "./disk-version";
 import { fileIdentity } from "./file-identity";
@@ -10,6 +10,7 @@ import {
   projectDocumentSession,
   replaceDocumentFromDisk,
   replaceDocumentText,
+  type ApplyDocumentEditBatchInput,
   type WorkspaceDocumentData
 } from "./document-session";
 import {
@@ -33,6 +34,9 @@ const diskVersion: DiskVersion = {
   size: 5,
   contentHash: "sha256:alpha"
 };
+
+expectTypeOf<ApplyDocumentEditBatchInput["baseRevision"]>().toEqualTypeOf<unknown>();
+expectTypeOf<ApplyDocumentEditBatchInput["changes"]>().toEqualTypeOf<unknown>();
 
 function createSession() {
   return createDocumentSession({
@@ -462,6 +466,24 @@ describe("document session edit batches", () => {
     expect(duplicate.session.text.toString()).toBe("beta");
   });
 
+  it("returns a duplicate before validating malformed changes or an empty batch", () => {
+    const first = applyDocumentEditBatch(createSession(), {
+      baseRevision: 0,
+      clientId: "client-a",
+      clientSequence: 1,
+      changes: replaceAlphaWith("beta")
+    });
+
+    for (const changes of [null, [], [null]] as unknown[]) {
+      expect(applyDocumentEditBatch(first.session, {
+        baseRevision: Number.NaN,
+        clientId: "client-a",
+        clientSequence: 1,
+        changes
+      })).toMatchObject({ kind: "duplicate", revision: 1 });
+    }
+  });
+
   it("rejects a sequence gap without mutating the session or ledger", () => {
     const session = createSession();
     const gap = applyDocumentEditBatch(session, {
@@ -502,6 +524,25 @@ describe("document session edit batches", () => {
     }
   );
 
+  it.each([-1, 0.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1])(
+    "rejects invalid base revision %# before conflict comparison",
+    (baseRevision) => {
+      const session = createSession();
+      const result = applyDocumentEditBatch(session, {
+        baseRevision,
+        clientId: "client-a",
+        clientSequence: 1,
+        changes: replaceAlphaWith("beta")
+      });
+
+      expect(result).toMatchObject({
+        kind: "invalid",
+        error: { code: "invalid-base-revision" }
+      });
+      expect(result.session).toBe(session);
+    }
+  );
+
   it("tracks client sequences independently", () => {
     const first = applyDocumentEditBatch(createSession(), {
       baseRevision: 0,
@@ -522,7 +563,9 @@ describe("document session edit batches", () => {
     expect(second.session.clientSequenceHighWatermarks.get("client-b")).toBe(1);
   });
 
-  it.each(["", "   "])("rejects invalid client id %#", (clientId) => {
+  it.each(["", "   ", "-client", "client id", "a".repeat(129)])(
+    "rejects invalid client id %#",
+    (clientId) => {
     const session = createSession();
     const result = applyDocumentEditBatch(session, {
       baseRevision: 0,
@@ -536,7 +579,8 @@ describe("document session edit batches", () => {
       error: { code: "invalid-client-id" }
     });
     expect(result.session).toBe(session);
-  });
+    }
+  );
 
   it.each([0, -1, 0.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1])(
     "rejects invalid client sequence %#",

@@ -19,6 +19,8 @@ function createDocument(): WorkspaceDocumentSnapshot {
     name: "note.md",
     content: "# Draft\n",
     encoding: "utf-8",
+    revision: 1,
+    savedRevision: 0,
     isDirty: true,
     saveState: "idle"
   };

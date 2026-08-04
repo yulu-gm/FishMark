@@ -69,15 +69,16 @@ export interface CommitSavedDocumentInput {
 }
 
 export interface ApplyDocumentEditBatchInput {
-  readonly baseRevision: DocumentRevision;
+  readonly baseRevision: unknown;
   readonly clientId: string;
   readonly clientSequence: number;
-  readonly changes: readonly TextChange[];
+  readonly changes: unknown;
 }
 
 export type ApplyDocumentEditBatchInvalidCode =
   | "invalid-client-id"
   | "invalid-client-sequence"
+  | "invalid-base-revision"
   | "empty-change-batch"
   | "invalid-text-changes"
   | "revision-overflow";
@@ -145,11 +146,14 @@ export function applyDocumentEditBatch(
   session: DocumentSessionState,
   input: ApplyDocumentEditBatchInput
 ): ApplyDocumentEditBatchResult {
-  if (typeof input.clientId !== "string" || input.clientId.trim().length === 0) {
+  if (
+    typeof input.clientId !== "string" ||
+    !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(input.clientId)
+  ) {
     return invalidEditBatch(
       session,
       "invalid-client-id",
-      "Document edit client ID must be a non-empty string."
+      "Document edit client ID has an invalid format."
     );
   }
   if (!Number.isSafeInteger(input.clientSequence) || input.clientSequence < 1) {
@@ -173,7 +177,15 @@ export function applyDocumentEditBatch(
   if (input.clientSequence !== expectedSequence) {
     return Object.freeze({ kind: "sequence-gap", session, expectedSequence });
   }
-  if (input.baseRevision !== session.revision) {
+  if (!isDocumentRevisionCandidate(input.baseRevision)) {
+    return invalidEditBatch(
+      session,
+      "invalid-base-revision",
+      "Document base revision must be a non-negative safe integer."
+    );
+  }
+  const baseRevision = input.baseRevision;
+  if (baseRevision !== session.revision) {
     return Object.freeze({
       kind: "revision-conflict",
       session,
@@ -181,8 +193,16 @@ export function applyDocumentEditBatch(
     });
   }
 
+  if (!isTextChangeCandidateArray(input.changes)) {
+    return invalidEditBatch(
+      session,
+      "invalid-text-changes",
+      "Document text changes must be an array of exact change objects."
+    );
+  }
+  const changes = input.changes;
   try {
-    validateTextChanges(input.changes, session.text.length);
+    validateTextChanges(changes, session.text.length);
   } catch (error) {
     return invalidEditBatch(
       session,
@@ -190,7 +210,7 @@ export function applyDocumentEditBatch(
       error instanceof Error ? error.message : "Invalid document text changes."
     );
   }
-  if (input.changes.length === 0) {
+  if (changes.length === 0) {
     return invalidEditBatch(
       session,
       "empty-change-batch",
@@ -209,7 +229,7 @@ export function applyDocumentEditBatch(
     );
   }
 
-  const text = session.text.apply(input.changes);
+  const text = session.text.apply(changes);
   const clientSequenceHighWatermarks = highWatermarksWith(
     session.clientSequenceHighWatermarks,
     input.clientId,
@@ -226,6 +246,13 @@ export function applyDocumentEditBatch(
   });
 
   return Object.freeze({ kind: "applied", session: nextSession, revision });
+}
+
+export function getDocumentClientAcknowledgedSequence(
+  session: DocumentSessionState,
+  clientId: string
+): number {
+  return session.clientSequenceHighWatermarks.get(clientId) ?? 0;
 }
 
 export function replaceDocumentText(
@@ -432,4 +459,24 @@ function invalidEditBatch(
     session,
     error: Object.freeze({ code, message })
   });
+}
+
+function isDocumentRevisionCandidate(value: unknown): value is DocumentRevision {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function isTextChangeCandidateArray(value: unknown): value is readonly TextChange[] {
+  return Array.isArray(value) && value.every((change: unknown) =>
+    typeof change === "object" &&
+    change !== null &&
+    !Array.isArray(change) &&
+    Object.getPrototypeOf(change) === Object.prototype &&
+    Object.keys(change).sort().join(",") === "from,insert,to" &&
+    "from" in change &&
+    typeof change.from === "number" &&
+    "to" in change &&
+    typeof change.to === "number" &&
+    "insert" in change &&
+    typeof change.insert === "string"
+  );
 }

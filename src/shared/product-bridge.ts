@@ -51,6 +51,13 @@ import type {
 import type { OpenWorkspacePathRequest } from "./workspace";
 import type { ThemePackageDescriptor } from "./theme-package";
 import type { OpenExternalLinkInput } from "./external-link";
+import type {
+  ApplyDocumentEditsInput,
+  ApplyDocumentEditsResult,
+  FlushDocumentEditsInput,
+  FlushDocumentEditsResult
+} from "./document-edit";
+import type { DocumentProjectionEvent } from "./document-projection";
 
 export interface ProductBridge {
   platform: NodeJS.Platform;
@@ -75,6 +82,11 @@ export interface ProductBridge {
     input: DetachWorkspaceTabToNewWindowInput
   ) => Promise<WorkspaceWindowSnapshot>;
   updateWorkspaceTabDraft: (input: UpdateWorkspaceTabDraftInput) => Promise<WorkspaceWindowSnapshot>;
+  applyDocumentEdits: (input: ApplyDocumentEditsInput) => Promise<ApplyDocumentEditsResult>;
+  flushDocumentEdits: (input: FlushDocumentEditsInput) => Promise<FlushDocumentEditsResult>;
+  onDocumentProjection: (
+    listener: (event: DocumentProjectionEvent) => void
+  ) => () => void;
   saveMarkdownFile: (input: SaveMarkdownFileInput) => Promise<SaveMarkdownFileResult>;
   saveMarkdownFileAs: (input: SaveMarkdownFileAsInput) => Promise<SaveMarkdownFileResult>;
   exportHtmlFile: (input: ExportHtmlFileInput) => Promise<ExportHtmlFileResult>;

@@ -8,8 +8,10 @@ import {
   type FileObjectIdentity
 } from "./file-identity";
 import {
+  applyDocumentEditBatch,
   commitSavedDocument,
   createDocumentSession,
+  getDocumentClientAcknowledgedSequence,
   moveDocumentSession,
   projectDocumentSession,
   replaceDocumentFromDisk,
@@ -19,7 +21,6 @@ import {
   type DocumentSessionState,
   type WorkspaceDocumentData
 } from "./document-session";
-
 const UNTITLED_DOCUMENT_NAME = "Untitled.md";
 
 export interface WorkspaceTabProjection {
@@ -36,9 +37,70 @@ export interface WorkspaceDocumentProjection {
   readonly name: string;
   readonly content: string;
   readonly encoding: "utf-8";
+  readonly revision: DocumentRevision;
+  readonly savedRevision: DocumentRevision;
   readonly isDirty: boolean;
   readonly saveState: DocumentSaveState;
 }
+
+export interface WorkspaceDocumentMetadataProjection {
+  readonly tabId: string;
+  readonly revision: DocumentRevision;
+  readonly savedRevision: DocumentRevision;
+  readonly isDirty: boolean;
+}
+
+export interface ApplyWorkspaceDocumentEditsInput {
+  readonly tabId: string;
+  readonly expectedWindowId: string;
+  readonly clientId: string;
+  readonly clientSequence: number;
+  readonly baseRevision: unknown;
+  readonly changes: unknown;
+}
+
+export type WorkspaceDocumentEditErrorCode =
+  | "unknown-tab"
+  | "tab-owner-changed"
+  | import("./document-session").ApplyDocumentEditBatchInvalidCode;
+
+export interface WorkspaceDocumentEditError {
+  readonly code: WorkspaceDocumentEditErrorCode;
+  readonly message: string;
+}
+
+export type ApplyWorkspaceDocumentEditsResult =
+  | {
+      readonly kind: "applied" | "duplicate";
+      readonly acknowledgedSequence: number;
+      readonly projection: WorkspaceDocumentMetadataProjection;
+    }
+  | {
+      readonly kind: "revision-conflict";
+      readonly canonicalRevision: DocumentRevision;
+      readonly canonicalText: string;
+      readonly isDirty: boolean;
+    }
+  | {
+      readonly kind: "sequence-gap";
+      readonly expectedSequence: number;
+      readonly canonicalRevision: DocumentRevision;
+    }
+  | { readonly kind: "error"; readonly error: WorkspaceDocumentEditError };
+
+export interface GetWorkspaceDocumentEditCheckpointInput {
+  readonly tabId: string;
+  readonly expectedWindowId: string;
+  readonly clientId: string;
+}
+
+export type GetWorkspaceDocumentEditCheckpointResult =
+  | {
+      readonly kind: "checkpoint";
+      readonly acknowledgedSequence: number;
+      readonly projection: WorkspaceDocumentMetadataProjection;
+    }
+  | { readonly kind: "error"; readonly error: WorkspaceDocumentEditError };
 
 export interface WorkspaceWindowProjection {
   readonly windowId: string;
@@ -171,6 +233,12 @@ export interface WorkspaceState {
   readonly updateTabDraft: (
     input: UpdateWorkspaceTabDraftInput
   ) => WorkspaceMutationResult;
+  readonly applyDocumentEdits: (
+    input: ApplyWorkspaceDocumentEditsInput
+  ) => ApplyWorkspaceDocumentEditsResult;
+  readonly getDocumentEditCheckpoint: (
+    input: GetWorkspaceDocumentEditCheckpointInput
+  ) => GetWorkspaceDocumentEditCheckpointResult;
   readonly saveTabDocument: (
     input: CommitWorkspaceDocumentInput
   ) => WorkspaceSaveMutationResult;
@@ -372,6 +440,80 @@ class CanonicalWorkspaceState implements WorkspaceState {
     const nextSession = replaceDocumentText(context.session, content);
     this.tabs.set(tabId, nextSession);
     return createAppliedMutationResult(this.getWindowProjection(context.windowId));
+  }
+
+  applyDocumentEdits({
+    tabId,
+    expectedWindowId,
+    clientId,
+    clientSequence,
+    baseRevision,
+    changes
+  }: ApplyWorkspaceDocumentEditsInput): ApplyWorkspaceDocumentEditsResult {
+    const resolved = this.resolveDocumentEditOwner(tabId, expectedWindowId);
+    if (resolved.kind === "error") {
+      return resolved;
+    }
+    const { session } = resolved.context;
+    const result = applyDocumentEditBatch(session, {
+      clientId,
+      clientSequence,
+      baseRevision,
+      changes
+    });
+
+    switch (result.kind) {
+      case "applied":
+        this.tabs.set(tabId, result.session);
+        return Object.freeze({
+          kind: "applied",
+          acknowledgedSequence: clientSequence,
+          projection: createDocumentMetadataProjection(result.session)
+        });
+      case "duplicate":
+        return Object.freeze({
+          kind: "duplicate",
+          acknowledgedSequence: getDocumentClientAcknowledgedSequence(
+            result.session,
+            clientId
+          ),
+          projection: createDocumentMetadataProjection(result.session)
+        });
+      case "revision-conflict":
+        return Object.freeze({
+          kind: "revision-conflict",
+          canonicalRevision: result.canonicalRevision,
+          canonicalText: result.session.text.toString(),
+          isDirty: result.session.revision !== result.session.savedRevision
+        });
+      case "sequence-gap":
+        return Object.freeze({
+          kind: "sequence-gap",
+          expectedSequence: result.expectedSequence,
+          canonicalRevision: result.session.revision
+        });
+      case "invalid":
+        return Object.freeze({ kind: "error", error: result.error });
+    }
+  }
+
+  getDocumentEditCheckpoint({
+    tabId,
+    expectedWindowId,
+    clientId
+  }: GetWorkspaceDocumentEditCheckpointInput): GetWorkspaceDocumentEditCheckpointResult {
+    const resolved = this.resolveDocumentEditOwner(tabId, expectedWindowId);
+    if (resolved.kind === "error") {
+      return resolved;
+    }
+    return Object.freeze({
+      kind: "checkpoint",
+      acknowledgedSequence: getDocumentClientAcknowledgedSequence(
+        resolved.context.session,
+        clientId
+      ),
+      projection: createDocumentMetadataProjection(resolved.context.session)
+    });
   }
 
   saveTabDocument({
@@ -719,6 +861,30 @@ class CanonicalWorkspaceState implements WorkspaceState {
     return { kind: "current", context: this.getTabContext(tabId) };
   }
 
+  private resolveDocumentEditOwner(
+    tabId: string,
+    expectedWindowId: string
+  ):
+    | { readonly kind: "current"; readonly context: TabContext }
+    | { readonly kind: "error"; readonly error: WorkspaceDocumentEditError } {
+    if (!this.tabs.has(tabId)) {
+      return Object.freeze({
+        kind: "error",
+        error: Object.freeze({ code: "unknown-tab", message: "Unknown document tab." })
+      });
+    }
+    if (this.tabToWindowId.get(tabId) !== expectedWindowId) {
+      return Object.freeze({
+        kind: "error",
+        error: Object.freeze({
+          code: "tab-owner-changed",
+          message: "Document tab owner changed."
+        })
+      });
+    }
+    return { kind: "current", context: this.getTabContext(tabId) };
+  }
+
   private resolveExpectedTabCheckpoint(
     tabId: string,
     expectedWindowId: string,
@@ -788,8 +954,21 @@ function createDocumentProjection(
     name: projection.name,
     content: projection.content,
     encoding: projection.encoding,
+    revision: projection.revision,
+    savedRevision: projection.savedRevision,
     isDirty: projection.isDirty,
     saveState: projection.saveState
+  });
+}
+
+function createDocumentMetadataProjection(
+  session: DocumentSessionState
+): WorkspaceDocumentMetadataProjection {
+  return Object.freeze({
+    tabId: session.tabId,
+    revision: session.revision,
+    savedRevision: session.savedRevision,
+    isDirty: session.revision !== session.savedRevision
   });
 }
 

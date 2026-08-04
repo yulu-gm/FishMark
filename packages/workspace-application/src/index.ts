@@ -1,4 +1,18 @@
-export { createApplyDocumentEdits, type ApplyDocumentDraftInput } from "./apply-document-edits";
+export {
+  createApplyDocumentEdits,
+  type ApplyDocumentEditsInput,
+  type ApplyDocumentEditsResult,
+  type DocumentEditAuthorization
+} from "./apply-document-edits";
+export {
+  createFlushDocumentEdits,
+  type FlushDocumentEditsInput,
+  type FlushDocumentEditsResult
+} from "./flush-document-edits";
+export {
+  createUpdateDocumentDraft,
+  type UpdateDocumentDraftInput
+} from "./update-document-draft";
 export {
   createWorkspaceApplication,
   type WorkspaceMoveCommandResult,

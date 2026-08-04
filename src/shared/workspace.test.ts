@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 import * as workspaceContract from "./workspace";
 
@@ -13,5 +13,12 @@ describe("workspace owner-tab activation contract", () => {
     expect(
       (workspaceContract as Record<string, unknown>).WORKSPACE_WINDOW_SNAPSHOT_EVENT
     ).toBeUndefined();
+  });
+});
+
+describe("workspace document snapshot", () => {
+  it("carries canonical and saved revisions for initial hydration", () => {
+    expectTypeOf<workspaceContract.WorkspaceDocumentSnapshot>().toHaveProperty("revision");
+    expectTypeOf<workspaceContract.WorkspaceDocumentSnapshot>().toHaveProperty("savedRevision");
   });
 });
