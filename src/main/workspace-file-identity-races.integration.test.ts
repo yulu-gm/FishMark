@@ -1,4 +1,5 @@
 import {
+  createStringTextBuffer,
   createWorkspaceState,
   fileIdentity,
   type FileLocationIdentity,
@@ -57,7 +58,7 @@ function createSaveDocumentForTest(
 
 describe("workspace physical file identity transactions", () => {
   it("serializes two Save As operations targeting the same new location", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     workspace.registerWindow("window-2");
     const firstTabId = workspace.createUntitledTab("window-1").activeTabId!;
@@ -106,7 +107,7 @@ describe("workspace physical file identity transactions", () => {
   });
 
   it("makes open wait for a Save As creation and then activates the single owner", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     workspace.registerWindow("window-2");
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
@@ -205,7 +206,7 @@ describe("workspace physical file identity transactions", () => {
   });
 
   it("serializes Save As across two hard-link locations that share one object", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     workspace.registerWindow("window-2");
     const firstTabId = workspace.createUntitledTab("window-1").activeTabId!;
@@ -267,7 +268,7 @@ describe("workspace physical file identity transactions", () => {
   });
 
   it("rejects a Save As identity change before writing", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
     workspace.updateTabDraft({ tabId, expectedWindowId: "window-1", content: "draft" });
@@ -312,7 +313,7 @@ describe("workspace physical file identity transactions", () => {
   });
 
   it("rejects bidirectional Save As collisions without deadlocking", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     workspace.registerWindow("window-2");
     const firstIdentity = fileIdentity("path:c:/notes/a.md", "inode:7:a");
@@ -386,7 +387,7 @@ describe("workspace physical file identity transactions", () => {
   });
 
   it("fails an ordinary save closed when the object at its location was replaced", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const oldIdentity = fileIdentity("path:c:/notes/replaced.md", "inode:7:1");
     const newIdentity = fileIdentity(oldIdentity.location, "inode:7:2");

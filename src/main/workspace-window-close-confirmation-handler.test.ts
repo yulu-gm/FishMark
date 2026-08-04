@@ -1,5 +1,5 @@
 import type { WorkspaceWindowCloseConfirmation } from "@fishmark/workspace-application";
-import { createWorkspaceState, fileIdentity } from "@fishmark/workspace-domain";
+import { createStringTextBuffer, createWorkspaceState, fileIdentity } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 
 import { createTestCloseWorkspace } from "./workspace-application.integration.test-helper";
@@ -78,7 +78,7 @@ describe("createWorkspaceWindowCloseConfirmationHandler", () => {
   });
 
   it("rejects a late generation and permits only one confirmation for its successor", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
       "window-1",

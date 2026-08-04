@@ -1,4 +1,4 @@
-import { createWorkspaceState, fileIdentity } from "@fishmark/workspace-domain";
+import { createStringTextBuffer, createWorkspaceState, fileIdentity } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 import {
   createSaveDocument,
@@ -74,7 +74,7 @@ function resolvedTestFile(targetPath: string) {
 
 describe("workspace window close use case", () => {
   it("holds every tab lease through confirmed discard until unregister", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace, "window-1", document("saved")).activeTabId!;
@@ -139,7 +139,7 @@ describe("workspace window close use case", () => {
   });
 
   it("releases all tab leases when native close confirmation is cancelled", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace, "window-1", document("saved")).activeTabId!;
@@ -188,7 +188,7 @@ describe("workspace window close use case", () => {
   });
 
   it("cancels before the renderer handshake when the tab set changes during acquisition", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace, "window-1", document("first")).activeTabId!;
@@ -227,7 +227,7 @@ describe("workspace window close use case", () => {
   });
 
   it("cancels after a successful handshake when a tab is added while confirmation is pending", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
     const firstTabId = openTestDocument(workspace,
@@ -283,7 +283,7 @@ describe("workspace window close use case", () => {
   });
 
   it("cancels when a confirmed tab revision changes before the handshake completes", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
@@ -335,7 +335,7 @@ describe("workspace window close use case", () => {
   });
 
   it("accepts a draft revision flushed before close confirmation", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
@@ -375,7 +375,7 @@ describe("workspace window close use case", () => {
   });
 
   it("releases every lease when the renderer handshake rejects", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace, "window-1", document("saved")).activeTabId!;

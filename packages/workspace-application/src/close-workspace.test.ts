@@ -1,11 +1,11 @@
-import { createWorkspaceState } from "@fishmark/workspace-domain";
+import { createStringTextBuffer, createWorkspaceState } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 
 import { createCloseWorkspace, type KeyedOperationLease } from "./index";
 
 describe("createCloseWorkspace", () => {
   it("preserves the typed save error when confirming a window close", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
     workspace.updateTabDraft({
@@ -47,7 +47,7 @@ describe("createCloseWorkspace", () => {
   });
 
   it("keeps a dirty tab open when the user cancels", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
     workspace.updateTabDraft({

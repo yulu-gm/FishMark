@@ -1,4 +1,4 @@
-import { createWorkspaceState } from "@fishmark/workspace-domain";
+import { createStringTextBuffer, createWorkspaceState } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 
 import { createWorkspaceApplication } from "./index";
@@ -52,7 +52,7 @@ function workflowDependencies(workspace: ReturnType<typeof createWorkspaceState>
 
 describe("createWorkspaceApplication", () => {
   it("commits a tab mutation before synchronizing its resulting watch target", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const events: string[] = [];
     const syncDocumentPath = vi.fn(async () => {
@@ -92,7 +92,7 @@ describe("createWorkspaceApplication", () => {
   });
 
   it("reports a committed mutation and its latest projection when watcher sync fails", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const application = createWorkspaceApplication({
       ...workflowDependencies(workspace),
@@ -128,7 +128,7 @@ describe("createWorkspaceApplication", () => {
   });
 
   it("reports snapshot watch failure as uncommitted", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const application = createWorkspaceApplication({
       ...workflowDependencies(workspace),
@@ -152,7 +152,7 @@ describe("createWorkspaceApplication", () => {
   });
 
   it("orders delegated mutation workflows before watcher synchronization", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const projection = workspace.getWindowProjection("window-1");
     const moveProjection = {

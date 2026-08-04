@@ -24,6 +24,7 @@ import {
   type WorkspaceProjectionMutationResult,
   type WorkspaceWindowCloseConfirmation
 } from "@fishmark/workspace-application";
+import { createCodeMirrorTextBuffer } from "@fishmark/workspace-infrastructure";
 import {
   app,
   BrowserWindow,
@@ -377,7 +378,7 @@ app.whenReady().then(async () => {
     platform: process.platform
   });
   const externalFileWatchService = createExternalFileWatchService();
-  const workspaceState = createWorkspaceState();
+  const workspaceState = createWorkspaceState({ createTextBuffer: createCodeMirrorTextBuffer });
   const workspaceWatcher = {
     syncDocumentPath: externalFileWatchService.syncDocumentPath,
     beginInternalWrite: externalFileWatchService.beginInternalWrite,

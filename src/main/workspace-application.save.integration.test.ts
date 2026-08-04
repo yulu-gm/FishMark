@@ -1,6 +1,6 @@
 import type { Stats } from "node:fs";
 
-import { createWorkspaceState, fileIdentity } from "@fishmark/workspace-domain";
+import { createStringTextBuffer, createWorkspaceState, fileIdentity } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 import { createSaveDocument as createSaveDocumentWithPorts } from "@fishmark/workspace-application";
 
@@ -95,7 +95,7 @@ describe("workspace save use case", () => {
   ])(
     "rejects an ordinary save whose adapter returns a %s path without mutating canonical state",
     async (_caseName, returnedPath) => {
-      const workspace = createWorkspaceState();
+      const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
       workspace.registerWindow("window-1");
       const tabId = openTestDocument(workspace,
         "window-1",
@@ -142,7 +142,7 @@ describe("workspace save use case", () => {
   );
 
   it("rejects adapter content that differs from the captured ordinary-save checkpoint after a newer edit", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
       "window-1",
@@ -187,7 +187,7 @@ describe("workspace save use case", () => {
   });
 
   it("rejects a Save As identity collision before writing", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     openTestDocument(workspace, "window-1", document("existing.md", "disk"));
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
@@ -215,7 +215,7 @@ describe("workspace save use case", () => {
   });
 
   it("rejects a Save As adapter path that differs from the confirmed canonical path", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
     workspace.updateTabDraft({
@@ -253,7 +253,7 @@ describe("workspace save use case", () => {
   });
 
   it("uses the canonical Save As path for an ordinary save that was queued while the dialog was open", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
       "window-1",
@@ -317,7 +317,7 @@ describe("workspace save use case", () => {
   });
 
   it("does not begin a second ordinary save before the first watcher transaction finishes", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
       "window-1",
@@ -396,7 +396,7 @@ describe("workspace save use case", () => {
   });
 
   it("awaits watcher write admission before invoking the filesystem adapter", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
       "window-1",
@@ -442,7 +442,7 @@ describe("workspace save use case", () => {
   });
 
   it("keeps consecutive ordinary saves inside distinct real watcher transactions", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
       "window-1",
@@ -534,7 +534,7 @@ describe("workspace save use case", () => {
   });
 
   it("keeps the Save As dialog outside the tab lease and serializes the write", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
     workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "draft" });
@@ -588,7 +588,7 @@ describe("workspace save use case", () => {
   });
 
   it("rejects a save commit after an out-of-band owner change and still completes cleanup", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     openTestDocument(workspace, "window-1", document("source.md", "source"));
     const tabId = openTestDocument(workspace,
@@ -651,7 +651,7 @@ describe("workspace save use case", () => {
   });
 
   it("completes write tracking when the write throws", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
       "window-1",
@@ -689,7 +689,7 @@ describe("workspace save use case", () => {
   });
 
   it("completes write tracking when the adapter returns mismatched content", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
       "window-1",
@@ -732,7 +732,7 @@ describe("workspace save use case", () => {
   });
 
   it("rejects a Save As commit after an out-of-band owner change", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     openTestDocument(workspace, "window-1", document("source.md", "source"));
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
@@ -783,7 +783,7 @@ describe("workspace save use case", () => {
   });
 
   it("preserves an ordinary save window-missing error while completing and unbinding", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
       "window-1",
@@ -845,7 +845,7 @@ describe("workspace save use case", () => {
   });
 
   it("rejects a window-missing Save As commit before recording recent and safely unbinds", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
     workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "captured dirty" });
@@ -890,7 +890,7 @@ describe("workspace save use case", () => {
   });
 
   it("preserves the primary save error while reporting write cleanup failure", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
       "window-1",
@@ -939,7 +939,7 @@ describe("workspace save use case", () => {
   });
 
   it("preserves the primary Save As dialog error without starting watcher cleanup", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
     const sender = { id: 8 };
@@ -977,7 +977,7 @@ describe("workspace save use case", () => {
   });
 
   it("aggregates write cleanup errors after a successful save operation", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
       "window-1",

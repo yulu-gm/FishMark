@@ -12,6 +12,9 @@ export default defineConfig({
   },
   resolve: {
     alias: {
+      "workspace-domain-test-conformance": fileURLToPath(
+        new URL("./packages/workspace-domain/test/text-buffer-conformance.ts", import.meta.url)
+      ),
       "@fishmark/editor-core": fileURLToPath(new URL("./packages/editor-core/src/index.ts", import.meta.url)),
       "@fishmark/markdown-engine": fileURLToPath(
         new URL("./packages/markdown-engine/src/index.ts", import.meta.url)
@@ -24,6 +27,9 @@ export default defineConfig({
       ),
       "@fishmark/workspace-domain": fileURLToPath(
         new URL("./packages/workspace-domain/src/index.ts", import.meta.url)
+      ),
+      "@fishmark/workspace-infrastructure": fileURLToPath(
+        new URL("./packages/workspace-infrastructure/src/index.ts", import.meta.url)
       )
     }
   },

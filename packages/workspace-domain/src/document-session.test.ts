@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { DiskVersion } from "./disk-version";
 import { fileIdentity } from "./file-identity";
 import {
+  applyDocumentEditBatch,
   commitSavedDocument,
   createDocumentSession,
   moveDocumentSession,
@@ -11,6 +12,12 @@ import {
   replaceDocumentText,
   type WorkspaceDocumentData
 } from "./document-session";
+import {
+  createStringTextBuffer,
+  type TextBuffer,
+  type TextBufferFactory,
+  type TextChange
+} from "./text-buffer";
 
 const untitledDocument: WorkspaceDocumentData = {
   fileIdentity: null,
@@ -31,7 +38,8 @@ function createSession() {
   return createDocumentSession({
     tabId: "tab-1",
     windowId: "window-1",
-    document: untitledDocument
+    document: untitledDocument,
+    createTextBuffer: createStringTextBuffer
   });
 }
 
@@ -316,7 +324,8 @@ describe("document session disk replacement and movement", () => {
         content: "# Saved\n",
         encoding: "utf-8"
       },
-      diskVersion
+      diskVersion,
+      createTextBuffer: createStringTextBuffer
     });
     const dirty = replaceDocumentText(opened, "# Current dirty\n");
     const incomingDiskVersion: DiskVersion = {
@@ -368,6 +377,352 @@ describe("document session disk replacement and movement", () => {
   });
 });
 
+describe("document session edit batches", () => {
+  const replaceAlphaWith = (insert: string): readonly TextChange[] => [
+    { from: 0, to: 5, insert }
+  ];
+
+  it("applies multiple original-offset changes with exactly one revision", () => {
+    const session = createDocumentSession({
+      tabId: "tab-1",
+      windowId: "window-1",
+      document: { ...untitledDocument, content: "alpha beta" },
+      createTextBuffer: createStringTextBuffer
+    });
+
+    const result = applyDocumentEditBatch(session, {
+      baseRevision: 0,
+      clientId: "client-a",
+      clientSequence: 1,
+      changes: [
+        { from: 0, to: 5, insert: "A" },
+        { from: 6, to: 10, insert: "B" }
+      ]
+    });
+
+    expect(result).toMatchObject({ kind: "applied", revision: 1 });
+    expect(result.session).not.toBe(session);
+    expect(result.session.text.toString()).toBe("A B");
+  });
+
+  it("acknowledges a non-empty same-text replacement with one clean revision", () => {
+    const session = createSession();
+    const result = applyDocumentEditBatch(session, {
+      baseRevision: 0,
+      clientId: "client-a",
+      clientSequence: 1,
+      changes: replaceAlphaWith("alpha")
+    });
+
+    expect(result).toMatchObject({ kind: "applied", revision: 1 });
+    expect(result.session).not.toBe(session);
+    expect(result.session.savedRevision).toBe(1);
+  });
+
+  it("rejects an empty batch without acknowledging its sequence", () => {
+    const session = createSession();
+    const invalid = applyDocumentEditBatch(session, {
+      baseRevision: 0,
+      clientId: "client-a",
+      clientSequence: 1,
+      changes: []
+    });
+
+    expect(invalid).toMatchObject({
+      kind: "invalid",
+      error: { code: "empty-change-batch" }
+    });
+    expect(invalid.session).toBe(session);
+    expect(
+      applyDocumentEditBatch(session, {
+        baseRevision: 0,
+        clientId: "client-a",
+        clientSequence: 1,
+        changes: replaceAlphaWith("beta")
+      }).kind
+    ).toBe("applied");
+  });
+
+  it("returns a duplicate before checking a stale base revision", () => {
+    const first = applyDocumentEditBatch(createSession(), {
+      baseRevision: 0,
+      clientId: "client-a",
+      clientSequence: 1,
+      changes: replaceAlphaWith("beta")
+    });
+    const duplicate = applyDocumentEditBatch(first.session, {
+      baseRevision: 0,
+      clientId: "client-a",
+      clientSequence: 1,
+      changes: replaceAlphaWith("gamma")
+    });
+
+    expect(duplicate).toMatchObject({ kind: "duplicate", revision: 1 });
+    expect(duplicate.session).toBe(first.session);
+    expect(duplicate.session.text.toString()).toBe("beta");
+  });
+
+  it("rejects a sequence gap without mutating the session or ledger", () => {
+    const session = createSession();
+    const gap = applyDocumentEditBatch(session, {
+      baseRevision: 0,
+      clientId: "client-a",
+      clientSequence: 2,
+      changes: replaceAlphaWith("beta")
+    });
+
+    expect(gap).toMatchObject({ kind: "sequence-gap", expectedSequence: 1 });
+    expect(gap.session).toBe(session);
+    expect(
+      applyDocumentEditBatch(session, {
+        baseRevision: 0,
+        clientId: "client-a",
+        clientSequence: 1,
+        changes: replaceAlphaWith("beta")
+      }).kind
+    ).toBe("applied");
+  });
+
+  it.each([0, 2])(
+    "returns a revision conflict for base revision %s",
+    (baseRevision) => {
+      const session = Object.freeze({ ...createSession(), revision: 1 });
+      const conflict = applyDocumentEditBatch(session, {
+        baseRevision,
+        clientId: "client-a",
+        clientSequence: 1,
+        changes: replaceAlphaWith("beta")
+      });
+
+      expect(conflict).toMatchObject({
+        kind: "revision-conflict",
+        canonicalRevision: 1
+      });
+      expect(conflict.session).toBe(session);
+    }
+  );
+
+  it("tracks client sequences independently", () => {
+    const first = applyDocumentEditBatch(createSession(), {
+      baseRevision: 0,
+      clientId: "client-a",
+      clientSequence: 1,
+      changes: replaceAlphaWith("beta")
+    });
+    const second = applyDocumentEditBatch(first.session, {
+      baseRevision: 1,
+      clientId: "client-b",
+      clientSequence: 1,
+      changes: [{ from: 4, to: 4, insert: "!" }]
+    });
+
+    expect(second).toMatchObject({ kind: "applied", revision: 2 });
+    expect(second.session.clientSequenceHighWatermarks.size).toBe(2);
+    expect(second.session.clientSequenceHighWatermarks.get("client-a")).toBe(1);
+    expect(second.session.clientSequenceHighWatermarks.get("client-b")).toBe(1);
+  });
+
+  it.each(["", "   "])("rejects invalid client id %#", (clientId) => {
+    const session = createSession();
+    const result = applyDocumentEditBatch(session, {
+      baseRevision: 0,
+      clientId,
+      clientSequence: 1,
+      changes: replaceAlphaWith("beta")
+    });
+
+    expect(result).toMatchObject({
+      kind: "invalid",
+      error: { code: "invalid-client-id" }
+    });
+    expect(result.session).toBe(session);
+  });
+
+  it.each([0, -1, 0.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1])(
+    "rejects invalid client sequence %#",
+    (clientSequence) => {
+      const session = createSession();
+      const result = applyDocumentEditBatch(session, {
+        baseRevision: 0,
+        clientId: "client-a",
+        clientSequence,
+        changes: replaceAlphaWith("beta")
+      });
+
+      expect(result).toMatchObject({
+        kind: "invalid",
+        error: { code: "invalid-client-sequence" }
+      });
+      expect(result.session).toBe(session);
+    }
+  );
+
+  it("rejects invalid ranges atomically without acknowledging the sequence", () => {
+    const session = createSession();
+    const invalid = applyDocumentEditBatch(session, {
+      baseRevision: 0,
+      clientId: "client-a",
+      clientSequence: 1,
+      changes: [
+        { from: 0, to: 3, insert: "A" },
+        { from: 2, to: 4, insert: "B" }
+      ]
+    });
+
+    expect(invalid).toMatchObject({
+      kind: "invalid",
+      error: { code: "invalid-text-changes" }
+    });
+    expect(invalid.session).toBe(session);
+    expect(invalid.session.text.toString()).toBe("alpha");
+    expect(
+      applyDocumentEditBatch(session, {
+        baseRevision: 0,
+        clientId: "client-a",
+        clientSequence: 1,
+        changes: replaceAlphaWith("beta")
+      }).kind
+    ).toBe("applied");
+  });
+
+  it.each<[string, unknown]>([
+    ["a null change", [null]],
+    ["a non-string insert", [{ from: 0, to: 5, insert: 42 }]]
+  ])("returns typed invalid text changes for runtime-malformed %s", (_description, malformed) => {
+    const session = createSession();
+    const ledger = session.clientSequenceHighWatermarks;
+    const invalid = applyDocumentEditBatch(session, {
+      baseRevision: 0,
+      clientId: "client-a",
+      clientSequence: 1,
+      changes: malformed as readonly TextChange[]
+    });
+
+    expect(invalid).toMatchObject({
+      kind: "invalid",
+      error: { code: "invalid-text-changes" }
+    });
+    expect(invalid.session).toBe(session);
+    expect(invalid.session.revision).toBe(0);
+    expect(invalid.session.clientSequenceHighWatermarks).toBe(ledger);
+    expect(ledger.size).toBe(0);
+    expect(
+      applyDocumentEditBatch(session, {
+        baseRevision: 0,
+        clientId: "client-a",
+        clientSequence: 1,
+        changes: replaceAlphaWith("beta")
+      }).kind
+    ).toBe("applied");
+  });
+
+  it("returns a typed invalid result when the revision cannot advance", () => {
+    const session = Object.freeze({
+      ...createSession(),
+      revision: Number.MAX_SAFE_INTEGER,
+      savedRevision: Number.MAX_SAFE_INTEGER
+    });
+    const result = applyDocumentEditBatch(session, {
+      baseRevision: Number.MAX_SAFE_INTEGER,
+      clientId: "client-a",
+      clientSequence: 1,
+      changes: replaceAlphaWith("beta")
+    });
+
+    expect(result).toMatchObject({
+      kind: "invalid",
+      error: { code: "revision-overflow" }
+    });
+    expect(result.session).toBe(session);
+  });
+
+  it("marks a batch that returns to saved text clean at the new revision", () => {
+    const changed = applyDocumentEditBatch(createSession(), {
+      baseRevision: 0,
+      clientId: "client-a",
+      clientSequence: 1,
+      changes: replaceAlphaWith("beta")
+    });
+    const restored = applyDocumentEditBatch(changed.session, {
+      baseRevision: 1,
+      clientId: "client-a",
+      clientSequence: 2,
+      changes: [{ from: 0, to: 4, insert: "alpha" }]
+    });
+
+    expect(restored).toMatchObject({ kind: "applied", revision: 2 });
+    expect(restored.session.savedRevision).toBe(2);
+  });
+
+  it("stores one immutable high-watermark per client instead of every edit", () => {
+    let session = createSession();
+
+    for (let sequence = 1; sequence <= 100; sequence += 1) {
+      const result = applyDocumentEditBatch(session, {
+        baseRevision: session.revision,
+        clientId: "client-a",
+        clientSequence: sequence,
+        changes: [
+          { from: session.text.length, to: session.text.length, insert: "!" }
+        ]
+      });
+      expect(result.kind).toBe("applied");
+      session = result.session;
+    }
+
+    expect(session.clientSequenceHighWatermarks.size).toBe(1);
+    expect(session.clientSequenceHighWatermarks.get("client-a")).toBe(100);
+    expect(() => {
+      (session.clientSequenceHighWatermarks as Map<string, number>).set(
+        "client-a",
+        1_000
+      );
+    }).toThrow();
+    expect(session.clientSequenceHighWatermarks.get("client-a")).toBe(100);
+  });
+
+  it("does not materialize the full string on the incremental path", () => {
+    let toStringCalls = 0;
+    class InstrumentedTextBuffer implements TextBuffer {
+      constructor(private readonly inner: TextBuffer) {}
+      get length(): number {
+        return this.inner.length;
+      }
+      apply(changes: readonly TextChange[]): TextBuffer {
+        return new InstrumentedTextBuffer(this.inner.apply(changes));
+      }
+      equals(other: TextBuffer): boolean {
+        return other instanceof InstrumentedTextBuffer &&
+          this.inner.equals(other.inner);
+      }
+      slice(from: number, to?: number): string {
+        return this.inner.slice(from, to);
+      }
+      toString(): string {
+        toStringCalls += 1;
+        return this.inner.toString();
+      }
+    }
+    const createInstrumentedTextBuffer: TextBufferFactory = (value) =>
+      new InstrumentedTextBuffer(createStringTextBuffer(value));
+    const session = createDocumentSession({
+      tabId: "tab-1",
+      windowId: "window-1",
+      document: untitledDocument,
+      createTextBuffer: createInstrumentedTextBuffer
+    });
+    const result = applyDocumentEditBatch(session, {
+      baseRevision: 0,
+      clientId: "client-a",
+      clientSequence: 1,
+      changes: replaceAlphaWith("beta")
+    });
+
+    expect(result.kind).toBe("applied");
+    expect(toStringCalls).toBe(0);
+  });
+});
+
 describe("document session immutability", () => {
   it("preserves disk versions while isolating input and projection mutation", () => {
     const mutableInput = { ...diskVersion };
@@ -375,7 +730,8 @@ describe("document session immutability", () => {
       tabId: "tab-1",
       windowId: "window-1",
       document: untitledDocument,
-      diskVersion: mutableInput
+      diskVersion: mutableInput,
+      createTextBuffer: createStringTextBuffer
     });
 
     mutableInput.contentHash = "mutated-input";

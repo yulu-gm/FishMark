@@ -1,4 +1,4 @@
-import { createWorkspaceState, fileIdentity } from "@fishmark/workspace-domain";
+import { createStringTextBuffer, createWorkspaceState, fileIdentity } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 import { createWorkspaceOpen } from "@fishmark/workspace-application";
 
@@ -45,7 +45,7 @@ const resolved = {
 
 describe("workspace open use case", () => {
   it("serializes duplicate opens and reads the physical file only once", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     workspace.registerWindow("window-2");
     const read = vi.fn(async () => ({
@@ -85,7 +85,7 @@ describe("workspace open use case", () => {
   });
 
   it("activates an existing same-window tab without rereading it", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     workspace.openDocument("window-1", {
       fileIdentity: resolved.identity,
@@ -116,7 +116,7 @@ describe("workspace open use case", () => {
   });
 
   it("identifies and activates the owning tab before focusing its window", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     workspace.registerWindow("window-2");
     const ownerTabId = workspace.openDocument("window-1", {
@@ -153,7 +153,7 @@ describe("workspace open use case", () => {
   });
 
   it("re-resolves identity after acquiring the location lease", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const locationOperations = createKeyedOperationCoordinator<
       typeof resolved.identity.location
@@ -205,7 +205,7 @@ describe("workspace open use case", () => {
   });
 
   it("rejects a final location change even when the object identity is unchanged", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const movedIdentity = fileIdentity("path:c:/moved/note.md", resolved.identity.object);
     const moved = {
@@ -247,7 +247,7 @@ describe("workspace open use case", () => {
   });
 
   it("retries instead of focusing an owner removed while its tab lease is held", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     workspace.registerWindow("window-2");
     workspace.openDocument("window-1", {
@@ -303,7 +303,7 @@ describe("workspace open use case", () => {
   });
 
   it("fails closed when location and object identities have different owners", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     workspace.registerWindow("window-2");
     const firstIdentity = fileIdentity("path:c:/first.md", "inode:7:first");
@@ -355,7 +355,7 @@ describe("workspace open use case", () => {
   });
 
   it("fails closed after the bounded owner retry budget is exhausted", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     workspace.registerWindow("window-2");
     workspace.openDocument("window-1", {
@@ -386,7 +386,7 @@ describe("workspace open use case", () => {
   });
 
   it("does not report focused-existing when owner renderer activation fails", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     workspace.registerWindow("window-2");
     workspace.openDocument("window-1", {
@@ -417,7 +417,7 @@ describe("workspace open use case", () => {
   });
 
   it("retries against the new owner when the tab moves before activation confirmation", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     workspace.registerWindow("window-2");
     workspace.registerWindow("window-3");

@@ -436,13 +436,14 @@ describe("package scripts", () => {
 
     expect(packageJson.dependencies).toEqual(
       expect.objectContaining({
+        "@codemirror/state": expect.any(String),
+        "@fishmark/workspace-infrastructure": "file:packages/workspace-infrastructure",
         "electron-updater": expect.any(String)
       })
     );
     expect(packageJson.dependencies).not.toEqual(
       expect.objectContaining({
         "@codemirror/commands": expect.any(String),
-        "@codemirror/state": expect.any(String),
         "@codemirror/view": expect.any(String),
         "micromark": expect.any(String),
         "react": expect.any(String),
@@ -452,13 +453,51 @@ describe("package scripts", () => {
     expect(packageJson.devDependencies).toEqual(
       expect.objectContaining({
         "@codemirror/commands": expect.any(String),
-        "@codemirror/state": expect.any(String),
         "@codemirror/view": expect.any(String),
         "micromark": expect.any(String),
         "react": expect.any(String),
         "react-dom": expect.any(String)
       })
     );
+    expect(packageJson.devDependencies).not.toHaveProperty("@codemirror/state");
+  });
+
+  it("builds, watches, cleans, and runtime-verifies workspace infrastructure", () => {
+    const packageJson = JSON.parse(
+      readFileSync(path.join(process.cwd(), "package.json"), "utf8")
+    ) as { scripts?: Record<string, string> };
+    const verifierPath = path.join(
+      process.cwd(),
+      "scripts",
+      "verify-workspace-infrastructure-runtime.mjs"
+    );
+
+    expect(packageJson.scripts?.dev).toContain("npm:dev:workspace-infrastructure");
+    expect(packageJson.scripts?.["dev:test-workbench"]).toContain(
+      "npm:dev:workspace-infrastructure"
+    );
+    expect(packageJson.scripts?.["dev:workspace-infrastructure"]).toContain(
+      "packages/workspace-domain/dist/index.js"
+    );
+    expect(packageJson.scripts?.["dev:electron"]).toContain(
+      "packages/workspace-infrastructure/dist/index.js"
+    );
+    expect(packageJson.scripts?.["build:workspace-infrastructure"]).toContain(
+      "npm run build:workspace-domain"
+    );
+    expect(packageJson.scripts?.["build:electron"]).toContain(
+      "npm run build:workspace-infrastructure"
+    );
+    expect(packageJson.scripts?.["build:electron"]).toContain(
+      "node scripts/verify-workspace-infrastructure-runtime.mjs"
+    );
+    expect(packageJson.scripts?.clean).toContain(
+      "packages/workspace-infrastructure/dist"
+    );
+    expect(packageJson.scripts?.typecheck).toContain(
+      "npm run build:workspace-infrastructure"
+    );
+    expect(existsSync(verifierPath)).toBe(true);
   });
 
   it("does not package the CLI-driven test harness into the Windows installer payload", () => {

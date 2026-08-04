@@ -1,4 +1,4 @@
-import { createWorkspaceState } from "@fishmark/workspace-domain";
+import { createStringTextBuffer, createWorkspaceState } from "@fishmark/workspace-domain";
 import { describe, expect, it } from "vitest";
 import { createWorkspaceTabTransfer } from "@fishmark/workspace-application";
 
@@ -8,7 +8,7 @@ describe("workspace tab transfer use case", () => {
   it.each(["move", "detach"] as const)(
     "runs %s owner transfer inside the tab document lease",
     async (kind) => {
-      const workspace = createWorkspaceState();
+      const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
       const documentOperations = createKeyedOperationCoordinator();
       workspace.registerWindow("window-1");
       const tabId = workspace.createUntitledTab("window-1").activeTabId!;
@@ -37,7 +37,7 @@ describe("workspace tab transfer use case", () => {
   );
 
   it("rejects a stale source owner inside the lease before transfer", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;

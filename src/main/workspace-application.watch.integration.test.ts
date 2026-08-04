@@ -1,6 +1,6 @@
 import type { Stats } from "node:fs";
 
-import { createWorkspaceState, fileIdentity } from "@fishmark/workspace-domain";
+import { createStringTextBuffer, createWorkspaceState, fileIdentity } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 import { createWorkspaceApplication } from "@fishmark/workspace-application";
 
@@ -75,7 +75,7 @@ function createWatchApplication<TContext>(input: {
 
 describe("workspace watcher use case", () => {
   it("forwards a newer window intent without waiting for an older service I/O", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabA = openTestDocument(workspace, "window-1", document("a.md")).activeTabId!;
     const tabB = openTestDocument(workspace, "window-1", document("b.md")).activeTabId!;
@@ -120,7 +120,7 @@ describe("workspace watcher use case", () => {
   });
 
   it("syncs missing windows and pathless active documents to null", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     workspace.createUntitledTab("window-1");
     const syncDocumentPath = vi.fn(async () => undefined);
@@ -141,7 +141,7 @@ describe("workspace watcher use case", () => {
   });
 
   it("forwards a later intent after a service failure", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     openTestDocument(workspace, "window-1", document("a.md"));
     const failure = new Error("stat failed");
@@ -166,7 +166,7 @@ describe("workspace watcher use case", () => {
   });
 
   it("does not serialize independent windows", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     workspace.registerWindow("window-2");
     openTestDocument(workspace, "window-1", document("a.md"));

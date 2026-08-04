@@ -90,6 +90,7 @@ describe("main process window wiring", () => {
     const mainSource = readMainSource();
     expect(mainSource).toContain('from "@fishmark/workspace-domain"');
     expect(mainSource).toContain('from "@fishmark/workspace-application"');
+    expect(mainSource).toContain('from "@fishmark/workspace-infrastructure"');
     for (const factory of [
       "createApplyDocumentEdits",
       "createCloseWorkspace",
@@ -131,7 +132,9 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain("ACTIVATE_WORKSPACE_TAB_CHANNEL");
     expect(mainSource).toContain("CLOSE_WORKSPACE_TAB_CHANNEL");
     expect(mainSource).toContain("UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL");
-    expect(mainSource).toContain("const workspaceState = createWorkspaceState()");
+    expect(mainSource).toContain(
+      "const workspaceState = createWorkspaceState({ createTextBuffer: createCodeMirrorTextBuffer })"
+    );
     expect(mainSource).toContain("const workspaceTabOperations = createKeyedOperationCoordinator<string>()");
     expect(mainSource).toContain("const workspaceTabReorderApplication = createWorkspaceTabReorder({");
     expect(mainSource).toContain("const workspaceApplication = createWorkspaceApplication({");

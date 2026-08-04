@@ -1,4 +1,4 @@
-import { createWorkspaceState } from "@fishmark/workspace-domain";
+import { createStringTextBuffer, createWorkspaceState } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 import {
   createWorkspaceTabReorder,
@@ -9,7 +9,7 @@ import {
 import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator";
 
 function createFixture() {
-  const workspace = createWorkspaceState();
+  const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
   const documentOperations = createKeyedOperationCoordinator();
   workspace.registerWindow("window-1");
   const firstTabId = workspace.createUntitledTab("window-1").activeTabId!;

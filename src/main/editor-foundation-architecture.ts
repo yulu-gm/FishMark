@@ -72,6 +72,7 @@ const bundleMaximumCheckIdsByMetric = new Map([
 const supportedLifecycleStates = new Set(["present", "present-until", "forbidden", "removed"]);
 const supportedParserVisibilities = new Set(["public", "internal-export"]);
 const forbiddenImportRuleFields = new Set([
+  "allowedPackages",
   "forbiddenPackages",
   "forbiddenPaths",
   "id",
@@ -303,6 +304,13 @@ function validateRules(rules: readonly ManifestRecord[], context: ValidationCont
 
     if (kind === "forbidden-imports") {
       validateActiveRuleDirectory(rule.sourcePath, `rule ${id ?? "<missing-id>"} sourcePath`, context);
+      if (rule.allowedPackages !== undefined) {
+        validateStringArray(
+          rule.allowedPackages,
+          `rule ${id ?? "<missing-id>"} allowedPackages`,
+          context
+        );
+      }
       validateStringArray(rule.forbiddenPackages, `rule ${id ?? "<missing-id>"} forbiddenPackages`, context);
       for (const path of validateStringArray(
         rule.forbiddenPaths,
@@ -635,6 +643,9 @@ function validateForbiddenImports(
     return;
   }
   const forbiddenPackages = stringArray(rule.forbiddenPackages);
+  const allowedPackages = Array.isArray(rule.allowedPackages)
+    ? stringArray(rule.allowedPackages)
+    : null;
   const forbiddenPaths = stringArray(rule.forbiddenPaths).flatMap((path) => {
     const canonicalPath = resolveRepoRelativePath(context.rootDir, path);
     return canonicalPath ? [canonicalPath] : [];
@@ -645,12 +656,25 @@ function validateForbiddenImports(
       continue;
     }
     for (const sourceImport of analysis.imports) {
-      const packageViolation = forbiddenPackages.some((pattern) => packagePatternMatches(pattern, sourceImport.specifier));
+      const packageViolation =
+        forbiddenPackages.some((pattern) =>
+          packagePatternMatches(pattern, sourceImport.specifier)
+        ) ||
+        (allowedPackages !== null &&
+          !isTestSource(importer) &&
+          isPackageImport(sourceImport.specifier) &&
+          !allowedPackages.some((pattern) =>
+            packagePatternMatches(pattern, sourceImport.specifier)
+          ));
       const resolvedPath = resolveImportRepoPath(context.rootDir, importer, sourceImport.specifier);
       const pathViolation =
         resolvedPath !== null &&
         forbiddenPaths.some((path) => pathIsWithin(context.rootDir, resolvedPath, path));
-      if (packageViolation || pathViolation) {
+      const allowedSourcePathViolation =
+        allowedPackages !== null &&
+        resolvedPath !== null &&
+        !pathIsWithin(context.rootDir, resolvedPath, canonicalSourcePath);
+      if (packageViolation || pathViolation || allowedSourcePathViolation) {
         reportViolation(
           ruleId,
           importer,
@@ -1408,6 +1432,14 @@ function reportFilesystemAccessError(
   });
 }
 
+
+function isPackageImport(specifier: string): boolean {
+  return !specifier.startsWith(".") && !specifier.startsWith("/");
+}
+
+function isTestSource(path: string): boolean {
+  return /\.test\.[cm]?[jt]sx?$/.test(path);
+}
 
 function packagePatternMatches(pattern: string, specifier: string): boolean {
   const patternIdentity = asciiCaseFold(pattern);

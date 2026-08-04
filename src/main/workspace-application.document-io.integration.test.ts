@@ -1,4 +1,4 @@
-import { createWorkspaceState, fileIdentity } from "@fishmark/workspace-domain";
+import { createStringTextBuffer, createWorkspaceState, fileIdentity } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 import {
   createSaveDocument as createSaveDocumentForTest,
@@ -90,7 +90,7 @@ const sender = { id: 1 };
 
 describe("workspace application document IO transactions", () => {
   it("commits an in-flight save before a queued move transfers the clean session", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
@@ -143,7 +143,7 @@ describe("workspace application document IO transactions", () => {
   });
 
   it("rejects an old-owner save before writing when a queued move wins the lease", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
@@ -183,7 +183,7 @@ describe("workspace application document IO transactions", () => {
   });
 
   it("commits an in-flight reload before a queued detach transfers disk content", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
@@ -229,7 +229,7 @@ describe("workspace application document IO transactions", () => {
   });
 
   it("rejects an old-owner reload before reading when a queued detach wins the lease", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
@@ -272,7 +272,7 @@ describe("workspace application document IO transactions", () => {
   });
 
   it("does not let a save overtake an in-flight reload of the same tab", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace, "window-1", document("A")).activeTabId!;
@@ -319,7 +319,7 @@ describe("workspace application document IO transactions", () => {
   });
 
   it("does not let a reload overtake an in-flight save of the same tab", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace, "window-1", document("before")).activeTabId!;
@@ -370,7 +370,7 @@ describe("workspace application document IO transactions", () => {
   });
 
   it("does not write a queued save after discard closes the tab", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace, "window-1", document("saved")).activeTabId!;
@@ -414,7 +414,7 @@ describe("workspace application document IO transactions", () => {
   });
 
   it("waits for an in-flight save before closing the now-clean tab", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace, "window-1", document("saved")).activeTabId!;
@@ -464,7 +464,7 @@ describe("workspace application document IO transactions", () => {
   ] as const)(
     "holds the window lease until a $lifecycle confirmation prompt drains",
     async ({ lifecycle, choice }) => {
-      const workspace = createWorkspaceState();
+      const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
       const documentOperations = createKeyedOperationCoordinator();
       workspace.registerWindow("window-1");
       const tabId = openTestDocument(workspace,
@@ -568,7 +568,7 @@ describe("workspace application document IO transactions", () => {
   );
 
   it("keeps queued IO blocked until an inactive close write returns and drains", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
@@ -675,7 +675,7 @@ describe("workspace application document IO transactions", () => {
   it("allows a native save confirmation to outlive the transport timeout", async () => {
     vi.useFakeTimers();
     try {
-      const workspace = createWorkspaceState();
+      const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
       const documentOperations = createKeyedOperationCoordinator();
       workspace.registerWindow("window-1");
       const tabId = openTestDocument(workspace,

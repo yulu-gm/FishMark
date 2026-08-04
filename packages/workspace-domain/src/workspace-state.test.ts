@@ -1,6 +1,7 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
+  createStringTextBuffer,
   createWorkspaceState,
   fileIdentity,
   type CloseWorkspaceTabInput,
@@ -19,6 +20,7 @@ import {
   type WorkspaceTabProjection,
   type WorkspaceWindowProjection
 } from "@fishmark/workspace-domain";
+import type { TextBuffer, TextBufferFactory, TextChange } from "./text-buffer";
 
 const diskVersion: DiskVersion = {
   normalizedPath: "C:/notes/document.md",
@@ -52,9 +54,59 @@ function openProjection(
   return result.projection;
 }
 
+describe("WorkspaceState text buffer injection", () => {
+  it("uses the explicit factory for created sessions and its buffer for reload", () => {
+    const createdValues: string[] = [];
+    let applyCalls = 0;
+    class TrackingTextBuffer implements TextBuffer {
+      constructor(private readonly inner: TextBuffer) {}
+      get length(): number {
+        return this.inner.length;
+      }
+      apply(changes: readonly TextChange[]): TextBuffer {
+        applyCalls += 1;
+        return new TrackingTextBuffer(this.inner.apply(changes));
+      }
+      equals(other: TextBuffer): boolean {
+        return other instanceof TrackingTextBuffer &&
+          this.inner.equals(other.inner);
+      }
+      slice(from: number, to?: number): string {
+        return this.inner.slice(from, to);
+      }
+      toString(): string {
+        return this.inner.toString();
+      }
+    }
+    const createTextBuffer: TextBufferFactory = (value) => {
+      createdValues.push(value);
+      return new TrackingTextBuffer(createStringTextBuffer(value));
+    };
+    const workspace = createWorkspaceState({ createTextBuffer });
+    workspace.registerWindow("window-1");
+    workspace.createUntitledTab("window-1");
+    const opened = openProjection(
+      workspace,
+      "window-1",
+      createDocument("opened.md", "opened")
+    );
+
+    workspace.replaceTabDocument({
+      tabId: opened.activeTabId!,
+      expectedWindowId: "window-1",
+      expectedRevision: 0,
+      document: createDocument("opened.md", "reloaded")
+    });
+
+    expect(createdValues).toEqual(["", "opened"]);
+    expect(applyCalls).toBe(1);
+    expect(workspace.getTabSession(opened.activeTabId!).content).toBe("reloaded");
+  });
+});
+
 describe("WorkspaceState physical file ownership", () => {
   it("rejects a save whose location is self-owned but object is owned by another tab", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const firstIdentity = fileIdentity("location:first", "object:first");
     const secondIdentity = fileIdentity("location:second", "object:second");
@@ -83,7 +135,7 @@ describe("WorkspaceState physical file ownership", () => {
   });
 
   it("rejects a reload object migration owned by another tab and preserves its index on release", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const firstIdentity = fileIdentity("location:first", "object:first");
     const secondIdentity = fileIdentity("location:second", "object:second");
@@ -121,7 +173,7 @@ describe("WorkspaceState physical file ownership", () => {
   });
 
   it("reports an ambiguous owner when location and object belong to different tabs", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const first = fileIdentity("path:c:/first.md", "inode:7:first");
     const second = fileIdentity("path:c:/second.md", "inode:7:second");
@@ -144,7 +196,7 @@ describe("WorkspaceState physical file ownership", () => {
   });
 
   it("treats different locations for the same filesystem object as one document", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     workspace.registerWindow("window-2");
     const createAlias = (location: string): WorkspaceDocumentData => ({
@@ -166,7 +218,7 @@ describe("WorkspaceState physical file ownership", () => {
   });
 
   it("treats a reused location as owned even if its filesystem object changed", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const createVersion = (object: string): WorkspaceDocumentData => ({
       fileIdentity: (fileIdentity as unknown as (
@@ -187,7 +239,7 @@ describe("WorkspaceState physical file ownership", () => {
   });
 
   it("activates an existing tab in the same window instead of creating a second session", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
 
     const first = workspace.openDocument("window-1", createDocument("Same.md", "first"));
@@ -202,7 +254,7 @@ describe("WorkspaceState physical file ownership", () => {
   });
 
   it("reports only the owning window for a cross-window duplicate", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     workspace.registerWindow("window-2");
 
@@ -216,7 +268,7 @@ describe("WorkspaceState physical file ownership", () => {
   });
 
   it("rejects a Save As identity collision without mutating either session", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const first = openProjection(workspace, "window-1", createDocument("first.md", "one"));
     const second = openProjection(workspace, "window-1", createDocument("second.md", "two"));
@@ -240,7 +292,7 @@ describe("WorkspaceState physical file ownership", () => {
   });
 
   it("releases ownership on close and keeps it across a move", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     workspace.registerWindow("window-2");
     const opened = openProjection(workspace, "window-1", createDocument("move.md"));
@@ -275,7 +327,7 @@ function tryMutation(mutate: () => void): void {
 
 describe("WorkspaceState window lifecycle", () => {
   it("starts each registered window empty and tracks the last focused window", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
 
     expect(workspace.registerWindow("window-1")).toEqual({
       windowId: "window-1",
@@ -296,7 +348,7 @@ describe("WorkspaceState window lifecycle", () => {
   });
 
   it("keeps tabs when registering a duplicate window and refreshes focus", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const created = workspace.createUntitledTab("window-1");
     workspace.registerWindow("window-2");
@@ -308,7 +360,7 @@ describe("WorkspaceState window lifecycle", () => {
   });
 
   it("provides a total readonly window projection query", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
 
@@ -325,7 +377,7 @@ describe("WorkspaceState window lifecycle", () => {
   });
 
   it("unregisters owned sessions and repairs focus without disturbing other windows", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const removedTabId = workspace.createUntitledTab("window-1").activeTabId!;
     workspace.registerWindow("window-2");
@@ -354,7 +406,7 @@ describe("WorkspaceState window lifecycle", () => {
 
 describe("WorkspaceState tab lifecycle", () => {
   it("creates sequential untitled tabs and appends opened documents as active", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
 
     const untitled = workspace.createUntitledTab("window-1");
@@ -380,7 +432,7 @@ describe("WorkspaceState tab lifecycle", () => {
   });
 
   it("reactivates only tabs owned by the requested window and updates focus", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const firstTabId = openProjection(workspace,
       "window-1",
@@ -411,7 +463,7 @@ describe("WorkspaceState tab lifecycle", () => {
   });
 
   it("updates revisions only for changed drafts and marks a restored draft clean", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openProjection(workspace, "window-1", createDocument("draft.md", "saved")).activeTabId!;
 
@@ -441,7 +493,7 @@ describe("WorkspaceState tab lifecycle", () => {
   });
 
   it("closes an active tab and selects the next tab at its old index", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     workspace.openDocument("window-1", createDocument("first.md"));
     const secondTabId = openProjection(workspace, "window-1", createDocument("second.md")).activeTabId!;
@@ -467,7 +519,7 @@ describe("WorkspaceState tab lifecycle", () => {
   });
 
   it("closes an inactive tab without changing the active tab", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const firstTabId = openProjection(workspace, "window-1", createDocument("first.md")).activeTabId!;
     const activeTabId = openProjection(workspace, "window-1", createDocument("second.md")).activeTabId!;
@@ -489,7 +541,7 @@ describe("WorkspaceState tab lifecycle", () => {
 
 describe("WorkspaceState save and reload transitions", () => {
   it("commits a current save with Save As metadata and disk evidence", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
     workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "# Saved\n" });
@@ -525,7 +577,7 @@ describe("WorkspaceState save and reload transitions", () => {
   });
 
   it("keeps a newer draft dirty when an older captured revision finishes saving", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openProjection(workspace, "window-1", createDocument("race.md", "saved")).activeTabId!;
     workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "captured" });
@@ -549,7 +601,7 @@ describe("WorkspaceState save and reload transitions", () => {
   });
 
   it("rejects mismatched current save content without changing the session", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openProjection(workspace, "window-1", createDocument("current.md", "saved")).activeTabId!;
     workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "current" });
@@ -568,7 +620,7 @@ describe("WorkspaceState save and reload transitions", () => {
   });
 
   it("reloads equal text without advancing and changed text with one clean revision", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openProjection(workspace, "window-1", createDocument("reload.md", "saved")).activeTabId!;
     workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "draft" });
@@ -606,7 +658,7 @@ describe("WorkspaceState save and reload transitions", () => {
   });
 
   it("rejects a reload when an edit advances the captured revision", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openProjection(workspace,
       "window-1",
@@ -639,7 +691,7 @@ describe("WorkspaceState save and reload transitions", () => {
   });
 
   it("rejects reload and save commits after the tab moves away", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openProjection(workspace,
       "window-1",
@@ -685,7 +737,7 @@ describe("WorkspaceState save and reload transitions", () => {
   });
 
   it("rejects close when the owner or revision no longer matches", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const editedTabId = workspace.createUntitledTab("window-1").activeTabId!;
     workspace.updateTabDraft({ tabId: editedTabId, expectedWindowId: "window-1", content: "new edit" });
@@ -725,7 +777,7 @@ describe("WorkspaceState save and reload transitions", () => {
   });
 
   it("returns a total window-missing stale result after the expected window closes", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
     workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "captured dirty" });
@@ -765,7 +817,7 @@ describe("WorkspaceState save and reload transitions", () => {
 
 describe("WorkspaceState tab ordering and movement", () => {
   it("clamps reorder targets and returns a fresh projection for a no-op", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const firstTabId = openProjection(workspace, "window-1", createDocument("first.md")).activeTabId!;
     const secondTabId = openProjection(workspace, "window-1", createDocument("second.md")).activeTabId!;
@@ -819,7 +871,7 @@ describe("WorkspaceState tab ordering and movement", () => {
   it.each([1.5, Number.NaN, Number.POSITIVE_INFINITY])(
     "rejects non-finite-integer reorder index %s without mutation",
     (targetIndex) => {
-      const workspace = createWorkspaceState();
+      const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
       workspace.registerWindow("window-1");
       const tabId = workspace.createUntitledTab("window-1").activeTabId!;
       const before = workspace.getWindowProjection("window-1");
@@ -836,7 +888,7 @@ describe("WorkspaceState tab ordering and movement", () => {
   );
 
   it("rejects a reorder from the old owner without exposing or mutating the new owner", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const movedTabId = openProjection(workspace,
       "window-1",
@@ -868,7 +920,7 @@ describe("WorkspaceState tab ordering and movement", () => {
   });
 
   it("returns total stale results for a missing reorder tab or owner window", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
 
@@ -895,7 +947,7 @@ describe("WorkspaceState tab ordering and movement", () => {
   });
 
   it("uses reorder semantics when moving within the same window", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const firstTabId = openProjection(workspace, "window-1", createDocument("first.md")).activeTabId!;
     workspace.openDocument("window-1", createDocument("second.md"));
@@ -915,7 +967,7 @@ describe("WorkspaceState tab ordering and movement", () => {
   });
 
   it("moves a dirty tab across windows without losing text or revisions", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const firstTabId = openProjection(workspace,
       "window-1",
@@ -961,7 +1013,7 @@ describe("WorkspaceState tab ordering and movement", () => {
   });
 
   it("rejects an unknown move target before mutating the source", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
     const before = workspace.getWindowProjection("window-1");
@@ -975,7 +1027,7 @@ describe("WorkspaceState tab ordering and movement", () => {
   });
 
   it("rejects an invalid cross-window move index before mutating either window", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
     workspace.registerWindow("window-2");
@@ -996,7 +1048,7 @@ describe("WorkspaceState tab ordering and movement", () => {
 
 describe("WorkspaceState detach operations", () => {
   it("creates a missing target window and moves the tab into it", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
 
@@ -1013,7 +1065,7 @@ describe("WorkspaceState detach operations", () => {
   });
 
   it("preserves existing target tabs when detaching", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openProjection(workspace, "window-1", createDocument("moved.md")).activeTabId!;
     workspace.registerWindow("window-2");
@@ -1042,7 +1094,7 @@ describe("WorkspaceState detach operations", () => {
   it.each(["move", "detach"] as const)(
     "rejects a late draft from the previous owner after a cross-window %s",
     (transfer) => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openProjection(workspace,
       "window-1",
@@ -1075,7 +1127,7 @@ describe("WorkspaceState detach operations", () => {
   );
 
   it("does not leave a target window behind for an invalid source or index", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
 
@@ -1144,7 +1196,7 @@ describe("WorkspaceState projection isolation", () => {
       WorkspaceState["getWindowProjectionOrNull"]
     >().returns.toEqualTypeOf<WorkspaceWindowProjection | null>();
 
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const projection = workspace.createUntitledTab("window-1");
     const assertReadonlySurface = (
@@ -1183,7 +1235,7 @@ describe("WorkspaceState projection isolation", () => {
   });
 
   it("returns fresh tab-id arrays that cannot pollute ownership", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
 
@@ -1199,7 +1251,7 @@ describe("WorkspaceState projection isolation", () => {
   });
 
   it("returns fresh deeply isolated window and tab-session projections", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openProjection(workspace, "window-1", createDocument("safe.md", "safe")).activeTabId!;
 

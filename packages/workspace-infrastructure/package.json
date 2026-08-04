@@ -1,0 +1,19 @@
+{
+  "name": "@fishmark/workspace-infrastructure",
+  "version": "0.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "dependencies": {
+    "@codemirror/state": "^6.6.0",
+    "@fishmark/workspace-domain": "file:../workspace-domain"
+  }
+}

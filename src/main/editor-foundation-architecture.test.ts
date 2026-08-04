@@ -154,6 +154,141 @@ describe("editor foundation architecture guard", () => {
     ]);
   });
 
+  it("binds the active workspace-infrastructure package to one fail-closed rule", () => {
+    const manifest = readCanonicalManifest();
+    const infrastructurePackages = (manifest.packages as MutableRecord[]).filter(
+      (targetPackage) => targetPackage.id === "workspace-infrastructure"
+    );
+    const infrastructureRules = (manifest.rules as MutableRecord[]).filter(
+      (rule) => rule.id === "boundary.workspace-infrastructure"
+    );
+
+    expect(infrastructurePackages).toEqual([
+      expect.objectContaining({
+        boundaryRuleId: "boundary.workspace-infrastructure",
+        path: "packages/workspace-infrastructure",
+        publicEntry: "@fishmark/workspace-infrastructure",
+        state: "active"
+      })
+    ]);
+    expect(infrastructureRules).toEqual([
+      expect.objectContaining({
+        allowedPackages: [
+          "@fishmark/workspace-domain",
+          "@codemirror/state"
+        ],
+        forbiddenPackages: ["electron", "react", "react-dom", "node:*"],
+        forbiddenPaths: [
+          "src/main",
+          "src/preload",
+          "src/renderer",
+          "src/shared",
+          "packages/editor-core",
+          "packages/markdown-engine",
+          "packages/workspace-application"
+        ],
+        kind: "forbidden-imports",
+        sourcePath: "packages/workspace-infrastructure",
+        state: "active"
+      })
+    ]);
+  });
+
+  it("allows workspace-infrastructure to import only domain, CodeMirror state, and local modules", () => {
+    const repository = createSyntheticRepository({
+      "packages/workspace-infrastructure/src/local.ts": "export const local = true;",
+      "packages/workspace-infrastructure/src/allowed.ts": [
+        'import type { TextBuffer } from "@fishmark/workspace-domain";',
+        'import type { Text } from "@codemirror/state";',
+        'import { local } from "./local";',
+        "export type Allowed = TextBuffer | Text;",
+        "export { local };"
+      ].join("\n")
+    });
+    const manifest = readSyntheticManifest(repository);
+    activateSyntheticWorkspaceInfrastructure(manifest);
+
+    expect(validateSynthetic(repository, manifest)).toEqual({ findings: [], ok: true });
+  });
+
+  it.each([
+    [
+      "a production relative import",
+      "packages/workspace-infrastructure/src/escape.ts",
+      'import "../../../unlisted-root/value";'
+    ],
+    [
+      "a production repo-root import",
+      "packages/workspace-infrastructure/src/escape.ts",
+      'import "fixtures/unlisted-root/value";'
+    ],
+    [
+      "a test relative import despite the package allowlist exception",
+      "packages/workspace-infrastructure/src/escape.test.ts",
+      ['import { describe } from "vitest";', 'import "../../../unlisted-root/value";', 'describe("escape", () => {});'].join("\n")
+    ]
+  ])("rejects %s that escapes the allowed rule source path", (_name, importer, source) => {
+    const repository = createSyntheticRepository({
+      [importer]: source,
+      "unlisted-root/value.ts": "export const value = true;",
+      "fixtures/unlisted-root/value.ts": "export const value = true;"
+    });
+    const manifest = readSyntheticManifest(repository);
+    activateSyntheticWorkspaceInfrastructure(manifest);
+    (findRule(manifest, "boundary.workspace-infrastructure").allowedPackages as string[]).push(
+      "fixtures"
+    );
+
+    const result = validateSynthetic(repository, manifest);
+
+    expect(result.findings).toContainEqual(expect.objectContaining({
+      code: "forbidden-import",
+      path: importer,
+      ruleId: "boundary.workspace-infrastructure"
+    }));
+  });
+
+  it.each([
+    ["Electron", 'import { app } from "electron"; void app;'],
+    ["React", 'import React from "react"; void React;'],
+    ["React DOM", 'import ReactDOM from "react-dom"; void ReactDOM;'],
+    ["Node API", 'import path from "node:path"; void path;'],
+    ["unlisted package", 'import value from "some-runtime-package"; void value;'],
+    ["main source", 'import "../../../src/main/main";'],
+    ["preload source", 'import "../../../src/preload/preload";'],
+    ["renderer source", 'import "../../../src/renderer/code-editor";'],
+    ["shared source", 'import "../../../src/shared/workspace";'],
+    ["editor-core package", 'import "@fishmark/editor-core";'],
+    ["markdown-engine package", 'import "@fishmark/markdown-engine";'],
+    ["workspace-application package", 'import "@fishmark/workspace-application";']
+  ])("rejects a workspace-infrastructure import of %s", (_name, source) => {
+    const repository = createSyntheticRepository({
+      "packages/workspace-infrastructure/src/forbidden.ts": source
+    });
+    const manifest = readSyntheticManifest(repository);
+    activateSyntheticWorkspaceInfrastructure(manifest);
+
+    expect(expectCodes(validateSynthetic(repository, manifest))).toContain(
+      "forbidden-import"
+    );
+  });
+
+  it("rejects consumers that bypass the workspace-infrastructure public entry", () => {
+    const repository = createSyntheticRepository({
+      "packages/workspace-infrastructure/src/index.ts":
+        "export const createCodeMirrorTextBuffer = () => null;",
+      "packages/workspace-infrastructure/src/private.ts": "export const secret = true;",
+      "src/main/consumer.ts":
+        'import { secret } from "../../packages/workspace-infrastructure/src/private"; void secret;'
+    });
+    const manifest = readSyntheticManifest(repository);
+    activateSyntheticWorkspaceInfrastructure(manifest);
+
+    expect(expectCodes(validateSynthetic(repository, manifest))).toContain(
+      "non-public-package-import"
+    );
+  });
+
   it.each([
     ["Electron", 'import { app } from "electron"; void app;'],
     ["React", 'import React from "react"; void React;'],
@@ -1743,6 +1878,33 @@ function createSyntheticManifest(): MutableRecord {
       )
     ]
   };
+}
+
+function activateSyntheticWorkspaceInfrastructure(manifest: MutableRecord): void {
+  (manifest.packages as MutableRecord[]).push({
+    id: "workspace-infrastructure",
+    path: "packages/workspace-infrastructure",
+    publicEntry: "@fishmark/workspace-infrastructure",
+    state: "active",
+    boundaryRuleId: "boundary.workspace-infrastructure"
+  });
+  (manifest.rules as MutableRecord[]).push({
+    id: "boundary.workspace-infrastructure",
+    kind: "forbidden-imports",
+    state: "active",
+    sourcePath: "packages/workspace-infrastructure",
+    allowedPackages: ["@fishmark/workspace-domain", "@codemirror/state"],
+    forbiddenPackages: ["electron", "react", "react-dom", "node:*"],
+    forbiddenPaths: [
+      "src/main",
+      "src/preload",
+      "src/renderer",
+      "src/shared",
+      "packages/editor-core",
+      "packages/markdown-engine",
+      "packages/workspace-application"
+    ]
+  });
 }
 
 function createParserEntry(

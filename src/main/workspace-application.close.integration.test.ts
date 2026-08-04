@@ -1,4 +1,5 @@
 import {
+  createStringTextBuffer,
   createWorkspaceState,
   fileIdentity,
   type DocumentSessionProjection
@@ -96,7 +97,7 @@ const windowCloseRequest = (
 
 describe("workspace close use case", () => {
   it("closes only the requested tab after an unchanged discard decision", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const firstTabId = openTestDocument(workspace,
       "window-1",
@@ -140,7 +141,7 @@ describe("workspace close use case", () => {
   });
 
   it("confirms a window in tab order and commits the captured owner and revision", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const firstTabId = openTestDocument(workspace,
       "window-1",
@@ -227,7 +228,7 @@ describe("workspace close use case", () => {
   });
 
   it("revalidates after cancel before returning the sender projection", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
       "window-1",
@@ -262,7 +263,7 @@ describe("workspace close use case", () => {
   });
 
   it("routes an unchanged untitled checkpoint through Save As before closing", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
     workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "untitled dirty" });
@@ -301,7 +302,7 @@ describe("workspace close use case", () => {
   });
 
   it("rejects a close-save adapter path that differs from the canonical checkpoint", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
       "window-1",
@@ -338,7 +339,7 @@ describe("workspace close use case", () => {
   });
 
   it("rejects an untitled close Save As result without a persisted path", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
     workspace.updateTabDraft({
@@ -381,7 +382,7 @@ describe("workspace close use case", () => {
   });
 
   it("cancels discard when the tab moves during the prompt", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
       "window-1",
@@ -422,7 +423,7 @@ describe("workspace close use case", () => {
   });
 
   it("cancels close when an edit arrives during save", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
       "window-1",
@@ -472,7 +473,7 @@ describe("workspace close use case", () => {
   });
 
   it("cancels close and leaves the target dirty when the tab moves during save", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
       "window-1",
@@ -520,7 +521,7 @@ describe("workspace close use case", () => {
   });
 
   it("revalidates earlier window checkpoints after later prompts", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const firstTabId = openTestDocument(workspace,
       "window-1",
@@ -551,7 +552,7 @@ describe("workspace close use case", () => {
   });
 
   it("cancels an inactive window confirmation before prompting", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
       "window-1",
@@ -575,7 +576,7 @@ describe("workspace close use case", () => {
   });
 
   it("does not start a close save after confirmation becomes inactive during the prompt", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
       "window-1",
@@ -608,7 +609,7 @@ describe("workspace close use case", () => {
   });
 
   it("does not commit a close save that returns after confirmation becomes inactive", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
       "window-1",
@@ -652,7 +653,7 @@ describe("workspace close use case", () => {
   });
 
   it("fails closed when a dirty tab is added while the first prompt is pending", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const firstTabId = openTestDocument(workspace,
       "window-1",
@@ -691,7 +692,7 @@ describe("workspace close use case", () => {
   });
 
   it("fails closed when the initial tab order changes during a prompt", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const firstTabId = openTestDocument(workspace,
       "window-1",
@@ -732,7 +733,7 @@ describe("workspace close use case", () => {
   });
 
   it("explicitly rejects a stale close result without a sender projection", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
       "window-1",
@@ -768,7 +769,7 @@ describe("workspace close use case", () => {
   });
 
   it("fails closed when an initial dirty tab closes while its prompt is pending", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const closingTabId = openTestDocument(workspace,
       "window-1",
@@ -809,7 +810,7 @@ describe("workspace close use case", () => {
   });
 
   it("fails closed when an initial dirty tab moves while its prompt is pending", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const movingTabId = openTestDocument(workspace,
       "window-1",

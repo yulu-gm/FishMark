@@ -1,4 +1,5 @@
 import {
+  createStringTextBuffer,
   createWorkspaceState,
   fileIdentity,
   type FileIdentity,
@@ -69,7 +70,7 @@ function createApplication(input: {
 
 describe("workspace owner-tab activation use case", () => {
   it("retries a negative confirmation when the physical owner moved during renderer activation", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     workspace.registerWindow("window-2");
     workspace.registerWindow("window-3");
@@ -93,7 +94,7 @@ describe("workspace owner-tab activation use case", () => {
   });
 
   it("retries a negative confirmation when the owner closed during renderer activation", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const identity = fileIdentity("location:note", "object:note");
     const tabId = openDocument(workspace, "window-1", identity, "note.md");
@@ -114,7 +115,7 @@ describe("workspace owner-tab activation use case", () => {
   });
 
   it("retries a negative confirmation when location and object ownership became ambiguous", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     workspace.registerWindow("window-2");
     const firstIdentity = fileIdentity("location:first", "object:first");
@@ -137,7 +138,7 @@ describe("workspace owner-tab activation use case", () => {
   });
 
   it("fails a negative confirmation when the exact owner is unchanged", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const identity = fileIdentity("location:note", "object:note");
     const tabId = openDocument(workspace, "window-1", identity, "note.md");
@@ -157,7 +158,7 @@ describe("workspace owner-tab activation use case", () => {
   });
 
   it("does not focus or replay activation when a newer tab intent wins before confirmation", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const targetIdentity = fileIdentity("location:target", "object:target");
     const targetTabId = openDocument(workspace, "window-1", targetIdentity, "target.md");
@@ -193,7 +194,7 @@ describe("workspace owner-tab activation use case", () => {
   });
 
   it("retries when the same window id resolves to a different window instance after confirmation", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const identity = fileIdentity("location:note", "object:note");
     const tabId = openDocument(workspace, "window-1", identity, "note.md");

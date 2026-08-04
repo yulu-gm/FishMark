@@ -7,9 +7,12 @@ export type TextChange = {
 export interface TextBuffer {
   readonly length: number;
   apply(changes: readonly TextChange[]): TextBuffer;
+  equals(other: TextBuffer): boolean;
   slice(from: number, to?: number): string;
   toString(): string;
 }
+
+export type TextBufferFactory = (value: string) => TextBuffer;
 
 class StringTextBuffer implements TextBuffer {
   readonly length: number;
@@ -38,6 +41,11 @@ class StringTextBuffer implements TextBuffer {
     return new StringTextBuffer(segments.join(""));
   }
 
+  equals(other: TextBuffer): boolean {
+    return this === other ||
+      (this.length === other.length && this.value === other.toString());
+  }
+
   slice(from: number, to?: number): string {
     return this.value.slice(from, to);
   }
@@ -51,12 +59,27 @@ export function createStringTextBuffer(value: string): TextBuffer {
   return new StringTextBuffer(value);
 }
 
-function validateTextChanges(changes: readonly TextChange[], bufferLength: number): void {
+export function validateTextChanges(
+  changes: readonly TextChange[],
+  bufferLength: number
+): void {
+  if (!Number.isSafeInteger(bufferLength) || bufferLength < 0) {
+    throw new RangeError(
+      "Text buffer length must be a non-negative safe integer."
+    );
+  }
+
   let previousTo = 0;
 
   for (const change of changes) {
-    if (!Number.isInteger(change.from) || !Number.isInteger(change.to)) {
-      throw new RangeError("Text change positions must be integers.");
+    if (typeof change !== "object" || change === null) {
+      throw new TypeError("Text change must be a non-null object.");
+    }
+    if (typeof change.insert !== "string") {
+      throw new TypeError("Text change insert must be a string.");
+    }
+    if (!Number.isSafeInteger(change.from) || !Number.isSafeInteger(change.to)) {
+      throw new RangeError("Text change positions must be safe integers.");
     }
     if (change.from < 0 || change.to < 0 || change.from > bufferLength || change.to > bufferLength) {
       throw new RangeError("Text change positions are outside buffer bounds.");

@@ -1,4 +1,4 @@
-import { createWorkspaceState } from "@fishmark/workspace-domain";
+import { createStringTextBuffer, createWorkspaceState } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 import {
   createWorkspaceDetach,
@@ -78,7 +78,7 @@ function createTabTransfer(
 }
 
 function createDirtySource() {
-  const workspace = createWorkspaceState();
+  const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
   workspace.registerWindow("window-1");
   const tabId = workspace.createUntitledTab("window-1").activeTabId!;
   workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "unsaved detached draft" });
@@ -300,7 +300,7 @@ describe("workspace detach use case", () => {
   });
 
   it("rejects foreign ownership before creating a window", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     workspace.registerWindow("window-2");
     const tabId = workspace.createUntitledTab("window-2").activeTabId!;

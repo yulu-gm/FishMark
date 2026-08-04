@@ -1,11 +1,11 @@
-import { createWorkspaceState } from "@fishmark/workspace-domain";
+import { createStringTextBuffer, createWorkspaceState } from "@fishmark/workspace-domain";
 import { describe, expect, it } from "vitest";
 
 import { createApplyDocumentEdits } from "./index";
 
 describe("createApplyDocumentEdits", () => {
   it("applies the current full-draft command through the owner-aware domain CAS", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
     const applyDocumentEdits = createApplyDocumentEdits({ workspace });
@@ -25,7 +25,7 @@ describe("createApplyDocumentEdits", () => {
   });
 
   it("does not expose the new owner's projection to a stale source window", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = workspace.createUntitledTab("window-1").activeTabId!;
     workspace.registerWindow("window-2");

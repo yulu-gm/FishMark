@@ -1,4 +1,4 @@
-import { createWorkspaceState, fileIdentity } from "@fishmark/workspace-domain";
+import { createStringTextBuffer, createWorkspaceState, fileIdentity } from "@fishmark/workspace-domain";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -17,7 +17,7 @@ const document = (name: string, content: string) => ({
 
 describe("workspace IPC projection", () => {
   it("deep-copies a frozen domain window projection into a mutable IPC snapshot", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const source = openTestDocument(workspace,
       "window-1",
@@ -47,7 +47,7 @@ describe("workspace IPC projection", () => {
   });
 
   it("deep-copies both sides of a move projection", () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     openTestDocument(workspace, "window-1", document("kept.md", "kept"));
     const movedTabId = openTestDocument(workspace,

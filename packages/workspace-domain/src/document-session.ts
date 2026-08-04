@@ -4,7 +4,12 @@ import {
   type DocumentRevision
 } from "./document-revision";
 import type { DiskVersion } from "./disk-version";
-import { createStringTextBuffer, type TextBuffer } from "./text-buffer";
+import {
+  validateTextChanges,
+  type TextBuffer,
+  type TextBufferFactory,
+  type TextChange
+} from "./text-buffer";
 import type { FileIdentity } from "./file-identity";
 
 export interface WorkspaceDocumentData {
@@ -30,6 +35,8 @@ export interface DocumentSessionState {
   readonly savedRevision: DocumentRevision;
   readonly diskVersion: DiskVersion | null;
   readonly saveState: DocumentSaveState;
+  readonly createTextBuffer: TextBufferFactory;
+  readonly clientSequenceHighWatermarks: ReadonlyMap<string, number>;
 }
 
 export interface DocumentSessionProjection {
@@ -52,6 +59,7 @@ export interface CreateDocumentSessionInput {
   readonly windowId: string;
   readonly document: WorkspaceDocumentData;
   readonly diskVersion?: DiskVersion | null;
+  readonly createTextBuffer: TextBufferFactory;
 }
 
 export interface CommitSavedDocumentInput {
@@ -60,13 +68,60 @@ export interface CommitSavedDocumentInput {
   readonly diskVersion: DiskVersion | null;
 }
 
+export interface ApplyDocumentEditBatchInput {
+  readonly baseRevision: DocumentRevision;
+  readonly clientId: string;
+  readonly clientSequence: number;
+  readonly changes: readonly TextChange[];
+}
+
+export type ApplyDocumentEditBatchInvalidCode =
+  | "invalid-client-id"
+  | "invalid-client-sequence"
+  | "empty-change-batch"
+  | "invalid-text-changes"
+  | "revision-overflow";
+
+export interface ApplyDocumentEditBatchError {
+  readonly code: ApplyDocumentEditBatchInvalidCode;
+  readonly message: string;
+}
+
+export type ApplyDocumentEditBatchResult =
+  | {
+      readonly kind: "applied";
+      readonly session: DocumentSessionState;
+      readonly revision: DocumentRevision;
+    }
+  | {
+      readonly kind: "duplicate";
+      readonly session: DocumentSessionState;
+      readonly revision: DocumentRevision;
+    }
+  | {
+      readonly kind: "revision-conflict";
+      readonly session: DocumentSessionState;
+      readonly canonicalRevision: DocumentRevision;
+    }
+  | {
+      readonly kind: "sequence-gap";
+      readonly session: DocumentSessionState;
+      readonly expectedSequence: number;
+    }
+  | {
+      readonly kind: "invalid";
+      readonly session: DocumentSessionState;
+      readonly error: ApplyDocumentEditBatchError;
+    };
+
 export function createDocumentSession({
   tabId,
   windowId,
   document,
-  diskVersion = null
+  diskVersion = null,
+  createTextBuffer
 }: CreateDocumentSessionInput): DocumentSessionState {
-  const text = createStringTextBuffer(document.content);
+  const text = createTextBuffer(document.content);
 
   return freezeSession({
     tabId,
@@ -80,8 +135,97 @@ export function createDocumentSession({
     revision: INITIAL_DOCUMENT_REVISION,
     savedRevision: INITIAL_DOCUMENT_REVISION,
     diskVersion: copyDiskVersion(diskVersion),
-    saveState: "idle"
+    saveState: "idle",
+    createTextBuffer,
+    clientSequenceHighWatermarks: new ImmutableHighWatermarks()
   });
+}
+
+export function applyDocumentEditBatch(
+  session: DocumentSessionState,
+  input: ApplyDocumentEditBatchInput
+): ApplyDocumentEditBatchResult {
+  if (typeof input.clientId !== "string" || input.clientId.trim().length === 0) {
+    return invalidEditBatch(
+      session,
+      "invalid-client-id",
+      "Document edit client ID must be a non-empty string."
+    );
+  }
+  if (!Number.isSafeInteger(input.clientSequence) || input.clientSequence < 1) {
+    return invalidEditBatch(
+      session,
+      "invalid-client-sequence",
+      "Document edit client sequence must be a positive safe integer."
+    );
+  }
+
+  const acknowledged = session.clientSequenceHighWatermarks.get(input.clientId) ?? 0;
+  if (input.clientSequence <= acknowledged) {
+    return Object.freeze({
+      kind: "duplicate",
+      session,
+      revision: session.revision
+    });
+  }
+
+  const expectedSequence = acknowledged + 1;
+  if (input.clientSequence !== expectedSequence) {
+    return Object.freeze({ kind: "sequence-gap", session, expectedSequence });
+  }
+  if (input.baseRevision !== session.revision) {
+    return Object.freeze({
+      kind: "revision-conflict",
+      session,
+      canonicalRevision: session.revision
+    });
+  }
+
+  try {
+    validateTextChanges(input.changes, session.text.length);
+  } catch (error) {
+    return invalidEditBatch(
+      session,
+      "invalid-text-changes",
+      error instanceof Error ? error.message : "Invalid document text changes."
+    );
+  }
+  if (input.changes.length === 0) {
+    return invalidEditBatch(
+      session,
+      "empty-change-batch",
+      "Document edit batch must contain at least one change."
+    );
+  }
+
+  let revision: DocumentRevision;
+  try {
+    revision = nextDocumentRevision(session.revision);
+  } catch (error) {
+    return invalidEditBatch(
+      session,
+      "revision-overflow",
+      error instanceof Error ? error.message : "Document revision cannot advance."
+    );
+  }
+
+  const text = session.text.apply(input.changes);
+  const clientSequenceHighWatermarks = highWatermarksWith(
+    session.clientSequenceHighWatermarks,
+    input.clientId,
+    input.clientSequence
+  );
+  const nextSession = freezeSession({
+    ...session,
+    text,
+    revision,
+    savedRevision: text.equals(session.savedText)
+      ? revision
+      : session.savedRevision,
+    clientSequenceHighWatermarks
+  });
+
+  return Object.freeze({ kind: "applied", session: nextSession, revision });
 }
 
 export function replaceDocumentText(
@@ -127,7 +271,7 @@ export function commitSavedDocument(
     encoding: document.encoding,
     savedText: currentMatchesSavedDocument
       ? session.text
-      : createStringTextBuffer(document.content),
+      : session.createTextBuffer(document.content),
     savedRevision: currentMatchesSavedDocument ? session.revision : capturedRevision,
     diskVersion: copyDiskVersion(diskVersion),
     saveState: "idle"
@@ -219,4 +363,73 @@ function validateCapturedRevision(
   if (capturedRevision > currentRevision) {
     throw new RangeError("Captured revision cannot be newer than the document revision.");
   }
+}
+
+class ImmutableHighWatermarks implements ReadonlyMap<string, number> {
+  readonly #values: Map<string, number>;
+
+  constructor(entries: Iterable<readonly [string, number]> = []) {
+    this.#values = new Map(entries);
+    Object.freeze(this);
+  }
+
+  get size(): number {
+    return this.#values.size;
+  }
+
+  get(key: string): number | undefined {
+    return this.#values.get(key);
+  }
+
+  has(key: string): boolean {
+    return this.#values.has(key);
+  }
+
+  entries(): MapIterator<[string, number]> {
+    return this.#values.entries();
+  }
+
+  keys(): MapIterator<string> {
+    return this.#values.keys();
+  }
+
+  values(): MapIterator<number> {
+    return this.#values.values();
+  }
+
+  forEach(
+    callbackfn: (value: number, key: string, map: ReadonlyMap<string, number>) => void,
+    thisArg?: unknown
+  ): void {
+    for (const [key, value] of this.#values) {
+      callbackfn.call(thisArg, value, key, this);
+    }
+  }
+
+  [Symbol.iterator](): MapIterator<[string, number]> {
+    return this.entries();
+  }
+}
+
+function highWatermarksWith(
+  current: ReadonlyMap<string, number>,
+  clientId: string,
+  clientSequence: number
+): ReadonlyMap<string, number> {
+  return new ImmutableHighWatermarks([
+    ...current.entries(),
+    [clientId, clientSequence]
+  ]);
+}
+
+function invalidEditBatch(
+  session: DocumentSessionState,
+  code: ApplyDocumentEditBatchInvalidCode,
+  message: string
+): ApplyDocumentEditBatchResult {
+  return Object.freeze({
+    kind: "invalid",
+    session,
+    error: Object.freeze({ code, message })
+  });
 }

@@ -8,7 +8,9 @@ if (buffer.toString() !== "FishMark") {
   throw new Error("workspace-domain runtime entry returned an invalid buffer");
 }
 
-const workspace = domain.createWorkspaceState();
+const workspace = domain.createWorkspaceState({
+  createTextBuffer: domain.createStringTextBuffer
+});
 workspace.registerWindow("window-1");
 const created = workspace.createUntitledTab("window-1");
 const tabId = created.activeTabId;

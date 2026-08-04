@@ -771,13 +771,13 @@ npm.cmd run build
 
 **Acceptance (2026-07-30):** `PASS`. Fresh focus passed 23 files / 561 tests; editor-foundation passed 7 files / 267 tests; lint, typecheck, the 165-file / 2,066-pass + 1-skip full suite, build with both workspace runtime verifiers, formal 121/121-case behavior gate, forbidden-import and retired-path scans, and diff check passed. Independent architecture acceptance reported P0/P1/P2 = 0; final quality review reported Critical/Important/Minor = 0 and `Ready: Yes`.
 
-**Exit:** accepted. Workspace business workflows are independently testable without Electron or React; M1 is 2/2 `COMPLETE`. `RF-201` is dependency-ready but has not started.
+**Exit:** accepted. Workspace business workflows are independently testable without Electron or React; M1 is 2/2 `COMPLETE`. This RF-102 checkpoint made RF-201 dependency-ready; RF-201 was later accepted as `COMPLETE` as recorded below.
 
 ### Milestone 2 — Revisioned edit transport
 
 #### RF-201: Persistent text buffer and session revisions
 
-**Outcome:** canonical sessions apply small changes without replacing or copying full renderer drafts across IPC.
+**Outcome:** canonical sessions expose a revisioned small-change primitive while the existing full-draft IPC remains temporarily in place until RF-204.
 
 **Files:**
 
@@ -789,11 +789,11 @@ npm.cmd run build
 
 **Steps:**
 
-- [ ] Wrap CodeMirror `Text` behind `TextBuffer`.
-- [ ] Validate sorted, non-overlapping, in-range changes before applying.
-- [ ] Increment revision once per accepted batch.
-- [ ] Track acknowledged `(clientId, clientSequence)` pairs for idempotence.
-- [ ] Prove Unicode, CRLF, large insertion, multiple changes, and invalid-range behavior.
+- [x] Wrap CodeMirror `Text` behind `TextBuffer`.
+- [x] Validate safe-integer, sorted, non-overlapping, in-range changes before applying.
+- [x] Increment revision once per accepted non-empty batch, including same-text replacements.
+- [x] Track one contiguous acknowledged sequence high-watermark per client for idempotence.
+- [x] Prove Unicode, CRLF, large insertion, multiple changes, invalid-range, duplicate, gap, and conflict behavior.
 
 **Verification:**
 
@@ -803,7 +803,9 @@ npm.cmd run typecheck
 npm.cmd run build
 ```
 
-**Exit:** main has a persistent canonical text representation with no public CodeMirror type leakage.
+**Acceptance (2026-08-04):** `PASS`. Independent specification/architecture review finished P0/P1/P2 = 0 with no open questions after its initial progress-document P1 was corrected and re-reviewed. Final code-quality review finished Critical/Important/Minor = 0 and `Ready: Yes` after the malformed-insert Important and relative-import-containment Minor findings were repaired RED to GREEN. Fresh acceptance evidence passed post-fix domain/infrastructure 4 files / 163 tests, architecture 1 file / 209 tests, editor-foundation 7 files / 285 tests, lint with 0 errors / 8 existing warnings, typecheck, the 166-file / 2,162-pass + 1-skip full suite, build with all three workspace runtime verifiers, formal behavior 121/121 cases / 2,541/2,541 targets / 0 unexpected / 0 not-run in 24,614 ms, and the final acceptance-document diff check.
+
+**Exit:** accepted. Main has a persistent canonical text representation with no public CodeMirror type leakage; RF-201 is `COMPLETE`, M2 is 1/4 `IN_PROGRESS`, and RF-202 is dependency-ready but remains `PLANNED` and has not started.
 
 #### RF-202: Shared edit contract and main handler
 

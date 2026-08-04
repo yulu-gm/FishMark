@@ -1,5 +1,6 @@
 import type { DiskVersion } from "./disk-version";
 import type { DocumentRevision } from "./document-revision";
+import type { TextBufferFactory } from "./text-buffer";
 import {
   sameFileIdentity,
   type FileIdentity,
@@ -186,6 +187,10 @@ export interface WorkspaceState {
   ) => WorkspaceMoveProjection;
 }
 
+export interface CreateWorkspaceStateInput {
+  readonly createTextBuffer: TextBufferFactory;
+}
+
 interface WindowSession {
   readonly windowId: string;
   readonly tabIds: string[];
@@ -207,6 +212,8 @@ class CanonicalWorkspaceState implements WorkspaceState {
   private readonly fileObjectToTabId = new Map<FileObjectIdentity, string>();
   private nextTabId = 1;
   private lastFocusedWindowId: string | null = null;
+
+  constructor(private readonly createTextBuffer: TextBufferFactory) {}
 
   registerWindow(windowId: string): WorkspaceWindowProjection {
     if (!this.windows.has(windowId)) {
@@ -577,7 +584,12 @@ class CanonicalWorkspaceState implements WorkspaceState {
   ): WorkspaceWindowProjection {
     const window = this.getWindow(windowId);
     const tabId = `tab-${this.nextTabId}`;
-    const session = createDocumentSession({ tabId, windowId, document });
+    const session = createDocumentSession({
+      tabId,
+      windowId,
+      document,
+      createTextBuffer: this.createTextBuffer
+    });
 
     this.nextTabId += 1;
     this.tabs.set(tabId, session);
@@ -745,8 +757,10 @@ class CanonicalWorkspaceState implements WorkspaceState {
   }
 }
 
-export function createWorkspaceState(): WorkspaceState {
-  return new CanonicalWorkspaceState();
+export function createWorkspaceState({
+  createTextBuffer
+}: CreateWorkspaceStateInput): WorkspaceState {
+  return new CanonicalWorkspaceState(createTextBuffer);
 }
 
 function createWindowSession(windowId: string): WindowSession {

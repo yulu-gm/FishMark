@@ -1,4 +1,4 @@
-import { createWorkspaceState, fileIdentity } from "@fishmark/workspace-domain";
+import { createStringTextBuffer, createWorkspaceState, fileIdentity } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -22,7 +22,7 @@ function createImmediateCoordinator<TKey extends string>(): KeyedOperationCoordi
 
 describe("createSaveDocument", () => {
   it("writes a captured canonical checkpoint and commits it clean", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const identity = fileIdentity("file:c:/notes/a.md");
     const opened = workspace.openDocument("window-1", {

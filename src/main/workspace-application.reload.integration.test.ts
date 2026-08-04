@@ -1,4 +1,4 @@
-import { createWorkspaceState, fileIdentity } from "@fishmark/workspace-domain";
+import { createStringTextBuffer, createWorkspaceState, fileIdentity } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 
 import type {
@@ -90,7 +90,7 @@ function document(name: string, content: string): OpenMarkdownDocument & { fileI
 
 describe("workspace reload use case", () => {
   it("returns a typed identity error when the file location changes before reload", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(
       workspace,
@@ -132,7 +132,7 @@ describe("workspace reload use case", () => {
   });
 
   it("returns a typed read error instead of rejecting when disk IO fails", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(
       workspace,
@@ -164,7 +164,7 @@ describe("workspace reload use case", () => {
   });
 
   it("returns a typed read error when the identity checkpoint cannot be resolved", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(
       workspace,
@@ -197,7 +197,7 @@ describe("workspace reload use case", () => {
   });
 
   it("returns a typed ownership conflict without replacing either tab", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const sourceIdentity = fileIdentity(
       "path:c:/notes/source.md",
@@ -257,7 +257,7 @@ describe("workspace reload use case", () => {
   });
 
   it("migrates the object identity when an explicit reload observes inode replacement", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const location = "path:c:/notes/replaced.md";
     const oldIdentity = fileIdentity(location, "inode:7:1");
@@ -301,7 +301,7 @@ describe("workspace reload use case", () => {
   ])(
     "rejects a reload adapter result with a %s path without recording or mutating",
     async (_caseName, returnedPath) => {
-      const workspace = createWorkspaceState();
+      const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
       workspace.registerWindow("window-1");
       const tabId = openTestDocument(workspace,
         "window-1",
@@ -338,7 +338,7 @@ describe("workspace reload use case", () => {
   );
 
   it("reads only the canonical path after Save As retargets the document", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
       "window-1",
@@ -374,7 +374,7 @@ describe("workspace reload use case", () => {
   });
 
   it("replaces an unchanged captured checkpoint after deferred IO", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
       "window-1",
@@ -406,7 +406,7 @@ describe("workspace reload use case", () => {
   });
 
   it("returns an explicit revision-stale result without recording recent or overwriting an edit during IO", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
       "window-1",
@@ -445,7 +445,7 @@ describe("workspace reload use case", () => {
   });
 
   it("rejects a reload commit after an out-of-band owner change", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     openTestDocument(workspace, "window-1", document("source.md", "source"));
     const tabId = openTestDocument(workspace,
@@ -488,7 +488,7 @@ describe("workspace reload use case", () => {
   });
 
   it("explicitly rejects a stale reload after the expected window closes", async () => {
-    const workspace = createWorkspaceState();
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace,
       "window-1",

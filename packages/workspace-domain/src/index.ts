@@ -12,13 +12,25 @@ export {
   type FileObjectIdentity
 } from "./file-identity";
 export type {
+  ApplyDocumentEditBatchError,
+  ApplyDocumentEditBatchInput,
+  ApplyDocumentEditBatchInvalidCode,
+  ApplyDocumentEditBatchResult,
   DocumentSaveState,
   DocumentSessionProjection,
   WorkspaceDocumentData
 } from "./document-session";
-export { createStringTextBuffer, type TextBuffer, type TextChange } from "./text-buffer";
+export { applyDocumentEditBatch } from "./document-session";
+export {
+  createStringTextBuffer,
+  validateTextChanges,
+  type TextBuffer,
+  type TextBufferFactory,
+  type TextChange
+} from "./text-buffer";
 export {
   createWorkspaceState,
+  type CreateWorkspaceStateInput,
   type CloseWorkspaceTabInput,
   type CommitWorkspaceDocumentInput,
   type DetachWorkspaceTabInput,

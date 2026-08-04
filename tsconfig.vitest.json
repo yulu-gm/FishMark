@@ -9,7 +9,9 @@
       "@fishmark/markdown-engine": ["./packages/markdown-engine/src/index.ts"],
       "@fishmark/test-harness": ["./packages/test-harness/src/index.ts"],
       "@fishmark/workspace-application": ["./packages/workspace-application/src/index.ts"],
-      "@fishmark/workspace-domain": ["./packages/workspace-domain/src/index.ts"]
+      "@fishmark/workspace-domain": ["./packages/workspace-domain/src/index.ts"],
+      "@fishmark/workspace-infrastructure": ["./packages/workspace-infrastructure/src/index.ts"],
+      "workspace-domain-test-conformance": ["./packages/workspace-domain/test/text-buffer-conformance.ts"]
     },
     "jsx": "react-jsx",
     "types": ["node", "vitest/globals", "vite/client"]
