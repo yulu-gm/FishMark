@@ -6,13 +6,13 @@
 
 **Created:** 2026-07-11
 
-**Last updated:** 2026-07-30
+**Last updated:** 2026-08-04
 
 **Overall status:** `IN_PROGRESS`
 
-**Current task:** None
+**Current task:** `RF-201 — Persistent text buffer and session revisions`
 
-**Next required skill:** `$fishmark-task-intake` for `RF-201` only when the user explicitly starts the next task; RF-201 is dependency-ready but not started
+**Next required skill:** `$fishmark-task-execution` using `docs/plans/2026-08-04-rf-201-intake.md`
 
 ## 1. Status vocabulary
 
@@ -33,7 +33,7 @@ At most one `RF-xxx` task may be `IN_PROGRESS` or `ACCEPTING` at a time. A later
 | --- | --- | --- | ---: | ---: | --- |
 | M0 | Invariants and executable baselines | `COMPLETE` | 2 | 2 | Behavior matrix and architecture/performance baseline exist |
 | M1 | Canonical workspace domain | `COMPLETE` | 2 | 2 | RF-101 and RF-102 accepted; domain and application boundaries are production dependencies |
-| M2 | Revisioned edit transport | `PLANNED` | 0 | 4 | Full-draft sync and renderer writable projection removed |
+| M2 | Revisioned edit transport | `IN_PROGRESS` | 0 | 4 | RF-201 is implementing persistent canonical text and session edit revisions |
 | M3 | Data safety and recovery | `PLANNED` | 0 | 4 | Inactive files protected; save/recovery/close are canonical |
 | M4 | Recursive parser and incremental cache | `PLANNED` | 0 | 5 | One recursive parser remains; differential cache tests pass |
 | M5 | Pure semantic editor model | `PLANNED` | 0 | 6 | All semantic commands migrated; old command engine removed |
@@ -55,7 +55,7 @@ Evidence columns are filled only with fresh command output/report paths from the
 | RF-002 | Architecture and performance guards | RF-001 | `COMPLETE` | Fresh public foundation gate 7 files/253 tests; fresh `perf:baseline` 23/23 contract checks and 7 files/253 tests. The manifest owns 73 exact CodeMirror targets; real micromark scan counters, resolved/case-folded repository paths, transparent dependency/site module arguments and literal `require` callees, and schema-v1 Vite module provenance close the reviewed evidence gaps. | Fresh lint 0 errors/8 pre-existing warnings; typecheck; 138-file/1,738-test suite; renderer/Electron/CLI build; exclusive formal behavior 121/121 cases and 2,541/2,541 targets with 79 existing + 1,928 runner + 534 known + 0 unexpected/not-run in 24.570s; ordinary dist 0 maps/0 provenance; diff check all passed. | Architecture `PASS` over `a6da237..53824a7`, 0 blocking findings/no open questions; task `PASS`; `reports/task-summaries/RF-002.md` | `codex/editor-foundation-refactor` at implementation head `53824a7` |
 | RF-101 | Extract workspace domain | RF-002 | `COMPLETE` | Production `@fishmark/workspace-domain`; independent location/object ownership registries and typed ambiguous-owner detection; fail-closed filesystem identity resolution; one non-React renderer transaction application with canonical known/unknown admission, strict FIFO, generated per-tab outbox, exact `{tabId, epoch, loadRevision}` CodeMirror ownership, target/all-tab drains, tokenized sealing/sealed/releasing editor-transition acknowledgement, structural CodeMirror hard read-only, fresh-state canonical undo boundaries, recoverable epoch-only rebind, operation-local reload checkpoint, post-await disposal fences, invocation-bound save transactions, and presentation-only hooks; typed application-owned editor test adapter; shell state is a canonical-only projector with no draft merge/reload bypass; exact confirmation and main owner/active-tab/exact-window-instance CAS before focus; opaque active close-save lease capability; one `tab -> location -> object` transaction order shared by open/save/reload/close and transfer; typed reload stale/error results; stateless latest-intent watcher ownership; old main service, renderer hook transaction lanes, split save orchestration, raw test snapshot/mutation paths, shell-state draft compatibility, direct snapshot-push event, rollback activation, duplicate close-save facade, legacy test dialog facade, and dead APIs deleted. | Fresh acceptance: renderer/editing focus 13 files / 863 tests; roadmap domain/main focus 16 files / 217 tests; editor-foundation 7 files / 260 tests; escalated full Vitest 163 files / 2,052 passed + 1 explicit skip; typecheck, lint (0 errors / 8 existing warnings), build, final formal behavior 121/121 cases and 2,541/2,541 targets with 0 unexpected/not-run, residue scans, and diff check passed. | Architecture `PASS` over `f5aa70b..003d4d5`, P0/P1/P2 = 0 and no open questions; task `PASS`; `reports/task-summaries/RF-101.md`; execution handoff: `docs/plans/2026-07-16-rf-101-handoff.md` | `codex/editor-foundation-refactor`, accepted implementation head `003d4d5` |
 | RF-102 | Extract workspace application ports/use cases | RF-101 | `COMPLETE` | Production runtime-neutral `@fishmark/workspace-application`; explicit consumed ports; typed edit/save/close/open/reload/reorder/transfer/detach/owner-activation/watch orchestration; exhaustive native-close application-to-shared DTO mapping; 11 superseded main-local business modules and obsolete same-name tests deleted; fresh focused gate 23 files / 561 tests. | Editor-foundation 7 files / 267 tests; lint 0 errors / 8 existing warnings; typecheck; full Vitest 165 files / 2,066 passed + 1 skip; build with both workspace runtime verifiers; formal behavior 121/121 cases and 2,541/2,541 targets with 0 unexpected/not-run; forbidden/residue scans and diff check passed. | Architecture `PASS`, P0/P1/P2 = 0; final quality Critical/Important/Minor = 0, `Ready: Yes`; task `PASS`; `reports/task-summaries/RF-102.md`; handoff: `docs/plans/2026-07-30-rf-102-handoff.md` | `codex/editor-foundation-refactor` |
-| RF-201 | Persistent text buffer and session revisions | RF-102 | `PLANNED` | — | typecheck/test/build | — | — |
+| RF-201 | Persistent text buffer and session revisions | RF-102 | `IN_PROGRESS` | Intake/design: `docs/plans/2026-08-04-rf-201-intake.md`; production persistent buffer and session edit batch pending. | typecheck/test/build pending | — | `codex/editor-foundation-refactor` |
 | RF-202 | Shared edit contract and main handler | RF-201 | `PLANNED` | — | typecheck/test | — | — |
 | RF-203 | Renderer workspace client and pending queue | RF-202 | `PLANNED` | — | typecheck/test | — | — |
 | RF-204 | Full-draft synchronization hard cutover | RF-203 | `PLANNED` | — | lint/typecheck/test/build | — | — |
