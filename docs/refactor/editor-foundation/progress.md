@@ -10,9 +10,9 @@
 
 **Overall status:** `IN_PROGRESS`
 
-**Current task:** none
+**Current task:** `RF-202 — Shared edit contract and main handler` (`IN_PROGRESS`)
 
-**Next dependency-ready task:** `RF-202 — Shared edit contract and main handler` (`PLANNED`, not started; use `$fishmark-task-intake` only when explicitly starting it)
+**Next required skill:** `$fishmark-task-execution`
 
 ## 1. Status vocabulary
 
@@ -33,7 +33,7 @@ At most one `RF-xxx` task may be `IN_PROGRESS` or `ACCEPTING` at a time. A later
 | --- | --- | --- | ---: | ---: | --- |
 | M0 | Invariants and executable baselines | `COMPLETE` | 2 | 2 | Behavior matrix and architecture/performance baseline exist |
 | M1 | Canonical workspace domain | `COMPLETE` | 2 | 2 | RF-101 and RF-102 accepted; domain and application boundaries are production dependencies |
-| M2 | Revisioned edit transport | `IN_PROGRESS` | 1 | 4 | RF-201 accepted; RF-202 is dependency-ready but remains `PLANNED` |
+| M2 | Revisioned edit transport | `IN_PROGRESS` | 1 | 4 | RF-202 is the only active task; formal acceptance is required before RF-203 |
 | M3 | Data safety and recovery | `PLANNED` | 0 | 4 | Inactive files protected; save/recovery/close are canonical |
 | M4 | Recursive parser and incremental cache | `PLANNED` | 0 | 5 | One recursive parser remains; differential cache tests pass |
 | M5 | Pure semantic editor model | `PLANNED` | 0 | 6 | All semantic commands migrated; old command engine removed |
@@ -56,7 +56,7 @@ Evidence columns are filled only with fresh command output/report paths from the
 | RF-101 | Extract workspace domain | RF-002 | `COMPLETE` | Production `@fishmark/workspace-domain`; independent location/object ownership registries and typed ambiguous-owner detection; fail-closed filesystem identity resolution; one non-React renderer transaction application with canonical known/unknown admission, strict FIFO, generated per-tab outbox, exact `{tabId, epoch, loadRevision}` CodeMirror ownership, target/all-tab drains, tokenized sealing/sealed/releasing editor-transition acknowledgement, structural CodeMirror hard read-only, fresh-state canonical undo boundaries, recoverable epoch-only rebind, operation-local reload checkpoint, post-await disposal fences, invocation-bound save transactions, and presentation-only hooks; typed application-owned editor test adapter; shell state is a canonical-only projector with no draft merge/reload bypass; exact confirmation and main owner/active-tab/exact-window-instance CAS before focus; opaque active close-save lease capability; one `tab -> location -> object` transaction order shared by open/save/reload/close and transfer; typed reload stale/error results; stateless latest-intent watcher ownership; old main service, renderer hook transaction lanes, split save orchestration, raw test snapshot/mutation paths, shell-state draft compatibility, direct snapshot-push event, rollback activation, duplicate close-save facade, legacy test dialog facade, and dead APIs deleted. | Fresh acceptance: renderer/editing focus 13 files / 863 tests; roadmap domain/main focus 16 files / 217 tests; editor-foundation 7 files / 260 tests; escalated full Vitest 163 files / 2,052 passed + 1 explicit skip; typecheck, lint (0 errors / 8 existing warnings), build, final formal behavior 121/121 cases and 2,541/2,541 targets with 0 unexpected/not-run, residue scans, and diff check passed. | Architecture `PASS` over `f5aa70b..003d4d5`, P0/P1/P2 = 0 and no open questions; task `PASS`; `reports/task-summaries/RF-101.md`; execution handoff: `docs/plans/2026-07-16-rf-101-handoff.md` | `codex/editor-foundation-refactor`, accepted implementation head `003d4d5` |
 | RF-102 | Extract workspace application ports/use cases | RF-101 | `COMPLETE` | Production runtime-neutral `@fishmark/workspace-application`; explicit consumed ports; typed edit/save/close/open/reload/reorder/transfer/detach/owner-activation/watch orchestration; exhaustive native-close application-to-shared DTO mapping; 11 superseded main-local business modules and obsolete same-name tests deleted; fresh focused gate 23 files / 561 tests. | Editor-foundation 7 files / 267 tests; lint 0 errors / 8 existing warnings; typecheck; full Vitest 165 files / 2,066 passed + 1 skip; build with both workspace runtime verifiers; formal behavior 121/121 cases and 2,541/2,541 targets with 0 unexpected/not-run; forbidden/residue scans and diff check passed. | Architecture `PASS`, P0/P1/P2 = 0; final quality Critical/Important/Minor = 0, `Ready: Yes`; task `PASS`; `reports/task-summaries/RF-102.md`; handoff: `docs/plans/2026-07-30-rf-102-handoff.md` | `codex/editor-foundation-refactor` |
 | RF-201 | Persistent text buffer and session revisions | RF-102 | `COMPLETE` | Persistent CodeMirror `Text` production buffer behind runtime-neutral domain `TextBuffer`; explicit factory composition; revisioned/idempotent edit batches; contiguous client high-watermarks; malformed-input validation; public-entry/runtime guards and fail-closed source-root containment; handoff: `docs/plans/2026-08-04-rf-201-handoff.md`. | Post-fix domain/infrastructure 4 files / 163 tests; architecture 1 file / 209 tests; earlier cross-layer focus 63 files / 816 passed + 1 skip; editor-foundation 7 files / 285 tests; lint 0 errors / 8 existing warnings; typecheck; full Vitest 166 files / 2,162 passed + 1 skip; build with three workspace runtime verifiers; formal behavior 121/121 cases / 2,541/2,541 targets / 0 unexpected / 0 not-run; final acceptance-document diff check passed. | Specification/architecture `PASS`, P0/P1/P2 = 0 and no open questions; final quality Critical/Important/Minor = 0, `Ready: Yes`; task `PASS`; `reports/task-summaries/RF-201.md` | `codex/editor-foundation-refactor` |
-| RF-202 | Shared edit contract and main handler | RF-201 | `PLANNED` | — | typecheck/test | — | — |
+| RF-202 | Shared edit contract and main handler | RF-201 | `IN_PROGRESS` | Intake and approved design: `docs/plans/2026-08-04-rf-202-intake.md`, `docs/superpowers/specs/2026-08-04-rf-202-shared-edit-contract-design.md`; implementation plan: `docs/superpowers/plans/2026-08-04-rf-202-shared-edit-contract.md`. | Pending execution | Pending formal acceptance | `codex/editor-foundation-refactor` |
 | RF-203 | Renderer workspace client and pending queue | RF-202 | `PLANNED` | — | typecheck/test | — | — |
 | RF-204 | Full-draft synchronization hard cutover | RF-203 | `PLANNED` | — | lint/typecheck/test/build | — | — |
 | RF-301 | Per-document watch registry | RF-204 | `PLANNED` | — | typecheck/test/build | — | — |
@@ -114,7 +114,7 @@ Evidence columns are filled only with fresh command output/report paths from the
 
 ### Status
 
-`COMPLETE` — independent specification/architecture acceptance and formal task acceptance passed on 2026-08-04. M2 is 1/4 `IN_PROGRESS`, program completion is 5/38, and no RF task is active.
+`COMPLETE` — independent specification/architecture acceptance and formal task acceptance passed on 2026-08-04. M2 is 1/4 `IN_PROGRESS`, program completion is 5/38, and RF-202 is now the only active task.
 
 ### Goal and accepted result
 
@@ -134,7 +134,7 @@ Production main sessions now store canonical Markdown in a private CodeMirror `T
 
 - Formal record and manual steps: `reports/task-summaries/RF-201.md`.
 - Intake and execution handoff: `docs/plans/2026-08-04-rf-201-intake.md` and `docs/plans/2026-08-04-rf-201-handoff.md`.
-- RF-201 is the latest accepted task. RF-202 is dependency-ready but remains `PLANNED`; it has not started.
+- RF-201 remains the latest accepted task. RF-202 started on 2026-08-04 after its one-time intake and design checkpoint; it is `IN_PROGRESS` and cannot advance the accepted task count until formal acceptance passes.
 
 ## 5A. Historical accepted task handoff
 
@@ -249,7 +249,7 @@ Append one entry when a task changes to `DEV_DONE`, then amend the same entry af
 
 ## 8. Blockers and deviations
 
-There are no accepted external blockers or roadmap deviations. RF-001, RF-002, RF-101, RF-102, and RF-201 are complete. M0 and M1 are both 2/2 `COMPLETE`; M2 is 1/4 `IN_PROGRESS`, and program completion is 5/38. No RF task is active. RF-202 is dependency-ready but remains `PLANNED` and has not started.
+There are no accepted external blockers or roadmap deviations. RF-001, RF-002, RF-101, RF-102, and RF-201 are complete. M0 and M1 are both 2/2 `COMPLETE`; M2 is 1/4 `IN_PROGRESS`, and accepted program completion remains 5/38. RF-202 is the only active task and is `IN_PROGRESS`; RF-203 cannot start until RF-202 formal acceptance passes.
 
 Any deviation must record:
 
