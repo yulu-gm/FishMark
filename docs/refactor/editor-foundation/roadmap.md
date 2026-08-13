@@ -950,6 +950,8 @@ npm.cmd run build
 
 **Outcome:** save is conditional on the expected disk version and writes through one repository adapter.
 
+**Status:** `COMPLETE` (2026-08-14). The repository owns read+hash (`readDiskVersion`) and safe temp-write + atomic rename (`writeDocument`); `save-document.ts` rejects a normal save with `disk-version-conflict` when the on-disk `contentHash` diverges from the session version and commits the post-write `DiskVersion`; `DiskVersion` is recorded at open/reload/save. `saveMarkdownFileToPath` was deleted (only the Save As dialog remains).
+
 **Files:**
 
 - Create: `src/main/infrastructure/document-repository.ts`
@@ -959,13 +961,13 @@ npm.cmd run build
 
 **Steps:**
 
-- [ ] Read and hash the disk document when stat metadata differs.
-- [ ] Introduce clock and hash ports with the safe-save use cases that consume them.
-- [ ] Reject normal save when disk version differs from the session version.
-- [ ] Implement safe temporary-file write and platform-appropriate replace while preserving explicit error results.
-- [ ] Update saved revision/disk version only after durable success.
-- [ ] Ensure edits accepted during an in-flight save remain dirty after that save completes.
-- [ ] Make Save As create a new disk identity without overwriting the conflicted source.
+- [x] Read and hash the disk document when stat metadata differs.
+- [x] Introduce clock and hash ports with the safe-save use cases that consume them.
+- [x] Reject normal save when disk version differs from the session version.
+- [x] Implement safe temporary-file write and platform-appropriate replace while preserving explicit error results.
+- [x] Update saved revision/disk version only after durable success.
+- [x] Ensure edits accepted during an in-flight save remain dirty after that save completes.
+- [x] Make Save As create a new disk identity without overwriting the conflicted source.
 
 **Verification:**
 
