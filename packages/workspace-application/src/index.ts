@@ -66,6 +66,11 @@ export {
   type RecoveryStorePort,
   type RecoveryUseCase
 } from "./recovery";
+export {
+  createResolveExternalChange,
+  type ResolveExternalChangeCommand,
+  type ResolveExternalChangeResult
+} from "./resolve-external-change";
 export type {
   CleanupReporterPort,
   DiskRepositoryPort,
