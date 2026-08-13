@@ -41,14 +41,12 @@ function getFailureMessage(error: unknown): string {
 export function useWorkspaceController(input: {
   fishmark: Window["fishmark"];
   initialSnapshot?: WorkspaceWindowSnapshot | null;
-  getEditorContent: () => string;
   showNotification: ShowNotification;
 }) {
-  const { fishmark, getEditorContent, initialSnapshot, showNotification } = input;
+  const { fishmark, initialSnapshot, showNotification } = input;
   const [application] = useState(() => new WorkspaceRendererApplication({
     bridge: fishmark,
-    initialSnapshot,
-    readEditorContent: getEditorContent
+    initialSnapshot
   }));
   const [editorTestAdapter] = useState(() => application.getEditorTestAdapter());
   const state = useSyncExternalStore(
@@ -97,10 +95,6 @@ export function useWorkspaceController(input: {
     }
   }, [application, notifyFailure]);
 
-  const updateDraft = useCallback((inputValue: {
-    identity: EditorLoadIdentity;
-    content: string;
-  }): boolean => application.recordEditorChange(inputValue), [application]);
   const recordDocumentChangeFrame = useCallback(
     (frame: CodeEditorDocumentChangeFrame): boolean =>
       application.recordEditorDocumentChangeFrame(frame),
@@ -292,7 +286,6 @@ export function useWorkspaceController(input: {
     editorEpoch: state.editorEpoch,
     editorTransition: state.editorTransition,
     flushActiveWorkspaceDraft,
-    updateDraft,
     recordDocumentChangeFrame,
     recordDiscardedDocumentText,
     recordPendingDocumentChanges,

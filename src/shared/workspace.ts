@@ -59,11 +59,6 @@ export type DetachWorkspaceTabToNewWindowInput = {
   tabId: string;
 };
 
-export type UpdateWorkspaceTabDraftInput = {
-  tabId: string;
-  content: string;
-};
-
 export type ReloadWorkspaceTabFromPathInput = {
   tabId: string;
 };
@@ -197,7 +192,6 @@ export const CLOSE_WORKSPACE_TAB_CHANNEL = "fishmark:close-workspace-tab";
 export const REORDER_WORKSPACE_TAB_CHANNEL = "fishmark:reorder-workspace-tab";
 export const MOVE_WORKSPACE_TAB_TO_WINDOW_CHANNEL = "fishmark:move-workspace-tab-to-window";
 export const DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL = "fishmark:detach-workspace-tab-to-new-window";
-export const UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL = "fishmark:update-workspace-tab-draft";
 export const RELOAD_WORKSPACE_TAB_FROM_PATH_CHANNEL = "fishmark:reload-workspace-tab-from-path";
 export const OPEN_WORKSPACE_PATH_EVENT = "fishmark:open-workspace-path";
 export const REQUEST_WORKSPACE_OWNER_TAB_ACTIVATION_EVENT =

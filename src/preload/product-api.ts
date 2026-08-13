@@ -83,7 +83,6 @@ import {
   REORDER_WORKSPACE_TAB_CHANNEL,
   REQUEST_WORKSPACE_OWNER_TAB_ACTIVATION_EVENT,
   REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT,
-  UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL,
   type ActivateWorkspaceTabInput,
   type CloseWorkspaceTabInput,
   type CompleteWorkspaceWindowCloseInput,
@@ -99,7 +98,6 @@ import {
   type ReloadWorkspaceTabFromPathInput,
   type ReloadWorkspaceTabFromPathResult,
   type ReorderWorkspaceTabInput,
-  type UpdateWorkspaceTabDraftInput,
   type WorkspaceMoveTabResult,
   type WorkspaceOwnerTabActivationRequest,
   type WorkspaceWindowCloseRequest,
@@ -166,8 +164,6 @@ export function createProductApi({ ipc, filePath, runtime }: CreateProductApiInp
       ipc.invoke<WorkspaceMoveTabResult>(MOVE_WORKSPACE_TAB_TO_WINDOW_CHANNEL, input),
     detachWorkspaceTabToNewWindow: (input: DetachWorkspaceTabToNewWindowInput) =>
       ipc.invoke<WorkspaceWindowSnapshot>(DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL, input),
-    updateWorkspaceTabDraft: (input: UpdateWorkspaceTabDraftInput) =>
-      ipc.invoke<WorkspaceWindowSnapshot>(UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL, input),
     applyDocumentEdits: (input: ApplyDocumentEditsInput) =>
       ipc.invoke<ApplyDocumentEditsResult>(APPLY_DOCUMENT_EDITS_CHANNEL, input),
     flushDocumentEdits: (input: FlushDocumentEditsInput) =>

@@ -12,35 +12,34 @@ function createHarness() {
   let editorContent = "";
   const openWorkspaceFileFromPath = vi.fn();
   const saveMarkdownFile = vi.fn();
-
-  const updateWorkspaceTabDraft = vi.fn(async (input: { tabId: string; content: string }) => {
-    const currentSnapshot = application.getState().workspaceSnapshot;
-    if (!currentSnapshot) {
-      throw new Error("No workspace snapshot to update.");
-    }
-    return {
-      windowId: currentSnapshot.windowId,
-      activeTabId: currentSnapshot.activeTabId,
-      tabs: currentSnapshot.tabs.map((tab) => tab.tabId === input.tabId
-        ? { ...tab, isDirty: true }
-        : tab),
-      activeDocument: currentSnapshot.activeDocument?.tabId === input.tabId
-        ? { ...currentSnapshot.activeDocument, content: input.content, isDirty: true }
-        : currentSnapshot.activeDocument
-    } satisfies WorkspaceWindowSnapshot;
-  });
+  const applyDocumentEdits = vi.fn(async (input: {
+    tabId: string; clientSequence: number; baseRevision: number;
+  }) => ({
+    kind: "applied" as const,
+    acknowledgedSequence: input.clientSequence,
+    revision: input.baseRevision + 1,
+    isDirty: true
+  }));
+  const flushDocumentEdits = vi.fn(async (input: { throughSequence: number }) => ({
+    kind: "flushed" as const,
+    acknowledgedSequence: input.throughSequence,
+    revision: 1,
+    savedRevision: 0,
+    isDirty: true
+  }));
 
   const application = new WorkspaceRendererApplication({
     bridge: {
       openWorkspaceFileFromPath,
-      updateWorkspaceTabDraft,
       saveMarkdownFile,
+      applyDocumentEdits,
+      flushDocumentEdits,
+      onDocumentProjection: vi.fn(() => () => {}),
       getWorkspaceSnapshot: vi.fn(async () =>
         application.getState().workspaceSnapshot ?? EMPTY_WORKSPACE_SNAPSHOT
       )
     } as unknown as WorkspaceRendererBridge,
-    initialSnapshot: EMPTY_WORKSPACE_SNAPSHOT,
-    readEditorContent: () => editorContent
+    initialSnapshot: EMPTY_WORKSPACE_SNAPSHOT
   });
 
   application.subscribe(() => {
@@ -53,11 +52,19 @@ function createHarness() {
   });
 
   const applyEditorContent = (content: string): void => {
-    editorContent = content;
     const identity = application.getEditorBinding();
-    if (identity !== null) {
-      application.recordEditorChange({ identity, content });
+    if (identity === null) {
+      editorContent = content;
+      return;
     }
+    const baseText = editorContent;
+    editorContent = content;
+    application.recordEditorDocumentChangeFrame({
+      identity,
+      baseText,
+      resultingText: content,
+      changes: [{ from: 0, to: baseText.length, insert: content }]
+    });
   };
 
   const harness = {
@@ -79,7 +86,7 @@ function createHarness() {
     },
     openWorkspaceFileFromPath,
     saveMarkdownFile,
-    updateWorkspaceTabDraft,
+    applyDocumentEdits,
     applyEditorContent
   };
 

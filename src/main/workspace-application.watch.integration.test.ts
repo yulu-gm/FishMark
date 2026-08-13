@@ -54,7 +54,6 @@ function createWatchApplication<TContext>(input: {
       detachTab: async () => Promise.reject(new Error("unused")),
       markWindowReady: async () => undefined
     },
-    drafts: { update: (command) => workspace.updateTabDraft(command) },
     edits: {
       apply: async (command) => workspace.applyDocumentEdits(command),
       flush: async () => ({

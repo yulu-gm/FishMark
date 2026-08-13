@@ -21,8 +21,7 @@ import {
   OPEN_WORKSPACE_FILE_CHANNEL,
   OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL,
   REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT,
-  REORDER_WORKSPACE_TAB_CHANNEL,
-  UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL
+  REORDER_WORKSPACE_TAB_CHANNEL
 } from "../shared/workspace";
 import { OPEN_EXTERNAL_LINK_CHANNEL } from "../shared/external-link";
 
@@ -198,7 +197,6 @@ describe("preload bridge", () => {
       detachWorkspaceTabToNewWindow: expect.any(Function),
       onOpenWorkspacePath: expect.any(Function),
       onWorkspaceOwnerTabActivationRequest: expect.any(Function),
-      updateWorkspaceTabDraft: expect.any(Function),
       confirmWorkspaceWindowClose: expect.any(Function),
       onWorkspaceWindowCloseRequest: expect.any(Function)
     });
@@ -213,7 +211,6 @@ describe("preload bridge", () => {
     void api.moveWorkspaceTabToWindow({ tabId: "tab-1", targetWindowId: "window-2" });
     void api.detachWorkspaceTabToNewWindow({ tabId: "tab-1" });
     void api.onOpenWorkspacePath(() => {});
-    void api.updateWorkspaceTabDraft({ tabId: "tab-1", content: "# Updated\n" });
     void api.confirmWorkspaceWindowClose({ requestId: "window-1:close-1" });
     void api.onWorkspaceWindowCloseRequest(async () => false);
 
@@ -237,10 +234,6 @@ describe("preload bridge", () => {
     expect(invoke.mock.calls).toContainEqual([
       DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL,
       { tabId: "tab-1" }
-    ]);
-    expect(invoke.mock.calls).toContainEqual([
-      UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL,
-      { tabId: "tab-1", content: "# Updated\n" }
     ]);
     expect(invoke.mock.calls).toContainEqual([
       CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL,

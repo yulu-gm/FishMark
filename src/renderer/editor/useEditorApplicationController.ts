@@ -11,7 +11,6 @@ import { useWorkspaceController } from "./useWorkspaceController";
 export function useEditorApplicationController(input: {
   autosaveDelayMs: number;
   fishmark: Window["fishmark"];
-  getEditorContent: () => string;
   initialSnapshot?: WorkspaceWindowSnapshot | null;
   scheduleDocumentDerivedDataUpdate: (content: string) => void;
   setEditorContentSnapshot: (content: string) => void;
@@ -20,7 +19,6 @@ export function useEditorApplicationController(input: {
   const {
     autosaveDelayMs,
     fishmark,
-    getEditorContent,
     initialSnapshot,
     scheduleDocumentDerivedDataUpdate,
     setEditorContentSnapshot,
@@ -28,7 +26,6 @@ export function useEditorApplicationController(input: {
   } = input;
   const workspaceController = useWorkspaceController({
     fishmark,
-    getEditorContent,
     initialSnapshot,
     showNotification
   });

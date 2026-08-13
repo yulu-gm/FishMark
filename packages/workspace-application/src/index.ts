@@ -10,10 +10,6 @@ export {
   type FlushDocumentEditsResult
 } from "./flush-document-edits";
 export {
-  createUpdateDocumentDraft,
-  type UpdateDocumentDraftInput
-} from "./update-document-draft";
-export {
   createWorkspaceApplication,
   type WorkspaceMoveCommandResult,
   type WorkspaceProjectionCommandResult,

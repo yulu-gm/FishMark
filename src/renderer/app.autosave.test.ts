@@ -34,7 +34,6 @@ import type {
   MoveWorkspaceTabToWindowInput,
   OpenWorkspacePathRequest,
   ReorderWorkspaceTabInput,
-  UpdateWorkspaceTabDraftInput,
   OpenWorkspaceFileResult,
   OpenWorkspaceFileFromPathResult,
   ReloadWorkspaceTabFromPathResult,
@@ -638,9 +637,6 @@ describe("App autosave", () => {
   let detachWorkspaceTabToNewWindow: ReturnType<
     typeof vi.fn<(input: DetachWorkspaceTabToNewWindowInput) => Promise<WorkspaceWindowSnapshot>>
   >;
-  let updateWorkspaceTabDraft: ReturnType<
-    typeof vi.fn<(input: UpdateWorkspaceTabDraftInput) => Promise<WorkspaceWindowSnapshot>>
-  >;
   let reloadWorkspaceTabFromPath: ReturnType<
     typeof vi.fn<
       (input: { tabId: string }) => Promise<ReloadWorkspaceTabFromPathResult>
@@ -791,20 +787,6 @@ describe("App autosave", () => {
 
   function setWorkspaceActiveTab(tabId: string): WorkspaceWindowSnapshot {
     workspaceActiveTabId = tabId;
-    return cloneWorkspaceSnapshot(buildWorkspaceSnapshot());
-  }
-
-  function updateWorkspaceDraft(tabId: string, content: string): WorkspaceWindowSnapshot {
-    workspaceTabs = workspaceTabs.map((tab) =>
-      tab.tabId === tabId
-        ? {
-            ...tab,
-            content,
-            isDirty: content !== tab.lastSavedContent
-          }
-        : tab
-    );
-
     return cloneWorkspaceSnapshot(buildWorkspaceSnapshot());
   }
 
@@ -1049,9 +1031,6 @@ describe("App autosave", () => {
     detachWorkspaceTabToNewWindow = vi
       .fn<(input: DetachWorkspaceTabToNewWindowInput) => Promise<WorkspaceWindowSnapshot>>()
       .mockImplementation(async (input) => detachWorkspaceSession(input.tabId));
-    updateWorkspaceTabDraft = vi
-      .fn<(input: UpdateWorkspaceTabDraftInput) => Promise<WorkspaceWindowSnapshot>>()
-      .mockImplementation(async (input) => updateWorkspaceDraft(input.tabId, input.content));
     reloadWorkspaceTabFromPath = vi
       .fn<
         (input: { tabId: string }) =>
@@ -1145,7 +1124,6 @@ describe("App autosave", () => {
       reorderWorkspaceTab,
       moveWorkspaceTabToWindow,
       detachWorkspaceTabToNewWindow,
-      updateWorkspaceTabDraft,
       applyDocumentEdits: applyDocumentEdits = vi.fn(async (input) => ({
         kind: "applied" as const,
         acknowledgedSequence: input.clientSequence,
@@ -1673,10 +1651,6 @@ describe("App autosave", () => {
       ["C:/notes/alpha.md"],
       ["C:/notes/beta.md"]
     ]);
-    expect(updateWorkspaceTabDraft).not.toHaveBeenCalledWith({
-      tabId: "tab-2",
-      content: "# Current\n"
-    });
     expect(workspaceTabs).toHaveLength(3);
     expect(workspaceTabs[1]?.textContent).toContain("alpha.md");
     expect(workspaceTabs[2]?.textContent).toContain("beta.md");
@@ -1795,7 +1769,6 @@ describe("App autosave", () => {
     expect(applyDocumentEdits).toHaveBeenCalledTimes(2);
     expect(saveMarkdownFile).not.toHaveBeenCalled();
     expect(applyDocumentEdits.mock.calls[0]).toEqual(applyDocumentEdits.mock.calls[1]);
-    expect(updateWorkspaceTabDraft).not.toHaveBeenCalled();
   });
 
   it("saves the currently active workspace tab by tab id after switching tabs", async () => {
@@ -1914,48 +1887,6 @@ describe("App autosave", () => {
     expect(container.querySelectorAll('[data-testid="mock-code-editor"]')).toHaveLength(1);
   });
 
-  it("surfaces active-tab dirty state in the workspace tab strip", async () => {
-    queueWorkspaceOpenDocuments(
-      {
-        path: "C:/notes/first.md",
-        name: "first.md",
-        content: "# First\n"
-      },
-      {
-        path: "C:/notes/second.md",
-        name: "second.md",
-        content: "# Second\n"
-      }
-    );
-
-    await renderApp();
-
-    await act(async () => {
-      menuCommandListener?.("open-markdown-file");
-      await Promise.resolve();
-    });
-    await act(async () => {
-      menuCommandListener?.("open-markdown-file");
-      await Promise.resolve();
-    });
-
-    updateWorkspaceTabDraft.mockClear();
-
-    await act(async () => {
-      codeEditorMock.changeContent("# Second dirty\n");
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    const activeTab = container.querySelector<HTMLElement>(
-      '[data-fishmark-region="workspace-tab"][data-active="true"]'
-    );
-
-    expect(updateWorkspaceTabDraft).not.toHaveBeenCalled();
-    expect(activeTab?.textContent).toContain("second.md");
-    expect(activeTab?.dataset.dirty).toBe("true");
-  });
-
   it("appends an externally opened Markdown path as a new workspace tab in the current window", async () => {
     queueWorkspaceOpenDocuments({
       path: "C:/notes/current.md",
@@ -2066,7 +1997,6 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
-    updateWorkspaceTabDraft.mockClear();
     closeWorkspaceTab.mockClear();
 
     await act(async () => {
@@ -2074,8 +2004,6 @@ describe("App autosave", () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-
-    expect(updateWorkspaceTabDraft).not.toHaveBeenCalled();
 
     const closeButton = Array.from(
       container.querySelectorAll<HTMLButtonElement>('[data-fishmark-region="workspace-tab-close"]')
@@ -2101,7 +2029,6 @@ describe("App autosave", () => {
       tabId: "tab-2",
       throughSequence: 1
     }));
-    expect(updateWorkspaceTabDraft).not.toHaveBeenCalled();
     expect(closeWorkspaceTab).toHaveBeenCalledWith({ tabId: "tab-2" });
     expect(flushDocumentEdits.mock.invocationCallOrder[0]).toBeLessThan(
       closeWorkspaceTab.mock.invocationCallOrder[0]!
@@ -2404,7 +2331,6 @@ describe("App autosave", () => {
     expect(shouldClose).toBe(false);
     expect(confirmWorkspaceWindowClose).not.toHaveBeenCalled();
     expect(applyDocumentEdits).toHaveBeenCalledTimes(2);
-    expect(updateWorkspaceTabDraft).not.toHaveBeenCalled();
   });
 
   it("shows the typed close-confirmation error message when saving during close fails", async () => {
@@ -2449,7 +2375,6 @@ describe("App autosave", () => {
     });
 
     expect(applyDocumentEdits).toHaveBeenCalledTimes(2);
-    expect(updateWorkspaceTabDraft).not.toHaveBeenCalled();
     expect(saveMarkdownFile).not.toHaveBeenCalled();
   });
 
@@ -4145,7 +4070,6 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
-    updateWorkspaceTabDraft.mockClear();
     saveMarkdownFile.mockClear();
 
     await act(async () => {
@@ -4154,10 +4078,6 @@ describe("App autosave", () => {
     });
 
     expect(openWorkspaceFile).toHaveBeenCalledTimes(2);
-    expect(updateWorkspaceTabDraft).not.toHaveBeenCalledWith({
-      tabId: "tab-2",
-      content: "# First\n"
-    });
     expect(saveMarkdownFile).not.toHaveBeenCalledWith({
       tabId: "tab-2",
       path: "C:/notes/test.md"

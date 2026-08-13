@@ -79,7 +79,6 @@ function acknowledgeEditorLoad(controller: EditorApplicationControllerValue): vo
 
 describe("useEditorApplicationController", () => {
   it("routes a production editor frame through the save barrier without a full draft", async () => {
-    const updateWorkspaceTabDraft = vi.fn(async () => savedSnapshot);
     const applyDocumentEdits = vi.fn(async (input: { clientSequence: number; baseRevision: number }) => ({
       kind: "applied" as const,
       acknowledgedSequence: input.clientSequence,
@@ -117,7 +116,6 @@ describe("useEditorApplicationController", () => {
     const { latestRef, root } = renderController({
       autosaveDelayMs: 25,
       fishmark: {
-        updateWorkspaceTabDraft,
         applyDocumentEdits,
         flushDocumentEdits,
         onDocumentProjection: vi.fn(() => () => {}),
@@ -126,7 +124,6 @@ describe("useEditorApplicationController", () => {
         onExternalMarkdownFileChanged: vi.fn(() => () => {}),
         onWorkspaceOwnerTabActivationRequest: vi.fn(() => () => {})
       } as unknown as Window["fishmark"],
-      getEditorContent: () => "# Draft\n",
       setEditorContentSnapshot: vi.fn(),
       showNotification: vi.fn(),
       scheduleDocumentDerivedDataUpdate: vi.fn(),
@@ -150,7 +147,6 @@ describe("useEditorApplicationController", () => {
       await latestRef.current?.commands.saveMarkdown();
     });
 
-    expect(updateWorkspaceTabDraft).not.toHaveBeenCalled();
     expect(applyDocumentEdits).toHaveBeenCalledTimes(1);
     expect(flushDocumentEdits).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
@@ -164,17 +160,6 @@ describe("useEditorApplicationController", () => {
   });
 
   it("exports the active document as standalone FishMark HTML without saving Markdown", async () => {
-    const exportedSnapshot: WorkspaceWindowSnapshot = {
-      ...savedSnapshot,
-      activeDocument: {
-        ...savedSnapshot.activeDocument!,
-        content: "# Exported\n",
-        revision: 1,
-        savedRevision: 0,
-        isDirty: true
-      }
-    };
-    const updateWorkspaceTabDraft = vi.fn(async () => exportedSnapshot);
     const applyDocumentEdits = vi.fn(async (input: { clientSequence: number; baseRevision: number }) => ({
       kind: "applied" as const,
       acknowledgedSequence: input.clientSequence,
@@ -200,7 +185,6 @@ describe("useEditorApplicationController", () => {
     const { latestRef, root } = renderController({
       autosaveDelayMs: 25,
       fishmark: {
-        updateWorkspaceTabDraft,
         applyDocumentEdits,
         flushDocumentEdits,
         onDocumentProjection: vi.fn(() => () => {}),
@@ -210,7 +194,6 @@ describe("useEditorApplicationController", () => {
         onExternalMarkdownFileChanged: vi.fn(() => () => {}),
         onWorkspaceOwnerTabActivationRequest: vi.fn(() => () => {})
       } as unknown as Window["fishmark"],
-      getEditorContent: () => "# Exported\n",
       setEditorContentSnapshot: vi.fn(),
       showNotification,
       scheduleDocumentDerivedDataUpdate: vi.fn(),
@@ -244,7 +227,6 @@ describe("useEditorApplicationController", () => {
     resolveExport({ status: "success", path: "C:/notes/note.html", name: "note.html" });
     await act(async () => { await exporting; });
 
-    expect(updateWorkspaceTabDraft).not.toHaveBeenCalled();
     expect(applyDocumentEdits).toHaveBeenCalledTimes(2);
     expect(flushDocumentEdits).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).not.toHaveBeenCalled();
@@ -292,7 +274,6 @@ describe("useEditorApplicationController", () => {
         onExternalMarkdownFileChanged: vi.fn(() => () => {}),
         onWorkspaceOwnerTabActivationRequest: vi.fn(() => () => {})
       } as unknown as Window["fishmark"],
-      getEditorContent: () => "# Exported\n",
       setEditorContentSnapshot: vi.fn(),
       showNotification,
       scheduleDocumentDerivedDataUpdate: vi.fn(),
@@ -335,11 +316,9 @@ describe("useEditorApplicationController", () => {
       fishmark: {
         getWorkspaceSnapshot: vi.fn(async () => emptySnapshot),
         openWorkspaceFile,
-        updateWorkspaceTabDraft: vi.fn(async () => emptySnapshot),
         onExternalMarkdownFileChanged: vi.fn(() => () => {}),
         onWorkspaceOwnerTabActivationRequest: vi.fn(() => () => {})
       } as unknown as Window["fishmark"],
-      getEditorContent: () => "",
       setEditorContentSnapshot: vi.fn(),
       showNotification: vi.fn(),
       scheduleDocumentDerivedDataUpdate: vi.fn(),
@@ -370,11 +349,9 @@ describe("useEditorApplicationController", () => {
         getWorkspaceSnapshot: vi.fn(async () => emptySnapshot),
         openWorkspaceFileFromPath,
         clearRecentFile,
-        updateWorkspaceTabDraft: vi.fn(async () => emptySnapshot),
         onExternalMarkdownFileChanged: vi.fn(() => () => {}),
         onWorkspaceOwnerTabActivationRequest: vi.fn(() => () => {})
       } as unknown as Window["fishmark"],
-      getEditorContent: () => "",
       setEditorContentSnapshot: vi.fn(),
       showNotification: vi.fn(),
       scheduleDocumentDerivedDataUpdate: vi.fn(),

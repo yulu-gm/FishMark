@@ -131,7 +131,7 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain("OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL");
     expect(mainSource).toContain("ACTIVATE_WORKSPACE_TAB_CHANNEL");
     expect(mainSource).toContain("CLOSE_WORKSPACE_TAB_CHANNEL");
-    expect(mainSource).toContain("UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL");
+    expect(mainSource).not.toContain("UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL");
     expect(mainSource).toContain(
       "const workspaceState = createWorkspaceState({ createTextBuffer: createCodeMirrorTextBuffer })"
     );
@@ -183,9 +183,7 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain("await workspaceApplication.reorderTab({");
     expect(mainSource).toContain("expectedWindowId: windowId");
     expect(mainSource).not.toContain("workspaceState.reorderTab(input.tabId, input.toIndex)");
-    expect(mainSource).toContain(
-      "ipcMain.handle(\n    UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL"
-    );
+    expect(mainSource).not.toContain("UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL");
     expect(mainSource).toContain('ownerWindow.on("close", (event) => {');
     expect(mainSource).toContain("workspaceWindowCloseRequestBroker.hasPending(windowId)");
     expect(mainSource).toContain("workspaceWindowCloseApplication.requestWindowClose({");
@@ -219,7 +217,7 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain(
       "const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender)"
     );
-    expect(mainSource).toContain("workspaceApplication.updateDocumentDraft({");
+    expect(mainSource).not.toContain("workspaceApplication.updateDocumentDraft({");
     expect(mainSource).toContain("registerWorkspaceHandlers<Electron.WebContents>({");
     expect(mainSource).toContain("createApplyDocumentEdits({");
     expect(mainSource).toContain("createFlushDocumentEdits({");

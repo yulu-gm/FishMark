@@ -129,7 +129,6 @@ describe("Test workbench shell", () => {
         targetWindowSnapshot: EMPTY_WORKSPACE_SNAPSHOT
       }),
       detachWorkspaceTabToNewWindow: vi.fn().mockResolvedValue(EMPTY_WORKSPACE_SNAPSHOT),
-      updateWorkspaceTabDraft: vi.fn().mockResolvedValue(EMPTY_WORKSPACE_SNAPSHOT),
       applyDocumentEdits: vi.fn(),
       flushDocumentEdits: vi.fn(),
       onDocumentProjection: vi.fn(() => () => {}),

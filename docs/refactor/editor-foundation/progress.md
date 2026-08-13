@@ -10,7 +10,7 @@
 
 **Overall status:** `IN_PROGRESS`
 
-**Current task:** `RF-203 — Renderer workspace client and pending edit queue` (`COMPLETE`)
+**Current task:** none — M2 complete; next is `RF-301`
 
 **Next required skill:** `$fishmark-task-intake` for `RF-204`
 
@@ -33,7 +33,7 @@ At most one `RF-xxx` task may be `IN_PROGRESS` or `ACCEPTING` at a time. A later
 | --- | --- | --- | ---: | ---: | --- |
 | M0 | Invariants and executable baselines | `COMPLETE` | 2 | 2 | Behavior matrix and architecture/performance baseline exist |
 | M1 | Canonical workspace domain | `COMPLETE` | 2 | 2 | RF-101 and RF-102 accepted; domain and application boundaries are production dependencies |
-| M2 | Revisioned edit transport | `IN_PROGRESS` | 3 | 4 | RF-203 accepted; RF-204 remains the final M2 deletion task |
+| M2 | Revisioned edit transport | `COMPLETE` | 4 | 4 | RF-203 and RF-204 accepted; full-draft channel deleted |
 | M3 | Data safety and recovery | `PLANNED` | 0 | 4 | Inactive files protected; save/recovery/close are canonical |
 | M4 | Recursive parser and incremental cache | `PLANNED` | 0 | 5 | One recursive parser remains; differential cache tests pass |
 | M5 | Pure semantic editor model | `PLANNED` | 0 | 6 | All semantic commands migrated; old command engine removed |
@@ -43,7 +43,7 @@ At most one `RF-xxx` task may be `IN_PROGRESS` or `ACCEPTING` at a time. A later
 | M9 | Performance, E2E, and security | `PLANNED` | 0 | 3 | Budgets, Playwright flows, and Electron security pass |
 | M10 | Purge and final acceptance | `PLANNED` | 0 | 2 | No compatibility/dead code; final verdict `PASS` |
 
-**Program completion:** 7 / 38 tasks.
+**Program completion:** 8 / 38 tasks.
 
 ## 3. Task ledger
 
@@ -58,7 +58,7 @@ Evidence columns are filled only with fresh command output/report paths from the
 | RF-201 | Persistent text buffer and session revisions | RF-102 | `COMPLETE` | Persistent CodeMirror `Text` production buffer behind runtime-neutral domain `TextBuffer`; explicit factory composition; revisioned/idempotent edit batches; contiguous client high-watermarks; malformed-input validation; public-entry/runtime guards and fail-closed source-root containment; handoff: `docs/plans/2026-08-04-rf-201-handoff.md`. | Post-fix domain/infrastructure 4 files / 163 tests; architecture 1 file / 209 tests; earlier cross-layer focus 63 files / 816 passed + 1 skip; editor-foundation 7 files / 285 tests; lint 0 errors / 8 existing warnings; typecheck; full Vitest 166 files / 2,162 passed + 1 skip; build with three workspace runtime verifiers; formal behavior 121/121 cases / 2,541/2,541 targets / 0 unexpected / 0 not-run; final acceptance-document diff check passed. | Specification/architecture `PASS`, P0/P1/P2 = 0 and no open questions; final quality Critical/Important/Minor = 0, `Ready: Yes`; task `PASS`; `reports/task-summaries/RF-201.md` | `codex/editor-foundation-refactor` |
 | RF-202 | Shared edit contract and main handler | RF-201 | `COMPLETE` | Repository-owned edit/flush/projection DTOs; revision-bearing snapshots; owner-aware metadata-only domain edit/checkpoint entries; apply and through-sequence flush under the same per-tab coordinator with mandatory in-critical-section sender authorization; exact IPC result reconstruction; one complete preload product builder protected by a fail-closed TypeScript symbol/owner invariant. The renamed `updateDocumentDraft` channel remains only as explicit RF-204 deletion debt; handoff: `docs/plans/2026-08-04-rf-202-handoff.md`. | Fresh focus 24 files / 529 tests; editor-foundation 7 files / 307 tests; lint 0 errors / 8 existing warnings; typecheck; full Vitest 172 files / 2,232 passed + 1 skip out of 2,233; renderer/Electron/CLI build with all three workspace runtime verifiers; formal behavior 121/121 cases / 2,541/2,541 targets / 0 unexpected / 0 not-run; diff check passed with line-ending warnings only. | Architecture `PASS`, P0/P1/P2 = 0, no open questions; final quality Critical 0, Important 0, Minor 1, `Ready: Yes`; task `PASS`; `reports/task-summaries/RF-202.md`. | `codex/editor-foundation-refactor` |
 | RF-203 | Renderer workspace client and pending queue | RF-202 | `COMPLETE` | Pure runtime-neutral pending queue and edit client (`src/renderer/application/`); RAF frame bucket with composition-aware seal; internal-origin remote patch; production hard-switch to revisioned frames with dormant full-draft only as RF-204 debt; non-conflict recovery auto-materialization; handoff: `docs/plans/2026-08-04-rf-203-handoff.md`. | Focused 6 files / 636 tests; editor-foundation 7 files / 308 tests; lint 0 errors / 8 existing warnings; typecheck; full Vitest 174 files / 2,413 passed + 1 skip; build exit 0; formal behavior 121/121 cases / 2,541/2,541 targets / 0 unexpected / 0 not-run on exclusive rerun. | Independent spec review 9/9 PASS; quality review Critical C1 fixed (non-conflict recovery auto-materialization) with regression tests; architecture `PASS`, P0/P1/P2 = 0; task `PASS`; `reports/task-summaries/RF-203.md`. | `codex/editor-foundation-refactor` |
-| RF-204 | Full-draft synchronization hard cutover | RF-203 | `PLANNED` | — | lint/typecheck/test/build | — | — |
+| RF-204 | Full-draft synchronization hard cutover | RF-203 | `COMPLETE` | Deleted the full-draft transport end to end: shared channel/input type, preload bridge method, main IPC handler, workspace-application `updateDocumentDraft` use case and `drafts` port, renderer `WorkspaceDraftOutbox`/`recordEditorChange`/legacy drain paths; added an architecture guard forbidding the retired symbols. | lint 0 errors; typecheck; full Vitest 172 files / 2,372 passed + 1 skip; build exit 0; formal behavior 121/121 cases / 2,541/2,541 targets / 0 unexpected / 0 not-run. | `reports/task-summaries/RF-204.md` (to create) | `codex/editor-foundation-refactor` |
 | RF-301 | Per-document watch registry | RF-204 | `PLANNED` | — | typecheck/test/build | — | — |
 | RF-302 | Conflict-aware safe save | RF-301 | `PLANNED` | — | typecheck/test/build | — | — |
 | RF-303 | Recovery journal and session restore | RF-302 | `PLANNED` | — | typecheck/test/build | — | — |

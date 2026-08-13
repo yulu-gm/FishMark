@@ -881,6 +881,8 @@ npm.cmd run typecheck
 
 #### RF-204: Hard cutover from full draft synchronization
 
+**Status:** `COMPLETE` (2026-08-13).
+
 **Outcome:** all document changes use revisioned edit batches.
 
 **Files:**
@@ -892,11 +894,11 @@ npm.cmd run typecheck
 
 **Steps:**
 
-- [ ] Route every edit, test driver operation, and programmatic insertion through the new queue.
-- [ ] Remove full draft synchronization and snapshot-preservation code.
-- [ ] Remove tests that mock the retired bridge and replace them with revision assertions.
-- [ ] Add an architecture test that forbids retired channel/symbol names.
-- [ ] Run open/edit/save/switch/detach/close scenarios with delayed IPC acknowledgements.
+- [x] Route every edit, test driver operation, and programmatic insertion through the new queue.
+- [x] Remove full draft synchronization and snapshot-preservation code.
+- [x] Remove tests that mock the retired bridge and replace them with revision assertions.
+- [x] Add an architecture test that forbids retired channel/symbol names.
+- [x] Run open/edit/save/switch/detach/close scenarios with delayed IPC acknowledgements.
 
 **Verification:**
 

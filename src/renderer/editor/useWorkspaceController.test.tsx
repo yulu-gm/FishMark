@@ -68,7 +68,6 @@ describe("useWorkspaceController", () => {
       const controller = useWorkspaceController({
         fishmark: createBridge({ onDocumentProjection }),
         initialSnapshot: createSnapshot(),
-        getEditorContent: () => "# Initial\n",
         showNotification: vi.fn()
       });
       useEffect(() => { latestRef.current = controller; }, [controller]);
@@ -88,7 +87,6 @@ describe("useWorkspaceController", () => {
     const { latestRef, root } = renderController({
       fishmark: createBridge(),
       initialSnapshot: snapshot,
-      getEditorContent: () => "# Draft\n",
       showNotification: vi.fn()
     });
     const identity = {
@@ -97,67 +95,9 @@ describe("useWorkspaceController", () => {
       loadRevision: latestRef.current!.editorLoadRevision
     };
 
-    expect(latestRef.current!.updateDraft({ identity, content: "# Rejected\n" })).toBe(false);
     expect(latestRef.current!.acknowledgeEditorLoad(identity)).toBe(true);
-    await act(async () => {
-      expect(latestRef.current!.updateDraft({ identity, content: "# Draft\n" })).toBe(true);
-    });
 
-    expect(latestRef.current!.activeDocument?.content).toBe("# Draft\n");
-    expect(latestRef.current!.activeDocument?.isDirty).toBe(true);
-    act(() => root.unmount());
-  });
-
-  it("maps a fail-closed structural outcome to one notification", async () => {
-    const snapshot = createSnapshot();
-    const showNotification = vi.fn();
-    const { latestRef, root } = renderController({
-      fishmark: createBridge({
-        updateWorkspaceTabDraft: vi.fn(async () => {
-          throw new Error("draft rejected");
-        }),
-        getWorkspaceSnapshot: vi.fn(async () => snapshot),
-        closeWorkspaceTab: vi.fn()
-      }),
-      initialSnapshot: snapshot,
-      getEditorContent: () => "# Draft\n",
-      showNotification
-    });
-    const identity = {
-      tabId: "tab-1",
-      epoch: latestRef.current!.editorEpoch,
-      loadRevision: latestRef.current!.editorLoadRevision
-    };
-    latestRef.current!.acknowledgeEditorLoad(identity);
-    latestRef.current!.updateDraft({ identity, content: "# Draft\n" });
-
-    let close!: Promise<void>;
-    act(() => {
-      close = latestRef.current!.closeWorkspaceTab("tab-1");
-    });
-    await vi.waitFor(() => {
-      expect(latestRef.current!.state.editorTransition?.phase).toBe("sealing");
-    });
-    act(() => {
-      const transition = latestRef.current!.state.editorTransition!;
-      latestRef.current!.acknowledgeEditorTransition({
-        token: transition.token,
-        readOnly: true
-      });
-    });
-    await vi.waitFor(() => {
-      expect(latestRef.current!.state.editorTransition?.phase).toBe("releasing");
-    });
-    act(() => {
-      const transition = latestRef.current!.state.editorTransition!;
-      latestRef.current!.acknowledgeEditorTransition({
-        token: transition.token,
-        readOnly: false
-      });
-    });
-    await act(async () => close);
-
-    expect(showNotification).toHaveBeenCalledWith({ kind: "error", message: "draft rejected" });
+    expect(latestRef.current!.activeDocument?.isDirty).toBe(false);
     act(() => root.unmount());
   });
 
@@ -193,7 +133,6 @@ describe("useWorkspaceController", () => {
         activateWorkspaceTab
       }),
       initialSnapshot: source,
-      getEditorContent: () => "# Initial\n",
       showNotification: vi.fn()
     });
 

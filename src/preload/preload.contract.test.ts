@@ -91,7 +91,6 @@ import {
   RELOAD_WORKSPACE_TAB_FROM_PATH_CHANNEL,
   REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT,
   REORDER_WORKSPACE_TAB_CHANNEL,
-  UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL,
   type OpenWorkspacePathRequest,
   type ReloadWorkspaceTabFromPathResult
 } from "../shared/workspace";
@@ -315,10 +314,6 @@ describe("preload contract", () => {
       targetWindowId: "window-2"
     };
     const detachWorkspaceTabToNewWindowInput = { tabId: "tab-2" };
-    const updateWorkspaceTabDraftInput = {
-      tabId: "tab-2",
-      content: "# Updated note\n"
-    };
     const reloadWorkspaceTabFromPathInput = {
       tabId: "tab-2"
     };
@@ -354,7 +349,6 @@ describe("preload contract", () => {
     void api.reorderWorkspaceTab(reorderWorkspaceTabInput);
     void api.moveWorkspaceTabToWindow(moveWorkspaceTabToWindowInput);
     void api.detachWorkspaceTabToNewWindow(detachWorkspaceTabToNewWindowInput);
-    void api.updateWorkspaceTabDraft(updateWorkspaceTabDraftInput);
     void api.confirmWorkspaceWindowClose(confirmWindowCloseInput);
     void api.saveMarkdownFile(saveInput);
     void api.saveMarkdownFileAs(saveAsInput);
@@ -401,10 +395,6 @@ describe("preload contract", () => {
     expect(invoke.mock.calls).toContainEqual([
       DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL,
       detachWorkspaceTabToNewWindowInput
-    ]);
-    expect(invoke.mock.calls).toContainEqual([
-      UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL,
-      updateWorkspaceTabDraftInput
     ]);
     expect(invoke.mock.calls).toContainEqual([
       CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL,

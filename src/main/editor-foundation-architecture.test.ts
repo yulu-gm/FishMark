@@ -88,6 +88,36 @@ describe("editor foundation architecture guard", () => {
     }
   });
 
+  it("forbids the retired full-draft synchronization channel in production sources", () => {
+    const forbiddenTokens = [
+      "UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL",
+      "updateWorkspaceTabDraft",
+      "UpdateWorkspaceTabDraftInput",
+      "pendingWorkspaceDraftRef",
+      "lastDraftSyncRequestRef",
+      "preserveCurrentActiveDocumentDraft",
+      "updateDocumentDraft",
+      "WorkspaceDraftOutbox"
+    ];
+    const productionFiles = [
+      "src/shared/workspace.ts",
+      "src/shared/product-bridge.ts",
+      "src/preload/product-api.ts",
+      "src/preload/preload.ts",
+      "src/main/main.ts",
+      "src/renderer/editor/workspace-renderer-application.ts",
+      "src/renderer/editor/useWorkspaceController.ts",
+      "src/renderer/editor/WorkspaceShell.tsx"
+    ];
+
+    for (const file of productionFiles) {
+      const source = readFileSync(resolve(process.cwd(), file), "utf8");
+      for (const token of forbiddenTokens) {
+        expect(source, `${file} must not contain ${token}`).not.toContain(token);
+      }
+    }
+  });
+
   it("keeps the RF-203 renderer pending queue and edit client runtime-neutral", () => {
     const queueSource = readFileSync(
       resolve(process.cwd(), "src/renderer/application/pending-edit-queue.ts"),

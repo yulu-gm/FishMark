@@ -34,7 +34,6 @@ describe("createProductApi", () => {
       applyDocumentEdits: expect.any(Function),
       flushDocumentEdits: expect.any(Function),
       onDocumentProjection: expect.any(Function),
-      updateWorkspaceTabDraft: expect.any(Function),
       saveMarkdownFile: expect.any(Function),
       getPreferences: expect.any(Function)
     });

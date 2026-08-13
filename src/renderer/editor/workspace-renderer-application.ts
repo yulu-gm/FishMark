@@ -25,10 +25,6 @@ import {
   setOpenState,
   type EditorShellState
 } from "./editor-shell-state";
-import {
-  WorkspaceDraftOutbox,
-  type WorkspaceDraftEntry
-} from "./workspace-draft-outbox";
 import { WorkspaceMutationCoordinator } from "./workspace-mutation-coordinator";
 import {
   isSameEditorLoadIdentity,
@@ -36,8 +32,6 @@ import {
 } from "./editor-load-identity";
 
 export type { EditorLoadIdentity } from "./editor-load-identity";
-
-const DRAFT_DRAIN_LIMIT = 16;
 
 export type EditorTransitionReason =
   | "reloading"
@@ -70,7 +64,6 @@ export type WorkspaceRendererBridge = Pick<
   | "applyDocumentEdits"
   | "flushDocumentEdits"
   | "onDocumentProjection"
-  | "updateWorkspaceTabDraft"
 >;
 
 export type WorkspaceRendererApplicationState = EditorShellState & Readonly<{
@@ -162,11 +155,6 @@ type PendingEditorTransitionBarrier = Readonly<{
   resolve: (applied: boolean) => void;
 }>;
 
-type ReloadDraftCheckpoint = Readonly<{
-  content: string;
-  cutoffGeneration: number;
-}>;
-
 class WorkspaceMutationFailure extends Error {
   constructor(
     readonly kind: MutationFailureKind,
@@ -188,9 +176,7 @@ class WorkspaceRecoveryPendingError extends Error {
 
 export class WorkspaceRendererApplication {
   private readonly bridge: WorkspaceRendererBridge;
-  private readonly readEditorContent: () => string;
   private readonly coordinator = new WorkspaceMutationCoordinator();
-  private readonly outbox = new WorkspaceDraftOutbox();
   private readonly listeners = new Set<() => void>();
   private readonly editClient: WorkspaceEditClient;
   private readonly editBindings = new Map<string, {
@@ -209,9 +195,6 @@ export class WorkspaceRendererApplication {
   private disposed = false;
   private lifecycleEpoch = 0;
   private pendingOperationKind: string | null = null;
-  // The legacy outbox stays available only for old non-CodeMirror callers. A real adapter marks
-  // this before its RAF frame is emitted, preventing a workflow from dual-sending that edit.
-  private incrementalEditingActive = false;
   private editorBarrier: (() => Promise<EditorBarrierSnapshot>) | null = null;
   private editorRemotePatch: EditorRemotePatch | null = null;
   private editorCanonicalRestore: EditorCanonicalRestore | null = null;
@@ -229,10 +212,8 @@ export class WorkspaceRendererApplication {
   constructor(input: {
     bridge: WorkspaceRendererBridge;
     initialSnapshot?: WorkspaceWindowSnapshot | null;
-    readEditorContent: () => string;
   }) {
     this.bridge = input.bridge;
-    this.readEditorContent = input.readEditorContent;
     const shellState = input.initialSnapshot
       ? applyWorkspaceSnapshot(createInitialEditorShellState(), input.initialSnapshot)
       : createInitialEditorShellState();
@@ -391,9 +372,7 @@ export class WorkspaceRendererApplication {
     }
 
     this.editorBinding = identity;
-    if (!this.outbox.has(identity.tabId)) {
-      this.ensureEditorEditBinding(identity);
-    }
+    this.ensureEditorEditBinding(identity);
     this.pendingEditorLoadIdentity = null;
     return true;
   }
@@ -414,7 +393,6 @@ export class WorkspaceRendererApplication {
 
     this.pendingEditorTransitionBarrier = null;
     if (input.readOnly) {
-      this.captureCurrentEditorContent();
       this.editorBinding = null;
       this.pendingEditorLoadIdentity = null;
       this.state = {
@@ -432,29 +410,6 @@ export class WorkspaceRendererApplication {
     return true;
   }
 
-  recordEditorChange(input: {
-    identity: EditorLoadIdentity;
-    content: string;
-  }): boolean {
-    if (
-      (this.state.editorTransition !== null &&
-        this.state.editorTransition.phase !== "sealing") ||
-      this.editorBinding === null ||
-      !isSameEditorLoadIdentity(this.editorBinding, input.identity)
-    ) {
-      return false;
-    }
-
-    if (this.incrementalEditingActive) return false;
-    this.outbox.set(input.identity.tabId, input.content);
-    this.updateState(applyRendererLocalWorkspaceDraft(
-      this.state,
-      input.identity.tabId,
-      input.content
-    ));
-    return true;
-  }
-
   recordEditorDocumentChangeFrame(frame: CodeEditorDocumentChangeFrame): boolean {
     if (
       frame.identity === null ||
@@ -463,7 +418,6 @@ export class WorkspaceRendererApplication {
     ) {
       return false;
     }
-    this.incrementalEditingActive = true;
     const entry = this.editBindings.get(frame.identity.tabId);
     if (entry === undefined || !isSameEditorLoadIdentity(entry.identity, frame.identity)) return false;
     const admission = this.editClient.admitFrame({ ...frame, binding: entry.binding });
@@ -492,14 +446,12 @@ export class WorkspaceRendererApplication {
     const wasPending = this.adapterFramePendingIdentity !== null &&
       isSameEditorLoadIdentity(this.adapterFramePendingIdentity, input.identity);
     if (isPending === wasPending) return;
-    if (isPending) this.incrementalEditingActive = true;
     this.adapterFramePendingIdentity = isPending ? input.identity : null;
     this.applyDisposableDirtyState(input.identity.tabId);
   }
 
   recordDiscardedEditorDocumentText(input: CodeEditorDiscardedDocumentText): boolean {
     if (input.identity === null) return false;
-    this.incrementalEditingActive = true;
     const entry = this.editBindings.get(input.identity.tabId);
     if (entry === undefined || !isSameEditorLoadIdentity(entry.identity, input.identity)) return false;
     return this.editClient.retainAdapterDiscard(entry.binding, input.text).kind === "recovery-required";
@@ -546,9 +498,7 @@ export class WorkspaceRendererApplication {
       if (tabId === null || document === null) return { kind: "no-document" };
       let acquired: AcquiredEditBarrier = { lease: null, sealedText: null };
       try {
-        acquired = this.incrementalEditingActive
-          ? await this.acquireEditBarrier(tabId)
-          : (await this.drainTab(tabId), { lease: null, sealedText: null });
+        acquired = await this.acquireEditBarrier(tabId);
       } catch (error) {
         return this.recoverMutationOutcome(error);
       }
@@ -698,7 +648,6 @@ export class WorkspaceRendererApplication {
   }
 
   activateWorkspaceTab(tabId: string): Promise<WorkspaceApplicationOutcome<void>> {
-    this.captureCurrentEditorContent();
     const sourceTabId = getActiveTabId(this.state);
     const generation = ++this.activationGeneration;
 
@@ -790,13 +739,11 @@ export class WorkspaceRendererApplication {
         return known;
       }
       const sealsActiveEditor = getActiveTabId(this.state) === tabId;
-      let checkpoint: ReloadDraftCheckpoint | undefined;
 
       try {
         if (sealsActiveEditor) {
           await this.sealEditor("reloading");
         }
-        checkpoint = this.captureReloadDraftCheckpoint(tabId);
         await this.drainTab(tabId);
         this.assertActive();
         const result = await this.bridge.reloadWorkspaceTabFromPath({ tabId });
@@ -808,27 +755,21 @@ export class WorkspaceRendererApplication {
           return { kind: "reload-error", error: result.error };
         }
 
-        this.outbox.discardThrough(tabId, checkpoint?.cutoffGeneration ?? 0);
-        const retainedNewerDraft = this.outbox.has(tabId);
         this.recordCanonicalSnapshot(result.snapshot, {
           forceEditorReload: sealsActiveEditor
         });
         return {
           kind: "committed",
-          value: { retainedNewerDraft }
+          value: { retainedNewerDraft: false }
         };
       } catch (error) {
         if (this.disposed || error instanceof WorkspaceRendererApplicationDisposedError) {
           return { kind: "failed", error: new WorkspaceRendererApplicationDisposedError() };
         }
         this.markCanonicalUnknown(error);
-        this.restoreReloadDraftCheckpoint(tabId, checkpoint);
         try {
           const snapshot = await this.bridge.getWorkspaceSnapshot();
           this.assertActive();
-          if (!snapshot.tabs.some((tab) => tab.tabId === tabId)) {
-            this.outbox.remove(tabId);
-          }
           this.recordCanonicalSnapshot(snapshot);
           return { kind: "failed-reconciled", error };
         } catch (reconcileError) {
@@ -902,7 +843,6 @@ export class WorkspaceRendererApplication {
     hasExternalConflict: boolean;
   }): Promise<WorkspaceSaveOutcome> {
     const capturedDocument = getActiveDocument(this.state);
-    this.captureCurrentEditorContent();
     if (capturedDocument === null) {
       return Promise.resolve({ kind: "no-document" });
     }
@@ -917,11 +857,7 @@ export class WorkspaceRendererApplication {
       }
       let editLease: WorkspaceEditBarrierLease | null = null;
       try {
-        if (this.incrementalEditingActive) {
-          editLease = (await this.acquireEditBarrier(tabId)).lease;
-        } else {
-          await this.drainTab(tabId);
-        }
+        editLease = (await this.acquireEditBarrier(tabId)).lease;
         const shouldSaveAs = input.forceSaveAs ||
           capturedDocument.path === null ||
           input.hasExternalConflict;
@@ -930,7 +866,6 @@ export class WorkspaceRendererApplication {
           : await this.bridge.saveMarkdownFile({ tabId });
 
         if (value.status === "success") {
-          if (!this.incrementalEditingActive) await this.drainTab(tabId);
           try {
             const snapshot = await this.bridge.getWorkspaceSnapshot();
             this.recordCanonicalSnapshot(snapshot);
@@ -1026,7 +961,6 @@ export class WorkspaceRendererApplication {
             error: new Error(`${kind} response retained target tab.`)
           };
         }
-        this.outbox.remove(tabId);
         return { kind: "committed", value: undefined };
       } catch (error) {
         if (this.disposed || error instanceof WorkspaceRendererApplicationDisposedError) {
@@ -1041,29 +975,7 @@ export class WorkspaceRendererApplication {
     });
   }
 
-  private captureCurrentEditorContent(): void {
-    if (this.incrementalEditingActive) return;
-    if (
-      (this.state.editorTransition !== null &&
-        this.state.editorTransition.phase !== "sealing") ||
-      this.editorBinding === null ||
-      this.editorBinding.tabId !== getActiveTabId(this.state)
-    ) {
-      return;
-    }
-    const document = getActiveDocument(this.state);
-    if (document === null) {
-      return;
-    }
-    const content = this.readEditorContent();
-    if (content !== document.content || this.outbox.has(document.tabId)) {
-      this.outbox.set(document.tabId, content);
-      this.updateState(applyRendererLocalWorkspaceDraft(this.state, document.tabId, content));
-    }
-  }
-
   private async captureAndDrainActiveDraft(): Promise<void> {
-    this.captureCurrentEditorContent();
     const tabId = getActiveTabId(this.state);
     if (tabId !== null) {
       await this.drainTab(tabId);
@@ -1071,70 +983,19 @@ export class WorkspaceRendererApplication {
   }
 
   private async drainTab(tabId: string): Promise<void> {
-    if (this.incrementalEditingActive) {
-      const barrier = await this.acquireEditBarrier(tabId);
-      barrier.lease?.release();
-      return;
-    }
-    for (let pass = 0; pass < DRAFT_DRAIN_LIMIT; pass += 1) {
-      const entry = this.outbox.peek(tabId);
-      if (entry === undefined) {
-        return;
-      }
-      await this.syncDraftEntry(entry);
-    }
-
-    if (this.outbox.has(tabId)) {
-      throw new Error("Workspace draft drain did not settle.");
-    }
+    const barrier = await this.acquireEditBarrier(tabId);
+    barrier.lease?.release();
   }
 
   private async drainAllDrafts(): Promise<void> {
-    if (this.incrementalEditingActive) {
-      if (this.editorBarrier !== null) await this.editorBarrier();
-      const barrier = await this.editClient.acquireAllFlushBarriers();
-      if (barrier.kind !== "acquired") {
-        throw new WorkspaceMutationFailure("failed-reconciled", new Error(
-          `Document edit barrier did not settle: ${barrier.kind}.`
-        ));
-      }
-      barrier.lease.release();
-      return;
+    if (this.editorBarrier !== null) await this.editorBarrier();
+    const barrier = await this.editClient.acquireAllFlushBarriers();
+    if (barrier.kind !== "acquired") {
+      throw new WorkspaceMutationFailure("failed-reconciled", new Error(
+        `Document edit barrier did not settle: ${barrier.kind}.`
+      ));
     }
-    for (let pass = 0; pass < DRAFT_DRAIN_LIMIT; pass += 1) {
-      const entries = this.outbox.entries();
-      if (entries.length === 0) {
-        return;
-      }
-      for (const entry of entries) {
-        await this.syncDraftEntry(entry);
-      }
-    }
-
-    if (this.outbox.entries().length > 0) {
-      throw new Error("Workspace draft drain did not settle.");
-    }
-  }
-
-  private async syncDraftEntry(entry: WorkspaceDraftEntry): Promise<void> {
-    try {
-      const snapshot = await this.bridge.updateWorkspaceTabDraft({
-        tabId: entry.tabId,
-        content: entry.content
-      });
-      this.assertActive();
-      this.outbox.acknowledge(entry);
-      this.recordCanonicalSnapshot(snapshot);
-    } catch (error) {
-      if (this.disposed) {
-        throw new WorkspaceRendererApplicationDisposedError();
-      }
-      const outcome = await this.recoverMutationOutcome(error);
-      throw new WorkspaceMutationFailure(
-        outcome.kind === "canonical-unavailable" ? "canonical-unavailable" : "failed-reconciled",
-        error
-      );
-    }
+    barrier.lease.release();
   }
 
   private async acquireEditBarrier(tabId: string): Promise<AcquiredEditBarrier> {
@@ -1259,13 +1120,6 @@ export class WorkspaceRendererApplication {
     const previousState = this.state;
     const previousDocument = getActiveDocument(previousState);
     let shellState = applyWorkspaceSnapshot(previousState, snapshot);
-    const activeTabId = getActiveTabId(shellState);
-    const pendingContent = this.incrementalEditingActive || activeTabId === null
-      ? undefined
-      : this.outbox.get(activeTabId);
-    if (activeTabId !== null && pendingContent !== undefined) {
-      shellState = applyRendererLocalWorkspaceDraft(shellState, activeTabId, pendingContent);
-    }
     const nextDocument = getActiveDocument(shellState);
     if (nextDocument !== null) {
       const entry = this.editBindings.get(nextDocument.tabId);
@@ -1933,35 +1787,6 @@ export class WorkspaceRendererApplication {
     this.emit();
   }
 
-  private captureReloadDraftCheckpoint(tabId: string): ReloadDraftCheckpoint | undefined {
-    if (this.incrementalEditingActive) return undefined;
-    const entry = this.outbox.peek(tabId);
-    const activeDocument = getActiveDocument(this.state);
-    if (activeDocument?.tabId === tabId) {
-      return {
-        content: activeDocument.content,
-        cutoffGeneration: entry?.generation ?? 0
-      };
-    }
-    return entry === undefined
-      ? undefined
-      : {
-          content: entry.content,
-          cutoffGeneration: entry.generation
-        };
-  }
-
-  private restoreReloadDraftCheckpoint(
-    tabId: string,
-    checkpoint: ReloadDraftCheckpoint | undefined
-  ): void {
-    if (this.incrementalEditingActive) return;
-    if (checkpoint === undefined || this.outbox.has(tabId)) {
-      return;
-    }
-    this.outbox.set(tabId, checkpoint.content);
-  }
-
   private getDisposedOutcome():
     | Extract<WorkspaceApplicationOutcome<never>, { kind: "failed" }>
     | null {
@@ -2003,33 +1828,6 @@ export class WorkspaceRendererApplication {
       listener();
     }
   }
-}
-
-function applyRendererLocalWorkspaceDraft<TState extends EditorShellState>(
-  current: TState,
-  tabId: string,
-  content: string
-): TState {
-  const snapshot = current.workspaceSnapshot;
-  const activeDocument = snapshot?.activeDocument;
-  if (!snapshot || !activeDocument || activeDocument.tabId !== tabId) {
-    return current;
-  }
-
-  return {
-    ...current,
-    workspaceSnapshot: {
-      ...snapshot,
-      tabs: snapshot.tabs.map((tab) => tab.tabId === tabId
-        ? { ...tab, isDirty: true }
-        : tab),
-      activeDocument: {
-        ...activeDocument,
-        content,
-        isDirty: true
-      }
-    }
-  };
 }
 
 function createEditorTransitionBarrier(

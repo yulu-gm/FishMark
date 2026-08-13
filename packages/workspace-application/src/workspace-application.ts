@@ -21,7 +21,6 @@ import type {
   FlushDocumentEditsInput,
   FlushDocumentEditsResult
 } from "./flush-document-edits";
-import type { UpdateDocumentDraftInput } from "./update-document-draft";
 import type { SaveDocumentInput } from "./save-document";
 import type { WorkspaceOpenPathResult, WorkspaceOpenResult } from "./open-workspace";
 import type { WorkspaceReloadResult } from "./reload-document";
@@ -95,9 +94,6 @@ export function createWorkspaceApplication<TContext>(dependencies: {
   detach: {
     detachTab(input: Omit<WorkspaceTabTransferInput, "targetWindowId">): Promise<WorkspaceMoveProjection>;
     markWindowReady(windowId: string): Promise<void>;
-  };
-  drafts: {
-    update(input: UpdateDocumentDraftInput): WorkspaceMutationResult;
   };
   edits: {
     apply(
@@ -279,9 +275,6 @@ export function createWorkspaceApplication<TContext>(dependencies: {
         input.context,
         await dependencies.detach.detachTab(input)
       );
-    },
-    updateDocumentDraft(input: UpdateDocumentDraftInput): WorkspaceMutationResult {
-      return dependencies.drafts.update(input);
     },
     applyDocumentEdits(
       input: ApplyDocumentEditsInput,

@@ -15,7 +15,6 @@ import type {
   ReloadWorkspaceTabFromPathInput,
   ReloadWorkspaceTabFromPathResult,
   ReorderWorkspaceTabInput,
-  UpdateWorkspaceTabDraftInput,
   WorkspaceMoveTabResult,
   WorkspaceOwnerTabActivationRequest,
   WorkspaceWindowCloseRequest,
@@ -81,7 +80,6 @@ export interface ProductBridge {
   detachWorkspaceTabToNewWindow: (
     input: DetachWorkspaceTabToNewWindowInput
   ) => Promise<WorkspaceWindowSnapshot>;
-  updateWorkspaceTabDraft: (input: UpdateWorkspaceTabDraftInput) => Promise<WorkspaceWindowSnapshot>;
   applyDocumentEdits: (input: ApplyDocumentEditsInput) => Promise<ApplyDocumentEditsResult>;
   flushDocumentEdits: (input: FlushDocumentEditsInput) => Promise<FlushDocumentEditsResult>;
   onDocumentProjection: (

@@ -322,7 +322,6 @@ function EditorShell({
 
   const editorApplicationController = useEditorApplicationController({
     fishmark,
-    getEditorContent,
     scheduleDocumentDerivedDataUpdate,
     setEditorContentSnapshot: (content) => {
       editorContentRef.current = content;
