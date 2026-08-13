@@ -58,6 +58,14 @@ export {
   type HeldWorkspaceWindowCloseLease,
   type WorkspaceWindowCloseConfirmation
 } from "./close-workspace";
+export {
+  createRecovery,
+  type RecoveryEditBatch,
+  type RecoveryOutcome,
+  type RecoveryStoreLoadResult,
+  type RecoveryStorePort,
+  type RecoveryUseCase
+} from "./recovery";
 export type {
   CleanupReporterPort,
   DiskRepositoryPort,
