@@ -114,6 +114,32 @@ export interface WorkspaceMoveProjection {
   readonly targetWindowSnapshot: WorkspaceWindowProjection;
 }
 
+export interface WorkspaceSessionSnapshot {
+  readonly tabId: string;
+  readonly windowId: string;
+  readonly fileIdentity: FileIdentity | null;
+  readonly path: string | null;
+  readonly name: string;
+  readonly content: string;
+  readonly savedContent: string;
+  readonly encoding: "utf-8";
+  readonly revision: DocumentRevision;
+  readonly savedRevision: DocumentRevision;
+  readonly saveState: DocumentSaveState;
+  readonly diskVersion: DiskVersion | null;
+}
+
+export interface WorkspaceSnapshot {
+  readonly windows: readonly {
+    readonly windowId: string;
+    readonly tabIds: readonly string[];
+    readonly activeTabId: string | null;
+  }[];
+  readonly sessions: readonly WorkspaceSessionSnapshot[];
+  readonly lastFocusedWindowId: string | null;
+  readonly nextTabId: number;
+}
+
 export interface CommitWorkspaceDocumentInput {
   readonly tabId: string;
   readonly expectedWindowId: string;
@@ -221,6 +247,7 @@ export interface WorkspaceState {
   ) => WorkspaceWindowProjection | null;
   readonly getWindowTabIds: (windowId: string) => readonly string[];
   readonly getTabSession: (tabId: string) => DocumentSessionProjection;
+  readonly exportSnapshot: () => WorkspaceSnapshot;
   readonly getFileOwner: (fileIdentity: FileIdentity) => WorkspaceFileOwnerLookup;
   readonly createUntitledTab: (windowId: string) => WorkspaceWindowProjection;
   readonly openDocument: (
@@ -354,6 +381,38 @@ class CanonicalWorkspaceState implements WorkspaceState {
 
   getTabSession(tabId: string): DocumentSessionProjection {
     return projectDocumentSession(this.getTab(tabId));
+  }
+
+  exportSnapshot(): WorkspaceSnapshot {
+    const windows = [...this.windows.values()].map((window) =>
+      Object.freeze({
+        windowId: window.windowId,
+        tabIds: Object.freeze([...window.tabIds]),
+        activeTabId: window.activeTabId
+      })
+    );
+    const sessions = [...this.tabs.values()].map((session) =>
+      Object.freeze({
+        tabId: session.tabId,
+        windowId: session.windowId,
+        fileIdentity: session.fileIdentity,
+        path: session.path,
+        name: session.name,
+        content: session.text.toString(),
+        savedContent: session.savedText.toString(),
+        encoding: session.encoding,
+        revision: session.revision,
+        savedRevision: session.savedRevision,
+        saveState: session.saveState,
+        diskVersion: session.diskVersion
+      })
+    );
+    return Object.freeze({
+      windows: Object.freeze(windows),
+      sessions: Object.freeze(sessions),
+      lastFocusedWindowId: this.lastFocusedWindowId,
+      nextTabId: this.nextTabId
+    });
   }
 
   getFileOwner(fileIdentity: FileIdentity): WorkspaceFileOwnerLookup {

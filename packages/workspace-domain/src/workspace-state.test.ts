@@ -105,6 +105,46 @@ describe("WorkspaceState text buffer injection", () => {
   });
 });
 
+describe("WorkspaceState snapshot export", () => {
+  it("exports every window, tab, and its full session state", () => {
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
+    workspace.registerWindow("window-1");
+    workspace.registerWindow("window-2");
+    const opened = openProjection(
+      workspace,
+      "window-1",
+      createDocument("opened.md", "saved")
+    );
+    const tabId = opened.activeTabId!;
+    workspace.updateTabDraft({ tabId, expectedWindowId: "window-1", content: "dirty" });
+
+    const snapshot = workspace.exportSnapshot();
+
+    expect(snapshot.windows).toEqual([
+      { windowId: "window-1", tabIds: [tabId], activeTabId: tabId },
+      { windowId: "window-2", tabIds: [], activeTabId: null }
+    ]);
+    expect(snapshot.sessions).toEqual([
+      {
+        tabId,
+        windowId: "window-1",
+        fileIdentity: fileIdentity("file:opened.md"),
+        path: "C:/notes/opened.md",
+        name: "opened.md",
+        content: "dirty",
+        savedContent: "saved",
+        encoding: "utf-8",
+        revision: 1,
+        savedRevision: 0,
+        saveState: "idle",
+        diskVersion: null
+      }
+    ]);
+    expect(snapshot.lastFocusedWindowId).toBe("window-2");
+    expect(snapshot.nextTabId).toBe(2);
+  });
+});
+
 describe("WorkspaceState physical file ownership", () => {
   it("rejects a save whose location is self-owned but object is owned by another tab", () => {
     const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });

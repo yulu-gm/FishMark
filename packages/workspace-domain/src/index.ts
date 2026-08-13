@@ -53,6 +53,8 @@ export {
   type WorkspaceFileOwner,
   type WorkspaceFileOwnerLookup,
   type WorkspaceMutationStaleReason,
+  type WorkspaceSessionSnapshot,
+  type WorkspaceSnapshot,
   type WorkspaceState,
   type WorkspaceTabProjection,
   type WorkspaceWindowProjection
