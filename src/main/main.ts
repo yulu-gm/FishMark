@@ -64,6 +64,7 @@ import { createAppUpdateCheckRunner } from "./app-update-check-runner";
 import { resolveAutoUpdaterModule } from "./resolve-auto-updater-module";
 import { createFileWatchRegistry } from "./infrastructure/file-watch-registry";
 import { createDocumentRepository } from "./infrastructure/document-repository";
+import { createRecoveryService } from "./infrastructure/recovery-service";
 import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator";
 import { createFileIdentityResolver } from "./file-identity-resolver";
 import { createWorkspaceWindowCloseConfirmationHandler } from "./workspace-window-close-confirmation-handler";
@@ -378,6 +379,32 @@ app.whenReady().then(async () => {
   const fileWatchRegistry = createFileWatchRegistry();
   const documentRepository = createDocumentRepository();
   const workspaceState = createWorkspaceState({ createTextBuffer: createCodeMirrorTextBuffer });
+  const recoveryService = createRecoveryService(app.getPath("userData"));
+
+  const recovery = await recoveryService.loadRecovery();
+  if (recovery.kind === "recovery-available") {
+    if (recovery.snapshot !== null) {
+      workspaceState.restoreSnapshot(recovery.snapshot);
+    }
+    for (const batch of recovery.editBatches) {
+      try {
+        const session = workspaceState.getTabSession(batch.tabId);
+        workspaceState.applyDocumentEdits({
+          tabId: batch.tabId,
+          expectedWindowId: session.windowId,
+          clientId: batch.clientId,
+          clientSequence: batch.clientSequence,
+          baseRevision: batch.baseRevision,
+          changes: batch.changes
+        });
+      } catch {
+        // The snapshot did not include this tab, so its edit batch cannot be replayed.
+      }
+    }
+  } else if (recovery.kind === "corrupt") {
+    console.error(`[fishmark] recovery data is corrupt at ${recovery.path}; starting fresh.`);
+  }
+
   const workspaceWatcher = {
     syncWindowPaths: fileWatchRegistry.syncWindowPaths,
     beginInternalWrite: fileWatchRegistry.beginInternalWrite,
@@ -393,6 +420,29 @@ app.whenReady().then(async () => {
     workspace: workspaceState,
     documentOperations: workspaceTabOperations
   });
+  const applyDocumentEditsWithRecovery = {
+    apply: async (
+      input: Parameters<typeof applyDocumentEdits.apply>[0],
+      authorize: Parameters<typeof applyDocumentEdits.apply>[1]
+    ) => {
+      const result = await applyDocumentEdits.apply(input, authorize);
+      if (result.kind === "applied") {
+        void recoveryService.recordEditBatch({
+          kind: "edit-batch",
+          tabId: input.tabId,
+          clientId: input.clientId,
+          clientSequence: input.clientSequence,
+          baseRevision: input.baseRevision as number,
+          changes: input.changes as readonly {
+            readonly from: number;
+            readonly to: number;
+            readonly insert: string;
+          }[]
+        }).catch(() => undefined);
+      }
+      return result;
+    }
+  };
   const flushDocumentEdits = createFlushDocumentEdits({
     workspace: workspaceState,
     documentOperations: workspaceTabOperations
@@ -831,7 +881,7 @@ app.whenReady().then(async () => {
     transfer: workspaceTabTransferApplication,
     detach: workspaceDetachApplication,
     edits: {
-      apply: applyDocumentEdits.apply,
+      apply: applyDocumentEditsWithRecovery.apply,
       flush: flushDocumentEdits.flush
     },
     save: workspaceFileOperations,
@@ -1236,6 +1286,10 @@ app.whenReady().then(async () => {
 
   app.on("activate", () => {
     windowManager.reopenPrimaryWindowIfNeeded();
+  });
+
+  app.on("before-quit", () => {
+    void recoveryService.compact(workspaceState.exportSnapshot()).catch(() => undefined);
   });
 });
 
