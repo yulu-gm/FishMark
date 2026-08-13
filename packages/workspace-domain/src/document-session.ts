@@ -62,6 +62,22 @@ export interface CreateDocumentSessionInput {
   readonly createTextBuffer: TextBufferFactory;
 }
 
+export interface RestoreDocumentSessionInput {
+  readonly tabId: string;
+  readonly windowId: string;
+  readonly fileIdentity: FileIdentity | null;
+  readonly path: string | null;
+  readonly name: string;
+  readonly content: string;
+  readonly savedContent: string;
+  readonly encoding: "utf-8";
+  readonly revision: DocumentRevision;
+  readonly savedRevision: DocumentRevision;
+  readonly saveState: DocumentSaveState;
+  readonly diskVersion: DiskVersion | null;
+  readonly createTextBuffer: TextBufferFactory;
+}
+
 export interface CommitSavedDocumentInput {
   readonly capturedRevision: DocumentRevision;
   readonly document: WorkspaceDocumentData;
@@ -138,6 +154,30 @@ export function createDocumentSession({
     diskVersion: copyDiskVersion(diskVersion),
     saveState: "idle",
     createTextBuffer,
+    clientSequenceHighWatermarks: new ImmutableHighWatermarks()
+  });
+}
+
+export function restoreDocumentSession(input: RestoreDocumentSessionInput): DocumentSessionState {
+  const text = input.createTextBuffer(input.content);
+  const savedText = input.savedContent === input.content
+    ? text
+    : input.createTextBuffer(input.savedContent);
+
+  return freezeSession({
+    tabId: input.tabId,
+    windowId: input.windowId,
+    fileIdentity: input.fileIdentity,
+    path: input.path,
+    name: input.name,
+    encoding: input.encoding,
+    text,
+    savedText,
+    revision: input.revision,
+    savedRevision: input.savedRevision,
+    diskVersion: copyDiskVersion(input.diskVersion),
+    saveState: input.saveState,
+    createTextBuffer: input.createTextBuffer,
     clientSequenceHighWatermarks: new ImmutableHighWatermarks()
   });
 }

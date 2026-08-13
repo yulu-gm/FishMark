@@ -143,6 +143,26 @@ describe("WorkspaceState snapshot export", () => {
     expect(snapshot.lastFocusedWindowId).toBe("window-2");
     expect(snapshot.nextTabId).toBe(2);
   });
+
+  it("round-trips a snapshot through restore into an equivalent state", () => {
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
+    workspace.registerWindow("window-1");
+    const opened = openProjection(workspace, "window-1", createDocument("a.md", "saved"));
+    const tabId = opened.activeTabId!;
+    workspace.updateTabDraft({ tabId, expectedWindowId: "window-1", content: "dirty" });
+
+    const snapshot = workspace.exportSnapshot();
+
+    const restored = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
+    restored.restoreSnapshot(snapshot);
+
+    expect(restored.exportSnapshot()).toEqual(snapshot);
+    expect(restored.getTabSession(tabId)).toMatchObject({
+      content: "dirty",
+      savedRevision: 0,
+      isDirty: true
+    });
+  });
 });
 
 describe("WorkspaceState physical file ownership", () => {

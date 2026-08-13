@@ -16,6 +16,7 @@ import {
   projectDocumentSession,
   replaceDocumentFromDisk,
   replaceDocumentText,
+  restoreDocumentSession,
   type DocumentSaveState,
   type DocumentSessionProjection,
   type DocumentSessionState,
@@ -248,6 +249,7 @@ export interface WorkspaceState {
   readonly getWindowTabIds: (windowId: string) => readonly string[];
   readonly getTabSession: (tabId: string) => DocumentSessionProjection;
   readonly exportSnapshot: () => WorkspaceSnapshot;
+  readonly restoreSnapshot: (snapshot: WorkspaceSnapshot) => void;
   readonly getFileOwner: (fileIdentity: FileIdentity) => WorkspaceFileOwnerLookup;
   readonly createUntitledTab: (windowId: string) => WorkspaceWindowProjection;
   readonly openDocument: (
@@ -413,6 +415,46 @@ class CanonicalWorkspaceState implements WorkspaceState {
       lastFocusedWindowId: this.lastFocusedWindowId,
       nextTabId: this.nextTabId
     });
+  }
+
+  restoreSnapshot(snapshot: WorkspaceSnapshot): void {
+    this.windows.clear();
+    this.tabs.clear();
+    this.tabToWindowId.clear();
+    this.fileLocationToTabId.clear();
+    this.fileObjectToTabId.clear();
+
+    for (const window of snapshot.windows) {
+      this.windows.set(window.windowId, {
+        windowId: window.windowId,
+        tabIds: [...window.tabIds],
+        activeTabId: window.activeTabId
+      });
+    }
+    for (const session of snapshot.sessions) {
+      const restored = restoreDocumentSession({
+        tabId: session.tabId,
+        windowId: session.windowId,
+        fileIdentity: session.fileIdentity,
+        path: session.path,
+        name: session.name,
+        content: session.content,
+        savedContent: session.savedContent,
+        encoding: session.encoding,
+        revision: session.revision,
+        savedRevision: session.savedRevision,
+        saveState: session.saveState,
+        diskVersion: session.diskVersion,
+        createTextBuffer: this.createTextBuffer
+      });
+      this.tabs.set(session.tabId, restored);
+      this.tabToWindowId.set(session.tabId, session.windowId);
+      if (restored.fileIdentity !== null) {
+        this.claimFileIdentity(restored.fileIdentity, session.tabId);
+      }
+    }
+    this.lastFocusedWindowId = snapshot.lastFocusedWindowId;
+    this.nextTabId = snapshot.nextTabId;
   }
 
   getFileOwner(fileIdentity: FileIdentity): WorkspaceFileOwnerLookup {
