@@ -983,6 +983,8 @@ npm.cmd run build
 
 **Outcome:** acknowledged unsaved changes survive renderer/main process crashes and normal restart.
 
+**Status:** `COMPLETE` (2026-08-14). The main process journals every accepted edit batch, restores the snapshot and replays the journal on startup, and compacts to a checksummed snapshot on clean shutdown; corrupt files are quarantined and reported. The recovery flow is entirely main-owned (no renderer memory).
+
 **Files:**
 
 - Create: `src/main/infrastructure/recovery-journal.ts`
@@ -993,13 +995,13 @@ npm.cmd run build
 
 **Steps:**
 
-- [ ] Append accepted edit batches with tab/session/revision metadata.
-- [ ] Introduce the journal port with the recovery use cases that consume it; reuse the clock/hash contracts only where recovery needs them.
-- [ ] Compact journals into snapshots after a bounded number of batches.
-- [ ] Use checksums and atomic replacement for journal/snapshot files.
-- [ ] Mark clean shutdown and prune journals only after saved revisions are durable.
-- [ ] Restore file-backed and untitled sessions without modifying source files.
-- [ ] Quarantine corrupt recovery files and surface a typed notification.
+- [x] Append accepted edit batches with tab/session/revision metadata.
+- [x] Introduce the journal port with the recovery use cases that consume it; reuse the clock/hash contracts only where recovery needs them.
+- [x] Compact journals into snapshots after a bounded number of batches.
+- [x] Use checksums and atomic replacement for journal/snapshot files.
+- [x] Mark clean shutdown and prune journals only after saved revisions are durable.
+- [x] Restore file-backed and untitled sessions without modifying source files.
+- [x] Quarantine corrupt recovery files and surface a typed notification.
 
 **Verification:**
 
