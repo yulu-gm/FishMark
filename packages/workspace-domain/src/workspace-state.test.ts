@@ -163,6 +163,27 @@ describe("WorkspaceState snapshot export", () => {
       isDirty: true
     });
   });
+
+  it("accepts an external disk version without changing session text", () => {
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
+    workspace.registerWindow("window-1");
+    const opened = openProjection(workspace, "window-1", createDocument("a.md", "saved"));
+    const tabId = opened.activeTabId!;
+    workspace.updateTabDraft({ tabId, expectedWindowId: "window-1", content: "dirty" });
+
+    const result = workspace.acceptExternalDiskVersion({
+      tabId,
+      expectedWindowId: "window-1",
+      diskVersion: { ...diskVersion, normalizedPath: "C:/notes/a.md" }
+    });
+
+    expect(result.kind).toBe("applied");
+    expect(workspace.getTabSession(tabId)).toMatchObject({
+      content: "dirty",
+      isDirty: true,
+      diskVersion: { normalizedPath: "C:/notes/a.md", contentHash: "sha256:document" }
+    });
+  });
 });
 
 describe("WorkspaceState physical file ownership", () => {

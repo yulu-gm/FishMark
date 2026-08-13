@@ -8,6 +8,7 @@ import {
   type FileObjectIdentity
 } from "./file-identity";
 import {
+  acceptExternalDiskVersion,
   applyDocumentEditBatch,
   commitSavedDocument,
   createDocumentSession,
@@ -157,6 +158,12 @@ export interface ReplaceWorkspaceDocumentInput {
   readonly diskVersion: DiskVersion | null;
 }
 
+export interface AcceptExternalDiskVersionInput {
+  readonly tabId: string;
+  readonly expectedWindowId: string;
+  readonly diskVersion: DiskVersion | null;
+}
+
 export interface UpdateWorkspaceTabDraftInput {
   readonly tabId: string;
   readonly expectedWindowId: string;
@@ -276,6 +283,9 @@ export interface WorkspaceState {
   readonly replaceTabDocument: (
     input: ReplaceWorkspaceDocumentInput
   ) => WorkspaceSaveMutationResult;
+  readonly acceptExternalDiskVersion: (
+    input: AcceptExternalDiskVersionInput
+  ) => WorkspaceMutationResult;
   readonly closeTab: (input: CloseWorkspaceTabInput) => WorkspaceMutationResult;
   readonly reorderTab: (
     input: ReorderWorkspaceTabInput
@@ -698,6 +708,20 @@ class CanonicalWorkspaceState implements WorkspaceState {
       this.claimFileIdentity(nextIdentity, tabId);
     }
     return createAppliedMutationResult(this.getWindowProjection(context.windowId));
+  }
+
+  acceptExternalDiskVersion({
+    tabId,
+    expectedWindowId,
+    diskVersion
+  }: AcceptExternalDiskVersionInput): WorkspaceMutationResult {
+    const resolved = this.resolveExpectedTabOwner(tabId, expectedWindowId);
+    if (resolved.kind === "stale") {
+      return this.createStaleMutationResult(expectedWindowId, resolved.reason);
+    }
+    const nextSession = acceptExternalDiskVersion(resolved.context.session, diskVersion);
+    this.tabs.set(tabId, nextSession);
+    return createAppliedMutationResult(this.getWindowProjection(resolved.context.windowId));
   }
 
   closeTab({

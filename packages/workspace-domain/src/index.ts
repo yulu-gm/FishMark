@@ -30,6 +30,7 @@ export {
 } from "./text-buffer";
 export {
   createWorkspaceState,
+  type AcceptExternalDiskVersionInput,
   type ApplyWorkspaceDocumentEditsInput,
   type ApplyWorkspaceDocumentEditsResult,
   type CreateWorkspaceStateInput,

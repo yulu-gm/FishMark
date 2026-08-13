@@ -345,6 +345,16 @@ export function commitSavedDocument(
   });
 }
 
+export function acceptExternalDiskVersion(
+  session: DocumentSessionState,
+  diskVersion: DiskVersion | null
+): DocumentSessionState {
+  return freezeSession({
+    ...session,
+    diskVersion: copyDiskVersion(diskVersion)
+  });
+}
+
 export function replaceDocumentFromDisk(
   session: DocumentSessionState,
   document: WorkspaceDocumentData,
