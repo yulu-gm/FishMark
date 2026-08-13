@@ -18,10 +18,10 @@ const sender = { id: 1 };
 function createSaveDocumentForTest(
   dependencies: Omit<
     Parameters<typeof createSaveDocument<typeof sender>>[0],
-    "fileIdentity" | "file" | "dialog" | "watcher" | "recentFiles" | "cleanupReporter"
+    "fileIdentity" | "disk" | "dialog" | "watcher" | "recentFiles" | "cleanupReporter"
   > & {
     fileIdentityResolver: Parameters<typeof createSaveDocument<typeof sender>>[0]["fileIdentity"];
-    saveMarkdownFileToPath: Parameters<typeof createSaveDocument<typeof sender>>[0]["file"]["write"];
+    writeDocument: Parameters<typeof createSaveDocument<typeof sender>>[0]["disk"]["writeDocument"];
     showSaveMarkdownPathDialog: Parameters<typeof createSaveDocument<typeof sender>>[0]["dialog"]["chooseSavePath"];
     beginInternalWrite: Parameters<typeof createSaveDocument<typeof sender>>[0]["watcher"]["beginInternalWrite"];
     completeInternalWrite: Parameters<typeof createSaveDocument<typeof sender>>[0]["watcher"]["completeInternalWrite"];
@@ -32,7 +32,7 @@ function createSaveDocumentForTest(
 ) {
   const {
     fileIdentityResolver,
-    saveMarkdownFileToPath,
+    writeDocument,
     showSaveMarkdownPathDialog,
     beginInternalWrite,
     completeInternalWrite,
@@ -44,7 +44,7 @@ function createSaveDocumentForTest(
   return createSaveDocument({
     ...rest,
     fileIdentity: fileIdentityResolver,
-    file: { write: saveMarkdownFileToPath },
+    disk: { readDiskVersion: async () => ({ normalizedPath: "C:/notes/x.md", mtimeMs: 1, size: 1, contentHash: "test-hash" }), writeDocument },
     dialog: { chooseSavePath: showSaveMarkdownPathDialog },
     watcher: {
       beginInternalWrite,
@@ -80,7 +80,7 @@ describe("workspace physical file identity transactions", () => {
       fileLocationOperations: locationOperations,
       fileObjectOperations: objectOperations,
       fileIdentityResolver: resolver,
-      saveMarkdownFileToPath: write,
+      writeDocument: write,
       showSaveMarkdownPathDialog: vi.fn(async () => ({
         status: "success" as const,
         path: "C:/notes/shared.md"
@@ -143,7 +143,7 @@ describe("workspace physical file identity transactions", () => {
       fileLocationOperations: locationOperations,
       fileObjectOperations: objectOperations,
       fileIdentityResolver: resolver,
-      saveMarkdownFileToPath: vi.fn(async ({ content }) => {
+      writeDocument: vi.fn(async ({ content }) => {
         exists = true;
         await new Promise<void>((resolve) => {
           finishWrite = resolve;
@@ -238,7 +238,7 @@ describe("workspace physical file identity transactions", () => {
         resolveExisting: resolve,
         resolveProspective: resolve
       },
-      saveMarkdownFileToPath: write,
+      writeDocument: write,
       showSaveMarkdownPathDialog: vi
         .fn()
         .mockResolvedValueOnce({ status: "success", path: "C:/notes/first.md" })
@@ -294,7 +294,7 @@ describe("workspace physical file identity transactions", () => {
           .mockResolvedValueOnce(resolved(initialIdentity))
           .mockResolvedValue(resolved(changedIdentity))
       },
-      saveMarkdownFileToPath: write,
+      writeDocument: write,
       showSaveMarkdownPathDialog: vi.fn(async () => ({
         status: "success" as const,
         path: "C:/notes/target.md"
@@ -354,7 +354,7 @@ describe("workspace physical file identity transactions", () => {
         resolveExisting: resolve,
         resolveProspective: resolve
       },
-      saveMarkdownFileToPath: write,
+      writeDocument: write,
       showSaveMarkdownPathDialog: vi
         .fn()
         .mockResolvedValueOnce({ status: "success", path: "C:/notes/b.md" })
@@ -411,7 +411,7 @@ describe("workspace physical file identity transactions", () => {
       fileLocationOperations: createKeyedOperationCoordinator(),
       fileObjectOperations: createKeyedOperationCoordinator(),
       fileIdentityResolver: resolver,
-      saveMarkdownFileToPath: write,
+      writeDocument: write,
       showSaveMarkdownPathDialog: vi.fn(),
       beginInternalWrite: vi.fn(),
       completeInternalWrite: vi.fn(),
@@ -469,6 +469,12 @@ function createStatefulResolver(
 function saved(path: string, content: string) {
   return {
     status: "success" as const,
+    diskVersion: {
+      normalizedPath: path,
+      mtimeMs: 1,
+      size: content.length,
+      contentHash: "test-hash"
+    },
     document: {
       path,
       name: path.split("/").at(-1)!,

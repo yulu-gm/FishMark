@@ -158,6 +158,7 @@ export type ConfirmWorkspaceWindowCloseInput = {
 export type WorkspaceWindowCloseErrorCode =
   | "dialog-failed"
   | "write-failed"
+  | "disk-version-conflict"
   | "file-identity-conflict"
   | "file-identity-changed"
   | "tab-missing"

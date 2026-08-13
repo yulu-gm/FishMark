@@ -39,8 +39,14 @@ describe("createSaveDocument", () => {
       expectedWindowId: "window-1",
       content: "captured"
     });
-    const write = vi.fn(async (input: { path: string; content: string }) => ({
+    const writeDocument = vi.fn(async (input: { path: string; content: string }) => ({
       status: "success" as const,
+      diskVersion: {
+        normalizedPath: "C:/notes/a.md",
+        mtimeMs: 1,
+        size: input.content.length,
+        contentHash: "hash-a"
+      },
       document: {
         path: input.path,
         name: "a.md",
@@ -61,7 +67,7 @@ describe("createSaveDocument", () => {
       fileLocationOperations: createImmediateCoordinator(),
       fileObjectOperations: createImmediateCoordinator(),
       fileIdentity: { resolveExisting: resolved, resolveProspective: resolved },
-      file: { write },
+      disk: { readDiskVersion: async () => null, writeDocument },
       dialog: { chooseSavePath: vi.fn() },
       watcher: {
         beginInternalWrite: vi.fn(),
@@ -79,8 +85,7 @@ describe("createSaveDocument", () => {
     });
 
     expect(result.status).toBe("success");
-    expect(write).toHaveBeenCalledWith({
-      tabId,
+    expect(writeDocument).toHaveBeenCalledWith({
       path: "C:/notes/a.md",
       content: "captured"
     });

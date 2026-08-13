@@ -45,10 +45,7 @@ import {
   registerPreviewAssetProtocol,
   registerPreviewAssetScheme
 } from "./preview-asset-protocol";
-import {
-  saveMarkdownFileToPath,
-  showSaveMarkdownPathDialog
-} from "./save-markdown-file";
+import { showSaveMarkdownPathDialog } from "./save-markdown-file";
 import { showExportHtmlDialog } from "./export-html-file";
 import { createPreferencesService } from "./preferences-service";
 import { createRecentFilesService } from "./recent-files-service";
@@ -66,6 +63,7 @@ import { resolveWindowIconPath } from "./window-icon";
 import { createAppUpdateCheckRunner } from "./app-update-check-runner";
 import { resolveAutoUpdaterModule } from "./resolve-auto-updater-module";
 import { createFileWatchRegistry } from "./infrastructure/file-watch-registry";
+import { createDocumentRepository } from "./infrastructure/document-repository";
 import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator";
 import { createFileIdentityResolver } from "./file-identity-resolver";
 import { createWorkspaceWindowCloseConfirmationHandler } from "./workspace-window-close-confirmation-handler";
@@ -378,6 +376,7 @@ app.whenReady().then(async () => {
     platform: process.platform
   });
   const fileWatchRegistry = createFileWatchRegistry();
+  const documentRepository = createDocumentRepository();
   const workspaceState = createWorkspaceState({ createTextBuffer: createCodeMirrorTextBuffer });
   const workspaceWatcher = {
     syncWindowPaths: fileWatchRegistry.syncWindowPaths,
@@ -753,7 +752,10 @@ app.whenReady().then(async () => {
     fileLocationOperations: workspaceFileLocationOperations,
     fileObjectOperations: workspaceFileObjectOperations,
     fileIdentity: fileIdentityResolver,
-    file: { write: saveMarkdownFileToPath },
+    disk: {
+      readDiskVersion: documentRepository.readDiskVersion,
+      writeDocument: documentRepository.writeDocument
+    },
     dialog: {
       chooseSavePath: showSaveMarkdownPathDialog
     },

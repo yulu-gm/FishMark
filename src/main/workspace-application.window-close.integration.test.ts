@@ -3,11 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createSaveDocument,
   createWorkspaceWindowClose,
-  type WorkspaceWindowCloseConfirmation
+  type WorkspaceWindowCloseConfirmation,
+  type WriteDocumentResult
 } from "@fishmark/workspace-application";
 
-import type { SaveMarkdownFileResult } from "../shared/save-markdown-file";
-import { createTestCloseWorkspace } from "./workspace-application.integration.test-helper";
+import { createSuccessfulDiskRepository, createTestCloseWorkspace } from "./workspace-application.integration.test-helper";
 import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator";
 import { openTestDocument } from "./workspace.test-helper";
 
@@ -36,9 +36,9 @@ function createSaveOperations(
   documentOperations: ReturnType<
     typeof createKeyedOperationCoordinator
   >,
-  saveMarkdownFileToPath: (
-    input: { readonly content: string; readonly tabId: string; readonly path: string }
-  ) => Promise<SaveMarkdownFileResult>
+  writeDocument: (
+    input: { readonly content: string; readonly path: string }
+  ) => Promise<WriteDocumentResult>
 ) {
   return createSaveDocument({
     workspace,
@@ -49,7 +49,15 @@ function createSaveOperations(
       resolveExisting: async (targetPath) => resolvedTestFile(targetPath),
       resolveProspective: async (targetPath) => resolvedTestFile(targetPath)
     },
-    file: { write: saveMarkdownFileToPath },
+    disk: {
+      readDiskVersion: async () => ({
+        normalizedPath: "C:/notes/window-close.md",
+        mtimeMs: 1,
+        size: 1,
+        contentHash: "test-hash"
+      }),
+      writeDocument
+    },
     dialog: { chooseSavePath: vi.fn() },
     watcher: {
       beginInternalWrite: vi.fn(),
@@ -87,7 +95,7 @@ describe("workspace window close use case", () => {
         new Promise((resolve) => {
           resolvePrompt = resolve;
         }),
-      saveMarkdownFileToPath: vi.fn(),
+      disk: createSuccessfulDiskRepository(),
     });
     const application = createWorkspaceWindowClose({
       workspace,
@@ -102,6 +110,12 @@ describe("workspace window close use case", () => {
     });
     const write = vi.fn(async ({ content, path }: { readonly content: string; readonly path: string }) => ({
       status: "success" as const,
+      diskVersion: {
+        normalizedPath: path,
+        mtimeMs: 1,
+        size: content.length,
+        contentHash: "test-hash"
+      },
       document: {
         path,
         name: path.split("/").at(-1)!,
@@ -156,9 +170,15 @@ describe("workspace window close use case", () => {
         })
     });
     const write = vi.fn<
-      (input: { readonly content: string; readonly path: string }) => Promise<SaveMarkdownFileResult>
+      (input: { readonly content: string; readonly path: string }) => Promise<WriteDocumentResult>
     >(async ({ content, path }) => ({
       status: "success",
+      diskVersion: {
+        normalizedPath: path,
+        mtimeMs: 1,
+        size: content.length,
+        contentHash: "test-hash"
+      },
       document: {
         path,
         name: path.split("/").at(-1)!,
@@ -346,7 +366,7 @@ describe("workspace window close use case", () => {
       workspace,
       documentOperations,
       promptToSaveWorkspaceTab: vi.fn(async () => "discard" as const),
-      saveMarkdownFileToPath: vi.fn(),
+      disk: createSuccessfulDiskRepository(),
     });
     const application = createWorkspaceWindowClose({
       workspace,

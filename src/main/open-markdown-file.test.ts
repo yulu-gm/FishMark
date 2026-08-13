@@ -6,10 +6,10 @@ describe("openMarkdownFileFromPath", () => {
   it("returns a success result for a UTF-8 markdown file", async () => {
     const result = await openMarkdownFileFromPath("C:/notes/today.md", {
       readFile: vi.fn().mockResolvedValue(Buffer.from("# Today\n", "utf8")),
-      stat: vi.fn().mockResolvedValue({ isFile: () => true })
+      stat: vi.fn().mockResolvedValue({ isFile: () => true, mtimeMs: 123, size: 8 })
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       status: "success",
       document: {
         path: "C:/notes/today.md",
@@ -18,15 +18,16 @@ describe("openMarkdownFileFromPath", () => {
         encoding: "utf-8"
       }
     });
+    expect(result.status === "success" && result.diskVersion.contentHash).toMatch(/^[a-f0-9]{64}$/);
   });
 
   it("normalizes CRLF line endings to LF", async () => {
     const result = await openMarkdownFileFromPath("C:/notes/today.md", {
       readFile: vi.fn().mockResolvedValue(Buffer.from("# Today\r\nParagraph\r\n", "utf8")),
-      stat: vi.fn().mockResolvedValue({ isFile: () => true })
+      stat: vi.fn().mockResolvedValue({ isFile: () => true, mtimeMs: 123, size: 20 })
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       status: "success",
       document: {
         path: "C:/notes/today.md",
@@ -40,10 +41,10 @@ describe("openMarkdownFileFromPath", () => {
   it("normalizes lone CR line endings to LF", async () => {
     const result = await openMarkdownFileFromPath("C:/notes/today.md", {
       readFile: vi.fn().mockResolvedValue(Buffer.from("# Today\rParagraph\r", "utf8")),
-      stat: vi.fn().mockResolvedValue({ isFile: () => true })
+      stat: vi.fn().mockResolvedValue({ isFile: () => true, mtimeMs: 123, size: 18 })
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       status: "success",
       document: {
         path: "C:/notes/today.md",

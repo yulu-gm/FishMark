@@ -1,4 +1,5 @@
 import type {
+  DiskVersion,
   FileIdentity,
   FileLocationIdentity,
   FileObjectIdentity
@@ -62,7 +63,11 @@ export type DocumentReadErrorCode =
   | "not-a-file";
 
 export type DocumentReadResult =
-  | { readonly status: "success"; readonly document: PersistedMarkdownDocument }
+  | {
+      readonly status: "success";
+      readonly document: PersistedMarkdownDocument;
+      readonly diskVersion: DiskVersion;
+    }
   | { readonly status: "cancelled" }
   | {
       readonly status: "error";
@@ -75,6 +80,7 @@ export type DocumentReadResult =
 export type SaveDocumentErrorCode =
   | "dialog-failed"
   | "write-failed"
+  | "disk-version-conflict"
   | "file-identity-conflict"
   | "file-identity-changed"
   | "tab-missing"
@@ -97,11 +103,25 @@ export type SaveDocumentResult =
 
 export interface DocumentFilePort {
   read(targetPath: string): Promise<DocumentReadResult>;
-  write(input: {
-    readonly tabId: string;
+}
+
+export type WriteDocumentResult =
+  | {
+      readonly status: "success";
+      readonly diskVersion: DiskVersion;
+      readonly document: PersistedMarkdownDocument;
+    }
+  | {
+      readonly status: "error";
+      readonly error: { readonly code: "write-failed"; readonly message: string };
+    };
+
+export interface DiskRepositoryPort {
+  readDiskVersion(targetPath: string): Promise<DiskVersion | null>;
+  writeDocument(input: {
     readonly path: string;
     readonly content: string;
-  }): Promise<SaveDocumentResult>;
+  }): Promise<WriteDocumentResult>;
 }
 
 export type PathDialogResult =

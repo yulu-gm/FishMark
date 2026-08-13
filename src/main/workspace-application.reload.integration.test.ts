@@ -1,11 +1,8 @@
 import { createStringTextBuffer, createWorkspaceState, fileIdentity } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 
-import type {
-  OpenMarkdownDocument,
-  OpenMarkdownFileResult
-} from "../shared/open-markdown-file";
-import { createWorkspaceReload } from "@fishmark/workspace-application";
+import type { OpenMarkdownDocument } from "../shared/open-markdown-file";
+import { createWorkspaceReload, type DocumentReadResult } from "@fishmark/workspace-application";
 import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator";
 import { openTestDocument } from "./workspace.test-helper";
 
@@ -15,7 +12,7 @@ function createWorkspaceReloadWithPorts(
     "fileIdentity" | "file" | "recentFiles"
   > & {
     fileIdentityResolver: Parameters<typeof createWorkspaceReload>[0]["fileIdentity"];
-    openMarkdownFileFromPath: (targetPath: string) => Promise<OpenMarkdownFileResult>;
+    openMarkdownFileFromPath: (targetPath: string) => Promise<DocumentReadResult>;
     recordRecentFilePath: (targetPath: string) => Promise<void>;
   }
 ) {
@@ -41,7 +38,7 @@ function createWorkspaceReloadForTest(
     | "fileObjectOperations"
     | "fileIdentityResolver"
   > & {
-    openMarkdownFileFromPath: (targetPath: string) => Promise<OpenMarkdownFileResult>;
+    openMarkdownFileFromPath: (targetPath: string) => Promise<DocumentReadResult>;
     recordRecentFilePath: (targetPath: string) => Promise<void>;
     fileIdentityResolver?: Parameters<
       typeof createWorkspaceReloadWithPorts
@@ -234,7 +231,7 @@ describe("workspace reload use case", () => {
         }))
       },
       openMarkdownFileFromPath: vi.fn(async () => ({
-        status: "success" as const,
+        status: "success" as const, diskVersion: { normalizedPath: "C:/notes/after.md", mtimeMs: 1, size: 1, contentHash: "test-hash" },
         document: document("source.md", "disk content")
       })),
       recordRecentFilePath: vi.fn(async () => undefined)
@@ -280,7 +277,7 @@ describe("workspace reload use case", () => {
       fileObjectOperations: createKeyedOperationCoordinator(),
       fileIdentityResolver: { resolveExisting: vi.fn(async () => resolved) },
       openMarkdownFileFromPath: vi.fn(async () => ({
-        status: "success" as const,
+        status: "success" as const, diskVersion: { normalizedPath: "C:/notes/after.md", mtimeMs: 1, size: 1, contentHash: "test-hash" },
         document: document("replaced.md", "after")
       })),
       recordRecentFilePath: vi.fn(async () => undefined)
@@ -311,7 +308,7 @@ describe("workspace reload use case", () => {
       const application = createWorkspaceReloadForTest({
         workspace,
         openMarkdownFileFromPath: vi.fn(async () => JSON.parse(JSON.stringify({
-          status: "success" as const,
+          status: "success" as const, diskVersion: { normalizedPath: "C:/notes/after.md", mtimeMs: 1, size: 1, contentHash: "test-hash" },
           document: {
             path: returnedPath,
             name: "adapter.md",
@@ -352,7 +349,7 @@ describe("workspace reload use case", () => {
       diskVersion: null
     });
     const openMarkdownFileFromPath = vi.fn(async () => ({
-      status: "success" as const,
+      status: "success" as const, diskVersion: { normalizedPath: "C:/notes/after.md", mtimeMs: 1, size: 1, contentHash: "test-hash" },
       document: document("after.md", "disk")
     }));
     const application = createWorkspaceReloadForTest({
@@ -384,7 +381,7 @@ describe("workspace reload use case", () => {
     const application = createWorkspaceReloadForTest({
       workspace,
       openMarkdownFileFromPath: vi.fn(async () => ({
-        status: "success" as const,
+        status: "success" as const, diskVersion: { normalizedPath: "C:/notes/after.md", mtimeMs: 1, size: 1, contentHash: "test-hash" },
         document: document("reload.md", "after")
       })),
       recordRecentFilePath
@@ -412,7 +409,7 @@ describe("workspace reload use case", () => {
       "window-1",
       document("edit-race.md", "before")
     ).activeTabId!;
-    let resolveRead!: (result: OpenMarkdownFileResult) => void;
+    let resolveRead!: (result: DocumentReadResult) => void;
     const recordRecentFilePath = vi.fn(async () => undefined);
     const application = createWorkspaceReloadForTest({
       workspace,
@@ -430,7 +427,7 @@ describe("workspace reload use case", () => {
     await vi.waitFor(() => expect(resolveRead).toBeTypeOf("function"));
     workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "new draft" });
     resolveRead({
-      status: "success",
+      status: "success", diskVersion: { normalizedPath: "C:/notes/after.md", mtimeMs: 1, size: 1, contentHash: "test-hash" },
       document: document("edit-race.md", "disk after")
     });
 
@@ -453,7 +450,7 @@ describe("workspace reload use case", () => {
       document("move-race.md", "before")
     ).activeTabId!;
     workspace.registerWindow("window-2");
-    let resolveRead!: (result: OpenMarkdownFileResult) => void;
+    let resolveRead!: (result: DocumentReadResult) => void;
     const application = createWorkspaceReloadForTest({
       workspace,
       openMarkdownFileFromPath: () =>
@@ -470,7 +467,7 @@ describe("workspace reload use case", () => {
     await vi.waitFor(() => expect(resolveRead).toBeTypeOf("function"));
     workspace.moveTabToWindow({ tabId, targetWindowId: "window-2" });
     resolveRead({
-      status: "success",
+      status: "success", diskVersion: { normalizedPath: "C:/notes/after.md", mtimeMs: 1, size: 1, contentHash: "test-hash" },
       document: document("move-race.md", "disk after")
     });
 
@@ -494,7 +491,7 @@ describe("workspace reload use case", () => {
       "window-1",
       document("closed-window.md", "before")
     ).activeTabId!;
-    let resolveRead!: (result: OpenMarkdownFileResult) => void;
+    let resolveRead!: (result: DocumentReadResult) => void;
     const application = createWorkspaceReloadForTest({
       workspace,
       openMarkdownFileFromPath: () =>
@@ -511,7 +508,7 @@ describe("workspace reload use case", () => {
     await vi.waitFor(() => expect(resolveRead).toBeTypeOf("function"));
     workspace.unregisterWindow("window-1");
     resolveRead({
-      status: "success",
+      status: "success", diskVersion: { normalizedPath: "C:/notes/after.md", mtimeMs: 1, size: 1, contentHash: "test-hash" },
       document: document("closed-window.md", "disk after")
     });
 

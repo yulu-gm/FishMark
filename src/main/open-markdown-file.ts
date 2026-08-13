@@ -1,15 +1,19 @@
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { readFile, stat } from "node:fs/promises";
 import { dialog } from "electron";
 
+import type { DocumentReadResult } from "@fishmark/workspace-application";
+
 import {
   OPEN_MARKDOWN_FILE_ERROR_MESSAGES,
-  type OpenMarkdownFileErrorCode,
-  type OpenMarkdownFileResult
+  type OpenMarkdownFileErrorCode
 } from "../shared/open-markdown-file";
 
 type FileStat = {
   isFile: () => boolean;
+  mtimeMs: number;
+  size: number;
 };
 
 export type OpenMarkdownFileDependencies = {
@@ -39,7 +43,7 @@ export type OpenMarkdownPathDialogResult =
 export async function openMarkdownFileFromPath(
   targetPath: string,
   dependencies: OpenMarkdownFileDependencies = defaultDependencies
-): Promise<OpenMarkdownFileResult> {
+): Promise<DocumentReadResult> {
   try {
     const fileStat = await dependencies.stat(targetPath);
 
@@ -61,6 +65,12 @@ export async function openMarkdownFileFromPath(
         name: path.basename(targetPath),
         content,
         encoding: "utf-8"
+      },
+      diskVersion: {
+        normalizedPath: targetPath.replace(/\\/g, "/"),
+        mtimeMs: fileStat.mtimeMs,
+        size: fileStat.size,
+        contentHash: createHash("sha256").update(fileBuffer).digest("hex")
       }
     };
   } catch (error) {
@@ -119,7 +129,7 @@ function decodeUtf8(fileBuffer: Buffer): string | null {
   }
 }
 
-function createErrorResult(code: OpenMarkdownFileErrorCode): OpenMarkdownFileResult {
+function createErrorResult(code: OpenMarkdownFileErrorCode): DocumentReadResult {
   return {
     status: "error",
     error: {
@@ -129,7 +139,7 @@ function createErrorResult(code: OpenMarkdownFileErrorCode): OpenMarkdownFileRes
   };
 }
 
-function mapReadError(error: unknown): OpenMarkdownFileResult {
+function mapReadError(error: unknown): DocumentReadResult {
   if (isNodeErrorWithCode(error, "ENOENT")) {
     return createErrorResult("file-not-found");
   }

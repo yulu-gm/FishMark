@@ -5,13 +5,13 @@ import {
   createWorkspaceReload as createWorkspaceReloadWithPorts,
   createWorkspaceTabTransfer,
   createWorkspaceWindowClose,
+  type DocumentReadResult,
   type KeyedOperationLease,
-  type WorkspaceWindowCloseConfirmation
+  type WorkspaceWindowCloseConfirmation,
+  type WriteDocumentResult
 } from "@fishmark/workspace-application";
 
-import type { OpenMarkdownFileResult } from "../shared/open-markdown-file";
-import type { SaveMarkdownFileResult } from "../shared/save-markdown-file";
-import { createTestCloseWorkspace } from "./workspace-application.integration.test-helper";
+import { createSuccessfulDiskRepository, createTestCloseWorkspace } from "./workspace-application.integration.test-helper";
 import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator";
 import { createWorkspaceWindowCloseConfirmationHandler } from "./workspace-window-close-confirmation-handler";
 import { createWorkspaceWindowCloseRequestBroker } from "./workspace-window-close-request-broker";
@@ -25,12 +25,19 @@ const document = (content: string) => ({
   encoding: "utf-8" as const
 });
 
+const diskVersion = () => ({
+  normalizedPath: "C:/notes/race.md",
+  mtimeMs: 1,
+  size: 1,
+  contentHash: "test-hash"
+});
+
 function createWorkspaceReloadForTest(
   dependencies: Omit<
     Parameters<typeof createWorkspaceReloadWithPorts>[0],
     "fileLocationOperations" | "fileObjectOperations" | "fileIdentity" | "file" | "recentFiles"
   > & {
-    openMarkdownFileFromPath: (targetPath: string) => Promise<OpenMarkdownFileResult>;
+    openMarkdownFileFromPath: (targetPath: string) => Promise<DocumentReadResult>;
     recordRecentFilePath: (targetPath: string) => Promise<void>;
   }
 ) {
@@ -50,9 +57,9 @@ function createSaveOperations(
   documentOperations: ReturnType<
     typeof createKeyedOperationCoordinator
   >,
-  saveMarkdownFileToPath: (
-    input: { readonly content: string; readonly tabId: string; readonly path: string }
-  ) => Promise<SaveMarkdownFileResult>
+  writeDocument: (
+    input: { readonly content: string; readonly path: string }
+  ) => Promise<WriteDocumentResult>
 ) {
   return createSaveDocumentForTest({
     workspace,
@@ -63,7 +70,15 @@ function createSaveOperations(
       resolveExisting: async (targetPath) => resolvedTestFile(targetPath),
       resolveProspective: async (targetPath) => resolvedTestFile(targetPath)
     },
-    file: { write: saveMarkdownFileToPath },
+    disk: {
+      readDiskVersion: async () => ({
+        normalizedPath: "C:/notes/race.md",
+        mtimeMs: 1,
+        size: 1,
+        contentHash: "test-hash"
+      }),
+      writeDocument
+    },
     dialog: { chooseSavePath: vi.fn() },
     watcher: {
       beginInternalWrite: vi.fn(),
@@ -103,7 +118,7 @@ describe("workspace application document IO transactions", () => {
       content: "dirty"
     });
     workspace.registerWindow("window-2");
-    let resolveWrite!: (result: SaveMarkdownFileResult) => void;
+    let resolveWrite!: (result: WriteDocumentResult) => void;
     const save = createSaveOperations(
       workspace,
       documentOperations,
@@ -130,7 +145,7 @@ describe("workspace application document IO transactions", () => {
     });
     expect(workspace.getTabSession(tabId).windowId).toBe("window-1");
 
-    resolveWrite({ status: "success", document: document("dirty") });
+    resolveWrite({ status: "success", diskVersion: diskVersion(), document: document("dirty") });
     await savePromise;
     await movePromise;
 
@@ -152,7 +167,7 @@ describe("workspace application document IO transactions", () => {
     ).activeTabId!;
     workspace.registerWindow("window-2");
     const write = vi.fn(async () => ({
-      status: "success" as const,
+      status: "success" as const, diskVersion: diskVersion(),
       document: document("should not write")
     }));
     const save = createSaveOperations(workspace, documentOperations, write);
@@ -190,7 +205,7 @@ describe("workspace application document IO transactions", () => {
       "window-1",
       document("before")
     ).activeTabId!;
-    let resolveRead!: (result: OpenMarkdownFileResult) => void;
+    let resolveRead!: (result: DocumentReadResult) => void;
     const reload = createWorkspaceReloadForTest({
       workspace,
       tabOperations: documentOperations,
@@ -217,7 +232,7 @@ describe("workspace application document IO transactions", () => {
     });
     expect(workspace.getTabSession(tabId).windowId).toBe("window-1");
 
-    resolveRead({ status: "success", document: document("disk after") });
+    resolveRead({ status: "success", diskVersion: diskVersion(), document: document("disk after") });
     await reloadPromise;
     await detachPromise;
 
@@ -237,7 +252,7 @@ describe("workspace application document IO transactions", () => {
       document("before")
     ).activeTabId!;
     const read = vi.fn(async () => ({
-      status: "success" as const,
+      status: "success" as const, diskVersion: diskVersion(),
       document: document("should not read")
     }));
     const reload = createWorkspaceReloadForTest({
@@ -276,9 +291,9 @@ describe("workspace application document IO transactions", () => {
     const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace, "window-1", document("A")).activeTabId!;
-    let resolveRead!: (result: OpenMarkdownFileResult) => void;
+    let resolveRead!: (result: DocumentReadResult) => void;
     const write = vi.fn(async ({ content }: { readonly content: string }) => ({
-      status: "success" as const,
+      status: "success" as const, diskVersion: diskVersion(),
       document: document(content)
     }));
     const reload = createWorkspaceReloadForTest({
@@ -305,12 +320,12 @@ describe("workspace application document IO transactions", () => {
 
     expect(write).not.toHaveBeenCalled();
 
-    resolveRead({ status: "success", document: document("B") });
+    resolveRead({ status: "success", diskVersion: diskVersion(), document: document("B") });
     await reloadPromise;
     await savePromise;
 
     expect(write).toHaveBeenCalledWith(
-      expect.objectContaining({ tabId, content: "B" })
+      expect.objectContaining({ content: "B" })
     );
     expect(workspace.getTabSession(tabId)).toMatchObject({
       content: "B",
@@ -325,16 +340,16 @@ describe("workspace application document IO transactions", () => {
     const tabId = openTestDocument(workspace, "window-1", document("before")).activeTabId!;
     workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "A" });
     let diskContent = "before";
-    let resolveWrite!: (result: SaveMarkdownFileResult) => void;
+    let resolveWrite!: (result: WriteDocumentResult) => void;
     const write = vi.fn(
       ({ content }: { readonly content: string }) =>
-        new Promise<SaveMarkdownFileResult>((resolve) => {
+        new Promise<WriteDocumentResult>((resolve) => {
           diskContent = content;
           resolveWrite = resolve;
         })
     );
     const read = vi.fn(async () => ({
-      status: "success" as const,
+      status: "success" as const, diskVersion: diskVersion(),
       document: document(diskContent)
     }));
     const save = createSaveOperations(workspace, documentOperations, write);
@@ -358,7 +373,7 @@ describe("workspace application document IO transactions", () => {
 
     expect(read).not.toHaveBeenCalled();
 
-    resolveWrite({ status: "success", document: document("A") });
+    resolveWrite({ status: "success", diskVersion: diskVersion(), document: document("A") });
     await savePromise;
     await reloadPromise;
 
@@ -377,8 +392,8 @@ describe("workspace application document IO transactions", () => {
     workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "dirty" });
     let resolvePrompt!: (choice: "discard") => void;
     const write = vi.fn<
-      (input: { readonly content: string }) => Promise<SaveMarkdownFileResult>
-    >(async ({ content }) => ({ status: "success", document: document(content) }));
+      (input: { readonly content: string }) => Promise<WriteDocumentResult>
+    >(async ({ content }) => ({ status: "success", diskVersion: diskVersion(), document: document(content) }));
     const close = createTestCloseWorkspace({
       workspace,
       documentOperations,
@@ -386,7 +401,7 @@ describe("workspace application document IO transactions", () => {
         new Promise((resolve) => {
           resolvePrompt = resolve;
         }),
-      saveMarkdownFileToPath: write,
+      disk: { readDiskVersion: async () => ({ normalizedPath: "C:/notes/x.md", mtimeMs: 1, size: 1, contentHash: "test-hash" }), writeDocument: write },
     });
     const save = createSaveOperations(workspace, documentOperations, write);
 
@@ -419,10 +434,10 @@ describe("workspace application document IO transactions", () => {
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace, "window-1", document("saved")).activeTabId!;
     workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "dirty" });
-    let resolveWrite!: (result: SaveMarkdownFileResult) => void;
+    let resolveWrite!: (result: WriteDocumentResult) => void;
     const write = vi.fn(
       () =>
-        new Promise<SaveMarkdownFileResult>((resolve) => {
+        new Promise<WriteDocumentResult>((resolve) => {
           resolveWrite = resolve;
         })
     );
@@ -432,7 +447,7 @@ describe("workspace application document IO transactions", () => {
       workspace,
       documentOperations,
       promptToSaveWorkspaceTab: prompt,
-      saveMarkdownFileToPath: write,
+      disk: { readDiskVersion: async () => ({ normalizedPath: "C:/notes/x.md", mtimeMs: 1, size: 1, contentHash: "test-hash" }), writeDocument: write },
     });
 
     const savePromise = save.save({
@@ -448,7 +463,7 @@ describe("workspace application document IO transactions", () => {
     });
 
     expect(prompt).not.toHaveBeenCalled();
-    resolveWrite({ status: "success", document: document("dirty") });
+    resolveWrite({ status: "success", diskVersion: diskVersion(), document: document("dirty") });
     await savePromise;
     await expect(closePromise).resolves.toMatchObject({ status: "closed" });
 
@@ -481,7 +496,7 @@ describe("workspace application document IO transactions", () => {
           new Promise((resolve) => {
             resolvePrompt = resolve;
           }),
-        saveMarkdownFileToPath: closeWrite,
+        disk: { readDiskVersion: async () => ({ normalizedPath: "C:/notes/x.md", mtimeMs: 1, size: 1, contentHash: "test-hash" }), writeDocument: closeWrite },
       });
       let abort!: () => void;
       const broker = createWorkspaceWindowCloseRequestBroker<
@@ -531,7 +546,7 @@ describe("workspace application document IO transactions", () => {
         })(identity);
       await vi.waitFor(() => expect(resolvePrompt).toBeTypeOf("function"));
       const queuedWrite = vi.fn(async () => ({
-        status: "success" as const,
+        status: "success" as const, diskVersion: diskVersion(),
         document: document("dirty")
       }));
       const queuedSave = createSaveOperations(
@@ -576,10 +591,10 @@ describe("workspace application document IO transactions", () => {
       document("saved")
     ).activeTabId!;
     workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "dirty" });
-    let resolveCloseWrite!: (result: SaveMarkdownFileResult) => void;
+    let resolveCloseWrite!: (result: WriteDocumentResult) => void;
     const closeWrite = vi.fn(
       () =>
-        new Promise<SaveMarkdownFileResult>((resolve) => {
+        new Promise<WriteDocumentResult>((resolve) => {
           resolveCloseWrite = resolve;
         })
     );
@@ -588,7 +603,7 @@ describe("workspace application document IO transactions", () => {
       workspace,
       documentOperations,
       promptToSaveWorkspaceTab: vi.fn(async () => "save" as const),
-      saveMarkdownFileToPath: closeWrite,
+      disk: { readDiskVersion: async () => ({ normalizedPath: "C:/notes/x.md", mtimeMs: 1, size: 1, contentHash: "test-hash" }), writeDocument: closeWrite },
     });
     let abort!: () => void;
     const broker = createWorkspaceWindowCloseRequestBroker<
@@ -636,10 +651,10 @@ describe("workspace application document IO transactions", () => {
         }
       })(identity);
     await vi.waitFor(() => expect(resolveCloseWrite).toBeTypeOf("function"));
-    let resolveQueuedWrite!: (result: SaveMarkdownFileResult) => void;
+    let resolveQueuedWrite!: (result: WriteDocumentResult) => void;
     const queuedWrite = vi.fn(
       () =>
-        new Promise<SaveMarkdownFileResult>((resolve) => {
+        new Promise<WriteDocumentResult>((resolve) => {
           resolveQueuedWrite = resolve;
         })
     );
@@ -655,7 +670,7 @@ describe("workspace application document IO transactions", () => {
 
     abort();
     expect(queuedWrite).not.toHaveBeenCalled();
-    resolveCloseWrite({ status: "success", document: document("dirty") });
+    resolveCloseWrite({ status: "success", diskVersion: diskVersion(), document: document("dirty") });
     await expect(confirmationPromise).resolves.toEqual({ status: "cancelled" });
     await vi.waitFor(() => expect(resolveQueuedWrite).toBeTypeOf("function"));
     expect(saveTabDocument).not.toHaveBeenCalled();
@@ -664,7 +679,7 @@ describe("workspace application document IO transactions", () => {
       isDirty: true
     });
 
-    resolveQueuedWrite({ status: "success", document: document("dirty") });
+    resolveQueuedWrite({ status: "success", diskVersion: diskVersion(), document: document("dirty") });
     await expect(queuedSave).resolves.toMatchObject({ status: "success" });
     await expect(closePromise).resolves.toBeNull();
     expect(saveTabDocument).toHaveBeenCalledOnce();
@@ -692,10 +707,7 @@ describe("workspace application document IO transactions", () => {
           new Promise((resolve) => {
             resolvePrompt = resolve;
           }),
-        saveMarkdownFileToPath: vi.fn(async () => ({
-          status: "success" as const,
-          document: document("dirty")
-        })),
+        disk: createSuccessfulDiskRepository(),
       });
       const broker = createWorkspaceWindowCloseRequestBroker<
         WorkspaceWindowCloseConfirmation

@@ -2,7 +2,7 @@ import type { WorkspaceWindowCloseConfirmation } from "@fishmark/workspace-appli
 import { createStringTextBuffer, createWorkspaceState, fileIdentity } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 
-import { createTestCloseWorkspace } from "./workspace-application.integration.test-helper";
+import { createSuccessfulDiskRepository, createTestCloseWorkspace } from "./workspace-application.integration.test-helper";
 import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator";
 import { createWorkspaceWindowCloseConfirmationHandler } from "./workspace-window-close-confirmation-handler";
 import { createWorkspaceWindowCloseRequestBroker } from "./workspace-window-close-request-broker";
@@ -96,7 +96,7 @@ describe("createWorkspaceWindowCloseConfirmationHandler", () => {
       workspace,
       documentOperations: createKeyedOperationCoordinator(),
       promptToSaveWorkspaceTab: prompt,
-      saveMarkdownFileToPath: vi.fn(),
+      disk: createSuccessfulDiskRepository(),
     });
     const timeouts: Array<() => void> = [];
     const broker = createWorkspaceWindowCloseRequestBroker<

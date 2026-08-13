@@ -3,8 +3,8 @@ import { fileIdentity, type WorkspaceState } from "@fishmark/workspace-domain";
 import {
   createCloseWorkspace,
   createSaveDocument,
-  type KeyedOperationCoordinator,
-  type SaveDocumentResult
+  type DiskRepositoryPort,
+  type KeyedOperationCoordinator
 } from "@fishmark/workspace-application";
 import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator";
 
@@ -15,12 +15,37 @@ type TestDependencies = {
     "acquireExclusive" | "runExclusiveWithLease" | "isLeaseHeld"
   >;
   promptToSaveWorkspaceTab: Parameters<typeof createCloseWorkspace>[0]["chooseDirtyTab"];
-  saveMarkdownFileToPath: (input: {
-    tabId: string;
-    path: string;
-    content: string;
-  }) => Promise<SaveDocumentResult>;
+  disk: DiskRepositoryPort;
 };
+
+export function createSuccessfulDiskRepository(
+  overrides: Partial<DiskRepositoryPort> = {}
+): DiskRepositoryPort {
+  return {
+    readDiskVersion: async () => ({
+      normalizedPath: "C:/notes/test.md",
+      mtimeMs: 1,
+      size: 1,
+      contentHash: "test-hash"
+    }),
+    writeDocument: async (input) => ({
+      status: "success",
+      diskVersion: {
+        normalizedPath: input.path.replace(/\\/g, "/"),
+        mtimeMs: 1,
+        size: input.content.length,
+        contentHash: "test-hash"
+      },
+      document: {
+        path: input.path,
+        name: input.path.split("/").pop() ?? input.path,
+        content: input.content,
+        encoding: "utf-8"
+      }
+    }),
+    ...overrides
+  };
+}
 
 export function createTestCloseWorkspace(
   dependencies: TestDependencies
@@ -34,7 +59,7 @@ export function createTestCloseWorkspace(
       resolveExisting: async (targetPath) => resolvedFile(targetPath),
       resolveProspective: async (targetPath) => resolvedFile(targetPath)
     },
-    file: { write: dependencies.saveMarkdownFileToPath },
+    disk: dependencies.disk,
     dialog: { chooseSavePath: async () => ({ status: "cancelled" }) },
     watcher: {
       beginInternalWrite: async () => undefined,

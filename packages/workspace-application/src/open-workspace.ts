@@ -151,7 +151,7 @@ export function createWorkspaceOpen(dependencies: {
           name: diskDocument.name,
           content: diskDocument.content,
           encoding: diskDocument.encoding
-        });
+        }, readResult.diskVersion);
         if (result.kind === "owned-by-other-window") {
           const currentOwner = dependencies.workspace.getFileOwner(finalIdentity.identity);
           if (currentOwner.kind !== "owned") return readFailure(input.targetPath);

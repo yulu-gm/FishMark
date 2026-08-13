@@ -1,5 +1,6 @@
 import {
   sameFileIdentity,
+  type DiskVersion,
   type FileLocationIdentity,
   type FileObjectIdentity,
   type WorkspaceState
@@ -7,7 +8,7 @@ import {
 
 import type {
   CleanupReporterPort,
-  DocumentFilePort,
+  DiskRepositoryPort,
   FileIdentityPort,
   KeyedOperationCoordinator,
   KeyedOperationLease,
@@ -16,11 +17,7 @@ import type {
   WorkspaceDialogPort,
   WorkspaceWatcherPort
 } from "./ports";
-import {
-  requirePersistedMarkdownDocument,
-  saveError,
-  workspaceMutationSaveError
-} from "./document-results";
+import { saveError, workspaceMutationSaveError } from "./document-results";
 
 export type SaveDocumentInput<TContext> = {
   readonly context: TContext;
@@ -47,7 +44,7 @@ export type SaveDocumentDependencies<TContext> = {
     "acquireExclusive" | "runExclusive"
   >;
   fileIdentity: FileIdentityPort;
-  file: Pick<DocumentFilePort, "write">;
+  disk: DiskRepositoryPort;
   dialog: Pick<WorkspaceDialogPort, "chooseSavePath">;
   watcher: WorkspaceWatcherPort<TContext>;
   recentFiles: RecentFilesPort;
@@ -147,38 +144,26 @@ export function createSaveDocument<TContext>(
             return saveError("file-identity-changed");
           }
 
+          const conflictError = await checkOrdinarySaveConflict(checkpoint);
+          if (conflictError !== null) return conflictError;
+
           let writeStarted = false;
           return runWithCleanup(async () => {
             await dependencies.watcher.beginInternalWrite(input.context, checkpoint.path!);
             writeStarted = true;
-            const result = await dependencies.file.write({
-              tabId: input.tabId,
+            const writeResult = await dependencies.disk.writeDocument({
               path: checkpoint.path!,
               content: checkpoint.content
             });
-            if (result.status !== "success") {
-              return result;
+            if (writeResult.status !== "success") {
+              return { status: "error", error: writeResult.error };
             }
             if (input.commitGuard?.() === false) {
               return { status: "cancelled" };
             }
-            const savedDocument = requirePersistedMarkdownDocument(
-              result.document,
-              "Ordinary save adapter"
-            );
-            if (savedDocument.path !== checkpoint.path) {
-              throw new Error(
-                "Ordinary save adapter path does not match the canonical save checkpoint."
-              );
-            }
-            if (savedDocument.content !== checkpoint.content) {
-              throw new Error(
-                "Ordinary save adapter content does not match the captured save content."
-              );
-            }
             const canonicalDocument = {
               fileIdentity: checkpoint.fileIdentity,
-              path: checkpoint.path,
+              path: checkpoint.path!,
               name: checkpoint.name,
               content: checkpoint.content,
               encoding: checkpoint.encoding
@@ -188,11 +173,11 @@ export function createSaveDocument<TContext>(
               expectedWindowId: input.expectedWindowId,
               capturedRevision: checkpoint.revision,
               document: canonicalDocument,
-              diskVersion: null
+              diskVersion: writeResult.diskVersion
             });
             const commitError = workspaceMutationSaveError(commit);
             if (commitError !== null) return commitError;
-            await dependencies.recentFiles.record(checkpoint.path);
+            await dependencies.recentFiles.record(checkpoint.path!);
             return { status: "success", document: canonicalDocument };
           }, [
             () => writeStarted
@@ -282,31 +267,17 @@ export function createSaveDocument<TContext>(
             confirmed.canonicalPath
           );
           writeStarted = true;
-          const result = await dependencies.file.write({
-            tabId: input.tabId,
+          const writeResult = await dependencies.disk.writeDocument({
             path: confirmed.canonicalPath,
             content: checkpoint.content
           });
-          if (result.status !== "success") {
-            return result;
+          if (writeResult.status !== "success") {
+            return { status: "error", error: writeResult.error };
           }
           if (input.commitGuard?.() === false) {
             return { status: "cancelled" };
           }
-          const savedDocument = requirePersistedMarkdownDocument(
-            result.document,
-            "Save As adapter"
-          );
-          if (savedDocument.path !== confirmed.canonicalPath) {
-            throw new Error(
-              "Save As adapter path does not match the confirmed canonical path."
-            );
-          }
-          if (savedDocument.content !== checkpoint.content) {
-            throw new Error(
-              "Save As adapter content does not match the captured save content."
-            );
-          }
+          const savedDocument = writeResult.document;
 
           let persisted;
           try {
@@ -351,7 +322,7 @@ export function createSaveDocument<TContext>(
             expectedWindowId: input.expectedWindowId,
             capturedRevision: checkpoint.revision,
             document: { fileIdentity: persisted.identity, ...savedDocument },
-            diskVersion: null
+            diskVersion: writeResult.diskVersion
           });
           const commitError = workspaceMutationSaveError(commit);
           if (commitError !== null) return commitError;
@@ -369,6 +340,18 @@ export function createSaveDocument<TContext>(
         objectLease?.release();
       }
     });
+  }
+
+  async function checkOrdinarySaveConflict(checkpoint: {
+    readonly path: string | null;
+    readonly diskVersion: DiskVersion | null;
+  }): Promise<Extract<SaveDocumentResult, { readonly status: "error" }> | null> {
+    if (checkpoint.diskVersion === null || checkpoint.path === null) return null;
+    const current = await dependencies.disk.readDiskVersion(checkpoint.path);
+    if (current === null || current.contentHash !== checkpoint.diskVersion.contentHash) {
+      return saveError("disk-version-conflict");
+    }
+    return null;
   }
 
   function requireHeldTabLease(

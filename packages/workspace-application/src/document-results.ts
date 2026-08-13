@@ -52,6 +52,7 @@ export function saveError(
   const messages = {
     "dialog-failed": "The file picker could not be opened.",
     "write-failed": "The Markdown file could not be written.",
+    "disk-version-conflict": "The file changed on disk since it was opened or last saved. Choose how to resolve the conflict before saving.",
     "file-identity-conflict": "That file is already open in another tab.",
     "file-identity-changed": "The selected file changed while preparing to save. Please try again.",
     "tab-missing": "The tab no longer exists.",

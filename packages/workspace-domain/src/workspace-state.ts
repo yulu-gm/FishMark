@@ -127,6 +127,7 @@ export interface ReplaceWorkspaceDocumentInput {
   readonly expectedWindowId: string;
   readonly expectedRevision: DocumentRevision;
   readonly document: WorkspaceDocumentData;
+  readonly diskVersion: DiskVersion | null;
 }
 
 export interface UpdateWorkspaceTabDraftInput {
@@ -224,7 +225,8 @@ export interface WorkspaceState {
   readonly createUntitledTab: (windowId: string) => WorkspaceWindowProjection;
   readonly openDocument: (
     windowId: string,
-    document: WorkspaceDocumentData
+    document: WorkspaceDocumentData,
+    diskVersion?: DiskVersion | null
   ) => OpenWorkspaceDocumentResult;
   readonly activateTab: (
     windowId: string,
@@ -389,7 +391,8 @@ class CanonicalWorkspaceState implements WorkspaceState {
 
   openDocument(
     windowId: string,
-    document: WorkspaceDocumentData
+    document: WorkspaceDocumentData,
+    diskVersion: DiskVersion | null = null
   ): OpenWorkspaceDocumentResult {
     if (document.fileIdentity === null) {
       throw new TypeError("Opened files require a physical file identity.");
@@ -412,7 +415,7 @@ class CanonicalWorkspaceState implements WorkspaceState {
     }
     return Object.freeze({
       kind: "opened",
-      projection: this.appendDocument(windowId, document)
+      projection: this.appendDocument(windowId, document, diskVersion)
     });
   }
 
@@ -559,7 +562,8 @@ class CanonicalWorkspaceState implements WorkspaceState {
     tabId,
     expectedWindowId,
     expectedRevision,
-    document
+    document,
+    diskVersion
   }: ReplaceWorkspaceDocumentInput): WorkspaceSaveMutationResult {
     const resolved = this.resolveExpectedTabCheckpoint(
       tabId,
@@ -586,7 +590,7 @@ class CanonicalWorkspaceState implements WorkspaceState {
         });
       }
     }
-    const nextSession = replaceDocumentFromDisk(context.session, document, null);
+    const nextSession = replaceDocumentFromDisk(context.session, document, diskVersion);
     this.tabs.set(tabId, nextSession);
     if (!sameFileIdentity(nextIdentity, currentIdentity)) {
       this.releaseFileIdentity(currentIdentity, tabId);
@@ -722,7 +726,8 @@ class CanonicalWorkspaceState implements WorkspaceState {
 
   private appendDocument(
     windowId: string,
-    document: WorkspaceDocumentData
+    document: WorkspaceDocumentData,
+    diskVersion: DiskVersion | null = null
   ): WorkspaceWindowProjection {
     const window = this.getWindow(windowId);
     const tabId = `tab-${this.nextTabId}`;
@@ -730,6 +735,7 @@ class CanonicalWorkspaceState implements WorkspaceState {
       tabId,
       windowId,
       document,
+      diskVersion,
       createTextBuffer: this.createTextBuffer
     });
 

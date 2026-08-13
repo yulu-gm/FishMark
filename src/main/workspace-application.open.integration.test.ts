@@ -49,7 +49,7 @@ describe("workspace open use case", () => {
     workspace.registerWindow("window-1");
     workspace.registerWindow("window-2");
     const read = vi.fn(async () => ({
-      status: "success" as const,
+      status: "success" as const, diskVersion: { normalizedPath: "C:/real/note.md", mtimeMs: 1, size: 1, contentHash: "test-hash" },
       document: { path: resolved.canonicalPath, name: "note.md", content: "body", encoding: "utf-8" as const }
     }));
     const activateOwnerWindowTab = vi.fn(async () => "activated" as const);
@@ -178,7 +178,7 @@ describe("workspace open use case", () => {
       resolveExisting,
       resolveProspective,
       openMarkdownFileFromPath: vi.fn(async () => ({
-        status: "success" as const,
+        status: "success" as const, diskVersion: { normalizedPath: "C:/real/note.md", mtimeMs: 1, size: 1, contentHash: "test-hash" },
         document: {
           path: resolved.canonicalPath,
           name: "note.md",
@@ -227,7 +227,7 @@ describe("workspace open use case", () => {
       resolveExisting,
       resolveProspective: vi.fn(async () => resolved),
       openMarkdownFileFromPath: vi.fn(async () => ({
-        status: "success" as const,
+        status: "success" as const, diskVersion: { normalizedPath: "C:/real/note.md", mtimeMs: 1, size: 1, contentHash: "test-hash" },
         document: {
           path: resolved.canonicalPath,
           name: "note.md",
@@ -263,7 +263,7 @@ describe("workspace open use case", () => {
     const ownerLease = await tabOperations.acquireExclusive([ownerTabId]);
     const resolveExisting = vi.fn(async () => resolved);
     const read = vi.fn(async () => ({
-      status: "success" as const,
+      status: "success" as const, diskVersion: { normalizedPath: "C:/real/note.md", mtimeMs: 1, size: 1, contentHash: "test-hash" },
       document: {
         path: resolved.canonicalPath,
         name: "note.md",

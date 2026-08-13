@@ -95,7 +95,8 @@ describe("WorkspaceState text buffer injection", () => {
       tabId: opened.activeTabId!,
       expectedWindowId: "window-1",
       expectedRevision: 0,
-      document: createDocument("opened.md", "reloaded")
+      document: createDocument("opened.md", "reloaded"),
+      diskVersion: null
     });
 
     expect(createdValues).toEqual(["", "opened"]);
@@ -155,7 +156,8 @@ describe("WorkspaceState physical file ownership", () => {
       document: {
         ...createDocument("first.md", "replacement"),
         fileIdentity: fileIdentity(firstIdentity.location, secondIdentity.object)
-      }
+      },
+      diskVersion: null
     });
 
     expect(result.kind).toBe("file-identity-conflict");
@@ -633,7 +635,8 @@ describe("WorkspaceState save and reload transitions", () => {
       tabId,
       expectedWindowId: "window-1",
       expectedRevision: 1,
-      document: createDocument("reload.md", "draft")
+      document: createDocument("reload.md", "draft"),
+      diskVersion: null
     });
     expect(equalReload.kind).toBe("applied");
     expect(workspace.getTabSession(tabId)).toMatchObject({
@@ -648,7 +651,8 @@ describe("WorkspaceState save and reload transitions", () => {
       tabId,
       expectedWindowId: "window-1",
       expectedRevision: 1,
-      document: createDocument("reload.md", "disk change")
+      document: createDocument("reload.md", "disk change"),
+      diskVersion: null
     });
     expect(changedReload.kind).toBe("applied");
     expect(workspace.getTabSession(tabId)).toMatchObject({
@@ -674,7 +678,8 @@ describe("WorkspaceState save and reload transitions", () => {
       tabId,
       expectedWindowId: "window-1",
       expectedRevision: 0,
-      document: createDocument("reload-edit.md", "disk after")
+      document: createDocument("reload-edit.md", "disk after"),
+      diskVersion: null
     });
 
     expect(result).toMatchObject({
@@ -709,7 +714,8 @@ describe("WorkspaceState save and reload transitions", () => {
       tabId,
       expectedWindowId: "window-1",
       expectedRevision: 1,
-      document: createDocument("moved.md", "disk reload")
+      document: createDocument("moved.md", "disk reload"),
+      diskVersion: null
     });
     const saveResult = workspace.saveTabDocument({
       tabId,
@@ -799,7 +805,8 @@ describe("WorkspaceState save and reload transitions", () => {
         tabId,
         expectedWindowId: "window-1",
         expectedRevision: 1,
-        document: createDocument("reloaded.md", "disk content")
+        document: createDocument("reloaded.md", "disk content"),
+        diskVersion: null
       }),
       workspace.closeTab({
         tabId,

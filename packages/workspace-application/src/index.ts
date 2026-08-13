@@ -60,6 +60,7 @@ export {
 } from "./close-workspace";
 export type {
   CleanupReporterPort,
+  DiskRepositoryPort,
   DocumentFilePort,
   DocumentReadErrorCode,
   DocumentReadResult,
@@ -77,5 +78,6 @@ export type {
   SaveDocumentResult,
   WorkspaceDialogPort,
   WorkspaceWatcherPort,
-  WorkspaceWindowLifecyclePort
+  WorkspaceWindowLifecyclePort,
+  WriteDocumentResult
 } from "./ports";

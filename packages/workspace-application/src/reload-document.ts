@@ -146,7 +146,8 @@ export function createWorkspaceReload(dependencies: {
                     name: checkpoint.name,
                     content: diskDocument.content,
                     encoding: checkpoint.encoding
-                  }
+                  },
+                  diskVersion: result.diskVersion
                 });
                 if (mutation.kind === "file-identity-conflict") {
                   return reloadError("file-identity-conflict");

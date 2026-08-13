@@ -225,7 +225,9 @@ describe("main process window wiring", () => {
     expect(mainSource).not.toContain("workspaceState.updateTabDraft(");
     expect(mainSource).toContain("workspaceApplication.saveDocument({");
     expect(mainSource).toContain("workspaceApplication.saveDocumentAs({");
-    expect(mainSource).toContain("write: saveMarkdownFileToPath");
+    expect(mainSource).toContain("writeDocument: documentRepository.writeDocument");
+    expect(mainSource).toContain("readDiskVersion: documentRepository.readDiskVersion");
+    expect(mainSource).not.toContain("saveMarkdownFileToPath");
     expect(mainSource).not.toContain("saveTab: workspaceApplication.saveTab");
     expect(mainSource).toContain("workspaceApplication.reloadTab({");
     expect(mainSource).toContain("workspaceApplication.moveTab({");

@@ -2,10 +2,9 @@ import type { Stats } from "node:fs";
 
 import { createStringTextBuffer, createWorkspaceState, fileIdentity } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
-import { createSaveDocument as createSaveDocumentWithPorts } from "@fishmark/workspace-application";
+import { createSaveDocument as createSaveDocumentWithPorts, type WriteDocumentResult } from "@fishmark/workspace-application";
 
 import { EXTERNAL_MARKDOWN_FILE_CHANGED_EVENT } from "../shared/external-file-change";
-import type { SaveMarkdownFileResult } from "../shared/save-markdown-file";
 import { createFileWatchRegistry } from "./infrastructure/file-watch-registry";
 import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator";
 import type { SaveMarkdownPathDialogResult } from "./save-markdown-file";
@@ -18,16 +17,19 @@ function createSaveDocumentForTest<TSender>(
     | "fileLocationOperations"
     | "fileObjectOperations"
     | "fileIdentity"
-    | "file"
+    | "disk"
     | "dialog"
     | "watcher"
     | "recentFiles"
     | "cleanupReporter"
   > & {
     documentOperations?: ReturnType<typeof createKeyedOperationCoordinator>;
-    saveMarkdownFileToPath: Parameters<
+    writeDocument: Parameters<
       typeof createSaveDocumentWithPorts<TSender>
-    >[0]["file"]["write"];
+    >[0]["disk"]["writeDocument"];
+    readDiskVersion?: Parameters<
+      typeof createSaveDocumentWithPorts<TSender>
+    >[0]["disk"]["readDiskVersion"];
     showSaveMarkdownPathDialog: (input: { currentPath: string | null }) => Promise<SaveMarkdownPathDialogResult>;
     beginInternalWrite: Parameters<typeof createSaveDocumentWithPorts<TSender>>[0]["watcher"]["beginInternalWrite"];
     completeInternalWrite: Parameters<typeof createSaveDocumentWithPorts<TSender>>[0]["watcher"]["completeInternalWrite"];
@@ -38,7 +40,8 @@ function createSaveDocumentForTest<TSender>(
 ) {
   const {
     showSaveMarkdownPathDialog,
-    saveMarkdownFileToPath,
+    writeDocument,
+    readDiskVersion,
     beginInternalWrite,
     completeInternalWrite,
     syncWindowWatch,
@@ -53,7 +56,15 @@ function createSaveDocumentForTest<TSender>(
     fileLocationOperations: createKeyedOperationCoordinator(),
     fileObjectOperations: createKeyedOperationCoordinator(),
     fileIdentity: testFileIdentityResolver(),
-    file: { write: saveMarkdownFileToPath },
+    disk: {
+      readDiskVersion: readDiskVersion ?? (async () => ({
+        normalizedPath: "C:/notes/watch.md",
+        mtimeMs: 1,
+        size: 1,
+        contentHash: "test-hash"
+      })),
+      writeDocument
+    },
     dialog: { chooseSavePath: showSaveMarkdownPathDialog },
     watcher: {
       beginInternalWrite,
@@ -88,74 +99,36 @@ const document = (name: string, content: string) => ({
   encoding: "utf-8" as const
 });
 
+const diskVersion = () => ({
+  normalizedPath: "C:/notes/watch.md",
+  mtimeMs: 1,
+  size: 1,
+  contentHash: "test-hash"
+});
+
 describe("workspace save use case", () => {
-  it.each([
-    ["null", null],
-    ["different", "C:/notes/other.md"]
-  ])(
-    "rejects an ordinary save whose adapter returns a %s path without mutating canonical state",
-    async (_caseName, returnedPath) => {
-      const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
-      workspace.registerWindow("window-1");
-      const tabId = openTestDocument(workspace,
-        "window-1",
-        document("canonical.md", "saved")
-      ).activeTabId!;
-      workspace.updateTabDraft({
-        tabId,
-        expectedWindowId: "window-1",
-        content: "captured"
-      });
-      const recordRecentFilePath = vi.fn(async () => undefined);
-      const operations = createSaveDocumentForTest({
-        workspace,
-        saveMarkdownFileToPath: vi.fn(async () => JSON.parse(JSON.stringify({
-          status: "success" as const,
-          document: {
-            path: returnedPath,
-            name: "adapter.md",
-            content: "captured",
-            encoding: "utf-8" as const
-          }
-        }))),
-        showSaveMarkdownPathDialog: vi.fn(),
-        beginInternalWrite: vi.fn(),
-        completeInternalWrite: vi.fn(async () => undefined),
-        syncWindowWatch: vi.fn(async () => undefined),
-        recordRecentFilePath,
-        reportCleanupError: vi.fn()
-      });
-
-      await expect(
-        operations.save({ context: { id: 1 }, expectedWindowId: "window-1", tabId })
-      ).rejects.toThrow(/Ordinary save adapter/);
-      expect(workspace.getTabSession(tabId)).toMatchObject({
-        path: "C:/notes/canonical.md",
-        name: "canonical.md",
-        content: "captured",
-        revision: 1,
-        savedRevision: 0,
-        isDirty: true
-      });
-      expect(recordRecentFilePath).not.toHaveBeenCalled();
-    }
-  );
-
-  it("rejects adapter content that differs from the captured ordinary-save checkpoint after a newer edit", async () => {
+  it("rejects an ordinary save when the on-disk content version changed", async () => {
     const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
-    const tabId = openTestDocument(workspace,
-      "window-1",
-      document("race.md", "saved")
-    ).activeTabId!;
+    const opened = workspace.openDocument("window-1", document("conflict.md", "saved"), {
+      normalizedPath: "C:/notes/conflict.md",
+      mtimeMs: 1,
+      size: 5,
+      contentHash: "expected"
+    });
+    if (opened.kind !== "opened") throw new Error("expected opened document");
+    const tabId = opened.projection.activeTabId!;
     workspace.updateTabDraft({ tabId, expectedWindowId: "window-1", content: "captured" });
-    let resolveWrite!: (result: SaveMarkdownFileResult) => void;
+    const writeDocument = vi.fn();
     const operations = createSaveDocumentForTest({
       workspace,
-      saveMarkdownFileToPath: () =>
-        new Promise((resolve) => {
-          resolveWrite = resolve;
-        }),
+      writeDocument,
+      readDiskVersion: vi.fn(async () => ({
+        normalizedPath: "C:/notes/conflict.md",
+        mtimeMs: 2,
+        size: 8,
+        contentHash: "changed"
+      })),
       showSaveMarkdownPathDialog: vi.fn(),
       beginInternalWrite: vi.fn(),
       completeInternalWrite: vi.fn(async () => undefined),
@@ -164,26 +137,13 @@ describe("workspace save use case", () => {
       reportCleanupError: vi.fn()
     });
 
-    const save = operations.save({
-      context: { id: 1 },
-      expectedWindowId: "window-1",
-      tabId
+    await expect(
+      operations.save({ context: { id: 1 }, expectedWindowId: "window-1", tabId })
+    ).resolves.toMatchObject({
+      status: "error",
+      error: { code: "disk-version-conflict" }
     });
-    await vi.waitFor(() => expect(resolveWrite).toBeTypeOf("function"));
-    workspace.updateTabDraft({ tabId, expectedWindowId: "window-1", content: "newer" });
-    resolveWrite({
-      status: "success",
-      document: document("race.md", "adapter mismatch")
-    });
-
-    await expect(save).rejects.toThrow("captured save content");
-    expect(workspace.getTabSession(tabId)).toMatchObject({
-      path: "C:/notes/race.md",
-      content: "newer",
-      revision: 2,
-      savedRevision: 0,
-      isDirty: true
-    });
+    expect(writeDocument).not.toHaveBeenCalled();
   });
 
   it("rejects a Save As identity collision before writing", async () => {
@@ -195,7 +155,7 @@ describe("workspace save use case", () => {
     const write = vi.fn();
     const operations = createSaveDocumentForTest({
       workspace,
-      saveMarkdownFileToPath: write,
+      writeDocument: write,
       showSaveMarkdownPathDialog: vi.fn(async () => ({
         status: "success" as const,
         path: "C:/notes/existing.md"
@@ -214,44 +174,6 @@ describe("workspace save use case", () => {
     expect(workspace.getTabSession(tabId)).toMatchObject({ path: null, isDirty: true });
   });
 
-  it("rejects a Save As adapter path that differs from the confirmed canonical path", async () => {
-    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
-    workspace.registerWindow("window-1");
-    const tabId = workspace.createUntitledTab("window-1").activeTabId!;
-    workspace.updateTabDraft({
-      tabId,
-      expectedWindowId: "window-1",
-      content: "captured"
-    });
-    const recordRecentFilePath = vi.fn(async () => undefined);
-    const operations = createSaveDocumentForTest({
-      workspace,
-      saveMarkdownFileToPath: vi.fn(async () => ({
-        status: "success" as const,
-        document: document("adapter-other.md", "captured")
-      })),
-      showSaveMarkdownPathDialog: vi.fn(async () => ({
-        status: "success" as const,
-        path: "C:/notes/confirmed.md"
-      })),
-      beginInternalWrite: vi.fn(),
-      completeInternalWrite: vi.fn(async () => undefined),
-      syncWindowWatch: vi.fn(async () => undefined),
-      recordRecentFilePath,
-      reportCleanupError: vi.fn()
-    });
-
-    await expect(
-      operations.saveAs({ context: { id: 1 }, expectedWindowId: "window-1", tabId })
-    ).rejects.toThrow(/Save As adapter path/);
-    expect(workspace.getTabSession(tabId)).toMatchObject({
-      path: null,
-      content: "captured",
-      isDirty: true
-    });
-    expect(recordRecentFilePath).not.toHaveBeenCalled();
-  });
-
   it("uses the canonical Save As path for an ordinary save that was queued while the dialog was open", async () => {
     const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
@@ -267,7 +189,7 @@ describe("workspace save use case", () => {
     const documentOperations = createKeyedOperationCoordinator();
     let resolveDialog!: (result: SaveMarkdownPathDialogResult) => void;
     const write = vi.fn(async ({ path, content }: { path: string; content: string }) => ({
-      status: "success" as const,
+      status: "success" as const, diskVersion: diskVersion(),
       document: {
         path,
         name: path.split("/").at(-1)!,
@@ -278,7 +200,7 @@ describe("workspace save use case", () => {
     const operations = createSaveDocumentForTest({
       workspace,
       documentOperations,
-      saveMarkdownFileToPath: write,
+      writeDocument: write,
       showSaveMarkdownPathDialog: () =>
         new Promise((resolve) => {
           resolveDialog = resolve;
@@ -309,7 +231,6 @@ describe("workspace save use case", () => {
     await Promise.all([saveAs, queuedSave]);
 
     expect(write).toHaveBeenCalledWith({
-      tabId,
       path: "C:/notes/after.md",
       content: "dirty"
     });
@@ -325,7 +246,7 @@ describe("workspace save use case", () => {
     ).activeTabId!;
     workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "dirty" });
     const documentOperations = createKeyedOperationCoordinator();
-    let resolveFirstSave!: (result: SaveMarkdownFileResult) => void;
+    let resolveFirstSave!: (result: WriteDocumentResult) => void;
     let resolveFirstCleanup!: () => void;
     const write = vi
       .fn<
@@ -333,7 +254,7 @@ describe("workspace save use case", () => {
           readonly tabId: string;
           readonly path: string;
           readonly content: string;
-        }) => Promise<SaveMarkdownFileResult>
+        }) => Promise<WriteDocumentResult>
       >()
       .mockImplementationOnce(
         () =>
@@ -342,7 +263,7 @@ describe("workspace save use case", () => {
           })
       )
       .mockResolvedValue({
-        status: "success",
+        status: "success", diskVersion: diskVersion(),
         document: document("serial.md", "dirty")
       });
     const beginInternalWrite = vi.fn();
@@ -358,7 +279,7 @@ describe("workspace save use case", () => {
     const operations = createSaveDocumentForTest({
       workspace,
       documentOperations,
-      saveMarkdownFileToPath: write,
+      writeDocument: write,
       showSaveMarkdownPathDialog: vi.fn(),
       beginInternalWrite,
       completeInternalWrite,
@@ -381,7 +302,7 @@ describe("workspace save use case", () => {
     expect(write).toHaveBeenCalledTimes(1);
 
     resolveFirstSave({
-      status: "success",
+      status: "success", diskVersion: diskVersion(),
       document: document("serial.md", "dirty")
     });
     await vi.waitFor(() => expect(resolveFirstCleanup).toBeTypeOf("function"));
@@ -408,13 +329,13 @@ describe("workspace save use case", () => {
       content: "dirty"
     });
     let releaseAdmission!: () => void;
-    const saveMarkdownFileToPath = vi.fn(async () => ({
-      status: "success" as const,
+    const writeDocument = vi.fn(async () => ({
+      status: "success" as const, diskVersion: diskVersion(),
       document: document("admission.md", "dirty")
     }));
     const operations = createSaveDocumentForTest({
       workspace,
-      saveMarkdownFileToPath,
+      writeDocument,
       showSaveMarkdownPathDialog: vi.fn(),
       beginInternalWrite: vi.fn(
         () =>
@@ -434,11 +355,11 @@ describe("workspace save use case", () => {
       tabId
     });
     await vi.waitFor(() => expect(releaseAdmission).toBeTypeOf("function"));
-    expect(saveMarkdownFileToPath).not.toHaveBeenCalled();
+    expect(writeDocument).not.toHaveBeenCalled();
 
     releaseAdmission();
     await save;
-    expect(saveMarkdownFileToPath).toHaveBeenCalledOnce();
+    expect(writeDocument).toHaveBeenCalledOnce();
   });
 
   it("keeps consecutive ordinary saves inside distinct real watcher transactions", async () => {
@@ -484,7 +405,7 @@ describe("workspace save use case", () => {
         });
       }
       return {
-        status: "success" as const,
+        status: "success" as const, diskVersion: diskVersion(),
         document: document("watch.md", "dirty")
       };
     });
@@ -493,7 +414,7 @@ describe("workspace save use case", () => {
     const operations = createSaveDocumentForTest({
       workspace,
       documentOperations,
-      saveMarkdownFileToPath: write,
+      writeDocument: write,
       showSaveMarkdownPathDialog: vi.fn(),
       beginInternalWrite,
       completeInternalWrite,
@@ -547,8 +468,8 @@ describe("workspace save use case", () => {
     const operations = createSaveDocumentForTest({
       workspace,
       documentOperations,
-      saveMarkdownFileToPath: vi.fn(async ({ path, content }) => ({
-        status: "success" as const,
+      writeDocument: vi.fn(async ({ path, content }) => ({
+        status: "success" as const, diskVersion: diskVersion(),
         document: { path, name: "saved-as.md", content, encoding: "utf-8" as const }
       })),
       showSaveMarkdownPathDialog,
@@ -596,10 +517,10 @@ describe("workspace save use case", () => {
     ).activeTabId!;
     workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "captured dirty" });
     workspace.registerWindow("window-2");
-    let resolveWrite!: (result: SaveMarkdownFileResult) => void;
-    const saveMarkdownFileToPath = vi.fn(
+    let resolveWrite!: (result: WriteDocumentResult) => void;
+    const writeDocument = vi.fn(
       () =>
-        new Promise<SaveMarkdownFileResult>((resolve) => {
+        new Promise<WriteDocumentResult>((resolve) => {
           resolveWrite = resolve;
         })
     );
@@ -610,7 +531,7 @@ describe("workspace save use case", () => {
     const recordRecentFilePath = vi.fn(async () => undefined);
     const operations = createSaveDocumentForTest({
       workspace,
-      saveMarkdownFileToPath,
+      writeDocument,
       showSaveMarkdownPathDialog: vi.fn(),
       beginInternalWrite,
       completeInternalWrite,
@@ -627,7 +548,7 @@ describe("workspace save use case", () => {
     await vi.waitFor(() => expect(resolveWrite).toBeTypeOf("function"));
     workspace.moveTabToWindow({ tabId, targetWindowId: "window-2" });
     resolveWrite({
-      status: "success",
+      status: "success", diskVersion: diskVersion(),
       document: document("moved.md", "captured dirty")
     });
 
@@ -661,7 +582,7 @@ describe("workspace save use case", () => {
     const syncWindowWatch = vi.fn(async () => undefined);
     const operations = createSaveDocumentForTest({
       workspace,
-      saveMarkdownFileToPath: vi.fn(async () => {
+      writeDocument: vi.fn(async () => {
         throw new Error("write exploded");
       }),
       showSaveMarkdownPathDialog: vi.fn(),
@@ -687,49 +608,6 @@ describe("workspace save use case", () => {
     expect(syncWindowWatch).not.toHaveBeenCalled();
   });
 
-  it("completes write tracking when the adapter returns mismatched content", async () => {
-    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
-    workspace.registerWindow("window-1");
-    const tabId = openTestDocument(workspace,
-      "window-1",
-      document("commit-throw.md", "saved")
-    ).activeTabId!;
-    workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "current" });
-    const saveMarkdownFileToPath = vi.fn(async () => ({
-        status: "success" as const,
-        document: document("commit-throw.md", "mismatched")
-      }));
-    const sender = { id: 3 };
-    const completeInternalWrite = vi.fn(async () => undefined);
-    const syncWindowWatch = vi.fn(async () => undefined);
-    const operations = createSaveDocumentForTest({
-      workspace,
-      saveMarkdownFileToPath,
-      showSaveMarkdownPathDialog: vi.fn(),
-      beginInternalWrite: vi.fn(),
-      completeInternalWrite,
-      syncWindowWatch,
-      recordRecentFilePath: vi.fn(async () => undefined),
-      reportCleanupError: vi.fn()
-    });
-
-    await expect(
-      operations.save({
-        context: sender,
-        expectedWindowId: "window-1",
-        tabId
-      })
-    ).rejects.toThrow(
-      "Ordinary save adapter content does not match the captured save content."
-    );
-
-    expect(completeInternalWrite).toHaveBeenCalledWith(
-      sender,
-      "C:/notes/commit-throw.md"
-    );
-    expect(syncWindowWatch).not.toHaveBeenCalled();
-  });
-
   it("rejects a Save As commit after an out-of-band owner change", async () => {
     const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
@@ -743,7 +621,7 @@ describe("workspace save use case", () => {
     const recordRecentFilePath = vi.fn(async () => undefined);
     const operations = createSaveDocumentForTest({
       workspace,
-      saveMarkdownFileToPath: vi.fn(),
+      writeDocument: vi.fn(),
       showSaveMarkdownPathDialog: () =>
         new Promise((resolve) => {
           resolveDialog = resolve;
@@ -789,10 +667,10 @@ describe("workspace save use case", () => {
       document("closed-save.md", "saved")
     ).activeTabId!;
     workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "captured dirty" });
-    let resolveWrite!: (result: SaveMarkdownFileResult) => void;
-    const saveMarkdownFileToPath = vi.fn(
+    let resolveWrite!: (result: WriteDocumentResult) => void;
+    const writeDocument = vi.fn(
       () =>
-        new Promise<SaveMarkdownFileResult>((resolve) => {
+        new Promise<WriteDocumentResult>((resolve) => {
           resolveWrite = resolve;
         })
     );
@@ -807,7 +685,7 @@ describe("workspace save use case", () => {
     const recordRecentFilePath = vi.fn(async () => undefined);
     const operations = createSaveDocumentForTest({
       workspace,
-      saveMarkdownFileToPath,
+      writeDocument,
       showSaveMarkdownPathDialog: vi.fn(),
       beginInternalWrite: vi.fn(async () => {
         callOrder.push("begin");
@@ -826,7 +704,7 @@ describe("workspace save use case", () => {
     await vi.waitFor(() => expect(resolveWrite).toBeTypeOf("function"));
     workspace.unregisterWindow("window-1");
     resolveWrite({
-      status: "success",
+      status: "success", diskVersion: diskVersion(),
       document: document("closed-save.md", "captured dirty")
     });
 
@@ -855,7 +733,7 @@ describe("workspace save use case", () => {
     const recordRecentFilePath = vi.fn(async () => undefined);
     const operations = createSaveDocumentForTest({
       workspace,
-      saveMarkdownFileToPath: vi.fn(),
+      writeDocument: vi.fn(),
       showSaveMarkdownPathDialog: () =>
         new Promise((resolve) => {
           resolveDialog = resolve;
@@ -910,7 +788,7 @@ describe("workspace save use case", () => {
     });
     const operations = createSaveDocumentForTest({
       workspace,
-      saveMarkdownFileToPath: vi.fn(async () => {
+      writeDocument: vi.fn(async () => {
         throw primaryError;
       }),
       showSaveMarkdownPathDialog: vi.fn(),
@@ -952,7 +830,7 @@ describe("workspace save use case", () => {
     });
     const operations = createSaveDocumentForTest({
       workspace,
-      saveMarkdownFileToPath: vi.fn(),
+      writeDocument: vi.fn(),
       showSaveMarkdownPathDialog: vi.fn(async () => {
         throw primaryError;
       }),
@@ -994,7 +872,10 @@ describe("workspace save use case", () => {
     const reportCleanupError = vi.fn();
     const operations = createSaveDocumentForTest({
       workspace,
-      saveMarkdownFileToPath: vi.fn(async () => ({ status: "cancelled" as const })),
+      writeDocument: vi.fn(async () => ({
+        status: "error" as const,
+        error: { code: "write-failed" as const, message: "unused" }
+      })),
       showSaveMarkdownPathDialog: vi.fn(),
       beginInternalWrite: vi.fn(),
       completeInternalWrite,
