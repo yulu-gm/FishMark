@@ -68,7 +68,7 @@ function createSaveOperations(
     watcher: {
       beginInternalWrite: vi.fn(),
       completeInternalWrite: vi.fn(async () => undefined),
-      syncDocumentPath: vi.fn(async () => undefined)
+      syncWindowPaths: vi.fn(async () => undefined)
     },
     recentFiles: { record: vi.fn(async () => undefined) },
     cleanupReporter: { report: vi.fn() }

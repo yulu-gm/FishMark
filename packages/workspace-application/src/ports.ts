@@ -122,7 +122,10 @@ export interface WorkspaceDialogPort {
 }
 
 export interface WorkspaceWatcherPort<TRuntimeContext> {
-  syncDocumentPath(context: TRuntimeContext, targetPath: string | null): Promise<void>;
+  syncWindowPaths(
+    context: TRuntimeContext,
+    targetPaths: readonly (string | null)[]
+  ): Promise<void>;
   beginInternalWrite(context: TRuntimeContext, targetPath: string): Promise<void>;
   completeInternalWrite(context: TRuntimeContext, targetPath: string): Promise<void>;
 }

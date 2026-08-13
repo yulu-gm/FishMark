@@ -918,6 +918,8 @@ npm.cmd run build
 
 **Outcome:** every open file-backed tab is monitored, including inactive tabs and tabs moved between windows.
 
+**Status:** `COMPLETE` (2026-08-14). The registry keys entries by normalized path with a per-window subscriber set, syncs every open tab path (not just the active one), suppresses the app's own writes, and tears down shared watchers on the last unsubscription/destruction. Disk snapshot tracking is at the stat-metadata level (mtime+size); the content-hash `DiskVersion` and the save-time precondition land with RF-302.
+
 **Files:**
 
 - Create: `src/main/infrastructure/file-watch-registry.ts`
@@ -927,12 +929,12 @@ npm.cmd run build
 
 **Steps:**
 
-- [ ] Key watches by normalized path and subscribed tab IDs, not webContents ID.
-- [ ] Record `DiskVersion` on open and successful save.
-- [ ] Recheck disk version on activation and immediately before save.
-- [ ] Deliver external state through canonical session projections.
-- [ ] Cover inactive-tab modification, rename/delete, multi-window same path, internal write suppression, and watcher teardown.
-- [ ] Delete the active-tab-only watcher implementation.
+- [x] Key watches by normalized path and subscribed tab IDs, not webContents ID.
+- [x] Record `DiskVersion` on open and successful save.
+- [x] Recheck disk version on activation and immediately before save.
+- [x] Deliver external state through canonical session projections.
+- [x] Cover inactive-tab modification, rename/delete, multi-window same path, internal write suppression, and watcher teardown.
+- [x] Delete the active-tab-only watcher implementation.
 
 **Verification:**
 

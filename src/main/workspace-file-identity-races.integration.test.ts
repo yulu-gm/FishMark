@@ -49,7 +49,7 @@ function createSaveDocumentForTest(
     watcher: {
       beginInternalWrite,
       completeInternalWrite,
-      syncDocumentPath: (context) => syncWindowWatch(context, "")
+      syncWindowPaths: (context) => syncWindowWatch(context, "")
     },
     recentFiles: { record: recordRecentFilePath },
     cleanupReporter: { report: reportCleanupError }

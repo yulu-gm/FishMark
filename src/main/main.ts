@@ -65,7 +65,7 @@ import { createRuntimeWindowManager, resolveAppRuntimeMode } from "./runtime-win
 import { resolveWindowIconPath } from "./window-icon";
 import { createAppUpdateCheckRunner } from "./app-update-check-runner";
 import { resolveAutoUpdaterModule } from "./resolve-auto-updater-module";
-import { createExternalFileWatchService } from "./external-file-watch-service";
+import { createFileWatchRegistry } from "./infrastructure/file-watch-registry";
 import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator";
 import { createFileIdentityResolver } from "./file-identity-resolver";
 import { createWorkspaceWindowCloseConfirmationHandler } from "./workspace-window-close-confirmation-handler";
@@ -377,12 +377,12 @@ app.whenReady().then(async () => {
   const fontCatalogService = createFontCatalogService({
     platform: process.platform
   });
-  const externalFileWatchService = createExternalFileWatchService();
+  const fileWatchRegistry = createFileWatchRegistry();
   const workspaceState = createWorkspaceState({ createTextBuffer: createCodeMirrorTextBuffer });
   const workspaceWatcher = {
-    syncDocumentPath: externalFileWatchService.syncDocumentPath,
-    beginInternalWrite: externalFileWatchService.beginInternalWrite,
-    completeInternalWrite: externalFileWatchService.completeInternalWrite
+    syncWindowPaths: fileWatchRegistry.syncWindowPaths,
+    beginInternalWrite: fileWatchRegistry.beginInternalWrite,
+    completeInternalWrite: fileWatchRegistry.completeInternalWrite
   };
   const workspaceTabOperations = createKeyedOperationCoordinator<string>();
   const workspaceFileLocationOperations =

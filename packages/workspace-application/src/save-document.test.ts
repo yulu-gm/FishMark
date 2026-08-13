@@ -66,7 +66,7 @@ describe("createSaveDocument", () => {
       watcher: {
         beginInternalWrite: vi.fn(),
         completeInternalWrite: vi.fn(),
-        syncDocumentPath: vi.fn()
+        syncWindowPaths: vi.fn()
       },
       recentFiles: { record: vi.fn() },
       cleanupReporter: { report: vi.fn() }

@@ -6,7 +6,7 @@ import { createSaveDocument as createSaveDocumentWithPorts } from "@fishmark/wor
 
 import { EXTERNAL_MARKDOWN_FILE_CHANGED_EVENT } from "../shared/external-file-change";
 import type { SaveMarkdownFileResult } from "../shared/save-markdown-file";
-import { createExternalFileWatchService } from "./external-file-watch-service";
+import { createFileWatchRegistry } from "./infrastructure/file-watch-registry";
 import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator";
 import type { SaveMarkdownPathDialogResult } from "./save-markdown-file";
 import { openTestDocument } from "./workspace.test-helper";
@@ -58,7 +58,7 @@ function createSaveDocumentForTest<TSender>(
     watcher: {
       beginInternalWrite,
       completeInternalWrite,
-      syncDocumentPath: (sender) => syncWindowWatch(sender, "window-1")
+      syncWindowPaths: (sender) => syncWindowWatch(sender, "window-1")
     },
     recentFiles: { record: recordRecentFilePath },
     cleanupReporter: { report: reportCleanupError }
@@ -461,14 +461,14 @@ describe("workspace save use case", () => {
       send: vi.fn<(channel: string, payload: unknown) => void>(),
       once: vi.fn<(event: "destroyed", listener: () => void) => void>()
     };
-    const watchService = createExternalFileWatchService({
+    const watchService = createFileWatchRegistry({
       watch: vi.fn((targetPath, listener) => {
         watchCallbacks.set(targetPath, listener);
         return { close: vi.fn() };
       }),
       stat
     });
-    await watchService.syncDocumentPath(sender, "C:/notes/watch.md");
+    await watchService.syncWindowPaths(sender, ["C:/notes/watch.md"]);
     let writeCount = 0;
     let releaseFirstWrite!: () => void;
     const write = vi.fn(async () => {
@@ -499,10 +499,9 @@ describe("workspace save use case", () => {
       completeInternalWrite,
       syncWindowWatch: async (candidate, windowId) => {
         const projection = workspace.getWindowProjectionOrNull(windowId);
-        await watchService.syncDocumentPath(
-          candidate,
+        await watchService.syncWindowPaths(candidate, [
           projection?.activeDocument?.path ?? null
-        );
+        ]);
       },
       recordRecentFilePath: vi.fn(async () => undefined),
       reportCleanupError: vi.fn()
@@ -526,7 +525,7 @@ describe("workspace save use case", () => {
 
     expect(beginInternalWrite).toHaveBeenCalledTimes(2);
     expect(completeInternalWrite).toHaveBeenCalledTimes(2);
-    expect(stat).toHaveBeenCalledTimes(5);
+    expect(stat).toHaveBeenCalledTimes(3);
     expect(sender.send).not.toHaveBeenCalledWith(
       EXTERNAL_MARKDOWN_FILE_CHANGED_EVENT,
       expect.anything()

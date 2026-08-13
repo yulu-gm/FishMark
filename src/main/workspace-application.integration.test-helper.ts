@@ -39,7 +39,7 @@ export function createTestCloseWorkspace(
     watcher: {
       beginInternalWrite: async () => undefined,
       completeInternalWrite: async () => undefined,
-      syncDocumentPath: async () => undefined
+      syncWindowPaths: async () => undefined
     },
     recentFiles: { record: async () => undefined },
     cleanupReporter: { report: () => undefined }

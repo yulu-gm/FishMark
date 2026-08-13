@@ -70,7 +70,10 @@ export function createWorkspaceApplication<TContext>(dependencies: {
   >;
   documentOperations: Pick<KeyedOperationCoordinator<string>, "runExclusive">;
   watcher: {
-    syncDocumentPath(context: TContext, targetPath: string | null): Promise<void>;
+    syncWindowPaths(
+      context: TContext,
+      targetPaths: readonly (string | null)[]
+    ): Promise<void>;
   };
   open: {
     open(input: { readonly windowId: string }): Promise<WorkspaceOpenResult>;
@@ -130,9 +133,9 @@ export function createWorkspaceApplication<TContext>(dependencies: {
     committed: boolean
   ): Promise<WorkspaceProjectionCommandResult> {
     try {
-      await dependencies.watcher.syncDocumentPath(
+      await dependencies.watcher.syncWindowPaths(
         context,
-        projection.activeDocument?.path ?? null
+        projection.tabs.map((tab) => tab.path)
       );
       return { kind: "success", projection };
     } catch (error) {
@@ -153,9 +156,9 @@ export function createWorkspaceApplication<TContext>(dependencies: {
     projection: WorkspaceMoveProjection
   ): Promise<WorkspaceMoveCommandResult> {
     try {
-      await dependencies.watcher.syncDocumentPath(
+      await dependencies.watcher.syncWindowPaths(
         context,
-        projection.sourceWindowSnapshot.activeDocument?.path ?? null
+        projection.sourceWindowSnapshot.tabs.map((tab) => tab.path)
       );
       return { kind: "success", projection };
     } catch (error) {
@@ -333,9 +336,9 @@ export function createWorkspaceApplication<TContext>(dependencies: {
     },
     syncWindow(input: { readonly context: TContext; readonly windowId: string }) {
       const projection = dependencies.workspace.getWindowProjectionOrNull(input.windowId);
-      return dependencies.watcher.syncDocumentPath(
+      return dependencies.watcher.syncWindowPaths(
         input.context,
-        projection?.activeDocument?.path ?? null
+        projection?.tabs.map((tab) => tab.path) ?? []
       );
     }
   };

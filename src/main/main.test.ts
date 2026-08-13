@@ -58,7 +58,7 @@ describe("main process window wiring", () => {
   it("registers IPC handlers for fonts, preferences, and themes", () => {
     const mainSource = readMainSource();
 
-    expect(mainSource).toContain('import { createExternalFileWatchService } from "./external-file-watch-service"');
+    expect(mainSource).toContain('import { createFileWatchRegistry } from "./infrastructure/file-watch-registry"');
     expect(mainSource).toContain('import { resolveTemporaryImageDirectory, selectTemporaryImageDirectory } from "./temporary-image-directory"');
     expect(mainSource).toContain('ipcMain.handle(GET_PREFERENCES_CHANNEL');
     expect(mainSource).toContain('ipcMain.handle(UPDATE_PREFERENCES_CHANNEL');

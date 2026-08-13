@@ -63,7 +63,7 @@ describe("createWorkspaceApplication", () => {
     const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     const events: string[] = [];
-    const syncDocumentPath = vi.fn(async () => {
+    const syncWindowPaths = vi.fn(async () => {
       expect(workspace.getWindowProjection("window-1").tabs).toHaveLength(1);
       events.push("watch");
     });
@@ -83,7 +83,7 @@ describe("createWorkspaceApplication", () => {
       documentOperations: {
         runExclusive: async (_key, operation) => operation()
       },
-      watcher: { syncDocumentPath }
+      watcher: { syncWindowPaths }
     });
 
     const created = await application.createTab({
@@ -109,7 +109,7 @@ describe("createWorkspaceApplication", () => {
         runExclusive: async (_key, operation) => operation()
       },
       watcher: {
-        syncDocumentPath: vi.fn(async () => {
+        syncWindowPaths: vi.fn(async () => {
           throw new Error("watch unavailable");
         })
       }
@@ -145,7 +145,7 @@ describe("createWorkspaceApplication", () => {
         runExclusive: async (_key, operation) => operation()
       },
       watcher: {
-        syncDocumentPath: async () => Promise.reject(new Error("watch unavailable"))
+        syncWindowPaths: async () => Promise.reject(new Error("watch unavailable"))
       }
     });
 
@@ -176,7 +176,7 @@ describe("createWorkspaceApplication", () => {
         runExclusive: async (_key, operation) => operation()
       },
       watcher: {
-        syncDocumentPath: async () => {
+        syncWindowPaths: async () => {
           events.push("watch");
         }
       },

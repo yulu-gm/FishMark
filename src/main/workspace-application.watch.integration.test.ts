@@ -1,10 +1,7 @@
-import type { Stats } from "node:fs";
-
 import { createStringTextBuffer, createWorkspaceState, fileIdentity } from "@fishmark/workspace-domain";
 import { describe, expect, it, vi } from "vitest";
 import { createWorkspaceApplication } from "@fishmark/workspace-application";
 
-import { createExternalFileWatchService } from "./external-file-watch-service";
 import { openTestDocument } from "./workspace.test-helper";
 
 const document = (name: string) => ({
@@ -28,13 +25,18 @@ function deferred(): {
   };
 }
 
-const documentOperations = { runExclusive: async <T>(_key: string, operation: () => Promise<T>) => operation() };
+const documentOperations = {
+  runExclusive: async <T>(_key: string, operation: () => Promise<T>) => operation()
+};
 
 function createWatchApplication<TContext>(input: {
   readonly workspace: ReturnType<typeof createWorkspaceState>;
   readonly documentOperations: typeof documentOperations;
   readonly watcher: {
-    syncDocumentPath(context: TContext, targetPath: string | null): Promise<void>;
+    syncWindowPaths(
+      context: TContext,
+      targetPaths: readonly (string | null)[]
+    ): Promise<void>;
   };
 }) {
   const { workspace } = input;
@@ -80,85 +82,61 @@ function createWatchApplication<TContext>(input: {
 }
 
 describe("workspace watcher use case", () => {
-  it("forwards a newer window intent without waiting for an older service I/O", async () => {
+  it("syncs every open tab path, not only the active tab", async () => {
     const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
-    const tabA = openTestDocument(workspace, "window-1", document("a.md")).activeTabId!;
-    const tabB = openTestDocument(workspace, "window-1", document("b.md")).activeTabId!;
-    workspace.activateTab("window-1", tabA);
-    const firstSnapshot = deferred();
-    const stat = vi.fn((targetPath: string): Promise<Stats> =>
-      targetPath.endsWith("a.md")
-        ? firstSnapshot.promise.then(
-            () => ({ mtimeMs: 1, size: 10 }) as Stats
-          )
-        : Promise.resolve({ mtimeMs: 2, size: 20 } as Stats)
-    );
-    const watch = vi.fn(() => ({ close: vi.fn() }));
-    const service = createExternalFileWatchService({ watch, stat });
-    const syncDocumentPath = vi.fn(service.syncDocumentPath);
+    openTestDocument(workspace, "window-1", document("a.md"));
+    openTestDocument(workspace, "window-1", document("b.md"));
+    const syncWindowPaths = vi.fn(async () => undefined);
     const application = createWatchApplication({
       workspace,
       documentOperations,
-      watcher: { syncDocumentPath }
+      watcher: { syncWindowPaths }
     });
-    const sender = { id: 1, send: vi.fn() };
+    const sender = { id: 1 };
 
-    const syncA = application.syncWindow({ context: sender, windowId: "window-1" });
-    await vi.waitFor(() =>
-      expect(syncDocumentPath).toHaveBeenCalledWith(sender, "C:/notes/a.md")
-    );
-    workspace.activateTab("window-1", tabB);
-    const syncB = application.syncWindow({ context: sender, windowId: "window-1" });
-    await expect(syncB).resolves.toBeUndefined();
-    await expect(
-      service.beginInternalWrite(sender, "C:/notes/b.md")
-    ).resolves.toBeUndefined();
-    expect(stat).toHaveBeenCalledWith("C:/notes/b.md");
-    expect(watch).toHaveBeenCalledWith("C:/notes/b.md", expect.any(Function));
+    await application.syncWindow({ context: sender, windowId: "window-1" });
 
-    expect(syncDocumentPath.mock.calls).toEqual([
-      [sender, "C:/notes/a.md"],
-      [sender, "C:/notes/b.md"]
+    expect(syncWindowPaths).toHaveBeenCalledWith(sender, [
+      "C:/notes/a.md",
+      "C:/notes/b.md"
     ]);
-    firstSnapshot.resolve();
-    await syncA;
   });
 
-  it("syncs missing windows and pathless active documents to null", async () => {
+  it("syncs a pathless tab as null and a missing window as an empty list", async () => {
     const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     workspace.createUntitledTab("window-1");
-    const syncDocumentPath = vi.fn(async () => undefined);
+    const syncWindowPaths = vi.fn(async () => undefined);
     const application = createWatchApplication({
       workspace,
       documentOperations,
-      watcher: { syncDocumentPath }
+      watcher: { syncWindowPaths }
     });
     const sender = { id: 1 };
 
     await application.syncWindow({ context: sender, windowId: "window-1" });
     await application.syncWindow({ context: sender, windowId: "window-missing" });
 
-    expect(syncDocumentPath.mock.calls).toEqual([
-      [sender, null],
-      [sender, null]
+    expect(syncWindowPaths.mock.calls).toEqual([
+      [sender, [null]],
+      [sender, []]
     ]);
   });
 
-  it("forwards a later intent after a service failure", async () => {
+  it("propagates a watcher failure", async () => {
     const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
     openTestDocument(workspace, "window-1", document("a.md"));
     const failure = new Error("stat failed");
-    const syncDocumentPath = vi
-      .fn<(sender: { id: number }, path: string | null) => Promise<void>>()
+    const syncWindowPaths = vi
+      .fn<(sender: { id: number }, paths: readonly (string | null)[]) => Promise<void>>()
       .mockRejectedValueOnce(failure)
       .mockResolvedValue(undefined);
     const application = createWatchApplication({
       workspace,
       documentOperations,
-      watcher: { syncDocumentPath }
+      watcher: { syncWindowPaths }
     });
     const sender = { id: 1 };
 
@@ -168,7 +146,7 @@ describe("workspace watcher use case", () => {
     await expect(
       application.syncWindow({ context: sender, windowId: "window-1" })
     ).resolves.toBeUndefined();
-    expect(syncDocumentPath).toHaveBeenCalledTimes(2);
+    expect(syncWindowPaths).toHaveBeenCalledTimes(2);
   });
 
   it("does not serialize independent windows", async () => {
@@ -178,9 +156,9 @@ describe("workspace watcher use case", () => {
     openTestDocument(workspace, "window-1", document("a.md"));
     openTestDocument(workspace, "window-2", document("b.md"));
     const firstSync = deferred();
-    const syncDocumentPath = vi.fn(
-      async (_sender: { id: number }, path: string | null) => {
-        if (path === "C:/notes/a.md") {
+    const syncWindowPaths = vi.fn(
+      async (_sender: { id: number }, paths: readonly (string | null)[]) => {
+        if (paths.includes("C:/notes/a.md")) {
           await firstSync.promise;
         }
       }
@@ -188,7 +166,7 @@ describe("workspace watcher use case", () => {
     const application = createWatchApplication({
       workspace,
       documentOperations,
-      watcher: { syncDocumentPath }
+      watcher: { syncWindowPaths }
     });
 
     const syncA = application.syncWindow({
@@ -198,10 +176,7 @@ describe("workspace watcher use case", () => {
     await expect(
       application.syncWindow({ context: { id: 2 }, windowId: "window-2" })
     ).resolves.toBeUndefined();
-    expect(syncDocumentPath).toHaveBeenCalledWith(
-      { id: 2 },
-      "C:/notes/b.md"
-    );
+    expect(syncWindowPaths).toHaveBeenCalledWith({ id: 2 }, ["C:/notes/b.md"]);
     firstSync.resolve();
     await syncA;
   });
