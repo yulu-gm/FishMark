@@ -12,16 +12,21 @@ import { WorkspaceShell } from "./WorkspaceShell";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+let latestEditorOnChange: unknown;
+
 vi.mock("../code-editor-view", () => ({
-  CodeEditorView: ({ initialContent, onChange, viewMode }: {
+  CodeEditorView: (props: {
     initialContent: string;
-    onChange: (content: string, identity: {
+    onChange?: (content: string, identity: {
       tabId: string;
       epoch: number;
       loadRevision: number;
     }) => void;
     viewMode?: "wysiwym" | "source";
-  }) =>
+  }) => {
+    const { initialContent, onChange, viewMode } = props;
+    latestEditorOnChange = onChange;
+    return (
     createElement(
       "div",
       {
@@ -37,7 +42,7 @@ vi.mock("../code-editor-view", () => ({
         "button",
         {
           type: "button",
-          onClick: () => onChange("# Changed\n", {
+          onClick: () => onChange?.("# Changed\n", {
             tabId: "tab-1",
             epoch: 1,
             loadRevision: 1
@@ -45,7 +50,8 @@ vi.mock("../code-editor-view", () => ({
         },
         "Change draft"
       )
-    )
+    ));
+  }
 }));
 
 let root: Root | null = null;
@@ -58,6 +64,7 @@ afterEach(async () => {
     });
   }
   root = null;
+  latestEditorOnChange = undefined;
   container?.remove();
   container = null;
 });
@@ -95,7 +102,9 @@ function readSvgFingerprint(svg: SVGSVGElement | string) {
 
 it("renders workspace tabs and delegates commands without owning persistence logic", async () => {
   const onTabActivate = vi.fn();
-  const onDraftChange = vi.fn();
+  const onDocumentChangeFrame = vi.fn();
+  const onDiscardedDocumentText = vi.fn();
+  const onPendingDocumentChangesChange = vi.fn();
   const onNavigateToOutlineItem = vi.fn();
   const onEditorViewModeChange = vi.fn();
   container = document.createElement("div");
@@ -237,7 +246,10 @@ it("renders workspace tabs and delegates commands without owning persistence log
         onClearRecentFile: vi.fn(),
         onWorkbenchSurfaceRuntimeModeChange: vi.fn(),
         onNavigateToOutlineItem,
-        onDraftChange,
+        onDocumentChangeFrame,
+        onDiscardedDocumentText,
+        onPendingDocumentChangesChange,
+        onEditorBarrierChange: vi.fn(),
         onEditorTransitionApplied: vi.fn(),
         onEditorLoadRevisionApplied: vi.fn()
       })
@@ -248,10 +260,6 @@ it("renders workspace tabs and delegates commands without owning persistence log
 
   await act(async () => {
     buttons.find((button) => button.textContent?.includes("draft.md"))?.click();
-  });
-
-  await act(async () => {
-    buttons.find((button) => button.textContent === "Change draft")?.click();
   });
 
   await act(async () => {
@@ -273,11 +281,7 @@ it("renders workspace tabs and delegates commands without owning persistence log
   });
 
   expect(onTabActivate).toHaveBeenCalledWith("tab-2");
-  expect(onDraftChange).toHaveBeenCalledWith("# Changed\n", {
-    tabId: "tab-1",
-    epoch: 1,
-    loadRevision: 1
-  });
+  expect(latestEditorOnChange).toBeUndefined();
   expect(onNavigateToOutlineItem).toHaveBeenCalledWith(3);
   expect(onEditorViewModeChange).toHaveBeenCalledWith("source");
   expect(container.querySelector('[data-fishmark-region="workspace-header"]')).toBeNull();
@@ -462,7 +466,10 @@ it("opens find and replace controls and delegates search actions to the editor",
         onClearRecentFile: vi.fn(),
         onWorkbenchSurfaceRuntimeModeChange: vi.fn(),
         onNavigateToOutlineItem: vi.fn(),
-        onDraftChange: vi.fn(),
+        onDocumentChangeFrame: vi.fn(),
+        onDiscardedDocumentText: vi.fn(),
+        onPendingDocumentChangesChange: vi.fn(),
+        onEditorBarrierChange: vi.fn(),
         onEditorTransitionApplied: vi.fn(),
         onEditorLoadRevisionApplied: vi.fn()
       })
@@ -642,7 +649,10 @@ it("renders recent files without the old empty headline and delegates open and c
         onClearRecentFile,
         onWorkbenchSurfaceRuntimeModeChange: vi.fn(),
         onNavigateToOutlineItem: vi.fn(),
-        onDraftChange: vi.fn(),
+        onDocumentChangeFrame: vi.fn(),
+        onDiscardedDocumentText: vi.fn(),
+        onPendingDocumentChangesChange: vi.fn(),
+        onEditorBarrierChange: vi.fn(),
         onEditorTransitionApplied: vi.fn(),
         onEditorLoadRevisionApplied: vi.fn()
       })

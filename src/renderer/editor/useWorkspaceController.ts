@@ -10,6 +10,11 @@ import {
   getActiveTabId
 } from "./editor-shell-state";
 import type { EditorLoadIdentity } from "./editor-load-identity";
+import type {
+  CodeEditorDiscardedDocumentText,
+  CodeEditorDocumentChangeFrame,
+  CodeEditorRemotePatchResult
+} from "../code-editor";
 import {
   WorkspaceRendererApplication,
   type WorkspaceApplicationOutcome,
@@ -52,7 +57,10 @@ export function useWorkspaceController(input: {
     application.getState
   );
 
-  useEffect(() => () => application.dispose(), [application]);
+  useEffect(() => {
+    application.start();
+    return () => application.scheduleDispose();
+  }, [application]);
 
   const notifyFailure = useCallback((outcome: WorkspaceApplicationOutcome<unknown>): void => {
     if (
@@ -93,6 +101,49 @@ export function useWorkspaceController(input: {
     identity: EditorLoadIdentity;
     content: string;
   }): boolean => application.recordEditorChange(inputValue), [application]);
+  const recordDocumentChangeFrame = useCallback(
+    (frame: CodeEditorDocumentChangeFrame): boolean =>
+      application.recordEditorDocumentChangeFrame(frame),
+    [application]
+  );
+  const recordDiscardedDocumentText = useCallback(
+    (discarded: CodeEditorDiscardedDocumentText): boolean =>
+      application.recordDiscardedEditorDocumentText(discarded),
+    [application]
+  );
+  const recordPendingDocumentChanges = useCallback(
+    (pending: { hasPending: boolean; identity: EditorLoadIdentity | null }): void =>
+      application.recordEditorFramePending(pending),
+    [application]
+  );
+  const registerEditorBarrier = useCallback(
+    (barrier: (() => Promise<{
+      readonly text: string;
+      readonly identity: EditorLoadIdentity | null;
+    }>) | null): void => application.registerEditorBarrier(barrier),
+    [application]
+  );
+  const registerEditorRemotePatch = useCallback(
+    (patch: ((input: {
+      readonly identity: EditorLoadIdentity;
+      readonly expectedBefore: string;
+      readonly expectedAfter: string;
+      readonly from: number;
+      readonly to: number;
+      readonly insert: string;
+    }) => Promise<CodeEditorRemotePatchResult>) | null): void =>
+      application.registerEditorRemotePatch(patch),
+    [application]
+  );
+  const registerEditorCanonicalRestore = useCallback(
+    (restore: ((input: {
+      readonly identity: EditorLoadIdentity;
+      readonly expectedBefore: string;
+      readonly canonicalText: string;
+    }) => Promise<{ readonly kind: "restored" | "stale-identity" | "text-mismatch" | "disposed" }>) | null) =>
+      application.registerEditorCanonicalRestore(restore),
+    [application]
+  );
 
   const acknowledgeEditorLoad = useCallback(
     (identity: EditorLoadIdentity): boolean => application.acknowledgeEditorLoad(identity),
@@ -221,6 +272,14 @@ export function useWorkspaceController(input: {
       application.runSaveTransaction(saveInput),
     [application]
   );
+  const runWithActiveEditBarrier = useCallback(
+    <T,>(operation: (
+      document: NonNullable<WorkspaceWindowSnapshot["activeDocument"]>,
+      sealedText: string
+    ) => Promise<T>): Promise<WorkspaceApplicationOutcome<T>> =>
+      application.runWithActiveEditBarrier(operation),
+    [application]
+  );
 
   return {
     state,
@@ -228,11 +287,18 @@ export function useWorkspaceController(input: {
     getActiveDocument: getCurrentActiveDocument,
     getActiveTabId: getCurrentActiveTabId,
     activeDocument: getActiveDocument(state),
+    editorViewSnapshot: application.getEditorViewSnapshot(),
     editorLoadRevision: state.editorLoadRevision,
     editorEpoch: state.editorEpoch,
     editorTransition: state.editorTransition,
     flushActiveWorkspaceDraft,
     updateDraft,
+    recordDocumentChangeFrame,
+    recordDiscardedDocumentText,
+    recordPendingDocumentChanges,
+    registerEditorBarrier,
+    registerEditorRemotePatch,
+    registerEditorCanonicalRestore,
     acknowledgeEditorLoad,
     acknowledgeEditorTransition,
     loadInitialWorkspaceSnapshot,
@@ -246,6 +312,7 @@ export function useWorkspaceController(input: {
     detachWorkspaceTab,
     reloadWorkspaceTabFromPath,
     confirmWorkspaceWindowClose,
-    runSaveTransaction
+    runSaveTransaction,
+    runWithActiveEditBarrier
   };
 }

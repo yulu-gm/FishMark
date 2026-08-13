@@ -63,7 +63,7 @@ export function useEditorApplicationController(input: {
     runAutosave: saveController.runAutosave,
     resetAutosaveRuntime: saveController.resetAutosaveRuntime,
     getActiveTabId: workspaceController.getActiveTabId,
-    updateDraft: workspaceController.updateDraft,
+    recordDocumentChangeFrame: workspaceController.recordDocumentChangeFrame,
     activateWorkspaceTab: async (tabId) => {
       await workspaceController.activateWorkspaceTab(tabId);
     },
@@ -73,7 +73,7 @@ export function useEditorApplicationController(input: {
   const {
     confirmWorkspaceWindowClose: confirmWorkspaceWindowCloseRequest,
     createUntitledMarkdown: createUntitledWorkspaceTab,
-    flushActiveWorkspaceDraft,
+    runWithActiveEditBarrier,
     getActiveDocument,
     openMarkdown: openWorkspaceMarkdown,
     openMarkdownFromPath: openWorkspaceMarkdownFromPath,
@@ -155,24 +155,33 @@ export function useEditorApplicationController(input: {
     }
 
     try {
-      await flushActiveWorkspaceDraft();
-      const {
-        collectReadableStyleSheetText,
-        collectRootExportAttributes,
-        createFishmarkExportHtml
-      } = await import("../export-html");
-
-      const html = createFishmarkExportHtml({
-        markdown: getEditorContent(),
-        title: activeDocument.name,
-        cssText: collectReadableStyleSheetText(document),
-        rootAttributes: collectRootExportAttributes(document)
+      const barrier = await runWithActiveEditBarrier(async (barrierDocument, sealedText) => {
+        const markdown = sealedText;
+        const {
+          collectReadableStyleSheetText,
+          collectRootExportAttributes,
+          createFishmarkExportHtml
+        } = await import("../export-html");
+        const html = createFishmarkExportHtml({
+          markdown,
+          title: barrierDocument.name,
+          cssText: collectReadableStyleSheetText(document),
+          rootAttributes: collectRootExportAttributes(document)
+        });
+        return fishmark.exportHtmlFile({
+          tabId: barrierDocument.tabId,
+          currentPath: barrierDocument.path,
+          html
+        });
       });
-      const result = await fishmark.exportHtmlFile({
-        tabId: activeDocument.tabId,
-        currentPath: activeDocument.path,
-        html
-      });
+      if (barrier.kind !== "committed") {
+        throw barrier.kind === "failed" ||
+          barrier.kind === "failed-reconciled" ||
+          barrier.kind === "canonical-unavailable"
+          ? barrier.error
+          : new Error(`Document export barrier ended with ${barrier.kind}.`);
+      }
+      const result = barrier.value;
 
       if (result.status === "error") {
         showNotification({
@@ -196,9 +205,8 @@ export function useEditorApplicationController(input: {
     }
   }, [
     fishmark,
-    flushActiveWorkspaceDraft,
     getActiveDocument,
-    getEditorContent,
+    runWithActiveEditBarrier,
     showNotification
   ]);
 

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, createElement, createRef, useEffect } from "react";
+import { act, createElement, createRef, StrictMode, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
 
@@ -59,6 +59,30 @@ function createBridge(overrides: Partial<Window["fishmark"]> = {}): Window["fish
 }
 
 describe("useWorkspaceController", () => {
+  it("keeps exactly one projection subscription through StrictMode effect rehearsal", async () => {
+    const detach = vi.fn();
+    const onDocumentProjection = vi.fn(() => detach);
+    const latestRef = createRef<Controller>();
+    const root = createRoot(document.createElement("div"));
+    function Probe(): null {
+      const controller = useWorkspaceController({
+        fishmark: createBridge({ onDocumentProjection }),
+        initialSnapshot: createSnapshot(),
+        getEditorContent: () => "# Initial\n",
+        showNotification: vi.fn()
+      });
+      useEffect(() => { latestRef.current = controller; }, [controller]);
+      return null;
+    }
+
+    act(() => root.render(createElement(StrictMode, null, createElement(Probe))));
+    expect(latestRef.current).not.toBeNull();
+    expect(onDocumentProjection).toHaveBeenCalledTimes(1);
+    await act(async () => root.unmount());
+    await Promise.resolve();
+    expect(detach).toHaveBeenCalledTimes(1);
+  });
+
   it("subscribes React state to the application service and records only acknowledged edits", async () => {
     const snapshot = createSnapshot();
     const { latestRef, root } = renderController({

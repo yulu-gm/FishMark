@@ -1,8 +1,22 @@
 import type { SaveMarkdownFileResult } from "../../shared/save-markdown-file";
+import type { DocumentTextChange } from "../../shared/document-edit";
 import type {
   ReloadWorkspaceTabFromPathError,
   WorkspaceWindowSnapshot
 } from "../../shared/workspace";
+import type {
+  CodeEditorDiscardedDocumentText,
+  CodeEditorDocumentChangeFrame,
+  CodeEditorRemotePatchResult
+} from "../code-editor";
+import {
+  WorkspaceEditClient,
+  type WorkspaceEditBarrierLease,
+  type WorkspaceEditClientStateChange,
+  type WorkspaceEditConflictClaim,
+  type WorkspaceEditTabBinding
+} from "../application/workspace-edit-client";
+import { isPendingEditQueueDirty } from "../application/pending-edit-queue";
 import {
   applyWorkspaceSnapshot,
   createInitialEditorShellState,
@@ -27,6 +41,7 @@ const DRAFT_DRAIN_LIMIT = 16;
 
 export type EditorTransitionReason =
   | "reloading"
+  | "recovering"
   | "closing-tab"
   | "detaching-tab"
   | "closing-window";
@@ -52,6 +67,9 @@ export type WorkspaceRendererBridge = Pick<
   | "reorderWorkspaceTab"
   | "saveMarkdownFile"
   | "saveMarkdownFileAs"
+  | "applyDocumentEdits"
+  | "flushDocumentEdits"
+  | "onDocumentProjection"
   | "updateWorkspaceTabDraft"
 >;
 
@@ -91,6 +109,42 @@ export type WorkspaceRendererTestAdapter = Readonly<{
   saveDocument: () => Promise<WorkspaceSaveOutcome>;
 }>;
 
+type EditorBarrierSnapshot = Readonly<{
+  text: string;
+  identity: EditorLoadIdentity | null;
+}>;
+
+type AcquiredEditBarrier = Readonly<{
+  lease: WorkspaceEditBarrierLease | null;
+  sealedText: string | null;
+}>;
+
+type EditorRemotePatch = (input: {
+  readonly identity: EditorLoadIdentity;
+  readonly expectedBefore: string;
+  readonly expectedAfter: string;
+  readonly from: number;
+  readonly to: number;
+  readonly insert: string;
+}) => Promise<CodeEditorRemotePatchResult>;
+
+type EditorCanonicalRestore = (input: {
+  readonly identity: EditorLoadIdentity;
+  readonly expectedBefore: string;
+  readonly canonicalText: string;
+}) => Promise<{ readonly kind: "restored" | "stale-identity" | "text-mismatch" | "disposed" }>;
+
+type RecoveryRecord = Readonly<{
+  readonly sourceBinding: WorkspaceEditTabBinding;
+  readonly localText: string;
+  readonly canonicalText?: string;
+  readonly canonicalRevision: number;
+  readonly sourceRestored: boolean;
+  readonly phase: "captured" | "creating" | "applying" | "blocked";
+  readonly recoverySnapshot?: WorkspaceWindowSnapshot;
+  readonly recoveryBinding?: WorkspaceEditTabBinding;
+}>;
+
 type CanonicalWorkspaceState =
   | Readonly<{ kind: "known"; snapshot: WorkspaceWindowSnapshot }>
   | Readonly<{
@@ -128,12 +182,22 @@ class WorkspaceRendererApplicationDisposedError extends Error {
   }
 }
 
+class WorkspaceRecoveryPendingError extends Error {
+  constructor() { super("A local recovery payload must be preserved before this operation can proceed."); }
+}
+
 export class WorkspaceRendererApplication {
   private readonly bridge: WorkspaceRendererBridge;
   private readonly readEditorContent: () => string;
   private readonly coordinator = new WorkspaceMutationCoordinator();
   private readonly outbox = new WorkspaceDraftOutbox();
   private readonly listeners = new Set<() => void>();
+  private readonly editClient: WorkspaceEditClient;
+  private readonly editBindings = new Map<string, {
+    identity: EditorLoadIdentity;
+    readonly binding: WorkspaceEditTabBinding;
+  }>();
+  private readonly recoveryByTab = new Map<string, RecoveryRecord>();
   private state: WorkspaceRendererApplicationState;
   private canonical: CanonicalWorkspaceState;
   private editorBinding: EditorLoadIdentity | null = null;
@@ -141,8 +205,26 @@ export class WorkspaceRendererApplication {
   private activationGeneration = 0;
   private editorTransitionSequence = 0;
   private pendingEditorTransitionBarrier: PendingEditorTransitionBarrier | null = null;
+  private adapterFramePendingIdentity: EditorLoadIdentity | null = null;
   private disposed = false;
+  private lifecycleEpoch = 0;
   private pendingOperationKind: string | null = null;
+  // The legacy outbox stays available only for old non-CodeMirror callers. A real adapter marks
+  // this before its RAF frame is emitted, preventing a workflow from dual-sending that edit.
+  private incrementalEditingActive = false;
+  private editorBarrier: (() => Promise<EditorBarrierSnapshot>) | null = null;
+  private editorRemotePatch: EditorRemotePatch | null = null;
+  private editorCanonicalRestore: EditorCanonicalRestore | null = null;
+  private conflictDrainScheduled = false;
+  private readonly recoveryMaterializationScheduled = new Set<string>();
+  private readonly pendingConflictClaims = new Map<number, {
+    readonly binding: WorkspaceEditTabBinding;
+    readonly claim: WorkspaceEditConflictClaim;
+  }>();
+  // Client metadata observation is synchronous and may publish.  Snapshot application must
+  // publish its canonical+local dirty overlay atomically instead of exposing an intermediate
+  // per-tab dirty state to subscribers.
+  private applyingCanonicalSnapshot = false;
 
   constructor(input: {
     bridge: WorkspaceRendererBridge;
@@ -162,10 +244,40 @@ export class WorkspaceRendererApplication {
     this.canonical = input.initialSnapshot
       ? { kind: "known", snapshot: input.initialSnapshot }
       : { kind: "unknown", lastKnown: null, cause: new Error("Workspace not loaded.") };
+    this.editClient = new WorkspaceEditClient({
+      windowId: input.initialSnapshot?.windowId ?? null,
+      ports: {
+        createClientId: createRendererEditClientId,
+        applyDocumentEdits: (request) => this.bridge.applyDocumentEdits(request),
+        flushDocumentEdits: (request) => this.bridge.flushDocumentEdits(request),
+        subscribeDocumentProjection: (listener) =>
+          this.bridge.onDocumentProjection?.(listener) ?? (() => {}),
+        notifyState: (change) => this.observeEditClientState(change)
+      }
+    });
     this.pendingEditorLoadIdentity = this.createCurrentEditorLoadIdentity();
   }
 
   getState = (): WorkspaceRendererApplicationState => this.state;
+
+  getEditorViewSnapshot = (): WorkspaceWindowSnapshot | null => {
+    const snapshot = this.state.workspaceSnapshot;
+    const document = snapshot?.activeDocument;
+    if (snapshot === null || document === null || document === undefined) return snapshot;
+    const queue = this.editClient.getTabState(document.tabId);
+    if (
+      queue === null ||
+      queue.optimisticText === document.content ||
+      (queue.batches.length === 0 &&
+        queue.status !== "recovering" &&
+        !this.hasPendingAdapterFrame(document.tabId) &&
+        queue.acknowledgedTextRevision <= document.revision)
+    ) return snapshot;
+    return {
+      ...snapshot,
+      activeDocument: { ...document, content: queue.optimisticText }
+    };
+  };
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -174,11 +286,42 @@ export class WorkspaceRendererApplication {
     };
   };
 
+  start(): void {
+    if (this.disposed) return;
+    this.lifecycleEpoch += 1;
+    this.editClient.start();
+  }
+
+  scheduleDispose(): void {
+    const epoch = ++this.lifecycleEpoch;
+    queueMicrotask(() => {
+      if (this.lifecycleEpoch === epoch) this.dispose();
+    });
+  }
+
+  registerEditorBarrier(barrier: (() => Promise<EditorBarrierSnapshot>) | null): void {
+    this.editorBarrier = barrier;
+  }
+
+  registerEditorRemotePatch(patch: EditorRemotePatch | null): void {
+    this.editorRemotePatch = patch;
+  }
+
+  registerEditorCanonicalRestore(restore: EditorCanonicalRestore | null): void {
+    this.editorCanonicalRestore = restore;
+  }
+
   dispose(): void {
     this.disposed = true;
+    this.lifecycleEpoch += 1;
     this.activationGeneration += 1;
     this.pendingEditorTransitionBarrier?.resolve(false);
     this.pendingEditorTransitionBarrier = null;
+    this.pendingConflictClaims.clear();
+    this.conflictDrainScheduled = false;
+    this.recoveryMaterializationScheduled.clear();
+    this.editClient.dispose();
+    this.editBindings.clear();
     this.listeners.clear();
   }
 
@@ -196,6 +339,32 @@ export class WorkspaceRendererApplication {
 
   getEditorBinding(): EditorLoadIdentity | null {
     return this.editorBinding;
+  }
+
+  retryRecovery(tabId: string): Promise<boolean> {
+    const recovery = this.recoveryByTab.get(tabId);
+    if (recovery === undefined || this.disposed) return Promise.resolve(false);
+    return this.enqueue("edit-conflict", async () => {
+      const current = this.recoveryByTab.get(tabId);
+      if (current === undefined || current !== recovery || this.disposed) return false;
+      if (current.recoveryBinding !== undefined) {
+        const retry = this.editClient.retryRetainedTransport(current.recoveryBinding);
+        if (retry.kind === "not-retryable") {
+          // A recovery apply can already be acknowledged while only its main flush checkpoint
+          // failed. In that case its queue is empty and retrying means re-flushing the same
+          // recovery tab; a retained batch is a typed/server failure and must stay blocked.
+          const state = this.editClient.getTabState(current.recoveryBinding.tabId);
+          if (state === null || state.batches.length > 0) return false;
+        } else if (retry.kind !== "resumed") {
+          return false;
+        }
+        await this.finishRecoveryApply(tabId, current);
+        return !this.recoveryByTab.has(tabId);
+      }
+      this.recoveryByTab.set(tabId, { ...current, phase: "captured" });
+      await this.runRecoveryOnlyCreate(tabId);
+      return !this.recoveryByTab.has(tabId);
+    });
   }
 
   getEditorTestAdapter(): WorkspaceRendererTestAdapter {
@@ -222,6 +391,9 @@ export class WorkspaceRendererApplication {
     }
 
     this.editorBinding = identity;
+    if (!this.outbox.has(identity.tabId)) {
+      this.ensureEditorEditBinding(identity);
+    }
     this.pendingEditorLoadIdentity = null;
     return true;
   }
@@ -273,6 +445,7 @@ export class WorkspaceRendererApplication {
       return false;
     }
 
+    if (this.incrementalEditingActive) return false;
     this.outbox.set(input.identity.tabId, input.content);
     this.updateState(applyRendererLocalWorkspaceDraft(
       this.state,
@@ -280,6 +453,56 @@ export class WorkspaceRendererApplication {
       input.content
     ));
     return true;
+  }
+
+  recordEditorDocumentChangeFrame(frame: CodeEditorDocumentChangeFrame): boolean {
+    if (
+      frame.identity === null ||
+      this.editorBinding === null ||
+      !isSameEditorLoadIdentity(this.editorBinding, frame.identity)
+    ) {
+      return false;
+    }
+    this.incrementalEditingActive = true;
+    const entry = this.editBindings.get(frame.identity.tabId);
+    if (entry === undefined || !isSameEditorLoadIdentity(entry.identity, frame.identity)) return false;
+    const admission = this.editClient.admitFrame({ ...frame, binding: entry.binding });
+    if (admission.kind === "admitted") {
+      return true;
+    }
+    if (admission.kind !== "stale") {
+      this.editClient.retainAdapterDiscard(entry.binding, frame.resultingText);
+      return true;
+    }
+    return false;
+  }
+
+  recordEditorFramePending(input: {
+    hasPending: boolean;
+    identity: EditorLoadIdentity | null;
+  }): void {
+    if (
+      input.identity === null ||
+      this.editorBinding === null ||
+      !isSameEditorLoadIdentity(this.editorBinding, input.identity)
+    ) {
+      return;
+    }
+    const isPending = input.hasPending;
+    const wasPending = this.adapterFramePendingIdentity !== null &&
+      isSameEditorLoadIdentity(this.adapterFramePendingIdentity, input.identity);
+    if (isPending === wasPending) return;
+    if (isPending) this.incrementalEditingActive = true;
+    this.adapterFramePendingIdentity = isPending ? input.identity : null;
+    this.applyDisposableDirtyState(input.identity.tabId);
+  }
+
+  recordDiscardedEditorDocumentText(input: CodeEditorDiscardedDocumentText): boolean {
+    if (input.identity === null) return false;
+    this.incrementalEditingActive = true;
+    const entry = this.editBindings.get(input.identity.tabId);
+    if (entry === undefined || !isSameEditorLoadIdentity(entry.identity, input.identity)) return false;
+    return this.editClient.retainAdapterDiscard(entry.binding, input.text).kind === "recovery-required";
   }
 
   private setOpenState(openState: "idle" | "opening"): void {
@@ -292,6 +515,8 @@ export class WorkspaceRendererApplication {
 
   flushActiveWorkspaceDraft(): Promise<WorkspaceApplicationOutcome<void>> {
     return this.enqueue("draft-flush", async () => {
+      const recovery = this.getRecoveryPendingOutcome();
+      if (recovery !== null) return recovery;
       const known = await this.ensureCanonicalKnown();
       if (known !== null) {
         return known;
@@ -301,6 +526,41 @@ export class WorkspaceRendererApplication {
         return { kind: "committed", value: undefined };
       } catch (error) {
         return this.outcomeFromError(error);
+      }
+    });
+  }
+
+  runWithActiveEditBarrier<T>(
+    operation: (
+      document: NonNullable<WorkspaceWindowSnapshot["activeDocument"]>,
+      sealedText: string
+    ) => Promise<T>
+  ): Promise<WorkspaceApplicationOutcome<T>> {
+    return this.enqueue("edit-barrier", async () => {
+      const recovery = this.getRecoveryPendingOutcome();
+      if (recovery !== null) return recovery;
+      const known = await this.ensureCanonicalKnown();
+      if (known !== null) return known;
+      const tabId = getActiveTabId(this.state);
+      const document = getActiveDocument(this.state);
+      if (tabId === null || document === null) return { kind: "no-document" };
+      let acquired: AcquiredEditBarrier = { lease: null, sealedText: null };
+      try {
+        acquired = this.incrementalEditingActive
+          ? await this.acquireEditBarrier(tabId)
+          : (await this.drainTab(tabId), { lease: null, sealedText: null });
+      } catch (error) {
+        return this.recoverMutationOutcome(error);
+      }
+      try {
+        return {
+          kind: "committed",
+          value: await operation(document, acquired.sealedText ?? document.content)
+        };
+      } catch (error) {
+        return { kind: "failed", error };
+      } finally {
+        acquired.lease?.release();
       }
     });
   }
@@ -322,6 +582,8 @@ export class WorkspaceRendererApplication {
 
   openMarkdown(): Promise<WorkspaceOpenOutcome> {
     return this.enqueue("open", async () => {
+      const recovery = this.getRecoveryPendingOutcome();
+      if (recovery !== null) return recovery;
       const known = await this.ensureCanonicalKnown();
       if (known !== null) {
         return known;
@@ -354,6 +616,8 @@ export class WorkspaceRendererApplication {
 
   openMarkdownFromPath(targetPath: string): Promise<WorkspaceOpenOutcome> {
     return this.enqueue("open", async () => {
+      const recovery = this.getRecoveryPendingOutcome();
+      if (recovery !== null) return recovery;
       const known = await this.ensureCanonicalKnown();
       if (known !== null) {
         return known;
@@ -382,6 +646,8 @@ export class WorkspaceRendererApplication {
 
   openMarkdownFromPaths(targetPaths: readonly string[]): Promise<WorkspaceOpenOutcome> {
     return this.enqueue("open", async () => {
+      const recovery = this.getRecoveryPendingOutcome();
+      if (recovery !== null) return recovery;
       if (targetPaths.length === 0) {
         return { kind: "cancelled" };
       }
@@ -414,6 +680,8 @@ export class WorkspaceRendererApplication {
 
   createUntitledMarkdown(): Promise<WorkspaceApplicationOutcome<void>> {
     return this.enqueue("create", async () => {
+      const recovery = this.getRecoveryPendingOutcome();
+      if (recovery !== null) return recovery;
       const known = await this.ensureCanonicalKnown();
       if (known !== null) {
         return known;
@@ -435,6 +703,8 @@ export class WorkspaceRendererApplication {
     const generation = ++this.activationGeneration;
 
     return this.enqueue("activation", async () => {
+      const recovery = this.getRecoveryPendingOutcome();
+      if (recovery !== null) return recovery;
       const known = await this.ensureCanonicalKnown();
       if (known !== null) {
         return known;
@@ -505,6 +775,8 @@ export class WorkspaceRendererApplication {
 
   reloadWorkspaceTabFromPath(tabId: string): Promise<WorkspaceReloadOutcome> {
     return this.enqueue("reload", async () => {
+      const recovery = this.getRecoveryPendingOutcome();
+      if (recovery !== null) return recovery;
       const disposed = this.getDisposedOutcome();
       if (disposed !== null) {
         return disposed;
@@ -578,6 +850,8 @@ export class WorkspaceRendererApplication {
     requestId: string
   ): Promise<WorkspaceApplicationOutcome<boolean>> {
     return this.enqueue("window-close", async () => {
+      const recovery = this.getRecoveryPendingOutcome();
+      if (recovery !== null) return recovery;
       const disposed = this.getDisposedOutcome();
       if (disposed !== null) {
         return disposed;
@@ -635,12 +909,19 @@ export class WorkspaceRendererApplication {
     const tabId = capturedDocument.tabId;
 
     return this.enqueue("save", async () => {
+      const recovery = this.getRecoveryPendingOutcome();
+      if (recovery !== null) return recovery;
       const known = await this.ensureCanonicalKnown();
       if (known !== null) {
         return known;
       }
+      let editLease: WorkspaceEditBarrierLease | null = null;
       try {
-        await this.drainTab(tabId);
+        if (this.incrementalEditingActive) {
+          editLease = (await this.acquireEditBarrier(tabId)).lease;
+        } else {
+          await this.drainTab(tabId);
+        }
         const shouldSaveAs = input.forceSaveAs ||
           capturedDocument.path === null ||
           input.hasExternalConflict;
@@ -649,7 +930,7 @@ export class WorkspaceRendererApplication {
           : await this.bridge.saveMarkdownFile({ tabId });
 
         if (value.status === "success") {
-          await this.drainTab(tabId);
+          if (!this.incrementalEditingActive) await this.drainTab(tabId);
           try {
             const snapshot = await this.bridge.getWorkspaceSnapshot();
             this.recordCanonicalSnapshot(snapshot);
@@ -662,6 +943,8 @@ export class WorkspaceRendererApplication {
         return { kind: "committed", tabId, value };
       } catch (error) {
         return this.recoverMutationOutcome(error);
+      } finally {
+        editLease?.release();
       }
     });
   }
@@ -675,6 +958,12 @@ export class WorkspaceRendererApplication {
         this.pendingOperationKind = null;
       }
     });
+  }
+
+  private getRecoveryPendingOutcome(): Extract<WorkspaceApplicationOutcome<never>, { kind: "failed" }> | null {
+    return this.recoveryByTab.size === 0
+      ? null
+      : { kind: "failed", error: new WorkspaceRecoveryPendingError() };
   }
 
   private async ensureCanonicalKnown(): Promise<
@@ -707,6 +996,8 @@ export class WorkspaceRendererApplication {
     operation: () => Promise<WorkspaceWindowSnapshot>
   ): Promise<WorkspaceApplicationOutcome<void>> {
     return this.enqueue(kind, async () => {
+      const recovery = this.getRecoveryPendingOutcome();
+      if (recovery !== null) return recovery;
       const disposed = this.getDisposedOutcome();
       if (disposed !== null) {
         return disposed;
@@ -751,6 +1042,7 @@ export class WorkspaceRendererApplication {
   }
 
   private captureCurrentEditorContent(): void {
+    if (this.incrementalEditingActive) return;
     if (
       (this.state.editorTransition !== null &&
         this.state.editorTransition.phase !== "sealing") ||
@@ -779,6 +1071,11 @@ export class WorkspaceRendererApplication {
   }
 
   private async drainTab(tabId: string): Promise<void> {
+    if (this.incrementalEditingActive) {
+      const barrier = await this.acquireEditBarrier(tabId);
+      barrier.lease?.release();
+      return;
+    }
     for (let pass = 0; pass < DRAFT_DRAIN_LIMIT; pass += 1) {
       const entry = this.outbox.peek(tabId);
       if (entry === undefined) {
@@ -793,6 +1090,17 @@ export class WorkspaceRendererApplication {
   }
 
   private async drainAllDrafts(): Promise<void> {
+    if (this.incrementalEditingActive) {
+      if (this.editorBarrier !== null) await this.editorBarrier();
+      const barrier = await this.editClient.acquireAllFlushBarriers();
+      if (barrier.kind !== "acquired") {
+        throw new WorkspaceMutationFailure("failed-reconciled", new Error(
+          `Document edit barrier did not settle: ${barrier.kind}.`
+        ));
+      }
+      barrier.lease.release();
+      return;
+    }
     for (let pass = 0; pass < DRAFT_DRAIN_LIMIT; pass += 1) {
       const entries = this.outbox.entries();
       if (entries.length === 0) {
@@ -827,6 +1135,48 @@ export class WorkspaceRendererApplication {
         error
       );
     }
+  }
+
+  private async acquireEditBarrier(tabId: string): Promise<AcquiredEditBarrier> {
+    const entry = this.editBindings.get(tabId);
+    if (entry === undefined) return { lease: null, sealedText: null };
+    let sealedText: string | null = null;
+    if (
+      tabId === getActiveTabId(this.state) &&
+      this.editorBinding !== null &&
+      this.editorBinding.tabId === tabId &&
+      this.editBindings.get(tabId)?.binding === entry.binding &&
+      this.editorBarrier !== null
+    ) {
+      const snapshot = await this.editorBarrier();
+      if (
+        snapshot.identity === null ||
+        !isSameEditorLoadIdentity(snapshot.identity, this.editorBinding)
+      ) {
+        throw new WorkspaceMutationFailure("failed-reconciled", new Error(
+          "Editor barrier snapshot did not match the active editor identity."
+        ));
+      }
+      sealedText = snapshot.text;
+    }
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const barrier = await this.editClient.acquireFlushBarrier(tabId);
+      if (barrier.kind === "acquired") {
+        return { lease: barrier.lease, sealedText };
+      }
+      if (barrier.kind === "conflict" && attempt === 0) {
+        await this.resolveEditConflict(entry.binding, undefined, true);
+        if (this.recoveryByTab.has(tabId)) break;
+        continue;
+      }
+      if (barrier.kind === "recovery-required") {
+        this.captureRecovery(entry.binding, barrier.recovery);
+      }
+      break;
+    }
+    throw new WorkspaceMutationFailure("failed-reconciled", new Error(
+      "Document edit barrier did not settle after conflict resolution."
+    ));
   }
 
   private markCanonicalUnknown(cause: unknown): void {
@@ -890,6 +1240,14 @@ export class WorkspaceRendererApplication {
     snapshot: WorkspaceWindowSnapshot,
     options: { forceEditorReload?: boolean } = {}
   ): void {
+    this.editClient.bindWindow(snapshot.windowId);
+    const liveTabs = new Set(snapshot.tabs.map((tab) => tab.tabId));
+    for (const [tabId, entry] of this.editBindings) {
+      if (!liveTabs.has(tabId)) {
+        this.editBindings.delete(tabId);
+        this.editClient.retireTab(entry.binding);
+      }
+    }
     this.canonical = { kind: "known", snapshot };
     this.applyCanonicalSnapshot(snapshot, options);
   }
@@ -902,15 +1260,50 @@ export class WorkspaceRendererApplication {
     const previousDocument = getActiveDocument(previousState);
     let shellState = applyWorkspaceSnapshot(previousState, snapshot);
     const activeTabId = getActiveTabId(shellState);
-    const pendingContent = activeTabId === null ? undefined : this.outbox.get(activeTabId);
+    const pendingContent = this.incrementalEditingActive || activeTabId === null
+      ? undefined
+      : this.outbox.get(activeTabId);
     if (activeTabId !== null && pendingContent !== undefined) {
       shellState = applyRendererLocalWorkspaceDraft(shellState, activeTabId, pendingContent);
     }
     const nextDocument = getActiveDocument(shellState);
-    const canonicalReplacement =
+    if (nextDocument !== null) {
+      const entry = this.editBindings.get(nextDocument.tabId);
+      if (entry !== undefined) {
+        this.applyingCanonicalSnapshot = true;
+        try {
+          this.editClient.observeCanonicalMetadata(entry.binding, {
+            revision: nextDocument.revision,
+            savedRevision: nextDocument.savedRevision,
+            isDirty: nextDocument.isDirty
+          });
+        } finally {
+          this.applyingCanonicalSnapshot = false;
+        }
+      }
+    }
+    let canonicalReplacement =
       previousDocument?.tabId !== nextDocument?.tabId ||
       previousDocument?.content !== nextDocument?.content ||
       (options.forceEditorReload ?? false);
+    const retainedQueue = nextDocument === null
+      ? null
+      : this.editClient.getTabState(nextDocument.tabId);
+    if (
+      !(options.forceEditorReload ?? false) &&
+      canonicalReplacement &&
+      previousDocument?.tabId === nextDocument?.tabId &&
+      retainedQueue !== null &&
+      (
+        retainedQueue.optimisticText === nextDocument!.content ||
+        retainedQueue.batches.length > 0 ||
+        retainedQueue.status === "recovering" ||
+        this.hasPendingAdapterFrame(nextDocument!.tabId) ||
+        retainedQueue.acknowledgedTextRevision > nextDocument!.revision
+      )
+    ) {
+      canonicalReplacement = false;
+    }
     if (
       (options.forceEditorReload ?? false) &&
       shellState.editorLoadRevision === previousState.editorLoadRevision
@@ -928,6 +1321,20 @@ export class WorkspaceRendererApplication {
     }
 
     if (canonicalReplacement) {
+      if (previousDocument !== null && previousDocument.tabId === nextDocument?.tabId) {
+        const previousBinding = this.editBindings.get(previousDocument.tabId);
+        const pendingState = previousBinding === undefined
+          ? null
+          : this.editClient.getTabState(previousDocument.tabId);
+        if (
+          previousBinding !== undefined &&
+          (pendingState === null ||
+            (pendingState.batches.length === 0 && pendingState.status !== "recovering"))
+        ) {
+          this.editBindings.delete(previousDocument.tabId);
+          this.editClient.retireTab(previousBinding.binding);
+        }
+      }
       this.editorBinding = null;
       this.state = {
         ...shellState,
@@ -946,7 +1353,509 @@ export class WorkspaceRendererApplication {
         editorTransition: previousState.editorTransition
       };
     }
+    this.state = {
+      ...this.state,
+      workspaceSnapshot: this.deriveDisposableDirtySnapshot(this.state.workspaceSnapshot)
+    };
     this.emit();
+  }
+
+  private ensureEditorEditBinding(identity: EditorLoadIdentity): WorkspaceEditTabBinding | null {
+    const document = getActiveDocument(this.state);
+    if (document === null || document.tabId !== identity.tabId) return null;
+    const existing = this.editBindings.get(identity.tabId);
+    if (existing !== undefined) {
+      const queue = this.editClient.getTabState(identity.tabId);
+      if (
+        queue !== null &&
+        queue.batches.length === 0 &&
+        queue.status !== "recovering" &&
+        (queue.acknowledgedText !== document.content ||
+          queue.acknowledgedTextRevision !== document.revision)
+      ) {
+        this.editBindings.delete(identity.tabId);
+        this.editClient.retireTab(existing.binding);
+      } else {
+        existing.identity = identity;
+        return existing.binding;
+      }
+    }
+    const binding = this.editClient.hydrateTab({
+      tabId: document.tabId,
+      text: document.content,
+      revision: document.revision,
+      savedRevision: document.savedRevision,
+      isDirty: document.isDirty
+    });
+    this.editBindings.set(identity.tabId, { identity, binding });
+    this.applyDisposableDirtyState(identity.tabId);
+    return binding;
+  }
+
+  private observeEditClientState(change: WorkspaceEditClientStateChange): void {
+    if (this.editBindings.get(change.binding.tabId)?.binding !== change.binding) return;
+    if (this.applyingCanonicalSnapshot) return;
+    if (change.outcome?.kind === "conflict") {
+      this.scheduleConflictResolution(change.binding, change.outcome.claim);
+    } else if (change.outcome?.kind === "recovery-required") {
+      this.captureRecovery(change.binding, change.outcome.recovery);
+      this.scheduleRecoveryMaterialization(change.binding.tabId);
+    }
+    this.applyDisposableDirtyState(change.binding.tabId, change.isDirty);
+  }
+
+  private scheduleConflictResolution(
+    binding: WorkspaceEditTabBinding,
+    claim: WorkspaceEditConflictClaim
+  ): void {
+    if (this.disposed || this.pendingConflictClaims.has(claim.id)) return;
+    this.pendingConflictClaims.set(claim.id, { binding, claim });
+    if (this.conflictDrainScheduled) return;
+    this.conflictDrainScheduled = true;
+    void this.enqueue("edit-conflict", async () => {
+      try {
+        while (this.pendingConflictClaims.size > 0 && !this.disposed) {
+          const next = this.pendingConflictClaims.values().next().value as
+            | { readonly binding: WorkspaceEditTabBinding; readonly claim: WorkspaceEditConflictClaim }
+            | undefined;
+          if (next === undefined) break;
+          this.pendingConflictClaims.delete(next.claim.id);
+          await this.resolveEditConflict(next.binding, next.claim);
+        }
+      } finally {
+        this.conflictDrainScheduled = false;
+      }
+    }).catch(() => {
+      // Conflict resolution is a background coordinator task. All protocol failures are retained
+      // as queue/recovery state; an observer or callback rejection must never escape unhandled.
+    });
+  }
+
+  private scheduleRecoveryMaterialization(sourceTabId: string): void {
+    if (this.disposed || this.recoveryMaterializationScheduled.has(sourceTabId)) return;
+    this.recoveryMaterializationScheduled.add(sourceTabId);
+    void this.enqueue("edit-conflict", async () => {
+      try {
+        const current = this.recoveryByTab.get(sourceTabId);
+        if (
+          current === undefined ||
+          current.phase === "creating" ||
+          current.phase === "applying" ||
+          current.phase === "blocked"
+        ) {
+          return;
+        }
+        await this.runRecoveryOnlyCreate(sourceTabId);
+      } finally {
+        this.recoveryMaterializationScheduled.delete(sourceTabId);
+      }
+    }).catch(() => {
+      // Recovery materialization is a background coordinator task; a rejected observer or
+      // protocol failure must never escape as an unhandled rejection. The recovery record
+      // remains durable and retryable via retryRecovery.
+    });
+  }
+
+  private async resolveEditConflict(
+    binding: WorkspaceEditTabBinding,
+    claim?: WorkspaceEditConflictClaim,
+    editorAlreadySealed = false
+  ): Promise<void> {
+    if (this.disposed || this.editBindings.get(binding.tabId)?.binding !== binding) return;
+    const identity = this.editBindings.get(binding.tabId)?.identity;
+    if (
+      identity !== undefined &&
+      this.editorBinding !== null &&
+      isSameEditorLoadIdentity(this.editorBinding, identity) &&
+      this.editorBarrier !== null &&
+      !editorAlreadySealed
+    ) {
+      const sealed = await this.editorBarrier();
+      if (
+        this.disposed ||
+        this.editBindings.get(binding.tabId)?.binding !== binding ||
+        sealed.identity === null ||
+        !isSameEditorLoadIdentity(sealed.identity, identity)
+      ) return;
+      const queue = this.editClient.getTabState(binding.tabId);
+      if (queue === null || sealed.text !== queue.optimisticText) {
+        const retained = this.editClient.retainAdapterDiscard(binding, sealed.text);
+        if (retained.kind === "recovery-required") {
+          this.captureRecovery(binding, retained.recovery);
+        }
+        return;
+      }
+    }
+    const prepared = this.editClient.prepareConflictResolution(binding, claim);
+    if (prepared.kind === "recovery-required") {
+      this.captureRecovery(binding, prepared.recovery);
+      await this.runRecoveryOnlyCreate(binding.tabId);
+      return;
+    }
+    if (prepared.kind !== "rebased") return;
+    if (
+      identity === undefined ||
+      this.editorBinding === null ||
+      !isSameEditorLoadIdentity(this.editorBinding, identity) ||
+      this.editorRemotePatch === null
+    ) return;
+    const patch = prepared.remoteOnOptimistic;
+    if (patch !== null) {
+      let applied: CodeEditorRemotePatchResult;
+      try {
+        applied = await this.editorRemotePatch({
+          identity,
+          expectedBefore: prepared.expectedOptimisticText,
+          expectedAfter: prepared.rebasedText,
+          from: patch.from,
+          to: patch.to,
+          insert: patch.insert
+        });
+      } catch {
+        applied = { kind: "disposed" };
+      }
+      if (applied.kind !== "applied") {
+        const recovery = this.editClient.abortConflictResolution(binding, prepared.resolution);
+        if (recovery.kind === "recovery-required") {
+          this.captureRecovery(binding, recovery.recovery);
+          await this.runRecoveryOnlyCreate(binding.tabId);
+        }
+        return;
+      }
+    }
+    const committed = this.editClient.commitConflictResolution(binding, prepared.resolution);
+    if (committed.kind === "stale") {
+      this.captureRecovery(binding, {
+        localText: prepared.rebasedText,
+        canonicalText: prepared.canonicalText,
+        canonicalRevision: prepared.canonicalRevision
+      });
+    }
+  }
+
+  private captureRecovery(
+    binding: WorkspaceEditTabBinding,
+    recovery: { readonly localText: string; readonly canonicalText?: string; readonly canonicalRevision: number }
+  ): void {
+    const existing = this.recoveryByTab.get(binding.tabId);
+    if (existing !== undefined) {
+      if (existing.sourceBinding !== binding || existing.localText === recovery.localText) return;
+      if (existing.recoveryBinding === undefined) {
+        this.recoveryByTab.set(binding.tabId, Object.freeze({
+          ...existing,
+          localText: recovery.localText,
+          canonicalText: recovery.canonicalText ?? existing.canonicalText,
+          canonicalRevision: Math.max(existing.canonicalRevision, recovery.canonicalRevision),
+          phase: "captured"
+        }));
+      }
+      return;
+    }
+    this.recoveryByTab.set(binding.tabId, Object.freeze({
+      sourceBinding: binding,
+      localText: recovery.localText,
+      ...(recovery.canonicalText === undefined ? {} : { canonicalText: recovery.canonicalText }),
+      canonicalRevision: recovery.canonicalRevision,
+      sourceRestored: false,
+      phase: "captured"
+    }));
+  }
+
+  private async runRecoveryOnlyCreate(sourceTabId: string): Promise<void> {
+    const captured = this.recoveryByTab.get(sourceTabId);
+    if (captured === undefined || !this.isRecoveryCurrent(sourceTabId, captured)) return;
+    let working = captured;
+    if (working.canonicalText === undefined) {
+      try {
+        const authoritative = await this.bridge.getWorkspaceSnapshot();
+        const document = authoritative.activeDocument;
+        if (
+          authoritative.windowId !== this.state.workspaceSnapshot?.windowId ||
+          document === null ||
+          document.tabId !== sourceTabId ||
+          document.revision < working.canonicalRevision
+        ) throw new Error("Authoritative recovery snapshot does not own the source tab.");
+        if (!this.isRecoveryCurrent(sourceTabId, working)) return;
+        working = Object.freeze({
+          ...working,
+          canonicalText: document.content,
+          canonicalRevision: document.revision
+        });
+        this.recoveryByTab.set(sourceTabId, working);
+      } catch {
+        if (this.isRecoveryCurrent(sourceTabId, working)) {
+          this.recoveryByTab.set(sourceTabId, { ...working, phase: "blocked" });
+        }
+        return;
+      }
+    }
+    const canonicalText = working.canonicalText;
+    if (canonicalText === undefined) return;
+    const source = this.editBindings.get(sourceTabId);
+    if (
+      source !== undefined &&
+      this.editorBinding !== null &&
+      isSameEditorLoadIdentity(source.identity, this.editorBinding) &&
+      this.state.editorTransition?.readOnly !== true
+    ) {
+      try {
+        if (this.editorBarrier !== null) {
+          const sealed = await this.editorBarrier();
+          if (
+            sealed.identity === null ||
+            !isSameEditorLoadIdentity(sealed.identity, source.identity)
+          ) throw new Error("Recovery seal identity changed.");
+          const queue = this.editClient.getTabState(sourceTabId);
+          if (queue === null || sealed.text !== queue.optimisticText) {
+            const late = this.editClient.retainAdapterDiscard(source.binding, sealed.text);
+            if (late.kind === "recovery-required") this.captureRecovery(source.binding, late.recovery);
+          }
+        }
+        await this.sealEditor("recovering");
+      } catch {
+        if (this.isRecoveryCurrent(sourceTabId, working)) {
+          this.recoveryByTab.set(sourceTabId, { ...working, phase: "blocked" });
+        }
+        return;
+      }
+      const latest = this.recoveryByTab.get(sourceTabId);
+      if (latest === undefined || !this.isRecoveryCurrent(sourceTabId, latest)) return;
+      working = latest;
+    }
+    if (
+      !working.sourceRestored &&
+      source !== undefined &&
+      (
+        (this.editorBinding !== null && isSameEditorLoadIdentity(source.identity, this.editorBinding)) ||
+        (this.state.editorTransition?.reason === "recovering" &&
+          this.state.editorTransition.phase === "sealed")
+      )
+    ) {
+      if (this.editorCanonicalRestore === null) {
+        this.recoveryByTab.set(sourceTabId, { ...working, phase: "blocked" });
+        return;
+      }
+      let restored: Awaited<ReturnType<EditorCanonicalRestore>>;
+      try {
+        restored = await this.editorCanonicalRestore({
+          identity: source.identity,
+          expectedBefore: working.localText,
+          canonicalText
+        });
+      } catch {
+        if (this.isRecoveryCurrent(sourceTabId, working)) {
+          this.recoveryByTab.set(sourceTabId, { ...working, phase: "blocked" });
+        }
+        return;
+      }
+      if (!this.isRecoveryCurrent(sourceTabId, working)) return;
+      if (restored.kind !== "restored") {
+        this.recoveryByTab.set(sourceTabId, { ...working, phase: "blocked" });
+        return;
+      }
+      working = Object.freeze({ ...working, sourceRestored: true, phase: "captured" as const });
+      this.recoveryByTab.set(sourceTabId, working);
+    }
+    working = Object.freeze({ ...working, phase: "creating" as const });
+    this.recoveryByTab.set(sourceTabId, working);
+    let snapshot = working.recoverySnapshot;
+    if (snapshot === undefined) try {
+      // This is intentionally not createUntitledMarkdown(): the source queue is frozen and cannot
+      // be flushed by a coordinator operation that is itself resolving that frozen queue.
+      snapshot = await this.bridge.createWorkspaceTab({ kind: "untitled" });
+    } catch {
+      if (this.recoveryByTab.get(sourceTabId) === working) {
+        this.recoveryByTab.set(sourceTabId, { ...working, phase: "blocked" });
+      }
+      return;
+    }
+    if (!this.isRecoveryCurrent(sourceTabId, working)) {
+      return;
+    }
+    const document = snapshot.activeDocument;
+    if (document === null || document === undefined) {
+      if (this.recoveryByTab.get(sourceTabId) === working) {
+        this.recoveryByTab.set(sourceTabId, { ...working, phase: "blocked" });
+      }
+      return;
+    }
+    working = Object.freeze({ ...working, recoverySnapshot: snapshot, phase: "applying" as const });
+    this.recoveryByTab.set(sourceTabId, working);
+    const binding = this.editClient.hydrateTab({
+      tabId: document.tabId,
+      text: document.content,
+      revision: document.revision,
+      savedRevision: document.savedRevision,
+      isDirty: document.isDirty
+    });
+    const applying = this.recoveryByTab.get(sourceTabId);
+    if (applying === undefined || applying !== working || !this.isRecoveryCurrent(sourceTabId, working)) {
+      this.editClient.retireTab(binding);
+      return;
+    }
+    const boundRecovery = Object.freeze({
+      ...working,
+      recoverySnapshot: snapshot,
+      recoveryBinding: binding,
+      phase: "applying" as const
+    });
+    this.recoveryByTab.set(sourceTabId, boundRecovery);
+    const changes: readonly DocumentTextChange[] = Object.freeze([Object.freeze({
+      from: 0,
+      to: document.content.length,
+      insert: working.localText
+    })]);
+    const admitted = this.editClient.admitFrame({
+      binding,
+      baseText: document.content,
+      resultingText: working.localText,
+      changes
+    });
+    if (admitted.kind !== "admitted") {
+      this.recoveryByTab.set(sourceTabId, { ...this.recoveryByTab.get(sourceTabId)!, phase: "blocked" });
+      return;
+    }
+    await this.finishRecoveryApply(sourceTabId, boundRecovery);
+  }
+
+  private async finishRecoveryApply(sourceTabId: string, recovery: RecoveryRecord): Promise<void> {
+    const binding = recovery.recoveryBinding;
+    const snapshot = recovery.recoverySnapshot;
+    if (binding === undefined || snapshot === undefined || !this.isRecoveryCurrent(sourceTabId, recovery)) return;
+    const current = this.recoveryByTab.get(sourceTabId);
+    if (current !== recovery) return;
+    const barrier = await this.editClient.acquireFlushBarrier(binding.tabId);
+    if (
+      barrier.kind !== "acquired" ||
+      !this.isRecoveryCurrent(sourceTabId, recovery)
+    ) {
+      if (!this.disposed && this.recoveryByTab.get(sourceTabId) === recovery) {
+        this.recoveryByTab.set(sourceTabId, { ...recovery, phase: "blocked" });
+      }
+      return;
+    }
+    barrier.lease.release();
+    if (!this.isRecoveryCurrent(sourceTabId, recovery)) return;
+    const recoveryQueue = this.editClient.getTabState(binding.tabId);
+    const recoveryDocument = snapshot.activeDocument;
+    if (
+      recoveryQueue === null ||
+      recoveryDocument === null ||
+      recoveryDocument.tabId !== binding.tabId ||
+      recoveryQueue.batches.length > 0
+    ) {
+      this.recoveryByTab.set(sourceTabId, { ...recovery, phase: "blocked" });
+      return;
+    }
+    const exactSnapshot: WorkspaceWindowSnapshot = {
+      ...snapshot,
+      tabs: snapshot.tabs.map((tab) => tab.tabId === binding.tabId
+        ? { ...tab, isDirty: isPendingEditQueueDirty(recoveryQueue) }
+        : tab),
+      activeDocument: {
+        ...recoveryDocument,
+        content: recoveryQueue.acknowledgedText,
+        revision: recoveryQueue.acknowledgedTextRevision,
+        savedRevision: recoveryQueue.observedSavedRevision,
+        isDirty: isPendingEditQueueDirty(recoveryQueue)
+      }
+    };
+    // The original tab remains in the recovery-create snapshot, but its renderer transport
+    // incarnation is no longer valid once the exact recovery checkpoint succeeded. Remove the
+    // application lookup before retiring it so a late source event cannot resurrect the queue.
+    this.editBindings.delete(sourceTabId);
+    this.editClient.retireTab(recovery.sourceBinding);
+    this.recoveryByTab.delete(sourceTabId);
+    this.pendingEditorTransitionBarrier = null;
+    this.editorBinding = null;
+    this.state = { ...this.state, editorTransition: null };
+    this.recordCanonicalSnapshot(exactSnapshot);
+    const recoveryIdentity = this.pendingEditorLoadIdentity ?? this.editorBinding;
+    if (recoveryIdentity !== null && recoveryIdentity.tabId === binding.tabId) {
+      this.editBindings.set(binding.tabId, { identity: recoveryIdentity, binding });
+    }
+  }
+
+  private isRecoveryCurrent(sourceTabId: string, recovery: RecoveryRecord): boolean {
+    return !this.disposed &&
+      this.recoveryByTab.get(sourceTabId) === recovery &&
+      this.editBindings.get(sourceTabId)?.binding === recovery.sourceBinding;
+  }
+
+  private applyDisposableDirtyState(tabId: string, clientDirty?: boolean): void {
+    const snapshot = this.state.workspaceSnapshot;
+    if (snapshot === null) return;
+    const dirty = (clientDirty ?? (() => {
+      const state = this.editClient.getTabState(tabId);
+      return state === null ? false : isPendingEditQueueDirty(state);
+    })()) || this.hasPendingAdapterFrame(tabId);
+    const tab = snapshot.tabs.find((candidate) => candidate.tabId === tabId);
+    const document = snapshot.activeDocument?.tabId === tabId ? snapshot.activeDocument : null;
+    if (tab?.isDirty === dirty && (document === null || document.isDirty === dirty)) return;
+    this.updateState({
+      ...this.state,
+      workspaceSnapshot: {
+        ...snapshot,
+        tabs: snapshot.tabs.map((candidate) => candidate.tabId === tabId
+          ? { ...candidate, isDirty: dirty }
+          : candidate),
+        activeDocument: document === null
+          ? snapshot.activeDocument
+          : { ...document, isDirty: dirty }
+      }
+    });
+  }
+
+  private deriveDisposableDirtySnapshot(
+    snapshot: WorkspaceWindowSnapshot | null
+  ): WorkspaceWindowSnapshot | null {
+    if (snapshot === null) return null;
+    const dirtyByTab = new Map<string, boolean>();
+    for (const tab of snapshot.tabs) {
+      const queue = this.editClient.getTabState(tab.tabId);
+      const activeDocument = snapshot.activeDocument?.tabId === tab.tabId
+        ? snapshot.activeDocument
+        : null;
+      const localStateOutrunsCanonical = queue !== null &&
+        activeDocument !== null &&
+        queue.observedRevision > activeDocument.revision;
+      dirtyByTab.set(
+        tab.tabId,
+        queue === null
+          ? tab.isDirty
+          : queue.batches.length > 0 ||
+            queue.status === "recovering" ||
+            this.hasPendingAdapterFrame(tab.tabId) ||
+            (localStateOutrunsCanonical && isPendingEditQueueDirty(queue)) ||
+            tab.isDirty
+      );
+    }
+    return {
+      ...snapshot,
+      tabs: snapshot.tabs.map((tab) => {
+        const dirty = dirtyByTab.get(tab.tabId) ?? tab.isDirty;
+        return tab.isDirty === dirty ? tab : { ...tab, isDirty: dirty };
+      }),
+      activeDocument: snapshot.activeDocument === null
+        ? null
+        : (() => {
+            const dirty = dirtyByTab.get(snapshot.activeDocument.tabId) ??
+              snapshot.activeDocument.isDirty;
+            return snapshot.activeDocument.isDirty === dirty
+              ? snapshot.activeDocument
+              : { ...snapshot.activeDocument, isDirty: dirty };
+          })()
+    };
+  }
+
+  private hasPendingAdapterFrame(tabId: string): boolean {
+    return this.adapterFramePendingIdentity !== null &&
+      this.adapterFramePendingIdentity.tabId === tabId &&
+      this.editBindings.get(tabId) !== undefined &&
+      isSameEditorLoadIdentity(
+        this.adapterFramePendingIdentity,
+        this.editBindings.get(tabId)!.identity
+      );
   }
 
   private async sealEditor(reason: EditorTransitionReason): Promise<void> {
@@ -1025,6 +1934,7 @@ export class WorkspaceRendererApplication {
   }
 
   private captureReloadDraftCheckpoint(tabId: string): ReloadDraftCheckpoint | undefined {
+    if (this.incrementalEditingActive) return undefined;
     const entry = this.outbox.peek(tabId);
     const activeDocument = getActiveDocument(this.state);
     if (activeDocument?.tabId === tabId) {
@@ -1045,6 +1955,7 @@ export class WorkspaceRendererApplication {
     tabId: string,
     checkpoint: ReloadDraftCheckpoint | undefined
   ): void {
+    if (this.incrementalEditingActive) return;
     if (checkpoint === undefined || this.outbox.has(tabId)) {
       return;
     }
@@ -1130,4 +2041,8 @@ function createEditorTransitionBarrier(
     resolve = resolvePromise;
   });
   return { token, readOnly, promise, resolve };
+}
+
+function createRendererEditClientId(): string {
+  return `renderer-${globalThis.crypto.randomUUID()}`;
 }

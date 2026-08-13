@@ -78,8 +78,21 @@ function acknowledgeEditorLoad(controller: EditorApplicationControllerValue): vo
 }
 
 describe("useEditorApplicationController", () => {
-  it("keeps save command orchestration behind the renderer application boundary", async () => {
+  it("routes a production editor frame through the save barrier without a full draft", async () => {
     const updateWorkspaceTabDraft = vi.fn(async () => savedSnapshot);
+    const applyDocumentEdits = vi.fn(async (input: { clientSequence: number; baseRevision: number }) => ({
+      kind: "applied" as const,
+      acknowledgedSequence: input.clientSequence,
+      revision: input.baseRevision + 1,
+      isDirty: true
+    }));
+    const flushDocumentEdits = vi.fn(async (input: { throughSequence: number }) => ({
+      kind: "flushed" as const,
+      acknowledgedSequence: input.throughSequence,
+      revision: 1,
+      savedRevision: 0,
+      isDirty: true
+    }));
     const saveMarkdownFile = vi.fn(async () => ({
       status: "success" as const,
       document: {
@@ -89,41 +102,57 @@ describe("useEditorApplicationController", () => {
         encoding: "utf-8" as const
       }
     }));
-    const getWorkspaceSnapshot = vi.fn(async () => savedSnapshot);
+    const savedAfterFrame: WorkspaceWindowSnapshot = {
+      ...savedSnapshot,
+      activeDocument: {
+        ...savedSnapshot.activeDocument!,
+        content: "# Draft\n",
+        revision: 1,
+        savedRevision: 1,
+        isDirty: false
+      }
+    };
+    const getWorkspaceSnapshot = vi.fn(async () => savedAfterFrame);
 
     const { latestRef, root } = renderController({
       autosaveDelayMs: 25,
       fishmark: {
         updateWorkspaceTabDraft,
+        applyDocumentEdits,
+        flushDocumentEdits,
+        onDocumentProjection: vi.fn(() => () => {}),
         saveMarkdownFile,
         getWorkspaceSnapshot,
         onExternalMarkdownFileChanged: vi.fn(() => () => {}),
         onWorkspaceOwnerTabActivationRequest: vi.fn(() => () => {})
       } as unknown as Window["fishmark"],
-      getEditorContent: () => "# Saved\n",
+      getEditorContent: () => "# Draft\n",
       setEditorContentSnapshot: vi.fn(),
       showNotification: vi.fn(),
       scheduleDocumentDerivedDataUpdate: vi.fn(),
-      initialSnapshot: {
-        ...savedSnapshot,
-        activeDocument: {
-          ...savedSnapshot.activeDocument!,
-          content: "# Draft\n",
-          isDirty: true
-        }
-      }
+      initialSnapshot: savedSnapshot
     });
 
     acknowledgeEditorLoad(latestRef.current!);
+    const identity = {
+      tabId: "tab-1",
+      epoch: latestRef.current!.workspace.editorEpoch,
+      loadRevision: latestRef.current!.workspace.editorLoadRevision
+    };
+    expect(latestRef.current!.workspace.recordDocumentChangeFrame({
+      identity,
+      baseText: "# Saved\n",
+      resultingText: "# Draft\n",
+      changes: [{ from: 2, to: 7, insert: "Draft" }]
+    })).toBe(true);
 
     await act(async () => {
       await latestRef.current?.commands.saveMarkdown();
     });
 
-    expect(updateWorkspaceTabDraft).toHaveBeenCalledWith({
-      tabId: "tab-1",
-      content: "# Saved\n"
-    });
+    expect(updateWorkspaceTabDraft).not.toHaveBeenCalled();
+    expect(applyDocumentEdits).toHaveBeenCalledTimes(1);
+    expect(flushDocumentEdits).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
       tabId: "tab-1"
     });
@@ -140,22 +169,41 @@ describe("useEditorApplicationController", () => {
       activeDocument: {
         ...savedSnapshot.activeDocument!,
         content: "# Exported\n",
+        revision: 1,
+        savedRevision: 0,
         isDirty: true
       }
     };
     const updateWorkspaceTabDraft = vi.fn(async () => exportedSnapshot);
-    const saveMarkdownFile = vi.fn();
-    const exportHtmlFile = vi.fn(async () => ({
-      status: "success" as const,
-      path: "C:/notes/note.html",
-      name: "note.html"
+    const applyDocumentEdits = vi.fn(async (input: { clientSequence: number; baseRevision: number }) => ({
+      kind: "applied" as const,
+      acknowledgedSequence: input.clientSequence,
+      revision: input.baseRevision + 1,
+      isDirty: true
     }));
+    const flushDocumentEdits = vi.fn(async (input: { throughSequence: number }) => ({
+      kind: "flushed" as const,
+      acknowledgedSequence: input.throughSequence,
+      revision: 1,
+      savedRevision: 0,
+      isDirty: true
+    }));
+    const saveMarkdownFile = vi.fn();
+    let resolveExport!: (result: { status: "success"; path: string; name: string }) => void;
+    const exportHtmlFile = vi.fn<(input: { html: string }) => Promise<{ status: "success"; path: string; name: string }>>(
+      () => new Promise<{ status: "success"; path: string; name: string }>((resolve) => {
+      resolveExport = resolve;
+      })
+    );
     const showNotification = vi.fn();
 
     const { latestRef, root } = renderController({
       autosaveDelayMs: 25,
       fishmark: {
         updateWorkspaceTabDraft,
+        applyDocumentEdits,
+        flushDocumentEdits,
+        onDocumentProjection: vi.fn(() => () => {}),
         saveMarkdownFile,
         exportHtmlFile,
         getWorkspaceSnapshot: vi.fn(async () => savedSnapshot),
@@ -166,32 +214,46 @@ describe("useEditorApplicationController", () => {
       setEditorContentSnapshot: vi.fn(),
       showNotification,
       scheduleDocumentDerivedDataUpdate: vi.fn(),
-      initialSnapshot: {
-        ...savedSnapshot,
-        activeDocument: {
-          ...savedSnapshot.activeDocument!,
-          content: "# Draft\n",
-          isDirty: true
-        }
-      }
+      initialSnapshot: savedSnapshot
     });
 
     acknowledgeEditorLoad(latestRef.current!);
-
-    await act(async () => {
-      await latestRef.current?.commands.exportHtml();
-    });
-
-    expect(updateWorkspaceTabDraft).toHaveBeenCalledWith({
+    const identity = {
       tabId: "tab-1",
-      content: "# Exported\n"
+      epoch: latestRef.current!.workspace.editorEpoch,
+      loadRevision: latestRef.current!.workspace.editorLoadRevision
+    };
+    expect(latestRef.current!.workspace.recordDocumentChangeFrame({
+      identity,
+      baseText: "# Saved\n",
+      resultingText: "# Exported\n",
+      changes: [{ from: 2, to: 7, insert: "Exported" }]
+    })).toBe(true);
+
+    let exporting: Promise<void> | undefined;
+    act(() => {
+      exporting = latestRef.current?.commands.exportHtml();
     });
+    await vi.waitFor(() => expect(exportHtmlFile).toHaveBeenCalledTimes(1));
+    expect(latestRef.current!.workspace.recordDocumentChangeFrame({
+      identity,
+      baseText: "# Exported\n",
+      resultingText: "# Exported tail\n",
+      changes: [{ from: 10, to: 10, insert: " tail" }]
+    })).toBe(true);
+    resolveExport({ status: "success", path: "C:/notes/note.html", name: "note.html" });
+    await act(async () => { await exporting; });
+
+    expect(updateWorkspaceTabDraft).not.toHaveBeenCalled();
+    expect(applyDocumentEdits).toHaveBeenCalledTimes(2);
+    expect(flushDocumentEdits).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).not.toHaveBeenCalled();
     expect(exportHtmlFile).toHaveBeenCalledWith({
       tabId: "tab-1",
       currentPath: "C:/notes/note.md",
       html: expect.stringContaining("cm-line cm-inactive-heading cm-inactive-heading-depth-1")
     });
+    expect(exportHtmlFile.mock.calls[0]?.[0].html).not.toContain("Exported tail");
     expect(showNotification).toHaveBeenCalledWith({
       kind: "info",
       message: "HTML exported."
@@ -200,6 +262,66 @@ describe("useEditorApplicationController", () => {
     act(() => {
       root.unmount();
     });
+  });
+
+  it("reports an export callback failure without reconciling or replacing the workspace snapshot", async () => {
+    const getWorkspaceSnapshot = vi.fn(async () => savedSnapshot);
+    const exportHtmlFile = vi.fn(async () => {
+      throw new Error("export destination unavailable");
+    });
+    const showNotification = vi.fn();
+    const { latestRef, root } = renderController({
+      autosaveDelayMs: 25,
+      fishmark: {
+        applyDocumentEdits: vi.fn(async (input: { clientSequence: number; baseRevision: number }) => ({
+          kind: "applied" as const,
+          acknowledgedSequence: input.clientSequence,
+          revision: input.baseRevision + 1,
+          isDirty: true
+        })),
+        flushDocumentEdits: vi.fn(async (input: { throughSequence: number }) => ({
+          kind: "flushed" as const,
+          acknowledgedSequence: input.throughSequence,
+          revision: 1,
+          savedRevision: 0,
+          isDirty: true
+        })),
+        onDocumentProjection: vi.fn(() => () => {}),
+        exportHtmlFile,
+        getWorkspaceSnapshot,
+        onExternalMarkdownFileChanged: vi.fn(() => () => {}),
+        onWorkspaceOwnerTabActivationRequest: vi.fn(() => () => {})
+      } as unknown as Window["fishmark"],
+      getEditorContent: () => "# Exported\n",
+      setEditorContentSnapshot: vi.fn(),
+      showNotification,
+      scheduleDocumentDerivedDataUpdate: vi.fn(),
+      initialSnapshot: savedSnapshot
+    });
+    acknowledgeEditorLoad(latestRef.current!);
+    const identity = {
+      tabId: "tab-1",
+      epoch: latestRef.current!.workspace.editorEpoch,
+      loadRevision: latestRef.current!.workspace.editorLoadRevision
+    };
+    expect(latestRef.current!.workspace.recordDocumentChangeFrame({
+      identity,
+      baseText: "# Saved\n",
+      resultingText: "# Exported\n",
+      changes: [{ from: 2, to: 7, insert: "Exported" }]
+    })).toBe(true);
+
+    await act(async () => {
+      await latestRef.current?.commands.exportHtml();
+    });
+
+    expect(exportHtmlFile).toHaveBeenCalledTimes(1);
+    expect(getWorkspaceSnapshot).not.toHaveBeenCalled();
+    expect(showNotification).toHaveBeenCalledWith({
+      kind: "error",
+      message: "export destination unavailable"
+    });
+    act(() => root.unmount());
   });
 
   it("exposes menu-scale open commands without App wiring workspace and autosave controllers", async () => {

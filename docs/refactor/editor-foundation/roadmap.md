@@ -843,7 +843,7 @@ npm.cmd run typecheck
 
 #### RF-203: Renderer workspace client and pending edit queue
 
-**Status:** `IN_PROGRESS`; intake accepted on 2026-08-04.
+**Status:** `COMPLETE`; intake accepted on 2026-08-04; implementation and formal acceptance complete 2026-08-13.
 
 **Outcome:** CodeMirror stays responsive while main remains authoritative.
 
@@ -858,14 +858,14 @@ npm.cmd run typecheck
 
 **Steps:**
 
-- [ ] Serialize CodeMirror transactions into repository-owned `DocumentTextChange[]`.
-- [ ] Batch edits per animation frame without changing undo grouping.
-- [ ] Send batches in client-sequence order and retain unacknowledged changes.
-- [ ] Implement composition-aware edit barriers for save, switch, detach-to-new-window, reload,
+- [x] Serialize CodeMirror transactions into repository-owned `DocumentTextChange[]`.
+- [x] Batch edits per animation frame without changing undo grouping.
+- [x] Send batches in client-sequence order and retain unacknowledged changes.
+- [x] Implement composition-aware edit barriers for save, switch, detach-to-new-window, reload,
   close, and every existing renderer ownership-transfer caller; do not claim a nonexistent
   cross-existing-window move UI.
-- [ ] On conflict, reload canonical text and remap pending changes; if remapping is ambiguous, create a recovery tab containing the local text.
-- [ ] Keep dirty UI derived from observed canonical dirty metadata plus non-empty pending/recovery
+- [x] On conflict, reload canonical text and remap pending changes; if remapping is ambiguous, create a recovery tab containing the local text.
+- [x] Keep dirty UI derived from observed canonical dirty metadata plus non-empty pending/recovery
   work, without advancing the acknowledged text/revision transport baseline from projections.
 
 **Verification:**
@@ -876,6 +876,8 @@ npm.cmd run typecheck
 ```
 
 **Exit:** renderer has an ordered command queue, not a writable workspace content snapshot.
+
+**Acceptance (2026-08-13):** `PASS`. Independent specification review passed all 9/9 Acceptance items with no FAIL/Critical. Independent code-quality review returned `Ready: No` initially with one Critical (non-conflict recovery sources — adapter discard, invalid frame, missing sequence — were captured but never materialized, so `getRecoveryPendingOutcome` permanently blocked window close); the Critical was fixed by auto-materializing recovery through the same coordinator as the conflict path, with two regression tests and three existing manual-retry tests updated. The review's Important/Minor items (apply/flush transport deadlines, blocked-queue UI retry, dormant full-draft test-driver cleanup) were recorded as RF-204-deferred robustness/cleanup. Fresh acceptance evidence passed the focused 6-file / 636-test gate, editor-foundation 7 files / 308 tests, lint with 0 errors / 8 existing warnings, typecheck, full Vitest 174 files / 2,413 passed + 1 skip, build exit 0 with all three workspace runtime verifiers, formal behavior 121/121 cases / 2,541/2,541 targets / 0 unexpected / 0 not-run on exclusive rerun, and `git diff --check` (line-ending warnings only). The architecture review subagent did not complete; the main process performed the architecture acceptance directly and reported P0/P1/P2 = 0.
 
 #### RF-204: Hard cutover from full draft synchronization
 

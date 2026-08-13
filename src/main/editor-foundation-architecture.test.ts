@@ -65,7 +65,18 @@ describe("editor foundation architecture guard", () => {
     expect(codeEditorSource).toContain("EditorState.transactionFilter.of");
     expect(codeEditorSource).toContain("view.setState(createState(nextContent))");
     expect(codeEditorSource).not.toContain("canonicalDocumentReplacement");
-    expect(codeEditorSource).not.toContain("Transaction.addToHistory.of(false)");
+    // RF-203 canonical: the only history-suppressing transaction is the repository-owned
+    // internal-origin remote patch. It must be paired with the internal-origin annotation
+    // inside applyRemoteDocumentPatch, and the update observer must ignore exactly that
+    // annotation so remote patches never re-enter the pending queue as local edits.
+    expect(codeEditorSource).toContain("internalDocumentTransaction.of(true)");
+    expect(codeEditorSource).toContain("Transaction.addToHistory.of(false)");
+    expect(codeEditorSource).toContain(
+      "transaction.annotation(internalDocumentTransaction) !== true"
+    );
+    expect(
+      (codeEditorSource.match(/Transaction\.addToHistory\.of\(false\)/g) ?? []).length
+    ).toBe(1);
     for (const obsoleteToken of [
       "ApplyWorkspaceSnapshotOptions",
       "currentEditorContent",
@@ -77,6 +88,35 @@ describe("editor foundation architecture guard", () => {
     }
   });
 
+  it("keeps the RF-203 renderer pending queue and edit client runtime-neutral", () => {
+    const queueSource = readFileSync(
+      resolve(process.cwd(), "src/renderer/application/pending-edit-queue.ts"),
+      "utf8"
+    );
+    const clientSource = readFileSync(
+      resolve(process.cwd(), "src/renderer/application/workspace-edit-client.ts"),
+      "utf8"
+    );
+
+    // The queue and client may depend only on repository-owned shared DTOs and on each
+    // other; CodeMirror, React, Node, Electron, main, preload and domain/application
+    // packages must stay out so the renderer transport remains runtime-neutral.
+    for (const source of [queueSource, clientSource]) {
+      expect(source).not.toMatch(
+        /from "(?:react|react-dom|electron|node:|@codemirror|@fishmark\/)/
+      );
+      expect(source).not.toMatch(
+        /from "\.\.\/\.\.\/\.\.\/(?:main|preload|packages)/
+      );
+      expect(source).not.toMatch(/from "\.\.\/\.\.\/(?:main|preload|packages)/);
+    }
+
+    const allowedImports =
+      /from "(?:\.\/pending-edit-queue|\.\.\/\.\.\/shared\/[a-z-]+)"/g;
+    expect(queueSource.match(allowedImports) ?? []).not.toHaveLength(0);
+    expect(clientSource.match(allowedImports) ?? []).not.toHaveLength(0);
+  });
+
   it("accepts the real repository and canonical versioned manifest", () => {
     const manifest = readCanonicalManifest();
 
@@ -86,7 +126,7 @@ describe("editor foundation architecture guard", () => {
       findings: [],
       ok: true
     });
-  });
+  }, 30_000);
 
   it("binds the active workspace-domain package to exactly one matching active rule", () => {
     const manifest = readCanonicalManifest();

@@ -25,6 +25,10 @@ import type { RecentFilesSnapshot } from "../../shared/recent-files";
 import type { ThemeEffectsMode } from "../../shared/theme-package";
 import type { WorkspaceWindowSnapshot } from "../../shared/workspace";
 import { CodeEditorView, type CodeEditorHandle } from "../code-editor-view";
+import type {
+  CodeEditorDiscardedDocumentText,
+  CodeEditorDocumentChangeFrame
+} from "../code-editor";
 import type { OutlineItem } from "../outline";
 import type { ThemeRuntimeEnv } from "../theme-runtime-env";
 import type { ThemeSurfaceRuntimeMode } from "../shader/theme-surface-runtime";
@@ -209,7 +213,29 @@ export type WorkspaceShellProps = {
   onCloseSettingsDrawer: () => void;
   onCloseWorkspaceTab: (tabId: string) => void;
   onDismissExternalFileConflict: () => void;
-  onDraftChange: (content: string, identity: EditorLoadIdentity | null) => void;
+  onDocumentChangeFrame: (frame: CodeEditorDocumentChangeFrame) => void;
+  onDiscardedDocumentText: (discarded: CodeEditorDiscardedDocumentText) => void;
+  onPendingDocumentChangesChange: (input: {
+    hasPending: boolean;
+    identity: EditorLoadIdentity | null;
+  }) => void;
+  onEditorBarrierChange: (barrier: (() => Promise<{
+    readonly text: string;
+    readonly identity: EditorLoadIdentity | null;
+  }>) | null) => void;
+  onEditorRemotePatchChange?: (patch: ((input: {
+    readonly identity: EditorLoadIdentity;
+    readonly expectedBefore: string;
+    readonly expectedAfter: string;
+    readonly from: number;
+    readonly to: number;
+    readonly insert: string;
+  }) => Promise<import("../code-editor").CodeEditorRemotePatchResult>) | null) => void;
+  onEditorCanonicalRestoreChange?: (restore: ((input: {
+    readonly identity: EditorLoadIdentity;
+    readonly expectedBefore: string;
+    readonly canonicalText: string;
+  }) => Promise<import("../code-editor").CodeEditorCanonicalRestoreResult>) | null) => void;
   onEditorTransitionApplied: (input: { token: number; readOnly: boolean }) => void;
   onEditorLoadRevisionApplied: (identity: EditorLoadIdentity) => void;
   onEditorBlur: () => void;
@@ -370,7 +396,12 @@ export function WorkspaceShell({
   onDeleteTableColumn,
   onDeleteTableRow,
   onDismissExternalFileConflict,
-  onDraftChange,
+  onDocumentChangeFrame,
+  onDiscardedDocumentText,
+  onPendingDocumentChangesChange,
+  onEditorBarrierChange,
+  onEditorRemotePatchChange,
+  onEditorCanonicalRestoreChange,
   onEditorTransitionApplied,
   onEditorLoadRevisionApplied,
   onEditorBlur,
@@ -978,7 +1009,12 @@ export function WorkspaceShell({
                       openExternalLink={onOpenExternalLink}
                       viewMode={editorViewMode}
                       onActiveBlockChange={onActiveBlockChange}
-                      onChange={onDraftChange}
+                      onDocumentChangeFrame={onDocumentChangeFrame}
+                      onDiscardedDocumentText={onDiscardedDocumentText}
+                      onPendingDocumentChangesChange={onPendingDocumentChangesChange}
+                      onEditorBarrierChange={onEditorBarrierChange}
+                      onEditorRemotePatchChange={onEditorRemotePatchChange}
+                      onEditorCanonicalRestoreChange={onEditorCanonicalRestoreChange}
                       onEditorTransitionApplied={onEditorTransitionApplied}
                       onLoadRevisionApplied={onEditorLoadRevisionApplied}
                       onBlur={onEditorBlur}

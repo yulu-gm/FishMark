@@ -336,7 +336,7 @@ function EditorShell({
   const editorWorkflowController = editorApplicationController.editorWorkflow;
   const editorCommands = editorApplicationController.commands;
   const {
-    handleEditorContentChange,
+    handleEditorDocumentChangeFrame,
     handleEditorBlur,
     activateWorkspaceTab: activateWorkspaceTabWorkflow,
     closeWorkspaceTab: closeWorkspaceTabWorkflow,
@@ -1501,7 +1501,7 @@ function EditorShell({
         editor={editorTestBridge.editor}
       />
       <WorkspaceShell
-        workspaceSnapshot={state.workspaceSnapshot}
+        workspaceSnapshot={workspaceController.editorViewSnapshot}
         activeHeadingId={activeHeadingId}
         activeShortcutGroup={activeShortcutGroup}
         activeTableToolId={activeTableToolId}
@@ -1554,7 +1554,12 @@ function EditorShell({
           void handleCloseWorkspaceTab(tabId);
         }}
         onDismissExternalFileConflict={externalConflictController.dismissConflict}
-        onDraftChange={handleEditorContentChange}
+        onDocumentChangeFrame={handleEditorDocumentChangeFrame}
+        onDiscardedDocumentText={workspaceController.recordDiscardedDocumentText}
+        onPendingDocumentChangesChange={workspaceController.recordPendingDocumentChanges}
+        onEditorBarrierChange={workspaceController.registerEditorBarrier}
+        onEditorRemotePatchChange={workspaceController.registerEditorRemotePatch}
+        onEditorCanonicalRestoreChange={workspaceController.registerEditorCanonicalRestore}
         onEditorTransitionApplied={workspaceController.acknowledgeEditorTransition}
         onEditorLoadRevisionApplied={workspaceController.acknowledgeEditorLoad}
         onEditorBlur={handleEditorBlurFromShell}

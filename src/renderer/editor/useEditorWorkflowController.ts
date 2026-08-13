@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import type { EditorLoadIdentity } from "./editor-load-identity";
+import type { CodeEditorDocumentChangeFrame } from "../code-editor";
 
 export function useEditorWorkflowController(input: {
   setEditorContentSnapshot: (content: string) => void;
@@ -8,7 +8,7 @@ export function useEditorWorkflowController(input: {
   runAutosave: () => Promise<void>;
   resetAutosaveRuntime: () => void;
   getActiveTabId: () => string | null;
-  updateDraft: (input: { identity: EditorLoadIdentity; content: string }) => boolean;
+  recordDocumentChangeFrame: (frame: CodeEditorDocumentChangeFrame) => boolean;
   activateWorkspaceTab: (tabId: string) => Promise<void>;
   closeWorkspaceTab: (tabId: string) => Promise<void>;
   detachWorkspaceTab: (tabId: string) => Promise<void>;
@@ -20,27 +20,22 @@ export function useEditorWorkflowController(input: {
     runAutosave,
     resetAutosaveRuntime,
     getActiveTabId,
-    updateDraft,
+    recordDocumentChangeFrame,
     activateWorkspaceTab: activateWorkspaceTabCommand,
     closeWorkspaceTab: closeWorkspaceTabCommand,
     detachWorkspaceTab: detachWorkspaceTabCommand
   } = input;
 
-  const handleEditorContentChange = useCallback(
-    (nextContent: string, identity: EditorLoadIdentity | null): void => {
-      if (identity === null || !updateDraft({ identity, content: nextContent })) {
-        return;
+  const handleEditorDocumentChangeFrame = useCallback(
+    (frame: CodeEditorDocumentChangeFrame): void => {
+      if (!recordDocumentChangeFrame(frame)) {
+        throw new Error("The editor frame was not accepted by the active document transport.");
       }
-      setEditorContentSnapshot(nextContent);
-      scheduleDocumentDerivedDataUpdate(nextContent);
+      setEditorContentSnapshot(frame.resultingText);
+      scheduleDocumentDerivedDataUpdate(frame.resultingText);
       scheduleAutosave();
     },
-    [
-      scheduleAutosave,
-      scheduleDocumentDerivedDataUpdate,
-      setEditorContentSnapshot,
-      updateDraft
-    ]
+    [recordDocumentChangeFrame, scheduleAutosave, scheduleDocumentDerivedDataUpdate, setEditorContentSnapshot]
   );
 
   const handleEditorBlur = useCallback((): void => {
@@ -83,7 +78,7 @@ export function useEditorWorkflowController(input: {
   );
 
   return {
-    handleEditorContentChange,
+    handleEditorDocumentChangeFrame,
     handleEditorBlur,
     activateWorkspaceTab,
     closeWorkspaceTab,

@@ -9,6 +9,8 @@ import {
 import {
   createCodeEditorController,
   type CodeEditorController,
+  type CodeEditorDocumentChangeFrame,
+  type CodeEditorDiscardedDocumentText,
   type FindReplaceQueryInput,
   type FindReplaceSnapshot
 } from "./code-editor";
@@ -55,7 +57,30 @@ type CodeEditorViewProps = {
   editorEpoch: number;
   readOnly: boolean;
   editorTransitionToken: number | null;
-  onChange: (content: string, identity: EditorLoadIdentity | null) => void;
+  onChange?: (content: string, identity: EditorLoadIdentity | null) => void;
+  onDocumentChangeFrame?: (frame: CodeEditorDocumentChangeFrame) => void;
+  onDiscardedDocumentText?: (discarded: CodeEditorDiscardedDocumentText) => void;
+  onPendingDocumentChangesChange?: (input: {
+    hasPending: boolean;
+    identity: EditorLoadIdentity | null;
+  }) => void;
+  onEditorBarrierChange?: (barrier: (() => Promise<{
+    readonly text: string;
+    readonly identity: EditorLoadIdentity | null;
+  }>) | null) => void;
+  onEditorRemotePatchChange?: (patch: ((input: {
+    readonly identity: EditorLoadIdentity;
+    readonly expectedBefore: string;
+    readonly expectedAfter: string;
+    readonly from: number;
+    readonly to: number;
+    readonly insert: string;
+  }) => ReturnType<CodeEditorController["applyRemoteDocumentPatch"]>) | null) => void;
+  onEditorCanonicalRestoreChange?: (restore: ((input: {
+    readonly identity: EditorLoadIdentity;
+    readonly expectedBefore: string;
+    readonly canonicalText: string;
+  }) => ReturnType<CodeEditorController["restoreCanonicalDocument"]>) | null) => void;
   onEditorTransitionApplied: (input: { token: number; readOnly: boolean }) => void;
   onLoadRevisionApplied: (identity: EditorLoadIdentity) => void;
   onBlur?: () => void;
@@ -76,6 +101,12 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
       readOnly,
       editorTransitionToken,
       onChange,
+      onDocumentChangeFrame,
+      onDiscardedDocumentText,
+      onPendingDocumentChangesChange,
+      onEditorBarrierChange,
+      onEditorRemotePatchChange,
+      onEditorCanonicalRestoreChange,
       onEditorTransitionApplied,
       onLoadRevisionApplied,
       onBlur,
@@ -94,8 +125,44 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
     const latestLoadedContentRef = useRef(initialContent);
     const appliedIdentityRef = useRef<EditorLoadIdentity | null>(null);
     const appliedLoadRevisionRef = useRef<number | null>(null);
-    const handleChange = useEffectEvent(onChange);
+    const transitionGenerationRef = useRef(0);
+    const handleChange = useEffectEvent((content: string, identity: EditorLoadIdentity | null) => {
+      onChange?.(content, identity);
+    });
+    const handleDocumentChangeFrame = useEffectEvent((frame: CodeEditorDocumentChangeFrame) => {
+      onDocumentChangeFrame?.(frame);
+    });
+    const handleDiscardedDocumentText = useEffectEvent((discarded: CodeEditorDiscardedDocumentText) => {
+      onDiscardedDocumentText?.(discarded);
+    });
+    const handlePendingDocumentChangesChange = useEffectEvent((hasPending: boolean) => {
+      onPendingDocumentChangesChange?.({
+        hasPending,
+        identity: appliedIdentityRef.current
+      });
+    });
+    const handleEditorBarrierChange = useEffectEvent((barrier: (() => Promise<{
+      readonly text: string;
+      readonly identity: EditorLoadIdentity | null;
+    }>) | null) => {
+      onEditorBarrierChange?.(barrier);
+    });
     const handleEditorTransitionApplied = useEffectEvent(onEditorTransitionApplied);
+    const handleEditorRemotePatchChange = useEffectEvent((patch: ((input: {
+      readonly identity: EditorLoadIdentity;
+      readonly expectedBefore: string;
+      readonly expectedAfter: string;
+      readonly from: number;
+      readonly to: number;
+      readonly insert: string;
+    }) => ReturnType<CodeEditorController["applyRemoteDocumentPatch"]>) | null) => {
+      onEditorRemotePatchChange?.(patch);
+    });
+    const handleEditorCanonicalRestoreChange = useEffectEvent((restore: ((input: {
+      readonly identity: EditorLoadIdentity; readonly expectedBefore: string; readonly canonicalText: string;
+    }) => ReturnType<CodeEditorController["restoreCanonicalDocument"]>) | null) => {
+      onEditorCanonicalRestoreChange?.(restore);
+    });
     const handleLoadRevisionApplied = useEffectEvent((identity: EditorLoadIdentity) => {
       onLoadRevisionApplied(identity);
     });
@@ -118,6 +185,10 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
         initialContent: initialContentRef.current,
         documentPath: null,
         onChange: (content) => handleChange(content, appliedIdentityRef.current),
+        onDocumentChangeFrame: (frame) => handleDocumentChangeFrame(frame),
+        onDiscardedDocumentText: (discarded) => handleDiscardedDocumentText(discarded),
+        onPendingDocumentChangesChange: (hasPending) =>
+          handlePendingDocumentChangesChange(hasPending),
         onBlur: () => handleBlur(),
         onActiveBlockChange: (state) => handleActiveBlockChange(state),
         importClipboardImage: (input) => handleImportClipboardImage(input),
@@ -127,6 +198,9 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
       });
 
       controllerRef.current = controller;
+      handleEditorBarrierChange(() => controller.sealForBarrier());
+      handleEditorRemotePatchChange((input) => controller.applyRemoteDocumentPatch(input));
+      handleEditorCanonicalRestoreChange((input) => controller.restoreCanonicalDocument(input));
 
       return () => {
         if (controllerRef.current === controller) {
@@ -134,6 +208,9 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
         }
 
         controller.destroy();
+        handleEditorBarrierChange(null);
+        handleEditorRemotePatchChange(null);
+        handleEditorCanonicalRestoreChange(null);
       };
     }, []);
 
@@ -148,9 +225,11 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
       }
       if (documentTabId === null) {
         appliedIdentityRef.current = null;
+        controllerRef.current?.setDocumentIdentity(null);
         return;
       }
       const identity = { tabId: documentTabId, epoch: editorEpoch, loadRevision };
+      controllerRef.current?.setDocumentIdentity(identity);
       appliedIdentityRef.current = identity;
       handleLoadRevisionApplied(identity);
     }, [documentTabId, editorEpoch, loadRevision]);
@@ -164,10 +243,23 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
     }, [viewMode]);
 
     useEffect(() => {
-      controllerRef.current?.setReadOnly(readOnly);
-      if (editorTransitionToken !== null) {
-        handleEditorTransitionApplied({ token: editorTransitionToken, readOnly });
+      const controller = controllerRef.current;
+      if (!controller) return undefined;
+      if (editorTransitionToken === null) {
+        controller.setReadOnly(readOnly);
+        return undefined;
       }
+      let cancelled = false;
+      const transitionGeneration = ++transitionGenerationRef.current;
+      void controller.sealForBarrier().then(() => {
+        if (cancelled || transitionGeneration !== transitionGenerationRef.current) return;
+        controller.setReadOnly(readOnly);
+        handleEditorTransitionApplied({ token: editorTransitionToken, readOnly });
+      });
+      return () => {
+        cancelled = true;
+        transitionGenerationRef.current += 1;
+      };
     }, [editorTransitionToken, readOnly]);
 
     useImperativeHandle(

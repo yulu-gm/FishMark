@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AppNotification, AppUpdateState } from "../shared/app-update";
 import type { EditorTestCommandEnvelope } from "../shared/editor-test-command";
+import type { ApplyDocumentEditsResult } from "../shared/document-edit";
 import type { ExternalMarkdownFileChangedEvent } from "../shared/external-file-change";
 import { DEFAULT_PREFERENCES, type Preferences } from "../shared/preferences";
 import {
@@ -336,6 +337,16 @@ vi.mock("./code-editor-view", async () => {
           epoch: number;
           loadRevision: number;
         } | null) => void;
+        onDocumentChangeFrame?: (frame: {
+          identity: { tabId: string; epoch: number; loadRevision: number } | null;
+          baseText: string;
+          resultingText: string;
+          changes: readonly { from: number; to: number; insert: string }[];
+        }) => void;
+        onPendingDocumentChangesChange?: (input: {
+          hasPending: boolean;
+          identity: { tabId: string; epoch: number; loadRevision: number } | null;
+        }) => void;
         onLoadRevisionApplied: (identity: {
           tabId: string;
           epoch: number;
@@ -521,8 +532,23 @@ vi.mock("./code-editor-view", async () => {
     CodeEditorView,
     __mock: {
       changeContent(content: string) {
+        if (latestProps?.readOnly) return;
+        const baseText = currentContent;
         currentContent = content;
-        latestProps?.onChange(content, appliedIdentity);
+        latestProps?.onPendingDocumentChangesChange?.({
+          hasPending: true,
+          identity: appliedIdentity
+        });
+        latestProps?.onDocumentChangeFrame?.({
+          identity: appliedIdentity,
+          baseText,
+          resultingText: content,
+          changes: [{ from: 0, to: baseText.length, insert: content }]
+        });
+        latestProps?.onPendingDocumentChangesChange?.({
+          hasPending: false,
+          identity: appliedIdentity
+        });
       },
       blur() {
         latestProps?.onBlur?.();
@@ -649,6 +675,8 @@ describe("App autosave", () => {
   let confirmWorkspaceWindowClose: ReturnType<
     typeof vi.fn<Window["fishmark"]["confirmWorkspaceWindowClose"]>
   >;
+  let applyDocumentEdits: ReturnType<typeof vi.fn>;
+  let flushDocumentEdits: ReturnType<typeof vi.fn>;
   let colorSchemeMediaQuery: MockMediaQueryList;
   let workspaceWindowId: string;
   let workspaceTabs: WorkspaceTabRecord[];
@@ -1118,14 +1146,19 @@ describe("App autosave", () => {
       moveWorkspaceTabToWindow,
       detachWorkspaceTabToNewWindow,
       updateWorkspaceTabDraft,
-      applyDocumentEdits: vi.fn().mockResolvedValue({
-        kind: "error",
-        error: { code: "internal-error", message: "Not configured." }
-      }),
-      flushDocumentEdits: vi.fn().mockResolvedValue({
-        kind: "error",
-        error: { code: "internal-error", message: "Not configured." }
-      }),
+      applyDocumentEdits: applyDocumentEdits = vi.fn(async (input) => ({
+        kind: "applied" as const,
+        acknowledgedSequence: input.clientSequence,
+        revision: input.baseRevision + 1,
+        isDirty: true
+      })),
+      flushDocumentEdits: flushDocumentEdits = vi.fn(async (input) => ({
+        kind: "flushed" as const,
+        acknowledgedSequence: input.throughSequence,
+        revision: input.throughSequence,
+        savedRevision: 0,
+        isDirty: input.throughSequence > 0
+      })),
       onDocumentProjection: vi.fn(() => () => {}),
       reloadWorkspaceTabFromPath,
       handleDroppedMarkdownFile,
@@ -1744,7 +1777,9 @@ describe("App autosave", () => {
   it("surfaces a failed draft sync before a manual save", async () => {
     await renderAndOpenDocument();
 
-    updateWorkspaceTabDraft.mockRejectedValueOnce(new Error("draft sync failed"));
+    applyDocumentEdits
+      .mockRejectedValueOnce(new Error("draft sync failed"))
+      .mockRejectedValueOnce(new Error("draft sync failed"));
 
     await act(async () => {
       codeEditorMock.changeContent("# Manual sync failure\n");
@@ -1757,27 +1792,10 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
-    expect(updateWorkspaceTabDraft).toHaveBeenCalledTimes(1);
+    expect(applyDocumentEdits).toHaveBeenCalledTimes(2);
     expect(saveMarkdownFile).not.toHaveBeenCalled();
-
-    updateWorkspaceTabDraft.mockResolvedValueOnce(
-      updateWorkspaceDraft("tab-1", "# Manual sync failure\n")
-    );
-
-    await act(async () => {
-      menuCommandListener?.("save-markdown-file");
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(updateWorkspaceTabDraft).toHaveBeenCalledTimes(2);
-    expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
-    expect(saveMarkdownFile).toHaveBeenCalledWith({
-      tabId: "tab-1"
-    });
-    expect(container.querySelector('[data-fishmark-region="app-notification-banner"]')?.textContent).toContain(
-      "draft sync failed"
-    );
+    expect(applyDocumentEdits.mock.calls[0]).toEqual(applyDocumentEdits.mock.calls[1]);
+    expect(updateWorkspaceTabDraft).not.toHaveBeenCalled();
   });
 
   it("saves the currently active workspace tab by tab id after switching tabs", async () => {
@@ -2075,12 +2093,17 @@ describe("App autosave", () => {
       '[data-fishmark-region="workspace-tab"]'
     );
 
-    expect(updateWorkspaceTabDraft).toHaveBeenCalledWith({
+    expect(applyDocumentEdits).toHaveBeenCalledWith(expect.objectContaining({
       tabId: "tab-2",
-      content: "# Second dirty\n"
-    });
+      clientSequence: 1
+    }));
+    expect(flushDocumentEdits).toHaveBeenCalledWith(expect.objectContaining({
+      tabId: "tab-2",
+      throughSequence: 1
+    }));
+    expect(updateWorkspaceTabDraft).not.toHaveBeenCalled();
     expect(closeWorkspaceTab).toHaveBeenCalledWith({ tabId: "tab-2" });
-    expect(updateWorkspaceTabDraft.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(flushDocumentEdits.mock.invocationCallOrder[0]).toBeLessThan(
       closeWorkspaceTab.mock.invocationCallOrder[0]!
     );
     expect(workspaceTabs).toHaveLength(1);
@@ -2242,6 +2265,8 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
+    expect(applyDocumentEdits).toHaveBeenCalledTimes(1);
+    expect(flushDocumentEdits).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
       tabId: "tab-1"
@@ -2290,8 +2315,8 @@ describe("App autosave", () => {
   it("waits for the latest draft sync before autosaving on blur", async () => {
     await renderAndOpenDocument();
 
-    const draftSync = createDeferred<WorkspaceWindowSnapshot>();
-    updateWorkspaceTabDraft.mockImplementationOnce(() => draftSync.promise);
+    const draftSync = createDeferred<ApplyDocumentEditsResult>();
+    applyDocumentEdits.mockImplementationOnce(() => draftSync.promise);
 
     await act(async () => {
       codeEditorMock.changeContent("# Blur update\n");
@@ -2299,11 +2324,11 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
-    expect(updateWorkspaceTabDraft).toHaveBeenCalledTimes(1);
+    expect(applyDocumentEdits).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).not.toHaveBeenCalled();
 
     await act(async () => {
-      draftSync.resolve(updateWorkspaceDraft("tab-1", "# Blur update\n"));
+      draftSync.resolve({ kind: "applied", acknowledgedSequence: 1, revision: 1, isDirty: true });
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -2317,8 +2342,8 @@ describe("App autosave", () => {
   it("waits for the latest draft sync before confirming native window close", async () => {
     await renderAndOpenDocument();
 
-    const draftSync = createDeferred<WorkspaceWindowSnapshot>();
-    updateWorkspaceTabDraft.mockImplementationOnce(() => draftSync.promise);
+    const draftSync = createDeferred<ApplyDocumentEditsResult>();
+    applyDocumentEdits.mockImplementationOnce(() => draftSync.promise);
 
     await act(async () => {
       codeEditorMock.changeContent("# Close update\n");
@@ -2336,14 +2361,11 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
-    expect(updateWorkspaceTabDraft).toHaveBeenCalledWith({
-      tabId: "tab-1",
-      content: "# Close update\n"
-    });
+    expect(applyDocumentEdits).toHaveBeenCalledTimes(1);
     expect(confirmWorkspaceWindowClose).not.toHaveBeenCalled();
 
     await act(async () => {
-      draftSync.resolve(updateWorkspaceDraft("tab-1", "# Close update\n"));
+      draftSync.resolve({ kind: "applied", acknowledgedSequence: 1, revision: 1, isDirty: true });
       await closeResult;
       await Promise.resolve();
     });
@@ -2358,7 +2380,9 @@ describe("App autosave", () => {
   it("cancels native window close when the latest draft cannot be synced", async () => {
     await renderAndOpenDocument();
 
-    updateWorkspaceTabDraft.mockRejectedValueOnce(new Error("draft sync failed"));
+    applyDocumentEdits
+      .mockRejectedValueOnce(new Error("draft sync failed"))
+      .mockRejectedValueOnce(new Error("draft sync failed"));
 
     await act(async () => {
       codeEditorMock.changeContent("# Close sync failure\n");
@@ -2379,9 +2403,8 @@ describe("App autosave", () => {
 
     expect(shouldClose).toBe(false);
     expect(confirmWorkspaceWindowClose).not.toHaveBeenCalled();
-    expect(container.querySelector('[data-fishmark-region="app-notification-banner"]')?.textContent).toContain(
-      "draft sync failed"
-    );
+    expect(applyDocumentEdits).toHaveBeenCalledTimes(2);
+    expect(updateWorkspaceTabDraft).not.toHaveBeenCalled();
   });
 
   it("shows the typed close-confirmation error message when saving during close fails", async () => {
@@ -2410,7 +2433,9 @@ describe("App autosave", () => {
   it("shows an autosave error banner when the pre-save draft sync fails", async () => {
     await renderAndOpenDocument();
 
-    updateWorkspaceTabDraft.mockRejectedValueOnce(new Error("draft sync failed"));
+    applyDocumentEdits
+      .mockRejectedValueOnce(new Error("draft sync failed"))
+      .mockRejectedValueOnce(new Error("draft sync failed"));
 
     await act(async () => {
       codeEditorMock.changeContent("# Autosave sync failure\n");
@@ -2423,24 +2448,9 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
-    expect(updateWorkspaceTabDraft).toHaveBeenCalledTimes(1);
+    expect(applyDocumentEdits).toHaveBeenCalledTimes(2);
+    expect(updateWorkspaceTabDraft).not.toHaveBeenCalled();
     expect(saveMarkdownFile).not.toHaveBeenCalled();
-
-    updateWorkspaceTabDraft.mockResolvedValueOnce(
-      updateWorkspaceDraft("tab-1", "# Autosave sync failure\n")
-    );
-
-    await act(async () => {
-      codeEditorMock.blur();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(updateWorkspaceTabDraft).toHaveBeenCalledTimes(2);
-    expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
-    expect(container.querySelector('[data-fishmark-region="app-notification-banner"]')?.textContent).toContain(
-      "Autosave failed"
-    );
   });
 
   it("does not run an extra autosave after a pending manual save", async () => {
@@ -2452,6 +2462,7 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
+    expect(flushDocumentEdits).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
     expect(saveMarkdownFile).toHaveBeenCalledWith({
       tabId: "tab-1"
@@ -2587,7 +2598,11 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
-    expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => {
+      expect(applyDocumentEdits).toHaveBeenCalledTimes(1);
+      expect(flushDocumentEdits).toHaveBeenCalledTimes(1);
+      expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
+    });
     expect(saveMarkdownFile).toHaveBeenCalledWith({
       tabId: "tab-1"
     });

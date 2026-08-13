@@ -8,7 +8,7 @@ import { isolateHistory, redo, redoDepth, undo, undoDepth } from "@codemirror/co
 import { EditorView } from "@codemirror/view";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { createCodeEditorController } from "./code-editor";
+import { createCodeEditorController, internalDocumentTransaction } from "./code-editor";
 
 const getEditorView = (host: HTMLElement) => {
   const editorRoot = host.querySelector(".cm-editor");
@@ -16,6 +16,21 @@ const getEditorView = (host: HTMLElement) => {
   expect(editorRoot).not.toBeNull();
 
   return editorRoot instanceof HTMLElement ? EditorView.findFromDOM(editorRoot) : null;
+};
+
+type DocumentFrame = {
+  identity: { tabId: string; epoch: number; loadRevision: number } | null;
+  baseText: string;
+  resultingText: string;
+  changes: readonly { from: number; to: number; insert: string }[];
+};
+
+const createDocumentFrameCollector = () => {
+  const frames: DocumentFrame[] = [];
+  return {
+    frames,
+    onDocumentChangeFrame: (frame: DocumentFrame) => frames.push(frame)
+  };
 };
 
 const getLineElementByText = (host: HTMLElement, text: string) => {
@@ -9010,5 +9025,709 @@ describe("createCodeEditorController", () => {
     expect(view!.state.selection.main.anchor).toBe(source.indexOf("> 第三条引用内容") - 1);
 
     controller.destroy();
+  });
+});
+
+describe("document change frames", () => {
+  it("serializes multi-range UTF-16 and CRLF edits in the original document coordinates", () => {
+    const host = document.createElement("div");
+    const frames = createDocumentFrameCollector();
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "a😀\r\nbc",
+      onChange: vi.fn(),
+      onDocumentChangeFrame: frames.onDocumentChangeFrame
+    } as Parameters<typeof createCodeEditorController>[0]);
+    const advanced = controller as typeof controller & {
+      setDocumentIdentity: (identity: DocumentFrame["identity"]) => void;
+      flushPendingDocumentChanges: () => void;
+    };
+    const view = getEditorView(host);
+
+    advanced.setDocumentIdentity({ tabId: "tab-1", epoch: 3, loadRevision: 7 });
+    view!.dispatch({
+      changes: [
+        { from: 1, to: 3, insert: "X" },
+        { from: 4, to: 6, insert: "YZ" }
+      ]
+    });
+    advanced.flushPendingDocumentChanges();
+
+    expect(frames.frames).toEqual([
+      {
+        identity: { tabId: "tab-1", epoch: 3, loadRevision: 7 },
+        baseText: "a😀\nbc",
+        resultingText: "aX\nYZ",
+        changes: [
+          { from: 1, to: 3, insert: "X" },
+          { from: 4, to: 6, insert: "YZ" }
+        ]
+      }
+    ]);
+
+    controller.destroy();
+  });
+
+  it("composes sequential edits in one pending frame instead of concatenating coordinates", () => {
+    const host = document.createElement("div");
+    const frames = createDocumentFrameCollector();
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "abc",
+      onChange: vi.fn(),
+      onDocumentChangeFrame: frames.onDocumentChangeFrame
+    } as Parameters<typeof createCodeEditorController>[0]);
+    const advanced = controller as typeof controller & {
+      setDocumentIdentity: (identity: DocumentFrame["identity"]) => void;
+      flushPendingDocumentChanges: () => void;
+      insertText: (text: string) => void;
+    };
+
+    advanced.setDocumentIdentity({ tabId: "tab-1", epoch: 1, loadRevision: 1 });
+    advanced.insertText("X");
+    advanced.insertText("Y");
+    advanced.flushPendingDocumentChanges();
+
+    expect(frames.frames[0]).toMatchObject({
+      baseText: "abc",
+      resultingText: "XYabc",
+      changes: [{ from: 0, to: 0, insert: "XY" }]
+    });
+
+    controller.destroy();
+  });
+
+  it("keeps frames isolated by the identity captured when their first change is observed", () => {
+    const host = document.createElement("div");
+    const frames = createDocumentFrameCollector();
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "abc",
+      onChange: vi.fn(),
+      onDocumentChangeFrame: frames.onDocumentChangeFrame
+    } as Parameters<typeof createCodeEditorController>[0]);
+    const advanced = controller as typeof controller & {
+      setDocumentIdentity: (identity: DocumentFrame["identity"]) => void;
+      flushPendingDocumentChanges: () => void;
+      insertText: (text: string) => void;
+    };
+
+    advanced.setDocumentIdentity({ tabId: "tab-a", epoch: 1, loadRevision: 1 });
+    advanced.insertText("A");
+    advanced.setDocumentIdentity({ tabId: "tab-b", epoch: 2, loadRevision: 1 });
+    advanced.insertText("B");
+    advanced.flushPendingDocumentChanges();
+
+    expect(frames.frames.map((frame) => frame.identity)).toEqual([
+      { tabId: "tab-a", epoch: 1, loadRevision: 1 },
+      { tabId: "tab-b", epoch: 2, loadRevision: 1 }
+    ]);
+    controller.destroy();
+  });
+
+  it("does not emit a document frame for a selection-only update or canonical replacement", () => {
+    const host = document.createElement("div");
+    const frames = createDocumentFrameCollector();
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "abc",
+      onChange: vi.fn(),
+      onDocumentChangeFrame: frames.onDocumentChangeFrame
+    } as Parameters<typeof createCodeEditorController>[0]);
+    const advanced = controller as typeof controller & {
+      setDocumentIdentity: (identity: DocumentFrame["identity"]) => void;
+      flushPendingDocumentChanges: () => void;
+      setSelection: (anchor: number, head?: number) => void;
+    };
+
+    advanced.setDocumentIdentity({ tabId: "tab-1", epoch: 1, loadRevision: 1 });
+    advanced.setSelection(2);
+    advanced.flushPendingDocumentChanges();
+    controller.replaceDocument("disk");
+    advanced.flushPendingDocumentChanges();
+
+    expect(frames.frames).toEqual([]);
+    controller.destroy();
+  });
+
+  it("waits through compositionend for the final document update before sealing", async () => {
+    const host = document.createElement("div");
+    const frames = createDocumentFrameCollector();
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "abc",
+      onChange: vi.fn(),
+      onDocumentChangeFrame: frames.onDocumentChangeFrame
+    } as Parameters<typeof createCodeEditorController>[0]);
+    const advanced = controller as typeof controller & {
+      setDocumentIdentity: (identity: DocumentFrame["identity"]) => void;
+      sealForBarrier: () => Promise<{ text: string; identity: DocumentFrame["identity"] }>;
+    };
+    const view = getEditorView(host);
+
+    advanced.setDocumentIdentity({ tabId: "tab-1", epoch: 1, loadRevision: 1 });
+    dispatchCompositionEvent(view!.contentDOM, "compositionstart");
+    view!.dispatch({ changes: { from: 0, insert: "中" } });
+    const sealed = advanced.sealForBarrier();
+    dispatchCompositionEvent(view!.contentDOM, "compositionend");
+    view!.dispatch({ changes: { from: 1, insert: "文" } });
+    await expect(sealed).resolves.toMatchObject({ text: "中文abc", identity: { tabId: "tab-1" } });
+
+    expect(frames.frames).toMatchObject([
+      { baseText: "abc", resultingText: "中文abc", changes: [{ from: 0, to: 0, insert: "中文" }] }
+    ]);
+    controller.destroy();
+  });
+
+  it("does not leak an internal patch when it shares one view update with a user transaction", () => {
+    const host = document.createElement("div");
+    const frames = createDocumentFrameCollector();
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "abc",
+      onChange: vi.fn(),
+      onDocumentChangeFrame: frames.onDocumentChangeFrame
+    } as Parameters<typeof createCodeEditorController>[0]);
+    const advanced = controller as typeof controller & {
+      setDocumentIdentity: (identity: DocumentFrame["identity"]) => void;
+      flushPendingDocumentChanges: () => void;
+    };
+    const view = getEditorView(host)!;
+
+    advanced.setDocumentIdentity({ tabId: "tab-1", epoch: 1, loadRevision: 1 });
+    const internal = view.state.update({
+      changes: { from: 0, insert: "R" },
+      annotations: internalDocumentTransaction.of(true)
+    });
+    const user = internal.state.update({ changes: { from: 1, insert: "L" } });
+    view.update([internal, user]);
+    advanced.flushPendingDocumentChanges();
+
+    expect(frames.frames).toMatchObject([
+      {
+        baseText: "Rabc",
+        resultingText: "RLabc",
+        changes: [{ from: 1, to: 1, insert: "L" }]
+      }
+    ]);
+    controller.destroy();
+  });
+
+  it("applies a remote reconciliation patch without creating a local document frame", async () => {
+    const host = document.createElement("div");
+    const frames = createDocumentFrameCollector();
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "LOCAL omega",
+      onChange: vi.fn(),
+      onDocumentChangeFrame: frames.onDocumentChangeFrame
+    } as Parameters<typeof createCodeEditorController>[0]);
+    const advanced = controller as typeof controller & {
+      setDocumentIdentity: (identity: DocumentFrame["identity"]) => void;
+      applyRemoteDocumentPatch: (input: {
+        readonly identity: DocumentFrame["identity"];
+        readonly expectedBefore: string;
+        readonly expectedAfter: string;
+        readonly from: number;
+        readonly to: number;
+        readonly insert: string;
+      }) => Promise<boolean>;
+      flushPendingDocumentChanges: () => void;
+    };
+
+    const identity = { tabId: "tab-1", epoch: 1, loadRevision: 1 };
+    advanced.setDocumentIdentity(identity);
+    await expect(advanced.applyRemoteDocumentPatch({
+      identity,
+      expectedBefore: "LOCAL omega",
+      expectedAfter: "LOCAL REMOTE",
+      from: 6,
+      to: 11,
+      insert: "REMOTE"
+    })).resolves.toEqual({ kind: "applied" });
+    advanced.flushPendingDocumentChanges();
+
+    expect(controller.getContent()).toBe("LOCAL REMOTE");
+    expect(frames.frames).toEqual([]);
+    controller.destroy();
+  });
+
+  it("maps selection through a remote patch while preserving local-only undo and redo", async () => {
+    const host = document.createElement("div");
+    const frames = createDocumentFrameCollector();
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "alpha omega",
+      onChange: vi.fn(),
+      onDocumentChangeFrame: frames.onDocumentChangeFrame
+    } as Parameters<typeof createCodeEditorController>[0]);
+    const advanced = controller as typeof controller & {
+      setDocumentIdentity: (identity: DocumentFrame["identity"]) => void;
+      applyRemoteDocumentPatch: (input: {
+        readonly identity: DocumentFrame["identity"];
+        readonly expectedBefore: string;
+        readonly expectedAfter: string;
+        readonly from: number;
+        readonly to: number;
+        readonly insert: string;
+      }) => Promise<unknown>;
+      flushPendingDocumentChanges: () => void;
+    };
+    const view = getEditorView(host)!;
+    const identity = { tabId: "tab-1", epoch: 1, loadRevision: 1 };
+    advanced.setDocumentIdentity(identity);
+    view.dispatch({
+      changes: { from: 0, to: 5, insert: "LOCAL" },
+      selection: { anchor: 7, head: 10 }
+    });
+    advanced.flushPendingDocumentChanges();
+    frames.frames.length = 0;
+
+    await advanced.applyRemoteDocumentPatch({
+      identity,
+      expectedBefore: "LOCAL omega",
+      expectedAfter: "REMOTE LOCAL omega",
+      from: 0,
+      to: 0,
+      insert: "REMOTE "
+    });
+    expect(controller.getContent()).toBe("REMOTE LOCAL omega");
+    expect(controller.getSelection()).toEqual({ anchor: 14, head: 17 });
+    expect(frames.frames).toEqual([]);
+
+    expect(undo(view)).toBe(true);
+    expect(controller.getContent()).toBe("REMOTE alpha omega");
+    expect(redo(view)).toBe(true);
+    expect(controller.getContent()).toBe("REMOTE LOCAL omega");
+    controller.destroy();
+  });
+
+  it("rejects a remote patch whose expected optimistic text changed during an IME-safe seal", async () => {
+    const host = document.createElement("div");
+    const controller = createCodeEditorController({
+      parent: host, initialContent: "abc", onChange: vi.fn()
+    } as Parameters<typeof createCodeEditorController>[0]);
+    const advanced = controller as typeof controller & {
+      setDocumentIdentity: (identity: DocumentFrame["identity"]) => void;
+      applyRemoteDocumentPatch: (input: {
+        readonly identity: DocumentFrame["identity"]; readonly expectedBefore: string;
+        readonly expectedAfter: string; readonly from: number; readonly to: number; readonly insert: string;
+      }) => Promise<unknown>;
+      insertText: (text: string) => void;
+    };
+    const identity = { tabId: "tab-1", epoch: 1, loadRevision: 1 };
+    advanced.setDocumentIdentity(identity);
+    advanced.insertText("L");
+    await expect(advanced.applyRemoteDocumentPatch({
+      identity, expectedBefore: "abc", expectedAfter: "Rabc", from: 0, to: 0, insert: "R"
+    })).resolves.toEqual({ kind: "text-mismatch" });
+    expect(controller.getContent()).toBe("Labc");
+    controller.destroy();
+  });
+
+  it("composes multiple transactions delivered by one view update from their shared original base", () => {
+    const host = document.createElement("div");
+    const frames = createDocumentFrameCollector();
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "abc",
+      onChange: vi.fn(),
+      onDocumentChangeFrame: frames.onDocumentChangeFrame
+    } as Parameters<typeof createCodeEditorController>[0]);
+    const advanced = controller as typeof controller & {
+      setDocumentIdentity: (identity: DocumentFrame["identity"]) => void;
+      flushPendingDocumentChanges: () => void;
+    };
+    const view = getEditorView(host)!;
+
+    advanced.setDocumentIdentity({ tabId: "tab-1", epoch: 1, loadRevision: 1 });
+    const user = view.state.update({ changes: { from: 0, insert: "X" } });
+    const followUp = user.state.update({ changes: { from: 1, insert: "Y" } });
+    view.update([user, followUp]);
+    advanced.flushPendingDocumentChanges();
+
+    expect(frames.frames).toMatchObject([
+      { baseText: "abc", resultingText: "XYabc", changes: [{ from: 0, to: 0, insert: "XY" }] }
+    ]);
+    controller.destroy();
+  });
+
+  it("reports pending state and preserves exact composing text when destroyed before a barrier can seal", async () => {
+    const host = document.createElement("div");
+    const pending = vi.fn();
+    const discarded = vi.fn();
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "abc",
+      onChange: vi.fn(),
+      onPendingDocumentChangesChange: pending,
+      onDiscardedDocumentText: discarded
+    } as Parameters<typeof createCodeEditorController>[0]);
+    const advanced = controller as typeof controller & {
+      setDocumentIdentity: (identity: DocumentFrame["identity"]) => void;
+      sealForBarrier: () => Promise<void>;
+      hasPendingDocumentChanges: () => boolean;
+    };
+    const view = getEditorView(host)!;
+
+    advanced.setDocumentIdentity({ tabId: "tab-1", epoch: 5, loadRevision: 2 });
+    dispatchCompositionEvent(view.contentDOM, "compositionstart");
+    view.dispatch({ changes: { from: 1, to: 2, insert: "中文" } });
+    const sealed = advanced.sealForBarrier();
+
+    expect(advanced.hasPendingDocumentChanges()).toBe(true);
+    expect(pending).toHaveBeenCalledWith(true);
+    controller.destroy();
+    await sealed;
+
+    expect(pending).toHaveBeenLastCalledWith(false);
+    expect(discarded).toHaveBeenCalledWith({
+      identity: { tabId: "tab-1", epoch: 5, loadRevision: 2 },
+      text: "a中文c"
+    });
+  });
+
+  it("does not settle a composition barrier until a stable animation frame after the final update", async () => {
+    vi.useFakeTimers();
+    const host = document.createElement("div");
+    const frames = createDocumentFrameCollector();
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "abc",
+      onChange: vi.fn(),
+      onDocumentChangeFrame: frames.onDocumentChangeFrame
+    } as Parameters<typeof createCodeEditorController>[0]);
+    const advanced = controller as typeof controller & {
+      sealForBarrier: () => Promise<void>;
+    };
+    const view = getEditorView(host)!;
+    let settled = false;
+
+    dispatchCompositionEvent(view.contentDOM, "compositionstart");
+    view.dispatch({ changes: { from: 0, insert: "中" } });
+    const sealed = advanced.sealForBarrier().then(() => {
+      settled = true;
+    });
+    dispatchCompositionEvent(view.contentDOM, "compositionend");
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    view.dispatch({ changes: { from: 1, insert: "文" } });
+    await vi.advanceTimersByTimeAsync(32);
+    await sealed;
+
+    expect(frames.frames[0]).toMatchObject({ resultingText: "中文abc" });
+    controller.destroy();
+    vi.useRealTimers();
+  });
+
+  it("isolates frame observers so a transport callback cannot break later local edits", () => {
+    const host = document.createElement("div");
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "abc",
+      onChange: vi.fn(),
+      onDocumentChangeFrame: () => {
+        throw new Error("transport unavailable");
+      }
+    } as Parameters<typeof createCodeEditorController>[0]);
+    const advanced = controller as typeof controller & {
+      insertText: (text: string) => void;
+      flushPendingDocumentChanges: () => void;
+    };
+
+    advanced.insertText("X");
+    expect(() => advanced.flushPendingDocumentChanges()).not.toThrow();
+    advanced.insertText("Y");
+    expect(controller.getContent()).toBe("XYabc");
+    controller.destroy();
+  });
+
+  it("keeps barriers pending after compositionend until the final input reaches the one stable frame", async () => {
+    vi.useFakeTimers();
+    const host = document.createElement("div");
+    const frames = createDocumentFrameCollector();
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "abc",
+      onChange: vi.fn(),
+      onDocumentChangeFrame: frames.onDocumentChangeFrame
+    } as Parameters<typeof createCodeEditorController>[0]);
+    const advanced = controller as typeof controller & { sealForBarrier: () => Promise<void> };
+    const view = getEditorView(host)!;
+    let firstSettled = false;
+    let secondSettled = false;
+
+    dispatchCompositionEvent(view.contentDOM, "compositionstart");
+    view.dispatch({ changes: { from: 0, insert: "中" } });
+    dispatchCompositionEvent(view.contentDOM, "compositionend");
+    const first = advanced.sealForBarrier().then(() => { firstSettled = true; });
+    const second = advanced.sealForBarrier().then(() => { secondSettled = true; });
+    await Promise.resolve();
+    expect(firstSettled).toBe(false);
+    expect(secondSettled).toBe(false);
+
+    view.dispatch({ changes: { from: 1, insert: "文" } });
+    await vi.advanceTimersByTimeAsync(32);
+    await Promise.all([first, second]);
+
+    expect(frames.frames).toMatchObject([
+      { baseText: "abc", resultingText: "中文abc", changes: [{ from: 0, to: 0, insert: "中文" }] }
+    ]);
+    controller.destroy();
+    vi.useRealTimers();
+  });
+
+  it("settles a checkpoint-pending barrier and retains exact text when identity replacement interrupts it", async () => {
+    vi.useFakeTimers();
+    const host = document.createElement("div");
+    const discarded = vi.fn();
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "abc",
+      onChange: vi.fn(),
+      onDiscardedDocumentText: discarded
+    } as Parameters<typeof createCodeEditorController>[0]);
+    const advanced = controller as typeof controller & {
+      sealForBarrier: () => Promise<void>;
+      setDocumentIdentity: (identity: DocumentFrame["identity"]) => void;
+    };
+    const view = getEditorView(host)!;
+    let settled = false;
+
+    advanced.setDocumentIdentity({ tabId: "tab-a", epoch: 1, loadRevision: 1 });
+    dispatchCompositionEvent(view.contentDOM, "compositionstart");
+    view.dispatch({ changes: { from: 0, insert: "中" } });
+    dispatchCompositionEvent(view.contentDOM, "compositionend");
+    const sealed = advanced.sealForBarrier().then(() => { settled = true; });
+    advanced.setDocumentIdentity({ tabId: "tab-b", epoch: 2, loadRevision: 1 });
+    await sealed;
+
+    expect(settled).toBe(true);
+    expect(discarded).toHaveBeenCalledWith({
+      identity: { tabId: "tab-a", epoch: 1, loadRevision: 1 },
+      text: "中abc"
+    });
+    controller.destroy();
+    vi.useRealTimers();
+  });
+
+  it("discards a composition checkpoint without leaving its barrier promises pending", async () => {
+    vi.useFakeTimers();
+    const host = document.createElement("div");
+    const discarded = vi.fn();
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "abc",
+      onChange: vi.fn(),
+      onDiscardedDocumentText: discarded
+    } as Parameters<typeof createCodeEditorController>[0]);
+    const advanced = controller as typeof controller & {
+      setDocumentIdentity: (identity: DocumentFrame["identity"]) => void;
+      sealForBarrier: () => Promise<void>;
+      discardPendingDocumentChanges: () => string;
+    };
+    const view = getEditorView(host)!;
+    let settled = false;
+
+    advanced.setDocumentIdentity({ tabId: "tab-1", epoch: 1, loadRevision: 1 });
+    dispatchCompositionEvent(view.contentDOM, "compositionstart");
+    view.dispatch({ changes: { from: 0, insert: "中" } });
+    const sealed = advanced.sealForBarrier().then(() => { settled = true; });
+    expect(advanced.discardPendingDocumentChanges()).toBe("中abc");
+    await sealed;
+
+    expect(settled).toBe(true);
+    expect(discarded).toHaveBeenCalledWith({
+      identity: { tabId: "tab-1", epoch: 1, loadRevision: 1 },
+      text: "中abc"
+    });
+    controller.destroy();
+    vi.useRealTimers();
+  });
+
+  it("does not project a clean pending state before the sealed frame has been handed off", () => {
+    const host = document.createElement("div");
+    const events: string[] = [];
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "abc",
+      onChange: vi.fn(),
+      onPendingDocumentChangesChange: (hasPending) => events.push(`pending:${hasPending}`),
+      onDocumentChangeFrame: () => events.push("frame")
+    } as Parameters<typeof createCodeEditorController>[0]);
+    const advanced = controller as typeof controller & {
+      insertText: (text: string) => void;
+      flushPendingDocumentChanges: () => void;
+    };
+
+    advanced.insertText("X");
+    advanced.flushPendingDocumentChanges();
+
+    expect(events).toEqual(["pending:true", "frame", "pending:false"]);
+    controller.destroy();
+  });
+
+  it("reports exact recovery text when a sealed frame observer rejects delivery", () => {
+    const host = document.createElement("div");
+    const discarded = vi.fn();
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "abc",
+      onChange: vi.fn(),
+      onDocumentChangeFrame: () => {
+        throw new Error("transport observer failed");
+      },
+      onDiscardedDocumentText: discarded
+    } as Parameters<typeof createCodeEditorController>[0]);
+    const advanced = controller as typeof controller & {
+      setDocumentIdentity: (identity: DocumentFrame["identity"]) => void;
+      insertText: (text: string) => void;
+      flushPendingDocumentChanges: () => void;
+    };
+
+    advanced.setDocumentIdentity({ tabId: "tab-1", epoch: 1, loadRevision: 1 });
+    advanced.insertText("X");
+    advanced.flushPendingDocumentChanges();
+
+    expect(discarded).toHaveBeenCalledWith({
+      identity: { tabId: "tab-1", epoch: 1, loadRevision: 1 },
+      text: "Xabc"
+    });
+    controller.destroy();
+  });
+
+  it("keeps a synchronously reentrant edit pending after its preceding frame is handed off", () => {
+    const host = document.createElement("div");
+    const events: string[] = [];
+    const frames = createDocumentFrameCollector();
+    let insertReentrant = () => {};
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "abc",
+      onChange: vi.fn(),
+      onPendingDocumentChangesChange: (hasPending) => events.push(`pending:${hasPending}`),
+      onDocumentChangeFrame: (frame) => {
+        frames.onDocumentChangeFrame(frame);
+        if (frames.frames.length === 1) insertReentrant();
+      }
+    } as Parameters<typeof createCodeEditorController>[0]);
+    const advanced = controller as typeof controller & {
+      insertText: (text: string) => void;
+      flushPendingDocumentChanges: () => void;
+      hasPendingDocumentChanges: () => boolean;
+    };
+    insertReentrant = () => advanced.insertText("Y");
+    advanced.insertText("X");
+    advanced.flushPendingDocumentChanges();
+    expect(advanced.hasPendingDocumentChanges()).toBe(true);
+    expect(events).toEqual(["pending:true"]);
+
+    advanced.flushPendingDocumentChanges();
+    expect(frames.frames.map((frame) => frame.resultingText)).toEqual(["Xabc", "XYabc"]);
+    expect(events).toEqual(["pending:true", "pending:false"]);
+    controller.destroy();
+  });
+
+  it("clears pending state without emitting a frame when one bucket composes to no net document change", () => {
+    const host = document.createElement("div");
+    const frames = createDocumentFrameCollector();
+    const pending: boolean[] = [];
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "abc",
+      onChange: vi.fn(),
+      onDocumentChangeFrame: frames.onDocumentChangeFrame,
+      onPendingDocumentChangesChange: (hasPending) => pending.push(hasPending)
+    } as Parameters<typeof createCodeEditorController>[0]);
+    const advanced = controller as typeof controller & {
+      insertText: (text: string) => void;
+      flushPendingDocumentChanges: () => void;
+      hasPendingDocumentChanges: () => boolean;
+      setSelection: (anchor: number, head?: number) => void;
+    };
+    const view = getEditorView(host)!;
+
+    advanced.insertText("X");
+    view.dispatch({ changes: { from: 0, to: 1, insert: "" } });
+    advanced.flushPendingDocumentChanges();
+
+    expect(frames.frames).toEqual([]);
+    expect(pending).toEqual([true, false]);
+    expect(advanced.hasPendingDocumentChanges()).toBe(false);
+    controller.destroy();
+  });
+
+  it("clears a zero-net RAF bucket without emitting a frame", async () => {
+    vi.useFakeTimers();
+    const host = document.createElement("div");
+    const frames = createDocumentFrameCollector();
+    const pending: boolean[] = [];
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "abc",
+      onChange: vi.fn(),
+      onDocumentChangeFrame: frames.onDocumentChangeFrame,
+      onPendingDocumentChangesChange: (hasPending) => pending.push(hasPending)
+    } as Parameters<typeof createCodeEditorController>[0]);
+    const advanced = controller as typeof controller & { insertText: (text: string) => void };
+    const view = getEditorView(host)!;
+
+    advanced.insertText("X");
+    view.dispatch({ changes: { from: 0, to: 1, insert: "" } });
+    await vi.advanceTimersByTimeAsync(32);
+
+    expect(frames.frames).toEqual([]);
+    expect(pending).toEqual([true, false]);
+    controller.destroy();
+    vi.useRealTimers();
+  });
+
+  it("aborts an interrupted composition so a later identity edit and barrier are not held by a stale end event", async () => {
+    vi.useFakeTimers();
+    const host = document.createElement("div");
+    const frames = createDocumentFrameCollector();
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "abc",
+      onChange: vi.fn(),
+      onDocumentChangeFrame: frames.onDocumentChangeFrame
+    } as Parameters<typeof createCodeEditorController>[0]);
+    const advanced = controller as typeof controller & {
+      setDocumentIdentity: (identity: DocumentFrame["identity"]) => void;
+      insertText: (text: string) => void;
+      replaceDocument: (text: string) => void;
+      sealForBarrier: () => Promise<void>;
+    };
+    const view = getEditorView(host)!;
+    let oldSettled = false;
+    let newSettled = false;
+
+    advanced.setDocumentIdentity({ tabId: "tab-a", epoch: 1, loadRevision: 1 });
+    dispatchCompositionEvent(view.contentDOM, "compositionstart");
+    advanced.insertText("中");
+    const oldSeal = advanced.sealForBarrier().then(() => { oldSettled = true; });
+    advanced.replaceDocument("disk");
+    await oldSeal;
+    expect(oldSettled).toBe(true);
+
+    advanced.setDocumentIdentity({ tabId: "tab-b", epoch: 2, loadRevision: 1 });
+    advanced.insertText("X");
+    const newSeal = advanced.sealForBarrier().then(() => { newSettled = true; });
+    await vi.advanceTimersByTimeAsync(32);
+    await newSeal;
+
+    dispatchCompositionEvent(view.contentDOM, "compositionend");
+    await vi.advanceTimersByTimeAsync(32);
+
+    expect(newSettled).toBe(true);
+    expect(frames.frames).toMatchObject([
+      {
+        identity: { tabId: "tab-b", epoch: 2, loadRevision: 1 },
+        baseText: "disk",
+        resultingText: "Xdisk"
+      }
+    ]);
+    controller.destroy();
+    vi.useRealTimers();
   });
 });

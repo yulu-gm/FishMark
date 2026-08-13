@@ -11,6 +11,9 @@ const setContentMock = vi.fn<(content: string) => void>();
 const setDocumentPathMock = vi.fn<(documentPath: string | null) => void>();
 const setViewModeMock = vi.fn<(viewMode: "wysiwym" | "source") => void>();
 const setReadOnlyMock = vi.fn<(readOnly: boolean) => void>();
+const setDocumentIdentityMock = vi.fn<(identity: { tabId: string; epoch: number; loadRevision: number } | null) => void>();
+const sealForBarrierMock = vi.fn(() => Promise.resolve({ text: "# Initial\n", identity: null }));
+const applyRemoteDocumentPatchMock = vi.fn(async () => ({ kind: "applied" as const }));
 const focusMock = vi.fn<() => void>();
 const navigateToOffsetMock = vi.fn<(offset: number) => void>();
 const destroyMock = vi.fn<() => void>();
@@ -22,6 +25,18 @@ const pressTabMock = vi.fn<(shiftKey?: boolean) => void>();
 const pressArrowUpMock = vi.fn<() => void>();
 const pressArrowDownMock = vi.fn<() => void>();
 const createCodeEditorControllerMock = vi.fn();
+
+function createDeferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
+}
+
+function asSealSnapshot(promise: Promise<void>) {
+  return promise.then(() => ({ text: "# Initial\n", identity: null }));
+}
 
 function createBindingProps() {
   return {
@@ -53,6 +68,11 @@ describe("CodeEditorView", () => {
     setDocumentPathMock.mockReset();
     setViewModeMock.mockReset();
     setReadOnlyMock.mockReset();
+    setDocumentIdentityMock.mockReset();
+    sealForBarrierMock.mockReset();
+    sealForBarrierMock.mockResolvedValue({ text: "# Initial\n", identity: null });
+    applyRemoteDocumentPatchMock.mockReset();
+    applyRemoteDocumentPatchMock.mockResolvedValue({ kind: "applied" });
     destroyMock.mockReset();
     focusMock.mockReset();
     navigateToOffsetMock.mockReset();
@@ -74,6 +94,9 @@ describe("CodeEditorView", () => {
       setDocumentPath: setDocumentPathMock,
       setViewMode: setViewModeMock,
       setReadOnly: setReadOnlyMock,
+      setDocumentIdentity: setDocumentIdentityMock,
+      sealForBarrier: sealForBarrierMock,
+      applyRemoteDocumentPatch: applyRemoteDocumentPatchMock,
       focus: focusMock,
       navigateToOffset: navigateToOffsetMock,
       pressEnter: pressEnterMock,
@@ -196,6 +219,34 @@ describe("CodeEditorView", () => {
     expect(replaceDocumentMock).toHaveBeenCalledWith("# Opened from disk\n");
   });
 
+  it("registers and unregisters the identity-fenced remote patch capability", async () => {
+    const onEditorRemotePatchChange = vi.fn();
+    await act(async () => {
+      root.render(
+        createElement(CodeEditorView, {
+          ...createBindingProps(),
+          initialContent: "# Initial\n",
+          documentPath: "D:/notes/initial.md",
+          loadRevision: 1,
+          onChange: vi.fn(),
+          onEditorRemotePatchChange
+        })
+      );
+    });
+
+    const patch = onEditorRemotePatchChange.mock.calls[0]?.[0];
+    expect(typeof patch).toBe("function");
+    await expect(patch({
+      identity: { tabId: "tab-1", epoch: 1, loadRevision: 1 },
+      expectedBefore: "# Initial\n",
+      expectedAfter: "# Remote\n",
+      from: 0,
+      to: 10,
+      insert: "# Remote\n"
+    })).resolves.toEqual({ kind: "applied" });
+    expect(applyRemoteDocumentPatchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("acknowledges the exact editor identity only after replacing the document", async () => {
     const onLoadRevisionApplied = vi.fn();
     const onEditorTransitionApplied = vi.fn();
@@ -310,5 +361,109 @@ describe("CodeEditorView", () => {
 
     expect(navigateToOffsetMock).toHaveBeenCalledTimes(1);
     expect(navigateToOffsetMock).toHaveBeenCalledWith(12);
+  });
+
+  it("forwards the applied identity and document frame callback without owning a scheduler", async () => {
+    const onDocumentChangeFrame = vi.fn();
+    await act(async () => {
+      root.render(
+        createElement(CodeEditorView, {
+          ...createBindingProps(),
+          initialContent: "# Initial\n",
+          documentPath: "D:/notes/initial.md",
+          loadRevision: 1,
+          onChange: vi.fn(),
+          onDocumentChangeFrame
+        } as ComponentProps<typeof CodeEditorView>)
+      );
+    });
+
+    expect(setDocumentIdentityMock).toHaveBeenCalledWith({
+      tabId: "tab-1",
+      epoch: 1,
+      loadRevision: 1
+    });
+    const controllerOptions = createCodeEditorControllerMock.mock.calls[0]?.[0] as {
+      onDocumentChangeFrame?: (frame: unknown) => void;
+    };
+    const frame = { baseText: "a", resultingText: "b", changes: [], identity: null };
+    controllerOptions.onDocumentChangeFrame?.(frame);
+    expect(onDocumentChangeFrame).toHaveBeenCalledWith(frame);
+  });
+
+  it("waits for the latest seal and fences prior tokens and unmounted controllers", async () => {
+    const first = createDeferred();
+    const second = createDeferred();
+    const onEditorTransitionApplied = vi.fn();
+    sealForBarrierMock.mockReturnValueOnce(asSealSnapshot(first.promise))
+      .mockReturnValueOnce(asSealSnapshot(second.promise));
+
+    await act(async () => {
+      root.render(
+        createElement(CodeEditorView, {
+          ...createBindingProps(),
+          initialContent: "# Initial\n",
+          documentPath: "D:/notes/initial.md",
+          loadRevision: 1,
+          readOnly: true,
+          editorTransitionToken: 1,
+          onEditorTransitionApplied,
+          onChange: vi.fn()
+        })
+      );
+    });
+    expect(setReadOnlyMock).not.toHaveBeenCalled();
+    expect(onEditorTransitionApplied).not.toHaveBeenCalled();
+
+    await act(async () => {
+      root.render(
+        createElement(CodeEditorView, {
+          ...createBindingProps(),
+          initialContent: "# Initial\n",
+          documentPath: "D:/notes/initial.md",
+          loadRevision: 1,
+          readOnly: false,
+          editorTransitionToken: 2,
+          onEditorTransitionApplied,
+          onChange: vi.fn()
+        })
+      );
+    });
+    await act(async () => {
+      first.resolve();
+      await Promise.resolve();
+    });
+    expect(setReadOnlyMock).not.toHaveBeenCalled();
+    expect(onEditorTransitionApplied).not.toHaveBeenCalled();
+
+    await act(async () => {
+      second.resolve();
+      await Promise.resolve();
+    });
+    expect(setReadOnlyMock).toHaveBeenCalledWith(false);
+    expect(onEditorTransitionApplied).toHaveBeenCalledWith({ token: 2, readOnly: false });
+
+    const unmounted = createDeferred();
+    sealForBarrierMock.mockReturnValueOnce(asSealSnapshot(unmounted.promise));
+    await act(async () => {
+      root.render(
+        createElement(CodeEditorView, {
+          ...createBindingProps(),
+          initialContent: "# Initial\n",
+          documentPath: "D:/notes/initial.md",
+          loadRevision: 1,
+          readOnly: true,
+          editorTransitionToken: 3,
+          onEditorTransitionApplied,
+          onChange: vi.fn()
+        })
+      );
+    });
+    await act(async () => {
+      root.unmount();
+      unmounted.resolve();
+      await Promise.resolve();
+    });
+    expect(onEditorTransitionApplied).not.toHaveBeenCalledWith({ token: 3, readOnly: true });
   });
 });
