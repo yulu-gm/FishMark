@@ -4,7 +4,7 @@ import type { AppNotification } from "../../shared/app-update";
 import type { AppMenuCommand } from "../../shared/menu-command";
 import type { WorkspaceWindowSnapshot } from "../../shared/workspace";
 import { useEditorWorkflowController } from "./useEditorWorkflowController";
-import { useExternalConflictController } from "./useExternalConflictController";
+import { useExternalConflictResolution } from "./useExternalConflictResolution";
 import { useSaveController } from "./useSaveController";
 import { useWorkspaceController } from "./useWorkspaceController";
 
@@ -29,28 +29,17 @@ export function useEditorApplicationController(input: {
     initialSnapshot,
     showNotification
   });
+  const externalConflictController = useExternalConflictResolution({
+    fishmark,
+    getActiveDocument: workspaceController.getActiveDocument,
+    refreshSnapshot: workspaceController.loadInitialWorkspaceSnapshot,
+    showNotification
+  });
   const saveController = useSaveController({
     getActiveDocument: workspaceController.getActiveDocument,
     runSaveTransaction: workspaceController.runSaveTransaction,
-    hasExternalFileConflict: () => externalConflictController.hasExternalFileConflict(),
+    hasExternalFileConflict: () => (workspaceController.getActiveDocument()?.externalChange ?? null) !== null,
     autosaveDelayMs,
-    showNotification
-  });
-  const externalConflictController = useExternalConflictController({
-    fishmark,
-    getActiveDocument: workspaceController.getActiveDocument,
-    reloadActiveDocument: async () => {
-      const activeDocument = workspaceController.getActiveDocument();
-
-      if (!activeDocument?.path) {
-        return false;
-      }
-
-      return workspaceController.reloadWorkspaceTabFromPath({
-        tabId: activeDocument.tabId
-      });
-    },
-    resetAutosaveRuntime: saveController.resetAutosaveRuntime,
     showNotification
   });
   const editorWorkflowController = useEditorWorkflowController({

@@ -1,4 +1,3 @@
-import type { ExternalMarkdownFileChangedEvent } from "../../shared/external-file-change";
 import type {
   WorkspaceDocumentSnapshot,
   WorkspaceWindowSnapshot
@@ -11,7 +10,7 @@ export type ExternalMarkdownFileState =
   | {
       status: "pending" | "keeping-memory";
       path: string;
-      kind: ExternalMarkdownFileChangedEvent["kind"];
+      kind: "modified" | "deleted";
     };
 
 export type EditorShellState = {
@@ -64,37 +63,4 @@ export function setOpenState(currentState: EditorShellState, openState: OpenStat
     ...currentState,
     openState
   };
-}
-
-export function applyExternalMarkdownFileChanged(
-  currentState: ExternalMarkdownFileState,
-  activeDocument: WorkspaceDocumentSnapshot | null,
-  event: ExternalMarkdownFileChangedEvent
-): ExternalMarkdownFileState {
-  if (!activeDocument?.path || activeDocument.path !== event.path) {
-    return currentState;
-  }
-
-  return {
-    status: "pending",
-    path: event.path,
-    kind: event.kind
-  };
-}
-
-export function keepExternalMarkdownMemoryVersion(
-  currentState: ExternalMarkdownFileState
-): ExternalMarkdownFileState {
-  if (currentState.status !== "pending") {
-    return currentState;
-  }
-
-  return {
-    ...currentState,
-    status: "keeping-memory"
-  };
-}
-
-export function clearExternalMarkdownFileState(): ExternalMarkdownFileState {
-  return { status: "idle" };
 }
