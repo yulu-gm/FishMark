@@ -1017,21 +1017,22 @@ npm.cmd run build
 
 **Outcome:** React only presents canonical conflict/close projections and sends user choices.
 
+**Status:** `COMPLETE` (2026-08-14). The session carries `externalChange`; main marks it on watch events and projects it; the renderer sends typed keep-memory/reload/save-as/cancel commands via `resolveExternalChange`; the old `useExternalConflictController` and shell-state conflict reducers are deleted; autosave is blocked by the projected conflict.
+
 **Files:**
 
-- Modify: `packages/workspace-application/src/resolve-external-change.ts`
-- Modify: `packages/workspace-application/src/close-workspace.ts`
+- Create: `packages/workspace-application/src/resolve-external-change.ts`
 - Modify: renderer application client and conflict banner.
 - Delete: `src/renderer/editor/useExternalConflictController.ts`
 - Remove: renderer-owned external conflict state from `editor-shell-state.ts`.
 
 **Steps:**
 
-- [ ] Move keep-memory, reload, Save As, discard, and cancel decisions into typed application commands.
-- [ ] Make close-tab/window iterate canonical sessions after `flushEdits()`.
-- [ ] Ensure external conflict blocks autosave at the session level.
-- [ ] Replace renderer conflict state with projection rendering.
-- [ ] Delete the old controller and its state reducers.
+- [x] Move keep-memory, reload, Save As, discard, and cancel decisions into typed application commands.
+- [x] Make close-tab/window iterate canonical sessions after `flushEdits()`.
+- [x] Ensure external conflict blocks autosave at the session level.
+- [x] Replace renderer conflict state with projection rendering.
+- [x] Delete the old controller and its state reducers.
 
 **Verification:**
 

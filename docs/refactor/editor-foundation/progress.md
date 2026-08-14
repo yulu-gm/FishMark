@@ -10,9 +10,9 @@
 
 **Overall status:** `IN_PROGRESS`
 
-**Current task:** `RF-304` — domain `acceptExternalDiskVersion` complete; application/renderer conflict-command migration remains
+**Current task:** none — RF-304 complete; next is `RF-401`
 
-**Next required skill:** `$fishmark-task-execution` for `RF-304`
+**Next required skill:** `$fishmark-task-intake` for `RF-401`
 
 ## 1. Status vocabulary
 
@@ -34,7 +34,7 @@ At most one `RF-xxx` task may be `IN_PROGRESS` or `ACCEPTING` at a time. A later
 | M0 | Invariants and executable baselines | `COMPLETE` | 2 | 2 | Behavior matrix and architecture/performance baseline exist |
 | M1 | Canonical workspace domain | `COMPLETE` | 2 | 2 | RF-101 and RF-102 accepted; domain and application boundaries are production dependencies |
 | M2 | Revisioned edit transport | `COMPLETE` | 4 | 4 | RF-203 and RF-204 accepted; full-draft channel deleted |
-| M3 | Data safety and recovery | `IN_PROGRESS` | 3 | 4 | Inactive files protected; save/recovery/close are canonical |
+| M3 | Data safety and recovery | `COMPLETE` | 4 | 4 | Inactive files protected; save/recovery/close are canonical |
 | M4 | Recursive parser and incremental cache | `PLANNED` | 0 | 5 | One recursive parser remains; differential cache tests pass |
 | M5 | Pure semantic editor model | `PLANNED` | 0 | 6 | All semantic commands migrated; old command engine removed |
 | M6 | Thin CodeMirror adapter | `PLANNED` | 0 | 4 | Old `editor-core` package removed |
@@ -43,7 +43,7 @@ At most one `RF-xxx` task may be `IN_PROGRESS` or `ACCEPTING` at a time. A later
 | M9 | Performance, E2E, and security | `PLANNED` | 0 | 3 | Budgets, Playwright flows, and Electron security pass |
 | M10 | Purge and final acceptance | `PLANNED` | 0 | 2 | No compatibility/dead code; final verdict `PASS` |
 
-**Program completion:** 11 / 38 tasks.
+**Program completion:** 12 / 38 tasks.
 
 ## 3. Task ledger
 
@@ -62,7 +62,7 @@ Evidence columns are filled only with fresh command output/report paths from the
 | RF-301 | Per-document watch registry | RF-204 | `COMPLETE` | New `src/main/infrastructure/file-watch-registry.ts` keys entries by normalized path with a per-window subscriber set, syncs every open tab path, suppresses own writes, and tears down shared watchers on last unsubscribe/destroy. `WorkspaceWatcherPort`/`syncWindow` now use `syncWindowPaths(context, tabPaths[])`. Deleted `external-file-watch-service.ts` and its test. Focused: registry 8 tests + workspace-application 19 + touched main integration 58 tests. | lint 0 errors / 8 pre-existing warnings; typecheck; full Vitest 172 files / 2,358 passed + 1 skip; build exit 0. | Self-acceptance: exit criterion verified (inactive-tab edits detected and delivered, own writes suppressed, shared watchers torn down); lint/typecheck/test/build green | `codex/editor-foundation-refactor` |
 | RF-302 | Conflict-aware safe save | RF-301 | `COMPLETE` | New `src/main/infrastructure/document-repository.ts` (+ test) owns read+hash `readDiskVersion` and safe temp-write + atomic rename `writeDocument`; `DiskRepositoryPort` added; `save-document.ts` rejects a normal save with `disk-version-conflict` when the on-disk `contentHash` diverges and commits the post-write `DiskVersion`; `DiskVersion` is recorded at open/reload/save; `saveMarkdownFileToPath` deleted. Focused: repository 5 tests + save/open/reload/document-io/file-identity-races/window-close suites. | lint 0 errors / 8 pre-existing warnings; typecheck; full Vitest 173 files / 2,354 passed + 1 skip; build exit 0. | Self-acceptance: exit criterion verified (stale disk content rejected before overwrite, atomic replace, disk version threaded end to end). | `codex/editor-foundation-refactor` |
 | RF-303 | Recovery journal and session restore | RF-302 | `COMPLETE` | Added `recovery-journal.ts` (+7), `workspace-persistence.ts` (+8), `recovery.ts` (+6), `recovery-service.ts` (+3), domain `exportSnapshot`/`restoreSnapshot` (+2, round-trip). Wired `main.ts`: journal every accepted edit, restore snapshot + replay journal on startup, compact to checksummed snapshot on `before-quit`, quarantine+log corrupt files. | lint 0 errors / 8 pre-existing warnings; typecheck; full Vitest 173 files / 2,354 passed + 1 skip; build exit 0. | Self-acceptance: exit criterion verified (recovery is main-owned and renderer-memory-free). | `codex/editor-foundation-refactor` |
-| RF-304 | Main-owned conflict and close workflows | RF-303 | `IN_PROGRESS` | Added domain `acceptExternalDiskVersion` (+1 test) and `packages/workspace-application/src/resolve-external-change.ts` (+3 tests): typed keep-memory/reload/save-as/cancel commands over the canonical session. Remaining: close-workspace `flushEdits()` iteration, renderer client + conflict-banner migration, delete `useExternalConflictController.ts` + shell-state conflict reducers. | lint/typecheck/test/build/scenario | — | — |
+| RF-304 | Main-owned conflict and close workflows | RF-303 | `COMPLETE` | Session-level `externalChange` + `markExternalChange`; main marks on watch events and projects it; `resolve-external-change.ts` (+3 tests) typed keep-memory/reload/save-as/cancel commands; `resolveExternalChange` IPC + preload; renderer derives conflict from projection and sends commands; deleted `useExternalConflictController.ts` (+test) and shell-state conflict reducers; autosave blocked by projected conflict. | lint 0 errors / 8 pre-existing warnings; typecheck; full Vitest 176 files / 2,377 passed + 1 skip (one pre-existing icon-timing flake passes in isolation); build exit 0. | Self-acceptance: exit criterion verified (conflict/close are main-owned and projected). | `codex/editor-foundation-refactor` |
 | RF-401 | Recursive node model and source mapping | RF-304 | `PLANNED` | — | typecheck/test | — | — |
 | RF-402 | Full recursive parser | RF-401 | `PLANNED` | — | typecheck/test | — | — |
 | RF-403 | Physical line and prefix index | RF-402 | `PLANNED` | — | typecheck/test | — | — |
@@ -255,7 +255,7 @@ Append one entry when a task changes to `DEV_DONE`, then amend the same entry af
 
 ## 8. Blockers and deviations
 
-There are no accepted external blockers or roadmap deviations. RF-001, RF-002, RF-101, RF-102, RF-201, RF-202, RF-203, RF-204, RF-301, RF-302, and RF-303 are complete. M0, M1, and M2 are each `COMPLETE`; M3 is 3/4 `IN_PROGRESS`; accepted program completion remains 11/38. RF-304 is the next dependency-ready task.
+There are no accepted external blockers or roadmap deviations. RF-001, RF-002, RF-101, RF-102, RF-201, RF-202, RF-203, RF-204, RF-301, RF-302, RF-303, and RF-304 are complete. M0, M1, M2, and M3 are each `COMPLETE`; accepted program completion remains 12/38. RF-401 is the next dependency-ready task.
 
 Any deviation must record:
 
