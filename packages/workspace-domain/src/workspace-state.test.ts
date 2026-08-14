@@ -505,7 +505,8 @@ describe("WorkspaceState tab lifecycle", () => {
       revision: 0,
       savedRevision: 0,
       isDirty: false,
-      saveState: "idle"
+      saveState: "idle",
+      externalChange: null
     });
     expect(opened.tabs.map((tab) => tab.name)).toEqual(["Untitled.md", "today.md"]);
     expect(opened.activeTabId).toBe("tab-2");
@@ -654,7 +655,8 @@ describe("WorkspaceState save and reload transitions", () => {
       revision: 1,
       savedRevision: 1,
       isDirty: false,
-      saveState: "idle"
+      saveState: "idle",
+      externalChange: null
     });
     expect(workspace.getTabSession(tabId)).toMatchObject({
       revision: 1,
@@ -1267,6 +1269,7 @@ describe("WorkspaceState projection isolation", () => {
       readonly savedRevision: number;
       readonly isDirty: boolean;
       readonly saveState: "idle" | "manual-saving" | "autosaving";
+      readonly externalChange: { readonly kind: "modified" | "deleted" } | null;
     }>();
     expectTypeOf<WorkspaceWindowProjection>().toEqualTypeOf<{
       readonly windowId: string;

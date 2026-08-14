@@ -45,6 +45,7 @@ export interface WorkspaceDocumentProjection {
   readonly savedRevision: DocumentRevision;
   readonly isDirty: boolean;
   readonly saveState: DocumentSaveState;
+  readonly externalChange: ExternalDocumentChange | null;
 }
 
 export interface WorkspaceDocumentMetadataProjection {
@@ -1116,7 +1117,8 @@ function createDocumentProjection(
     revision: projection.revision,
     savedRevision: projection.savedRevision,
     isDirty: projection.isDirty,
-    saveState: projection.saveState
+    saveState: projection.saveState,
+    externalChange: projection.externalChange
   });
 }
 

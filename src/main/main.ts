@@ -376,9 +376,20 @@ app.whenReady().then(async () => {
   const fontCatalogService = createFontCatalogService({
     platform: process.platform
   });
-  const fileWatchRegistry = createFileWatchRegistry();
-  const documentRepository = createDocumentRepository();
   const workspaceState = createWorkspaceState({ createTextBuffer: createCodeMirrorTextBuffer });
+  const fileWatchRegistry = createFileWatchRegistry({
+    onExternalChange: (path, kind) => {
+      const session = workspaceState.exportSnapshot().sessions.find((s) => s.path === path);
+      if (session !== undefined) {
+        workspaceState.markExternalChange({
+          tabId: session.tabId,
+          expectedWindowId: session.windowId,
+          change: { kind }
+        });
+      }
+    }
+  });
+  const documentRepository = createDocumentRepository();
   const recoveryService = createRecoveryService(app.getPath("userData"));
 
   const recovery = await recoveryService.loadRecovery();

@@ -33,7 +33,8 @@ export function toWorkspaceWindowSnapshot(
             revision: projection.activeDocument.revision,
             savedRevision: projection.activeDocument.savedRevision,
             isDirty: projection.activeDocument.isDirty,
-            saveState: projection.activeDocument.saveState
+            saveState: projection.activeDocument.saveState,
+            externalChange: projection.activeDocument.externalChange
           }
   };
 }

@@ -13,6 +13,10 @@ export type WorkspaceTabStripItem = {
   saveState: WorkspaceTabSaveState;
 };
 
+export type WorkspaceExternalChange = {
+  kind: "modified" | "deleted";
+};
+
 export type WorkspaceDocumentSnapshot = {
   tabId: string;
   path: string | null;
@@ -23,6 +27,7 @@ export type WorkspaceDocumentSnapshot = {
   savedRevision: number;
   isDirty: boolean;
   saveState: WorkspaceTabSaveState;
+  externalChange?: WorkspaceExternalChange | null;
 };
 
 export type WorkspaceWindowSnapshot = {

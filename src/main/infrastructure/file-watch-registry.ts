@@ -27,6 +27,7 @@ type WatchDependencies = {
   ) => FSWatcherLike;
   stat: (targetPath: string) => Promise<Stats>;
   reportCleanupError?: (error: unknown) => void;
+  onExternalChange?: (path: string, kind: "modified" | "deleted") => void;
 };
 
 type InternalWrite = {
@@ -70,8 +71,9 @@ export type FileWatchRegistry = {
 };
 
 export function createFileWatchRegistry(
-  dependencies: WatchDependencies = defaultDependencies
+  dependencies: Partial<WatchDependencies> = {}
 ): FileWatchRegistry {
+  const resolved = { ...defaultDependencies, ...dependencies } as WatchDependencies;
   const entriesByPath = new Map<string, RegistryEntry>();
   const pathsByTarget = new Map<number, Set<string>>();
   const destroyedTargets = new WeakSet<WatchedTarget>();
@@ -149,7 +151,7 @@ export function createFileWatchRegistry(
         entriesByPath.set(path, entry);
         let baseline: FileSnapshot | null;
         try {
-          baseline = await readSnapshot(path, dependencies.stat);
+          baseline = await readSnapshot(path, resolved.stat);
         } catch (error) {
           entriesByPath.delete(path);
           throw error;
@@ -157,7 +159,7 @@ export function createFileWatchRegistry(
         entry.baseline = baseline;
         let watcher: FSWatcherLike;
         try {
-          watcher = dependencies.watch(path, () => {
+          watcher = resolved.watch(path, () => {
             void handleWatchEvent(entry!).catch(() => undefined);
           });
         } catch (error) {
@@ -197,7 +199,7 @@ export function createFileWatchRegistry(
     if (entry === undefined || write === undefined || write === null) return;
     if (write.path !== path || !entry.subscribers.has(target)) return;
     try {
-      const currentSnapshot = await readSnapshot(path, dependencies.stat);
+      const currentSnapshot = await readSnapshot(path, resolved.stat);
       if (entry.internalWrite === write) {
         entry.baseline = currentSnapshot;
       }
@@ -211,11 +213,15 @@ export function createFileWatchRegistry(
   async function handleWatchEvent(entry: RegistryEntry): Promise<void> {
     if (entry.watcher === null || entriesByPath.get(entry.path) !== entry) return;
     if (entry.internalWrite !== null) return;
-    const nextSnapshot = await readSnapshot(entry.path, dependencies.stat);
+    const nextSnapshot = await readSnapshot(entry.path, resolved.stat);
     if (entriesByPath.get(entry.path) !== entry) return;
     if (entry.internalWrite !== null) return;
     if (snapshotsEqual(entry.baseline, nextSnapshot)) return;
     entry.baseline = nextSnapshot;
+    resolved.onExternalChange?.(
+      entry.path,
+      nextSnapshot === null ? "deleted" : "modified"
+    );
     for (const subscriber of entry.subscribers) {
       if (!isLive(subscriber)) continue;
       sendExternalChange(subscriber, entry.path, nextSnapshot);
@@ -232,7 +238,7 @@ export function createFileWatchRegistry(
       watcher.close();
     } catch (error) {
       try {
-        dependencies.reportCleanupError?.(error);
+        resolved.reportCleanupError?.(error);
       } catch {
         // Cleanup reporting cannot corrupt authoritative registry state.
       }
