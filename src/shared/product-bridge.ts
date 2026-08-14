@@ -15,6 +15,8 @@ import type {
   ReloadWorkspaceTabFromPathInput,
   ReloadWorkspaceTabFromPathResult,
   ReorderWorkspaceTabInput,
+  ResolveExternalChangeInput,
+  ResolveExternalChangeResult,
   WorkspaceMoveTabResult,
   WorkspaceOwnerTabActivationRequest,
   WorkspaceWindowCloseRequest,
@@ -67,6 +69,9 @@ export interface ProductBridge {
   ) => Promise<HandleDroppedMarkdownFileResult>;
   getPathForDroppedFile: (file: File) => string;
   getWorkspaceSnapshot: () => Promise<WorkspaceWindowSnapshot>;
+  resolveExternalChange: (
+    input: ResolveExternalChangeInput
+  ) => Promise<ResolveExternalChangeResult>;
   createWorkspaceTab: (input: CreateWorkspaceTabInput) => Promise<WorkspaceWindowSnapshot>;
   openWorkspaceFile: () => Promise<OpenWorkspaceFileResult>;
   openWorkspaceFileFromPath: (targetPath: string) => Promise<OpenWorkspaceFileFromPathResult>;

@@ -1211,6 +1211,7 @@ describe("App autosave", () => {
           }
         };
       },
+      resolveExternalChange: vi.fn().mockResolvedValue({ kind: "resolved" }),
       onOpenWorkspacePath(listener: OpenWorkspacePathListener) {
         openWorkspacePathListener = listener;
         return () => {

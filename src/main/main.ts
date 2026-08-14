@@ -18,6 +18,7 @@ import {
   createWorkspaceTabReorder,
   createWorkspaceTabTransfer,
   createWorkspaceWindowClose,
+  createResolveExternalChange,
   type CloseWorkspaceTabResult,
   type KeyedOperationLease,
   type WorkspaceMoveCommandResult,
@@ -157,6 +158,7 @@ import {
   REORDER_WORKSPACE_TAB_CHANNEL,
   REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT,
   REQUEST_WORKSPACE_OWNER_TAB_ACTIVATION_EVENT,
+  RESOLVE_EXTERNAL_CHANGE_CHANNEL,
   type ActivateWorkspaceTabInput,
   type CloseWorkspaceTabInput,
   type ConfirmWorkspaceOwnerTabActivationInput,
@@ -172,6 +174,7 @@ import {
   type ReloadWorkspaceTabFromPathInput,
   type ReloadWorkspaceTabFromPathResult,
   type ReorderWorkspaceTabInput,
+  type ResolveExternalChangeInput,
   type WorkspaceWindowCloseRequest
 } from "../shared/workspace";
 
@@ -180,6 +183,18 @@ const WORKSPACE_DETACH_READY_TIMEOUT_MS = 15_000;
 const WORKSPACE_WINDOW_CLOSE_REQUEST_TIMEOUT_MS = 15_000;
 const WORKSPACE_WINDOW_CLOSE_POST_CONFIRM_WATCHDOG_MS = 15_000;
 const WORKSPACE_OWNER_TAB_ACTIVATION_REQUEST_TIMEOUT_MS = 15_000;
+
+function mapResolveExternalChangeResult(
+  result: import("@fishmark/workspace-application").ResolveExternalChangeResult
+): import("../shared/workspace").ResolveExternalChangeResult {
+  if (result.kind === "resolved" || result.kind === "reloaded" || result.kind === "saved-as") {
+    return { kind: "resolved" };
+  }
+  if (result.kind === "cancelled") {
+    return { kind: "cancelled" };
+  }
+  return { kind: "error", message: "The tab is no longer available." };
+}
 
 function requireWorkspaceCommandProjection(
   result: WorkspaceProjectionMutationResult
@@ -898,6 +913,11 @@ app.whenReady().then(async () => {
     save: workspaceFileOperations,
     close: closeWorkspace
   });
+  const resolveExternalChange = createResolveExternalChange<Electron.WebContents>({
+    workspace: workspaceState,
+    reload: (input) => workspaceApplication.reloadTab(input),
+    saveAs: (input) => workspaceFileOperations.saveAs(input)
+  });
   const handleWorkspaceWindowCloseConfirmation =
     createWorkspaceWindowCloseConfirmationHandler({
       broker: workspaceWindowCloseRequestBroker,
@@ -953,6 +973,42 @@ app.whenReady().then(async () => {
       await workspaceApplication.getSnapshot({ context: event.sender, windowId })
     ));
   });
+  ipcMain.handle(
+    RESOLVE_EXTERNAL_CHANGE_CHANNEL,
+    async (event, input: ResolveExternalChangeInput) => {
+      const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
+      let tab;
+      try {
+        tab = workspaceState.getTabSession(input.tabId);
+      } catch {
+        return { kind: "error", message: "The tab no longer exists." };
+      }
+      if (tab.windowId !== windowId) {
+        return { kind: "error", message: "The tab moved to another window." };
+      }
+
+      const context = { context: event.sender, tabId: input.tabId, expectedWindowId: windowId };
+      if (input.command === "keep-memory") {
+        const diskVersion = tab.path === null
+          ? null
+          : await documentRepository.readDiskVersion(tab.path);
+        const result = await resolveExternalChange.resolve(context, {
+          kind: "keep-memory",
+          diskVersion
+        });
+        return mapResolveExternalChangeResult(result);
+      }
+      const result = await resolveExternalChange.resolve(
+        context,
+        input.command === "reload"
+          ? { kind: "reload" }
+          : input.command === "save-as"
+            ? { kind: "save-as" }
+            : { kind: "cancel" }
+      );
+      return mapResolveExternalChangeResult(result);
+    }
+  );
   ipcMain.handle(
     CONFIRM_WORKSPACE_OWNER_TAB_ACTIVATION_CHANNEL,
     async (event, input: ConfirmWorkspaceOwnerTabActivationInput) => {

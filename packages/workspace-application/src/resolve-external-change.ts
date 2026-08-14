@@ -28,7 +28,11 @@ export type ResolveExternalChangeResult =
 
 export function createResolveExternalChange<TContext>(dependencies: {
   workspace: Pick<WorkspaceState, "acceptExternalDiskVersion">;
-  reload: (input: { readonly tabId: string; readonly expectedWindowId: string }) => Promise<unknown>;
+  reload: (input: {
+    readonly context: TContext;
+    readonly tabId: string;
+    readonly expectedWindowId: string;
+  }) => Promise<unknown>;
   saveAs: (input: SaveDocumentInput<TContext>) => Promise<SaveDocumentResult>;
 }) {
   return {
@@ -59,6 +63,7 @@ export function createResolveExternalChange<TContext>(dependencies: {
         }
         case "reload":
           return dependencies.reload({
+            context: input.context,
             tabId: input.tabId,
             expectedWindowId: input.expectedWindowId
           }).then((outcome) => ({ kind: "reloaded", outcome }));

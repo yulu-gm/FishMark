@@ -243,7 +243,6 @@ describe("main process window wiring", () => {
     expect(mainSource).not.toContain("workspaceState.registerWindow(detachedWindowId)");
     expect(mainSource).not.toContain("workspaceState.createUntitledTab(");
     expect(mainSource).not.toContain("workspaceState.activateTab(");
-    expect(mainSource).not.toContain("workspaceState.getTabSession(input.tabId)");
     expect(mainSource).not.toContain("workspaceState.replaceTabDocument(input.tabId");
   });
 

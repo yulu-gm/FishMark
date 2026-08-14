@@ -83,6 +83,7 @@ import {
   REORDER_WORKSPACE_TAB_CHANNEL,
   REQUEST_WORKSPACE_OWNER_TAB_ACTIVATION_EVENT,
   REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT,
+  RESOLVE_EXTERNAL_CHANGE_CHANNEL,
   type ActivateWorkspaceTabInput,
   type CloseWorkspaceTabInput,
   type CompleteWorkspaceWindowCloseInput,
@@ -98,6 +99,8 @@ import {
   type ReloadWorkspaceTabFromPathInput,
   type ReloadWorkspaceTabFromPathResult,
   type ReorderWorkspaceTabInput,
+  type ResolveExternalChangeInput,
+  type ResolveExternalChangeResult,
   type WorkspaceMoveTabResult,
   type WorkspaceOwnerTabActivationRequest,
   type WorkspaceWindowCloseRequest,
@@ -147,6 +150,8 @@ export function createProductApi({ ipc, filePath, runtime }: CreateProductApiInp
     getPathForDroppedFile: (file: File) => filePath.getPathForFile(file),
     getWorkspaceSnapshot: () =>
       ipc.invoke<WorkspaceWindowSnapshot>(GET_WORKSPACE_SNAPSHOT_CHANNEL),
+    resolveExternalChange: (input: ResolveExternalChangeInput) =>
+      ipc.invoke<ResolveExternalChangeResult>(RESOLVE_EXTERNAL_CHANGE_CHANNEL, input),
     createWorkspaceTab: (input: CreateWorkspaceTabInput) =>
       ipc.invoke<WorkspaceWindowSnapshot>(CREATE_WORKSPACE_TAB_CHANNEL, input),
     openWorkspaceFile: () => ipc.invoke<OpenWorkspaceFileResult>(OPEN_WORKSPACE_FILE_CHANNEL),

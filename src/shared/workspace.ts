@@ -189,6 +189,24 @@ export type CompleteWorkspaceWindowCloseInput = {
   shouldClose: boolean;
 };
 
+export type ResolveExternalChangeCommandKind =
+  | "keep-memory"
+  | "reload"
+  | "save-as"
+  | "cancel";
+
+export type ResolveExternalChangeInput = {
+  tabId: string;
+  command: ResolveExternalChangeCommandKind;
+};
+
+export type ResolveExternalChangeResult =
+  | { kind: "resolved" }
+  | { kind: "cancelled" }
+  | { kind: "error"; message: string };
+
+export const RESOLVE_EXTERNAL_CHANGE_CHANNEL = "fishmark:resolve-external-change";
+
 export const GET_WORKSPACE_SNAPSHOT_CHANNEL = "fishmark:get-workspace-snapshot";
 export const CREATE_WORKSPACE_TAB_CHANNEL = "fishmark:create-workspace-tab";
 export const OPEN_WORKSPACE_FILE_CHANNEL = "fishmark:open-workspace-file";

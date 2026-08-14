@@ -167,7 +167,8 @@ describe("Test workbench shell", () => {
       onRecentFilesChanged: vi.fn(() => () => {}),
       onAppUpdateState: vi.fn(() => () => {}),
       onAppNotification: vi.fn(() => () => {}),
-      onExternalMarkdownFileChanged: vi.fn(() => () => {})
+      onExternalMarkdownFileChanged: vi.fn(() => () => {}),
+      resolveExternalChange: vi.fn().mockResolvedValue({ kind: "resolved" })
     } satisfies Window["fishmark"];
     window.fishmark = fishmarkFixture;
 
