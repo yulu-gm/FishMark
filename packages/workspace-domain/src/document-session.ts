@@ -22,6 +22,10 @@ export interface WorkspaceDocumentData {
 
 export type DocumentSaveState = "idle" | "manual-saving" | "autosaving";
 
+export type ExternalDocumentChange = {
+  readonly kind: "modified" | "deleted";
+};
+
 export interface DocumentSessionState {
   readonly tabId: string;
   readonly windowId: string;
@@ -35,6 +39,7 @@ export interface DocumentSessionState {
   readonly savedRevision: DocumentRevision;
   readonly diskVersion: DiskVersion | null;
   readonly saveState: DocumentSaveState;
+  readonly externalChange: ExternalDocumentChange | null;
   readonly createTextBuffer: TextBufferFactory;
   readonly clientSequenceHighWatermarks: ReadonlyMap<string, number>;
 }
@@ -52,6 +57,7 @@ export interface DocumentSessionProjection {
   readonly isDirty: boolean;
   readonly saveState: DocumentSaveState;
   readonly diskVersion: DiskVersion | null;
+  readonly externalChange: ExternalDocumentChange | null;
 }
 
 export interface CreateDocumentSessionInput {
@@ -75,6 +81,7 @@ export interface RestoreDocumentSessionInput {
   readonly savedRevision: DocumentRevision;
   readonly saveState: DocumentSaveState;
   readonly diskVersion: DiskVersion | null;
+  readonly externalChange: ExternalDocumentChange | null;
   readonly createTextBuffer: TextBufferFactory;
 }
 
@@ -153,6 +160,7 @@ export function createDocumentSession({
     savedRevision: INITIAL_DOCUMENT_REVISION,
     diskVersion: copyDiskVersion(diskVersion),
     saveState: "idle",
+    externalChange: null,
     createTextBuffer,
     clientSequenceHighWatermarks: new ImmutableHighWatermarks()
   });
@@ -177,6 +185,7 @@ export function restoreDocumentSession(input: RestoreDocumentSessionInput): Docu
     savedRevision: input.savedRevision,
     diskVersion: copyDiskVersion(input.diskVersion),
     saveState: input.saveState,
+    externalChange: input.externalChange,
     createTextBuffer: input.createTextBuffer,
     clientSequenceHighWatermarks: new ImmutableHighWatermarks()
   });
@@ -341,7 +350,8 @@ export function commitSavedDocument(
       : session.createTextBuffer(document.content),
     savedRevision: currentMatchesSavedDocument ? session.revision : capturedRevision,
     diskVersion: copyDiskVersion(diskVersion),
-    saveState: "idle"
+    saveState: "idle",
+    externalChange: null
   });
 }
 
@@ -351,8 +361,16 @@ export function acceptExternalDiskVersion(
 ): DocumentSessionState {
   return freezeSession({
     ...session,
-    diskVersion: copyDiskVersion(diskVersion)
+    diskVersion: copyDiskVersion(diskVersion),
+    externalChange: null
   });
+}
+
+export function markExternalChange(
+  session: DocumentSessionState,
+  change: ExternalDocumentChange
+): DocumentSessionState {
+  return freezeSession({ ...session, externalChange: change });
 }
 
 export function replaceDocumentFromDisk(
@@ -381,7 +399,8 @@ export function replaceDocumentFromDisk(
     revision,
     savedRevision: revision,
     diskVersion: copyDiskVersion(diskVersion),
-    saveState: "idle"
+    saveState: "idle",
+    externalChange: null
   });
 }
 
@@ -411,7 +430,8 @@ export function projectDocumentSession(
     savedRevision: session.savedRevision,
     isDirty: session.revision !== session.savedRevision,
     saveState: session.saveState,
-    diskVersion: copyDiskVersion(session.diskVersion)
+    diskVersion: copyDiskVersion(session.diskVersion),
+    externalChange: session.externalChange
   });
 }
 

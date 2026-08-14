@@ -13,6 +13,7 @@ import {
   commitSavedDocument,
   createDocumentSession,
   getDocumentClientAcknowledgedSequence,
+  markExternalChange,
   moveDocumentSession,
   projectDocumentSession,
   replaceDocumentFromDisk,
@@ -21,6 +22,7 @@ import {
   type DocumentSaveState,
   type DocumentSessionProjection,
   type DocumentSessionState,
+  type ExternalDocumentChange,
   type WorkspaceDocumentData
 } from "./document-session";
 const UNTITLED_DOCUMENT_NAME = "Untitled.md";
@@ -129,6 +131,7 @@ export interface WorkspaceSessionSnapshot {
   readonly savedRevision: DocumentRevision;
   readonly saveState: DocumentSaveState;
   readonly diskVersion: DiskVersion | null;
+  readonly externalChange: ExternalDocumentChange | null;
 }
 
 export interface WorkspaceSnapshot {
@@ -162,6 +165,12 @@ export interface AcceptExternalDiskVersionInput {
   readonly tabId: string;
   readonly expectedWindowId: string;
   readonly diskVersion: DiskVersion | null;
+}
+
+export interface MarkExternalChangeInput {
+  readonly tabId: string;
+  readonly expectedWindowId: string;
+  readonly change: ExternalDocumentChange;
 }
 
 export interface UpdateWorkspaceTabDraftInput {
@@ -285,6 +294,9 @@ export interface WorkspaceState {
   ) => WorkspaceSaveMutationResult;
   readonly acceptExternalDiskVersion: (
     input: AcceptExternalDiskVersionInput
+  ) => WorkspaceMutationResult;
+  readonly markExternalChange: (
+    input: MarkExternalChangeInput
   ) => WorkspaceMutationResult;
   readonly closeTab: (input: CloseWorkspaceTabInput) => WorkspaceMutationResult;
   readonly reorderTab: (
@@ -416,7 +428,8 @@ class CanonicalWorkspaceState implements WorkspaceState {
         revision: session.revision,
         savedRevision: session.savedRevision,
         saveState: session.saveState,
-        diskVersion: session.diskVersion
+        diskVersion: session.diskVersion,
+        externalChange: session.externalChange
       })
     );
     return Object.freeze({
@@ -455,6 +468,7 @@ class CanonicalWorkspaceState implements WorkspaceState {
         savedRevision: session.savedRevision,
         saveState: session.saveState,
         diskVersion: session.diskVersion,
+        externalChange: session.externalChange,
         createTextBuffer: this.createTextBuffer
       });
       this.tabs.set(session.tabId, restored);
@@ -720,6 +734,20 @@ class CanonicalWorkspaceState implements WorkspaceState {
       return this.createStaleMutationResult(expectedWindowId, resolved.reason);
     }
     const nextSession = acceptExternalDiskVersion(resolved.context.session, diskVersion);
+    this.tabs.set(tabId, nextSession);
+    return createAppliedMutationResult(this.getWindowProjection(resolved.context.windowId));
+  }
+
+  markExternalChange({
+    tabId,
+    expectedWindowId,
+    change
+  }: MarkExternalChangeInput): WorkspaceMutationResult {
+    const resolved = this.resolveExpectedTabOwner(tabId, expectedWindowId);
+    if (resolved.kind === "stale") {
+      return this.createStaleMutationResult(expectedWindowId, resolved.reason);
+    }
+    const nextSession = markExternalChange(resolved.context.session, change);
     this.tabs.set(tabId, nextSession);
     return createAppliedMutationResult(this.getWindowProjection(resolved.context.windowId));
   }

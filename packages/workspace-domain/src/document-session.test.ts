@@ -95,7 +95,8 @@ describe("document session revisions", () => {
       savedRevision: 0,
       isDirty: false,
       saveState: "idle",
-      diskVersion: null
+      diskVersion: null,
+      externalChange: null
     });
     expect(session.text).toBe(session.savedText);
   });

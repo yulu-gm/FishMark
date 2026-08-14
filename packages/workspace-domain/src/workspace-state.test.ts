@@ -137,7 +137,8 @@ describe("WorkspaceState snapshot export", () => {
         revision: 1,
         savedRevision: 0,
         saveState: "idle",
-        diskVersion: null
+        diskVersion: null,
+        externalChange: null
       }
     ]);
     expect(snapshot.lastFocusedWindowId).toBe("window-2");

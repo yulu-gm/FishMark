@@ -20,7 +20,8 @@ function validSnapshot() {
         revision: 2,
         savedRevision: 1,
         saveState: "idle",
-        diskVersion: null
+        diskVersion: null,
+        externalChange: null
       }
     ],
     lastFocusedWindowId: "window-1",

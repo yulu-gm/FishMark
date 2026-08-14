@@ -22,7 +22,8 @@ const snapshot: WorkspaceSnapshot = {
       revision: 1,
       savedRevision: 0,
       saveState: "idle" as const,
-      diskVersion: null
+      diskVersion: null,
+      externalChange: null
     }
   ],
   lastFocusedWindowId: "window-1",

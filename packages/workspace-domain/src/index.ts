@@ -18,9 +18,10 @@ export type {
   ApplyDocumentEditBatchResult,
   DocumentSaveState,
   DocumentSessionProjection,
+  ExternalDocumentChange,
   WorkspaceDocumentData
 } from "./document-session";
-export { applyDocumentEditBatch } from "./document-session";
+export { applyDocumentEditBatch, markExternalChange } from "./document-session";
 export {
   createStringTextBuffer,
   validateTextChanges,

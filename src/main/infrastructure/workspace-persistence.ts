@@ -65,6 +65,7 @@ export function parseWorkspaceSnapshot(value: unknown): WorkspaceSnapshot | null
     if (!isNonNegativeInteger(session.savedRevision)) return null;
     if (!isSaveState(session.saveState)) return null;
     if (!isDiskVersion(session.diskVersion)) return null;
+    if (!isExternalChange(session.externalChange)) return null;
     sessions.push({
       tabId: session.tabId,
       windowId: session.windowId,
@@ -77,7 +78,8 @@ export function parseWorkspaceSnapshot(value: unknown): WorkspaceSnapshot | null
       revision: session.revision,
       savedRevision: session.savedRevision,
       saveState: session.saveState,
-      diskVersion: session.diskVersion
+      diskVersion: session.diskVersion,
+      externalChange: session.externalChange
     });
   }
 
@@ -135,6 +137,13 @@ function isFileIdentity(value: unknown): value is FileIdentity {
 
 function isSaveState(value: unknown): value is WorkspaceSessionSnapshot["saveState"] {
   return value === "idle" || value === "manual-saving" || value === "autosaving";
+}
+
+function isExternalChange(
+  value: unknown
+): value is WorkspaceSessionSnapshot["externalChange"] {
+  if (value === null) return true;
+  return isRecord(value) && (value.kind === "modified" || value.kind === "deleted");
 }
 
 function isDiskVersion(value: unknown): value is DiskVersion | null {
