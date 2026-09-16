@@ -1135,9 +1135,27 @@
       "lifecycle": {
         "state": "present"
       }
+    },
+    {
+      "id": "parser.parse-full-document-tree",
+      "module": "packages/markdown-engine/src/parse/full-document-parser.ts",
+      "symbol": "parseFullDocumentTree",
+      "visibility": "public",
+      "role": "recursive-document",
+      "scope": "full-document",
+      "lifecycle": {
+        "state": "present"
+      }
     }
   ],
   "micromarkDocumentSites": [
+    {
+      "id": "micromark-document.collect-event-views",
+      "module": "packages/markdown-engine/src/parse/micromark-event-adapter.ts",
+      "lifecycle": {
+        "state": "present"
+      }
+    },
     {
       "id": "micromark-document.parse-markdown-document",
       "module": "packages/markdown-engine/src/parse-markdown-document.ts",

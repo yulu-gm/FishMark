@@ -1,4 +1,7 @@
-export type MarkdownFullDocumentParseKind = "reference-definitions" | "block-map";
+export type MarkdownFullDocumentParseKind =
+  | "reference-definitions"
+  | "block-map"
+  | "full-document-tree";
 
 export type MarkdownFullDocumentParseEvent = {
   kind: MarkdownFullDocumentParseKind;

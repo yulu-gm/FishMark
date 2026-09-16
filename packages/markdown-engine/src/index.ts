@@ -121,6 +121,11 @@ export {
   type CodeBlockKind
 } from "./code-block";
 export { parseBlockMap } from "./parse-block-map";
+export { parseFullDocumentTree } from "./parse/full-document-parser";
+export {
+  collectMicromarkEventViews,
+  type MicromarkEventView
+} from "./parse/micromark-event-adapter";
 export {
   formatTableMarkdown,
   formatTableMarkdownWithOffsets,
