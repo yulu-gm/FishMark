@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 
@@ -109,6 +109,29 @@ describe("editor foundation architecture guard", () => {
       "src/renderer/editor/useWorkspaceController.ts",
       "src/renderer/editor/WorkspaceShell.tsx"
     ];
+
+    for (const file of productionFiles) {
+      const source = readFileSync(resolve(process.cwd(), file), "utf8");
+      for (const token of forbiddenTokens) {
+        expect(source, `${file} must not contain ${token}`).not.toContain(token);
+      }
+    }
+  });
+
+  it("forbids the retired block-map parser and blockquote rescans in production sources", () => {
+    const forbiddenTokens = ["parseBlockMap", "parseTopLevelBlocks", "createBlockquoteInnerSource"];
+    const productionFiles = [
+      "packages/markdown-engine/src/index.ts",
+      "packages/markdown-engine/src/parse-markdown-document.ts",
+      "packages/markdown-engine/src/parse/document-projection.ts",
+      "packages/markdown-engine/src/parse/full-document-parser.ts",
+      "packages/editor-core/src/active-block.ts",
+      "packages/editor-core/src/commands/list-edits.ts",
+      "packages/editor-core/src/extensions/markdown.ts",
+      "packages/editor-core/src/performance/editor-performance-probe.ts"
+    ];
+
+    expect(existsSync(resolve(process.cwd(), "packages/markdown-engine/src/parse-block-map.ts"))).toBe(false);
 
     for (const file of productionFiles) {
       const source = readFileSync(resolve(process.cwd(), file), "utf8");
@@ -2444,3 +2467,4 @@ function writeRepositoryFile(repository: string, path: string, source: string): 
   mkdirSync(dirname(absolutePath), { recursive: true });
   writeFileSync(absolutePath, source, "utf8");
 }
+

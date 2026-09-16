@@ -6,13 +6,13 @@
 
 **Created:** 2026-07-11
 
-**Last updated:** 2026-08-13
+**Last updated:** 2026-08-14
 
 **Overall status:** `IN_PROGRESS`
 
-**Current task:** none — RF-404 complete; next is `RF-405`
+**Current task:** none — RF-405 complete; next is `RF-501`
 
-**Next required skill:** `$fishmark-task-intake` for `RF-405`
+**Next required skill:** `$fishmark-task-intake` for `RF-501`
 
 ## 1. Status vocabulary
 
@@ -35,7 +35,7 @@ At most one `RF-xxx` task may be `IN_PROGRESS` or `ACCEPTING` at a time. A later
 | M1 | Canonical workspace domain | `COMPLETE` | 2 | 2 | RF-101 and RF-102 accepted; domain and application boundaries are production dependencies |
 | M2 | Revisioned edit transport | `COMPLETE` | 4 | 4 | RF-203 and RF-204 accepted; full-draft channel deleted |
 | M3 | Data safety and recovery | `COMPLETE` | 4 | 4 | Inactive files protected; save/recovery/close are canonical |
-| M4 | Recursive parser and incremental cache | `IN_PROGRESS` | 4 | 5 | One recursive parser remains; differential cache tests pass |
+| M4 | Recursive parser and incremental cache | `COMPLETE` | 5 | 5 | One recursive parser remains; differential cache tests pass |
 | M5 | Pure semantic editor model | `PLANNED` | 0 | 6 | All semantic commands migrated; old command engine removed |
 | M6 | Thin CodeMirror adapter | `PLANNED` | 0 | 4 | Old `editor-core` package removed |
 | M7 | Shared presentation and derived consumers | `PLANNED` | 0 | 3 | Editor/export/outline/metrics share canonical derived inputs |
@@ -43,7 +43,7 @@ At most one `RF-xxx` task may be `IN_PROGRESS` or `ACCEPTING` at a time. A later
 | M9 | Performance, E2E, and security | `PLANNED` | 0 | 3 | Budgets, Playwright flows, and Electron security pass |
 | M10 | Purge and final acceptance | `PLANNED` | 0 | 2 | No compatibility/dead code; final verdict `PASS` |
 
-**Program completion:** 16 / 38 tasks.
+**Program completion:** 17 / 38 tasks.
 
 ## 3. Task ledger
 
@@ -67,7 +67,7 @@ Evidence columns are filled only with fresh command output/report paths from the
 | RF-402 | Full recursive parser | RF-401 | `COMPLETE` | `packages/markdown-engine/src/parse/micromark-event-adapter.ts` flattens micromark events into offset-bearing views; `full-document-parser.ts` drives one container stack (`blockQuote`/`listOrdered`/`listUnordered` + synthetic `listItemPrefix` item frames) into the recursive model, unions lazy-continuation ranges, masks container prefixes before leaf inline parsing, and builds reference/footnote indexes. Fixture `fixtures/markdown/recursive-containers.md` + 5 tests prove nesting depth, containment, ordered top-level coverage, leaf-only inline ranges, and lazy continuation. Registered in the architecture parser registry. | typecheck; lint 0 errors; build exit 0; full Vitest 179 files / 2,391 passed + 1 skip; architecture guard 233 tests. | Self-acceptance: no renderer/editor/export regex scan discovers container children. | `codex/editor-foundation-refactor` |
 | RF-403 | Physical line and prefix index | RF-402 | `COMPLETE` | Created the `@fishmark/editor-model` package (path alias + active architecture-guard rule) with `physical-lines/prefix-segment.ts` (ordered quote/indentation/list-marker/task-marker/spacing segments, tab-aware visible columns) and `physical-editing-document.ts` (lines from source + recursive tree, structural-blank/separator/fence/content roles, offset/line/node/visible-column queries). 4 tests cover nested quote+list+task prefixes, roles, queries, and tab geometry. Not yet consumed. | typecheck; lint 0 errors; build exit 0; full Vitest; architecture guard. | Self-acceptance: commands/decorations no longer need to reconstruct prefixes independently. | `codex/editor-foundation-refactor` |
 | RF-404 | Incremental structure cache | RF-403 | `COMPLETE` | `packages/markdown-engine/src/parse/parse-checkpoint.ts` (safe checkpoints: depth 0 + no open fence), `cache/invalidation-range.ts` (`TextEdit`, `computeInvalidationWindow`, `applyTextEdit`), `cache/document-structure-cache.ts` (revision/source/tree), and `cache/incremental-document-parser.ts` (`applyIncrementalEdit` reuses the before-region by identity, reparses only the window slice, shifts the after-region by delta, and falls back to a fresh parse with `no-safe-window`). 8 tests: 5-case differential corpus vs. fresh parse, identity reuse, fallback, and no-edit. Cache is not yet consumed on any production path. | typecheck; lint 0 errors; build exit 0; full Vitest; architecture guard. | Self-acceptance: local edits invalidate only a bounded window, and a fresh parse remains the only correctness fallback. `perf:baseline` intentionally not rerun (cache has no production consumer or bundle impact yet). | `codex/editor-foundation-refactor` |
-| RF-405 | Parser hard cutover | RF-404 | `PLANNED` | — | lint/typecheck/test/build | — | — |
+| RF-405 | Parser hard cutover | RF-404 | `COMPLETE` | `parseFullDocumentTree` is the only parser: shared leaf classifier (`parse/leaf-blocks.ts`), definition index (`parse/definition-index.ts`), indentation list scopes (`parse/list-scopes.ts`), and a rich-document projection of the tree (`parse/document-projection.ts`). `parse-block-map.ts` and the blockquote inner-source rescans are deleted; consumers use `parseMarkdownDocument`, the tree API, or the cache; container masking is a lazy `SourceText` view (20k-line fixture: tree 1.2s, rich document 2.2s, down from ~10s). A new guard test forbids `parseBlockMap`, `parseTopLevelBlocks`, and `createBlockquoteInnerSource`. | typecheck; lint 0 errors / 8 pre-existing warnings; build exit 0; full Vitest 181 files / 2,411 passed + 1 skipped; formal Electron behavior 121/121 cases and 2,541/2,541 targets with 0 unexpected/not-run; editing experience `pass: true`; architecture guard 234 tests. | Self-acceptance: one parser and one recursive tree remain, with no old parser export and no behavior regression in the formal corpus. | `codex/editor-foundation-refactor` |
 | RF-501 | Semantic context and derived snapshot | RF-405 | `PLANNED` | — | typecheck/test | — | — |
 | RF-502 | Enter planner | RF-501 | `PLANNED` | — | focused behavior tests | — | — |
 | RF-503 | Backspace and Delete planners | RF-502 | `PLANNED` | — | focused behavior tests | — | — |
@@ -259,9 +259,11 @@ Append one entry when a task changes to `DEV_DONE`, then amend the same entry af
 | 2026-08-14 | RF-403 | Created the `@fishmark/editor-model` package (path alias + active architecture-guard rule) with `physical-lines/prefix-segment.ts` (ordered quote/indentation/list-marker/task-marker/spacing segments, tab-aware visible columns) and `physical-editing-document.ts` (lines derived from source + recursive tree, structural-blank/separator/fence/content roles, offset/line/node/visible-column queries). 4 tests cover nested quote+list+task prefixes, roles, queries, and tab geometry. Not yet consumed. | Focused editor-model suite 4 tests; full Vitest; architecture guard. | typecheck; lint 0 errors; build exit 0. | Self-acceptance: commands/decorations no longer reconstruct prefixes independently. | RF-403 is COMPLETE; M4 is 3/5 IN_PROGRESS; program completion is 15/38. |
 | 2026-08-14 | RF-404 | Added `parse/parse-checkpoint.ts`, `cache/invalidation-range.ts`, `cache/document-structure-cache.ts`, and `cache/incremental-document-parser.ts`: safe checkpoints (depth 0, no open fence), bounded invalidation windows, identity-reuse of the before-region, window-local reparse with delta shift of the after-region, and a fresh-parse `no-safe-window` fallback. 8 tests include a 5-case differential corpus against a fresh parse. The cache has no production consumer yet. | Focused cache suite 8 tests; full Vitest. | typecheck; lint 0 errors; build exit 0. | Self-acceptance: local edits invalidate only a bounded window with a fresh parse as the only correctness fallback. | RF-404 is COMPLETE; M4 is 4/5 IN_PROGRESS; program completion is 16/38. RF-405 is the next dependency-ready task. |
 
+| 2026-08-14 | RF-405 | Made the recursive tree the single parser. Leaf classification moved to `parse/leaf-blocks.ts`, reference/footnote indexes to `parse/definition-index.ts`, indentation list scoping to `parse/list-scopes.ts`, and the rich document became a projection of the tree (`parse/document-projection.ts`) with legacy offsets, markers, and camelCase block ids. Deleted `parse-block-map.ts` together with the blockquote inner-source rescan/normalization machinery and its obsolete lean-parser tests; migrated `active-block`, `list-edits`, `extensions/markdown`, the performance probe, renderer probes, and their tests to `parseMarkdownDocument`; container masking became a lazy `SourceText` view. | Full Vitest 181 files / 2,411 passed + 1 skipped; architecture guard 234 tests; 54-test block-structure corpus unchanged. | typecheck; lint 0 errors / 8 pre-existing warnings; build exit 0; formal Electron behavior 121/121 cases and 2,541/2,541 targets (0 unexpected, 0 not-run, 24.6s); editing experience `pass: true`; 20k-line fixture 1.2s tree / 2.2s document. | Self-acceptance: one parser and one recursive tree remain; the guard fails closed if the retired parser symbols or the deleted `parse-block-map.ts` return. | RF-405 and M4 are COMPLETE; program completion is 17/38. RF-501 is the next dependency-ready task. |
+
 ## 8. Blockers and deviations
 
-There are no accepted external blockers or roadmap deviations. RF-001, RF-002, RF-101, RF-102, RF-201, RF-202, RF-203, RF-204, RF-301, RF-302, RF-303, RF-304, RF-401, RF-402, RF-403, and RF-404 are complete. M0, M1, M2, and M3 are each `COMPLETE`; M4 is 4/5 `IN_PROGRESS`; accepted program completion remains 16/38. RF-405 is the next dependency-ready task.
+There are no accepted external blockers or roadmap deviations. RF-001, RF-002, RF-101, RF-102, RF-201, RF-202, RF-203, RF-204, RF-301, RF-302, RF-303, RF-304, and RF-401 through RF-405 are complete. M0, M1, M2, M3, and M4 are each `COMPLETE`; accepted program completion is 17/38. RF-501 is the next dependency-ready task.
 
 Any deviation must record:
 
@@ -326,3 +328,6 @@ When acceptance fails:
 - [ ] Architecture acceptance result is `PASS`.
 - [ ] Task acceptance result is `PASS`.
 - [ ] Stable docs, backlog, progress, test cases/report, package READMEs, and task summaries agree.
+
+
+

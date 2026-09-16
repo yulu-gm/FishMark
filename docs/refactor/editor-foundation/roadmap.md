@@ -1182,6 +1182,8 @@ npm.cmd run perf:baseline
 
 **Outcome:** every consumer uses the recursive parser/cache public API and old block-map paths are deleted.
 
+**Status:** `COMPLETE` (2026-08-14). `parseFullDocumentTree` is now the only Markdown parser: leaf classification moved to a shared `parse/leaf-blocks.ts`, reference/footnote indexes to `parse/definition-index.ts`, indentation list scoping to `parse/list-scopes.ts`, and the rich document view became a projection of the recursive tree (`parse/document-projection.ts`). `parse-block-map.ts` and the blockquote inner-source rescan machinery are deleted; consumers use `parseMarkdownDocument`, the tree API, or the incremental cache. Container masking is a lazy `SourceText` view, so a 20k-line fixture parses in ~1.2s (tree) / ~2.2s (rich document) instead of ~10s.
+
 **Files:**
 
 - Modify: editor-core consumers, outline, metrics, export, probes, and tests.
@@ -1189,12 +1191,12 @@ npm.cmd run perf:baseline
 
 **Steps:**
 
-- [ ] Migrate consumers one by one to `MarkdownDocumentTree` or `EditorDerivedSnapshot`.
-- [ ] Remove direct `parseInlineAst` calls where the canonical leaf AST exists.
-- [ ] Remove editor/export blockquote child rescans.
-- [ ] Delete retired parser code, aliases, fixtures, and tests.
-- [ ] Add forbidden-import/symbol assertions.
-- [ ] Run round-trip and mixed-container differential suites.
+- [x] Migrate consumers one by one to `MarkdownDocumentTree` or `EditorDerivedSnapshot`.
+- [x] Remove direct `parseInlineAst` calls where the canonical leaf AST exists.
+- [x] Remove editor/export blockquote child rescans.
+- [x] Delete retired parser code, aliases, fixtures, and tests.
+- [x] Add forbidden-import/symbol assertions.
+- [x] Run round-trip and mixed-container differential suites.
 
 **Verification:**
 
