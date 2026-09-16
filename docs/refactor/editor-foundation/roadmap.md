@@ -1084,6 +1084,8 @@ npm.cmd run typecheck
 
 **Outcome:** one micromark-based parser builds the complete recursive document tree.
 
+**Status:** `COMPLETE` (2026-08-14). `parseFullDocumentTree` drives one container stack from a flattened micromark event view, so blockquote/list/list-item children come from the event stream rather than source regex scanning; inline AST attaches only to leaf content ranges (through masked container prefixes); a `recursive-containers.md` fixture proves nested depth, containment, ordered top-level coverage, and lazy continuation.
+
 **Files:**
 
 - Create: `packages/markdown-engine/src/parse/full-document-parser.ts`
@@ -1094,13 +1096,13 @@ npm.cmd run typecheck
 
 **Steps:**
 
-- [ ] Convert micromark events into a container stack and recursive nodes.
-- [ ] Parse blockquote children with the same block rules as document children.
-- [ ] Parse list-item children recursively, including nested list, quote, code, math, Mermaid, table, and paragraphs.
-- [ ] Attach inline AST only to leaf content ranges.
-- [ ] Build reference/footnote indexes from the same tree.
-- [ ] Prove source ranges reconstruct the original Markdown exactly.
-- [ ] Compare supported top-level behavior against current parser fixtures.
+- [x] Convert micromark events into a container stack and recursive nodes.
+- [x] Parse blockquote children with the same block rules as document children.
+- [x] Parse list-item children recursively, including nested list, quote, code, math, Mermaid, table, and paragraphs.
+- [x] Attach inline AST only to leaf content ranges.
+- [x] Build reference/footnote indexes from the same tree.
+- [x] Prove source ranges reconstruct the original Markdown exactly.
+- [x] Compare supported top-level behavior against current parser fixtures.
 
 **Verification:**
 
