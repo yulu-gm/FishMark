@@ -23,6 +23,18 @@ export type MarkdownLeafKind =
 export type MarkdownNodeKind = MarkdownContainerKind | MarkdownLeafKind;
 
 export type MarkdownTableAlignment = "left" | "center" | "right" | null;
+export type MarkdownTableRowSeparator = "compact" | "loose";
+
+export interface MarkdownTableCell {
+  readonly text: string;
+  readonly rowIndex: number;
+  readonly columnIndex: number;
+  readonly isHeader: boolean;
+  readonly source: SourceRange;
+  readonly content: SourceRange;
+}
+
+export type MarkdownTableRow = readonly MarkdownTableCell[];
 
 export interface MarkdownHeadingData {
   readonly kind: "heading";
@@ -40,26 +52,49 @@ export interface MarkdownListItemData {
   readonly kind: "list-item";
   readonly marker: string;
   readonly checked: boolean | null;
+  readonly indent: number;
 }
 
 export interface MarkdownCodeFenceData {
   readonly kind: "code-fence";
+  readonly fence: "fenced" | "indented";
   readonly info: string | null;
-  readonly closed: boolean;
 }
 
 export interface MarkdownBlockMathData {
   readonly kind: "block-math";
+  readonly value: string;
   readonly closed: boolean;
 }
 
 export interface MarkdownTableData {
   readonly kind: "table";
+  readonly columnCount: number;
+  readonly hasHeader: boolean;
+  readonly rowSeparator: MarkdownTableRowSeparator;
   readonly alignments: readonly MarkdownTableAlignment[];
+  readonly header: MarkdownTableRow;
+  readonly rows: readonly MarkdownTableRow[];
+}
+
+export interface MarkdownThematicBreakData {
+  readonly kind: "thematic-break";
+  readonly marker: "-" | "+";
+}
+
+export interface MarkdownHtmlImageData {
+  readonly kind: "html-image";
+  readonly src: string | null;
+  readonly alt: string;
+  readonly title: string | null;
+  readonly width: string | null;
+  readonly height: string | null;
+  readonly zoom: string | null;
+  readonly align: "left" | "center" | "right" | null;
 }
 
 export interface MarkdownPlainData {
-  readonly kind: "document" | "blockquote" | "paragraph" | "thematic-break" | "definition" | "html-image";
+  readonly kind: "document" | "blockquote" | "paragraph" | "definition";
 }
 
 export type MarkdownNodeData =
@@ -69,6 +104,8 @@ export type MarkdownNodeData =
   | MarkdownCodeFenceData
   | MarkdownBlockMathData
   | MarkdownTableData
+  | MarkdownThematicBreakData
+  | MarkdownHtmlImageData
   | MarkdownPlainData;
 
 export interface MarkdownNodeBase {

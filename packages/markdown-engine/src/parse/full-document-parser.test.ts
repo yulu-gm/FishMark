@@ -91,4 +91,118 @@ describe("parseFullDocumentTree", () => {
     expect(text).toContain("continued");
     expect(text).not.toContain(">");
   });
+
+  it("masks container prefixes inside continued blockquote lines", () => {
+    const tree = parseFullDocumentTree("> a\n> b");
+    const leaf = flattenMarkdownTree(tree).find(isMarkdownLeafNode);
+    const text = leaf?.inline?.children
+      .map((child) => ("value" in child ? child.value : ""))
+      .join("") ?? "";
+
+    expect(text).toBe("ab");
+  });
 });
+
+function findByKind(tree: MarkdownDocumentTree, kind: MarkdownNode["kind"]): MarkdownNode[] {
+  return flattenMarkdownTree(tree).filter((node) => node.kind === kind);
+}
+
+describe("parseFullDocumentTree leaf and container data", () => {
+  it("records list metadata, item geometry, and task markers", () => {
+    const tree = parseFullDocumentTree("3) three\n4) four\n\n- [x] done");
+    const lists = findByKind(tree, "list");
+    const items = findByKind(tree, "list-item");
+    const ordered = lists[0]!;
+
+    expect(ordered.data).toEqual({ kind: "list", ordered: true, startOrdinal: 3, delimiter: ")" });
+    expect(items[0]?.data).toEqual({ kind: "list-item", marker: "3)", checked: null, indent: 0 });
+    expect(items[0]?.markers).toEqual([
+      { kind: "list-marker", range: { startOffset: 0, endOffset: 2 } }
+    ]);
+
+    const task = items[2]!;
+    expect(task.data).toEqual({ kind: "list-item", marker: "-", checked: true, indent: 0 });
+    expect(task.markers.map((marker) => marker.kind)).toEqual(["list-marker", "task-marker"]);
+  });
+
+  it("measures list indentation relative to enclosing container prefixes", () => {
+    const tree = parseFullDocumentTree("> quote\n> - a\n>   1) nested");
+    const items = findByKind(tree, "list-item");
+
+    expect(items[0]?.data).toMatchObject({ marker: "-", indent: 0 });
+    expect(items[0]?.content).toEqual({ startOffset: 12, endOffset: 13 });
+    expect(items[1]?.data).toMatchObject({ marker: "1)", indent: 2 });
+    expect(items[1]?.content).toEqual({ startOffset: 21, endOffset: 27 });
+  });
+
+  it("keeps item content inside the item's own first line when a nested list follows", () => {
+    const tree = parseFullDocumentTree("- a\n  - b\n    - c");
+    const items = findByKind(tree, "list-item");
+
+    expect(items.map((item) => item.content)).toEqual([
+      { startOffset: 2, endOffset: 3 },
+      { startOffset: 8, endOffset: 9 },
+      { startOffset: 16, endOffset: 17 }
+    ]);
+    expect(items.map((item) => item.data)).toMatchObject([
+      { marker: "-", indent: 0 },
+      { marker: "-", indent: 2 },
+      { marker: "-", indent: 4 }
+    ]);
+  });
+
+  it("records heading content, depth, and marker spans", () => {
+    const atx = findByKind(parseFullDocumentTree("# Title #"), "heading")[0]!;
+    expect(atx.data).toEqual({ kind: "heading", depth: 1 });
+    expect(atx.markers).toEqual([{ kind: "heading", range: { startOffset: 0, endOffset: 2 } }]);
+    expect(atx.content).toEqual({ startOffset: 2, endOffset: 7 });
+
+    const setext = findByKind(parseFullDocumentTree("Title\n====="), "heading")[0]!;
+    expect(setext.data).toEqual({ kind: "heading", depth: 1 });
+    expect(setext.markers).toEqual([]);
+    expect(setext.content).toEqual({ startOffset: 0, endOffset: 5 });
+  });
+
+  it("keeps fenced and indented code distinct", () => {
+    const fenced = findByKind(parseFullDocumentTree("```ts info\ncode\n```"), "code-fence")[0]!;
+    const indented = findByKind(parseFullDocumentTree("    code"), "code-fence")[0]!;
+
+    expect(fenced.data).toEqual({ kind: "code-fence", fence: "fenced", info: "ts info" });
+    expect(indented.data).toEqual({ kind: "code-fence", fence: "indented", info: null });
+  });
+
+  it("records block math fences, value, and closure", () => {
+    const closed = findByKind(parseFullDocumentTree("$$\nvalue\n$$"), "block-math")[0]!;
+    const open = findByKind(parseFullDocumentTree("$$\nvalue"), "block-math")[0]!;
+
+    expect(closed.data).toEqual({ kind: "block-math", value: "value", closed: true });
+    expect(closed.markers.map((marker) => marker.kind)).toEqual(["fence", "fence"]);
+    expect(open.data).toEqual({ kind: "block-math", value: "value", closed: false });
+    expect(open.markers).toHaveLength(1);
+  });
+
+  it("records thematic breaks, definitions, and html images", () => {
+    expect(findByKind(parseFullDocumentTree("***"), "thematic-break")[0]?.data).toEqual({
+      kind: "thematic-break",
+      marker: "-"
+    });
+    expect(findByKind(parseFullDocumentTree("[ref]: /x \"t\""), "definition")).toHaveLength(1);
+
+    const image = findByKind(
+      parseFullDocumentTree("<img src=\"a.png\" width=\"10\" />"),
+      "html-image"
+    )[0]!;
+    expect(image.data).toMatchObject({ kind: "html-image", src: "a.png", width: "10" });
+  });
+
+  it("records table cells with their own source and content ranges", () => {
+    const table = findByKind(parseFullDocumentTree("| a | b |\n| --- | --- |\n| 1 | 2 |"), "table")[0]!;
+    const data = table.data as { kind: "table"; columnCount: number; hasHeader: boolean; rows: unknown[] };
+
+    expect(data.kind).toBe("table");
+    expect(data.columnCount).toBe(2);
+    expect(data.hasHeader).toBe(true);
+    expect(data.rows.length).toBeGreaterThan(0);
+  });
+});
+

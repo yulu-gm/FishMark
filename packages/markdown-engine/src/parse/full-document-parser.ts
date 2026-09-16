@@ -1,34 +1,36 @@
-import type { InlineRoot } from "../inline-ast";
+import type { FootnoteDefinition, InlineReferenceDefinition } from "../inline-ast";
 import { parseBlockquoteLinePrefix } from "../blockquote";
-import {
-  childContainerPath,
-  ROOT_CONTAINER_PATH,
-  type ContainerPath
-} from "../model/container-path";
+import type { ListItemBlock, MarkdownBlock } from "../block-map";
+import { childContainerPath, ROOT_CONTAINER_PATH, type ContainerPath } from "../model/container-path";
 import {
   assertMarkdownTreeInvariants,
-  createContainerPrefixedSource,
   createMarkdownDocumentTree,
   createNodeIdForSource,
   type MarkdownDocumentTree
 } from "../model/document-tree";
 import {
   createMarkdownContainerNode,
-  createMarkdownLeafNode,
   type MarkdownContainerKind,
   type MarkdownContainerNode,
-  type MarkdownLeafKind,
   type MarkdownNode,
   type MarkdownNodeData
 } from "../model/markdown-node";
 import { createSourceRange, type SourceMarker, type SourceRange } from "../model/source-range";
 import type { MarkdownParseOptions } from "../parse-instrumentation";
-import { parseInlineAst } from "../parse-inline-ast";
 import { collectFootnoteDefinitions, collectReferenceDefinitions } from "../parse-markdown-document";
+import {
+  createLeafNodeContext,
+  createListItemContentRange,
+  createNodesFromBlocks
+} from "./leaf-nodes";
+import { createLeafBlocksForToken, mergeLeafSiblingBlocks } from "./leaf-blocks";
 import { collectMicromarkEventViews } from "./micromark-event-adapter";
 
 // One micromark-based recursive parser. Every container child comes from the event stream and
 // a container stack, so no renderer/editor/export regex scan is needed to discover nesting.
+// Leaf blocks are derived by the shared leaf classifier and materialized into nodes only
+// after the whole raw structure is known, which keeps container paths stable under sibling
+// merges such as loose pipe tables.
 export function parseFullDocumentTree(
   source: string,
   options: MarkdownParseOptions = {}
@@ -37,33 +39,38 @@ export function parseFullDocumentTree(
   const referenceDefinitions = collectReferenceDefinitions(source);
   const footnoteDefinitions = collectFootnoteDefinitions(source);
 
-  const root: OpenFrame = {
+  const root: RawContainer = {
     kind: "document",
     tokenType: "document",
     tokenStartOffset: 0,
-    path: ROOT_CONTAINER_PATH,
     range: createSourceRange(0, source.length),
     markers: [],
-    children: []
+    prefixes: [],
+    data: { kind: "document" },
+    children: [],
+    itemPrefixes: []
   };
-  const stack: OpenFrame[] = [root];
-  let openLeaf = false;
+  const stack: RawContainer[] = [root];
+  let openLeafType: string | null = null;
 
   for (const event of events) {
     const containerKind = CONTAINER_TOKEN_KINDS[event.type];
     if (containerKind !== undefined) {
       if (event.kind === "enter") {
         const range = createSourceRange(event.startOffset, event.endOffset);
+        const blockquotePrefixes = containerKind === "blockquote"
+          ? collectBlockquotePrefixes(source, range)
+          : EMPTY_PREFIXES;
         stack.push({
           kind: containerKind,
           tokenType: event.type,
           tokenStartOffset: event.startOffset,
-          path: childContainerPath(current().path, current().children.length),
           range,
-          markers: containerKind === "blockquote"
-            ? collectBlockquoteMarkers(source, range)
-            : [],
-          children: []
+          markers: blockquotePrefixes.markers,
+          prefixes: blockquotePrefixes.prefixes,
+          data: initialContainerData(containerKind),
+          children: [],
+          itemPrefixes: []
         });
       } else {
         closeContainerFrame(event.type, event.startOffset);
@@ -79,51 +86,43 @@ export function parseFullDocumentTree(
       }
       const listFrame = current();
       if (listFrame.kind !== "list") continue;
-      stack.push({
-        kind: "list-item",
-        tokenType: "list-item",
-        tokenStartOffset: event.startOffset,
-        path: childContainerPath(listFrame.path, listFrame.children.length),
-        range: createSourceRange(
-          event.startOffset,
-          Math.max(event.startOffset, listFrame.range.endOffset)
-        ),
-        markers: [],
-        children: []
-      });
+      const isFirstItem = listFrame.itemPrefixes.length === 0;
+      listFrame.itemPrefixes.push(event.startOffset);
+      stack.push(createListItemFrame(source, stack, listFrame, isFirstItem, event.startOffset, event.endOffset));
       continue;
     }
 
-    const leafKind = LEAF_TOKEN_KINDS[event.type];
-    if (leafKind === undefined) continue;
+    if (!LEAF_TOKEN_TYPES.has(event.type)) continue;
 
     if (event.kind === "enter") {
-      if (openLeaf) continue;
+      if (openLeafType !== null) continue;
+      openLeafType = event.type;
       const parent = current();
-      parent.children.push(
-        createLeafNode({
-          kind: leafKind,
-          path: childContainerPath(parent.path, parent.children.length),
-          range: createSourceRange(event.startOffset, event.endOffset),
-          source,
-          referenceDefinitions,
-          footnoteDefinitions,
-          containerPrefixes: stack.flatMap((frame) => frame.markers.map((marker) => marker.range))
-        })
-      );
-      openLeaf = true;
-    } else if (openLeaf) {
-      openLeaf = false;
+      parent.children.push({
+        type: "blocks",
+        blocks: createLeafBlocksForToken(event.token, source)
+      });
+    } else if (openLeafType === event.type) {
+      openLeafType = null;
     }
   }
 
   closeContainerFrame("document", source.length);
 
-  const tree = createMarkdownDocumentTree(finalizeContainer(root, source));
+  const tree = createMarkdownDocumentTree(
+    materializeContainer({
+      frame: root,
+      path: ROOT_CONTAINER_PATH,
+      source,
+      referenceDefinitions,
+      footnoteDefinitions,
+      maskPrefixes: []
+    })
+  );
   assertMarkdownTreeInvariants(tree);
   return tree;
 
-  function current(): OpenFrame {
+  function current(): RawContainer {
     return stack[stack.length - 1]!;
   }
 
@@ -146,21 +145,40 @@ export function parseFullDocumentTree(
            (source[trimmedEnd - 1] === "\n" || source[trimmedEnd - 1] === "\r")) {
       trimmedEnd -= 1;
     }
-    current().children.push(
-      finalizeContainer({ ...frame, range: createSourceRange(startOffset, trimmedEnd) }, source)
-    );
+    current().children.push({
+      type: "container",
+      container: { ...frame, range: createSourceRange(startOffset, trimmedEnd) }
+    });
   }
 }
 
-interface OpenFrame {
+interface RawContainer {
   readonly kind: MarkdownContainerKind;
   readonly tokenType: string;
   readonly tokenStartOffset: number;
-  readonly path: ContainerPath;
   readonly range: SourceRange;
   readonly markers: readonly SourceMarker[];
-  readonly children: MarkdownNode[];
+  // The exact prefix spans masked for this container's children. They can be wider than the
+  // semantic markers (a blockquote prefix includes its padding), which is why they are
+  // tracked separately from marker metadata.
+  readonly prefixes: readonly SourceRange[];
+  data: MarkdownNodeData;
+  readonly children: RawChild[];
+  readonly itemPrefixes: number[];
+  readonly itemGeometry?: ListItemGeometry;
 }
+
+type RawChild =
+  | { readonly type: "container"; readonly container: RawContainer }
+  | { readonly type: "blocks"; readonly blocks: readonly MarkdownBlock[] };
+
+type ListItemGeometry = {
+  readonly marker: string;
+  readonly markerStart: number;
+  readonly markerEnd: number;
+  readonly indent: number;
+  readonly task: ListItemBlock["task"];
+};
 
 const CONTAINER_TOKEN_KINDS: Readonly<Record<string, MarkdownContainerKind>> = {
   blockQuote: "blockquote",
@@ -169,69 +187,303 @@ const CONTAINER_TOKEN_KINDS: Readonly<Record<string, MarkdownContainerKind>> = {
   listItem: "list-item"
 };
 
-const LEAF_TOKEN_KINDS: Readonly<Record<string, MarkdownLeafKind>> = {
-  atxHeading: "heading",
-  setextHeading: "heading",
-  paragraph: "paragraph",
-  codeFenced: "code-fence",
-  codeIndented: "code-fence",
-  mathFlow: "block-math",
-  thematicBreak: "thematic-break",
-  definition: "definition"
-};
+const LEAF_TOKEN_TYPES: ReadonlySet<string> = new Set([
+  "atxHeading",
+  "setextHeading",
+  "paragraph",
+  "codeFenced",
+  "codeIndented",
+  "mathFlow",
+  "thematicBreak",
+  "definition",
+  "htmlFlow"
+]);
 
-function finalizeContainer(frame: OpenFrame, source: string): MarkdownContainerNode {
-  // micromark's container token can stop before a lazily continued child line, so the node's
-  // source range is the union of its token range and its children.
-  const first = frame.children[0];
-  const last = frame.children[frame.children.length - 1];
-  const range = first === undefined || last === undefined
-    ? frame.range
-    : createSourceRange(
-        Math.min(frame.range.startOffset, first.source.startOffset),
-        Math.max(frame.range.endOffset, last.source.endOffset)
-      );
-  return createMarkdownContainerNode({
-    id: createNodeIdForSource({
-      path: frame.path,
-      kind: frame.kind,
-      source: source.slice(range.startOffset, range.endOffset)
-    }),
-    kind: frame.kind,
-    path: frame.path,
-    source: range,
-    content: range,
-    markers: frame.markers,
-    data: containerData(frame.kind),
-    children: frame.children
-  });
-}
+const LIST_ITEM_MARKER_PATTERN = /^(\d{1,9}[.)]|[*+-])/u;
+const LIST_ITEM_TASK_PATTERN = /^\[( |x|X)\](?=[ \t]|$)/u;
+const ORDERED_MARKER_PATTERN = /^(\d{1,9})([.)])/u;
 
-function containerData(kind: MarkdownContainerKind): MarkdownNodeData {
+function initialContainerData(kind: MarkdownContainerKind): MarkdownNodeData {
   if (kind === "list") {
     return { kind: "list", ordered: false, startOrdinal: null, delimiter: null };
   }
   if (kind === "list-item") {
-    return { kind: "list-item", marker: "", checked: null };
+    return { kind: "list-item", marker: "", checked: null, indent: 0 };
   }
   return { kind };
 }
 
-// The `> ` prefixes of every line a blockquote covers. These are the ranges masked before
-// inline parsing so inline offsets stay document offsets.
-function collectBlockquoteMarkers(source: string, range: SourceRange): readonly SourceMarker[] {
+function createListItemFrame(
+  source: string,
+  stack: readonly RawContainer[],
+  listFrame: RawContainer,
+  isFirstItem: boolean,
+  prefixStart: number,
+  prefixEnd: number
+): RawContainer {
+  const geometry = readListItemGeometry(source, stack, prefixStart, prefixEnd);
+
+  if (isFirstItem) {
+    listFrame.data = listDataForToken(listFrame.tokenType, geometry.marker);
+  }
+
+  return {
+    kind: "list-item",
+    tokenType: "list-item",
+    tokenStartOffset: prefixStart,
+    range: createSourceRange(prefixStart, Math.max(prefixEnd, listFrame.range.endOffset)),
+    markers: listItemMarkers(geometry),
+    prefixes: listItemMarkers(geometry).map((marker) => marker.range),
+    data: {
+      kind: "list-item",
+      marker: geometry.marker,
+      checked: geometry.task ? geometry.task.checked : null,
+      indent: geometry.indent
+    },
+    children: [],
+    itemPrefixes: [],
+    itemGeometry: geometry
+  };
+}
+
+function readListItemGeometry(
+  source: string,
+  stack: readonly RawContainer[],
+  prefixStart: number,
+  prefixEnd: number
+): ListItemGeometry {
+  const lineStart = source.lastIndexOf("\n", prefixStart - 1) + 1;
+  const contentBase = containerContentStart(stack, prefixStart, lineStart);
+  const markerMatch = LIST_ITEM_MARKER_PATTERN.exec(source.slice(prefixStart, prefixEnd));
+  const marker = markerMatch?.[0] ?? "-";
+  const markerEnd = prefixStart + marker.length;
+  const taskMatch = LIST_ITEM_TASK_PATTERN.exec(source.slice(prefixEnd));
+  const indentCandidate = source.slice(contentBase, prefixStart);
+  const indent = /^[ \t]*$/u.test(indentCandidate) ? indentCandidate.length : 0;
+
+  return {
+    marker,
+    markerStart: prefixStart,
+    markerEnd,
+    indent,
+    task: taskMatch
+      ? {
+          checked: taskMatch[1]?.toLowerCase() === "x",
+          markerStart: prefixEnd,
+          markerEnd: prefixEnd + taskMatch[0].length
+        }
+      : null
+  };
+}
+
+// A list item's indentation is measured from the innermost ancestor container prefix on its
+// line, so a list nested in a blockquote reports the same indentation the masked content would.
+function containerContentStart(
+  stack: readonly RawContainer[],
+  prefixStart: number,
+  lineStart: number
+): number {
+  let contentBase = lineStart;
+
+  for (const frame of stack) {
+    for (const prefix of frame.prefixes) {
+      if (prefix.startOffset >= lineStart && prefix.endOffset <= prefixStart) {
+        contentBase = Math.max(contentBase, prefix.endOffset);
+      }
+    }
+  }
+
+  return contentBase;
+}
+
+function listDataForToken(tokenType: string, marker: string): MarkdownNodeData {
+  if (tokenType !== "listOrdered") {
+    return { kind: "list", ordered: false, startOrdinal: null, delimiter: null };
+  }
+
+  const orderedMatch = ORDERED_MARKER_PATTERN.exec(marker);
+
+  if (!orderedMatch) {
+    return { kind: "list", ordered: true, startOrdinal: 1, delimiter: "." };
+  }
+
+  return {
+    kind: "list",
+    ordered: true,
+    startOrdinal: Number.parseInt(orderedMatch[1] ?? "1", 10),
+    delimiter: orderedMatch[2] === ")" ? ")" : "."
+  };
+}
+
+function listItemMarkers(geometry: ListItemGeometry): readonly SourceMarker[] {
+  const markers: SourceMarker[] = [
+    { kind: "list-marker", range: createSourceRange(geometry.markerStart, geometry.markerEnd) }
+  ];
+
+  if (geometry.task) {
+    markers.push({
+      kind: "task-marker",
+      range: createSourceRange(geometry.task.markerStart, geometry.task.markerEnd)
+    });
+  }
+
+  return markers;
+}
+
+function materializeContainer(input: {
+  readonly frame: RawContainer;
+  readonly path: ContainerPath;
+  readonly source: string;
+  readonly referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition>;
+  readonly footnoteDefinitions: ReadonlyMap<string, FootnoteDefinition>;
+  readonly maskPrefixes: readonly SourceRange[];
+}): MarkdownContainerNode {
+  const children: MarkdownNode[] = [];
+  // A container's own prefixes are masked for its content nodes, so nested inline parsing
+  // keeps document offsets while never seeing `> ` or item markers as text.
+  const maskPrefixes = [
+    ...input.maskPrefixes,
+    ...input.frame.prefixes
+  ];
+  const context = createLeafNodeContext({
+    source: input.source,
+    referenceDefinitions: input.referenceDefinitions,
+    footnoteDefinitions: input.footnoteDefinitions,
+    maskPrefixes
+  });
+  let index = 0;
+  let pendingBlocks: MarkdownBlock[] = [];
+
+  const flushBlocks = () => {
+    if (pendingBlocks.length === 0) return;
+    const merged = mergeLeafSiblingBlocks(pendingBlocks, input.source);
+    const nodes = createNodesFromBlocks({
+      blocks: merged,
+      context,
+      parentPath: input.path,
+      startIndex: index
+    });
+    children.push(...nodes);
+    index += nodes.length;
+    pendingBlocks = [];
+  };
+
+  for (const child of input.frame.children) {
+    if (child.type === "blocks") {
+      pendingBlocks.push(...child.blocks);
+      continue;
+    }
+
+    flushBlocks();
+    children.push(materializeContainer({
+      frame: child.container,
+      path: childContainerPath(input.path, index),
+      source: input.source,
+      referenceDefinitions: input.referenceDefinitions,
+      footnoteDefinitions: input.footnoteDefinitions,
+      maskPrefixes
+    }));
+    index += 1;
+  }
+
+  flushBlocks();
+
+  const range = containerRange(input.frame.range, children);
+  const data = materializeContainerData(input.frame);
+
+  return createMarkdownContainerNode({
+    id: createNodeIdForSource({
+      path: input.path,
+      kind: input.frame.kind,
+      source: input.source.slice(range.startOffset, range.endOffset)
+    }),
+    kind: input.frame.kind,
+    path: input.path,
+    source: range,
+    content: input.frame.kind === "list-item" ? listItemContent(input.frame, children, input.source, range) : range,
+    markers: input.frame.markers,
+    data,
+    children
+  });
+}
+
+function materializeContainerData(frame: RawContainer): MarkdownNodeData {
+  if (frame.kind !== "list-item" || frame.itemGeometry === undefined) {
+    return frame.data;
+  }
+
+  return {
+    kind: "list-item",
+    marker: frame.itemGeometry.marker,
+    checked: frame.itemGeometry.task ? frame.itemGeometry.task.checked : null,
+    indent: frame.itemGeometry.indent
+  };
+}
+
+function listItemContent(
+  frame: RawContainer,
+  children: readonly MarkdownNode[],
+  source: string,
+  range: SourceRange
+): SourceRange {
+  const geometry = frame.itemGeometry;
+
+  return createListItemContentRange({
+    source,
+    startOffset: range.startOffset,
+    endOffset: range.endOffset,
+    markerEnd: geometry?.markerEnd ?? range.startOffset,
+    task: geometry?.task ?? null,
+    children
+  });
+}
+
+// micromark's container token can stop before a lazily continued child line, so the node's
+// source range is the union of its token range and its children.
+function containerRange(frameRange: SourceRange, children: readonly MarkdownNode[]): SourceRange {
+  const first = children[0];
+  const last = children[children.length - 1];
+
+  if (first === undefined || last === undefined) {
+    return frameRange;
+  }
+
+  return createSourceRange(
+    Math.min(frameRange.startOffset, first.source.startOffset),
+    Math.max(frameRange.endOffset, last.source.endOffset)
+  );
+}
+
+// The `> ` prefixes of every line a blockquote covers. Markers keep the semantic `>` span while
+// prefixes cover the whole masked span (indentation included), so inline offsets stay document
+// offsets and nested container content starts exactly where the prefix ends.
+function collectBlockquotePrefixes(
+  source: string,
+  range: SourceRange
+): { markers: readonly SourceMarker[]; prefixes: readonly SourceRange[] } {
   const markers: SourceMarker[] = [];
+  const prefixes: SourceRange[] = [];
+
   for (const line of splitSourceLines(source, range)) {
     const prefix = parseBlockquoteLinePrefix(source, line.startOffset, line.endOffset);
+
+    if (prefix.markers.length === 0) continue;
+
     for (const marker of prefix.markers) {
       markers.push({
         kind: "blockquote",
         range: createSourceRange(marker.markerStart, marker.markerEnd)
       });
     }
+
+    prefixes.push(createSourceRange(line.startOffset, prefix.sourcePrefixEndOffset));
   }
-  return markers;
+
+  return { markers, prefixes };
 }
+
+const EMPTY_PREFIXES: { markers: readonly SourceMarker[]; prefixes: readonly SourceRange[] } =
+  Object.freeze({ markers: [], prefixes: [] });
 
 function splitSourceLines(source: string, range: SourceRange): readonly SourceRange[] {
   const lines: SourceRange[] = [];
@@ -244,69 +496,4 @@ function splitSourceLines(source: string, range: SourceRange): readonly SourceRa
   }
   lines.push(createSourceRange(lineStart, range.endOffset));
   return lines;
-}
-
-function createLeafNode(input: {
-  readonly kind: MarkdownLeafKind;
-  readonly path: ContainerPath;
-  readonly range: SourceRange;
-  readonly source: string;
-  readonly referenceDefinitions: ReturnType<typeof collectReferenceDefinitions>;
-  readonly footnoteDefinitions: ReturnType<typeof collectFootnoteDefinitions>;
-  readonly containerPrefixes: readonly SourceRange[];
-}): MarkdownNode {
-  const inlineSource = input.containerPrefixes.length === 0
-    ? input.source
-    : createContainerPrefixedSource(input.source, input.containerPrefixes).masked;
-  const inline = supportsInline(input.kind)
-    ? parseInlineAst(inlineSource, input.range.startOffset, input.range.endOffset, {
-        referenceDefinitions: input.referenceDefinitions,
-        footnoteDefinitions: input.footnoteDefinitions
-      })
-    : undefined;
-
-  return createMarkdownLeafNode({
-    id: createNodeIdForSource({
-      path: input.path,
-      kind: input.kind,
-      source: input.source.slice(input.range.startOffset, input.range.endOffset)
-    }),
-    kind: input.kind,
-    path: input.path,
-    source: input.range,
-    content: input.range,
-    markers: [],
-    data: leafData(input.kind, input.range, input.source),
-    ...(inline === undefined ? {} : { inline: inline as InlineRoot })
-  });
-}
-
-function supportsInline(kind: MarkdownLeafKind): boolean {
-  return kind === "paragraph" || kind === "heading";
-}
-
-function leafData(kind: MarkdownLeafKind, range: SourceRange, source: string): MarkdownNodeData {
-  if (kind === "heading") {
-    return { kind: "heading", depth: headingDepthAt(source, range.startOffset) };
-  }
-  if (kind === "code-fence") {
-    return { kind: "code-fence", info: null, closed: true };
-  }
-  if (kind === "block-math") {
-    return { kind: "block-math", closed: true };
-  }
-  if (kind === "table") {
-    return { kind: "table", alignments: [] };
-  }
-  return { kind: kind as "paragraph" | "thematic-break" | "definition" | "html-image" };
-}
-
-function headingDepthAt(source: string, startOffset: number): number {
-  let cursor = startOffset;
-  let depth = 0;
-  while (source[cursor] === "#" && depth < 6) {
-    depth += 1;
-    cursor += 1;
-  }
-  return depth === 0 ? 1 : depth;
 }
