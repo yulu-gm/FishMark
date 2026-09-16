@@ -1,4 +1,35 @@
 import type { BlockquoteMarker } from "./block-map";
+import { createSourceRange, type SourceRange } from "./model/source-range";
+
+export interface BlockquotePrefixSpans {
+  readonly markers: readonly BlockquoteMarker[];
+  readonly prefixes: readonly SourceRange[];
+}
+
+// Every `> ` prefix of the lines a range covers, as semantic `>` markers plus the whole masked
+// spans (indentation and padding included). Container-aware parsing and projection share this
+// so both read a line's structure from exactly the same content start.
+export function collectBlockquotePrefixSpans(source: string, range: SourceRange): BlockquotePrefixSpans {
+  const markers: BlockquoteMarker[] = [];
+  const prefixes: SourceRange[] = [];
+  let lineStart = range.startOffset;
+
+  for (let offset = range.startOffset; offset <= range.endOffset; offset += 1) {
+    const atEnd = offset === range.endOffset;
+    if (!atEnd && source[offset] !== "\n") continue;
+
+    const prefix = parseBlockquoteLinePrefix(source, lineStart, offset);
+
+    if (prefix.markers.length > 0) {
+      markers.push(...prefix.markers);
+      prefixes.push(createSourceRange(lineStart, prefix.sourcePrefixEndOffset));
+    }
+
+    lineStart = offset + 1;
+  }
+
+  return { markers, prefixes };
+}
 
 export interface BlockquoteLinePrefix {
   markers: readonly BlockquoteMarker[];

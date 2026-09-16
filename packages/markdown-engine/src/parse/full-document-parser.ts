@@ -1,5 +1,5 @@
 import type { FootnoteDefinition, InlineReferenceDefinition } from "../inline-ast";
-import { parseBlockquoteLinePrefix } from "../blockquote";
+import { collectBlockquotePrefixSpans, type BlockquotePrefixSpans } from "../blockquote";
 import type { ListItemBlock, MarkdownBlock } from "../block-map";
 import { childContainerPath, ROOT_CONTAINER_PATH, type ContainerPath } from "../model/container-path";
 import {
@@ -63,14 +63,17 @@ export function parseFullDocumentTree(
       if (event.kind === "enter") {
         const range = createSourceRange(event.startOffset, event.endOffset);
         const blockquotePrefixes = containerKind === "blockquote"
-          ? collectBlockquotePrefixes(source, range)
+          ? collectBlockquotePrefixSpans(source, range)
           : EMPTY_PREFIXES;
         stack.push({
           kind: containerKind,
           tokenType: event.type,
           tokenStartOffset: event.startOffset,
           range,
-          markers: blockquotePrefixes.markers,
+          markers: blockquotePrefixes.markers.map((marker) => ({
+            kind: "blockquote" as const,
+            range: createSourceRange(marker.markerStart, marker.markerEnd)
+          })) as readonly SourceMarker[],
           prefixes: blockquotePrefixes.prefixes,
           maskedSource: containerMaskedSource(current().maskedSource, blockquotePrefixes.prefixes),
           data: initialContainerData(containerKind),
@@ -482,50 +485,7 @@ function containerRange(frameRange: SourceRange, children: readonly MarkdownNode
   );
 }
 
-// The `> ` prefixes of every line a blockquote covers. Markers keep the semantic `>` span while
-// prefixes cover the whole masked span (indentation included), so inline offsets stay document
-// offsets and nested container content starts exactly where the prefix ends.
-function collectBlockquotePrefixes(
-  source: string,
-  range: SourceRange
-): { markers: readonly SourceMarker[]; prefixes: readonly SourceRange[] } {
-  const markers: SourceMarker[] = [];
-  const prefixes: SourceRange[] = [];
-
-  for (const line of splitSourceLines(source, range)) {
-    const prefix = parseBlockquoteLinePrefix(source, line.startOffset, line.endOffset);
-
-    if (prefix.markers.length === 0) continue;
-
-    for (const marker of prefix.markers) {
-      markers.push({
-        kind: "blockquote",
-        range: createSourceRange(marker.markerStart, marker.markerEnd)
-      });
-    }
-
-    prefixes.push(createSourceRange(line.startOffset, prefix.sourcePrefixEndOffset));
-  }
-
-  return { markers, prefixes };
-}
-
-const EMPTY_PREFIXES: { markers: readonly SourceMarker[]; prefixes: readonly SourceRange[] } =
-  Object.freeze({ markers: [], prefixes: [] });
-
-function splitSourceLines(source: string, range: SourceRange): readonly SourceRange[] {
-  const lines: SourceRange[] = [];
-  let lineStart = range.startOffset;
-  for (let offset = range.startOffset; offset < range.endOffset; offset += 1) {
-    if (source[offset] === "\n") {
-      lines.push(createSourceRange(lineStart, offset));
-      lineStart = offset + 1;
-    }
-  }
-  lines.push(createSourceRange(lineStart, range.endOffset));
-  return lines;
-}
-
+const EMPTY_PREFIXES: BlockquotePrefixSpans = Object.freeze({ markers: [], prefixes: [] });
 
 
 

@@ -27,10 +27,11 @@ import {
   type MarkdownNode,
   type MarkdownTableRow
 } from "../model/markdown-node";
-import type { SourceRange } from "../model/source-range";
+import { createSourceRange, type SourceRange } from "../model/source-range";
 import { createLineInfos } from "./leaf-blocks";
 import { consumeHorizontalSpace, findLineEndOffset } from "./leaf-nodes";
 import { parseInlineAst } from "../parse-inline-ast";
+import { collectBlockquotePrefixSpans } from "../blockquote";
 import { parseFlatListItems, parseListScopes, type ListItemGeometry, type ListScope } from "./list-scopes";
 
 // The rich document view is a projection of the recursive tree. Structure, container nesting,
@@ -40,22 +41,112 @@ import { parseFlatListItems, parseListScopes, type ListItemGeometry, type ListSc
 export function projectMarkdownDocument(tree: MarkdownDocumentTree): MarkdownDocument {
   const source = tree.source;
   const lineAt = createLineLookup(source);
-  const blocks = tree.root.children.flatMap((node) =>
-    projectNode(node, {
-      source,
-      lineAt,
-      referenceDefinitions: tree.referenceDefinitions,
-      footnoteDefinitions: tree.footnoteDefinitions,
-      maskPrefixes: [],
-      lineRanges: false
-    })
-  );
+  const blocks = projectChildren(tree.root.children, {
+    source,
+    lineAt,
+    referenceDefinitions: tree.referenceDefinitions,
+    footnoteDefinitions: tree.footnoteDefinitions,
+    maskPrefixes: [],
+    lineRanges: false
+  });
 
   return {
     blocks,
     referenceDefinitions: tree.referenceDefinitions,
     footnoteDefinitions: tree.footnoteDefinitions
   };
+}
+
+// One Markdown list can reach the tree as several adjacent list containers (a marker-only line or
+// an indent the container above cannot own starts a new one). The rich view scopes every run of
+// whitespace-separated list siblings as a single list, which is also how items keep nesting by
+// indentation across those container boundaries.
+function projectChildren(
+  nodes: readonly MarkdownNode[],
+  context: ProjectionContext
+): MarkdownBlock[] {
+  const blocks: MarkdownBlock[] = [];
+  let index = 0;
+
+  while (index < nodes.length) {
+    const node = nodes[index]!;
+
+    if (node.kind !== "list") {
+      blocks.push(...projectNode(node, context));
+      index += 1;
+      continue;
+    }
+
+    let end = index;
+    while (
+      end + 1 < nodes.length &&
+      nodes[end + 1]!.kind === "list" &&
+      whitespaceOnlyGap(context.source, nodes[end]!.source.endOffset, nodes[end + 1]!.source.startOffset)
+    ) {
+      end += 1;
+    }
+
+    blocks.push(...projectListRun(nodes.slice(index, end + 1) as readonly MarkdownContainerNode[], context));
+    index = end + 1;
+  }
+
+  return blocks;
+}
+
+function whitespaceOnlyGap(source: string, from: number, to: number): boolean {
+  return /^[\s]*$/u.test(source.slice(from, to));
+}
+
+function projectListRun(
+  nodes: readonly MarkdownContainerNode[],
+  context: ProjectionContext
+): MarkdownBlock[] {
+  const first = nodes[0]!;
+  const last = nodes[nodes.length - 1]!;
+  const span = createSourceRange(
+    lineRangeFor(context.source, first.source).startOffset,
+    lineRangeFor(context.source, last.source).endOffset
+  );
+
+  if (nodes.length === 1) {
+    return projectListWithin(span, first, context);
+  }
+
+  const data = first.data as { kind: "list"; ordered: boolean };
+  const scopes = parseListScopes(context.source, span, context.maskPrefixes);
+
+  // A run only merges when one indentation scope covers it; otherwise every container in the run
+  // is projected on its own.
+  if (scopes !== null && scopes.length === 1 && scopes[0]!.ordered === data.ordered) {
+    return scopes.map((scope) => projectScope(scope, context));
+  }
+
+  const blocks: MarkdownBlock[] = [];
+  for (const node of nodes) {
+    blocks.push(...projectListWithin(lineRangeFor(context.source, node.source), node, context));
+  }
+
+  return blocks;
+}
+
+function projectListWithin(
+  range: SourceRange,
+  node: MarkdownContainerNode,
+  context: ProjectionContext
+): MarkdownBlock[] {
+  const data = node.data as { kind: "list"; ordered: boolean };
+  const scopes = parseListScopes(context.source, range, context.maskPrefixes);
+
+  if (scopes === null || scopes.length === 0 || scopes.some((scope) => scope.ordered !== data.ordered)) {
+    const flatItems = parseFlatListItems(context.source, range, context.maskPrefixes);
+
+    // A marker that is never followed by content or a space is paragraph text, not a list.
+    return flatItems.length === 0
+      ? [projectParagraphRange(range, context)]
+      : [projectFlatList(flatItems, data.ordered, context)];
+  }
+
+  return scopes.map((scope) => projectScope(scope, context));
 }
 
 interface ProjectionContext {
@@ -72,7 +163,7 @@ interface ProjectionContext {
 function projectNode(node: MarkdownNode, context: ProjectionContext): MarkdownBlock[] {
   if (isMarkdownContainerNode(node)) {
     if (node.kind === "blockquote") return [projectBlockquote(node, context)];
-    if (node.kind === "list") return projectList(node, context);
+    if (node.kind === "list") return projectListRun([node], context);
     return [];
   }
 
@@ -246,13 +337,12 @@ function toTableCell(cell: MarkdownTableRow[number]): TableCell {
 
 function projectBlockquote(node: MarkdownContainerNode, context: ProjectionContext): BlockquoteBlock {
   const lines = createBlockquoteLines(node, context);
-  const innerBlocks = node.children.flatMap((child) =>
-    projectNode(child, {
-      ...context,
-      lineRanges: true,
-      maskPrefixes: [...context.maskPrefixes, ...node.markers.map((marker) => marker.range)]
-    })
-  );
+  const prefixes = collectBlockquotePrefixSpans(context.source, node.source).prefixes;
+  const innerBlocks = projectChildren(node.children, {
+    ...context,
+    lineRanges: true,
+    maskPrefixes: [...context.maskPrefixes, ...prefixes]
+  });
 
   return {
     id: `blockquote:${node.source.startOffset}-${node.source.endOffset}`,
@@ -297,25 +387,6 @@ function createBlockquoteLines(
       })
     };
   });
-}
-
-function projectList(node: MarkdownContainerNode, context: ProjectionContext): MarkdownBlock[] {
-  // The list's own line span, extended to whole raw lines so items keep the legacy geometry
-  // (indentation and container prefixes included) that the editing commands replace.
-  const range = lineRangeFor(context.source, node.source);
-  const data = node.data as { kind: "list"; ordered: boolean };
-  const scopes = parseListScopes(context.source, range, context.maskPrefixes);
-
-  if (scopes === null || scopes.length === 0 || scopes.some((scope) => scope.ordered !== data.ordered)) {
-    const flatItems = parseFlatListItems(context.source, range, context.maskPrefixes);
-
-    // A marker that is never followed by content or a space is paragraph text, not a list.
-    return flatItems.length === 0
-      ? [projectParagraphRange(range, context)]
-      : [projectFlatList(flatItems, data.ordered, context)];
-  }
-
-  return scopes.map((scope) => projectScope(scope, context));
 }
 
 function projectParagraphRange(range: SourceRange, context: ProjectionContext): ParagraphBlock {
@@ -594,6 +665,11 @@ function createLineLookup(source: string): (offset: number) => number {
 }
 
 export type { InlineRoot };
+
+
+
+
+
 
 
 
