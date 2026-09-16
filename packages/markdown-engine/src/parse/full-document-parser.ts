@@ -15,9 +15,13 @@ import {
   type MarkdownNode,
   type MarkdownNodeData
 } from "../model/markdown-node";
-import { createSourceRange, type SourceMarker, type SourceRange } from "../model/source-range";
+import { createSourceRange, maskSourceRanges, type SourceMarker, type SourceRange } from "../model/source-range";
 import type { MarkdownParseOptions } from "../parse-instrumentation";
-import { collectFootnoteDefinitions, collectReferenceDefinitions } from "../parse-markdown-document";
+import {
+  collectFootnoteDefinitionsFromBlocks,
+  collectReferenceDefinitions,
+  enrichFootnoteDefinitions
+} from "./definition-index";
 import {
   createLeafNodeContext,
   createListItemContentRange,
@@ -37,7 +41,6 @@ export function parseFullDocumentTree(
 ): MarkdownDocumentTree {
   const events = collectMicromarkEventViews(source, options);
   const referenceDefinitions = collectReferenceDefinitions(source);
-  const footnoteDefinitions = collectFootnoteDefinitions(source);
 
   const root: RawContainer = {
     kind: "document",
@@ -46,6 +49,7 @@ export function parseFullDocumentTree(
     range: createSourceRange(0, source.length),
     markers: [],
     prefixes: [],
+    maskedSource: source,
     data: { kind: "document" },
     children: [],
     itemPrefixes: []
@@ -68,12 +72,15 @@ export function parseFullDocumentTree(
           range,
           markers: blockquotePrefixes.markers,
           prefixes: blockquotePrefixes.prefixes,
+          maskedSource: containerMaskedSource(current().maskedSource, blockquotePrefixes.prefixes),
           data: initialContainerData(containerKind),
           children: [],
           itemPrefixes: []
         });
       } else {
-        closeContainerFrame(event.type, event.startOffset);
+        // An exit event carries the container's own start offset for matching and its true end
+        // offset for the range, so a closed frame never loses trailing content characters.
+        closeContainerFrame(event.type, event.startOffset, event.endOffset);
       }
       continue;
     }
@@ -98,16 +105,28 @@ export function parseFullDocumentTree(
       if (openLeafType !== null) continue;
       openLeafType = event.type;
       const parent = current();
+      // Leaf classification runs on the container-masked source, so a table or code block inside
+      // a blockquote is recognised exactly like one at the top level while offsets stay absolute.
       parent.children.push({
         type: "blocks",
-        blocks: createLeafBlocksForToken(event.token, source)
+        blocks: createLeafBlocksForToken(event.token, parent.maskedSource, parent.prefixes)
       });
     } else if (openLeafType === event.type) {
       openLeafType = null;
     }
   }
 
-  closeContainerFrame("document", source.length);
+  closeContainerFrame("document", 0, source.length);
+
+  // Footnote definitions attach to top-level paragraph/definition blocks, so they are derived
+  // from the raw top-level leaf blocks before nodes are materialized. Inline parsing of every
+  // container child then sees the same definition index.
+  const topLevelBlocks = mergeLeafSiblingBlocks([...topLevelLeafBlocks(root)], source);
+  const footnoteDefinitions = enrichFootnoteDefinitions(
+    collectFootnoteDefinitionsFromBlocks(source, topLevelBlocks),
+    source,
+    referenceDefinitions
+  );
 
   const tree = createMarkdownDocumentTree(
     materializeContainer({
@@ -116,8 +135,9 @@ export function parseFullDocumentTree(
       source,
       referenceDefinitions,
       footnoteDefinitions,
-      maskPrefixes: []
-    })
+      maskedSource: source
+    }),
+    { source, referenceDefinitions, footnoteDefinitions }
   );
   assertMarkdownTreeInvariants(tree);
   return tree;
@@ -127,11 +147,11 @@ export function parseFullDocumentTree(
   }
 
   // Closes synthetic item frames until the container token being exited is the frame popped.
-  function closeContainerFrame(tokenType: string, startOffset: number): void {
+  function closeContainerFrame(tokenType: string, tokenStartOffset: number, endOffset: number): void {
     while (stack.length > 1) {
       const frame = current();
-      closeFrame(startOffset);
-      if (frame.tokenType === tokenType && frame.tokenStartOffset === startOffset) return;
+      closeFrame(endOffset);
+      if (frame.tokenType === tokenType && frame.tokenStartOffset === tokenStartOffset) return;
     }
   }
 
@@ -162,6 +182,9 @@ interface RawContainer {
   // semantic markers (a blockquote prefix includes its padding), which is why they are
   // tracked separately from marker metadata.
   readonly prefixes: readonly SourceRange[];
+  // The source with every enclosing blockquote prefix blanked out. Container children are
+  // classified against it, so nesting never changes what counts as a table, fence, or heading.
+  readonly maskedSource: string;
   data: MarkdownNodeData;
   readonly children: RawChild[];
   readonly itemPrefixes: number[];
@@ -203,8 +226,17 @@ const LIST_ITEM_MARKER_PATTERN = /^(\d{1,9}[.)]|[*+-])/u;
 const LIST_ITEM_TASK_PATTERN = /^\[( |x|X)\](?=[ \t]|$)/u;
 const ORDERED_MARKER_PATTERN = /^(\d{1,9})([.)])/u;
 
-function initialContainerData(kind: MarkdownContainerKind): MarkdownNodeData {
-  if (kind === "list") {
+// Footnote definitions can only attach to top-level paragraph/definition leaf blocks, so the
+// definition index is built from exactly those blocks before any node is materialized.
+function topLevelLeafBlocks(root: RawContainer): readonly MarkdownBlock[] {
+  return root.children.flatMap((child) => (child.type === "blocks" ? child.blocks : []));
+}
+
+function containerMaskedSource(parentMaskedSource: string, prefixes: readonly SourceRange[]): string {
+  return prefixes.length === 0 ? parentMaskedSource : maskSourceRanges(parentMaskedSource, prefixes);
+}
+
+function initialContainerData(kind: MarkdownContainerKind): MarkdownNodeData {  if (kind === "list") {
     return { kind: "list", ordered: false, startOrdinal: null, delimiter: null };
   }
   if (kind === "list-item") {
@@ -234,6 +266,7 @@ function createListItemFrame(
     range: createSourceRange(prefixStart, Math.max(prefixEnd, listFrame.range.endOffset)),
     markers: listItemMarkers(geometry),
     prefixes: listItemMarkers(geometry).map((marker) => marker.range),
+    maskedSource: listFrame.maskedSource,
     data: {
       kind: "list-item",
       marker: geometry.marker,
@@ -336,27 +369,22 @@ function materializeContainer(input: {
   readonly source: string;
   readonly referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition>;
   readonly footnoteDefinitions: ReadonlyMap<string, FootnoteDefinition>;
-  readonly maskPrefixes: readonly SourceRange[];
+  readonly maskedSource: string;
 }): MarkdownContainerNode {
   const children: MarkdownNode[] = [];
-  // A container's own prefixes are masked for its content nodes, so nested inline parsing
-  // keeps document offsets while never seeing `> ` or item markers as text.
-  const maskPrefixes = [
-    ...input.maskPrefixes,
-    ...input.frame.prefixes
-  ];
+  const maskedSource = input.frame.maskedSource;
   const context = createLeafNodeContext({
     source: input.source,
     referenceDefinitions: input.referenceDefinitions,
     footnoteDefinitions: input.footnoteDefinitions,
-    maskPrefixes
+    maskedSource
   });
   let index = 0;
   let pendingBlocks: MarkdownBlock[] = [];
 
   const flushBlocks = () => {
     if (pendingBlocks.length === 0) return;
-    const merged = mergeLeafSiblingBlocks(pendingBlocks, input.source);
+    const merged = mergeLeafSiblingBlocks(pendingBlocks, maskedSource);
     const nodes = createNodesFromBlocks({
       blocks: merged,
       context,
@@ -381,7 +409,7 @@ function materializeContainer(input: {
       source: input.source,
       referenceDefinitions: input.referenceDefinitions,
       footnoteDefinitions: input.footnoteDefinitions,
-      maskPrefixes
+      maskedSource
     }));
     index += 1;
   }
@@ -497,3 +525,7 @@ function splitSourceLines(source: string, range: SourceRange): readonly SourceRa
   lines.push(createSourceRange(lineStart, range.endOffset));
   return lines;
 }
+
+
+
+

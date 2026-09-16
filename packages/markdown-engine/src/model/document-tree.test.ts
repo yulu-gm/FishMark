@@ -141,7 +141,7 @@ describe("stable node identity", () => {
 describe("document tree", () => {
   it("indexes every node and resolves it by path and id", () => {
     const root = buildHierarchy(0, ROOT_CONTAINER_PATH, 3);
-    const tree = createMarkdownDocumentTree(root);
+    const tree = createMarkdownDocumentTree(root, { source: "" });
 
     assertMarkdownTreeInvariants(tree);
     expect(flattenMarkdownTree(tree)).toHaveLength(4);
@@ -153,7 +153,7 @@ describe("document tree", () => {
 
   it("supports empty containers and depth 0-8 nesting", () => {
     const deep = buildHierarchy(0, ROOT_CONTAINER_PATH, 8);
-    const tree = createMarkdownDocumentTree(deep);
+    const tree = createMarkdownDocumentTree(deep, { source: "" });
     assertMarkdownTreeInvariants(tree);
     expect(flattenMarkdownTree(tree)).toHaveLength(9);
 
@@ -193,9 +193,10 @@ describe("document tree", () => {
         })
       ]
     });
-    const tree = createMarkdownDocumentTree(root);
+    const tree = createMarkdownDocumentTree(root, { source: "" });
 
     assertMarkdownTreeInvariants(tree);
     expect(sourceRangeContainsRange(root.source, childrenOf(root)[0]!.source)).toBe(true);
   });
 });
+

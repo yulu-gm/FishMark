@@ -1,4 +1,5 @@
 import { containerPathKey, type ContainerPath } from "./container-path";
+import type { FootnoteDefinition, InlineReferenceDefinition } from "../inline-ast";
 import type {
   MarkdownContainerNode,
   MarkdownNode,
@@ -17,6 +18,9 @@ import {
 export interface MarkdownDocumentTree {
   readonly root: MarkdownContainerNode;
   readonly nodesById: ReadonlyMap<string, MarkdownNode>;
+  readonly source: string;
+  readonly referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition>;
+  readonly footnoteDefinitions: ReadonlyMap<string, FootnoteDefinition>;
 }
 
 export function createMarkdownNodeId(input: {
@@ -77,11 +81,22 @@ export function createContainerPrefixedSource(
 }
 
 export function createMarkdownDocumentTree(
-  root: MarkdownContainerNode
+  root: MarkdownContainerNode,
+  input: {
+    readonly source: string;
+    readonly referenceDefinitions?: ReadonlyMap<string, InlineReferenceDefinition>;
+    readonly footnoteDefinitions?: ReadonlyMap<string, FootnoteDefinition>;
+  }
 ): MarkdownDocumentTree {
   const nodesById = new Map<string, MarkdownNode>();
   visit(root);
-  return Object.freeze({ root, nodesById });
+  return Object.freeze({
+    root,
+    nodesById,
+    source: input.source,
+    referenceDefinitions: input.referenceDefinitions ?? new Map(),
+    footnoteDefinitions: input.footnoteDefinitions ?? new Map()
+  });
 
   function visit(node: MarkdownNode): void {
     if (nodesById.has(node.id)) {

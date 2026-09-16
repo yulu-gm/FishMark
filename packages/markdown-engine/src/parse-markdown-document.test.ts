@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   collectFootnoteDefinitions,
   collectReferenceDefinitions,
-  parseBlockMap,
   parseMarkdownDocument
 } from "./index";
 
@@ -15,15 +14,15 @@ describe("full-document parse instrumentation", () => {
     };
 
     parseMarkdownDocument("> quoted paragraph", { instrumentation });
-    expect(scans).toEqual(["reference-definitions", "block-map", "block-map"]);
+    expect(scans).toEqual(["reference-definitions", "full-document-tree"]);
 
     scans.length = 0;
     collectReferenceDefinitions("[label]: /target", { instrumentation });
     expect(scans).toEqual(["reference-definitions"]);
 
     scans.length = 0;
-    parseBlockMap("# Heading", { instrumentation });
-    expect(scans).toEqual(["block-map"]);
+    parseMarkdownDocument("# Heading", { instrumentation });
+    expect(scans).toEqual(["reference-definitions", "full-document-tree"]);
   });
 });
 

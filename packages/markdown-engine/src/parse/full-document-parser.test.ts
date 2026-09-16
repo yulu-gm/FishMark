@@ -197,7 +197,7 @@ describe("parseFullDocumentTree leaf and container data", () => {
 
   it("records table cells with their own source and content ranges", () => {
     const table = findByKind(parseFullDocumentTree("| a | b |\n| --- | --- |\n| 1 | 2 |"), "table")[0]!;
-    const data = table.data as { kind: "table"; columnCount: number; hasHeader: boolean; rows: unknown[] };
+    const data = table.data as unknown as { kind: "table"; columnCount: number; hasHeader: boolean; rows: unknown[] };
 
     expect(data.kind).toBe("table");
     expect(data.columnCount).toBe(2);
@@ -205,4 +205,5 @@ describe("parseFullDocumentTree leaf and container data", () => {
     expect(data.rows.length).toBeGreaterThan(0);
   });
 });
+
 

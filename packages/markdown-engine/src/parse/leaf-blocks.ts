@@ -13,18 +13,23 @@ import type {
   ThematicBreakBlock
 } from "../block-map";
 import { parseHtmlImageData } from "../html-image";
+import type { SourceRange } from "../model/source-range";
 import { isTableDelimiterLine, parseLoosePipeTable, parsePipeTable, splitTableLine } from "../table-model";
 
 // Leaf-level Markdown derivation: turning one micromark leaf token range into the concrete
 // blocks it represents. Container structure never appears here, so the recursive document
 // parser and any container-aware caller share exactly one leaf classification path.
-export function createLeafBlocksForToken(token: Token, source: string): MarkdownBlock[] {
+export function createLeafBlocksForToken(
+  token: Token,
+  source: string,
+  maskPrefixes: readonly SourceRange[] = []
+): MarkdownBlock[] {
   if (token.type === "codeFenced") {
     return [createCodeFenceBlock(token, source)];
   }
 
   if (token.type === "mathFlow") {
-    return [createBlockMathBlock(token, source)];
+    return [createBlockMathBlock(token, source, maskPrefixes)];
   }
 
   if (token.type === "codeIndented") {
@@ -97,23 +102,39 @@ function createIndentedCodeBlock(token: Token): CodeFenceBlock {
   };
 }
 
-function createBlockMathBlock(token: Token, source: string): BlockMathBlock {
+function createBlockMathBlock(
+  token: Token,
+  source: string,
+  maskPrefixes: readonly SourceRange[]
+): BlockMathBlock {
   const base = createBaseBlock("blockMath", token);
   const lines = createLineInfos(source.slice(base.startOffset, base.endOffset), base.startOffset, base.startLine);
   const openingLine = lines[0];
-  const openingMatch = openingLine ? /^([ \t]{0,3})(\${2,})[ \t]*$/u.exec(openingLine.text) : null;
+  const openingText = openingLine
+    ? source.slice(lineContentStart(openingLine, maskPrefixes), openingLine.endOffset)
+    : "";
+  const openingMatch = openingLine ? /^([ \t]{0,3})(\${2,})[ \t]*$/u.exec(openingText) : null;
   const openingIndentLength = openingMatch?.[1]?.length ?? 0;
   const openingMarkerLength = openingMatch?.[2]?.length ?? "$$".length;
   const markerStartOffset = openingLine
-    ? openingLine.startOffset + openingIndentLength
+    ? lineContentStart(openingLine, maskPrefixes) + openingIndentLength
     : base.startOffset;
   const markerEndOffset = markerStartOffset + openingMarkerLength;
   const contentStartOffset = openingLine
-    ? skipLineBreak(source, openingLine.endOffset, base.endOffset)
+    ? lineContentStart(
+        { startOffset: skipLineBreak(source, openingLine.endOffset, base.endOffset), endOffset: base.endOffset },
+        maskPrefixes
+      )
     : base.startOffset;
-  const closingLine = findClosingBlockMathLine(lines, contentStartOffset);
-  const closingMarkerStartOffset = closingLine ? closingLine.startOffset + getLeadingWhitespaceLength(closingLine.text) : null;
-  const closingMarkerLength = closingLine ? getBlockMathFenceLength(closingLine.text) : 0;
+  const closingLine = findClosingBlockMathLine(source, lines, contentStartOffset, maskPrefixes);
+  const closingMarkerStartOffset = closingLine
+    ? lineContentStart(closingLine, maskPrefixes) + getLeadingWhitespaceLength(
+        source.slice(lineContentStart(closingLine, maskPrefixes), closingLine.endOffset)
+      )
+    : null;
+  const closingMarkerLength = closingLine
+    ? getBlockMathFenceLength(source.slice(lineContentStart(closingLine, maskPrefixes), closingLine.endOffset))
+    : 0;
   const closingMarkerEndOffset = closingMarkerStartOffset === null
     ? null
     : closingMarkerStartOffset + closingMarkerLength;
@@ -134,7 +155,29 @@ function createBlockMathBlock(token: Token, source: string): BlockMathBlock {
   };
 }
 
-function findClosingBlockMathLine(lines: readonly LineInfo[], contentStartOffset: number): LineInfo | null {
+// A container prefix is blanked instead of removed, so structural line inspection must start
+// after it. Prefix spans are contiguous per line, which makes this a simple forward skip.
+function lineContentStart(
+  line: { startOffset: number; endOffset: number },
+  maskPrefixes: readonly SourceRange[]
+): number {
+  let cursor = line.startOffset;
+
+  for (const prefix of maskPrefixes) {
+    if (prefix.startOffset === cursor && prefix.endOffset <= line.endOffset) {
+      cursor = prefix.endOffset;
+    }
+  }
+
+  return cursor;
+}
+
+function findClosingBlockMathLine(
+  source: string,
+  lines: readonly LineInfo[],
+  contentStartOffset: number,
+  maskPrefixes: readonly SourceRange[]
+): LineInfo | null {
   for (let index = lines.length - 1; index >= 1; index -= 1) {
     const line = lines[index]!;
 
@@ -142,7 +185,9 @@ function findClosingBlockMathLine(lines: readonly LineInfo[], contentStartOffset
       continue;
     }
 
-    if (/^[ \t]{0,3}\${2,}[ \t]*$/u.test(line.text)) {
+    const text = source.slice(lineContentStart(line, maskPrefixes), line.endOffset);
+
+    if (/^[ \t]{0,3}\${2,}[ \t]*$/u.test(text)) {
       return line;
     }
   }
@@ -855,3 +900,6 @@ export function createLineInfos(sourceSlice: string, baseOffset: number, baseLin
 
   return lines;
 }
+
+
+

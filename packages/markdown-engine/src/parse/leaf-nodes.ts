@@ -7,7 +7,7 @@ import type { BlockMathBlock, TableBlock, TableCell as LegacyTableCell } from ".
 import type { CodeBlockKind } from "../code-block";
 import type { FootnoteDefinition, InlineReferenceDefinition, InlineRoot } from "../inline-ast";
 import { childContainerPath, type ContainerPath } from "../model/container-path";
-import { createContainerPrefixedSource, createNodeIdForSource } from "../model/document-tree";
+import { createNodeIdForSource } from "../model/document-tree";
 import {
   createMarkdownContainerNode,
   createMarkdownLeafNode,
@@ -37,15 +37,13 @@ export function createLeafNodeContext(input: {
   readonly source: string;
   readonly referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition>;
   readonly footnoteDefinitions: ReadonlyMap<string, FootnoteDefinition>;
-  readonly maskPrefixes: readonly SourceRange[];
+  readonly maskedSource: string;
 }): LeafNodeContext {
   return {
     source: input.source,
     referenceDefinitions: input.referenceDefinitions,
     footnoteDefinitions: input.footnoteDefinitions,
-    maskedSource: input.maskPrefixes.length === 0
-      ? input.source
-      : createContainerPrefixedSource(input.source, input.maskPrefixes).masked
+    maskedSource: input.maskedSource
   };
 }
 
@@ -443,3 +441,4 @@ function trimTrailingListItemContent(source: string, startOffset: number, endOff
 
   return cursor;
 }
+

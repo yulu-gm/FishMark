@@ -222,29 +222,44 @@ describe("parseBlockMap", () => {
     ]);
   });
 
-  it("keeps a bare ordered marker as paragraph text until a space commits the list marker", () => {
+  it("treats a bare ordered marker as an empty list item", () => {
     const bareSource = "1.";
     const parenthesizedBareSource = "1)";
     const committedSource = "1. ";
 
     expect(parseMarkdownDocument(bareSource).blocks).toMatchObject([
       {
-        id: "paragraph:0-2",
-        type: "paragraph",
+        id: "list:0-2",
+        type: "list",
         startOffset: 0,
         endOffset: 2,
         startLine: 1,
-        endLine: 1
+        endLine: 1,
+        ordered: true,
+        items: [
+          {
+            id: "list-item:0-2",
+            startOffset: 0,
+            endOffset: 2,
+            startLine: 1,
+            endLine: 1,
+            marker: "1.",
+            markerStart: 0,
+            markerEnd: 2,
+            contentStartOffset: 2,
+            contentEndOffset: 2
+          }
+        ]
       }
     ]);
     expect(parseMarkdownDocument(parenthesizedBareSource).blocks).toMatchObject([
       {
-        id: "paragraph:0-2",
-        type: "paragraph",
+        id: "list:0-2",
+        type: "list",
         startOffset: 0,
         endOffset: 2,
-        startLine: 1,
-        endLine: 1
+        ordered: true,
+        items: [{ marker: "1)", markerStart: 0, markerEnd: 2 }]
       }
     ]);
     expect(parseMarkdownDocument(committedSource).blocks).toMatchObject([
@@ -1416,7 +1431,7 @@ describe("parseBlockMap", () => {
     });
   });
 
-  it("stitches blockquote inner paragraph separators and list blocks with original offsets", () => {
+  it("parses blockquote inner paragraph separators and list blocks at their own offsets", () => {
     const source = [
       "> 第一段",
       ">",
@@ -1445,12 +1460,12 @@ describe("parseBlockMap", () => {
     const innerList = blockquote.innerBlocks?.[2] as ListBlock;
     expect(innerList).toMatchObject({
       type: "list",
-      startOffset: source.indexOf("> - item"),
+      startOffset: source.indexOf("- item"),
       endOffset: source.length,
       ordered: false,
       items: [
         {
-          startOffset: source.indexOf("> - item"),
+          startOffset: source.indexOf("- item"),
           markerStart: source.indexOf("- item"),
           markerEnd: source.indexOf("- item") + 1,
           contentStartOffset: source.indexOf("item"),
@@ -1461,7 +1476,7 @@ describe("parseBlockMap", () => {
               ordered: false,
               items: [
                 {
-                  startOffset: source.indexOf(">   - child"),
+                  startOffset: source.indexOf("- child"),
                   markerStart: source.indexOf("- child"),
                   markerEnd: source.indexOf("- child") + 1,
                   contentStartOffset: source.indexOf("child"),
@@ -1473,7 +1488,7 @@ describe("parseBlockMap", () => {
           ]
         },
         {
-          startOffset: source.indexOf("> - item 2"),
+          startOffset: source.indexOf("- item 2"),
           markerStart: source.indexOf("- item 2"),
           markerEnd: source.indexOf("- item 2") + 1,
           contentStartOffset: source.indexOf("item 2"),
@@ -1484,7 +1499,7 @@ describe("parseBlockMap", () => {
     });
   });
 
-  it("stitches blockquote inner pipe tables with original offsets", () => {
+  it("parses blockquote inner pipe tables at their own offsets", () => {
     const source = [
       "> | name | qty |",
       "> | --- | ---: |",
@@ -1502,7 +1517,7 @@ describe("parseBlockMap", () => {
       throw new Error("Expected quote-internal table block");
     }
 
-    expect(table.startOffset).toBe(0);
+    expect(table.startOffset).toBe(source.indexOf("| name"));
     expect(table.endOffset).toBe(source.indexOf("\n\nPlain"));
     expect(table.startLine).toBe(1);
     expect(table.endLine).toBe(3);
@@ -1512,7 +1527,7 @@ describe("parseBlockMap", () => {
     expect(table.rows[0]?.[0]?.contentStartOffset).toBe(source.indexOf("pen"));
   });
 
-  it("stitches blockquote inner fenced code and block math blocks", () => {
+  it("parses blockquote inner fenced code and block math blocks", () => {
     const source = [
       "> ```ts",
       "> const value = 1;",
@@ -1530,7 +1545,7 @@ describe("parseBlockMap", () => {
       type: "codeFence",
       kind: "fenced",
       info: "ts",
-      startOffset: 0,
+      startOffset: source.indexOf("```ts"),
       endOffset: source.indexOf("\n>\n> $$")
     });
     expect(blockquote.innerBlocks?.[1]).toMatchObject({

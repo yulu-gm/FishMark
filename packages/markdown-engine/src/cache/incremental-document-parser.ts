@@ -104,7 +104,10 @@ export function applyIncrementalEdit(
   });
   const tree: MarkdownDocumentTree = Object.freeze({
     root,
-    nodesById: indexTree(root)
+    nodesById: indexTree(root),
+    source: newSource,
+    referenceDefinitions: cache.tree.referenceDefinitions,
+    footnoteDefinitions: cache.tree.footnoteDefinitions
   });
 
   const reparsedNodes = countNodes(windowTree.root);
