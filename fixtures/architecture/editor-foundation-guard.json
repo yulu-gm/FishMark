@@ -41,7 +41,7 @@
       "id": "editor-model",
       "path": "packages/editor-model",
       "publicEntry": "@fishmark/editor-model",
-      "state": "planned",
+      "state": "active",
       "boundaryRuleId": "boundary.editor-model"
     },
     {
@@ -65,6 +65,25 @@
       "kind": "forbidden-imports",
       "state": "active",
       "sourcePath": "packages/markdown-engine",
+      "forbiddenPackages": [
+        "react",
+        "react-dom",
+        "electron",
+        "@codemirror/*",
+        "@fishmark/editor-core"
+      ],
+      "forbiddenPaths": [
+        "src/main",
+        "src/preload",
+        "src/renderer",
+        "packages/editor-core"
+      ]
+    },
+    {
+      "id": "boundary.editor-model",
+      "kind": "forbidden-imports",
+      "state": "active",
+      "sourcePath": "packages/editor-model",
       "forbiddenPackages": [
         "react",
         "react-dom",

@@ -6,6 +6,7 @@
     "moduleResolution": "Bundler",
     "paths": {
       "@fishmark/editor-core": ["./packages/editor-core/src/index.ts"],
+      "@fishmark/editor-model": ["./packages/editor-model/src/index.ts"],
       "@fishmark/markdown-engine": ["./packages/markdown-engine/src/index.ts"],
       "@fishmark/test-harness": ["./packages/test-harness/src/index.ts"],
       "@fishmark/workspace-application": ["./packages/workspace-application/src/index.ts"],
