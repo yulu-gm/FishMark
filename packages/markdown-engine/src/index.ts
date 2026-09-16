@@ -56,7 +56,9 @@ export {
   type MarkdownNodeKind,
   type MarkdownPlainData,
   type MarkdownTableAlignment,
-  type MarkdownTableData
+  type MarkdownTableCell,
+  type MarkdownTableData,
+  type MarkdownTableRow
 } from "./model/markdown-node";
 export {
   collectUnmaskedRanges,
@@ -180,4 +182,5 @@ export {
   tableBlockToCanonicalModel,
   type CanonicalTableModel
 } from "./table-model";
+
 

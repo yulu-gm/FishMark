@@ -1216,6 +1216,8 @@ npm.cmd run build
 
 **Outcome:** commands receive one immutable context containing tree, physical line, container path, selection, and indexes.
 
+**Status:** `COMPLETE` (2026-08-14). `EditorDerivedSnapshot` wraps one document revision (tree, source, physical editing document) and answers line/node/path/table-cursor queries; `deriveSelectionSnapshot` adds only the selection-derived active line, node, path, and table cursor; `EditorSemanticContext` composes both and rejects a command scheduled against a stale revision; `edit-transaction-plan.ts` defines the ordered, non-overlapping `TextEditOperation` plan plus the command registry contract.
+
 **Files:**
 
 - Create: `packages/editor-model/src/context/editor-semantic-context.ts`
@@ -1228,11 +1230,11 @@ npm.cmd run build
 
 **Steps:**
 
-- [ ] Build snapshot queries from the incremental structure cache.
-- [ ] Separate document-derived state from selection-derived state.
-- [ ] Recompute only active line/path/table cursor on selection changes.
-- [ ] Define the command registry and `EditTransactionPlan` contract.
-- [ ] Verify stale revision/context rejection.
+- [x] Build snapshot queries from the incremental structure cache.
+- [x] Separate document-derived state from selection-derived state.
+- [x] Recompute only active line/path/table cursor on selection changes.
+- [x] Define the command registry and `EditTransactionPlan` contract.
+- [x] Verify stale revision/context rejection.
 
 **Verification:**
 
