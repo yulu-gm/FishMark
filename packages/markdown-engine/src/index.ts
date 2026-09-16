@@ -20,6 +20,72 @@ export type {
   ThematicBreakBlock
 } from "./block-map";
 export type { MarkdownDocument } from "./markdown-document";
+// The recursive document model. It is intentionally parser-agnostic and is not yet the
+// production parse path: the legacy block-map parser stays authoritative until RF-405.
+export {
+  ROOT_CONTAINER_PATH,
+  childContainerPath,
+  compareContainerPaths,
+  containerPathDepth,
+  containerPathKey,
+  isContainerPathAncestor,
+  isRootContainerPath,
+  sameContainerPath,
+  type ContainerPath
+} from "./model/container-path";
+export {
+  collectMarkdownNodeMarkers,
+  createMarkdownContainerNode,
+  createMarkdownLeafNode,
+  isMarkdownContainerKind,
+  isMarkdownContainerNode,
+  isMarkdownLeafNode,
+  markdownNodeDepth,
+  type MarkdownBlockMathData,
+  type MarkdownCodeFenceData,
+  type MarkdownContainerKind,
+  type MarkdownContainerNode,
+  type MarkdownHeadingData,
+  type MarkdownLeafKind,
+  type MarkdownLeafNode,
+  type MarkdownListData,
+  type MarkdownListItemData,
+  type MarkdownNode,
+  type MarkdownNodeBase,
+  type MarkdownNodeData,
+  type MarkdownNodeKind,
+  type MarkdownPlainData,
+  type MarkdownTableAlignment,
+  type MarkdownTableData
+} from "./model/markdown-node";
+export {
+  collectUnmaskedRanges,
+  createSourceRange,
+  isEmptySourceRange,
+  maskSourceRanges,
+  sameSourceRange,
+  sourceRangeContainsOffset,
+  sourceRangeContainsRange,
+  sourceRangeLength,
+  sourceRangesOverlap,
+  type MarkdownMarkerKind,
+  type SourceMarker,
+  type SourceRange
+} from "./model/source-range";
+export {
+  assertMarkdownTreeInvariants,
+  childrenOf,
+  createContainerPrefixedSource,
+  createMarkdownDocumentTree,
+  createMarkdownNodeId,
+  createNodeIdForSource,
+  findMarkdownNodeByPath,
+  fingerprintMarkdownSource,
+  flattenMarkdownTree,
+  getMarkdownNodeById,
+  type ContainerPrefixedSource,
+  type MarkdownDocumentTree
+} from "./model/document-tree";
 export type {
   MarkdownFullDocumentParseEvent,
   MarkdownFullDocumentParseKind,
