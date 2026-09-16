@@ -1052,6 +1052,8 @@ npm.cmd run build
 
 **Outcome:** the parser target can express arbitrary mixed container nesting with original offsets.
 
+**Status:** `COMPLETE` (2026-08-14). The parser-agnostic recursive model (`src/model/`) defines container/leaf unions, source/content ranges, marker metadata, container paths, FNV-1a node identity from ancestry + subtree fingerprint, masked container-prefixed source mapping, and tree indexing/invariant checks. The legacy block-map parser stays authoritative until RF-405.
+
 **Files:**
 
 - Create: `packages/markdown-engine/src/model/source-range.ts`
@@ -1063,11 +1065,11 @@ npm.cmd run build
 
 **Steps:**
 
-- [ ] Define recursive container/leaf unions, source/content ranges, marker metadata, and container paths.
-- [ ] Define stable node ID generation from structural ancestry and subtree identity, not raw offsets alone.
-- [ ] Define source mapping helpers for masked/container-prefixed source.
-- [ ] Cover CRLF, tabs, Unicode, empty containers, lazy continuation, and depth 0–8.
-- [ ] Keep the existing parser runtime until RF-405, but prevent new consumers from depending on the new model before it is complete.
+- [x] Define recursive container/leaf unions, source/content ranges, marker metadata, and container paths.
+- [x] Define stable node ID generation from structural ancestry and subtree identity, not raw offsets alone.
+- [x] Define source mapping helpers for masked/container-prefixed source.
+- [x] Cover CRLF, tabs, Unicode, empty containers, lazy continuation, and depth 0–8.
+- [x] Keep the existing parser runtime until RF-405, but prevent new consumers from depending on the new model before it is complete.
 
 **Verification:**
 
