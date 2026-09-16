@@ -127,6 +127,30 @@ export {
   type MicromarkEventView
 } from "./parse/micromark-event-adapter";
 export {
+  collectParseCheckpoints,
+  findCheckpointAfter,
+  findCheckpointBefore,
+  isSafeCheckpoint,
+  type OpenFence,
+  type ParseCheckpoint
+} from "./parse/parse-checkpoint";
+export {
+  applyTextEdit,
+  computeInvalidationWindow,
+  type InvalidationWindow,
+  type TextEdit
+} from "./cache/invalidation-range";
+export {
+  createDocumentStructureCache,
+  createDocumentStructureCacheFromTree,
+  type DocumentStructureCache
+} from "./cache/document-structure-cache";
+export {
+  applyIncrementalEdit,
+  type IncrementalParseResult,
+  type IncrementalParseStats
+} from "./cache/incremental-document-parser";
+export {
   formatTableMarkdown,
   formatTableMarkdownWithOffsets,
   type FormattedTableWithOffsets,
