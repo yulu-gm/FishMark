@@ -10,9 +10,9 @@
 
 **Overall status:** `IN_PROGRESS`
 
-**Current task:** none — RF-504 complete; next is `RF-505`
+**Current task:** none — RF-505 complete; next is `RF-506`
 
-**Next required skill:** `$fishmark-task-intake` for `RF-505`
+**Next required skill:** `$fishmark-task-intake` for `RF-506`
 
 ## 1. Status vocabulary
 
@@ -36,14 +36,14 @@ At most one `RF-xxx` task may be `IN_PROGRESS` or `ACCEPTING` at a time. A later
 | M2 | Revisioned edit transport | `COMPLETE` | 4 | 4 | RF-203 and RF-204 accepted; full-draft channel deleted |
 | M3 | Data safety and recovery | `COMPLETE` | 4 | 4 | Inactive files protected; save/recovery/close are canonical |
 | M4 | Recursive parser and incremental cache | `COMPLETE` | 5 | 5 | One recursive parser remains; differential cache tests pass |
-| M5 | Pure semantic editing engine | `IN_PROGRESS` | 4 | 6 | All semantic commands migrated; old command engine removed |
+| M5 | Pure semantic editing engine | `IN_PROGRESS` | 5 | 6 | All semantic commands migrated; old command engine removed |
 | M6 | Thin CodeMirror adapter | `PLANNED` | 0 | 4 | Old `editor-core` package removed |
 | M7 | Shared presentation and derived consumers | `PLANNED` | 0 | 3 | Editor/export/outline/metrics share canonical derived inputs |
 | M8 | Renderer/main composition cleanup | `PLANNED` | 0 | 3 | React/main/preload are composition or presentation only |
 | M9 | Performance, E2E, and security | `PLANNED` | 0 | 3 | Budgets, Playwright flows, and Electron security pass |
 | M10 | Purge and final acceptance | `PLANNED` | 0 | 2 | No compatibility/dead code; final verdict `PASS` |
 
-**Program completion:** 21 / 38 tasks.
+**Program completion:** 22 / 38 tasks.
 
 ## 3. Task ledger
 
@@ -269,9 +269,11 @@ Append one entry when a task changes to `DEV_DONE`, then amend the same entry af
 
 | 2026-08-14 | RF-504 | Added the indent/outdent planners and explicit navigation policies to `@fishmark/editor-model`. Indentation lands after quote and parent prefixes so quoted lists stay valid, and outdenting moves every covered line of the subtree. `navigation.ts` splits pointer, structural arrow, printable input, and programmatic normalization into declared policies, implements visible-line vertical navigation with a preferred visible column, and proves printable input never changes structure. Added the missing `selection-context.test.ts`. | Focused `packages/editor-model` 58 tests. | typecheck; lint 0 errors / 8 pre-existing warnings; build exit 0; full Vitest 189 files / 2,466 passed + 1 skipped. | Self-acceptance: Tab/Shift+Tab/arrows/pointer/input policies are explicit and non-conflicting. | RF-504 is COMPLETE; M5 is 4/6 IN_PROGRESS; program completion is 21/38. RF-505 is the next dependency-ready task. |
 
+| 2026-08-14 | RF-505 | Added the formatting, table, and code-fence planners to `@fishmark/editor-model`. Toggles rewrite only the exact marker ranges and read line patterns after quote prefixes, so quoted and nested content keeps its structure. Table operations run against the canonical table node (cell navigation, row/column insert and delete, table delete, cell update, boundary exit) and rebuild the canonical spelling through the engine formatter. Code fences cover wrap/unwrap, language completion, content Enter, closing boundary exit, and content indentation. | Focused `packages/editor-model` 83 tests. | typecheck; lint 0 errors / 8 pre-existing warnings; build exit 0; full Vitest 192 files / 2,491 passed + 1 skipped (one load-related release-build flake passed on rerun). | Self-acceptance: all remaining semantic edits share the plan/context boundary with no CodeMirror imports. | RF-505 is COMPLETE; M5 is 5/6 IN_PROGRESS; program completion is 22/38. RF-506 is the next dependency-ready task. |
+
 ## 8. Blockers and deviations
 
-There are no accepted external blockers or roadmap deviations. RF-001, RF-002, RF-101, RF-102, RF-201, RF-202, RF-203, RF-204, RF-301, RF-302, RF-303, RF-304, and RF-401 through RF-405 are complete. M0, M1, M2, M3, and M4 are each `COMPLETE`; M5 is 4/6 `IN_PROGRESS`; accepted program completion is 21/38. RF-505 is the next dependency-ready task.
+There are no accepted external blockers or roadmap deviations. RF-001, RF-002, RF-101, RF-102, RF-201, RF-202, RF-203, RF-204, RF-301, RF-302, RF-303, RF-304, and RF-401 through RF-405 are complete. M0, M1, M2, M3, and M4 are each `COMPLETE`; M5 is 5/6 `IN_PROGRESS`; accepted program completion is 22/38. RF-506 is the next dependency-ready task.
 
 Any deviation must record:
 
@@ -336,6 +338,8 @@ When acceptance fails:
 - [ ] Architecture acceptance result is `PASS`.
 - [ ] Task acceptance result is `PASS`.
 - [ ] Stable docs, backlog, progress, test cases/report, package READMEs, and task summaries agree.
+
+
 
 
 

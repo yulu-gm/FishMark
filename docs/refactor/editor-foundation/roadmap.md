@@ -1338,6 +1338,8 @@ npm.cmd run test -- packages/editor-model/src/commands/indent.test.ts packages/e
 
 **Outcome:** all remaining semantic edits share the same plan/context boundary.
 
+**Status:** `COMPLETE` (2026-08-14). `formatting.ts` ports the heading, bullet-list, blockquote, strong, and emphasis toggles as minimal-range plans that read patterns after quote prefixes, so quoted and nested content keeps its structure and spelling outside the edit survives. `table.ts` reads the canonical table node, performs cell navigation, row/column insert and delete, table delete, cell update, and boundary exit through the engine's canonical table formatter, and keeps quoted tables inside their quote. `code-fence.ts` handles wrap/unwrap, language completion, content Enter, closing-boundary exit, and content indentation. Every planner returns one `EditTransactionPlan`.
+
 **Files:**
 
 - Create: `packages/editor-model/src/commands/formatting.ts`
@@ -1350,11 +1352,11 @@ npm.cmd run test -- packages/editor-model/src/commands/indent.test.ts packages/e
 
 **Steps:**
 
-- [ ] Port inline/block toggles without CodeMirror imports.
-- [ ] Port table selection/edit/row/column operations against canonical table nodes.
-- [ ] Port code fence completion, indentation, and boundary Enter behavior.
-- [ ] Preserve history groups and exact source spelling outside changed ranges.
-- [ ] Cover each command inside list/quote combinations where syntax permits.
+- [x] Port inline/block toggles without CodeMirror imports.
+- [x] Port table selection/edit/row/column operations against canonical table nodes.
+- [x] Port code fence completion, indentation, and boundary Enter behavior.
+- [x] Preserve history groups and exact source spelling outside changed ranges.
+- [x] Cover each command inside list/quote combinations where syntax permits.
 
 **Verification:**
 
@@ -1852,6 +1854,7 @@ The refactor is complete only when all statements below are true:
 - Renderer sandbox, CSP, IPC sender validation, and resource path allowlists are active.
 - Old editor-core, old parser, full-draft sync, renderer conflict state, compatibility adapters, dead code, and stale tests/docs are deleted.
 - Build, lint, typecheck, full tests, performance gates, E2E, architecture acceptance, and task acceptance all pass with fresh evidence.
+
 
 
 

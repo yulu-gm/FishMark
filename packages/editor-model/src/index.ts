@@ -86,3 +86,47 @@ export {
   type NavigationIntent
 } from "./commands/navigation";
 
+export {
+  decideBlockquoteToggle,
+  decideBulletListToggle,
+  decideEmphasisToggle,
+  decideHeadingToggle,
+  decideStrongToggle,
+  planBlockquoteToggle,
+  planBulletListToggle,
+  planEmphasisToggle,
+  planHeadingToggle,
+  planStrongToggle,
+  type FormattingDecision,
+  type FormattingPlanKind
+} from "./commands/formatting";
+export {
+  planTableDelete,
+  planTableDeleteColumn,
+  planTableDeleteRow,
+  planTableExitBelow,
+  planTableInsertColumnLeft,
+  planTableInsertColumnRight,
+  planTableInsertRowAbove,
+  planTableInsertRowBelow,
+  planTableMoveToCell,
+  planTableNextCell,
+  planTablePreviousCell,
+  planTableUpdateCell,
+  readTableSnapshot,
+  tablePositionAt,
+  type TableDecision,
+  type TablePlanKind,
+  type TablePosition,
+  type TableSnapshot
+} from "./commands/table";
+export {
+  decideCodeFenceToggle,
+  planCodeFenceCompletion,
+  planCodeFenceEnter,
+  planCodeFenceIndent,
+  planCodeFenceToggle,
+  type CodeFenceDecision,
+  type CodeFencePlanKind
+} from "./commands/code-fence";
+

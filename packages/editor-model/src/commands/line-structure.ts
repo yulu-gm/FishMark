@@ -170,6 +170,22 @@ export function blockquotePrefix(line: PhysicalLine): QuotePrefix {
 
 // Where indentation belongs on a line: after the enclosing quote and parent prefixes, never
 // before them.
+// The end of a line's leading quote prefixes. Formatting patterns read from here so quoted
+// content is matched and rewritten without disturbing the quote structure.
+export function quotePrefixEnd(line: PhysicalLine): number {
+  let offset = line.range.startOffset;
+
+  for (const segment of line.segments) {
+    if (segment.kind !== "quote-marker" && segment.kind !== "spacing") {
+      break;
+    }
+
+    offset = segment.range.endOffset;
+  }
+
+  return offset;
+}
+
 export function indentationAnchor(line: PhysicalLine): number {
   const segments = line.segments;
   let markerIndex = -1;
@@ -263,5 +279,6 @@ export function deepestAncestorOfKind(
 export function isKind(node: MarkdownNode | null, kind: MarkdownNode["kind"]): boolean {
   return node !== null && node.kind === kind;
 }
+
 
 
