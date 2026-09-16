@@ -1148,6 +1148,8 @@ npm.cmd run typecheck
 
 **Outcome:** ordinary edits reuse unaffected document structure and derived indexes.
 
+**Status:** `COMPLETE` (2026-08-14). `parse/parse-checkpoint.ts` records per-line container depth and open-fence state so only container-free, fence-free line starts are safe resumption points; `cache/invalidation-range.ts` maps an edit to backward/forward safe bounds; `cache/document-structure-cache.ts` + `cache/incremental-document-parser.ts` reparse only the window, keep unaffected `before` blocks by identity, and offset-remap the `after` region (re-lexing only its inline leaves), falling back to a full parse when no safe window exists. Differential tests prove incremental results equal fresh parses across insert/delete/nested/fence/multi-edit corpora.
+
 **Files:**
 
 - Create: `packages/markdown-engine/src/parse/parse-checkpoint.ts`
@@ -1159,13 +1161,13 @@ npm.cmd run typecheck
 
 **Steps:**
 
-- [ ] Define safe checkpoints containing open fence, container stack, line state, and dialect state.
-- [ ] Map change ranges through revisions and choose backward/forward reparse bounds.
-- [ ] Reuse immutable unaffected nodes and remap their offsets.
-- [ ] Invalidate inline/global-definition dependents precisely.
-- [ ] Record parse windows, reused/invalidated nodes, and fallback reasons.
-- [ ] Add differential edit-sequence tests against `fullDocumentParser`.
-- [ ] Prove selection-only changes perform no parse.
+- [x] Define safe checkpoints containing open fence, container stack, line state, and dialect state.
+- [x] Map change ranges through revisions and choose backward/forward reparse bounds.
+- [x] Reuse immutable unaffected nodes and remap their offsets.
+- [x] Invalidate inline/global-definition dependents precisely.
+- [x] Record parse windows, reused/invalidated nodes, and fallback reasons.
+- [x] Add differential edit-sequence tests against `fullDocumentParser`.
+- [x] Prove selection-only changes perform no parse.
 
 **Verification:**
 
