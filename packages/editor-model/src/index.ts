@@ -52,3 +52,16 @@ export {
   type EnterPlanKind
 } from "./commands/enter";
 
+export {
+  decideBackspace,
+  planBackspace,
+  type BackspaceDecision,
+  type BackspacePlanKind
+} from "./commands/backspace";
+export {
+  decideDelete,
+  planDelete,
+  type DeleteDecision,
+  type DeletePlanKind
+} from "./commands/delete";
+

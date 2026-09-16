@@ -1277,6 +1277,8 @@ npm.cmd run test -- packages/editor-model/src/commands/enter.test.ts fixtures/ed
 
 **Outcome:** deletion degrades structure one predictable step and preserves subtrees.
 
+**Status:** `COMPLETE` (2026-08-14). `decideBackspace`/`planBackspace` delete an ordinary character or the selected range, then degrade exactly one hidden prefix: an item marker becomes its indentation, an indentation run moves the whole item subtree, and a quoted line loses one quote level. `decideDelete`/`planDelete` mirror it forward, joining the next line by removing its break and hidden prefix so the destination path is recomputed from the next snapshot. Shared line-structure helpers now live in `commands/line-structure.ts`, and the line→node mapping prefers the child that starts on the line instead of the previous sibling that still owns its trailing break.
+
 **Files:**
 
 - Create: `packages/editor-model/src/commands/backspace.ts`
@@ -1287,11 +1289,11 @@ npm.cmd run test -- packages/editor-model/src/commands/enter.test.ts fixtures/ed
 
 **Steps:**
 
-- [ ] Implement ordinary deletion and range deletion.
-- [ ] Implement content-start marker/indent/quote degradation.
-- [ ] Move or outdent complete list-item subtrees.
-- [ ] Recompute destination path after range deletion/join.
-- [ ] Cover hidden markers, whitespace lines, repeated deletion, and undo/redo.
+- [x] Implement ordinary deletion and range deletion.
+- [x] Implement content-start marker/indent/quote degradation.
+- [x] Move or outdent complete list-item subtrees.
+- [x] Recompute destination path after range deletion/join.
+- [x] Cover hidden markers, whitespace lines, repeated deletion, and undo/redo.
 
 **Verification:**
 
@@ -1848,4 +1850,5 @@ The refactor is complete only when all statements below are true:
 - Renderer sandbox, CSP, IPC sender validation, and resource path allowlists are active.
 - Old editor-core, old parser, full-draft sync, renderer conflict state, compatibility adapters, dead code, and stale tests/docs are deleted.
 - Build, lint, typecheck, full tests, performance gates, E2E, architecture acceptance, and task acceptance all pass with fresh evidence.
+
 

@@ -126,10 +126,18 @@ function deepestNodeOverlapping(root: MarkdownNode, range: SourceRange): Markdow
   let current: MarkdownNode | null = null;
   let candidate: MarkdownNode = root;
   for (;;) {
-    const next: MarkdownNode | undefined = childrenOf(candidate).find(
-      (child) =>
-        child.source.startOffset < range.endOffset && child.source.endOffset > range.startOffset
-    );
+    const children = childrenOf(candidate);
+    // A child that starts on this line owns it. Overlap alone would hand the line to the
+    // previous sibling, whose range still covers its own trailing line break.
+    const next: MarkdownNode | undefined =
+      children.find(
+        (child) =>
+          child.source.startOffset >= range.startOffset && child.source.startOffset < range.endOffset
+      ) ??
+      children.find(
+        (child) =>
+          child.source.startOffset < range.endOffset && child.source.endOffset > range.startOffset
+      );
     if (next === undefined) break;
     current = next;
     candidate = next;
@@ -310,3 +318,4 @@ function listMarkerAt(source: string, offset: number): string | null {
   const ordered = /^\d{1,9}[.)](?=[ \t]|$)/u.exec(source.slice(offset, offset + 11));
   return ordered === null ? null : ordered[0];
 }
+
