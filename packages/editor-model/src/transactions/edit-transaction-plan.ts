@@ -26,7 +26,9 @@ export type EditorCommandId =
   | "outdent"
   | "format-inline"
   | "table-edit"
-  | "fence-edit";
+  | "fence-edit"
+  | "insert-text"
+  | "pointer";
 
 export interface EditorCommand<TContext = EditorSemanticContext> {
   readonly id: EditorCommandId;
@@ -109,3 +111,4 @@ function assertPlanEdits(edits: readonly TextEditOperation[]): void {
     previousTo = edit.to;
   }
 }
+

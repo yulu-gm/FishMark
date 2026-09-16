@@ -10,9 +10,9 @@
 
 **Overall status:** `IN_PROGRESS`
 
-**Current task:** none — RF-503 complete; next is `RF-504`
+**Current task:** none — RF-504 complete; next is `RF-505`
 
-**Next required skill:** `$fishmark-task-intake` for `RF-504`
+**Next required skill:** `$fishmark-task-intake` for `RF-505`
 
 ## 1. Status vocabulary
 
@@ -36,14 +36,14 @@ At most one `RF-xxx` task may be `IN_PROGRESS` or `ACCEPTING` at a time. A later
 | M2 | Revisioned edit transport | `COMPLETE` | 4 | 4 | RF-203 and RF-204 accepted; full-draft channel deleted |
 | M3 | Data safety and recovery | `COMPLETE` | 4 | 4 | Inactive files protected; save/recovery/close are canonical |
 | M4 | Recursive parser and incremental cache | `COMPLETE` | 5 | 5 | One recursive parser remains; differential cache tests pass |
-| M5 | Pure semantic editing engine | `IN_PROGRESS` | 3 | 6 | All semantic commands migrated; old command engine removed |
+| M5 | Pure semantic editing engine | `IN_PROGRESS` | 4 | 6 | All semantic commands migrated; old command engine removed |
 | M6 | Thin CodeMirror adapter | `PLANNED` | 0 | 4 | Old `editor-core` package removed |
 | M7 | Shared presentation and derived consumers | `PLANNED` | 0 | 3 | Editor/export/outline/metrics share canonical derived inputs |
 | M8 | Renderer/main composition cleanup | `PLANNED` | 0 | 3 | React/main/preload are composition or presentation only |
 | M9 | Performance, E2E, and security | `PLANNED` | 0 | 3 | Budgets, Playwright flows, and Electron security pass |
 | M10 | Purge and final acceptance | `PLANNED` | 0 | 2 | No compatibility/dead code; final verdict `PASS` |
 
-**Program completion:** 20 / 38 tasks.
+**Program completion:** 21 / 38 tasks.
 
 ## 3. Task ledger
 
@@ -71,7 +71,7 @@ Evidence columns are filled only with fresh command output/report paths from the
 | RF-501 | Semantic context and derived snapshot | RF-405 | `COMPLETE` | `EditorDerivedSnapshot` wraps one revision (tree, source, physical editing document) with line/node/path/table-cursor queries and an incremental-edit entry point; `deriveSelectionSnapshot` recomputes only the selection-derived active line/node/path/table cursor; `EditorSemanticContext` composes both and rejects stale revisions; `edit-transaction-plan.ts` defines ordered non-overlapping `TextEditOperation` plans and the command registry contract. 12 focused tests. | typecheck; lint 0 errors / 8 pre-existing warnings; build exit 0; full Vitest 183 files / 2,420 passed + 1 skipped; architecture guard 234 tests. | Self-acceptance: commands can read tree/line/path/selection with no parser call and no CodeMirror state. | `codex/editor-foundation-refactor` |
 | RF-502 | Enter planner | RF-501 | `COMPLETE` | Pure `decideEnter`/`planEnter` over the semantic context: line container chain resolved by overlap, one rule per case (plain/structural-blank break with enclosing prefixes, heading exit, list continuation with ordinal/delimiter/task handling, one-level empty item and quote exits, fenced content lines, table-boundary row skeleton), each returning a single ordered `EditTransactionPlan` with the resulting caret. 14 focused tests cover the matrix through depth 8 and repeated Enter. | typecheck; lint 0 errors / 8 pre-existing warnings; build exit 0; full Vitest 184 files / 2,434 passed + 1 skipped. | Self-acceptance: no Enter behavior depends on DOM class names or feature-specific source rescans. | `codex/editor-foundation-refactor` |
 | RF-503 | Backspace and Delete planners | RF-502 | `COMPLETE` | `decideBackspace`/`planBackspace` handle ordinary and range deletion, then degrade one hidden prefix per press (item marker → indentation, indentation run → outdent the whole subtree, quoted line → one quote level); `decideDelete`/`planDelete` delete forward and join the next line by removing its break plus prefix so the destination path is recomputed. Shared helpers extracted to `commands/line-structure.ts`; the physical-line→node mapping now prefers the child starting on the line. 12 focused tests. | typecheck; lint 0 errors / 8 pre-existing warnings; build exit 0; full Vitest 186 files / 2,448 passed + 1 skipped. | Self-acceptance: Backspace/Delete are source-minimal, subtree-safe, and depth-independent. | `codex/editor-foundation-refactor` |
-| RF-504 | Indent, navigation, and selection policies | RF-503 | `PLANNED` | — | focused behavior tests | — | — |
+| RF-504 | Indent, navigation, and selection policies | RF-503 | `COMPLETE` | `planIndentIn`/`planIndentOut` move the enclosing item subtree and anchor indentation after quote/parent prefixes; `navigation.ts` declares one policy per user intent (pointer, structural arrow, printable input, programmatic normalization), implements visible-line vertical navigation with a preferred visible column, a pointer plan without edits, a printable-input plan that only inserts text, and a normalization entry point that never changes structure. `selection-context.test.ts` covers normalization and ownership. 18 focused tests. | typecheck; lint 0 errors / 8 pre-existing warnings; build exit 0; full Vitest 189 files / 2,466 passed + 1 skipped. | Self-acceptance: selection policy is explicit and no global transaction filter guesses user intent. | `codex/editor-foundation-refactor` |
 | RF-505 | Formatting, table, and fence planners | RF-504 | `PLANNED` | — | command package tests | — | — |
 | RF-506 | Semantic engine hard cutover | RF-505 | `PLANNED` | — | lint/typecheck/test/build | — | — |
 | RF-601 | Transaction bridge, history, and IME | RF-506 | `PLANNED` | — | adapter tests | — | — |
@@ -267,9 +267,11 @@ Append one entry when a task changes to `DEV_DONE`, then amend the same entry af
 
 | 2026-08-14 | RF-503 | Added the Backspace and Delete planners to `@fishmark/editor-model` plus the shared `commands/line-structure.ts` helpers. Backspace deletes a character or range and then degrades exactly one hidden prefix (marker, indentation with the whole subtree, or one quote level); Delete mirrors it forward and joins the next line by removing its break and prefix. Fixed the physical-line→node mapping so a line belongs to the child starting on it rather than the previous sibling whose range still covers its trailing break. | Focused `packages/editor-model` 40 tests (12 RF-501, 14 RF-502, 7 RF-503 backspace, 7 RF-503 delete). | typecheck; lint 0 errors / 8 pre-existing warnings; build exit 0; full Vitest 186 files / 2,448 passed + 1 skipped. | Self-acceptance: deletion degrades one step, preserves subtrees, and recomputes the destination path. | RF-503 is COMPLETE; M5 is 3/6 IN_PROGRESS; program completion is 20/38. RF-504 is the next dependency-ready task. |
 
+| 2026-08-14 | RF-504 | Added the indent/outdent planners and explicit navigation policies to `@fishmark/editor-model`. Indentation lands after quote and parent prefixes so quoted lists stay valid, and outdenting moves every covered line of the subtree. `navigation.ts` splits pointer, structural arrow, printable input, and programmatic normalization into declared policies, implements visible-line vertical navigation with a preferred visible column, and proves printable input never changes structure. Added the missing `selection-context.test.ts`. | Focused `packages/editor-model` 58 tests. | typecheck; lint 0 errors / 8 pre-existing warnings; build exit 0; full Vitest 189 files / 2,466 passed + 1 skipped. | Self-acceptance: Tab/Shift+Tab/arrows/pointer/input policies are explicit and non-conflicting. | RF-504 is COMPLETE; M5 is 4/6 IN_PROGRESS; program completion is 21/38. RF-505 is the next dependency-ready task. |
+
 ## 8. Blockers and deviations
 
-There are no accepted external blockers or roadmap deviations. RF-001, RF-002, RF-101, RF-102, RF-201, RF-202, RF-203, RF-204, RF-301, RF-302, RF-303, RF-304, and RF-401 through RF-405 are complete. M0, M1, M2, M3, and M4 are each `COMPLETE`; M5 is 3/6 `IN_PROGRESS`; accepted program completion is 20/38. RF-504 is the next dependency-ready task.
+There are no accepted external blockers or roadmap deviations. RF-001, RF-002, RF-101, RF-102, RF-201, RF-202, RF-203, RF-204, RF-301, RF-302, RF-303, RF-304, and RF-401 through RF-405 are complete. M0, M1, M2, M3, and M4 are each `COMPLETE`; M5 is 4/6 `IN_PROGRESS`; accepted program completion is 21/38. RF-505 is the next dependency-ready task.
 
 Any deviation must record:
 
@@ -334,6 +336,8 @@ When acceptance fails:
 - [ ] Architecture acceptance result is `PASS`.
 - [ ] Task acceptance result is `PASS`.
 - [ ] Stable docs, backlog, progress, test cases/report, package READMEs, and task summaries agree.
+
+
 
 
 

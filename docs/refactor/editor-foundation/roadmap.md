@@ -1307,6 +1307,8 @@ npm.cmd run test -- packages/editor-model/src/commands/backspace.test.ts package
 
 **Outcome:** Tab/Shift+Tab/arrows/pointer/input use explicit, non-conflicting policies.
 
+**Status:** `COMPLETE` (2026-08-14). `planIndentIn`/`planIndentOut` move the nearest enclosing item subtree, inserting or removing indentation after the quote and parent prefixes so quoted lists stay valid, and outdenting moves every covered line of the subtree. `navigation.ts` declares one policy per user intent (pointer, structural arrow, printable input, programmatic normalization) and provides visible-line vertical navigation with a preferred visible column, a pointer caret plan with no edits, a printable-input plan that only inserts text, and a normalization entry point that never changes structure. `selection-context.test.ts` covers normalization, emptiness, clamping, and ownership.
+
 **Files:**
 
 - Create: `packages/editor-model/src/commands/indent.ts`
@@ -1318,11 +1320,11 @@ npm.cmd run test -- packages/editor-model/src/commands/backspace.test.ts package
 
 **Steps:**
 
-- [ ] Implement list-subtree indent/outdent with preserved quote prefixes.
-- [ ] Implement visible-line vertical navigation with preferred columns.
-- [ ] Split pointer, structural arrow, printable input, and programmatic normalization.
-- [ ] Prove printable input never moves selection structurally.
-- [ ] Cover hidden marker and structural blank navigation at mixed depths.
+- [x] Implement list-subtree indent/outdent with preserved quote prefixes.
+- [x] Implement visible-line vertical navigation with preferred columns.
+- [x] Split pointer, structural arrow, printable input, and programmatic normalization.
+- [x] Prove printable input never moves selection structurally.
+- [x] Cover hidden marker and structural blank navigation at mixed depths.
 
 **Verification:**
 
@@ -1850,5 +1852,6 @@ The refactor is complete only when all statements below are true:
 - Renderer sandbox, CSP, IPC sender validation, and resource path allowlists are active.
 - Old editor-core, old parser, full-draft sync, renderer conflict state, compatibility adapters, dead code, and stale tests/docs are deleted.
 - Build, lint, typecheck, full tests, performance gates, E2E, architecture acceptance, and task acceptance all pass with fresh evidence.
+
 
 

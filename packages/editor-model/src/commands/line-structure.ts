@@ -168,6 +168,40 @@ export function blockquotePrefix(line: PhysicalLine): QuotePrefix {
   };
 }
 
+// Where indentation belongs on a line: after the enclosing quote and parent prefixes, never
+// before them.
+export function indentationAnchor(line: PhysicalLine): number {
+  const segments = line.segments;
+  let markerIndex = -1;
+
+  for (let index = segments.length - 1; index >= 0; index -= 1) {
+    if (segments[index]!.kind === "list-marker") {
+      markerIndex = index;
+      break;
+    }
+  }
+
+  if (markerIndex >= 0) {
+    const indentIndex = markerIndex > 0 && segments[markerIndex - 1]!.kind === "indentation"
+      ? markerIndex - 1
+      : markerIndex;
+
+    return segments[indentIndex]!.range.startOffset;
+  }
+
+  let offset = line.range.startOffset;
+
+  for (const segment of segments) {
+    if (segment.kind !== "quote-marker" && segment.kind !== "spacing" && segment.kind !== "indentation") {
+      break;
+    }
+
+    offset = segment.range.endOffset;
+  }
+
+  return offset;
+}
+
 export function nextListMarker(
   context: EditorSemanticContext,
   item: MarkdownNode,

@@ -65,3 +65,24 @@ export {
   type DeletePlanKind
 } from "./commands/delete";
 
+export {
+  INDENT_UNIT,
+  decideIndentIn,
+  decideIndentOut,
+  planIndent,
+  planIndentIn,
+  planIndentOut,
+  type IndentDecision,
+  type IndentPlanKind
+} from "./commands/indent";
+export {
+  INTENT_POLICIES,
+  planPointerSelection,
+  planPrintableInput,
+  planProgrammaticNormalization,
+  planVerticalNavigation,
+  policyFor,
+  type IntentPolicy,
+  type NavigationIntent
+} from "./commands/navigation";
+
