@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createRequire } from "node:module";
 
-import { parseBlockMap, parseMarkdownDocument } from "@fishmark/markdown-engine";
+import { parseMarkdownDocument } from "@fishmark/markdown-engine";
 
 import { createActiveBlockStateFromBlockMap } from "../active-block";
 import { createEditorDerivedState } from "../derived-state/editor-derived-state";
@@ -897,7 +897,7 @@ describe("createBlockDecorations", () => {
       "",
       "Paragraph"
     ].join("\n");
-    const blockMap = parseBlockMap(source);
+    const blockMap = parseMarkdownDocument(source);
     const activeState = createActiveBlockStateFromBlockMap(blockMap, {
       anchor: source.indexOf("Paragraph"),
       head: source.indexOf("Paragraph")
@@ -913,9 +913,10 @@ describe("createBlockDecorations", () => {
     expect(result.signature).toBe(
       [
         "view-mode:wysiwym:active:paragraph:86-95:blank-line:86:physical-line:15:86:95:text",
-        "heading:heading:0-7:0:1",
-        "list:list:9-25:9:false:list-item:9-14:0:none,list-item:15-25:0:true",
-        "blockquote:blockquote:27-49:27:49",
+        'heading:heading:0-7:0:1|inline:root(2-7:text(2-7:"Title"))',
+        'list:list:9-25:9:false:list-item:9-14:0:none|inline:root(11-14:text(11-14:"one")),list-item:15-25:0:true|inline:root(21-25:text(21-25:"done"))',
+        // Blockquote lines carry their own inline ASTs and inner blocks after the RF-405 cutover.
+        'blockquote:blockquote:27-49:27:49:6:28:29:34|inline:root(29-34:text(29-34:"quote"))|7:36:37:49|inline:root(37-49:text(37-49:"still quoted")):inner(paragraph:paragraph:29-49:29|inline:root(29-49:text(29-49:"quotestill quoted")))',
         "codeFence:codeFence:51-79:ts",
         "thematicBreak:thematicBreak:81-84:-"
       ].join("|")
@@ -999,6 +1000,14 @@ describe("createBlockDecorations", () => {
         to: 29,
         className: "cm-inactive-blockquote-marker",
         text: "> "
+      },
+      {
+        // The quoted paragraph is a real inner block after RF-405, so it carries its own
+        // paragraph decoration in addition to the blockquote line decorations.
+        from: 29,
+        to: 29,
+        className: "cm-inactive-paragraph cm-inactive-paragraph-leading",
+        text: ""
       },
       {
         from: 35,
@@ -2046,7 +2055,7 @@ describe("createBlockDecorations", () => {
 
   it("omits the active block only while the editor has focus", () => {
     const source = ["# Title", "", "Paragraph"].join("\n");
-    const blockMap = parseBlockMap(source);
+    const blockMap = parseMarkdownDocument(source);
     const activeState = createActiveBlockStateFromBlockMap(blockMap, {
       anchor: source.indexOf("Title"),
       head: source.indexOf("Title")
@@ -2134,7 +2143,7 @@ describe("createBlockDecorations", () => {
 
   it("does not apply CJK decorations inside code fences", () => {
     const source = ["```txt", "中文", "```"].join("\n");
-    const blockMap = parseBlockMap(source);
+    const blockMap = parseMarkdownDocument(source);
     const activeState = createActiveBlockStateFromBlockMap(blockMap, {
       anchor: source.length,
       head: source.length
@@ -2237,3 +2246,4 @@ describe("block decoration line helpers", () => {
     ]);
   });
 });
+

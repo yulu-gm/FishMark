@@ -97,7 +97,6 @@ export type ParseMarkdownDocument = (source: string) => MarkdownDocument;
 export type ParseOrderedListNormalizationBlockMap = (source: string) => BlockMap;
 
 export type CreateFishMarkMarkdownExtensionsOptions = {
-  parseBlockMap?: ParseMarkdownDocument;
   parseMarkdownDocument?: ParseMarkdownDocument;
   parseOrderedListNormalizationBlockMap?: ParseOrderedListNormalizationBlockMap;
   onContentChange: (doc: string) => void;
@@ -132,11 +131,11 @@ const blockPointerDragThresholdPx = 3;
 export function createFishMarkMarkdownExtensions(
   options: CreateFishMarkMarkdownExtensionsOptions
 ): Extension[] {
-  const parseMarkdownDocument = options.parseMarkdownDocument ?? options.parseBlockMap;
+  const parseMarkdownDocument = options.parseMarkdownDocument;
 
   if (!parseMarkdownDocument) {
     throw new Error(
-      "createFishMarkMarkdownExtensions requires parseBlockMap or parseMarkdownDocument"
+      "createFishMarkMarkdownExtensions requires parseMarkdownDocument"
     );
   }
 
@@ -1036,7 +1035,7 @@ export function createFishMarkMarkdownExtensions(
 
       if (shouldNormalizeOrderedLists) {
         const normalization = computeNormalizedOrderedListDocument(effectiveSource, {
-          parseBlockMap: options.parseOrderedListNormalizationBlockMap,
+          parseOrderedListNormalization: options.parseOrderedListNormalizationBlockMap,
           changedRanges: readTransactionChangedRanges(transaction)
         });
 
@@ -1573,3 +1572,4 @@ export function refreshMarkdownDecorations(view: EditorView): void {
     effects: forceRefreshMarkdownDecorationsEffect.of(null)
   });
 }
+

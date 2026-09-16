@@ -15,7 +15,8 @@ import {
   type MarkdownNode,
   type MarkdownNodeData
 } from "../model/markdown-node";
-import { createSourceRange, maskSourceRanges, type SourceMarker, type SourceRange } from "../model/source-range";
+import { createSourceRange, type SourceMarker, type SourceRange } from "../model/source-range";
+import { createMaskedSource, type SourceText } from "../source-text";
 import type { MarkdownParseOptions } from "../parse-instrumentation";
 import {
   collectFootnoteDefinitionsFromBlocks,
@@ -187,7 +188,7 @@ interface RawContainer {
   readonly prefixes: readonly SourceRange[];
   // The source with every enclosing blockquote prefix blanked out. Container children are
   // classified against it, so nesting never changes what counts as a table, fence, or heading.
-  readonly maskedSource: string;
+  readonly maskedSource: SourceText;
   data: MarkdownNodeData;
   readonly children: RawChild[];
   readonly itemPrefixes: number[];
@@ -235,8 +236,8 @@ function topLevelLeafBlocks(root: RawContainer): readonly MarkdownBlock[] {
   return root.children.flatMap((child) => (child.type === "blocks" ? child.blocks : []));
 }
 
-function containerMaskedSource(parentMaskedSource: string, prefixes: readonly SourceRange[]): string {
-  return prefixes.length === 0 ? parentMaskedSource : maskSourceRanges(parentMaskedSource, prefixes);
+function containerMaskedSource(parentMaskedSource: SourceText, prefixes: readonly SourceRange[]): SourceText {
+  return createMaskedSource(parentMaskedSource, prefixes);
 }
 
 function initialContainerData(kind: MarkdownContainerKind): MarkdownNodeData {  if (kind === "list") {
@@ -372,7 +373,7 @@ function materializeContainer(input: {
   readonly source: string;
   readonly referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition>;
   readonly footnoteDefinitions: ReadonlyMap<string, FootnoteDefinition>;
-  readonly maskedSource: string;
+  readonly maskedSource: SourceText;
 }): MarkdownContainerNode {
   const children: MarkdownNode[] = [];
   const maskedSource = input.frame.maskedSource;
@@ -486,6 +487,7 @@ function containerRange(frameRange: SourceRange, children: readonly MarkdownNode
 }
 
 const EMPTY_PREFIXES: BlockquotePrefixSpans = Object.freeze({ markers: [], prefixes: [] });
+
 
 
 

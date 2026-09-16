@@ -1058,35 +1058,10 @@
       "module": "packages/markdown-engine/src/parse-markdown-document.ts",
       "symbol": "parseMarkdownDocument",
       "visibility": "public",
-      "role": "rich-document",
+      "role": "rich-document-view",
       "scope": "full-document",
       "lifecycle": {
-        "state": "present-until",
-        "retireIn": "RF-405"
-      }
-    },
-    {
-      "id": "parser.parse-block-map",
-      "module": "packages/markdown-engine/src/parse-block-map.ts",
-      "symbol": "parseBlockMap",
-      "visibility": "public",
-      "role": "lean-legacy-document",
-      "scope": "full-document",
-      "lifecycle": {
-        "state": "present-until",
-        "retireIn": "RF-405"
-      }
-    },
-    {
-      "id": "parser.parse-top-level-blocks",
-      "module": "packages/markdown-engine/src/parse-block-map.ts",
-      "symbol": "parseTopLevelBlocks",
-      "visibility": "internal-export",
-      "role": "legacy-top-level-document",
-      "scope": "full-document",
-      "lifecycle": {
-        "state": "present-until",
-        "retireIn": "RF-405"
+        "state": "present"
       }
     },
     {
@@ -1176,19 +1151,10 @@
       }
     },
     {
-      "id": "micromark-document.parse-markdown-document",
-      "module": "packages/markdown-engine/src/parse-markdown-document.ts",
+      "id": "micromark-document.definition-index",
+      "module": "packages/markdown-engine/src/parse/definition-index.ts",
       "lifecycle": {
-        "state": "present-until",
-        "retireIn": "RF-405"
-      }
-    },
-    {
-      "id": "micromark-document.parse-block-map",
-      "module": "packages/markdown-engine/src/parse-block-map.ts",
-      "lifecycle": {
-        "state": "present-until",
-        "retireIn": "RF-405"
+        "state": "present"
       }
     }
   ]

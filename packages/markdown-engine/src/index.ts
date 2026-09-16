@@ -120,8 +120,8 @@ export {
   resolveIndentedCodeContentStartOffset,
   type CodeBlockKind
 } from "./code-block";
-export { parseBlockMap } from "./parse-block-map";
 export { parseFullDocumentTree } from "./parse/full-document-parser";
+export { projectMarkdownDocument } from "./parse/document-projection";
 export {
   collectMicromarkEventViews,
   type MicromarkEventView
@@ -180,3 +180,4 @@ export {
   tableBlockToCanonicalModel,
   type CanonicalTableModel
 } from "./table-model";
+

@@ -19,10 +19,10 @@ describe("measureRendererDerivedDataPerformance", () => {
       expect(operation.durationMs).toBeGreaterThanOrEqual(0);
       expect(operation.parserEntries).toEqual({
         parseMarkdownDocument: 1,
-        parseBlockMap: 0
+        parseOrderedListNormalization: 0
       });
       expect(operation.counters.fullParse).toBeGreaterThan(
-        operation.parserEntries.parseMarkdownDocument + operation.parserEntries.parseBlockMap
+        operation.parserEntries.parseMarkdownDocument + operation.parserEntries.parseOrderedListNormalization
       );
       expect(operation.counters).toMatchObject({
         incrementalParseWindow: 0,
@@ -55,3 +55,4 @@ function createLegacyRendererPerformanceSource(lineCount: number): string {
 
   return Array.from({ length: lineCount }, (_value, index) => block[index % block.length]).join("\n");
 }
+

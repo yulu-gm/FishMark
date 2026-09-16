@@ -48,7 +48,7 @@ describe("measureEditorPerformanceProbe", () => {
       }
 
       expect(operation.counters.fullParse).toBeGreaterThanOrEqual(
-        operation.parserEntries.parseMarkdownDocument + operation.parserEntries.parseBlockMap
+        operation.parserEntries.parseMarkdownDocument + operation.parserEntries.parseOrderedListNormalization
       );
       expect(operation.counters.incrementalParseWindow).toBe(0);
       expect(operation.counters.cacheHit).toBe(0);
@@ -64,12 +64,12 @@ describe("measureEditorPerformanceProbe", () => {
 
     expect(open?.parserEntries.parseMarkdownDocument).toBeGreaterThan(0);
     expect(open?.counters.fullParse).toBeGreaterThan(
-      (open?.parserEntries.parseMarkdownDocument ?? 0) + (open?.parserEntries.parseBlockMap ?? 0)
+      (open?.parserEntries.parseMarkdownDocument ?? 0) + (open?.parserEntries.parseOrderedListNormalization ?? 0)
     );
     expect(open?.counters.decorationRebuild).toBeGreaterThan(0);
     expect(edit?.parserEntries.parseMarkdownDocument).toBeGreaterThan(0);
     expect(selection?.counters.fullParse).toBe(0);
-    expect(orderedListEdit?.parserEntries.parseBlockMap).toBeGreaterThan(0);
+    expect(orderedListEdit?.parserEntries.parseOrderedListNormalization).toBeGreaterThan(0);
   }, 15_000);
 
   it("removes the host when EditorView construction throws after the host is appended", () => {
@@ -121,3 +121,4 @@ describe("measureEditorPerformanceProbe", () => {
     expect(Array.from(document.body.childNodes)).toEqual(bodyChildrenBefore);
   });
 });
+

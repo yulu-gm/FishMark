@@ -1,4 +1,5 @@
 import type { TableAlignment, TableBlock, TableCell, TableRow, TableRowSeparator } from "./block-map";
+import type { SourceText } from "./source-text";
 
 export type CanonicalTableModel = {
   hasHeader: boolean;
@@ -210,7 +211,7 @@ export function createCanonicalTableModel(input: {
 }
 
 export function parsePipeTable(params: {
-  source: string;
+  source: SourceText;
   startOffset: number;
   endOffset: number;
   startLine: number;
@@ -281,7 +282,7 @@ export function looksLikeLoosePipeTable(lines: readonly string[]): boolean {
 }
 
 export function parseLoosePipeTable(params: {
-  source: string;
+  source: SourceText;
   startOffset: number;
   endOffset: number;
   startLine: number;
@@ -415,3 +416,4 @@ function createLineInfos(sourceSlice: string, baseOffset: number, baseLine: numb
 
   return lines;
 }
+

@@ -1,4 +1,5 @@
 import { parse, postprocess, preprocess } from "micromark";
+import type { SourceText } from "./source-text";
 import { math } from "micromark-extension-math";
 import type { Token } from "micromark-util-types";
 
@@ -63,7 +64,7 @@ export function normalizeReferenceIdentifier(value: string): string {
 }
 
 export function parseInlineAst(
-  source: string,
+  source: SourceText,
   startOffset: number,
   endOffset: number,
   options: ParseInlineAstOptions = {}
@@ -350,7 +351,7 @@ function toAbsoluteOffset(base: number, localOffset: number): number {
   return base + localOffset;
 }
 
-function readSlice(source: string, token: Token): string {
+function readSlice(source: SourceText, token: Token): string {
   return source.slice(token.start.offset, token.end.offset);
 }
 
@@ -463,7 +464,7 @@ function appendNode(stack: AstStackEntry[], node: InlineNode): void {
   siblings.push(node);
 }
 
-function appendTextNode(stack: AstStackEntry[], source: string, startOffset: number, endOffset: number): void {
+function appendTextNode(stack: AstStackEntry[], source: SourceText, startOffset: number, endOffset: number): void {
   if (endOffset <= startOffset) {
     return;
   }
@@ -679,7 +680,7 @@ function readInlineNodeText(node: InlineNode): string {
 
 function resolveReferenceMediaTextNodes(
   root: InlineRoot | InlineContainerNode,
-  source: string,
+  source: SourceText,
   referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition> | undefined
 ): void {
   if (!referenceDefinitions || referenceDefinitions.size === 0) {
@@ -707,7 +708,7 @@ function resolveReferenceMediaTextNodes(
 
 function splitReferenceMediaTextNode(
   node: InlineText,
-  source: string,
+  source: SourceText,
   referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition>
 ): InlineNode[] {
   const replacements: InlineNode[] = [];
@@ -778,7 +779,7 @@ function splitReferenceMediaTextNode(
 
 function resolveFootnoteReferenceTextNodes(
   root: InlineRoot | InlineContainerNode,
-  source: string,
+  source: SourceText,
   footnoteDefinitions: ReadonlyMap<string, FootnoteDefinition> | undefined
 ): void {
   if (!footnoteDefinitions || footnoteDefinitions.size === 0) {
@@ -806,7 +807,7 @@ function resolveFootnoteReferenceTextNodes(
 
 function splitFootnoteReferenceTextNode(
   node: InlineText,
-  source: string,
+  source: SourceText,
   footnoteDefinitions: ReadonlyMap<string, FootnoteDefinition>
 ): InlineNode[] {
   const replacements: InlineNode[] = [];
@@ -890,13 +891,16 @@ function isLikelyLinkReferenceSecondLabel(value: string, matchIndex: number): bo
   return matchIndex > 0 && value[matchIndex - 1] === "]";
 }
 
-function isFootnoteDefinitionLikeReference(source: string, matchStartOffset: number, matchEndOffset: number): boolean {
-  if (source[matchEndOffset] !== ":") {
+function isFootnoteDefinitionLikeReference(source: SourceText, matchStartOffset: number, matchEndOffset: number): boolean {
+  if (source.charAt(matchEndOffset) !== ":") {
     return false;
   }
 
-  const previousLineBreakOffset = source.lastIndexOf("\n", Math.max(0, matchStartOffset - 1));
-  const lineStartOffset = previousLineBreakOffset === -1 ? 0 : previousLineBreakOffset + 1;
+  let lineStartOffset = Math.max(0, matchStartOffset);
+  while (lineStartOffset > 0 && source.charAt(lineStartOffset - 1) !== "\n") {
+    lineStartOffset -= 1;
+  }
+
   return /^[ \t]{0,3}$/u.test(source.slice(lineStartOffset, matchStartOffset));
 }
 
@@ -906,7 +910,7 @@ function createReferenceMediaNode(input: {
   isImage: boolean;
   labelEndOffset: number;
   labelStartOffset: number;
-  source: string;
+  source: SourceText;
   startOffset: number;
 }): InlineLink | InlineImage {
   const children = parseInlineAst(input.source, input.labelStartOffset, input.labelEndOffset).children;
@@ -955,7 +959,7 @@ function ensureMathMarkers(node: InlineMath): void {
   }
 }
 
-function shouldAcceptInlineMath(node: InlineMath, source: string): boolean {
+function shouldAcceptInlineMath(node: InlineMath, source: SourceText): boolean {
   if (node.value.trim().length === 0) {
     return false;
   }
@@ -967,7 +971,7 @@ function shouldAcceptInlineMath(node: InlineMath, source: string): boolean {
   return !isLikelyCurrencyInlineMath(node, source);
 }
 
-function isLikelyCurrencyInlineMath(node: InlineMath, source: string): boolean {
+function isLikelyCurrencyInlineMath(node: InlineMath, source: SourceText): boolean {
   const markerLength = node.openMarker.endOffset - node.openMarker.startOffset;
   const value = node.value.trim();
 
@@ -975,8 +979,8 @@ function isLikelyCurrencyInlineMath(node: InlineMath, source: string): boolean {
     return false;
   }
 
-  const previousCharacter = source[node.startOffset - 1] ?? "";
-  const nextCharacter = source[node.endOffset] ?? "";
+  const previousCharacter = source.charAt(node.startOffset - 1);
+  const nextCharacter = source.charAt(node.endOffset);
   const looksLikePlainAmount = !/[\\^_=+\-*/{}()[\]]/u.test(value);
 
   return /[0-9]/u.test(nextCharacter) || (looksLikePlainAmount && isCurrencyBoundary(previousCharacter));
@@ -985,3 +989,8 @@ function isLikelyCurrencyInlineMath(node: InlineMath, source: string): boolean {
 function isCurrencyBoundary(character: string): boolean {
   return character.length === 0 || /\s/u.test(character);
 }
+
+
+
+
+

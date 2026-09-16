@@ -571,10 +571,10 @@ describe("list-edits", () => {
 
   it("does not parse the document for ordered-list normalization when a single change is outside list text", () => {
     const doc = ["Paragraph updated", "", "1. one", "3. two"].join("\n");
-    const parseBlockMap = vi.fn(parseMarkdownDocument);
+    const parseOrderedListNormalization = vi.fn(parseMarkdownDocument);
 
     const result = computeNormalizedOrderedListDocument(doc, {
-      parseBlockMap,
+      parseOrderedListNormalization,
       changedRanges: [{
         from: "Paragraph".length,
         to: "Paragraph updated".length
@@ -582,15 +582,15 @@ describe("list-edits", () => {
     });
 
     expect(result).toBeNull();
-    expect(parseBlockMap).not.toHaveBeenCalled();
+    expect(parseOrderedListNormalization).not.toHaveBeenCalled();
   });
 
   it("does not parse ordered-list normalization when appending ordinary text after a blank line", () => {
     const doc = ["1. one", "2. two", "", "Performance probe insertion."].join("\n");
-    const parseBlockMap = vi.fn(parseMarkdownDocument);
+    const parseOrderedListNormalization = vi.fn(parseMarkdownDocument);
 
     const result = computeNormalizedOrderedListDocument(doc, {
-      parseBlockMap,
+      parseOrderedListNormalization,
       changedRanges: [{
         from: ["1. one", "2. two", ""].join("\n").length,
         to: doc.length
@@ -598,14 +598,14 @@ describe("list-edits", () => {
     });
 
     expect(result).toBeNull();
-    expect(parseBlockMap).not.toHaveBeenCalled();
+    expect(parseOrderedListNormalization).not.toHaveBeenCalled();
   });
 
   it("normalizes only the changed ordered-list root for a single list edit", () => {
     const doc = ["1. stale", "3. stale", "", "5. current", "9. next"].join("\n");
-    const parseBlockMap = vi.fn(parseMarkdownDocument);
+    const parseOrderedListNormalization = vi.fn(parseMarkdownDocument);
     const result = computeNormalizedOrderedListDocument(doc, {
-      parseBlockMap,
+      parseOrderedListNormalization,
       changedRanges: [{
         from: doc.indexOf("current"),
         to: doc.indexOf("current") + "current".length
@@ -613,15 +613,15 @@ describe("list-edits", () => {
     });
 
     expect(result?.source).toBe(["1. stale", "3. stale", "", "5. current", "6. next"].join("\n"));
-    expect(parseBlockMap).toHaveBeenCalledTimes(1);
-    expect(parseBlockMap.mock.calls[0]?.[0]).toBe(["5. current", "9. next"].join("\n"));
+    expect(parseOrderedListNormalization).toHaveBeenCalledTimes(1);
+    expect(parseOrderedListNormalization.mock.calls[0]?.[0]).toBe(["5. current", "9. next"].join("\n"));
   });
 
   it("falls back to document normalization for multi-range edits", () => {
     const doc = ["1. stale", "3. stale", "", "5. current", "9. next"].join("\n");
-    const parseBlockMap = vi.fn(parseMarkdownDocument);
+    const parseOrderedListNormalization = vi.fn(parseMarkdownDocument);
     const result = computeNormalizedOrderedListDocument(doc, {
-      parseBlockMap,
+      parseOrderedListNormalization,
       changedRanges: [
         { from: doc.indexOf("stale"), to: doc.indexOf("stale") + "stale".length },
         { from: doc.indexOf("current"), to: doc.indexOf("current") + "current".length }
@@ -629,7 +629,7 @@ describe("list-edits", () => {
     });
 
     expect(result?.source).toBe(["1. stale", "2. stale", "", "5. current", "6. next"].join("\n"));
-    expect(parseBlockMap).toHaveBeenCalledWith(doc);
+    expect(parseOrderedListNormalization).toHaveBeenCalledWith(doc);
   });
 
   it("normalizes blank-line-separated ordered runs independently", () => {
@@ -658,9 +658,9 @@ describe("list-edits", () => {
 
   it("keeps lazy-continuation root list semantics for single-range ordered-list edits", () => {
     const doc = ["1. one", "2. two", "3. four", "4", "5. six", "6. seven"].join("\n");
-    const parseBlockMap = vi.fn(parseMarkdownDocument);
+    const parseOrderedListNormalization = vi.fn(parseMarkdownDocument);
     const result = computeNormalizedOrderedListDocument(doc, {
-      parseBlockMap,
+      parseOrderedListNormalization,
       changedRanges: [{
         from: doc.indexOf("six"),
         to: doc.indexOf("six") + "six".length
@@ -668,15 +668,15 @@ describe("list-edits", () => {
     });
 
     expect(result?.source).toBe(["1. one", "2. two", "3. four", "4", "1. six", "2. seven"].join("\n"));
-    expect(parseBlockMap).toHaveBeenCalledTimes(1);
-    expect(parseBlockMap.mock.calls[0]?.[0]).toBe(doc);
+    expect(parseOrderedListNormalization).toHaveBeenCalledTimes(1);
+    expect(parseOrderedListNormalization.mock.calls[0]?.[0]).toBe(doc);
   });
 
   it("keeps lazy-continuation root list semantics when editing the plain-text tail line", () => {
     const doc = ["1. one", "2. two", "3. four", "4", "5. six", "6. seven"].join("\n");
-    const parseBlockMap = vi.fn(parseMarkdownDocument);
+    const parseOrderedListNormalization = vi.fn(parseMarkdownDocument);
     const result = computeNormalizedOrderedListDocument(doc, {
-      parseBlockMap,
+      parseOrderedListNormalization,
       changedRanges: [{
         from: doc.indexOf("4"),
         to: doc.indexOf("4") + 1
@@ -684,8 +684,8 @@ describe("list-edits", () => {
     });
 
     expect(result?.source).toBe(["1. one", "2. two", "3. four", "4", "1. six", "2. seven"].join("\n"));
-    expect(parseBlockMap).toHaveBeenCalledTimes(1);
-    expect(parseBlockMap.mock.calls[0]?.[0]).toBe(doc);
+    expect(parseOrderedListNormalization).toHaveBeenCalledTimes(1);
+    expect(parseOrderedListNormalization.mock.calls[0]?.[0]).toBe(doc);
   });
 
   it("keeps offsets inside unchanged ordered-list content when normalizing document markers", () => {
@@ -847,3 +847,4 @@ describe("list-edits", () => {
     }
   );
 });
+

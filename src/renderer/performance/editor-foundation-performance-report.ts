@@ -119,7 +119,7 @@ export function toStableEditorFoundationBaseline(
       },
       parserEntries: {
         parseMarkdownDocument: operation.parserEntries.parseMarkdownDocument,
-        parseBlockMap: operation.parserEntries.parseBlockMap
+        parseOrderedListNormalization: operation.parserEntries.parseOrderedListNormalization
       },
       capabilityRefs: [operation.capabilityRefs[0]],
       unavailableCapabilityReason: operation.unavailableCapabilityReason
@@ -150,3 +150,4 @@ function toFoundationOperation(input: {
     unavailableCapabilityReason: input.unavailableCapabilityReason
   };
 }
+

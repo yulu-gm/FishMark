@@ -14,6 +14,7 @@ import type {
 } from "../block-map";
 import { parseHtmlImageData } from "../html-image";
 import type { SourceRange } from "../model/source-range";
+import type { SourceText } from "../source-text";
 import { isTableDelimiterLine, parseLoosePipeTable, parsePipeTable, splitTableLine } from "../table-model";
 
 // Leaf-level Markdown derivation: turning one micromark leaf token range into the concrete
@@ -21,7 +22,7 @@ import { isTableDelimiterLine, parseLoosePipeTable, parsePipeTable, splitTableLi
 // parser and any container-aware caller share exactly one leaf classification path.
 export function createLeafBlocksForToken(
   token: Token,
-  source: string,
+  source: SourceText,
   maskPrefixes: readonly SourceRange[] = []
 ): MarkdownBlock[] {
   if (token.type === "codeFenced") {
@@ -67,11 +68,11 @@ export function createLeafBlocksForToken(
 
 // Sibling-level leaf merges. These only ever combine adjacent leaf blocks, so a container can
 // run them over its direct leaf run without any knowledge of container nesting.
-export function mergeLeafSiblingBlocks(blocks: MarkdownBlock[], source: string): MarkdownBlock[] {
+export function mergeLeafSiblingBlocks(blocks: MarkdownBlock[], source: SourceText): MarkdownBlock[] {
   return mergeLoosePipeTables(blocks, source);
 }
 
-function createHeadingBlock(token: Token, source: string): HeadingBlock {
+function createHeadingBlock(token: Token, source: SourceText): HeadingBlock {
   const base = createBaseBlock("heading", token);
 
   return {
@@ -84,7 +85,7 @@ function createParagraphBlock(token: Token): ParagraphBlock {
   return createBlockFromRange("paragraph", token.start.offset, token.end.offset, token.start.line, token.end.line);
 }
 
-function createCodeFenceBlock(token: Token, source: string): CodeFenceBlock {
+function createCodeFenceBlock(token: Token, source: SourceText): CodeFenceBlock {
   const base = createBaseBlock("codeFence", token);
 
   return {
@@ -104,7 +105,7 @@ function createIndentedCodeBlock(token: Token): CodeFenceBlock {
 
 function createBlockMathBlock(
   token: Token,
-  source: string,
+  source: SourceText,
   maskPrefixes: readonly SourceRange[]
 ): BlockMathBlock {
   const base = createBaseBlock("blockMath", token);
@@ -173,7 +174,7 @@ function lineContentStart(
 }
 
 function findClosingBlockMathLine(
-  source: string,
+  source: SourceText,
   lines: readonly LineInfo[],
   contentStartOffset: number,
   maskPrefixes: readonly SourceRange[]
@@ -203,40 +204,40 @@ function getBlockMathFenceLength(value: string): number {
   return /\${2,}/u.exec(value)?.[0].length ?? "$$".length;
 }
 
-function skipLineBreak(source: string, startOffset: number, endOffset: number): number {
+function skipLineBreak(source: SourceText, startOffset: number, endOffset: number): number {
   if (startOffset >= endOffset) {
     return startOffset;
   }
 
-  if (source[startOffset] === "\r" && source[startOffset + 1] === "\n") {
+  if (source.charAt(startOffset) === "\r" && source.charAt(startOffset + 1) === "\n") {
     return Math.min(startOffset + 2, endOffset);
   }
 
-  if (source[startOffset] === "\n") {
+  if (source.charAt(startOffset) === "\n") {
     return Math.min(startOffset + 1, endOffset);
   }
 
   return startOffset;
 }
 
-function trimLineBreakBefore(source: string, startOffset: number, endOffset: number): number {
+function trimLineBreakBefore(source: SourceText, startOffset: number, endOffset: number): number {
   let cursor = endOffset;
 
-  if (cursor > startOffset && source[cursor - 1] === "\n") {
+  if (cursor > startOffset && source.charAt(cursor - 1) === "\n") {
     cursor -= 1;
   }
 
-  if (cursor > startOffset && source[cursor - 1] === "\r") {
+  if (cursor > startOffset && source.charAt(cursor - 1) === "\r") {
     cursor -= 1;
   }
 
   return cursor;
 }
 
-function trimTrailingLineBreak(source: string, startOffset: number, endOffset: number): number {
+function trimTrailingLineBreak(source: SourceText, startOffset: number, endOffset: number): number {
   let cursor = endOffset;
 
-  while (cursor > startOffset && (source[cursor - 1] === "\n" || source[cursor - 1] === "\r")) {
+  while (cursor > startOffset && (source.charAt(cursor - 1) === "\n" || source.charAt(cursor - 1) === "\r")) {
     cursor -= 1;
   }
 
@@ -249,7 +250,7 @@ function createDefinitionBlock(token: Token): DefinitionBlock {
 
 function createThematicBreakBlock(
   token: Token,
-  source: string,
+  source: SourceText,
   markerOverride?: ThematicBreakBlock["marker"]
 ): ThematicBreakBlock {
   const base = createBaseBlock("thematicBreak", token);
@@ -260,7 +261,7 @@ function createThematicBreakBlock(
   };
 }
 
-function createHtmlImageBlock(token: Token, source: string): HtmlImageBlock | null {
+function createHtmlImageBlock(token: Token, source: SourceText): HtmlImageBlock | null {
   const htmlImageData = parseHtmlImageData(source.slice(token.start.offset, token.end.offset));
 
   if (!htmlImageData) {
@@ -297,7 +298,7 @@ export function createBlockFromRange<TType extends MarkdownBlock["type"]>(
   } as Extract<MarkdownBlock, { type: TType }>;
 }
 
-function getHeadingDepth(token: Token, source: string): number {
+function getHeadingDepth(token: Token, source: SourceText): number {
   const slice = source.slice(token.start.offset, token.end.offset);
 
   if (token.type === "atxHeading") {
@@ -327,7 +328,7 @@ function getCodeFenceInfo(sourceSlice: string): string | null {
 
 function createParagraphDerivedBlocks(
   token: Token,
-  source: string
+  source: SourceText
 ): Array<ParagraphBlock | ThematicBreakBlock | TableBlock> {
   const tableBlock = createTableBlock(token, source);
 
@@ -346,7 +347,7 @@ function createParagraphDerivedBlocks(
 
 function createSetextHeadingDerivedBlocks(
   token: Token,
-  source: string
+  source: SourceText
 ): Array<HeadingBlock | ParagraphBlock | ThematicBreakBlock | ListBlock | TableBlock> {
   const trailingDashMarkerSplit = createTrailingDashMarkerBlocks(token, source);
 
@@ -364,7 +365,7 @@ function createSetextHeadingDerivedBlocks(
 
 function createTrailingDashMarkerBlocks(
   token: Token,
-  source: string
+  source: SourceText
 ): Array<ParagraphBlock | ThematicBreakBlock | TableBlock | ListBlock> | null {
   if (token.end.offset !== source.length) {
     return null;
@@ -446,7 +447,7 @@ function createTrailingDashMarkerBlocks(
   ];
 }
 
-function createTableBlock(token: Token, source: string): TableBlock | null {
+function createTableBlock(token: Token, source: SourceText): TableBlock | null {
   return parsePipeTable({
     source,
     startOffset: token.start.offset,
@@ -458,7 +459,7 @@ function createTableBlock(token: Token, source: string): TableBlock | null {
 
 function createLooseTableDerivedBlocks(
   token: Token,
-  source: string
+  source: SourceText
 ): Array<ParagraphBlock | ThematicBreakBlock | TableBlock> | null {
   const lines = createLineInfos(
     source.slice(token.start.offset, token.end.offset),
@@ -471,7 +472,7 @@ function createLooseTableDerivedBlocks(
 
 function createLooseTableDerivedBlocksFromLines(
   lines: readonly LineInfo[],
-  source: string
+  source: SourceText
 ): Array<ParagraphBlock | ThematicBreakBlock | TableBlock> | null {
   const blocks: Array<ParagraphBlock | ThematicBreakBlock | TableBlock> = [];
   let foundLooseTable = false;
@@ -570,7 +571,7 @@ function findPipeTableLineRunEnd(lines: readonly LineInfo[], startIndex: number)
   return runEnd;
 }
 
-function mergeLoosePipeTables(blocks: MarkdownBlock[], source: string): MarkdownBlock[] {
+function mergeLoosePipeTables(blocks: MarkdownBlock[], source: SourceText): MarkdownBlock[] {
   const mergedBlocks: MarkdownBlock[] = [];
 
   for (let index = 0; index < blocks.length; index += 1) {
@@ -636,7 +637,7 @@ function mergeLoosePipeTables(blocks: MarkdownBlock[], source: string): Markdown
 function findPipeTableCandidate(
   blocks: readonly MarkdownBlock[],
   startIndex: number,
-  source: string
+  source: SourceText
 ): { block: TableBlock; endIndex: number } | null {
   const startBlock = blocks[startIndex];
 
@@ -672,7 +673,7 @@ function findPipeTableCandidate(
   return null;
 }
 
-function looksLikeLoosePipeParagraph(block: ParagraphBlock, source: string): boolean {
+function looksLikeLoosePipeParagraph(block: ParagraphBlock, source: SourceText): boolean {
   const lines = source
     .slice(block.startOffset, block.endOffset)
     .split(/\r?\n/u)
@@ -766,7 +767,7 @@ function appendParagraphDerivedBlocksFromLines(
 
 function createDerivedTextBlocks<TBlock extends ParagraphBlock | HeadingBlock>(
   token: Token,
-  source: string,
+  source: SourceText,
   createFallbackBlock: () => TBlock,
   splitOnAnyThematicBreak: boolean
 ): Array<TBlock | ParagraphBlock | ThematicBreakBlock> {
@@ -900,6 +901,8 @@ export function createLineInfos(sourceSlice: string, baseOffset: number, baseLin
 
   return lines;
 }
+
+
 
 
 

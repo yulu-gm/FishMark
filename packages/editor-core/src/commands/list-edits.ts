@@ -1,6 +1,5 @@
 import {
   parseMarkdownDocument,
-  parseBlockMap,
   type BlockMap,
   type MarkdownBlock,
   type ListBlock,
@@ -37,7 +36,7 @@ export type OrderedListNormalizationChangedRange = {
 };
 
 export type OrderedListNormalizationOptions = {
-  parseBlockMap?: ParseOrderedListNormalizationBlockMap;
+  parseOrderedListNormalization?: ParseOrderedListNormalizationBlockMap;
   changedRanges?: readonly OrderedListNormalizationChangedRange[];
 };
 
@@ -743,7 +742,7 @@ function computeFullDocumentOrderedListNormalization(
   source: string,
   options: OrderedListNormalizationOptions
 ): OrderedListNormalization | null {
-  const document = (options.parseBlockMap ?? parseBlockMap)(source);
+  const document = (options.parseOrderedListNormalization ?? parseMarkdownDocument)(source);
   const changes: TextChange[] = [];
 
   for (const block of document.blocks) {
@@ -793,7 +792,7 @@ function computeChangedRangeOrderedListNormalization(
   }
 
   const candidateSource = source.slice(candidateRange.from, candidateRange.to);
-  const document = (options.parseBlockMap ?? parseBlockMap)(candidateSource);
+  const document = (options.parseOrderedListNormalization ?? parseMarkdownDocument)(candidateSource);
   const changedFrom = Math.max(0, changedRange.from - candidateRange.from);
   const changedTo = Math.max(changedFrom, changedRange.to - candidateRange.from);
   const targetBlock = document.blocks.find((block) =>
@@ -1186,7 +1185,7 @@ function readActiveListRoot(ctx: SemanticContext): ListBlock | null {
     return nestedLiveRoot;
   }
 
-  const blocks = parseBlockMap(ctx.source).blocks;
+  const blocks = parseMarkdownDocument(ctx.source).blocks;
   const currentIndex = blocks.findIndex(
     (block) => block.type === "list" && selectionOffset >= block.startOffset && selectionOffset <= block.endOffset
   );
@@ -1606,7 +1605,7 @@ function offsetIsInsideBlock(block: { startOffset: number; endOffset: number }, 
 
 function tryReadListRootFromRange(source: string, startOffset: number, endOffset: number): ListBlock | null {
   const candidateSource = source.slice(startOffset, endOffset);
-  const parsed = parseBlockMap(candidateSource).blocks;
+  const parsed = parseMarkdownDocument(candidateSource).blocks;
   const rootList = parsed.length === 1 && parsed[0]?.type === "list" ? parsed[0] : null;
 
   if (!rootList) {
@@ -1617,7 +1616,7 @@ function tryReadListRootFromRange(source: string, startOffset: number, endOffset
 }
 
 function parseListBlockForNormalization(source: string): ListBlock | null {
-  const parsed = parseBlockMap(source).blocks;
+  const parsed = parseMarkdownDocument(source).blocks;
   const rootList = parsed.length === 1 && parsed[0]?.type === "list" ? parsed[0] : null;
 
   if (rootList) {
@@ -1887,3 +1886,5 @@ function mapBlockOffsetThroughChanges(offset: number, changes: readonly TextChan
 function toBlockOffset(list: ListBlock, absoluteOffset: number): number {
   return absoluteOffset - list.startOffset;
 }
+
+

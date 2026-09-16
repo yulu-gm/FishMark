@@ -37,7 +37,7 @@ const TASK_MARKER_PATTERN = /^\[( |x|X)\](?=[ \t]|$)/;
 
 // `prefixRanges` blank container prefixes: they are skipped when reading a line's structure but
 // still occupy real offsets, so every reported range stays a document offset.
-export function parseListScopes(
+export function readListScopes(
   source: string,
   range: SourceRange,
   prefixRanges: readonly SourceRange[]
@@ -118,7 +118,7 @@ export function parseListScopes(
 
 // Flat items ignore nesting entirely, which is the fallback when indentation scoping rejects a
 // run of markers that do not agree on kind, delimiter, or indentation.
-export function parseFlatListItems(
+export function readFlatListItems(
   source: string,
   range: SourceRange,
   prefixRanges: readonly SourceRange[]
@@ -323,3 +323,4 @@ function parseTaskMarker(remainder: string, taskStartOffset: number): ListItemBl
 }
 
 export type { ListBlock };
+

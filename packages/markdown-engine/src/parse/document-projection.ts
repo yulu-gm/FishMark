@@ -32,7 +32,7 @@ import { createLineInfos } from "./leaf-blocks";
 import { consumeHorizontalSpace, findLineEndOffset } from "./leaf-nodes";
 import { parseInlineAst } from "../parse-inline-ast";
 import { collectBlockquotePrefixSpans } from "../blockquote";
-import { parseFlatListItems, parseListScopes, type ListItemGeometry, type ListScope } from "./list-scopes";
+import { readFlatListItems, readListScopes, type ListItemGeometry, type ListScope } from "./list-scopes";
 
 // The rich document view is a projection of the recursive tree. Structure, container nesting,
 // and source geometry all come from the tree, so no consumer needs a second Markdown scanner.
@@ -113,7 +113,7 @@ function projectListRun(
   }
 
   const data = first.data as { kind: "list"; ordered: boolean };
-  const scopes = parseListScopes(context.source, span, context.maskPrefixes);
+  const scopes = readListScopes(context.source, span, context.maskPrefixes);
 
   // A run only merges when one indentation scope covers it; otherwise every container in the run
   // is projected on its own.
@@ -135,10 +135,10 @@ function projectListWithin(
   context: ProjectionContext
 ): MarkdownBlock[] {
   const data = node.data as { kind: "list"; ordered: boolean };
-  const scopes = parseListScopes(context.source, range, context.maskPrefixes);
+  const scopes = readListScopes(context.source, range, context.maskPrefixes);
 
   if (scopes === null || scopes.length === 0 || scopes.some((scope) => scope.ordered !== data.ordered)) {
-    const flatItems = parseFlatListItems(context.source, range, context.maskPrefixes);
+    const flatItems = readFlatListItems(context.source, range, context.maskPrefixes);
 
     // A marker that is never followed by content or a space is paragraph text, not a list.
     return flatItems.length === 0
@@ -193,6 +193,18 @@ function projectLeaf(node: MarkdownLeafNode, context: ProjectionContext): Markdo
   }
 }
 
+const BLOCK_TYPES: Readonly<Record<string, string>> = {
+  "code-fence": "codeFence",
+  "block-math": "blockMath",
+  "thematic-break": "thematicBreak",
+  "html-image": "htmlImage"
+};
+
+// Block ids keep the historical camelCase type names consumers and signature caches expect.
+function legacyBlockType(kind: MarkdownNode["kind"]): MarkdownBlock["type"] {
+  return (BLOCK_TYPES[kind] ?? kind) as MarkdownBlock["type"];
+}
+
 function blockBase(
   node: MarkdownNode,
   context: ProjectionContext
@@ -203,9 +215,11 @@ function blockBase(
     ? lineRangeFor(context.source, node.source)
     : node.source;
 
+  const type = legacyBlockType(node.kind);
+
   return {
-    id: `${node.kind}:${range.startOffset}-${range.endOffset}`,
-    type: node.kind === "code-fence" ? "codeFence" : node.kind === "block-math" ? "blockMath" : node.kind === "thematic-break" ? "thematicBreak" : node.kind === "html-image" ? "htmlImage" : node.kind,
+    id: `${type}:${range.startOffset}-${range.endOffset}`,
+    type,
     startOffset: range.startOffset,
     endOffset: range.endOffset,
     startLine: context.lineAt(node.source.startOffset),
@@ -338,11 +352,13 @@ function toTableCell(cell: MarkdownTableRow[number]): TableCell {
 function projectBlockquote(node: MarkdownContainerNode, context: ProjectionContext): BlockquoteBlock {
   const lines = createBlockquoteLines(node, context);
   const prefixes = collectBlockquotePrefixSpans(context.source, node.source).prefixes;
-  const innerBlocks = projectChildren(node.children, {
+  // The rich view reports one blockquote per quoted region and carries nesting in each
+  // line's depth, so nested quote blocks are flattened into this block's inner blocks.
+  const innerBlocks = flattenBlockquoteBlocks(projectChildren(node.children, {
     ...context,
     lineRanges: true,
     maskPrefixes: [...context.maskPrefixes, ...prefixes]
-  });
+  }));
 
   return {
     id: `blockquote:${node.source.startOffset}-${node.source.endOffset}`,
@@ -354,6 +370,14 @@ function projectBlockquote(node: MarkdownContainerNode, context: ProjectionConte
     lines,
     innerBlocks
   };
+}
+
+function flattenBlockquoteBlocks(blocks: readonly MarkdownBlock[]): MarkdownBlock[] {
+  return blocks.flatMap((block) =>
+    block.type === "blockquote"
+      ? flattenBlockquoteBlocks(block.innerBlocks ?? [])
+      : [block]
+  );
 }
 
 function createBlockquoteLines(
@@ -554,9 +578,14 @@ function projectScopeItem(item: ListItemGeometry, context: ProjectionContext): L
       ? []
       : [{ startOffset: item.task.markerStart, endOffset: item.task.markerEnd }])
   ];
-  const inlineSource = maskPrefixes.length === 0
-    ? context.source
-    : createContainerPrefixedSource(context.source, maskPrefixes).masked;
+  // Masking rewrites the whole document, so it only runs when a prefix actually overlaps the
+  // content being parsed; a single-line item is parsed straight from the source.
+  const needsMask = maskPrefixes.some((range) =>
+    range.startOffset < content.endOffset && range.endOffset > content.startOffset
+  );
+  const inlineSource = needsMask
+    ? createContainerPrefixedSource(context.source, maskPrefixes).masked
+    : context.source;
 
   return {
     id: `list-item:${item.startOffset}-${item.endOffset}`,
@@ -665,6 +694,11 @@ function createLineLookup(source: string): (offset: number) => number {
 }
 
 export type { InlineRoot };
+
+
+
+
+
 
 
 

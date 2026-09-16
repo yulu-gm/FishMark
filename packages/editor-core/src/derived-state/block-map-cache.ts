@@ -1,15 +1,15 @@
 import type { BlockMap } from "@fishmark/markdown-engine";
 import { createMarkdownDocumentCache } from "./markdown-document-cache";
 
-export type ParseBlockMap = (source: string) => BlockMap;
+export type ParseDocumentBlocks = (source: string) => BlockMap;
 
 export type BlockMapCache = {
   read: (source: string) => BlockMap;
   clear: () => void;
 };
 
-export function createBlockMapCache(parseBlockMap: ParseBlockMap): BlockMapCache {
-  const documentCache = createMarkdownDocumentCache(parseBlockMap);
+export function createBlockMapCache(parseDocument: ParseDocumentBlocks): BlockMapCache {
+  const documentCache = createMarkdownDocumentCache(parseDocument);
 
   return {
     read(source) {
@@ -20,3 +20,5 @@ export function createBlockMapCache(parseBlockMap: ParseBlockMap): BlockMapCache
     }
   };
 }
+
+

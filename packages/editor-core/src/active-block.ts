@@ -1,5 +1,5 @@
 import {
-  parseBlockMap,
+  parseMarkdownDocument,
   type BlockMap,
   type MarkdownBlock,
   type MarkdownDocument
@@ -23,7 +23,7 @@ export function createActiveBlockState(
   selection: ActiveBlockSelection
 ): ActiveBlockState {
   return createActiveBlockStateFromBlockMap(
-    parseBlockMap(source),
+    parseMarkdownDocument(source),
     selection
   );
 }
@@ -67,3 +67,6 @@ export function resolveActiveBlock(
 
   return null;
 }
+
+
+

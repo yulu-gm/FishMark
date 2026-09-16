@@ -1,12 +1,8 @@
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
-import { parseBlockMap, parseMarkdownDocument } from "@fishmark/markdown-engine";
-import type {
-  BlockMap,
-  MarkdownDocument,
-  MarkdownParseInstrumentation
-} from "@fishmark/markdown-engine";
+import { parseMarkdownDocument } from "@fishmark/markdown-engine";
+import type { MarkdownDocument, MarkdownParseInstrumentation } from "@fishmark/markdown-engine";
 
 import { createFishMarkMarkdownExtensions } from "../extensions";
 import { countMarkdownLines } from "./long-document-fixtures";
@@ -30,7 +26,7 @@ export type EditorPerformanceCounters = {
 
 export type EditorPerformanceParserEntries = {
   parseMarkdownDocument: number;
-  parseBlockMap: number;
+  parseOrderedListNormalization: number;
 };
 
 export type EditorPerformanceOperationResult = {
@@ -69,7 +65,7 @@ export function measureEditorPerformanceProbe(input: {
   try {
     document.body.appendChild(host);
     const stats: ProbeStats = {
-      parseBlockMap: 0,
+      parseOrderedListNormalization: 0,
       parseMarkdownDocument: 0,
       decorationRebuild: 0,
       fullDocumentParse: 0
@@ -83,9 +79,9 @@ export function measureEditorPerformanceProbe(input: {
       stats.parseMarkdownDocument += 1;
       return parseMarkdownDocument(source, { instrumentation });
     };
-    const parseBlockMapWithStats = (source: string): BlockMap => {
-      stats.parseBlockMap += 1;
-      return parseBlockMap(source, { instrumentation });
+    const parseOrderedListNormalizationWithStats = (source: string): MarkdownDocument => {
+      stats.parseOrderedListNormalization += 1;
+      return parseMarkdownDocument(source, { instrumentation });
     };
     const open = measureOperation(stats, "open", () => {
       const openedView = new EditorView({
@@ -93,7 +89,7 @@ export function measureEditorPerformanceProbe(input: {
           doc: input.source,
           extensions: createFishMarkMarkdownExtensions({
             parseMarkdownDocument: parseMarkdownDocumentWithStats,
-            parseOrderedListNormalizationBlockMap: parseBlockMapWithStats,
+            parseOrderedListNormalizationBlockMap: parseOrderedListNormalizationWithStats,
             onBlockDecorationsBuilt: () => {
               stats.decorationRebuild += 1;
             },
@@ -175,7 +171,7 @@ function measureOperation<T>(
   const value = run();
   const parserEntries = {
     parseMarkdownDocument: stats.parseMarkdownDocument - before.parseMarkdownDocument,
-    parseBlockMap: stats.parseBlockMap - before.parseBlockMap
+    parseOrderedListNormalization: stats.parseOrderedListNormalization - before.parseOrderedListNormalization
   };
 
   return {
@@ -202,3 +198,7 @@ function now(): number {
     ? globalThis.performance.now()
     : Date.now();
 }
+
+
+
+

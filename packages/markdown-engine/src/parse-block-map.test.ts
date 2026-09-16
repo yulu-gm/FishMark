@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatTableMarkdown, parseBlockMap, parseMarkdownDocument } from "./index";
+import { formatTableMarkdown, parseMarkdownDocument } from "./index";
 import type {
   BlockquoteBlock,
   HeadingBlock,
@@ -10,7 +10,7 @@ import type {
   ListItemBlock
 } from "./index";
 
-describe("parseBlockMap", () => {
+describe("parseMarkdownDocument block structure", () => {
   it("returns top-level heading, paragraph, list, and blockquote blocks in source order", () => {
     const source = [
       "# Title",
@@ -25,7 +25,7 @@ describe("parseBlockMap", () => {
       "> more"
     ].join("\n");
 
-    const result = parseBlockMap(source);
+    const result = parseMarkdownDocument(source);
 
     expect(result.blocks).toMatchObject([
       {
@@ -94,7 +94,7 @@ describe("parseBlockMap", () => {
   it("captures heading depth, ordered-list metadata, and exact source slices", () => {
     const source = ["Heading", "===", "", "1. one", "2. two"].join("\n");
 
-    const result = parseBlockMap(source);
+    const result = parseMarkdownDocument(source);
 
     expect(result.blocks).toMatchObject([
       {
@@ -222,44 +222,29 @@ describe("parseBlockMap", () => {
     ]);
   });
 
-  it("treats a bare ordered marker as an empty list item", () => {
+  it("keeps a bare ordered marker as paragraph text until a space commits the list marker", () => {
     const bareSource = "1.";
     const parenthesizedBareSource = "1)";
     const committedSource = "1. ";
 
     expect(parseMarkdownDocument(bareSource).blocks).toMatchObject([
       {
-        id: "list:0-2",
-        type: "list",
+        id: "paragraph:0-2",
+        type: "paragraph",
         startOffset: 0,
         endOffset: 2,
         startLine: 1,
-        endLine: 1,
-        ordered: true,
-        items: [
-          {
-            id: "list-item:0-2",
-            startOffset: 0,
-            endOffset: 2,
-            startLine: 1,
-            endLine: 1,
-            marker: "1.",
-            markerStart: 0,
-            markerEnd: 2,
-            contentStartOffset: 2,
-            contentEndOffset: 2
-          }
-        ]
+        endLine: 1
       }
     ]);
     expect(parseMarkdownDocument(parenthesizedBareSource).blocks).toMatchObject([
       {
-        id: "list:0-2",
-        type: "list",
+        id: "paragraph:0-2",
+        type: "paragraph",
         startOffset: 0,
         endOffset: 2,
-        ordered: true,
-        items: [{ marker: "1)", markerStart: 0, markerEnd: 2 }]
+        startLine: 1,
+        endLine: 1
       }
     ]);
     expect(parseMarkdownDocument(committedSource).blocks).toMatchObject([
@@ -704,7 +689,7 @@ describe("parseBlockMap", () => {
   it("recognizes top-level HTML image flow blocks and preserves image attributes", () => {
     const source = '<img src="assets/branding/fishmark_logo_light.svg" alt="FishMark logo" style="zoom:25%;" />';
 
-    const result = parseBlockMap(source);
+    const result = parseMarkdownDocument(source);
 
     expect(result.blocks).toMatchObject([
       {
@@ -724,36 +709,17 @@ describe("parseBlockMap", () => {
     ]);
   });
 
-  it("keeps parseBlockMap as block-only parse without rich inline stitch fields", () => {
-    const source = ["# **Title**", "", "- [x] done `code`", "", "> ~~quote~~"].join("\n");
-    const result = parseBlockMap(source);
 
-    const heading = result.blocks[0] as HeadingBlock;
-    expect(heading.type).toBe("heading");
-    expect(heading.markerEnd).toBeUndefined();
-    expect(heading.inline).toBeUndefined();
-
-    const list = result.blocks[1] as ListBlock;
-    expect(list.type).toBe("list");
-    const item = list.items[0] as ListItemBlock;
-    expect(item.contentStartOffset).toBeUndefined();
-    expect(item.contentEndOffset).toBeUndefined();
-    expect(item.inline).toBeUndefined();
-
-    const blockquote = result.blocks[2] as BlockquoteBlock;
-    expect(blockquote.type).toBe("blockquote");
-    expect(blockquote.lines).toBeUndefined();
-  });
 
   it("returns no blocks for empty or whitespace-only input", () => {
-    expect(parseBlockMap("").blocks).toEqual([]);
-    expect(parseBlockMap("\n  \n\t").blocks).toEqual([]);
+    expect(parseMarkdownDocument("").blocks).toEqual([]);
+    expect(parseMarkdownDocument("\n  \n\t").blocks).toEqual([]);
   });
 
   it("does not emit nested paragraph blocks from lists or blockquotes", () => {
     const source = ["- item", "  still item", "", "> quote", "> more"].join("\n");
 
-    expect(parseBlockMap(source).blocks).toMatchObject([
+    expect(parseMarkdownDocument(source).blocks).toMatchObject([
       {
         id: "list:0-19",
         type: "list",
@@ -790,7 +756,7 @@ describe("parseBlockMap", () => {
 
   it("captures list item metadata for ordered, unordered, task, and nested items", () => {
     const source = ["- one", "  - [x] done", "1. first", "2. [ ] second"].join("\n");
-    const result = parseBlockMap(source);
+    const result = parseMarkdownDocument(source);
 
     expect(result.blocks).toMatchObject([
       {
@@ -902,7 +868,7 @@ describe("parseBlockMap", () => {
       "Paragraph"
     ].join("\n");
 
-    const result = parseBlockMap(source);
+    const result = parseMarkdownDocument(source);
 
     expect(result.blocks).toMatchObject([
       {
@@ -941,7 +907,7 @@ describe("parseBlockMap", () => {
       "Paragraph"
     ].join("\n");
 
-    const result = parseBlockMap(source);
+    const result = parseMarkdownDocument(source);
 
     expect(result.blocks).toMatchObject([
       {
@@ -984,7 +950,7 @@ describe("parseBlockMap", () => {
 
   it("captures top-level block math with marker and content ranges", () => {
     const source = ["Before", "", "$$", "a + b", "$$", "", "After"].join("\n");
-    const result = parseBlockMap(source);
+    const result = parseMarkdownDocument(source);
 
     expect(result.blocks).toMatchObject([
       {
@@ -1026,7 +992,7 @@ describe("parseBlockMap", () => {
     const unclosed = ["$$", "a + b"].join("\n");
     const code = ["```md", "$$", "a + b", "$$", "```"].join("\n");
 
-    expect(parseBlockMap(unclosed).blocks).toMatchObject([
+    expect(parseMarkdownDocument(unclosed).blocks).toMatchObject([
       {
         type: "blockMath",
         startOffset: 0,
@@ -1041,7 +1007,7 @@ describe("parseBlockMap", () => {
         closed: false
       }
     ]);
-    expect(parseBlockMap(code).blocks).toMatchObject([
+    expect(parseMarkdownDocument(code).blocks).toMatchObject([
       {
         type: "codeFence",
         startOffset: 0,
@@ -1052,7 +1018,7 @@ describe("parseBlockMap", () => {
 
   it("captures thematic breaks for both CommonMark dashes and FishMark plus separators", () => {
     const source = ["Paragraph", "", "---", "", "+++", "", "After"].join("\n");
-    const result = parseBlockMap(source);
+    const result = parseMarkdownDocument(source);
 
     expect(result.blocks).toMatchObject([
       {
@@ -1094,7 +1060,7 @@ describe("parseBlockMap", () => {
 
   it("splits compact plus separators into thematic breaks even when they touch adjacent text", () => {
     const source = ["+++", "sep", "+++"].join("\n");
-    const result = parseBlockMap(source);
+    const result = parseMarkdownDocument(source);
 
     expect(result.blocks).toMatchObject([
       {
@@ -1128,7 +1094,7 @@ describe("parseBlockMap", () => {
 
   it("keeps a leading plus separator when a trailing single dash would otherwise form a setext heading", () => {
     const source = ["+++", "sep", "-"].join("\n");
-    const result = parseBlockMap(source);
+    const result = parseMarkdownDocument(source);
 
     expect(result.blocks).toMatchObject([
       {
@@ -1160,7 +1126,7 @@ describe("parseBlockMap", () => {
       "",
       "# Heading"
     ].join("\n");
-    const result = parseBlockMap(source);
+    const result = parseMarkdownDocument(source);
 
     expect(result.blocks).toMatchObject([
       {
@@ -1230,7 +1196,7 @@ describe("parseBlockMap", () => {
   it("preserves the starting ordinal of an ordered list block", () => {
     const source = ["5. first", "6. second"].join("\n");
 
-    const result = parseBlockMap(source);
+    const result = parseMarkdownDocument(source);
 
     expect(result.blocks).toMatchObject([
       {
@@ -1257,7 +1223,7 @@ describe("parseBlockMap", () => {
   it("preserves the ordered-list delimiter on parenthesized list blocks", () => {
     const source = ["5) first", "6) second"].join("\n");
 
-    const result = parseBlockMap(source);
+    const result = parseMarkdownDocument(source);
 
     expect(result.blocks).toMatchObject([
       {
@@ -1284,7 +1250,7 @@ describe("parseBlockMap", () => {
   it("exposes nested ordered list scopes as children on list items", () => {
     const source = ["5. parent", "  3) nested one", "  4) nested two", "6. sibling"].join("\n");
 
-    const result = parseBlockMap(source);
+    const result = parseMarkdownDocument(source);
 
     expect(result.blocks).toMatchObject([
       {
@@ -1323,7 +1289,7 @@ describe("parseBlockMap", () => {
   it("splits top-level ordered lists when the delimiter changes mid-run", () => {
     const source = ["1. one", "2. two", "1) three", "2) four"].join("\n");
 
-    const result = parseBlockMap(source);
+    const result = parseMarkdownDocument(source);
 
     expect(result.blocks).toMatchObject([
       {
@@ -1350,7 +1316,7 @@ describe("parseBlockMap", () => {
   it("splits blank-line-separated ordered runs into independent scopes that preserve their offsets", () => {
     const source = ["1. one", "2. two", "", "3. three", "4. four"].join("\n");
 
-    const result = parseBlockMap(source);
+    const result = parseMarkdownDocument(source);
 
     expect(result.blocks).toMatchObject([
       {
@@ -1431,7 +1397,7 @@ describe("parseBlockMap", () => {
     });
   });
 
-  it("parses blockquote inner paragraph separators and list blocks at their own offsets", () => {
+  it("stitches blockquote inner paragraph separators and list blocks with original offsets", () => {
     const source = [
       "> 第一段",
       ">",
@@ -1460,12 +1426,12 @@ describe("parseBlockMap", () => {
     const innerList = blockquote.innerBlocks?.[2] as ListBlock;
     expect(innerList).toMatchObject({
       type: "list",
-      startOffset: source.indexOf("- item"),
+      startOffset: source.indexOf("> - item"),
       endOffset: source.length,
       ordered: false,
       items: [
         {
-          startOffset: source.indexOf("- item"),
+          startOffset: source.indexOf("> - item"),
           markerStart: source.indexOf("- item"),
           markerEnd: source.indexOf("- item") + 1,
           contentStartOffset: source.indexOf("item"),
@@ -1476,7 +1442,7 @@ describe("parseBlockMap", () => {
               ordered: false,
               items: [
                 {
-                  startOffset: source.indexOf("- child"),
+                  startOffset: source.indexOf(">   - child"),
                   markerStart: source.indexOf("- child"),
                   markerEnd: source.indexOf("- child") + 1,
                   contentStartOffset: source.indexOf("child"),
@@ -1488,7 +1454,7 @@ describe("parseBlockMap", () => {
           ]
         },
         {
-          startOffset: source.indexOf("- item 2"),
+          startOffset: source.indexOf("> - item 2"),
           markerStart: source.indexOf("- item 2"),
           markerEnd: source.indexOf("- item 2") + 1,
           contentStartOffset: source.indexOf("item 2"),
@@ -1499,7 +1465,7 @@ describe("parseBlockMap", () => {
     });
   });
 
-  it("parses blockquote inner pipe tables at their own offsets", () => {
+  it("stitches blockquote inner pipe tables with original offsets", () => {
     const source = [
       "> | name | qty |",
       "> | --- | ---: |",
@@ -1517,7 +1483,7 @@ describe("parseBlockMap", () => {
       throw new Error("Expected quote-internal table block");
     }
 
-    expect(table.startOffset).toBe(source.indexOf("| name"));
+    expect(table.startOffset).toBe(0);
     expect(table.endOffset).toBe(source.indexOf("\n\nPlain"));
     expect(table.startLine).toBe(1);
     expect(table.endLine).toBe(3);
@@ -1527,7 +1493,7 @@ describe("parseBlockMap", () => {
     expect(table.rows[0]?.[0]?.contentStartOffset).toBe(source.indexOf("pen"));
   });
 
-  it("parses blockquote inner fenced code and block math blocks", () => {
+  it("stitches blockquote inner fenced code and block math blocks", () => {
     const source = [
       "> ```ts",
       "> const value = 1;",
@@ -1545,7 +1511,7 @@ describe("parseBlockMap", () => {
       type: "codeFence",
       kind: "fenced",
       info: "ts",
-      startOffset: source.indexOf("```ts"),
+      startOffset: 0,
       endOffset: source.indexOf("\n>\n> $$")
     });
     expect(blockquote.innerBlocks?.[1]).toMatchObject({
@@ -1786,36 +1752,13 @@ describe("parseBlockMap", () => {
     });
   });
 
-  it("keeps parseBlockMap lean while parseMarkdownDocument remains rich", () => {
-    const source = ["# **title**", "", "- [x] item `code`", "", "> **quote**"].join("\n");
-    const blockMap = parseBlockMap(source);
-    const document = parseMarkdownDocument(source);
 
-    const leanHeading = blockMap.blocks[0] as HeadingBlock;
-    const richHeading = document.blocks[0] as HeadingBlock;
-    expect(leanHeading.inline).toBeUndefined();
-    expect(leanHeading.markerEnd).toBeUndefined();
-    expect(richHeading.inline?.children[0]).toMatchObject({ type: "strong" });
-    expect(richHeading.markerEnd).toBe(2);
-
-    const leanList = blockMap.blocks[1] as ListBlock;
-    const richList = document.blocks[1] as ListBlock;
-    expect(leanList.items[0]?.inline).toBeUndefined();
-    expect(leanList.items[0]?.contentStartOffset).toBeUndefined();
-    expect(richList.items[0]?.inline?.children[1]).toMatchObject({ type: "codeSpan", text: "code" });
-    expect(richList.items[0]?.contentStartOffset).toBeGreaterThan(leanList.items[0]!.markerEnd);
-
-    const leanBlockquote = blockMap.blocks[2] as BlockquoteBlock;
-    const richBlockquote = document.blocks[2] as BlockquoteBlock;
-    expect(leanBlockquote.lines).toBeUndefined();
-    expect(richBlockquote.lines?.[0]?.inline.children[0]).toMatchObject({ type: "strong" });
-  });
 
   it("retains top-level block offsets under MarkdownDocument parsing", () => {
     const source = ["# title", "", "paragraph"].join("\n");
     const result = parseMarkdownDocument(source);
 
-    const baseline = parseBlockMap(source);
+    const baseline = parseMarkdownDocument(source);
 
     expect(result.blocks[0]).toMatchObject({
       id: baseline.blocks[0]!.id,
@@ -1860,3 +1803,4 @@ describe("parseBlockMap", () => {
     ]);
   });
 });
+

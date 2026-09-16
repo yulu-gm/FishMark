@@ -106,7 +106,7 @@ function createOperationEvidence(
     },
     parserEntries: {
       parseMarkdownDocument: parseMarkdownDocumentCalls,
-      parseBlockMap: 0
+      parseOrderedListNormalization: 0
     },
     capabilityRefs: ["incrementalStructureCache"],
     unavailableCapabilityReason: INCREMENTAL_STRUCTURE_CACHE_REASON
@@ -136,3 +136,4 @@ function now(): number {
     ? globalThis.performance.now()
     : Date.now();
 }
+

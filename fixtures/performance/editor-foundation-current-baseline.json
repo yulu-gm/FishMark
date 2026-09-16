@@ -28,7 +28,7 @@
     {
       "name": "open",
       "counters": {
-        "fullParse": 504,
+        "fullParse": 4,
         "incrementalParseWindow": 0,
         "cacheHit": 0,
         "invalidatedNodes": 0,
@@ -36,7 +36,7 @@
       },
       "parserEntries": {
         "parseMarkdownDocument": 2,
-        "parseBlockMap": 0
+        "parseOrderedListNormalization": 0
       },
       "capabilityRefs": [
         "incrementalStructureCache"
@@ -46,7 +46,7 @@
     {
       "name": "edit",
       "counters": {
-        "fullParse": 502,
+        "fullParse": 2,
         "incrementalParseWindow": 0,
         "cacheHit": 0,
         "invalidatedNodes": 0,
@@ -54,7 +54,7 @@
       },
       "parserEntries": {
         "parseMarkdownDocument": 1,
-        "parseBlockMap": 0
+        "parseOrderedListNormalization": 0
       },
       "capabilityRefs": [
         "incrementalStructureCache"
@@ -72,7 +72,7 @@
       },
       "parserEntries": {
         "parseMarkdownDocument": 0,
-        "parseBlockMap": 0
+        "parseOrderedListNormalization": 0
       },
       "capabilityRefs": [
         "incrementalStructureCache"
@@ -82,7 +82,7 @@
     {
       "name": "orderedListEdit",
       "counters": {
-        "fullParse": 503,
+        "fullParse": 4,
         "incrementalParseWindow": 0,
         "cacheHit": 0,
         "invalidatedNodes": 0,
@@ -90,7 +90,7 @@
       },
       "parserEntries": {
         "parseMarkdownDocument": 1,
-        "parseBlockMap": 1
+        "parseOrderedListNormalization": 1
       },
       "capabilityRefs": [
         "incrementalStructureCache"
@@ -100,7 +100,7 @@
     {
       "name": "outline",
       "counters": {
-        "fullParse": 502,
+        "fullParse": 2,
         "incrementalParseWindow": 0,
         "cacheHit": 0,
         "invalidatedNodes": 0,
@@ -108,7 +108,7 @@
       },
       "parserEntries": {
         "parseMarkdownDocument": 1,
-        "parseBlockMap": 0
+        "parseOrderedListNormalization": 0
       },
       "capabilityRefs": [
         "incrementalStructureCache"
@@ -118,7 +118,7 @@
     {
       "name": "metrics",
       "counters": {
-        "fullParse": 503,
+        "fullParse": 3,
         "incrementalParseWindow": 0,
         "cacheHit": 0,
         "invalidatedNodes": 0,
@@ -126,7 +126,7 @@
       },
       "parserEntries": {
         "parseMarkdownDocument": 1,
-        "parseBlockMap": 0
+        "parseOrderedListNormalization": 0
       },
       "capabilityRefs": [
         "incrementalStructureCache"

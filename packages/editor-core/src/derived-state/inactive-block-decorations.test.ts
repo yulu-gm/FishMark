@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { parseBlockMap, parseMarkdownDocument } from "@fishmark/markdown-engine";
+import { parseMarkdownDocument } from "@fishmark/markdown-engine";
 
 import { createBlockMapCache } from "./block-map-cache";
 import { createMarkdownDocumentCache } from "./markdown-document-cache";
@@ -70,7 +70,7 @@ describe("deriveInactiveBlockDecorationsState", () => {
       "",
       "Paragraph"
     ].join("\n");
-    const blockMapCache = createBlockMapCache(parseBlockMap);
+    const blockMapCache = createBlockMapCache(parseMarkdownDocument);
 
     const result = deriveInactiveBlockDecorationsState({
       source,
@@ -160,3 +160,4 @@ function collectWidgets(
 
   return widgets;
 }
+

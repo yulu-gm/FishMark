@@ -20,6 +20,7 @@ import {
 } from "../model/markdown-node";
 import { createSourceRange, type SourceMarker, type SourceRange } from "../model/source-range";
 import { parseInlineAst } from "../parse-inline-ast";
+import type { SourceText } from "../source-text";
 
 // Turning concrete leaf blocks into recursive nodes. Leaf classification itself lives in
 // `leaf-blocks.ts`; this module owns the node-level concerns: identity, container paths,
@@ -27,17 +28,17 @@ import { parseInlineAst } from "../parse-inline-ast";
 // list-item geometry.
 
 export interface LeafNodeContext {
-  readonly source: string;
+  readonly source: SourceText;
   readonly referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition>;
   readonly footnoteDefinitions: ReadonlyMap<string, FootnoteDefinition>;
-  readonly maskedSource: string;
+  readonly maskedSource: SourceText;
 }
 
 export function createLeafNodeContext(input: {
-  readonly source: string;
+  readonly source: SourceText;
   readonly referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition>;
   readonly footnoteDefinitions: ReadonlyMap<string, FootnoteDefinition>;
-  readonly maskedSource: string;
+  readonly maskedSource: SourceText;
 }): LeafNodeContext {
   return {
     source: input.source,
@@ -168,7 +169,7 @@ function leafKindForBlock(block: MarkdownBlock): MarkdownLeafKind {
   return "paragraph";
 }
 
-function leafMarkers(block: MarkdownBlock, source: string): readonly SourceMarker[] {
+function leafMarkers(block: MarkdownBlock, source: SourceText): readonly SourceMarker[] {
   if (block.type === "heading") {
     const range = resolveHeadingContentRange(block.startOffset, block.endOffset, source);
     return range.markerEnd > block.startOffset
@@ -198,7 +199,7 @@ function leafMarkers(block: MarkdownBlock, source: string): readonly SourceMarke
   return [];
 }
 
-function leafContentRange(block: MarkdownBlock, source: string): SourceRange {
+function leafContentRange(block: MarkdownBlock, source: SourceText): SourceRange {
   if (block.type === "heading") {
     const range = resolveHeadingContentRange(block.startOffset, block.endOffset, source);
     return createSourceRange(range.contentStartOffset, range.contentEndOffset);
@@ -322,7 +323,7 @@ export type HeadingContentRange = {
 export function resolveHeadingContentRange(
   startOffset: number,
   endOffset: number,
-  source: string
+  source: SourceText
 ): HeadingContentRange {
   const lineEndOffset = findLineEndOffset(source, startOffset, endOffset);
   const contentLineEndOffset = trimTrailingCarriageReturn(source, startOffset, lineEndOffset);
@@ -356,7 +357,7 @@ export function resolveHeadingContentRange(
 // A list item's content starts after its marker, its padding, and any task marker, and ends
 // before the first nested child block. This is the range item-level inline parsing uses.
 export function createListItemContentRange(input: {
-  readonly source: string;
+  readonly source: SourceText;
   readonly startOffset: number;
   readonly endOffset: number;
   readonly markerEnd: number;
@@ -397,40 +398,48 @@ function firstListChildStartOffset(children: readonly MarkdownNode[]): number | 
   return start;
 }
 
-function lineStartOf(source: string, offset: number): number {
-  return source.lastIndexOf("\n", Math.max(0, offset - 1)) + 1;
-}
+// SourceText has no reverse search, so the line start is found by scanning back to the previous
+// line break. Lines are short, so this stays cheap.
+function lineStartOf(source: SourceText, offset: number): number {
+  let cursor = Math.max(0, offset - 1);
 
-export function findLineEndOffset(source: string, startOffset: number, endOffset: number): number {
-  const lineEndIndex = source.indexOf("\n", startOffset);
-  return lineEndIndex === -1 || lineEndIndex > endOffset ? endOffset : lineEndIndex;
-}
-
-export function trimTrailingCarriageReturn(source: string, startOffset: number, endOffset: number): number {
-  let cursor = endOffset;
-
-  if (cursor > startOffset && source[cursor - 1] === "\r") {
+  while (cursor > 0 && source.charAt(cursor - 1) !== "\n") {
     cursor -= 1;
   }
 
   return cursor;
 }
 
-export function consumeHorizontalSpace(source: string, startOffset: number, endOffset: number): number {
+export function findLineEndOffset(source: SourceText, startOffset: number, endOffset: number): number {
+  const lineEndIndex = source.indexOf("\n", startOffset);
+  return lineEndIndex === -1 || lineEndIndex > endOffset ? endOffset : lineEndIndex;
+}
+
+export function trimTrailingCarriageReturn(source: SourceText, startOffset: number, endOffset: number): number {
+  let cursor = endOffset;
+
+  if (cursor > startOffset && source.charAt(cursor - 1) === "\r") {
+    cursor -= 1;
+  }
+
+  return cursor;
+}
+
+export function consumeHorizontalSpace(source: SourceText, startOffset: number, endOffset: number): number {
   let cursor = startOffset;
 
-  while (cursor < endOffset && (source[cursor] === " " || source[cursor] === "\t")) {
+  while (cursor < endOffset && (source.charAt(cursor) === " " || source.charAt(cursor) === "\t")) {
     cursor += 1;
   }
 
   return cursor;
 }
 
-function trimTrailingListItemContent(source: string, startOffset: number, endOffset: number): number {
+function trimTrailingListItemContent(source: SourceText, startOffset: number, endOffset: number): number {
   let cursor = trimTrailingCarriageReturn(source, startOffset, endOffset);
 
   while (cursor > startOffset) {
-    const character = source[cursor - 1];
+    const character = source.charAt(cursor - 1);
 
     if (character !== " " && character !== "\t" && character !== "\r" && character !== "\n") {
       break;
@@ -441,4 +450,8 @@ function trimTrailingListItemContent(source: string, startOffset: number, endOff
 
   return cursor;
 }
+
+
+
+
 
