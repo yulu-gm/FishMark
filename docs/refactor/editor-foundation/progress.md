@@ -10,9 +10,9 @@
 
 **Overall status:** `IN_PROGRESS`
 
-**Current task:** none — RF-402 complete; next is `RF-403`
+**Current task:** none — RF-403 complete; next is `RF-404`
 
-**Next required skill:** `$fishmark-task-intake` for `RF-403`
+**Next required skill:** `$fishmark-task-intake` for `RF-404`
 
 ## 1. Status vocabulary
 
@@ -35,7 +35,7 @@ At most one `RF-xxx` task may be `IN_PROGRESS` or `ACCEPTING` at a time. A later
 | M1 | Canonical workspace domain | `COMPLETE` | 2 | 2 | RF-101 and RF-102 accepted; domain and application boundaries are production dependencies |
 | M2 | Revisioned edit transport | `COMPLETE` | 4 | 4 | RF-203 and RF-204 accepted; full-draft channel deleted |
 | M3 | Data safety and recovery | `COMPLETE` | 4 | 4 | Inactive files protected; save/recovery/close are canonical |
-| M4 | Recursive parser and incremental cache | `IN_PROGRESS` | 2 | 5 | One recursive parser remains; differential cache tests pass |
+| M4 | Recursive parser and incremental cache | `IN_PROGRESS` | 3 | 5 | One recursive parser remains; differential cache tests pass |
 | M5 | Pure semantic editor model | `PLANNED` | 0 | 6 | All semantic commands migrated; old command engine removed |
 | M6 | Thin CodeMirror adapter | `PLANNED` | 0 | 4 | Old `editor-core` package removed |
 | M7 | Shared presentation and derived consumers | `PLANNED` | 0 | 3 | Editor/export/outline/metrics share canonical derived inputs |
@@ -43,7 +43,7 @@ At most one `RF-xxx` task may be `IN_PROGRESS` or `ACCEPTING` at a time. A later
 | M9 | Performance, E2E, and security | `PLANNED` | 0 | 3 | Budgets, Playwright flows, and Electron security pass |
 | M10 | Purge and final acceptance | `PLANNED` | 0 | 2 | No compatibility/dead code; final verdict `PASS` |
 
-**Program completion:** 14 / 38 tasks.
+**Program completion:** 15 / 38 tasks.
 
 ## 3. Task ledger
 
@@ -65,7 +65,7 @@ Evidence columns are filled only with fresh command output/report paths from the
 | RF-304 | Main-owned conflict and close workflows | RF-303 | `COMPLETE` | Session-level `externalChange` + `markExternalChange`; main marks on watch events and projects it; `resolve-external-change.ts` (+3 tests) typed keep-memory/reload/save-as/cancel commands; `resolveExternalChange` IPC + preload; renderer derives conflict from projection and sends commands; deleted `useExternalConflictController.ts` (+test) and shell-state conflict reducers; autosave blocked by projected conflict. | lint 0 errors / 8 pre-existing warnings; typecheck; full Vitest 176 files / 2,377 passed + 1 skip (one pre-existing icon-timing flake passes in isolation); build exit 0. | Self-acceptance: exit criterion verified (conflict/close are main-owned and projected). | `codex/editor-foundation-refactor` |
 | RF-401 | Recursive node model and source mapping | RF-304 | `COMPLETE` | Parser-agnostic recursive model in `packages/markdown-engine/src/model/`: `source-range.ts` (ranges, markers, masked/container-prefixed source, offset-preserving masking), `container-path.ts` (ancestry paths), `markdown-node.ts` (container/leaf unions, node data, constructors), `document-tree.ts` (FNV-1a node identity from ancestry + subtree fingerprint, tree index, navigation, invariants). 9 focused tests cover CRLF/tabs/Unicode/empty containers/lazy continuation/depth 0–8. Legacy block-map parser untouched. | typecheck; lint 0 errors; build exit 0; full Vitest. | Self-acceptance: model expresses every recursive parity path without top-level special cases. | `codex/editor-foundation-refactor` |
 | RF-402 | Full recursive parser | RF-401 | `COMPLETE` | `packages/markdown-engine/src/parse/micromark-event-adapter.ts` flattens micromark events into offset-bearing views; `full-document-parser.ts` drives one container stack (`blockQuote`/`listOrdered`/`listUnordered` + synthetic `listItemPrefix` item frames) into the recursive model, unions lazy-continuation ranges, masks container prefixes before leaf inline parsing, and builds reference/footnote indexes. Fixture `fixtures/markdown/recursive-containers.md` + 5 tests prove nesting depth, containment, ordered top-level coverage, leaf-only inline ranges, and lazy continuation. Registered in the architecture parser registry. | typecheck; lint 0 errors; build exit 0; full Vitest 179 files / 2,391 passed + 1 skip; architecture guard 233 tests. | Self-acceptance: no renderer/editor/export regex scan discovers container children. | `codex/editor-foundation-refactor` |
-| RF-403 | Physical line and prefix index | RF-402 | `PLANNED` | — | typecheck/test | — | — |
+| RF-403 | Physical line and prefix index | RF-402 | `COMPLETE` | Created the `@fishmark/editor-model` package (path alias + active architecture-guard rule) with `physical-lines/prefix-segment.ts` (ordered quote/indentation/list-marker/task-marker/spacing segments, tab-aware visible columns) and `physical-editing-document.ts` (lines from source + recursive tree, structural-blank/separator/fence/content roles, offset/line/node/visible-column queries). 4 tests cover nested quote+list+task prefixes, roles, queries, and tab geometry. Not yet consumed. | typecheck; lint 0 errors; build exit 0; full Vitest; architecture guard. | Self-acceptance: commands/decorations no longer need to reconstruct prefixes independently. | `codex/editor-foundation-refactor` |
 | RF-404 | Incremental structure cache | RF-403 | `PLANNED` | — | test/perf baseline | — | — |
 | RF-405 | Parser hard cutover | RF-404 | `PLANNED` | — | lint/typecheck/test/build | — | — |
 | RF-501 | Semantic context and derived snapshot | RF-405 | `PLANNED` | — | typecheck/test | — | — |
@@ -255,7 +255,7 @@ Append one entry when a task changes to `DEV_DONE`, then amend the same entry af
 
 ## 8. Blockers and deviations
 
-There are no accepted external blockers or roadmap deviations. RF-001, RF-002, RF-101, RF-102, RF-201, RF-202, RF-203, RF-204, RF-301, RF-302, RF-303, RF-304, RF-401, and RF-402 are complete. M0, M1, M2, and M3 are each `COMPLETE`; M4 is 2/5 `IN_PROGRESS`; accepted program completion remains 14/38. RF-403 is the next dependency-ready task.
+There are no accepted external blockers or roadmap deviations. RF-001, RF-002, RF-101, RF-102, RF-201, RF-202, RF-203, RF-204, RF-301, RF-302, RF-303, RF-304, RF-401, RF-402, and RF-403 are complete. M0, M1, M2, and M3 are each `COMPLETE`; M4 is 3/5 `IN_PROGRESS`; accepted program completion remains 15/38. RF-404 is the next dependency-ready task.
 
 Any deviation must record:
 

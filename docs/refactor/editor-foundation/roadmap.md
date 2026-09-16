@@ -1117,6 +1117,8 @@ npm.cmd run typecheck
 
 **Outcome:** every source line has a canonical container/prefix interpretation.
 
+**Status:** `COMPLETE` (2026-08-14). New `@fishmark/editor-model` package with `physical-lines/`: `prefix-segment.ts` (ordered quote/indentation/list-marker/task-marker/spacing segments with tab-aware visible columns) and `physical-editing-document.ts` (lines built from source + recursive tree, structural-blank/separator/fence/content roles, and offset/line/node/visible-column queries). The package is path-aliased and registered active in the architecture guard; nothing consumes it yet.
+
 **Files:**
 
 - Create: `packages/editor-model/src/physical-lines/prefix-segment.ts`
@@ -1127,11 +1129,11 @@ npm.cmd run typecheck
 
 **Steps:**
 
-- [ ] Build physical lines from source plus recursive tree.
-- [ ] Emit ordered quote, indentation, list-marker, task-marker, and spacing segments.
-- [ ] Mark structural blank, separator, fence open/content/close, and ordinary content roles.
-- [ ] Provide offset-to-line, line-to-node, node-to-lines, and visible-column queries.
-- [ ] Verify soft-wrap indentation and hidden-prefix geometry inputs.
+- [x] Build physical lines from source plus recursive tree.
+- [x] Emit ordered quote, indentation, list-marker, task-marker, and spacing segments.
+- [x] Mark structural blank, separator, fence open/content/close, and ordinary content roles.
+- [x] Provide offset-to-line, line-to-node, node-to-lines, and visible-column queries.
+- [x] Verify soft-wrap indentation and hidden-prefix geometry inputs.
 
 **Verification:**
 
