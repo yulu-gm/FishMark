@@ -45,3 +45,10 @@ export {
   type EditorCommandRegistry,
   type TextEditOperation
 } from "./transactions/edit-transaction-plan";
+export {
+  decideEnter,
+  planEnter,
+  type EnterDecision,
+  type EnterPlanKind
+} from "./commands/enter";
+

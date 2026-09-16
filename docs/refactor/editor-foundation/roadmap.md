@@ -1249,6 +1249,8 @@ npm.cmd run typecheck
 
 **Outcome:** Enter behavior is recursive-container aware and consistent at every depth.
 
+**Status:** `COMPLETE` (2026-08-14). `decideEnter`/`planEnter` resolve the line's container chain by overlap, then apply one rule per case: plain/structural-blank line break with the enclosing prefixes, heading exit, list continuation (ordered items advance their ordinal and delimiter, task items restart unchecked), empty-item one-level exit, quote continuation and one-level quote exit, fenced content lines, and a table-boundary row skeleton. Every case returns a single ordered `EditTransactionPlan` with the resulting caret, so one Enter is one undo step.
+
 **Files:**
 
 - Create: `packages/editor-model/src/commands/enter.ts`
@@ -1257,11 +1259,11 @@ npm.cmd run typecheck
 
 **Steps:**
 
-- [ ] Implement plain, heading, list, quote, code-fence, table-boundary, and structural-blank Enter rules.
-- [ ] Preserve parent prefixes while the deepest semantic handler edits the leaf.
-- [ ] Implement one-level empty-container exit rules.
-- [ ] Preserve selection and one-step undo intent.
-- [ ] Pass the full Enter behavior matrix through depth 8 and repeated Enter sequences.
+- [x] Implement plain, heading, list, quote, code-fence, table-boundary, and structural-blank Enter rules.
+- [x] Preserve parent prefixes while the deepest semantic handler edits the leaf.
+- [x] Implement one-level empty-container exit rules.
+- [x] Preserve selection and one-step undo intent.
+- [x] Pass the full Enter behavior matrix through depth 8 and repeated Enter sequences.
 
 **Verification:**
 
@@ -1846,3 +1848,4 @@ The refactor is complete only when all statements below are true:
 - Renderer sandbox, CSP, IPC sender validation, and resource path allowlists are active.
 - Old editor-core, old parser, full-draft sync, renderer conflict state, compatibility adapters, dead code, and stale tests/docs are deleted.
 - Build, lint, typecheck, full tests, performance gates, E2E, architecture acceptance, and task acceptance all pass with fresh evidence.
+

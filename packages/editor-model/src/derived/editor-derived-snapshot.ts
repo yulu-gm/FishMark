@@ -115,6 +115,9 @@ export function assertSnapshotRevision(snapshot: EditorDerivedSnapshot, revision
   }
 }
 
+function resolveNodeAt(document: PhysicalEditingDocument, offset: number): MarkdownNode | null {
+  return document.nodeAtOffset(offset) ?? (offset > 0 ? document.nodeAtOffset(offset - 1) : null);
+}
 function createSnapshot(
   revision: number,
   source: string,
@@ -129,15 +132,16 @@ function createSnapshot(
     tree,
     document: physical,
     lineAt: (offset: number): PhysicalLine | null => physical.lineAtOffset(offset),
-    nodeAt: (offset: number): MarkdownNode | null => physical.nodeAtOffset(offset),
+    // A caret sits between characters, so a caret at a node's end still belongs to that node.
+    nodeAt: (offset: number): MarkdownNode | null => resolveNodeAt(physical, offset),
     nodeById: (id: string): MarkdownNode | null => tree.nodesById.get(id) ?? null,
     containerPathAt: (offset: number): ContainerPath | null => {
-      const node = physical.nodeAtOffset(offset);
+      const node = resolveNodeAt(physical, offset);
 
       return node === null ? null : node.path;
     },
     tableAt: (offset: number): TableCursor | null => {
-      const node = physical.nodeAtOffset(offset);
+      const node = resolveNodeAt(physical, offset);
 
       return node !== null && node.kind === "table" ? tableCursorAt(node, offset) : null;
     }
@@ -185,6 +189,7 @@ function freezeCursor(node: MarkdownLeafNode, cell: MarkdownTableCell): TableCur
 }
 
 export { childrenOf };
+
 
 
 
