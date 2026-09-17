@@ -10,7 +10,7 @@
 
 **Overall status:** `IN_PROGRESS`
 
-**Current task:** none — RF-505 complete; next is `RF-506`
+**Current task:** none — RF-505 complete; `RF-506` is deferred to a follow-up session (hard cutover of the old semantic engine, ~8.2k lines to delete plus consumer rewiring through a CodeMirror bridge)
 
 **Next required skill:** `$fishmark-task-intake` for `RF-506`
 
@@ -106,6 +106,8 @@ Evidence columns are filled only with fresh command output/report paths from the
 | 2026-07-30 | `@fishmark/workspace-application` is the single runtime-neutral owner of current workspace workflow orchestration and exposes only consumed ports through one public entry. | Main constructs native adapters and maps IPC DTOs only. Typed success/cancel/stale/conflict/error results cross explicit exhaustive mappings; application code cannot import Electron, React, DOM, Node, shared IPC DTOs, CodeMirror, or future infrastructure. Superseded main-local business modules and compatibility aliases are deleted. |
 | 2026-08-04 | Domain/application remain runtime-neutral through `TextBuffer`/`TextBufferFactory`; private workspace infrastructure owns CodeMirror `Text`, and production main injects its factory explicitly. Revisioned sessions keep one contiguous acknowledged sequence high-watermark per client. | Persistent edits reuse structural sharing without CodeMirror type leakage or dual truth. The existing full-draft transport remains only until RF-204 and is not a second canonical owner; infrastructure dependency and resolved source paths fail closed through the package allowlist, public entry, and source-root containment. |
 | 2026-08-04 | RF-202 defines one staged, structured-clone-safe revisioned edit transport: shared owns wire DTOs, application/domain own runtime-neutral validation and sequencing, main derives authorization from the live sender and rechecks it inside the same per-tab critical section, and preload has one complete `ProductBridge` builder guarded by canonical-symbol/runtime-owner analysis. | Applied/duplicate acknowledgements and projection events contain metadata only; canonical Markdown crosses only for explicit revision-conflict recovery. Apply and `throughSequence` flush serialize together. RF-203 may now build the renderer queue; RF-204 must delete the intentionally retained full-draft channel without introducing a compatibility route or second owner. |
+
+| 2026-08-14 | M4 and M5 (RF-401 through RF-505) are merged into `main`; RF-506 remains the last M5 task. | The merge lands the single recursive parser, the incremental cache, the rich-document projection, and the complete pure semantic engine (context, Enter, Backspace/Delete, indent/navigation, formatting/table/code-fence) with all gates and the formal Electron corpus green. RF-506 is deferred because it deletes ~8.2k lines of old semantic code and requires a CodeMirror-to-editor-model bridge plus rewiring of keyboard, menu, toolbar, table widget, and test-driver commands; doing it together with this merge would leave the editor non-functional. |
 
 ## 5. Latest accepted task handoff
 
@@ -338,6 +340,8 @@ When acceptance fails:
 - [ ] Architecture acceptance result is `PASS`.
 - [ ] Task acceptance result is `PASS`.
 - [ ] Stable docs, backlog, progress, test cases/report, package READMEs, and task summaries agree.
+
+
 
 
 
