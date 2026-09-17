@@ -40,13 +40,36 @@ describe("indent planners", () => {
   });
 
   it("moves every covered line of a nested subtree", () => {
-    const source = ["- parent", "  - child", "    - leaf"].join("\n");
+    const source = ["- parent", "  - first", "  - child", "    - leaf"].join("\n");
     const context = contextAt(source, source.indexOf("child"));
     const plan = planIndentIn(context);
 
     expect(applyPlan(source, plan)).toBe(
-      ["- parent", "    - child", "      - leaf"].join("\n")
+      ["- parent", "  - first", "    - child", "      - leaf"].join("\n")
     );
+  });
+
+  it("leaves the first item of a scope alone", () => {
+    const source = ["- parent", "  - child"].join("\n");
+    const context = contextAt(source, source.indexOf("child"));
+
+    expect(planIndentIn(context)).toBeNull();
+  });
+
+  it("completes and indents an unterminated marker", () => {
+    const source = ["> - parent", "> -"].join("\n");
+    const context = contextAt(source, source.length);
+    const plan = planIndentIn(context);
+
+    expect(applyPlan(source, plan)).toBe(["> - parent", ">   - "].join("\n"));
+  });
+
+  it("closes the empty quote lines that hide a sibling before indenting", () => {
+    const source = ["> - first", ">", "> - second"].join("\n");
+    const context = contextAt(source, source.indexOf("second"));
+    const plan = planIndentIn(context);
+
+    expect(applyPlan(source, plan)).toBe(["> - first", ">   - second"].join("\n"));
   });
 
   it("outdents the item subtree one unit", () => {

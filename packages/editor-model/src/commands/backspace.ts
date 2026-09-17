@@ -1,4 +1,4 @@
-import { childrenOf, type MarkdownNode } from "@fishmark/markdown-engine";
+import { childrenOf, parseBlockquoteLinePrefix, type MarkdownNode } from "@fishmark/markdown-engine";
 import type { PhysicalLine } from "../physical-lines/physical-editing-document";
 
 import type { EditorSemanticContext } from "../context/editor-semantic-context";
@@ -28,6 +28,59 @@ export function planBackspace(context: EditorSemanticContext): EditTransactionPl
   return decideBackspace(context)?.plan ?? null;
 }
 
+// Every blank line at the end of the document — plain, whitespace-only, or a bare quote marker —
+// is one step to remove: the whole run goes back to the end of the last line with content.
+function planTrailingBlankCollapse(
+  context: EditorSemanticContext,
+  line: PhysicalLine,
+  chain: readonly MarkdownNode[]
+): BackspaceDecision | null {
+  const offset = context.selectionContext.activeOffset;
+  const lines = context.lines.lines;
+
+  if (
+    line.lineNumber !== lines.length ||
+    (offset !== line.contentEndOffset && offset !== line.range.endOffset)
+  ) {
+    return null;
+  }
+
+  const item = lastOfKind(chain, "list-item");
+
+  if (item !== null && listItemPrefix(line, context, item).markerText.length > 0) {
+    return null;
+  }
+
+  const prefix = parseBlockquoteLinePrefix(context.source, line.range.startOffset, line.contentEndOffset);
+  const text = context.source.slice(line.range.startOffset, line.contentEndOffset);
+
+  // Whitespace is its own kind of blank line: Backspace removes it one character at a time.
+  if (/^[ \t]+$/u.test(text)) {
+    return null;
+  }
+
+  if (context.source.slice(prefix.contentStartOffset, line.contentEndOffset).trim().length > 0) {
+    return null;
+  }
+
+  for (let number = line.lineNumber - 1; number >= 1; number -= 1) {
+    const previous = lines[number - 1]!;
+    const previousPrefix = parseBlockquoteLinePrefix(
+      context.source,
+      previous.range.startOffset,
+      previous.contentEndOffset
+    );
+
+    if (context.source.slice(previousPrefix.contentStartOffset, previous.contentEndOffset).trim().length === 0) {
+      continue;
+    }
+
+    return rangeDelete(context, previous.contentEndOffset, offset, "subtree-join");
+  }
+
+  return null;
+}
+
 export function decideBackspace(context: EditorSemanticContext): BackspaceDecision | null {
   const selection = context.selectionContext;
   const line = context.lineAt(selection.activeOffset);
@@ -44,6 +97,13 @@ export function decideBackspace(context: EditorSemanticContext): BackspaceDecisi
   const offset = selection.activeOffset;
   const chain = lineContainerChain(context, line);
   const contentStart = line.contentStartOffset;
+
+  // 0. A trailing run of blank lines collapses back to the last line that has content.
+  const trailingBlank = planTrailingBlankCollapse(context, line, chain);
+
+  if (trailingBlank !== null) {
+    return trailingBlank;
+  }
 
   // 1. Inside a line, an ordinary character delete.
   if (offset > contentStart) {

@@ -1,4 +1,4 @@
-import type { MarkdownNode } from "@fishmark/markdown-engine";
+import { childrenOf, parseBlockquoteLinePrefix, type MarkdownNode } from "@fishmark/markdown-engine";
 import type { PhysicalLine } from "../physical-lines/physical-editing-document";
 
 import type { EditorSemanticContext } from "../context/editor-semantic-context";
@@ -7,7 +7,13 @@ import {
   type EditTransactionPlan,
   type TextEditOperation
 } from "../transactions/edit-transaction-plan";
-import { indentationAnchor, lastOfKind, lineContainerChain, listItemPrefix } from "./line-structure";
+import {
+  indentationAnchor,
+  lastOfKind,
+  lineContainerChain,
+  listItemPrefix,
+  parentOf
+} from "./line-structure";
 
 // Indentation is a list concept only. Tab/Shift+Tab move the nearest enclosing item subtree, and
 // every line of that subtree keeps its blockquote prefixes untouched.
@@ -36,6 +42,29 @@ export function decideIndentIn(context: EditorSemanticContext): IndentDecision |
   }
 
   const { item, line } = resolved;
+  const itemIndex = listIndexOf(context, item);
+
+  // An unterminated marker is completed and indented in one edit: the line it breaks is the very
+  // line the marker sits on.
+  if (isBareMarkerLine(context, line, item)) {
+    return itemIndex > 0
+      ? planBareMarkerIndent(context, line, item)
+      : { kind: "none", plan: null };
+  }
+
+  // A run of empty quote lines above the item hides the sibling it can nest under; closing that
+  // gap is part of the indent, whatever the item index says.
+  const acrossSeparators = planIndentAcrossQuoteSeparators(context, line, item);
+
+  if (acrossSeparators !== null) {
+    return acrossSeparators;
+  }
+
+  // The first item of a scope has no previous sibling to nest under, so Tab leaves it alone.
+  if (itemIndex <= 0) {
+    return { kind: "none", plan: null };
+  }
+
   const edits = coveredItemLines(context, item, line).map((coveredLine) => ({
     from: indentationAnchor(coveredLine),
     to: indentationAnchor(coveredLine),
@@ -58,6 +87,145 @@ export function decideIndentIn(context: EditorSemanticContext): IndentDecision |
       selection: { anchor: cursor, head: cursor }
     })
   };
+}
+
+// A run of empty quote lines between two items of the same scope is invisible separators; an
+// indent closes the gap so the item becomes a child of the item above it.
+function planIndentAcrossQuoteSeparators(
+  context: EditorSemanticContext,
+  line: PhysicalLine,
+  item: MarkdownNode
+): IndentDecision | null {
+  const current = parseBlockquoteLinePrefix(context.source, line.range.startOffset, line.contentEndOffset);
+
+  if (current.markers.length === 0 || line.lineNumber <= 2) {
+    return null;
+  }
+
+  const currentPrefix = listItemPrefix(line, context, item);
+
+  if (currentPrefix.markerText.length === 0) {
+    return null;
+  }
+
+  let firstSeparatorStart = line.range.startOffset;
+  let separatorCount = 0;
+  let previousNumber = line.lineNumber - 1;
+
+  while (previousNumber >= 1) {
+    const previous = context.lines.lines[previousNumber - 1]!;
+    const separator = parseBlockquoteLinePrefix(
+      context.source,
+      previous.range.startOffset,
+      previous.contentEndOffset
+    );
+
+    if (
+      separator.markers.length !== current.markers.length ||
+      context.source.slice(separator.contentStartOffset, previous.contentEndOffset).trim().length > 0
+    ) {
+      break;
+    }
+
+    firstSeparatorStart = previous.range.startOffset;
+    separatorCount += 1;
+    previousNumber -= 1;
+  }
+
+  if (separatorCount === 0 || previousNumber < 1) {
+    return null;
+  }
+
+  const previousLine = context.lines.lines[previousNumber - 1]!;
+  const previousItem = lastOfKind(lineContainerChain(context, previousLine), "list-item");
+
+  if (previousItem === null) {
+    return null;
+  }
+
+  const previousPrefix = listItemPrefix(previousLine, context, previousItem);
+
+  if (
+    previousPrefix.markerText.length === 0 ||
+    previousPrefix.indentationText !== currentPrefix.indentationText ||
+    isOrderedMarker(previousPrefix.markerText) !== isOrderedMarker(currentPrefix.markerText)
+  ) {
+    return null;
+  }
+
+  const anchor = indentationAnchor(line);
+  const removedLength = line.range.startOffset - firstSeparatorStart;
+  const edits: TextEditOperation[] = [
+    { from: firstSeparatorStart, to: line.range.startOffset, insert: "" },
+    { from: anchor, to: anchor, insert: INDENT_UNIT }
+  ];
+  const cursor = context.selectionContext.activeOffset - removedLength + INDENT_UNIT.length;
+
+  return {
+    kind: "indent-subtree",
+    plan: createEditTransactionPlan({
+      context,
+      commandId: "indent",
+      intent: "structural",
+      edits,
+      selection: { anchor: cursor, head: cursor }
+    })
+  };
+}
+
+function isOrderedMarker(marker: string): boolean {
+  return /^\d+[.)]$/u.test(marker);
+}
+
+function planBareMarkerIndent(
+  context: EditorSemanticContext,
+  line: PhysicalLine,
+  item: MarkdownNode
+): IndentDecision {
+  const prefix = listItemPrefix(line, context, item);
+  const markerEnd =
+    prefix.startOffset + prefix.indentationText.length + prefix.markerText.length;
+  const anchor = indentationAnchor(line);
+  const edits: TextEditOperation[] = [
+    { from: anchor, to: anchor, insert: INDENT_UNIT },
+    { from: markerEnd, to: markerEnd, insert: " " }
+  ];
+  const cursor = context.selectionContext.activeOffset + INDENT_UNIT.length + 1;
+
+  return {
+    kind: "indent-subtree",
+    plan: createEditTransactionPlan({
+      context,
+      commandId: "indent",
+      intent: "structural",
+      edits,
+      selection: { anchor: cursor, head: cursor }
+    })
+  };
+}
+
+// A marker with nothing after it on the line is not committed yet.
+function isBareMarkerLine(
+  context: EditorSemanticContext,
+  line: PhysicalLine,
+  item: MarkdownNode
+): boolean {
+  const prefix = listItemPrefix(line, context, item);
+
+  if (prefix.markerText.length === 0) {
+    return false;
+  }
+
+  const markerEnd =
+    prefix.startOffset + prefix.indentationText.length + prefix.markerText.length;
+
+  return line.contentEndOffset <= markerEnd;
+}
+
+function listIndexOf(context: EditorSemanticContext, item: MarkdownNode): number {
+  const parent = parentOf(context, item);
+
+  return parent === null || parent.kind !== "list" ? -1 : childrenOf(parent).indexOf(item);
 }
 
 export function planIndentOut(context: EditorSemanticContext): EditTransactionPlan | null {

@@ -104,6 +104,24 @@ describe("planBackspace", () => {
     expect(result.kind).toBe("default");
     expect(result.text).toBe("Alpha\n  ");
   });
+
+  it("collapses a trailing blank line back to the last line with content", () => {
+    const source = "Alpha\n\n";
+    const result = applyPlan(source, source.length);
+
+    expect(result.kind).toBe("subtree-join");
+    expect(result.text).toBe("Alpha");
+    expect(result.cursor).toBe("Alpha".length);
+  });
+
+  it("collapses a trailing run of empty quote lines", () => {
+    const source = ["> 1111", ">", "> "].join("\n");
+    const result = applyPlan(source, source.length);
+
+    expect(result.kind).toBe("subtree-join");
+    expect(result.text).toBe("> 1111");
+    expect(result.cursor).toBe("> 1111".length);
+  });
 });
 
 
