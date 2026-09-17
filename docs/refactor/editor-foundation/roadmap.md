@@ -8,6 +8,26 @@
 
 **Tech Stack:** Electron, React, TypeScript, CodeMirror 6, micromark, Vite, Vitest, Playwright.
 
+**Plan revision:** 2026-09-17, authorized by the user. The three delivery priorities are maintainability/extensibility, friendly editing/interaction, and performance. Package count and deleted line count are not acceptance criteria. Preserve the current stack and reuse established owners and libraries.
+
+### Current execution order and repair gate
+
+The source review at `1b4c329` found recovery, incremental-cache, and bridge defects despite prior task completion records. See `reports/reviews/2026-09-17-editor-foundation-plan-review.md`. Historical passes are retained as history, not permission to bypass these findings.
+
+1. **RF-HARDEN-001:** repair and independently accept the reviewed recovery, incremental correctness/hidden full-parse, and bridge version/snapshot defects. This supplemental repair gate does not count as a new feature milestone in the original 38-task ledger.
+2. **RF-601 before RF-506:** establish the production bridge's local version/session identity, history grouping, multi-range mapping, IME protection, and delayed-ACK integration. Reuse the existing edit client and pending queue. New-path performance counters and real-process recovery tests are prerequisites, not postponed to M9.
+3. **RF-506:** route every consumer through the proven bridge; run the complete runtime behavior corpus, not only first-checkpoint planner replay; then remove the retired semantic engine.
+4. **RF-701 before RF-602:** land the shared semantic render plan with a production consumer. Then RF-602/603/604 migrate layout/viewport decorations and widgets and retire the old adapter.
+5. RF-702/703 share derived inputs across export, outline, and metrics; M8 consolidates existing orchestration rather than recreating it. M9/M10 aggregate performance/E2E/security evidence and finish deletion/documentation acceptance.
+
+Execute one task at a time. A failed repair or runtime gate keeps its owning boundary closed to cutover. An accepted focused repair does not automatically certify the entire 20k-document budget, all-platform IME, or unrelated milestone work.
+
+| Priority | Required observable outcome |
+| --- | --- |
+| Maintainability and extensibility | One owner per responsibility; explicit consumed APIs; a nested-container feature uses shared semantics without parallel command/parser/queue implementations; migrations have bounded deletion points. |
+| Editing and interaction | Source, selection, undo/redo, composition, scroll anchoring, focus, and save/recovery behavior remain predictable in real editor flows. Known defects are reported separately from intended behavior. |
+| Performance | Measure the production path; ordinary edits avoid hidden whole-document parsing, selection reuses document-derived state, and expensive previews do not block input. Report real scanned work and latency, not just cache labels. |
+
 ---
 
 ## 1. Program contract
@@ -336,7 +356,7 @@ export type DocumentSession = {
 };
 ```
 
-`isDirty` is always derived as `revision !== savedRevision`; it is not independently assigned.
+`isDirty` is derived from the canonical saved-content checkpoint; the current implementation represents this as `revision !== savedRevision` and advances `savedRevision` when the text returns to `savedText`. Monotonic revisions alone are not a content-equality test. Undo/manual edits returning to the saved content must become clean; in-flight saves mark only the captured content saved.
 
 ### 5.2 Disk version
 
@@ -569,6 +589,12 @@ The performance fixture is a committed deterministic Markdown document, not a mu
 | Outline/metrics | must not block first editor paint |
 
 The baseline report records CPU, memory, Electron version, fixture hash, warm/cold status, median, p95, parse windows, reused nodes, invalidated nodes, and fallback reasons.
+
+The existing old-runtime baseline is a comparison artifact, not evidence that the new cache/bridge meets these budgets. Instrument every full parser/definition scan, including calls made from a path labelled incremental. Report total scanned bytes, rebuilt physical lines, node/index remapping, and snapshot reuse. Incremental-vs-full differential checks include node data and global definition indexes after every edit in a sequence.
+
+Before RF-506, measure the actual candidate bridge on 5k/20k mixed fixtures and document-start edits, long paragraphs, large tables, deep mixed containers, and fence/reference changes. After correctness is proven, ordinary typing must satisfy the warm-cache zero-full-parse rule; structure-changing edits may conservatively reparse when stability cannot be proven, with an explicit reason and measured cost. Never narrow the window unsafely to satisfy a counter.
+
+Before claiming user-visible performance acceptance, add input-to-next-paint p50/p95/p99, long tasks, dropped frames/scroll jumps, and retained memory to the synchronous-work metrics above. Record hardware/platform and compare the old and new runtime on identical inputs. The 16/24 ms semantic-work limits alone are insufficient evidence of smooth rendering. Windows and macOS IME/soft-wrap checks remain explicit platform gates.
 
 ## 9. Delivery and deletion policy
 
@@ -1368,6 +1394,8 @@ npm.cmd run test -- packages/editor-model/src/commands
 
 #### RF-506: Semantic engine hard cutover
 
+**Prerequisites (2026-09-17):** RF-HARDEN-001 and RF-601 accepted; new cache/bridge correctness and performance evidence available. Do not remove working routes based only on planner replay parity.
+
 **Outcome:** old editor-core semantic commands, physical-line models, and parsing helpers are deleted.
 
 **Preparation landed ahead of this task:** `packages/editor-core/src/commands/editor-model-bridge.ts` owns the one non-pure piece (a per-view document structure cache that follows CodeMirror edits incrementally and reparses on multi-range changes) and exposes `readEditorSemanticContext` / `applyEditorPlan` / `runEditorPlanCommand`, so a keypress can run any `@fishmark/editor-model` planner as a single CodeMirror transaction. `packages/editor-model/src/commands/list-move.ts` moves a list-item subtree up/down through the canonical list scopes (renumbering ordered scopes with the loose-item restart rule) and `commands/ordered-list.ts` normalizes ordered scopes; `@fishmark/markdown-engine` now exposes `readListScopes`/`readFlatListItems`/`collectBlockquotePrefixSpans` so the semantic engine and the parser share one scope reader. The remaining work is the consumer cutover: the CodeMirror-to-editor-model bridge, routing keyboard/menu/toolbar/table-widget/test-driver commands, and the deletions below.
@@ -1392,6 +1420,8 @@ npm.cmd run test -- packages/editor-model/src/commands
 - [ ] Remove old line/prefix/list parsing utilities.
 - [ ] Replace tests with package-level behavioral tests plus focused adapter tests.
 - [ ] Add forbidden imports for retired editor-core semantics.
+- [ ] Run all behavior checkpoints through the new production consumers, including continuous edits, undo/redo, table focus, source-mode switch, delayed acknowledgements, and composition; prove keyboard/menu/toolbar/widget/test-driver routes reach the new engine.
+- [ ] Record candidate-runtime performance and geometry evidence before deleting the old route. Known baseline defects are not reclassified as desired behavior.
 
 **Verification:**
 
@@ -1409,14 +1439,15 @@ npm.cmd run build
 
 #### RF-601: Transaction bridge, queue, history, and IME
 
+**Order (2026-09-17):** execute before RF-506, building on the existing `editor-model-bridge.ts`. Package relocation belongs to RF-604; do not create empty adapter scaffolds or another pending queue.
+
 **Outcome:** CodeMirror converts browser transactions to/from semantic plans without owning Markdown rules.
 
 **Files:**
 
 - Create: `packages/codemirror-adapter/src/transaction-adapter.ts`
 - Create: `packages/codemirror-adapter/src/transaction-adapter.test.ts`
-- Create: `packages/codemirror-adapter/src/pending-edit-queue.ts`
-- Create: `packages/codemirror-adapter/src/pending-edit-queue.test.ts`
+- Reuse: `src/renderer/application/pending-edit-queue.ts` and `workspace-edit-client.ts`, including their tests; the adapter integrates these established owners without duplicating transport state.
 - Create: `packages/codemirror-adapter/src/selection-mapper.ts`
 - Create: `packages/codemirror-adapter/src/selection-mapper.test.ts`
 - Create: `packages/codemirror-adapter/src/composition-controller.ts`
@@ -1431,6 +1462,8 @@ npm.cmd run build
 - [ ] Freeze geometry-changing semantic refresh during composition.
 - [ ] Recompute from final text on composition end.
 - [ ] Prove undo/redo across automatic structure completion and delayed acknowledgements.
+- [ ] Reject stale plans before dispatch; keep local cache versions monotonic across full reparses and multi-range edits, distinguish local optimistic revisions from main-confirmed revisions, and invalidate/rebind across session ownership changes.
+- [ ] Reuse the same document-derived snapshot for selection-only reads; separate navigation transactions from input/structure history groups.
 
 **Verification:**
 
@@ -1441,6 +1474,8 @@ npm.cmd run test -- packages/codemirror-adapter/src/transaction-adapter.test.ts 
 **Exit:** IME and history are adapter concerns; Markdown semantics stay pure.
 
 #### RF-602: Viewport-scoped decorations
+
+**Prerequisite (2026-09-17):** RF-701's shared render plan is already consumed by production code.
 
 **Outcome:** decorations consume render plans and update only affected visible structures.
 
@@ -1453,6 +1488,7 @@ npm.cmd run test -- packages/codemirror-adapter/src/transaction-adapter.test.ts 
 - [ ] Reuse unchanged decoration ranges by node ID/hash.
 - [ ] Keep source mode as a presentation gate over the same document state.
 - [ ] Cover viewport entry/exit, active-node changes, scrolling, and composition.
+- [ ] Provide layout-changing block widgets and cross-line replacements directly, before viewport calculation; reserve indirect viewport decoration generation for layout-safe presentation. Maintain stable range/height metadata, request measurements for changing widget heights, and verify scroll anchors when previews load.
 
 **Verification:**
 
@@ -1521,6 +1557,8 @@ npm.cmd run test:editing-experience
 ### Milestone 7 — Shared presentation and derived consumers
 
 #### RF-701: Semantic render plan
+
+**Order (2026-09-17):** execute after RF-506 and before RF-602; land a real consumer in the same task. Share semantic roles/traversal, not CodeMirror DOM or editor-specific visibility rules with HTML export.
 
 **Outcome:** editor and export share one semantic presentation description without sharing DOM implementations.
 
@@ -1596,6 +1634,8 @@ npm.cmd run perf:baseline
 ### Milestone 8 — Renderer and main composition cleanup
 
 #### RF-801: Non-React workspace client/store
+
+**Re-scoped (2026-09-17):** audit and consolidate the clients, queue, and transaction orchestration already delivered in M1/M2. The files below are target responsibilities, not a requirement to build replacement facades. Reuse existing modules where their boundary already fits; any move must remove the superseded entry point in the same task.
 
 **Outcome:** application workflows are callable without hooks or JSX.
 
@@ -1815,11 +1855,13 @@ npm.cmd run test:editing-experience
 M0 baselines
   → M1 workspace domain/application
   → M2 revisioned edit transport
-  → M3 data safety/recovery
-  → M4 recursive parser/cache
-  → M5 semantic editor model
-  → M6 CodeMirror adapter
-  → M7 presentation/derived consumers
+  → M3/M4 and RF-501..505 implementation baseline
+  → RF-HARDEN-001 recovery/cache/bridge repair gate
+  → RF-601 transaction/history/IME + candidate performance gate
+  → RF-506 semantic consumer cutover
+  → RF-701 shared semantic render plan
+  → RF-602/603/604 CodeMirror adapter cutover
+  → RF-702/703 derived consumers
   → M8 renderer/main composition cleanup
   → M9 performance/E2E/security
   → M10 purge/final acceptance
@@ -1829,10 +1871,10 @@ Rules:
 
 - M2 cannot start before workspace domain ownership is explicit.
 - M3 cannot accept save/recovery work while full-draft sync still exists.
-- M5 cannot migrate commands before the recursive parser/cache is accepted.
-- M6 cannot delete old editor-core until all pure commands are in editor-model.
-- M7 cannot delete export parsing until the semantic render plan covers all supported nodes.
-- M9 measures the final architecture, not intermediate compatibility paths.
+- RF-506 cannot switch command consumers until the reviewed cache defects and RF-601 transaction/IME prerequisites pass independent acceptance.
+- RF-604 cannot delete old editor-core until all pure commands are in editor-model and all adapter consumers have migrated.
+- RF-701 precedes RF-602; RF-702 cannot delete export parsing until the shared semantic render plan covers all supported nodes.
+- M9 aggregates final evidence; real-process recovery tests and candidate bridge performance/behavior gates run at their owning changes rather than waiting for M9.
 - M10 is deletion and acceptance, not a place to finish missing architecture.
 
 ## 12. Definition of program completion
@@ -1858,8 +1900,6 @@ The refactor is complete only when all statements below are true:
 - Renderer sandbox, CSP, IPC sender validation, and resource path allowlists are active.
 - Old editor-core, old parser, full-draft sync, renderer conflict state, compatibility adapters, dead code, and stale tests/docs are deleted.
 - Build, lint, typecheck, full tests, performance gates, E2E, architecture acceptance, and task acceptance all pass with fresh evidence.
-
-
 
 
 

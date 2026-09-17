@@ -1259,3 +1259,14 @@
 - 这些测试是否通过
 
 至少要覆盖本次改动影响到的区域，尤其是文件操作、编辑行为和回归敏感路径。
+## RF-HARDEN-001：切换前回归（2026-09-17）
+
+- 首次新建文档编辑 ACK 后，独立 Node 写入进程被 SIGKILL，重新加载真实恢复目录应恢复未保存内容，不能依赖退出 compact。
+- 连续编辑只写一次基线；reload→edit、save→edit 更新基线；恢复正文及 savedContent 与新基线一致。
+- 磁盘追加失败不返回 ACK，重复请求仍失败；无效 owner 或失效 sender 不修改正文、不把业务错误误判成永久磁盘失败。
+- append 挂起时 ACK 挂起；最终 shutdown 等待 append 后 compact；被截断的末条 journal 保留此前有效编辑并返回 incompleteTail。
+- 删除段落空行、插入未闭合围栏、改变前后方全局引用、CRLF 混合容器逐步与 fresh parse 差分，包含节点 data 和定义索引。
+- 普通段落行尾/EOF 输入、标点空格、Backspace 的 actual full-parser 调用为零；后方 table data/inline 坐标必须正确。
+- 旧 revision plan 拒绝 dispatch，多范围编辑 revision 不回退，selection-only 读取复用 physical snapshot。
+
+此处不替代 RF-506 前真实 Electron 消费入口、平台 IME/history 和按键到绘制性能验收。

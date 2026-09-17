@@ -94,3 +94,4 @@ export type {
   WorkspaceWindowLifecyclePort,
   WriteDocumentResult
 } from "./ports";
+export { createRecoverableDocumentEdits } from "./recoverable-document-edits";

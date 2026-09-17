@@ -1,10 +1,12 @@
 import {
   applyIncrementalEdit,
   createDocumentStructureCache,
+  createDocumentStructureCacheFromTree,
   type DocumentStructureCache
 } from "@fishmark/markdown-engine";
 import {
   createEditorDerivedSnapshotFromCache,
+  assertPlanAppliesToRevision,
   createEditorSemanticContext,
   type EditTransactionPlan,
   type EditorSemanticContext
@@ -40,20 +42,22 @@ export function readEditorSemanticContext(state: EditorState): EditorSemanticCon
   });
 }
 
-// Applying a plan is one CodeMirror transaction, so one command is one undo step.
+// History grouping is supplied by the command adapter; one dispatch alone does not isolate undo.
 export function applyEditorPlan(
   view: EditorView,
   plan: EditTransactionPlan | null,
-  userEvent = "input.type"
+  userEvent?: string
 ): boolean {
   if (plan === null) {
     return false;
   }
 
+  assertPlanAppliesToRevision(plan, readEditorStructureCache(view.state).revision);
+
   view.dispatch({
     changes: plan.edits.map((edit) => ({ from: edit.from, to: edit.to, insert: edit.insert })),
     selection: { anchor: plan.selection.anchor, head: plan.selection.head },
-    userEvent
+    userEvent: userEvent ?? (plan.intent === "navigation" ? "select" : "input")
   });
 
   return true;
@@ -97,5 +101,6 @@ function nextCache(
     }
   }
 
-  return createDocumentStructureCache(transaction.newDoc.toString());
+  const rebuilt = createDocumentStructureCache(transaction.newDoc.toString());
+  return createDocumentStructureCacheFromTree(cache.revision + 1, rebuilt.source, rebuilt.tree);
 }

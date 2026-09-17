@@ -55,7 +55,7 @@ export function parseWorkspaceSnapshot(value: unknown): WorkspaceSnapshot | null
     if (!isRecord(session)) return null;
     if (typeof session.tabId !== "string" || session.tabId.length === 0) return null;
     if (typeof session.windowId !== "string" || session.windowId.length === 0) return null;
-    if (!isFileIdentity(session.fileIdentity)) return null;
+    if (session.fileIdentity !== null && !isFileIdentity(session.fileIdentity)) return null;
     if (session.path !== null && typeof session.path !== "string") return null;
     if (typeof session.name !== "string") return null;
     if (typeof session.content !== "string") return null;

@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import * as fullParser from "../parse/full-document-parser";
 
 import { flattenMarkdownTree, type MarkdownDocumentTree } from "../model/document-tree";
 import { parseFullDocumentTree } from "../parse/full-document-parser";
@@ -7,15 +8,16 @@ import { applyIncrementalEdit } from "./incremental-document-parser";
 import type { TextEdit } from "./invalidation-range";
 
 function snapshot(tree: MarkdownDocumentTree) {
-  return flattenMarkdownTree(tree).map((node) => ({
+  return { references: [...tree.referenceDefinitions], footnotes: [...tree.footnoteDefinitions], nodes: flattenMarkdownTree(tree).map((node) => ({
     id: node.id,
     kind: node.kind,
     path: [...node.path],
     source: { ...node.source },
     content: { ...node.content },
     markers: node.markers.map((marker) => ({ kind: marker.kind, range: { ...marker.range } })),
+    data: node.data,
     inline: "inline" in node ? node.inline ?? null : null
-  }));
+  })) };
 }
 
 function applyAll(source: string, edits: readonly TextEdit[]) {
@@ -24,6 +26,7 @@ function applyAll(source: string, edits: readonly TextEdit[]) {
   for (const edit of edits) {
     const result = applyIncrementalEdit(cache, edit);
     cache = result.cache;
+    expect(snapshot(cache.tree)).toEqual(snapshot(parseFullDocumentTree(cache.source)));
     stats.push(result.stats);
   }
   return { source: cache.source, tree: cache.tree, stats };
@@ -58,6 +61,47 @@ const corpus: readonly { readonly name: string; readonly source: string; readonl
 ];
 
 describe("applyIncrementalEdit", () => {
+  it.each([
+    { source: "alpha\n\nbeta\n\ngamma\n", fromOffset: 6, toOffset: 7, insertedText: "" },
+    { source: "alpha\n\nbeta\n\ngamma\n", fromOffset: 6, toOffset: 6, insertedText: "```\n" },
+    { source: "[x][ref]\n\n[ref]: /old\n\nafter\n", fromOffset: 17, toOffset: 21, insertedText: "/new" },
+    { source: "alpha\n\n| a | b |\n| --- | --- |\n| c | d |\n\nafter\n", fromOffset: 2, toOffset: 2, insertedText: "XYZ" }
+  ])("matches complete trees including metadata after boundary edits: $source", ({ source, ...edit }) => {
+    applyAll(source, [edit]);
+  });
+
+  it.each(["alpha", "before\n\nalpha", "alpha\r\n\r\nbeta\r\n", "alpha\n\n**bold**\n\n| a |\n| --- |\n| b |\n"])(
+    "keeps ordinary continuous typing and backspace local: %s", (source) => {
+      let cache = createDocumentStructureCache(source);
+      const offset = source.indexOf("alpha") + 5;
+      const edits = [
+        { fromOffset: offset, toOffset: offset, insertedText: " beta!" },
+        { fromOffset: offset + 5, toOffset: offset + 6, insertedText: "" },
+        { fromOffset: 0, toOffset: 0, insertedText: "X" }
+      ];
+      for (const edit of edits) {
+        const spy = vi.spyOn(fullParser, "parseFullDocumentTree");
+        const result = applyIncrementalEdit(cache, edit);
+        expect(spy).not.toHaveBeenCalled();
+        spy.mockRestore();
+        expect(result.stats.fullParseCount).toBe(0);
+        expect(result.stats.fallbackReason).toBeNull();
+        cache = result.cache;
+        expect(snapshot(cache.tree)).toEqual(snapshot(parseFullDocumentTree(cache.source)));
+      }
+    }
+  );
+
+  it("checks every step of structural edits, definitions and CRLF containers", () => {
+    let cache = createDocumentStructureCache("> - one\r\n> - two\r\n\r\n[x][ref]\r\n\r\n[ref]: /old\r\n\r\nafter\r\n");
+    for (const text of ["```\r\n", "text", "\r\n```\r\n", "\r\n[^n]: note\r\n", "[ref]: /new\r\n"]) {
+      const result = applyIncrementalEdit(cache, { fromOffset: 0, toOffset: 0, insertedText: text });
+      cache = result.cache;
+      expect(snapshot(cache.tree)).toEqual(snapshot(parseFullDocumentTree(cache.source)));
+      expect(result.stats.fullParseCount).toBe(1);
+      expect(result.stats.fallbackReason).not.toBeNull();
+    }
+  });
   it.each(corpus)("stays structurally identical to a fresh parse: $name", ({ source, edits }) => {
     const incremental = applyAll(source, edits);
     const fresh = parseFullDocumentTree(incremental.source);

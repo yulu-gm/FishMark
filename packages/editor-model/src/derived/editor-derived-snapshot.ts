@@ -65,8 +65,15 @@ export function createEditorDerivedSnapshot(input: {
   return createSnapshot(input.revision, input.source, input.tree, input.document);
 }
 
+const snapshotsByCache = new WeakMap<DocumentStructureCache, EditorDerivedSnapshot>();
+
 export function createEditorDerivedSnapshotFromCache(cache: DocumentStructureCache): EditorDerivedSnapshot {
-  return createSnapshot(cache.revision, cache.source, cache.tree, undefined);
+  let snapshot = snapshotsByCache.get(cache);
+  if (snapshot === undefined) {
+    snapshot = createSnapshot(cache.revision, cache.source, cache.tree, undefined);
+    snapshotsByCache.set(cache, snapshot);
+  }
+  return snapshot;
 }
 
 // A document edit goes through the incremental cache, so unaffected structure is reused and the
@@ -189,7 +196,6 @@ function freezeCursor(node: MarkdownLeafNode, cell: MarkdownTableCell): TableCur
 }
 
 export { childrenOf };
-
 
 
 

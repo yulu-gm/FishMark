@@ -21,6 +21,7 @@ export type RecoveryJournalLoadResult =
       readonly kind: "loaded";
       readonly snapshot: unknown | null;
       readonly entries: readonly unknown[];
+      readonly incompleteTail?: boolean;
     }
   | { readonly kind: "corrupt"; readonly path: string };
 
@@ -112,12 +113,18 @@ export function createRecoveryJournal(
     }
 
     const entries: unknown[] = [];
-    for (const line of journalRaw.split("\n")) {
+    const lines = journalRaw.split("\n");
+    let incompleteTail = false;
+    for (const [index, line] of lines.entries()) {
       const trimmed = line.trim();
       if (trimmed.length === 0) continue;
       try {
         entries.push(JSON.parse(trimmed));
       } catch {
+        if (index === lines.length - 1 && !journalRaw.endsWith("\n")) {
+          incompleteTail = true;
+          break;
+        }
         return { kind: "corrupt", path: dependencies.journalPath };
       }
     }
@@ -125,7 +132,7 @@ export function createRecoveryJournal(
     if (snapshot === null && entries.length === 0) {
       return { kind: "empty" };
     }
-    return { kind: "loaded", snapshot, entries };
+    return { kind: "loaded", snapshot, entries, ...(incompleteTail ? { incompleteTail: true } : {}) };
   }
 
   return { appendEntry, writeSnapshot, truncateJournal, load };

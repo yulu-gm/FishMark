@@ -22,6 +22,7 @@ export type RecoveryStoreLoadResult =
       readonly kind: "loaded";
       readonly snapshot: unknown | null;
       readonly entries: readonly unknown[];
+      readonly incompleteTail?: boolean;
     }
   | { readonly kind: "corrupt"; readonly path: string };
 
@@ -38,6 +39,7 @@ export type RecoveryOutcome =
       readonly kind: "recovery-available";
       readonly snapshot: WorkspaceSnapshot | null;
       readonly editBatches: readonly RecoveryEditBatch[];
+      readonly incompleteTail?: boolean;
     }
   | { readonly kind: "corrupt"; readonly path: string };
 
@@ -90,7 +92,8 @@ export function createRecovery(store: RecoveryStorePort): RecoveryUseCase {
       if (snapshot === null && editBatches.length === 0) {
         return { kind: "no-recovery-needed" };
       }
-      return { kind: "recovery-available", snapshot, editBatches };
+      return { kind: "recovery-available", snapshot, editBatches,
+        ...(loaded.incompleteTail ? { incompleteTail: true } : {}) };
     }
   };
 }

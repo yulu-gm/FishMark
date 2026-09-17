@@ -7,6 +7,7 @@ import {
 } from "@fishmark/workspace-domain";
 import {
   createApplyDocumentEdits,
+  createRecoverableDocumentEdits,
   createFlushDocumentEdits,
   createCloseWorkspace,
   createSaveDocument,
@@ -409,22 +410,34 @@ app.whenReady().then(async () => {
 
   const recovery = await recoveryService.loadRecovery();
   if (recovery.kind === "recovery-available") {
+    if (recovery.incompleteTail) {
+      console.warn("[fishmark] Recovery journal has an incomplete final write; replaying its valid prefix.");
+      dialog.showErrorBox("Recovery incomplete", "The final recovery write was interrupted. Earlier completed edits have been recovered.");
+    }
     if (recovery.snapshot !== null) {
       workspaceState.restoreSnapshot(recovery.snapshot);
     }
     for (const batch of recovery.editBatches) {
       try {
         const session = workspaceState.getTabSession(batch.tabId);
-        workspaceState.applyDocumentEdits({
+        // Snapshot replacement may have completed before journal truncation.
+        if (session.revision > batch.baseRevision) continue;
+        const result = workspaceState.applyDocumentEdits({
           tabId: batch.tabId,
           expectedWindowId: session.windowId,
-          clientId: batch.clientId,
-          clientSequence: batch.clientSequence,
+          // Client ACK counters are transient and are not part of the workspace snapshot.
+          clientId: `recovery:${batch.clientId}:${batch.baseRevision}`,
+          clientSequence: 1,
           baseRevision: batch.baseRevision,
           changes: batch.changes
         });
-      } catch {
-        // The snapshot did not include this tab, so its edit batch cannot be replayed.
+        if (result.kind !== "applied" && result.kind !== "duplicate") {
+          throw new Error(`Recovery replay stopped: ${result.kind}`);
+        }
+      } catch (error) {
+        console.error("[fishmark] Recovery replay stopped; original files retained.", error);
+        dialog.showErrorBox("Recovery incomplete", "Some recovery entries could not be replayed. The recovered prefix is available.");
+        break;
       }
     }
   } else if (recovery.kind === "corrupt") {
@@ -442,33 +455,14 @@ app.whenReady().then(async () => {
   const workspaceFileObjectOperations =
     createKeyedOperationCoordinator<FileObjectIdentity>();
   const fileIdentityResolver = createFileIdentityResolver();
-  const applyDocumentEdits = createApplyDocumentEdits({
+  const recoverableEdits = createRecoverableDocumentEdits({
     workspace: workspaceState,
+    recovery: recoveryService
+  });
+  const applyDocumentEditsWithRecovery = createApplyDocumentEdits({
+    workspace: recoverableEdits,
     documentOperations: workspaceTabOperations
   });
-  const applyDocumentEditsWithRecovery = {
-    apply: async (
-      input: Parameters<typeof applyDocumentEdits.apply>[0],
-      authorize: Parameters<typeof applyDocumentEdits.apply>[1]
-    ) => {
-      const result = await applyDocumentEdits.apply(input, authorize);
-      if (result.kind === "applied") {
-        void recoveryService.recordEditBatch({
-          kind: "edit-batch",
-          tabId: input.tabId,
-          clientId: input.clientId,
-          clientSequence: input.clientSequence,
-          baseRevision: input.baseRevision as number,
-          changes: input.changes as readonly {
-            readonly from: number;
-            readonly to: number;
-            readonly insert: string;
-          }[]
-        }).catch(() => undefined);
-      }
-      return result;
-    }
-  };
   const flushDocumentEdits = createFlushDocumentEdits({
     workspace: workspaceState,
     documentOperations: workspaceTabOperations
@@ -1355,8 +1349,27 @@ app.whenReady().then(async () => {
     windowManager.reopenPrimaryWindowIfNeeded();
   });
 
-  app.on("before-quit", () => {
-    void recoveryService.compact(workspaceState.exportSnapshot()).catch(() => undefined);
+  let recoveryShutdownStarted = false;
+  let recoveryShutdownFinished = false;
+  app.on("will-quit", (event) => {
+    if (recoveryShutdownFinished) return;
+    event.preventDefault();
+    if (recoveryShutdownStarted) return;
+    recoveryShutdownStarted = true;
+    const timeout = setTimeout(() => {
+      console.error("[fishmark] Recovery shutdown timed out; completed journal entries are retained.");
+      recoveryShutdownFinished = true;
+      app.quit();
+    }, 5000);
+    void recoverableEdits.shutdown().catch((error: unknown) => {
+      console.error("[fishmark] Recovery shutdown failed.", error);
+      dialog.showErrorBox("Recovery write failed", "Recovery could not be updated. Previously completed journal entries are retained.");
+    }).finally(() => {
+      clearTimeout(timeout);
+      if (recoveryShutdownFinished) return;
+      recoveryShutdownFinished = true;
+      app.quit();
+    });
   });
 });
 

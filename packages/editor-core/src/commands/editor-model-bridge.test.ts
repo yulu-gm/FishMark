@@ -19,6 +19,20 @@ function stateWith(source: string, anchor = source.length): EditorState {
 }
 
 describe("editor model bridge", () => {
+  it("rejects stale plans and shares a snapshot across selection changes", () => {
+    const state = stateWith("alpha");
+    const selected = state.update({ selection: { anchor: 2 } }).state;
+    expect(readEditorSemanticContext(state).snapshot).toBe(readEditorSemanticContext(selected).snapshot);
+    const newer = selected.update({ changes: { from: 2, insert: "X" } }).state;
+    const dispatch = vi.fn();
+    const view = { state: newer, dispatch } as unknown as Parameters<typeof applyEditorPlan>[0];
+    expect(() => applyEditorPlan(view, { revision: 1, commandId: "insert-text", intent: "edit",
+      edits: [{ from: 0, to: 0, insert: "!" }], selection: { anchor: 1, head: 1 } })).toThrow(/revision/);
+    expect(dispatch).not.toHaveBeenCalled();
+    const multi = newer.update({ changes: [{ from: 0, to: 1, insert: "B" }, { from: 3, to: 4, insert: "C" }] }).state;
+    expect(readEditorStructureCache(multi).revision).toBe(3);
+    expect(readEditorSemanticContext(multi).snapshot).not.toBe(readEditorSemanticContext(newer).snapshot);
+  });
   it("keeps a document structure cache that follows ordinary edits incrementally", () => {
     const state = stateWith("Alpha");
     const before = readEditorStructureCache(state);
@@ -44,7 +58,7 @@ describe("editor model bridge", () => {
     const cache = readEditorStructureCache(after);
 
     expect(cache.source).toBe("Alpha Beta");
-    expect(cache.revision).toBe(1);
+    expect(cache.revision).toBe(before.revision + 1);
     expect(cache).not.toBe(before);
   });
 

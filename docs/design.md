@@ -145,3 +145,10 @@ P2：
 该壳层的设计目标是保持写作工具的秩序感与沉浸感，同时为后续搜索等能力预留自然版位。视觉细节中的字号、颜色和字体仍由主题系统与偏好设置控制，布局层只负责信息层级、容器关系和一致的设计 token。
 
 查找替换作为编辑器浮层能力挂在写作画布之上，由 renderer 侧面板维护临时查询状态，并通过 CodeMirror search state 完成匹配高亮、导航和替换；替换事务必须进入现有 undo / redo history，不能绕开 Markdown 文本真值或 main/preload 边界。
+## RF-HARDEN-001：切换前恢复与增量边界（2026-09-17）
+
+恢复业务编排由 `workspace-application/createRecoverableDocumentEdits` 持有，main 只组合磁盘端口和已有文档锁。新会话首次编辑以及非日志变更（如 reload 或保存点改变）先建立持久化基线，普通后续编辑只追加增量。每次用 metadata checkpoint 检测 revision/savedRevision，不导出全文；只有基线失效才导出快照。追加完成后返回 ACK；写失败保留内存、向调用方报告，并禁止 duplicate 绕过失败返回假 ACK。所有追加和快照压缩共用串行队列。异步基线之后、实际 mutation 之前再次校验调用者授权。
+
+最终排空发生在 `will-quit`，保留此前窗口关闭确认和 renderer flush。最多等待 5 秒；超时或失败记录错误，保留已完成日志。恢复跳过快照已覆盖的 revision；client sequence 属于瞬态状态，重放每个 entry 使用独立 recovery client。最后一行写入中断时恢复有效前缀并显式提示；untitled 的 null fileIdentity 是合法持久化状态。这是进程崩溃保证，不承诺掉电或硬盘损坏恢复（尚无 fsync/目录同步保证）。
+
+增量缓存目前只对无全局定义的单行纯文本段落证明块边界不变，直接重建该段 inline，并映射后续 inline/table 的位置；支持正文、行尾/EOF 输入和 Backspace。结构编辑、复杂行内语法和含定义文档显式 full fallback，提供 `fallbackReason/fullParseCount/parsedSourceLength`，不得把 fallback 包装成局部性能。树索引、root fingerprint 和后方位置映射仍有全篇成本。桥接拒绝过期计划，多范围事务保持本地版本单调，selection-only 操作复用同一派生快照；该本地版本不是 main 权威版本。

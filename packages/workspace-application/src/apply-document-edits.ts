@@ -12,7 +12,8 @@ export type DocumentEditAuthorization = () => void;
 export function createApplyDocumentEdits(dependencies: {
   workspace: {
     applyDocumentEdits(
-      input: ApplyWorkspaceDocumentEditsInput
+      input: ApplyWorkspaceDocumentEditsInput,
+      authorize?: DocumentEditAuthorization
     ): ApplyWorkspaceDocumentEditsResult | Promise<ApplyWorkspaceDocumentEditsResult>;
   };
   documentOperations: Pick<KeyedOperationCoordinator<string>, "runExclusive">;
@@ -24,7 +25,7 @@ export function createApplyDocumentEdits(dependencies: {
     ): Promise<ApplyDocumentEditsResult> {
       return dependencies.documentOperations.runExclusive(input.tabId, async () => {
         authorize();
-        return dependencies.workspace.applyDocumentEdits(input);
+        return dependencies.workspace.applyDocumentEdits(input, authorize);
       });
     }
   };

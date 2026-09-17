@@ -6,13 +6,17 @@
 
 **Created:** 2026-07-11
 
-**Last updated:** 2026-08-14
+**Last updated:** 2026-09-17
 
 **Overall status:** `IN_PROGRESS`
 
-**Current task:** none — RF-505 complete; `RF-506` is deferred to a follow-up session (hard cutover of the old semantic engine, ~8.2k lines to delete plus consumer rewiring through a CodeMirror bridge)
+**Current task:** `RF-HARDEN-001 COMPLETE` — one implementation agent repaired the recovery/cache/bridge boundaries; parent independent acceptance is `PASS`. No implementation task is currently running. Next: RF-601.
 
-**Next required skill:** `$fishmark-task-intake` for `RF-506`
+**Next required skill:** `$fishmark-task-intake` to bound RF-601 transaction/history/IME and candidate performance gates, then execution. RF-506 follows only after those gates pass.
+
+**Current gate:** RF-HARDEN-001 is `PASS`; see `reports/reviews/2026-09-17-rf-harden-001-acceptance.md`. The earlier `FAIL` review at `1b4c329` is retained as historical evidence. Parser correctness uses explicit full fallback outside the proved plain-paragraph fast path; general incremental performance remains open. RF-506 is not dependency-ready until RF-601/runtime/performance gates pass. Historical milestone completion rows are not final platform or performance acceptance.
+
+**User priorities:** maintainability/extensibility, editing/interaction quality, and measured performance. Preserve the existing stack and owners; do not optimize progress percentages, package count, or deleted lines.
 
 ## 1. Status vocabulary
 
@@ -43,7 +47,7 @@ At most one `RF-xxx` task may be `IN_PROGRESS` or `ACCEPTING` at a time. A later
 | M9 | Performance, E2E, and security | `PLANNED` | 0 | 3 | Budgets, Playwright flows, and Electron security pass |
 | M10 | Purge and final acceptance | `PLANNED` | 0 | 2 | No compatibility/dead code; final verdict `PASS` |
 
-**Program completion:** 22 / 38 tasks.
+**Historical recorded completion:** 22 / 38 original tasks. The supplemental RF-HARDEN-001 repair gate is tracked separately; this count is not a current quality or release-readiness percentage.
 
 ## 3. Task ledger
 
@@ -72,14 +76,14 @@ Evidence columns are filled only with fresh command output/report paths from the
 | RF-502 | Enter planner | RF-501 | `COMPLETE` | Pure `decideEnter`/`planEnter` over the semantic context: line container chain resolved by overlap, one rule per case (plain/structural-blank break with enclosing prefixes, heading exit, list continuation with ordinal/delimiter/task handling, one-level empty item and quote exits, fenced content lines, table-boundary row skeleton), each returning a single ordered `EditTransactionPlan` with the resulting caret. 14 focused tests cover the matrix through depth 8 and repeated Enter. | typecheck; lint 0 errors / 8 pre-existing warnings; build exit 0; full Vitest 184 files / 2,434 passed + 1 skipped. | Self-acceptance: no Enter behavior depends on DOM class names or feature-specific source rescans. | `codex/editor-foundation-refactor` |
 | RF-503 | Backspace and Delete planners | RF-502 | `COMPLETE` | `decideBackspace`/`planBackspace` handle ordinary and range deletion, then degrade one hidden prefix per press (item marker → indentation, indentation run → outdent the whole subtree, quoted line → one quote level); `decideDelete`/`planDelete` delete forward and join the next line by removing its break plus prefix so the destination path is recomputed. Shared helpers extracted to `commands/line-structure.ts`; the physical-line→node mapping now prefers the child starting on the line. 12 focused tests. | typecheck; lint 0 errors / 8 pre-existing warnings; build exit 0; full Vitest 186 files / 2,448 passed + 1 skipped. | Self-acceptance: Backspace/Delete are source-minimal, subtree-safe, and depth-independent. | `codex/editor-foundation-refactor` |
 | RF-504 | Indent, navigation, and selection policies | RF-503 | `COMPLETE` | `planIndentIn`/`planIndentOut` move the enclosing item subtree and anchor indentation after quote/parent prefixes; `navigation.ts` declares one policy per user intent (pointer, structural arrow, printable input, programmatic normalization), implements visible-line vertical navigation with a preferred visible column, a pointer plan without edits, a printable-input plan that only inserts text, and a normalization entry point that never changes structure. `selection-context.test.ts` covers normalization and ownership. 18 focused tests. | typecheck; lint 0 errors / 8 pre-existing warnings; build exit 0; full Vitest 189 files / 2,466 passed + 1 skipped. | Self-acceptance: selection policy is explicit and no global transaction filter guesses user intent. | `codex/editor-foundation-refactor` |
-| RF-505 | Formatting, table, and fence planners | RF-504 | `PLANNED` | — | command package tests | — | — |
-| RF-506 | Semantic engine hard cutover | RF-505 | `PLANNED` | — | lint/typecheck/test/build | — | — |
-| RF-601 | Transaction bridge, history, and IME | RF-506 | `PLANNED` | — | adapter tests | — | — |
-| RF-602 | Viewport-scoped decorations | RF-601 | `PLANNED` | — | adapter tests/perf | — | — |
+| RF-505 | Formatting, table, and fence planners | RF-504 | `COMPLETE` | Historical implementation/evidence is recorded in the 2026-08-14 RF-505 log below. | Historical 192 files / 2,491 passed + 1 skipped; not rerun by this status correction. | Historical self-acceptance; runtime cutover remains separately gated. | `codex/editor-foundation-refactor` |
+| RF-506 | Semantic engine hard cutover | RF-HARDEN-001, RF-601 | `PLANNED` | — | full runtime corpus + candidate performance + lint/typecheck/test/build | — | — |
+| RF-601 | Transaction bridge, history, and IME | RF-505, RF-HARDEN-001 | `PLANNED` | — | adapter/history/IME + candidate performance tests | — | — |
+| RF-602 | Viewport-scoped decorations | RF-506, RF-701 | `PLANNED` | — | adapter/layout/scroll tests/perf | — | — |
 | RF-603 | Interaction adapters and widgets | RF-602 | `PLANNED` | — | adapter/visual tests | — | — |
 | RF-604 | CodeMirror adapter hard cutover | RF-603 | `PLANNED` | — | lint/typecheck/test/build/probes | — | — |
-| RF-701 | Semantic render plan | RF-604 | `PLANNED` | — | typecheck/test | — | — |
-| RF-702 | HTML export cutover | RF-701 | `PLANNED` | — | test/build | — | — |
+| RF-701 | Semantic render plan | RF-506 | `PLANNED` | — | typecheck/test + production consumer | — | — |
+| RF-702 | HTML export cutover | RF-604, RF-701 | `PLANNED` | — | test/build | — | — |
 | RF-703 | Outline and metrics cutover | RF-702 | `PLANNED` | — | test/perf baseline | — | — |
 | RF-801 | Non-React workspace client/store | RF-703 | `PLANNED` | — | typecheck/test | — | — |
 | RF-802 | React shell decomposition | RF-801 | `PLANNED` | — | lint/typecheck/test | — | — |
@@ -109,7 +113,13 @@ Evidence columns are filled only with fresh command output/report paths from the
 
 | 2026-08-14 | M4 and M5 (RF-401 through RF-505) are merged into `main`; RF-506 remains the last M5 task. | The merge lands the single recursive parser, the incremental cache, the rich-document projection, and the complete pure semantic engine (context, Enter, Backspace/Delete, indent/navigation, formatting/table/code-fence) with all gates and the formal Electron corpus green. RF-506 is deferred because it deletes ~8.2k lines of old semantic code and requires a CodeMirror-to-editor-model bridge plus rewiring of keyboard, menu, toolbar, table widget, and test-driver commands; doing it together with this merge would leave the editor non-functional. |
 
-## 5. Latest accepted task handoff
+## 5. Current repair handoff
+
+`RF-HARDEN-001` is `COMPLETE` with parent acceptance `PASS`. Intake and handoff are in `docs/plans/2026-09-17-rf-harden-001-{intake,handoff}.md`; fresh evidence and manual steps are in `reports/task-summaries/RF-HARDEN-001.md`. Full Vitest: 195 files, 2,535 passed / 1 skipped; independent audit: 19/19; build/typecheck/lint and formal runtime behavior passed. RF-601 is next, RF-506 remains planned. No general incremental latency, platform IME or whole-program completion is claimed.
+
+## 5H. Historical RF-202 accepted task handoff
+
+The following text describes its 2026-08-04 state only; the current task and dependency order are above.
 
 ### Task
 
@@ -287,7 +297,7 @@ Append one entry when a task changes to `DEV_DONE`, then amend the same entry af
 
 ## 8. Blockers and deviations
 
-There are no accepted external blockers or roadmap deviations. RF-001, RF-002, RF-101, RF-102, RF-201, RF-202, RF-203, RF-204, RF-301, RF-302, RF-303, RF-304, and RF-401 through RF-405 are complete. M0, M1, M2, M3, and M4 are each `COMPLETE`; M5 is 5/6 `IN_PROGRESS`; accepted program completion is 22/38. RF-506 is the next dependency-ready task.
+The user authorized the 2026-09-17 repair and reordered roadmap around maintainability/extensibility, editing/interaction, and performance. Earlier 22/38 completion records remain historical. The new review blocks semantic cutover on RF-HARDEN-001 and RF-601; RF-506 is not the next dependency-ready task. Shared render planning moves before viewport decoration migration. Runtime recovery and new-path performance evidence move to the changes that introduce those risks; final M9 validation still remains required.
 
 Any deviation must record:
 
@@ -352,8 +362,6 @@ When acceptance fails:
 - [ ] Architecture acceptance result is `PASS`.
 - [ ] Task acceptance result is `PASS`.
 - [ ] Stable docs, backlog, progress, test cases/report, package READMEs, and task summaries agree.
-
-
 
 
 
