@@ -130,3 +130,12 @@ export {
   type CodeFencePlanKind
 } from "./commands/code-fence";
 
+export {
+  decideMoveListItem,
+  planMoveListItemDown,
+  planMoveListItemUp,
+  type ListMoveDecision,
+  type ListMovePlanKind
+} from "./commands/list-move";
+export { planNormalizeOrderedListScopes } from "./commands/ordered-list";
+

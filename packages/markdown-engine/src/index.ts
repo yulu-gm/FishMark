@@ -117,7 +117,18 @@ export type {
   FootnoteDefinitionContentLine,
   FootnoteDefinitionStatus
 } from "./inline-ast";
-export { parseBlockquoteLinePrefix, type BlockquoteLinePrefix } from "./blockquote";
+export {
+  collectBlockquotePrefixSpans,
+  parseBlockquoteLinePrefix,
+  type BlockquoteLinePrefix,
+  type BlockquotePrefixSpans
+} from "./blockquote";
+export {
+  readFlatListItems,
+  readListScopes,
+  type ListItemGeometry,
+  type ListScope
+} from "./parse/list-scopes";
 export {
   resolveIndentedCodeContentStartOffset,
   type CodeBlockKind
@@ -182,5 +193,6 @@ export {
   tableBlockToCanonicalModel,
   type CanonicalTableModel
 } from "./table-model";
+
 
 
