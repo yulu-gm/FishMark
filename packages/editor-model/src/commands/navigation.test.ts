@@ -50,15 +50,16 @@ describe("navigation policies", () => {
     expect(plan?.selection.anchor).toBeGreaterThan(source.indexOf("beta"));
   });
 
-  it("navigates across a structural blank line at depth", () => {
+  it("steps over a bare quote separator instead of landing on it", () => {
     const source = ["> - one", ">", "> - two"].join("\n");
-    const first = planVerticalNavigation(contextAt(source, source.indexOf("one") + 1), "down");
+    const down = planVerticalNavigation(contextAt(source, source.indexOf("one") + 1), "down");
 
-    // The empty quoted line only offers the caret position after its marker.
-    expect(first?.selection.anchor).toBe(source.indexOf("\n") + 2);
+    // The bare `>` line only separates blocks; the caret moves to the next visible line.
+    expect(down?.selection.anchor).toBeGreaterThanOrEqual(source.indexOf("- two"));
 
-    const second = planVerticalNavigation(contextAt(source, first?.selection.anchor ?? 0), "down");
-    expect(second?.selection.anchor).toBe(source.indexOf("- two") + 2);
+    // Moving up across the separator lands at the end of the visible line above it.
+    const up = planVerticalNavigation(contextAt(source, source.length), "up");
+    expect(up?.selection.anchor).toBe(source.indexOf("one") + "one".length);
   });
 
   it("returns null at the document edges", () => {

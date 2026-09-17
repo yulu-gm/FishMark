@@ -95,6 +95,16 @@ export function decideEnter(context: EditorSemanticContext): EnterDecision | nul
     return planListItemEnter(context, line, offset, item);
   }
 
+  // An indented line the tree reads as a paragraph continuation is still a list item for the
+  // legacy indentation scopes; Enter continues it at its own indent.
+  if (item !== null) {
+    const scoped = planScopedListItemEnter(context, line, offset);
+
+    if (scoped !== null) {
+      return scoped;
+    }
+  }
+
   // 4. A quoted line continues its marker run: a paragraph break inside a quote is written as a
   // separator line carrying the quote markers, then the continuation prefix.
   if (lastOfKind(chain, "blockquote") !== null) {
@@ -358,6 +368,42 @@ function replaceLineDecision(
     to: line.contentEndOffset,
     insert: replacement,
     caret
+  });
+}
+
+// An indented line the tree reads as a paragraph continuation can still be a list item at its own
+// indent, which is how the legacy indentation scopes see it: Enter continues that item in place.
+function planScopedListItemEnter(
+  context: EditorSemanticContext,
+  line: PhysicalLine,
+  offset: number
+): EnterDecision | null {
+  const text = lineTextOf(context, line);
+  const match = /^([ \t]*)([-+*]|\d+[.)])([ \t]+)(.*)$/u.exec(text);
+
+  if (match === null) {
+    return null;
+  }
+
+  const indent = match[1] ?? "";
+  const marker = match[2] ?? "-";
+  const spacing = match[3] ?? " ";
+  const contentStart = line.range.startOffset + indent.length + marker.length + spacing.length;
+
+  if (offset < contentStart) {
+    return null;
+  }
+
+  const ordered = /^(\d+)([.)])$/u.exec(marker);
+  const next = ordered === null ? marker : `${Number.parseInt(ordered[1] ?? "1", 10) + 1}${ordered[2] ?? "."}`;
+  const task = /^\[[ xX]\][ \t]+/u.exec(match[4] ?? "");
+  const insert = `\n${indent}${next}${spacing}${task === null ? "" : "[ ] "}`;
+
+  return paragraphBreakDecision(context, "list-continue", "structural", {
+    from: offset,
+    to: offset,
+    insert,
+    caret: offset + insert.length
   });
 }
 

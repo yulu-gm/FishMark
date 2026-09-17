@@ -1,3 +1,4 @@
+import { parseBlockquoteLinePrefix } from "@fishmark/markdown-engine";
 import type { PhysicalLine } from "../physical-lines/physical-editing-document";
 
 import type { EditorSemanticContext } from "../context/editor-semantic-context";
@@ -39,7 +40,8 @@ export function policyFor(intent: NavigationIntent): IntentPolicy {
 }
 
 // Vertical navigation moves between visible lines and keeps the preferred visible column, which
-// skips hidden prefixes without ever changing the document.
+// skips hidden prefixes without ever changing the document. Lines that exist only to separate
+// blocks — blank lines and bare quote markers — are not visible, so the caret steps over them.
 export function planVerticalNavigation(
   context: EditorSemanticContext,
   direction: "up" | "down"
@@ -50,16 +52,34 @@ export function planVerticalNavigation(
     return null;
   }
 
-  const targetLine = context.lines.lines.find(
-    (candidate) => candidate.lineNumber === line.lineNumber + (direction === "down" ? 1 : -1)
-  );
+  const lines = context.lines.lines;
+  const step = direction === "down" ? 1 : -1;
+  let targetNumber = line.lineNumber + step;
+  let skippedSeparator = false;
 
-  if (targetLine === undefined) {
+  while (targetNumber >= 1 && targetNumber <= lines.length) {
+    const candidate = lines[targetNumber - 1]!;
+
+    if (!isStructuralSeparatorLine(context, candidate)) {
+      break;
+    }
+
+    skippedSeparator = true;
+    targetNumber += step;
+  }
+
+  if (targetNumber < 1 || targetNumber > lines.length) {
     return null;
   }
 
+  const targetLine = lines[targetNumber - 1]!;
   const preferredColumn = context.lines.visibleColumnAt(context.selectionContext.activeOffset);
-  const offset = offsetAtVisibleColumn(context, targetLine, preferredColumn);
+  // Stepping up across a separator lands at the end of the visible line above it; every other
+  // move keeps the visible column.
+  const offset =
+    direction === "up" && skippedSeparator
+      ? targetLine.contentEndOffset
+      : offsetAtVisibleColumn(context, targetLine, preferredColumn);
 
   return createEditTransactionPlan({
     context,
@@ -68,6 +88,14 @@ export function planVerticalNavigation(
     edits: [],
     selection: { anchor: offset, head: offset }
   });
+}
+
+// A line whose content is empty — blank, whitespace-only, or nothing but quote markers — only
+// separates blocks and is never a navigation target.
+function isStructuralSeparatorLine(context: EditorSemanticContext, line: PhysicalLine): boolean {
+  const prefix = parseBlockquoteLinePrefix(context.source, line.range.startOffset, line.contentEndOffset);
+
+  return context.source.slice(prefix.contentStartOffset, line.contentEndOffset).trim().length === 0;
 }
 
 // Printable input only inserts text at the caret: it cannot move structure or normalize syntax.
