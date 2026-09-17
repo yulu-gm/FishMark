@@ -362,6 +362,33 @@
       "retireIn": "RF-604"
     },
     {
+      "ruleId": "boundary.editor-core",
+      "owner": "editor-foundation-refactor",
+      "reason": "The editor-model bridge test builds a real CodeMirror state until the adapter hard cutover moves the bridge to @fishmark/codemirror-adapter.",
+      "retireIn": "RF-604",
+      "id": "exception.editor-core-codemirror.commands-editor-model-bridge-test.state",
+      "importer": "packages/editor-core/src/commands/editor-model-bridge.test.ts",
+      "specifier": "@codemirror/state"
+    },
+    {
+      "ruleId": "boundary.editor-core",
+      "owner": "editor-foundation-refactor",
+      "reason": "The editor-model bridge owns the CodeMirror state field until the adapter hard cutover moves it to @fishmark/codemirror-adapter.",
+      "retireIn": "RF-604",
+      "id": "exception.editor-core-codemirror.commands-editor-model-bridge.state",
+      "importer": "packages/editor-core/src/commands/editor-model-bridge.ts",
+      "specifier": "@codemirror/state"
+    },
+    {
+      "ruleId": "boundary.editor-core",
+      "owner": "editor-foundation-refactor",
+      "reason": "The editor-model bridge owns the CodeMirror state field until the adapter hard cutover moves it to @fishmark/codemirror-adapter.",
+      "retireIn": "RF-604",
+      "id": "exception.editor-core-codemirror.commands-editor-model-bridge.view",
+      "importer": "packages/editor-core/src/commands/editor-model-bridge.ts",
+      "specifier": "@codemirror/view"
+    },
+    {
       "id": "exception.editor-core-codemirror.commands-list-commands-test.state",
       "importer": "packages/editor-core/src/commands/list-commands.test.ts",
       "specifier": "@codemirror/state",
