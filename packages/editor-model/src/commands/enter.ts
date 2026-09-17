@@ -8,7 +8,8 @@ import {
   lineContainerChain,
   linePrefixText,
   listItemPrefix,
-  nextListMarker
+  nextListMarker,
+  parentOf
 } from "./line-structure";
 
 import type { EditorSemanticContext } from "../context/editor-semantic-context";
@@ -17,6 +18,7 @@ import {
   type EditTransactionPlan,
   type TextEditOperation
 } from "../transactions/edit-transaction-plan";
+import { planFenceDraftEnter } from "./code-fence";
 
 // Enter is decided from the semantic context alone: line roles, prefix segments, and the
 // recursive tree. No DOM class names, no source rescans, and no CodeMirror state are involved.
@@ -61,11 +63,17 @@ export function decideEnter(context: EditorSemanticContext): EnterDecision | nul
   const chain = lineContainerChain(context, line);
   const activeNode = chain[chain.length - 1] ?? null;
   const offset = selection.activeOffset;
-  const contentText = context.source.slice(line.contentStartOffset, line.contentEndOffset);
 
-  // 1. Fenced content owns its own lines: Enter only repeats the container prefixes.
+  // 1. Fenced content owns its own lines: Enter only repeats the container prefixes, unless the
+  //    opener was never closed and Enter has to give the fence a body.
   if (line.role === "fence-open" || line.role === "fence-content" || line.role === "fence-close" ||
       isKind(activeNode, "code-fence") || isKind(activeNode, "block-math")) {
+    const draft = planFenceDraftEnter(context);
+
+    if (draft !== null) {
+      return { kind: "fence-line", plan: draft };
+    }
+
     return plainDecision(context, line, offset, "fence-line", "structural");
   }
 
@@ -84,7 +92,7 @@ export function decideEnter(context: EditorSemanticContext): EnterDecision | nul
 
   // 3. List items continue themselves, and an empty item leaves its level.
   if (item !== null && isItemLine(context, line, item)) {
-    return planListItemEnter(context, line, offset, item, contentText);
+    return planListItemEnter(context, line, offset, item);
   }
 
   // 4. A quoted line continues its marker run: a paragraph break inside a quote is written as a
@@ -316,35 +324,76 @@ function buildBlockquoteContinuationPrefix(sourcePrefix: string): string {
   return `${sourcePrefix} `;
 }
 
+// The blank line that separates two blocks inside the container prefixes the line already had.
+function buildContainerBreakPrefix(ancestorText: string): string {
+  if (ancestorText.length === 0) {
+    return "\n";
+  }
+
+  return `${ancestorText.replace(/[ \t]+$/u, "")}\n${buildBlockquoteContinuationPrefix(ancestorText)}`;
+}
+
+// The list an item belongs to is itself nested inside another item only when its own list sits
+// inside a list item; that item is the level an empty item drops to.
+function parentListItemOf(context: EditorSemanticContext, item: MarkdownNode): MarkdownNode | null {
+  const list = parentOf(context, item);
+
+  if (list === null || list.kind !== "list") {
+    return null;
+  }
+
+  const owner = parentOf(context, list);
+
+  return owner !== null && owner.kind === "list-item" ? owner : null;
+}
+
+function replaceLineDecision(
+  context: EditorSemanticContext,
+  line: PhysicalLine,
+  replacement: string,
+  caret: number
+): EnterDecision {
+  return paragraphBreakDecision(context, "list-exit", "structural", {
+    from: line.range.startOffset,
+    to: line.contentEndOffset,
+    insert: replacement,
+    caret
+  });
+}
+
 function planListItemEnter(
   context: EditorSemanticContext,
   line: PhysicalLine,
   offset: number,
-  item: MarkdownNode,
-  contentText: string
+  item: MarkdownNode
 ): EnterDecision {
   const prefix = listItemPrefix(line, context, item);
-  const isEmptyItem = contentText.trim().length === 0;
+  const leftContent = context.source.slice(line.contentStartOffset, offset);
+  const isEmptyItem = leftContent.trim().length === 0;
 
   if (isEmptyItem) {
-    // Leaving the item removes its own marker, leaving an empty line at the level above.
-    const exitPrefix = prefix.ancestorText;
-    const edits: TextEditOperation[] = [
-      { from: prefix.startOffset, to: line.contentStartOffset, insert: "" },
-      { from: line.contentStartOffset, to: line.contentStartOffset, insert: `\n${exitPrefix}` }
-    ];
-    const cursor = prefix.startOffset + 1 + exitPrefix.length;
+    const parentItem = parentListItemOf(context, item);
 
-    return {
-      kind: "list-exit",
-      plan: createEditTransactionPlan({
+    if (parentItem !== null) {
+      // An empty item inside a nested scope drops to its parent's level, keeping its marker.
+      const parentLine = context.lines.lineForNode(parentItem)[0] ?? null;
+      const parentPrefix = parentLine === null ? null : listItemPrefix(parentLine, context, parentItem);
+      const replacement = `${prefix.ancestorText}${parentPrefix?.indentationText ?? ""}${prefix.markerText}`;
+
+      return replaceLineDecision(
         context,
-        commandId: "enter",
-        intent: "structural",
-        edits,
-        selection: { anchor: cursor, head: cursor }
-      })
-    };
+        line,
+        replacement,
+        line.range.startOffset + replacement.length
+      );
+    }
+
+    // Leaving the outermost item removes its own marker: the line becomes the container's
+    // separator, and any content right of the caret moves to the continuation line.
+    const separator = buildContainerBreakPrefix(prefix.ancestorText);
+    const replacement = `${separator}${context.source.slice(offset, line.contentEndOffset)}`;
+
+    return replaceLineDecision(context, line, replacement, line.range.startOffset + separator.length);
   }
 
   const marker = nextListMarker(context, item, prefix.markerText);

@@ -137,6 +137,48 @@ export function planCodeFenceCompletion(
 }
 
 // Enter inside a fence keeps the fence open; Enter on the closing fence leaves it.
+// An opener that never closes is still a draft: Enter gives it an empty content line and the
+// closing marker, so the fence body has somewhere to go.
+export function planFenceDraftEnter(context: EditorSemanticContext): EditTransactionPlan | null {
+  const line = context.lineAt(context.selectionContext.activeOffset);
+
+  if (line === null || line.role !== "fence-open") {
+    return null;
+  }
+
+  const offset = context.selectionContext.activeOffset;
+
+  if (offset < line.contentEndOffset) {
+    return null;
+  }
+
+  const fence = fenceNodeAt(context);
+
+  if (fence === null || context.lines.lineForNode(fence).some((covered) => covered.role === "fence-close")) {
+    return null;
+  }
+
+  const content = context.source.slice(line.contentStartOffset, line.contentEndOffset);
+  const opener = /^( {0,3})(`{3,}|~{3,})/u.exec(content);
+
+  if (opener === null) {
+    return null;
+  }
+
+  const prefix = linePrefixText(line);
+  const closing = `${prefix}${opener[1] ?? ""}${opener[2] ?? ""}`;
+  const insert = `\n${prefix}\n${closing}`;
+  const anchor = offset + 1 + prefix.length;
+
+  return createEditTransactionPlan({
+    context,
+    commandId: "enter",
+    intent: "structural",
+    edits: [{ from: offset, to: offset, insert }],
+    selection: { anchor, head: anchor }
+  });
+}
+
 export function planCodeFenceEnter(context: EditorSemanticContext): EditTransactionPlan | null {
   const line = context.lineAt(context.selectionContext.activeOffset);
 
@@ -152,6 +194,12 @@ export function planCodeFenceEnter(context: EditorSemanticContext): EditTransact
 
   const offset = context.selectionContext.activeOffset;
   const prefix = linePrefixText(line);
+
+  const draft = planFenceDraftEnter(context);
+
+  if (draft !== null) {
+    return draft;
+  }
 
   if (line.role === "fence-close" || line.role === "fence-open" && offset >= line.contentEndOffset) {
     // Leaving the fence: the caret moves to a fresh line after it.
