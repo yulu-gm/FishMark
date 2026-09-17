@@ -1370,7 +1370,7 @@ npm.cmd run test -- packages/editor-model/src/commands
 
 **Outcome:** old editor-core semantic commands, physical-line models, and parsing helpers are deleted.
 
-**Preparation landed ahead of this task:** `packages/editor-model/src/commands/list-move.ts` moves a list-item subtree up/down through the canonical list scopes (renumbering ordered scopes with the loose-item restart rule) and `commands/ordered-list.ts` normalizes ordered scopes; `@fishmark/markdown-engine` now exposes `readListScopes`/`readFlatListItems`/`collectBlockquotePrefixSpans` so the semantic engine and the parser share one scope reader. The remaining work is the consumer cutover: the CodeMirror-to-editor-model bridge, routing keyboard/menu/toolbar/table-widget/test-driver commands, and the deletions below.
+**Preparation landed ahead of this task:** `packages/editor-core/src/commands/editor-model-bridge.ts` owns the one non-pure piece (a per-view document structure cache that follows CodeMirror edits incrementally and reparses on multi-range changes) and exposes `readEditorSemanticContext` / `applyEditorPlan` / `runEditorPlanCommand`, so a keypress can run any `@fishmark/editor-model` planner as a single CodeMirror transaction. `packages/editor-model/src/commands/list-move.ts` moves a list-item subtree up/down through the canonical list scopes (renumbering ordered scopes with the loose-item restart rule) and `commands/ordered-list.ts` normalizes ordered scopes; `@fishmark/markdown-engine` now exposes `readListScopes`/`readFlatListItems`/`collectBlockquotePrefixSpans` so the semantic engine and the parser share one scope reader. The remaining work is the consumer cutover: the CodeMirror-to-editor-model bridge, routing keyboard/menu/toolbar/table-widget/test-driver commands, and the deletions below.
 
 **Files:**
 
@@ -1856,6 +1856,7 @@ The refactor is complete only when all statements below are true:
 - Renderer sandbox, CSP, IPC sender validation, and resource path allowlists are active.
 - Old editor-core, old parser, full-draft sync, renderer conflict state, compatibility adapters, dead code, and stale tests/docs are deleted.
 - Build, lint, typecheck, full tests, performance gates, E2E, architecture acceptance, and task acceptance all pass with fresh evidence.
+
 
 
 

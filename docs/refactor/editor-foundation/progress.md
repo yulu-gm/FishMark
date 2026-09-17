@@ -275,6 +275,8 @@ Append one entry when a task changes to `DEV_DONE`, then amend the same entry af
 
 | 2026-08-14 | RF-506 (preparation) | Ported the last missing pure semantics before the cutover: `commands/list-move.ts` (move an item subtree up/down through canonical list scopes, with ordered renumbering and the loose-item restart rule) and `commands/ordered-list.ts` (ordered scope normalization). Exposed `readListScopes`, `readFlatListItems`, `collectBlockquotePrefixSpans` and their types from `@fishmark/markdown-engine` so commands and the parser share one list-scope reader. Also corrected the loose-item tail rule so indented continuation lines do not restart numbering. | Focused `packages/editor-model` 93 tests (10 new). | typecheck; lint 0 errors / 8 pre-existing warnings; full Vitest 193 files / 2,501 passed + 1 skipped (one load-related renderer flake passed on rerun). | Preparation only: the RF-506 consumer cutover (CodeMirror bridge, command routing, ~8.2k-line deletion) is still pending and the branch is otherwise identical to `main`. | RF-506 remains PLANNED; M5 is 5/6. |
 
+| 2026-08-14 | RF-506 (preparation) | Added the editor-model command bridge (`packages/editor-core/src/commands/editor-model-bridge.ts`): a per-view `DocumentStructureCache` state field that updates incrementally for single-range edits and reparses for multi-range changes, plus `readEditorSemanticContext`/`applyEditorPlan`/`runEditorPlanCommand` so any planner runs as one CodeMirror transaction. Added the `@fishmark/editor-model` alias to the renderer tsconfig and both Vite/Vitest configs, and registered the two bridge import exceptions in the guard manifest (`retireIn: RF-604`). 5 focused bridge tests. The field is deliberately not installed in the extension list yet, so the shipped app is unchanged. | Focused bridge 5 tests; `packages/editor-core` + `packages/editor-model` 98 tests. | typecheck; lint 0 errors / 8 pre-existing warnings; build exit 0; full Vitest 194 files / 2,506 passed + 1 skipped; architecture guard 234 tests. | Preparation only: RF-506 still needs the command routing, the ~8.2k-line deletion and the test replacement. | RF-506 remains PLANNED; M5 is 5/6. |
+
 ## 8. Blockers and deviations
 
 There are no accepted external blockers or roadmap deviations. RF-001, RF-002, RF-101, RF-102, RF-201, RF-202, RF-203, RF-204, RF-301, RF-302, RF-303, RF-304, and RF-401 through RF-405 are complete. M0, M1, M2, M3, and M4 are each `COMPLETE`; M5 is 5/6 `IN_PROGRESS`; accepted program completion is 22/38. RF-506 is the next dependency-ready task.
@@ -342,6 +344,7 @@ When acceptance fails:
 - [ ] Architecture acceptance result is `PASS`.
 - [ ] Task acceptance result is `PASS`.
 - [ ] Stable docs, backlog, progress, test cases/report, package READMEs, and task summaries agree.
+
 
 
 
