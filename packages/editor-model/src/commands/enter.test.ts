@@ -30,21 +30,46 @@ function applyPlan(source: string, offset: number): { text: string; cursor: numb
 }
 
 describe("planEnter", () => {
-  it("inserts a plain line break at the end of a paragraph", () => {
+  it("separates paragraphs with a blank line", () => {
     const source = "Alpha";
     const result = applyPlan(source, source.length);
 
     expect(result.kind).toBe("plain");
-    expect(result.text).toBe("Alpha\n");
-    expect(result.cursor).toBe(6);
+    expect(result.text).toBe("Alpha\n\n");
+    expect(result.cursor).toBe(7);
   });
 
-  it("exits a heading instead of continuing it", () => {
+  it("pushes one extra blank line in before following content", () => {
+    const source = ["Alpha", "Beta"].join("\n");
+    const result = applyPlan(source, "Alpha".length);
+
+    expect(result.text).toBe("Alpha\n\n\n\nBeta");
+    expect(result.cursor).toBe(7);
+  });
+
+  it("opens a new paragraph from the start of a line after a blank line", () => {
+    const source = ["Alpha", "", "Beta"].join("\n");
+    const result = applyPlan(source, "Alpha\n\n".length);
+
+    expect(result.text).toBe("Alpha\n\n\n\nBeta");
+    expect(result.cursor).toBe("Alpha\n\n".length + 1);
+  });
+
+  it("separates a whitespace-only line with a blank line", () => {
+    const source = "   ";
+    const result = applyPlan(source, source.length);
+
+    expect(result.kind).toBe("structural-blank");
+    expect(result.text).toBe("   \n\n");
+    expect(result.cursor).toBe(5);
+  });
+
+  it("exits a heading into a new paragraph", () => {
     const source = "# Title";
     const result = applyPlan(source, source.length);
 
     expect(result.kind).toBe("heading-exit");
-    expect(result.text).toBe("# Title\n");
+    expect(result.text).toBe("# Title\n\n");
   });
 
   it("continues an unordered list item with the same marker", () => {
@@ -80,13 +105,25 @@ describe("planEnter", () => {
     expect(result.cursor).toBe(result.text.length);
   });
 
-  it("continues a quoted paragraph inside the same quote level", () => {
+  it("writes a paragraph break inside a quote as a separator carrying the marker", () => {
     const source = "> quoted";
     const result = applyPlan(source, source.length);
 
     expect(result.kind).toBe("quote-continue");
-    expect(result.text).toBe("> quoted\n> ");
+    expect(result.text).toBe("> quoted\n>\n> ");
     expect(result.cursor).toBe(result.text.length);
+  });
+
+  it("keeps every marker on a separator line of a nested quote", () => {
+    const source = "> > quoted";
+    const result = applyPlan(source, source.length);
+
+    expect(result.text).toBe("> > quoted\n> > \n> > ");
+  });
+
+  it("commits an unterminated quote marker before breaking the line", () => {
+    expect(applyPlan(">", 1).text).toBe("> \n> ");
+    expect(applyPlan("> >", 3).text).toBe("> > \n> > ");
   });
 
   it("exits exactly one quote level from an empty quoted line", () => {
@@ -94,14 +131,16 @@ describe("planEnter", () => {
     const result = applyPlan(source, source.length);
 
     expect(result.kind).toBe("quote-exit");
-    expect(result.text).toBe(["> outer", "> > inner", "> ", "> "].join("\n"));
+    expect(result.text).toBe(["> outer", "> > inner", "> "].join("\n"));
   });
 
-  it("preserves enclosing container prefixes on a structural blank line", () => {
-    const source = ["> - item", "> "].join("\n");
+  it("leaves the quote from an empty innermost quoted line", () => {
+    const source = ["> outer", "> "].join("\n");
     const result = applyPlan(source, source.length);
 
-    expect(result.text.startsWith("> - item\n> ")).toBe(true);
+    expect(result.kind).toBe("quote-exit");
+    expect(result.text).toBe("> outer\n");
+    expect(result.cursor).toBe("> outer\n".length);
   });
 
   it("keeps fenced content lines free of structure", () => {
@@ -142,8 +181,9 @@ describe("planEnter", () => {
     cursor = first.cursor;
 
     let lines = current.split("\n");
-    expect(lines).toHaveLength(2);
+    expect(lines).toHaveLength(3);
     expect(lines[1]).toBe("> ".repeat(8));
+    expect(lines[2]).toBe("> ".repeat(8));
 
     // Each further Enter on the empty quoted line leaves exactly one quote level.
     for (let level = 7; level >= 1; level -= 1) {
