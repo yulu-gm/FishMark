@@ -28,9 +28,12 @@ import {
   runTableUpdateCell,
   setMarkdownEditorViewMode,
   type ActiveBlockState,
+  type SemanticCommandBindings,
   type EditorViewMode
 } from "@fishmark/editor-core";
 import { parseMarkdownDocument } from "@fishmark/markdown-engine";
+import { planPrintableInput } from "@fishmark/editor-model";
+import { readCompositionState } from "@fishmark/codemirror-adapter";
 
 import { createPreviewAssetUrl } from "../shared/preview-asset-url";
 import type { DocumentTextChange } from "../shared/document-edit";
@@ -153,6 +156,7 @@ export function createCodeEditorController(
   let currentReadOnly = options.readOnly ?? false;
   const readOnlyCompartment = new Compartment();
   let isDestroyed = false;
+  let semanticCommands: SemanticCommandBindings;
   let documentIdentity: EditorLoadIdentity | null = null;
   let pendingDocumentChanges: {
     identity: EditorLoadIdentity | null;
@@ -198,7 +202,7 @@ export function createCodeEditorController(
 
   const emitPendingDocumentChanges = () => {
     cancelPendingFrame();
-    if (pendingDocumentChanges === null || isDestroyed || isComposing) return;
+    if (pendingDocumentChanges === null || isDestroyed || isComposing || readCompositionState(view.state).active) return;
 
     const pending = pendingDocumentChanges;
     pendingDocumentChanges = null;
@@ -248,8 +252,9 @@ export function createCodeEditorController(
     if (
       pendingFrameHandle !== null ||
       isComposing ||
+      readCompositionState(view.state).active ||
       isDestroyed ||
-      (pendingDocumentChanges === null && compositionSealWaiters.size === 0)
+      (pendingDocumentChanges === null && compositionSealWaiters.size === 0 && !compositionCheckpointPending)
     ) {
       return;
     }
@@ -258,7 +263,7 @@ export function createCodeEditorController(
       if (frameEpoch !== pendingFrameEpoch || isDestroyed) return;
       pendingFrameHandle = null;
       emitPendingDocumentChanges();
-      if (!isComposing) {
+      if (!isComposing && !readCompositionState(view.state).active) {
         compositionCheckpointPending = false;
         resolveCompositionSeals();
       }
@@ -296,7 +301,14 @@ export function createCodeEditorController(
   };
 
   const observeDocumentUpdate = (update: ViewUpdate) => {
-    if (!update.docChanged) return;
+    if (!update.docChanged) {
+      // Composition can finish without another text change. The adapter's finish
+      // transaction, not the DOM compositionend event, releases pending barriers.
+      if (compositionCheckpointPending && !readCompositionState(update.state).active) {
+        scheduleCompositionCheckpoint();
+      }
+      return;
+    }
     const containsInternalDocumentTransaction = update.transactions.some(
       (transaction) => transaction.docChanged && !observeDocumentTransaction(transaction)
     );
@@ -352,6 +364,7 @@ export function createCodeEditorController(
         ),
         EditorView.updateListener.of(observeDocumentUpdate),
         createFishMarkMarkdownExtensions({
+          onSemanticCommands: (commands) => { semanticCommands = commands; },
           parseMarkdownDocument,
           onContentChange: (nextContent) => {
             options.onChange(nextContent);
@@ -542,7 +555,7 @@ export function createCodeEditorController(
       text: view.state.doc.toString(),
       identity: documentIdentity === null ? null : Object.freeze({ ...documentIdentity })
     });
-    if (!isComposing && !compositionCheckpointPending) {
+    if (!isComposing && !compositionCheckpointPending && !readCompositionState(view.state).active) {
       emitPendingDocumentChanges();
       return Promise.resolve(snapshot());
     }
@@ -610,6 +623,7 @@ export function createCodeEditorController(
     }
     // A recovery boundary deliberately starts a fresh editor history.
     view.setState(createState(input.canonicalText));
+    semanticCommands.bindSession(view, documentIdentity?.tabId);
     return Object.freeze({ kind: "restored" });
   };
 
@@ -660,25 +674,32 @@ export function createCodeEditorController(
       });
     },
     replaceDocument(nextContent: string) {
-      if (isComposing || compositionCheckpointPending) {
+      if (isComposing || compositionCheckpointPending || readCompositionState(view.state).active) {
         discardPendingDocumentChanges();
         abortCompositionCheckpoint();
       } else {
         emitPendingDocumentChanges();
       }
       view.setState(createState(nextContent));
+      semanticCommands.bindSession(view, documentIdentity?.tabId);
     },
     setDocumentIdentity(nextIdentity: EditorLoadIdentity | null) {
-      if (isComposing || compositionCheckpointPending) {
+      if (isComposing || compositionCheckpointPending || readCompositionState(view.state).active) {
         discardPendingDocumentChanges();
         abortCompositionCheckpoint();
       } else {
         emitPendingDocumentChanges();
       }
       documentIdentity = nextIdentity === null ? null : Object.freeze({ ...nextIdentity });
+      semanticCommands.bindSession(view, documentIdentity?.tabId);
+      view.dispatch({ effects: semanticCommands.adapter.resetComposition() });
     },
     flushPendingDocumentChanges() {
       emitPendingDocumentChanges();
+      if (!isComposing && !readCompositionState(view.state).active) {
+        compositionCheckpointPending = false;
+        resolveCompositionSeals();
+      }
     },
     sealForBarrier,
     applyRemoteDocumentPatch,
@@ -730,20 +751,7 @@ export function createCodeEditorController(
       view.focus();
     },
     insertText(text: string) {
-      const selection = view.state.selection.main;
-      const nextAnchor = selection.from + text.length;
-
-      view.dispatch({
-        changes: {
-          from: selection.from,
-          to: selection.to,
-          insert: text
-        },
-        selection: {
-          anchor: nextAnchor,
-          head: nextAnchor
-        }
-      });
+      semanticCommands.run(view, context => planPrintableInput(context, text));
     },
     setSelection(anchor: number, head = anchor) {
       view.dispatch({
@@ -811,6 +819,7 @@ export function createCodeEditorController(
       view.contentDOM.removeEventListener("compositionstart", handleCompositionStart);
       view.contentDOM.removeEventListener("compositionend", handleCompositionEnd);
       view.dom.removeEventListener("paste", handlePaste);
+      semanticCommands.releaseSession();
       view.destroy();
     }
   };

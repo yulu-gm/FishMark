@@ -71,7 +71,7 @@ export function tablePositionAt(context: EditorSemanticContext): TablePosition |
   const cursor = context.tableAt(context.selectionContext.activeOffset);
 
   if (cursor === null) {
-    return null;
+    return readTableSnapshot(context) === null ? null : { row: 0, column: 0, offsetInCell: 0 };
   }
 
   return {
@@ -128,6 +128,54 @@ export function planTablePreviousCell(context: EditorSemanticContext): EditTrans
   const next = previousPosition(readTableSnapshot(context)!, position);
 
   return planTableMoveToCell(context, next);
+}
+
+export function planTableMoveHorizontal(context: EditorSemanticContext, direction: "left" | "right"): EditTransactionPlan | null {
+  const cursor = context.tableAt(context.selectionContext.activeOffset);
+  if (cursor === null || !context.selectionContext.empty) return null;
+  const offset = context.selectionContext.activeOffset;
+  if (direction === "left" ? offset > cursor.cell.content.startOffset : offset < cursor.cell.content.endOffset) return null;
+  const snapshot = readTableSnapshot(context)!;
+  const position = tablePositionAt(context)!;
+  const target = direction === "left" ? previousPosition(snapshot, position) : nextPosition(snapshot, position);
+  return planTableMoveToCell(context, { ...target, offsetInCell: direction === "left" ? Number.MAX_SAFE_INTEGER : 0 });
+}
+
+export function planTableBackspaceFromBelow(context: EditorSemanticContext): EditTransactionPlan | null {
+  const selection = context.selectionContext;
+  const line = context.lineAt(selection.activeOffset);
+  if (!selection.empty || line === null || selection.activeOffset !== line.range.startOffset || line.contentEndOffset !== line.range.startOffset) return null;
+  for (const node of [...context.snapshot.tree.nodesById.values()].reverse()) {
+    if (node.data.kind !== "table" || node.source.endOffset > line.range.startOffset) continue;
+    const gap = context.source.slice(node.source.endOffset, line.range.startOffset);
+    if (!/^(?:\r?\n){1,2}$/u.test(gap)) return null;
+    const cell = (node.data.rows.at(-1) ?? node.data.header).at(-1);
+    if (cell === undefined) return null;
+    const anchor = cell.content.endOffset;
+    return createEditTransactionPlan({ context, commandId: "table-edit", intent: "navigation", edits: [], selection: { anchor, head: anchor } });
+  }
+  return null;
+}
+
+export function planTableMoveVertical(context: EditorSemanticContext, direction: "up" | "down"): EditTransactionPlan | null {
+  const position = tablePositionAt(context);
+  const snapshot = readTableSnapshot(context);
+  if (position === null || snapshot === null) return null;
+  const row = position.row + (direction === "down" ? 1 : -1);
+  if (row >= 0 && row < totalRowCount(snapshot)) return planTableMoveToCell(context, { ...position, row });
+  if (direction === "down") return planTableExitBelow(context);
+  const first = context.lineAt(snapshot.node.source.startOffset);
+  if (first === null) return null;
+  let previous = context.lines.lines[first.lineNumber - 2];
+  if (previous !== undefined && previous.lineNumber > 1 && previous.contentEndOffset === previous.range.startOffset) {
+    const above = context.lines.lines[previous.lineNumber - 2]!;
+    if (above.contentEndOffset > above.range.startOffset) previous = above;
+  }
+  if (previous !== undefined) {
+    const anchor = previous.contentEndOffset;
+    return createEditTransactionPlan({ context, commandId: "table-edit", intent: "navigation", edits: [], selection: { anchor, head: anchor } });
+  }
+  return null;
 }
 
 export function planTableInsertRowBelow(context: EditorSemanticContext): EditTransactionPlan | null {
@@ -199,8 +247,8 @@ export function planTableExitBelow(context: EditorSemanticContext): EditTransact
   const tableEnd = snapshot.node.source.endOffset;
   const nextBreak = context.source.indexOf("\n", tableEnd);
 
-  if (nextBreak === -1) {
-    const insert = "\n\n";
+  if (nextBreak === -1 || nextBreak === context.source.length - 1) {
+    const insert = nextBreak === -1 ? "\n\n" : "\n";
 
     return createEditTransactionPlan({
       context,
@@ -216,9 +264,9 @@ export function planTableExitBelow(context: EditorSemanticContext): EditTransact
 
   // A single structural blank line below the table is skipped so the caret lands on real content.
   const nextLineStart = nextBreak + 1;
-  const lineAfterBlank = context.source.indexOf("\n", nextLineStart);
-  const isBlankLine = context.source.slice(nextLineStart, nextBreak + 2).trim().length === 0;
-  const anchor = isBlankLine && lineAfterBlank !== -1 ? lineAfterBlank + 1 : nextLineStart;
+  const nextLine = context.lineAt(nextLineStart);
+  const anchor = nextLine !== null && nextLine.contentEndOffset === nextLine.range.startOffset && nextLine.range.endOffset > nextLineStart
+    ? nextLine.range.endOffset : nextLineStart;
 
   return createEditTransactionPlan({
     context,
@@ -290,7 +338,7 @@ function decideInsertColumn(
 
   const insertionColumn = where === "left" ? position.column : position.column + 1;
   const alignments = [...snapshot.alignments];
-  alignments.splice(insertionColumn, 0, "none");
+  alignments.splice(insertionColumn, 0, "left");
   const header = insertAt([...snapshot.header], insertionColumn, "");
   const rows = snapshot.rows.map((row) => insertAt([...row], insertionColumn, ""));
 

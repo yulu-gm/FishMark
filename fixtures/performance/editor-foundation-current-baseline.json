@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "fixture": {
     "schemaVersion": 1,
     "fixtureId": "fishmark-rf-complex-20000-lines-v1",
@@ -15,13 +15,9 @@
   },
   "capabilities": {
     "incrementalStructureCache": {
-      "available": false,
-      "reason": "incremental-structure-cache-not-implemented",
-      "zeroCounters": [
-        "incrementalParseWindow",
-        "cacheHit",
-        "invalidatedNodes"
-      ]
+      "available": true,
+      "reason": null,
+      "zeroCounters": []
     }
   },
   "operations": [
@@ -35,38 +31,38 @@
         "decorationRebuild": 1
       },
       "parserEntries": {
-        "parseMarkdownDocument": 2,
-        "parseOrderedListNormalization": 0
-      },
-      "capabilityRefs": [
-        "incrementalStructureCache"
-      ],
-      "unavailableCapabilityReason": "incremental-structure-cache-not-implemented"
-    },
-    {
-      "name": "edit",
-      "counters": {
-        "fullParse": 2,
-        "incrementalParseWindow": 0,
-        "cacheHit": 0,
-        "invalidatedNodes": 0,
-        "decorationRebuild": 1
-      },
-      "parserEntries": {
         "parseMarkdownDocument": 1,
         "parseOrderedListNormalization": 0
       },
       "capabilityRefs": [
         "incrementalStructureCache"
       ],
-      "unavailableCapabilityReason": "incremental-structure-cache-not-implemented"
+      "unavailableCapabilityReason": null
+    },
+    {
+      "name": "edit",
+      "counters": {
+        "fullParse": 2,
+        "incrementalParseWindow": 0,
+        "cacheHit": 1,
+        "invalidatedNodes": 19501,
+        "decorationRebuild": 1
+      },
+      "parserEntries": {
+        "parseMarkdownDocument": 0,
+        "parseOrderedListNormalization": 0
+      },
+      "capabilityRefs": [
+        "incrementalStructureCache"
+      ],
+      "unavailableCapabilityReason": null
     },
     {
       "name": "selection",
       "counters": {
         "fullParse": 0,
         "incrementalParseWindow": 0,
-        "cacheHit": 0,
+        "cacheHit": 1,
         "invalidatedNodes": 0,
         "decorationRebuild": 0
       },
@@ -77,25 +73,25 @@
       "capabilityRefs": [
         "incrementalStructureCache"
       ],
-      "unavailableCapabilityReason": "incremental-structure-cache-not-implemented"
+      "unavailableCapabilityReason": null
     },
     {
       "name": "orderedListEdit",
       "counters": {
-        "fullParse": 4,
+        "fullParse": 2,
         "incrementalParseWindow": 0,
-        "cacheHit": 0,
-        "invalidatedNodes": 0,
+        "cacheHit": 1,
+        "invalidatedNodes": 19501,
         "decorationRebuild": 1
       },
       "parserEntries": {
-        "parseMarkdownDocument": 1,
-        "parseOrderedListNormalization": 1
+        "parseMarkdownDocument": 0,
+        "parseOrderedListNormalization": 0
       },
       "capabilityRefs": [
         "incrementalStructureCache"
       ],
-      "unavailableCapabilityReason": "incremental-structure-cache-not-implemented"
+      "unavailableCapabilityReason": null
     },
     {
       "name": "outline",
@@ -113,7 +109,7 @@
       "capabilityRefs": [
         "incrementalStructureCache"
       ],
-      "unavailableCapabilityReason": "incremental-structure-cache-not-implemented"
+      "unavailableCapabilityReason": "consumer-does-not-use-incremental-structure-cache"
     },
     {
       "name": "metrics",
@@ -131,7 +127,7 @@
       "capabilityRefs": [
         "incrementalStructureCache"
       ],
-      "unavailableCapabilityReason": "incremental-structure-cache-not-implemented"
+      "unavailableCapabilityReason": "consumer-does-not-use-incremental-structure-cache"
     }
   ]
 }

@@ -30,6 +30,46 @@ function applyPlan(source: string, offset: number): { text: string; cursor: numb
 }
 
 describe("planEnter", () => {
+  it("continues the innermost quote inside a list without cloning its ancestor marker", () => {
+    const first = applyPlan("- > alpha", 6);
+    expect(first.text).toBe("- > al\n  > \n  > pha");
+    expect(applyPlan(first.text, first.cursor).text).toBe("- > al\n  > \n  > \n  > \n  > pha");
+    const end = applyPlan("- > quote", 9);
+    expect(end.text).toBe("- > quote\n  > ");
+    expect(applyPlan(end.text, end.cursor).text).toBe("- > quote\n  \n");
+  });
+  it("continues an inner list using indentation for the enclosing item", () => {
+    const first = applyPlan("- > - alpha", 8);
+    expect(first.text).toBe("- > - al\n  > - pha");
+    expect(applyPlan(first.text, first.cursor).text).toBe("- > - al\n  > \n  > pha");
+  });
+  it("keeps the quoted body separator prefix when a split list item is promoted", () => {
+    const first = applyPlan("> - alpha", "> - al".length);
+    expect(first.text).toBe("> - al\n> - pha");
+    const second = applyPlan(first.text, first.cursor);
+    expect(second.text).toBe("> - al\n> \n> pha");
+    expect(second.cursor).toBe(12);
+  });
+  it("promotes the complete subtree and separates a promoted root body from following list content", () => {
+    const source = "- parent\n  - child\n    - grandchild\n- sibling";
+    expect(applyPlan(source, source.indexOf("child")).text).toBe("- parent\n- child\n  - grandchild\n- sibling");
+    expect(applyPlan(source, source.indexOf("parent")).text).toBe("parent\n\n- child\n  - grandchild\n- sibling");
+  });
+
+  it("materializes a draft table and selects the first editable body cell without reparsing the formatted text", () => {
+    const source = "| a | b |";
+    const result = applyPlan(source, source.length);
+    expect(result.text).toBe("| a | b |\n| :--- | :--- |\n|   |   |");
+    expect(result.cursor).toBe(result.text.lastIndexOf("|   |   |") + 2);
+  });
+  it("keeps the checkbox when an empty nested task item is promoted", () => {
+    const source = ["- [ ] parent", "  - [ ] "].join("\n");
+    const result = applyPlan(source, source.length);
+
+    // Promotion only changes the level, so the marker and the checkbox both survive.
+    expect(result.text).toBe(["- [ ] parent", "- [ ] "].join("\n"));
+  });
+
   it("separates paragraphs with a blank line", () => {
     const source = "Alpha";
     const result = applyPlan(source, source.length);
@@ -152,8 +192,31 @@ describe("planEnter", () => {
     expect(result.text).toBe(["```ts", "const value = 1;", "", "```"].join("\n"));
   });
 
-  it("grows a table by one empty row at its boundary", () => {
-    const source = ["| a | b |", "| --- | --- |", "| 1 | 2 |"].join("\n");
+  // The recursive tree stores indented items as flat siblings of one list, so an empty nested
+  // item's level is read from its own indentation run rather than from tree ancestry. Enter on it
+  // promotes the item one level, keeping the marker so the ordered-list normalizer renumbers it.
+  it("promotes an empty nested ordered item to its parent's level", () => {
+    const source = ["1. Parent", "  1. "].join("\n");
+    const result = applyPlan(source, source.length);
+
+    expect(result.text).toBe(["1. Parent", "1. "].join("\n"));
+  });
+
+  it("promotes an empty nested bullet item to its parent's level", () => {
+    const source = ["- parent", "  - "].join("\n");
+    const result = applyPlan(source, source.length);
+
+    expect(result.text).toBe(["- parent", "- "].join("\n"));
+  });
+
+  it("promotes an empty nested quoted item while preserving the quote", () => {
+    const source = ["> - parent", ">   - "].join("\n");
+    const result = applyPlan(source, source.length);
+
+    expect(result.text).toBe(["> - parent", "> - "].join("\n"));
+  });
+
+  it("grows a table by one empty row at its boundary", () => {    const source = ["| a | b |", "| --- | --- |", "| 1 | 2 |"].join("\n");
     const result = applyPlan(source, source.length);
 
     expect(result.kind).toBe("table-row");

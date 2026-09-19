@@ -6,6 +6,10 @@
 
 ## 当前项目判断
 
+### 2026-09-19 M5/M6 持续实现
+
+用户授权通过 SubAgent 推进 M5 与 M6。RF-506 当前为 `DEV_DONE`（行为/安全验收 PASS，包体积 FAIL、最终性能验收 pending）；代码基于主目录未提交改动，而非旧 refactor worktree。父 agent 负责计划与独立验收，实现按 runtime 与 pure model 分工，审查 agent 处理明确的 adapter 安全/性能前置缺陷。父最终 2671 passed / 1 skipped、lint/typecheck/build、正式行为 121/121 与编辑交互均通过；M5 不提前标 COMPLETE。按调整后的依赖先推进 RF-701 → RF-602/603/604，删除重复显示派生后按原包体积预算共同收口。当前 intake：`docs/plans/2026-09-19-rf-506-intake.md`。
+
 ### 2026-09-17 Editor Foundation 复审修复与路线调整
 
 当前任务 `RF-HARDEN-001`：`ACCEPTED`，父 agent 独立验收 `PASS`。单个实现 agent 修复了恢复基线/落盘确认、增量正确性/隐藏全文解析、桥接版本与快照复用。全量 195 文件、2,535 passed / 1 skipped，独立审计 19/19，build/typecheck/lint 与正式行为 121/121 通过。后续专注可维护与可扩展、编辑交互、性能；下一任务 RF-601 事务/history/IME 与新路径性能验证，之后 RF-506 → RF-701 共享 render plan → RF-602/603/604。复杂结构全文回退、真实平台 IME 与 20k 输入到绘制尚未验收，不把本轮 PASS 扩张为整个重构完成。详见 `reports/task-summaries/RF-HARDEN-001.md`。下方旧日期记录是历史，不代表当前正在执行 RF-101。

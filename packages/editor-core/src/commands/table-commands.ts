@@ -1,310 +1,92 @@
 import type { EditorView } from "@codemirror/view";
-
+import {
+  planTableDelete, planTableDeleteColumn, planTableDeleteRow,
+  planTableInsertColumnLeft, planTableInsertColumnRight, planTableInsertRowAbove, planTableInsertRowBelow,
+  planTableNextCell, planTablePreviousCell, planTableMoveToCell, planTableUpdateCell,
+  planTableMoveVertical, planTableMoveHorizontal, reselectEditorSemanticContext,
+  planTableBackspaceFromBelow,
+  type EditorSemanticContext
+} from "@fishmark/editor-model";
 import type { ActiveBlockState } from "../active-block";
-import {
-  findTableBlockByStartOffset,
-  getTableCell,
-  readTableContext,
-  type TablePosition
-} from "./table-context";
-import {
-  computeDeleteTable,
-  computeDeleteTableColumn,
-  computeDeleteTableRow,
-  computeExitTableAbove,
-  computeExitTableBelow,
-  computeInsertTableColumnLeft,
-  computeInsertTableColumnRight,
-  computeInsertTableRowAbove,
-  computeInsertTableRowBelow,
-  computeMoveToNextTableCellAtBoundary,
-  computeMoveToNextTableCell,
-  computeMoveToPreviousTableCellAtBoundary,
-  computeMoveToPreviousTableCell,
-  computeMoveToTableRowAbove,
-  computeMoveToTableRowBelow,
-  computeUpdateTableCell,
-  isExitSelectionTarget,
-  type TableExitTarget,
-  type TableSemanticEdit
-} from "./table-edits";
+import { runSemanticCommand, type SemanticCommandPlanner } from "@fishmark/codemirror-adapter";
+import type { TablePosition } from "./table-context";
 
-export function runTableNextCell(view: EditorView, activeState: ActiveBlockState): boolean {
-  return applyTableSemanticEdit(
-    view,
-    activeState,
-    computeMoveToNextTableCell(readTableContext(view.state, activeState))
-  );
+// Widget callbacks carry the table's source identity because focus may still be in a neighbouring
+// paragraph. Reselect only the immutable context; the resulting plan performs the single dispatch.
+function contextForTable(context: EditorSemanticContext, target: TablePosition): EditorSemanticContext {
+  if (target.tableStartOffset === undefined) return context;
+  const offset = target.tableStartOffset;
+  return reselectEditorSemanticContext(context, { anchor: offset, head: offset });
 }
-
-export function runTablePreviousCell(view: EditorView, activeState: ActiveBlockState): boolean {
-  return applyTableSemanticEdit(
-    view,
-    activeState,
-    computeMoveToPreviousTableCell(readTableContext(view.state, activeState))
-  );
+const run = (view: EditorView, planner: SemanticCommandPlanner) => runSemanticCommand(view, planner);
+export function runTableNextCell(view: EditorView, _state: ActiveBlockState): boolean {
+  void _state;
+  return run(view, planTableNextCell);
 }
-
-export function runTableMoveUp(view: EditorView, activeState: ActiveBlockState): boolean {
-  const ctx = readTableContext(view.state, activeState);
-
-  return applyTableSemanticEdit(view, activeState, computeMoveToTableRowAbove(ctx) ?? computeExitTableAbove(ctx));
+export function runTablePreviousCell(view: EditorView, _state: ActiveBlockState): boolean {
+  void _state;
+  return run(view, planTablePreviousCell);
 }
-
-export function runTableMoveDown(view: EditorView, activeState: ActiveBlockState): boolean {
-  const ctx = readTableContext(view.state, activeState);
-
-  return applyTableSemanticEdit(view, activeState, computeMoveToTableRowBelow(ctx) ?? computeExitTableBelow(ctx));
+export function runTableMoveUp(view: EditorView, _state: ActiveBlockState): boolean {
+  void _state;
+  return run(view, context => planTableMoveVertical(context, "up"));
 }
-
-export function runTableEnterFromLineAbove(view: EditorView, activeState: ActiveBlockState): boolean {
-  if (activeState.tableCursor?.mode !== "adjacent-above") {
-    return false;
-  }
-
-  return runTableSelectCell(view, activeState, {
-    row: activeState.tableCursor.row,
-    column: activeState.tableCursor.column,
-    tableStartOffset: activeState.tableCursor.tableStartOffset,
-    offsetInCell: activeState.tableCursor.offsetInCell
-  });
+export function runTableMoveDown(view: EditorView, _state: ActiveBlockState): boolean {
+  void _state;
+  return run(view, context => planTableMoveVertical(context, "down"));
 }
-
-export function runTableEnterFromLineBelow(view: EditorView, activeState: ActiveBlockState): boolean {
-  if (activeState.tableCursor?.mode !== "adjacent-below") {
-    return false;
-  }
-
-  return runTableSelectCell(view, activeState, {
-    row: activeState.tableCursor.row,
-    column: activeState.tableCursor.column,
-    tableStartOffset: activeState.tableCursor.tableStartOffset,
-    offsetInCell: activeState.tableCursor.offsetInCell
-  });
+export const runTableMoveDownOrExit = runTableMoveDown;
+export function runTableMoveLeft(view: EditorView, _state: ActiveBlockState): boolean {
+  void _state;
+  return run(view, context => planTableMoveHorizontal(context, "left"));
 }
-
-export function runTableBackspaceFromLineBelow(view: EditorView, activeState: ActiveBlockState): boolean {
-  if (activeState.tableCursor?.mode !== "adjacent-below") {
-    return false;
-  }
-
-  const selection = view.state.selection.main;
-
-  if (!selection.empty) {
-    return false;
-  }
-
-  const line = view.state.doc.lineAt(selection.head);
-
-  if (selection.head !== line.from || line.text.length > 0) {
-    return false;
-  }
-
-  const tableBlock = findTableBlockByStartOffset(activeState, activeState.tableCursor.tableStartOffset);
-
-  if (!tableBlock) {
-    return false;
-  }
-
-  const row = Math.max(tableBlock.rows.length, 0);
-  const column = Math.max(tableBlock.columnCount - 1, 0);
-
-  return runTableSelectCell(view, activeState, {
-    row,
-    column,
-    tableStartOffset: tableBlock.startOffset,
-    offsetInCell: Number.MAX_SAFE_INTEGER
-  });
+export function runTableMoveRight(view: EditorView, _state: ActiveBlockState): boolean {
+  void _state;
+  return run(view, context => planTableMoveHorizontal(context, "right"));
 }
-
-export function runTableMoveLeft(view: EditorView, activeState: ActiveBlockState): boolean {
-  return applyTableSemanticEdit(
-    view,
-    activeState,
-    computeMoveToPreviousTableCellAtBoundary(readTableContext(view.state, activeState))
-  );
+export function runTableInsertRowBelow(view: EditorView, _state: ActiveBlockState): boolean {
+  void _state;
+  return run(view, planTableInsertRowBelow);
 }
-
-export function runTableMoveRight(view: EditorView, activeState: ActiveBlockState): boolean {
-  return applyTableSemanticEdit(
-    view,
-    activeState,
-    computeMoveToNextTableCellAtBoundary(readTableContext(view.state, activeState))
-  );
+export function runTableInsertRowAbove(view: EditorView, _state: ActiveBlockState): boolean {
+  void _state;
+  return run(view, planTableInsertRowAbove);
 }
-
-export function runTableMoveDownOrExit(view: EditorView, activeState: ActiveBlockState): boolean {
-  return runTableMoveDown(view, activeState);
+export function runTableInsertColumnLeft(view: EditorView, _state: ActiveBlockState): boolean {
+  void _state;
+  return run(view, planTableInsertColumnLeft);
 }
-
-export function runTableInsertRowBelow(view: EditorView, activeState: ActiveBlockState): boolean {
-  return applyTableSemanticEdit(
-    view,
-    activeState,
-    computeInsertTableRowBelow(readTableContext(view.state, activeState))
-  );
+export function runTableInsertColumnRight(view: EditorView, _state: ActiveBlockState): boolean {
+  void _state;
+  return run(view, planTableInsertColumnRight);
 }
-
-export function runTableInsertRowAbove(view: EditorView, activeState: ActiveBlockState): boolean {
-  return applyTableSemanticEdit(
-    view,
-    activeState,
-    computeInsertTableRowAbove(readTableContext(view.state, activeState))
-  );
+export function runTableDeleteRow(view: EditorView, _state: ActiveBlockState): boolean {
+  void _state;
+  return run(view, planTableDeleteRow);
 }
-
-export function runTableInsertColumnLeft(view: EditorView, activeState: ActiveBlockState): boolean {
-  return applyTableSemanticEdit(
-    view,
-    activeState,
-    computeInsertTableColumnLeft(readTableContext(view.state, activeState))
-  );
+export function runTableDeleteColumn(view: EditorView, _state: ActiveBlockState): boolean {
+  void _state;
+  return run(view, planTableDeleteColumn);
 }
-
-export function runTableInsertColumnRight(view: EditorView, activeState: ActiveBlockState): boolean {
-  return applyTableSemanticEdit(
-    view,
-    activeState,
-    computeInsertTableColumnRight(readTableContext(view.state, activeState))
-  );
+export function runTableDelete(view: EditorView, _state: ActiveBlockState): boolean {
+  void _state;
+  return run(view, planTableDelete);
 }
-
-export function runTableDeleteRow(view: EditorView, activeState: ActiveBlockState): boolean {
-  return applyTableSemanticEdit(
-    view,
-    activeState,
-    computeDeleteTableRow(readTableContext(view.state, activeState))
-  );
+export function runTableSelectCell(view: EditorView, _state: ActiveBlockState, target: TablePosition): boolean {
+  void _state;
+  return run(view, context => planTableMoveToCell(contextForTable(context, target), target));
 }
-
-export function runTableDeleteColumn(view: EditorView, activeState: ActiveBlockState): boolean {
-  return applyTableSemanticEdit(
-    view,
-    activeState,
-    computeDeleteTableColumn(readTableContext(view.state, activeState))
-  );
+export function runTableUpdateCell(view: EditorView, _state: ActiveBlockState, target: TablePosition, text: string): boolean {
+  void _state;
+  return run(view, context => planTableUpdateCell(contextForTable(context, target), target, text));
 }
-
-export function runTableDelete(view: EditorView, activeState: ActiveBlockState): boolean {
-  return applyTableSemanticEdit(
-    view,
-    activeState,
-    computeDeleteTable(readTableContext(view.state, activeState))
-  );
+export function runTableEnterFromLineAbove(view: EditorView, state: ActiveBlockState): boolean {
+  return state.tableCursor?.mode === "adjacent-above" && runTableSelectCell(view, state, state.tableCursor);
 }
-
-export function runTableSelectCell(
-  view: EditorView,
-  activeState: ActiveBlockState,
-  selectionTarget: TablePosition
-): boolean {
-  const tableBlock = findTableBlockByStartOffset(activeState, selectionTarget.tableStartOffset);
-  const targetCell = tableBlock ? getTableCell(tableBlock, selectionTarget) : null;
-
-  if (!targetCell) {
-    return false;
-  }
-
-  const cellLength = Math.max(targetCell.contentEndOffset - targetCell.contentStartOffset, 0);
-  const offsetInCell = Math.max(0, Math.min(selectionTarget.offsetInCell ?? 0, cellLength));
-  const nextAnchor = targetCell.contentStartOffset + offsetInCell;
-
-  view.dispatch({
-    selection: {
-      anchor: nextAnchor,
-      head: nextAnchor
-    }
-  });
-
-  return true;
+export function runTableEnterFromLineBelow(view: EditorView, state: ActiveBlockState): boolean {
+  return state.tableCursor?.mode === "adjacent-below" && runTableSelectCell(view, state, state.tableCursor);
 }
-
-export function runTableUpdateCell(
-  view: EditorView,
-  activeState: ActiveBlockState,
-  selectionTarget: TablePosition,
-  text: string
-): boolean {
-  return applyTableSemanticEdit(
-    view,
-    activeState,
-    computeUpdateTableCell(readTableContext(view.state, activeState), selectionTarget, text)
-  );
-}
-
-function applyTableSemanticEdit(
-  view: EditorView,
-  activeState: ActiveBlockState,
-  edit: TableSemanticEdit | null
-): boolean {
-  if (!edit) {
-    return false;
-  }
-
-  // Exit edits can target a location outside any table and may carry their own insert payload,
-  // so they short-circuit the cell-lookup path entirely.
-  if (isExitSelectionTarget(edit.selectionTarget)) {
-    return dispatchExit(view, edit.selectionTarget);
-  }
-
-  const selectionAnchor = resolveSelectionAnchor(activeState, edit);
-
-  if (selectionAnchor === null) {
-    return false;
-  }
-
-  view.dispatch(
-    edit.changes
-      ? {
-          changes: edit.changes,
-          selection: { anchor: selectionAnchor, head: selectionAnchor }
-        }
-      : {
-          selection: { anchor: selectionAnchor, head: selectionAnchor }
-        }
-  );
-
-  return true;
-}
-
-function dispatchExit(view: EditorView, target: TableExitTarget): boolean {
-  view.dispatch(
-    target.insert
-      ? {
-          changes: target.insert,
-          selection: { anchor: target.anchor, head: target.anchor }
-        }
-      : {
-          selection: { anchor: target.anchor, head: target.anchor }
-        }
-  );
-
-  return true;
-}
-
-function resolveSelectionAnchor(activeState: ActiveBlockState, edit: TableSemanticEdit): number | null {
-  // Mutating edits pre-compute the caret offset while they format the new table markdown, so we
-  // never need to re-parse the inserted text to resolve a cell location.
-  if (edit.resolvedAnchor !== undefined) {
-    return edit.resolvedAnchor;
-  }
-
-  // Navigation-only edits resolve against the tableBlock already cached on the active state.
-  const tableBlock = findTableBlockByStartOffset(activeState, activeState.tableCursor?.tableStartOffset);
-
-  if (!tableBlock) {
-    return null;
-  }
-
-  const selectionTarget = edit.selectionTarget as TablePosition;
-  const targetCell = getTableCell(tableBlock, selectionTarget);
-
-  if (!targetCell) {
-    return null;
-  }
-
-  const cellLength = Math.max(targetCell.contentEndOffset - targetCell.contentStartOffset, 0);
-  const offsetInCell = Math.max(0, Math.min(selectionTarget.offsetInCell ?? 0, cellLength));
-
-  return targetCell.contentStartOffset + offsetInCell;
+export function runTableBackspaceFromLineBelow(view: EditorView, state: ActiveBlockState): boolean {
+  void state;
+  return run(view, planTableBackspaceFromBelow);
 }

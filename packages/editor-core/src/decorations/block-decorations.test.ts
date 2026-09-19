@@ -20,6 +20,23 @@ type JSDOMConstructor = new (html: string) => JSDOMInstance;
 const requireFromTest = createRequire(import.meta.url);
 const { JSDOM } = requireFromTest("jsdom") as { JSDOM: JSDOMConstructor };
 
+it("preserves every empty quoted code content line when another line owns the caret", () => {
+  const source = "> ```\n> \n> \n> ```\n\nPlain paragraph";
+  for (const head of [8, 11, source.length]) {
+    const document = parseMarkdownDocument(source);
+    const { decorationSet } = createBlockDecorations({
+      source,
+      activeBlockState: createActiveBlockStateFromBlockMap(document, { anchor: head, head }),
+      hasEditorFocus: true
+    });
+    const contentLines: number[] = [];
+    decorationSet.between(0, source.length, (from, _to, decoration) => {
+      if (decoration.spec.attributes?.class?.includes("cm-blockquote-code-content")) contentLines.push(from);
+    });
+    expect(contentLines).toEqual([6, 9]);
+  }
+});
+
 const collectDecorations = (source: string, decorationSet: ReturnType<typeof createBlockDecorations>["decorationSet"]) => {
   const ranges: Array<{ from: number; to: number; className: string; text: string }> = [];
 

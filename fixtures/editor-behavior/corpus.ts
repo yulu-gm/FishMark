@@ -2,7 +2,7 @@ import {
   editorBehaviorKnownDefectObservations,
   editorBehaviorRunnerCalibration,
   editorBehaviorRunnerVerifiedTargets
-} from "./current-observations";
+} from "./active-calibration";
 import type { EditorBehaviorCase } from "./model";
 import { rawEditorBehaviorCases } from "./raw-cases";
 import {

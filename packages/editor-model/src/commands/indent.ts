@@ -71,6 +71,26 @@ export function decideIndentIn(context: EditorSemanticContext): IndentDecision |
     insert: INDENT_UNIT
   }));
 
+  // The indented item opens a scope of its own, so an ordered marker restarts at the scope's first
+  // ordinal instead of carrying the number it held as a sibling. The docnormalizer renumbers the
+  // scope it left behind, which is why only the marker's number is rewritten here. The rewrite is
+  // folded into the indentation edit of that same line so the plan keeps one edit per offset and
+  // stays order-independent.
+  const markerReset = firstItemMarkerReset(context, line, item);
+  const markerLineEdit = markerReset === null
+    ? -1
+    : edits.findIndex((edit) => edit.from === indentationAnchor(line));
+
+  if (markerLineEdit >= 0) {
+    const indentationEdit = edits[markerLineEdit]!;
+
+    edits[markerLineEdit] = {
+      from: indentationEdit.from,
+      to: markerReset!.to,
+      insert: `${INDENT_UNIT}${markerReset!.insert}`
+    };
+  }
+
   if (edits.length === 0) {
     return { kind: "none", plan: null };
   }
@@ -186,6 +206,13 @@ function planBareMarkerIndent(
   const markerEnd =
     prefix.startOffset + prefix.indentationText.length + prefix.markerText.length;
   const anchor = indentationAnchor(line);
+  const reset = firstItemMarkerReset(context, line, item);
+  if (reset !== null) {
+    const insert = `${INDENT_UNIT}${prefix.indentationText}${reset.insert} `;
+    const cursor = anchor + insert.length;
+    return { kind: "indent-subtree", plan: createEditTransactionPlan({ context, commandId: "indent", intent: "structural",
+      edits: [{ from: anchor, to: markerEnd, insert }], selection: { anchor: cursor, head: cursor } }) };
+  }
   const edits: TextEditOperation[] = [
     { from: anchor, to: anchor, insert: INDENT_UNIT },
     { from: markerEnd, to: markerEnd, insert: " " }
@@ -244,6 +271,22 @@ export function decideIndentOut(context: EditorSemanticContext): IndentDecision 
   const amount = Math.min(prefix.indentationText.length, INDENT_UNIT.length);
   const edits: TextEditOperation[] = [];
 
+  const chain = lineContainerChain(context, line);
+  const list = parentOf(context, item);
+  const owner = list === null ? null : parentOf(context, list);
+  // A child opened on its ancestor's physical line has no indentation to remove.
+  // Its marker is the level boundary, including when a quote lies between items.
+  const sharesAncestorLine = owner?.kind === "list-item" &&
+    line.segments.filter((segment) => segment.kind === "list-marker").length > 1;
+  const quotedNestedItem = owner?.kind === "blockquote" && chain.filter((node) => node.kind === "list-item").length > 1;
+  if (amount === 0 && prefix.markerText.length > 0 && (sharesAncestorLine || quotedNestedItem)) {
+    const from = prefix.startOffset;
+    const to = from + prefix.markerText.length + prefix.markerSpacingText.length + prefix.taskText.length;
+    const cursor = Math.max(from, context.selectionContext.activeOffset - (to - from));
+    return { kind: "outdent-subtree", plan: createEditTransactionPlan({ context, commandId: "indent", intent: "structural",
+      edits: [{ from, to, insert: "" }], selection: { anchor: cursor, head: cursor } }) };
+  }
+
   if (amount > 0) {
     for (const coveredLine of coveredItemLines(context, item, line)) {
       const anchor = indentationAnchor(coveredLine);
@@ -300,6 +343,27 @@ function coveredItemLines(
   const covered = context.lines.lineForNode(item);
 
   return covered.length === 0 ? [fallback] : covered;
+}
+
+// Rewrites an ordered marker's number to the ordinal the indented scope starts at. The delimiter
+// the author used is preserved, and an unordered marker has no number to reset. The offset is the
+// plan's own source offset: the indentation edit sits earlier on the same line and the adapter
+// applies edits from the end of the document backwards.
+function firstItemMarkerReset(
+  context: EditorSemanticContext,
+  line: PhysicalLine,
+  item: MarkdownNode
+): TextEditOperation | null {
+  const prefix = listItemPrefix(line, context, item);
+  const ordered = /^(\d+)([.)])$/u.exec(prefix.markerText);
+
+  if (ordered === null) {
+    return null;
+  }
+
+  const from = line.range.startOffset + prefix.ancestorText.length + prefix.indentationText.length;
+
+  return { from, to: from + prefix.markerText.length, insert: `1${ordered[2] ?? "."}` };
 }
 
 

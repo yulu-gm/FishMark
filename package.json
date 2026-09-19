@@ -34,6 +34,7 @@
     "test:cursor-hit-geometry": "node scripts/probe-cursor-hit-geometry.mjs",
     "test:editing-experience": "node scripts/probe-markdown-editing-experience.mjs",
     "test:editor-behavior": "node scripts/probe-editor-behavior.mjs",
+    "perf:editor-runtime": "node scripts/probe-editor-runtime-performance.mjs",
     "test:blockquote-typora-visual": "node scripts/probe-blockquote-typora-visual.mjs",
     "test:mermaid-footnote-render": "node scripts/probe-mermaid-footnote-rendering.mjs",
     "test:empty-document-layout": "node scripts/probe-empty-document-layout.mjs",

@@ -1,25 +1,12 @@
 import type { EditorView } from "@codemirror/view";
-
+import { planStrongToggle, planEmphasisToggle } from "@fishmark/editor-model";
 import type { ActiveBlockState } from "../active-block";
-import { readSemanticContext } from "./semantic-context";
-import {
-  computeEmphasisToggle,
-  computeStrongToggle,
-  type SemanticEdit
-} from "./semantic-edits";
-
-export function toggleStrong(view: EditorView, activeState: ActiveBlockState): boolean {
-  return applySemanticEdit(view, computeStrongToggle(readSemanticContext(view.state, activeState)));
+import { runSemanticCommand } from "@fishmark/codemirror-adapter";
+export function toggleStrong(view: EditorView, _activeState: ActiveBlockState): boolean {
+  void _activeState;
+  return runSemanticCommand(view, planStrongToggle);
 }
-
-export function toggleEmphasis(view: EditorView, activeState: ActiveBlockState): boolean {
-  return applySemanticEdit(view, computeEmphasisToggle(readSemanticContext(view.state, activeState)));
-}
-
-function applySemanticEdit(view: EditorView, edit: SemanticEdit | null): boolean {
-  if (!edit) {
-    return false;
-  }
-  view.dispatch({ changes: edit.changes, selection: edit.selection });
-  return true;
+export function toggleEmphasis(view: EditorView, _activeState: ActiveBlockState): boolean {
+  void _activeState;
+  return runSemanticCommand(view, planEmphasisToggle);
 }

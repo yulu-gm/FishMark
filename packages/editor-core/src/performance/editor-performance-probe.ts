@@ -1,5 +1,6 @@
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
+import { editorStructureObserver } from "@fishmark/codemirror-adapter";
 
 import { parseMarkdownDocument } from "@fishmark/markdown-engine";
 import type { MarkdownDocument, MarkdownParseInstrumentation } from "@fishmark/markdown-engine";
@@ -8,7 +9,7 @@ import { createFishMarkMarkdownExtensions } from "../extensions";
 import { countMarkdownLines } from "./long-document-fixtures";
 
 export const INCREMENTAL_STRUCTURE_CACHE_REASON =
-  "incremental-structure-cache-not-implemented" as const;
+  "consumer-does-not-use-incremental-structure-cache" as const;
 
 export type EditorPerformanceOperationName =
   | "open"
@@ -17,9 +18,14 @@ export type EditorPerformanceOperationName =
   | "orderedListEdit";
 
 export type EditorPerformanceCounters = {
+  // Actual full-source scanner events (reference-definition pass and full tree parse), not the
+  // number of top-level rich-document calls. Includes candidate transactions from filters.
   fullParse: number;
+  // Successful bounded incremental windows, as reported by the canonical cache.
   incrementalParseWindow: number;
+  // State-field updates that reused the unchanged canonical cache, including effects.
   cacheHit: number;
+  // Sum of nodes the cache reports rebuilt. This is work, not a count of distinct final nodes.
   invalidatedNodes: number;
   decorationRebuild: number;
 };
@@ -35,7 +41,7 @@ export type EditorPerformanceOperationResult = {
   counters: EditorPerformanceCounters;
   parserEntries: EditorPerformanceParserEntries;
   capabilityRefs: ["incrementalStructureCache"];
-  unavailableCapabilityReason: typeof INCREMENTAL_STRUCTURE_CACHE_REASON;
+  unavailableCapabilityReason: null;
 };
 
 export type EditorPerformanceProbeReport = {
@@ -49,6 +55,9 @@ export type EditorPerformanceProbeReport = {
 type ProbeStats = EditorPerformanceParserEntries & {
   decorationRebuild: number;
   fullDocumentParse: number;
+  incrementalParseWindow: number;
+  cacheHit: number;
+  invalidatedNodes: number;
 };
 
 type MeasuredOperation<T> = {
@@ -68,7 +77,10 @@ export function measureEditorPerformanceProbe(input: {
       parseOrderedListNormalization: 0,
       parseMarkdownDocument: 0,
       decorationRebuild: 0,
-      fullDocumentParse: 0
+      fullDocumentParse: 0,
+      incrementalParseWindow: 0,
+      cacheHit: 0,
+      invalidatedNodes: 0
     };
     const instrumentation: MarkdownParseInstrumentation = {
       onFullDocumentParse: () => {
@@ -87,14 +99,23 @@ export function measureEditorPerformanceProbe(input: {
       const openedView = new EditorView({
         state: EditorState.create({
           doc: input.source,
-          extensions: createFishMarkMarkdownExtensions({
+          extensions: [editorStructureObserver.of({
+            instrumentation,
+            onUpdate: (update) => {
+              if (update === null) stats.cacheHit += 1;
+              else {
+                stats.incrementalParseWindow += update.window === null ? 0 : 1;
+                stats.invalidatedNodes += update.reparsedNodes;
+              }
+            }
+          }), ...createFishMarkMarkdownExtensions({
             parseMarkdownDocument: parseMarkdownDocumentWithStats,
             parseOrderedListNormalizationBlockMap: parseOrderedListNormalizationWithStats,
             onBlockDecorationsBuilt: () => {
               stats.decorationRebuild += 1;
             },
             onContentChange: () => {}
-          })
+          })]
         }),
         parent: host
       });
@@ -180,14 +201,14 @@ function measureOperation<T>(
       durationMs: now() - startedAt,
       counters: {
         fullParse: stats.fullDocumentParse - before.fullDocumentParse,
-        incrementalParseWindow: 0,
-        cacheHit: 0,
-        invalidatedNodes: 0,
+        incrementalParseWindow: stats.incrementalParseWindow - before.incrementalParseWindow,
+        cacheHit: stats.cacheHit - before.cacheHit,
+        invalidatedNodes: stats.invalidatedNodes - before.invalidatedNodes,
         decorationRebuild: stats.decorationRebuild - before.decorationRebuild
       },
       parserEntries,
       capabilityRefs: ["incrementalStructureCache"],
-      unavailableCapabilityReason: INCREMENTAL_STRUCTURE_CACHE_REASON
+      unavailableCapabilityReason: null
     },
     value
   };

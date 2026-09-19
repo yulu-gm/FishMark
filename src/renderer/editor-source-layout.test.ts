@@ -531,6 +531,11 @@ describe("editor source layout stylesheet", () => {
     );
   });
 
+  it("reserves one computed line height for quoted code content whose prefix is hidden", async () => {
+    const stylesheet = await readFile(resolve(process.cwd(), "src/renderer/styles/markdown-render.css"), "utf8");
+    expect(getCssRule(stylesheet, ".document-editor .cm-blockquote-code-content")).toContain("min-height: 1lh;");
+  });
+
   it("keeps task checkbox rendering on a themeable widget contract without changing list geometry", async () => {
     const stylesheet = await readFile(resolve(process.cwd(), "src/renderer/styles/markdown-render.css"), "utf8");
     const rootRule = getCssRule(stylesheet, ":root");

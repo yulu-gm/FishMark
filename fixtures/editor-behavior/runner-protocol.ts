@@ -310,6 +310,8 @@ export type EditorBehaviorRunnerCalibration = {
   readonly contractHash: string;
   readonly runId: string;
   readonly calibrationHash: string;
+  /** Explicit contract migrations awaiting fresh exact runner evidence. */
+  readonly pendingTargets?: readonly EditorBehaviorRunnerVerifiedTarget[];
 };
 
 export type EditorBehaviorRunnerVerifiedTarget = {
@@ -358,11 +360,21 @@ export function composeEditorBehaviorRunnerEvidence(
     (count, behaviorCase) => count + behaviorCase.checkpoints.length * editorBehaviorAspects.length,
     0
   );
+  const pendingTargets = new Set((calibration.pendingTargets ?? []).map(targetKey));
+  if (pendingTargets.size !== (calibration.pendingTargets?.length ?? 0)) {
+    throw new Error("Runner calibration duplicates a pending target.");
+  }
+  for (const key of pendingTargets) {
+    if (expectedTargets.get(key)?.status !== "gap") {
+      throw new Error(`Pending calibration target ${key} must exist and be unverified.`);
+    }
+  }
   if (expectedTargets.size !== expectedTargetCount) {
     throw new Error("Runner evidence composition requires globally unique case targets.");
   }
   const verifiedTargetKeys = new Set<string>();
   for (const target of verifiedTargets) {
+    if (pendingTargets.has(targetKey(target))) throw new Error(`Pending target ${targetKey(target)} cannot reuse verified calibration.`);
     const key = targetKey(target);
     if (!expectedTargets.has(key)) {
       throw new Error(`Verified runner calibration references unknown target ${key}.`);
@@ -377,6 +389,7 @@ export function composeEditorBehaviorRunnerEvidence(
   }
   const defectTargets = new Set<string>();
   for (const defect of knownDefects) {
+    if (pendingTargets.has(targetKey(defect))) throw new Error(`Pending target ${targetKey(defect)} cannot reuse known-defect calibration.`);
     const key = targetKey(defect);
     if (!expectedTargets.has(key)) {
       throw new Error(`Known-defect baseline references unknown target ${key}.`);
@@ -399,7 +412,7 @@ export function composeEditorBehaviorRunnerEvidence(
     }
     defectTargets.add(key);
   }
-  if (verifiedTargetKeys.size + defectTargets.size !== expectedTargets.size) {
+  if (verifiedTargetKeys.size + defectTargets.size + pendingTargets.size !== expectedTargets.size) {
     throw new Error(
       `Runner calibration covers ${verifiedTargetKeys.size + defectTargets.size}/${expectedTargets.size} targets.`
     );
@@ -435,6 +448,7 @@ export function composeEditorBehaviorRunnerEvidence(
               runId: calibration.runId
             };
             const key = targetKey({ caseId: behaviorCase.id, checkpoint: checkpoint.id, aspect });
+            if (pendingTargets.has(key)) return [aspect, state];
             let status: EditorBehaviorEvidenceState;
             if (verifiedTargetKeys.has(key)) {
               status = { status: "verified", provenance };
@@ -452,7 +466,8 @@ export function composeEditorBehaviorRunnerEvidence(
     if (
       behaviorCase.checkpoints.some((checkpoint) =>
         editorBehaviorAspects.some(
-          (aspect) => evidence[checkpoint.id][aspect].status === "gap"
+          (aspect) => evidence[checkpoint.id][aspect].status === "gap" &&
+            !pendingTargets.has(targetKey({ caseId: behaviorCase.id, checkpoint: checkpoint.id, aspect }))
         )
       )
     ) {
@@ -695,10 +710,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function createCalibrationHash(
+export function createCalibrationHash(
   calibration: Pick<
     EditorBehaviorRunnerCalibration,
-    "manifestHash" | "contractHash" | "runId"
+    "manifestHash" | "contractHash" | "runId" | "pendingTargets"
   >,
   verifiedTargets: readonly EditorBehaviorRunnerVerifiedTarget[],
   knownDefects: readonly EditorBehaviorKnownDefectObservation[]
@@ -719,6 +734,7 @@ function createCalibrationHash(
     manifestHash: calibration.manifestHash,
     contractHash: calibration.contractHash,
     runId: calibration.runId,
+    ...(calibration.pendingTargets === undefined ? {} : { pendingTargets: calibration.pendingTargets.map(targetKey).sort() }),
     verified,
     defects
   });

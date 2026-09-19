@@ -33,6 +33,7 @@ export type ListScope =
     };
 
 const LIST_ITEM_PATTERN = /^([ \t]*)(?:([*+-])([ \t]+)|(\d+[.)])([ \t]+))/;
+const EDITABLE_LIST_ITEM_PATTERN = /^([ \t]*)(?:([*+-])([ \t]+|$)|(\d+[.)])([ \t]+|$))/;
 const TASK_MARKER_PATTERN = /^\[( |x|X)\](?=[ \t]|$)/;
 
 // `prefixRanges` blank container prefixes: they are skipped when reading a line's structure but
@@ -40,17 +41,26 @@ const TASK_MARKER_PATTERN = /^\[( |x|X)\](?=[ \t]|$)/;
 export function readListScopes(
   source: string,
   range: SourceRange,
-  prefixRanges: readonly SourceRange[]
+  prefixRanges: readonly SourceRange[],
+  opaqueRanges: readonly SourceRange[] = [],
+  includeUncommittedMarkers = false
 ): ListScope[] | null {
   const lines = createLineInfos(source.slice(range.startOffset, range.endOffset), range.startOffset, 0);
   const rootScopes: DraftScope[] = [];
   const openItems: DraftItem[] = [];
   let forceNewRootScope = false;
+  let opaqueIndex = 0;
 
   for (const line of lines) {
+    while (opaqueIndex < opaqueRanges.length && opaqueRanges[opaqueIndex]!.endOffset <= line.startOffset) opaqueIndex += 1;
+    const opaque = opaqueRanges[opaqueIndex];
+    if (opaque !== undefined && line.endOffset > opaque.startOffset) {
+      for (const item of openItems) item.endOffset = line.endOffset;
+      continue;
+    }
     const contentStart = lineContentStart(line.startOffset, line.endOffset, prefixRanges);
     const text = source.slice(contentStart, line.endOffset);
-    const match = LIST_ITEM_PATTERN.exec(text);
+    const match = (includeUncommittedMarkers ? EDITABLE_LIST_ITEM_PATTERN : LIST_ITEM_PATTERN).exec(text);
 
     if (!match) {
       if (text.trim().length === 0) {

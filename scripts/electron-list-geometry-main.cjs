@@ -1,4 +1,6 @@
 const { app, BrowserWindow } = require("electron");
+const { configurePaintableOffscreenTestApp, createPaintableOffscreenTestWindow } = require("./electron-test-window.cjs");
+configurePaintableOffscreenTestApp(app);
 
 async function main() {
   const url = process.env.FISHMARK_LIST_GEOMETRY_PROBE_URL;
@@ -8,16 +10,7 @@ async function main() {
 
   await app.whenReady();
 
-  const window = new BrowserWindow({
-    width: 420,
-    height: 360,
-    show: false,
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true
-    }
-  });
+  const window = createPaintableOffscreenTestWindow(BrowserWindow, { width: 420, height: 360 });
 
   await window.loadURL(url);
   const result = await window.webContents.executeJavaScript(

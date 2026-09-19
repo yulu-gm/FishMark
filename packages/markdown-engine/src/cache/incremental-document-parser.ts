@@ -13,6 +13,7 @@ import {
 } from "../model/markdown-node";
 import { createSourceRange, type SourceMarker, type SourceRange } from "../model/source-range";
 import { parseFullDocumentTree } from "../parse/full-document-parser";
+import type { MarkdownParseOptions } from "../parse-instrumentation";
 import {
   createDocumentStructureCacheFromTree,
   type DocumentStructureCache
@@ -42,7 +43,8 @@ export interface IncrementalParseResult {
 // to a full parse, so the result is always structurally identical to parsing the new source.
 export function applyIncrementalEdit(
   cache: DocumentStructureCache,
-  edit: TextEdit
+  edit: TextEdit,
+  options: MarkdownParseOptions = {}
 ): IncrementalParseResult {
   const newSource = applyTextEdit(cache.source, edit);
   const delta = edit.insertedText.length - (edit.toOffset - edit.fromOffset);
@@ -137,7 +139,7 @@ export function applyIncrementalEdit(
   };
 
   function fullParseFallback(source: string, reason: string): IncrementalParseResult {
-    const tree = parseFullDocumentTree(source);
+    const tree = parseFullDocumentTree(source, options);
     return {
       cache: createDocumentStructureCacheFromTree(cache.revision + 1, source, tree),
       stats: {

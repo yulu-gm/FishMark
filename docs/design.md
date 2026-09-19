@@ -28,6 +28,14 @@ MVP 应当像一个原生桌面写作工具：
 
 ## 3. MVP 约束
 
+### 2026-09-19 编辑器基础重构现状
+
+生产编辑命令已经由 `editor-model` 纯计划统一决定，`codemirror-adapter` 将计划转换为 CodeMirror 事务。每个 view 的结构缓存与本地 revision 由 StateField 管理；切换文档和重新加载产生新的 session generation，使旧计划不能复用。最终事务仍由 renderer 既有 update listener 统一生成编辑帧，包含原生输入、语义命令、撤销和组合输入，不建立第二个发送队列。
+
+布局暂时仍由 `editor-core` 承担。它复用 canonical tree 的 rich projection，不再为一次输入执行第二次全文解析；物理行和 outline 按不可变文档复用。但 rich projection 的列表和行内派生仍有重复解释，装饰仍有全文更新路径。这些是 M6 前置 RF-701 及 RF-602/603/604 的明确删除责任，不应把事务适配器已经存在等同于薄适配层重构完成。
+
+正式行为观察器读取实际 view 的 canonical snapshot；DOM 可见性由真实元素、computed style 和几何测量判断。性能验收分别报告真实 parser 扫描、同步派发和下一次渲染机会，不能把 parser 调用次数为零当作输入不卡顿。
+
 固定技术栈：
 - Electron
 - React

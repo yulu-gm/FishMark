@@ -365,6 +365,8 @@ function activePhysicalLine(source: string, selection: SourceSelection): number 
 
 export type VisibleLineOptions = {
   readonly roleOverrides?: Readonly<Partial<Record<number, VisiblePhysicalLineRole>>>;
+  /** Explicit fixture geometry where source-line prefix inference is insufficient. */
+  readonly geometryOverrides?: Readonly<Partial<Record<number, Pick<VisiblePhysicalLineExpectation["geometry"], "semanticDepth" | "contentColumn" | "markerColumn">>>>;
 };
 
 type OpaqueBlock =
@@ -568,6 +570,7 @@ export function physicalLineExpectations(
         semanticDepth: geometry.semanticDepth,
         contentColumn: geometry.contentColumn,
         markerColumn: geometry.markerColumn,
+        ...options.geometryOverrides?.[line],
         visibility
       }
     };

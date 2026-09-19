@@ -6,7 +6,6 @@ import { EditorView } from "@codemirror/view";
 
 import { createLongMarkdownFixture } from "./long-document-fixtures";
 import {
-  INCREMENTAL_STRUCTURE_CACHE_REASON,
   measureEditorPerformanceProbe
 } from "./editor-performance-probe";
 
@@ -35,7 +34,7 @@ describe("measureEditorPerformanceProbe", () => {
       expect(Number.isFinite(operation.durationMs)).toBe(true);
       expect(operation.durationMs).toBeGreaterThanOrEqual(0);
       expect(operation.capabilityRefs).toEqual(["incrementalStructureCache"]);
-      expect(operation.unavailableCapabilityReason).toBe(INCREMENTAL_STRUCTURE_CACHE_REASON);
+      expect(operation.unavailableCapabilityReason).toBeNull();
 
       for (const counter of Object.values(operation.counters)) {
         expect(Number.isInteger(counter)).toBe(true);
@@ -50,9 +49,6 @@ describe("measureEditorPerformanceProbe", () => {
       expect(operation.counters.fullParse).toBeGreaterThanOrEqual(
         operation.parserEntries.parseMarkdownDocument + operation.parserEntries.parseOrderedListNormalization
       );
-      expect(operation.counters.incrementalParseWindow).toBe(0);
-      expect(operation.counters.cacheHit).toBe(0);
-      expect(operation.counters.invalidatedNodes).toBe(0);
     }
 
     const open = report.operations.find((operation) => operation.name === "open");
@@ -67,10 +63,24 @@ describe("measureEditorPerformanceProbe", () => {
       (open?.parserEntries.parseMarkdownDocument ?? 0) + (open?.parserEntries.parseOrderedListNormalization ?? 0)
     );
     expect(open?.counters.decorationRebuild).toBeGreaterThan(0);
-    expect(edit?.parserEntries.parseMarkdownDocument).toBeGreaterThan(0);
+    expect(edit?.parserEntries.parseMarkdownDocument).toBe(0);
+    expect(edit?.counters.invalidatedNodes).toBeGreaterThan(0);
     expect(selection?.counters.fullParse).toBe(0);
-    expect(orderedListEdit?.parserEntries.parseOrderedListNormalization).toBeGreaterThan(0);
+    expect(selection?.counters.cacheHit).toBeGreaterThan(0);
+    expect(orderedListEdit?.parserEntries.parseOrderedListNormalization).toBe(0);
+    expect(orderedListEdit?.counters.fullParse).toBeGreaterThan(0);
   }, 15_000);
+
+  it("counts real incremental windows for warm plain text and real fallback parses for structural input", () => {
+    const report = measureEditorPerformanceProbe({ source: "Paragraph\n\n1. Ordered item" });
+    const edit = report.operations.find(operation => operation.name === "edit")!;
+    expect(edit.counters.fullParse).toBe(0);
+    expect(edit.counters.incrementalParseWindow).toBeGreaterThan(0);
+    expect(edit.counters.invalidatedNodes).toBeGreaterThan(0);
+    const structural = report.operations.find(operation => operation.name === "orderedListEdit")!;
+    expect(structural.counters.fullParse).toBeGreaterThan(0);
+    expect(structural.counters.incrementalParseWindow).toBe(0);
+  });
 
   it("removes the host when EditorView construction throws after the host is appended", () => {
     const bodyChildrenBefore = Array.from(document.body.childNodes);

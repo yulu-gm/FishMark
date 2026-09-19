@@ -126,7 +126,7 @@ describe("editor foundation architecture guard", () => {
       "packages/markdown-engine/src/parse/document-projection.ts",
       "packages/markdown-engine/src/parse/full-document-parser.ts",
       "packages/editor-core/src/active-block.ts",
-      "packages/editor-core/src/commands/list-edits.ts",
+      "packages/editor-model/src/commands/ordered-list.ts",
       "packages/editor-core/src/extensions/markdown.ts",
       "packages/editor-core/src/performance/editor-performance-probe.ts"
     ];

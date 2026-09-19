@@ -5,6 +5,7 @@ import { recursiveParityMatrixCases } from "../../../../fixtures/editor-behavior
 import { editorBehaviorAspects } from "../../../../fixtures/editor-behavior/model";
 import {
   composeEditorBehaviorRunnerEvidence,
+  createCalibrationHash,
   type EditorBehaviorRunnerCalibration
 } from "../../../../fixtures/editor-behavior/runner-protocol";
 
@@ -62,5 +63,20 @@ describe("editor behavior calibration identity", () => {
         { ...calibration, contractHash: "fnv1a32-stale" }
       )
     ).toThrow(/contract hash/u);
+  });
+
+  it("allows only explicitly hashed pending targets and never reuses their old evidence", () => {
+    const pending = targets[0]!;
+    const retained = targets.slice(1);
+    const migration = { ...calibration, runId: "explicit-contract-migration", pendingTargets: [pending] };
+    const signed = { ...migration, calibrationHash: createCalibrationHash(migration, retained, []) };
+    const [composed] = composeEditorBehaviorRunnerEvidence([behaviorCase], retained, [], signed);
+    expect(composed!.classification.evidence[pending.checkpoint][pending.aspect].status).toBe("gap");
+    expect(() => composeEditorBehaviorRunnerEvidence([behaviorCase], targets, [], signed)).toThrow(/cannot reuse verified/u);
+    expect(() => composeEditorBehaviorRunnerEvidence([behaviorCase], retained, [{ ...pending, aspect: "command-plan", observed: [], reason: "old value" }], signed)).toThrow(/cannot reuse known-defect/u);
+    expect(() => composeEditorBehaviorRunnerEvidence([behaviorCase], retained.slice(1), [], signed)).toThrow(/covers/u);
+    expect(() => composeEditorBehaviorRunnerEvidence([behaviorCase], retained, [], { ...signed, pendingTargets: [pending, pending] })).toThrow(/duplicates a pending/u);
+    expect(() => composeEditorBehaviorRunnerEvidence([behaviorCase], retained, [], { ...signed, pendingTargets: [{ ...pending, caseId: "unknown" }] })).toThrow(/must exist/u);
+    expect(() => composeEditorBehaviorRunnerEvidence([behaviorCase], targets.slice(2), [], { ...signed, pendingTargets: targets.slice(0, 2) })).toThrow(/calibration hash/u);
   });
 });

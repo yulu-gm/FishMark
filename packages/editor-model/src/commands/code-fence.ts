@@ -166,9 +166,12 @@ export function planFenceDraftEnter(context: EditorSemanticContext): EditTransac
   }
 
   const prefix = linePrefixText(line);
-  const closing = `${prefix}${opener[1] ?? ""}${opener[2] ?? ""}`;
-  const insert = `\n${prefix}\n${closing}`;
-  const anchor = offset + 1 + prefix.length;
+  // A quote prefix is padded on every line the fence owns, including the closing marker, so a
+  // compact opener (`>``` `) still completes to padded `> ` lines.
+  const paddedPrefix = prefix.length > 0 && !/\s$/u.test(prefix) ? `${prefix} ` : prefix;
+  const closing = `${paddedPrefix}${opener[1] ?? ""}${opener[2] ?? ""}`;
+  const insert = `\n${paddedPrefix}\n${closing}`;
+  const anchor = offset + 1 + paddedPrefix.length;
 
   return createEditTransactionPlan({
     context,

@@ -11,7 +11,28 @@ import { lastOfKind, lineContainerChain, parentOf } from "./line-structure";
 // Ordered-list normalization renumbers the scopes of the list the caret is in. Numbering restarts
 // at one after an item whose own text continues below its first line, which is how a loose item
 // ends a run.
-export function planNormalizeOrderedListScopes(context: EditorSemanticContext): EditTransactionPlan | null {
+export function planNormalizeOrderedListScopes(
+  context: EditorSemanticContext,
+  options?: { readonly changedRanges: readonly { readonly from: number; readonly to: number }[] }
+): EditTransactionPlan | null {
+  if (options !== undefined) {
+    const roots: MarkdownNode[] = [];
+    const visit = (node: MarkdownNode): void => {
+      if (node.kind === "list") {
+        roots.push(node);
+        return;
+      }
+      for (const child of childrenOf(node)) visit(child);
+    };
+    visit(context.snapshot.tree.root);
+    const changed = options.changedRanges.length === 1 ? options.changedRanges[0] : undefined;
+    const edits = roots.filter((root) => changed === undefined || (
+      changed.from === changed.to
+        ? changed.from >= root.source.startOffset && changed.from <= root.source.endOffset
+        : changed.from < root.source.endOffset && changed.to > root.source.startOffset
+    )).flatMap((root) => collectScopeChanges(context, root));
+    return normalizationPlan(context, edits);
+  }
   const line = context.lineAt(context.selectionContext.activeOffset);
 
   if (line === null) {
@@ -28,20 +49,32 @@ export function planNormalizeOrderedListScopes(context: EditorSemanticContext): 
 
   const edits = collectScopeChanges(context, rootList);
 
-  if (edits.length === 0) {
-    return null;
-  }
+  return normalizationPlan(context, edits);
+}
 
+function normalizationPlan(context: EditorSemanticContext, edits: readonly TextEditOperation[]): EditTransactionPlan | null {
+  if (edits.length === 0) return null;
+  const ordered = [...edits].sort((left, right) => left.from - right.from);
   return createEditTransactionPlan({
     context,
     commandId: "format-inline",
     intent: "structural",
-    edits,
+    edits: ordered,
     selection: {
-      anchor: context.selectionContext.from,
-      head: context.selectionContext.to
+      anchor: mapOffset(context.selectionContext.selection.anchor, ordered),
+      head: mapOffset(context.selectionContext.selection.head, ordered)
     }
   });
+}
+
+function mapOffset(offset: number, edits: readonly TextEditOperation[]): number {
+  let delta = 0;
+  for (const edit of edits) {
+    if (offset <= edit.from) break;
+    if (offset <= edit.to) return edit.from + delta + edit.insert.length;
+    delta += edit.insert.length - (edit.to - edit.from);
+  }
+  return offset + delta;
 }
 
 function collectScopeChanges(

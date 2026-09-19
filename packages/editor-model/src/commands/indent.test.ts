@@ -29,6 +29,35 @@ function applyPlan(source: string, plan: ReturnType<typeof planIndentIn>): strin
 }
 
 describe("indent planners", () => {
+  it("outdents a same-line child marker once and retains the outer item on repeat", () => {
+    const source = "- - alpha";
+    const first = planIndentOut(contextAt(source, source.length));
+    expect(applyPlan(source, first)).toBe("- alpha");
+    expect(first?.selection).toEqual({ anchor: 7, head: 7 });
+    expect(planIndentOut(contextAt("- alpha", 7))).toBeNull();
+  });
+  it("outdents an inner list to its enclosing quote without removing the outer item", () => {
+    const source = "- > - alpha";
+    expect(applyPlan(source, planIndentOut(contextAt(source, source.length)))).toBe("- > alpha");
+  });
+  it("resets an ordered marker when Tab moves the item into a new scope", () => {
+    const source = ["5. parent", "6. child", "7. sibling"].join("\n");
+    const context = contextAt(source, source.indexOf("child"));
+    const plan = planIndentIn(context);
+
+    expect(applyPlan(source, plan)).toBe(["5. parent", "  1. child", "7. sibling"].join("\n"));
+  });
+
+  it("outdents the continuation line together with its owning item", () => {
+    const source = ["- parent", "  - child", "    - leaf", "    continuation", "- sibling"].join("\n");
+    const context = contextAt(source, source.indexOf("leaf"));
+    const plan = planIndentOut(context);
+
+    expect(applyPlan(source, plan)).toBe(
+      ["- parent", "  - child", "  - leaf", "  continuation", "- sibling"].join("\n")
+    );
+  });
+
   it("indents the item subtree and keeps quoted prefixes untouched", () => {
     const source = ["> - parent", "> - child"].join("\n");
     const context = contextAt(source, source.indexOf("child"));

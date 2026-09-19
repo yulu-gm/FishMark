@@ -1,44 +1,32 @@
 import type { EditorView } from "@codemirror/view";
-
+import { planEnter, planBackspace, planHardBreak, planPointerSelection, planVerticalNavigation } from "@fishmark/editor-model";
 import type { ActiveBlockState } from "../active-block";
-import {
-  createCodeMirrorMarkdownCommandTarget,
-  runCodeMirrorMarkdownCommand
-} from "./codemirror-markdown-command-adapter";
-import {
-  runMarkdownArrowDownCommand,
-  runMarkdownArrowUpCommand,
-  runMarkdownBackspaceCommand,
-  runMarkdownEnterCommand,
-  runMarkdownHardBreakCommand,
-  runMarkdownShiftTabCommand,
-  runMarkdownTabCommand
-} from "./markdown-commands";
-
-export function runMarkdownEnter(view: EditorView, activeState: ActiveBlockState): boolean {
-  return runCodeMirrorMarkdownCommand(view, activeState, runMarkdownEnterCommand);
+import { resolveArrowUp, resolveArrowDown } from "../interactions";
+import { runSemanticCommand, planSemanticTab, planSemanticShiftTab } from "@fishmark/codemirror-adapter";
+export function runMarkdownEnter(view: EditorView, _activeState: ActiveBlockState): boolean {
+  void _activeState;
+  return runSemanticCommand(view, planEnter);
 }
-
-export function runMarkdownBackspace(view: EditorView, activeState: ActiveBlockState): boolean {
-  return runCodeMirrorMarkdownCommand(view, activeState, runMarkdownBackspaceCommand);
+export function runMarkdownBackspace(view: EditorView, _activeState: ActiveBlockState): boolean {
+  void _activeState;
+  return runSemanticCommand(view, planBackspace);
 }
-
 export function runMarkdownHardBreak(view: EditorView): boolean {
-  return runMarkdownHardBreakCommand(createCodeMirrorMarkdownCommandTarget(view));
+  return runSemanticCommand(view, planHardBreak);
 }
-
-export function runMarkdownTab(view: EditorView, activeState: ActiveBlockState): boolean {
-  return runCodeMirrorMarkdownCommand(view, activeState, runMarkdownTabCommand);
+export function runMarkdownTab(view: EditorView, _activeState: ActiveBlockState): boolean {
+  void _activeState;
+  return runSemanticCommand(view, planSemanticTab);
 }
-
-export function runMarkdownShiftTab(view: EditorView, activeState: ActiveBlockState): boolean {
-  return runCodeMirrorMarkdownCommand(view, activeState, runMarkdownShiftTabCommand);
+export function runMarkdownShiftTab(view: EditorView, _activeState: ActiveBlockState): boolean {
+  void _activeState;
+  return runSemanticCommand(view, planSemanticShiftTab);
 }
-
 export function runMarkdownArrowDown(view: EditorView, activeState: ActiveBlockState): boolean {
-  return runCodeMirrorMarkdownCommand(view, activeState, runMarkdownArrowDownCommand);
+  const target = resolveArrowDown(view, activeState);
+  return runSemanticCommand(view, context => target === null ? planVerticalNavigation(context, "down") : planPointerSelection(context, target.anchor));
 }
-
 export function runMarkdownArrowUp(view: EditorView, activeState: ActiveBlockState): boolean {
-  return runCodeMirrorMarkdownCommand(view, activeState, runMarkdownArrowUpCommand);
+  const target = resolveArrowUp(view, activeState);
+  return runSemanticCommand(view, context => target === null ? planVerticalNavigation(context, "up") : planPointerSelection(context, target.anchor));
 }

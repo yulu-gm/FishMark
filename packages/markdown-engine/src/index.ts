@@ -135,6 +135,7 @@ export {
 } from "./code-block";
 export { parseFullDocumentTree } from "./parse/full-document-parser";
 export { projectMarkdownDocument } from "./parse/document-projection";
+export { createMarkdownDocumentFromTree } from "./parse-markdown-document";
 export {
   collectMicromarkEventViews,
   type MicromarkEventView

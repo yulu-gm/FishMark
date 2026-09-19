@@ -10,10 +10,10 @@ function configurePaintableOffscreenTestApp(app) {
   }
 }
 
-function createPaintableOffscreenTestWindow(BrowserWindow) {
+function createPaintableOffscreenTestWindow(BrowserWindow, size = {}) {
   return new BrowserWindow({
-    width: 1280,
-    height: 900,
+    width: size.width ?? 1280,
+    height: size.height ?? 900,
     show: true,
     skipTaskbar: true,
     x: -10000,

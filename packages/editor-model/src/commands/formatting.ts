@@ -113,7 +113,7 @@ export function planBulletListToggle(context: EditorSemanticContext): EditTransa
 }
 
 export function decideBulletListToggle(context: EditorSemanticContext): FormattingDecision | null {
-  const lines = selectedLines(context).filter((line) => line.contentEndOffset > line.contentStartOffset || true);
+  const lines = selectedLines(context);
 
   if (lines.length === 0) {
     return null;
@@ -126,7 +126,7 @@ export function decideBulletListToggle(context: EditorSemanticContext): Formatti
     const from = quotePrefixEnd(line);
     const text = formatTargetTextOf(context, line);
     const match = BULLET_LINE_PATTERN.exec(text);
-    const indentLength = match?.[1]?.length ?? 0;
+    const indentLength = match?.[1]?.length ?? /^[ \t]*/u.exec(text)![0].length;
 
     if (allBullet && match !== null) {
       // Remove marker and its spacing, keeping indentation and content.
@@ -187,7 +187,7 @@ export function decideBlockquoteToggle(context: EditorSemanticContext): Formatti
       edits.push({
         from: marker.range.startOffset,
         to: marker.range.endOffset + (spacing?.text.length ?? 0),
-        insert: ""
+        insert: context.source[marker.range.startOffset - 1] === ">" ? " " : ""
       });
       continue;
     }
@@ -257,6 +257,11 @@ function inlineToggle(
   }
 
   const cursor = selection.from;
+  if (context.source.slice(cursor - marker.length, cursor) === marker && context.source.slice(cursor, cursor + marker.length) === marker) {
+    const anchor = cursor - marker.length;
+    return { kind: type, plan: createEditTransactionPlan({ context, commandId: "format-inline", intent: "edit",
+      edits: [{ from: anchor, to: cursor + marker.length, insert: "" }], selection: { anchor, head: anchor } }) };
+  }
 
   return {
     kind: type,
@@ -380,7 +385,7 @@ function selectionFromEdits(
   for (const edit of edits) {
     const delta = edit.insert.length - (edit.to - edit.from);
 
-    if (edit.from <= selection.from) {
+    if (edit.from < selection.from || (selection.empty && edit.from <= selection.from)) {
       shiftFrom += delta;
     }
 

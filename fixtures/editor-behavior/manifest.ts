@@ -14,7 +14,7 @@ export {
   editorBehaviorKnownDefectObservations,
   editorBehaviorRunnerCalibration,
   editorBehaviorRunnerVerifiedTargets
-} from "./current-observations";
+} from "./active-calibration";
 export {
   createRecursiveParityMatrixCases,
   createRepresentativeDepthCases,

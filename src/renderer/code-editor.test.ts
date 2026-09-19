@@ -3,12 +3,42 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { Transaction } from "@codemirror/state";
+import { RangeSet, StateEffect, Transaction } from "@codemirror/state";
+import { readCompositionState } from "@fishmark/codemirror-adapter";
 import { isolateHistory, redo, redoDepth, undo, undoDepth } from "@codemirror/commands";
 import { EditorView } from "@codemirror/view";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { createCodeEditorController, internalDocumentTransaction } from "./code-editor";
+
+function waitForCompositionFinish(view: EditorView): Promise<void> {
+  return new Promise((resolve) => {
+    view.dispatch({ effects: StateEffect.appendConfig.of(EditorView.updateListener.of((update) => {
+      if (update.transactions.some((transaction) => readCompositionState(transaction.startState).active &&
+          !readCompositionState(transaction.state).active)) queueMicrotask(resolve);
+    })) });
+  });
+}
+
+// jsdom has no text-range geometry. Real semantic commands still request scrolling; the harness
+// supplies empty measurements rather than changing the production command's scroll contract.
+const rangeGeometryDescriptors = new Map<string, PropertyDescriptor | undefined>();
+beforeAll(() => {
+  for (const name of ["getClientRects", "getBoundingClientRect"]) {
+    rangeGeometryDescriptors.set(name, Object.getOwnPropertyDescriptor(Range.prototype, name));
+    if (!(name in Range.prototype)) Object.defineProperty(Range.prototype, name, {
+      configurable: true,
+      writable: true,
+      value: name === "getClientRects" ? () => [] : () => new DOMRect()
+    });
+  }
+});
+afterAll(() => {
+  for (const [name, descriptor] of rangeGeometryDescriptors) {
+    if (descriptor) Object.defineProperty(Range.prototype, name, descriptor);
+    else Reflect.deleteProperty(Range.prototype, name);
+  }
+});
 
 const getEditorView = (host: HTMLElement) => {
   const editorRoot = host.querySelector(".cm-editor");
@@ -1124,7 +1154,7 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("flushes inline decorations once when composition ends", () => {
+  it("flushes inline decorations once when composition ends", async () => {
     const host = document.createElement("div");
     const source = ["**bold**", "", "Paragraph"].join("\n");
 
@@ -1161,10 +1191,13 @@ describe("createCodeEditorController", () => {
     });
 
     dispatchSpy.mockClear();
+    const compositionFinished = waitForCompositionFinish(view!);
     dispatchCompositionEvent(editorRoot as HTMLElement, "compositionend", "x");
+    await compositionFinished;
 
     const decorationFlushCount = dispatchSpy.mock.calls.filter(
-      ([spec]) => typeof spec === "object" && spec !== null && "effects" in spec
+      ([spec]) => typeof spec === "object" && spec !== null && "effects" in spec &&
+        [spec.effects].flat().some((effect) => effect !== undefined && effect.value instanceof RangeSet)
     ).length;
 
     expect(decorationFlushCount).toBe(1);
@@ -1175,7 +1208,7 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("flushes inactive heading decorations once when composition ends", () => {
+  it("flushes inactive heading decorations once when composition ends", async () => {
     const host = document.createElement("div");
     const source = ["# Title", "", "Paragraph"].join("\n");
 
@@ -1210,10 +1243,13 @@ describe("createCodeEditorController", () => {
     });
 
     dispatchSpy.mockClear();
+    const compositionFinished = waitForCompositionFinish(view!);
     dispatchCompositionEvent(editorRoot as HTMLElement, "compositionend", "x");
+    await compositionFinished;
 
     const decorationFlushCount = dispatchSpy.mock.calls.filter(
-      ([spec]) => typeof spec === "object" && spec !== null && "effects" in spec
+      ([spec]) => typeof spec === "object" && spec !== null && "effects" in spec &&
+        [spec.effects].flat().some((effect) => effect !== undefined && effect.value instanceof RangeSet)
     ).length;
 
     expect(decorationFlushCount).toBe(1);
@@ -3254,7 +3290,7 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("flushes inactive blockquote decorations once when composition ends", () => {
+  it("flushes inactive blockquote decorations once when composition ends", async () => {
     const host = document.createElement("div");
     const source = ["> Quote line", "> Still quoted", "", "Paragraph"].join("\n");
 
@@ -3289,10 +3325,13 @@ describe("createCodeEditorController", () => {
     });
 
     dispatchSpy.mockClear();
+    const compositionFinished = waitForCompositionFinish(view!);
     dispatchCompositionEvent(editorRoot as HTMLElement, "compositionend", "x");
+    await compositionFinished;
 
     const decorationFlushCount = dispatchSpy.mock.calls.filter(
-      ([spec]) => typeof spec === "object" && spec !== null && "effects" in spec
+      ([spec]) => typeof spec === "object" && spec !== null && "effects" in spec &&
+        [spec.effects].flat().some((effect) => effect !== undefined && effect.value instanceof RangeSet)
     ).length;
 
     expect(decorationFlushCount).toBe(1);
@@ -6505,7 +6544,7 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("flushes inactive paragraph decorations once when composition ends", () => {
+  it("flushes inactive paragraph decorations once when composition ends", async () => {
     const host = document.createElement("div");
     const source = ["Paragraph one", "", "Paragraph two"].join("\n");
 
@@ -6542,10 +6581,13 @@ describe("createCodeEditorController", () => {
     });
 
     dispatchSpy.mockClear();
+    const compositionFinished = waitForCompositionFinish(view!);
     dispatchCompositionEvent(editorRoot as HTMLElement, "compositionend", "x");
+    await compositionFinished;
 
     const decorationFlushCount = dispatchSpy.mock.calls.filter(
-      ([spec]) => typeof spec === "object" && spec !== null && "effects" in spec
+      ([spec]) => typeof spec === "object" && spec !== null && "effects" in spec &&
+        [spec.effects].flat().some((effect) => effect !== undefined && effect.value instanceof RangeSet)
     ).length;
 
     expect(decorationFlushCount).toBe(1);
@@ -6556,7 +6598,7 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("defers paragraph active-block recomputation until composition ends", () => {
+  it("defers paragraph active-block recomputation until composition ends", async () => {
     const host = document.createElement("div");
     const source = "Paragraph";
     const activeBlockTypes: Array<string | null> = [];
@@ -6591,7 +6633,9 @@ describe("createCodeEditorController", () => {
     expect(activeBlockTypes).toEqual(["paragraph"]);
     expect(selectionAnchors).toEqual([0]);
 
+    const compositionFinished = waitForCompositionFinish(view!);
     dispatchCompositionEvent(editorRoot as HTMLElement, "compositionend", "x");
+    await compositionFinished;
 
     expect(activeBlockTypes).toEqual(["paragraph", "paragraph"]);
     expect(selectionAnchors).toEqual([0, source.length + 1]);
@@ -6599,7 +6643,7 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("defers heading updates until composition ends without losing committed text", () => {
+  it("defers heading updates until composition ends without losing committed text", async () => {
     const host = document.createElement("div");
     const source = "# Title";
     const activeBlockTypes: Array<string | null> = [];
@@ -6630,7 +6674,9 @@ describe("createCodeEditorController", () => {
     expect(controller.getContent()).toBe("# Titlex");
     expect(activeBlockTypes).toEqual(["heading"]);
 
+    const compositionFinished = waitForCompositionFinish(view!);
     dispatchCompositionEvent(editorRoot as HTMLElement, "compositionend", "x");
+    await compositionFinished;
 
     expect(controller.getContent()).toBe("# Titlex");
     expect(activeBlockTypes).toEqual(["heading", "heading"]);
@@ -6638,7 +6684,7 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("flushes list active-block state once after composition ends", () => {
+  it("flushes list active-block state once after composition ends", async () => {
     const host = document.createElement("div");
     const source = "- item";
     const activeBlockTypes: Array<string | null> = [];
@@ -6673,7 +6719,9 @@ describe("createCodeEditorController", () => {
     expect(activeBlockTypes).toEqual(["list"]);
     expect(selectionAnchors).toEqual([0]);
 
+    const compositionFinished = waitForCompositionFinish(view!);
     dispatchCompositionEvent(editorRoot as HTMLElement, "compositionend", "x");
+    await compositionFinished;
 
     expect(activeBlockTypes).toEqual(["list", "list"]);
     expect(selectionAnchors).toEqual([0, source.length + 1]);
@@ -6967,40 +7015,50 @@ describe("createCodeEditorController", () => {
     activeCell = host.querySelector<HTMLElement>('[data-table-cell="1:0"]');
     expect(document.activeElement).toBe(activeCell);
 
-    dispatchCompositionEvent(activeCell as HTMLElement, "compositionstart", "·");
-    activeCell!.textContent = "·";
-    setDomCaret(activeCell as HTMLElement, 1);
-    activeCell?.dispatchEvent(new Event("input", { bubbles: true }));
-    await flushMicrotasks();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      dispatchCompositionEvent(activeCell as HTMLElement, "compositionstart", "·");
+      activeCell!.textContent = "·";
+      setDomCaret(activeCell as HTMLElement, 1);
+      activeCell?.dispatchEvent(new Event("input", { bubbles: true }));
+      await flushMicrotasks();
 
-    expect(controller.getContent()).toBe(source);
-    expect(document.activeElement).toBe(activeCell);
-    expect(onChange).not.toHaveBeenCalled();
+      expect(controller.getContent()).toBe(source);
+      expect(document.activeElement).toBe(activeCell);
+      expect(onChange).not.toHaveBeenCalled();
 
-    dispatchCompositionEvent(activeCell as HTMLElement, "compositionend", "·");
-    await flushMicrotasks();
+      dispatchCompositionEvent(activeCell as HTMLElement, "compositionend", "·");
+      await flushMicrotasks();
 
-    expect(controller.getContent()).toBe(source);
-    expect(document.activeElement).toBe(activeCell);
-    expect(onChange).not.toHaveBeenCalled();
+      expect(controller.getContent()).toBe(source);
+      expect(document.activeElement).toBe(activeCell);
+      expect(onChange).not.toHaveBeenCalled();
 
-    activeCell = host.querySelector<HTMLElement>('[data-table-cell="1:0"]');
-    activeCell!.textContent = "·";
-    setDomCaret(activeCell as HTMLElement, 1);
-    activeCell?.dispatchEvent(new Event("input", { bubbles: true }));
-    await flushMicrotasks();
+      activeCell = host.querySelector<HTMLElement>('[data-table-cell="1:0"]');
+      activeCell!.textContent = "·";
+      setDomCaret(activeCell as HTMLElement, 1);
+      activeCell?.dispatchEvent(new Event("input", { bubbles: true }));
+      await flushMicrotasks();
 
-    activeCell = host.querySelector<HTMLElement>('[data-table-cell="1:0"]');
+      // Advance the composition finish turn explicitly. Polling real timers here
+      // makes this ordering contract depend on unrelated full-suite CPU load.
+      await vi.advanceTimersByTimeAsync(0);
+      expect(readCompositionState(getEditorView(host)!.state).active).toBe(false);
 
-    expect(controller.getContent()).toContain("·");
-    expect(controller.getContent().match(/·/g)).toHaveLength(1);
-    expect(host.querySelector(".cm-table-widget")).not.toBeNull();
-    expect(document.activeElement).toBe(activeCell);
-    expect((activeCell as HTMLElement & { selectionStart: number }).selectionStart).toBe(1);
-    expect(onChange).toHaveBeenCalledTimes(1);
+      activeCell = host.querySelector<HTMLElement>('[data-table-cell="1:0"]');
 
-    controller.destroy();
-    host.remove();
+      expect(controller.getContent()).toContain("·");
+      expect(controller.getContent().match(/·/g)).toHaveLength(1);
+      expect(host.querySelector(".cm-table-widget")).not.toBeNull();
+      expect(document.activeElement).toBe(activeCell);
+      expect((activeCell as HTMLElement & { selectionStart: number }).selectionStart).toBe(1);
+      expect(onChange).toHaveBeenCalledTimes(1);
+
+    } finally {
+      controller.destroy();
+      host.remove();
+      vi.useRealTimers();
+    }
   });
 
   it("renders loose headerless pipe rows as a table widget", () => {

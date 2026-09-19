@@ -5,6 +5,22 @@ import { parseMarkdownDocument } from "@fishmark/markdown-engine";
 import { createEditorDerivedState } from "./editor-derived-state";
 
 describe("createEditorDerivedState", () => {
+  it("reuses document geometry across selections and replaces it when the projection changes", () => {
+    const source = "# Title\n\nParagraph";
+    const document = parseMarkdownDocument(source);
+    const first = createEditorDerivedState({ source, selection: { anchor: 0, head: 0 }, parseMarkdownDocument: () => document });
+    const second = createEditorDerivedState({ source, selection: { anchor: source.length, head: source.length }, parseMarkdownDocument: () => document });
+    expect(second.editingDocument).toBe(first.editingDocument);
+    expect(second.outlineHeadings).toBe(first.outlineHeadings);
+    expect(first.activeLine.number).toBe(1);
+    expect(second.activeLine.number).toBe(3);
+    expect(second.activeBlockState.activeBlock?.type).toBe("paragraph");
+    const nextSource = "# Next\n\nParagraph";
+    const third = createEditorDerivedState({ source: nextSource, selection: { anchor: 0, head: 0 }, parseMarkdownDocument });
+    expect(third.editingDocument).not.toBe(first.editingDocument);
+    expect(third.outlineHeadings[0]?.label).toBe("Next");
+  });
+
   it("builds one reusable derived state from a single Markdown document parse", () => {
     const source = [
       "# **Title**",
@@ -75,23 +91,6 @@ describe("createEditorDerivedState", () => {
       to: 1
     });
     expect(state.activeBlockState.activeBlock).toBeNull();
-  });
-
-  it("derives semantic context beside compatibility active block state", () => {
-    const source = ["> ```", "> code", "> ```"].join("\n");
-    const state = createEditorDerivedState({
-      source,
-      selection: {
-        anchor: source.indexOf("code"),
-        head: source.indexOf("code")
-      },
-      parseMarkdownDocument
-    });
-
-    expect(state.activeBlockState.activeBlock?.type).toBe("blockquote");
-    expect(state.semanticContext.activeBlock?.type).toBe("blockquote");
-    expect(state.semanticContext.leaf?.type).toBe("codeFence");
-    expect(state.semanticContext.containers.map((container) => container.type)).toEqual(["blockquote"]);
   });
 
   it("exposes an active empty physical line for an empty document", () => {

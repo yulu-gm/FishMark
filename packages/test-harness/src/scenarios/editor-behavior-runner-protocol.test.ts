@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createExecutionPlan } from "../../../../fixtures/editor-behavior/execution-plan";
+import { editorBehaviorKnownDefectObservations as historicalDefects } from "../../../../fixtures/editor-behavior/current-observations";
 import {
   capturedOracleAndProbeCases,
   editorBehaviorCases,
@@ -53,8 +54,14 @@ describe("compareEditorBehaviorObservations", () => {
         ({ caseId, checkpoint, aspect }) => `${caseId}:${checkpoint}:${aspect}`
       )
     );
-    expect(editorBehaviorKnownDefectObservations).toHaveLength(534);
-    expect(editorBehaviorRunnerVerifiedTargets).toHaveLength(2_007);
+    expect(editorBehaviorKnownDefectObservations).toHaveLength(107);
+    expect(editorBehaviorRunnerVerifiedTargets).toHaveLength(2_434);
+    expect(editorBehaviorRunnerCalibration).not.toHaveProperty("pendingTargets");
+    expect(editorBehaviorRunnerCalibration.runId).toBe("d46d7078-8ac3-4cf3-9a0f-0ac89953a320");
+    for (const retained of editorBehaviorKnownDefectObservations) {
+      const historical = historicalDefects.find((entry) => entry.caseId === retained.caseId && entry.checkpoint === retained.checkpoint && entry.aspect === retained.aspect);
+      expect(retained).toBe(historical);
+    }
     expect(defectKeys.size).toBe(editorBehaviorKnownDefectObservations.length);
 
     let gaps = 0;
@@ -87,7 +94,7 @@ describe("compareEditorBehaviorObservations", () => {
     }
 
     expect(gaps).toBe(0);
-    expect(observedDefects).toBe(534);
+    expect(observedDefects).toBe(107);
   });
 
   it("accounts for all 2,541 full-manifest targets", () => {

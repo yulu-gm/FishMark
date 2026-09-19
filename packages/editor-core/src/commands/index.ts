@@ -1,8 +1,3 @@
-export { runBlockquoteEnter } from "./blockquote-commands";
-export {
-  runCodeFenceBackspace,
-  runCodeFenceEnter
-} from "./code-fence-commands";
 export {
   runMarkdownArrowDown,
   runMarkdownArrowUp,
@@ -12,16 +7,6 @@ export {
   runMarkdownShiftTab,
   runMarkdownTab
 } from "./codemirror-markdown-commands";
-export {
-  runMarkdownArrowDownCommand,
-  runMarkdownArrowUpCommand,
-  runMarkdownBackspaceCommand,
-  runMarkdownEnterCommand,
-  runMarkdownHardBreakCommand,
-  runMarkdownShiftTabCommand,
-  runMarkdownTabCommand,
-  type MarkdownCommandTarget
-} from "./markdown-commands";
 export {
   runTableDelete,
   runTableDeleteColumn,

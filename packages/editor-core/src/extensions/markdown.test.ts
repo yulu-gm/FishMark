@@ -5,6 +5,7 @@ import { EditorView } from "@codemirror/view";
 import { describe, expect, it, vi } from "vitest";
 
 import { parseMarkdownDocument } from "@fishmark/markdown-engine";
+import { editorStructureObserver, readCompositionState, type EditorStructureObserver } from "@fishmark/codemirror-adapter";
 
 import { createFishMarkMarkdownExtensions } from "./markdown";
 import { clearCodeHighlightCache } from "../decorations/code-highlight-cache";
@@ -38,6 +39,7 @@ type HarnessOptions = {
   onBlur?: () => void;
   parseMarkdownDocument?: typeof parseMarkdownDocument;
   parseOrderedListNormalizationBlockMap?: typeof parseMarkdownDocument;
+  structureObserver?: EditorStructureObserver;
 };
 
 const createHarness = (options: HarnessOptions) => {
@@ -47,7 +49,7 @@ const createHarness = (options: HarnessOptions) => {
   const view = new EditorView({
     state: EditorState.create({
       doc: options.source,
-      extensions: createFishMarkMarkdownExtensions({
+      extensions: [editorStructureObserver.of(options.structureObserver ?? {}), ...createFishMarkMarkdownExtensions({
         parseMarkdownDocument: options.parseMarkdownDocument ?? parseMarkdownDocument,
         parseOrderedListNormalizationBlockMap: options.parseOrderedListNormalizationBlockMap,
         onContentChange: options.onContentChange ?? vi.fn(),
@@ -60,7 +62,7 @@ const createHarness = (options: HarnessOptions) => {
       } as Parameters<typeof createFishMarkMarkdownExtensions>[0] & {
         onBlockDecorationsBuilt?: () => void;
         onOpenLink?: (href: string) => void;
-      })
+      })]
     }),
     parent: host
   });
@@ -121,15 +123,18 @@ describe("createFishMarkMarkdownExtensions", () => {
     destroy();
   });
 
-  it("uses at most one Markdown document parse for a single document change", () => {
+  it("uses the canonical incremental tree without a second rich-document parse", () => {
     const source = "# Title\n\nParagraph";
     const parseSpy = vi.fn(parseMarkdownDocument);
+    const fullParser = vi.fn();
     const { view, destroy } = createHarness({
       source,
-      parseMarkdownDocument: parseSpy
+      parseMarkdownDocument: parseSpy,
+      structureObserver: { instrumentation: { onFullDocumentParse: fullParser } }
     });
 
     parseSpy.mockClear();
+    fullParser.mockClear();
 
     view.dispatch({
       changes: {
@@ -138,7 +143,8 @@ describe("createFishMarkMarkdownExtensions", () => {
       }
     });
 
-    expect(parseSpy).toHaveBeenCalledTimes(1);
+    expect(parseSpy).not.toHaveBeenCalled();
+    expect(fullParser).not.toHaveBeenCalled();
 
     destroy();
   });
@@ -284,7 +290,7 @@ describe("createFishMarkMarkdownExtensions", () => {
     destroy();
   });
 
-  it("defers derived-state recompute until compositionend", () => {
+  it("defers derived-state recompute until compositionend", async () => {
     const activeBlocks: Array<{ blockType: string | null; anchor: number }> = [];
     const source = "Paragraph";
     const { view, destroy } = createHarness({
@@ -310,6 +316,7 @@ describe("createFishMarkMarkdownExtensions", () => {
     expect(activeBlocks).toEqual([{ blockType: "paragraph", anchor: 0 }]);
 
     dispatchCompositionEvent(view.dom, "compositionend", "x");
+    await vi.waitFor(() => expect(readCompositionState(view.state).active).toBe(false));
 
     expect(activeBlocks).toEqual([
       { blockType: "paragraph", anchor: 0 },

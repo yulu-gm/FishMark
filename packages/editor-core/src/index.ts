@@ -1,24 +1,11 @@
 export type { ActiveBlockState } from "./active-block";
-export {
-  findBlockPathAt,
-  findLeafBlockAt,
-  findTopLevelBlockAt,
-  type BlockPathEntry
-} from "./context/block-path";
+export type { SemanticCommandBindings } from "@fishmark/codemirror-adapter";
 export {
   findBlockByStartOffsetDeep,
   findBlocksByTypeDeep,
   walkMarkdownBlocks,
   type MarkdownBlockTreeEntry
 } from "./context/block-tree";
-export { detectDraftSyntax, type DraftSyntax } from "./context/draft-syntax";
-export {
-  createEditorSemanticContext,
-  type CreateEditorSemanticContextOptions,
-  type EditorContainerContext,
-  type EditorLeafContext,
-  type EditorSemanticContext
-} from "./context/editor-semantic-context";
 export {
   createPhysicalEditingDocument,
   type EditingLine,

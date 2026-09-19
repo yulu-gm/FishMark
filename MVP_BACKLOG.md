@@ -48,6 +48,78 @@
 
 验收结果：PASS。新鲜全量 195 文件、2,535 passed / 1 skipped；build/typecheck/lint 与正式行为 121/121 通过。详见 `reports/task-summaries/RF-HARDEN-001.md`。下一任务为 RF-601；RF-506 尚未执行。
 
+### RF-601 事务桥、队列、history 与 IME
+
+状态：已完成（独立验收 `PASS`，见 `reports/task-summaries/RF-601.md`）
+
+目标：CodeMirror 在浏览器事务与语义 plan 之间转换，且不拥有 Markdown 规则；IME 与 history 归 adapter，Markdown 语义保持纯净。
+
+Intake：`docs/plans/2026-09-18-rf-601-intake.md`。执行交接：`docs/plans/2026-09-18-rf-601-handoff.md`。
+
+验收：
+- CodeMirror change set 与 `DocumentTextChange[]` 双向往返一致（多范围、Unicode、CRLF 归一）。
+- 语义 plan 以带正确 history 注解的单个事务应用；导航不产生 history 事件，自动结构补全可单独撤销/重做。
+- 复用 `src/renderer/application/pending-edit-queue.ts` 与 `workspace-edit-client.ts`，不新建第二套队列或序列真相。
+- 组合期间冻结几何/结构刷新，结束后按最终文本只请求一次重算。
+- 本地缓存版本在单范围、多范围与 fallback 下严格单调；stale 与跨 session 的 plan 在派发前被拒绝；选择变化复用同一文档派生快照。
+- 候选性能如实计数：普通纯文本段落输入零 full parse；结构变更给出显式 fallback 原因与实测代价。
+- guard 中 `codemirror-adapter` 以自身匹配边界规则激活；lint/typecheck/test/build 全绿。
+
+执行切片：
+- [x] 建立 `@fishmark/codemirror-adapter` 与 guard 边界激活。
+- [x] 事务转换、版本单调、stale/跨 session 拒绝。
+- [x] 选择映射与文档派生快照复用。
+- [x] 组合（IME）冻结与结束重算。
+- [x] history 分组与撤销/重做证据。
+- [x] 与既有 queue/client 集成（不建第二套队列）。
+- [x] 候选路径性能证据（5k/20k、文首、长段落、大表格、深容器、围栏/引用）。
+- [x] 独立验收与 `reports/task-summaries/RF-601.md`。
+
+本轮自检：adapter+集成 6 文件 / 56 通过；architecture guard 234 通过；lint 0 errors / 8 pre-existing warnings；typecheck exit 0；全量 200 文件 / 2,585 passed + 1 skipped；build exit 0。未跑正式 Electron 行为语料（本轮不切换生产入口）。
+
+验收结果：PASS。验收中复核了实现声明并删除了 3 处不拥有版本的冗余状态（session 快照 revision/acknowledgedRevision、未被使用的 `isGeometryFrozen` 与冗余断言）；清理后重新跑通 typecheck、lint（0 errors / 8 既有 warning）与全量 200 文件 / 2,585 passed + 1 skipped。下一任务为 RF-506。
+
+### RF-506 语义引擎硬切换
+
+状态：DEV_DONE（2026-09-19 行为/安全独立验收 PASS；包体积门禁 FAIL，最终性能验收 pending，M5 不标 COMPLETE）。
+
+目标：键盘/菜单/工具栏/表格 widget/测试驱动器全部消费 editor-model 的唯一语义规则，生产默认路径可复现并通过真实行为验证，再删除旧语义实现。
+
+当前 intake：`docs/plans/2026-09-19-rf-506-intake.md`。此前切片历史保存在 `docs/plans/2026-09-18-rf-506-handoff.md`，不以切片数代替验收。
+
+验收：
+- 五类入口实际到达新引擎；不能用临时换线后回滚或 fallback 旧引擎作为完成。
+- 默认真实 corpus、正式 Electron 全检查点、undo/redo、composition 和 delayed-ACK 无回归；不能将差异改成 expected/known-defect 来变绿。
+- parser tree、物理行、显示投影使用同一容器语义；plan 与 transaction filter 不维护冲突规则。
+- 旧语义模块无调用者后删除，guard 对退休入口 fail-closed；布局/DOM 能力随后按 M6 迁入 adapter。
+- 性能记录真实新路径扫描、派生重建与延迟，不能把零 full-parser 次数当作实时预算通过。
+- lint/typecheck/full test/build、独立架构/任务验收与文档同步通过。
+
+执行切片：
+- [x] RF-601 adapter 与候选探针实现（模块级历史验收保留，生产级接线仍待验收）。
+- [x] 新命令永久绑定；旧粗 parity 豁免与临时切换脚手架已删除。
+- [x] 建立永久生产新路径与可重复的完整 runtime corpus。
+- [x] 按 parser/纯模型根因修复嵌套结构、整行替换和列表归一化。
+- [x] 完成导航/焦点/组合/history/frame 接线与所有入口。
+- [x] 移除旧语义实现及重复上下文，更新 guard。
+- [ ] 新路径完整行为/几何/性能门禁与父 agent 独立验收。
+
+2026-09-19 继续前基线：父 agent 聚焦 684/684 通过；生产仍旧路径。文档所称 34 项 switched-runtime 失败是历史临时接线结果，必须由本轮永久路径重测；不降低 M5 验收标准。旧的“等待用户决定是否降低验收”不再是阻塞条件。
+
+### RF-701 / RF-602 / RF-603 / RF-604 — M6 依赖顺序
+
+状态：PLANNED。用户授权完成 M6，同时包含必要的 RF-701 前置；仍逐任务实现/验收。2026-09-19 调整：M5 行为安全稳定后允许进入 RF-701，RF-506 的最终性能验收保持未通过，待 M6 删除双重显示派生后按原 bundle 预算共同收口；不得据此宣告 M5 提前 COMPLETE。
+
+- RF-701：一个从 canonical snapshot 派生的共享 render plan，至少一个真实生产消费者；不把 CodeMirror DOM/可见性规则强塞给导出。
+- RF-602：revision snapshot 与 render plan 驱动装饰；普通选择/输入避免全文装饰重建；布局关键装饰直接供给，viewport 仅处理布局安全部分；有滚动/高度/组合证据。
+- RF-603：typed interaction registry；表格焦点、链接、图片、math/Mermaid/highlight 各自明确 adapter；异步结果检查 session/revision，widget 提交 semantic plan。
+- RF-604：生产工厂迁入 codemirror-adapter；renderer 仅装配；editor-core 实现与全部旧 import/例外删除；完整行为、性能、build/lint/typecheck/test 验收。
+
+执行切片：
+- [ ] RF-701 实现并独立验收。
+- [ ] RF-602 实现并独立验收。
+- [ ] RF-603 实现并独立验收。
+- [ ] RF-604 实现并独立验收。
 ## Epic 1：项目骨架
 
 ### TASK-001 初始化桌面工程

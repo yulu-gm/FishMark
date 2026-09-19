@@ -744,6 +744,12 @@ function appendBlockquoteDecorations(
 
   if (block.lines) {
     const renderableLines = getRenderableBlockquoteLines(block.lines);
+    const codeContentLineStarts = new Set((block.innerBlocks ?? []).flatMap((innerBlock) =>
+      innerBlock.type === "codeFence"
+        ? getInactiveCodeFenceLines(innerBlock.startOffset, innerBlock.endOffset, source, innerBlock.kind)
+          .filter((line) => line.kind === "content").map((line) => line.lineStart)
+        : []
+    ));
     const lineCount = renderableLines.length;
     const shouldRenderInnerBlocks = Boolean(block.innerBlocks && block.innerBlocks.length > 0);
     const activeLineInnerBlock =
@@ -776,6 +782,12 @@ function appendBlockquoteDecorations(
         "cm-inactive-blockquote",
         createInactiveBlockquoteDepthClass(quoteDepth)
       ];
+
+      // Hiding a quote prefix can hide every DOM text box on an empty code line.
+      // Preserve that physical content line even while its fence is actively edited.
+      if (codeContentLineStarts.has(line.startOffset)) {
+        lineClasses.push("cm-blockquote-code-content");
+      }
 
       if (isSeparatorLine) {
         lineClasses.push("cm-inactive-blockquote-separator");

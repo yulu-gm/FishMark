@@ -3,6 +3,7 @@ import {
   createEditTransactionPlan,
   type EditTransactionPlan
 } from "../transactions/edit-transaction-plan";
+import { graphemeDeletionRange } from "./grapheme-deletion";
 
 // Forward delete mirrors Backspace: delete one character, or join the next line by removing its
 // break and its hidden prefix. The joined content lands in the current leaf, and the caller's
@@ -34,7 +35,8 @@ export function decideDelete(context: EditorSemanticContext): DeleteDecision | n
 
   // 1. An ordinary character delete.
   if (offset < line.contentEndOffset) {
-    return rangeDelete(context, offset, offset + 1, "default");
+    const range = graphemeDeletionRange(context.source, line, offset, "forward");
+    return range === null ? null : rangeDelete(context, range.from, range.to, "default");
   }
 
   // 2. At the end of the line, join the next line into this one.

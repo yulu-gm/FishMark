@@ -1,18 +1,9 @@
 import type { EditorView } from "@codemirror/view";
 
-import {
-  findBlockPathAt,
-  createPhysicalEditingDocument,
-  getMarkdownEditorViewMode
-} from "@fishmark/editor-core";
-import {
-  parseMarkdownDocument,
-  type BlockquoteMarker,
-  type ListBlock,
-  type ListItemBlock,
-  type MarkdownBlock,
-  type MarkdownDocument
-} from "@fishmark/markdown-engine";
+import { getMarkdownEditorViewMode } from "@fishmark/editor-core";
+import { readEditorStructureCache } from "@fishmark/codemirror-adapter";
+import { createEditorDerivedSnapshotFromCache, type EditorDerivedSnapshot, type PhysicalLine } from "@fishmark/editor-model";
+import { childrenOf, createDocumentStructureCache, type MarkdownNode } from "@fishmark/markdown-engine";
 
 import type { EditorBehaviorCheckpointObservation } from "../../fixtures/editor-behavior/runner-protocol";
 import type { EditorBehaviorLineDomMapping } from "../../fixtures/editor-behavior/runner-protocol";
@@ -37,73 +28,79 @@ export type ObservedPhysicalLineSemantic = {
   readonly markerColumn: number | null;
 };
 
-const canonicalBlockType: Readonly<
-  Partial<Record<MarkdownBlock["type"], EditorBehaviorContainer>>
-> = {
-  paragraph: "Paragraph",
-  list: "List",
-  blockquote: "Blockquote",
-  codeFence: "CodeFence",
-  blockMath: "BlockMath"
+const canonicalBlockType: Readonly<Partial<Record<MarkdownNode["kind"], EditorBehaviorContainer>>> = {
+  paragraph: "Paragraph", list: "List", "list-item": "ListItem", blockquote: "Blockquote",
+  "code-fence": "CodeFence", "block-math": "BlockMath"
 };
 
-export function observeSemanticPath(
-  source: string,
-  selectionOffset: number
-): ObservedSemanticPath {
-  const document = parseMarkdownDocument(source);
-  const raw = findBlockPathAt(document, selectionOffset).map(({ block }) => block.type);
-  const canonical = raw.flatMap((type) => {
-    const mapped = canonicalBlockType[type];
-    return mapped ? [mapped] : [];
-  });
-  return { raw, canonical: ["Document", ...canonical] };
+// Live observations use the exact document snapshot owned by the current EditorState.
+// Source-only callers may build an independent snapshot for parser unit tests.
+function snapshotFor(source: string, snapshot?: EditorDerivedSnapshot): EditorDerivedSnapshot {
+  if (snapshot !== undefined) {
+    if (snapshot.source !== source) throw new Error("Observer snapshot does not match the current source.");
+    return snapshot;
+  }
+  return createEditorDerivedSnapshotFromCache(createDocumentStructureCache(source));
 }
 
-export function observePhysicalLineSemantics(
-  source: string
-): readonly ObservedPhysicalLineSemantic[] {
-  const document = parseMarkdownDocument(source);
-  const physical = createPhysicalEditingDocument(source, document);
+function nodeChain(snapshot: EditorDerivedSnapshot, node: MarkdownNode | null): readonly MarkdownNode[] {
+  if (node === null) return [];
+  const result: MarkdownNode[] = [];
+  let current: MarkdownNode = snapshot.tree.root;
+  for (const index of node.path) {
+    const child: MarkdownNode | undefined = childrenOf(current)[index];
+    if (child === undefined) break;
+    result.push(child);
+    current = child;
+  }
+  return result;
+}
 
-  return physical.lines.map((line) => {
-    const probeOffset = line.to > line.from ? line.from : line.from;
-    const path = findBlockPathAt(document, probeOffset);
-    const quote = quoteLineContext(path.map(({ block }) => block), line.number);
-    const list = deepestListContext(document, probeOffset, line.number);
-    const quoteContentOffset = quote?.contentStartOffset ?? line.from;
-    const contentOffset =
-      list?.item.startLine === line.number && list.item.contentStartOffset !== undefined
-        ? list.item.contentStartOffset
-        : list || quote
-          ? consumeHorizontalSpace(source, quoteContentOffset, line.to)
-          : line.from;
-    const markerOffset =
-      list?.item.startLine === line.number
-        ? list.item.markerStart
-        : quote?.markers.at(-1)?.markerStart ?? null;
-    const role = observeLineRole(
-      source,
-      line,
-      path.map(({ block }) => block),
-      physical.semanticLineMap.byLineNumber.get(line.number)?.role ?? null,
-      contentOffset
-    );
+export function observeSemanticPath(source: string, selectionOffset: number, cached?: EditorDerivedSnapshot): ObservedSemanticPath {
+  const snapshot = snapshotFor(source, cached);
+  const line = snapshot.lineAt(selectionOffset);
+  const node = snapshot.nodeAt(selectionOffset) ?? (line?.nodeId ? snapshot.nodeById(line.nodeId) : null);
+  const chain = nodeChain(snapshot, node);
+  return { raw: chain.map((entry) => entry.kind), canonical: ["Document", ...chain.flatMap((entry) => {
+    const mapped = canonicalBlockType[entry.kind];
+    return mapped === undefined ? [] : [mapped];
+  })] };
+}
 
+export function observePhysicalLineSemantics(source: string, cached?: EditorDerivedSnapshot): readonly ObservedPhysicalLineSemantic[] {
+  const snapshot = snapshotFor(source, cached);
+  return snapshot.document.lines.map((line) => {
+    const chain = nodeChain(snapshot, line.nodeId === null ? null : snapshot.nodeById(line.nodeId));
+    const marker = line.segments.findLast((segment) => segment.kind === "list-marker" || segment.kind === "quote-marker");
     return {
-      line: line.number,
-      from: line.from,
-      to: line.to,
-      sourceText: line.text,
-      role,
-      semanticDepth: (quote?.markers.length ?? 0) + (list?.depth ?? 0),
-      contentColumn: Math.max(0, Math.min(line.text.length, contentOffset - line.from)),
-      markerColumn:
-        markerOffset === null
-          ? null
-          : Math.max(0, Math.min(line.text.length - 1, markerOffset - line.from))
+      line: line.lineNumber, from: line.range.startOffset, to: line.contentEndOffset,
+      sourceText: source.slice(line.range.startOffset, line.contentEndOffset),
+      role: observeCanonicalRole(source, line, chain),
+      semanticDepth: chain.filter((node) => node.kind === "blockquote" || node.kind === "list-item").length,
+      contentColumn: Math.max(0, line.contentStartOffset - line.range.startOffset),
+      markerColumn: marker === undefined ? null : marker.range.startOffset - line.range.startOffset
     };
   });
+}
+
+function observeCanonicalRole(source: string, line: PhysicalLine, chain: readonly MarkdownNode[]): VisiblePhysicalLineRole {
+  const fence = chain.findLast((node) => node.kind === "code-fence" || node.kind === "block-math");
+  if (fence !== undefined) {
+    const boundary = line.role === "fence-open" || line.role === "fence-close";
+    if (fence.data.kind === "code-fence") return fence.data.fence === "indented" || !boundary ? "code-fence-content" : "code-fence-delimiter";
+    return boundary ? "block-math-delimiter" : "block-math-content";
+  }
+  const owner = chain.at(-1);
+  // An empty list item is still an editable, visible item (CommonMark §5.2),
+  // even though it has no paragraph child. Only its own marker line qualifies;
+  // blank continuation lines and empty nested quotes remain separators.
+  if (owner?.kind === "list-item" && line.segments.some((segment) =>
+    segment.kind === "list-marker" && owner.markers.some((marker) => marker.kind === "list-marker" &&
+      marker.range.startOffset === segment.range.startOffset))) return "content";
+  const text = source.slice(line.range.startOffset, line.contentEndOffset);
+  if (/^[ \t]+$/u.test(text)) return "whitespace-only";
+  if (text.length === 0) return line.range.startOffset === source.length ? "empty-editing-line" : "structural-separator";
+  return source.slice(line.contentStartOffset, line.contentEndOffset).trim().length === 0 ? "structural-separator" : "content";
 }
 
 export function observeLineDomMapping(
@@ -168,197 +165,6 @@ function lineDomKind(element: HTMLElement | null): EditorBehaviorLineDomMapping[
   return "source-line";
 }
 
-type QuoteLineContext = {
-  readonly contentStartOffset: number;
-  readonly markers: readonly BlockquoteMarker[];
-};
-
-function quoteLineContext(
-  path: readonly MarkdownBlock[],
-  lineNumber: number
-): QuoteLineContext | null {
-  let deepest: QuoteLineContext | null = null;
-  for (const block of path) {
-    if (block.type !== "blockquote") {
-      continue;
-    }
-    const line = block.lines?.find((candidate) => candidate.lineNumber === lineNumber);
-    if (!line) {
-      continue;
-    }
-    if (!deepest || line.markers.length >= deepest.markers.length) {
-      deepest = {
-        contentStartOffset: line.contentStartOffset,
-        markers: line.markers
-      };
-    }
-  }
-  return deepest;
-}
-
-type ListContext = {
-  readonly depth: number;
-  readonly item: ListItemBlock;
-};
-
-function deepestListContext(
-  document: MarkdownDocument,
-  offset: number,
-  lineNumber: number
-): ListContext | null {
-  let deepest: ListContext | null = null;
-
-  const visitBlocks = (blocks: readonly MarkdownBlock[], parentDepth: number): void => {
-    for (const block of blocks) {
-      if (lineNumber < block.startLine || lineNumber > block.endLine) {
-        continue;
-      }
-      if (block.type === "blockquote") {
-        visitBlocks(block.innerBlocks ?? [], parentDepth);
-        continue;
-      }
-      if (block.type !== "list") {
-        continue;
-      }
-      visitList(block, parentDepth + 1);
-    }
-  };
-
-  const visitList = (list: ListBlock, depth: number): void => {
-    const item = list.items.find(
-      (candidate) =>
-        lineNumber >= candidate.startLine &&
-        lineNumber <= candidate.endLine &&
-        offset >= candidate.startOffset &&
-        offset <= candidate.endOffset
-    );
-    if (!item) {
-      return;
-    }
-    deepest = { depth, item };
-    for (const child of item.children) {
-      if (lineNumber >= child.startLine && lineNumber <= child.endLine) {
-        visitList(child, depth + 1);
-      }
-    }
-  };
-
-  visitBlocks(document.blocks, 0);
-  return deepest;
-}
-
-function consumeHorizontalSpace(
-  source: string,
-  from: number,
-  to: number
-): number {
-  let cursor = from;
-  while (cursor < to && (source[cursor] === " " || source[cursor] === "\t")) {
-    cursor += 1;
-  }
-  return cursor;
-}
-
-function observeLineRole(
-  source: string,
-  line: {
-    readonly number: number;
-    readonly from: number;
-    readonly to: number;
-    readonly text: string;
-    readonly isDocumentEnd: boolean;
-  },
-  path: readonly MarkdownBlock[],
-  physicalRole: string | null,
-  contentOffset: number
-): VisiblePhysicalLineRole {
-  const deepest = path.at(-1);
-  if (deepest?.type === "codeFence") {
-    if (deepest.kind === "indented") {
-      return "code-fence-content";
-    }
-    if (physicalRole === "code-fence-boundary") {
-      return "code-fence-delimiter";
-    }
-    if (physicalRole === "code-fence-content") {
-      return "code-fence-content";
-    }
-    return line.number === deepest.startLine ||
-      isNestedCodeFenceClosingLine(source, line, deepest, path, contentOffset)
-      ? "code-fence-delimiter"
-      : "code-fence-content";
-  }
-  if (deepest?.type === "blockMath") {
-    return line.number === deepest.startLine || (deepest.closed && line.number === deepest.endLine)
-      ? "block-math-delimiter"
-      : "block-math-content";
-  }
-  if (/^[ \t]+$/u.test(line.text)) {
-    return "whitespace-only";
-  }
-  if (line.text.length === 0) {
-    return line.isDocumentEnd ? "empty-editing-line" : "structural-separator";
-  }
-  const lineContentOffset = Math.max(line.from, Math.min(line.to, contentOffset));
-  if (source.slice(lineContentOffset, line.to).trim() === "") {
-    return "structural-separator";
-  }
-  if (physicalRole === "structural-separator") {
-    return "structural-separator";
-  }
-  return "content";
-}
-
-function isNestedCodeFenceClosingLine(
-  source: string,
-  line: { readonly number: number; readonly to: number },
-  block: Extract<MarkdownBlock, { readonly type: "codeFence" }>,
-  path: readonly MarkdownBlock[],
-  contentOffset: number
-): boolean {
-  if (line.number !== block.endLine) {
-    return false;
-  }
-
-  const openingLine = readSourceLine(source, block.startLine);
-  if (!openingLine) {
-    return false;
-  }
-  const openingQuote = quoteLineContext(path, block.startLine);
-  const openingContentOffset = openingQuote?.contentStartOffset ?? openingLine.from;
-  const opening = /^ {0,3}(`{3,}|~{3,})/u.exec(
-    source.slice(openingContentOffset, openingLine.to)
-  )?.[1];
-  if (!opening) {
-    return false;
-  }
-
-  const closing = /^ {0,3}(`{3,}|~{3,})[ \t]*$/u.exec(
-    source.slice(contentOffset, line.to)
-  )?.[1];
-  return closing !== undefined && closing[0] === opening[0] && closing.length >= opening.length;
-}
-
-function readSourceLine(
-  source: string,
-  targetLine: number
-): { readonly from: number; readonly to: number } | null {
-  let line = 1;
-  let from = 0;
-  for (let offset = 0; offset <= source.length; offset += 1) {
-    if (offset !== source.length && source[offset] !== "\n") {
-      continue;
-    }
-    if (line === targetLine) {
-      const to = offset > from && source[offset - 1] === "\r" ? offset - 1 : offset;
-      return { from, to };
-    }
-    line += 1;
-    from = offset + 1;
-  }
-  return null;
-}
-
 export function observeEditorBehaviorCheckpoint(
   view: EditorView,
   identity: Pick<
@@ -371,8 +177,9 @@ export function observeEditorBehaviorCheckpoint(
     anchor: view.state.selection.main.anchor,
     head: view.state.selection.main.head
   };
-  const semanticPath = observeSemanticPath(source, selection.head);
-  const lines = observePhysicalLineSemantics(source);
+  const snapshot = createEditorDerivedSnapshotFromCache(readEditorStructureCache(view.state));
+  const semanticPath = observeSemanticPath(source, selection.head, snapshot);
+  const lines = observePhysicalLineSemantics(source, snapshot);
   const dom = lines.map((line) =>
     observeLineDomMapping(line.line, resolveLineDomElement(view, line.from))
   );

@@ -1,136 +1,28 @@
 import type { EditorView } from "@codemirror/view";
-
+import { planEnter, planBackspace, planIndentIn, planIndentOut, planMoveListItemUp, planMoveListItemDown } from "@fishmark/editor-model";
 import type { ActiveBlockState } from "../active-block";
-import { buildContinuationPrefix, parseListLine } from "./line-parsers";
-import {
-  computeBackspaceListMarker,
-  computeIndentListItem,
-  computeListItemEnter,
-  computeMoveListItemDown,
-  computeMoveListItemUp,
-  computeOutdentListItem,
-  type ListEdit
-} from "./list-edits";
-import { readSemanticContext } from "./semantic-context";
-
-export function runListEnter(view: EditorView, activeState: ActiveBlockState): boolean {
-  const selection = view.state.selection.main;
-  if (!selection.empty) {
-    return false;
-  }
-
-  const line = view.state.doc.lineAt(selection.head);
-  const parsed = parseListLine(line.text);
-  const semanticContext = readSemanticContext(view.state, activeState);
-  const listItemEdit = computeListItemEnter(semanticContext);
-
-  if (listItemEdit) {
-    applyListEdit(view, listItemEdit);
-    return true;
-  }
-
-  if (!parsed) {
-    return false;
-  }
-
-  if (parsed.content.trim().length === 0) {
-    const deleteTo =
-      line.to < view.state.doc.length && view.state.doc.sliceString(line.to, line.to + 1) === "\n"
-        ? line.to + 1
-        : line.to;
-    const exitsTrailingListItem = line.from > 0 && deleteTo >= view.state.doc.length;
-    const insert = exitsTrailingListItem ? "\n" : "";
-
-    view.dispatch({
-      changes: {
-        from: line.from,
-        to: deleteTo,
-        insert
-      },
-      selection: {
-        anchor: line.from + insert.length,
-        head: line.from + insert.length
-      },
-      userEvent: "input.list-exit"
-    });
-    return true;
-  }
-
-  const continuationPrefix = buildContinuationPrefix(parsed);
-  const insertAt = selection.head;
-  const nextAnchor = insertAt + 1 + continuationPrefix.length;
-
-  view.dispatch({
-    changes: {
-      from: insertAt,
-      to: insertAt,
-      insert: `\n${continuationPrefix}`
-    },
-    selection: {
-      anchor: nextAnchor,
-      head: nextAnchor
-    }
-  });
-
-  return true;
+import { runSemanticCommand } from "@fishmark/codemirror-adapter";
+export function runListEnter(view: EditorView, _activeState: ActiveBlockState): boolean {
+  void _activeState;
+  return runSemanticCommand(view, planEnter);
 }
-export function runListMoveLineUp(view: EditorView, activeState: ActiveBlockState): boolean {
-  return runOrderedListEdit(view, activeState, computeMoveListItemUp);
+export function runListBackspace(view: EditorView, _activeState: ActiveBlockState): boolean {
+  void _activeState;
+  return runSemanticCommand(view, planBackspace);
 }
-
-export function runListBackspace(view: EditorView, activeState: ActiveBlockState): boolean {
-  return runListEdit(view, activeState, computeBackspaceListMarker);
+export function runListMoveLineUp(view: EditorView, _activeState: ActiveBlockState): boolean {
+  void _activeState;
+  return runSemanticCommand(view, planMoveListItemUp);
 }
-
-export function runListMoveLineDown(view: EditorView, activeState: ActiveBlockState): boolean {
-  return runOrderedListEdit(view, activeState, computeMoveListItemDown);
+export function runListMoveLineDown(view: EditorView, _activeState: ActiveBlockState): boolean {
+  void _activeState;
+  return runSemanticCommand(view, planMoveListItemDown);
 }
-
-export function runListIndentOnTab(view: EditorView, activeState: ActiveBlockState): boolean {
-  return runListEdit(view, activeState, computeIndentListItem);
+export function runListIndentOnTab(view: EditorView, _activeState: ActiveBlockState): boolean {
+  void _activeState;
+  return runSemanticCommand(view, planIndentIn);
 }
-
-export function runListOutdentOnShiftTab(view: EditorView, activeState: ActiveBlockState): boolean {
-  return runListEdit(view, activeState, computeOutdentListItem);
-}
-
-function runOrderedListEdit(
-  view: EditorView,
-  activeState: ActiveBlockState,
-  computeEdit: (ctx: ReturnType<typeof readSemanticContext>) => ListEdit | null
-): boolean {
-  const edit = computeEdit(readSemanticContext(view.state, activeState));
-
-  if (!edit) {
-    return false;
-  }
-
-  applyListEdit(view, edit);
-
-  return true;
-}
-
-function runListEdit(
-  view: EditorView,
-  activeState: ActiveBlockState,
-  computeEdit: (ctx: ReturnType<typeof readSemanticContext>) => ListEdit | null
-): boolean {
-  const edit = computeEdit(readSemanticContext(view.state, activeState));
-
-  if (!edit) {
-    return false;
-  }
-
-  applyListEdit(view, edit);
-
-  return true;
-}
-
-function applyListEdit(view: EditorView, edit: ListEdit): void {
-  view.dispatch({
-    changes: edit.changes,
-    selection: edit.selection,
-    filter: edit.filter,
-    userEvent: edit.userEvent
-  });
+export function runListOutdentOnShiftTab(view: EditorView, _activeState: ActiveBlockState): boolean {
+  void _activeState;
+  return runSemanticCommand(view, planIndentOut);
 }

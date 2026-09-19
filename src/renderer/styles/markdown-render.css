@@ -678,6 +678,10 @@
   line-height: 0.8;
 }
 
+.document-editor .cm-blockquote-code-content {
+  min-height: 1lh;
+}
+
 .document-editor .cm-inactive-blockquote-marker {
   display: none;
 }

@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 1,
+  "fixture": {
+    "schemaVersion": 1,
+    "fixtureId": "fishmark-rf-complex-20000-lines-v1",
+    "path": "fixtures/performance/complex-20000-lines.md",
+    "sha256": "545601ad9d770898e23e5551e938bcaa4ebaecd8446941a4145a4db8777f6d37",
+    "lineCount": 20000,
+    "byteLength": 531783,
+    "sourceLength": 531783,
+    "encoding": "utf-8",
+    "newlinePolicy": "lf-only-no-final-newline",
+    "lineCountPolicy": "logical-lines-separated-by-lf",
+    "contentProfile": "Deterministic mixed Markdown with headings, paragraphs, ordinary blank lines, nested unordered and ordered lists, nested blockquotes, quoted lists and fenced code, ordinary fenced code, block math, tables, footnotes, reference definitions, inline formatting, and links."
+  },
+  "capabilities": {
+    "incrementalStructureCache": {
+      "available": false,
+      "reason": "incremental-structure-cache-not-implemented",
+      "zeroCounters": [
+        "incrementalParseWindow",
+        "cacheHit",
+        "invalidatedNodes"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "name": "open",
+      "counters": {
+        "fullParse": 4,
+        "incrementalParseWindow": 0,
+        "cacheHit": 0,
+        "invalidatedNodes": 0,
+        "decorationRebuild": 1
+      },
+      "parserEntries": {
+        "parseMarkdownDocument": 2,
+        "parseOrderedListNormalization": 0
+      },
+      "capabilityRefs": [
+        "incrementalStructureCache"
+      ],
+      "unavailableCapabilityReason": "incremental-structure-cache-not-implemented"
+    },
+    {
+      "name": "edit",
+      "counters": {
+        "fullParse": 2,
+        "incrementalParseWindow": 0,
+        "cacheHit": 0,
+        "invalidatedNodes": 0,
+        "decorationRebuild": 1
+      },
+      "parserEntries": {
+        "parseMarkdownDocument": 1,
+        "parseOrderedListNormalization": 0
+      },
+      "capabilityRefs": [
+        "incrementalStructureCache"
+      ],
+      "unavailableCapabilityReason": "incremental-structure-cache-not-implemented"
+    },
+    {
+      "name": "selection",
+      "counters": {
+        "fullParse": 0,
+        "incrementalParseWindow": 0,
+        "cacheHit": 0,
+        "invalidatedNodes": 0,
+        "decorationRebuild": 0
+      },
+      "parserEntries": {
+        "parseMarkdownDocument": 0,
+        "parseOrderedListNormalization": 0
+      },
+      "capabilityRefs": [
+        "incrementalStructureCache"
+      ],
+      "unavailableCapabilityReason": "incremental-structure-cache-not-implemented"
+    },
+    {
+      "name": "orderedListEdit",
+      "counters": {
+        "fullParse": 4,
+        "incrementalParseWindow": 0,
+        "cacheHit": 0,
+        "invalidatedNodes": 0,
+        "decorationRebuild": 1
+      },
+      "parserEntries": {
+        "parseMarkdownDocument": 1,
+        "parseOrderedListNormalization": 1
+      },
+      "capabilityRefs": [
+        "incrementalStructureCache"
+      ],
+      "unavailableCapabilityReason": "incremental-structure-cache-not-implemented"
+    },
+    {
+      "name": "outline",
+      "counters": {
+        "fullParse": 2,
+        "incrementalParseWindow": 0,
+        "cacheHit": 0,
+        "invalidatedNodes": 0,
+        "decorationRebuild": 0
+      },
+      "parserEntries": {
+        "parseMarkdownDocument": 1,
+        "parseOrderedListNormalization": 0
+      },
+      "capabilityRefs": [
+        "incrementalStructureCache"
+      ],
+      "unavailableCapabilityReason": "incremental-structure-cache-not-implemented"
+    },
+    {
+      "name": "metrics",
+      "counters": {
+        "fullParse": 3,
+        "incrementalParseWindow": 0,
+        "cacheHit": 0,
+        "invalidatedNodes": 0,
+        "decorationRebuild": 0
+      },
+      "parserEntries": {
+        "parseMarkdownDocument": 1,
+        "parseOrderedListNormalization": 0
+      },
+      "capabilityRefs": [
+        "incrementalStructureCache"
+      ],
+      "unavailableCapabilityReason": "incremental-structure-cache-not-implemented"
+    }
+  ]
+}

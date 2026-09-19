@@ -1,7 +1,6 @@
 import { useEffect, useEffectEvent } from "react";
 
 import type { EditorTestCommandEnvelope } from "../../shared/editor-test-command";
-import { createEditorTestDriver } from "../editor-test-driver";
 import type { WorkspaceRendererTestAdapter } from "./workspace-renderer-application";
 
 type EditorBridge = {
@@ -30,13 +29,15 @@ export function EditorTestBridgeHost(props: EditorTestBridgeHostProps): null {
       return;
     }
 
-    const driver = createEditorTestDriver({
-      workspace: props.workspace,
-      resetAutosaveRuntime: props.resetAutosaveRuntime,
-      editor: props.editor
-    });
-
     try {
+      // Test automation is an optional bridge capability; ordinary editing never
+      // needs to download or initialize the scenario driver.
+      const { createEditorTestDriver } = await import("../editor-test-driver");
+      const driver = createEditorTestDriver({
+        workspace: props.workspace,
+        resetAutosaveRuntime: props.resetAutosaveRuntime,
+        editor: props.editor
+      });
       const result = await driver.run(payload.command);
       await props.fishmarkTest.completeEditorTestCommand({
         sessionId: payload.sessionId,

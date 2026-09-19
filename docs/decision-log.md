@@ -9,6 +9,129 @@
 
 ## 记录
 
+| 2026-09-19 | 行为观察器读取实际 canonical snapshot；修正经独立规范和 micromark 验证的错误夹具，不改变真实源码编辑或 DOM 期望来迎合实现。 | 空列表项不必有 Paragraph；task checkbox 后同一行的 `>` 是段落文本，不构成深层引用；容器 source range 外的尾部空白不能继承不存在的 AST 祖先。依据 CommonMark §5.2 与 GFM §5.3。 | 深度 5/8 的 task 用例改成合法多行嵌套，保留深度与 task 覆盖。仅被修改的精确 targets 撤销旧证据并重新精确验证；RF-001 原始记录保留，其他 known-defect 的值不变；不为修订目标新增缺陷豁免。编辑用虚拟段落不能冒充原始语法树节点。 |
+
+| 2026-09-19 | 用户授权 SubAgent 持续完成 M5/M6；以永久生产新路径作为可复现判据，不再用临时接线后回滚反复探测。 | 粗 parity 允许 10 项差异，默认旧路径通过不能证明新路径就绪。父实测零 full-parse 时 snapshot 在简单 20k 文档仍耗时约 4.8–5.3 秒，因此派生复杂度优化成为切换前置。 | 当前仅 RF-506 实现，完成后 RF-701 → RF-602/603/604。不采纳把回归记为 known deviation 降低退出标准；实现 agent 按文件所有权协作，父 agent 独立验收。 |
+
+## 记录
+
+## 记录
+
+## 记录
+
+## 记录
+
+## 记录
+
+## 记录
+
+## 记录
+
+## 记录
+
+## 记录
+
+## 记录
+
+## 记录
+
+## 记录
+
+## 记录
+
+## 记录
+
+## 记录
+
+| 2026-09-19 | 带"临时接线 + 必须回滚"的任务**不要委派**给子代理；这类任务由自己完成，且凡收到子代理改动过共享文件的结果，必须独立复核 `git diff`。 | RF-506 切片五十四：为压缩上下文，把"箭头族失败按形状分类"（需临时打开语义面、跑语料、再回滚）委派给子代理。它连续两轮无返回、无产物，并在"准备接线"处停下，**留下 3 行 `onSemanticCommands` / `onSemanticChangeFrame` 接线**未回滚——若保留，语义面会永久开启，使后续所有切换口径测量失真。已中断并手工清理，五项复核（`git diff` 空、探针匹配 0、typecheck 0、673/673、lint/build 0）通过。 | 子代理无共享上下文、无法确认清理完成且不会主动核对；测量脚手架类任务应自己做。若确需委派，须在提示里要求"先回滚再报告"，并在返回后独立跑 `git diff --stat` 复核。 |
+
+| 2026-09-19 | 更正切片二十二：箭头族两条用例**并不冲突**——向上跨隐藏分隔行要落到目标行**内容起点**，向下跨空行要落到下一段**末尾**。 | RF-506 切片五十三读原始用例后确认：`enters the last visible blockquote line…`（`> Quote line`/`> Still quoted`/空/`Paragraph`，起锚 27）期望 `indexOf("Still quoted")` = 15；`skips the collapsed structural blank row…`（`Paragraph one`/空/`Paragraph two`，起锚 13）期望 `source.length` = 27。方向与目标行都不同，切片二十二把两个不同形状当成同一形状，从而误判为"要求相反"。 | 判断两条用例是否冲突前，必须各自 `read` 原始 `source`/`setSelection`/断言；只看失败信息里的文本片段会把不同方向、不同目标行的用例混为一谈（与切片四十六"源必须从测试文件抄录"同源）。 |
+
+| 2026-09-19 | 一个族在**同一处**连续三次以上无净进展时，应把该族标为止损并换族，而不是继续单点尝试；已得收益先固化进文档。 | RF-506 的 `Backspace` 族：累计取得 **15 → 5** 的净收益后，剩余 5 项分别经历过（归一化器作用域三次尝试 −7/−2/0；围栏光标两次尝试 0/0；多按键递归与"归属 Enter"各一项）。每次尝试都消耗一整轮，且失败模式重复（判据与语料真实入参不对应、共享分支约束冲突）。 | 触发止损的判据：同一族同一处连续 3 轮无净进展，或 2 轮改动未改变任何指标。止损时必须在 handoff/progress 中写下每项的**具名阻碍**与建议的下一个族，避免后续 agent 重新踩同一处。 |
+
+| 2026-09-19 | 单元探针要与语料**逐参数一致**，不只是 source 一致；同一个函数在不同调用点可能收到不同的 `changedRanges`/选项，单元里改对不等于语料里生效。 | RF-506 切片五十：我在 `computeChangedRangeOrderedListNormalization` 里加的"作用域夹取"判断让**单元探针输出确实变了**（`…\n1. 内容3` → `…\n2. 内容3`），但切换口径语料始终是 5、目标用例照旧失败。说明语料并未以 `changedRanges: [{ from: 6, to: 9 }]` 走到该分支——真实过滤器传入的范围不同（很可能来自切片四十五观测到的、在语义事务**之前**运行的那次 `follows=1` 流程）。 | 用单元探针复现语料问题时，必须把**调用点的全部实参**（source、changedRanges、options）一并打出来照抄；否则"单元改对、语料没动"会反复出现（切片四十四是 source 不等价，本轮是参数不等价）。 |
+
+| 2026-09-19 | 在事务过滤器入口按"编辑形状"（删了哪些字符）决定是否跳过某个归一化，是**过宽**的判据；应看"编辑后该区域是否仍构成该结构"。 | RF-506 切片四十八：为让"删除有序标记使列表断开"时不再重编号，我按"删除文本是否以有序标记开头"跳过有序归一化。切换口径 Backspace **5 → 7**：目标两条仍失败，却回归了两条 `renumbers … when deleting a middle item`——那两条同样删掉了标记，但剩余各项仍有标记、仍是同一列表，必须重编号。收窄为排除整行删除也无效。 | 结构类后处理的开关判据应基于**编辑后的结构**（本例：候选范围内的行是否仍都有标记），而不是编辑动作的字符形状；且应在该处理函数内部判断，不要放在过滤器入口。 |
+
+| 2026-09-19 | 怀疑某个纯函数算错时，**直接在单元测试里调用它**比在编辑器里打点更快也更可靠：一次调用就能拿到完整返回值，且排除管线其它环节。 | RF-506 切片四十六/四十七：前两轮在编辑器管线里打点，只能看到"某次 filter 的 follow-up 是 `[10,12):"1."`"；切片四十七改为直接 `computeNormalizedOrderedListDocument(中间态, { changedRanges })`，一次返回 `{"source":"…1. 内容3","changes":[{"from":10,"to":12,"insert":"1."}]}`，与编辑器里观察到的错误文本完全一致，直接确认根因在该函数内。 | 定位责任组件的顺序：先看调用栈/打点确定大致环节（切片二十七、四十五），一旦怀疑到**纯函数**，立刻改为单元探针直接调用它，不要在管线里继续加打印。 |
+
+| 2026-09-19 | 阅读行为用例时，**源字符串与期望字符串必须从测试文件里抄录**，不能凭断言输出反推；断言输出只显示差异，极易漏掉规模（如列表项数）。 | RF-506 切片四十四到四十六：我根据 `expected '1. 内容\n内容2\n1. 内容3' to be '1. 内容\n\n2.内容2\n3. 内容3'` 反推源，误以为是两行列表，据此做了两次 ASCII 探针并得出相互矛盾的结论。切片四十六直接读 `code-editor.test.ts:4832` 才发现源是**三项**列表（`1. 内容` / `2. 内容2` / `3. 内容3`），期望是"在第二项内容起点按 Backspace 让列表断开"。 | 排查任何语料用例前，先 `read` 该用例拿到 `const source` / `const expected` / `setSelection` 的原始代码；断言输出只用于确认，不用于反推输入。 |
+
+| 2026-09-19 | 定位"结果被谁改写"时，要按**发生顺序**打点并打印 follow-up 的具体变更；只看最终文本或只看一次过滤器出口会把因果判反。 | RF-506 切片四十四/四十五：切片四十四只打印了过滤器出口一次（`follows=0 effectiveLen=19`），据此以为过滤器没改写、问题在别处；切片四十五同时给 `followUpTransactions.push` 的出口与派发点打点，得到完整顺序 `follows=0 → follow [10-12:"1."] → follows=1 → RF508RUN applied`，才看清改写者是一个**发生在语义事务之前**的 follow-up，且语义并无双重派发。 | 排查此类问题时至少打印三处：过滤器的**每次**运行（含 `follows` 计数）、每个 follow-up 的 changes、以及语义派发点。顺序信息是判据，单点信息不是。 |
+
+| 2026-09-19 | 做"等价形状"探针时，**必须保证输入与语料逐字等价**；标记后的空格数、全角/半角宽度都会改变偏移，使结论失效。 | RF-506 切片四十三/四十四：我用 ASCII 形状 `1. AAAA\nBBBB\n1. CCCC`（标记后 1 个空格）探规划器，得到 `[3,5)`，据此判断"删除范围与期望文本相符"；切片四十四改用真实中文用例探 dispatch 前事务，得到 `[6,9)`，实际产出与语料输出**不一致**。两次探针的输入不等价（标记后空格数不同），结论因此相反。 | 探针一律直接使用语料里的原始字符串与锚点；若必须用 ASCII 简化，需保证标记、空格、前导宽度完全一致，并在记录中注明差异。 |
+
+| 2026-09-19 | 共享分支（如 `marker-degrade`）的光标语义不要单独调整：它被整族用例依赖，改一处会批量破坏。 | RF-506 切片四十三：为让 `breaks ordered list rendering…` 的光标落到内容处，我给 `rangeDelete` 加 `caret` 参数并在 `marker-degrade` 两支上传入 `contentStart - markerText.length`。切换口径 Backspace **5 → 12**，新增 8 条 `removes an empty ordered/unordered/quote marker…`、`deletes the marker for a first ordered item…` 失败。已回滚。 | 需改共享分支行为时，先把该分支的**全部**语料用例列出来作为同一组约束（同切片四十二的教训），或先加分支再改，绝不在共享路径上直接调参数。 |
+
+| 2026-09-19 | 规则的推断必须由**两侧语料共同约束**；只按一侧用例推断会写出过宽的规则，修好一侧的同时打破另一侧。 | RF-506 切片四十二：为修 `removes one repeated empty paragraph…`（`# Title\n\n\n\n` 一次按键 → `# Title\n\n`），我把 `planTrailingBlankCollapse` 统一改成"只删该行前的换行"。总数从 8 到 7，但**新增两条失败**：`joins a trailing empty quote line across its structural separator on Backspace` 与 `deletes trailing empty quote lines after a quoted list on Backspace`——引用尾部空行要求**整段删掉**。按"尾部 run 是否为裸引用分隔行"分两支后到 5，两侧都满足。 | 改一条共享分支前，先找出**所有**依赖该分支的语料用例（这里是纯空行族与引用尾部族），把它们作为同一组约束一起满足；只测目标用例会漏掉反例。 |
+
+| 2026-09-19 | 单元测试的期望值必须**取自真实语料**，不能从规则推断；推断出来的期望会和实现一起错。 | RF-506 切片四十一：我从"一次按键只删一行分隔行"的规则推断出 `Alpha\n\n\nBeta` 在锚点 7 应得 `Alpha\n\nBeta`，据此写单测，结果实现产出 `Alpha\nBeta` 而失败。同一形状的语料用例（`removes a visible extra blank row…`）走的却是锚点 6，两处锚点语义不同，我的推断只覆盖了其中一处。 | 写语义单测时，期望值一律抄自语料用例或探针实测；若发现实现与推断不符，先记录该不一致并查清，而不是把单测改成推断值。 |
+
+| 2026-09-19 | 只调整 `replaceLineDecision` 的 `from` 不是局部改动：它的范围语义是"**整行 run，含行前换行**"，调用方的 `prefixText`/`carried` 都按该语义拼装，改起点会连带改变所有共享该分支的用例。 | RF-506 切片三十九/四十：为让"空项退出"少一个空行，先改 `from` 为 `prefix.startOffset`（净负 2、破坏两条引用用例），再写 `exitRunStartOffset` 精确算该项 run 起点（**净负 11**，新增 11 条 `exits …`/`upgrades … at content start`/`keeps input.list-exit …` 失败）。两次都因为该分支的正确性依赖"`from` 含前置换行"这一前提。 | 若确要改这类"整行替换"规则，须同时重写 `prefixText`/`carried` 的拼装并重跑全部共享该分支的用例；在此之前先补单测锁定现状（例如 `Enter` 的 13 条已通过退出用例），把它当作重构而非补丁来做。 |
+
+| 2026-09-19 | `line.range.startOffset` **含该行前的换行**，不能与"插入一个换行"的替换同时使用，否则会多出一整行空行。 | RF-506 切片三十九：`replaceLineDecision` 用 `from: line.range.startOffset` 到 `line.contentEndOffset` 做整行替换（该范围已吞掉上一行的换行），而最外层空项退出分支又插入 `prefixText = "\n"`，于是 `- [ ] todo` 的行末退出产出 `- [ ] todo\n\n\n` 而非 `- [ ] todo\n\n`；另一条同类用例多出一行空块。切片三十已记录该边界性质（`lineAt` 返回行的 `range.startOffset` 含前置换行）。 | 做整行替换时二选一：要么范围从 `line.range.startOffset` 起且**不再补换行**，要么范围从内容/前缀起点起并补上一个换行。两者混用必然多一行。 |
+
+| 2026-09-19 | 重建一行前缀时必须把 `List` 前缀的**全部**字段带上（`ancestorText`、`indentationText`、`markerText`、`markerSpacingText`、`taskText`）；漏字段会静默丢数据，且只在带该字段的形状上暴露。 | RF-506 切片三十八：`planListItemEnter` 的空项升级分支重建行时漏了 `prefix.taskText`，于是空任务项升级会丢掉复选框（`- [ ] parent\n- ` 而期望 `- [ ] parent\n- [ ] `）。该 bug 自切片二十写入，直到本轮专门测空任务项形状才发现——因为其它形状的 `taskText` 为空串，行为看起来正常。 | 复用 `ListItemPrefix` 重建行时，优先整体使用一个已声明的拼接（例如让 `listItemPrefix` 或共享辅助函数提供 `text` 字段），或至少在改动该拼接时逐字段对照接口定义。 |
+
+| 2026-09-19 | **重申硬性约束**：`packages/editor-core/src/extensions/markdown.ts` 的任何改动只能用 edit 工具**逐段**进行，禁止 PowerShell 正则批量替换。 | 该规则在切片三已记录（当时批量替换三次损坏该文件），但 RF-506 切片三十七我在"按命令测量"时又用 PowerShell 正则改了它的开关数组。本次侥幸未损坏（typecheck 通过）并已用 edit 工具恢复，但同类操作此前三次都留下了语法错误并浪费整轮。 | 需要按命令测量时，改为用 edit 工具手工改那一个数组字面量；测量结束同样用 edit 工具还原。批量文本工具一律不用于 `markdown.ts`。 |
+
+| 2026-09-19 | 一条行为用例内**多次按键**的断言必须逐次验证；不能用第一次按键的期望推导规则，因为前一次修复会改变后续按键的输入状态。 | RF-506 切片三十六：`removes an empty nested quote list marker before clearing its indentation on Backspace`（`code-editor.test.ts:3555`）在一次 `it` 内连按三次 Backspace，断言 `>   - ` → `>   ` → `>  ` → `> `，考核的是同一形状上的递归收敛（先降级列表标记，再逐个吃缩进空格）。而切片二十七到三十五修好的全部是**单次按键**形状，此前建立的方法（探一次锚点与旧路径编辑，写一条规则）对本条不充分。 | 遇到多按键用例时：对每次 `pressBackspace` 前后分别取锚点与旧路径编辑（文档在按键之间变化），先让第一次正确，再复核后续各次；若各次要求互斥，则该用例需要"多按键状态机"级别的建模，应单列并考虑先绕开。 |
+
+| 2026-09-19 | "仅移动光标"的语义计划必须**同时**验证两件事：文档不变，以及**光标的落点**。只断言文本会漏掉后者。 | RF-506 切片三十五：为"引用后续行"实现空 edits 计划时，首版把光标设为 `offset`，文本断言立即通过、只剩 `expected 25 to be 22` 失败；旧路径把光标放在上一行内容末尾，改为 `previous.range.endOffset - 1` 后才全通过。若当时只检查文本就会误判为"已修好"。 | 写空编辑计划时按 `settleCaret` 的思路显式决定落点（行首/内容末尾/上一行末尾），并在单测里同时断言 `text === source` 与 `cursor`。 |
+
+| 2026-09-19 | 在既有 `decideXxx` 的分支链上加"守卫"无法**替代**该形状所需的动作；若目标行为是"不改文档"，必须在链中新增一支返回空编辑计划，而不是阻止某一支命中。 | RF-506 切片三十四：为修 `keeps blockquote presentation…at a later line start`（旧路径**完全没有文档变更**），我在"删除前置换行"那支上加了 `isFirstLineOfQuote` 守卫。结果该支不命中后执行继续落到步骤 3 的 `quote-degrade`，删掉 `>` 与空格——正是错误结果，切换口径仍为 12。 | 判据是"这一形状应该**做什么**"，不是"不应该命中哪一支"。改 `decideXxx` 前先写出目标形状的期望动作（增删改或仅移动光标），再决定是加分支还是改分支。 |
+
+| 2026-09-19 | 引用块 Backspace 的分支判据是"光标所在行是否为该引用的**首行**"，而**不是**"上一行是否为空"。 | RF-506 切片三十二/三十三连续两轮都按"上一行为空与否"设计守卫，两次净负（−4、−1）。实测显示两条用例的上一行**都是空行**却要求相反结果：`allows leaving a blockquote…`（光标在 `> quote one`，引用首行）旧路径删除 `10-11:""`（标记前的换行）；`keeps blockquote presentation…at a later line start`（光标在 `> quote two`，引用后续行）旧路径**完全不改文档**，其测试也只断言内容不变与光标位置。 | 判"首行"可用 `lineContainerChain` 取得引用容器后比较其 `source.startOffset` 与当前行行首。推论：判定旧路径行为差异时，优先看"该行在容器内的相对位置"，而不是相邻行的内容；相邻行内容相同的情形已经被这两条用例证伪两次。 |
+
+| 2026-09-19 | 在语义模型里判断"某行是否为空"必须用**不含换行的边界**；`lineTextOf` 之类的整行切片对本行与**上一行**都会带上换行，`trim()` 判空因而不成立。 | RF-506 切片三十二：为区分"上一行是空行"与"上一行是普通段落"，我用 `lineTextOf(context, previous).trim().length === 0` 作守卫，结果该守卫从不成立（空行的切片含换行），导致切换口径 Backspace 由 12 **净负到 16**，并回归了 3 条此前通过的行首合并用例。 | 正确做法是用 `context.source.slice(prefix.contentStartOffset, line.contentEndOffset)`（不含换行）判断；切片十七的 `isSeparatorLine` 已经采用这种边界，新代码应保持一致。 |
+
+| 2026-09-19 | 语义规则必须基于**渲染器归一化之后的锚点**编写；写规则前先用 `setSelection` 探针读出真实锚点，不要假定它等于测试传入的值。 | RF-506 切片三十/三十一：行为用例把光标设在隐藏引用标记上（`indexOf("> quote one")` = 11），但 `setSelection` 的 dispatch 返回时视图里已是 13——`normalizeHiddenSelectionAnchor`（`markdown.ts:1132`）把落在隐藏标记上的光标推到该行内容起点，且该归一化对**两条路径都生效**。此前按"锚点在标记上"编写的规则因此全部不命中或产出错误范围：切片二十九用 offset 11 直接调规划器得出"已修好"的错误结论，切片三十才在真实路径上看到 13。改为在"行首**或**内容起点"都生效后，切换口径 Backspace 13 → 12。 | 固定的探路顺序：先用 `setSelection` 探针读 `requested` 与 `actual` 两个值，确认真实锚点，再据此写规则，最后跑切换口径语料。这也解释了为什么"单元探针通过但语料仍失败"会反复出现。 |
+
+| 2026-09-19 | 判断"某规则是否被下游改写"时，必须在 **dispatch 之前**读取事务本身；只在 `observeDocumentUpdate` 读最终结果会把"规划器产出的范围"误判为"过滤器改写的结果"。 | RF-506 切片二十九在 `observeDocumentUpdate` 看到语义路径删 `[11,13]`，据此推断"差异发生在规划器之后"；切片三十在 `applyPreparedSemanticCommand` 的 dispatch 前打印同一事务，得到 `applied 11-13:""`——计划本身就是这个范围，过滤器没有改写。真正的原因是**规划器收到的锚点是 13 而不是测试设置的 11**。 | 验证语义规则的四步顺序固定：规划器单元探针 → **dispatch 前的事务** → 过滤器出口 spec → 切换口径语料。其中"dispatch 前"这一步是区分"计划错"与"被改写"的唯一判据。 |
+
+| 2026-09-19 | 语义改动的验证必须分两层：**规划器输出**与**真实路径最终编辑**要分别测量，二者可以不一致。 | RF-506 切片二十九：`allows leaving a blockquote when Backspace is pressed from the first line start` 一例中，旧路径与语义**规划器**都删除 `[10,11]`（文本一致），但语义**真实路径**最终删 `[11,13]`。也就是说，只靠 `planBackspace` 单元探针"验证通过"并不代表该修复在真实语料里生效——切片二十六/二十七曾因同类误判浪费多轮。 | 任何语义规则改动的验证顺序固定为：(1) 规划器单元探针确认 edits 与文本；(2) 在语义路径 dispatch **之前**打印 `prepared.transaction` 的 changes；(3) 打印事务过滤器出口的 spec（含 follow-up）；(4) 跑切换口径语料。四步中任一步不一致都要先解释差异再继续。 |
+
+| 2026-09-19 | 迁语义规则时，**删除范围要按引用深度分支持有**，不能用一个公式覆盖；深度不等的情形必须让更深的那一行保持原位。 | RF-506 切片二十八：同族两条用例的旧路径编辑实测为 `> 11`/`>`/`> 222`（深度 1 vs 1）→ `[4,9]`（上一行内容末尾 → 锚点，吞掉换行+分隔行+本行前缀），而 `> 11`/`>`/`> > 1`（深度 1 vs 2）→ `[5,7]`（只删分隔行整行）。若对深度不等的情形沿用"reach back"，会把更深引用行的层级悄悄降一级；若直接 `return null`，则落到 `quote-degrade` 产出 `> 11\n> 1`。二者都不是旧路径行为。 | 这与旧路径 `mergeSameDepthBlockquoteAcrossStructuralSeparator` 的 `quoteDepth` 相等守卫一致。后续遇到"分隔行 + 容器前缀"的删除规则，先确认两侧容器的深度是否相等，再决定删除范围。 |
+
+| 2026-09-19 | 定位旧路径的编辑规则时，**优先在真实键盘路径上打点并读调用栈**，不要靠读代码推断。 | RF-506 切片二十三到二十六连续四轮在 `backspace.ts` 上"读代码 + 猜条件"，全部无效；切片二十七改在 `src/renderer/code_editor.ts` 的 `observeDocumentUpdate` 里加一行打印，异常栈立刻给出旧路径实现是 `mergeSameDepthBlockquoteAcrossStructuralSeparator`（`packages/editor-core/src/commands/blockquote-commands.ts:323`），并直接读到它的删除范围（`separator.previousBlockEnd → contentStart`）与前置判据（`quoteDepth` 相等）。按此实现后切换口径 Backspace **15 → 14**，是连续多轮以来的首个净收益。 | 迁语义规则的标准流程应为：真实路径打点 → 读调用栈得到旧实现位置 → 读它的判据与范围 → 在 `editor-model` 复刻 → 用同一输入的单测先验证 → 再跑切换口径语料。 |
+
+| 2026-09-19 | RF-506 / M5 的验收基线已实测确定：`test:editor-behavior` 与 `test:editor-foundation` 在**旧路径下均已通过**，因此语义切换的验收标准是"切换后保持通过"，而不是"把它们修绿"。 | RF-506 切片二十七首次运行这两条从未被执行过的门禁：`test:editor-behavior` 得 `cases=121/121 targets=2541 unexpected=0`（exit 0），`test:editor-foundation` 得 310/310（exit 0）。默认配置下 `code-editor.test.ts` 亦为 273/273。 | 结论：M5 的唯一阻塞是切换口径的真实语料失败（当前全切 45 项），不存在其它隐藏门禁风险。后续不需要再为"门禁是否会红"担心，全部精力应放在清零切换口径失败上。 |
+
+| 2026-09-19 | 在语义模型里判断"光标是否在内容起点"时，**不能用 `line.contentStartOffset` 作为唯一分界**：引用标记与其后的间距都属于隐藏前缀，而光标可能落在"内容首字符"上，二者是不同位置。 | RF-506 切片二十六：`> 222` 行的段为 `quote-marker@7-8, spacing@8-9`、`contentStartOffset = 9`、`contentEndOffset = 12`。行为用例把光标放在 `indexOf("222") = 10`（内容首字符），此时 `offset > contentStart` 成立，任何写成 `offset <= contentStart` 的分支都不会命中——我连续两次因此写错条件；"在最后一个标记与其后间距之内"的判据同样不成立（间距结束也在 9）。 | 写此类分支前先打印目标行的 `segments`（kind 与 range）与 `contentStartOffset/contentEndOffset`，用数据确认光标与各段的相对位置，不要用"应该在内容起点"推断条件。 |
+
+| 2026-09-19 | **撤回**上一条关于"切换口径存在跨用例状态污染"的判断：该现象不存在，是**跨代码状态比较**造成的误读。 | RF-506 切片二十四比较的是"装了分支修复时的限定运行"与"回滚后的整跑"，把两次**代码状态不同**的运行差异误读成"同一状态下单独跑通过、同跑失败"。切片二十五在同一代码状态下把三种运行范围（只跑该用例 / 同族 4 条同跑 / 整个文件）跑齐，结果**全部失败**，污染不存在。 | 教训：判定"顺序相关"必须**固定代码状态**、只改变运行范围，并在同一批次内完成；跨批次（尤其跨回滚）比较不能作为顺序相关性的证据。 |
+
+| 2026-09-19 | 语义行为改动**禁止先写分支再跑语料**；必须先建立"实际命中哪个分支"的数据，再决定改哪里。 | RF-506 切片二十三/二十四/二十五连续三轮在 `backspace.ts` 上先写分支后验证，全部无效：分支没命中、放宽条件仍没命中、所依据的"污染"不存在。三次都浪费在错误的定位上，因为 `decideBackspace` 的分支顺序与 `lineAt` / 容器前缀边界的关系从未被实测。 | 动手前先在 `decideBackspace` 的每个 `return` 处加临时分支名追踪，对目标用例打印命中的分支；确认命中分支后才改代码。这也解释了为什么切片七写下的"改 `editor-model` 前必须先证明分支被命中"这句教训至今仍反复被违反。 |
+
+| 2026-09-19 | 切换口径的语料数字在**语义命令接线后存在跨用例状态污染**，单条与整跑的结论可以相反；报告与对比前必须先确认这一点。 | RF-506 切片二十四：同一条用例（`deletes a bare quote separator on Backspace at the following content start`）在切换口径下**单独跑通过**、与同族 4 条**同跑失败**（产出差一个换行），而**基线口径（接入语义面但不切命令）4/4 通过**。即污染只在某条命令被切到语义路径后出现，指向语义会话/结构缓存跨视图残留，而不是用例本身的期望差异。此前所有"只切 X"的数字都建立在整跑之上，因此都受此影响。 | 先判定是测量假象还是真实残留：检查视图销毁路径是否调用 `releaseSession()`（`markdown.ts` 仅在创建时 `bindSession`），以及每个视图是否重建 `editorStructureCacheField`。若为真实残留，它属于 RF-603（交互适配器与 widget 全部 revision-aware、无替代编辑路径）的实质范围，应先修复再继续量语料。 |
+
+| 2026-09-19 | 缩进/前缀类改动必须先确认**物理行边界与容器前缀边界的对应关系**：`lineAt(offset)` 返回行的 `range.startOffset` 可能包含上一行的换行，不能用它作为"光标在本行行首"的判据。 | RF-506 切片二十三：`planBareQuoteSeparatorJoin` 原条件写成 `offset !== line.range.startOffset`，因此对 `> 11\n>\n222`（锚点 9）永不成立——探针显示 `lineAt(9)` 给出的行 `range.startOffset = 7`（即空行 2 的换行），而 `offset` 是 9。切片十八把"分支未被命中"归因于步骤 3 拦截，这个推测因此被推翻。放宽条件后分支命中，但删除范围又差一个换行（引用前缀 `contentEndOffset` 与行 `range` 边界错配）。 | 排此类 bug 时先打印 `context.lines.lines` 每行的 `lineNumber / range.startOffset / range.endOffset / contentStartOffset / contentEndOffset`，用数据确定边界归属，再写条件与删除范围；不要靠"看起来应该在行首"推断。 |
+
+| 2026-09-19 | `semantic-parity.test.ts` 的通过率对**复杂形状族**没有诊断价值：它的用例集与真实语料的失败集可以完全不相交。 | RF-506 切片二十三：该夹具报 `Backspace 7/7`（零差异），而真实语料同一命令有 **15 项失败**，两个集合无交集。夹具的 Backspace 用例都是简单形状（段落行首、列表/引用标记、引用分隔行），真实失败集中在引用内行首降级、多空行折叠、有序引用项、表格围栏。切片二十二对导航已有同类结论。 | parity 只在"简单形状是否回退"这一点上有效；任何语义行为改动都必须用切换口径的真实语料判定，并与**同口径下未改动前的失败数**对比。 |
+
+| 2026-09-19 | `semantic-parity.test.ts` 的**导航类**期望值不可作为行为判据，连"粗略护栏"都不够；垂直导航只能以真实 `code-editor.test.ts` 为准。 | RF-506 切片二十二：该夹具对 `alpha\n\n\nbeta` 从 offset 5 按 ArrowDown 记录 legacy 落点为 `anchor 7`，而真实语料 `skips the collapsed structural blank row on ArrowDown from the previous block` 明确断言 `anchor === source.length` 且 `!== blankLineStart`。原因是夹具的 `runLegacy` 与真实测试的 `runtime.activeBlockState` 来源不同（夹具注释早已声明不忠实）。此前用它推断出的"跨分隔行落到最后一个可见字符"规则据此实现后，切换口径导航失败数反而 **15 → 17**。 | 导航族改动一律先跑真实语料切换口径，且必须与"同口径下未改动前的失败数"对比（而不是与旧路径基线对比，否则会把语义路径原有的 15 项误读成 0）。 |
+
+| 2026-09-19 | 同一条语义命令对同一行的多处改写必须**折叠成一条编辑**，不能作为相邻的多条编辑提交。 | RF-506 切片二十一：`Tab` 需要在同一行同时插入缩进（行首）并把有序标记 `6.` 改写成 `1.`。先按两条编辑实现，实测产出 `1.6. child`——规划器的偏移按原文计算，而应用侧从后往前处理编辑，两条相邻编辑的偏移会互相错位。折叠成一条 `from=行首, to=标记结束, insert=缩进+新标记` 后立即正确。 | 后续任何"同一行改两处"的语义决策都应折叠为一条替换编辑；这也让每个偏移至多一条编辑，`assertPlanEdits` 的有序不重叠约束才有意义。 |
+
+| 2026-09-19 | 语义编辑计划可以**声明自己的历史事件名**（`EditTransactionPlan.userEventName`）；旧路径的 `input.*` 事件词汇是外部契约，不是命令 id 的拼写。 | RF-506 切片二十：只切 `Enter` 的语料里有一条失败是**纯注解问题**——文本 `1. Todo\n\n` 已完全正确，断言 `toContain("input.list-exit")` 却只看到 `input.enter`。该事件名被 `markdown.ts:1154` 用来决定"退出列表后的空行是否保留光标"，undo 分组也按它聚合。适配器原本无条件用 `input.${plan.commandId}`，无法表达这种差异。 | `createEditTransactionPlan` 透传该字段，`historyAnnotationFor` 优先采用它（结构化意图仍加 `isolateHistory`），未声明时行为完全不变。`enter.ts` 中"空列表项离开本层"这一族的 `replaceLineDecision` 设为 `"input.list-exit"`。只切 `Enter` 的失败数 15 → 14。 |
+
+| 2026-09-19 | 报告 RF-506 的"语料失败数"时必须同时写明**当时 keymap 的接线状态**；默认配置（keymap 全走旧命令）下 `src/renderer/code-editor.test.ts` 是 273/273，失败数只在"临时把某个命令改指语义路径"的对照配置下存在。此外语义路径是**双重未接线**：`src/renderer/code-editor.ts` 既没传 `onSemanticCommands` 也没传 `onSemanticChangeFrame`，两者缺一语义面就不会建立。 | RF-506 切片二十用 `git stash` 对照时发现默认配置全绿，随后又在接入时发现只传 `onSemanticCommands` 不足以启用。此前的 57/50/49 等数字全部来自临时切换实验，撤掉切换后无法复现，容易被后续 agent 误读为"当前有 49 项回归"。语义路径在生产里尚未接线，`code-editor.test.ts` 在默认口径下只能抓**共享层回归**。 | 两种口径分开记录：**默认口径**用于回归（273/273）；**切换口径**用于量剩余差距（切片二十实测：基线 0、Enter 14、Backspace 15、Tab+Shift-Tab 3、ArrowUp+ArrowDown 15、全切 45）。跨配置可复现的口径是 `semantic-parity.test.ts` 的矩阵（`Enter 14/18, Backspace 7/7, Tab 2/3, Shift-Tab 2/2, ArrowUp 0/4, ArrowDown 1/3`），但它不跑事务过滤器，因此看不到注解类修复。 |
+| 2026-09-19 | 缩进列表的层级以**缩进串**为唯一判据，不以树的父子关系为判据。 | RF-506 切片二十：递归解析器把 `1. Parent\n  1. ` 读成 `document → list` 下的**扁平同级** `list-item` 序列（内层项的父链是 `document → list → list-item`），因此 `parentListItemOf` 在这类输入上恒为 null。层级信息只存在于 `indentationText` 里。 | `planListItemEnter` 的空项分支据此改为：有缩进就丢掉一级缩进（升级），无缩进才走"最外层退出"。同一判据也应作为后续 Tab/Shift-Tab 与引用内嵌套项修复的基础。 |
+
+| 2026-09-19 | 纯规划器的单元探针结果**不能**外推到真实键盘路径；语义命令的行为判据只能是真实 `code-editor.test.ts` 的断言输出。 | RF-506 切片十九：`decideBackspace` 在 `> 11\n>\n222` 行首探针给出 `{ kind: "default", from: 8, to: 9 }`，但真实按 Backspace 的行为与此不符；空行折叠用例探针推断"删 1 个换行"，真实却删了 2 个。原因是真实路径上还有事务过滤器（隐藏选区/结构导航/有序列表归一化）与渲染器帧处理会改写语义事务的结果。此前多次"探针说对了但测试仍失败"同属这一类。 | 后续排查一律在真实路径上打点（打印最终 `prepared.frame.changes` 与 `decision.kind`），用真实断言输出与期望逐字对比；探针仅用于读字段值，不作为行为结论。 |
+
+| 2026-09-19 | "关掉某个开关后现象消失"只能证明因果关系在该开关的**控制流影响范围**内，不能直接归因到该开关本身的功能。 | RF-506 切片十二把 `shouldNormalizeOrderedLists` 置为 `false` 后列表拆分用例恢复正常，于是判断"归一化器插入了多余换行"；切片十三用单元探针证明归一化器对 5 个候选范围都产出正确结果。真正的原因是：该开关为 `false` 会让事务过滤器在守卫处**提前 return**，跳过了其后所有后处理分支。 | 后续做此类判别实验时，必须区分"功能被关闭"与"控制流被截断"两种效应；优先用单元级探针直接验证被怀疑的组件，而不是依赖端到端开关实验的结论。 |
+
+| 2026-09-18 | 已记录的"基线既有失败"必须先用干净 HEAD 复核才能成立；半改坏的工作区不能用来判定基线。回滚 `editor-model` 文件禁止用 `git checkout --`，必须逐段编辑。 | 切片三曾把 `markdown.test.ts` 的 5 项失败记为"基线既有缺陷"，但那是 `markdown.ts` 被 PowerShell 批量替换失败留下的半坏状态。切片四在干净 HEAD 与当前工作区分别复跑，该文件均为 41/41 全绿；真正的既有失败只有 `src/main/generate-icons.test.ts` 的 ICO 转换一项（干净 HEAD 亦失败）。此外 `git checkout -- packages/editor-model/src/commands/enter.ts` 连同切片二已交付的共享层修复一起回滚，需重新逐段应用。 | 判定 RF-506 回归时以 `code-editor.test.ts` + `markdown.test.ts` + 其余 200 个文件为准，把 `generate-icons.test.ts` 作为已知环境噪音排除；回滚共享层文件用逐段编辑而非 checkout。 |
+
+| 2026-09-18 | `packages/editor-model` 是旧引擎与新路径的**共享**语义层，因此其中的改动等于生产行为改动，必须同时通过 `code-editor.test.ts` 与 `markdown.test.ts`。 | 切片三修改 `navigation.ts` 的垂直导航规则后，7 项实测导航锚点有 6 项与旧引擎一致，但 `packages/editor-core/src/extensions/markdown.test.ts` 出现 6 项失败——旧引擎已在复用该文件。stash 对照实验进一步证明切片二的 4 条规则修复正是真实语料从 59 降到 57 的原因，即它们直接作用于生产旧路径。 | RF-506 的后续改动一律按"共享规则"对待：先跑两个语料文件，再决定是否需要新路径专用分支。切片三的导航改动已整体回滚，生产行为未变。**（切片四更正：当时所谓"`markdown.test.ts` 5 项基线既有失败"并不存在，该文件实际 41/41 全绿，见上条。）** |
+
+| 2026-09-18 | RF-506 的完成判据是真实语料 `code-editor.test.ts`，不是精简 parity 夹具。 | 切片二修好 4 条规则、parity 由 18/23 提升到 21/23，但把 keymap 切到纯规划器后真实语料仍有 57 项失败（216/273）。精简夹具没有覆盖嵌套引用/任务列表/表格交互组合，因此会把"看起来等价"误判为"可以切换"。 | 下一轮直接以既有 `code-editor.test.ts` 断言为规范驱动实现，parity 仅作快速回归护栏；导航规则的残余 2 条差异必须先用真实断言钉死再改实现。生产 keymap 保持旧引擎，未删除旧语义模块。 |
+
+| 2026-09-18 | RF-506 的旧语义引擎只在真实运行时行为证明等价后才删除；等价性用旧/新路径同输入对比的 parity 标尺度量，而不是规划器回放。 | 把 keymap 切到纯规划器后 `src/renderer/code-editor.test.ts` 由 273/273 变为 214/273（59 项失败），证明"规划器回放 112/112"不等于"真实按键路径等价"。直接上线会引入用户可见回归，直接删除则失去唯一可用路径。 | 本轮未落地切换、未删除任何旧语义模块：生产 keymap 还原，新增可选接线 `onSemanticCommands` 与 `semantic-parity.test.ts`（18/23，5 条差异已定位到具体规则）。差异全部补齐并清零后，才切换 keymap 并跑正式行为语料，再执行删除。已确认真实导航按"可见渲染行"建模（连续空行只在最后一个空行行首可见；相邻隐藏 `>` 分隔行必须跨过），该规则需在 `packages/editor-model` 实现并补测试。 |
+
+| 2026-09-18 | RF-601 的 CodeMirror 转换层归属 `@fishmark/codemirror-adapter`，不留在 `editor-core`；plan 的来源 session 必须被记录而不是假设；普通文本输入的 history 事件必须保持 CodeMirror 原生 typing 组。 | guard 禁止 adapter 之外的包 import `@codemirror/*`，而转换层必须持有 per-view state field；若保留旧 bridge 只能留下两份实现或一条永久例外，故连同 bridge 一起迁移并删除其 `retireIn: RF-604` 例外。把 plan 与「当前 session」比较是同义反复，无法发现 rebind，因此用 `EditorPlanSessions` 记录生成该 plan 的 generation，跨 session 的 plan 判定为 `foreign-session` 并拒绝。把所有命令写成 `input.<commandId>` 会实测破坏连续键入合并为一次撤销，故 `insert-text` 保持 `input.type`。 | adapter 只依赖窄端口 `EditorChangeFramePort`，queue/序列/传输仍唯一属于 `src/renderer/application/{pending-edit-queue,workspace-edit-client}.ts`；`localRevision`（自身缓存）、`acknowledgedRevision`（main 已确认）、`observedRevision`（投影观测）保持三个不同语义且不由 adapter 拥有。RF-604 仍负责把 renderer 编辑器工厂切到 adapter。本轮不切换生产入口，故正式 Electron 语料留待 RF-506。 |
+
 | 2026-09-17 | 用户授权以可维护/可扩展、编辑交互、性能为 Editor Foundation 的三项交付目标，并由单个实现 agent 修复、父 agent 验收。 | 复审证明历史完成数和主检查点回放没有覆盖恢复基线、增量边界及桥接版本。先执行 RF-HARDEN-001，再将 RF-601 的事务/history/IME 和新路径性能证据前置到 RF-506；共享 render plan RF-701 前置到 RF-602。 | 保留现有栈和 main canonical owner；复用已有 queue/client，禁止以拆包数/删行数代替用户体验和实际性能。不把安全全解析回退伪报为局部解析，也不把本轮修复通过扩张为整个 M3/M4/M9 的最终性能/平台验收。 |
 
 | 2026-08-13 | `RF-203` 将 renderer 编辑传输收敛为纯 runtime-neutral 的 pending edit queue + workspace edit client：每个 tab 队列持有 atomic transport baseline（acknowledgedText/revision）与 UI-only observed metadata 严格分离；CodeMirror adapter 用单一 RAF 帧桶把同帧 ChangeSet 组合成 repository-owned `DocumentTextChange[]`；破坏性工作流经 composition-aware seal + 精确 sequence cutoff barrier；远程/恢复事务携带 internal-origin 注解且不进 undo history；所有 recovery 来源（冲突 + adapter-discard/invalid-frame/missing-sequence 非冲突来源）都在同一 coordinator 内自动物化 untitled recovery tab，旧队列仅在 recovery tab 精确文本被 ack 后 retire。legacy full-draft 通道只作为 RF-204 明确删除债务，生产不可达。 | Markdown 文本仍是唯一事实来源；renderer 只做乐观代理，不持有 writable snapshot。RAF 组合保证同帧多事务保持 original-base offset 且不改 undo 分组；atomic baseline 与 observed metadata 分离保证投影/重复 ack 不会推进文本基线或误 retire 批次；internal-origin 注解让远程 patch 不被 observer 当作本地编辑重新上报。非冲突 recovery 自动物化避免了 recovery 记录滞留导致 getRecoveryPendingOutcome 永久阻塞窗口关闭（质量审查 Critical C1）。 | RF-204 必须删除 full-draft channel、旧 bridge mock、snapshot-preservation 代码，并补传输超时与 blocked 队列 UI 重试；RF-301+ 负责 main 侧 save/recovery 重设计与 per-document watch registry。 |
@@ -91,3 +214,6 @@
 | 2026-04-15 | `docs/` 成为唯一有效的工作文档目录。 | 编排流程默认读取 `docs/`，统一入口可降低歧义。 | 旧草稿材料不再作为活跃维护目录。 |
 | 2026-04-15 | 删除重复的 `doc/` 目录，并把唯一仍有价值的内容保留到 `docs/agent-runbook.md`。 | 重复目录会让未来 agent 和人工协作产生歧义。 | 此决策覆盖更早“保留旧 `doc/` 不动”的临时约定。 |
 | 2026-04-15 | `TASK-001` 的开发壳启动证明已在修复 `localhost` 不一致和恢复 Electron 运行时后重新记录。 | 需要用可成功退出的证明命令替换旧的、不稳定的记录。 | 当前仓库中的通过记录来自这一轮修正后的证据。 |
+
+## 2026-09-19 M5 行为收口与 M6 依赖调整
+RF506 父独立行为/安全验收 PASS，最终 2671 tests、lint/typecheck/build、formal 121/121 和 editing 通过；包体积仍 FAIL。允许其保持 DEV_DONE、最终性能 pending 后进入 RF701/M6，删除双重显示派生后用原预算共同验收；不得标 M5 COMPLETE、不得增加 known 豁免或放宽预算。用户已授权按三项优先级调整后续计划。

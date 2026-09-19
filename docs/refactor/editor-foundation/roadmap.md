@@ -1398,7 +1398,7 @@ npm.cmd run test -- packages/editor-model/src/commands
 
 **Outcome:** old editor-core semantic commands, physical-line models, and parsing helpers are deleted.
 
-**Preparation landed ahead of this task:** `packages/editor-core/src/commands/editor-model-bridge.ts` owns the one non-pure piece (a per-view document structure cache that follows CodeMirror edits incrementally and reparses on multi-range changes) and exposes `readEditorSemanticContext` / `applyEditorPlan` / `runEditorPlanCommand`, so a keypress can run any `@fishmark/editor-model` planner as a single CodeMirror transaction. `packages/editor-model/src/commands/list-move.ts` moves a list-item subtree up/down through the canonical list scopes (renumbering ordered scopes with the loose-item restart rule) and `commands/ordered-list.ts` normalizes ordered scopes; `@fishmark/markdown-engine` now exposes `readListScopes`/`readFlatListItems`/`collectBlockquotePrefixSpans` so the semantic engine and the parser share one scope reader. The remaining work is the consumer cutover: the CodeMirror-to-editor-model bridge, routing keyboard/menu/toolbar/table-widget/test-driver commands, and the deletions below.
+**Preparation landed ahead of this task:** the CodeMirror conversion layer now lives in `@fishmark/codemirror-adapter` (RF-601): `transaction-adapter.ts` owns the one non-pure piece (a per-view document structure cache that follows CodeMirror edits incrementally and reparses on multi-range changes) and the prepare/record command entry points, `selection-mapper.ts` owns selection-snapshot reuse and stale/foreign-session plan rejection, and `composition-controller.ts` owns the IME freeze. `packages/editor-model/src/commands/list-move.ts` moves a list-item subtree up/down through the canonical list scopes (renumbering ordered scopes with the loose-item restart rule) and `commands/ordered-list.ts` normalizes ordered scopes; `@fishmark/markdown-engine` exposes `readListScopes`/`readFlatListItems`/`collectBlockquotePrefixSpans` so the semantic engine and the parser share one scope reader. The remaining work is the consumer cutover: routing keyboard/menu/toolbar/table-widget/test-driver commands, and the deletions below.
 
 **Parity baseline measured ahead of this task:** replaying every `fixtures/editor-behavior` case's `checkpoints[0].actions` through the pure planners and diffing source+selection against the result the formal runner enforces matches all 112 enforced primary checkpoints. The ported rules are the legacy ones: a paragraph break writes a blank line (`\n\n`, plus one extra blank when content follows), a break inside a blockquote writes `\n` + separator line + `\n` + continuation prefix (bare marker for a single level, the full prefix for nested quotes), an unterminated `>` marker is completed first, an empty quote line exits one level and collapses an adjacent empty pair, `Tab` completes and indents an unterminated marker, indents a non-first item (closing invisible empty quote lines above it), and leaves a scope's first item alone, a trailing blank-line run collapses in one Backspace, an empty list item leaves through the container's separator (or drops to its parent scope's level when its list is nested), an unclosed fence opener gains its content line and closing marker, vertical arrows step over blank and bare-marker separator lines (landing at the end of the line above when moving up), and an indented item the tree reads as a paragraph continuation continues at its own scope's indent.
 
@@ -1435,11 +1435,13 @@ npm.cmd run build
 
 **Exit:** one pure semantic engine remains.
 
+**Progress (2026-09-18, slice one):** the decision path exists but the cutover has not landed. `packages/editor-core/src/commands/semantic-keypress.ts` is the single new path over the adapter planners, wired as an opt-in host surface (`onSemanticCommands`) in `extensions/markdown.ts`, and `semantic-parity.test.ts` measures the legacy-versus-pure gap. Switching the keymap to the pure planners took `src/renderer/code-editor.test.ts` from 273/273 to 214/273, so the production keymap was reverted and no old semantic module was deleted. The measured gap is 18/23 with five located rules (empty task item padding, compact fence completion, Backspace joining at a paragraph line start, crossing an adjacent hidden `>` separator, and landing on the visible blank row start for consecutive blank lines). Existing assertions prove navigation follows visible rendered rows, so the pure planner must adopt that model before the switch. Details and the ordered next steps are in `docs/plans/2026-09-18-rf-506-handoff.md`.
+
 ### Milestone 6 — Thin CodeMirror adapter
 
 #### RF-601: Transaction bridge, queue, history, and IME
 
-**Order (2026-09-17):** execute before RF-506, building on the existing `editor-model-bridge.ts`. Package relocation belongs to RF-604; do not create empty adapter scaffolds or another pending queue.
+**Order (2026-09-17):** execute before RF-506, building on the adapter package created by RF-601 (`packages/codemirror-adapter`); do not create empty adapter scaffolds or another pending queue.
 
 **Outcome:** CodeMirror converts browser transactions to/from semantic plans without owning Markdown rules.
 
@@ -1456,14 +1458,14 @@ npm.cmd run build
 
 **Steps:**
 
-- [ ] Convert CodeMirror change sets to repository `TextChange[]` and back.
-- [ ] Apply semantic plans with correct history annotations.
-- [ ] Integrate the workspace client acknowledgement queue.
-- [ ] Freeze geometry-changing semantic refresh during composition.
-- [ ] Recompute from final text on composition end.
-- [ ] Prove undo/redo across automatic structure completion and delayed acknowledgements.
-- [ ] Reject stale plans before dispatch; keep local cache versions monotonic across full reparses and multi-range edits, distinguish local optimistic revisions from main-confirmed revisions, and invalidate/rebind across session ownership changes.
-- [ ] Reuse the same document-derived snapshot for selection-only reads; separate navigation transactions from input/structure history groups.
+- [x] Convert CodeMirror change sets to repository `TextChange[]` and back.
+- [x] Apply semantic plans with correct history annotations.
+- [x] Integrate the workspace client acknowledgement queue.
+- [x] Freeze geometry-changing semantic refresh during composition.
+- [x] Recompute from final text on composition end.
+- [x] Prove undo/redo across automatic structure completion and delayed acknowledgements.
+- [x] Reject stale plans before dispatch; keep local cache versions monotonic across full reparses and multi-range edits, distinguish local optimistic revisions from main-confirmed revisions, and invalidate/rebind across session ownership changes.
+- [x] Reuse the same document-derived snapshot for selection-only reads; separate navigation transactions from input/structure history groups.
 
 **Verification:**
 
@@ -1472,6 +1474,8 @@ npm.cmd run test -- packages/codemirror-adapter/src/transaction-adapter.test.ts 
 ```
 
 **Exit:** IME and history are adapter concerns; Markdown semantics stay pure.
+
+**Status (2026-09-18):** `COMPLETE` — acceptance `PASS` (`reports/task-summaries/RF-601.md`). The CodeMirror conversion layer is `@fishmark/codemirror-adapter` (`transaction-adapter.ts` + `selection-mapper.ts` + `composition-controller.ts` + `candidate-performance.ts`); the superseded `packages/editor-core/src/commands/editor-model-bridge.{ts,test.ts}` and its guard exceptions were deleted because the guard forbids `@codemirror/*` outside the adapter. Candidate evidence: adapter + real-client integration 6 files / 56 tests (including undo/redo across an isolated automatic completion and the 5k/20k zero-full-parse plain-paragraph rule with explicit fallback reasons), architecture guard 234 tests, lint 0 errors / 8 pre-existing warnings, typecheck, full Vitest 200 files / 2,585 passed + 1 skipped, build. The production editor entry is not switched yet and real platform IME remains unproven, so the formal Electron corpus and functional-runtime IME acceptance stay with RF-506/RF-902.
 
 #### RF-602: Viewport-scoped decorations
 
@@ -1904,3 +1908,6 @@ The refactor is complete only when all statements below are true:
 
 
 
+
+### 2026-09-19 执行依赖补充
+RF506 生产切换、Unicode/IME/frame 安全与完整行为门禁已通过父验收（2671 tests，正式121/121）。原bundle预算仍FAIL，任务保持DEV_DONE且最终性能pending。为移除双重显示派生成本，先推进RF701→RF602/603/604，再按原预算共同验收M5/M6；不提前标记M5 COMPLETE。当前事实以progress顶部与RF506 summary为准，旧切片记录为历史。

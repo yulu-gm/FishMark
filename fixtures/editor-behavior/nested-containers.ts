@@ -60,6 +60,11 @@ function wrapLeafSource(
     }
 
     const marker = listStyle === "ordered" ? "1. " : listStyle === "task" ? "- [ ] " : "- ";
+    // A task checkbox starts a paragraph. A child container must start on a
+    // subsequent line, indented relative to the list marker (not the checkbox).
+    if (listStyle === "task" && source.startsWith("> ")) {
+      return ["- [ ] task", ...source.split("\n").map((line) => `  ${line}`)].join("\n");
+    }
     const [first = "", ...rest] = source.split("\n");
     return [`${marker}${first}`, ...rest.map((line) => `${" ".repeat(marker.length)}${line}`)].join("\n");
   }, leaf);
@@ -251,6 +256,16 @@ function paragraphEnterSources(
   readonly repeatPath: EditorBehaviorContainerPath;
 } {
   const deepestLayer = layers[layers.length - 1];
+  if (layers.length === 1 && deepestLayer === "Blockquote") {
+    // The established single-quote Enter contract writes bare structural
+    // separators; only editable continuation lines carry the trailing space.
+    return {
+      expectedSource: "> al\n>\n> pha",
+      repeatSource: "> al\n>\n> \n>\n> pha",
+      primaryPath: path,
+      repeatPath: path
+    };
+  }
   if (deepestLayer !== "List") {
     return {
       expectedSource: sourceForPath(path, "al\n\npha", layers),
@@ -441,7 +456,21 @@ export function createRepresentativeDepthCases(): readonly EditorBehaviorCase[] 
     );
     const listStyle: ListStyle = depth % 3 === 1 ? "ordered" : depth % 3 === 2 ? "task" : "unordered";
     const source = wrapLeafSource(layers, "leaf", listStyle);
-    const range = resultAtText(source, "leaf", "range", depth === 0 ? "source" : "wysiwym");
+    const draft = resultAtText(source, "leaf", "range", depth === 0 ? "source" : "wysiwym");
+    // Author the continuation geometry from the requested layers. The generic
+    // single-line prefix helper cannot infer task-item ancestry across lines.
+    const range = listStyle === "task" ? {
+      ...draft,
+      visibleLines: draft.visibleLines.map((line, index) => ({
+        ...line,
+        geometry: {
+          semanticDepth: Math.min(depth, (index + 1) * 2),
+          contentColumn: line.sourceText.indexOf(index === draft.visibleLines.length - 1 ? "leaf" : "task"),
+          markerColumn: Math.max(line.sourceText.lastIndexOf(">"), line.sourceText.lastIndexOf("-")),
+          visibility: "visible" as const
+        }
+      }))
+    } : draft;
     return defineCase({
       id: `mixed-container-depth-${depth}-selection`,
       title: `Range selection remains source-mapped at mixed container depth ${depth}`,
@@ -668,11 +697,19 @@ export const focusedRecursiveCases: readonly EditorBehaviorCase[] = [
       )
     }),
     initial: { source: "- > quote", selection: sourceSelection(9) },
-    semanticPaths: { repeat: requiredEditorBehaviorContainerPaths[1] },
+    semanticPaths: {
+      primary: ["Document", "List", "ListItem", "Blockquote"],
+      repeat: requiredEditorBehaviorContainerPaths[1]
+    },
     checkpointResults: checkpointResults(
       resultDraft("- > quote\n  > ", sourceSelection(14), "wysiwym"),
       2,
-      resultDraft("- > quote\n  \n", sourceSelection(13), "wysiwym"),
+      {
+        ...resultDraft("- > quote\n  \n", sourceSelection(13), "wysiwym"),
+        visibleLines: physicalLineExpectations("- > quote\n  \n", sourceSelection(13), "wysiwym", {
+          geometryOverrides: { 2: { semanticDepth: 0, contentColumn: 0, markerColumn: null } }
+        })
+      },
       1,
       resultDraft("- > quote", sourceSelection(9), "wysiwym")
     )

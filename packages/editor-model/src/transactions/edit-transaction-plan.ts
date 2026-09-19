@@ -16,6 +16,10 @@ export interface EditTransactionPlan {
   readonly edits: readonly TextEditOperation[];
   readonly selection: EditorSelection;
   readonly intent: "edit" | "structural" | "navigation";
+  // The history event name this plan must carry. Most plans take the default `input.<commandId>`,
+  // but a few decisions correspond to a named legacy event (`input.list-exit`) that undo grouping,
+  // the renderer, and recorded behaviour all key off, so the decision states it explicitly.
+  readonly userEventName?: string;
 }
 
 export type EditorCommandId =
@@ -28,6 +32,7 @@ export type EditorCommandId =
   | "table-edit"
   | "fence-edit"
   | "insert-text"
+  | "hard-break"
   | "pointer";
 
 export interface EditorCommand<TContext = EditorSemanticContext> {
@@ -66,6 +71,7 @@ export function createEditTransactionPlan(input: {
   readonly intent: EditTransactionPlan["intent"];
   readonly edits: readonly TextEditOperation[];
   readonly selection?: EditorSelection;
+  readonly userEventName?: string;
 }): EditTransactionPlan {
   assertPlanEdits(input.edits);
 
@@ -79,7 +85,8 @@ export function createEditTransactionPlan(input: {
         anchor: input.context.selectionContext.selection.anchor,
         head: input.context.selectionContext.selection.head
       }
-    )
+    ),
+    ...(input.userEventName === undefined ? {} : { userEventName: input.userEventName })
   });
 }
 

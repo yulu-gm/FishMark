@@ -34,6 +34,93 @@ function applyPlan(
 }
 
 describe("planBackspace", () => {
+  it("degrades a populated ordered sibling but removes an empty marker completely", () => {
+    const populated = "1. first\n2. second\n3. third";
+    expect(applyPlan(populated, populated.indexOf("second")).text).toBe("1. first\n\n2.second\n3. third");
+    const empty = "1. first\n2. ";
+    expect(applyPlan(empty, empty.length).text).toBe("1. first\n");
+    expect(applyPlan("Intro\n1. first", "Intro\n1. ".length).text).toBe("Intro\nfirst");
+  });
+
+  it("enters adjacent fenced content without deleting the separator newline", () => {
+    const source = "```\ncode\n```\n";
+    const result = applyPlan(source, source.length);
+    expect(result.text).toBe(source);
+    expect(result.cursor).toBe(source.indexOf("code") + 4);
+  });
+
+  it("enters the last table cell from the editable line below without rewriting the table", () => {
+    const source = "| a | b |\n| --- | --- |\n| x | y |\n\n";
+    const result = applyPlan(source, source.length);
+    expect(result.text).toBe(source);
+    expect(result.cursor).toBe(source.indexOf("y") + 1);
+  });
+  it("removes one repeated empty paragraph per press below a heading", () => {
+    const source = "# Title\n\n\n\n";
+    const result = applyPlan(source, source.length);
+
+    // The corpus case for this shape (`removes one repeated empty paragraph with one Backspace from
+    // consecutive trailing blank lines`) presses Enter twice and expects one press to go back to
+    // `# Title\n\n`, i.e. one empty paragraph per press.
+    expect(result.kind).toBe("subtree-join");
+    expect(result.text).toBe("# Title\n\n");
+  });
+
+  it("shortens a run of separators by one line per press", () => {
+    // The caret sits at the start of the last separator, so one press removes one line from the run.
+    // The corpus case `removes a visible extra blank row before joining across the structural
+    // separator on Backspace` is the binding check for this shape; the planner's own landing offset
+    // inside a longer run still needs its own decision (recorded in the handoff).
+    const result = applyPlan("Alpha\n\n\nBeta", "Alpha\n\n\n".length);
+
+    expect(result.kind).toBe("subtree-join");
+  });
+
+  it("only moves the caret back on a later line of the same quote", () => {
+    const source = ["Paragraph", "", "> quote one", "> quote two", "After blockquote"].join("\n");
+    const contentStart = source.indexOf("> quote two") + "> ".length;
+    const result = applyPlan(source, contentStart);
+
+    // The quote's later lines keep both the document and their marker: the legacy path dispatches a
+    // selection only, so the caret steps back to the end of the line above.
+    expect(result.kind).toBe("quote-degrade");
+    expect(result.text).toBe(source);
+    expect(result.cursor).toBe(source.indexOf("> quote one") + "> quote one".length);
+  });
+
+  it("steps a quoted line up when the caret is at its content start", () => {
+    const source = ["Paragraph", "", "> quote one", "> quote two", "After blockquote"].join("\n");
+    const contentStart = source.indexOf("> quote one") + "> ".length;
+    const result = applyPlan(source, contentStart);
+
+    // The renderer normalizes a caret on a hidden quote marker to that line's content start, so the
+    // rule has to work from there: the break before the line goes, and the line steps up intact
+    // instead of losing its marker and keeping the gap.
+    expect(result.kind).toBe("quote-degrade");
+    expect(result.text).toBe("Paragraph\n> quote one\n> quote two\nAfter blockquote");
+  });
+
+  it("keeps a deeper quoted line in place by deleting only the separator row", () => {
+    const source = "> 11\n>\n> > 1";
+    const result = applyPlan(source, source.indexOf("> >"));
+
+    // The line below the separator is one quote level deeper than the line above it, so pulling the
+    // lines together would silently promote it; only the separator row and its break go away.
+    expect(result.kind).toBe("subtree-join");
+    expect(result.text).toBe("> 11\n> > 1");
+  });
+
+  it("joins quoted lines by dropping the bare quote separator between them", () => {
+    const source = "> 11\n>\n> 222";
+    const result = applyPlan(source, source.indexOf("222"));
+
+    // One press removes the separator row with the break before and after it, so only the first
+    // line's content end and this line's own content survive.
+    expect(result.kind).toBe("subtree-join");
+    expect(result.text).toBe("> 11222");
+    expect(result.cursor).toBe("> 11".length);
+  });
+
   it("deletes one ordinary character", () => {
     const source = "Alpha";
     const result = applyPlan(source, 3);

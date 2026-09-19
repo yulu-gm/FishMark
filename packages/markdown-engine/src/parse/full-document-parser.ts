@@ -30,6 +30,7 @@ import {
 } from "./leaf-nodes";
 import { createLeafBlocksForToken, mergeLeafSiblingBlocks } from "./leaf-blocks";
 import { collectMicromarkEventViews } from "./micromark-event-adapter";
+import { normalizeListFrames } from "./list-frames";
 
 // One micromark-based recursive parser. Every container child comes from the event stream and
 // a container stack, so no renderer/editor/export regex scan is needed to discover nesting.
@@ -121,6 +122,7 @@ export function parseFullDocumentTree(
   }
 
   closeContainerFrame("document", 0, source.length);
+  normalizeListFrames(root, source);
 
   // Footnote definitions attach to top-level paragraph/definition blocks, so they are derived
   // from the raw top-level leaf blocks before nodes are materialized. Inline parsing of every
@@ -176,7 +178,7 @@ export function parseFullDocumentTree(
   }
 }
 
-interface RawContainer {
+export interface RawContainer {
   readonly kind: MarkdownContainerKind;
   readonly tokenType: string;
   readonly tokenStartOffset: number;
@@ -190,12 +192,12 @@ interface RawContainer {
   // classified against it, so nesting never changes what counts as a table, fence, or heading.
   readonly maskedSource: SourceText;
   data: MarkdownNodeData;
-  readonly children: RawChild[];
+  children: RawChild[];
   readonly itemPrefixes: number[];
   readonly itemGeometry?: ListItemGeometry;
 }
 
-type RawChild =
+export type RawChild =
   | { readonly type: "container"; readonly container: RawContainer }
   | { readonly type: "blocks"; readonly blocks: readonly MarkdownBlock[] };
 

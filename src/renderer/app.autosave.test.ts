@@ -6350,6 +6350,11 @@ describe("App autosave", () => {
           expectedPath: "C:/notes/today.md"
         }
       });
+      // The optional test driver is loaded on the first bridge command. Wait
+      // for protocol completion rather than the void event listener returning.
+      await vi.waitFor(() => {
+        expect(window.fishmarkTest?.completeEditorTestCommand).toHaveBeenCalledTimes(1);
+      });
     });
 
     expect(window.fishmarkTest?.completeEditorTestCommand).toHaveBeenCalledWith({

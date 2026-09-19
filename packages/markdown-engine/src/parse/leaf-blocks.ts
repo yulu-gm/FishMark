@@ -645,32 +645,24 @@ function findPipeTableCandidate(
     return null;
   }
 
-  let endIndex = startIndex;
-
-  while (endIndex + 1 < blocks.length) {
-    const nextBlock = blocks[endIndex + 1];
-    const gapSource = source.slice(blocks[endIndex]!.endOffset, nextBlock!.startOffset);
-
-    if (nextBlock?.type !== "paragraph" || !/^[\s\r\n]*$/u.test(gapSource)) {
-      break;
-    }
-
-    endIndex += 1;
-
-    const candidate = parsePipeTable({
-      source,
-      startOffset: startBlock.startOffset,
-      endOffset: blocks[endIndex]!.endOffset,
-      startLine: startBlock.startLine,
-      endLine: blocks[endIndex]!.endLine
-    });
-
-    if (candidate) {
-      return { block: candidate, endIndex };
-    }
+  const endIndex = startIndex + 1;
+  const nextBlock = blocks[endIndex];
+  if (nextBlock?.type !== "paragraph" ||
+      !/^[\s\r\n]*$/u.test(source.slice(startBlock.endOffset, nextBlock.startOffset))) {
+    return null;
   }
 
-  return null;
+  // Two nonempty paragraphs already provide at least two lines. If their prefix is not a
+  // table (invalid header, delimiter, blank or body row), appending later paragraphs cannot
+  // repair it. Retrying every longer suffix made ordinary blank-separated prose cubic.
+  const candidate = parsePipeTable({
+    source,
+    startOffset: startBlock.startOffset,
+    endOffset: nextBlock.endOffset,
+    startLine: startBlock.startLine,
+    endLine: nextBlock.endLine
+  });
+  return candidate === null ? null : { block: candidate, endIndex };
 }
 
 function looksLikeLoosePipeParagraph(block: ParagraphBlock, source: SourceText): boolean {

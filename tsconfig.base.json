@@ -2,6 +2,7 @@
   "compilerOptions": {
     "target": "ES2022",
     "paths": {
+      "@fishmark/codemirror-adapter": ["./packages/codemirror-adapter/src/index.ts"],
       "@fishmark/editor-core": ["./packages/editor-core/src/index.ts"],
       "@fishmark/editor-model": ["./packages/editor-model/src/index.ts"],
       "@fishmark/markdown-engine": ["./packages/markdown-engine/src/index.ts"],

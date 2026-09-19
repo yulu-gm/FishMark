@@ -18,10 +18,6 @@ import {
   type PhysicalEditingDocument
 } from "../physical-editing-document";
 import {
-  createEditorSemanticContext,
-  type EditorSemanticContext
-} from "../context/editor-semantic-context";
-import {
   deriveTableCursorState,
   type TableCursorState
 } from "../table-cursor-state";
@@ -44,7 +40,6 @@ export type EditorDerivedState = {
   editingDocument: PhysicalEditingDocument;
   activeLine: EditingLine;
   activeBlockState: ActiveBlockState;
-  semanticContext: EditorSemanticContext;
   tableCursor: TableCursorState | null;
   referenceDefinitions?: ReadonlyMap<string, InlineReferenceDefinition>;
   footnoteDefinitions?: ReadonlyMap<string, FootnoteDefinition>;
@@ -57,6 +52,14 @@ export type CreateEditorDerivedStateOptions = {
   parseMarkdownDocument: ParseEditorMarkdownDocument;
   previousTableCursor?: TableCursorState | null;
 };
+
+// Only document-derived geometry is retained. Selection, active block and table focus are always
+// recomputed, while the rich projection's identity changes on every document revision.
+const documentGeometry = new WeakMap<MarkdownDocument, {
+  source: string;
+  editingDocument: PhysicalEditingDocument;
+  outlineHeadings: readonly EditorOutlineHeading[];
+}>();
 
 export function createEditorDerivedState(
   options: CreateEditorDerivedStateOptions
@@ -71,7 +74,12 @@ export function createEditorDerivedState(
       );
       const editingDocument = measureEditorCorePerformance(
         "editorCore:createEditorDerivedState.physicalEditingDocument",
-        () => createPhysicalEditingDocument(options.source, markdownDocument),
+        () => {
+          const cached = documentGeometry.get(markdownDocument);
+          return cached?.source === options.source
+            ? cached.editingDocument
+            : createPhysicalEditingDocument(options.source, markdownDocument);
+        },
         {
           blocks: markdownDocument.blocks.length,
           chars: options.source.length
@@ -103,29 +111,16 @@ export function createEditorDerivedState(
         ),
         tableCursor
       };
-      const semanticContext = measureEditorCorePerformance(
-        "editorCore:createEditorDerivedState.semanticContext",
-        () =>
-          createEditorSemanticContext({
-            source: options.source,
-            markdownDocument,
-            editingDocument,
-            selection: options.selection,
-            activeState: activeBlockState
-          }),
-        {
-          blocks: markdownDocument.blocks.length,
-          chars: options.source.length
-        }
-      );
       const outlineHeadings = measureEditorCorePerformance(
         "editorCore:createEditorDerivedState.outlineHeadings",
-        () => createOutlineHeadings(markdownDocument),
+        () => documentGeometry.get(markdownDocument)?.outlineHeadings ?? createOutlineHeadings(markdownDocument),
         {
           blocks: markdownDocument.blocks.length,
           chars: options.source.length
         }
       );
+
+      documentGeometry.set(markdownDocument, { source: options.source, editingDocument, outlineHeadings });
 
       return {
         source: options.source,
@@ -134,7 +129,6 @@ export function createEditorDerivedState(
         editingDocument,
         activeLine,
         activeBlockState,
-        semanticContext,
         tableCursor,
         referenceDefinitions: markdownDocument.referenceDefinitions,
         footnoteDefinitions: markdownDocument.footnoteDefinitions,

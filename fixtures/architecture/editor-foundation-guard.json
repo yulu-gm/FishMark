@@ -55,7 +55,7 @@
       "id": "codemirror-adapter",
       "path": "packages/codemirror-adapter",
       "publicEntry": "@fishmark/codemirror-adapter",
-      "state": "planned",
+      "state": "active",
       "boundaryRuleId": "boundary.codemirror-adapter"
     }
   ],
@@ -183,6 +183,27 @@
       ]
     },
     {
+      "id": "boundary.codemirror-adapter",
+      "kind": "forbidden-imports",
+      "state": "active",
+      "sourcePath": "packages/codemirror-adapter",
+      "forbiddenPackages": [
+        "react",
+        "react-dom",
+        "electron",
+        "node:*"
+      ],
+      "forbiddenPaths": [
+        "src/main",
+        "src/preload",
+        "src/shared",
+        "src/renderer",
+        "packages/workspace-domain",
+        "packages/workspace-application",
+        "packages/workspace-infrastructure"
+      ]
+    },
+    {
       "id": "boundary.shared",
       "kind": "forbidden-imports",
       "state": "active",
@@ -263,96 +284,6 @@
   ],
   "exceptions": [
     {
-      "id": "exception.editor-core-codemirror.commands-blockquote-commands-test.state",
-      "importer": "packages/editor-core/src/commands/blockquote-commands.test.ts",
-      "specifier": "@codemirror/state",
-      "ruleId": "boundary.editor-core",
-      "owner": "editor-foundation-refactor",
-      "reason": "Current editor-core CodeMirror ownership must be removed by the adapter hard cutover.",
-      "retireIn": "RF-604"
-    },
-    {
-      "id": "exception.editor-core-codemirror.commands-blockquote-commands-test.view",
-      "importer": "packages/editor-core/src/commands/blockquote-commands.test.ts",
-      "specifier": "@codemirror/view",
-      "ruleId": "boundary.editor-core",
-      "owner": "editor-foundation-refactor",
-      "reason": "Current editor-core CodeMirror ownership must be removed by the adapter hard cutover.",
-      "retireIn": "RF-604"
-    },
-    {
-      "id": "exception.editor-core-codemirror.commands-blockquote-commands.state",
-      "importer": "packages/editor-core/src/commands/blockquote-commands.ts",
-      "specifier": "@codemirror/state",
-      "ruleId": "boundary.editor-core",
-      "owner": "editor-foundation-refactor",
-      "reason": "Current editor-core CodeMirror ownership must be removed by the adapter hard cutover.",
-      "retireIn": "RF-604"
-    },
-    {
-      "id": "exception.editor-core-codemirror.commands-blockquote-commands.view",
-      "importer": "packages/editor-core/src/commands/blockquote-commands.ts",
-      "specifier": "@codemirror/view",
-      "ruleId": "boundary.editor-core",
-      "owner": "editor-foundation-refactor",
-      "reason": "Current editor-core CodeMirror ownership must be removed by the adapter hard cutover.",
-      "retireIn": "RF-604"
-    },
-    {
-      "id": "exception.editor-core-codemirror.commands-code-fence-commands.view",
-      "importer": "packages/editor-core/src/commands/code-fence-commands.ts",
-      "specifier": "@codemirror/view",
-      "ruleId": "boundary.editor-core",
-      "owner": "editor-foundation-refactor",
-      "reason": "Current editor-core CodeMirror ownership must be removed by the adapter hard cutover.",
-      "retireIn": "RF-604"
-    },
-    {
-      "id": "exception.editor-core-codemirror.commands-codemirror-markdown-command-adapter-test.state",
-      "importer": "packages/editor-core/src/commands/codemirror-markdown-command-adapter.test.ts",
-      "specifier": "@codemirror/state",
-      "ruleId": "boundary.editor-core",
-      "owner": "editor-foundation-refactor",
-      "reason": "Current editor-core CodeMirror ownership must be removed by the adapter hard cutover.",
-      "retireIn": "RF-604"
-    },
-    {
-      "id": "exception.editor-core-codemirror.commands-codemirror-markdown-command-adapter-test.view",
-      "importer": "packages/editor-core/src/commands/codemirror-markdown-command-adapter.test.ts",
-      "specifier": "@codemirror/view",
-      "ruleId": "boundary.editor-core",
-      "owner": "editor-foundation-refactor",
-      "reason": "Current editor-core CodeMirror ownership must be removed by the adapter hard cutover.",
-      "retireIn": "RF-604"
-    },
-    {
-      "id": "exception.editor-core-codemirror.commands-codemirror-markdown-command-adapter.commands",
-      "importer": "packages/editor-core/src/commands/codemirror-markdown-command-adapter.ts",
-      "specifier": "@codemirror/commands",
-      "ruleId": "boundary.editor-core",
-      "owner": "editor-foundation-refactor",
-      "reason": "Current editor-core CodeMirror ownership must be removed by the adapter hard cutover.",
-      "retireIn": "RF-604"
-    },
-    {
-      "id": "exception.editor-core-codemirror.commands-codemirror-markdown-command-adapter.state",
-      "importer": "packages/editor-core/src/commands/codemirror-markdown-command-adapter.ts",
-      "specifier": "@codemirror/state",
-      "ruleId": "boundary.editor-core",
-      "owner": "editor-foundation-refactor",
-      "reason": "Current editor-core CodeMirror ownership must be removed by the adapter hard cutover.",
-      "retireIn": "RF-604"
-    },
-    {
-      "id": "exception.editor-core-codemirror.commands-codemirror-markdown-command-adapter.view",
-      "importer": "packages/editor-core/src/commands/codemirror-markdown-command-adapter.ts",
-      "specifier": "@codemirror/view",
-      "ruleId": "boundary.editor-core",
-      "owner": "editor-foundation-refactor",
-      "reason": "Current editor-core CodeMirror ownership must be removed by the adapter hard cutover.",
-      "retireIn": "RF-604"
-    },
-    {
       "id": "exception.editor-core-codemirror.commands-codemirror-markdown-commands.view",
       "importer": "packages/editor-core/src/commands/codemirror-markdown-commands.ts",
       "specifier": "@codemirror/view",
@@ -360,33 +291,6 @@
       "owner": "editor-foundation-refactor",
       "reason": "Current editor-core CodeMirror ownership must be removed by the adapter hard cutover.",
       "retireIn": "RF-604"
-    },
-    {
-      "ruleId": "boundary.editor-core",
-      "owner": "editor-foundation-refactor",
-      "reason": "The editor-model bridge test builds a real CodeMirror state until the adapter hard cutover moves the bridge to @fishmark/codemirror-adapter.",
-      "retireIn": "RF-604",
-      "id": "exception.editor-core-codemirror.commands-editor-model-bridge-test.state",
-      "importer": "packages/editor-core/src/commands/editor-model-bridge.test.ts",
-      "specifier": "@codemirror/state"
-    },
-    {
-      "ruleId": "boundary.editor-core",
-      "owner": "editor-foundation-refactor",
-      "reason": "The editor-model bridge owns the CodeMirror state field until the adapter hard cutover moves it to @fishmark/codemirror-adapter.",
-      "retireIn": "RF-604",
-      "id": "exception.editor-core-codemirror.commands-editor-model-bridge.state",
-      "importer": "packages/editor-core/src/commands/editor-model-bridge.ts",
-      "specifier": "@codemirror/state"
-    },
-    {
-      "ruleId": "boundary.editor-core",
-      "owner": "editor-foundation-refactor",
-      "reason": "The editor-model bridge owns the CodeMirror state field until the adapter hard cutover moves it to @fishmark/codemirror-adapter.",
-      "retireIn": "RF-604",
-      "id": "exception.editor-core-codemirror.commands-editor-model-bridge.view",
-      "importer": "packages/editor-core/src/commands/editor-model-bridge.ts",
-      "specifier": "@codemirror/view"
     },
     {
       "id": "exception.editor-core-codemirror.commands-list-commands-test.state",
@@ -410,51 +314,6 @@
       "id": "exception.editor-core-codemirror.commands-list-commands.view",
       "importer": "packages/editor-core/src/commands/list-commands.ts",
       "specifier": "@codemirror/view",
-      "ruleId": "boundary.editor-core",
-      "owner": "editor-foundation-refactor",
-      "reason": "Current editor-core CodeMirror ownership must be removed by the adapter hard cutover.",
-      "retireIn": "RF-604"
-    },
-    {
-      "id": "exception.editor-core-codemirror.commands-list-edits-test.state",
-      "importer": "packages/editor-core/src/commands/list-edits.test.ts",
-      "specifier": "@codemirror/state",
-      "ruleId": "boundary.editor-core",
-      "owner": "editor-foundation-refactor",
-      "reason": "Current editor-core CodeMirror ownership must be removed by the adapter hard cutover.",
-      "retireIn": "RF-604"
-    },
-    {
-      "id": "exception.editor-core-codemirror.commands-semantic-context-test.state",
-      "importer": "packages/editor-core/src/commands/semantic-context.test.ts",
-      "specifier": "@codemirror/state",
-      "ruleId": "boundary.editor-core",
-      "owner": "editor-foundation-refactor",
-      "reason": "Current editor-core CodeMirror ownership must be removed by the adapter hard cutover.",
-      "retireIn": "RF-604"
-    },
-    {
-      "id": "exception.editor-core-codemirror.commands-semantic-context.state",
-      "importer": "packages/editor-core/src/commands/semantic-context.ts",
-      "specifier": "@codemirror/state",
-      "ruleId": "boundary.editor-core",
-      "owner": "editor-foundation-refactor",
-      "reason": "Current editor-core CodeMirror ownership must be removed by the adapter hard cutover.",
-      "retireIn": "RF-604"
-    },
-    {
-      "id": "exception.editor-core-codemirror.commands-semantic-edits-test.state",
-      "importer": "packages/editor-core/src/commands/semantic-edits.test.ts",
-      "specifier": "@codemirror/state",
-      "ruleId": "boundary.editor-core",
-      "owner": "editor-foundation-refactor",
-      "reason": "Current editor-core CodeMirror ownership must be removed by the adapter hard cutover.",
-      "retireIn": "RF-604"
-    },
-    {
-      "id": "exception.editor-core-codemirror.commands-semantic-edits.state",
-      "importer": "packages/editor-core/src/commands/semantic-edits.ts",
-      "specifier": "@codemirror/state",
       "ruleId": "boundary.editor-core",
       "owner": "editor-foundation-refactor",
       "reason": "Current editor-core CodeMirror ownership must be removed by the adapter hard cutover.",
@@ -499,15 +358,6 @@
     {
       "id": "exception.editor-core-codemirror.commands-table-context.state",
       "importer": "packages/editor-core/src/commands/table-context.ts",
-      "specifier": "@codemirror/state",
-      "ruleId": "boundary.editor-core",
-      "owner": "editor-foundation-refactor",
-      "reason": "Current editor-core CodeMirror ownership must be removed by the adapter hard cutover.",
-      "retireIn": "RF-604"
-    },
-    {
-      "id": "exception.editor-core-codemirror.commands-table-edits-test.state",
-      "importer": "packages/editor-core/src/commands/table-edits.test.ts",
       "specifier": "@codemirror/state",
       "ruleId": "boundary.editor-core",
       "owner": "editor-foundation-refactor",
@@ -1170,6 +1020,15 @@
     }
   ],
   "micromarkDocumentSites": [
+    {
+      "id": "micromark-document.independent-fixture-oracle-test",
+      "module": "packages/test-harness/src/scenarios/editor-behavior-nested-containers.test.ts",
+      "role": "test-only-independent-syntax-oracle",
+      "reason": "Fixture authoring validates CommonMark container ownership independently of the production parser; this exact test module is not a production parse entry.",
+      "lifecycle": {
+        "state": "present"
+      }
+    },
     {
       "id": "micromark-document.collect-event-views",
       "module": "packages/markdown-engine/src/parse/micromark-event-adapter.ts",

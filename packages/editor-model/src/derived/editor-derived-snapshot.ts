@@ -122,8 +122,15 @@ export function assertSnapshotRevision(snapshot: EditorDerivedSnapshot, revision
   }
 }
 
-function resolveNodeAt(document: PhysicalEditingDocument, offset: number): MarkdownNode | null {
-  return document.nodeAtOffset(offset) ?? (offset > 0 ? document.nodeAtOffset(offset - 1) : null);
+function resolveNodeAt(document: PhysicalEditingDocument, tree: MarkdownDocumentTree, offset: number): MarkdownNode | null {
+  const exact = document.nodeAtOffset(offset);
+  const line = document.lineAtOffset(offset);
+  const owner = line?.nodeId === null || line?.nodeId === undefined ? null : tree.nodesById.get(line.nodeId) ?? null;
+  // Prefixes and the caret immediately after the final character belong to the
+  // content on this line, even when half-open source lookup finds only an ancestor.
+  if (owner !== null && (exact === null || owner.depth > exact.depth)) return owner;
+  return exact ?? (offset > 0 && line !== null && offset > line.range.startOffset
+    ? document.nodeAtOffset(offset - 1) : null);
 }
 function createSnapshot(
   revision: number,
@@ -140,15 +147,15 @@ function createSnapshot(
     document: physical,
     lineAt: (offset: number): PhysicalLine | null => physical.lineAtOffset(offset),
     // A caret sits between characters, so a caret at a node's end still belongs to that node.
-    nodeAt: (offset: number): MarkdownNode | null => resolveNodeAt(physical, offset),
+    nodeAt: (offset: number): MarkdownNode | null => resolveNodeAt(physical, tree, offset),
     nodeById: (id: string): MarkdownNode | null => tree.nodesById.get(id) ?? null,
     containerPathAt: (offset: number): ContainerPath | null => {
-      const node = resolveNodeAt(physical, offset);
+      const node = resolveNodeAt(physical, tree, offset);
 
       return node === null ? null : node.path;
     },
     tableAt: (offset: number): TableCursor | null => {
-      const node = resolveNodeAt(physical, offset);
+      const node = resolveNodeAt(physical, tree, offset);
 
       return node !== null && node.kind === "table" ? tableCursorAt(node, offset) : null;
     }

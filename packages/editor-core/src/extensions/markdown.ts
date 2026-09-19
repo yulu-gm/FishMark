@@ -16,9 +16,12 @@ import {
   type DecorationSet,
   EditorView,
   ViewPlugin,
+  type ViewUpdate,
   keymap
 } from "@codemirror/view";
 
+import { planNormalizeOrderedListScopes, planPointerSelection, planTableUpdateCell, reselectEditorSemanticContext } from "@fishmark/editor-model";
+import { createCanonicalSeparatorField, finishCompositionEffect, readCompositionState, readEditorStructureCache } from "@fishmark/codemirror-adapter";
 import type {
   InlineASTNode,
   InlineLink,
@@ -36,15 +39,19 @@ import {
   type ActiveBlockState
 } from "../active-block";
 import {
-  runMarkdownArrowDown,
-  runMarkdownArrowUp,
+  createSemanticCommandBindings,
+  planSemanticEnter,
+  planSemanticBackspace,
+  planSemanticDelete,
+  planSemanticTab,
+  planSemanticShiftTab,
+  planSemanticArrow,
+  type SemanticCommandBindings
+} from "@fishmark/codemirror-adapter";
+import {
   runListMoveLineDown,
   runListMoveLineUp,
-  runMarkdownBackspace,
-  runMarkdownEnter,
   runMarkdownHardBreak,
-  runMarkdownShiftTab,
-  runMarkdownTab,
   runTableInsertRowBelow,
   runTableMoveDown,
   runTableMoveDownOrExit,
@@ -63,10 +70,6 @@ import {
 } from "../derived-state/editor-derived-state";
 import { deriveInactiveBlockDecorationsState } from "../derived-state/inactive-block-decorations";
 import { readTableContext, type TablePosition } from "../commands/table-context";
-import {
-  computeNormalizedOrderedListDocument,
-  mapTextOffsetThroughChanges
-} from "../commands/list-edits";
 import { createGroupedShortcutKeymaps } from "./markdown-shortcuts";
 import {
   type TableWidgetCallbacks
@@ -85,7 +88,7 @@ import {
   normalizeHiddenSelectionAnchor,
   normalizeStructuralBlankSelectionAnchor
 } from "../line-visibility";
-import { resolvePointerSelectionAnchor as resolveBlockPointerSelectionAnchor } from "../interactions";
+import { resolveArrowUp, resolveArrowDown, resolvePointerSelectionAnchor as resolveBlockPointerSelectionAnchor } from "../interactions";
 import {
   createMarkdownEditorViewModeExtension,
   getMarkdownEditorViewMode,
@@ -99,6 +102,11 @@ export type ParseOrderedListNormalizationBlockMap = (source: string) => BlockMap
 export type CreateFishMarkMarkdownExtensionsOptions = {
   parseMarkdownDocument?: ParseMarkdownDocument;
   parseOrderedListNormalizationBlockMap?: ParseOrderedListNormalizationBlockMap;
+  readAcknowledgedRevision?: () => number | null;
+  readObservedRevision?: () => number | null;
+  // The host receives the bound semantic command surface so its own command API (menu, toolbar,
+  // test driver, controller press helpers) runs the same decisions as the keymap.
+  onSemanticCommands?: (commands: SemanticCommandBindings) => void;
   onContentChange: (doc: string) => void;
   onActiveBlockChange?: (state: ActiveBlockState) => void;
   onBlockDecorationsBuilt?: () => void;
@@ -113,7 +121,6 @@ type MarkdownExtensionRuntime = {
   editorDerivedState: EditorDerivedState;
   blockDecorationSignature: string;
   hasEditorFocus: boolean;
-  isCompositionGuardActive: boolean;
   hasPendingDerivedStateFlush: boolean;
 };
 
@@ -150,12 +157,12 @@ export function createFishMarkMarkdownExtensions(
     parseMarkdownDocument: markdownDocumentCache.read
   });
   let tableInteractionView: EditorView | null = null;
+  let pendingTableComposition: { position: TablePosition; text: string; source: string; generation: number } | null = null;
   const runtime: MarkdownExtensionRuntime = {
     activeBlockState: initialEditorDerivedState.activeBlockState,
     editorDerivedState: initialEditorDerivedState,
     blockDecorationSignature: "",
     hasEditorFocus: false,
-    isCompositionGuardActive: false,
     hasPendingDerivedStateFlush: false
   };
 
@@ -163,13 +170,35 @@ export function createFishMarkMarkdownExtensions(
   const groupedShortcutKeymaps = createGroupedShortcutKeymaps(() => runtime.activeBlockState);
   const canOpenExternalLink = typeof options.onOpenLink === "function";
 
-  const createLiveEditorDerivedState = (state: EditorState): EditorDerivedState =>
-    createEditorDerivedState({
-      source: state.doc.toString(),
+  // Every command uses the model. The host observes the final transaction for transport, including
+  // normalizations and native input; requesting this surface does not opt into a different engine.
+  const semanticCommands = createSemanticCommandBindings({
+        ...(options.readAcknowledgedRevision === undefined
+          ? {}
+          : { readAcknowledgedRevision: options.readAcknowledgedRevision }),
+        ...(options.readObservedRevision === undefined
+          ? {}
+          : { readObservedRevision: options.readObservedRevision })
+      });
+
+  if (semanticCommands !== null) {
+    options.onSemanticCommands?.(semanticCommands);
+  }
+
+  const readStateMarkdownDocument = (state: EditorState): MarkdownDocument => {
+    const cache = readEditorStructureCache(state);
+    return markdownDocumentCache.readTree(cache.tree);
+  };
+
+  const createLiveEditorDerivedState = (state: EditorState): EditorDerivedState => {
+    const markdownDocument = readStateMarkdownDocument(state);
+    return createEditorDerivedState({
+      source: readEditorStructureCache(state).source,
       selection: createSelectionSnapshot(state),
-      parseMarkdownDocument: markdownDocumentCache.read,
+      parseMarkdownDocument: () => markdownDocument,
       previousTableCursor: runtime.activeBlockState.tableCursor
     });
+  };
 
   const createLiveActiveBlockState = (state: EditorState): ActiveBlockState =>
     createLiveEditorDerivedState(state).activeBlockState;
@@ -489,6 +518,12 @@ export function createFishMarkMarkdownExtensions(
       if (!tableInteractionView) {
         return;
       }
+      if (readCompositionState(tableInteractionView.state).active) {
+        const session = semanticCommands.adapter.readSession(tableInteractionView.state);
+        if (session !== null) pendingTableComposition = { position, text,
+          source: tableInteractionView.state.doc.toString(), generation: session.generation };
+        return;
+      }
 
       if (
         runTableUpdateCell(
@@ -621,7 +656,8 @@ export function createFishMarkMarkdownExtensions(
     view: EditorView,
     decorationSet: DecorationSet,
     signature: string,
-    force = false
+    force = false,
+    effects: readonly StateEffect<unknown>[] = []
   ) => {
     if (!force && signature === runtime.blockDecorationSignature) {
       return;
@@ -629,14 +665,15 @@ export function createFishMarkMarkdownExtensions(
 
     runtime.blockDecorationSignature = signature;
     view.dispatch({
-      effects: setBlockDecorationsEffect.of(decorationSet)
+      effects: [...effects, setBlockDecorationsEffect.of(decorationSet)]
     });
   };
 
   const recomputeDerivedState = (
     view: EditorView,
     state: EditorState,
-    recomputeOptions: boolean | { force?: boolean; reuseMappedDecorations?: boolean } = false
+    recomputeOptions: boolean | { force?: boolean; reuseMappedDecorations?: boolean } = false,
+    effects: readonly StateEffect<unknown>[] = []
   ) => {
     const force = typeof recomputeOptions === "boolean" ? recomputeOptions : recomputeOptions.force === true;
     const reuseMappedDecorations =
@@ -682,7 +719,7 @@ export function createFishMarkMarkdownExtensions(
 
     runtime.editorDerivedState = editorDerivedState;
     notifyActiveBlockChange(activeBlockState, force);
-    applyBlockDecorations(view, decorationSet, signature, force);
+    applyBlockDecorations(view, decorationSet, signature, force, effects);
     syncTableInteractionFocus(view, activeBlockState);
   };
 
@@ -772,12 +809,18 @@ export function createFishMarkMarkdownExtensions(
 
   const lifecyclePlugin = ViewPlugin.fromClass(class {
     view: EditorView;
+    compositionFinishTimer: ReturnType<typeof setTimeout> | null = null;
+    compositionBaseSource: string | null = null;
+    compositionGeneration: number | null = null;
     stopBlockPointerDragSelection: (() => void) | null = null;
     unsubscribeCodeHighlightParserLoaded: () => void;
 
     constructor(view: EditorView) {
       this.view = view;
       tableInteractionView = view;
+      // The adapter owns one document structure cache per view; the semantic session starts with
+      // the view that hosts it.
+      semanticCommands?.bindSession(view);
       this.unsubscribeCodeHighlightParserLoaded = subscribeCodeHighlightParserLoaded(() => {
         this.view.dispatch({
           effects: forceRefreshMarkdownDecorationsEffect.of(null)
@@ -801,11 +844,87 @@ export function createFishMarkMarkdownExtensions(
     }
 
     handleCompositionStart = () => {
-      runtime.isCompositionGuardActive = true;
+      if (this.compositionFinishTimer !== null) {
+        clearTimeout(this.compositionFinishTimer);
+        this.compositionFinishTimer = null;
+      }
+      if (!readCompositionState(this.view.state).active) {
+        this.compositionBaseSource = this.view.state.doc.toString();
+        this.compositionGeneration = semanticCommands.adapter.readSession(this.view.state)?.generation ?? null;
+        pendingTableComposition = null;
+        this.view.dispatch({ effects: semanticCommands.adapter.startComposition(this.view.state) });
+      }
     };
 
+    update(update: ViewUpdate) {
+      if (update.transactions.some((transaction) => readCompositionState(transaction.startState).active &&
+          !readCompositionState(transaction.state).active &&
+          !transaction.effects.some((effect) => effect.is(finishCompositionEffect)))) {
+        if (this.compositionFinishTimer !== null) clearTimeout(this.compositionFinishTimer);
+        this.compositionFinishTimer = null;
+        this.compositionBaseSource = null;
+        this.compositionGeneration = null;
+        pendingTableComposition = null;
+      }
+    }
+
     handleCompositionEnd = () => {
-      runtime.isCompositionGuardActive = false;
+      // Browsers may deliver the final native input after compositionend. Keep
+      // provisional text protected through that event turn, then finalize once.
+      if (this.compositionFinishTimer !== null) clearTimeout(this.compositionFinishTimer);
+      this.compositionFinishTimer = setTimeout(this.finishComposition, 0);
+    };
+
+    finishComposition = () => {
+      this.compositionFinishTimer = null;
+      const completion = semanticCommands.adapter.finishComposition(this.view.state);
+      const originalState = this.view.state;
+      const generation = semanticCommands.adapter.readSession(originalState)?.generation ?? null;
+      const pendingTable = pendingTableComposition;
+      pendingTableComposition = null;
+      const before = generation === this.compositionGeneration ? this.compositionBaseSource : null;
+      this.compositionBaseSource = null;
+      this.compositionGeneration = null;
+      let finalState = originalState;
+      let changes = originalState.changes([]);
+      let appliedTable = false;
+      if (pendingTable !== null && pendingTable.generation === generation && pendingTable.source === originalState.doc.toString()) {
+        const context = semanticCommands.adapter.readSemanticContext(originalState);
+        const offset = pendingTable.position.tableStartOffset;
+        const tableContext = offset === undefined ? context : reselectEditorSemanticContext(context, { anchor: offset, head: offset });
+        const plan = planTableUpdateCell(tableContext, pendingTable.position, pendingTable.text);
+        if (plan !== null) {
+          const candidate = originalState.update({ changes: plan.edits, selection: plan.selection, filter: false });
+          finalState = candidate.state;
+          changes = candidate.changes;
+          appliedTable = true;
+        }
+      }
+      const source = finalState.doc.toString();
+      let normalization = null;
+      if (before !== null && before !== source) {
+        let from = 0;
+        while (from < before.length && from < source.length && before[from] === source[from]) from += 1;
+        let oldEnd = before.length;
+        let to = source.length;
+        while (oldEnd > from && to > from && before[oldEnd - 1] === source[to - 1]) { oldEnd -= 1; to -= 1; }
+        normalization = planNormalizeOrderedListScopes(semanticCommands.adapter.readSemanticContext(finalState), {
+          changedRanges: [{ from, to }]
+        });
+      }
+      if (normalization !== null) {
+        const candidate = finalState.update({ changes: normalization.edits, selection: normalization.selection, filter: false });
+        changes = changes.compose(candidate.changes);
+        finalState = candidate.state;
+      }
+      // Finish and normalization share one transaction so canonical geometry
+      // rebuilds once from final text; the host retains normal frame ownership.
+      this.view.dispatch({
+        effects: completion.effects,
+        ...(changes.empty ? {} : { changes, selection: finalState.selection,
+          annotations: orderedListNormalizationAnnotation.of(true), userEvent: "input.normalize" }),
+        filter: false
+      });
 
       if (!runtime.hasPendingDerivedStateFlush) {
         return;
@@ -813,6 +932,7 @@ export function createFishMarkMarkdownExtensions(
 
       runtime.hasPendingDerivedStateFlush = false;
       recomputeDerivedState(this.view, this.view.state, true);
+      if (appliedTable && pendingTable !== null) focusTableCellEditor(this.view, pendingTable.position);
     };
 
     handleFocusIn = () => {
@@ -981,6 +1101,9 @@ export function createFishMarkMarkdownExtensions(
     };
 
     destroy() {
+      if (this.compositionFinishTimer !== null) clearTimeout(this.compositionFinishTimer);
+      pendingTableComposition = null;
+      semanticCommands.releaseSession();
       if (tableInteractionView === this.view) {
         tableInteractionView = null;
       }
@@ -996,11 +1119,15 @@ export function createFishMarkMarkdownExtensions(
   });
 
   return [
+    ...(semanticCommands === null ? [] : [semanticCommands.adapter.extension()]),
     createMarkdownEditorViewModeExtension(options.viewMode),
     blockDecorationsField,
+    createCanonicalSeparatorField(getMarkdownEditorViewMode),
     lifecyclePlugin,
     whitespaceInputHandler,
     EditorState.transactionFilter.of((transaction) => {
+      if (readCompositionState(transaction.startState).active ||
+          transaction.isUserEvent("input.type.compose")) return transaction;
       const whitespaceInputSelection = createWhitespaceInputSelectionTransaction(transaction);
 
       if (whitespaceInputSelection) {
@@ -1009,7 +1136,7 @@ export function createFishMarkMarkdownExtensions(
 
       const detachedListBlankLineInsert = createDetachedListBlankLineInsertTransaction(
         transaction,
-        markdownDocumentCache
+        { read: () => readStateMarkdownDocument(transaction.startState) }
       );
 
       if (detachedListBlankLineInsert) {
@@ -1029,22 +1156,24 @@ export function createFishMarkMarkdownExtensions(
       }
 
       let effectiveSource = transaction.newDoc.toString();
+      let effectiveState = transaction.state;
       let effectiveAnchor = transaction.newSelection.main.anchor;
       let effectiveHead = transaction.newSelection.main.head;
       const followUpTransactions: TransactionSpec[] = [];
 
       if (shouldNormalizeOrderedLists) {
-        const normalization = computeNormalizedOrderedListDocument(effectiveSource, {
-          parseOrderedListNormalization: options.parseOrderedListNormalizationBlockMap,
+        const normalization = planNormalizeOrderedListScopes(semanticCommands.adapter.readSemanticContext(transaction.state), {
           changedRanges: readTransactionChangedRanges(transaction)
         });
 
         if (normalization) {
-          effectiveSource = normalization.source;
-          effectiveAnchor = mapTextOffsetThroughChanges(effectiveAnchor, normalization.changes);
-          effectiveHead = mapTextOffsetThroughChanges(effectiveHead, normalization.changes);
+          const normalized = transaction.state.update({ changes: normalization.edits, filter: false });
+          effectiveState = normalized.state;
+          effectiveSource = normalized.newDoc.toString();
+          effectiveAnchor = normalization.selection.anchor;
+          effectiveHead = normalization.selection.head;
           followUpTransactions.push({
-            changes: normalization.changes,
+            changes: normalization.edits,
             selection: {
               anchor: effectiveAnchor,
               head: effectiveHead
@@ -1060,7 +1189,7 @@ export function createFishMarkMarkdownExtensions(
         effectiveAnchor === effectiveHead &&
         transaction.annotation(Transaction.userEvent) !== "delete.list-marker"
       ) {
-        const markdownDocument = markdownDocumentCache.read(effectiveSource);
+        const markdownDocument = readStateMarkdownDocument(effectiveState);
         const previousAnchor = transaction.startState.selection.main.anchor;
         const anchorDelta = effectiveAnchor - previousAnchor;
         const userEvent = transaction.annotation(Transaction.userEvent);
@@ -1140,7 +1269,9 @@ export function createFishMarkMarkdownExtensions(
       {
         key: "ArrowUp",
         run: (view) => {
-          const handled = runMarkdownArrowUp(view, runtime.activeBlockState);
+          const target = resolveArrowUp(view, runtime.activeBlockState);
+          const handled = semanticCommands.run(view, target === null ? planSemanticArrow("up") :
+            (context) => planPointerSelection(context, target.anchor)) !== "unhandled";
 
           if (handled) {
             syncTableInteractionFocus(view, createLiveActiveBlockState(view.state), { force: true });
@@ -1152,7 +1283,9 @@ export function createFishMarkMarkdownExtensions(
       {
         key: "ArrowDown",
         run: (view) => {
-          const handled = runMarkdownArrowDown(view, runtime.activeBlockState);
+          const target = resolveArrowDown(view, runtime.activeBlockState);
+          const handled = semanticCommands.run(view, target === null ? planSemanticArrow("down") :
+            (context) => planPointerSelection(context, target.anchor)) !== "unhandled";
 
           if (handled) {
             syncTableInteractionFocus(view, createLiveActiveBlockState(view.state), { force: true });
@@ -1163,7 +1296,11 @@ export function createFishMarkMarkdownExtensions(
       },
       {
         key: "Backspace",
-        run: (view) => runMarkdownBackspace(view, runtime.activeBlockState)
+        run: (view) => semanticCommands.run(view, planSemanticBackspace) !== "unhandled"
+      },
+      {
+        key: "Delete",
+        run: (view) => semanticCommands.run(view, planSemanticDelete) !== "unhandled"
       },
       {
         key: "Shift-Enter",
@@ -1171,15 +1308,15 @@ export function createFishMarkMarkdownExtensions(
       },
       {
         key: "Enter",
-        run: (view) => runMarkdownEnter(view, runtime.activeBlockState)
+        run: (view) => semanticCommands.run(view, planSemanticEnter) !== "unhandled"
       },
       {
         key: "Tab",
-        run: (view) => runMarkdownTab(view, createLiveActiveBlockState(view.state))
+        run: (view) => semanticCommands.run(view, planSemanticTab) !== "unhandled"
       },
       {
         key: "Shift-Tab",
-        run: (view) => runMarkdownShiftTab(view, createLiveActiveBlockState(view.state))
+        run: (view) => semanticCommands.run(view, planSemanticShiftTab) !== "unhandled"
       },
       {
         key: "Alt-ArrowUp",
@@ -1216,6 +1353,12 @@ export function createFishMarkMarkdownExtensions(
         return;
       }
 
+      if (readCompositionState(update.state).active || update.transactions.some((transaction) =>
+          transaction.effects.some((effect) => effect.is(finishCompositionEffect)))) {
+        runtime.hasPendingDerivedStateFlush = true;
+        return;
+      }
+
       const whitespaceInputSelectionAnchor = resolveWhitespaceInputSelectionAnchor(
         update.transactions,
         update.state.selection.main
@@ -1228,15 +1371,6 @@ export function createFishMarkMarkdownExtensions(
             head: whitespaceInputSelectionAnchor
           }
         });
-        return;
-      }
-
-      if (
-        runtime.isCompositionGuardActive ||
-        update.view.compositionStarted ||
-        update.view.composing
-      ) {
-        runtime.hasPendingDerivedStateFlush = true;
         return;
       }
 

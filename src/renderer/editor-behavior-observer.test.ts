@@ -1,15 +1,46 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it, vi } from "vitest";
+import { EditorState } from "@codemirror/state";
+import type { EditorView } from "@codemirror/view";
+import { editorStructureCacheField, readEditorStructureCache } from "@fishmark/codemirror-adapter";
+import { createEditorDerivedSnapshotFromCache } from "@fishmark/editor-model";
+import * as engine from "@fishmark/markdown-engine";
 
 import {
   observePhysicalLineSemantics,
   observeLineDomMapping,
   observeSemanticPath
+  , observeEditorBehaviorCheckpoint
 } from "./editor-behavior-observer";
 
 describe("editor behavior observer", () => {
-  it("projects the real parser block path without filling missing list descendants", () => {
+  it("reuses the runtime EditorState cache across repeated and selection-only observations", () => {
+    const source = "> - ```txt\n>   code\n>   ```";
+    let state = EditorState.create({ doc: source, selection: { anchor: source.indexOf("code") }, extensions: [editorStructureCacheField] });
+    const snapshot = createEditorDerivedSnapshotFromCache(readEditorStructureCache(state));
+    const parse = vi.spyOn(engine, "createDocumentStructureCache");
+    const view = { get state() { return state; }, domAtPos() { throw new Error("no DOM in state-only test"); } } as unknown as EditorView;
+    const identity = { runId: "cache-reuse", manifestHash: "fixture", contractHash: "contract", caseId: "case", checkpoint: "primary" as const,
+      commandPlan: [] } as unknown as Parameters<typeof observeEditorBehaviorCheckpoint>[1];
+    try {
+      expect(observeEditorBehaviorCheckpoint(view, identity).semanticPath).toEqual(["Document", "Blockquote", "List", "ListItem", "CodeFence"]);
+      state = state.update({ selection: { anchor: source.indexOf("code") + 1 } }).state;
+      const observed = observeEditorBehaviorCheckpoint(view, identity);
+      expect(observed.visibleLineRoles).toEqual(["code-fence-delimiter", "code-fence-content", "code-fence-delimiter"]);
+      expect(observed.physicalGeometry.every((line) => line.geometry.visibility === "collapsed")).toBe(true);
+      expect(createEditorDerivedSnapshotFromCache(readEditorStructureCache(state))).toBe(snapshot);
+      expect(parse).not.toHaveBeenCalled();
+    } finally { parse.mockRestore(); }
+  });
+
+  it("keeps alternating list and quote ancestry in physical prefix order", () => {
+    const source = "- > - first\n  > - second\n  >   - target";
+    expect(observePhysicalLineSemantics(source).map(({ semanticDepth, contentColumn, markerColumn }) => ({ semanticDepth, contentColumn, markerColumn })))
+      .toEqual([{ semanticDepth: 3, contentColumn: 6, markerColumn: 4 }, { semanticDepth: 3, contentColumn: 6, markerColumn: 4 },
+        { semanticDepth: 4, contentColumn: 8, markerColumn: 6 }]);
+  });
+  it("observes canonical list-item descendants without the lossy rich-document projection", () => {
     const paragraph = observeSemanticPath("Paragraph", 4);
     expect(paragraph).toEqual({
       raw: ["paragraph"],
@@ -19,13 +50,13 @@ describe("editor behavior observer", () => {
     const source = ["> > - $$", "> >   x + y", "> >   $$"].join("\n");
     const nested = observeSemanticPath(source, source.indexOf("x + y"));
     expect(nested).toEqual({
-      raw: ["blockquote", "blockquote", "list"],
-      canonical: ["Document", "Blockquote", "Blockquote", "List"]
+      raw: ["blockquote", "blockquote", "list", "list-item", "block-math"],
+      canonical: ["Document", "Blockquote", "Blockquote", "List", "ListItem", "BlockMath"]
     });
-    expect(nested.canonical).not.toContain("BlockMath");
+    expect(nested.canonical).toContain("BlockMath");
   });
 
-  it("derives nested quote/list columns without inventing an absent math descendant", () => {
+  it("derives nested quote/list columns and math roles from the same canonical snapshot", () => {
     const source = ["> > - $$", "> >   x + y", "> >   $$"].join("\n");
     const lines = observePhysicalLineSemantics(source);
 
@@ -36,19 +67,19 @@ describe("editor behavior observer", () => {
       markerColumn
     }))).toEqual([
       {
-        role: "content",
+        role: "block-math-delimiter",
         semanticDepth: 3,
         contentColumn: 6,
         markerColumn: 4
       },
       {
-        role: "content",
+        role: "block-math-content",
         semanticDepth: 3,
         contentColumn: 6,
         markerColumn: 2
       },
       {
-        role: "content",
+        role: "block-math-delimiter",
         semanticDepth: 3,
         contentColumn: 6,
         markerColumn: 2
@@ -101,7 +132,7 @@ describe("editor behavior observer", () => {
     },
     {
       source: "- \n- ",
-      roles: ["structural-separator", "structural-separator"],
+      roles: ["content", "content"],
       contentColumns: [2, 2]
     },
     {
@@ -112,7 +143,7 @@ describe("editor behavior observer", () => {
     {
       source: "- item\n  \n  continuation",
       roles: ["content", "whitespace-only", "content"],
-      contentColumns: [2, 0, 0]
+      contentColumns: [2, 2, 2]
     }
   ])(
     "keeps content classification within each physical line for $source",
@@ -125,6 +156,26 @@ describe("editor behavior observer", () => {
       }
     }
   );
+
+  it.each(["-", "- ", "1.", "1. ", "> > -", "> > - ",
+    "> > - parent\n> >   - ", "> - List1\n>   - "])(
+    "observes an empty list item as content without inventing a paragraph: %j", (source) => {
+      const line = observePhysicalLineSemantics(source).at(-1)!;
+      expect(line.role).toBe("content");
+      const path = observeSemanticPath(source, source.length).canonical;
+      expect(path.at(-1)).toBe("ListItem");
+      expect(path).not.toContain("Paragraph");
+    }
+  );
+
+  it.each([
+    ["- item\n  \n  continuation", ["content", "whitespace-only", "content"]],
+    ["> - item\n>   \n>   continuation", ["content", "structural-separator", "content"]],
+    ["- >", ["structural-separator"]],
+    ["- > ", ["structural-separator"]]
+  ] as const)("does not classify list continuation blanks or nested empty quotes as empty items: %j", (source, roles) => {
+    expect(observePhysicalLineSemantics(source).map((line) => line.role)).toEqual(roles);
+  });
 
   it("does not treat an unclosed fence or indented code content as a closing delimiter", () => {
     expect(observePhysicalLineSemantics("```ts\ncode").map(({ role }) => role)).toEqual([

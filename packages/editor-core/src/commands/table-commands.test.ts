@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { EditorState } from "@codemirror/state";
+import { EditorState, Text } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { describe, expect, it, vi } from "vitest";
 
@@ -9,6 +9,7 @@ import { parseMarkdownDocument } from "@fishmark/markdown-engine";
 import { createActiveBlockStateFromMarkdownDocument } from "../active-block";
 import { deriveTableCursorState } from "../table-cursor-state";
 import { runMarkdownTab } from "./codemirror-markdown-commands";
+import { createSemanticCommandBindings } from "@fishmark/codemirror-adapter";
 import {
   runTableBackspaceFromLineBelow,
   runTableEnterFromLineBelow,
@@ -21,13 +22,16 @@ import {
 } from "./table-commands";
 
 const createHarness = (doc: string, anchor: number) => {
+  const bindings = createSemanticCommandBindings();
   const view = new EditorView({
     state: EditorState.create({
-      doc,
+      doc: Text.of(doc.split("\n")),
+      extensions: [bindings.adapter.extension()],
       selection: { anchor }
     }),
     parent: document.createElement("div")
   });
+  bindings.bindSession(view);
   const activeState = createActiveBlockStateFromMarkdownDocument(
     parseMarkdownDocument(doc),
     { anchor, head: anchor }

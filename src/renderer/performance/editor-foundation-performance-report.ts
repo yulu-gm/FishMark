@@ -25,17 +25,17 @@ export type EditorFoundationPerformanceOperation = {
   counters: EditorPerformanceCounters;
   parserEntries: EditorPerformanceParserEntries;
   capabilityRefs: ["incrementalStructureCache"];
-  unavailableCapabilityReason: typeof INCREMENTAL_STRUCTURE_CACHE_REASON;
+  unavailableCapabilityReason: typeof INCREMENTAL_STRUCTURE_CACHE_REASON | null;
 };
 
 export type EditorFoundationPerformanceReport = {
-  schemaVersion: 1;
+  schemaVersion: 2;
   fixture: PerformanceFixtureIdentity;
   capabilities: {
     incrementalStructureCache: {
-      available: false;
-      reason: typeof INCREMENTAL_STRUCTURE_CACHE_REASON;
-      zeroCounters: ["incrementalParseWindow", "cacheHit", "invalidatedNodes"];
+      available: boolean;
+      reason: typeof INCREMENTAL_STRUCTURE_CACHE_REASON | null;
+      zeroCounters: string[];
     };
   };
   operations: EditorFoundationPerformanceOperation[];
@@ -62,13 +62,13 @@ export function measureEditorFoundationPerformance(
   const derivedData = measureRendererDerivedDataPerformance(fixture.source);
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     fixture: fixture.identity,
     capabilities: {
       incrementalStructureCache: {
-        available: false,
-        reason: INCREMENTAL_STRUCTURE_CACHE_REASON,
-        zeroCounters: ["incrementalParseWindow", "cacheHit", "invalidatedNodes"]
+        available: true,
+        reason: null,
+        zeroCounters: []
       }
     },
     operations: [
@@ -101,11 +101,7 @@ export function toStableEditorFoundationBaseline(
       incrementalStructureCache: {
         available: report.capabilities.incrementalStructureCache.available,
         reason: report.capabilities.incrementalStructureCache.reason,
-        zeroCounters: [
-          report.capabilities.incrementalStructureCache.zeroCounters[0],
-          report.capabilities.incrementalStructureCache.zeroCounters[1],
-          report.capabilities.incrementalStructureCache.zeroCounters[2]
-        ]
+        zeroCounters: [...report.capabilities.incrementalStructureCache.zeroCounters]
       }
     },
     operations: report.operations.map((operation) => ({

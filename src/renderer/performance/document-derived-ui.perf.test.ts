@@ -31,7 +31,7 @@ describe("measureRendererDerivedDataPerformance", () => {
         decorationRebuild: 0
       });
       expect(operation.unavailableCapabilityReason).toBe(
-        "incremental-structure-cache-not-implemented"
+        "consumer-does-not-use-incremental-structure-cache"
       );
     }
 

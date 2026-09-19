@@ -691,7 +691,7 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
       "wysiwym",
       ["> > \n> > ", sourceSelection(9)],
       2,
-      ["> > \n> \n> ", sourceSelection(10)],
+      [">\n> ", sourceSelection(4)],
       1,
       ["> >", sourceSelection(3)]
     )
@@ -845,12 +845,18 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
       source: "> 引用块\n>\n> > 二级引用块\n> > - List 1\n> > - List 2\n> >   - List 2.1\n> >   -",
         selection: sourceSelection("> 引用块\n>\n> > 二级引用块\n> > - List 1\n> > - List 2\n> >   - List 2.1\n> >   -".length)
     },
-    semanticPaths: { repeat: DOCUMENT_NESTED_BLOCKQUOTE_PARAGRAPH },
+    semanticPaths: {
+      initial: ["Document", "Blockquote", "Blockquote", "List", "ListItem", "List", "ListItem"],
+      primary: ["Document", "Blockquote", "Blockquote", "List", "ListItem"],
+      repeat: DOCUMENT_NESTED_BLOCKQUOTE_PARAGRAPH,
+      undo: ["Document", "Blockquote", "Blockquote", "List", "ListItem", "List", "ListItem"]
+    },
     checkpointResults: checkpointResults(
       "wysiwym",
       [
         "> 引用块\n>\n> > 二级引用块\n> > - List 1\n> > - List 2\n> >   - List 2.1\n> > -",
-        sourceSelection("> 引用块\n>\n> > 二级引用块\n> > - List 1\n> > - List 2\n> >   - List 2.1\n> > -".length)
+        sourceSelection("> 引用块\n>\n> > 二级引用块\n> > - List 1\n> > - List 2\n> >   - List 2.1\n> > -".length),
+        { geometryOverrides: { 7: { semanticDepth: 3, contentColumn: 5, markerColumn: 4 } } }
       ],
       2,
       [
@@ -860,7 +866,8 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
       1,
       [
         "> 引用块\n>\n> > 二级引用块\n> > - List 1\n> > - List 2\n> >   - List 2.1\n> >   -",
-        sourceSelection("> 引用块\n>\n> > 二级引用块\n> > - List 1\n> > - List 2\n> >   - List 2.1\n> >   -".length)
+        sourceSelection("> 引用块\n>\n> > 二级引用块\n> > - List 1\n> > - List 2\n> >   - List 2.1\n> >   -".length),
+        { geometryOverrides: { 7: { semanticDepth: 4, contentColumn: 7, markerColumn: 6 } } }
       ]
     )
   }),
@@ -905,26 +912,32 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
       }),
       initial: { source: input.initial, selection: sourceSelection(input.initial.length) },
       semanticPaths: {
+        ...(input.id === "blockquote-list-tab-after-residual-separator" ? {} : {
+          initial: input.path.slice(0, -1),
+          undo: input.path.slice(0, -1)
+        }),
         primary: [
           ...input.path.slice(0, -1),
           "List",
           "ListItem",
-          "Paragraph"
+          ...(input.id === "blockquote-list-tab-after-residual-separator" ? ["Paragraph" as const] : [])
         ],
         repeat: [
           ...input.path.slice(0, -1),
           "List",
           "ListItem",
-          "Paragraph"
+          ...(input.id === "blockquote-list-tab-after-residual-separator" ? ["Paragraph" as const] : [])
         ]
       },
       checkpointResults: checkpointResults(
         "wysiwym",
-        [input.expected, sourceSelection(input.expected.length)],
+        [input.expected, sourceSelection(input.expected.length), { roleOverrides: { 2: "content" } }],
         2,
-        [input.expected, sourceSelection(input.expected.length)],
+        [input.expected, sourceSelection(input.expected.length), { roleOverrides: { 2: "content" } }],
         1,
-        [input.initial, sourceSelection(input.initial.length)]
+        [input.initial, sourceSelection(input.initial.length), input.id === "blockquote-bare-list-marker-tab"
+          ? { geometryOverrides: { 2: { semanticDepth: 3, contentColumn: 5, markerColumn: 4 } }, roleOverrides: { 2: "content" } }
+          : input.id === "blockquote-padded-empty-list-item-tab" ? { roleOverrides: { 2: "content" } } : undefined]
       )
     })
   ),
@@ -944,7 +957,9 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
     initial: { source: "> - List1\n> - ", selection: sourceSelection(14) },
     semanticPaths: {
       primary: DOCUMENT_BLOCKQUOTE_PARAGRAPH,
-      repeat: DOCUMENT_PARAGRAPH
+      repeat: DOCUMENT_PARAGRAPH,
+      initial: ["Document", "Blockquote", "List", "ListItem"],
+      undo: ["Document", "Blockquote", "List", "ListItem"]
     },
     checkpointResults: checkpointResults(
       "wysiwym",
@@ -952,7 +967,7 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
       2,
       ["> - List1\n\n", sourceSelection("> - List1\n\n".length)],
       1,
-      ["> - List1\n> - ", sourceSelection(14)]
+      ["> - List1\n> - ", sourceSelection(14), { roleOverrides: { 2: "content" } }]
     )
   }),
   defineCase({
@@ -1054,12 +1069,16 @@ export const namedFishMarkProbeCases: readonly EditorBehaviorCase[] = [
       source: "1. 111\n2. 222\n  1. 2.1\n    1. 2.1.1",
       selection: sourceSelection("1. 111\n2. 222\n  1. 2.1\n    1. 2.1.1".length)
     },
-    semanticPaths: { repeat: DOCUMENT_PARAGRAPH },
+    semanticPaths: {
+      primary: ["Document", "List", "ListItem", "List", "ListItem", "List", "ListItem"],
+      repeat: DOCUMENT_PARAGRAPH
+    },
     checkpointResults: checkpointResults(
       "wysiwym",
       [
         "1. 111\n2. 222\n  1. 2.1\n    1. 2.1.1\n    2. ",
-        sourceSelection("1. 111\n2. 222\n  1. 2.1\n    1. 2.1.1\n    2. ".length)
+        sourceSelection("1. 111\n2. 222\n  1. 2.1\n    1. 2.1.1\n    2. ".length),
+        { roleOverrides: { 5: "content" } }
       ],
       4,
       [

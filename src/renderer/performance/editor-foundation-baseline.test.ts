@@ -140,12 +140,12 @@ describe("editor foundation canonical performance baseline", () => {
 
     const report = measureEditorFoundationPerformance(fixture);
 
-    expect(report.schemaVersion).toBe(1);
+    expect(report.schemaVersion).toBe(2);
     expect(report.fixture).toEqual(fixture.identity);
     expect(report.capabilities.incrementalStructureCache).toEqual({
-      available: false,
-      reason: INCREMENTAL_STRUCTURE_CACHE_REASON,
-      zeroCounters: ["incrementalParseWindow", "cacheHit", "invalidatedNodes"]
+      available: true,
+      reason: null,
+      zeroCounters: []
     });
     expect(report.operations.map((operation) => operation.name)).toEqual([
       "open",
@@ -206,7 +206,7 @@ function shouldPrintPerformanceReport(): boolean {
 
 function createOwnershipReport(): EditorFoundationPerformanceReport {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     fixture: {
       ...createIdentity(Buffer.from("# Ownership", "utf8")),
       contentProfile: "Ownership test fixture."

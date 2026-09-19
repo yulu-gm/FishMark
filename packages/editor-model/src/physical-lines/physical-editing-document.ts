@@ -49,8 +49,9 @@ export function createPhysicalEditingDocument(
   tree: MarkdownDocumentTree
 ): PhysicalEditingDocument {
   const lineRanges = splitLineRanges(source);
+  const nodeIndex = createNodeRangeIndex();
   const nodesByLine: (MarkdownNode | null)[] = lineRanges.map((range) =>
-    deepestNodeOverlapping(tree.root, range)
+    deepestNodeOverlapping(tree.root, range, nodeIndex)
   );
   const fenceLineRoles = computeFenceRoles(source, lineRanges, tree);
   const lines: PhysicalLine[] = lineRanges.map((range, index) =>
@@ -58,10 +59,13 @@ export function createPhysicalEditingDocument(
   );
 
   const frozenLines = Object.freeze(lines);
-  const lineAtOffset = (offset: number): PhysicalLine | null =>
-    frozenLines.find(
-      (line) => offset >= line.range.startOffset && offset < line.range.endOffset
-    ) ?? frozenLines[frozenLines.length - 1] ?? null;
+  const lineAtOffset = (offset: number): PhysicalLine | null => {
+    const index = firstAfter(lineRanges.length, (index) => lineRanges[index]!.endOffset, offset);
+    const line = frozenLines[index];
+    return line !== undefined && offset >= line.range.startOffset
+      ? line
+      : frozenLines[frozenLines.length - 1] ?? null;
+  };
 
   return Object.freeze({
     source,
@@ -70,16 +74,12 @@ export function createPhysicalEditingDocument(
       return lineAtOffset(offset);
     },
     lineForNode(node: MarkdownNode): readonly PhysicalLine[] {
-      return Object.freeze(
-        frozenLines.filter(
-          (line) =>
-            line.range.endOffset > node.source.startOffset &&
-            line.range.startOffset < node.source.endOffset
-        )
-      );
+      const start = firstAfter(lineRanges.length, (index) => lineRanges[index]!.endOffset, node.source.startOffset);
+      const end = firstAtLeast(lineRanges.length, (index) => lineRanges[index]!.startOffset, node.source.endOffset);
+      return Object.freeze(frozenLines.slice(start, Math.max(start, end)));
     },
     nodeAtOffset(offset: number): MarkdownNode | null {
-      return deepestNodeAt(tree.root, offset);
+      return deepestNodeAt(tree.root, offset, nodeIndex);
     },
     visibleColumnAt(offset: number): number {
       const line = lineAtOffset(offset);
@@ -100,20 +100,59 @@ function splitLineRanges(source: string): readonly SourceRange[] {
       start = offset + 1;
     }
   }
-  if (start < source.length) {
-    ranges.push(Object.freeze({ startOffset: start, endOffset: source.length }));
-  }
+  // Match editor line semantics: even an empty document or terminal newline has a caret line.
+  ranges.push(Object.freeze({ startOffset: start, endOffset: source.length }));
   return ranges;
 }
 
-function deepestNodeAt(root: MarkdownNode, offset: number): MarkdownNode | null {
+// Siblings are in source order. Prefix maximum ends retain the original first-overlap
+// preference even when a preceding sibling extends over a later sibling's range.
+function createNodeRangeIndex() {
+  const indexes = new WeakMap<MarkdownNode, { children: readonly MarkdownNode[]; ends: number[] }>();
+  return (node: MarkdownNode) => {
+    let index = indexes.get(node);
+    if (index === undefined) {
+      const children = childrenOf(node);
+      let maxEnd = -Infinity;
+      const ends = children.map((child) => (maxEnd = Math.max(maxEnd, child.source.endOffset)));
+      index = { children, ends };
+      indexes.set(node, index);
+    }
+    return index;
+  };
+}
+
+type NodeRangeIndex = ReturnType<typeof createNodeRangeIndex>;
+
+function firstAfter(length: number, valueAt: (index: number) => number, value: number): number {
+  let low = 0;
+  let high = length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (valueAt(middle) <= value) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
+
+function firstAtLeast(length: number, valueAt: (index: number) => number, value: number): number {
+  let low = 0;
+  let high = length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (valueAt(middle) < value) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
+
+function deepestNodeAt(root: MarkdownNode, offset: number, nodeIndex: NodeRangeIndex): MarkdownNode | null {
   let current: MarkdownNode | null = null;
   let candidate: MarkdownNode = root;
   for (;;) {
-    const next: MarkdownNode | undefined = childrenOf(candidate).find(
-      (child) => offset >= child.source.startOffset && offset < child.source.endOffset
-    );
-    if (next === undefined) break;
+    const { children, ends } = nodeIndex(candidate);
+    const next = children[firstAfter(ends.length, (index) => ends[index]!, offset)];
+    if (next === undefined || next.source.startOffset > offset) break;
     current = next;
     candidate = next;
   }
@@ -122,23 +161,18 @@ function deepestNodeAt(root: MarkdownNode, offset: number): MarkdownNode | null 
 
 // Lines are matched by overlap, not by their start offset: a container whose range begins
 // after a quote prefix on the same line still owns that line.
-function deepestNodeOverlapping(root: MarkdownNode, range: SourceRange): MarkdownNode | null {
+function deepestNodeOverlapping(root: MarkdownNode, range: SourceRange, nodeIndex: NodeRangeIndex): MarkdownNode | null {
   let current: MarkdownNode | null = null;
   let candidate: MarkdownNode = root;
   for (;;) {
-    const children = childrenOf(candidate);
+    const { children, ends } = nodeIndex(candidate);
     // A child that starts on this line owns it. Overlap alone would hand the line to the
     // previous sibling, whose range still covers its own trailing line break.
-    const next: MarkdownNode | undefined =
-      children.find(
-        (child) =>
-          child.source.startOffset >= range.startOffset && child.source.startOffset < range.endOffset
-      ) ??
-      children.find(
-        (child) =>
-          child.source.startOffset < range.endOffset && child.source.endOffset > range.startOffset
-      );
-    if (next === undefined) break;
+    const starting = children[firstAtLeast(children.length, (index) => children[index]!.source.startOffset, range.startOffset)];
+    const next = starting !== undefined && starting.source.startOffset < range.endOffset
+      ? starting
+      : children[firstAfter(ends.length, (index) => ends[index]!, range.startOffset)];
+    if (next === undefined || next.source.startOffset >= range.endOffset) break;
     current = next;
     candidate = next;
   }
@@ -153,21 +187,25 @@ function computeFenceRoles(
   const roles: PhysicalLineRole[] = lineRanges.map(() => "content");
   for (const node of tree.nodesById.values()) {
     if (node.kind !== "code-fence" && node.kind !== "block-math") continue;
-    const covered = lineRanges
-      .map((range, index) => ({ range, index }))
-      .filter(
-        ({ range }) =>
-          range.endOffset > node.source.startOffset && range.startOffset < node.source.endOffset
-      );
-    covered.forEach(({ range, index }, position) => {
-      const text = source.slice(range.startOffset, range.endOffset).trimEnd();
-      const isMarker = /^(```|~~~|\\$\\$|\\$\\$)/u.test(text.trimStart());
-      roles[index] = position === 0
+    const start = firstAfter(lineRanges.length, (index) => lineRanges[index]!.endOffset, node.source.startOffset);
+    const end = firstAtLeast(lineRanges.length, (index) => lineRanges[index]!.startOffset, node.source.endOffset);
+    const markerText = (range: SourceRange): string => {
+      const lineEnd = trimLineBreak(source, range.startOffset, range.endOffset);
+      const segments = buildPrefixSegments(source, range.startOffset, lineEnd, node, tree);
+      return source.slice(segments.at(-1)?.range.endOffset ?? range.startOffset, lineEnd).trim();
+    };
+    const opening = start < end ? /^(`{3,}|~{3,}|\$\$)/u.exec(markerText(lineRanges[start]!))?.[0] : undefined;
+    for (let index = start; index < end; index += 1) {
+      const range = lineRanges[index]!;
+      const closing = index === end - 1 ? /^(`{3,}|~{3,}|\$\$)$/u.exec(markerText(range))?.[0] : undefined;
+      const isMarker = opening !== undefined && closing !== undefined &&
+        closing[0] === opening[0] && closing.length >= opening.length;
+      roles[index] = index === start
         ? "fence-open"
-        : position === covered.length - 1 && isMarker
+        : index === end - 1 && isMarker
           ? "fence-close"
           : "fence-content";
-    });
+    }
   }
   return roles;
 }
@@ -249,25 +287,22 @@ function buildPrefixSegments(
     column = advanceVisibleColumn(column, text);
   };
 
-  for (const quote of chain.filter((entry) => entry.kind === "blockquote")) {
-    const indentStart = cursor;
-    while (cursor < lineEnd && (source[cursor] === " " || source[cursor] === "\t") &&
-           cursor - indentStart < 3) {
+  // Containers may alternate (list > quote > list); process actual ancestry order,
+  // never all quote prefixes followed by all list prefixes.
+  for (const item of chain) {
+    if (item.kind === "blockquote") {
+      const indentStart = cursor;
+      while (cursor < lineEnd && (source[cursor] === " " || source[cursor] === "\t") && cursor - indentStart < 3) cursor += 1;
+      push("indentation", indentStart, cursor);
+      if (source[cursor] !== ">") continue;
+      push("quote-marker", cursor, cursor + 1);
       cursor += 1;
+      const spacingStart = cursor;
+      if (source[cursor] === " " || source[cursor] === "\t") cursor += 1;
+      push("spacing", spacingStart, cursor);
+      continue;
     }
-    push("indentation", indentStart, cursor);
-    if (source[cursor] !== ">") {
-      void quote;
-      break;
-    }
-    push("quote-marker", cursor, cursor + 1);
-    cursor += 1;
-    const spacingStart = cursor;
-    if (source[cursor] === " " || source[cursor] === "\t") cursor += 1;
-    push("spacing", spacingStart, cursor);
-  }
-
-  for (const item of chain.filter((entry) => entry.kind === "list-item")) {
+    if (item.kind !== "list-item") continue;
     const isFirstLine =
       item.source.startOffset >= lineStart && item.source.startOffset < lineEnd;
     const indentStart = cursor;

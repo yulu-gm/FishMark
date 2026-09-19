@@ -11,6 +11,14 @@ export function linePrefixText(line: PhysicalLine): string {
   return line.segments.map((segment: PrefixSegment) => segment.text).join("");
 }
 
+// A new physical line continues ancestor items by indentation, never by copying
+// their opening markers. Quote markers retain their exact source spelling.
+export function continuationPrefix(line: PhysicalLine, endOffset = line.contentStartOffset): string {
+  return line.segments.filter((segment) => segment.range.endOffset <= endOffset)
+    .map((segment) => segment.kind === "list-marker" || segment.kind === "task-marker"
+      ? " ".repeat(segment.text.length) : segment.text).join("");
+}
+
 // The containers a line belongs to, from the document down to its deepest node. Lines are
 // matched by overlap so an empty container line still resolves to that container.
 export function lineContainerChain(
@@ -146,7 +154,7 @@ export function listItemPrefix(
     ancestorText,
     indentationText,
     markerText,
-    markerSpacingText: markerSpacingText.length === 0 ? " " : markerSpacingText,
+    markerSpacingText,
     taskText
   };
 }
@@ -208,7 +216,8 @@ export function indentationAnchor(line: PhysicalLine): number {
   let offset = line.range.startOffset;
 
   for (const segment of segments) {
-    if (segment.kind !== "quote-marker" && segment.kind !== "spacing" && segment.kind !== "indentation") {
+    if (segment.kind === "indentation") return segment.range.startOffset;
+    if (segment.kind !== "quote-marker" && segment.kind !== "spacing") {
       break;
     }
 

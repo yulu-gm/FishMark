@@ -21,6 +21,18 @@ function nodeKinds(tree: MarkdownDocumentTree): string[] {
 }
 
 describe("parseFullDocumentTree", () => {
+  it.each(["- - alpha", "- - alpha\n    omega", "> - - alpha", "- - alpha\r\n    omega"])(
+    "preserves same-line nested lists through indentation normalization: %j", (source) => {
+      const tree = parseFullDocumentTree(source);
+      const nodes = flattenMarkdownTree(tree);
+      const paragraph = nodes.find((node) => node.kind === "paragraph");
+      expect(paragraph).toBeDefined();
+      expect(nodes.filter((node) => node.kind === "list")).toHaveLength(2);
+      expect(nodes.filter((node) => node.kind === "list-item")).toHaveLength(2);
+      expect(paragraph?.depth).toBe(source.startsWith(">") ? 6 : 5);
+      expect(source.slice(paragraph!.content.startOffset, paragraph!.content.endOffset)).toContain("alpha");
+    }
+  );
   it("builds recursive container nesting from the event stream", () => {
     const tree = parseFullDocumentTree(fixture);
     const kinds = nodeKinds(tree);
@@ -108,6 +120,46 @@ function findByKind(tree: MarkdownDocumentTree, kind: MarkdownNode["kind"]): Mar
 }
 
 describe("parseFullDocumentTree leaf and container data", () => {
+  it.each([
+    ["> - ```txt\n>   al\n>   \n>   pha\n>   ```", "code-fence"],
+    ["> > - $$\n> >   al\n> >   \n> >   pha\n> >   $$", "block-math"]
+  ] as const)("preserves a fenced leaf in quoted item content after repeated Enter: %s", (source, kind) => {
+    const tree = parseFullDocumentTree(source);
+    const leaf = findByKind(tree, kind)[0];
+    expect(leaf).toBeDefined();
+    expect(leaf!.source.endOffset).toBe(source.length);
+    expect(leaf!.path.length).toBe(kind === "block-math" ? 5 : 4);
+  });
+  it.each(["", "> "])("owns two-space ordered scopes and continuation lines under prefix %j", (prefix) => {
+    const source = ["1. parent", "  1. child", "    1. leaf", "    continuation", "2. sibling"].map((line) => prefix + line).join("\n");
+    const tree = parseFullDocumentTree(source);
+    const items = findByKind(tree, "list-item");
+    expect(items.map((item) => item.data)).toMatchObject([
+      { marker: "1.", indent: 0 }, { marker: "1.", indent: 2 }, { marker: "1.", indent: 4 }, { marker: "2.", indent: 0 }
+    ]);
+    expect(items[2]!.source.endOffset).toBe(source.indexOf("continuation") + "continuation".length);
+    expect(items[1]!.path.length).toBe(items[0]!.path.length + 2);
+    expect(items[2]!.path.length).toBe(items[1]!.path.length + 2);
+  });
+
+  it("recognizes an editable empty quoted child as a list item instead of a setext underline", () => {
+    const source = "> - parent\n>   - ";
+    const tree = parseFullDocumentTree(source);
+    expect(findByKind(tree, "heading")).toHaveLength(0);
+    expect(findByKind(tree, "list-item").map((item) => item.data)).toMatchObject([
+      { marker: "-", indent: 0 }, { marker: "-", indent: 2 }
+    ]);
+    expect(findByKind(tree, "list-item")[1]!.content.startOffset).toBe(source.length);
+  });
+
+  it.each(["\n", "\n\n"])("keeps fenced content after an item separator %j without discovering its literal markers", (gap) => {
+    const source = `- parent${gap}  \`\`\`md\n  - literal\n  \`\`\`\n- sibling`;
+    const tree = parseFullDocumentTree(source);
+    expect(findByKind(tree, "list-item")).toHaveLength(2);
+    expect(findByKind(tree, "code-fence")).toHaveLength(1);
+    const fence = findByKind(tree, "code-fence")[0]!;
+    expect(source.slice(fence.source.startOffset, fence.source.endOffset)).toContain("- literal");
+  });
   it("records list metadata, item geometry, and task markers", () => {
     const tree = parseFullDocumentTree("3) three\n4) four\n\n- [x] done");
     const lists = findByKind(tree, "list");

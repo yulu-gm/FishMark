@@ -145,17 +145,7 @@ function findLineAtOffset(
 ): EditingLine | null {
   const clampedOffset = Math.max(0, Math.min(offset, source.length));
 
-  for (const line of lines) {
-    if (clampedOffset >= line.from && clampedOffset <= line.to) {
-      return line;
-    }
-
-    if (clampedOffset >= line.to && clampedOffset < line.lineBreakTo) {
-      return line;
-    }
-  }
-
-  return lines[lines.length - 1] ?? null;
+  return lines[Math.max(0, upperBound(lines, clampedOffset, line => line.from) - 1)] ?? null;
 }
 
 function createSemanticLineMap(
@@ -186,9 +176,9 @@ function findBlockForLine(
     return null;
   }
 
-  return markdownDocument.blocks.find((block) =>
-    line.number >= block.startLine && line.number <= block.endLine
-  ) ?? null;
+  const index = upperBound(markdownDocument.blocks, line.number, block => block.startLine) - 1;
+  const block = markdownDocument.blocks[index];
+  return block && line.number <= block.endLine ? block : null;
 }
 
 function resolveSemanticLineRole(
@@ -272,7 +262,8 @@ function readOpeningFence(text: string): { marker: "`" | "~"; length: number } |
 }
 
 function resolveListLineRole(block: ListBlock, line: EditingLine): SemanticLineRole {
-  return block.items.some((item) => item.startLine === line.number)
+  const itemIndex = upperBound(block.items, line.number, item => item.startLine) - 1;
+  return block.items[itemIndex]?.startLine === line.number
     ? "list-item"
     : "list-continuation";
 }
@@ -286,7 +277,9 @@ function isStructuralSeparator(
     return false;
   }
 
-  const nextBlock = markdownDocument.blocks.find((block) => block.startLine === line.number + 1);
+  const blocks = markdownDocument.blocks;
+  const nextIndex = upperBound(blocks, line.number, block => block.startLine);
+  const nextBlock = blocks[nextIndex]?.startLine === line.number + 1 ? blocks[nextIndex] : undefined;
 
   if (nextBlock && blockRequiresLeadingStructuralSeparator(nextBlock)) {
     return true;
@@ -296,20 +289,28 @@ function isStructuralSeparator(
     return false;
   }
 
-  const previousBlock = [...markdownDocument.blocks]
-    .reverse()
-    .find((block) => block.endOffset <= line.from);
-  const hasNextBlock = markdownDocument.blocks.some((block) => block.startOffset >= line.lineBreakTo);
+  const previousBlock = blocks[upperBound(blocks, line.from, block => block.endOffset) - 1];
+  const hasNextBlock = blocks.length > 0 && blocks[blocks.length - 1]!.startOffset >= line.lineBreakTo;
 
   if (!previousBlock || !hasNextBlock) {
     return false;
   }
 
-  const previousLineBreakCount = lines.filter(
-    (candidate) =>
-      candidate.lineBreakTo > previousBlock.endOffset &&
-      candidate.lineBreakTo <= line.from
-  ).length;
+  const previousLineBreakCount = upperBound(lines, line.from, candidate => candidate.lineBreakTo) -
+    upperBound(lines, previousBlock.endOffset, candidate => candidate.lineBreakTo);
 
   return previousLineBreakCount === 1;
+}
+
+// Source-ordered blocks and physical lines have monotonic boundaries. Querying them directly
+// avoids copying/scanning the entire document for each blank line in long documents.
+function upperBound<T>(values: readonly T[], target: number, read: (value: T) => number): number {
+  let low = 0;
+  let high = values.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (read(values[middle]!) <= target) low = middle + 1;
+    else high = middle;
+  }
+  return low;
 }

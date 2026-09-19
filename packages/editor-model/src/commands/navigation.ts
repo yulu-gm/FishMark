@@ -94,8 +94,16 @@ export function planVerticalNavigation(
 // separates blocks and is never a navigation target.
 function isStructuralSeparatorLine(context: EditorSemanticContext, line: PhysicalLine): boolean {
   const prefix = parseBlockquoteLinePrefix(context.source, line.range.startOffset, line.contentEndOffset);
-
-  return context.source.slice(prefix.contentStartOffset, line.contentEndOffset).trim().length === 0;
+  const text = context.source.slice(prefix.contentStartOffset, line.contentEndOffset);
+  if (prefix.markers.length > 0) return text.trim().length === 0;
+  if (text.length > 0) return false;
+  let count = 1;
+  for (let index = line.lineNumber - 2; index >= 0; index -= 1) {
+    const previous = context.lines.lines[index]!;
+    if (previous.contentEndOffset !== previous.range.startOffset) break;
+    count += 1;
+  }
+  return count % 2 === 1;
 }
 
 // Printable input only inserts text at the caret: it cannot move structure or normalize syntax.
@@ -114,6 +122,13 @@ export function planPrintableInput(
     edits,
     selection: { anchor: caret, head: caret }
   });
+}
+
+// A hard break is an explicit Markdown command, not provisional IME typing.
+export function planHardBreak(context: EditorSemanticContext): EditTransactionPlan {
+  const input = planPrintableInput(context, "<br>");
+  return createEditTransactionPlan({ context, commandId: "hard-break", intent: "edit",
+    edits: input.edits, selection: input.selection });
 }
 
 // A pointer press sets the caret without touching the document.

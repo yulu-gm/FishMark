@@ -21,6 +21,13 @@ export function parseMarkdownDocument(
   options: MarkdownParseOptions = {}
 ): MarkdownDocument {
   const tree = parseFullDocumentTree(source, options);
+  return createMarkdownDocumentFromTree(tree);
+}
+
+// Existing canonical trees can supply the complete rich view, including footnote segments,
+// without invoking the parser again.
+export function createMarkdownDocumentFromTree(tree: ReturnType<typeof parseFullDocumentTree>): MarkdownDocument {
+  const source = tree.source;
   const projected = projectMarkdownDocument(tree);
   const footnoteData = collectFootnoteDefinitionData(source, projected.blocks);
   const blocks = attachFootnoteDefinitionBlocks(

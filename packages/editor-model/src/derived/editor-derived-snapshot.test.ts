@@ -24,6 +24,24 @@ const SOURCE = [
 ].join("\n");
 
 describe("editor derived snapshot", () => {
+  it.each([
+    ["> 1\n>\n> 222", 3],
+    ["> - alpha\n>   omega", 2],
+    ["- > alpha\n  > omega", 2],
+    ["- > - alpha\n  >   omega", 2],
+    ["- - alpha\n    omega", 2],
+    ["> alpha\r\n> beta", 7]
+  ] as const)("keeps prefix and end carets on the physical content owner: %j at %i", (source, offset) => {
+    const snapshot = createEditorDerivedSnapshotFromCache(createDocumentStructureCache(source));
+    expect(snapshot.nodeAt(offset)?.kind).toBe("paragraph");
+    expect(snapshot.nodeAt(offset)?.id).toBe(snapshot.lineAt(offset)?.nodeId);
+  });
+
+  it("does not assign an empty final line to the preceding paragraph", () => {
+    const source = "> alpha\n";
+    const snapshot = createEditorDerivedSnapshotFromCache(createDocumentStructureCache(source));
+    expect(snapshot.nodeAt(source.length)).toBeNull();
+  });
   it("answers document queries from one revision without reparsing", () => {
     const cache = createDocumentStructureCache(SOURCE);
     const snapshot = createEditorDerivedSnapshotFromCache(cache);
