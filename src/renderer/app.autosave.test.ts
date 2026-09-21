@@ -322,6 +322,18 @@ const emberAscendDarkTokensPath = join(process.cwd(), "fixtures/themes/ember-asc
 
 vi.mock("./code-editor-view", async () => {
   const React = await import("react");
+  const { createDocumentStructureCache } = await import("@fishmark/markdown-engine");
+  const {
+    createActiveBlockState,
+    createEditorDerivedSnapshotFromCache
+  } = await import("@fishmark/editor-model");
+
+  const createMockActiveBlockState = (content: string) => {
+    const snapshot = createEditorDerivedSnapshotFromCache(
+      createDocumentStructureCache(content)
+    );
+    return createActiveBlockState(snapshot, { anchor: 0, head: 0 });
+  };
 
   let latestProps:
     | {
@@ -443,6 +455,7 @@ vi.mock("./code-editor-view", async () => {
       editorTransitionToken,
       initialContent,
       loadRevision,
+      onActiveBlockChange,
       onEditorTransitionApplied,
       onLoadRevisionApplied,
       readOnly
@@ -468,7 +481,15 @@ vi.mock("./code-editor-view", async () => {
         loadRevision
       };
       onLoadRevisionApplied(appliedIdentity);
-    }, [documentTabId, editorEpoch, initialContent, loadRevision, onLoadRevisionApplied]);
+      onActiveBlockChange?.(createMockActiveBlockState(initialContent));
+    }, [
+      documentTabId,
+      editorEpoch,
+      initialContent,
+      loadRevision,
+      onActiveBlockChange,
+      onLoadRevisionApplied
+    ]);
 
     React.useEffect(() => {
       if (editorTransitionToken !== null) {
@@ -548,6 +569,7 @@ vi.mock("./code-editor-view", async () => {
           hasPending: false,
           identity: appliedIdentity
         });
+        latestProps?.onActiveBlockChange?.(createMockActiveBlockState(content));
       },
       blur() {
         latestProps?.onBlur?.();
@@ -562,7 +584,10 @@ vi.mock("./code-editor-view", async () => {
         return renderCount;
       },
       emitActiveBlockChange(state: unknown) {
-        latestProps?.onActiveBlockChange?.(state);
+        latestProps?.onActiveBlockChange?.({
+          ...createMockActiveBlockState(currentContent),
+          ...(typeof state === "object" && state !== null ? state : {})
+        });
       },
       getNavigateCalls() {
         return [...navigateCalls];

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import type { EditorDerivedSnapshot } from "@fishmark/editor-model";
 import {
   getDocumentMetrics as getDefaultDocumentMetrics,
   type DocumentMetrics
@@ -12,14 +13,14 @@ import {
 export const DOCUMENT_DERIVED_DATA_UPDATE_DELAY_MS = 120;
 
 export function useDocumentDerivedDataController(input: {
-  deriveOutlineItems?: (content: string) => OutlineItem[];
-  getDocumentMetrics?: (content: string) => DocumentMetrics;
+  deriveOutlineItems?: (snapshot: EditorDerivedSnapshot) => OutlineItem[];
+  getDocumentMetrics?: (snapshot: EditorDerivedSnapshot) => DocumentMetrics;
 } = {}) {
   const deriveOutlineItems = input.deriveOutlineItems ?? deriveDefaultOutlineItems;
   const getDocumentMetrics = input.getDocumentMetrics ?? getDefaultDocumentMetrics;
   const [outlineItems, setOutlineItems] = useState<OutlineItem[]>([]);
   const [currentDocumentMetrics, setCurrentDocumentMetrics] = useState<DocumentMetrics | null>(null);
-  const pendingContentRef = useRef<string | null>(null);
+  const pendingSnapshotRef = useRef<EditorDerivedSnapshot | null>(null);
   const updateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearPendingUpdate = useCallback((): void => {
@@ -32,38 +33,38 @@ export function useDocumentDerivedDataController(input: {
   }, []);
 
   const applyDocumentDerivedDataNow = useCallback(
-    (content: string | null): void => {
+    (snapshot: EditorDerivedSnapshot | null): void => {
       clearPendingUpdate();
-      pendingContentRef.current = null;
+      pendingSnapshotRef.current = null;
 
-      if (content === null) {
+      if (snapshot === null) {
         setOutlineItems([]);
         setCurrentDocumentMetrics(null);
         return;
       }
 
-      setOutlineItems(deriveOutlineItems(content));
-      setCurrentDocumentMetrics(getDocumentMetrics(content));
+      setOutlineItems(deriveOutlineItems(snapshot));
+      setCurrentDocumentMetrics(getDocumentMetrics(snapshot));
     },
     [clearPendingUpdate, deriveOutlineItems, getDocumentMetrics]
   );
 
   const flushPendingDocumentDerivedData = useCallback((): void => {
-    const content = pendingContentRef.current;
+    const snapshot = pendingSnapshotRef.current;
     updateTimerRef.current = null;
-    pendingContentRef.current = null;
+    pendingSnapshotRef.current = null;
 
-    if (content === null) {
+    if (snapshot === null) {
       return;
     }
 
-    setOutlineItems(deriveOutlineItems(content));
-    setCurrentDocumentMetrics(getDocumentMetrics(content));
+    setOutlineItems(deriveOutlineItems(snapshot));
+    setCurrentDocumentMetrics(getDocumentMetrics(snapshot));
   }, [deriveOutlineItems, getDocumentMetrics]);
 
   const scheduleDocumentDerivedDataUpdate = useCallback(
-    (content: string): void => {
-      pendingContentRef.current = content;
+    (snapshot: EditorDerivedSnapshot): void => {
+      pendingSnapshotRef.current = snapshot;
       clearPendingUpdate();
       updateTimerRef.current = setTimeout(
         flushPendingDocumentDerivedData,

@@ -4,12 +4,17 @@ import { act, createElement, createRef, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { createEditorDerivedSnapshotFromCache } from "@fishmark/editor-model";
+import { createDocumentStructureCache } from "@fishmark/markdown-engine";
 import {
   DOCUMENT_DERIVED_DATA_UPDATE_DELAY_MS,
   useDocumentDerivedDataController
 } from "./useDocumentDerivedDataController";
 
 type ControllerValue = ReturnType<typeof useDocumentDerivedDataController>;
+
+const snapshot = (source: string) =>
+  createEditorDerivedSnapshotFromCache(createDocumentStructureCache(source));
 
 function renderController(
   options: Parameters<typeof useDocumentDerivedDataController>[0]
@@ -46,31 +51,24 @@ describe("useDocumentDerivedDataController", () => {
     vi.useRealTimers();
   });
 
-  it("applies opened-document derived data immediately", () => {
-    const deriveOutlineItems = vi.fn(() => [
-      {
-        id: "heading:0-7",
-        label: "Title",
-        depth: 1,
-        startOffset: 0,
-        startLine: 1
-      }
-    ]);
-    const getDocumentMetrics = vi.fn(() => ({
-      meaningfulCharacterCount: 5
-    }));
+  it("applies an opened editor snapshot immediately without reparsing source", () => {
+    const deriveOutlineItems = vi.fn((value: ReturnType<typeof snapshot>) =>
+      value.outlineHeadings.map((heading) => ({ ...heading }))
+    );
+    const getDocumentMetrics = vi.fn((value: ReturnType<typeof snapshot>) => value.documentMetrics);
     const { latestRef, root } = renderController({
       deriveOutlineItems,
       getDocumentMetrics
     });
+    const current = snapshot("# Title");
 
     act(() => {
-      latestRef.current?.applyDocumentDerivedDataNow("# Title");
+      latestRef.current?.applyDocumentDerivedDataNow(current);
     });
 
-    expect(deriveOutlineItems).toHaveBeenCalledWith("# Title");
-    expect(getDocumentMetrics).toHaveBeenCalledWith("# Title");
-    expect(latestRef.current?.outlineItems).toHaveLength(1);
+    expect(deriveOutlineItems).toHaveBeenCalledWith(current);
+    expect(getDocumentMetrics).toHaveBeenCalledWith(current);
+    expect(latestRef.current?.outlineItems[0]?.label).toBe("Title");
     expect(latestRef.current?.currentDocumentMetrics?.meaningfulCharacterCount).toBe(5);
 
     act(() => {
@@ -78,27 +76,21 @@ describe("useDocumentDerivedDataController", () => {
     });
   });
 
-  it("defers editor-change derived data work and only applies the latest content", () => {
-    const deriveOutlineItems = vi.fn((content: string) => [
-      {
-        id: `heading:${content.length}`,
-        label: content,
-        depth: 1,
-        startOffset: 0,
-        startLine: 1
-      }
-    ]);
-    const getDocumentMetrics = vi.fn((content: string) => ({
-      meaningfulCharacterCount: content.length
-    }));
+  it("defers presentation refresh and only consumes the latest revision snapshot", () => {
+    const deriveOutlineItems = vi.fn((value: ReturnType<typeof snapshot>) =>
+      value.outlineHeadings.map((heading) => ({ ...heading }))
+    );
+    const getDocumentMetrics = vi.fn((value: ReturnType<typeof snapshot>) => value.documentMetrics);
     const { latestRef, root } = renderController({
       deriveOutlineItems,
       getDocumentMetrics
     });
+    const first = snapshot("# First");
+    const second = snapshot("# Second");
 
     act(() => {
-      latestRef.current?.scheduleDocumentDerivedDataUpdate("# First");
-      latestRef.current?.scheduleDocumentDerivedDataUpdate("# Second");
+      latestRef.current?.scheduleDocumentDerivedDataUpdate(first);
+      latestRef.current?.scheduleDocumentDerivedDataUpdate(second);
     });
 
     expect(deriveOutlineItems).not.toHaveBeenCalled();
@@ -109,18 +101,17 @@ describe("useDocumentDerivedDataController", () => {
     });
 
     expect(deriveOutlineItems).not.toHaveBeenCalled();
-    expect(getDocumentMetrics).not.toHaveBeenCalled();
 
     act(() => {
       vi.advanceTimersByTime(1);
     });
 
     expect(deriveOutlineItems).toHaveBeenCalledTimes(1);
-    expect(deriveOutlineItems).toHaveBeenCalledWith("# Second");
+    expect(deriveOutlineItems).toHaveBeenCalledWith(second);
     expect(getDocumentMetrics).toHaveBeenCalledTimes(1);
-    expect(getDocumentMetrics).toHaveBeenCalledWith("# Second");
-    expect(latestRef.current?.outlineItems[0]?.label).toBe("# Second");
-    expect(latestRef.current?.currentDocumentMetrics?.meaningfulCharacterCount).toBe("# Second".length);
+    expect(getDocumentMetrics).toHaveBeenCalledWith(second);
+    expect(latestRef.current?.outlineItems[0]?.label).toBe("Second");
+    expect(latestRef.current?.currentDocumentMetrics?.meaningfulCharacterCount).toBe(6);
 
     act(() => {
       root.unmount();

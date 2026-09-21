@@ -331,7 +331,6 @@ function EditorShell({
 
   const editorApplicationController = useEditorApplicationController({
     fishmark,
-    scheduleDocumentDerivedDataUpdate,
     setEditorContentSnapshot: (content) => {
       editorContentRef.current = content;
     },
@@ -453,7 +452,7 @@ function EditorShell({
 
     editorContentRef.current = activeDocumentContent ?? "";
     activeBlockStateRef.current = null;
-    applyDocumentDerivedDataNow(activeDocumentContent);
+    applyDocumentDerivedDataNow(null);
     // eslint-disable-next-line react-hooks/set-state-in-effect -- A document load boundary intentionally clears editor affordance state.
     setActiveHeadingId(null);
     setActiveShortcutGroupId("default-text");
@@ -1497,10 +1496,22 @@ function EditorShell({
   );
 
   const handleActiveBlockChange = useCallback((nextActiveBlockState: ActiveBlockState): void => {
+    const previousSnapshot = activeBlockStateRef.current?.snapshot ?? null;
+    const nextSnapshot = nextActiveBlockState.snapshot;
+
     activeBlockStateRef.current = nextActiveBlockState;
+
+    if (previousSnapshot !== nextSnapshot) {
+      if (previousSnapshot === null) {
+        applyDocumentDerivedDataNow(nextSnapshot);
+      } else {
+        scheduleDocumentDerivedDataUpdate(nextSnapshot);
+      }
+    }
+
     setActiveShortcutGroupId(resolveEditorShortcutGroup(nextActiveBlockState).id);
     setActiveHeadingId(nextActiveBlockState.activeHeadingId);
-  }, []);
+  }, [applyDocumentDerivedDataNow, scheduleDocumentDerivedDataUpdate]);
 
   const handleReloadExternalFile = useCallback((): void => {
     void externalConflictController.reloadFromDisk().then(() => {

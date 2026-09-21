@@ -1618,6 +1618,8 @@ npm.cmd run build
 
 #### RF-703: Outline and metrics cutover
 
+**Status (2026-09-21):** `IN_PROGRESS` — implementation is on `main`; verification and measured frozen-baseline reconciliation remain before acceptance.
+
 **Outcome:** outline and document metrics update from `EditorDerivedSnapshot`.
 
 **Files:** migrate `src/renderer/outline.ts`, `document-metrics.ts`, and `useDocumentDerivedDataController.ts`; delete redundant parsers/timers.

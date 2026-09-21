@@ -12,7 +12,6 @@ export function useEditorApplicationController(input: {
   autosaveDelayMs: number;
   fishmark: Window["fishmark"];
   initialSnapshot?: WorkspaceWindowSnapshot | null;
-  scheduleDocumentDerivedDataUpdate: (content: string) => void;
   setEditorContentSnapshot: (content: string) => void;
   showNotification: (notification: AppNotification) => void;
 }) {
@@ -20,7 +19,6 @@ export function useEditorApplicationController(input: {
     autosaveDelayMs,
     fishmark,
     initialSnapshot,
-    scheduleDocumentDerivedDataUpdate,
     setEditorContentSnapshot,
     showNotification
   } = input;
@@ -44,7 +42,6 @@ export function useEditorApplicationController(input: {
   });
   const editorWorkflowController = useEditorWorkflowController({
     setEditorContentSnapshot,
-    scheduleDocumentDerivedDataUpdate,
     scheduleAutosave: saveController.scheduleAutosave,
     runAutosave: saveController.runAutosave,
     resetAutosaveRuntime: saveController.resetAutosaveRuntime,

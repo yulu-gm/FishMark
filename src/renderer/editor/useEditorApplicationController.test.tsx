@@ -126,7 +126,6 @@ describe("useEditorApplicationController", () => {
       } as unknown as Window["fishmark"],
       setEditorContentSnapshot: vi.fn(),
       showNotification: vi.fn(),
-      scheduleDocumentDerivedDataUpdate: vi.fn(),
       initialSnapshot: savedSnapshot
     });
 
@@ -196,7 +195,6 @@ describe("useEditorApplicationController", () => {
       } as unknown as Window["fishmark"],
       setEditorContentSnapshot: vi.fn(),
       showNotification,
-      scheduleDocumentDerivedDataUpdate: vi.fn(),
       initialSnapshot: savedSnapshot
     });
 
@@ -276,7 +274,6 @@ describe("useEditorApplicationController", () => {
       } as unknown as Window["fishmark"],
       setEditorContentSnapshot: vi.fn(),
       showNotification,
-      scheduleDocumentDerivedDataUpdate: vi.fn(),
       initialSnapshot: savedSnapshot
     });
     acknowledgeEditorLoad(latestRef.current!);
@@ -321,7 +318,6 @@ describe("useEditorApplicationController", () => {
       } as unknown as Window["fishmark"],
       setEditorContentSnapshot: vi.fn(),
       showNotification: vi.fn(),
-      scheduleDocumentDerivedDataUpdate: vi.fn(),
       initialSnapshot: emptySnapshot
     });
 
@@ -354,7 +350,6 @@ describe("useEditorApplicationController", () => {
       } as unknown as Window["fishmark"],
       setEditorContentSnapshot: vi.fn(),
       showNotification: vi.fn(),
-      scheduleDocumentDerivedDataUpdate: vi.fn(),
       initialSnapshot: emptySnapshot
     });
 

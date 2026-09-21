@@ -34,7 +34,7 @@ MVP 应当像一个原生桌面写作工具：
 
 M6 / M6.5 已于 2026-09-20 收口：`packages/editor-core/` 已删除，architecture guard 为 7 包 / 13 规则 / `exceptions: []`；canonical snapshot 与共享 render plan 已成为编辑显示主路径，嵌套 list/blockquote 中的 heading、code fence、table、math/Mermaid 等叶子复用同一语义结构。左侧壳层采用常驻 rail + Search/Outline 共用的 docked sidebar，正文采用固定 measure，避免模式切换和普通面板开合导致整篇重新排版。
 
-当前重构剩余重点不再是替换编辑内核，而是扩散 canonical 数据源并完成产品级收尾：RF-506 的最终性能/bundle 预算仍 pending；RF-702 已将 HTML export 切到 `markdown-presentation` 并完成验收；RF-703 下一步让 outline 与 document metrics 统一消费 `EditorDerivedSnapshot`；随后 M8 清理 React/main/preload 组合层，M9 完成性能、真实 Electron E2E 与安全门禁，M10 做兼容/死代码清理和最终验收。
+当前重构剩余重点不再是替换编辑内核，而是扩散 canonical 数据源并完成产品级收尾：RF-506 的最终性能/bundle 预算仍 pending；RF-702 已将 HTML export 切到 `markdown-presentation` 并完成验收；RF-703 正在把 outline 与 document metrics 统一收敛到同一 `EditorDerivedSnapshot` / revision；随后 M8 清理 React/main/preload 组合层，M9 完成性能、真实 Electron E2E 与安全门禁，M10 做兼容/死代码清理和最终验收。
 
 特殊区域的光标视口行为由 `codemirror-adapter/src/viewport-reveal.ts` 开始统一：鼠标点击使用 `preserve`（已可见则不滚），连续键盘导航使用 `nearest`（只做带安全边距的最小修正），显式导航使用 `navigate`（允许居中）。表格和图片已迁入该策略；异步 widget 高度变化造成的 viewport anchor 漂移仍是独立后续问题。
 

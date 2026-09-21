@@ -3,7 +3,6 @@ import type { CodeEditorDocumentChangeFrame } from "../code-editor";
 
 export function useEditorWorkflowController(input: {
   setEditorContentSnapshot: (content: string) => void;
-  scheduleDocumentDerivedDataUpdate: (content: string) => void;
   scheduleAutosave: () => void;
   runAutosave: () => Promise<void>;
   resetAutosaveRuntime: () => void;
@@ -15,7 +14,6 @@ export function useEditorWorkflowController(input: {
 }) {
   const {
     setEditorContentSnapshot,
-    scheduleDocumentDerivedDataUpdate,
     scheduleAutosave,
     runAutosave,
     resetAutosaveRuntime,
@@ -32,10 +30,9 @@ export function useEditorWorkflowController(input: {
         throw new Error("The editor frame was not accepted by the active document transport.");
       }
       setEditorContentSnapshot(frame.resultingText);
-      scheduleDocumentDerivedDataUpdate(frame.resultingText);
       scheduleAutosave();
     },
-    [recordDocumentChangeFrame, scheduleAutosave, scheduleDocumentDerivedDataUpdate, setEditorContentSnapshot]
+    [recordDocumentChangeFrame, scheduleAutosave, setEditorContentSnapshot]
   );
 
   const handleEditorBlur = useCallback((): void => {

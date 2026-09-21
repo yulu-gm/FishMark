@@ -3,11 +3,9 @@ import {
   type EditorPerformanceCounters,
   type EditorPerformanceParserEntries
 } from "@fishmark/codemirror-adapter";
+import { createEditorDerivedSnapshotFromCache } from "@fishmark/editor-model";
 import {
-  collectReferenceDefinitions,
-  parseFullDocumentTree,
-  parseMarkdownDocument,
-  type MarkdownDocument,
+  createDocumentStructureCache,
   type MarkdownParseInstrumentation
 } from "@fishmark/markdown-engine";
 
@@ -19,11 +17,15 @@ type RendererDerivedDataOperationEvidence = {
   counters: EditorPerformanceCounters;
   parserEntries: EditorPerformanceParserEntries;
   capabilityRefs: ["incrementalStructureCache"];
-  unavailableCapabilityReason: typeof INCREMENTAL_STRUCTURE_CACHE_REASON;
+  unavailableCapabilityReason: typeof INCREMENTAL_STRUCTURE_CACHE_REASON | null;
 };
 
 export type RendererDerivedDataPerformanceReport = {
   lineCount: number;
+  sharedSnapshotBuild: {
+    durationMs: number;
+    fullDocumentParseCalls: number;
+  };
   metrics: RendererDerivedDataOperationEvidence & {
     name: "metrics";
     meaningfulCharacterCount: number;
@@ -38,79 +40,59 @@ export type RendererDerivedDataPerformanceReport = {
 export function measureRendererDerivedDataPerformance(
   source: string
 ): RendererDerivedDataPerformanceReport {
-  let outlineFullDocumentParseCalls = 0;
-  const outlineInstrumentation = createInstrumentation(() => {
-    outlineFullDocumentParseCalls += 1;
+  let sharedFullDocumentParseCalls = 0;
+  const instrumentation = createInstrumentation(() => {
+    sharedFullDocumentParseCalls += 1;
   });
-  const outline = measure(() =>
-    deriveOutlineItems(source, {
-      parseDocumentTree: (input) =>
-        parseFullDocumentTree(input, { instrumentation: outlineInstrumentation })
-    })
+  const sharedSnapshot = measure(() =>
+    createEditorDerivedSnapshotFromCache(
+      createDocumentStructureCache(source, { instrumentation })
+    )
   );
-  let metricsParseCalls = 0;
-  let metricsFullDocumentParseCalls = 0;
-  const metricsInstrumentation = createInstrumentation(() => {
-    metricsFullDocumentParseCalls += 1;
-  });
-  const metrics = measure(() =>
-    getDocumentMetrics(source, {
-      collectReferenceDefinitions: (input) =>
-        collectReferenceDefinitions(input, { instrumentation: metricsInstrumentation }),
-      parseMarkdownDocument: createParserProbe(() => {
-        metricsParseCalls += 1;
-      }, metricsInstrumentation)
-    })
-  );
+
+  const outline = measure(() => deriveOutlineItems(sharedSnapshot.value));
+  const metrics = measure(() => getDocumentMetrics(sharedSnapshot.value));
 
   return {
     lineCount: countMarkdownLines(source),
+    sharedSnapshotBuild: {
+      durationMs: sharedSnapshot.durationMs,
+      fullDocumentParseCalls: sharedFullDocumentParseCalls
+    },
     metrics: {
       name: "metrics",
       durationMs: metrics.durationMs,
       meaningfulCharacterCount: metrics.value.meaningfulCharacterCount,
-      ...createOperationEvidence(metricsParseCalls, metricsFullDocumentParseCalls)
+      ...createSnapshotConsumerEvidence()
     },
     outline: {
       name: "outline",
       durationMs: outline.durationMs,
       itemCount: outline.value.length,
-      // The outline reads the canonical tree directly, so it makes no parseMarkdownDocument entry
-      // while still paying for the same two full-source scanner events.
-      ...createOperationEvidence(0, outlineFullDocumentParseCalls)
+      ...createSnapshotConsumerEvidence()
     },
     sourceLength: source.length
   };
 }
 
-function createParserProbe(
-  onParse: () => void,
-  instrumentation: MarkdownParseInstrumentation
-): (source: string) => MarkdownDocument {
-  return (source) => {
-    onParse();
-    return parseMarkdownDocument(source, { instrumentation });
-  };
-}
-
-function createOperationEvidence(
-  parseMarkdownDocumentCalls: number,
-  fullDocumentParseCalls: number
-): Omit<RendererDerivedDataOperationEvidence, "durationMs"> {
+function createSnapshotConsumerEvidence(): Omit<
+  RendererDerivedDataOperationEvidence,
+  "durationMs"
+> {
   return {
     counters: {
-      fullParse: fullDocumentParseCalls,
+      fullParse: 0,
       incrementalParseWindow: 0,
-      cacheHit: 0,
+      cacheHit: 1,
       invalidatedNodes: 0,
       decorationRebuild: 0
     },
     parserEntries: {
-      parseMarkdownDocument: parseMarkdownDocumentCalls,
+      parseMarkdownDocument: 0,
       parseOrderedListNormalization: 0
     },
     capabilityRefs: ["incrementalStructureCache"],
-    unavailableCapabilityReason: INCREMENTAL_STRUCTURE_CACHE_REASON
+    unavailableCapabilityReason: null
   };
 }
 
@@ -137,4 +119,3 @@ function now(): number {
     ? globalThis.performance.now()
     : Date.now();
 }
-

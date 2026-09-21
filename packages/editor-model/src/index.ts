@@ -32,14 +32,15 @@ export {
   deriveSelectionSnapshot,
   type EditorDerivedEditResult,
   type EditorDerivedSnapshot,
+  type EditorDocumentMetrics,
+  type EditorOutlineHeading,
   type EditorSelectionSnapshot,
   type TableCursor
 } from "./derived/editor-derived-snapshot";
 export {
   createEditorDerivedState,
   type CreateEditorDerivedStateOptions,
-  type EditorDerivedState,
-  type EditorOutlineHeading
+  type EditorDerivedState
 } from "./derived/editor-derived-state";
 export {
   createActiveBlockState,

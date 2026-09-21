@@ -6,6 +6,10 @@
 
 ## 当前项目判断
 
+### 2026-09-21 M7 / RF-703 实现：Outline / Metrics 收敛到 EditorDerivedSnapshot（验证待执行）
+
+RF-703 代码层已切换到 revision-owned derived snapshot：`EditorDerivedSnapshot` 新增 root-level `outlineHeadings` 与 lazy `documentMetrics`；Outline 直接投影 `snapshot.outlineHeadings`，Metrics 从 canonical tree / inline AST / table cell inline / physical line prefix geometry 派生，不再调用 `parseMarkdownDocument` / `parseInlineAst`。task/list/blockquote 等结构 marker 通过 physical-line content boundary 排除，code fence 仅统计 fence-content。React 的 derived-data controller 改为接收 snapshot；App 只在 snapshot identity 变化时更新，首次文档 snapshot 立即应用，后续 revision 仍保留 120ms UI debounce，selection-only 变化不重复刷新；`useEditorWorkflowController` 不再把 `resultingText` 送入第二套解析。性能探针改为先构建一次 shared snapshot，再测 Outline / Metrics consumer，consumer parser entries/fullParse 均应为 0、cacheHit=1，并单独记录 shared snapshot build 的真实 full-document parse 次数。**冻结 baseline 本提交刻意不修改**，等待实际 `perf:baseline` 输出后按测量证据更新，RF-703 暂保持 IN_PROGRESS。
+
 ### 2026-09-21 RF-702 正式验收 COMPLETE
 
 owner 在干净 HEAD `1b08a2c` 上完成修复后复验：focused **5 文件 / 42 测试**全绿，typecheck/build exit 0；全量 Vitest **2799 passed / 1 skipped / 11 failed**，失败集合精确回到 M6 已知的 `parse-block-map 8 + document-metrics 1 + code-editor 2`，新增 viewport-reveal 表格回归已消失；architecture guard **234/234**。bundle 侧 `forbiddenInitialSourceGroup:katex` / Mermaid 与 4 个 required lazy-chunk 检查全部 PASS，KaTeX 泄漏的约 82KB 已回收；`perf:bundle` 仍仅因既有四个 maximum budget 超限而 exit 1（当前 totalInitialGzip 273083 / 260000 等），继续归 RF-506/M5 与 M9 最终性能债。基于上述证据，RF-702 标记 **COMPLETE**；M7 进度变为 2/3，下一任务 RF-703。

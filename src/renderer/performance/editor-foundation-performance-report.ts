@@ -135,7 +135,7 @@ function toFoundationOperation(input: {
   counters: EditorPerformanceCounters;
   parserEntries: EditorPerformanceParserEntries;
   capabilityRefs: ["incrementalStructureCache"];
-  unavailableCapabilityReason: typeof INCREMENTAL_STRUCTURE_CACHE_REASON;
+  unavailableCapabilityReason: typeof INCREMENTAL_STRUCTURE_CACHE_REASON | null;
 }): EditorFoundationPerformanceOperation {
   return {
     name: input.name,

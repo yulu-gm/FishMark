@@ -1,15 +1,20 @@
 import { describe, expect, it } from "vitest";
 
-import { parseFullDocumentTree } from "@fishmark/markdown-engine";
+import { createEditorDerivedSnapshotFromCache } from "@fishmark/editor-model";
+import { createDocumentStructureCache } from "@fishmark/markdown-engine";
 
 import { deriveOutlineItems } from "./outline";
 
-describe("deriveOutlineItems", () => {
-  it("collects heading labels, depth, and source offsets from the canonical document tree", () => {
-    const source = ["# Title", "", "Paragraph", "", "## Next step"].join("\n");
-    const rootChildren = parseFullDocumentTree(source).root.children;
+const snapshot = (source: string) =>
+  createEditorDerivedSnapshotFromCache(createDocumentStructureCache(source));
 
-    expect(deriveOutlineItems(source)).toEqual([
+describe("deriveOutlineItems", () => {
+  it("projects heading labels, depth, offsets, and canonical ids from one editor snapshot", () => {
+    const source = ["# Title", "", "Paragraph", "", "## Next step"].join("\n");
+    const current = snapshot(source);
+    const rootChildren = current.tree.root.children;
+
+    expect(deriveOutlineItems(current)).toEqual([
       {
         id: rootChildren[0]!.id,
         label: "Title",
@@ -29,10 +34,11 @@ describe("deriveOutlineItems", () => {
 
   it("flattens inline heading content into plain-text outline labels", () => {
     const source = "### **Bold** `code` [link](https://example.com) ![alt](hero.png)";
+    const current = snapshot(source);
 
-    expect(deriveOutlineItems(source)).toEqual([
+    expect(deriveOutlineItems(current)).toEqual([
       {
-        id: parseFullDocumentTree(source).root.children[0]!.id,
+        id: current.tree.root.children[0]!.id,
         label: "Bold code link alt",
         depth: 3,
         startOffset: 0,
@@ -41,42 +47,16 @@ describe("deriveOutlineItems", () => {
     ]);
   });
 
-  it("takes every outline id from the canonical node, including after a non-heading root child", () => {
-    const source = ["> # Quoted", "", "# Root", "", "- item", "", "## Tail"].join("\n");
-    const rootChildren = parseFullDocumentTree(source).root.children;
+  it("keeps nested headings out of the renderer outline", () => {
+    const current = snapshot(["> # Quoted", "", "# Root"].join("\n"));
 
-    expect(deriveOutlineItems(source).map((item) => item.id)).toEqual([
-      rootChildren[1]!.id,
-      rootChildren[3]!.id
-    ]);
+    expect(deriveOutlineItems(current).map((item) => item.label)).toEqual(["Root"]);
   });
 
-  it("keeps nested headings out of the outline", () => {
-    const source = ["> # Quoted", "", "# Root"].join("\n");
+  it("reuses the exact snapshot heading projection without another parser", () => {
+    const current = snapshot("# Title\n\n## Next");
 
-    expect(deriveOutlineItems(source).map((item) => item.label)).toEqual(["Root"]);
-  });
-
-  it("keeps the default parser behavior unchanged when parser instrumentation is omitted", () => {
-    const source = "# Title\n\n## Next";
-
-    expect(deriveOutlineItems(source)).toEqual(
-      deriveOutlineItems(source, { parseDocumentTree: parseFullDocumentTree })
-    );
-  });
-
-  it("uses an injected document tree parser exactly once", () => {
-    const source = "# Title";
-    let parseCalls = 0;
-
-    expect(
-      deriveOutlineItems(source, {
-        parseDocumentTree(value) {
-          parseCalls += 1;
-          return parseFullDocumentTree(value);
-        }
-      })
-    ).toHaveLength(1);
-    expect(parseCalls).toBe(1);
+    expect(deriveOutlineItems(current)).toEqual(current.outlineHeadings);
+    expect(deriveOutlineItems(current)[0]?.id).toBe(current.outlineHeadings[0]?.id);
   });
 });
