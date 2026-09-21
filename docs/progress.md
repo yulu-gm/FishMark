@@ -8,6 +8,8 @@
 
 ### 2026-09-21 M7 / RF-703 实现：Outline / Metrics 收敛到 EditorDerivedSnapshot（验证待执行）
 
+性能合同同步：foundation baseline 测试不再要求 Outline/Metrics 像独立 parser consumer 一样产生 full parse；两者的新硬契约是 `fullParse=0 / parserEntries=0 / cacheHit=1 / unavailableCapabilityReason=null`。真正的 parser 成本只记录在 shared snapshot build / editor production path。冻结 `editor-foundation-current-baseline.json` 仍保持未改，等待实测 diff。
+
 静态复核补强：React passive effect 顺序可能让 `CodeEditorView` 先发布新 snapshot、父 `App` 的 load effect 后执行；若父层无条件清空 derived UI，会把刚收到的新 revision 数据抹掉。load boundary 已改为**仅在 activeDocument=null 时清空**，正常 tab / loadRevision 切换完全由新 editor snapshot 替换旧 snapshot，避免依赖父子 effect 的执行先后。
 
 RF-703 代码层已切换到 revision-owned derived snapshot：`EditorDerivedSnapshot` 新增 root-level `outlineHeadings` 与 lazy `documentMetrics`；Outline 直接投影 `snapshot.outlineHeadings`，Metrics 从 canonical tree / inline AST / table cell inline / physical line prefix geometry 派生，不再调用 `parseMarkdownDocument` / `parseInlineAst`。task/list/blockquote 等结构 marker 通过 physical-line content boundary 排除，code fence 仅统计 fence-content。React 的 derived-data controller 改为接收 snapshot；App 只在 snapshot identity 变化时更新，首次文档 snapshot 立即应用，后续 revision 仍保留 120ms UI debounce，selection-only 变化不重复刷新；`useEditorWorkflowController` 不再把 `resultingText` 送入第二套解析。性能探针改为先构建一次 shared snapshot，再测 Outline / Metrics consumer，consumer parser entries/fullParse 均应为 0、cacheHit=1，并单独记录 shared snapshot build 的真实 full-document parse 次数。**冻结 baseline 本提交刻意不修改**，等待实际 `perf:baseline` 输出后按测量证据更新，RF-703 暂保持 IN_PROGRESS。

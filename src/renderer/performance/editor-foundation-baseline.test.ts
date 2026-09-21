@@ -168,7 +168,30 @@ describe("editor foundation canonical performance baseline", () => {
     }
 
     expect(report.operations.find((operation) => operation.name === "selection")?.counters.fullParse).toBe(0);
-    for (const operation of report.operations.filter((candidate) => candidate.name !== "selection")) {
+
+    for (const name of ["outline", "metrics"] as const) {
+      const operation = report.operations.find((candidate) => candidate.name === name);
+
+      expect(operation?.counters).toEqual({
+        fullParse: 0,
+        incrementalParseWindow: 0,
+        cacheHit: 1,
+        invalidatedNodes: 0,
+        decorationRebuild: 0
+      });
+      expect(operation?.parserEntries).toEqual({
+        parseMarkdownDocument: 0,
+        parseOrderedListNormalization: 0
+      });
+      expect(operation?.unavailableCapabilityReason).toBeNull();
+    }
+
+    for (const operation of report.operations.filter(
+      (candidate) =>
+        candidate.name !== "selection" &&
+        candidate.name !== "outline" &&
+        candidate.name !== "metrics"
+    )) {
       expect(operation.counters.fullParse).toBeGreaterThan(
         operation.parserEntries.parseMarkdownDocument + operation.parserEntries.parseOrderedListNormalization
       );
