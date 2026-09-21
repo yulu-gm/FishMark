@@ -1598,11 +1598,11 @@ npm.cmd run typecheck
 
 **Steps:**
 
-- [ ] Move pure HTML rendering into the presentation package.
-- [ ] Render recursive containers, inline nodes, tables, math fallback, Mermaid fallback, and footnotes from canonical data.
-- [ ] Keep theme/style collection in renderer orchestration only.
-- [ ] Remove direct `parseInlineAst`, blockquote scans, and duplicate prefix helpers from export.
-- [ ] Compare editor semantic plan and exported semantic roles in tests.
+- [x] Move pure HTML rendering into the presentation package.
+- [x] Render recursive containers, inline nodes, tables, math fallback, Mermaid fallback, and footnotes from canonical data.
+- [x] Keep theme/style collection in renderer orchestration only.
+- [x] Remove direct `parseInlineAst`, blockquote scans, and duplicate prefix helpers from export.
+- [x] Compare editor semantic plan and exported semantic roles in tests.
 
 **Verification:**
 
@@ -1612,6 +1612,9 @@ npm.cmd run build
 ```
 
 **Exit:** export has one semantic source and no duplicate Markdown parser logic.
+
+**Status (2026-09-21):** `COMPLETE` — clean-tree owner verification on `1b08a2c`: focused 5 files / 42 tests passed, typecheck/build exit 0, full Vitest returned to the 11-known-failure baseline, guard 234/234, KaTeX/Mermaid forbidden-initial groups and all required lazy chunks PASS. The four bundle maximum overages remain the pre-existing M5/M9 budget debt and are not an RF-702 regression.
+
 
 #### RF-703: Outline and metrics cutover
 

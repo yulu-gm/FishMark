@@ -6,6 +6,10 @@
 
 ## 当前项目判断
 
+### 2026-09-21 RF-702 正式验收 COMPLETE
+
+owner 在干净 HEAD `1b08a2c` 上完成修复后复验：focused **5 文件 / 42 测试**全绿，typecheck/build exit 0；全量 Vitest **2799 passed / 1 skipped / 11 failed**，失败集合精确回到 M6 已知的 `parse-block-map 8 + document-metrics 1 + code-editor 2`，新增 viewport-reveal 表格回归已消失；architecture guard **234/234**。bundle 侧 `forbiddenInitialSourceGroup:katex` / Mermaid 与 4 个 required lazy-chunk 检查全部 PASS，KaTeX 泄漏的约 82KB 已回收；`perf:bundle` 仍仅因既有四个 maximum budget 超限而 exit 1（当前 totalInitialGzip 273083 / 260000 等），继续归 RF-506/M5 与 M9 最终性能债。基于上述证据，RF-702 标记 **COMPLETE**；M7 进度变为 2/3，下一任务 RF-703。
+
 ### 2026-09-21 RF-702 验证反馈与 gate 回归修复
 
 owner 在 `df3b562` 拉取后的干净树上补跑 RF-702 要求的三项验证：presentation + export focused tests **3 文件 / 33 测试通过**、typecheck exit 0、build exit 0；同时额外发现两处不能忽略的新红点。① `perf:bundle` 的 `forbiddenInitialSourceGroup:katex` 从 PASS 变 FAIL，`totalInitialGzipBytes` 267192 → 349610，根因是 presentation 主 barrel 静态 re-export 了带 `import katex` 的 HTML renderer。现修正为：KaTeX 重新只由本来就 lazy 的 `src/renderer/export-html.ts` 引入，presentation 通过纯 `renderMath` callback 接收 MathML renderer，package root 不再静态依赖 KaTeX，并新增资产合同防回归。② 全量 Vitest 比 M6 基线新增 1 条 viewport reveal 表格失败；定位为同帧共享 measure key 的 intent 覆盖：键盘 `nearest` 会被 programmatic focus 触发的 `preserve` 弱化。现改为“最新 target + intent 提升（navigate > nearest > preserve）”合并，并补纯策略断言。RF-702 仍保持 IN_PROGRESS，等待这些修复后的 focused/full/perf 复跑；未通过前不进入 RF-703。

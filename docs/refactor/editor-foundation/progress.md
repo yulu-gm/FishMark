@@ -10,7 +10,7 @@
 
 **Overall status:** `IN_PROGRESS`
 
-**Current task:** `RF-702 IN_PROGRESS` — required focused tests/typecheck/build passed on `df3b562`, but extra validation found a new KaTeX initial-bundle regression and one new viewport-reveal Vitest failure. Both fixes are now landed and require a fresh rerun before RF-702 can be accepted. RF-506 remains `DEV_DONE` because final performance/bundle acceptance is still pending.
+**Current task:** no RF task is active after RF-702 acceptance; `RF-703` is next. RF-506 remains `DEV_DONE` because final performance/bundle acceptance is still pending.
 
 **Next required work:** execute RF-702, then RF-703 to finish M7's derived-consumer convergence; afterwards follow the roadmap through M8 composition cleanup, M9 performance/E2E/security, and M10 purge/final acceptance. Keep RF-506/M5 open until the original final performance and bundle gates pass.
 
@@ -43,12 +43,12 @@ At most one `RF-xxx` task may be `IN_PROGRESS` or `ACCEPTING` at a time. A later
 | M4 | Recursive parser and incremental cache | `COMPLETE` | 5 | 5 | One recursive parser remains; differential cache tests pass |
 | M5 | Pure semantic editing engine | `IN_PROGRESS` | 5 | 6 | All semantic commands migrated; old command engine removed |
 | M6 | Thin CodeMirror adapter | `COMPLETE` | 4 | 4 | RF-601/602/603/604 accepted; `editor-core` deleted and adapter is the production owner |
-| M7 | Shared presentation and derived consumers | `IN_PROGRESS` | 1 | 3 | RF-701 complete; RF-702 export and RF-703 outline/metrics remain |
+| M7 | Shared presentation and derived consumers | `IN_PROGRESS` | 2 | 3 | RF-701/RF-702 complete; RF-703 outline/metrics remains |
 | M8 | Renderer/main composition cleanup | `PLANNED` | 0 | 3 | React/main/preload are composition or presentation only |
 | M9 | Performance, E2E, and security | `PLANNED` | 0 | 3 | Budgets, Playwright flows, and Electron security pass |
 | M10 | Purge and final acceptance | `PLANNED` | 0 | 2 | No compatibility/dead code; final verdict `PASS` |
 
-**Historical recorded completion:** 26 / 38 original tasks. The supplemental RF-HARDEN-001 repair gate is tracked separately; this count is not a current quality or release-readiness percentage.
+**Historical recorded completion:** 27 / 38 original tasks. The supplemental RF-HARDEN-001 repair gate is tracked separately; this count is not a current quality or release-readiness percentage.
 
 ## 3. Task ledger
 
@@ -84,7 +84,7 @@ Evidence columns are filled only with fresh command output/report paths from the
 | RF-603 | Interaction adapters and widgets | RF-602 | `COMPLETE` | Typed/canonical interaction path owns tables, links, images, math/Mermaid/code widgets; stale async/widget lifecycle guards and table focus/measurement paths moved into the adapter. Later viewport-reveal hardening continues under the same owner without reopening the completed cutover scope. | Same M6 frozen-tree acceptance plus table-layout/table-focus-scroll/mermaid-footnote/blockquote probes. | Accepted as part of M6/M6.5 final parent acceptance on 2026-09-20; async-height anchoring and table DOM-listener reuse remain separately recorded hardening candidates. | `main` (`4a66136`, later hardening on `48ae95a`) |
 | RF-604 | CodeMirror adapter hard cutover | RF-603 | `COMPLETE` | Renderer production factory uses `@fishmark/codemirror-adapter`; `packages/editor-core/` and its runtime imports/guard exceptions are deleted; package boundary is fail-closed. | typecheck/lint/build; guard 234/234 with `exceptions: []`; full Vitest/oracle/Electron probe batch accepted. | Accepted as part of M6 final parent acceptance on 2026-09-20. | `main` (`4a66136`) |
 | RF-701 | Semantic render plan | RF-506 behavior/safety gate | `COMPLETE` | `@fishmark/markdown-presentation` exposes the canonical semantic render plan; nested list/blockquote leaves use the same traversal and production CodeMirror decorations consume it. | Focused presentation/adapter suites plus the combined M6 frozen-tree acceptance. | Accepted as the completed prerequisite used by RF-602/603/604; M7 remains open because RF-702/703 are still planned. | `main` (`4a66136`) |
-| RF-702 | HTML export cutover | RF-604, RF-701 | `IN_PROGRESS` | Renderer export orchestration parses one canonical tree, builds the shared render plan, and delegates pure Markdown-content HTML to `markdown-presentation`; legacy export-local block/inline parsing is removed. KaTeX stays in the lazy renderer export chunk via injected `renderMath`, so presentation root consumers do not pull it into the initial graph. | On `df3b562`: focused export tests 3 files/33 passed, typecheck 0, build 0; extra perf/full-suite validation exposed KaTeX initial-graph regression + one viewport-reveal failure, fixes now pending rerun. | No acceptance claim until post-fix focused/full/perf gates are green. | `main` |
+| RF-702 | HTML export cutover | RF-604, RF-701 | `COMPLETE` | Renderer export orchestration parses one canonical tree, builds the shared render plan, and delegates pure Markdown-content HTML to `markdown-presentation`; legacy export-local block/inline parsing is removed. KaTeX stays in the lazy renderer export chunk via injected `renderMath`, so presentation root consumers do not pull it into the initial graph. | Clean-tree rerun at `1b08a2c`: focused 5 files / 42 passed; typecheck exit 0; build exit 0; full Vitest 2799 passed / 1 skipped / 11 known failures; guard 234/234; `forbiddenInitialSourceGroup:katex` and Mermaid plus all required lazy-chunk checks PASS. `perf:bundle` remains red only on the four pre-existing maximum budgets. | Accepted 2026-09-21 from owner-provided clean-tree verification; no new failing test or bundle source-group regression remains. | `main` (`df3b562` + `1b08a2c`) |
 | RF-703 | Outline and metrics cutover | RF-702 | `PLANNED` | — | test/perf baseline | — | — |
 | RF-801 | Non-React workspace client/store | RF-703 | `PLANNED` | — | typecheck/test | — | — |
 | RF-802 | React shell decomposition | RF-801 | `PLANNED` | — | lint/typecheck/test | — | — |
