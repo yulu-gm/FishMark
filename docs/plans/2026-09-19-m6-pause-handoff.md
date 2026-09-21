@@ -1,6 +1,6 @@
 # 2026-09-19 M6 暂停交接
 
-> **状态更新（2026-09-20，本文以下内容为历史快照）**：暂停已解除，M6（RF-701 / RF-602 / RF-603 / RF-604）与 M6.5（外壳布局不变性 + VS Code 式侧栏 S1–S4）**已全部落地并通过父级最终验收**：`packages/editor-core/` 已删除、guard 7 包 / 13 规则 / `exceptions: []`（234/234）、全量 vitest 2788 passed / 1 skipped / 11 failed（失败集合与开工前逐条相同）、独占 oracle `unexpected=0 / known-defect=99 / not-run=0`、6 个 Electron 探针除 `editing-experience` 已知 5 条 bare-marker 族外全部 exit 0。**M6 / M6.5 已经 owner 明确认可全部验收（2026-09-20）并标记 `ACCEPTED` 收口**；按 owner 要求未提交未推送，改动全部留在工作区。最新状态与遗留项见 `docs/progress.md` 首节与文末"最终全量验收"、`docs/test-report.md`、`docs/plans/2026-09-19-rf-701-nested-rendering-handoff.md`。
+> **状态更新（2026-09-20，本文以下内容为历史快照）**：暂停已解除，M6（RF-701 / RF-602 / RF-603 / RF-604）与 M6.5（外壳布局不变性 + VS Code 式侧栏 S1–S4）**已全部落地并通过父级最终验收**：`packages/editor-core/` 已删除、guard 7 包 / 13 规则 / `exceptions: []`（234/234）、全量 vitest 2788 passed / 1 skipped / 11 failed（失败集合与开工前逐条相同）、独占 oracle `unexpected=0 / known-defect=99 / not-run=0`、6 个 Electron 探针除 `editing-experience` 已知 5 条 bare-marker 族外全部 exit 0。**M6 / M6.5 已经 owner 明确认可全部验收（2026-09-20）并标记 `ACCEPTED` 收口**，随后按 owner 指示提交并推送 main（提交 `4a66136`，`origin/main` 已同步，本文件为该提交的一部分）。最新状态与遗留项见 `docs/progress.md` 首节与文末"最终全量验收"、`docs/test-report.md`、`docs/plans/2026-09-19-rf-701-nested-rendering-handoff.md`。
 
 用户因 token 不足明确要求迅速收工，当前停止推进，保留未提交改动。
 
