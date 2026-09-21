@@ -451,12 +451,18 @@ function EditorShell({
     const activeDocumentContent = readActiveDocumentLoadContent();
 
     editorContentRef.current = activeDocumentContent ?? "";
-    activeBlockStateRef.current = null;
-    applyDocumentDerivedDataNow(null);
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- A document load boundary intentionally clears editor affordance state.
-    setActiveHeadingId(null);
-    setActiveShortcutGroupId("default-text");
-    setActiveTableToolId(null);
+
+    // CodeEditorView publishes the new revision snapshot from its child effects.
+    // Do not clear it from the parent load effect afterwards. Only the no-document
+    // boundary has no replacement snapshot and therefore clears derived UI state.
+    if (activeDocumentTabId === null) {
+      activeBlockStateRef.current = null;
+      applyDocumentDerivedDataNow(null);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Closing the document clears editor affordance state.
+      setActiveHeadingId(null);
+      setActiveShortcutGroupId("default-text");
+      setActiveTableToolId(null);
+    }
   }, [activeDocumentTabId, applyDocumentDerivedDataNow, editorLoadRevision]);
 
   const insertTableRowAbove = useCallback(() => {
