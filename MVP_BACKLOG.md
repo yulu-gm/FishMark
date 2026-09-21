@@ -131,7 +131,6 @@ Intake：`docs/plans/2026-09-18-rf-601-intake.md`。执行交接：`docs/plans/2
 - [ ] 完成 M7 后再进入 M8 renderer/main/preload composition cleanup。
 
 ## Epic 1：项目骨架
-## Epic 1：项目骨架
 
 ### TASK-001 初始化桌面工程
 

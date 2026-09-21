@@ -85,7 +85,6 @@ FishMark 当前基线是单窗口多标签页工作区，而不是单文档窗�
 - 移动端应用
 - 知识图谱式工作区
 - 保存时大范围格式重写
-- 自动恢复跨进程崩溃前的完整 workspace session
 
 ## 5. 架构
 
@@ -124,7 +123,7 @@ markdown-engine → editor-model → markdown-presentation → codemirror-adapte
 - 本地文件内容是权威数据
 - 除非用户明确要求转换，保存操作必须尽量保留原 Markdown 风格
 - 自动保存绝不能丢失未保存修改
-- 崩溃恢复属于后续 backlog；在落地前，保存 / autosave / close confirmation 必须优先防止当前会话内的数据丢失
+- 崩溃恢复由 main-owned recovery journal + checksummed snapshot 负责，启动时重放有效日志；该保证不扩张为掉电/fsync/硬盘损坏恢复承诺
 - 资源文件尽量保持相对路径
 
 ## 8. UX 优先级
@@ -183,7 +182,6 @@ DOM widget 的 reveal 应在 CodeMirror `requestMeasure` 中读取最终几何�
 异步图片 decode、Mermaid/math 渲染等导致 widget 高度发生变化时，不应通过“再次把当前 selection 居中”掩盖问题。该类问题属于 viewport anchoring：应记录稳定的视口块身份/块内偏移，在最终测量后补偿上方高度变化。它与 selection reveal 是两个不同职责，后续应作为独立 hardening 处理。
 
 ## 12. RF-HARDEN-001：切换前恢复与增量边界（2026-09-17）
-## RF-HARDEN-001：切换前恢复与增量边界（2026-09-17）
 
 恢复业务编排由 `workspace-application/createRecoverableDocumentEdits` 持有，main 只组合磁盘端口和已有文档锁。新会话首次编辑以及非日志变更（如 reload 或保存点改变）先建立持久化基线，普通后续编辑只追加增量。每次用 metadata checkpoint 检测 revision/savedRevision，不导出全文；只有基线失效才导出快照。追加完成后返回 ACK；写失败保留内存、向调用方报告，并禁止 duplicate 绕过失败返回假 ACK。所有追加和快照压缩共用串行队列。异步基线之后、实际 mutation 之前再次校验调用者授权。
 
