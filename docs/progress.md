@@ -6,6 +6,10 @@
 
 ## 当前项目判断
 
+### 2026-09-21 M7 / RF-702 实现推进：HTML Export canonical cutover（验证待执行）
+
+RF-702 已完成代码层切换：`src/renderer/export-html.ts` 不再拥有 `parseMarkdownDocument / parseInlineAst / collectReferenceDefinitions` 等 export 语义解析，只做 `parseFullDocumentTree → buildRenderPlan → renderFishmarkMarkdownContent`、主题 CSS 收集和外层 HTML 文档拼装。纯 Markdown 内容 HTML 渲染迁入 `packages/markdown-presentation/src/html/render-export-content.ts`，输入为同一 canonical render plan；为了保持既有 CSS/DOM 合同，内部可使用 `projectMarkdownDocument(tree)` 的兼容序列化，但该函数不做 scope inference、source scan 或 inline parse，inline/table/reference/footnote 数据均直接来自 canonical tree。新增 presentation 级测试覆盖嵌套容器、table cell inline、reference image 与 footnote。当前 GitHub connector 无执行环境，因此尚未产生 roadmap 要求的 `packages/markdown-presentation + export-html.test + build` 新鲜运行证据；RF-702 暂保持 IN_PROGRESS，不提前标 COMPLETE，也不越 gate 宣告 RF-703 已开始。
+
 ### 2026-09-21 设计与重构进度文档同步到当前 main
 
 按 owner 要求统一项目内设计与 progress 真相：`docs/design.md` 更新到 M6/M6.5 后架构，明确 `editor-core` 已删除、canonical snapshot/render plan + `codemirror-adapter` 为生产主路径；壳层改写为常驻 rail + 平面 docked sidebar + 固定正文 measure，并记录“外层 track 平滑移动 / 内层最终宽度避免 reflow”的当前动画契约；新增 viewport reveal 的 `preserve / nearest / navigate` 设计和异步高度 anchoring 的职责边界。同步修正 `docs/refactor/editor-foundation/progress.md` 与 `MVP_BACKLOG.md`：M6 改为 COMPLETE 4/4，RF-701/602/603/604 均 COMPLETE，M7 改为 IN_PROGRESS 1/3，下一正式任务为 RF-702 → RF-703；M5/RF-506 仍因最终性能与 bundle 预算未通过而不标 COMPLETE。历史中间态记录保留，但不再作为当前状态源。

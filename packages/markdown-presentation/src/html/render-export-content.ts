@@ -1,0 +1,1267 @@
+import {
+  computeTableColumnLayout,
+  formatTableColumnWidthPercent,
+  projectMarkdownDocument,
+  resolveIndentedCodeContentStartOffset,
+  tableBlockToCanonicalModel,
+  type BlockquoteBlock,
+  type BlockMathBlock,
+  type CodeFenceBlock,
+  type FootnoteDefinition,
+  type HeadingBlock,
+  type HtmlImageBlock,
+  type InlineNode,
+  type InlineRoot,
+  type ListBlock,
+  type ListItemBlock,
+  type MarkdownBlock,
+  type ParagraphBlock,
+  type TableBlock,
+  type TableCell,
+  type ThematicBreakBlock
+} from "@fishmark/markdown-engine";
+import katex from "katex";
+
+import type { RenderPlan } from "../render-plan";
+
+type SourceLine = {
+  endOffset: number;
+  startOffset: number;
+  text: string;
+};
+type BlockquoteExportLine = NonNullable<BlockquoteBlock["lines"]>[number];
+type FootnoteDefinitions = ReadonlyMap<string, FootnoteDefinition>;
+type ExtraLineClassResolver = (lineStartOffset: number) => string;
+type FootnoteRenderState = {
+  backlinksByIdentifier: Map<string, string[]>;
+  definitions: FootnoteDefinitions;
+  orderedIdentifiers: string[];
+  referenceCountsByIdentifier: Map<string, number>;
+  referenceNumbersByIdentifier: Map<string, number>;
+};
+
+export function renderFishmarkMarkdownContent(plan: RenderPlan): string {
+  const markdown = plan.tree.source;
+  const documentModel = projectMarkdownDocument(plan.tree);
+  const footnoteState = createFootnoteRenderState(plan.tree.footnoteDefinitions);
+  const chunks: string[] = [];
+  let cursor = 0;
+
+  for (const block of documentModel.blocks) {
+    if (block.startOffset > cursor) {
+      chunks.push(renderPlainLines(markdown, cursor, block.startOffset));
+    }
+
+    chunks.push(renderBlock(block, markdown, footnoteState));
+    cursor = Math.max(cursor, block.endOffset);
+  }
+
+  if (cursor < markdown.length) {
+    chunks.push(renderPlainLines(markdown, cursor, markdown.length));
+  }
+
+  if (chunks.length === 0) {
+    return renderLine("", "<br>");
+  }
+
+  chunks.push(renderFootnoteSection(markdown, footnoteState));
+
+  return chunks.filter(Boolean).join("");
+}
+
+function renderBlock(
+  block: MarkdownBlock,
+  source: string,
+  footnoteState: FootnoteRenderState
+): string {
+  switch (block.type) {
+    case "heading":
+      return renderHeadingBlock(block, source, footnoteState);
+    case "paragraph":
+      return renderParagraphBlock(block, source, footnoteState);
+    case "list":
+      return renderListBlock(block, source, footnoteState);
+    case "blockquote":
+      return renderBlockquoteBlock(block, source, footnoteState);
+    case "codeFence":
+      return renderCodeFenceBlock(block, source);
+    case "blockMath":
+      return renderBlockMathBlock(block, source);
+    case "definition":
+      return renderDefinitionBlock(block, source);
+    case "thematicBreak":
+      return renderThematicBreakBlock(block, source);
+    case "htmlImage":
+      return renderHtmlImageBlock(block);
+    case "table":
+      return renderTableBlock(block, source, footnoteState);
+  }
+}
+
+function renderHeadingBlock(block: HeadingBlock, source: string, footnoteState: FootnoteRenderState): string {
+  const line = createSourceLines(source, block.startOffset, block.endOffset)[0];
+  if (!line) {
+    return "";
+  }
+
+  const contentStartOffset = block.inline?.startOffset ?? block.markerEnd ?? block.startOffset;
+  const markerEnd = Math.min(block.markerEnd ?? contentStartOffset, line.endOffset);
+  const contentEndOffset = Math.min(block.inline?.endOffset ?? line.endOffset, line.endOffset);
+  const inlineHtml = block.inline
+    ? renderInlineRoot(block.inline, source, footnoteState)
+    : renderDecoratedPlainText(source.slice(contentStartOffset, contentEndOffset));
+  const trailingHtml = renderDecoratedPlainText(source.slice(contentEndOffset, line.endOffset));
+
+  return renderLine(
+    `cm-inactive-heading cm-inactive-heading-depth-${block.depth}`,
+    [
+      renderSpan("cm-inactive-heading-marker", source.slice(block.startOffset, markerEnd)),
+      inlineHtml,
+      trailingHtml
+    ].join("")
+  );
+}
+
+function renderParagraphBlock(
+  block: ParagraphBlock,
+  source: string,
+  footnoteState: FootnoteRenderState
+): string {
+  return createSourceLines(source, block.startOffset, block.endOffset)
+    .map((line) =>
+      renderLine(
+        "cm-inactive-paragraph cm-inactive-paragraph-leading",
+        renderInlineRange(block.inline, source, line.startOffset, line.endOffset, footnoteState) || "<br>"
+      )
+    )
+    .join("");
+}
+
+function renderListBlock(
+  block: ListBlock,
+  source: string,
+  footnoteState: FootnoteRenderState,
+  extraLineClassResolver?: ExtraLineClassResolver
+): string {
+  return block.items
+    .map((item) => renderListItem(item, source, block.ordered, footnoteState, extraLineClassResolver))
+    .join("");
+}
+
+function renderListItem(
+  item: ListItemBlock,
+  source: string,
+  ordered: boolean,
+  footnoteState: FootnoteRenderState,
+  extraLineClassResolver?: ExtraLineClassResolver
+): string {
+  const contentUpperBound = item.children[0]?.startOffset ?? item.endOffset;
+  const lines = createSourceLines(source, item.startOffset, contentUpperBound);
+  const chunks = lines.map((line) =>
+    line.startOffset === item.startOffset
+      ? renderListItemFirstLine(item, source, line, ordered, footnoteState, extraLineClassResolver)
+      : renderListItemContinuationLine(item, source, line, ordered, footnoteState, extraLineClassResolver)
+  );
+
+  for (const child of item.children) {
+    chunks.push(renderListBlock(child, source, footnoteState, extraLineClassResolver));
+  }
+
+  return chunks.filter(Boolean).join("");
+}
+
+function renderListItemFirstLine(
+  item: ListItemBlock,
+  source: string,
+  line: SourceLine,
+  ordered: boolean,
+  footnoteState: FootnoteRenderState,
+  extraLineClassResolver?: ExtraLineClassResolver
+): string {
+  const contentStartOffset = resolveListItemContentStartOffset(item, source, line.endOffset);
+  const lineAttributes = createListItemLineAttributes(item, source, ordered, "first");
+  const className = mergeLineClassNames(extraLineClassResolver?.(line.startOffset), lineAttributes.className);
+  const taskHtml = item.task ? renderTaskMarker(item.task.checked) : "";
+  const taskStartOffset = item.task?.markerStart ?? contentStartOffset;
+  const taskEndOffset = item.task?.markerEnd ?? contentStartOffset;
+  const inlineStart = Math.min(contentStartOffset, line.endOffset);
+  const innerHtml = [
+    renderSpan("cm-inactive-list-source-prefix", source.slice(item.startOffset, item.markerStart)),
+    renderSpan("cm-inactive-list-marker", source.slice(item.markerStart, item.markerEnd)),
+    renderSpan("cm-inactive-list-source-prefix", source.slice(item.markerEnd, taskStartOffset)),
+    taskHtml,
+    renderSpan("cm-inactive-list-source-prefix", source.slice(taskEndOffset, inlineStart)),
+    renderInlineRange(item.inline, source, inlineStart, line.endOffset, footnoteState)
+  ].join("");
+
+  return renderLine(className, innerHtml || "<br>", { style: lineAttributes.style });
+}
+
+function renderListItemContinuationLine(
+  item: ListItemBlock,
+  source: string,
+  line: SourceLine,
+  ordered: boolean,
+  footnoteState: FootnoteRenderState,
+  extraLineClassResolver?: ExtraLineClassResolver
+): string {
+  if (isExplicitThematicBreakLine(line.text)) {
+    return renderLine(
+      mergeLineClassNames(extraLineClassResolver?.(line.startOffset), "cm-inactive-thematic-break"),
+      renderSpan("cm-inactive-thematic-break-marker", line.text)
+    );
+  }
+
+  const contentStartOffset = consumeHorizontalSpace(source, line.startOffset, line.endOffset);
+  const lineAttributes = createListItemLineAttributes(
+    item,
+    source,
+    ordered,
+    "continuation",
+    Math.max(contentStartOffset - line.startOffset, 0)
+  );
+  const className = mergeLineClassNames(extraLineClassResolver?.(line.startOffset), lineAttributes.className);
+  const innerHtml = [
+    renderSpan("cm-inactive-list-source-prefix", source.slice(line.startOffset, contentStartOffset)),
+    renderInlineRange(item.inline, source, contentStartOffset, line.endOffset, footnoteState)
+  ].join("");
+
+  return renderLine(className, innerHtml || "<br>", { style: lineAttributes.style });
+}
+
+function renderBlockquoteBlock(
+  block: BlockquoteBlock,
+  source: string,
+  footnoteState: FootnoteRenderState
+): string {
+  const renderableLines = getRenderableBlockquoteLines(block.lines ?? []);
+  const lastIndex = renderableLines.length - 1;
+  const lineClassesByStartOffset = new Map(
+    renderableLines.map((line, index) => [
+      line.startOffset,
+      createBlockquoteLineClassName(line.quoteDepth, index, lastIndex)
+    ])
+  );
+
+  if (block.innerBlocks && block.innerBlocks.length > 0) {
+    return renderBlockquoteInnerBlocks(
+      block.innerBlocks,
+      source,
+      footnoteState,
+      block.lines ?? [],
+      lineClassesByStartOffset
+    );
+  }
+
+  return renderableLines
+    .map((line, index) => {
+      const innerHtml = [
+        renderSpan("cm-inactive-blockquote-marker", source.slice(line.startOffset, line.contentStartOffset)),
+        renderInlineRoot(line.inline, source, footnoteState)
+      ].join("");
+
+      return renderLine(createBlockquoteLineClassName(line.quoteDepth, index, lastIndex), innerHtml || "<br>");
+    })
+    .join("");
+}
+
+function renderBlockquoteInnerBlocks(
+  innerBlocks: readonly MarkdownBlock[],
+  source: string,
+  footnoteState: FootnoteRenderState,
+  lines: readonly BlockquoteExportLine[],
+  lineClassesByStartOffset: ReadonlyMap<number, string>
+): string {
+  const extraLineClass = (lineStartOffset: number) => lineClassesByStartOffset.get(lineStartOffset) ?? "";
+
+  return innerBlocks
+    .map((innerBlock) => {
+      switch (innerBlock.type) {
+        case "paragraph":
+          return renderBlockquoteParagraphBlock(innerBlock, source, footnoteState, lines, lineClassesByStartOffset);
+        case "list":
+          return renderListBlock(innerBlock, source, footnoteState, extraLineClass);
+        case "codeFence":
+          return renderBlockquoteCodeFenceBlock(innerBlock, source, lines, lineClassesByStartOffset);
+        case "blockMath":
+          return renderLine(
+            mergeLineClassNames(extraLineClass(innerBlock.startOffset), "cm-inactive-block-math"),
+            renderMathHtml(innerBlock.value, true, source.slice(innerBlock.startOffset, innerBlock.endOffset))
+          );
+        case "thematicBreak":
+          return renderLine(
+            mergeLineClassNames(extraLineClass(innerBlock.startOffset), "cm-inactive-thematic-break"),
+            renderSpan(
+              "cm-inactive-thematic-break-marker",
+              source.slice(innerBlock.startOffset, innerBlock.endOffset)
+            )
+          );
+        default:
+          return renderBlock(innerBlock, source, footnoteState);
+      }
+    })
+    .join("");
+}
+
+function renderBlockquoteParagraphBlock(
+  block: ParagraphBlock,
+  source: string,
+  footnoteState: FootnoteRenderState,
+  lines: readonly BlockquoteExportLine[],
+  lineClassesByStartOffset: ReadonlyMap<number, string>
+): string {
+  return lines
+    .filter((line) => line.contentEndOffset >= block.startOffset && line.contentStartOffset <= block.endOffset)
+    .map((line) => {
+      const contentStartOffset = Math.max(block.startOffset, line.contentStartOffset);
+      const contentEndOffset = Math.min(block.endOffset, line.contentEndOffset);
+      const innerHtml = [
+        renderSpan("cm-inactive-blockquote-marker", source.slice(line.startOffset, line.contentStartOffset)),
+        renderInlineRange(block.inline, source, contentStartOffset, contentEndOffset, footnoteState)
+      ].join("");
+
+      return renderLine(
+        mergeLineClassNames(
+          lineClassesByStartOffset.get(line.startOffset),
+          "cm-inactive-paragraph cm-inactive-paragraph-leading"
+        ),
+        innerHtml || "<br>"
+      );
+    })
+    .join("");
+}
+
+function renderBlockquoteCodeFenceBlock(
+  block: CodeFenceBlock,
+  source: string,
+  lines: readonly BlockquoteExportLine[],
+  lineClassesByStartOffset: ReadonlyMap<number, string>
+): string {
+  const codeLines = createSourceLines(source, block.startOffset, block.endOffset);
+  const fenceLineIndexes = new Set<number>([0]);
+  const lastLine = codeLines[codeLines.length - 1];
+
+  if (codeLines.length > 1 && lastLine) {
+    const closingQuoteLine = findBlockquoteLineForOffset(lastLine.startOffset, lines);
+    const closingText = closingQuoteLine
+      ? source.slice(closingQuoteLine.contentStartOffset, closingQuoteLine.contentEndOffset)
+      : lastLine.text;
+
+    if (isCodeFenceLine(closingText)) {
+      fenceLineIndexes.add(codeLines.length - 1);
+    }
+  }
+
+  const contentLineIndexes = codeLines
+    .map((_, index) => index)
+    .filter((index) => !fenceLineIndexes.has(index));
+  const lastContentLineIndex = contentLineIndexes[contentLineIndexes.length - 1] ?? null;
+  const languageLabel = formatLanguageLabel(block.info);
+
+  return codeLines
+    .map((line, index) => {
+      const quoteLine = findBlockquoteLineForOffset(line.startOffset, lines);
+      const quoteClassName = quoteLine ? lineClassesByStartOffset.get(quoteLine.startOffset) : "";
+      const prefixHtml = quoteLine
+        ? renderSpan("cm-inactive-blockquote-marker", source.slice(quoteLine.startOffset, quoteLine.contentStartOffset))
+        : "";
+      const contentText = quoteLine
+        ? source.slice(quoteLine.contentStartOffset, quoteLine.contentEndOffset)
+        : line.text;
+
+      if (fenceLineIndexes.has(index)) {
+        return renderLine(
+          mergeLineClassNames(quoteClassName, "cm-inactive-code-block-fence"),
+          prefixHtml + renderSpan("cm-inactive-code-block-fence-marker", contentText)
+        );
+      }
+
+      const lineClasses = ["cm-inactive-code-block"];
+      if (index === contentLineIndexes[0]) {
+        lineClasses.push("cm-inactive-code-block-start");
+      }
+      if (index === lastContentLineIndex) {
+        lineClasses.push("cm-inactive-code-block-end");
+      }
+
+      return renderLine(
+        mergeLineClassNames(quoteClassName, lineClasses.join(" ")),
+        prefixHtml + (escapeHtml(contentText) || "<br>"),
+        index === lastContentLineIndex && languageLabel ? { "data-language": languageLabel } : {}
+      );
+    })
+    .join("");
+}
+
+function getRenderableBlockquoteLines(lines: readonly BlockquoteExportLine[]): BlockquoteExportLine[] {
+  if (!lines.some((line) => line.quoteDepth > 0)) {
+    return [];
+  }
+
+  return lines.filter((line) => line.quoteDepth > 0);
+}
+
+function createBlockquoteLineClassName(depth: number, index: number, lastIndex: number): string {
+  const lineClasses = [
+    "cm-inactive-blockquote",
+    createInactiveBlockquoteDepthClass(depth)
+  ];
+
+  if (index === 0) {
+    lineClasses.push("cm-inactive-blockquote-start");
+  }
+
+  if (index === lastIndex) {
+    lineClasses.push("cm-inactive-blockquote-end");
+  }
+
+  return lineClasses.join(" ");
+}
+
+function findBlockquoteLineForOffset(
+  offset: number,
+  lines: readonly BlockquoteExportLine[]
+): BlockquoteExportLine | null {
+  return lines.find((line) => offset >= line.startOffset && offset <= line.endOffset) ?? null;
+}
+
+function createInactiveBlockquoteDepthClass(depth: number): string {
+  return `cm-inactive-blockquote-depth-${Math.max(1, Math.min(depth, 4))}`;
+}
+
+function renderCodeFenceBlock(block: CodeFenceBlock, source: string): string {
+  const lines = createSourceLines(source, block.startOffset, block.endOffset);
+  if (lines.length === 0) {
+    return "";
+  }
+
+  if (block.kind === "indented") {
+    return renderIndentedCodeBlock(lines, source);
+  }
+
+  const fenceLineIndexes = new Set<number>([0]);
+  const lastLine = lines[lines.length - 1];
+  if (lines.length > 1 && lastLine && isCodeFenceLine(lastLine.text)) {
+    fenceLineIndexes.add(lines.length - 1);
+  }
+
+  const contentLineIndexes = lines
+    .map((_, index) => index)
+    .filter((index) => !fenceLineIndexes.has(index));
+  const lastContentLineIndex = contentLineIndexes[contentLineIndexes.length - 1] ?? null;
+  const languageLabel = formatLanguageLabel(block.info);
+
+  return lines
+    .map((line, index) => {
+      if (fenceLineIndexes.has(index)) {
+        return renderLine(
+          "cm-inactive-code-block-fence",
+          renderSpan("cm-inactive-code-block-fence-marker", line.text)
+        );
+      }
+
+      const lineClasses = ["cm-inactive-code-block"];
+      if (index === contentLineIndexes[0]) {
+        lineClasses.push("cm-inactive-code-block-start");
+      }
+      if (index === lastContentLineIndex) {
+        lineClasses.push("cm-inactive-code-block-end");
+      }
+
+      return renderLine(
+        lineClasses.join(" "),
+        escapeHtml(line.text) || "<br>",
+        index === lastContentLineIndex && languageLabel ? { "data-language": languageLabel } : {}
+      );
+    })
+    .join("");
+}
+
+function renderIndentedCodeBlock(lines: SourceLine[], source: string): string {
+  const lastIndex = lines.length - 1;
+
+  return lines
+    .map((line, index) => {
+      const lineClasses = ["cm-inactive-code-block"];
+      if (index === 0) {
+        lineClasses.push("cm-inactive-code-block-start");
+      }
+      if (index === lastIndex) {
+        lineClasses.push("cm-inactive-code-block-end");
+      }
+
+      const contentStartOffset = resolveIndentedCodeContentStartOffset(source, line.startOffset, line.endOffset);
+      const markerHtml = renderSpan(
+        "cm-inactive-code-block-indent-marker",
+        source.slice(line.startOffset, contentStartOffset)
+      );
+      const codeHtml = escapeHtml(source.slice(contentStartOffset, line.endOffset));
+
+      return renderLine(lineClasses.join(" "), markerHtml + (codeHtml || "<br>"));
+    })
+    .join("");
+}
+
+function renderBlockMathBlock(block: BlockMathBlock, source: string): string {
+  if (!block.closed) {
+    return renderPlainLines(source, block.startOffset, block.endOffset);
+  }
+
+  return renderLine(
+    "cm-inactive-block-math",
+    renderMathHtml(block.value, true, source.slice(block.startOffset, block.endOffset))
+  );
+}
+
+function renderThematicBreakBlock(block: ThematicBreakBlock, source: string): string {
+  const marker = source.slice(block.startOffset, block.endOffset);
+  return renderLine(
+    "cm-inactive-thematic-break",
+    renderSpan("cm-inactive-thematic-break-marker", marker)
+  );
+}
+
+function renderHtmlImageBlock(block: HtmlImageBlock): string {
+  return renderImagePreview({
+    align: block.align,
+    alt: block.alt,
+    height: block.height,
+    href: block.src,
+    mode: "inactive",
+    width: block.width,
+    zoom: block.zoom
+  });
+}
+
+function renderDefinitionBlock(block: Extract<MarkdownBlock, { type: "definition" }>, source: string): string {
+  if (block.footnoteDefinition && block.footnoteDefinition.status !== "valid") {
+    return renderPlainLines(source, block.startOffset, block.endOffset);
+  }
+
+  return "";
+}
+
+function renderTableBlock(block: TableBlock, source: string, footnoteState: FootnoteRenderState): string {
+  const headerRows = block.hasHeader
+    ? `<thead>${renderTableRow(block.header, true, source, footnoteState)}</thead>`
+    : "";
+  const bodyRows = [
+    ...(block.hasHeader ? [] : [renderTableRow(block.header, false, source, footnoteState)]),
+    ...block.rows.map((row) => renderTableRow(row, false, source, footnoteState))
+  ].join("");
+
+  return [
+    `<div class="cm-table-widget" data-table-columns="${block.columnCount}" data-table-start-offset="${block.startOffset}">`,
+    '<table class="cm-table-widget-table">',
+    renderTableColumnGroup(block),
+    headerRows,
+    `<tbody>${bodyRows}</tbody>`,
+    "</table>",
+    "</div>"
+  ].join("");
+}
+
+function renderTableColumnGroup(block: TableBlock): string {
+  const columns = computeTableColumnLayout(tableBlockToCanonicalModel(block)).map((column) => {
+    const width = formatTableColumnWidthPercent(column.widthPercent);
+
+    return [
+      `<col class="cm-table-widget-column" data-column-index="${column.columnIndex}"`,
+      ` style="width: ${width}">`
+    ].join("");
+  });
+
+  return `<colgroup class="cm-table-widget-column-group">${columns.join("")}</colgroup>`;
+}
+
+function renderTableRow(
+  cells: readonly TableCell[],
+  isHeader: boolean,
+  source: string,
+  footnoteState: FootnoteRenderState
+): string {
+  const rowClass = isHeader ? "cm-table-widget-row cm-table-widget-row-header" : "cm-table-widget-row";
+  return `<tr class="${rowClass}">${cells.map((cell) => renderTableCell(cell, isHeader, source, footnoteState)).join("")}</tr>`;
+}
+
+function renderTableCell(
+  cell: TableCell,
+  isHeader: boolean,
+  source: string,
+  footnoteState: FootnoteRenderState
+): string {
+  const cellTag = isHeader ? "th" : "td";
+  const cellHtml = cell.inline
+    ? renderInlineRoot(cell.inline, source, footnoteState)
+    : renderDecoratedPlainText(cell.text);
+
+  return [
+    `<${cellTag} class="cm-table-widget-cell" data-active="false">`,
+    '<div class="cm-table-widget-input" contenteditable="false" spellcheck="false" tabindex="0"',
+    ` role="textbox" data-table-cell="${cell.rowIndex}:${cell.columnIndex}"`,
+    ` data-table-cell-preview="${cell.rowIndex}:${cell.columnIndex}">`,
+    cellHtml,
+    "</div>",
+    `</${cellTag}>`
+  ].join("");
+}
+
+function renderPlainLines(source: string, startOffset: number, endOffset: number): string {
+  const contentStartOffset = skipSingleLeadingLineBreak(source, startOffset, endOffset);
+  let hasRenderedStructuralBlankLine = false;
+
+  return createSourceLines(source, contentStartOffset, endOffset)
+    .map((line) => {
+      const isBlankLine = line.text.trim().length === 0;
+      const className = isBlankLine && !hasRenderedStructuralBlankLine ? "cm-inactive-blank-line" : "";
+
+      if (isBlankLine) {
+        hasRenderedStructuralBlankLine = true;
+      }
+
+      return renderLine(className, renderDecoratedPlainText(line.text) || "<br>");
+    })
+    .join("");
+}
+
+function skipSingleLeadingLineBreak(source: string, startOffset: number, endOffset: number): number {
+  if (startOffset >= endOffset) {
+    return startOffset;
+  }
+
+  const firstCharacter = source[startOffset];
+
+  if (firstCharacter === "\r" && source[startOffset + 1] === "\n") {
+    return Math.min(startOffset + 2, endOffset);
+  }
+
+  if (firstCharacter === "\n") {
+    return Math.min(startOffset + 1, endOffset);
+  }
+
+  return startOffset;
+}
+
+function renderInlineRange(
+  root: InlineRoot | undefined,
+  source: string,
+  startOffset: number,
+  endOffset: number,
+  footnoteState: FootnoteRenderState | null = null
+): string {
+  if (endOffset <= startOffset) {
+    return "";
+  }
+
+  if (!root) {
+    return renderDecoratedPlainText(source.slice(startOffset, endOffset));
+  }
+
+  const chunks: string[] = [];
+  let cursor = startOffset;
+
+  for (const node of root.children) {
+    if (node.endOffset <= startOffset || node.startOffset >= endOffset) {
+      continue;
+    }
+
+    const from = Math.max(startOffset, node.startOffset);
+    const to = Math.min(endOffset, node.endOffset);
+
+    if (from > cursor) {
+      chunks.push(renderDecoratedPlainText(source.slice(cursor, from)));
+    }
+
+    chunks.push(renderInlineNodeSlice(node, source, from, to, footnoteState));
+    cursor = Math.max(cursor, to);
+  }
+
+  if (cursor < endOffset) {
+    chunks.push(renderDecoratedPlainText(source.slice(cursor, endOffset)));
+  }
+
+  return chunks.join("");
+}
+
+function renderInlineNodeSlice(
+  node: InlineNode,
+  source: string,
+  from: number,
+  to: number,
+  footnoteState: FootnoteRenderState | null
+): string {
+  if (from <= node.startOffset && node.endOffset <= to) {
+    return renderInlineNode(node, source, footnoteState);
+  }
+
+  if (node.type === "text") {
+    return renderDecoratedPlainText(source.slice(from, to));
+  }
+
+  if (
+    node.type === "strong" ||
+    node.type === "emphasis" ||
+    node.type === "strikethrough" ||
+    node.type === "link"
+  ) {
+    const inner = renderInlineChildrenRange(node.children, source, from, to, footnoteState);
+    if (inner.length === 0) {
+      return renderDecoratedPlainText(source.slice(from, to));
+    }
+
+    if (node.type === "link") {
+      return inner;
+    }
+
+    return renderSpan(resolveInlineContainerClass(node.type), inner, { escapeContent: false });
+  }
+
+  return renderDecoratedPlainText(source.slice(from, to));
+}
+
+function renderInlineChildrenRange(
+  children: readonly InlineNode[],
+  source: string,
+  startOffset: number,
+  endOffset: number,
+  footnoteState: FootnoteRenderState | null
+): string {
+  const syntheticRoot: InlineRoot = {
+    type: "root",
+    startOffset,
+    endOffset,
+    children: [...children]
+  };
+  return renderInlineRange(syntheticRoot, source, startOffset, endOffset, footnoteState);
+}
+
+function renderInlineRoot(root: InlineRoot, source: string, footnoteState: FootnoteRenderState | null = null): string {
+  return root.children.map((node) => renderInlineNode(node, source, footnoteState)).join("");
+}
+
+function renderInlineNode(node: InlineNode, source: string, footnoteState: FootnoteRenderState | null = null): string {
+  if (shouldRenderNodeAsPlainText(node)) {
+    return renderDecoratedPlainText(source.slice(node.startOffset, node.endOffset));
+  }
+
+  switch (node.type) {
+    case "text":
+      return renderDecoratedPlainText(node.value);
+    case "hardBreak":
+      return "<br>";
+    case "footnoteReference":
+      return renderFootnoteReferenceNode(node, source, footnoteState);
+    case "codeSpan":
+      return [
+        renderInlineMarker(source.slice(node.openMarker.startOffset, node.openMarker.endOffset)),
+        renderSpan("cm-inactive-inline-code", node.text),
+        renderInlineMarker(source.slice(node.closeMarker.startOffset, node.closeMarker.endOffset))
+      ].join("");
+    case "inlineMath":
+      return renderMathHtml(node.value, false, source.slice(node.startOffset, node.endOffset));
+    case "strong":
+    case "emphasis":
+    case "strikethrough":
+      return [
+        renderInlineMarker(source.slice(node.openMarker.startOffset, node.openMarker.endOffset)),
+        renderSpan(resolveInlineContainerClass(node.type), renderInlineChildren(node.children, source, footnoteState), {
+          escapeContent: false
+        }),
+        renderInlineMarker(source.slice(node.closeMarker.startOffset, node.closeMarker.endOffset))
+      ].join("");
+    case "link":
+      return [
+        renderInlineMarker(source.slice(node.openMarker.startOffset, node.openMarker.endOffset)),
+        renderInlineChildren(node.children, source, footnoteState),
+        renderInlineMarker(source.slice(node.closeMarker.startOffset, node.closeMarker.endOffset)),
+        renderDecoratedPlainText(source.slice(node.closeMarker.endOffset, node.endOffset))
+      ].join("");
+    case "image":
+      return renderImagePreview({
+        align: "center",
+        alt: readInlineText(node.children),
+        href: node.href,
+        mode: "inactive"
+      });
+  }
+}
+
+function renderInlineChildren(
+  children: readonly InlineNode[],
+  source: string,
+  footnoteState: FootnoteRenderState | null = null
+): string {
+  return children.map((child) => renderInlineNode(child, source, footnoteState)).join("");
+}
+
+function renderMathHtml(value: string, displayMode: boolean, fallbackSource: string): string {
+  try {
+    const mathMarkup = katex.renderToString(value, {
+      displayMode,
+      output: "mathml",
+      throwOnError: false
+    });
+
+    return displayMode ? `<span class="katex-display">${mathMarkup}</span>` : mathMarkup;
+  } catch {
+    return renderSpan(
+      displayMode ? "cm-math-preview cm-math-preview-block cm-math-preview-fallback" : "cm-math-preview cm-math-preview-inline cm-math-preview-fallback",
+      fallbackSource
+    );
+  }
+}
+
+function createFootnoteRenderState(definitions: FootnoteDefinitions): FootnoteRenderState {
+  return {
+    backlinksByIdentifier: new Map(),
+    definitions,
+    orderedIdentifiers: [],
+    referenceCountsByIdentifier: new Map(),
+    referenceNumbersByIdentifier: new Map()
+  };
+}
+
+function renderFootnoteReferenceNode(
+  node: Extract<InlineNode, { type: "footnoteReference" }>,
+  source: string,
+  footnoteState: FootnoteRenderState | null
+): string {
+  const reference = footnoteState ? registerFootnoteReference(footnoteState, node.identifier) : null;
+
+  if (!reference) {
+    return renderDecoratedPlainText(source.slice(node.startOffset, node.endOffset));
+  }
+
+  return [
+    `<sup class="cm-inactive-inline-footnote-reference" id="${escapeAttribute(reference.referenceId)}">`,
+    `<a href="#${escapeAttribute(reference.footnoteId)}" class="fishmark-footnote-ref" role="doc-noteref">`,
+    `${reference.number}`,
+    "</a>",
+    "</sup>"
+  ].join("");
+}
+
+function registerFootnoteReference(
+  footnoteState: FootnoteRenderState,
+  identifier: string
+): { footnoteId: string; number: number; referenceId: string } | null {
+  if (!footnoteState.definitions.has(identifier)) {
+    return null;
+  }
+
+  let number = footnoteState.referenceNumbersByIdentifier.get(identifier);
+
+  if (number === undefined) {
+    number = footnoteState.orderedIdentifiers.length + 1;
+    footnoteState.orderedIdentifiers.push(identifier);
+    footnoteState.referenceNumbersByIdentifier.set(identifier, number);
+  }
+
+  const referenceCount = (footnoteState.referenceCountsByIdentifier.get(identifier) ?? 0) + 1;
+  footnoteState.referenceCountsByIdentifier.set(identifier, referenceCount);
+
+  const footnoteId = createFootnoteId(number);
+  const referenceId = createFootnoteReferenceId(number, referenceCount);
+  const backlinks = footnoteState.backlinksByIdentifier.get(identifier) ?? [];
+  backlinks.push(referenceId);
+  footnoteState.backlinksByIdentifier.set(identifier, backlinks);
+
+  return { footnoteId, number, referenceId };
+}
+
+function renderFootnoteSection(source: string, footnoteState: FootnoteRenderState): string {
+  if (footnoteState.orderedIdentifiers.length === 0) {
+    return "";
+  }
+
+  const items: string[] = [];
+
+  for (let index = 0; index < footnoteState.orderedIdentifiers.length; index += 1) {
+    const identifier = footnoteState.orderedIdentifiers[index]!;
+    const definition = footnoteState.definitions.get(identifier);
+    const number = footnoteState.referenceNumbersByIdentifier.get(identifier);
+
+    if (!definition || number === undefined) {
+      continue;
+    }
+
+    items.push(renderFootnoteDefinitionItem(definition, source, footnoteState, number));
+  }
+
+  if (items.length === 0) {
+    return "";
+  }
+
+  return [
+    '<section class="fishmark-footnotes" role="doc-endnotes">',
+    '<hr class="fishmark-footnotes-separator">',
+    `<ol class="fishmark-footnotes-list">${items.join("")}</ol>`,
+    "</section>"
+  ].join("");
+}
+
+function renderFootnoteDefinitionItem(
+  definition: FootnoteDefinition,
+  source: string,
+  footnoteState: FootnoteRenderState,
+  number: number
+): string {
+  const contentHtml = definition.lines
+    .map((line) => line.inline
+      ? renderInlineRoot(line.inline, source, footnoteState)
+      : renderDecoratedPlainText(source.slice(line.contentStartOffset, line.contentEndOffset)))
+    .join("<br>");
+  const backlinks = (footnoteState.backlinksByIdentifier.get(definition.identifier) ?? [])
+    .map((referenceId, index) =>
+      [
+        `<a href="#${escapeAttribute(referenceId)}"`,
+        ' class="fishmark-footnote-backref"',
+        ` aria-label="Back to reference ${index + 1}">`,
+        index === 0 ? "&#8617;" : `&#8617;${index + 1}`,
+        "</a>"
+      ].join("")
+    )
+    .join(" ");
+
+  return [
+    `<li id="${escapeAttribute(createFootnoteId(number))}" class="fishmark-footnote-item">`,
+    contentHtml || "<br>",
+    backlinks ? ` ${backlinks}` : "",
+    "</li>"
+  ].join("");
+}
+
+function createFootnoteId(number: number): string {
+  return `fishmark-fn-${number}`;
+}
+
+function createFootnoteReferenceId(number: number, referenceCount: number): string {
+  return `fishmark-fnref-${number}-${referenceCount}`;
+}
+
+function renderImagePreview(input: {
+  align?: "left" | "center" | "right" | null;
+  alt: string;
+  height?: string | null;
+  href: string | null;
+  mode: "inactive";
+  width?: string | null;
+  zoom?: string | null;
+}): string {
+  const align = input.align ?? "center";
+  const imageStyle = createImageStyle(input);
+  const imageContent = input.href
+    ? `<img class="cm-markdown-image-preview-image" src="${escapeAttribute(input.href)}" alt="${escapeAttribute(input.alt || "Markdown image")}"${imageStyle ? ` style="${escapeAttribute(imageStyle)}"` : ""}>`
+    : `<span class="cm-markdown-image-preview-fallback">${escapeHtml(input.alt || "Image preview unavailable")}</span>`;
+
+  return [
+    '<span class="cm-markdown-image-preview"',
+    ` data-image-preview-mode="${input.mode}" data-image-align="${align}">`,
+    imageContent,
+    "</span>"
+  ].join("");
+}
+
+function createImageStyle(input: {
+  height?: string | null;
+  width?: string | null;
+  zoom?: string | null;
+}): string {
+  const declarations: string[] = [];
+
+  if (input.width) {
+    declarations.push(`width: ${normalizeCssLength(input.width)};`);
+  }
+
+  if (input.height) {
+    declarations.push(`height: ${normalizeCssLength(input.height)};`);
+  }
+
+  if (input.zoom) {
+    declarations.push(`zoom: ${input.zoom};`);
+  }
+
+  return declarations.join(" ");
+}
+
+function renderTaskMarker(checked: boolean): string {
+  const state = checked ? "checked" : "unchecked";
+  return [
+    `<span class="cm-inactive-task-marker cm-inactive-task-marker-${state}" data-task-state="${state}" aria-hidden="true">`,
+    '<span class="cm-inactive-task-marker-box"></span>',
+    '<span class="cm-inactive-task-marker-check"></span>',
+    "</span>"
+  ].join("");
+}
+
+function createListItemLineAttributes(
+  item: ListItemBlock,
+  source: string,
+  ordered: boolean,
+  lineKind: "first" | "continuation",
+  sourcePrefixLength: number | null = null
+): { className: string; style: string } {
+  const mode = "inactive";
+  const classNames = [
+    lineKind === "continuation" ? `cm-${mode}-list-continuation` : `cm-${mode}-list`,
+    ordered ? `cm-${mode}-list-ordered` : `cm-${mode}-list-unordered`,
+    `cm-${mode}-list-depth-${Math.floor(item.indent / 2)}`
+  ];
+
+  if (item.task) {
+    classNames.push(
+      `cm-${mode}-list-task`,
+      item.task.checked ? `cm-${mode}-list-task-checked` : `cm-${mode}-list-task-unchecked`
+    );
+  }
+
+  return {
+    className: classNames.join(" "),
+    style: `--fishmark-list-source-prefix-offset: ${sourcePrefixLength ?? getListItemSourcePrefixLength(item, source)}ch;`
+  };
+}
+
+function getListItemSourcePrefixLength(item: ListItemBlock, source: string): number {
+  const lineEndOffset = findLineEndOffset(source, item.startOffset, item.endOffset);
+  const contentStartOffset = resolveListItemContentStartOffset(item, source, lineEndOffset);
+  return Math.max(contentStartOffset - item.startOffset, 0);
+}
+
+function resolveListItemContentStartOffset(
+  item: ListItemBlock,
+  source: string,
+  lineEndOffset: number
+): number {
+  if (typeof item.contentStartOffset === "number") {
+    return Math.min(item.contentStartOffset, lineEndOffset);
+  }
+
+  let cursor = consumeHorizontalSpace(source, item.markerEnd, lineEndOffset);
+
+  if (item.task && item.task.markerStart === cursor) {
+    cursor = consumeHorizontalSpace(source, item.task.markerEnd, lineEndOffset);
+  }
+
+  return Math.min(cursor, lineEndOffset);
+}
+
+function shouldRenderNodeAsPlainText(node: InlineNode): boolean {
+  switch (node.type) {
+    case "text":
+      return false;
+    case "hardBreak":
+      return false;
+    case "footnoteReference":
+      return false;
+    case "codeSpan":
+      return node.text.length === 0 || node.openMarker.endOffset >= node.closeMarker.startOffset;
+    case "inlineMath":
+      return node.value.length === 0 || node.openMarker.endOffset >= node.closeMarker.startOffset;
+    case "strong":
+    case "emphasis":
+    case "strikethrough":
+      return node.children.length === 0 || node.openMarker.endOffset >= node.closeMarker.startOffset;
+    case "link":
+    case "image":
+      return false;
+  }
+}
+
+function resolveInlineContainerClass(type: "strong" | "emphasis" | "strikethrough"): string {
+  switch (type) {
+    case "strong":
+      return "cm-inactive-inline-strong";
+    case "emphasis":
+      return "cm-inactive-inline-emphasis";
+    case "strikethrough":
+      return "cm-inactive-inline-strikethrough";
+  }
+}
+
+function renderDecoratedPlainText(text: string): string {
+  if (text.length === 0) {
+    return "";
+  }
+
+  const matches = Array.from(text.matchAll(/[\p{Script=Han}\u3000-\u303F\uFF00-\uFFEF]+/gu));
+
+  if (matches.length === 0) {
+    return escapeHtml(text);
+  }
+
+  const chunks: string[] = [];
+  let cursor = 0;
+
+  for (const match of matches) {
+    if (typeof match.index !== "number") {
+      continue;
+    }
+
+    if (match.index > cursor) {
+      chunks.push(escapeHtml(text.slice(cursor, match.index)));
+    }
+
+    chunks.push(renderSpan("cm-fishmark-cjk-font", match[0]));
+    cursor = match.index + match[0].length;
+  }
+
+  if (cursor < text.length) {
+    chunks.push(escapeHtml(text.slice(cursor)));
+  }
+
+  return chunks.join("");
+}
+
+function renderLine(
+  className: string,
+  innerHtml: string,
+  attributes: Record<string, string | undefined> = {}
+): string {
+  const lineClass = className ? `cm-line ${className}` : "cm-line";
+  return `<div${renderAttributes({ ...attributes, class: lineClass })}>${innerHtml}</div>`;
+}
+
+function mergeLineClassNames(...classNames: Array<string | null | undefined>): string {
+  return classNames.filter((className): className is string => Boolean(className)).join(" ");
+}
+
+function renderSpan(
+  className: string,
+  content: string,
+  options: { escapeContent?: boolean } = {}
+): string {
+  if (content.length === 0) {
+    return "";
+  }
+
+  const escapedContent = options.escapeContent === false ? content : escapeHtml(content);
+  return `<span class="${className}">${escapedContent}</span>`;
+}
+
+function renderInlineMarker(text: string): string {
+  return renderSpan("cm-inactive-inline-marker", text);
+}
+
+function renderAttributes(attributes: Record<string, string | null | undefined>): string {
+  const renderedAttributes = Object.entries(attributes)
+    .filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].length > 0)
+    .map(([name, value]) => `${name}="${escapeAttribute(value)}"`);
+
+  return renderedAttributes.length > 0 ? ` ${renderedAttributes.join(" ")}` : "";
+}
+
+function createSourceLines(source: string, startOffset: number, endOffset: number): SourceLine[] {
+  if (endOffset <= startOffset) {
+    return [];
+  }
+
+  const lines: SourceLine[] = [];
+  let cursor = startOffset;
+
+  while (cursor < endOffset) {
+    const nextNewlineOffset = source.indexOf("\n", cursor);
+    const rawEndOffset =
+      nextNewlineOffset === -1 || nextNewlineOffset >= endOffset ? endOffset : nextNewlineOffset;
+    const lineEndOffset = trimTrailingCarriageReturn(source, cursor, rawEndOffset);
+
+    lines.push({
+      startOffset: cursor,
+      endOffset: lineEndOffset,
+      text: source.slice(cursor, lineEndOffset)
+    });
+
+    if (nextNewlineOffset === -1 || nextNewlineOffset >= endOffset) {
+      break;
+    }
+
+    cursor = nextNewlineOffset + 1;
+  }
+
+  return lines;
+}
+
+function consumeHorizontalSpace(source: string, startOffset: number, endOffset: number): number {
+  let cursor = startOffset;
+
+  while (cursor < endOffset) {
+    const character = source[cursor];
+    if (character !== " " && character !== "\t") {
+      break;
+    }
+
+    cursor += 1;
+  }
+
+  return cursor;
+}
+
+function findLineEndOffset(source: string, startOffset: number, upperBound: number): number {
+  const newlineOffset = source.indexOf("\n", startOffset);
+  const rawEndOffset = newlineOffset === -1 ? upperBound : Math.min(newlineOffset, upperBound);
+  return trimTrailingCarriageReturn(source, startOffset, rawEndOffset);
+}
+
+function trimTrailingCarriageReturn(source: string, startOffset: number, endOffset: number): number {
+  return endOffset > startOffset && source[endOffset - 1] === "\r" ? endOffset - 1 : endOffset;
+}
+
+function formatLanguageLabel(info: string | null): string {
+  if (!info) {
+    return "";
+  }
+
+  const token = info.trim().split(/\s+/)[0];
+  if (!token) {
+    return "";
+  }
+
+  return token.length > 16 ? token.slice(0, 16) : token;
+}
+
+function isCodeFenceLine(text: string): boolean {
+  return /^[ \t]{0,3}(`{3,}|~{3,})/.test(text);
+}
+
+function isExplicitThematicBreakLine(text: string): boolean {
+  return /^\s{0,3}(?:\+(?:[ \t]*\+){2,}|-(?:[ \t]*-){2,})[ \t]*$/u.test(text);
+}
+
+function readInlineText(nodes: readonly InlineNode[]): string {
+  return nodes.map((node) => readInlineNodeText(node)).join("").trim();
+}
+
+function readInlineNodeText(node: InlineNode): string {
+  switch (node.type) {
+    case "text":
+      return node.value;
+    case "hardBreak":
+      return "\n";
+    case "codeSpan":
+      return node.text;
+    case "inlineMath":
+      return node.value;
+    case "footnoteReference":
+      return node.label;
+    case "strong":
+    case "emphasis":
+    case "strikethrough":
+    case "link":
+    case "image":
+      return node.children.map((child) => readInlineNodeText(child)).join("");
+  }
+}
+
+function normalizeCssLength(value: string): string {
+  return /^\d+(?:\.\d+)?$/.test(value) ? `${value}px` : value;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function escapeAttribute(value: string): string {
+  return escapeHtml(value).replace(/"/g, "&quot;");
+}
