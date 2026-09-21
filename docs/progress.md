@@ -6,6 +6,10 @@
 
 ## 当前项目判断
 
+### 2026-09-21 Sidebar 正文位移动画恢复且保持内容无 reflow
+
+上一刀为消除 sidebar 文字 reflow 取消了 `grid-template-columns` 过渡，副作用是 Markdown document stage 在开关 sidebar 时改为瞬移。现将模型细化为**外层 track 动画、内层内容固定宽度**：`workspace-shell` 恢复 220ms grid track 过渡，正文因此继续平滑右移/左移；同时新增 `--fishmark-side-panel-content-width`，Search/Outline 的 header/body 始终按最终宽度排版，外层 `.side-panel{overflow:hidden}` 只负责在 track 展开/收起时裁剪显示区域。因此长 Outline 标题不会经历中间宽度换行，正文位移动画也恢复。窄窗口的 44vw clamp 同样作用在 final content width 上；用户主动 resize 仍允许实时 reflow。
+
 ### 2026-09-21 Sidebar 开合动效去 reflow
 
 针对 owner 观察到的 Outline 长标题在 sidebar 展开过程中反复换行：根因是 workspace-shell 对 side-panel grid track 做 0 → stored width 的 220ms 宽度过渡，导致内部 Search/Outline 每帧都按新宽度重新排版。现改为**布局宽度原子切换 + 内容淡入/淡出**：打开时 sidebar track 立即进入最终宽度，header/body 只做 opacity + 4px translateX；关闭时利用现有 closingViewContainer 加 :has() 在 180ms 淡出期间继续保留最终 track 宽度，动画结束卸载后才收回列。这样 sidebar 文本从第一帧起就以最终宽度排版，不再因开合动画产生 reflow；用户主动拖拽 resize 时仍按实时宽度重排，这是明确的交互反馈。同步更新 renderer CSS 契约测试，移除旧玻璃样式和 grid 宽度动画断言。

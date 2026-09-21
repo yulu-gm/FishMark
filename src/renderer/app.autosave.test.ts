@@ -5516,10 +5516,14 @@ describe("App autosave", () => {
 
     expect(appUiStylesheet).toContain("--fishmark-side-panel-width: 0px;");
     expect(appUiStylesheet).toContain("grid-template-columns: var(--fishmark-side-panel-width) minmax(0, 1fr);");
-    // Width is applied atomically so Outline/Search text never reflows through
-    // intermediate panel widths during open/close.
-    expect(appUiStylesheet).not.toContain("grid-template-columns 220ms var(--fishmark-ease-standard)");
-    expect(appUiStylesheet).toContain('.workspace-shell:has(> .side-panel[data-state="closing"])');
+    // The outer grid track animates so the document moves smoothly, while
+    // sidebar content keeps a separately resolved final width and never
+    // reflows through intermediate track sizes.
+    expect(appUiStylesheet).toContain("grid-template-columns 220ms var(--fishmark-ease-standard)");
+    expect(appUiStylesheet).toContain("--fishmark-side-panel-content-width: min(");
+    expect(appUiStylesheet).toContain("width: var(--fishmark-side-panel-content-width);");
+    expect(appUiStylesheet).toContain("--fishmark-side-panel-width: var(--fishmark-side-panel-content-width);");
+    expect(appUiStylesheet).not.toContain('.workspace-shell:has(> .side-panel[data-state="closing"]) {');
     expect(appUiStylesheet).toContain(".side-panel");
     expect(appUiStylesheet).toContain(".side-panel-header");
     expect(appUiStylesheet).toContain(".side-panel-body");

@@ -883,15 +883,18 @@
    * writes; `--fishmark-side-panel-width` is the resolved column width.
    */
   --fishmark-side-panel-default-width: 248px;
+  /* The content width resolves immediately and never participates in the
+     grid-track interpolation. Sidebar text therefore lays out once at its
+     final width while the outer track simply reveals more of it. */
+  --fishmark-side-panel-content-width: min(
+    var(--fishmark-side-panel-stored-width, var(--fishmark-side-panel-default-width)),
+    60vw
+  );
   --fishmark-side-panel-width: 0px;
   --fishmark-side-panel-gap: 0px;
-  /*
-   * Apply the panel track width atomically. Animating this grid track makes
-   * Outline/Search content repeatedly reflow while the panel opens.
-   * Visual motion belongs to the already-final-width panel content below.
-   */
   grid-template-columns: var(--fishmark-side-panel-width) minmax(0, 1fr);
   column-gap: var(--fishmark-side-panel-gap);
+  transition: grid-template-columns 220ms var(--fishmark-ease-standard);
 }
 
 .workspace-canvas[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] .workspace-shell {
@@ -900,17 +903,9 @@
   margin: 0;
 }
 
-.workspace-shell.is-side-panel-open,
-.workspace-shell:has(> .side-panel[data-state="closing"]) {
-  /*
-   * The stored width is the single source of truth for every view container;
-   * it is clamped here for display only, so a narrow window never writes the
-   * clamped value back.
-   */
-  --fishmark-side-panel-width: min(
-    var(--fishmark-side-panel-stored-width, var(--fishmark-side-panel-default-width)),
-    60vw
-  );
+.workspace-shell.is-side-panel-open {
+  /* The track animates, but its children keep the final content width. */
+  --fishmark-side-panel-width: var(--fishmark-side-panel-content-width);
   --fishmark-side-panel-gap: 0px;
 }
 
@@ -1206,6 +1201,12 @@
 .side-panel[data-state="closing"] .side-panel-header,
 .side-panel[data-state="closing"] .side-panel-body {
   animation: side-panel-content-exit 180ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.side-panel-header,
+.side-panel-body {
+  width: var(--fishmark-side-panel-content-width);
+  min-width: var(--fishmark-side-panel-content-width);
 }
 
 .side-panel-header {
@@ -1734,14 +1735,11 @@
     --fishmark-status-bar-inline-padding: var(--fishmark-space-3);
   }
 
-  .workspace-shell.is-side-panel-open {
-    /*
-     * Narrow windows clamp the region for display only, through the same
-     * stored-width variable the drag path writes: the shell keeps the stored
-     * width, so widening the window restores it without a write-back.
-     */
-    --fishmark-side-panel-width: min(
-      var(--fishmark-side-panel-stored-width, var(--fishmark-side-panel-width-default, 248px)),
+  .workspace-shell {
+    /* Narrow windows clamp both the final content width and the animated
+       track target, without writing the clamped value back to preferences. */
+    --fishmark-side-panel-content-width: min(
+      var(--fishmark-side-panel-stored-width, var(--fishmark-side-panel-default-width)),
       44vw
     );
   }
