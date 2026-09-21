@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { createExecutionPlan } from "../../../../fixtures/editor-behavior/execution-plan";
 import { editorBehaviorKnownDefectObservations as historicalDefects } from "../../../../fixtures/editor-behavior/current-observations";
+import { editorBehaviorReObservedKnownDefects } from "../../../../fixtures/editor-behavior/active-calibration";
 import {
   capturedOracleAndProbeCases,
   editorBehaviorCases,
@@ -47,6 +48,18 @@ function observationsFor(
   }));
 }
 
+function defectTargetKey(entry: {
+  readonly caseId: string;
+  readonly checkpoint: string;
+  readonly aspect: string;
+}): string {
+  return `${entry.caseId}:${entry.checkpoint}:${entry.aspect}`;
+}
+
+function describeSelection(observed: { readonly anchor: number; readonly head: number }): string {
+  return `{anchor:${observed.anchor},head:${observed.head}}`;
+}
+
 describe("compareEditorBehaviorObservations", () => {
   it("persists complete canonical runner coverage with exact defect targets", () => {
     const defectKeys = new Set(
@@ -58,9 +71,47 @@ describe("compareEditorBehaviorObservations", () => {
     expect(editorBehaviorRunnerVerifiedTargets).toHaveLength(2_434);
     expect(editorBehaviorRunnerCalibration).not.toHaveProperty("pendingTargets");
     expect(editorBehaviorRunnerCalibration.runId).toBe("d46d7078-8ac3-4cf3-9a0f-0ac89953a320");
+    const historicalByKey = new Map(historicalDefects.map((entry) => [defectTargetKey(entry), entry]));
+    const reObservedByKey = new Map(
+      editorBehaviorReObservedKnownDefects.map((entry) => [defectTargetKey(entry), entry])
+    );
+    expect(editorBehaviorReObservedKnownDefects).toHaveLength(4);
+    expect(reObservedByKey.size).toBe(editorBehaviorReObservedKnownDefects.length);
+    const identicalToHistory: string[] = [];
     for (const retained of editorBehaviorKnownDefectObservations) {
-      const historical = historicalDefects.find((entry) => entry.caseId === retained.caseId && entry.checkpoint === retained.checkpoint && entry.aspect === retained.aspect);
-      expect(retained).toBe(historical);
+      const key = defectTargetKey(retained);
+      const historical = historicalByKey.get(key);
+      // Every retained target still needs an immutable RF-001 historical record.
+      expect(historical, key).toBeDefined();
+      const reObserved = reObservedByKey.get(key);
+      if (!reObserved) {
+        // The 103 untouched retained targets stay identical historical objects.
+        expect(retained).toBe(historical);
+        identicalToHistory.push(key);
+        continue;
+      }
+      // The 4 explicitly re-observed targets must be exactly the declared entries, must not be the
+      // historical objects, must carry the re-observed exact value, and must name in their reason
+      // the historical value they supersede.
+      expect(retained).toBe(reObserved);
+      expect(retained).not.toBe(historical);
+      expect(retained.observed).toEqual(reObserved.observed);
+      expect(retained.observed).not.toEqual(historical!.observed);
+      expect(retained.reason.trim()).not.toBe("");
+      expect(historical!.aspect).toBe("selection");
+      if (historical!.aspect === "selection") {
+        expect(retained.reason).toContain(describeSelection(historical!.observed));
+      }
+    }
+    expect(identicalToHistory).toHaveLength(103);
+    // The re-observed keys are exactly the declared set: no other retained entry may deviate from
+    // its historical identity, and every declared key must be a retained key.
+    const deviatingKeys = editorBehaviorKnownDefectObservations
+      .filter((retained) => retained !== historicalByKey.get(defectTargetKey(retained)))
+      .map(defectTargetKey);
+    expect(new Set(deviatingKeys)).toEqual(new Set(reObservedByKey.keys()));
+    for (const key of reObservedByKey.keys()) {
+      expect(defectKeys.has(key), key).toBe(true);
     }
     expect(defectKeys.size).toBe(editorBehaviorKnownDefectObservations.length);
 

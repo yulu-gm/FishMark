@@ -34,6 +34,13 @@ export type UiPreferences = {
   fontFamily: string | null;
   /** Font size in pixels, or `null` to use the theme default. */
   fontSize: number | null;
+  /**
+   * Width in CSS pixels of the shared workspace side panel (the region that
+   * hosts the Search and Outline view containers), or `null` to use
+   * {@link SIDE_PANEL_WIDTH_DEFAULT}. One value is shared by every view
+   * container; a collapsed panel never overwrites it with `0`.
+   */
+  sidePanelWidth: number | null;
 };
 
 export type DocumentPreferences = {
@@ -106,7 +113,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   },
   ui: {
     fontFamily: null,
-    fontSize: null
+    fontSize: null,
+    sidePanelWidth: null
   },
   document: {
     fontFamily: null,
@@ -132,6 +140,18 @@ const RECENT_FILES_MAX = 100;
 
 const FONT_SIZE_MIN = 8;
 const FONT_SIZE_MAX = 72;
+
+/**
+ * The shared side panel (Search / Outline) keeps one width for every view
+ * container. The stored value is expressed in CSS pixels and clamped to
+ * {@link SIDE_PANEL_WIDTH_MIN}..{@link SIDE_PANEL_WIDTH_MAX}; narrower windows
+ * clamp it for display only and never write the clamped value back.
+ */
+export const SIDE_PANEL_WIDTH_MIN = 160;
+export const SIDE_PANEL_WIDTH_MAX = 480;
+export const SIDE_PANEL_WIDTH_DEFAULT = 248;
+/** Upper bound relative to the space available for the panel, as a fraction. */
+export const SIDE_PANEL_WIDTH_MAX_VIEWPORT_FRACTION = 0.6;
 
 const THEME_MODES: readonly ThemeMode[] = ["system", "light", "dark"];
 const THEME_EFFECTS_MODES: readonly ThemeEffectsMode[] = ["auto", "full", "off"];
@@ -180,6 +200,49 @@ function normalizeFontSize(value: unknown): number | null {
   }
 
   return clampInteger(value, FONT_SIZE_MIN, FONT_SIZE_MAX);
+}
+
+function normalizeSidePanelWidth(value: unknown): number | null {
+  if (value === null) {
+    return null;
+  }
+
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+
+  return clampInteger(value, SIDE_PANEL_WIDTH_MIN, SIDE_PANEL_WIDTH_MAX);
+}
+
+/**
+ * Clamp a side panel width for a given amount of space.
+ *
+ * `availableWidth` is the space the panel column can occupy (the workspace
+ * stage minus the panel gap); the result never exceeds
+ * {@link SIDE_PANEL_WIDTH_MAX_VIEWPORT_FRACTION} of it. Pass `null` when the
+ * space cannot be measured — then only the absolute bounds apply. The result is
+ * always within {@link SIDE_PANEL_WIDTH_MIN}..{@link SIDE_PANEL_WIDTH_MAX}, so
+ * callers can persist it directly; clamping for display must not be written
+ * back.
+ */
+export function clampSidePanelWidth(
+  width: number,
+  availableWidth: number | null = null
+): number {
+  const absolute = Number.isFinite(width)
+    ? clampInteger(width, SIDE_PANEL_WIDTH_MIN, SIDE_PANEL_WIDTH_MAX)
+    : SIDE_PANEL_WIDTH_MIN;
+
+  if (availableWidth === null || !Number.isFinite(availableWidth) || availableWidth <= 0) {
+    return absolute;
+  }
+
+  const sharedMaximum = Math.max(
+    SIDE_PANEL_WIDTH_MIN,
+    Math.min(SIDE_PANEL_WIDTH_MAX, availableWidth * SIDE_PANEL_WIDTH_MAX_VIEWPORT_FRACTION)
+  );
+
+  return Math.min(absolute, Math.round(sharedMaximum));
 }
 
 function isAbsoluteFilesystemPath(value: string): boolean {
@@ -309,7 +372,8 @@ export function normalizePreferences(raw: unknown): Preferences {
     },
     ui: {
       fontFamily: normalizeFontFamily(uiSource.fontFamily),
-      fontSize: normalizeFontSize(uiSource.fontSize)
+      fontSize: normalizeFontSize(uiSource.fontSize),
+      sidePanelWidth: normalizeSidePanelWidth(uiSource.sidePanelWidth)
     },
     document: {
       fontFamily: normalizeFontFamily(documentSource.fontFamily),

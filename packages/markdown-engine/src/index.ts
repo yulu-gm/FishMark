@@ -46,6 +46,7 @@ export {
   type MarkdownContainerKind,
   type MarkdownContainerNode,
   type MarkdownHeadingData,
+  type MarkdownDefinitionData,
   type MarkdownLeafKind,
   type MarkdownLeafNode,
   type MarkdownListData,

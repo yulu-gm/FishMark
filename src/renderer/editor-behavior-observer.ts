@@ -1,6 +1,6 @@
 import type { EditorView } from "@codemirror/view";
 
-import { getMarkdownEditorViewMode } from "@fishmark/editor-core";
+import { getMarkdownEditorViewMode } from "@fishmark/codemirror-adapter";
 import { readEditorStructureCache } from "@fishmark/codemirror-adapter";
 import { createEditorDerivedSnapshotFromCache, type EditorDerivedSnapshot, type PhysicalLine } from "@fishmark/editor-model";
 import { childrenOf, createDocumentStructureCache, type MarkdownNode } from "@fishmark/markdown-engine";

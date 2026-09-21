@@ -24,14 +24,14 @@
     {
       "name": "open",
       "counters": {
-        "fullParse": 4,
+        "fullParse": 2,
         "incrementalParseWindow": 0,
         "cacheHit": 0,
         "invalidatedNodes": 0,
         "decorationRebuild": 1
       },
       "parserEntries": {
-        "parseMarkdownDocument": 1,
+        "parseMarkdownDocument": 0,
         "parseOrderedListNormalization": 0
       },
       "capabilityRefs": [
@@ -45,7 +45,7 @@
         "fullParse": 2,
         "incrementalParseWindow": 0,
         "cacheHit": 1,
-        "invalidatedNodes": 19501,
+        "invalidatedNodes": 20501,
         "decorationRebuild": 1
       },
       "parserEntries": {
@@ -81,7 +81,7 @@
         "fullParse": 2,
         "incrementalParseWindow": 0,
         "cacheHit": 1,
-        "invalidatedNodes": 19501,
+        "invalidatedNodes": 20501,
         "decorationRebuild": 1
       },
       "parserEntries": {
@@ -103,7 +103,7 @@
         "decorationRebuild": 0
       },
       "parserEntries": {
-        "parseMarkdownDocument": 1,
+        "parseMarkdownDocument": 0,
         "parseOrderedListNormalization": 0
       },
       "capabilityRefs": [

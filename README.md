@@ -56,7 +56,9 @@ npm run package:win         # 打包 Windows 安装产物
 - `src/main/`：Electron main 进程、菜单、窗口与文件系统入口
 - `src/preload/`：受限 bridge 和 IPC 暴露
 - `src/renderer/`：React UI、编辑器视图、测试工作台界面
-- `packages/editor-core/`：编辑器状态与纯逻辑
+- `packages/editor-model/`：纯语义编辑引擎（规划器、物理行/语义行与派生快照；无 DOM / CodeMirror）
+- `packages/markdown-presentation/`：编辑器与 HTML 导出共享的语义 render plan
+- `packages/codemirror-adapter/`：薄 CodeMirror 适配器（事务/历史/IME/装饰/widget/交互，不含 Markdown 业务规则）
 - `packages/markdown-engine/`：Markdown 解析与 block map
 - `packages/workspace-domain/`：runtime-neutral workspace/window/tab/document session canonical state；消费者只使用 package public entry
 - `packages/test-harness/`：场景注册表、CLI 与测试运行基础设施

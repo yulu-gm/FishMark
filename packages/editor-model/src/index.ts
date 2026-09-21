@@ -36,6 +36,23 @@ export {
   type TableCursor
 } from "./derived/editor-derived-snapshot";
 export {
+  createEditorDerivedState,
+  type CreateEditorDerivedStateOptions,
+  type EditorDerivedState,
+  type EditorOutlineHeading
+} from "./derived/editor-derived-state";
+export {
+  createActiveBlockState,
+  type ActiveBlockSelection,
+  type ActiveBlockState
+} from "./active/active-block";
+export {
+  deriveTableCursorState,
+  isInsideTableCursor,
+  type TableCursorMode,
+  type TableCursorState
+} from "./active/table-cursor-state";
+export {
   assertPlanAppliesToRevision,
   createEditTransactionPlan,
   createEditorCommandRegistry,
@@ -142,4 +159,79 @@ export {
   type ListMovePlanKind
 } from "./commands/list-move";
 export { planNormalizeOrderedListScopes } from "./commands/ordered-list";
+
+// Semantic line layer: pairs the canonical PhysicalLine geometry with the roles resolved from the
+// canonical tree, plus the pure source/line helpers the interaction layer reads.
+export {
+  createCanonicalSemanticLineRoles,
+  type SemanticLineInput,
+  type SemanticLineRole
+} from "./semantic-lines/canonical-semantic-lines";
+export {
+  createSemanticEditingDocument,
+  type EditingLine,
+  type EditingLineKind,
+  type SemanticEditingDocument,
+  type SemanticLine,
+  type SemanticLineMap
+} from "./semantic-lines/semantic-editing-document";
+export {
+  findCanonicalBlockquoteStructuralSeparatorAt,
+  findCanonicalPreviousBlockquoteStructuralSeparator,
+  type BlockquoteStructuralSeparator
+} from "./semantic-lines/blockquote-structural-separators";
+export {
+  createStructuralLineModel,
+  resolveStructuralLineDeleteRange,
+  type StructuralLineModel,
+  type StructuralLineRole,
+  type StructuralLineSeparator
+} from "./semantic-lines/structural-line-model";
+export {
+  anchorForVisibleLineColumn,
+  createVisibleLine,
+  normalizeHiddenLineSelectionAnchor,
+  normalizeHiddenSelectionAnchor,
+  normalizeStructuralBlankSelectionAnchor,
+  visibleLineColumn,
+  type LineVisibilityParams,
+  type VisibleLine
+} from "./semantic-lines/line-visibility";
+export {
+  normalizeHiddenInlineAnchor,
+  normalizeHiddenInlineSelectionAnchor,
+  resolveVisibleInlineStartAnchor
+} from "./semantic-lines/hidden-markers";
+export {
+  createLineInfosInRange,
+  resolveLineStartOffset,
+  trimTrailingCarriageReturn,
+  type SourceLineInfo
+} from "./semantic-lines/source-utils";
+export { nodeRequiresLeadingStructuralSeparator } from "./semantic-lines/structural-blank-lines";
+export {
+  getBlockLineInfos,
+  getInactiveBlockquoteLines,
+  getInactiveCodeFenceLines,
+  type BlockLineInfo,
+  type InactiveBlockquoteLine,
+  type InactiveCodeFenceLine
+} from "./semantic-lines/block-lines";
+export {
+  buildContinuationPrefix,
+  getBackspaceLineStart,
+  getCodeFenceEditableAnchor,
+  parseBlockquoteLine,
+  parseCodeFenceLine,
+  parseListLine,
+  type ParsedBlockquoteLine,
+  type ParsedListLine
+} from "./semantic-lines/line-parsers";
+export {
+  countMarkdownLines,
+  createLongMarkdownFixture,
+  type LongMarkdownFixture,
+  type LongMarkdownFixtureInput,
+  type LongMarkdownFixtureKind
+} from "./performance/long-document-fixtures";
 

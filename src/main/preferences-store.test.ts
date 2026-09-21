@@ -86,7 +86,7 @@ describe("loadPreferencesFromDisk", () => {
       version: PREFERENCES_SCHEMA_VERSION,
       autosave: { idleDelayMs: 2500 },
       recentFiles: { maxEntries: 20 },
-      ui: { fontFamily: null, fontSize: 18 },
+      ui: { fontFamily: null, fontSize: 18, sidePanelWidth: null },
       document: { fontFamily: "Fira Code", cjkFontFamily: "Source Han Sans SC", fontSize: 16 },
       images: DEFAULT_PREFERENCES.images,
       theme: { mode: "dark", selectedId: "graphite", effectsMode: "auto", parameters: {} }

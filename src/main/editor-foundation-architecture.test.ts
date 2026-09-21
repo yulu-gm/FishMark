@@ -125,10 +125,10 @@ describe("editor foundation architecture guard", () => {
       "packages/markdown-engine/src/parse-markdown-document.ts",
       "packages/markdown-engine/src/parse/document-projection.ts",
       "packages/markdown-engine/src/parse/full-document-parser.ts",
-      "packages/editor-core/src/active-block.ts",
+      "packages/editor-model/src/active/active-block.ts",
       "packages/editor-model/src/commands/ordered-list.ts",
-      "packages/editor-core/src/extensions/markdown.ts",
-      "packages/editor-core/src/performance/editor-performance-probe.ts"
+      "packages/codemirror-adapter/src/extensions/markdown.ts",
+      "packages/codemirror-adapter/src/performance/editor-performance-probe.ts"
     ];
 
     expect(existsSync(resolve(process.cwd(), "packages/markdown-engine/src/parse-block-map.ts"))).toBe(false);
@@ -236,7 +236,7 @@ describe("editor foundation architecture guard", () => {
           "src/preload",
           "src/renderer",
           "src/shared",
-          "packages/editor-core",
+          "packages/editor-model",
           "packages/markdown-engine",
           "packages/workspace-infrastructure"
         ],
@@ -628,7 +628,7 @@ describe("editor foundation architecture guard", () => {
           "src/preload",
           "src/renderer",
           "src/shared",
-          "packages/editor-core",
+          "packages/editor-model",
           "packages/markdown-engine",
           "packages/workspace-application"
         ],
@@ -703,7 +703,7 @@ describe("editor foundation architecture guard", () => {
     ["preload source", 'import "../../../src/preload/preload";'],
     ["renderer source", 'import "../../../src/renderer/code-editor";'],
     ["shared source", 'import "../../../src/shared/workspace";'],
-    ["editor-core package", 'import "@fishmark/editor-core";'],
+    ["codemirror-adapter package", 'import "@fishmark/editor-model";'],
     ["markdown-engine package", 'import "@fishmark/markdown-engine";'],
     ["workspace-application package", 'import "@fishmark/workspace-application";']
   ])("rejects a workspace-infrastructure import of %s", (_name, source) => {
@@ -789,7 +789,7 @@ describe("editor foundation architecture guard", () => {
         "src/preload",
         "src/renderer",
         "src/shared",
-        "packages/editor-core",
+        "packages/editor-model",
         "packages/markdown-engine",
         "packages/workspace-infrastructure"
       ]
@@ -816,11 +816,11 @@ describe("editor foundation architecture guard", () => {
       'import type { Text } from "@codemirror/state"; export type Forbidden = Text;'
     ],
     [
-      "markdown-engine editor-core",
+      "markdown-engine workspace-domain",
       "packages/markdown-engine/src/forbidden.ts",
-      'import { editorCore } from "@fishmark/editor-core"; void editorCore;'
+      'import { workspaceDomain } from "@fishmark/workspace-domain"; void workspaceDomain;'
     ],
-    ["editor-core", "packages/editor-core/src/forbidden.ts", 'import { app } from "electron";'],
+    ["codemirror-adapter", "packages/codemirror-adapter/src/forbidden.ts", 'import { app } from "electron";'],
     ["renderer", "src/renderer/forbidden.ts", 'import "../main/secret";'],
     ["preload", "src/preload/forbidden.ts", 'import "../renderer/secret";'],
     ["main", "src/main/forbidden.ts", 'import "../preload/secret";']
@@ -831,7 +831,7 @@ describe("editor foundation architecture guard", () => {
   });
 
   it("allows only the exact registered CodeMirror importer/specifier debt", () => {
-    const importer = "packages/editor-core/src/codemirror-current.ts";
+    const importer = "packages/codemirror-adapter/src/codemirror-current.ts";
     const specifier = "@codemirror/state";
     const repository = createSyntheticRepository({
       [importer]: `import type { Text } from "${specifier}"; export type CurrentText = Text;`
@@ -843,7 +843,7 @@ describe("editor foundation architecture guard", () => {
   });
 
   it("rejects a new CodeMirror package from an otherwise excepted importer", () => {
-    const importer = "packages/editor-core/src/codemirror-current.ts";
+    const importer = "packages/codemirror-adapter/src/codemirror-current.ts";
     const repository = createSyntheticRepository({
       [importer]: [
         'import type { Text } from "@codemirror/state";',
@@ -858,10 +858,10 @@ describe("editor foundation architecture guard", () => {
   });
 
   it("rejects an excepted CodeMirror package from a new importer", () => {
-    const allowedImporter = "packages/editor-core/src/codemirror-current.ts";
+    const allowedImporter = "packages/codemirror-adapter/src/codemirror-current.ts";
     const repository = createSyntheticRepository({
       [allowedImporter]: 'import type { Text } from "@codemirror/state"; export type CurrentText = Text;',
-      "packages/editor-core/src/codemirror-new.ts":
+      "packages/codemirror-adapter/src/codemirror-new.ts":
         'import type { Text } from "@codemirror/state"; export type NewText = Text;'
     });
     const manifest = readSyntheticManifest(repository);
@@ -873,22 +873,22 @@ describe("editor foundation architecture guard", () => {
   });
 
   it("rejects wildcard CodeMirror debt declarations", () => {
-    const importer = "packages/editor-core/src/codemirror-current.ts";
+    const importer = "packages/codemirror-adapter/src/codemirror-current.ts";
     const repository = createSyntheticRepository({
       [importer]: 'import type { Text } from "@codemirror/state"; export type CurrentText = Text;'
     });
     const manifest = readSyntheticManifest(repository);
-    const editorCoreRule = findRule(manifest, "boundary.editor-core");
+    const editorCoreRule = findRule(manifest, "boundary.codemirror-adapter");
     editorCoreRule.temporaryAllowedPackages = [
       {
-        id: "allowance.synthetic-editor-core-codemirror",
+        id: "allowance.synthetic-codemirror-adapter-codemirror",
         owner: "editor-foundation-refactor",
         package: "@codemirror/*",
         reason: "A wildcard must never suppress CodeMirror debt.",
         retireIn: "RF-604"
       }
     ];
-    manifest.exceptions = [createCodeMirrorException({ importer: "packages/editor-core/src/*.ts" })];
+    manifest.exceptions = [createCodeMirrorException({ importer: "packages/codemirror-adapter/src/*.ts" })];
 
     expect(expectCodes(validateSynthetic(repository, manifest))).toEqual(
       expect.arrayContaining(["forbidden-import", "invalid-exception", "unknown-rule-field"])
@@ -896,7 +896,7 @@ describe("editor foundation architecture guard", () => {
   });
 
   it("rejects a stale exact CodeMirror exception", () => {
-    const importer = "packages/editor-core/src/codemirror-current.ts";
+    const importer = "packages/codemirror-adapter/src/codemirror-current.ts";
     const repository = createSyntheticRepository({
       [importer]: "export const clean = true;"
     });
@@ -908,7 +908,12 @@ describe("editor foundation architecture guard", () => {
 
   it("keeps the canonical CodeMirror debt equal to scanner evidence", () => {
     const manifest = readCanonicalManifest();
-    const actualTargets = collectSourceFiles(process.cwd(), "packages/editor-core")
+    // editor-core is gone, so the adapter is now the only package that owns CodeMirror imports. Its
+    // boundary rule deliberately permits CodeMirror directly, which is why the canonical manifest must
+    // declare zero CodeMirror exceptions: any entry here would be stale debt the scanner cannot match.
+    const adapterRule = findRule(manifest, "boundary.codemirror-adapter");
+    expect(adapterRule.forbiddenPackages).not.toContain("@codemirror/*");
+    const actualTargets = collectSourceFiles(process.cwd(), "packages/codemirror-adapter")
       .flatMap((importer) =>
         analyzeSourceModule(process.cwd(), importer).imports
           .filter(({ specifier }) => specifier.startsWith("@codemirror/"))
@@ -917,11 +922,20 @@ describe("editor foundation architecture guard", () => {
       .filter((target, index, targets) => targets.indexOf(target) === index)
       .sort();
     const declaredTargets = (manifest.exceptions as MutableRecord[])
-      .filter((exception) => exception.ruleId === "boundary.editor-core")
+      .filter((exception) => exception.ruleId === "boundary.codemirror-adapter")
       .map((exception) => `${String(exception.importer)}|${String(exception.specifier)}`)
       .sort();
 
-    expect(declaredTargets).toEqual(actualTargets);
+    // The scanner must still see real CodeMirror ownership, otherwise this guard would pass
+    // vacuously after the editor-core deletion.
+    expect(actualTargets.length).toBeGreaterThan(0);
+    // Every scanned target is owned by the adapter rule itself, so the package entry that owned the
+    // retired debt must be gone and nothing may re-declare it as an exception.
+    expect(manifest.packages).not.toContainEqual(
+      expect.objectContaining({ publicEntry: "@fishmark/editor-core" })
+    );
+    expect(manifest.exceptions).toEqual([]);
+    expect(declaredTargets).toEqual([]);
   });
 
   it.each([
@@ -956,7 +970,7 @@ describe("editor foundation architecture guard", () => {
     [
       "public-entry packages path that is a file",
       (manifest: MutableRecord) => {
-        findRule(manifest, "boundary.public-package-entries").packagesPath = "packages/editor-core/src/index.ts";
+        findRule(manifest, "boundary.public-package-entries").packagesPath = "packages/codemirror-adapter/src/index.ts";
       },
       "active-rule-path-not-directory"
     ]
@@ -972,22 +986,22 @@ describe("editor foundation architecture guard", () => {
     [
       "a public-entry rule",
       (manifest: MutableRecord) => {
-        findPackage(manifest, "editor-core").boundaryRuleId = "boundary.public-package-entries";
+        findPackage(manifest, "codemirror-adapter").boundaryRuleId = "boundary.public-package-entries";
       },
       "package-boundary-rule-wrong-kind"
     ],
     [
       "a forbidden-import rule for another source path",
       (manifest: MutableRecord) => {
-        findPackage(manifest, "editor-core").boundaryRuleId = "boundary.markdown-engine";
+        findPackage(manifest, "codemirror-adapter").boundaryRuleId = "boundary.markdown-engine";
       },
       "package-boundary-rule-source-mismatch"
     ],
     [
       "a forbidden-import rule claimed by two packages",
       (manifest: MutableRecord) => {
-        findPackage(manifest, "editor-core").boundaryRuleId = "boundary.markdown-engine";
-        findPackage(manifest, "editor-core").path = "packages/markdown-engine";
+        findPackage(manifest, "codemirror-adapter").boundaryRuleId = "boundary.markdown-engine";
+        findPackage(manifest, "codemirror-adapter").path = "packages/markdown-engine";
       },
       "package-boundary-rule-reused"
     ]
@@ -1000,19 +1014,19 @@ describe("editor foundation architecture guard", () => {
   });
 
   it("rejects a second active forbidden-import rule for the same active package path", () => {
-    const importer = "packages/editor-core/src/codemirror-current.ts";
+    const importer = "packages/codemirror-adapter/src/codemirror-current.ts";
     const repository = createSyntheticRepository({
       [importer]: 'import type { Text } from "@codemirror/state"; export type CurrentText = Text;'
     });
     const manifest = readSyntheticManifest(repository);
-    const duplicateRule = structuredClone(findRule(manifest, "boundary.editor-core"));
-    duplicateRule.id = "boundary.editor-core-shadow";
+    const duplicateRule = structuredClone(findRule(manifest, "boundary.codemirror-adapter"));
+    duplicateRule.id = "boundary.codemirror-adapter-shadow";
     (manifest.rules as MutableRecord[]).push(duplicateRule);
     manifest.exceptions = [
       createCodeMirrorException(),
       createCodeMirrorException({
-        id: "exception.synthetic-editor-core-codemirror-shadow",
-        ruleId: "boundary.editor-core-shadow"
+        id: "exception.synthetic-codemirror-adapter-codemirror-shadow",
+        ruleId: "boundary.codemirror-adapter-shadow"
       })
     ];
 
@@ -1022,26 +1036,26 @@ describe("editor foundation architecture guard", () => {
   });
 
   it.each([
-    ["dot segment", "packages/editor-core/."],
-    ["parent segment", "packages/markdown-engine/../editor-core"],
-    ["repeated separators", "packages//editor-core"],
-    ["backslashes", "packages\\editor-core\\."],
-    ["case and segment combination", "Packages\\markdown-engine\\..\\EDITOR-core\\."]
+    ["dot segment", "packages/codemirror-adapter/."],
+    ["parent segment", "packages/markdown-engine/../codemirror-adapter"],
+    ["repeated separators", "packages//codemirror-adapter"],
+    ["backslashes", "packages\\codemirror-adapter\\."],
+    ["case and segment combination", "Packages\\markdown-engine\\..\\CODEMIRROR-adapter\\."]
   ])("rejects a second active rule using a canonical %s alias", (_name, sourcePath) => {
-    const importer = "packages/editor-core/src/codemirror-current.ts";
+    const importer = "packages/codemirror-adapter/src/codemirror-current.ts";
     const repository = createSyntheticRepository({
       [importer]: 'import type { Text } from "@codemirror/state"; export type CurrentText = Text;'
     });
     const manifest = readSyntheticManifest(repository);
-    const duplicateRule = structuredClone(findRule(manifest, "boundary.editor-core"));
-    duplicateRule.id = "boundary.editor-core-shadow";
+    const duplicateRule = structuredClone(findRule(manifest, "boundary.codemirror-adapter"));
+    duplicateRule.id = "boundary.codemirror-adapter-shadow";
     duplicateRule.sourcePath = sourcePath;
     (manifest.rules as MutableRecord[]).push(duplicateRule);
     manifest.exceptions = [
       createCodeMirrorException(),
       createCodeMirrorException({
-        id: "exception.synthetic-editor-core-codemirror-shadow",
-        ruleId: "boundary.editor-core-shadow"
+        id: "exception.synthetic-codemirror-adapter-codemirror-shadow",
+        ruleId: "boundary.codemirror-adapter-shadow"
       })
     ];
 
@@ -1051,14 +1065,14 @@ describe("editor foundation architecture guard", () => {
   });
 
   it("accepts package and rule paths that resolve to the same normalized directory", () => {
-    const importer = "packages/editor-core/src/codemirror-current.ts";
+    const importer = "packages/codemirror-adapter/src/codemirror-current.ts";
     const repository = createSyntheticRepository({
       [importer]: 'import type { Text } from "@codemirror/state"; export type CurrentText = Text;'
     });
     const manifest = readSyntheticManifest(repository);
-    findPackage(manifest, "editor-core").path = "packages/editor-core/.";
-    findRule(manifest, "boundary.editor-core").sourcePath =
-      "packages/markdown-engine/../editor-core";
+    findPackage(manifest, "codemirror-adapter").path = "packages/codemirror-adapter/.";
+    findRule(manifest, "boundary.codemirror-adapter").sourcePath =
+      "packages/markdown-engine/../codemirror-adapter";
     manifest.exceptions = [createCodeMirrorException()];
 
     expect(validateSynthetic(repository, manifest)).toEqual({ findings: [], ok: true });
@@ -1091,7 +1105,7 @@ describe("editor foundation architecture guard", () => {
   });
 
   it("does not let a case-variant specifier reuse an exact exception", () => {
-    const importer = "packages/editor-core/src/codemirror-current.ts";
+    const importer = "packages/codemirror-adapter/src/codemirror-current.ts";
     const repository = createSyntheticRepository({
       [importer]: 'import type { Text } from "@CodeMirror/state"; export type CurrentText = Text;'
     });
@@ -1109,7 +1123,7 @@ describe("editor foundation architecture guard", () => {
     });
     const manifest = readSyntheticManifest(repository);
     findPackage(manifest, "editor-model").state = "active";
-    findPackage(manifest, "editor-model").boundaryRuleId = "boundary.editor-core";
+    findPackage(manifest, "editor-model").boundaryRuleId = "boundary.codemirror-adapter";
 
     expect(expectCodes(validateSynthetic(repository, manifest))).toEqual(
       expect.arrayContaining([
@@ -1338,7 +1352,7 @@ describe("editor foundation architecture guard", () => {
     ["preload import-equals", "src/preload/import-equals.ts", 'import secret = require("../renderer/secret"); void secret;'],
     ["renderer require", "src/renderer/require.ts", 'require("../main/secret");'],
     ["markdown-engine require", "packages/markdown-engine/src/require.ts", 'require("react");'],
-    ["editor-core import-equals", "packages/editor-core/src/import-equals.ts", 'import electron = require("electron"); void electron;']
+    ["codemirror-adapter import-equals", "packages/codemirror-adapter/src/import-equals.ts", 'import electron = require("electron"); void electron;']
   ])("detects forbidden %s syntax", (_name, path, source) => {
     const repository = createSyntheticRepository({ [path]: source });
 
@@ -1601,7 +1615,7 @@ describe("editor foundation architecture guard", () => {
       "an id duplicated outside bundle policy",
       (manifest: MutableRecord) => {
         ((manifest.bundlePolicy as MutableRecord).checks as MutableRecord[])[0]!.id =
-          "boundary.editor-core";
+          "boundary.codemirror-adapter";
       },
       "duplicate-id"
     ]
@@ -2044,7 +2058,7 @@ describe("editor foundation architecture guard", () => {
 
   it.each([
     "src/renderer/direct-micromark.ts",
-    "packages/editor-core/src/direct-micromark.ts"
+    "packages/codemirror-adapter/src/direct-micromark.ts"
   ])("rejects a direct micromark document parse outside markdown-engine at %s", (path) => {
     const repository = createSyntheticRepository({
       [path]: [
@@ -2126,7 +2140,7 @@ function createSyntheticRepository(overrides: Record<string, string> = {}): stri
 
   const files: Record<string, string> = {
     "docs/refactor/editor-foundation/roadmap.md": ["#### RF-405: Parser hard cutover", "#### RF-604: Adapter hard cutover"].join("\n"),
-    "packages/editor-core/src/index.ts": "export const editorCore = true;",
+    "packages/codemirror-adapter/src/index.ts": "export const fishmarkCodemirrorAdapter = true;",
     "packages/markdown-engine/src/index.ts": syntheticPublicParserExports,
     "packages/markdown-engine/src/parse-block-map.ts": [
       'import { parse } from "micromark";',
@@ -2177,11 +2191,11 @@ function createSyntheticManifest(): MutableRecord {
         boundaryRuleId: "boundary.markdown-engine"
       },
       {
-        id: "editor-core",
-        path: "packages/editor-core",
-        publicEntry: "@fishmark/editor-core",
+        id: "codemirror-adapter",
+        path: "packages/codemirror-adapter",
+        publicEntry: "@fishmark/codemirror-adapter",
         state: "active",
-        boundaryRuleId: "boundary.editor-core"
+        boundaryRuleId: "boundary.codemirror-adapter"
       },
       {
         id: "workspace-domain",
@@ -2204,14 +2218,14 @@ function createSyntheticManifest(): MutableRecord {
         kind: "forbidden-imports",
         state: "active",
         sourcePath: "packages/markdown-engine",
-        forbiddenPackages: ["react", "react-dom", "electron", "@codemirror/*", "@fishmark/editor-core"],
-        forbiddenPaths: ["src/main", "src/preload", "src/renderer", "packages/editor-core"]
+        forbiddenPackages: ["react", "react-dom", "electron", "@codemirror/*", "@fishmark/workspace-domain"],
+        forbiddenPaths: ["src/main", "src/preload", "src/renderer", "packages/workspace-domain"]
       },
       {
-        id: "boundary.editor-core",
+        id: "boundary.codemirror-adapter",
         kind: "forbidden-imports",
         state: "active",
-        sourcePath: "packages/editor-core",
+        sourcePath: "packages/codemirror-adapter",
         forbiddenPackages: ["react", "react-dom", "electron", "@codemirror/*"],
         forbiddenPaths: ["src/main", "src/preload", "src/renderer"]
       },
@@ -2225,7 +2239,7 @@ function createSyntheticManifest(): MutableRecord {
           "src/main",
           "src/preload",
           "src/renderer",
-          "packages/editor-core",
+          "packages/editor-model",
           "packages/workspace-application",
           "packages/workspace-infrastructure"
         ]
@@ -2351,7 +2365,7 @@ function activateSyntheticWorkspaceInfrastructure(manifest: MutableRecord): void
       "src/preload",
       "src/renderer",
       "src/shared",
-      "packages/editor-core",
+      "packages/editor-model",
       "packages/markdown-engine",
       "packages/workspace-application"
     ]
@@ -2406,12 +2420,12 @@ function createException(overrides: MutableRecord = {}): MutableRecord {
 
 function createCodeMirrorException(overrides: MutableRecord = {}): MutableRecord {
   return {
-    id: "exception.synthetic-editor-core-codemirror",
-    importer: "packages/editor-core/src/codemirror-current.ts",
+    id: "exception.synthetic-codemirror-adapter-codemirror",
+    importer: "packages/codemirror-adapter/src/codemirror-current.ts",
     owner: "editor-foundation-refactor",
     reason: "Synthetic exact CodeMirror debt until the adapter cutover.",
     retireIn: "RF-604",
-    ruleId: "boundary.editor-core",
+    ruleId: "boundary.codemirror-adapter",
     specifier: "@codemirror/state",
     ...overrides
   };

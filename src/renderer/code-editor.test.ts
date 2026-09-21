@@ -599,7 +599,7 @@ describe("createCodeEditorController", () => {
       initialContent: source,
       onChange: vi.fn(),
       onActiveBlockChange: (state) => {
-        activeBlockTypes.push(state.activeBlock?.type ?? null);
+        activeBlockTypes.push(state.activeKind);
         selectionAnchors.push(state.selection.anchor);
       }
     });
@@ -1974,7 +1974,7 @@ describe("createCodeEditorController", () => {
       initialContent: "",
       onChange: vi.fn(),
       onActiveBlockChange: (state) => {
-        activeBlockTypes.push(state.activeBlock?.type ?? null);
+        activeBlockTypes.push(state.activeKind);
       }
     });
     const advancedController = controller as typeof controller & {
@@ -2028,7 +2028,7 @@ describe("createCodeEditorController", () => {
       initialContent: "",
       onChange: vi.fn(),
       onActiveBlockChange: (state) => {
-        activeBlockTypes.push(state.activeBlock?.type ?? null);
+        activeBlockTypes.push(state.activeKind);
       }
     });
     const advancedController = controller as typeof controller & {
@@ -2072,7 +2072,7 @@ describe("createCodeEditorController", () => {
       initialContent: "> ",
       onChange: vi.fn(),
       onActiveBlockChange: (state) => {
-        activeBlockTypes.push(state.activeBlock?.type ?? null);
+        activeBlockTypes.push(state.activeKind);
       }
     });
     const advancedController = controller as typeof controller & {
@@ -2127,7 +2127,7 @@ describe("createCodeEditorController", () => {
       initialContent: "> ",
       onChange: vi.fn(),
       onActiveBlockChange: (state) => {
-        activeBlockTypes.push(state.activeBlock?.type ?? null);
+        activeBlockTypes.push(state.activeKind);
       }
     });
     const advancedController = controller as typeof controller & {
@@ -6609,7 +6609,7 @@ describe("createCodeEditorController", () => {
       initialContent: source,
       onChange: vi.fn(),
       onActiveBlockChange: (state) => {
-        activeBlockTypes.push(state.activeBlock?.type ?? null);
+        activeBlockTypes.push(state.activeKind);
         selectionAnchors.push(state.selection.anchor);
       }
     });
@@ -6653,7 +6653,7 @@ describe("createCodeEditorController", () => {
       initialContent: source,
       onChange: vi.fn(),
       onActiveBlockChange: (state) => {
-        activeBlockTypes.push(state.activeBlock?.type ?? null);
+        activeBlockTypes.push(state.activeKind);
       }
     });
 
@@ -6695,7 +6695,7 @@ describe("createCodeEditorController", () => {
       initialContent: source,
       onChange: vi.fn(),
       onActiveBlockChange: (state) => {
-        activeBlockTypes.push(state.activeBlock?.type ?? null);
+        activeBlockTypes.push(state.activeKind);
         selectionAnchors.push(state.selection.anchor);
       }
     });
@@ -6738,7 +6738,7 @@ describe("createCodeEditorController", () => {
       initialContent: "# Title",
       onChange: vi.fn(),
       onActiveBlockChange: (state) => {
-        activeBlockTypes.push(state.activeBlock?.type ?? null);
+        activeBlockTypes.push(state.activeKind);
       }
     });
 
@@ -7124,7 +7124,7 @@ describe("createCodeEditorController", () => {
       initialContent: source,
       onChange: vi.fn(),
       onActiveBlockChange: (state) => {
-        activeBlockTypes.push(state.activeBlock?.type ?? null);
+        activeBlockTypes.push(state.activeKind);
       }
     });
 
@@ -7289,7 +7289,7 @@ describe("createCodeEditorController", () => {
       initialContent: source,
       onChange: vi.fn(),
       onActiveBlockChange: (state) => {
-        activeBlockTypes.push(state.activeBlock?.type ?? null);
+        activeBlockTypes.push(state.activeKind);
       }
     });
 
@@ -7582,7 +7582,7 @@ describe("createCodeEditorController", () => {
       initialContent: source,
       onChange: vi.fn(),
       onActiveBlockChange: (state) => {
-        activeBlockTypes.push(state.activeBlock?.type ?? null);
+        activeBlockTypes.push(state.activeKind);
       }
     });
 
@@ -7629,7 +7629,7 @@ describe("createCodeEditorController", () => {
       initialContent: source,
       onChange: vi.fn(),
       onActiveBlockChange: (state) => {
-        activeBlockTypes.push(state.activeBlock?.type ?? null);
+        activeBlockTypes.push(state.activeKind);
       }
     });
 
@@ -7670,7 +7670,7 @@ describe("createCodeEditorController", () => {
       initialContent: source,
       onChange: vi.fn(),
       onActiveBlockChange: (state) => {
-        activeBlockTypes.push(state.activeBlock?.type ?? null);
+        activeBlockTypes.push(state.activeKind);
       }
     });
 
@@ -7783,7 +7783,7 @@ describe("createCodeEditorController", () => {
       initialContent: source,
       onChange: vi.fn(),
       onActiveBlockChange: (state) => {
-        activeBlockTypes.push(state.activeBlock?.type ?? null);
+        activeBlockTypes.push(state.activeKind);
       }
     });
 
@@ -7813,7 +7813,7 @@ describe("createCodeEditorController", () => {
       initialContent: source,
       onChange: vi.fn(),
       onActiveBlockChange: (state) => {
-        activeBlockTypes.push(state.activeBlock?.type ?? null);
+        activeBlockTypes.push(state.activeKind);
       }
     });
 
@@ -7853,7 +7853,7 @@ describe("createCodeEditorController", () => {
       initialContent: source,
       onChange: vi.fn(),
       onActiveBlockChange: (state) => {
-        activeBlockTypes.push(state.activeBlock?.type ?? null);
+        activeBlockTypes.push(state.activeKind);
       }
     });
 
@@ -8011,7 +8011,7 @@ describe("createCodeEditorController", () => {
       initialContent: source,
       onChange: vi.fn(),
       onActiveBlockChange: (state) => {
-        activeBlockTypes.push(state.activeBlock?.type ?? null);
+        activeBlockTypes.push(state.activeKind);
       }
     });
     const view = getEditorView(host);
@@ -8066,7 +8066,7 @@ describe("createCodeEditorController", () => {
       initialContent: source,
       onChange: vi.fn(),
       onActiveBlockChange: (state) => {
-        activeBlockTypes.push(state.activeBlock?.type ?? null);
+        activeBlockTypes.push(state.activeKind);
       }
     });
     const view = getEditorView(host);
@@ -8181,7 +8181,7 @@ describe("createCodeEditorController", () => {
       initialContent: source,
       onChange: vi.fn(),
       onActiveBlockChange: (state) => {
-        activeBlockTypes.push(state.activeBlock?.type ?? null);
+        activeBlockTypes.push(state.activeKind);
       }
     });
     const input = host.querySelector<HTMLInputElement>('[data-table-cell="0:0"]');
@@ -8241,7 +8241,7 @@ describe("createCodeEditorController", () => {
       initialContent: source,
       onChange: vi.fn(),
       onActiveBlockChange: (state) => {
-        activeBlockTypes.push(state.activeBlock?.type ?? null);
+        activeBlockTypes.push(state.activeKind);
       }
     });
     const view = getEditorView(host);
@@ -8641,7 +8641,7 @@ describe("createCodeEditorController", () => {
         initialContent: source,
         onChange: vi.fn(),
         onActiveBlockChange: (state) => {
-          activeBlockTypes.push(state.activeBlock?.type ?? null);
+          activeBlockTypes.push(state.activeKind);
         }
       });
 

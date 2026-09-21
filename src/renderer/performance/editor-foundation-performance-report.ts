@@ -3,7 +3,7 @@ import {
   measureEditorPerformanceProbe,
   type EditorPerformanceCounters,
   type EditorPerformanceParserEntries
-} from "@fishmark/editor-core";
+} from "@fishmark/codemirror-adapter";
 
 import type {
   PerformanceFixtureIdentity,

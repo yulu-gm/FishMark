@@ -61,6 +61,7 @@ type ProbeResult = {
   trailingBlankAfterList: {
     caret: SerializableRect;
     caretLeftMinusParagraphLeft: number;
+    whitespace: SerializableRect;
     line: SerializableRect;
     lineClasses: string;
     linePaddingLeft: string;
@@ -397,6 +398,7 @@ export async function runListGeometryProbe(): Promise<ProbeResult> {
   const trailingBlankAfterList = {
     caret: toSerializableRect(trailingBlankCaret),
     caretLeftMinusParagraphLeft: trailingBlankCaret.left - blockAnchors.paragraph.left,
+    whitespace: firstRangeRect(trailingBlankLine, "   "),
     line: toSerializableRect(trailingBlankLine.getBoundingClientRect()),
     lineClasses: trailingBlankLine.className,
     linePaddingLeft: getComputedStyle(trailingBlankLine).paddingLeft,
@@ -404,13 +406,29 @@ export async function runListGeometryProbe(): Promise<ProbeResult> {
     paragraphAnchor: blockAnchors.paragraph,
     selection: trailingBlankSelection
   };
+  if (trailingBlankController.getContent() !== TRAILING_BLANK_AFTER_LIST_CONTENT) {
+    failures.push("positioning on trailing whitespace must preserve source text");
+  }
   trailingBlankController.destroy();
 
   assertNear(
     failures,
-    "trailing blank after list caret left minus paragraph left",
-    trailingBlankAfterList.caretLeftMinusParagraphLeft
+    "trailing blank after list whitespace begins at paragraph left",
+    trailingBlankAfterList.whitespace.left - blockAnchors.paragraph.left
   );
+  // Spaces are real editable source, with the selection at their end (also
+  // required by the production whitespace input/Backspace contracts). Compare
+  // the caret with independently measured text geometry, not a zero-column
+  // assumption or a captured font-specific pixel value.
+  assertNear(
+    failures,
+    "trailing blank after list caret follows the three source spaces",
+    trailingBlankAfterList.caret.left - trailingBlankAfterList.whitespace.right
+  );
+  if (trailingBlankSelection.anchor !== TRAILING_BLANK_AFTER_LIST_CONTENT.length ||
+      trailingBlankSelection.head !== TRAILING_BLANK_AFTER_LIST_CONTENT.length) {
+    failures.push("trailing blank after list must retain the source-end selection");
+  }
 
   if (/\bcm-(?:active|inactive)-list\b/u.test(trailingBlankAfterList.lineClasses)) {
     failures.push(

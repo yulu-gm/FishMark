@@ -1,12 +1,22 @@
 import { editorBehaviorKnownDefectObservations as historicalDefects } from "./current-observations";
 import { editorBehaviorAspects } from "./model";
 import { rawEditorBehaviorCases } from "./raw-cases";
-import type { EditorBehaviorRunnerCalibration, EditorBehaviorRunnerVerifiedTarget } from "./runner-protocol";
+import type {
+  EditorBehaviorKnownDefectObservation,
+  EditorBehaviorRunnerCalibration,
+  EditorBehaviorRunnerVerifiedTarget
+} from "./runner-protocol";
 
 /**
  * Complete fresh RF-506 Electron calibration: 121 cases, 363 checkpoints, 2541 targets.
  * Run d46d7078-8ac3-4cf3-9a0f-0ac89953a320: 2434 exact verified, 107 unchanged historical defects,
  * zero unexpected, zero not-run. All prior pending contract targets passed exactly.
+ * The active set still retains those 107 defect targets, but it is no longer 107 unchanged
+ * historical objects: 103 are the identical RF-001 historical objects and 4 are explicit,
+ * target-specific re-observations (editorBehaviorReObservedKnownDefects) whose exact current value
+ * moved when RF-602 canonical container-prefix normalization advanced the top-of-document ArrowUp
+ * fallback from the nested marker-prefix offset to the first visible content character (4 / 6).
+ * The desired contract is unchanged in every case, so all 107 remain genuine retained defects.
  * Historical RF-001 values/provenance remain immutable in current-observations.ts.
  */
 const retainedKnownTargetKeys = new Set<string>([
@@ -119,7 +129,111 @@ const retainedKnownTargetKeys = new Set<string>([
   "matrix-arrowdown-path-10:repeat:selection"
 ]);
 const targetKey = (target: EditorBehaviorRunnerVerifiedTarget) => `${target.caseId}:${target.checkpoint}:${target.aspect}`;
-export const editorBehaviorKnownDefectObservations = historicalDefects.filter((target) => retainedKnownTargetKeys.has(targetKey(target)));
+
+const reObservationProvenance =
+  "Re-observed exactly in the clean exclusive probe run e6e5abb8-19fa-4b5a-a645-03772d227b69 " +
+  "(quiet tree, 8994 ms, verified-existing=79, verified-runner=2363, known-defect-observed=95, " +
+  "unexpected-mismatch=4, not-run=0), which excludes the concurrent-probe false positive that run " +
+  "e5630ba7-9bb2-4e35-b9e6-df42038c1e42 reported at matrix-enter-path-1:repeat:physical-geometry.";
+
+/**
+ * Exact re-observations of retained defects whose current value moved while the desired contract
+ * stayed the same. RF-602 canonical container-prefix normalization moved the line-visibility caret
+ * normalizer from inside a nested multi-segment marker prefix to the first visible content
+ * character, so the `repeat` ArrowUp checkpoint of these nested container paths no longer matches
+ * the immutable RF-001 record. The historical baseline in current-observations.ts stays
+ * byte-identical; each entry below replaces the RF-001 value of exactly one retained target.
+ */
+export const editorBehaviorReObservedKnownDefects = [
+  {
+    caseId: "matrix-arrowup-path-3",
+    checkpoint: "repeat",
+    aspect: "selection",
+    observed: { anchor: 4, head: 4 },
+    reason:
+      "Retained defect, desired contract unchanged at {anchor:9,head:9}: RF-602 canonical " +
+      "container-prefix normalization advanced the top-of-document ArrowUp fallback from the " +
+      "nested '- - alpha' marker-prefix offset 2 to the first visible content character (offset 4), " +
+      "so the repeat checkpoint observes {anchor:4,head:4} rather than the immutable RF-001 value " +
+      "{anchor:2,head:2}. " + reObservationProvenance
+  },
+  {
+    caseId: "matrix-arrowup-path-6",
+    checkpoint: "repeat",
+    aspect: "selection",
+    observed: { anchor: 4, head: 4 },
+    reason:
+      "Retained defect, desired contract unchanged at {anchor:9,head:9}: RF-602 canonical " +
+      "container-prefix normalization advanced the top-of-document ArrowUp fallback from the " +
+      "nested '> - alpha' marker-prefix offset 2 to the first visible content character (offset 4), " +
+      "so the repeat checkpoint observes {anchor:4,head:4} rather than the immutable RF-001 value " +
+      "{anchor:2,head:2}. " + reObservationProvenance
+  },
+  {
+    caseId: "matrix-arrowup-path-8",
+    checkpoint: "repeat",
+    aspect: "selection",
+    observed: { anchor: 4, head: 4 },
+    reason:
+      "Retained defect, desired contract unchanged at {anchor:9,head:9}: RF-602 canonical " +
+      "container-prefix normalization advanced the top-of-document ArrowUp fallback from the " +
+      "nested '- > alpha' marker-prefix offset 2 to the first visible content character (offset 4), " +
+      "so the repeat checkpoint observes {anchor:4,head:4} rather than the immutable RF-001 value " +
+      "{anchor:2,head:2}. " + reObservationProvenance
+  },
+  {
+    caseId: "matrix-arrowup-path-9",
+    checkpoint: "repeat",
+    aspect: "selection",
+    observed: { anchor: 6, head: 6 },
+    reason:
+      "Retained defect, desired contract unchanged at {anchor:11,head:11}: RF-602 canonical " +
+      "container-prefix normalization advanced the top-of-document ArrowUp fallback from the " +
+      "nested '- > - alpha' marker-prefix offset 2 to the first visible content character " +
+      "(offset 6), so the repeat checkpoint observes {anchor:6,head:6} rather than the immutable " +
+      "RF-001 value {anchor:2,head:2}. " + reObservationProvenance
+  }
+] as const satisfies readonly EditorBehaviorKnownDefectObservation[];
+
+// Fail closed: every retained key must resolve to exactly one active exact observation, and every
+// re-observed key must be one of the retained keys. A silent hole here would let the runner report
+// an unexpected mismatch instead of the retained defect.
+const reObservedKnownDefectByKey = new Map<string, EditorBehaviorKnownDefectObservation>();
+for (const defect of editorBehaviorReObservedKnownDefects) {
+  const key = targetKey(defect);
+  if (reObservedKnownDefectByKey.has(key)) {
+    throw new Error(`Re-observed known-defect target ${key} is declared more than once.`);
+  }
+  if (!retainedKnownTargetKeys.has(key)) {
+    throw new Error(`Re-observed known-defect target ${key} is not a retained known-defect target.`);
+  }
+  reObservedKnownDefectByKey.set(key, defect);
+}
+
+export const editorBehaviorKnownDefectObservations: readonly EditorBehaviorKnownDefectObservation[] =
+  historicalDefects
+    .filter((target) => retainedKnownTargetKeys.has(targetKey(target)))
+    .map((target) => reObservedKnownDefectByKey.get(targetKey(target)) ?? target);
+
+const activeKnownDefectByKey = new Map<string, EditorBehaviorKnownDefectObservation>();
+for (const defect of editorBehaviorKnownDefectObservations) {
+  const key = targetKey(defect);
+  if (activeKnownDefectByKey.has(key)) {
+    throw new Error(`Active known-defect calibration lists target ${key} more than once.`);
+  }
+  activeKnownDefectByKey.set(key, defect);
+}
+for (const key of retainedKnownTargetKeys) {
+  if (!activeKnownDefectByKey.has(key)) {
+    throw new Error(`Retained known-defect target ${key} has no active exact observation.`);
+  }
+}
+for (const [key, defect] of reObservedKnownDefectByKey) {
+  if (activeKnownDefectByKey.get(key) !== defect) {
+    throw new Error(`Retained known-defect target ${key} does not carry its re-observed exact value.`);
+  }
+}
+
 // The complete fresh run verified every other target. Fixed execution/contract
 // hashes below reject additions or authoring changes without another calibration.
 export const editorBehaviorRunnerVerifiedTargets = rawEditorBehaviorCases.flatMap((behaviorCase) =>
@@ -129,5 +243,5 @@ export const editorBehaviorRunnerCalibration = {
   "manifestHash": "fnv1a32-c3f2d4a4",
   "contractHash": "fnv1a32-c680cf8b",
   "runId": "d46d7078-8ac3-4cf3-9a0f-0ac89953a320",
-  "calibrationHash": "fnv1a32-12fd6881"
+  "calibrationHash": "fnv1a32-ec70a8b9"
 } as const satisfies EditorBehaviorRunnerCalibration;

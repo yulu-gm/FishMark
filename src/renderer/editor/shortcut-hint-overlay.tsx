@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
 
-import { formatShortcutHintKey, type ShortcutGroup } from "@fishmark/editor-core";
+import { formatShortcutHintKey, type ShortcutGroup } from "@fishmark/codemirror-adapter";
 
 const CONTAINER_FADE_DURATION_MS = 105;
 const ITEM_STAGGER_DURATION_MS = 18;

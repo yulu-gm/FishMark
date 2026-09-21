@@ -131,12 +131,10 @@
   min-height: 0;
   position: relative;
   display: grid;
+  /* The rail column is permanent chrome: reading mode only folds the vertical
+     chrome (tab strip / status bar), never the rail. */
   grid-template-columns: var(--fishmark-shell-rail-offset) minmax(0, 1fr);
   transition: grid-template-columns var(--fishmark-focus-transition-duration) var(--fishmark-focus-transition-easing);
-}
-
-.app-layout[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] {
-  grid-template-columns: 0 minmax(0, 1fr);
 }
 
 .app-layout > :not(.theme-surface-host):not(.app-rail) {
@@ -165,12 +163,6 @@
   gap: var(--fishmark-space-4);
   border-right: 1px solid var(--fishmark-panel-border, rgba(15, 23, 42, 0.12));
   background: var(--fishmark-rail-bg, rgba(255, 255, 255, 0.92));
-  transform: translateX(0);
-  opacity: 1;
-  transition:
-    transform var(--fishmark-focus-transition-duration) var(--fishmark-focus-transition-easing),
-    opacity var(--fishmark-focus-transition-duration) ease,
-    padding var(--fishmark-focus-transition-duration) var(--fishmark-focus-transition-easing);
 }
 
 .app-rail-brand {
@@ -344,6 +336,18 @@
   cursor: default;
 }
 
+/* The rail icon owns one shared side panel view container; `aria-pressed`
+   marks the container that is currently expanded. */
+.rail-tool-button[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--fishmark-text-accent, #4f7cff) 36%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--fishmark-control-bg-active, rgba(79, 124, 255, 0.12)) 88%,
+    transparent
+  );
+  color: var(--fishmark-text-primary, #171a1f);
+}
+
 .rail-tool-button-icon {
   inline-size: 17px;
   block-size: 17px;
@@ -370,21 +374,6 @@
 /* Subtle lift unique to the rail button */
 .settings-entry:hover {
   transform: translateY(-1px);
-}
-
-.app-rail[data-visibility="collapsed"] {
-  padding-top: var(--fishmark-space-4);
-  padding-bottom: var(--fishmark-space-4);
-  transform: translateX(calc(-100% - 1px));
-  opacity: 0;
-  pointer-events: none;
-}
-
-.app-rail[data-visibility="collapsed"] .app-rail-brand,
-.app-rail[data-visibility="collapsed"] .app-rail-spacer,
-.app-rail[data-visibility="collapsed"] .settings-entry {
-  opacity: 0;
-  pointer-events: none;
 }
 
 .app-workspace {
@@ -439,11 +428,6 @@
   pointer-events: none;
   z-index: var(--fishmark-z-alert);
   transition: left var(--fishmark-focus-transition-duration) var(--fishmark-focus-transition-easing);
-}
-
-.app-layout[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] .app-notification-banner,
-.app-layout[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] ~ .app-notification-banner {
-  left: var(--fishmark-shell-gutter);
 }
 
 .app-notification-banner[data-state="open"] {
@@ -858,6 +842,26 @@
   z-index: 2;
 }
 
+/*
+ * The shortcut-hint column sits on the canvas' leading edge, which the shared
+ * side panel also occupies while it is expanded. The panel exposes its width
+ * as canvas-level variables, so the hint column follows the same single width
+ * value instead of hiding under the panel.
+ */
+.workspace-canvas {
+  --fishmark-hint-column-offset: 0px;
+}
+
+.workspace-canvas:has(> .workspace-shell.is-side-panel-open) {
+  --fishmark-hint-column-offset: calc(
+    var(--fishmark-side-panel-width) + var(--fishmark-side-panel-gap)
+  );
+}
+
+.workspace-canvas.is-editor-open > .shortcut-hint-overlay-shell {
+  left: var(--fishmark-hint-column-offset);
+}
+
 .workspace-shell,
 .document-canvas,
 .document-editor {
@@ -869,10 +873,19 @@
   position: relative;
   grid-area: 1 / 1;
   display: grid;
-  --fishmark-outline-column-width: 0px;
-  --fishmark-outline-column-gap: 0px;
-  grid-template-columns: minmax(0, 1fr) var(--fishmark-outline-column-width);
-  column-gap: var(--fishmark-outline-column-gap);
+  /*
+   * Document stage + one shared side panel region. The panel column comes
+   * first so the region docks to the left of the document; the rail is
+   * `.app-layout`'s own first column and is never duplicated here. Every view
+   * container (search and outline) shares this single width, and
+   * `--fishmark-side-panel-stored-width` is the persisted value the drag path
+   * writes; `--fishmark-side-panel-width` is the resolved column width.
+   */
+  --fishmark-side-panel-default-width: 248px;
+  --fishmark-side-panel-width: 0px;
+  --fishmark-side-panel-gap: 0px;
+  grid-template-columns: var(--fishmark-side-panel-width) minmax(0, 1fr);
+  column-gap: var(--fishmark-side-panel-gap);
   transition:
     grid-template-columns 220ms var(--fishmark-ease-standard),
     column-gap 220ms var(--fishmark-ease-standard);
@@ -884,53 +897,55 @@
   margin: 0;
 }
 
-.workspace-shell.is-outline-open {
-  --fishmark-outline-column-width: min(248px, 28vw);
-  --fishmark-outline-column-gap: var(--fishmark-space-4);
+.workspace-shell.is-side-panel-open {
+  /*
+   * The stored width is the single source of truth for every view container;
+   * it is clamped here for display only, so a narrow window never writes the
+   * clamped value back.
+   */
+  --fishmark-side-panel-width: min(
+    var(--fishmark-side-panel-stored-width, var(--fishmark-side-panel-default-width)),
+    60vw
+  );
+  --fishmark-side-panel-gap: var(--fishmark-space-4);
 }
 
 .document-canvas {
   min-width: 0;
   position: relative;
+  /* The document stage keeps the trailing column; the shared side panel owns
+     the leading one, so a collapsed panel never parks the editor in a 0px
+     track. */
+  grid-column: 2;
   container-type: inline-size;
   container-name: editor-canvas;
 }
 
 .find-replace-panel {
-  position: absolute;
-  top: 18px;
-  right: clamp(18px, 4vw, 58px);
-  width: min(520px, calc(100% - 36px));
+  /*
+   * The find/replace UI is the shared side panel's "search" view container; it
+   * fills the region body and stacks its fields to fit the narrow column.
+   */
+  min-height: 0;
+  flex: 1;
   display: grid;
-  gap: 8px;
+  align-content: start;
+  gap: var(--fishmark-space-3);
   padding: 10px;
-  border: 1px solid var(--fishmark-panel-border, rgba(15, 23, 42, 0.12));
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--fishmark-panel-bg, rgba(255, 255, 255, 0.92)) 94%, transparent);
   color: var(--fishmark-text-secondary, #31353d);
-  box-shadow: var(--fishmark-panel-shadow, var(--fishmark-shadow-3));
-  backdrop-filter: blur(24px) saturate(1.1);
-  -webkit-backdrop-filter: blur(24px) saturate(1.1);
-  z-index: 4;
+  overflow-y: auto;
 }
 
 .find-replace-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto auto;
+  display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.find-replace-row + .find-replace-row {
-  grid-template-columns: minmax(0, 1fr) auto auto;
 }
 
 .find-replace-field {
   min-width: 0;
   display: grid;
-  grid-template-columns: 58px minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
+  gap: 4px;
   color: var(--fishmark-text-muted, #687180);
   font-size: 0.76rem;
   font-weight: 620;
@@ -956,10 +971,10 @@
 
 .find-replace-status {
   min-width: 58px;
-  margin: 0;
+  margin: 0 auto 0 0;
   color: var(--fishmark-text-muted, #687180);
   font-size: 0.78rem;
-  text-align: center;
+  text-align: left;
   white-space: nowrap;
 }
 
@@ -1145,33 +1160,14 @@
   }
 }
 
-.outline-entry {
-  position: absolute;
-  top: 18px;
-  right: 18px;
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: 1px solid var(--fishmark-control-border, rgba(15, 23, 42, 0.12));
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--fishmark-control-bg, rgba(255, 255, 255, 0.9)) 88%, transparent);
-  color: var(--fishmark-control-fg, #31353d);
-  box-shadow:
-    var(--fishmark-shadow-1),
-    0 16px 28px -24px rgba(15, 23, 42, 0.34);
-  backdrop-filter: blur(18px) saturate(1.06);
-  animation: outline-toggle-enter 160ms cubic-bezier(0.24, 0.84, 0.24, 1) both;
-  z-index: 2;
-}
+/* ── Shared side panel region ───────────────────────────────── */
+/*   One region, one width. The rail switches which view container */
+/*   (outline today, search next) renders inside it; the region    */
+/*   docks to the left of the document stage, next to the rail.    */
 
-.outline-entry:hover {
-  color: var(--fishmark-text-primary, #171a1f);
-  transform: translateX(-1px);
-}
-
-.outline-panel {
+.side-panel {
+  grid-column: 1;
+  grid-row: 1;
   position: relative;
   width: 100%;
   min-width: 0;
@@ -1190,25 +1186,25 @@
   isolation: isolate;
 }
 
-.outline-panel[data-state="open"] {
-  transform-origin: right center;
-  animation: outline-panel-enter 220ms var(--fishmark-ease-standard) both;
+.side-panel[data-state="open"] {
+  transform-origin: left center;
+  animation: side-panel-enter 220ms var(--fishmark-ease-standard) both;
 }
 
-.outline-panel[data-state="closing"] {
-  transform-origin: right center;
+.side-panel[data-state="closing"] {
+  transform-origin: left center;
   pointer-events: none;
-  animation: outline-panel-exit 180ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation: side-panel-exit 180ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
-.outline-panel::before {
+.side-panel::before {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: inherit;
   background:
     linear-gradient(
-      140deg,
+      40deg,
       color-mix(in srgb, var(--fishmark-panel-border, rgba(15, 23, 42, 0.12)) 45%, transparent) 0%,
       transparent 28%
     ),
@@ -1223,12 +1219,12 @@
   z-index: 0;
 }
 
-.outline-panel > * {
+.side-panel > * {
   position: relative;
   z-index: 1;
 }
 
-.outline-panel-header {
+.side-panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1245,7 +1241,7 @@
   -webkit-backdrop-filter: blur(18px);
 }
 
-.outline-panel-title {
+.side-panel-title {
   margin: 0;
   color: var(--fishmark-text-muted, #687180);
   font-size: 0.68rem;
@@ -1254,7 +1250,7 @@
   text-transform: uppercase;
 }
 
-.outline-panel-close {
+.side-panel-close {
   width: 28px;
   height: 28px;
   display: grid;
@@ -1266,21 +1262,77 @@
   color: var(--fishmark-control-fg, #31353d);
 }
 
-.outline-panel-body {
+.side-panel-body {
   min-height: 0;
   flex: 1;
-  padding: 6px 10px 12px;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
-.outline-panel-close:hover {
+.side-panel-close:hover {
   background: var(--fishmark-control-bg-hover, rgba(255, 255, 255, 0.94));
   color: var(--fishmark-text-primary, #171a1f);
 }
 
-.outline-panel-close svg,
-.outline-entry svg {
+.side-panel-close svg {
   transition: transform var(--yu-t-fast), opacity var(--yu-t-fast);
+}
+
+/* ── Side panel resize handle ───────────────────────────────── */
+/*   Drag handle on the region's right edge. It reuses the shared */
+/*   `--fishmark-side-panel-width` / `-gap` variables so it stays  */
+/*   glued to the panel edge while the pointer resizes, and        */
+/*   disappears with the region while it is collapsed.             */
+
+.side-panel-resizer {
+  position: absolute;
+  inset-block: 0;
+  left: calc(
+    var(--fishmark-side-panel-width) + var(--fishmark-side-panel-gap) - 3px
+  );
+  width: 6px;
+  cursor: col-resize;
+  touch-action: none;
+  border-radius: 3px;
+  z-index: 3;
+}
+
+/* Widen the pointer target without widening the visible handle. */
+.side-panel-resizer::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline: -5px;
+  cursor: col-resize;
+}
+
+.side-panel-resizer:hover,
+.side-panel-resizer:focus-visible {
+  background: color-mix(in srgb, var(--fishmark-text-accent, #4f7cff) 34%, transparent);
+  outline: none;
+}
+
+.workspace-shell.is-side-panel-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+/* ── Search view container ──────────────────────────────────── */
+/*   Search is the region's second view container and owns the    */
+/*   `[data-fishmark-region="search"]` hook; its controls keep the */
+/*   historical `find-replace-*` classes so nothing else changes.  */
+
+/* ── Outline view container ─────────────────────────────────── */
+/*   The outline keeps its own region hook and content classes so   */
+/*   theme packages that style `[data-fishmark-region="outline-panel"]` */
+/*   keep working; it fills the shared region body and owns the     */
+/*   list scrollport.                                              */
+
+.outline-panel {
+  min-height: 0;
+  flex: 1;
+  padding: 6px 10px 12px;
+  overflow-y: auto;
 }
 
 .outline-panel-list {
@@ -1330,10 +1382,10 @@
   line-height: 1.4;
 }
 
-@keyframes outline-panel-enter {
+@keyframes side-panel-enter {
   from {
     opacity: 0;
-    transform: translateX(14px) scale(0.985);
+    transform: translateX(-14px) scale(0.985);
   }
 
   to {
@@ -1342,7 +1394,7 @@
   }
 }
 
-@keyframes outline-panel-exit {
+@keyframes side-panel-exit {
   from {
     opacity: 1;
     transform: translateX(0) scale(1);
@@ -1350,19 +1402,7 @@
 
   to {
     opacity: 0;
-    transform: translateX(12px) scale(0.985);
-  }
-}
-
-@keyframes outline-toggle-enter {
-  from {
-    opacity: 0;
-    transform: translateX(8px) scale(0.94);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateX(0) scale(1);
+    transform: translateX(-12px) scale(0.985);
   }
 }
 
@@ -1488,10 +1528,15 @@
 
 @media (prefers-reduced-motion: reduce) {
   .app-layout,
-  .app-rail,
+  .workspace-shell,
+  .side-panel,
   .app-notification-banner,
   .app-status-bar {
     transition-duration: 1ms;
+  }
+
+  .side-panel {
+    animation-duration: 1ms;
   }
 }
 
@@ -1711,8 +1756,16 @@
     --fishmark-status-bar-inline-padding: var(--fishmark-space-3);
   }
 
-  .workspace-shell.is-outline-open {
-    --fishmark-outline-column-width: min(220px, 44vw);
+  .workspace-shell.is-side-panel-open {
+    /*
+     * Narrow windows clamp the region for display only, through the same
+     * stored-width variable the drag path writes: the shell keeps the stored
+     * width, so widening the window restores it without a write-back.
+     */
+    --fishmark-side-panel-width: min(
+      var(--fishmark-side-panel-stored-width, var(--fishmark-side-panel-width-default, 248px)),
+      44vw
+    );
   }
 
   .empty-inner {

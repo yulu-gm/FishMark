@@ -8,7 +8,7 @@ import { act } from "react";
 import {
   DEFAULT_TEXT_SHORTCUT_GROUP,
   TABLE_EDITING_SHORTCUT_GROUP
-} from "@fishmark/editor-core";
+} from "@fishmark/codemirror-adapter";
 
 import { ShortcutHintOverlay } from "./shortcut-hint-overlay";
 

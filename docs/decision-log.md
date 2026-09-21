@@ -9,6 +9,12 @@
 
 ## 记录
 
+| 2026-09-20 | **M6.5 面板开合与正文位移契约**：接受"开/关侧栏会让正文列**水平平移**"（实测 132px：面板实占 264px 布局宽，居中列右移一半，与 VS Code 开侧栏时编辑器区域平移同构）。最终契约只断言两条：**① 模式切换零位移**（同一面板状态下 editing 与 reading 的正文列绝对 X 完全相同，实测 280.00==280.00 / 412.00==412.00）；**② 任何状态都不重排**（列宽 720.50px、首行 720.00、渲染行 31、文档高/scrollHeight 四状态全等）。 | 要让绝对 X 在开合前后也恒定，只有两条路：面板浮层覆盖正文（会遮字），或把 measure 缩到"两侧预留空白 ≥ 面板宽"（1204 宽窗口下正文列只剩 ~562px）。两者都以破坏阅读体验为代价，而用户真正痛的是"**没要求就变**"与"**整篇重排**"，这两点在固定 measure 下已经彻底消除。 | 另附一条文档化阈值：当舞台宽 < measure + 2×gutter（本窗口 768px）时，measure 的 clamp 会让正文列收窄并真实重排（360px 面板样本：列 646px、文本高 +499px）——这是"保住 720px"与"不许水平溢出"不可兼得时的正确行为，探针按阈值报告而不当作 invariance 断言。探针自身也修正了一处不可靠派生指标（`textLineCount` 对长文档失真，已从断言移除，改用 `scrollHeight`/`documentHeight`/列宽等精确量）。**S4 已把两条契约固化为常备断言并复跑通过**：四组合 `textColumnWidth/renderedLineCount/totalTextHeight/documentHeight` spread 全 0、`textColumnLeftModeTranslation = firstLineLeftModeTranslation = 0`、`failures: []`；另把**拖拽维度**加入同一探针——留白档（248/200）正文排版不变，`stored-360` 档按上述阈值单独报告。 |
+
+| 2026-09-20 | **M6.5 外壳布局模型**：正文采用**固定 measure**（`--fishmark-document-measure`，两侧留白吸收差值）；左侧保留**独立窄 rail**（参考 VS Code activity bar）；outline 与搜索都成为**同一个共享侧栏区域**内的 view container，rail 图标负责切换/收起；**阅读模式下 rail 不折叠**。 | 聚焦↔编辑自动切换时整篇文档重排，根因不是 widget 折叠，而是**正文可用宽度被外壳状态决定**：`.app-layout` 的 rail 列（`app-ui.css:133-140`，且带 transition）+ `.workspace-shell` 的 outline 列（`:872-889`）+ `.cm-content` 的 `width:100%` 与视口相对 padding（`editor-source.css:30-36`）。固定 measure 从根上切断这三者的乘积关系；rail 不折叠则连横向 chrome 位移也消除，只剩竖直方向（状态栏/标签条）变化。 | VS Code 参照（已核 `src/vs/workbench/browser/layout.ts`）：单一 `sideBarPartView` 承载 Explorer/SCM/Extensions，活动栏图标只切换区域内 pane composite；隐藏用 `getViewCachedVisibleSize()` 记住上次宽度；整张 grid 经 `IStorageService` 序列化 ⇒ **一块区域一份宽度**，不做每面板一份。 |
+
+| 2026-09-20 | **M6.5 宽度持久化与搜索口径**：面板宽度写**全局偏好**；**拖拽结束（pointerup）落盘一次**，拖动过程每帧只改 CSS 变量不落盘；收起时**缓存宽度不写 0**；加载时 clamp 到 min/max 但**不回写被压小的值**；拖拽改的是"区域宽度"，Search/Outline 共享。搜索采用**单一实现**：`Ctrl/Cmd+F` 打开侧栏的 Search 视图，删除现有内联查找/替换 bar，两者共用同一份 CodeMirror search query。 | 每帧写偏好会打爆 IPC/磁盘；收起写 0 会让"再展开"丢失用户宽度；把 clamp 后的值回写会让"窗口拉窄一次"永久改小偏好。搜索若同时保留浮层与侧栏两套 UI，会出现两个入口显示不同 query 的分叉，违反"一个状态源"。 | 状态栏左侧偏移只跟随 rail、**不跟随面板**（`app-ui.css:6` 的派生关系保持），避免拖拽时状态栏跳动。切片顺序：S2 共享区域骨架 + outline 迁入 → S3 搜索成为第二个 view container + 拖拽与持久化 → S4 固化为常备探针（四种组合 + 拖拽后正文行数不变）。 |
+
 | 2026-09-19 | 行为观察器读取实际 canonical snapshot；修正经独立规范和 micromark 验证的错误夹具，不改变真实源码编辑或 DOM 期望来迎合实现。 | 空列表项不必有 Paragraph；task checkbox 后同一行的 `>` 是段落文本，不构成深层引用；容器 source range 外的尾部空白不能继承不存在的 AST 祖先。依据 CommonMark §5.2 与 GFM §5.3。 | 深度 5/8 的 task 用例改成合法多行嵌套，保留深度与 task 覆盖。仅被修改的精确 targets 撤销旧证据并重新精确验证；RF-001 原始记录保留，其他 known-defect 的值不变；不为修订目标新增缺陷豁免。编辑用虚拟段落不能冒充原始语法树节点。 |
 
 | 2026-09-19 | 用户授权 SubAgent 持续完成 M5/M6；以永久生产新路径作为可复现判据，不再用临时接线后回滚反复探测。 | 粗 parity 允许 10 项差异，默认旧路径通过不能证明新路径就绪。父实测零 full-parse 时 snapshot 在简单 20k 文档仍耗时约 4.8–5.3 秒，因此派生复杂度优化成为切换前置。 | 当前仅 RF-506 实现，完成后 RF-701 → RF-602/603/604。不采纳把回归记为 known deviation 降低退出标准；实现 agent 按文件所有权协作，父 agent 独立验收。 |
@@ -217,3 +223,6 @@
 
 ## 2026-09-19 M5 行为收口与 M6 依赖调整
 RF506 父独立行为/安全验收 PASS，最终 2671 tests、lint/typecheck/build、formal 121/121 和 editing 通过；包体积仍 FAIL。允许其保持 DEV_DONE、最终性能 pending 后进入 RF701/M6，删除双重显示派生后用原预算共同验收；不得标 M5 COMPLETE、不得增加 known 豁免或放宽预算。用户已授权按三项优先级调整后续计划。
+
+## 2026-09-19 M6 尾随空格几何合同裁定
+旧list-geometry将三个真实空格末尾的光标要求对齐零列，与既有生产用例 keeps the selection after inserted spaces / returns to whitespace-only line below ordered list 的源码末端选区合同冲突；父在fdddabd与M5新路径均测得相同11.578px。M6探针改为要求空格起点与正文左边界对齐、光标与独立DOM Range量出的三个空格右边界对齐，同时保留源码/选区精确、无list缩进类、可见行高要求。没有录入11.578作为expected，也没有改正式manifest或known豁免。最终须在真实Electron复验。

@@ -71,3 +71,133 @@ export {
   type SemanticCommandResult
 } from "./semantic-keypress";
 export { createCanonicalSeparatorField } from "./canonical-separators";
+export {
+  resolveArrowDown,
+  resolveArrowUp,
+  resolvePointerSelectionAnchor,
+  type VerticalNavigationResult
+} from "./interactions";
+export {
+  runMarkdownArrowDown,
+  runMarkdownArrowUp,
+  runMarkdownBackspace,
+  runMarkdownEnter,
+  runMarkdownHardBreak,
+  runMarkdownShiftTab,
+  runMarkdownTab
+} from "./codemirror-markdown-commands";
+export {
+  createBlockDecorations,
+  createBlockDecorationSignature,
+  createInactiveInlineDecorations,
+  createTableWidgetDecoration,
+  getBlockLineInfos,
+  getInactiveBlockquoteLines,
+  getInactiveCodeFenceLines,
+  getInactiveHeadingMarkerEnd,
+  type BlockDecorationsResult,
+  type BlockLineInfo,
+  type InactiveBlockquoteLine,
+  type InactiveCodeFenceLine,
+  type TableWidgetCallbacks
+} from "./decorations";
+export { createSelectionScopedBlockDecorations } from "./decorations/block-decorations";
+export {
+  INACTIVE_INLINE_LINK_HREF_ATTRIBUTE,
+  INACTIVE_INLINE_LINK_SELECTOR
+} from "./decorations/inline-decorations";
+export {
+  INACTIVE_INLINE_FOOTNOTE_REFERENCE_IDENTIFIER_ATTRIBUTE,
+  INACTIVE_INLINE_FOOTNOTE_REFERENCE_SELECTOR
+} from "./decorations/footnote-widgets";
+export { clearCodeHighlightCache } from "./decorations/code-highlight-cache";
+export {
+  clearCodeHighlightLanguageLoaderState,
+  subscribeCodeHighlightParserLoaded,
+  waitForPendingCodeHighlightLanguageLoads
+} from "./decorations/code-highlight-language-loader";
+export {
+  findActiveTableBlock,
+  getTableCell,
+  locateTablePosition,
+  readTableContext,
+  type TableContext,
+  type TablePosition
+} from "./table-context";
+export {
+  runTableBackspaceFromLineBelow,
+  runTableDelete,
+  runTableDeleteColumn,
+  runTableDeleteRow,
+  runTableEnterFromLineAbove,
+  runTableEnterFromLineBelow,
+  runTableInsertColumnLeft,
+  runTableInsertColumnRight,
+  runTableInsertRowAbove,
+  runTableInsertRowBelow,
+  runTableMoveDown,
+  runTableMoveDownOrExit,
+  runTableMoveLeft,
+  runTableMoveRight,
+  runTableMoveUp,
+  runTableNextCell,
+  runTablePreviousCell,
+  runTableSelectCell,
+  runTableUpdateCell
+} from "./table-commands";
+export {
+  runListEnter,
+  runListIndentOnTab,
+  runListMoveLineDown,
+  runListMoveLineUp,
+  runListOutdentOnShiftTab
+} from "./list-commands";
+export { toggleEmphasis, toggleStrong } from "./toggle-inline-commands";
+export {
+  toggleBlockquote,
+  toggleBulletList,
+  toggleCodeFence,
+  toggleHeading
+} from "./toggle-block-commands";
+export {
+  createFishMarkMarkdownExtensions,
+  refreshMarkdownDecorations,
+  type CreateFishMarkMarkdownExtensionsOptions
+} from "./extensions/markdown";
+export {
+  DEFAULT_EDITOR_VIEW_MODE,
+  createMarkdownEditorViewModeExtension,
+  getMarkdownEditorViewMode,
+  markdownEditorViewModeField,
+  setMarkdownEditorViewMode,
+  setMarkdownEditorViewModeEffect,
+  type EditorViewMode
+} from "./editor-view-mode";
+export {
+  DEFAULT_TEXT_SHORTCUT_GROUP,
+  SHORTCUT_GROUPS,
+  TABLE_EDITING_SHORTCUT_GROUP,
+  TEXT_EDITING_SHORTCUTS,
+  createGroupedShortcutKeymaps,
+  createTextEditingShortcutKeymap,
+  formatShortcutHintKey,
+  type ShortcutGroup,
+  type ShortcutGroupId,
+  type TextEditingShortcut
+} from "./markdown-shortcuts";
+export {
+  measureEditorPerformanceProbe,
+  type EditorPerformanceOperationName,
+  type EditorPerformanceOperationResult,
+  type EditorPerformanceProbeReport
+} from "./performance/editor-performance-probe";
+export {
+  INCREMENTAL_STRUCTURE_CACHE_REASON,
+  type EditorPerformanceCounters,
+  type EditorPerformanceParserEntries
+} from "./performance-counters";
+export {
+  deriveInactiveBlockDecorationsState,
+  type DeriveInactiveBlockDecorationsStateOptions,
+  type InactiveBlockDecorationsDerivedState
+} from "./derived-state/inactive-block-decorations";

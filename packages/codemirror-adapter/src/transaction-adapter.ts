@@ -195,6 +195,9 @@ function parseOptions(state: EditorState) {
     instrumentation: {
       onFullDocumentParse: (event: Parameters<MarkdownParseInstrumentation["onFullDocumentParse"]>[0]) => {
         for (const observer of observers) observer.instrumentation?.onFullDocumentParse(event);
+      },
+      onInlineParse: (event: Parameters<NonNullable<MarkdownParseInstrumentation["onInlineParse"]>>[0]) => {
+        for (const observer of observers) observer.instrumentation?.onInlineParse?.(event);
       }
     }
   };

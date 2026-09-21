@@ -11,16 +11,17 @@ import {
 import {
   DEFAULT_TEXT_SHORTCUT_GROUP,
   TABLE_EDITING_SHORTCUT_GROUP,
-  type ActiveBlockState,
   type EditorViewMode,
   type ShortcutGroup,
   type ShortcutGroupId
-} from "@fishmark/editor-core";
+} from "@fishmark/codemirror-adapter";
+import type { ActiveBlockState } from "@fishmark/editor-model";
 import type { AppNotification, AppUpdateState } from "../../shared/app-update";
 import type { AppMenuCommand } from "../../shared/menu-command";
 import type { WorkspaceWindowCloseRequest } from "../../shared/workspace";
 import {
   DEFAULT_PREFERENCES,
+  clampSidePanelWidth,
   type Preferences,
   type PreferencesUpdate,
 } from "../../shared/preferences";
@@ -49,7 +50,7 @@ import {
 } from "./theme-dynamic-mode";
 import { type ExternalMarkdownFileState } from "./editor-shell-state";
 import type { ThemeSurfaceRuntimeMode } from "../shader/theme-surface-runtime";
-import { WorkspaceShell } from "./WorkspaceShell";
+import { WorkspaceShell, type WorkspaceViewContainerId } from "./WorkspaceShell";
 import { useEditorApplicationController } from "./useEditorApplicationController";
 import { useSettingsController } from "./useSettingsController";
 import {
@@ -79,7 +80,7 @@ const DOCUMENT_FONT_FAMILY_CSS_VAR = "--fishmark-document-font-family";
 const DOCUMENT_CJK_FONT_FAMILY_CSS_VAR = "--fishmark-document-cjk-font-family";
 const DOCUMENT_FONT_SIZE_CSS_VAR = "--fishmark-document-font-size";
 const THEME_DYNAMIC_MODE_ATTRIBUTE = "data-fishmark-theme-dynamic-mode";
-const OUTLINE_EXIT_ANIMATION_MS = 180;
+const VIEW_CONTAINER_EXIT_ANIMATION_MS = 180;
 const SETTINGS_DRAWER_EXIT_ANIMATION_MS = 180;
 
 function getExternalFileConflictMessage(externalFileState: ExternalMarkdownFileState): string {
@@ -226,8 +227,16 @@ function EditorShell({
   fishmarkTest?: Window["fishmarkTest"];
 }) {
   const [activeHeadingId, setActiveHeadingId] = useState<string | null>(null);
-  const [isOutlineOpen, setIsOutlineOpen] = useState(false);
-  const [isOutlineClosing, setIsOutlineClosing] = useState(false);
+  /*
+   * The rail switches the shared side panel between view containers; `null`
+   * means collapsed. `closingViewContainer` keeps the last container mounted
+   * until its exit animation ends.
+   */
+  const [activeViewContainer, setActiveViewContainer] = useState<WorkspaceViewContainerId | null>(
+    null
+  );
+  const [closingViewContainer, setClosingViewContainer] =
+    useState<WorkspaceViewContainerId | null>(null);
   const [shellMode, setShellMode] = useState<ShellMode>("reading");
   const [editorViewMode, setEditorViewMode] = useState<EditorViewMode>("wysiwym");
   const [preferences, setPreferences] = useState<Preferences>(DEFAULT_PREFERENCES);
@@ -264,7 +273,7 @@ function EditorShell({
   const preferencesRef = useRef<Preferences>(DEFAULT_PREFERENCES);
   const settingsEntryRef = useRef<HTMLButtonElement | null>(null);
   const themePackageRuntimeRef = useRef<ReturnType<typeof createThemePackageRuntime> | null>(null);
-  const outlineCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const viewContainerCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const notificationHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const notificationCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shortcutHintHoldTimerRef = useRef<number | null>(null);
@@ -378,7 +387,6 @@ function EditorShell({
   const isDocumentOpen = activeDocument !== null;
   const isReadingMode = shellMode === "reading";
   const isDocumentReadingMode = isDocumentOpen && isReadingMode;
-  const isOutlinePanelVisible = isOutlineOpen || isOutlineClosing;
   const headerTitle = isDocumentOpen
     ? activeDocument?.name ?? "Untitled"
     : "Local-first Markdown writing";
@@ -518,10 +526,10 @@ function EditorShell({
     }
   }, [activeShortcutGroup.id]);
 
-  function clearOutlineCloseTimer(): void {
-    if (outlineCloseTimerRef.current !== null) {
-      clearTimeout(outlineCloseTimerRef.current);
-      outlineCloseTimerRef.current = null;
+  function clearViewContainerCloseTimer(): void {
+    if (viewContainerCloseTimerRef.current !== null) {
+      clearTimeout(viewContainerCloseTimerRef.current);
+      viewContainerCloseTimerRef.current = null;
     }
   }
 
@@ -626,7 +634,7 @@ function EditorShell({
         return;
       }
 
-      if (target.closest(".outline-panel, .outline-entry")) {
+      if (target.closest(".side-panel")) {
         return;
       }
 
@@ -763,20 +771,45 @@ function EditorShell({
     closeSettingsDrawer();
   });
 
-  function openOutlinePanel(): void {
-    clearOutlineCloseTimer();
-    setIsOutlineClosing(false);
-    setIsOutlineOpen(true);
+  function toggleViewContainer(viewContainerId: WorkspaceViewContainerId): void {
+    if (activeViewContainer === viewContainerId) {
+      closeViewContainer();
+      return;
+    }
+
+    clearViewContainerCloseTimer();
+    setClosingViewContainer(null);
+    setActiveViewContainer(viewContainerId);
   }
 
-  function closeOutlinePanel(): void {
-    clearOutlineCloseTimer();
-    setIsOutlineOpen(false);
-    setIsOutlineClosing(true);
-    outlineCloseTimerRef.current = setTimeout(() => {
-      outlineCloseTimerRef.current = null;
-      setIsOutlineClosing(false);
-    }, OUTLINE_EXIT_ANIMATION_MS);
+  function closeViewContainer(): void {
+    if (activeViewContainer === null) {
+      return;
+    }
+
+    clearViewContainerCloseTimer();
+    setClosingViewContainer(activeViewContainer);
+    setActiveViewContainer(null);
+    viewContainerCloseTimerRef.current = setTimeout(() => {
+      viewContainerCloseTimerRef.current = null;
+      setClosingViewContainer(null);
+    }, VIEW_CONTAINER_EXIT_ANIMATION_MS);
+  }
+
+  /*
+   * One shared panel width for every view container. The shell reports the
+   * final width once per drag (never per frame); an unchanged width is not
+   * written again, and a collapsed panel never reaches this path, so the
+   * stored width survives collapsing.
+   */
+  function handleSidePanelWidthCommit(width: number): void {
+    const nextWidth = clampSidePanelWidth(width);
+
+    if (preferencesRef.current.ui.sidePanelWidth === nextWidth) {
+      return;
+    }
+
+    void handleUpdatePreferences({ ui: { sidePanelWidth: nextWidth } });
   }
 
   async function handleOpenMarkdown(): Promise<void> {
@@ -1452,7 +1485,7 @@ function EditorShell({
   useEffect(
     () => () => {
       resetAutosaveRuntime();
-      clearOutlineCloseTimer();
+      clearViewContainerCloseTimer();
       clearSettingsCloseTimer();
       clearNotificationTimers();
       themePackageRuntimeRef.current?.clear();
@@ -1466,11 +1499,7 @@ function EditorShell({
   const handleActiveBlockChange = useCallback((nextActiveBlockState: ActiveBlockState): void => {
     activeBlockStateRef.current = nextActiveBlockState;
     setActiveShortcutGroupId(resolveEditorShortcutGroup(nextActiveBlockState).id);
-    setActiveHeadingId(
-      nextActiveBlockState.activeBlock?.type === "heading"
-        ? nextActiveBlockState.activeBlock.id
-        : null
-    );
+    setActiveHeadingId(nextActiveBlockState.activeHeadingId);
   }, []);
 
   const handleReloadExternalFile = useCallback((): void => {
@@ -1505,9 +1534,11 @@ function EditorShell({
         activeShortcutGroup={activeShortcutGroup}
         activeTableToolId={activeTableToolId}
         activeTitlebarSurface={activeTitlebarSurface}
+        activeViewContainer={activeViewContainer}
         activeWorkbenchSurface={activeWorkbenchSurface}
         appUpdateStatusLabel={appUpdateStatusLabel}
         appVersionLabel={appVersionLabel}
+        closingViewContainer={closingViewContainer}
         controlledTitlebarEnabled={controlledTitlebarEnabled}
         currentDocumentMetrics={currentDocumentMetrics}
         effectiveSaveState={effectiveSaveState}
@@ -1523,8 +1554,6 @@ function EditorShell({
         fontFamilies={fontFamilies}
         headerTitle={headerTitle}
         isDocumentOpen={isDocumentOpen}
-        isOutlineOpen={isOutlineOpen}
-        isOutlinePanelVisible={isOutlinePanelVisible}
         isReadingMode={isReadingMode}
         isRefreshingThemePackages={isRefreshingThemePackages}
         isSettingsDrawerVisible={isSettingsDrawerVisible}
@@ -1540,6 +1569,7 @@ function EditorShell({
         saveStatusLabel={saveStatusLabel}
         settingsEntryRef={settingsEntryRef}
         shellMode={shellMode}
+        sidePanelStoredWidth={preferences.ui.sidePanelWidth}
         themePackages={themePackages}
         themeRuntimeEnv={themeRuntimeEnv}
         titlebarHeight={titlebarLayout.height}
@@ -1547,7 +1577,7 @@ function EditorShell({
         onActiveBlockChange={handleActiveBlockChange}
         onAppWorkspaceMouseDownCapture={handleAppWorkspaceMouseDownCapture}
         onCaptureSettingsOpenOrigin={captureSettingsOpenOrigin}
-        onCloseOutlinePanel={closeOutlinePanel}
+        onCloseViewContainer={closeViewContainer}
         onCloseSettingsDrawer={closeSettingsDrawer}
         onCloseWorkspaceTab={(tabId) => {
           void handleCloseWorkspaceTab(tabId);
@@ -1576,11 +1606,12 @@ function EditorShell({
         onDeleteTableRow={deleteTableRow}
         onKeepMemoryVersion={externalConflictController.keepMemoryVersion}
         onNavigateToOutlineItem={handleNavigateToOutlineItem}
-        onOpenOutlinePanel={openOutlinePanel}
+        onToggleViewContainer={toggleViewContainer}
         onReloadExternalFile={handleReloadExternalFile}
         onRefreshThemePackages={handleRefreshThemePackages}
         onSaveAs={handleSaveMarkdownAsCommand}
         onSettingsOpen={openSettingsDrawer}
+        onSidePanelWidthCommit={handleSidePanelWidthCommit}
         onOpenRecentFile={(targetPath) => {
           void handleOpenRecentFile(targetPath);
         }}

@@ -2589,7 +2589,8 @@ describe("App autosave", () => {
         theme: { mode: "dark", selectedId: "graphite", effectsMode: "auto", parameters: {} },
         ui: {
           fontSize: 18,
-          fontFamily: "Aptos"
+          fontFamily: "Aptos",
+          sidePanelWidth: null
         },
         document: {
           fontFamily: "Source Serif 4",
@@ -3419,13 +3420,13 @@ describe("App autosave", () => {
     const workspace = container.querySelector('[data-fishmark-layout="workspace"]');
     const activeTab = container.querySelector('[data-fishmark-region="workspace-tab"][data-active="true"]');
     const statusStrip = container.querySelector('[data-fishmark-region="status-strip"]');
-    const outlineToggle = container.querySelector('[data-fishmark-region="outline-toggle"]');
-    const outlinePanel = container.querySelector('[data-fishmark-region="outline-panel"]');
+    const outlineButton = container.querySelector('[data-fishmark-command="outline"]');
+    const sidePanel = container.querySelector('[data-fishmark-region="side-panel"]');
 
     expect(rail).not.toBeNull();
     expect(workspace).not.toBeNull();
-    expect(outlineToggle).not.toBeNull();
-    expect(outlinePanel).toBeNull();
+    expect(outlineButton).not.toBeNull();
+    expect(sidePanel).toBeNull();
     expect(activeTab?.textContent).toContain("today.md");
     expect(activeTab?.getAttribute("title")).toBe("C:/notes/today.md");
     expect(statusStrip?.textContent).toContain("All changes saved");
@@ -3442,74 +3443,81 @@ describe("App autosave", () => {
     const activeTab = container.querySelector('[data-fishmark-region="workspace-tab"][data-active="true"]');
     const workspaceHeader = container.querySelector('[data-fishmark-region="workspace-header"]');
     const documentHeader = container.querySelector('[data-fishmark-region="document-header"]');
-    const outlineToggle = container.querySelector('[data-fishmark-region="outline-toggle"]');
-    const outlinePanel = container.querySelector('[data-fishmark-region="outline-panel"]');
+    const outlineButton = container.querySelector('[data-fishmark-command="outline"]');
+    const sidePanel = container.querySelector('[data-fishmark-region="side-panel"]');
 
     expect(activeTab?.textContent).toContain("today.md");
     expect(activeTab?.getAttribute("title")).toBe("C:/notes/today.md");
     expect(workspaceHeader).toBeNull();
     expect(rail?.textContent).not.toContain("Workspace");
     expect(rail?.textContent).not.toContain("Outline");
-    expect(outlineToggle).not.toBeNull();
-    expect(outlinePanel).toBeNull();
+    expect(outlineButton).not.toBeNull();
+    expect(sidePanel).toBeNull();
     expect(documentHeader).toBeNull();
   });
 
-  it("expands the floating outline panel from a compact right-side toggle and routes item clicks to editor navigation", async () => {
+  it("expands the shared side panel from the rail outline button and routes item clicks to editor navigation", async () => {
     await renderAndOpenDocument();
 
     await clickEditorContent();
 
-    const outlineToggle = container.querySelector<HTMLButtonElement>(
-      '[data-fishmark-region="outline-toggle"]'
+    const outlineButton = container.querySelector<HTMLButtonElement>(
+      '[data-fishmark-command="outline"]'
     );
 
-    expect(outlineToggle).not.toBeNull();
-
-    await act(async () => {
-      outlineToggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    const outlinePanel = container.querySelector('[data-fishmark-region="outline-panel"]');
-    const outlineHeader = container.querySelector('[data-fishmark-region="outline-panel-header"]');
-    const outlineBody = container.querySelector('[data-fishmark-region="outline-panel-body"]');
-    const outlineButton = Array.from(outlinePanel?.querySelectorAll("button") ?? []).find((button) =>
-      button.textContent?.includes("Today")
-    );
-
-    expect(outlineHeader?.textContent).toContain("Outline");
-    expect(outlineBody).not.toBeNull();
-    expect(outlinePanel?.textContent).toContain("Outline");
-    expect(outlinePanel?.textContent).toContain("Today");
     expect(outlineButton).not.toBeNull();
+    expect(outlineButton?.getAttribute("aria-pressed")).toBe("false");
 
     await act(async () => {
       outlineButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await Promise.resolve();
     });
 
+    expect(outlineButton?.getAttribute("aria-pressed")).toBe("true");
+
+    const sidePanel = container.querySelector<HTMLElement>('[data-fishmark-region="side-panel"]');
+    const sidePanelHeader = container.querySelector('[data-fishmark-region="side-panel-header"]');
+    const sidePanelBody = container.querySelector('[data-fishmark-region="side-panel-body"]');
+    const outlineView = container.querySelector('[data-fishmark-region="outline-panel"]');
+    const outlineItemButton = Array.from(sidePanel?.querySelectorAll("button") ?? []).find((button) =>
+      button.textContent?.includes("Today")
+    );
+
+    expect(sidePanel?.dataset.viewContainer).toBe("outline");
+    expect(sidePanel?.dataset.state).toBe("open");
+    expect(sidePanelHeader?.textContent).toContain("Outline");
+    expect(sidePanelBody).not.toBeNull();
+    expect(outlineView).not.toBeNull();
+    expect(sidePanel?.textContent).toContain("Outline");
+    expect(sidePanel?.textContent).toContain("Today");
+    expect(outlineItemButton).not.toBeNull();
+
+    await act(async () => {
+      outlineItemButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
     expect(codeEditorMock.getNavigateCalls()).toEqual([0]);
   });
 
-  it("collapses the floating outline panel back to a compact toggle", async () => {
+  it("collapses the shared side panel back to the rail button", async () => {
     await renderAndOpenDocument();
 
     await clickEditorContent();
 
-    const outlineToggle = container.querySelector<HTMLButtonElement>(
-      '[data-fishmark-region="outline-toggle"]'
+    const outlineButton = container.querySelector<HTMLButtonElement>(
+      '[data-fishmark-command="outline"]'
     );
 
     await act(async () => {
-      outlineToggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      outlineButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await Promise.resolve();
     });
 
     const collapseButton = container.querySelector<HTMLButtonElement>(
       '[aria-label="Collapse outline"]'
     );
-    expect(container.querySelector('[data-fishmark-region="outline-panel"]')).not.toBeNull();
+    expect(container.querySelector('[data-fishmark-region="side-panel"]')).not.toBeNull();
     expect(collapseButton).not.toBeNull();
 
     await act(async () => {
@@ -3517,18 +3525,19 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
-    expect(container.querySelector<HTMLElement>('[data-fishmark-region="outline-panel"]')?.dataset.state).toBe(
+    expect(container.querySelector<HTMLElement>('[data-fishmark-region="side-panel"]')?.dataset.state).toBe(
       "closing"
     );
-    expect(container.querySelector('[data-fishmark-region="outline-toggle"]')).toBeNull();
+    // The rail button stays mounted while the region plays its exit animation.
+    expect(outlineButton?.getAttribute("aria-pressed")).toBe("false");
 
     await act(async () => {
       vi.advanceTimersByTime(180);
       await Promise.resolve();
     });
 
-    expect(container.querySelector('[data-fishmark-region="outline-panel"]')).toBeNull();
-    expect(container.querySelector('[data-fishmark-region="outline-toggle"]')).not.toBeNull();
+    expect(container.querySelector('[data-fishmark-region="side-panel"]')).toBeNull();
+    expect(container.querySelector('[data-fishmark-command="outline"]')).not.toBeNull();
   });
 
   it("renders the empty state inside a shared workspace canvas", async () => {
@@ -3546,7 +3555,9 @@ describe("App autosave", () => {
     expect(appLayout?.dataset.fishmarkHasDocument).toBe("false");
     expect(appWorkspace?.dataset.fishmarkHasDocument).toBe("false");
     expect(workspaceCanvas?.dataset.fishmarkHasDocument).toBe("false");
-    expect(rail?.dataset.visibility).toBe("visible");
+    // The rail is permanent chrome: it carries no collapse state on any screen.
+    expect(rail).not.toBeNull();
+    expect(rail?.hasAttribute("data-visibility")).toBe(false);
     expect(workspaceHeader).toBeNull();
     expect(workspaceCanvas).not.toBeNull();
     expect(emptyState).not.toBeNull();
@@ -4022,7 +4033,7 @@ describe("App autosave", () => {
     expect(appShell?.dataset.fishmarkShellMode).toBe("reading");
   });
 
-  it("collapses the rail in document reading mode while keeping it available on the welcome screen", async () => {
+  it("keeps the rail and its shared side panel live in document reading mode while reading mode folds the vertical chrome", async () => {
     await renderAndOpenDocument();
 
     const appShell = container.querySelector<HTMLElement>(".app-shell");
@@ -4033,14 +4044,14 @@ describe("App autosave", () => {
 
     await clickEditorContent();
 
-    const outlineToggle = container.querySelector<HTMLButtonElement>('[data-fishmark-region="outline-toggle"]');
+    const outlineButton = container.querySelector<HTMLButtonElement>('[data-fishmark-command="outline"]');
     await act(async () => {
-      outlineToggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      outlineButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await Promise.resolve();
     });
 
     expect(appShell?.dataset.fishmarkShellMode).toBe("editing");
-    expect(container.querySelector('[data-fishmark-region="outline-panel"]')).not.toBeNull();
+    expect(container.querySelector('[data-fishmark-region="side-panel"]')).not.toBeNull();
 
     await act(async () => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
@@ -4048,11 +4059,37 @@ describe("App autosave", () => {
     });
 
     expect(appShell?.dataset.fishmarkShellMode).toBe("reading");
-    expect(rail?.dataset.visibility).toBe("collapsed");
+    expect(rail?.hasAttribute("data-visibility")).toBe(false);
     expect(tabStrip?.dataset.visibility).toBe("collapsed");
     expect(statusBar?.dataset.visibility).toBe("collapsed");
-    expect(container.querySelector('[data-fishmark-region="outline-panel"]')).not.toBeNull();
+    expect(container.querySelector('[data-fishmark-region="side-panel"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="mock-code-editor"]')).not.toBeNull();
+
+    // The rail button still owns the region while the shell is in reading mode.
+    await act(async () => {
+      outlineButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(appShell?.dataset.fishmarkShellMode).toBe("reading");
+    expect(
+      container.querySelector<HTMLElement>('[data-fishmark-region="side-panel"]')?.dataset.state
+    ).toBe("closing");
+
+    await act(async () => {
+      vi.advanceTimersByTime(180);
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-fishmark-region="side-panel"]')).toBeNull();
+
+    await act(async () => {
+      outlineButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(appShell?.dataset.fishmarkShellMode).toBe("reading");
+    expect(container.querySelector('[data-fishmark-region="side-panel"]')).not.toBeNull();
 
     await act(async () => {
       editorSurface?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0, clientX: 300 }));
@@ -4062,10 +4099,10 @@ describe("App autosave", () => {
     });
 
     expect(appShell?.dataset.fishmarkShellMode).toBe("editing");
-    expect(rail?.dataset.visibility).toBe("visible");
+    expect(rail?.hasAttribute("data-visibility")).toBe(false);
     expect(tabStrip?.dataset.visibility).toBe("visible");
     expect(statusBar?.dataset.visibility).toBe("visible");
-    expect(container.querySelector('[data-fishmark-region="outline-panel"]')).not.toBeNull();
+    expect(container.querySelector('[data-fishmark-region="side-panel"]')).not.toBeNull();
   });
 
   it("shows the shortcut hint overlay only after Control is held for 1 second while the editor is focused", async () => {
@@ -4154,11 +4191,7 @@ describe("App autosave", () => {
 
     await act(async () => {
       codeEditorMock.emitActiveBlockChange({
-        activeBlock: {
-          id: "table:0-1",
-          type: "table"
-        },
-        blockMap: { blocks: [] },
+        activeHeadingId: null,
         selection: { anchor: 0, head: 0 },
         tableCursor: {
           mode: "inside",
@@ -4193,11 +4226,7 @@ describe("App autosave", () => {
 
     await act(async () => {
       codeEditorMock.emitActiveBlockChange({
-        activeBlock: {
-          id: "table:0-1",
-          type: "table"
-        },
-        blockMap: { blocks: [] },
+        activeHeadingId: null,
         selection: { anchor: 0, head: 0 },
         tableCursor: {
           mode: "inside",
@@ -4235,11 +4264,7 @@ describe("App autosave", () => {
 
     await act(async () => {
       codeEditorMock.emitActiveBlockChange({
-        activeBlock: {
-          id: "table:0-1",
-          type: "table"
-        },
-        blockMap: { blocks: [] },
+        activeHeadingId: null,
         selection: { anchor: 0, head: 0 },
         tableCursor: {
           mode: "inside",
@@ -5016,14 +5041,9 @@ describe("App autosave", () => {
     expect(container.querySelector('[data-fishmark-region="focus-toggle"]')).toBeNull();
   });
 
-  it("defines animated shell chrome transitions for document reading mode and fully retracts the rail", () => {
+  it("defines animated shell chrome transitions for document reading mode while the rail stays docked", () => {
     const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8");
     const railRule = getCssRule(appUiStylesheet, ".app-rail");
-    const collapsedRailRule = getCssRule(appUiStylesheet, '.app-rail[data-visibility="collapsed"]');
-    const readingLayoutRule = getCssRule(
-      appUiStylesheet,
-      '.app-layout[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"]'
-    );
     const readingWorkspaceRule = getCssRule(
       appUiStylesheet,
       '.app-workspace[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"]'
@@ -5036,10 +5056,14 @@ describe("App autosave", () => {
       '.app-status-bar[data-visibility="collapsed"]'
     );
 
-    expect(railRule).toContain("transition:");
-    expect(collapsedRailRule).toContain("transform: translateX(calc(-100% - 1px));");
-    expect(collapsedRailRule).toContain("opacity: 0;");
-    expect(readingLayoutRule).toContain("grid-template-columns: 0 minmax(0, 1fr);");
+    // The rail never retracts, so reading mode is expressed by the vertical
+    // chrome only; no rule zeroes the rail column any more.
+    expect(railRule).not.toContain("transform: translateX");
+    expect(railRule).not.toContain("opacity:");
+    expect(appUiStylesheet).not.toContain('.app-rail[data-visibility="collapsed"]');
+    expect(appUiStylesheet).not.toContain(
+      '.app-layout[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"]'
+    );
     expect(readingWorkspaceRule).toContain("grid-template-rows: minmax(0, 1fr);");
     expect(tabStripRule).toContain("transition:");
     expect(tabStripRule).not.toContain("display var(--fishmark-focus-transition-duration) allow-discrete;");
@@ -5122,6 +5146,10 @@ describe("App autosave", () => {
     const buttonRule = getCssRule(appUiStylesheet, ".table-tool-button");
     const tooltipRule = getCssRule(appUiStylesheet, ".table-tool-tooltip");
     const dangerRule = getCssRule(appUiStylesheet, '.table-tool-button[data-tone="danger"]');
+    const pressedRailToolRule = getCssRule(
+      appUiStylesheet,
+      '.rail-tool-button[aria-pressed="true"]'
+    );
 
     expect(layoutChromeRule).toContain("z-index: 1;");
     expect(railRule).toContain("z-index: var(--fishmark-z-shell);");
@@ -5134,6 +5162,8 @@ describe("App autosave", () => {
     expect(tooltipRule).toContain("left: calc(100% + var(--fishmark-space-2));");
     expect(tooltipRule).toContain("transform: translateY(-50%);");
     expect(tooltipRule).toContain("z-index: 3;");
+    expect(pressedRailToolRule).toContain("background:");
+    expect(pressedRailToolRule).toContain("color:");
     expect(workspaceShellSource).not.toContain('data-fishmark-region="table-tool-tooltip-layer"');
     expect(dangerRule).toContain("color:");
   });
@@ -5477,7 +5507,7 @@ describe("App autosave", () => {
     expect(fallbackRule).toContain("padding:");
   });
 
-  it("defines a compact floating outline panel with a fixed header and glass styling", () => {
+  it("defines a left-docked shared side panel with a fixed header and glass styling", () => {
     const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8");
     const baseStylesheet = readFileSync(baseStylesheetPath, "utf-8");
     const workspaceShellSource = readFileSync(
@@ -5485,28 +5515,34 @@ describe("App autosave", () => {
       "utf-8"
     );
 
-    expect(appUiStylesheet).toContain("--fishmark-outline-column-width: 0px;");
-    expect(appUiStylesheet).toContain("grid-template-columns: minmax(0, 1fr) var(--fishmark-outline-column-width);");
+    expect(appUiStylesheet).toContain("--fishmark-side-panel-width: 0px;");
+    expect(appUiStylesheet).toContain("grid-template-columns: var(--fishmark-side-panel-width) minmax(0, 1fr);");
     expect(appUiStylesheet).toContain("transition:");
     expect(appUiStylesheet).toContain("grid-template-columns 220ms var(--fishmark-ease-standard)");
     expect(baseStylesheet).toContain("--fishmark-ease-standard: cubic-bezier(0.2, 0.85, 0.2, 1);");
-    expect(appUiStylesheet).toContain(".outline-entry");
-    expect(appUiStylesheet).toContain(".outline-panel");
-    expect(appUiStylesheet).toContain(".outline-panel-body");
-    expect(appUiStylesheet).toContain(".outline-panel::before");
+    expect(appUiStylesheet).toContain(".side-panel");
+    expect(appUiStylesheet).toContain(".side-panel-header");
+    expect(appUiStylesheet).toContain(".side-panel-body");
+    expect(appUiStylesheet).toContain(".side-panel::before");
     expect(appUiStylesheet).toContain("overflow: hidden;");
     expect(appUiStylesheet).toContain("overflow-y: auto;");
+    // The outline stays a view container of the shared region, with its own
+    // region hook so theme packages keep theming it.
+    expect(appUiStylesheet).toContain(".outline-panel");
     expect(appUiStylesheet).toContain(".outline-panel-list");
+    expect(workspaceShellSource).toContain('data-fishmark-region="outline-panel"');
     expect(appUiStylesheet).toContain("backdrop-filter: blur(28px) saturate(1.12);");
-    expect(appUiStylesheet).toContain(".workspace-shell.is-outline-open");
-    expect(appUiStylesheet).toContain('.outline-panel[data-state="closing"]');
-    expect(appUiStylesheet).toContain("@keyframes outline-panel-exit");
-    expect(appUiStylesheet).toContain("@keyframes outline-toggle-enter");
+    expect(appUiStylesheet).toContain(".workspace-shell.is-side-panel-open");
+    expect(appUiStylesheet).toContain('.side-panel[data-state="closing"]');
+    expect(appUiStylesheet).toContain("transform-origin: left center;");
+    expect(appUiStylesheet).toContain("@keyframes side-panel-exit");
+    expect(appUiStylesheet).not.toContain("@keyframes outline-toggle-enter");
+    // The collapse affordance points left, back towards the rail-docked panel.
     expect(workspaceShellSource).toContain('d="M15 6l-6 6 6 6"');
-    expect(workspaceShellSource).toContain('d="M9 6l6 6-6 6"');
+    expect(workspaceShellSource).toContain('data-fishmark-command="outline"');
   });
 
-  it("keeps the reading shell full width so the scrollbar and outline controls stay on the far right", () => {
+  it("keeps the reading shell full width so the scrollbar stays on the far right", () => {
     const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8").replace(/\r\n/g, "\n");
 
     expect(appUiStylesheet).toContain(
@@ -5575,13 +5611,14 @@ describe("App autosave", () => {
     expect(editorStylesheet).toContain(".document-editor .cm-content");
     expect(editorContentRule).toContain("width: 100%;");
     expect(editorContentRule).toContain("box-sizing: border-box;");
-    expect(editorContentRule).toContain("padding: 40px clamp(64px, 12vw, 220px) 56px;");
-    expect(editorContentRule).not.toContain("padding: 40px clamp(48px, 9vw, 160px) 56px;");
-    expect(editorContentRule).not.toContain("padding: 40px 48px 56px;");
+    expect(editorContentRule).toContain("--fishmark-document-padding-inline: max(");
+    expect(editorContentRule).toContain("(100% - var(--fishmark-document-measure)) / 2");
+    expect(editorContentRule).toContain("padding: 40px var(--fishmark-document-padding-inline) 56px;");
+    expect(editorContentRule).not.toContain("12vw");
     expect(editorContentRule).not.toContain("max-width: 72ch;");
   });
 
-  it("keeps the reading-mode scroll surface full width so the scrollbar and outline stay pinned right", () => {
+  it("keeps the reading-mode scroll surface full width so the scrollbar stays pinned right", () => {
     const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8");
     const readingCanvasRule = getCssRule(
       appUiStylesheet,

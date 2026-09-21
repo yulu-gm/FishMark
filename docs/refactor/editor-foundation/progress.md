@@ -10,9 +10,9 @@
 
 **Overall status:** `IN_PROGRESS`
 
-**Current task:** `RF-506 DEV_DONE; final performance acceptance pending` — resumed 2026-09-19 under the user's M5/M6 goal. Runtime and pure-model SubAgents implement disjoint parts of this one task; the parent coordinates and independently accepts. Latest work is the uncommitted main checkout, not the unchanged refactor worktree.
+**Current task:** `RF-701 IN_PROGRESS` — required production render-plan prerequisite for M6. User clarified the endpoint is M6 only. RF-506 is DEV_DONE with behavior/safety PASS and final performance pending; its production checkpoint is committed and pushed at 6464487 (implementation 133679d).
 
-**Next required skill:** finish RF-506 behavior/safety acceptance, then implement RF-701 shared render plan and RF-602/603/604 sequentially. Plan adjustment: keep RF-506 final performance acceptance open while M6 removes duplicate projection/derived code; require the unchanged bundle budget at combined completion. Do not falsely mark M5 COMPLETE to unlock dependencies.
+**Next required skill:** task execution for RF-701, then RF-602/603/604 sequentially and independent combined M6 acceptance. No later M7/M8/M9 implementation is in scope. Keep original behavior and bundle gates; no early M5 COMPLETE claim.
 
 **Current gate:** parent fresh frozen-code validation passed 2671 tests plus 1 existing skip; lint (0 errors / 8 existing warnings), typecheck, build and editing experience passed. Formal Electron: 121/121 cases, 2541 targets (2434 exact, 107 unchanged historical defects, zero unexpected/not-run). Unicode and IME review findings are repaired. Behavior/safety architecture PASS; bundle budget remains FAIL. RF-506 is DEV_DONE with final performance pending, M5 is not COMPLETE.
 
@@ -83,7 +83,7 @@ Evidence columns are filled only with fresh command output/report paths from the
 | RF-602 | Viewport-scoped decorations | RF-506, RF-701 | `PLANNED` | — | adapter/layout/scroll tests/perf | — | — |
 | RF-603 | Interaction adapters and widgets | RF-602 | `PLANNED` | — | adapter/visual tests | — | — |
 | RF-604 | CodeMirror adapter hard cutover | RF-603 | `PLANNED` | — | lint/typecheck/test/build/probes | — | — |
-| RF-701 | Semantic render plan | RF-506 | `PLANNED` | — | typecheck/test + production consumer | — | — |
+| RF-701 | Semantic render plan | RF-506 behavior/safety gate | `IN_PROGRESS` | Canonical display metadata + pure flat plan + simultaneous production decoration consumer. | Pending implementation | docs/plans/2026-09-19-rf-701-intake.md | main |
 | RF-702 | HTML export cutover | RF-604, RF-701 | `PLANNED` | — | test/build | — | — |
 | RF-703 | Outline and metrics cutover | RF-702 | `PLANNED` | — | test/perf baseline | — | — |
 | RF-801 | Non-React workspace client/store | RF-703 | `PLANNED` | — | typecheck/test | — | — |

@@ -21,10 +21,12 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
+      "@fishmark/markdown-presentation": fileURLToPath(
+        new URL("./packages/markdown-presentation/src/index.ts", import.meta.url)
+      ),
       "@fishmark/codemirror-adapter": fileURLToPath(
         new URL("./packages/codemirror-adapter/src/index.ts", import.meta.url)
       ),
-      "@fishmark/editor-core": fileURLToPath(new URL("./packages/editor-core/src/index.ts", import.meta.url)),
       "@fishmark/editor-model": fileURLToPath(
         new URL("./packages/editor-model/src/index.ts", import.meta.url)
       ),

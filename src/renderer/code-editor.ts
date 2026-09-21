@@ -27,12 +27,16 @@ import {
   runTableSelectCell,
   runTableUpdateCell,
   setMarkdownEditorViewMode,
-  type ActiveBlockState,
   type SemanticCommandBindings,
   type EditorViewMode
-} from "@fishmark/editor-core";
-import { parseMarkdownDocument } from "@fishmark/markdown-engine";
-import { planPrintableInput } from "@fishmark/editor-model";
+} from "@fishmark/codemirror-adapter";
+import { createDocumentStructureCache } from "@fishmark/markdown-engine";
+import {
+  createActiveBlockState,
+  createEditorDerivedSnapshotFromCache,
+  planPrintableInput,
+  type ActiveBlockState
+} from "@fishmark/editor-model";
 import { readCompositionState } from "@fishmark/codemirror-adapter";
 
 import { createPreviewAssetUrl } from "../shared/preview-asset-url";
@@ -339,15 +343,11 @@ export function createCodeEditorController(
     schedulePendingDocumentChanges();
   };
 
-  let activeBlockState: ActiveBlockState = {
-    blockMap: parseMarkdownDocument(""),
-    activeBlock: null,
-    selection: {
-      anchor: 0,
-      head: 0
-    },
-    tableCursor: null
-  };
+  // The host holds the canonical empty-document state until the view reports its first update.
+  let activeBlockState: ActiveBlockState = createActiveBlockState(
+    createEditorDerivedSnapshotFromCache(createDocumentStructureCache("")),
+    { anchor: 0, head: 0 }
+  );
 
   const createState = (content: string) =>
     EditorState.create({
@@ -365,7 +365,6 @@ export function createCodeEditorController(
         EditorView.updateListener.of(observeDocumentUpdate),
         createFishMarkMarkdownExtensions({
           onSemanticCommands: (commands) => { semanticCommands = commands; },
-          parseMarkdownDocument,
           onContentChange: (nextContent) => {
             options.onChange(nextContent);
           },

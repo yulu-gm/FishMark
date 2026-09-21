@@ -3,6 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_PREFERENCES,
   PREFERENCES_SCHEMA_VERSION,
+  SIDE_PANEL_WIDTH_DEFAULT,
+  SIDE_PANEL_WIDTH_MAX,
+  SIDE_PANEL_WIDTH_MIN,
+  clampSidePanelWidth,
   mergePreferences,
   normalizePreferences,
   serializePreferences
@@ -123,6 +127,23 @@ describe("normalizePreferences", () => {
     expect(normalizePreferences({ ui: { fontFamily: 42 } }).ui.fontFamily).toBeNull();
   });
 
+  it("clamps and rounds the shared side panel width and allows explicit null", () => {
+    expect(DEFAULT_PREFERENCES.ui.sidePanelWidth).toBeNull();
+    expect(normalizePreferences({}).ui.sidePanelWidth).toBeNull();
+    expect(normalizePreferences({ ui: { sidePanelWidth: 10 } }).ui.sidePanelWidth).toBe(
+      SIDE_PANEL_WIDTH_MIN
+    );
+    expect(normalizePreferences({ ui: { sidePanelWidth: 4000 } }).ui.sidePanelWidth).toBe(
+      SIDE_PANEL_WIDTH_MAX
+    );
+    expect(normalizePreferences({ ui: { sidePanelWidth: 271.6 } }).ui.sidePanelWidth).toBe(272);
+    expect(normalizePreferences({ ui: { sidePanelWidth: null } }).ui.sidePanelWidth).toBeNull();
+    expect(normalizePreferences({ ui: { sidePanelWidth: "wide" } }).ui.sidePanelWidth).toBeNull();
+    expect(
+      normalizePreferences({ ui: { sidePanelWidth: Number.POSITIVE_INFINITY } }).ui.sidePanelWidth
+    ).toBeNull();
+  });
+
   it("only accepts known theme modes and falls back to system otherwise", () => {
     expect(normalizePreferences({ theme: { mode: "dark" } }).theme.mode).toBe("dark");
     expect(normalizePreferences({ theme: { mode: "light" } }).theme.mode).toBe("light");
@@ -204,7 +225,7 @@ describe("normalizePreferences", () => {
     const result = normalizePreferences({
       version: 99,
       autosave: { idleDelayMs: 2000, extra: true },
-      ui: { fontSize: 18, fontFamily: "Segoe UI", extra: true },
+      ui: { fontSize: 18, fontFamily: "Segoe UI", sidePanelWidth: null, extra: true },
       document: { fontFamily: "Mono", cjkFontFamily: "Source Han Sans SC", fontSize: null, unknown: "x" },
       surprise: { nested: 1 }
     });
@@ -213,11 +234,32 @@ describe("normalizePreferences", () => {
       version: PREFERENCES_SCHEMA_VERSION,
       autosave: { idleDelayMs: 2000 },
       recentFiles: DEFAULT_PREFERENCES.recentFiles,
-      ui: { fontSize: 18, fontFamily: "Segoe UI" },
+      ui: { fontFamily: "Segoe UI", fontSize: 18, sidePanelWidth: null },
       document: { fontFamily: "Mono", cjkFontFamily: "Source Han Sans SC", fontSize: null },
       theme: DEFAULT_PREFERENCES.theme,
       images: DEFAULT_PREFERENCES.images
     });
+  });
+});
+
+describe("clampSidePanelWidth", () => {
+  it("keeps the absolute panel bounds when the available space is unknown", () => {
+    expect(clampSidePanelWidth(SIDE_PANEL_WIDTH_DEFAULT)).toBe(SIDE_PANEL_WIDTH_DEFAULT);
+    expect(clampSidePanelWidth(40)).toBe(SIDE_PANEL_WIDTH_MIN);
+    expect(clampSidePanelWidth(900)).toBe(SIDE_PANEL_WIDTH_MAX);
+    expect(clampSidePanelWidth(Number.NaN)).toBe(SIDE_PANEL_WIDTH_MIN);
+    expect(clampSidePanelWidth(200, null)).toBe(200);
+    expect(clampSidePanelWidth(200, Number.NaN)).toBe(200);
+    expect(clampSidePanelWidth(200, 0)).toBe(200);
+  });
+
+  it("never exceeds 60% of the space available to the panel", () => {
+    expect(clampSidePanelWidth(480, 600)).toBe(360);
+    expect(clampSidePanelWidth(480, 300)).toBe(180);
+    // A window too narrow to honor the minimum still yields the minimum.
+    expect(clampSidePanelWidth(480, 120)).toBe(SIDE_PANEL_WIDTH_MIN);
+    // Wide stages stay bounded by the absolute maximum.
+    expect(clampSidePanelWidth(480, 4000)).toBe(SIDE_PANEL_WIDTH_MAX);
   });
 });
 

@@ -1,5 +1,6 @@
 import { parse, postprocess, preprocess } from "micromark";
 import type { SourceText } from "./source-text";
+import type { MarkdownParseInstrumentation } from "./parse-instrumentation";
 import { math } from "micromark-extension-math";
 import type { Token } from "micromark-util-types";
 
@@ -55,6 +56,7 @@ type MathEntry = {
 type AstStackEntry = RootEntry | ContainerEntry | CodeEntry | MathEntry;
 
 export type ParseInlineAstOptions = {
+  instrumentation?: MarkdownParseInstrumentation;
   referenceDefinitions?: ReadonlyMap<string, InlineReferenceDefinition>;
   footnoteDefinitions?: ReadonlyMap<string, FootnoteDefinition>;
 };
@@ -72,6 +74,7 @@ export function parseInlineAst(
   const clampedStartOffset = clampOffset(startOffset, 0, source.length);
   const clampedEndOffset = clampOffset(endOffset, clampedStartOffset, source.length);
   const sourceSlice = source.slice(clampedStartOffset, clampedEndOffset);
+  options.instrumentation?.onInlineParse?.({ startOffset: clampedStartOffset, endOffset: clampedEndOffset, sourceLength: sourceSlice.length });
   const root: InlineRoot = {
     type: "root",
     startOffset: clampedStartOffset,

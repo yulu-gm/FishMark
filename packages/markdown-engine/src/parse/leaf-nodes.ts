@@ -21,6 +21,8 @@ import {
 import { createSourceRange, type SourceMarker, type SourceRange } from "../model/source-range";
 import { parseInlineAst } from "../parse-inline-ast";
 import type { SourceText } from "../source-text";
+import { createTableCellInline } from "./table-cell-inline";
+import type { MarkdownParseInstrumentation } from "../parse-instrumentation";
 
 // Turning concrete leaf blocks into recursive nodes. Leaf classification itself lives in
 // `leaf-blocks.ts`; this module owns the node-level concerns: identity, container paths,
@@ -28,6 +30,7 @@ import type { SourceText } from "../source-text";
 // list-item geometry.
 
 export interface LeafNodeContext {
+  readonly instrumentation?: MarkdownParseInstrumentation;
   readonly source: SourceText;
   readonly referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition>;
   readonly footnoteDefinitions: ReadonlyMap<string, FootnoteDefinition>;
@@ -35,12 +38,14 @@ export interface LeafNodeContext {
 }
 
 export function createLeafNodeContext(input: {
+  readonly instrumentation?: MarkdownParseInstrumentation;
   readonly source: SourceText;
   readonly referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition>;
   readonly footnoteDefinitions: ReadonlyMap<string, FootnoteDefinition>;
   readonly maskedSource: SourceText;
 }): LeafNodeContext {
   return {
+    instrumentation: input.instrumentation,
     source: input.source,
     referenceDefinitions: input.referenceDefinitions,
     footnoteDefinitions: input.footnoteDefinitions,
@@ -153,7 +158,7 @@ function createLeafNode(block: MarkdownBlock, path: ContainerPath, context: Leaf
     source: createSourceRange(block.startOffset, block.endOffset),
     content,
     markers,
-    data: blockNodeData(block),
+    data: blockNodeData(block, context),
     ...(inline === undefined ? {} : { inline })
   });
 }
@@ -200,6 +205,9 @@ function leafMarkers(block: MarkdownBlock, source: SourceText): readonly SourceM
 }
 
 function leafContentRange(block: MarkdownBlock, source: SourceText): SourceRange {
+  if (block.type === "definition" && block.footnoteDefinition !== undefined) {
+    return createSourceRange(block.footnoteDefinition.contentStartOffset, block.footnoteDefinition.contentEndOffset);
+  }
   if (block.type === "heading") {
     const range = resolveHeadingContentRange(block.startOffset, block.endOffset, source);
     return createSourceRange(range.contentStartOffset, range.contentEndOffset);
@@ -229,12 +237,13 @@ function createLeafInline(
   }
 
   return parseInlineAst(context.maskedSource, content.startOffset, content.endOffset, {
+    instrumentation: context.instrumentation,
     referenceDefinitions: context.referenceDefinitions,
     footnoteDefinitions: context.footnoteDefinitions
   });
 }
 
-function blockNodeData(block: MarkdownBlock): MarkdownNodeData {
+function blockNodeData(block: MarkdownBlock, context: LeafNodeContext): MarkdownNodeData {
   if (block.type === "heading") {
     return { kind: "heading", depth: block.depth };
   }
@@ -265,11 +274,11 @@ function blockNodeData(block: MarkdownBlock): MarkdownNodeData {
   }
 
   if (block.type === "table") {
-    return tableNodeData(block);
+    return tableNodeData(block, context);
   }
 
   if (block.type === "definition") {
-    return { kind: "definition" };
+    return { kind: "definition", ...(block.footnoteDefinition === undefined ? {} : { footnote: block.footnoteDefinition }) };
   }
 
   return { kind: "paragraph" };
@@ -287,15 +296,15 @@ function blockMathNodeData(block: BlockMathBlock): MarkdownNodeData {
   };
 }
 
-function tableNodeData(block: TableBlock): MarkdownNodeData {
+function tableNodeData(block: TableBlock, context: LeafNodeContext): MarkdownNodeData {
   return {
     kind: "table",
     columnCount: block.columnCount,
     hasHeader: block.hasHeader,
     rowSeparator: block.rowSeparator,
     alignments: block.alignments.map(tableAlignment),
-    header: convertTableRow(block.header),
-    rows: block.rows.map(convertTableRow)
+    header: convertTableRow(block.header, context),
+    rows: block.rows.map((row) => convertTableRow(row, context))
   };
 }
 
@@ -303,14 +312,15 @@ function tableAlignment(alignment: TableBlock["alignments"][number]): MarkdownTa
   return alignment === "none" ? null : alignment;
 }
 
-function convertTableRow(row: readonly LegacyTableCell[]): MarkdownTableRow {
+function convertTableRow(row: readonly LegacyTableCell[], context: LeafNodeContext): MarkdownTableRow {
   return Object.freeze(row.map((cell) => ({
     text: cell.text,
     rowIndex: cell.rowIndex,
     columnIndex: cell.columnIndex,
     isHeader: cell.isHeader,
     source: createSourceRange(cell.startOffset, cell.endOffset),
-    content: createSourceRange(cell.contentStartOffset, cell.contentEndOffset)
+    content: createSourceRange(cell.contentStartOffset, cell.contentEndOffset),
+    inline: createTableCellInline(cell, context)
   } satisfies MarkdownTableCell)));
 }
 

@@ -84,7 +84,7 @@ export function applyIncrementalEdit(
     id: createNodeIdForSource({ path: target.path, kind: "paragraph", source: newSource.slice(window.newStart, window.newEnd) }),
     source: createSourceRange(window.newStart, window.newEnd),
     content,
-    inline: parseInlineAst(newSource, content.startOffset, content.endOffset)
+    inline: parseInlineAst(newSource, content.startOffset, content.endOffset, { instrumentation: options.instrumentation })
   })];
   const afterChildren = after.map((child, index) =>
     shiftSubtree({
@@ -97,7 +97,8 @@ export function applyIncrementalEdit(
       source: newSource,
       referenceDefinitions,
       footnoteDefinitions,
-      reuseInline: true
+      reuseInline: true,
+      options
     })
   );
 
@@ -162,6 +163,7 @@ function shiftSubtree(input: {
   readonly referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition>;
   readonly footnoteDefinitions: ReadonlyMap<string, FootnoteDefinition>;
   readonly reuseInline?: boolean;
+  readonly options?: MarkdownParseOptions;
 }): MarkdownNode {
   const sourceRange = shiftRange(input.node.source, input.offsetDelta);
   const contentRange = shiftRange(input.node.content, input.offsetDelta);
@@ -198,6 +200,7 @@ function shiftSubtree(input: {
     ? mapSourceOffsets(input.node.inline, input.offsetDelta)
     : input.node.kind === "paragraph" || input.node.kind === "heading"
     ? parseInlineAst(input.source, contentRange.startOffset, contentRange.endOffset, {
+        instrumentation: input.options?.instrumentation,
         referenceDefinitions: input.referenceDefinitions,
         footnoteDefinitions: input.footnoteDefinitions
       })

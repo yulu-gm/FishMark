@@ -71,6 +71,8 @@ export interface ListItemBlock {
   contentEndOffset?: number;
   inline?: InlineRoot;
   task: ListItemTaskMarker | null;
+  // Complete canonical children; children below is only the legacy direct-list view.
+  blocks?: readonly MarkdownBlock[];
   children: readonly ListBlock[];
 }
 
@@ -142,6 +144,7 @@ export type TableAlignment = "none" | "left" | "center" | "right";
 export type TableRowSeparator = "compact" | "loose";
 
 export interface TableCell {
+  inline?: InlineRoot;
   text: string;
   rowIndex: number;
   columnIndex: number;

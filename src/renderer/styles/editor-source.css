@@ -11,6 +11,12 @@
   overflow: auto;
   /* Keep empty documents pinned to the top across shell-mode transitions. */
   align-items: flex-start !important;
+  /*
+   * Reserve the vertical scrollbar on both edges so the measured text column
+   * keeps its exact symmetric padding whether or not the document currently
+   * overflows, and so the centring maths stay scroll-state independent.
+   */
+  scrollbar-gutter: stable both-edges;
 }
 
 .document-editor .cm-content,
@@ -31,7 +37,19 @@
   width: 100%;
   min-height: 100%;
   box-sizing: border-box;
-  padding: 40px clamp(64px, 12vw, 220px) 56px;
+  /*
+   * Layout-invariant measure. The horizontal padding is the leftover space
+   * between the fixed document measure and the surrounding area, so the text
+   * column stays exactly `--fishmark-document-measure` wide no matter how much
+   * room the rail or the outline panel leave behind. The remainder becomes
+   * symmetric whitespace on both sides. `--fishmark-document-gutter` is the
+   * floor that keeps the narrow-window case from collapsing to zero padding.
+   */
+  --fishmark-document-padding-inline: max(
+    var(--fishmark-document-gutter),
+    (100% - var(--fishmark-document-measure)) / 2
+  );
+  padding: 40px var(--fishmark-document-padding-inline) 56px;
   caret-color: var(--fishmark-caret-color);
 }
 
@@ -90,8 +108,17 @@
   color: var(--fishmark-gutter-fg, var(--fishmark-editor-muted, #687180));
 }
 
-@media (max-width: 860px) {
-  .document-editor .cm-content {
-    padding: 28px 24px 48px;
+/*
+ * Narrow canvas: the fixed measure no longer fits next to the rail and/or the
+ * outline panel, so it contracts to the canvas width minus a symmetric
+ * `--fishmark-document-gutter` on each side. The column stays centred either
+ * way, which keeps narrow windows sane without introducing horizontal
+ * scrolling. At the probe window width (1204px viewport) this query does not
+ * apply, so all shell states keep the full 720px measure.
+ */
+@container editor-canvas (max-width: 640px) {
+  .document-editor {
+    --fishmark-document-measure: 100cqw - 2 * var(--fishmark-document-gutter);
+    --fishmark-document-padding-inline: var(--fishmark-document-gutter);
   }
 }

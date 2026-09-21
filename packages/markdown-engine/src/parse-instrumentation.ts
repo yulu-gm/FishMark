@@ -10,6 +10,7 @@ export type MarkdownFullDocumentParseEvent = {
 
 export type MarkdownParseInstrumentation = {
   onFullDocumentParse: (event: MarkdownFullDocumentParseEvent) => void;
+  onInlineParse?: (event: { startOffset: number; endOffset: number; sourceLength: number }) => void;
 };
 
 export type MarkdownParseOptions = {

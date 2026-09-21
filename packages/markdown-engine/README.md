@@ -1,6 +1,6 @@
 # Markdown 引擎包
 
-`@fishmark/markdown-engine` 是当前唯一 public entry，落点为 `src/index.ts`。Markdown 文本仍是唯一事实来源；本包负责 parser-owned block/inline/document 结构、source range 与 round-trip 辅助语义，renderer 和 editor-core 只消费公开结果。
+`@fishmark/markdown-engine` 是当前唯一 public entry，落点为 `src/index.ts`。Markdown 文本仍是唯一事实来源；本包负责 parser-owned block/inline/document 结构、source range 与 round-trip 辅助语义，renderer、`@fishmark/editor-model` 与 `@fishmark/codemirror-adapter` 只消费公开结果。
 
 当前 document parse lifecycle：
 
@@ -11,7 +11,7 @@
 
 性能探针通过显式可选的 `MarkdownParseInstrumentation` 依赖在真实 micromark `.document()` 边界记录 `reference-definitions` / `block-map` 扫描；它会随递归 blockquote 扫描继续传递，不使用全局 mutable hook，也不把 public parser entry 次数冒充为底层完整扫描次数。
 
-包边界禁止 React、Electron、CodeMirror、`@fishmark/editor-core`、`src/main`、`src/preload` 和 `src/renderer`。跨 package consumer 必须通过 `@fishmark/markdown-engine`，不得导入 `packages/markdown-engine/src/**`。
+包边界禁止 React、Electron、CodeMirror、`@fishmark/editor-model`、`src/main`、`src/preload` 和 `src/renderer`。跨 package consumer 必须通过 `@fishmark/markdown-engine`，不得导入 `packages/markdown-engine/src/**`。
 
 architecture scanner 对 static import、re-export、literal dynamic import、TypeScript import-equals、import type 与 literal `require` 使用同一 forbidden/public-entry policy。无 type checker 时 shadowed literal `require` 也按保守依赖证据处理；注释、普通字符串和非 literal `require` 不会伪报。新增语法入口不能绕开 public package entry。
 

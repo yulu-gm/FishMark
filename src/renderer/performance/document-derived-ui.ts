@@ -2,9 +2,10 @@ import {
   INCREMENTAL_STRUCTURE_CACHE_REASON,
   type EditorPerformanceCounters,
   type EditorPerformanceParserEntries
-} from "@fishmark/editor-core";
+} from "@fishmark/codemirror-adapter";
 import {
   collectReferenceDefinitions,
+  parseFullDocumentTree,
   parseMarkdownDocument,
   type MarkdownDocument,
   type MarkdownParseInstrumentation
@@ -37,16 +38,14 @@ export type RendererDerivedDataPerformanceReport = {
 export function measureRendererDerivedDataPerformance(
   source: string
 ): RendererDerivedDataPerformanceReport {
-  let outlineParseCalls = 0;
   let outlineFullDocumentParseCalls = 0;
   const outlineInstrumentation = createInstrumentation(() => {
     outlineFullDocumentParseCalls += 1;
   });
   const outline = measure(() =>
     deriveOutlineItems(source, {
-      parseMarkdownDocument: createParserProbe(() => {
-        outlineParseCalls += 1;
-      }, outlineInstrumentation)
+      parseDocumentTree: (input) =>
+        parseFullDocumentTree(input, { instrumentation: outlineInstrumentation })
     })
   );
   let metricsParseCalls = 0;
@@ -76,7 +75,9 @@ export function measureRendererDerivedDataPerformance(
       name: "outline",
       durationMs: outline.durationMs,
       itemCount: outline.value.length,
-      ...createOperationEvidence(outlineParseCalls, outlineFullDocumentParseCalls)
+      // The outline reads the canonical tree directly, so it makes no parseMarkdownDocument entry
+      // while still paying for the same two full-source scanner events.
+      ...createOperationEvidence(0, outlineFullDocumentParseCalls)
     },
     sourceLength: source.length
   };

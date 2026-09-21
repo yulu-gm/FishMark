@@ -108,7 +108,7 @@ Intake：`docs/plans/2026-09-18-rf-601-intake.md`。执行交接：`docs/plans/2
 
 ### RF-701 / RF-602 / RF-603 / RF-604 — M6 依赖顺序
 
-状态：PLANNED。用户授权完成 M6，同时包含必要的 RF-701 前置；仍逐任务实现/验收。2026-09-19 调整：M5 行为安全稳定后允许进入 RF-701，RF-506 的最终性能验收保持未通过，待 M6 删除双重显示派生后按原 bundle 预算共同收口；不得据此宣告 M5 提前 COMPLETE。
+状态：RF-701 IN_PROGRESS；RF-602/603/604 PLANNED。用户授权完成 M6，同时包含必要的 RF-701 前置；仍逐任务实现/验收。2026-09-19 调整：M5 行为安全稳定后允许进入 RF-701，RF-506 的最终性能验收保持未通过，待 M6 删除双重显示派生后按原 bundle 预算共同收口；不得据此宣告 M5 提前 COMPLETE。
 
 - RF-701：一个从 canonical snapshot 派生的共享 render plan，至少一个真实生产消费者；不把 CodeMirror DOM/可见性规则强塞给导出。
 - RF-602：revision snapshot 与 render plan 驱动装饰；普通选择/输入避免全文装饰重建；布局关键装饰直接供给，viewport 仅处理布局安全部分；有滚动/高度/组合证据。
@@ -1736,3 +1736,6 @@ Intake：`docs/plans/2026-09-18-rf-601-intake.md`。执行交接：`docs/plans/2
 - [x] 调整 blockquote Enter / Backspace 与 physical line surface，让引用内结构空行和退出引用块行为符合 Typora-like block 规则。
 - [x] 统一引用内列表编辑命令入口，让引用块内列表的 Enter、Backspace、Tab / Shift+Tab 与正文列表走同一套编辑语义。
 - [x] 增加 renderer DOM 测试与 Electron geometry / editing-experience / Typora visual probe，覆盖引用内列表、代码块、数学公式、空行 Enter 退出、source mode gate 和 Typora 导出样式对齐。
+
+## 2026-09-19 当前执行补充
+RF701 IN_PROGRESS，为完成 M6 的必要前置；用户明确以 M6 为终点。M5 checkpoint 已推送 main，行为/安全 PASS、最终性能 pending。RF701 内三个 SubAgent 分工 canonical 显示元数据、纯 render plan 和生产消费迁移，父独立验收；不同时启动无关任务。

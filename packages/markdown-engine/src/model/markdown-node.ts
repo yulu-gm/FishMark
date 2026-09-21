@@ -1,4 +1,4 @@
-import type { InlineRoot } from "../inline-ast";
+import type { FootnoteDefinitionBlockData, InlineRoot } from "../inline-ast";
 import type { ContainerPath } from "./container-path";
 import { containerPathDepth } from "./container-path";
 import type { SourceMarker, SourceRange } from "./source-range";
@@ -32,6 +32,7 @@ export interface MarkdownTableCell {
   readonly isHeader: boolean;
   readonly source: SourceRange;
   readonly content: SourceRange;
+  readonly inline: InlineRoot;
 }
 
 export type MarkdownTableRow = readonly MarkdownTableCell[];
@@ -94,7 +95,12 @@ export interface MarkdownHtmlImageData {
 }
 
 export interface MarkdownPlainData {
-  readonly kind: "document" | "blockquote" | "paragraph" | "definition";
+  readonly kind: "document" | "blockquote" | "paragraph";
+}
+
+export interface MarkdownDefinitionData {
+  readonly kind: "definition";
+  readonly footnote?: FootnoteDefinitionBlockData;
 }
 
 export type MarkdownNodeData =
@@ -106,6 +112,7 @@ export type MarkdownNodeData =
   | MarkdownTableData
   | MarkdownThematicBreakData
   | MarkdownHtmlImageData
+  | MarkdownDefinitionData
   | MarkdownPlainData;
 
 export interface MarkdownNodeBase {

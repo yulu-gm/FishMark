@@ -16,7 +16,7 @@ import type {
   EditorBehaviorRunReport
 } from "../../fixtures/editor-behavior/runner-protocol";
 import { createEditorBehaviorFormalRun } from "../../fixtures/editor-behavior/formal-run-port";
-import { getMarkdownEditorViewMode } from "@fishmark/editor-core";
+import { getMarkdownEditorViewMode } from "@fishmark/codemirror-adapter";
 import { createCodeEditorController } from "./code-editor";
 import { observeEditorBehaviorCheckpoint } from "./editor-behavior-observer";
 

@@ -296,12 +296,13 @@ function cloneFootnoteDefinition(definition: FootnoteDefinition): FootnoteDefini
 export function enrichFootnoteDefinitions(
   definitions: ReadonlyMap<string, FootnoteDefinition>,
   source: string,
-  referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition>
+  referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition>,
+  options: MarkdownParseOptions = {}
 ): Map<string, FootnoteDefinition> {
   const enriched = new Map<string, FootnoteDefinition>();
 
   for (const [identifier, definition] of definitions) {
-    enriched.set(identifier, enrichFootnoteDefinition(definition, source, referenceDefinitions, definitions));
+    enriched.set(identifier, enrichFootnoteDefinition(definition, source, referenceDefinitions, definitions, options));
   }
 
   return enriched;
@@ -311,13 +312,15 @@ function enrichFootnoteDefinition(
   definition: FootnoteDefinition,
   source: string,
   referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition>,
-  footnoteDefinitions: ReadonlyMap<string, FootnoteDefinition>
+  footnoteDefinitions: ReadonlyMap<string, FootnoteDefinition>,
+  options: MarkdownParseOptions
 ): FootnoteDefinition {
   return {
     ...definition,
     lines: definition.lines.map((line) => ({
       ...line,
       inline: parseInlineAst(source, line.contentStartOffset, line.contentEndOffset, {
+        instrumentation: options.instrumentation,
         referenceDefinitions,
         footnoteDefinitions
       })

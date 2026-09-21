@@ -19,7 +19,9 @@ import { createSourceRange, type SourceMarker, type SourceRange } from "../model
 import { createMaskedSource, type SourceText } from "../source-text";
 import type { MarkdownParseOptions } from "../parse-instrumentation";
 import {
-  collectFootnoteDefinitionsFromBlocks,
+  collectFootnoteDefinitionData,
+  attachFootnoteDefinitionBlocks,
+  type FootnoteDefinitionCandidate,
   collectReferenceDefinitions,
   enrichFootnoteDefinitions
 } from "./definition-index";
@@ -128,10 +130,12 @@ export function parseFullDocumentTree(
   // from the raw top-level leaf blocks before nodes are materialized. Inline parsing of every
   // container child then sees the same definition index.
   const topLevelBlocks = mergeLeafSiblingBlocks([...topLevelLeafBlocks(root)], source);
+  const footnoteData = collectFootnoteDefinitionData(source, topLevelBlocks);
   const footnoteDefinitions = enrichFootnoteDefinitions(
-    collectFootnoteDefinitionsFromBlocks(source, topLevelBlocks),
+    footnoteData.definitions,
     source,
-    referenceDefinitions
+    referenceDefinitions,
+    options
   );
 
   const tree = createMarkdownDocumentTree(
@@ -141,6 +145,8 @@ export function parseFullDocumentTree(
       source,
       referenceDefinitions,
       footnoteDefinitions,
+      footnoteCandidates: footnoteData.candidates,
+      options,
       maskedSource: source
     }),
     { source, referenceDefinitions, footnoteDefinitions }
@@ -375,11 +381,14 @@ function materializeContainer(input: {
   readonly source: string;
   readonly referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition>;
   readonly footnoteDefinitions: ReadonlyMap<string, FootnoteDefinition>;
+  readonly footnoteCandidates?: readonly FootnoteDefinitionCandidate[];
+  readonly options?: MarkdownParseOptions;
   readonly maskedSource: SourceText;
 }): MarkdownContainerNode {
   const children: MarkdownNode[] = [];
   const maskedSource = input.frame.maskedSource;
   const context = createLeafNodeContext({
+    instrumentation: input.options?.instrumentation,
     source: input.source,
     referenceDefinitions: input.referenceDefinitions,
     footnoteDefinitions: input.footnoteDefinitions,
@@ -387,12 +396,21 @@ function materializeContainer(input: {
   });
   let index = 0;
   let pendingBlocks: MarkdownBlock[] = [];
+  let footnoteCandidateIndex = 0;
 
   const flushBlocks = () => {
     if (pendingBlocks.length === 0) return;
     const merged = mergeLeafSiblingBlocks(pendingBlocks, maskedSource);
+    const candidates: FootnoteDefinitionCandidate[] = [];
+    while (input.footnoteCandidates !== undefined && footnoteCandidateIndex < input.footnoteCandidates.length &&
+        input.footnoteCandidates[footnoteCandidateIndex]!.startOffset < merged.at(-1)!.endOffset) {
+      candidates.push(input.footnoteCandidates[footnoteCandidateIndex++]!);
+    }
+    const blocks = candidates.length === 0 ? merged : attachFootnoteDefinitionBlocks(
+      merged, candidates, input.footnoteDefinitions, input.source
+    );
     const nodes = createNodesFromBlocks({
-      blocks: merged,
+      blocks,
       context,
       parentPath: input.path,
       startIndex: index
@@ -415,6 +433,7 @@ function materializeContainer(input: {
       source: input.source,
       referenceDefinitions: input.referenceDefinitions,
       footnoteDefinitions: input.footnoteDefinitions,
+      options: input.options,
       maskedSource
     }));
     index += 1;

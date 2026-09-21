@@ -3,15 +3,15 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-const mathWidgetsPath = join(process.cwd(), "packages/editor-core/src/decorations/math-widgets.ts");
+const mathWidgetsPath = join(process.cwd(), "packages/codemirror-adapter/src/decorations/math-widgets.ts");
 const katexPreviewRendererPath = join(
   process.cwd(),
-  "packages/editor-core/src/decorations/katex-preview-renderer.ts"
+  "packages/codemirror-adapter/src/decorations/katex-preview-renderer.ts"
 );
-const mermaidWidgetsPath = join(process.cwd(), "packages/editor-core/src/decorations/mermaid-widgets.ts");
+const mermaidWidgetsPath = join(process.cwd(), "packages/codemirror-adapter/src/decorations/mermaid-widgets.ts");
 const mermaidPreviewRendererPath = join(
   process.cwd(),
-  "packages/editor-core/src/decorations/mermaid-preview-renderer.ts"
+  "packages/codemirror-adapter/src/decorations/mermaid-preview-renderer.ts"
 );
 
 describe("editor preview assets", () => {

@@ -1,12 +1,15 @@
 import {
   Suspense,
   lazy,
+  useEffect,
+  useRef,
   useState,
   type ChangeEvent,
   type CSSProperties,
   type DragEvent,
   type KeyboardEvent,
   type MouseEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactElement,
   type RefObject,
   type SVGProps
@@ -15,12 +18,19 @@ import {
 import {
   DEFAULT_TEXT_SHORTCUT_GROUP,
   formatShortcutHintKey,
-  type ActiveBlockState,
   type EditorViewMode,
   type ShortcutGroup
-} from "@fishmark/editor-core";
+} from "@fishmark/codemirror-adapter";
+import type { ActiveBlockState } from "@fishmark/editor-model";
 import type { AppNotification } from "../../shared/app-update";
-import type { Preferences, PreferencesUpdate } from "../../shared/preferences";
+import {
+  SIDE_PANEL_WIDTH_DEFAULT,
+  SIDE_PANEL_WIDTH_MAX,
+  SIDE_PANEL_WIDTH_MIN,
+  clampSidePanelWidth,
+  type Preferences,
+  type PreferencesUpdate
+} from "../../shared/preferences";
 import type { RecentFilesSnapshot } from "../../shared/recent-files";
 import type { ThemeEffectsMode } from "../../shared/theme-package";
 import type { WorkspaceWindowSnapshot } from "../../shared/workspace";
@@ -48,12 +58,30 @@ const SettingsView = lazy(async () => {
 });
 
 type ShellMode = "reading" | "editing";
+/**
+ * The rail switches the shared side panel between view containers; the same
+ * container id is what `aria-pressed` on the rail button reports, and `null`
+ * means the region is collapsed.
+ */
+export type WorkspaceViewContainerId = "search" | "outline";
 type AppNotificationBannerState = "hidden" | "open" | "closing";
 type TableToolTone = "default" | "danger";
 type TableToolIconComponent = (props: SVGProps<SVGSVGElement>) => ReactElement;
 type FindReplaceSnapshot = {
   matchCount: number;
   currentMatchIndex: number | null;
+};
+/**
+ * In-flight pointer drag of the shared side panel's right edge. `startWidth` is
+ * the width when the drag began and `availableWidth` is the space the panel
+ * column may occupy; both are captured at pointerdown so a frame only needs the
+ * pointer delta.
+ */
+type SidePanelResizeSession = {
+  pointerId: number;
+  startX: number;
+  startWidth: number;
+  availableWidth: number;
 };
 type TableToolAction = {
   id: string;
@@ -62,6 +90,14 @@ type TableToolAction = {
   icon: TableToolIconComponent;
   onClick: () => void;
 };
+
+const VIEW_CONTAINER_LABELS: Record<WorkspaceViewContainerId, string> = {
+  search: "Search",
+  outline: "Outline"
+};
+
+/** Keyboard resize step for the panel separator, in CSS pixels. */
+const SIDE_PANEL_RESIZE_KEY_STEP = 16;
 
 function createWelcomeShortcutTip(platform: string, random = Math.random) {
   const shortcuts = DEFAULT_TEXT_SHORTCUT_GROUP.shortcuts;
@@ -146,6 +182,14 @@ function SearchIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+function OutlineIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" {...props}>
+      <path d="M4 6h3M4 12h3M4 18h3M10 6h10M10 12h10M10 18h6" />
+    </svg>
+  );
+}
+
 function SettingsDrawerFallback({ surfaceState }: { surfaceState: "open" | "closing" }) {
   return (
     <section
@@ -167,9 +211,11 @@ export type WorkspaceShellProps = {
   activeTableToolId: string | null;
   activeThemePackageSurface?: never;
   activeTitlebarSurface: ThemeSurfaceHostDescriptor | null;
+  activeViewContainer: WorkspaceViewContainerId | null;
   activeWorkbenchSurface: ThemeSurfaceHostDescriptor | null;
   appUpdateStatusLabel: string | null;
   appVersionLabel: string;
+  closingViewContainer: WorkspaceViewContainerId | null;
   controlledTitlebarEnabled: boolean;
   currentDocumentMetrics: { meaningfulCharacterCount: number } | null;
   effectiveSaveState: "idle" | "manual-saving" | "autosaving";
@@ -185,8 +231,6 @@ export type WorkspaceShellProps = {
   fontFamilies: string[];
   headerTitle: string;
   isDocumentOpen: boolean;
-  isOutlineOpen: boolean;
-  isOutlinePanelVisible: boolean;
   isReadingMode: boolean;
   isRefreshingThemePackages: boolean;
   isSettingsDrawerVisible: boolean;
@@ -202,6 +246,11 @@ export type WorkspaceShellProps = {
   saveStatusLabel: string;
   settingsEntryRef: RefObject<HTMLButtonElement | null>;
   shellMode: ShellMode;
+  /**
+   * Stored width of the shared side panel region, shared by every view
+   * container. `null` means "not set yet" and resolves to the default.
+   */
+  sidePanelStoredWidth: number | null;
   themePackages: ThemePackageEntry[];
   themeRuntimeEnv: ThemeRuntimeEnv;
   titlebarHeight: number;
@@ -209,7 +258,7 @@ export type WorkspaceShellProps = {
   onActiveBlockChange: (activeBlockState: ActiveBlockState) => void;
   onAppWorkspaceMouseDownCapture: (event: MouseEvent<HTMLElement>) => void;
   onCaptureSettingsOpenOrigin: () => void;
-  onCloseOutlinePanel: () => void;
+  onCloseViewContainer: () => void;
   onCloseSettingsDrawer: () => void;
   onCloseWorkspaceTab: (tabId: string) => void;
   onDismissExternalFileConflict: () => void;
@@ -251,12 +300,14 @@ export type WorkspaceShellProps = {
   onDeleteTableRow: () => void;
   onKeepMemoryVersion: () => void;
   onNavigateToOutlineItem: (startOffset: number) => void;
-  onOpenOutlinePanel: () => void;
+  onToggleViewContainer: (viewContainerId: WorkspaceViewContainerId) => void;
   onOpenRecentFile: (targetPath: string) => void;
   onClearRecentFile: (targetPath: string) => void;
   onReloadExternalFile: () => void;
   onSaveAs: () => void;
   onSettingsOpen: () => void;
+  /** Persist a pointerup/keyboard side panel width. Never called per frame. */
+  onSidePanelWidthCommit: (width: number) => void;
   onTableToolHoverChange: (toolId: string | null) => void;
   onTabActivate: (tabId: string) => void;
   onTabDragEnd: (tabId: string) => void;
@@ -347,9 +398,11 @@ export function WorkspaceShell({
   activeShortcutGroup,
   activeTableToolId,
   activeTitlebarSurface,
+  activeViewContainer,
   activeWorkbenchSurface,
   appUpdateStatusLabel,
   appVersionLabel,
+  closingViewContainer,
   controlledTitlebarEnabled,
   currentDocumentMetrics,
   editorContainerRef,
@@ -364,8 +417,6 @@ export function WorkspaceShell({
   fontFamilies,
   headerTitle,
   isDocumentOpen,
-  isOutlineOpen,
-  isOutlinePanelVisible,
   isReadingMode,
   isRefreshingThemePackages,
   isSettingsDrawerVisible,
@@ -381,6 +432,7 @@ export function WorkspaceShell({
   saveStatusLabel,
   settingsEntryRef,
   shellMode,
+  sidePanelStoredWidth,
   themePackages,
   themeRuntimeEnv,
   titlebarHeight,
@@ -389,7 +441,7 @@ export function WorkspaceShell({
   onActiveBlockChange,
   onAppWorkspaceMouseDownCapture,
   onCaptureSettingsOpenOrigin,
-  onCloseOutlinePanel,
+  onCloseViewContainer,
   onCloseSettingsDrawer,
   onCloseWorkspaceTab,
   onDeleteTable,
@@ -413,7 +465,7 @@ export function WorkspaceShell({
   onInsertTableRowBelow,
   onKeepMemoryVersion,
   onNavigateToOutlineItem,
-  onOpenOutlinePanel,
+  onToggleViewContainer,
   onOpenExternalLink,
   onOpenRecentFile,
   onClearRecentFile,
@@ -421,6 +473,7 @@ export function WorkspaceShell({
   onRefreshThemePackages,
   onSaveAs,
   onSettingsOpen,
+  onSidePanelWidthCommit,
   onTableToolHoverChange,
   onTabActivate,
   onTabDragEnd,
@@ -435,8 +488,6 @@ export function WorkspaceShell({
   const workspaceTabs = workspaceSnapshot?.tabs ?? [];
   const activeTabId = workspaceSnapshot?.activeTabId ?? null;
   const nextEditorViewMode: EditorViewMode = editorViewMode === "source" ? "wysiwym" : "source";
-  const [isFindReplaceOpen, setIsFindReplaceOpen] = useState(false);
-  const [findReplaceTabId, setFindReplaceTabId] = useState<string | null>(null);
   const [findText, setFindText] = useState("");
   const [replaceText, setReplaceText] = useState("");
   const [welcomeShortcutTip] = useState(() => createWelcomeShortcutTip(fishmarkPlatform));
@@ -444,6 +495,22 @@ export function WorkspaceShell({
     matchCount: 0,
     currentMatchIndex: null
   });
+  const [resizeSession, setResizeSession] = useState<SidePanelResizeSession | null>(null);
+  const [draggedPanelWidth, setDraggedPanelWidth] = useState<number | null>(null);
+  const findInputRef = useRef<HTMLInputElement | null>(null);
+  const resizeSessionRef = useRef<SidePanelResizeSession | null>(null);
+  const draggedPanelWidthRef = useRef<number | null>(null);
+  const workspaceShellRef = useRef<HTMLElement | null>(null);
+  /*
+   * The rail switches the shared side panel between view containers and
+   * `Ctrl/Cmd+F` opens the Search container; the inline find bar no longer
+   * exists, so CodeMirror's own search query stays the only source of truth for
+   * what is searched while these fields only mirror it for editing.
+   */
+  const visibleViewContainer = activeViewContainer ?? closingViewContainer;
+  const isSidePanelOpen = activeViewContainer !== null;
+  const isSidePanelVisible = visibleViewContainer !== null;
+  const isSearchViewActive = activeViewContainer === "search";
   const tableToolActions = createTableToolActions({
     onDeleteTable,
     onDeleteTableColumn,
@@ -453,44 +520,43 @@ export function WorkspaceShell({
     onInsertTableRowAbove,
     onInsertTableRowBelow
   });
-  const isFindReplaceEnabled = isDocumentOpen && activeDocument !== null;
-  const isFindReplaceStateCurrent = findReplaceTabId === activeTabId;
-  const isFindReplacePanelOpen = isFindReplaceOpen && isFindReplaceStateCurrent;
-  const activeFindText = isFindReplaceStateCurrent ? findText : "";
-  const activeReplaceText = isFindReplaceStateCurrent ? replaceText : "";
-  const activeFindReplaceSnapshot = isFindReplaceStateCurrent
-    ? findReplaceSnapshot
-    : {
-        matchCount: 0,
-        currentMatchIndex: null
-      };
+  const isViewContainerEnabled = isDocumentOpen && activeDocument !== null;
+  /*
+   * The stored width is resolved for the drag maths (the CSS clamps it for
+   * display); a collapsed region never overwrites it.
+   */
+  const displayedSidePanelWidth = draggedPanelWidth ?? sidePanelStoredWidth ?? SIDE_PANEL_WIDTH_DEFAULT;
+  const isResizingSidePanel = resizeSession !== null;
+  /*
+   * The shared side panel renders `activeViewContainer` while it is expanded
+   * and keeps `closingViewContainer` mounted until the exit animation ends.
+   */
+  const visibleViewContainerLabel = visibleViewContainer
+    ? VIEW_CONTAINER_LABELS[visibleViewContainer]
+    : null;
 
-  const openFindReplacePanel = () => {
-    if (!isFindReplaceEnabled) {
+  useEffect(() => {
+    if (!isSearchViewActive) {
       return;
     }
 
-    const nextFindText = isFindReplaceStateCurrent ? findText : "";
-    const nextReplaceText = isFindReplaceStateCurrent ? replaceText : "";
+    findInputRef.current?.focus();
+  }, [isSearchViewActive]);
 
-    setFindReplaceTabId(activeTabId);
-    setFindText(nextFindText);
-    setReplaceText(nextReplaceText);
-    setIsFindReplaceOpen(true);
-    setFindReplaceSnapshot(
-      editorRef.current?.updateFindReplaceQuery({
-        search: nextFindText,
-        replace: nextReplaceText
-      }) ?? {
-        matchCount: 0,
-        currentMatchIndex: null
-      }
-    );
-  };
+  /*
+   * While the region is expanded the canvas publishes the stored width as a CSS
+   * variable; the stylesheet clamps it for the available viewport (display
+   * only), and the drag path overrides the same variable for live resizing.
+   * While it is closing the override is dropped so the column animates to 0px.
+   */
+  const sidePanelWidthVariables =
+    isSidePanelVisible
+      ? ({
+          "--fishmark-side-panel-stored-width": `${displayedSidePanelWidth}px`
+        } as CSSProperties)
+      : undefined;
 
   const closeFindReplacePanel = () => {
-    setIsFindReplaceOpen(false);
-    setFindReplaceTabId(null);
     setFindText("");
     setReplaceText("");
     setFindReplaceSnapshot(
@@ -502,6 +568,120 @@ export function WorkspaceShell({
     editorRef.current?.focus();
   };
 
+  const exitSearchViewContainer = () => {
+    closeFindReplacePanel();
+    onCloseViewContainer();
+  };
+
+  /*
+   * The panel's collapse affordance clears this view container's query as well
+   * as collapsing the region; CodeMirror search state stays the single source
+   * of truth, so nothing else has to mirror it.
+   */
+  const collapseVisibleViewContainer = () => {
+    if (visibleViewContainer === "search") {
+      closeFindReplacePanel();
+    }
+
+    onCloseViewContainer();
+  };
+
+  /*
+   * The panel column may occupy the workspace stage minus the gap; when the
+   * shell has not been laid out (or is not mounted) fall back to the window so
+   * the drag still has a sane maximum.
+   */
+  const measureSidePanelAvailableWidth = (): number => {
+    const shell = workspaceShellRef.current;
+    const shellWidth = shell?.getBoundingClientRect().width ?? 0;
+
+    return shellWidth > 0 ? shellWidth : window.innerWidth;
+  };
+
+  const applyDraggedPanelWidth = (width: number | null) => {
+    draggedPanelWidthRef.current = width;
+    setDraggedPanelWidth(width);
+  };
+
+  const handleSidePanelResizePointerDown = (event: ReactPointerEvent<HTMLElement>) => {
+    if (event.button !== 0) {
+      return;
+    }
+
+    // Keep focus (and the caret) where it was while the pointer drags.
+    event.preventDefault();
+
+    const availableWidth = measureSidePanelAvailableWidth();
+    const displayWidth = clampSidePanelWidth(displayedSidePanelWidth, availableWidth);
+    const session: SidePanelResizeSession = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startWidth: displayWidth,
+      availableWidth
+    };
+
+    resizeSessionRef.current = session;
+    setResizeSession(session);
+    applyDraggedPanelWidth(displayWidth);
+  };
+
+  const handleSidePanelResizePointerMove = (event: ReactPointerEvent<HTMLElement>) => {
+    const session = resizeSessionRef.current;
+
+    if (!session || session.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const pointerDelta = event.clientX - session.startX;
+
+    applyDraggedPanelWidth(
+      clampSidePanelWidth(session.startWidth + pointerDelta, session.availableWidth)
+    );
+  };
+
+  /**
+   * End the drag. `commit` writes the resulting width to preferences exactly
+   * once; cancelling (Escape) restores the pre-drag width without writing.
+   */
+  const finishSidePanelResize = (commit: boolean) => {
+    const session = resizeSessionRef.current;
+    const width = draggedPanelWidthRef.current;
+
+    resizeSessionRef.current = null;
+    setResizeSession(null);
+    applyDraggedPanelWidth(null);
+
+    if (!commit || session === null || width === null) {
+      return;
+    }
+
+    onSidePanelWidthCommit(clampSidePanelWidth(width, session.availableWidth));
+  };
+
+  const handleSidePanelResizeKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key === "Escape" && resizeSessionRef.current !== null) {
+      event.preventDefault();
+      finishSidePanelResize(false);
+      return;
+    }
+
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+      return;
+    }
+
+    event.preventDefault();
+    const availableWidth = measureSidePanelAvailableWidth();
+    const baseWidth = clampSidePanelWidth(displayedSidePanelWidth, availableWidth);
+    const direction = event.key === "ArrowLeft" ? -1 : 1;
+    const nextWidth = clampSidePanelWidth(
+      baseWidth + direction * SIDE_PANEL_RESIZE_KEY_STEP,
+      availableWidth
+    );
+
+    applyDraggedPanelWidth(nextWidth);
+    onSidePanelWidthCommit(nextWidth);
+  };
+
   const handleFindTextChange = (event: ChangeEvent<HTMLInputElement>) => {
     const nextFindText = event.currentTarget.value;
 
@@ -509,7 +689,7 @@ export function WorkspaceShell({
     setFindReplaceSnapshot(
       editorRef.current?.updateFindReplaceQuery({
         search: nextFindText,
-        replace: activeReplaceText
+        replace: replaceText
       }) ?? {
         matchCount: 0,
         currentMatchIndex: null
@@ -523,7 +703,7 @@ export function WorkspaceShell({
     setReplaceText(nextReplaceText);
     setFindReplaceSnapshot(
       editorRef.current?.updateFindReplaceQuery({
-        search: activeFindText,
+        search: findText,
         replace: nextReplaceText
       }) ?? {
         matchCount: 0,
@@ -535,7 +715,7 @@ export function WorkspaceShell({
   const handleFindReplaceKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
-      closeFindReplacePanel();
+      exitSearchViewContainer();
       return;
     }
 
@@ -543,26 +723,34 @@ export function WorkspaceShell({
       event.preventDefault();
       setFindReplaceSnapshot(
         event.shiftKey
-          ? editorRef.current?.findPreviousMatch() ?? activeFindReplaceSnapshot
-          : editorRef.current?.findNextMatch() ?? activeFindReplaceSnapshot
+          ? editorRef.current?.findPreviousMatch() ?? findReplaceSnapshot
+          : editorRef.current?.findNextMatch() ?? findReplaceSnapshot
       );
     }
   };
 
   const handleWorkspaceKeyDownCapture = (event: KeyboardEvent<HTMLElement>) => {
-    if (!isFindReplaceEnabled || event.key.toLowerCase() !== "f" || (!event.metaKey && !event.ctrlKey)) {
+    if (
+      !isViewContainerEnabled ||
+      event.key.toLowerCase() !== "f" ||
+      (!event.metaKey && !event.ctrlKey)
+    ) {
       return;
     }
 
+    /*
+     * `Ctrl/Cmd+F` is the keyboard entry point into the shared region's Search
+     * view container; the rail button drives the same toggle.
+     */
     event.preventDefault();
-    openFindReplacePanel();
+    onToggleViewContainer("search");
   };
 
-  const matchStatusLabel = activeFindText.length === 0
+  const matchStatusLabel = findText.length === 0
     ? "No query"
-    : activeFindReplaceSnapshot.matchCount === 0
+    : findReplaceSnapshot.matchCount === 0
       ? "No matches"
-      : `${activeFindReplaceSnapshot.currentMatchIndex ?? 0} / ${activeFindReplaceSnapshot.matchCount}`;
+      : `${findReplaceSnapshot.currentMatchIndex ?? 0} / ${findReplaceSnapshot.matchCount}`;
 
   return (
     <main
@@ -608,7 +796,6 @@ export function WorkspaceShell({
           className="app-rail"
           data-fishmark-layout="rail"
           data-fishmark-rail-mode={activeShortcutGroup.id}
-          data-visibility={isDocumentOpen && isReadingMode ? "collapsed" : "visible"}
         >
           <div className="app-rail-brand">
             <p className="app-name">FishMark</p>
@@ -625,11 +812,24 @@ export function WorkspaceShell({
                 className="rail-tool-button"
                 data-fishmark-command="find-replace"
                 aria-label="Find and replace"
+                aria-pressed={activeViewContainer === "search"}
                 title="Find and replace"
-                disabled={!isFindReplaceEnabled}
-                onClick={openFindReplacePanel}
+                disabled={!isViewContainerEnabled}
+                onClick={() => onToggleViewContainer("search")}
               >
                 <SearchIcon className="rail-tool-button-icon" />
+              </button>
+              <button
+                type="button"
+                className="rail-tool-button"
+                data-fishmark-command="outline"
+                aria-label="Outline"
+                aria-pressed={activeViewContainer === "outline"}
+                title="Outline"
+                disabled={!isViewContainerEnabled}
+                onClick={() => onToggleViewContainer("outline")}
+              >
+                <OutlineIcon className="rail-tool-button-icon" />
               </button>
               <div
                 className="app-rail-spacer"
@@ -871,6 +1071,7 @@ export function WorkspaceShell({
             data-fishmark-region="workspace-canvas"
             data-fishmark-shell-mode={shellMode}
             data-fishmark-has-document={isDocumentOpen ? "true" : "false"}
+            style={sidePanelWidthVariables}
           >
             {activeDocument ? (
               <>
@@ -885,117 +1086,17 @@ export function WorkspaceShell({
                     group={activeShortcutGroup}
                   />
                 </div>
-                <section className={`workspace-shell ${isOutlineOpen ? "is-outline-open" : ""}`}>
+                <section
+                  className={`workspace-shell ${isSidePanelOpen ? "is-side-panel-open" : ""} ${
+                    isResizingSidePanel ? "is-side-panel-resizing" : ""
+                  }`}
+                  ref={workspaceShellRef}
+                  style={sidePanelWidthVariables}
+                >
                   <div
                     className="document-canvas"
                     ref={editorContainerRef}
                   >
-                    {isFindReplacePanelOpen ? (
-                      <section
-                        className="find-replace-panel"
-                        data-fishmark-region="find-replace-panel"
-                        aria-label="Find and replace"
-                        onKeyDown={handleFindReplaceKeyDown}
-                      >
-                        <div className="find-replace-row">
-                          <label className="find-replace-field">
-                            <span>Find</span>
-                            <input
-                              type="search"
-                              className="find-replace-input"
-                              aria-label="Find text"
-                              value={activeFindText}
-                              onChange={handleFindTextChange}
-                            />
-                          </label>
-                          <p
-                            className="find-replace-status"
-                            data-fishmark-region="find-replace-status"
-                            aria-live="polite"
-                          >
-                            {matchStatusLabel}
-                          </p>
-                          <button
-                            type="button"
-                            className="find-replace-icon-button"
-                            aria-label="Previous match"
-                            disabled={activeFindReplaceSnapshot.matchCount === 0}
-                            onClick={() =>
-                              setFindReplaceSnapshot(
-                                editorRef.current?.findPreviousMatch() ?? activeFindReplaceSnapshot
-                              )
-                            }
-                          >
-                            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                              <path d="M6 14l6-6 6 6" />
-                            </svg>
-                          </button>
-                          <button
-                            type="button"
-                            className="find-replace-icon-button"
-                            aria-label="Next match"
-                            disabled={activeFindReplaceSnapshot.matchCount === 0}
-                            onClick={() =>
-                              setFindReplaceSnapshot(
-                                editorRef.current?.findNextMatch() ?? activeFindReplaceSnapshot
-                              )
-                            }
-                          >
-                            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                              <path d="M6 10l6 6 6-6" />
-                            </svg>
-                          </button>
-                          <button
-                            type="button"
-                            className="find-replace-icon-button"
-                            aria-label="Close find and replace"
-                            onClick={closeFindReplacePanel}
-                          >
-                            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                              <path d="M7 7l10 10M17 7L7 17" />
-                            </svg>
-                          </button>
-                        </div>
-                        <div className="find-replace-row">
-                          <label className="find-replace-field">
-                            <span>Replace</span>
-                            <input
-                              type="text"
-                              className="find-replace-input"
-                              aria-label="Replace with"
-                              value={activeReplaceText}
-                              onChange={handleReplaceTextChange}
-                            />
-                          </label>
-                          <button
-                            type="button"
-                            className="find-replace-text-button"
-                            aria-label="Replace current match"
-                            disabled={activeFindReplaceSnapshot.matchCount === 0}
-                            onClick={() =>
-                              setFindReplaceSnapshot(
-                                editorRef.current?.replaceCurrentMatch() ?? activeFindReplaceSnapshot
-                              )
-                            }
-                          >
-                            Replace
-                          </button>
-                          <button
-                            type="button"
-                            className="find-replace-text-button"
-                            aria-label="Replace all matches"
-                            disabled={activeFindReplaceSnapshot.matchCount === 0}
-                            onClick={() =>
-                              setFindReplaceSnapshot(
-                                editorRef.current?.replaceAllMatches() ?? activeFindReplaceSnapshot
-                              )
-                            }
-                          >
-                            All
-                          </button>
-                        </div>
-                      </section>
-                    ) : null}
                     <CodeEditorView
                       ref={editorRef}
                       initialContent={activeDocument.content}
@@ -1020,23 +1121,24 @@ export function WorkspaceShell({
                       onBlur={onEditorBlur}
                     />
                   </div>
-                  {isOutlinePanelVisible ? (
+                  {visibleViewContainer && visibleViewContainerLabel ? (
                     <aside
-                      className="outline-panel"
-                      data-fishmark-region="outline-panel"
-                      data-state={isOutlineOpen ? "open" : "closing"}
-                      aria-label="Document outline"
+                      className="side-panel"
+                      data-fishmark-region="side-panel"
+                      data-view-container={visibleViewContainer}
+                      data-state={isSidePanelOpen ? "open" : "closing"}
+                      aria-label={visibleViewContainerLabel}
                     >
                       <div
-                        className="outline-panel-header"
-                        data-fishmark-region="outline-panel-header"
+                        className="side-panel-header"
+                        data-fishmark-region="side-panel-header"
                       >
-                        <p className="outline-panel-title">Outline</p>
+                        <p className="side-panel-title">{visibleViewContainerLabel}</p>
                         <button
                           type="button"
-                          className="outline-panel-close"
-                          aria-label="Collapse outline"
-                          onClick={onCloseOutlinePanel}
+                          className="side-panel-close"
+                          aria-label={`Collapse ${visibleViewContainerLabel.toLowerCase()}`}
+                          onClick={collapseVisibleViewContainer}
                         >
                           <svg
                             width="14"
@@ -1046,7 +1148,7 @@ export function WorkspaceShell({
                             focusable="false"
                           >
                             <path
-                              d="M9 6l6 6-6 6"
+                              d="M15 6l-6 6 6 6"
                               fill="none"
                               stroke="currentColor"
                               strokeWidth="1.8"
@@ -1057,57 +1159,155 @@ export function WorkspaceShell({
                         </button>
                       </div>
                       <div
-                        className="outline-panel-body"
-                        data-fishmark-region="outline-panel-body"
+                        className="side-panel-body"
+                        data-fishmark-region="side-panel-body"
                       >
-                        {outlineItems.length > 0 ? (
-                          <ol className="outline-panel-list">
-                            {outlineItems.map((item) => (
-                              <li key={item.id}>
-                                <button
-                                  type="button"
-                                  className={`outline-panel-item ${activeHeadingId === item.id ? "is-current" : ""}`}
-                                  style={{
-                                    paddingInlineStart: `${10 + Math.max(item.depth - 1, 0) * 10}px`
-                                  }}
-                                  onClick={() => onNavigateToOutlineItem(item.startOffset)}
-                                >
-                                  <span className="outline-panel-item-label">{item.label}</span>
-                                </button>
-                              </li>
-                            ))}
-                          </ol>
-                        ) : (
-                          <p className="outline-panel-empty">No headings yet.</p>
-                        )}
+                        {visibleViewContainer === "search" ? (
+                          <div
+                            className="find-replace-panel"
+                            data-fishmark-region="search"
+                            aria-label="Find and replace"
+                            onKeyDown={handleFindReplaceKeyDown}
+                          >
+                            <label className="find-replace-field">
+                              <span>Find</span>
+                              <input
+                                type="search"
+                                className="find-replace-input"
+                                aria-label="Find text"
+                                ref={findInputRef}
+                                value={findText}
+                                onChange={handleFindTextChange}
+                              />
+                            </label>
+                            <div className="find-replace-row">
+                              <p
+                                className="find-replace-status"
+                                data-fishmark-region="find-replace-status"
+                                aria-live="polite"
+                              >
+                                {matchStatusLabel}
+                              </p>
+                              <button
+                                type="button"
+                                className="find-replace-icon-button"
+                                aria-label="Previous match"
+                                disabled={findReplaceSnapshot.matchCount === 0}
+                                onClick={() =>
+                                  setFindReplaceSnapshot(
+                                    editorRef.current?.findPreviousMatch() ?? findReplaceSnapshot
+                                  )
+                                }
+                              >
+                                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                  <path d="M6 14l6-6 6 6" />
+                                </svg>
+                              </button>
+                              <button
+                                type="button"
+                                className="find-replace-icon-button"
+                                aria-label="Next match"
+                                disabled={findReplaceSnapshot.matchCount === 0}
+                                onClick={() =>
+                                  setFindReplaceSnapshot(
+                                    editorRef.current?.findNextMatch() ?? findReplaceSnapshot
+                                  )
+                                }
+                              >
+                                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                  <path d="M6 10l6 6 6-6" />
+                                </svg>
+                              </button>
+                            </div>
+                            <label className="find-replace-field">
+                              <span>Replace</span>
+                              <input
+                                type="text"
+                                className="find-replace-input"
+                                aria-label="Replace with"
+                                value={replaceText}
+                                onChange={handleReplaceTextChange}
+                              />
+                            </label>
+                            <div className="find-replace-row">
+                              <button
+                                type="button"
+                                className="find-replace-text-button"
+                                aria-label="Replace current match"
+                                disabled={findReplaceSnapshot.matchCount === 0}
+                                onClick={() =>
+                                  setFindReplaceSnapshot(
+                                    editorRef.current?.replaceCurrentMatch() ?? findReplaceSnapshot
+                                  )
+                                }
+                              >
+                                Replace
+                              </button>
+                              <button
+                                type="button"
+                                className="find-replace-text-button"
+                                aria-label="Replace all matches"
+                                disabled={findReplaceSnapshot.matchCount === 0}
+                                onClick={() =>
+                                  setFindReplaceSnapshot(
+                                    editorRef.current?.replaceAllMatches() ?? findReplaceSnapshot
+                                  )
+                                }
+                              >
+                                Replace all
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+                        {visibleViewContainer === "outline" ? (
+                          <div
+                            className="outline-panel"
+                            data-fishmark-region="outline-panel"
+                          >
+                            {outlineItems.length > 0 ? (
+                              <ol className="outline-panel-list">
+                                {outlineItems.map((item) => (
+                                  <li key={item.id}>
+                                    <button
+                                      type="button"
+                                      className={`outline-panel-item ${activeHeadingId === item.id ? "is-current" : ""}`}
+                                      style={{
+                                        paddingInlineStart: `${10 + Math.max(item.depth - 1, 0) * 10}px`
+                                      }}
+                                      onClick={() => onNavigateToOutlineItem(item.startOffset)}
+                                    >
+                                      <span className="outline-panel-item-label">{item.label}</span>
+                                    </button>
+                                  </li>
+                                ))}
+                              </ol>
+                            ) : (
+                              <p className="outline-panel-empty">No headings yet.</p>
+                            )}
+                          </div>
+                        ) : null}
                       </div>
                     </aside>
-                  ) : (
-                    <button
-                      type="button"
-                      className="outline-entry"
-                      data-fishmark-region="outline-toggle"
-                      aria-label="Expand outline"
-                      onClick={onOpenOutlinePanel}
-                    >
-                      <svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        aria-hidden="true"
-                        focusable="false"
-                      >
-                        <path
-                          d="M15 6l-6 6 6 6"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.8"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    </button>
-                  )}
+                  ) : null}
+                  {isSidePanelOpen ? (
+                    <div
+                      className="side-panel-resizer"
+                      data-fishmark-region="side-panel-resizer"
+                      role="separator"
+                      aria-orientation="vertical"
+                      aria-label="Resize side panel"
+                      aria-valuemin={SIDE_PANEL_WIDTH_MIN}
+                      aria-valuemax={SIDE_PANEL_WIDTH_MAX}
+                      aria-valuenow={displayedSidePanelWidth}
+                      tabIndex={0}
+                      onPointerDown={handleSidePanelResizePointerDown}
+                      onPointerMove={handleSidePanelResizePointerMove}
+                      onPointerUp={() => finishSidePanelResize(true)}
+                      onPointerCancel={() => finishSidePanelResize(false)}
+                      onKeyDown={handleSidePanelResizeKeyDown}
+                      onLostPointerCapture={() => finishSidePanelResize(false)}
+                    />
+                  ) : null}
                 </section>
               </>
             ) : (

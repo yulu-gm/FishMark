@@ -38,7 +38,7 @@ describe("scripts/analyze-renderer-bundle.mjs", () => {
         sources: [
           "../../node_modules/@codemirror/view/dist/index.js",
           "../../node_modules/micromark-extension-math/node_modules/katex/dist/katex.mjs",
-          "../../packages/editor-core/src/extensions/markdown.ts",
+          "../../packages/codemirror-adapter/src/extensions/markdown.ts",
           "../../src/renderer/editor/App.tsx"
         ],
         sourcesContent: [

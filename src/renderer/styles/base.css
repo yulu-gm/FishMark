@@ -147,6 +147,15 @@
   --fishmark-shadow-2: 0 10px 28px rgba(15, 23, 42, 0.08);
   --fishmark-shadow-3: 0 22px 54px rgba(15, 23, 42, 0.14);
   --fishmark-shell-rail-width: 76px;
+  /*
+   * Fixed document measure — the single source of truth for the text column.
+   * It is deliberately independent of the rail and outline geometry so that
+   * switching shell mode or opening the outline panel never re-wraps the
+   * document. It is only relaxed for very narrow canvases (see the
+   * editor-canvas container query in editor-source.css).
+   */
+  --fishmark-document-measure: 720px;
+  --fishmark-document-gutter: 24px;
   --fishmark-workspace-max-width: 1120px;
   --fishmark-canvas-max-width: 920px;
   --fishmark-status-bar-height: 46px;

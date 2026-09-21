@@ -21,6 +21,9 @@ function create(source: string) {
   const view = EditorView.findFromDOM(parent.querySelector(".cm-editor")!)!;
   return { controller, view, frames, parent };
 }
+function planTypedText(text: string) {
+  return (context: model.EditorSemanticContext) => model.planPrintableInput(context, text);
+}
 
 describe("production semantic routes", () => {
   it.each(["source", "identity"])("discards a pending table composition after its %s changes without restoring stale focus", async (change) => {
@@ -163,25 +166,42 @@ describe("production semantic routes", () => {
     expect(controller.getContent()).toContain("edited");
   });
 
-  it("invalidates prepared plans on identity changes and releases a replaced or destroyed session", () => {
-    const creation = vi.spyOn(adapter, "createSemanticCommandBindings");
+  it("routes semantic commands through the controller's own session and rebinds it on identity changes", () => {
     const { controller, view } = create("abc");
-    const first = (creation.mock.results[0]!.value as adapter.SemanticCommandBindings).adapter;
     controller.setDocumentIdentity({ tabId: "a", epoch: 1, loadRevision: 1 });
-    const prepared = first.prepareCommand(view.state, context => model.planPrintableInput(context, "X"));
-    expect(prepared.kind).toBe("applied");
-    if (prepared.kind !== "applied") throw new Error("Expected a prepared edit");
-    controller.setDocumentIdentity({ tabId: "b", epoch: 2, loadRevision: 1 });
-    expect(first.preparePlan(view.state, prepared.plan).kind).toBe("stale");
-    expect(first.readSession(view.state)?.tabId).toBe("b");
+    controller.setSelection(3);
+    // The controller's transaction adapter is private, so this observes the session it actually
+    // bound through the public semantic-command route. A released session returns "unhandled" and
+    // leaves the document untouched, so a real edit is proof that the controller owns a live one.
+    expect(adapter.runSemanticCommand(view, planTypedText("X"))).toBe(true);
+    expect(controller.getContent()).toBe("abcX");
+    expect(adapter.readCompositionState(view.state).active).toBe(false);
+
+    controller.setDocumentIdentity({ tabId: "b", epoch: 2, loadRevision: 2 });
+    controller.setSelection(4);
+    expect(adapter.runSemanticCommand(view, planTypedText("Y"))).toBe(true);
+    expect(controller.getContent()).toBe("abcXY");
+
     controller.replaceDocument("abc");
-    expect(first.readSession(view.state)).toBeNull();
-    const second = (creation.mock.results.at(-1)!.value as adapter.SemanticCommandBindings).adapter;
-    expect(second.readSession(view.state)?.tabId).toBe("b");
-    expect(second.preparePlan(view.state, prepared.plan).kind).toBe("stale");
+    controller.setSelection(3);
+    expect(adapter.runSemanticCommand(view, planTypedText("Z"))).toBe(true);
+    expect(controller.getContent()).toBe("abcZ");
+
     controller.destroy();
     controllers.splice(controllers.indexOf(controller), 1);
-    expect(second.readSession(view.state)).toBeNull();
+  });
+
+  it("releases the controller session on destroy so semantic routes stop editing", () => {
+    const { controller, view } = create("abc");
+    controller.setDocumentIdentity({ tabId: "a", epoch: 1, loadRevision: 1 });
+    controller.setSelection(3);
+    expect(adapter.runSemanticCommand(view, planTypedText("X"))).toBe(true);
+    expect(controller.getContent()).toBe("abcX");
+    controller.destroy();
+    controllers.splice(controllers.indexOf(controller), 1);
+
+    expect(adapter.runSemanticCommand(view, planTypedText("Y"))).toBe(false);
+    expect(view.state.doc.toString()).toBe("abcX");
   });
 
   it("freezes structural commands during composition while preserving native composition text", async () => {

@@ -14,7 +14,8 @@ import {
   type FindReplaceQueryInput,
   type FindReplaceSnapshot
 } from "./code-editor";
-import type { ActiveBlockState, EditorViewMode } from "@fishmark/editor-core";
+import type { EditorViewMode } from "@fishmark/codemirror-adapter";
+import type { ActiveBlockState } from "@fishmark/editor-model";
 import type { EditorLoadIdentity } from "./editor/editor-load-identity";
 
 export type CodeEditorHandle = {
