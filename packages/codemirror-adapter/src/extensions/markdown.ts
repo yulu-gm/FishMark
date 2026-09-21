@@ -100,6 +100,7 @@ import {
   normalizeStructuralBlankSelectionAnchor
 } from "@fishmark/editor-model";
 import { resolveArrowUp, resolveArrowDown, resolvePointerSelectionAnchor as resolveBlockPointerSelectionAnchor } from "../interactions";
+import { requestEditorElementReveal, type EditorRevealIntent } from "../viewport-reveal";
 
 export type CreateFishMarkMarkdownExtensionsOptions = {
   readAcknowledgedRevision?: () => number | null;
@@ -248,7 +249,7 @@ export function createFishMarkMarkdownExtensions(
   const focusTableCellEditor = (
     view: EditorView,
     target: TablePosition,
-    options?: { restoreSelection?: boolean }
+    options?: { restoreSelection?: boolean; revealIntent?: EditorRevealIntent }
   ) => {
     queueMicrotask(() => {
       const liveActiveState = createLiveActiveBlockState(view.state);
@@ -283,76 +284,8 @@ export function createFishMarkMarkdownExtensions(
         setTableCellSelection(editor, nextOffset);
       }
 
-      scheduleTableCellIntoEditorScroller(view, editor);
+      requestEditorElementReveal(view, editor, options?.revealIntent ?? "nearest");
     });
-  };
-
-  const scheduleTableCellIntoEditorScroller = (view: EditorView, editor: HTMLElement) => {
-    scrollTableCellIntoEditorScroller(view, editor);
-
-    const frame = editor.ownerDocument.defaultView?.requestAnimationFrame;
-    if (!frame) {
-      return;
-    }
-
-    frame(() => {
-      if (editor.isConnected) {
-        scrollTableCellIntoEditorScroller(view, editor);
-      }
-    });
-  };
-
-  const scrollTableCellIntoEditorScroller = (view: EditorView, editor: HTMLElement) => {
-    const scroller = editor.closest<HTMLElement>(".cm-scroller");
-
-    if (!scroller) {
-      return;
-    }
-
-    scrollElementIntoScroller(
-      scroller,
-      editor.getBoundingClientRect(),
-      scroller.getBoundingClientRect()
-    );
-
-    view.requestMeasure({
-      read: () => ({
-        editorRect: editor.getBoundingClientRect(),
-        scrollerRect: scroller.getBoundingClientRect()
-      }),
-      write: ({ editorRect, scrollerRect }) => {
-        scrollElementIntoScroller(scroller, editorRect, scrollerRect);
-      }
-    });
-  };
-
-  const scrollElementIntoScroller = (
-    scroller: HTMLElement,
-    editorRect: DOMRect,
-    scrollerRect: DOMRect
-  ) => {
-    let deltaTop = 0;
-    let deltaLeft = 0;
-
-    if (editorRect.top < scrollerRect.top) {
-      deltaTop = editorRect.top - scrollerRect.top;
-    } else if (editorRect.bottom > scrollerRect.bottom) {
-      deltaTop = editorRect.bottom - scrollerRect.bottom;
-    }
-
-    if (editorRect.left < scrollerRect.left) {
-      deltaLeft = editorRect.left - scrollerRect.left;
-    } else if (editorRect.right > scrollerRect.right) {
-      deltaLeft = editorRect.right - scrollerRect.right;
-    }
-
-    if (deltaTop !== 0) {
-      scroller.scrollTop = Math.max(0, scroller.scrollTop + deltaTop);
-    }
-
-    if (deltaLeft !== 0) {
-      scroller.scrollLeft = Math.max(0, scroller.scrollLeft + deltaLeft);
-    }
   };
 
   const findTableCellEditor = (view: EditorView, target: Required<TablePosition>): HTMLElement | null => {
@@ -498,7 +431,10 @@ export function createFishMarkMarkdownExtensions(
           { force: true }
         );
       } else {
-        focusTableCellEditor(tableInteractionView, position, { restoreSelection: false });
+        focusTableCellEditor(tableInteractionView, position, {
+          restoreSelection: false,
+          revealIntent: "preserve"
+        });
       }
     },
     updateCell(position, text) {

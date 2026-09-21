@@ -2,6 +2,7 @@ import { type Range } from "@codemirror/state";
 import { Decoration, EditorView, WidgetType } from "@codemirror/view";
 
 import { requestMountedWidgetMeasurement } from "./widget-lifecycle";
+import { createEditorOffsetRevealEffect } from "../viewport-reveal";
 
 import type { HtmlImageBlock, InlineImage, InlineNode, InlineRoot } from "@fishmark/markdown-engine";
 
@@ -74,10 +75,7 @@ class MarkdownImagePreviewWidget extends WidgetType {
         canMeasureClientRects
           ? {
               selection,
-              effects: EditorView.scrollIntoView(this.sourceOffset, {
-                y: "center",
-                yMargin: 24
-              })
+              effects: createEditorOffsetRevealEffect(this.sourceOffset, "preserve")
             }
           : { selection }
       );

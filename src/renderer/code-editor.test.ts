@@ -94,6 +94,10 @@ const flushMicrotasks = async () => {
   await Promise.resolve();
 };
 
+const flushAnimationFrame = async () => {
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+};
+
 const setDomCaret = (editor: HTMLElement, offset: number) => {
   const selection = editor.ownerDocument.getSelection();
   const range = editor.ownerDocument.createRange();
@@ -7442,7 +7446,7 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("keeps the newly focused table cell in view by scrolling only the CodeMirror scroller", async () => {
+  it("preserves visible table clicks and reveals keyboard navigation with one editor-scroller correction", async () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
     const source = ["| name | qty |", "| --- | ---: |", "| pen | 2 |", "| ink | 3 |"].join("\n");
@@ -7474,9 +7478,13 @@ describe("createCodeEditorController", () => {
         return createDomRect(0, 100, 600, 200);
       }
 
+      if (this.dataset.tableCell === "1:0") {
+        const scroller = host.querySelector<HTMLElement>(".cm-scroller");
+        return createDomRect(20, 160 - (scroller?.scrollTop ?? 0), 120, 24);
+      }
+
       if (this.dataset.tableCell === "2:0") {
         const scroller = host.querySelector<HTMLElement>(".cm-scroller");
-
         return createDomRect(20, 330 - (scroller?.scrollTop ?? 0), 120, 24);
       }
 
@@ -7491,12 +7499,19 @@ describe("createCodeEditorController", () => {
       });
 
       const input = host.querySelector<HTMLInputElement>('[data-table-cell="1:0"]');
+      const scroller = host.querySelector<HTMLElement>(".cm-scroller");
 
       expect(input).toBeInstanceOf(HTMLElement);
+      expect(scroller).toBeInstanceOf(HTMLElement);
 
       input?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
       await flushMicrotasks();
+      await flushAnimationFrame();
       await flushMicrotasks();
+
+      // Pointer activation uses the preserve policy: an already-visible cell
+      // does not disturb the viewport at all.
+      expect(scroller?.scrollTop).toBe(0);
 
       focusCalls.length = 0;
       scrollCalls.length = 0;
@@ -7505,6 +7520,7 @@ describe("createCodeEditorController", () => {
         new KeyboardEvent("keydown", { key: "ArrowDown", code: "ArrowDown", bubbles: true, cancelable: true })
       );
       await flushMicrotasks();
+      await flushAnimationFrame();
       await flushMicrotasks();
 
       expect(document.activeElement).toBe(host.querySelector('[data-table-cell="2:0"]'));
@@ -7513,7 +7529,9 @@ describe("createCodeEditorController", () => {
         options: { preventScroll: true }
       });
       expect(scrollCalls).toEqual([]);
-      expect(host.querySelector<HTMLElement>(".cm-scroller")?.scrollTop).toBe(54);
+      // The 24px nearest-reveal margin keeps the caret away from the hard
+      // viewport edge while still applying the smallest possible correction.
+      expect(scroller?.scrollTop).toBe(78);
 
       controller.destroy();
     } finally {

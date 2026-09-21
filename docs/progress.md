@@ -6,6 +6,10 @@
 
 ## 当前项目判断
 
+### 2026-09-21 特殊编辑区域统一 viewport reveal 策略（第一版）
+
+针对点击表格单元格、图片预览时视口被突然拉动的问题，新增 `packages/codemirror-adapter/src/viewport-reveal.ts` 作为统一滚动策略入口。第一版定义三种 intent：`preserve`（鼠标点击，已可见则零滚动）、`nearest`（连续键盘导航，24px 垂直 / 16px 水平安全边距，仅做最小修正）、`navigate`（显式跳转，可居中）。图片 preview 点击从无条件 `y:center` 改为 `preserve`；表格 cell 的 pointer select 同样使用 `preserve`，键盘/结构导航默认 `nearest`。原表格滚动的“立即一次 + RAF 一次 + requestMeasure 再一次”三段路径删除，统一为单个 `requestMeasure` read/write，并用共享 measure key 合并同帧 focus/mousedown/click 请求。`focus({preventScroll:true})` 继续阻止浏览器原生抢滚动。新增纯策略测试并更新真实 controller 表格滚动回归：可见点击不滚，ArrowDown 只滚 CodeMirror scroller 并留下安全边距。异步图片解码导致的高度锚点漂移仍是后续独立问题，本切片不混入。
+
 ### 2026-09-21 Sidebar 正文位移动画恢复且保持内容无 reflow
 
 上一刀为消除 sidebar 文字 reflow 取消了 `grid-template-columns` 过渡，副作用是 Markdown document stage 在开关 sidebar 时改为瞬移。现将模型细化为**外层 track 动画、内层内容固定宽度**：`workspace-shell` 恢复 220ms grid track 过渡，正文因此继续平滑右移/左移；同时新增 `--fishmark-side-panel-content-width`，Search/Outline 的 header/body 始终按最终宽度排版，外层 `.side-panel{overflow:hidden}` 只负责在 track 展开/收起时裁剪显示区域。因此长 Outline 标题不会经历中间宽度换行，正文位移动画也恢复。窄窗口的 44vw clamp 同样作用在 final content width 上；用户主动 resize 仍允许实时 reflow。
