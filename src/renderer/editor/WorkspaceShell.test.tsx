@@ -350,6 +350,7 @@ it("opens find and replace controls and delegates search actions to the editor",
     currentMatchIndex: null
   }));
   const onCloseViewContainer = vi.fn();
+  const onToggleViewContainer = vi.fn();
 
   container = document.createElement("div");
   document.body.appendChild(container);
@@ -489,7 +490,7 @@ it("opens find and replace controls and delegates search actions to the editor",
         onDeleteTable: vi.fn(),
         onDeleteTableColumn: vi.fn(),
         onDeleteTableRow: vi.fn(),
-        onToggleViewContainer: vi.fn(),
+        onToggleViewContainer,
         onReloadExternalFile: vi.fn(),
         onKeepMemoryVersion: vi.fn(),
         onDismissExternalFileConflict: vi.fn(),
@@ -545,6 +546,18 @@ it("opens find and replace controls and delegates search actions to the editor",
   expect(findInput).not.toBeNull();
   expect(replaceInput).not.toBeNull();
   expect(document.activeElement?.getAttribute("aria-label")).toBe("Find text");
+
+  // Repeating Ctrl/Cmd+F while Search is already open must refocus the query
+  // field instead of toggling the shared view container closed.
+  replaceInput?.focus();
+  expect(document.activeElement).toBe(replaceInput);
+  await act(async () => {
+    activeContainer.querySelector<HTMLElement>(".app-workspace")?.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, key: "f", ctrlKey: true })
+    );
+  });
+  expect(onToggleViewContainer).not.toHaveBeenCalled();
+  expect(document.activeElement).toBe(findInput);
 
   await act(async () => {
     setTextInputValue(findInput!, "beta");
@@ -897,6 +910,8 @@ it("resizes the shared panel on the right edge and persists the width once on po
   const resizer = activeContainer.querySelector<HTMLElement>(
     '[data-fishmark-region="side-panel-resizer"]'
   );
+  const setPointerCapture = vi.fn();
+  Object.defineProperty(resizer!, "setPointerCapture", { value: setPointerCapture });
 
   expect(shell?.style.getPropertyValue("--fishmark-side-panel-stored-width")).toBe("248px");
   expect(resizer).not.toBeNull();
@@ -919,6 +934,8 @@ it("resizes the shared panel on the right edge and persists the width once on po
     );
   });
 
+  expect(setPointerCapture).toHaveBeenCalledTimes(1);
+  expect(setPointerCapture).toHaveBeenCalledWith(1);
   expect(shell?.classList.contains("is-side-panel-resizing")).toBe(true);
 
   for (const clientX of [110, 120, 130]) {

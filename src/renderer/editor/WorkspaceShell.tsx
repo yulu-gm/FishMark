@@ -501,6 +501,9 @@ export function WorkspaceShell({
   const resizeSessionRef = useRef<SidePanelResizeSession | null>(null);
   const draggedPanelWidthRef = useRef<number | null>(null);
   const workspaceShellRef = useRef<HTMLElement | null>(null);
+  const searchDocumentIdentityRef = useRef<string | null>(
+    activeTabId === null ? null : `${activeTabId}:${editorEpoch}:${editorLoadRevision}`
+  );
   /*
    * The rail switches the shared side panel between view containers and
    * `Ctrl/Cmd+F` opens the Search container; the inline find bar no longer
@@ -542,6 +545,28 @@ export function WorkspaceShell({
 
     findInputRef.current?.focus();
   }, [isSearchViewActive]);
+
+  useEffect(() => {
+    const nextDocumentIdentity = activeTabId === null
+      ? null
+      : `${activeTabId}:${editorEpoch}:${editorLoadRevision}`;
+
+    if (searchDocumentIdentityRef.current === nextDocumentIdentity) {
+      return;
+    }
+
+    searchDocumentIdentityRef.current = nextDocumentIdentity;
+    setFindText("");
+    setReplaceText("");
+    setFindReplaceSnapshot({
+      matchCount: 0,
+      currentMatchIndex: null
+    });
+
+    if (isSearchViewActive) {
+      editorRef.current?.clearFindReplaceQuery();
+    }
+  }, [activeTabId, editorEpoch, editorLoadRevision, editorRef, isSearchViewActive]);
 
   /*
    * While the region is expanded the canvas publishes the stored width as a CSS
@@ -610,6 +635,9 @@ export function WorkspaceShell({
 
     // Keep focus (and the caret) where it was while the pointer drags.
     event.preventDefault();
+    // Pointer capture keeps move/up delivery on the separator after the cursor
+    // leaves its narrow hit target, so every drag has one deterministic finish.
+    event.currentTarget.setPointerCapture?.(event.pointerId);
 
     const availableWidth = measureSidePanelAvailableWidth();
     const displayWidth = clampSidePanelWidth(displayedSidePanelWidth, availableWidth);
@@ -743,6 +771,10 @@ export function WorkspaceShell({
      * view container; the rail button drives the same toggle.
      */
     event.preventDefault();
+    if (isSearchViewActive) {
+      findInputRef.current?.focus();
+      return;
+    }
     onToggleViewContainer("search");
   };
 

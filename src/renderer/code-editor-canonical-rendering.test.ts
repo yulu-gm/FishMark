@@ -102,4 +102,30 @@ describe("canonical nested rendering through the production editor", () => {
     expect(host.querySelector(".cm-active-heading")).not.toBeNull();
     expect(controller.getContent()).toBe(source);
   });
+
+  it("reveals nested Mermaid source while its content line is active", () => {
+    const source = [
+      "> ```mermaid",
+      "> graph TD",
+      ">   A --> B",
+      "> ```",
+      "",
+      "after"
+    ].join("\n");
+    const { host, controller } = create(source);
+    const previewCount = () => host.querySelectorAll(".cm-mermaid-preview").length;
+
+    expect(previewCount()).toBe(1);
+
+    host.querySelector(".cm-editor")?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    controller.setSelection(source.indexOf("A --> B"));
+
+    expect(previewCount()).toBe(0);
+    expect(host.textContent).toContain("A --> B");
+
+    controller.setSelection(source.indexOf("after"));
+
+    expect(previewCount()).toBe(1);
+    expect(controller.getContent()).toBe(source);
+  });
 });

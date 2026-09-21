@@ -420,7 +420,7 @@ function appendCanonicalContainerDecorations(
     }
     const quoteDepth = plan.ancestorsOf(node.id).filter(value => value.node.kind === "blockquote").length;
     const activeLine = context.activeSelectionLineStart;
-    if (activeLine !== null && node.kind !== "table" && node.kind !== "code-fence" &&
+    if (activeLine !== null && node.kind !== "table" &&
       snapshot.lineAt(node.source.startOffset)!.range.startOffset <= activeLine && activeLine < node.source.endOffset) {
       appendActiveDecorationsForBlock(canonicalLeafView(node, snapshot), source, ranges, context.resolveImagePreviewUrl);
       continue;
