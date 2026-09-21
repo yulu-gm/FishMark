@@ -1,4 +1,4 @@
-# Yulora 决策日志
+# FishMark 决策日志
 
 用于记录会影响后续工作的简短架构或流程决策。
 
@@ -8,6 +8,9 @@
 | --- | --- | --- | --- |
 
 ## 记录
+
+| 2026-09-21 | **特殊编辑区域采用统一 viewport reveal policy**：selection 后的滚动由 `codemirror-adapter` 单一 owner 决定，区分 `preserve`（鼠标点击，已可见则零滚动）、`nearest`（连续键盘导航，只做带安全边距的最小修正）和 `navigate`（显式跳转，可居中）。 | 图片此前无条件 `y:center`，表格又维护“立即 + RAF + requestMeasure”三套校正，同一类交互存在不同视口心智且会产生连续小跳。统一 intent 后能区分“用户点击当前位置”和“用户要求跳转”的期望。 | 第一版已覆盖 image preview 与 table cell；DOM reveal 在单个 `requestMeasure` read/write 中完成，focus 使用 `preventScroll:true`，同帧重复请求合并。异步 widget 高度变化属于 viewport anchoring，不用 selection reveal 代替。 |
+| 2026-09-21 | **共享 sidebar 的最终视觉/动效模型为 flat docked panel**：外层去圆角、阴影、backdrop blur 与卡片 gap；Search/Outline 共用一份宽度。开合时外层 grid track 保留平滑宽度动画，让正文整体平移；header/body 固定最终宽度并被外层裁剪、淡入，因此不经历中间宽度 reflow。 | 纯悬浮卡片观感过重；直接取消 grid transition 又会让 Markdown document stage 瞬移。把“布局移动”和“sidebar 内容排版”拆开，可以同时得到平面视觉、正文平滑移动和 Outline 长标题稳定换行。 | 用户主动 resize 仍实时 reflow，因为此时用户确实在改变内容宽度；窄窗口 clamp 只影响显示，不回写偏好。 |
 
 | 2026-09-20 | **M6.5 面板开合与正文位移契约**：接受"开/关侧栏会让正文列**水平平移**"（实测 132px：面板实占 264px 布局宽，居中列右移一半，与 VS Code 开侧栏时编辑器区域平移同构）。最终契约只断言两条：**① 模式切换零位移**（同一面板状态下 editing 与 reading 的正文列绝对 X 完全相同，实测 280.00==280.00 / 412.00==412.00）；**② 任何状态都不重排**（列宽 720.50px、首行 720.00、渲染行 31、文档高/scrollHeight 四状态全等）。 | 要让绝对 X 在开合前后也恒定，只有两条路：面板浮层覆盖正文（会遮字），或把 measure 缩到"两侧预留空白 ≥ 面板宽"（1204 宽窗口下正文列只剩 ~562px）。两者都以破坏阅读体验为代价，而用户真正痛的是"**没要求就变**"与"**整篇重排**"，这两点在固定 measure 下已经彻底消除。 | 另附一条文档化阈值：当舞台宽 < measure + 2×gutter（本窗口 768px）时，measure 的 clamp 会让正文列收窄并真实重排（360px 面板样本：列 646px、文本高 +499px）——这是"保住 720px"与"不许水平溢出"不可兼得时的正确行为，探针按阈值报告而不当作 invariance 断言。探针自身也修正了一处不可靠派生指标（`textLineCount` 对长文档失真，已从断言移除，改用 `scrollHeight`/`documentHeight`/列宽等精确量）。**S4 已把两条契约固化为常备断言并复跑通过**：四组合 `textColumnWidth/renderedLineCount/totalTextHeight/documentHeight` spread 全 0、`textColumnLeftModeTranslation = firstLineLeftModeTranslation = 0`、`failures: []`；另把**拖拽维度**加入同一探针——留白档（248/200）正文排版不变，`stored-360` 档按上述阈值单独报告。 |
 

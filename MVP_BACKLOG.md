@@ -102,24 +102,35 @@ Intake：`docs/plans/2026-09-18-rf-601-intake.md`。执行交接：`docs/plans/2
 - [x] 按 parser/纯模型根因修复嵌套结构、整行替换和列表归一化。
 - [x] 完成导航/焦点/组合/history/frame 接线与所有入口。
 - [x] 移除旧语义实现及重复上下文，更新 guard。
-- [ ] 新路径完整行为/几何/性能门禁与父 agent 独立验收。
+- [x] 新路径完整行为/几何门禁与父 agent 独立验收（M6/M6.5 frozen-tree acceptance 已完成）。
+- [ ] M5 最终性能与 bundle 预算门禁；未通过前 RF-506 仍保持 `DEV_DONE`。
 
 2026-09-19 继续前基线：父 agent 聚焦 684/684 通过；生产仍旧路径。文档所称 34 项 switched-runtime 失败是历史临时接线结果，必须由本轮永久路径重测；不降低 M5 验收标准。旧的“等待用户决定是否降低验收”不再是阻塞条件。
 
 ### RF-701 / RF-602 / RF-603 / RF-604 — M6 依赖顺序
 
-状态：RF-701 IN_PROGRESS；RF-602/603/604 PLANNED。用户授权完成 M6，同时包含必要的 RF-701 前置；仍逐任务实现/验收。2026-09-19 调整：M5 行为安全稳定后允许进入 RF-701，RF-506 的最终性能验收保持未通过，待 M6 删除双重显示派生后按原 bundle 预算共同收口；不得据此宣告 M5 提前 COMPLETE。
+状态：**全部完成并于 2026-09-20 随 M6/M6.5 父级验收收口**。生产 renderer 已硬切到 `@fishmark/codemirror-adapter`，`packages/editor-core/` 已删除，architecture guard 为 7 包 / 13 规则 / `exceptions: []`。RF-701 作为 M6 前置已完成，但这只意味着 M7 的 1/3 完成；RF-702/703 仍是后续任务。
 
-- RF-701：一个从 canonical snapshot 派生的共享 render plan，至少一个真实生产消费者；不把 CodeMirror DOM/可见性规则强塞给导出。
-- RF-602：revision snapshot 与 render plan 驱动装饰；普通选择/输入避免全文装饰重建；布局关键装饰直接供给，viewport 仅处理布局安全部分；有滚动/高度/组合证据。
-- RF-603：typed interaction registry；表格焦点、链接、图片、math/Mermaid/highlight 各自明确 adapter；异步结果检查 session/revision，widget 提交 semantic plan。
-- RF-604：生产工厂迁入 codemirror-adapter；renderer 仅装配；editor-core 实现与全部旧 import/例外删除；完整行为、性能、build/lint/typecheck/test 验收。
+- RF-701：canonical snapshot 派生共享 semantic render plan，并有生产 decorations 消费者。
+- RF-602：revision snapshot / render plan 驱动装饰与物理/语义几何；删除富投影兼容消费链。
+- RF-603：typed/canonical interaction 与 widget 生命周期进入 adapter；table/link/image/math/Mermaid/highlight 各自有明确 owner。
+- RF-604：生产工厂迁入 codemirror-adapter；renderer 只装配；editor-core 实现、旧 import 和 guard 例外删除。
 
 执行切片：
-- [ ] RF-701 实现并独立验收。
-- [ ] RF-602 实现并独立验收。
-- [ ] RF-603 实现并独立验收。
-- [ ] RF-604 实现并独立验收。
+- [x] RF-701 实现并独立验收。
+- [x] RF-602 实现并独立验收。
+- [x] RF-603 实现并独立验收。
+- [x] RF-604 实现并独立验收。
+
+### RF-702 / RF-703 — M7 剩余 canonical consumer 收口
+
+状态：RF-701 COMPLETE；RF-702/703 PLANNED。
+
+- [ ] RF-702：HTML export 改由 `MarkdownDocumentTree + markdown-presentation render plan` 驱动，删除 exporter 内重复 parser/blockquote/prefix/inline 解释。
+- [ ] RF-703：Outline 与 document metrics 改为订阅 `EditorDerivedSnapshot` / revision，删除独立结构解析和重复 timers。
+- [ ] 完成 M7 后再进入 M8 renderer/main/preload composition cleanup。
+
+## Epic 1：项目骨架
 ## Epic 1：项目骨架
 
 ### TASK-001 初始化桌面工程

@@ -6,6 +6,10 @@
 
 ## 当前项目判断
 
+### 2026-09-21 设计与重构进度文档同步到当前 main
+
+按 owner 要求统一项目内设计与 progress 真相：`docs/design.md` 更新到 M6/M6.5 后架构，明确 `editor-core` 已删除、canonical snapshot/render plan + `codemirror-adapter` 为生产主路径；壳层改写为常驻 rail + 平面 docked sidebar + 固定正文 measure，并记录“外层 track 平滑移动 / 内层最终宽度避免 reflow”的当前动画契约；新增 viewport reveal 的 `preserve / nearest / navigate` 设计和异步高度 anchoring 的职责边界。同步修正 `docs/refactor/editor-foundation/progress.md` 与 `MVP_BACKLOG.md`：M6 改为 COMPLETE 4/4，RF-701/602/603/604 均 COMPLETE，M7 改为 IN_PROGRESS 1/3，下一正式任务为 RF-702 → RF-703；M5/RF-506 仍因最终性能与 bundle 预算未通过而不标 COMPLETE。历史中间态记录保留，但不再作为当前状态源。
+
 ### 2026-09-21 特殊编辑区域统一 viewport reveal 策略（第一版）
 
 针对点击表格单元格、图片预览时视口被突然拉动的问题，新增 `packages/codemirror-adapter/src/viewport-reveal.ts` 作为统一滚动策略入口。第一版定义三种 intent：`preserve`（鼠标点击，已可见则零滚动）、`nearest`（连续键盘导航，24px 垂直 / 16px 水平安全边距，仅做最小修正）、`navigate`（显式跳转，可居中）。图片 preview 点击从无条件 `y:center` 改为 `preserve`；表格 cell 的 pointer select 同样使用 `preserve`，键盘/结构导航默认 `nearest`。原表格滚动的“立即一次 + RAF 一次 + requestMeasure 再一次”三段路径删除，统一为单个 `requestMeasure` read/write，并用共享 measure key 合并同帧 focus/mousedown/click 请求。`focus({preventScroll:true})` 继续阻止浏览器原生抢滚动。新增纯策略测试并更新真实 controller 表格滚动回归：可见点击不滚，ArrowDown 只滚 CodeMirror scroller 并留下安全边距。异步图片解码导致的高度锚点漂移仍是后续独立问题，本切片不混入。
@@ -14,7 +18,7 @@
 
 上一刀为消除 sidebar 文字 reflow 取消了 `grid-template-columns` 过渡，副作用是 Markdown document stage 在开关 sidebar 时改为瞬移。现将模型细化为**外层 track 动画、内层内容固定宽度**：`workspace-shell` 恢复 220ms grid track 过渡，正文因此继续平滑右移/左移；同时新增 `--fishmark-side-panel-content-width`，Search/Outline 的 header/body 始终按最终宽度排版，外层 `.side-panel{overflow:hidden}` 只负责在 track 展开/收起时裁剪显示区域。因此长 Outline 标题不会经历中间宽度换行，正文位移动画也恢复。窄窗口的 44vw clamp 同样作用在 final content width 上；用户主动 resize 仍允许实时 reflow。
 
-### 2026-09-21 Sidebar 开合动效去 reflow
+### 2026-09-21 Sidebar 开合动效去 reflow（中间方案，已被“正文位移动画恢复”方案替代）
 
 针对 owner 观察到的 Outline 长标题在 sidebar 展开过程中反复换行：根因是 workspace-shell 对 side-panel grid track 做 0 → stored width 的 220ms 宽度过渡，导致内部 Search/Outline 每帧都按新宽度重新排版。现改为**布局宽度原子切换 + 内容淡入/淡出**：打开时 sidebar track 立即进入最终宽度，header/body 只做 opacity + 4px translateX；关闭时利用现有 closingViewContainer 加 :has() 在 180ms 淡出期间继续保留最终 track 宽度，动画结束卸载后才收回列。这样 sidebar 文本从第一帧起就以最终宽度排版，不再因开合动画产生 reflow；用户主动拖拽 resize 时仍按实时宽度重排，这是明确的交互反馈。同步更新 renderer CSS 契约测试，移除旧玻璃样式和 grid 宽度动画断言。
 
