@@ -13,6 +13,11 @@ const mermaidPreviewRendererPath = join(
   process.cwd(),
   "packages/codemirror-adapter/src/decorations/mermaid-preview-renderer.ts"
 );
+const exportHtmlPath = join(process.cwd(), "src/renderer/export-html.ts");
+const presentationExportRendererPath = join(
+  process.cwd(),
+  "packages/markdown-presentation/src/html/render-export-content.ts"
+);
 
 describe("editor preview assets", () => {
   it("loads KaTeX CSS through the same lazy editor preview module as KaTeX JS", () => {
@@ -25,6 +30,15 @@ describe("editor preview assets", () => {
 
     expect(rendererSource).toContain('import "katex/dist/katex.min.css";');
     expect(rendererSource).toContain('import katex from "katex";');
+  });
+
+  it("keeps HTML-export KaTeX behind the lazy renderer export chunk", () => {
+    const exportSource = readFileSync(exportHtmlPath, "utf8").replace(/\r\n/g, "\n");
+    const presentationSource = readFileSync(presentationExportRendererPath, "utf8").replace(/\r\n/g, "\n");
+
+    expect(exportSource).toContain('import katex from "katex";');
+    expect(presentationSource).not.toContain('from "katex"');
+    expect(presentationSource).toContain("renderMath: HtmlMathRenderer | null");
   });
 
   it("keeps Mermaid rendering in a lazy preview module with strict security", () => {

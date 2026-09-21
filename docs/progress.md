@@ -6,6 +6,10 @@
 
 ## 当前项目判断
 
+### 2026-09-21 RF-702 验证反馈与 gate 回归修复
+
+owner 在 `df3b562` 拉取后的干净树上补跑 RF-702 要求的三项验证：presentation + export focused tests **3 文件 / 33 测试通过**、typecheck exit 0、build exit 0；同时额外发现两处不能忽略的新红点。① `perf:bundle` 的 `forbiddenInitialSourceGroup:katex` 从 PASS 变 FAIL，`totalInitialGzipBytes` 267192 → 349610，根因是 presentation 主 barrel 静态 re-export 了带 `import katex` 的 HTML renderer。现修正为：KaTeX 重新只由本来就 lazy 的 `src/renderer/export-html.ts` 引入，presentation 通过纯 `renderMath` callback 接收 MathML renderer，package root 不再静态依赖 KaTeX，并新增资产合同防回归。② 全量 Vitest 比 M6 基线新增 1 条 viewport reveal 表格失败；定位为同帧共享 measure key 的 intent 覆盖：键盘 `nearest` 会被 programmatic focus 触发的 `preserve` 弱化。现改为“最新 target + intent 提升（navigate > nearest > preserve）”合并，并补纯策略断言。RF-702 仍保持 IN_PROGRESS，等待这些修复后的 focused/full/perf 复跑；未通过前不进入 RF-703。
+
 ### 2026-09-21 M7 / RF-702 实现推进：HTML Export canonical cutover（验证待执行）
 
 RF-702 已完成代码层切换：`src/renderer/export-html.ts` 不再拥有 `parseMarkdownDocument / parseInlineAst / collectReferenceDefinitions` 等 export 语义解析，只做 `parseFullDocumentTree → buildRenderPlan → renderFishmarkMarkdownContent`、主题 CSS 收集和外层 HTML 文档拼装。纯 Markdown 内容 HTML 渲染迁入 `packages/markdown-presentation/src/html/render-export-content.ts`，输入为同一 canonical render plan；为了保持既有 CSS/DOM 合同，内部可使用 `projectMarkdownDocument(tree)` 的兼容序列化，但该函数不做 scope inference、source scan 或 inline parse，inline/table/reference/footnote 数据均直接来自 canonical tree。新增 presentation 级测试覆盖嵌套容器、table cell inline、reference image 与 footnote。当前 GitHub connector 无执行环境，因此尚未产生 roadmap 要求的 `packages/markdown-presentation + export-html.test + build` 新鲜运行证据；RF-702 暂保持 IN_PROGRESS，不提前标 COMPLETE，也不越 gate 宣告 RF-703 已开始。

@@ -20,7 +20,6 @@ import {
   type TableCell,
   type ThematicBreakBlock
 } from "@fishmark/markdown-engine";
-import katex from "katex";
 
 import type { RenderPlan } from "../render-plan";
 
@@ -32,18 +31,31 @@ type SourceLine = {
 type BlockquoteExportLine = NonNullable<BlockquoteBlock["lines"]>[number];
 type FootnoteDefinitions = ReadonlyMap<string, FootnoteDefinition>;
 type ExtraLineClassResolver = (lineStartOffset: number) => string;
+export type HtmlMathRenderer = (value: string, displayMode: boolean) => string | null;
+
+export type RenderFishmarkMarkdownContentOptions = {
+  readonly renderMath?: HtmlMathRenderer;
+};
+
 type FootnoteRenderState = {
   backlinksByIdentifier: Map<string, string[]>;
   definitions: FootnoteDefinitions;
   orderedIdentifiers: string[];
   referenceCountsByIdentifier: Map<string, number>;
   referenceNumbersByIdentifier: Map<string, number>;
+  renderMath: HtmlMathRenderer | null;
 };
 
-export function renderFishmarkMarkdownContent(plan: RenderPlan): string {
+export function renderFishmarkMarkdownContent(
+  plan: RenderPlan,
+  options: RenderFishmarkMarkdownContentOptions = {}
+): string {
   const markdown = plan.tree.source;
   const documentModel = projectMarkdownDocument(plan.tree);
-  const footnoteState = createFootnoteRenderState(plan.tree.footnoteDefinitions);
+  const footnoteState = createFootnoteRenderState(
+    plan.tree.footnoteDefinitions,
+    options.renderMath ?? null
+  );
   const chunks: string[] = [];
   let cursor = 0;
 
@@ -86,7 +98,7 @@ function renderBlock(
     case "codeFence":
       return renderCodeFenceBlock(block, source);
     case "blockMath":
-      return renderBlockMathBlock(block, source);
+      return renderBlockMathBlock(block, source, footnoteState);
     case "definition":
       return renderDefinitionBlock(block, source);
     case "thematicBreak":
@@ -286,7 +298,12 @@ function renderBlockquoteInnerBlocks(
         case "blockMath":
           return renderLine(
             mergeLineClassNames(extraLineClass(innerBlock.startOffset), "cm-inactive-block-math"),
-            renderMathHtml(innerBlock.value, true, source.slice(innerBlock.startOffset, innerBlock.endOffset))
+            renderMathHtml(
+              innerBlock.value,
+              true,
+              source.slice(innerBlock.startOffset, innerBlock.endOffset),
+              footnoteState.renderMath
+            )
           );
         case "thematicBreak":
           return renderLine(
@@ -502,14 +519,23 @@ function renderIndentedCodeBlock(lines: SourceLine[], source: string): string {
     .join("");
 }
 
-function renderBlockMathBlock(block: BlockMathBlock, source: string): string {
+function renderBlockMathBlock(
+  block: BlockMathBlock,
+  source: string,
+  footnoteState: FootnoteRenderState
+): string {
   if (!block.closed) {
     return renderPlainLines(source, block.startOffset, block.endOffset);
   }
 
   return renderLine(
     "cm-inactive-block-math",
-    renderMathHtml(block.value, true, source.slice(block.startOffset, block.endOffset))
+    renderMathHtml(
+      block.value,
+      true,
+      source.slice(block.startOffset, block.endOffset),
+      footnoteState.renderMath
+    )
   );
 }
 
@@ -758,7 +784,12 @@ function renderInlineNode(node: InlineNode, source: string, footnoteState: Footn
         renderInlineMarker(source.slice(node.closeMarker.startOffset, node.closeMarker.endOffset))
       ].join("");
     case "inlineMath":
-      return renderMathHtml(node.value, false, source.slice(node.startOffset, node.endOffset));
+      return renderMathHtml(
+        node.value,
+        false,
+        source.slice(node.startOffset, node.endOffset),
+        footnoteState?.renderMath ?? null
+      );
     case "strong":
     case "emphasis":
     case "strikethrough":
@@ -794,30 +825,42 @@ function renderInlineChildren(
   return children.map((child) => renderInlineNode(child, source, footnoteState)).join("");
 }
 
-function renderMathHtml(value: string, displayMode: boolean, fallbackSource: string): string {
-  try {
-    const mathMarkup = katex.renderToString(value, {
-      displayMode,
-      output: "mathml",
-      throwOnError: false
-    });
-
-    return displayMode ? `<span class="katex-display">${mathMarkup}</span>` : mathMarkup;
-  } catch {
-    return renderSpan(
-      displayMode ? "cm-math-preview cm-math-preview-block cm-math-preview-fallback" : "cm-math-preview cm-math-preview-inline cm-math-preview-fallback",
-      fallbackSource
-    );
+function renderMathHtml(
+  value: string,
+  displayMode: boolean,
+  fallbackSource: string,
+  renderMath: HtmlMathRenderer | null
+): string {
+  if (renderMath) {
+    try {
+      const mathMarkup = renderMath(value, displayMode);
+      if (mathMarkup) {
+        return displayMode ? `<span class="katex-display">${mathMarkup}</span>` : mathMarkup;
+      }
+    } catch {
+      // Fall through to safe source rendering.
+    }
   }
+
+  return renderSpan(
+    displayMode
+      ? "cm-math-preview cm-math-preview-block cm-math-preview-fallback"
+      : "cm-math-preview cm-math-preview-inline cm-math-preview-fallback",
+    fallbackSource
+  );
 }
 
-function createFootnoteRenderState(definitions: FootnoteDefinitions): FootnoteRenderState {
+function createFootnoteRenderState(
+  definitions: FootnoteDefinitions,
+  renderMath: HtmlMathRenderer | null
+): FootnoteRenderState {
   return {
     backlinksByIdentifier: new Map(),
     definitions,
     orderedIdentifiers: [],
     referenceCountsByIdentifier: new Map(),
-    referenceNumbersByIdentifier: new Map()
+    referenceNumbersByIdentifier: new Map(),
+    renderMath
   };
 }
 

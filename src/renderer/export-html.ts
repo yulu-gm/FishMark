@@ -3,6 +3,7 @@ import {
   buildRenderPlan,
   renderFishmarkMarkdownContent
 } from "@fishmark/markdown-presentation";
+import katex from "katex";
 
 export type FishmarkExportRootAttributes = {
   className?: string | null;
@@ -107,7 +108,14 @@ export function createFishmarkExportHtml(input: CreateFishmarkExportHtmlInput): 
   );
   const tree = parseFullDocumentTree(input.markdown);
   const renderPlan = buildRenderPlan(tree, { revision: 0 });
-  const contentHtml = renderFishmarkMarkdownContent(renderPlan);
+  const contentHtml = renderFishmarkMarkdownContent(renderPlan, {
+    renderMath: (value, displayMode) =>
+      katex.renderToString(value, {
+        displayMode,
+        output: "mathml",
+        throwOnError: false
+      })
+  });
 
   return [
     "<!doctype html>",

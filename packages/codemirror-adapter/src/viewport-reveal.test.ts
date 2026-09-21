@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   computeEditorRevealDelta,
-  editorRevealOptionsFor
+  editorRevealOptionsFor,
+  mergeEditorRevealIntent
 } from "./viewport-reveal";
 
 const rect = (left: number, top: number, width: number, height: number) => ({
@@ -53,6 +54,12 @@ describe("editor viewport reveal policy", () => {
         "navigate"
       )
     ).toEqual({ top: 72, left: 0 });
+  });
+
+  it("does not let re-entrant focus preserve requests weaken keyboard navigation", () => {
+    expect(mergeEditorRevealIntent("nearest", "preserve")).toBe("nearest");
+    expect(mergeEditorRevealIntent("preserve", "nearest")).toBe("nearest");
+    expect(mergeEditorRevealIntent("nearest", "navigate")).toBe("navigate");
   });
 
   it("maps offset reveal intents onto the same preserve/nearest/navigate policy", () => {

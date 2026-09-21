@@ -6,4 +6,8 @@ export {
   type RenderPlanEntry,
   type RenderRole
 } from "./render-plan";
-export { renderFishmarkMarkdownContent } from "./html/render-export-content";
+export {
+  renderFishmarkMarkdownContent,
+  type HtmlMathRenderer,
+  type RenderFishmarkMarkdownContentOptions
+} from "./html/render-export-content";

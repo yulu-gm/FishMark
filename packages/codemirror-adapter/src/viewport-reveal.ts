@@ -31,9 +31,31 @@ const NEAREST_MARGINS: RevealMargins = {
 };
 
 // A single key makes repeated focus/mousedown/click requests in the same frame
-// collapse to the latest geometry measurement instead of producing several
-// competing scroll writes.
+// collapse to one geometry measurement. The latest target wins, while intent is
+// promoted rather than overwritten so a re-entrant focus "preserve" request
+// cannot weaken a keyboard "nearest" reveal.
 const EDITOR_REVEAL_MEASURE_KEY = {};
+
+type PendingEditorReveal = {
+  element: HTMLElement;
+  intent: EditorRevealIntent;
+};
+
+const pendingEditorReveals = new WeakMap<EditorView, PendingEditorReveal>();
+const EDITOR_REVEAL_INTENT_PRIORITY: Readonly<Record<EditorRevealIntent, number>> = {
+  preserve: 0,
+  nearest: 1,
+  navigate: 2
+};
+
+export function mergeEditorRevealIntent(
+  current: EditorRevealIntent,
+  next: EditorRevealIntent
+): EditorRevealIntent {
+  return EDITOR_REVEAL_INTENT_PRIORITY[next] > EDITOR_REVEAL_INTENT_PRIORITY[current]
+    ? next
+    : current;
+}
 
 export function editorRevealOptionsFor(intent: EditorRevealIntent) {
   if (intent === "navigate") {
@@ -112,23 +134,37 @@ export function requestEditorElementReveal(
   element: HTMLElement,
   intent: EditorRevealIntent
 ): void {
+  const pending = pendingEditorReveals.get(view);
+
+  if (pending) {
+    pending.element = element;
+    pending.intent = mergeEditorRevealIntent(pending.intent, intent);
+    return;
+  }
+
+  pendingEditorReveals.set(view, { element, intent });
+
   view.requestMeasure({
     key: EDITOR_REVEAL_MEASURE_KEY,
     read: () => {
-      if (!view.dom.contains(element)) {
+      const current = pendingEditorReveals.get(view);
+      if (!current || !view.dom.contains(current.element)) {
         return null;
       }
 
       const scroller = view.scrollDOM;
       return {
+        intent: current.intent,
         scroller,
-        targetRect: element.getBoundingClientRect(),
+        targetRect: current.element.getBoundingClientRect(),
         viewportRect: scroller.getBoundingClientRect(),
         scrollTop: scroller.scrollTop,
         scrollLeft: scroller.scrollLeft
       };
     },
     write: (measurement) => {
+      pendingEditorReveals.delete(view);
+
       if (measurement === null) {
         return;
       }
@@ -136,7 +172,7 @@ export function requestEditorElementReveal(
       const delta = computeEditorRevealDelta(
         measurement.targetRect,
         measurement.viewportRect,
-        intent
+        measurement.intent
       );
 
       if (delta.top !== 0) {
