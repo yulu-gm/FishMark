@@ -6,6 +6,10 @@
 
 ## 当前项目判断
 
+### 2026-09-21 Sidebar 开合动效去 reflow
+
+针对 owner 观察到的 Outline 长标题在 sidebar 展开过程中反复换行：根因是 workspace-shell 对 side-panel grid track 做 0 → stored width 的 220ms 宽度过渡，导致内部 Search/Outline 每帧都按新宽度重新排版。现改为**布局宽度原子切换 + 内容淡入/淡出**：打开时 sidebar track 立即进入最终宽度，header/body 只做 opacity + 4px translateX；关闭时利用现有 closingViewContainer 加 :has() 在 180ms 淡出期间继续保留最终 track 宽度，动画结束卸载后才收回列。这样 sidebar 文本从第一帧起就以最终宽度排版，不再因开合动画产生 reflow；用户主动拖拽 resize 时仍按实时宽度重排，这是明确的交互反馈。同步更新 renderer CSS 契约测试，移除旧玻璃样式和 grid 宽度动画断言。
+
 ### 2026-09-21 Sidebar 平面化视觉调整
 
 按 owner 反馈将 M6.5 左侧共享 sidebar 从“悬浮玻璃卡片”收敛为更克制的 docked panel：保留现有 rail、共享宽度、Search/Outline 容器、resize 与持久化逻辑不变；仅移除 sidebar 外层圆角、阴影、backdrop blur 与渐变高光，取消 sidebar/document 间额外 gap，改用单一右侧 1px 分隔线，并把开合动画从 translate+scale 收敛为 4px 的轻量位移。搜索框、按钮、outline hover/active 等内部交互控件仍保留轻微圆角，以维持可操作层级。此修改为 CSS 视觉层调整，未改变编辑器或 workspace 状态语义。

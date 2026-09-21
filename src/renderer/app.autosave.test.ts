@@ -5507,9 +5507,8 @@ describe("App autosave", () => {
     expect(fallbackRule).toContain("padding:");
   });
 
-  it("defines a left-docked shared side panel with a fixed header and glass styling", () => {
+  it("defines a flat left-docked shared side panel with stable-width content motion", () => {
     const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8");
-    const baseStylesheet = readFileSync(baseStylesheetPath, "utf-8");
     const workspaceShellSource = readFileSync(
       join(process.cwd(), "src/renderer/editor/WorkspaceShell.tsx"),
       "utf-8"
@@ -5517,13 +5516,16 @@ describe("App autosave", () => {
 
     expect(appUiStylesheet).toContain("--fishmark-side-panel-width: 0px;");
     expect(appUiStylesheet).toContain("grid-template-columns: var(--fishmark-side-panel-width) minmax(0, 1fr);");
-    expect(appUiStylesheet).toContain("transition:");
-    expect(appUiStylesheet).toContain("grid-template-columns 220ms var(--fishmark-ease-standard)");
-    expect(baseStylesheet).toContain("--fishmark-ease-standard: cubic-bezier(0.2, 0.85, 0.2, 1);");
+    // Width is applied atomically so Outline/Search text never reflows through
+    // intermediate panel widths during open/close.
+    expect(appUiStylesheet).not.toContain("grid-template-columns 220ms var(--fishmark-ease-standard)");
+    expect(appUiStylesheet).toContain('.workspace-shell:has(> .side-panel[data-state="closing"])');
     expect(appUiStylesheet).toContain(".side-panel");
     expect(appUiStylesheet).toContain(".side-panel-header");
     expect(appUiStylesheet).toContain(".side-panel-body");
-    expect(appUiStylesheet).toContain(".side-panel::before");
+    expect(appUiStylesheet).not.toContain(".side-panel::before");
+    expect(appUiStylesheet).toContain("box-shadow: none;");
+    expect(appUiStylesheet).toContain("backdrop-filter: none;");
     expect(appUiStylesheet).toContain("overflow: hidden;");
     expect(appUiStylesheet).toContain("overflow-y: auto;");
     // The outline stays a view container of the shared region, with its own
@@ -5531,11 +5533,12 @@ describe("App autosave", () => {
     expect(appUiStylesheet).toContain(".outline-panel");
     expect(appUiStylesheet).toContain(".outline-panel-list");
     expect(workspaceShellSource).toContain('data-fishmark-region="outline-panel"');
-    expect(appUiStylesheet).toContain("backdrop-filter: blur(28px) saturate(1.12);");
     expect(appUiStylesheet).toContain(".workspace-shell.is-side-panel-open");
     expect(appUiStylesheet).toContain('.side-panel[data-state="closing"]');
-    expect(appUiStylesheet).toContain("transform-origin: left center;");
-    expect(appUiStylesheet).toContain("@keyframes side-panel-exit");
+    expect(appUiStylesheet).toContain('.side-panel[data-state="open"] .side-panel-body');
+    expect(appUiStylesheet).toContain("@keyframes side-panel-content-enter");
+    expect(appUiStylesheet).toContain("@keyframes side-panel-content-exit");
+    expect(appUiStylesheet).not.toContain("@keyframes side-panel-enter");
     expect(appUiStylesheet).not.toContain("@keyframes outline-toggle-enter");
     // The collapse affordance points left, back towards the rail-docked panel.
     expect(workspaceShellSource).toContain('d="M15 6l-6 6 6 6"');

@@ -852,7 +852,8 @@
   --fishmark-hint-column-offset: 0px;
 }
 
-.workspace-canvas:has(> .workspace-shell.is-side-panel-open) {
+.workspace-canvas:has(> .workspace-shell.is-side-panel-open),
+.workspace-canvas:has(> .workspace-shell > .side-panel[data-state="closing"]) {
   --fishmark-hint-column-offset: calc(
     var(--fishmark-side-panel-width) + var(--fishmark-side-panel-gap)
   );
@@ -884,11 +885,13 @@
   --fishmark-side-panel-default-width: 248px;
   --fishmark-side-panel-width: 0px;
   --fishmark-side-panel-gap: 0px;
+  /*
+   * Apply the panel track width atomically. Animating this grid track makes
+   * Outline/Search content repeatedly reflow while the panel opens.
+   * Visual motion belongs to the already-final-width panel content below.
+   */
   grid-template-columns: var(--fishmark-side-panel-width) minmax(0, 1fr);
   column-gap: var(--fishmark-side-panel-gap);
-  transition:
-    grid-template-columns 220ms var(--fishmark-ease-standard),
-    column-gap 220ms var(--fishmark-ease-standard);
 }
 
 .workspace-canvas[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] .workspace-shell {
@@ -897,7 +900,8 @@
   margin: 0;
 }
 
-.workspace-shell.is-side-panel-open {
+.workspace-shell.is-side-panel-open,
+.workspace-shell:has(> .side-panel[data-state="closing"]) {
   /*
    * The stored width is the single source of truth for every view container;
    * it is clamped here for display only, so a narrow window never writes the
@@ -1186,15 +1190,22 @@
   overflow: hidden;
 }
 
-.side-panel[data-state="open"] {
-  transform-origin: left center;
-  animation: side-panel-enter 220ms var(--fishmark-ease-standard) both;
+.side-panel[data-state="closing"] {
+  pointer-events: none;
 }
 
-.side-panel[data-state="closing"] {
-  transform-origin: left center;
-  pointer-events: none;
-  animation: side-panel-exit 180ms cubic-bezier(0.4, 0, 0.2, 1) both;
+/*
+ * The panel track is already at its final width before these run, so text is
+ * laid out exactly once. Only presentation opacity/translation animates.
+ */
+.side-panel[data-state="open"] .side-panel-header,
+.side-panel[data-state="open"] .side-panel-body {
+  animation: side-panel-content-enter 160ms var(--fishmark-ease-standard) both;
+}
+
+.side-panel[data-state="closing"] .side-panel-header,
+.side-panel[data-state="closing"] .side-panel-body {
+  animation: side-panel-content-exit 180ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 .side-panel-header {
@@ -1348,7 +1359,7 @@
   line-height: 1.4;
 }
 
-@keyframes side-panel-enter {
+@keyframes side-panel-content-enter {
   from {
     opacity: 0;
     transform: translateX(-4px);
@@ -1360,7 +1371,7 @@
   }
 }
 
-@keyframes side-panel-exit {
+@keyframes side-panel-content-exit {
   from {
     opacity: 1;
     transform: translateX(0);
@@ -1501,7 +1512,8 @@
     transition-duration: 1ms;
   }
 
-  .side-panel {
+  .side-panel-header,
+  .side-panel-body {
     animation-duration: 1ms;
   }
 }
