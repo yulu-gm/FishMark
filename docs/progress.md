@@ -6,6 +6,10 @@
 
 ## 当前项目判断
 
+### 2026-09-21 Sidebar 平面化视觉调整
+
+按 owner 反馈将 M6.5 左侧共享 sidebar 从“悬浮玻璃卡片”收敛为更克制的 docked panel：保留现有 rail、共享宽度、Search/Outline 容器、resize 与持久化逻辑不变；仅移除 sidebar 外层圆角、阴影、backdrop blur 与渐变高光，取消 sidebar/document 间额外 gap，改用单一右侧 1px 分隔线，并把开合动画从 translate+scale 收敛为 4px 的轻量位移。搜索框、按钮、outline hover/active 等内部交互控件仍保留轻微圆角，以维持可操作层级。此修改为 CSS 视觉层调整，未改变编辑器或 workspace 状态语义。
+
 ### 2026-09-20 M6 + M6.5 验收完成并收口（owner 已认可）
 
 M6（RF-701 嵌套渲染 / RF-602 遗留解析路径与物理行几何归一 / RF-603 异步 widget 生命周期与测量 / RF-604 包边界硬切换）与 M6.5（外壳布局不变性 + VS Code 式侧栏）在本会话声明的范围内**全部落地并通过父级独立验收**：`packages/editor-core/` 已删除、architecture guard 为 7 包 / 13 规则 / `exceptions: []`（234/234）、全量 vitest 2788 passed / 1 skipped / 11 failed（失败集合与开工前逐条相同，无新增无删覆盖）、独占 oracle `unexpected=0 / known-defect=99 / not-run=0`、6 个 Electron 探针除 `editing-experience` 的已知 5 条 bare-marker 族外全部 exit 0。**M6 / M6.5 已由 owner 明确认可全部验收并在本日标记为 `ACCEPTED`（收口）**，随后按 owner 指示**提交并推送 main**：提交 `4a66136`（168 个文件，+7802 / −4946，含 `packages/editor-core` 删除到 `exceptions: []` 的全部改动），`origin/main` 已推进到该提交；提交内容与本节验收所依据的树完全一致（提交后仅追加文档状态更新）。明确留给后续：RF-702（HTML 导出 canonical 化）、RF-703（outline/指标统一到 `EditorDerivedSnapshot`）、包体积预算、M5 最终性能验收、M7–M10，以及三个已测量但契约未定的产品行为候选（未聚焦时异步预览长高推移视口、编辑轴 wysiwym↔source 切换的有界位移、widget 池 DOM 复用累积 cell 监听器）。
