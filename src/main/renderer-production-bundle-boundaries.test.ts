@@ -7,6 +7,12 @@ const readRendererSource = (relativePath: string): string =>
   readFileSync(join(process.cwd(), "src/renderer", relativePath), "utf8").replace(/\r\n/g, "\n");
 
 describe("renderer production bundle boundaries", () => {
+  it("targets the Chromium version bundled by the pinned Electron runtime", () => {
+    const source = readFileSync(join(process.cwd(), "vite.config.ts"), "utf8").replace(/\r\n/g, "\n");
+
+    expect(source).toContain('target: "chrome146"');
+  });
+
   it("compiles the editor automation bridge out of production mode", () => {
     const source = readRendererSource("editor/App.tsx");
 

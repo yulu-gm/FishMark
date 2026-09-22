@@ -48,6 +48,10 @@ export default defineConfig({
     strictPort: true
   },
   build: {
+    // FishMark's renderer only runs inside Electron 41.x (Chromium 146).
+    // Avoid Vite's broad-browser transpilation so shipped JS matches the
+    // actual desktop runtime contract instead of carrying unused fallbacks.
+    target: "chrome146",
     outDir: "../../dist",
     emptyOutDir: true,
     // Keep standard backdrop-filter declarations in built CSS so Electron/Windows

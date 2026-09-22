@@ -6,6 +6,10 @@
 
 ## 当前项目判断
 
+### 2026-09-22 M5 / RF-506 最终收口 slice B：renderer target 对齐 Electron Chromium
+
+为压缩 `totalJsGzipBytes` 而不删除功能或放宽预算，Vite renderer build 明确从默认广泛浏览器 target 收敛到 `chrome146`。仓库锁定 Electron 41.2.0，其 Chromium 为 146；因此这是运行时事实的显式化，而不是降低兼容承诺。新增 bundle source contract 防止未来无意退回广泛浏览器转译。此改动与 slice A 一起等待真实 `perf:bundle` 复测，四个 maximum 未全绿前 M5 仍保持 IN_PROGRESS。
+
 ### 2026-09-22 M5 / RF-506 最终收口 slice A：真实生产 bundle 减重
 
 owner 要求在进入 M8 前收掉 M5。本轮重新激活 RF-506，但不重开已通过的语义/行为切换：唯一目标是让原始 bundle maximum gate 真正转绿，不调预算、不删用户 Markdown 能力。第一刀处理两类明确不属于默认首屏的负担：① `EditorTestBridgeHost` 改为与 test-workbench 相同的编译期 DEV/test 边界，production build 不再发出 `editor-test-driver` 自动化 chunk；正式 behavior/performance/geometry 探针均有独立 probe page，不依赖该 production host。② `WorkspaceShell` 不再静态导入 macOS custom `TitlebarHost` 与 `ThemeSurfaceHost`；两者仅在对应平台/titlebar 或动态主题 surface 实际存在时通过 React lazy 加载，默认编辑器 initial closure 不承担 shader scene host。新增源码合同防止测试 bridge 或两个 optional host 被重新静态接回。此 slice 只改变加载边界，不改任何 bundle limit；等待真实 `perf:bundle` 后决定是否需要 slice B。
