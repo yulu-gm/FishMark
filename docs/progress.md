@@ -6,6 +6,10 @@
 
 ## 当前项目判断
 
+### 2026-09-22 M5 / RF-506 slice F：撤销过宽 adapter manual chunk
+
+Provenance v2 后 CI 已能完整执行正式 bundle analyzer。实测确认 `totalJsGzipBytes=1427440/1430000` 已 PASS，但此前把整个 `packages/codemirror-adapter/src/**` 固定到一个 manual chunk 会跨越 adapter 内部的动态 import 边界，把 KaTeX/Mermaid/语言相关代码吸入 1.24MB initial chunk，导致 initial 三项和 forbidden-initial 证据同时回归。现删除该过宽 manual chunk，仅保留不会跨 lazy boundary 的 editor-model / markdown-engine / workspace package ownership chunk；Search lazy、Terser、Chromium target 均保留。新增构建配置合同禁止未来再次把整个 codemirror-adapter 强制合并。另补 Search document-identity reset 的精确 React lint 说明，保持原行为不变。
+
 ### 2026-09-22 M5 / bundle provenance v2：显式记录 Rolldown facade chunk
 
 CI clean install 修复后，Linux sourcemap build 仍稳定产出同一 `moduleIds=[]` 的 `dist-BFdHydeb.js`，证明该 chunk 不是 workspace dist alias 遗留，而是 Rolldown 的真实 facade 输出。Provenance contract 升级到 v2：每个 chunk 新增 `facade: boolean` 与 `facadeModuleId: string|null`；普通 chunk 仍必须至少包含一个 moduleId，**只有 Rolldown 明确提供非空 facadeModuleId 的 facade 才允许 moduleIds 为空**。这种 facade 的空 sources/mappings map 不再伪装成普通 COMPLETE map，而报告为显式 `sourceMapEvidence.status=FACADE`；任何其它 map 问题仍 INCOMPLETE。Forbidden-source 归属同时把 `facadeModuleId` 纳入 provenance source groups，并继续校验 facade 的 static/dynamic import closure，因此零-module facade 不能成为隐藏依赖的绕过点。新增 producer + analyzer 两层回归，未降低 bundle budget 或 provenance fail-closed 约束。
