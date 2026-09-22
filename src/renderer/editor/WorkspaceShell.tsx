@@ -576,6 +576,7 @@ export function WorkspaceShell({
     }
 
     searchDocumentIdentityRef.current = nextDocumentIdentity;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- A document identity boundary intentionally resets the Search view's local presentation state.
     setFindText("");
     setReplaceText("");
     setFindReplaceSnapshot({
