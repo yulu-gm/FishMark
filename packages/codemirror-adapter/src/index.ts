@@ -177,12 +177,16 @@ export {
   DEFAULT_TEXT_SHORTCUT_GROUP,
   SHORTCUT_GROUPS,
   TABLE_EDITING_SHORTCUT_GROUP,
+  formatShortcutHintKey,
+  type ShortcutDescriptor,
+  type ShortcutGroup,
+  type ShortcutGroupId,
+  type ShortcutId
+} from "./shortcut-descriptors";
+export {
   TEXT_EDITING_SHORTCUTS,
   createGroupedShortcutKeymaps,
   createTextEditingShortcutKeymap,
-  formatShortcutHintKey,
-  type ShortcutGroup,
-  type ShortcutGroupId,
   type TextEditingShortcut
 } from "./markdown-shortcuts";
 export {
