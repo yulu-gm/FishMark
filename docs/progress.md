@@ -6,6 +6,10 @@
 
 ## 当前项目判断
 
+### 2026-09-22 RF-703 证据可信度修正 + frozen baseline 合法重录
+
+owner 对 `84d0b4c` 的独立复核确认结构目标已达成：renderer 的 Outline/Metrics 已退化为 snapshot 投影，`EditorDerivedSnapshot` 为唯一文档级派生 owner，生产 legacy parser 调用清零；同时指出两项 acceptance 证据问题。第一，`document-derived-ui.ts` 原先把 consumer 的 `fullParse=0/cacheHit=1/parserEntries=0` 写成常量，测试再断言同一常量，形成自证循环，且 `cacheHit=1` 错把上游 snapshot reuse 记在 consumer 名下。现改为一份 `MarkdownParseInstrumentation` tracker：shared snapshot build 记录 `snapshotBuildCount` 与真实 full/inline parse event；Outline/Metrics 分别记录执行前后 delta，`counters.fullParse` 直接取实测 delta，consumer `cacheHit=0`。focused perf contract 明确断言一次 snapshot build、当前 canonical build 的两个 full-source scan event（reference-definitions + full-document-tree），以及两个 consumer 的 full/inline parse delta 均为 0。保留的 `parserEntries` 仅为历史报告 schema 字段，其 parser ownership 由 architecture guard 静态约束，不再作为“consumer 无解析”的运行时证据。第二，按 owner 实测，frozen baseline 的 outline/metrics 观测值已合法变化，因此仅重录这两个 operation：outline `fullParse 2→0` / reason→null；metrics `fullParse 3→0` / `parseMarkdownDocument 1→0` / reason→null；两者 `cacheHit` 保持真实的 0，不采用先前错误的 1。baseline test 不再通过 filter 绕开 Outline/Metrics，而是在遍历全部 operation 时对 snapshot consumer 做显式合同断言。另补回 RF-602 的“非标题根 sibling 之后 heading id 仍直接取 canonical node.id”回归守卫。RF-703 继续保持 IN_PROGRESS，等待本提交后的 focused/full/baseline 复验。
+
 ### 2026-09-21 M7 / RF-703 实现：Outline / Metrics 收敛到 EditorDerivedSnapshot（验证待执行）
 
 性能合同同步：foundation baseline 测试不再要求 Outline/Metrics 像独立 parser consumer 一样产生 full parse；两者的新硬契约是 `fullParse=0 / parserEntries=0 / cacheHit=1 / unavailableCapabilityReason=null`。真正的 parser 成本只记录在 shared snapshot build / editor production path。冻结 `editor-foundation-current-baseline.json` 仍保持未改，等待实测 diff。

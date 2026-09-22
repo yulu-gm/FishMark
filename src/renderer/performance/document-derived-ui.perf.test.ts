@@ -11,7 +11,11 @@ describe("measureRendererDerivedDataPerformance", () => {
     expect(report.sourceLength).toBe(source.length);
     expect(Number.isFinite(report.sharedSnapshotBuild.durationMs)).toBe(true);
     expect(report.sharedSnapshotBuild.durationMs).toBeGreaterThanOrEqual(0);
-    expect(report.sharedSnapshotBuild.fullDocumentParseCalls).toBeGreaterThan(0);
+    expect(report.sharedSnapshotBuild.snapshotBuildCount).toBe(1);
+    // One canonical build performs the two currently-instrumented full-source
+    // scans: reference definitions and the recursive document tree.
+    expect(report.sharedSnapshotBuild.parseEvents.fullDocumentParseCalls).toBe(2);
+    expect(report.sharedSnapshotBuild.parseEvents.inlineParseCalls).toBeGreaterThan(0);
 
     expect(report.outline.name).toBe("outline");
     expect(report.outline.itemCount).toBeGreaterThan(0);
@@ -21,14 +25,18 @@ describe("measureRendererDerivedDataPerformance", () => {
     for (const operation of [report.outline, report.metrics]) {
       expect(Number.isFinite(operation.durationMs)).toBe(true);
       expect(operation.durationMs).toBeGreaterThanOrEqual(0);
+      expect(operation.parseEvents).toEqual({
+        fullDocumentParseCalls: 0,
+        inlineParseCalls: 0
+      });
       expect(operation.parserEntries).toEqual({
         parseMarkdownDocument: 0,
         parseOrderedListNormalization: 0
       });
       expect(operation.counters).toEqual({
-        fullParse: 0,
+        fullParse: operation.parseEvents.fullDocumentParseCalls,
         incrementalParseWindow: 0,
-        cacheHit: 1,
+        cacheHit: 0,
         invalidatedNodes: 0,
         decorationRebuild: 0
       });

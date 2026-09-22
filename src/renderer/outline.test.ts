@@ -47,6 +47,17 @@ describe("deriveOutlineItems", () => {
     ]);
   });
 
+  it("takes every outline id from the canonical root child after non-heading siblings", () => {
+    const source = ["> # Quoted", "", "# Root", "", "- item", "", "## Tail"].join("\n");
+    const current = snapshot(source);
+    const rootChildren = current.tree.root.children;
+
+    expect(deriveOutlineItems(current).map((item) => item.id)).toEqual([
+      rootChildren[1]!.id,
+      rootChildren[3]!.id
+    ]);
+  });
+
   it("keeps nested headings out of the renderer outline", () => {
     const current = snapshot(["> # Quoted", "", "# Root"].join("\n"));
 

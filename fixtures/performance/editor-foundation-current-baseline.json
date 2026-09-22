@@ -96,7 +96,7 @@
     {
       "name": "outline",
       "counters": {
-        "fullParse": 2,
+        "fullParse": 0,
         "incrementalParseWindow": 0,
         "cacheHit": 0,
         "invalidatedNodes": 0,
@@ -109,25 +109,25 @@
       "capabilityRefs": [
         "incrementalStructureCache"
       ],
-      "unavailableCapabilityReason": "consumer-does-not-use-incremental-structure-cache"
+      "unavailableCapabilityReason": null
     },
     {
       "name": "metrics",
       "counters": {
-        "fullParse": 3,
+        "fullParse": 0,
         "incrementalParseWindow": 0,
         "cacheHit": 0,
         "invalidatedNodes": 0,
         "decorationRebuild": 0
       },
       "parserEntries": {
-        "parseMarkdownDocument": 1,
+        "parseMarkdownDocument": 0,
         "parseOrderedListNormalization": 0
       },
       "capabilityRefs": [
         "incrementalStructureCache"
       ],
-      "unavailableCapabilityReason": "consumer-does-not-use-incremental-structure-cache"
+      "unavailableCapabilityReason": null
     }
   ]
 }
