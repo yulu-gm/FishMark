@@ -40,7 +40,7 @@
     "test:empty-document-layout": "node scripts/probe-empty-document-layout.mjs",
     "test:table-layout": "node scripts/probe-table-layout.mjs",
     "test:table-focus-scroll": "node scripts/probe-table-focus-scroll.mjs",
-    "perf:bundle": "npm exec vite -- build --sourcemap && node scripts/analyze-renderer-bundle.mjs --dist dist --top 20 --contract fixtures/architecture/editor-foundation-guard.json && npm run build:renderer",
+    "perf:bundle": "npm exec vite -- build --sourcemap hidden && node scripts/analyze-renderer-bundle.mjs --dist dist --top 20 --contract fixtures/architecture/editor-foundation-guard.json && npm run build:renderer",
     "test:editor-foundation": "vitest run src/main/editor-foundation-architecture.test.ts packages/codemirror-adapter/src/performance src/renderer/performance src/main/analyze-renderer-bundle.test.ts src/main/vite-bundle-provenance.test.ts --reporter=verbose",
     "perf:baseline": "npm run perf:bundle && cross-env FISHMARK_PERF_REPORT=1 npm run test:editor-foundation",
     "build:cli": "tsc -p tsconfig.cli.json",
