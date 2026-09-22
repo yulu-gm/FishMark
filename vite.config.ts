@@ -77,6 +77,9 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
+          if (/node_modules[\\/]katex[\\/]/u.test(id)) {
+            return "katex";
+          }
           if (/node_modules[\\/]@codemirror[\\/]view[\\/]/u.test(id)) {
             return "codemirror-view";
           }
