@@ -6,6 +6,12 @@
 
 ## 当前项目判断
 
+### 2026-09-22 M5 / RF-506 slice H：合并 Mermaid tiny lazy modules
+
+`4761664` 的 CI Quality 已全绿；bundle 三项 initial 指标也全部 PASS，唯一剩余为 `totalJsGzipBytes 1438511/1430000`（差 8511 B）。bundle 日志显示 Mermaid 动态图中存在大量数百字节到数 KB 的独立 lazy chunk；aggregate budget 对每个 chunk 分别 gzip 后求和，因此这些 tiny registration/facade 模块重复承担 header/import/export 与压缩字典开销。
+
+本切片不把 Mermaid 全量合成一个 chunk，也不改变 diagram 能力：仅在 `node_modules/mermaid/dist/**` 中，将 Rolldown 已加载后源码长度不超过 12,000 字符的小模块归并到 `mermaid-small` lazy chunk；较大的 flow/sequence/architecture 等 diagram 实现继续保留各自动态边界。现有 `forbiddenInitialSourceGroup:mermaid` 仍 fail-closed 约束任何 Mermaid 模块不得进入 initial。目标是降低 total-JS aggregate gzip，而不把大型 Mermaid payload 前移到首屏或删除支持类型。
+
 ### 2026-09-22 M5 / RF-506 slice G：只剩 total JS，改做真实 minification
 
 CI 对 `e591dc5` 的正式 bundle 结果为：`maxInitialChunkBytes 182006/300000 PASS`、`maxInitialChunkGzipBytes 57287/90000 PASS`、`totalInitialGzipBytes 94585/260000 PASS`，说明壳层 shortcut metadata / CodeEditor lazy 边界已把 initial 债彻底清零；唯一剩余为 `totalJsGzipBytes 1439079/1430000 FAIL`（差 9079 B）。上一刀的 `lodash-es` manual chunk 未改善 aggregate gzip，故撤回，避免为 budget 保留无收益 chunk 策略。

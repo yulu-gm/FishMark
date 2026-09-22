@@ -34,6 +34,8 @@ describe("renderer production bundle boundaries", () => {
     expect(source).toContain('"console.trace"');
     expect(source).toContain("polyfill: false");
     expect(source).toContain('return "katex";');
+    expect(source).toContain('return "mermaid-small";');
+    expect(source).toContain("moduleCode.length <= 12_000");
     expect(source).toContain('return "codemirror-view";');
     expect(source).toContain('return "codemirror-state";');
     expect(source).toContain('return "fishmark-editor-model";');

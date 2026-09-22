@@ -82,9 +82,18 @@ export default defineConfig({
     },
     rollupOptions: {
       output: {
-        manualChunks(id) {
+        manualChunks(id, { getModuleInfo }) {
           if (/node_modules[\\/]katex[\\/]/u.test(id)) {
             return "katex";
+          }
+          if (/node_modules[\\/]mermaid[\\/]dist[\\/]/u.test(id)) {
+            const moduleCode = getModuleInfo(id)?.code;
+            // Mermaid ships dozens of tiny dynamic registration/facade modules.
+            // Coalesce only small modules; large diagram implementations remain
+            // independent dynamic chunks so first-use loading stays selective.
+            if (moduleCode !== null && moduleCode !== undefined && moduleCode.length <= 12_000) {
+              return "mermaid-small";
+            }
           }
           if (/node_modules[\\/]@codemirror[\\/]view[\\/]/u.test(id)) {
             return "codemirror-view";
