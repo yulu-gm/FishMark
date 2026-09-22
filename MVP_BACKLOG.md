@@ -124,7 +124,7 @@ Intake：`docs/plans/2026-09-18-rf-601-intake.md`。执行交接：`docs/plans/2
 
 ### RF-702 / RF-703 — M7 剩余 canonical consumer 收口
 
-状态：RF-701 COMPLETE；RF-702 COMPLETE；RF-703 IN_PROGRESS（实现已落地，验证/冻结基线复核待补）。
+状态：**M7 COMPLETE**；RF-701 / RF-702 / RF-703 全部 ACCEPTED。
 
 - [x] RF-702：HTML export 改由 `MarkdownDocumentTree + markdown-presentation render plan` 驱动；focused 42/42、typecheck/build、guard、全量回归及 KaTeX/Mermaid lazy bundle source-group 契约均通过，2026-09-21 ACCEPTED。
 - [x] RF-703 实现：Outline 与 document metrics 改为订阅 `EditorDerivedSnapshot` / revision，删除独立结构解析；保留 120ms presentation debounce，但不再重复 parse。\n- [ ] RF-703 验证：focused tests / typecheck / build / full suite / perf baseline，按实测更新冻结性能基线后再 acceptance。

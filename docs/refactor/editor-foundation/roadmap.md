@@ -1618,7 +1618,7 @@ npm.cmd run build
 
 #### RF-703: Outline and metrics cutover
 
-**Status (2026-09-21):** `IN_PROGRESS` — implementation is on `main`; verification and measured frozen-baseline reconciliation remain before acceptance.
+**Status (2026-09-22):** `COMPLETE` — snapshot-only Outline/Metrics, measured consumer parse evidence, focused/full/baseline rerun and owner acceptance passed.
 
 **Outcome:** outline and document metrics update from `EditorDerivedSnapshot`.
 
@@ -1626,10 +1626,10 @@ npm.cmd run build
 
 **Steps:**
 
-- [ ] Expose outline and metric deltas from the derived snapshot.
-- [ ] Make renderer subscribe by revision instead of content string.
-- [ ] Remove standalone Markdown parsing from outline and metrics.
-- [ ] Schedule noncritical presentation updates after first paint without duplicating structure work.
+- [x] Expose outline and metric deltas from the derived snapshot.
+- [x] Make renderer subscribe by revision instead of content string.
+- [x] Remove standalone Markdown parsing from outline and metrics.
+- [x] Schedule noncritical presentation updates after first paint without duplicating structure work.
 
 **Verification:**
 
@@ -1638,7 +1638,7 @@ npm.cmd run test -- src/renderer/outline.test.ts src/renderer/document-metrics.t
 npm.cmd run perf:baseline
 ```
 
-**Exit:** one document structure build feeds editor, outline, metrics, and export.
+**Exit:** one document structure build feeds editor, outline, metrics, and export. **PASS (2026-09-22).**
 
 ### Milestone 8 — Renderer and main composition cleanup
 

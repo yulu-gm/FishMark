@@ -6,15 +6,15 @@
 
 **Created:** 2026-07-11
 
-**Last updated:** 2026-09-21
+**Last updated:** 2026-09-22
 
 **Overall status:** `IN_PROGRESS`
 
-**Current task:** `RF-703 IN_PROGRESS` — structure cutover is landed. Owner review found the first performance evidence was self-referential; consumer parse work is now measured by instrumentation deltas, the two affected frozen operations are re-recorded from the observed semantic change, and focused/full/baseline rerun is pending. RF-506 remains `DEV_DONE` because final performance/bundle acceptance is still pending.
+**Current task:** no RF task is active. `RF-703` is accepted and M7 is complete; the next dependency-ready task is `RF-801` (renderer application client/store consolidation). RF-506 remains `DEV_DONE` because final performance/bundle acceptance is still pending.
 
-**Next required work:** verify and accept RF-703 to finish M7; afterwards follow the roadmap through M8 composition cleanup, M9 performance/E2E/security, and M10 purge/final acceptance. Keep RF-506/M5 open until the original final performance and bundle gates pass.
+**Next required work:** start RF-801 only when M8 work is intentionally begun, then RF-802/RF-803; afterwards M9 performance/E2E/security and M10 purge/final acceptance. Keep RF-506/M5 open until the original final performance and bundle gates pass.
 
-**Current gate:** M6/M6.5 parent acceptance on the frozen tree passed typecheck/lint/build, architecture guard 234/234 with `exceptions: []`, full Vitest 2788 passed / 1 skipped / 11 known pre-existing failures, formal Electron oracle 121/121 cases / 2541 targets with 0 unexpected and 0 not-run, and all geometry/render probes except the already-known five bare-marker editing-experience cases. `packages/editor-core` is deleted. Bundle budget remains FAIL, so RF-506/M5 final performance acceptance is still open.
+**Current gate:** M7 is accepted: RF-702 canonical export and RF-703 snapshot-only Outline/Metrics both passed owner verification; RF-703 runtime evidence measures consumer parse deltas instead of hard-coded expectations, and the frozen baseline only re-records the two legitimately changed operations. M6/M6.5 remain accepted with guard 234/234 and `exceptions: []`. Bundle budget remains FAIL, so RF-506/M5 final performance acceptance is still open.
 
 **Current performance evidence:** the 20k-line controller probe improved typing dispatch p95 from 1,934 ms to 66.9 ms and selection p95 from 1,697 ms to 13.9 ms after canonical-tree reuse and physical-range indexing. M6 removed the old mixed runtime and duplicate display path, but the final bundle contract still exceeds four limits (initial bytes/gzip, total initial gzip, total JS gzip). M9 still owns reproducible 5k/20k open/input/selection/scroll/tab-switch/memory budgets; do not treat M6 acceptance as final performance acceptance.
 **User priorities:** maintainability/extensibility, editing/interaction quality, and measured performance. Preserve the existing stack and owners; do not optimize progress percentages, package count, or deleted lines.
@@ -43,12 +43,12 @@ At most one `RF-xxx` task may be `IN_PROGRESS` or `ACCEPTING` at a time. A later
 | M4 | Recursive parser and incremental cache | `COMPLETE` | 5 | 5 | One recursive parser remains; differential cache tests pass |
 | M5 | Pure semantic editing engine | `IN_PROGRESS` | 5 | 6 | All semantic commands migrated; old command engine removed |
 | M6 | Thin CodeMirror adapter | `COMPLETE` | 4 | 4 | RF-601/602/603/604 accepted; `editor-core` deleted and adapter is the production owner |
-| M7 | Shared presentation and derived consumers | `IN_PROGRESS` | 2 | 3 | RF-701/RF-702 complete; RF-703 outline/metrics remains |
+| M7 | Shared presentation and derived consumers | `COMPLETE` | 3 | 3 | RF-701/702/703 accepted; editor/export/outline/metrics now share canonical derived inputs |
 | M8 | Renderer/main composition cleanup | `PLANNED` | 0 | 3 | React/main/preload are composition or presentation only |
 | M9 | Performance, E2E, and security | `PLANNED` | 0 | 3 | Budgets, Playwright flows, and Electron security pass |
 | M10 | Purge and final acceptance | `PLANNED` | 0 | 2 | No compatibility/dead code; final verdict `PASS` |
 
-**Historical recorded completion:** 27 / 38 original tasks. The supplemental RF-HARDEN-001 repair gate is tracked separately; this count is not a current quality or release-readiness percentage.
+**Historical recorded completion:** 28 / 38 original tasks. The supplemental RF-HARDEN-001 repair gate is tracked separately; this count is not a current quality or release-readiness percentage.
 
 ## 3. Task ledger
 
@@ -85,7 +85,7 @@ Evidence columns are filled only with fresh command output/report paths from the
 | RF-604 | CodeMirror adapter hard cutover | RF-603 | `COMPLETE` | Renderer production factory uses `@fishmark/codemirror-adapter`; `packages/editor-core/` and its runtime imports/guard exceptions are deleted; package boundary is fail-closed. | typecheck/lint/build; guard 234/234 with `exceptions: []`; full Vitest/oracle/Electron probe batch accepted. | Accepted as part of M6 final parent acceptance on 2026-09-20. | `main` (`4a66136`) |
 | RF-701 | Semantic render plan | RF-506 behavior/safety gate | `COMPLETE` | `@fishmark/markdown-presentation` exposes the canonical semantic render plan; nested list/blockquote leaves use the same traversal and production CodeMirror decorations consume it. | Focused presentation/adapter suites plus the combined M6 frozen-tree acceptance. | Accepted as the completed prerequisite used by RF-602/603/604; M7 remains open because RF-702/703 are still planned. | `main` (`4a66136`) |
 | RF-702 | HTML export cutover | RF-604, RF-701 | `COMPLETE` | Renderer export orchestration parses one canonical tree, builds the shared render plan, and delegates pure Markdown-content HTML to `markdown-presentation`; legacy export-local block/inline parsing is removed. KaTeX stays in the lazy renderer export chunk via injected `renderMath`, so presentation root consumers do not pull it into the initial graph. | Clean-tree rerun at `1b08a2c`: focused 5 files / 42 passed; typecheck exit 0; build exit 0; full Vitest 2799 passed / 1 skipped / 11 known failures; guard 234/234; `forbiddenInitialSourceGroup:katex` and Mermaid plus all required lazy-chunk checks PASS. `perf:bundle` remains red only on the four pre-existing maximum budgets. | Accepted 2026-09-21 from owner-provided clean-tree verification; no new failing test or bundle source-group regression remains. | `main` (`df3b562` + `1b08a2c`) |
-| RF-703 | Outline and metrics cutover | RF-702 | `IN_PROGRESS` | `EditorDerivedSnapshot` owns root outline headings and lazy document metrics; renderer consumers accept only a snapshot, App refreshes by snapshot identity/revision, raw-content scheduling is removed. Performance evidence now uses one shared `MarkdownParseInstrumentation` tracker and per-consumer before/after deltas; consumer cacheHit is 0 because snapshot reuse belongs upstream. RF-602 canonical-id regression coverage is restored. | Owner review on `84d0b4c`: typecheck/build/guard green; structural cutover confirmed; frozen baseline red only because old outline/metrics observations remained. Baseline now re-records only those two operations from the measured semantic change; post-fix focused/full/baseline rerun pending. | No acceptance claim until the rerun proves no RF-703 regression. | `main` |
+| RF-703 | Outline and metrics cutover | RF-702 | `COMPLETE` | `EditorDerivedSnapshot` owns root outline headings and lazy document metrics; renderer consumers accept only a snapshot, App refreshes by snapshot identity/revision, raw-content scheduling is removed. Runtime evidence uses one shared `MarkdownParseInstrumentation` tracker with per-consumer before/after deltas; consumer cacheHit remains 0 because snapshot reuse belongs upstream. RF-602 canonical-id regression coverage is restored. | Owner independently confirmed the post-`b6a2c8e` focused/full/frozen-baseline rerun passed. Earlier typecheck/build and guard 234/234 were green; structural review confirmed production legacy parser calls are zero. Frozen baseline changes are limited to the two legitimately changed outline/metrics operations. | Owner acceptance PASS on 2026-09-22; `reports/task-summaries/RF-703.md`. | `main` (`265694d` + hardening through `b6a2c8e`) |
 | RF-801 | Non-React workspace client/store | RF-703 | `PLANNED` | — | typecheck/test | — | — |
 | RF-802 | React shell decomposition | RF-801 | `PLANNED` | — | lint/typecheck/test | — | — |
 | RF-803 | Main/preload composition split | RF-802 | `PLANNED` | — | lint/typecheck/test/build | — | — |
