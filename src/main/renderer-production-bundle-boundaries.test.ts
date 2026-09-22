@@ -7,13 +7,33 @@ const readRendererSource = (relativePath: string): string =>
   readFileSync(join(process.cwd(), "src/renderer", relativePath), "utf8").replace(/\r\n/g, "\n");
 
 describe("renderer production bundle boundaries", () => {
+  it("pins the release minifier that owns the frozen bundle budget", () => {
+    const packageJson = JSON.parse(
+      readFileSync(join(process.cwd(), "package.json"), "utf8")
+    ) as { devDependencies?: Record<string, string> };
+    const packageLock = JSON.parse(
+      readFileSync(join(process.cwd(), "package-lock.json"), "utf8")
+    ) as {
+      packages?: Record<string, { version?: string; devDependencies?: Record<string, string> }>;
+    };
+
+    expect(packageJson.devDependencies?.terser).toBe("5.51.2");
+    expect(packageLock.packages?.[""]?.devDependencies?.terser).toBe("5.51.2");
+    expect(packageLock.packages?.["node_modules/terser"]?.version).toBe("5.51.2");
+  });
+
   it("targets the Chromium version bundled by the pinned Electron runtime", () => {
     const source = readFileSync(join(process.cwd(), "vite.config.ts"), "utf8").replace(/\r\n/g, "\n");
 
     expect(source).toContain('target: "chrome146"');
+    expect(source).toContain('minify: "terser"');
+    expect(source).toContain("passes: 2");
     expect(source).toContain("polyfill: false");
     expect(source).toContain('return "codemirror-view";');
     expect(source).toContain('return "codemirror-state";');
+    expect(source).toContain('return "fishmark-codemirror-adapter";');
+    expect(source).toContain('return "fishmark-editor-model";');
+    expect(source).toContain('return "fishmark-markdown-engine";');
   });
 
   it("compiles the editor automation bridge out of production mode", () => {

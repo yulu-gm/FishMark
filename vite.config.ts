@@ -52,6 +52,17 @@ export default defineConfig({
     // Avoid Vite's broad-browser transpilation so shipped JS matches the
     // actual desktop runtime contract instead of carrying unused fallbacks.
     target: "chrome146",
+    minify: "terser",
+    terserOptions: {
+      // M5's remaining bundle debt is compression, not compatibility.
+      // Two passes trade a little build time for a smaller deterministic
+      // production artifact while preserving the Electron 41 runtime target.
+      ecma: 2022,
+      module: true,
+      compress: {
+        passes: 2
+      }
+    },
     modulePreload: {
       // Chromium 146 implements modulepreload natively; the Vite compatibility
       // polyfill would be dead code in every supported FishMark renderer.
@@ -65,6 +76,15 @@ export default defineConfig({
           }
           if (/node_modules[\\/]@codemirror[\\/]state[\\/]/u.test(id)) {
             return "codemirror-state";
+          }
+          if (/[\\/]packages[\\/]codemirror-adapter[\\/]src[\\/]/u.test(id)) {
+            return "fishmark-codemirror-adapter";
+          }
+          if (/[\\/]packages[\\/]editor-model[\\/]src[\\/]/u.test(id)) {
+            return "fishmark-editor-model";
+          }
+          if (/[\\/]packages[\\/]markdown-engine[\\/]src[\\/]/u.test(id)) {
+            return "fishmark-markdown-engine";
           }
           return undefined;
         }

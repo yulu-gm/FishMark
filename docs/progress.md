@@ -6,6 +6,10 @@
 
 ## 当前项目判断
 
+### 2026-09-22 M5 / RF-506 最终收口 slice D：固定 Terser + package-owned initial chunks
+
+基于 owner 对 `257cc90` 的实测，剩余三项 FAIL 已明确为：`maxInitialChunkBytes 325153/300000`、`totalInitialGzipBytes 267050/260000`、`totalJsGzipBytes 1439520/1430000`；其余 20 项 bundle 检查全 PASS，KaTeX/Mermaid forbidden-initial 与 4 个 required lazy chunks 均保持绿色。下一刀不再继续移动用户功能：release JS minifier 从 Vite 8 默认 Oxc 改为**精确锁定 Terser 5.51.2**，`module=true + compress passes=2`，用于真实压缩 total JS / initial gzip；Terser 及其 lock entry 固定，避免 minifier 漂移改变冻结预算。与此同时仅为解决单块 raw gate，把 `codemirror-adapter / editor-model / markdown-engine` 按 package owner 拆为稳定 initial chunks；总 initial gzip 仍统计完整 static closure，因此这项 chunking 不能掩盖总量。预算上限没有修改。等待本提交真实 `perf:bundle` 后决定是否可直接进入 RF-506/M5 最终验收。
+
 ### 2026-09-22 M5 / RF-506 最终收口 slice C：Search lazy + CodeMirror vendor chunk
 
 继续按原预算减首屏：`@codemirror/search` 不再由 `code-editor.ts` 静态导入；新增 `search-runtime.ts`，第一次文档 mount 后低优先预热，并在显式打开 Search 前由 `prepareFindReplace()` 保证 runtime 已装入 CodeMirror Compartment。查找/替换仍完全使用 CodeMirror `SearchQuery/search state/find/replace`，没有第二套搜索语义。Vite 同时把 `@codemirror/view` 与 `@codemirror/state` 分成独立 initial vendor chunk，用单-chunk gate 约束各自大小；`totalInitialGzipBytes` 仍会统计整个静态 closure，因此该拆分不能掩盖总量。Chromium 146 原生 modulepreload，production build 关闭 Vite polyfill。新增源码合同钉住 Search lazy、CodeMirror chunk 与 polyfill 边界。等待真实 bundle 产物复测后再判断是否需要继续削减 total JS。
