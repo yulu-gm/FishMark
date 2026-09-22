@@ -221,6 +221,15 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain("registerWorkspaceHandlers<Electron.WebContents>({");
     expect(mainSource).toContain("createApplyDocumentEdits({");
     expect(mainSource).toContain("createFlushDocumentEdits({");
+    expect(mainSource).toContain(
+      "workspaceWindowCloseLeases.get(input.expectedWindowId)"
+    );
+    expect(mainSource).toContain(
+      "applyDocumentEditsWithRecovery.applyWithHeldTabLease("
+    );
+    expect(mainSource).toContain(
+      "flushDocumentEdits.flushWithHeldTabLease("
+    );
     expect(mainSource).toContain("expectedWindowId: windowId");
     expect(mainSource).not.toContain("workspaceState.updateTabDraft(");
     expect(mainSource).toContain("workspaceApplication.saveDocument({");

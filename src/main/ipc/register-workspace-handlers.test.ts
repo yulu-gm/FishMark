@@ -335,6 +335,51 @@ describe("registerWorkspaceHandlers", () => {
     expect(checkpoint).not.toHaveBeenCalled();
   });
 
+  it("drains document edits through an already-held window-close lease without reacquiring", async () => {
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
+    workspace.registerWindow("window-1");
+    const tabId = workspace.createUntitledTab("window-1").activeTabId!;
+    const operations = createKeyedOperationCoordinator<string>();
+    const apply = createApplyDocumentEdits({ workspace, documentOperations: operations });
+    const flush = createFlushDocumentEdits({ workspace, documentOperations: operations });
+    const lease = await operations.acquireExclusive([tabId]);
+
+    try {
+      await expect(apply.applyWithHeldTabLease({
+        tabId,
+        expectedWindowId: "window-1",
+        clientId: "client-close",
+        clientSequence: 1,
+        baseRevision: 0,
+        changes: [{ from: 0, to: 0, insert: "pending close edit" }]
+      }, () => undefined, lease)).resolves.toMatchObject({
+        kind: "applied",
+        acknowledgedSequence: 1
+      });
+
+      await expect(flush.flushWithHeldTabLease({
+        tabId,
+        expectedWindowId: "window-1",
+        clientId: "client-close",
+        throughSequence: 1
+      }, () => undefined, lease)).resolves.toEqual({
+        kind: "flushed",
+        acknowledgedSequence: 1,
+        revision: 1,
+        savedRevision: 0,
+        isDirty: true
+      });
+    } finally {
+      lease.release();
+    }
+
+    expect(workspace.getTabSession(tabId)).toMatchObject({
+      content: "pending close edit",
+      revision: 1,
+      isDirty: true
+    });
+  });
+
   it("maps unexpected application errors to a stable closed error", async () => {
     const fixture = createFixture();
     fixture.application.flushDocumentEdits.mockRejectedValueOnce(new Error("secret stack data"));

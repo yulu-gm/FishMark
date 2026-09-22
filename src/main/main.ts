@@ -955,7 +955,28 @@ app.whenReady().then(async () => {
         ownerWindow.webContents === sender &&
         String(ownerWindow.id) === windowId;
     },
-    application: workspaceApplication,
+    application: {
+      applyDocumentEdits(input, authorize) {
+        const closeLease = workspaceWindowCloseLeases.get(input.expectedWindowId);
+        return closeLease === undefined
+          ? applyDocumentEditsWithRecovery.apply(input, authorize)
+          : applyDocumentEditsWithRecovery.applyWithHeldTabLease(
+              input,
+              authorize,
+              closeLease
+            );
+      },
+      flushDocumentEdits(input, authorize) {
+        const closeLease = workspaceWindowCloseLeases.get(input.expectedWindowId);
+        return closeLease === undefined
+          ? flushDocumentEdits.flush(input, authorize)
+          : flushDocumentEdits.flushWithHeldTabLease(
+              input,
+              authorize,
+              closeLease
+            );
+      }
+    },
     publish: (sender, channel, payload) => {
       sender.send(channel, payload);
     }

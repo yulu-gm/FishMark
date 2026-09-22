@@ -4,7 +4,7 @@ import type {
   WorkspaceState
 } from "@fishmark/workspace-domain";
 
-import type { KeyedOperationCoordinator } from "./ports";
+import type { KeyedOperationCoordinator, KeyedOperationLease } from "./ports";
 import type { DocumentEditAuthorization } from "./apply-document-edits";
 
 export interface FlushDocumentEditsInput {
@@ -31,35 +31,58 @@ export type FlushDocumentEditsResult =
 
 export function createFlushDocumentEdits(dependencies: {
   workspace: Pick<WorkspaceState, "getDocumentEditCheckpoint">;
-  documentOperations: Pick<KeyedOperationCoordinator<string>, "runExclusive">;
+  documentOperations: Pick<KeyedOperationCoordinator<string>, "runExclusive"> &
+    Partial<Pick<KeyedOperationCoordinator<string>, "isLeaseHeld">>;
 }) {
+  function flushAuthorized(
+    input: FlushDocumentEditsInput,
+    authorize: DocumentEditAuthorization
+  ): FlushDocumentEditsResult {
+    authorize();
+    const checkpoint: GetWorkspaceDocumentEditCheckpointResult =
+      dependencies.workspace.getDocumentEditCheckpoint(input);
+    if (checkpoint.kind === "error") {
+      return checkpoint;
+    }
+    if (checkpoint.acknowledgedSequence < input.throughSequence) {
+      return Object.freeze({
+        kind: "sequence-gap" as const,
+        expectedSequence: checkpoint.acknowledgedSequence + 1,
+        canonicalRevision: checkpoint.projection.revision
+      });
+    }
+    return Object.freeze({
+      kind: "flushed" as const,
+      acknowledgedSequence: checkpoint.acknowledgedSequence,
+      revision: checkpoint.projection.revision,
+      savedRevision: checkpoint.projection.savedRevision,
+      isDirty: checkpoint.projection.isDirty
+    });
+  }
+
+  async function flushWithHeldTabLease(
+    input: FlushDocumentEditsInput,
+    authorize: DocumentEditAuthorization,
+    tabLease: KeyedOperationLease<string>
+  ): Promise<FlushDocumentEditsResult> {
+    if (dependencies.documentOperations.isLeaseHeld?.(tabLease, input.tabId) !== true) {
+      throw new Error(
+        `Document edit flush for tab '${input.tabId}' requires an active operation lease.`
+      );
+    }
+    return flushAuthorized(input, authorize);
+  }
+
   return {
     flush(
       input: FlushDocumentEditsInput,
       authorize: DocumentEditAuthorization
     ): Promise<FlushDocumentEditsResult> {
-      return dependencies.documentOperations.runExclusive(input.tabId, async () => {
-        authorize();
-        const checkpoint: GetWorkspaceDocumentEditCheckpointResult =
-          dependencies.workspace.getDocumentEditCheckpoint(input);
-        if (checkpoint.kind === "error") {
-          return checkpoint;
-        }
-        if (checkpoint.acknowledgedSequence < input.throughSequence) {
-          return Object.freeze({
-            kind: "sequence-gap" as const,
-            expectedSequence: checkpoint.acknowledgedSequence + 1,
-            canonicalRevision: checkpoint.projection.revision
-          });
-        }
-        return Object.freeze({
-          kind: "flushed" as const,
-          acknowledgedSequence: checkpoint.acknowledgedSequence,
-          revision: checkpoint.projection.revision,
-          savedRevision: checkpoint.projection.savedRevision,
-          isDirty: checkpoint.projection.isDirty
-        });
-      });
-    }
+      return dependencies.documentOperations.runExclusive(
+        input.tabId,
+        async () => flushAuthorized(input, authorize)
+      );
+    },
+    flushWithHeldTabLease
   };
 }

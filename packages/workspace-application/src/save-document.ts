@@ -158,11 +158,33 @@ export function createSaveDocument<TContext>(
             if (writeResult.status !== "success") {
               return { status: "error", error: writeResult.error };
             }
+
+            let persisted;
+            let persistedDiskVersion;
+            try {
+              persisted = await dependencies.fileIdentity.resolveExisting(
+                checkpoint.path!
+              );
+              persistedDiskVersion = await dependencies.disk.readDiskVersion(
+                persisted.canonicalPath
+              );
+            } catch {
+              return saveError("file-identity-changed");
+            }
+            if (persisted.pathKey !== confirmed.pathKey) {
+              return saveError("file-identity-changed");
+            }
+            if (
+              persistedDiskVersion === null ||
+              persistedDiskVersion.contentHash !== writeResult.diskVersion.contentHash
+            ) {
+              return saveError("disk-version-conflict");
+            }
             if (input.commitGuard?.() === false) {
               return { status: "cancelled" };
             }
             const canonicalDocument = {
-              fileIdentity: checkpoint.fileIdentity,
+              fileIdentity: persisted.identity,
               path: checkpoint.path!,
               name: checkpoint.name,
               content: checkpoint.content,
@@ -173,7 +195,7 @@ export function createSaveDocument<TContext>(
               expectedWindowId: input.expectedWindowId,
               capturedRevision: checkpoint.revision,
               document: canonicalDocument,
-              diskVersion: writeResult.diskVersion
+              diskVersion: persistedDiskVersion
             });
             const commitError = workspaceMutationSaveError(commit);
             if (commitError !== null) return commitError;

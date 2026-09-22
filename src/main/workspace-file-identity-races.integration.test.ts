@@ -386,6 +386,84 @@ describe("workspace physical file identity transactions", () => {
     expect(write).not.toHaveBeenCalled();
   });
 
+  it("refreshes the physical file identity after every atomic ordinary save", async () => {
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
+    workspace.registerWindow("window-1");
+    const firstIdentity = fileIdentity("path:c:/notes/atomic.md", "inode:7:1");
+    const secondIdentity = fileIdentity(firstIdentity.location, "inode:7:2");
+    const thirdIdentity = fileIdentity(firstIdentity.location, "inode:7:3");
+    const opened = workspace.openDocument("window-1", {
+      fileIdentity: firstIdentity,
+      path: "C:/notes/atomic.md",
+      name: "atomic.md",
+      content: "saved",
+      encoding: "utf-8"
+    });
+    if (opened.kind !== "opened") {
+      throw new Error("Expected test document to open.");
+    }
+    const tabId = opened.projection.activeTabId!;
+    let currentIdentity = firstIdentity;
+    let writeCount = 0;
+    const resolveCurrent = vi.fn(async () => ({
+      canonicalPath: "C:/notes/atomic.md",
+      identity: currentIdentity,
+      exists: true as const,
+      pathKey: currentIdentity.location,
+      physicalKey: currentIdentity.object
+    }));
+    const write = vi.fn(async ({ content }: { readonly content: string }) => {
+      currentIdentity = writeCount++ === 0 ? secondIdentity : thirdIdentity;
+      return saved("C:/notes/atomic.md", content);
+    });
+    const operations = createSaveDocumentForTest({
+      workspace,
+      tabOperations: createKeyedOperationCoordinator(),
+      fileLocationOperations: createKeyedOperationCoordinator(),
+      fileObjectOperations: createKeyedOperationCoordinator(),
+      fileIdentityResolver: {
+        resolveExisting: resolveCurrent,
+        resolveProspective: resolveCurrent
+      },
+      writeDocument: write,
+      showSaveMarkdownPathDialog: vi.fn(),
+      beginInternalWrite: vi.fn(),
+      completeInternalWrite: vi.fn(async () => undefined),
+      syncWindowWatch: vi.fn(async () => undefined),
+      recordRecentFilePath: vi.fn(async () => undefined),
+      reportCleanupError: vi.fn()
+    });
+
+    workspace.updateTabDraft({
+      tabId,
+      expectedWindowId: "window-1",
+      content: "first save"
+    });
+    await expect(
+      operations.save({ context: sender, expectedWindowId: "window-1", tabId })
+    ).resolves.toMatchObject({ status: "success" });
+    expect(workspace.getTabSession(tabId)).toMatchObject({
+      fileIdentity: secondIdentity,
+      content: "first save",
+      isDirty: false
+    });
+
+    workspace.updateTabDraft({
+      tabId,
+      expectedWindowId: "window-1",
+      content: "second save"
+    });
+    await expect(
+      operations.save({ context: sender, expectedWindowId: "window-1", tabId })
+    ).resolves.toMatchObject({ status: "success" });
+    expect(workspace.getTabSession(tabId)).toMatchObject({
+      fileIdentity: thirdIdentity,
+      content: "second save",
+      isDirty: false
+    });
+    expect(write).toHaveBeenCalledTimes(2);
+  });
+
   it("fails an ordinary save closed when the object at its location was replaced", async () => {
     const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
