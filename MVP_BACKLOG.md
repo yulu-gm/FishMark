@@ -81,7 +81,7 @@ Intake：`docs/plans/2026-09-18-rf-601-intake.md`。执行交接：`docs/plans/2
 
 ### RF-506 语义引擎硬切换
 
-状态：IN_PROGRESS（2026-09-22 重新进入最终性能/bundle 收口；行为/安全独立验收仍 PASS，原预算不放宽）。
+状态：COMPLETE（2026-09-22 最终行为/安全、Quality 与原始 bundle 预算全部通过；预算未放宽）。
 
 目标：键盘/菜单/工具栏/表格 widget/测试驱动器全部消费 editor-model 的唯一语义规则，生产默认路径可复现并通过真实行为验证，再删除旧语义实现。
 
@@ -103,7 +103,7 @@ Intake：`docs/plans/2026-09-18-rf-601-intake.md`。执行交接：`docs/plans/2
 - [x] 完成导航/焦点/组合/history/frame 接线与所有入口。
 - [x] 移除旧语义实现及重复上下文，更新 guard。
 - [x] 新路径完整行为/几何门禁与父 agent 独立验收（M6/M6.5 frozen-tree acceptance 已完成）。
-- [ ] M5 最终性能与 bundle 预算门禁：当前 slice A 剔除 production 中的 editor-test automation，并把 titlebar / shader surface host 移出默认 initial closure；按原预算复测，未全绿前 RF-506/M5 不标 COMPLETE。
+- [x] M5 最终性能与 bundle 预算门禁：CI 原预算全部 PASS（max initial 179699/300000、max initial gzip 56955/90000、total initial gzip 93918/260000、total JS gzip 1425457/1430000）；`perf:bundle` 使用 hidden sourcemap 保留 provenance `.map` 证据，同时不把仅供分析的 sourceMappingURL 注释计入生产 JS。
 
 2026-09-19 继续前基线：父 agent 聚焦 684/684 通过；生产仍旧路径。文档所称 34 项 switched-runtime 失败是历史临时接线结果，必须由本轮永久路径重测；不降低 M5 验收标准。旧的“等待用户决定是否降低验收”不再是阻塞条件。
 

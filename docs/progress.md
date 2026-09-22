@@ -6,6 +6,12 @@
 
 ## 当前项目判断
 
+### 2026-09-22 M5 / RF-506 正式收口 COMPLETE
+
+最终 GitHub CI 在 `3977d5f` 上确认 Quality 与 Bundle budget 两个 blocking job 全绿。Quality：typecheck PASS、lint PASS、focused architecture/regression **347/347**、build PASS、tracked tree clean PASS。Bundle 按**原预算**全部 PASS：`maxInitialChunkBytes=179699/300000`、`maxInitialChunkGzipBytes=56955/90000`、`totalInitialGzipBytes=93918/260000`、`totalJsGzipBytes=1425457/1430000`；KaTeX/Mermaid 等 forbidden-initial 与 required-lazy 合同继续保持。
+
+最终收口没有放宽预算。最后 346B 偏差来自分析构建的 `//# sourceMappingURL` 注释：`perf:bundle` 改用 Vite hidden sourcemap，继续生成完整独立 `.map` 供 provenance 校验，但不把生产构建不会发出的分析注释计入 JS。Terser 保持 Chromium 146 / ES module 的生产合同；一次全局 `unsafe:true` 尝试触发 Terser 自身崩溃后已明确撤回，不进入最终配置。RF-506 / M5 因此标记 **COMPLETE**；下一 dependency-ready 任务为 M8 / RF-801，仍保持 PLANNED。
+
 ### 2026-09-22 M5 / RF-506 slice I：entry-aware Mermaid tiny-module coalescing
 
 上一版 `cc4a78c` 证明 tiny-module 合并可以把 `totalJsGzipBytes` 从 1,438,511 降到 **1,417,892（PASS）**，但旧 `manualChunks` 会把不同 entry 的 Mermaid 模块强行合为一个 1.76MB shared chunk，并被 initial closure 静态引用，导致 initial 三项与 forbidden-initial 全面回归，因此该规则被判定为不可接受。

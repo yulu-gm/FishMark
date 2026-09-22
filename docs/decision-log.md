@@ -9,6 +9,7 @@
 
 ## 记录
 
+| 2026-09-22 | **M5 bundle 门禁用 hidden sourcemap 生成 provenance 证据**：`perf:bundle` 继续产出完整独立 `.map`，但不在 JS 中写分析专用 `sourceMappingURL` 注释；四个预算值保持不变。 | 正式 `build:renderer` 不发出 sourcemap 注释；普通 `--sourcemap` 会给每个 chunk 增加只服务分析的注释并被 aggregate gzip 计入，导致门禁测量高于真实生产 JS。hidden sourcemap 保留同等 provenance 证据，同时让体积口径与生产输出一致。 | 最终 CI：179699/300000、56955/90000、93918/260000、1425457/1430000，全部 PASS。全局 `unsafe:true` 压缩因触发 Terser 崩溃被撤回，不作为最终方案。RF-506/M5 标记 COMPLETE。 |
 | 2026-09-21 | **特殊编辑区域采用统一 viewport reveal policy**：selection 后的滚动由 `codemirror-adapter` 单一 owner 决定，区分 `preserve`（鼠标点击，已可见则零滚动）、`nearest`（连续键盘导航，只做带安全边距的最小修正）和 `navigate`（显式跳转，可居中）。 | 图片此前无条件 `y:center`，表格又维护“立即 + RAF + requestMeasure”三套校正，同一类交互存在不同视口心智且会产生连续小跳。统一 intent 后能区分“用户点击当前位置”和“用户要求跳转”的期望。 | 第一版已覆盖 image preview 与 table cell；DOM reveal 在单个 `requestMeasure` read/write 中完成，focus 使用 `preventScroll:true`，同帧重复请求合并。异步 widget 高度变化属于 viewport anchoring，不用 selection reveal 代替。 |
 | 2026-09-21 | **共享 sidebar 的最终视觉/动效模型为 flat docked panel**：外层去圆角、阴影、backdrop blur 与卡片 gap；Search/Outline 共用一份宽度。开合时外层 grid track 保留平滑宽度动画，让正文整体平移；header/body 固定最终宽度并被外层裁剪、淡入，因此不经历中间宽度 reflow。 | 纯悬浮卡片观感过重；直接取消 grid transition 又会让 Markdown document stage 瞬移。把“布局移动”和“sidebar 内容排版”拆开，可以同时得到平面视觉、正文平滑移动和 Outline 长标题稳定换行。 | 用户主动 resize 仍实时 reflow，因为此时用户确实在改变内容宽度；窄窗口 clamp 只影响显示，不回写偏好。 |
 

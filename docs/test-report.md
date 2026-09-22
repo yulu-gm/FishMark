@@ -1,5 +1,16 @@
 # FishMark 测试报告
 
+## 2026-09-22 RF-506 / M5 最终验收
+
+| 范围 | 命令 / 证据 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| GitHub CI Quality | Actions run `35691815667` / head `3977d5f` | PASS | typecheck、lint、focused architecture/regression **347/347**、build、tracked-tree clean check 全通过。 |
+| Bundle contract | 同一 run 的 Bundle budget | PASS | max initial 179699/300000B；max initial gzip 56955/90000B；total initial gzip 93918/260000B；total JS gzip 1425457/1430000B；原预算未修改。 |
+| Bundle evidence口径 | `npm run perf:bundle` | PASS | 使用 hidden sourcemap 保留完整独立 map/provenance 证据，避免把分析专用 sourceMappingURL 注释计入生产 JS；forbidden-initial / required-lazy 合同保持。 |
+| RF-506 历史行为/安全门禁 | `reports/task-summaries/RF-506.md` 中父独立冻结证据 | PASS | 121/121 场景、2541 targets、0 unexpected/not-run；Unicode/IME/frame/连续编辑 differential 已闭环。 |
+
+结论：RF-506 与 M5 的既定退出条件全部满足，状态可从 IN_PROGRESS/DEV_DONE 收口为 COMPLETE。M9 的真实平台 IME、输入到绘制与完整 E2E/安全预算不属于本次 M5 退出条件。
+
 用于记录各任务的验证结果。
 
 ## 模板
