@@ -6,6 +6,12 @@
 
 ## 当前项目判断
 
+### 2026-09-22 M5 / RF-506 slice I：entry-aware Mermaid tiny-module coalescing
+
+上一版 `cc4a78c` 证明 tiny-module 合并可以把 `totalJsGzipBytes` 从 1,438,511 降到 **1,417,892（PASS）**，但旧 `manualChunks` 会把不同 entry 的 Mermaid 模块强行合为一个 1.76MB shared chunk，并被 initial closure 静态引用，导致 initial 三项与 forbidden-initial 全面回归，因此该规则被判定为不可接受。
+
+本切片把现有 package chunk policy 从 Rolldown 兼容层 `manualChunks` 迁到原生 `output.codeSplitting.groups`。KaTeX、CodeMirror view/state 与 FishMark package-owned chunk 维持原 owner；Mermaid 小模块使用 `maxModuleSize: 12_000 + entriesAware: true`，只在**相同 entry 使用集合**内聚合 tiny modules，避免动态 diagram entry 与 initial entry 被无条件共包。大 diagram 模块仍自动切分；既有 Mermaid forbidden-initial / required-lazy gate 保持不变。该方案的验收仍完全交给正式 CI bundle provenance，不修改预算或 analyzer 口径。
+
 ### 2026-09-22 M5 / RF-506 slice H：合并 Mermaid tiny lazy modules
 
 `4761664` 的 CI Quality 已全绿；bundle 三项 initial 指标也全部 PASS，唯一剩余为 `totalJsGzipBytes 1438511/1430000`（差 8511 B）。bundle 日志显示 Mermaid 动态图中存在大量数百字节到数 KB 的独立 lazy chunk；aggregate budget 对每个 chunk 分别 gzip 后求和，因此这些 tiny registration/facade 模块重复承担 header/import/export 与压缩字典开销。

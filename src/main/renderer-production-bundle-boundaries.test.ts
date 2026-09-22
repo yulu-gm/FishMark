@@ -33,15 +33,18 @@ describe("renderer production bundle boundaries", () => {
     expect(source).toContain('"console.info"');
     expect(source).toContain('"console.trace"');
     expect(source).toContain("polyfill: false");
-    expect(source).toContain('return "katex";');
-    expect(source).toContain('return "mermaid-small";');
-    expect(source).toContain("moduleCode.length <= 12_000");
-    expect(source).toContain('return "codemirror-view";');
-    expect(source).toContain('return "codemirror-state";');
-    expect(source).toContain('return "fishmark-editor-model";');
-    expect(source).toContain('return "fishmark-markdown-engine";');
-    expect(source).toContain('return "fishmark-workspace-application";');
-    expect(source).toContain('return "fishmark-workspace-infrastructure";');
+    expect(source).toContain("codeSplitting: {");
+    expect(source).toContain('name: "katex"');
+    expect(source).toContain('name: "codemirror-view"');
+    expect(source).toContain('name: "codemirror-state"');
+    expect(source).toContain('name: "fishmark-editor-model"');
+    expect(source).toContain('name: "fishmark-markdown-engine"');
+    expect(source).toContain('name: "fishmark-workspace-application"');
+    expect(source).toContain('name: "fishmark-workspace-infrastructure"');
+    expect(source).toContain('name: "mermaid-small"');
+    expect(source).toContain("maxModuleSize: 12_000");
+    expect(source).toContain("entriesAware: true");
+    expect(source).not.toContain("manualChunks(");
   });
 
   it("bundles workspace packages from source entries instead of their emitted dist facades", () => {
@@ -67,7 +70,7 @@ describe("renderer production bundle boundaries", () => {
   it("does not force the whole CodeMirror adapter into one initial manual chunk", () => {
     const source = readFileSync(join(process.cwd(), "vite.config.ts"), "utf8").replace(/\r\n/g, "\n");
 
-    expect(source).not.toContain('return "fishmark-codemirror-adapter";');
+    expect(source).not.toContain('name: "fishmark-codemirror-adapter"');
   });
 
   it("keeps the CodeMirror editor runtime outside the empty-workspace initial graph", () => {
