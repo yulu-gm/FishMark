@@ -73,6 +73,7 @@ export default defineConfig({
         arguments: true,
         unsafe_arrows: true,
         unsafe_undefined: true,
+        pure_getters: true,
         // Production renderer diagnostics keep console.error, while routine
         // debug/info/warn output is stripped from both FishMark and bundled
         // optional libraries. This reduces shipped JS without changing any
