@@ -34,11 +34,11 @@ if errorlevel 1 (
   echo [dev-app] Dependencies are up to date.
 )
 
-echo [dev-app] Clearing stale generated runtime output...
-call npm.cmd run clean
+echo [dev-app] Preparing fresh runtime output before starting watchers...
+call npm.cmd run dev:prepare
 if errorlevel 1 (
   echo.
-  echo [dev-app] clean failed with exit code %errorlevel%.
+  echo [dev-app] dev preparation failed with exit code %errorlevel%.
   pause
   exit /b %errorlevel%
 )

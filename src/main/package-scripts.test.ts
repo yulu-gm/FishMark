@@ -44,6 +44,27 @@ describe("package scripts", () => {
     );
   });
 
+  it("prebuilds a coherent dev runtime before long-running watchers start", () => {
+    const packageJsonPath = path.join(process.cwd(), "package.json");
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
+      scripts?: Record<string, string>;
+    };
+
+    expect(packageJson.scripts?.["dev:prepare"]).toContain("npm run clean");
+    expect(packageJson.scripts?.["dev:prepare"]).toContain(
+      "npm run build:workspace-application"
+    );
+    expect(packageJson.scripts?.["dev:prepare"]).toContain(
+      "npm run build:workspace-infrastructure"
+    );
+    expect(packageJson.scripts?.["dev:prepare"]).toContain(
+      "tsc -p tsconfig.electron.json"
+    );
+    expect(packageJson.scripts?.["dev:prepare"]).toContain(
+      "tsc -p tsconfig.cli.json"
+    );
+  });
+
   it("defines a dedicated dev entry for the test workbench mode", () => {
     const packageJsonPath = path.join(process.cwd(), "package.json");
     const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
@@ -565,10 +586,10 @@ describe("package scripts", () => {
     expect(batchSource).toContain('cd /d "%~dp0\\.."');
     expect(batchSource).toContain("node_modules\\.package-lock.json");
     expect(batchSource).toContain("call npm.cmd ci");
-    expect(batchSource).toContain("call npm.cmd run clean");
+    expect(batchSource).toContain("call npm.cmd run dev:prepare");
     expect(batchSource).toContain("node scripts/sync-dev-themes.mjs");
     expect(batchSource).toContain("call npm.cmd run dev");
-    expect(batchSource.indexOf("call npm.cmd run clean")).toBeLessThan(
+    expect(batchSource.indexOf("call npm.cmd run dev:prepare")).toBeLessThan(
       batchSource.indexOf("call npm.cmd run dev")
     );
     expect(syncScriptSource).toContain("FishMark-dev");
@@ -585,10 +606,10 @@ describe("package scripts", () => {
 
     expect(shellSource).toContain("#!/usr/bin/env bash");
     expect(shellSource).toContain('cd "$(dirname "$0")/.."');
-    expect(shellSource).toContain("npm run clean");
+    expect(shellSource).toContain("npm run dev:prepare");
     expect(shellSource).toContain("node scripts/sync-dev-themes.mjs");
     expect(shellSource).toContain("npm run dev");
-    expect(shellSource.indexOf("npm run clean")).toBeLessThan(
+    expect(shellSource.indexOf("npm run dev:prepare")).toBeLessThan(
       shellSource.indexOf("npm run dev")
     );
     expect(existsSync(legacyHyphenPath)).toBe(false);
