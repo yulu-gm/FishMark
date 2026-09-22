@@ -34,6 +34,15 @@ if errorlevel 1 (
   echo [dev-app] Dependencies are up to date.
 )
 
+echo [dev-app] Clearing stale generated runtime output...
+call npm.cmd run clean
+if errorlevel 1 (
+  echo.
+  echo [dev-app] clean failed with exit code %errorlevel%.
+  pause
+  exit /b %errorlevel%
+)
+
 node scripts/sync-dev-themes.mjs
 if errorlevel 1 (
   echo.
@@ -42,7 +51,7 @@ if errorlevel 1 (
   exit /b %errorlevel%
 )
 
-call npm run dev
+call npm.cmd run dev
 set EXITCODE=%errorlevel%
 
 echo.

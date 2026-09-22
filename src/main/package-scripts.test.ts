@@ -565,8 +565,12 @@ describe("package scripts", () => {
     expect(batchSource).toContain('cd /d "%~dp0\\.."');
     expect(batchSource).toContain("node_modules\\.package-lock.json");
     expect(batchSource).toContain("call npm.cmd ci");
+    expect(batchSource).toContain("call npm.cmd run clean");
     expect(batchSource).toContain("node scripts/sync-dev-themes.mjs");
-    expect(batchSource).toContain("call npm run dev");
+    expect(batchSource).toContain("call npm.cmd run dev");
+    expect(batchSource.indexOf("call npm.cmd run clean")).toBeLessThan(
+      batchSource.indexOf("call npm.cmd run dev")
+    );
     expect(syncScriptSource).toContain("FishMark-dev");
     expect(syncScriptSource).toContain("fixtures");
     expect(syncScriptSource).toContain("themes");
@@ -581,8 +585,12 @@ describe("package scripts", () => {
 
     expect(shellSource).toContain("#!/usr/bin/env bash");
     expect(shellSource).toContain('cd "$(dirname "$0")/.."');
+    expect(shellSource).toContain("npm run clean");
     expect(shellSource).toContain("node scripts/sync-dev-themes.mjs");
     expect(shellSource).toContain("npm run dev");
+    expect(shellSource.indexOf("npm run clean")).toBeLessThan(
+      shellSource.indexOf("npm run dev")
+    );
     expect(existsSync(legacyHyphenPath)).toBe(false);
     expect(existsSync(legacyUnderscorePath)).toBe(false);
   });
