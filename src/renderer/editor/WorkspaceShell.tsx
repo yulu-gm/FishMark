@@ -42,8 +42,7 @@ import type {
 import type { OutlineItem } from "../outline";
 import type { ThemeRuntimeEnv } from "../theme-runtime-env";
 import type { ThemeSurfaceRuntimeMode } from "../shader/theme-surface-runtime";
-import { ThemeSurfaceHost, type ThemeSurfaceHostDescriptor } from "./ThemeSurfaceHost";
-import { TitlebarHost } from "./TitlebarHost";
+import type { ThemeSurfaceHostDescriptor } from "./ThemeSurfaceHost";
 import type { ExternalMarkdownFileState } from "./editor-shell-state";
 import type { EditorLoadIdentity } from "./editor-load-identity";
 import type { EditorTransition } from "./workspace-renderer-application";
@@ -55,6 +54,16 @@ import fishmarkMarkSvg from "../../../assets/branding/fishmark_mark.svg?raw";
 const SettingsView = lazy(async () => {
   const module = await import("./settings-view");
   return { default: module.SettingsView };
+});
+
+const ThemeSurfaceHost = lazy(async () => {
+  const module = await import("./ThemeSurfaceHost");
+  return { default: module.ThemeSurfaceHost };
+});
+
+const TitlebarHost = lazy(async () => {
+  const module = await import("./TitlebarHost");
+  return { default: module.TitlebarHost };
 });
 
 type ShellMode = "reading" | "editing";
@@ -797,17 +806,19 @@ export function WorkspaceShell({
       }
     >
       {controlledTitlebarEnabled ? (
-        <TitlebarHost
-          platform={fishmarkPlatform}
-          layout={titlebarLayout}
-          title={headerTitle}
-          isDirty={activeDocument?.isDirty ?? false}
-          themeMode={resolvedThemeMode}
-          runtimeEnv={themeRuntimeEnv}
-          effectsMode={preferencesThemeEffectsMode}
-          titlebarSurface={activeTitlebarSurface}
-          onTitlebarSurfaceRuntimeModeChange={onTitlebarSurfaceRuntimeModeChange}
-        />
+        <Suspense fallback={null}>
+          <TitlebarHost
+            platform={fishmarkPlatform}
+            layout={titlebarLayout}
+            title={headerTitle}
+            isDirty={activeDocument?.isDirty ?? false}
+            themeMode={resolvedThemeMode}
+            runtimeEnv={themeRuntimeEnv}
+            effectsMode={preferencesThemeEffectsMode}
+            titlebarSurface={activeTitlebarSurface}
+            onTitlebarSurfaceRuntimeModeChange={onTitlebarSurfaceRuntimeModeChange}
+          />
+        </Suspense>
       ) : null}
       <div
         className="app-layout"
@@ -815,14 +826,16 @@ export function WorkspaceShell({
         data-fishmark-has-document={isDocumentOpen ? "true" : "false"}
       >
         {activeWorkbenchSurface ? (
-          <ThemeSurfaceHost
-            surface="workbenchBackground"
-            descriptor={activeWorkbenchSurface}
-            themeMode={resolvedThemeMode}
-            runtimeEnv={themeRuntimeEnv}
-            effectsMode={preferencesThemeEffectsMode}
-            onRuntimeModeChange={onWorkbenchSurfaceRuntimeModeChange}
-          />
+          <Suspense fallback={null}>
+            <ThemeSurfaceHost
+              surface="workbenchBackground"
+              descriptor={activeWorkbenchSurface}
+              themeMode={resolvedThemeMode}
+              runtimeEnv={themeRuntimeEnv}
+              effectsMode={preferencesThemeEffectsMode}
+              onRuntimeModeChange={onWorkbenchSurfaceRuntimeModeChange}
+            />
+          </Suspense>
         ) : null}
         <aside
           className="app-rail"

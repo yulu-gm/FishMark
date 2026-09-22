@@ -6,6 +6,10 @@
 
 ## 当前项目判断
 
+### 2026-09-22 M5 / RF-506 最终收口 slice A：真实生产 bundle 减重
+
+owner 要求在进入 M8 前收掉 M5。本轮重新激活 RF-506，但不重开已通过的语义/行为切换：唯一目标是让原始 bundle maximum gate 真正转绿，不调预算、不删用户 Markdown 能力。第一刀处理两类明确不属于默认首屏的负担：① `EditorTestBridgeHost` 改为与 test-workbench 相同的编译期 DEV/test 边界，production build 不再发出 `editor-test-driver` 自动化 chunk；正式 behavior/performance/geometry 探针均有独立 probe page，不依赖该 production host。② `WorkspaceShell` 不再静态导入 macOS custom `TitlebarHost` 与 `ThemeSurfaceHost`；两者仅在对应平台/titlebar 或动态主题 surface 实际存在时通过 React lazy 加载，默认编辑器 initial closure 不承担 shader scene host。新增源码合同防止测试 bridge 或两个 optional host 被重新静态接回。此 slice 只改变加载边界，不改任何 bundle limit；等待真实 `perf:bundle` 后决定是否需要 slice B。
+
 ### 2026-09-22 RF-703 / M7 正式验收 COMPLETE
 
 owner 已确认 `b6a2c8e` 后的复验通过。RF-703 因此正式收口：renderer Outline/Metrics 仅消费 `EditorDerivedSnapshot`，生产 legacy document/inline/reference parser 调用已清零；Outline 与 editor active heading 共用 canonical node id，Metrics 直接消费 canonical tree / inline AST / physical-line geometry；React 按 snapshot identity/revision 更新，不再从 resultingText 启动第二套结构派生。性能证据也已从“硬编码期望”修正为同一 `MarkdownParseInstrumentation` tracker 的实际区间 delta：shared snapshot build 与 consumer interval 分开计量，Outline/Metrics consumer 的 full/inline parse delta 为 0，且不把上游 snapshot reuse 冒充为自身 cacheHit。Frozen performance baseline 仅重录实测发生语义变化的 outline/metrics 两个 operation，RF-602 canonical outline-id 守卫已恢复。基于最终复验，**RF-703 = COMPLETE，M7 = COMPLETE（3/3）**。下一依赖阶段为 M8 / RF-801；M5/RF-506 的既有最终性能与 bundle budget 债仍独立保持开放。

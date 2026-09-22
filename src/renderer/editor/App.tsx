@@ -1,4 +1,6 @@
 import {
+  Suspense,
+  lazy,
   useCallback,
   useEffect,
   useEffectEvent,
@@ -39,7 +41,6 @@ import {
   applyThemeRuntimeEnv,
   clearThemeRuntimeEnv,
 } from "../theme-runtime-env";
-import { EditorTestBridgeHost } from "./editor-test-bridge-host";
 import {
   normalizeTitlebarLayout,
   resolveDefaultTitlebarLayout
@@ -66,6 +67,14 @@ import {
   type ResolvedThemeMode
 } from "./useThemeController";
 import { useDocumentDerivedDataController } from "./useDocumentDerivedDataController";
+
+const canRenderEditorTestBridge = import.meta.env.DEV || import.meta.env.MODE === "test";
+const LazyEditorTestBridgeHost = canRenderEditorTestBridge
+  ? lazy(async () => {
+      const module = await import("./editor-test-bridge-host");
+      return { default: module.EditorTestBridgeHost };
+    })
+  : null;
 
 const EXTERNAL_FILE_MODIFIED_PENDING_MESSAGE =
   "当前文件已被外部修改。请先决定是重载磁盘版本，还是保留当前编辑并另存为。";
@@ -1539,12 +1548,16 @@ function EditorShell({
 
   return (
     <>
-      <EditorTestBridgeHost
-        fishmarkTest={fishmarkTest}
-        workspace={editorTestBridge.workspace}
-        resetAutosaveRuntime={editorTestBridge.resetAutosaveRuntime}
-        editor={editorTestBridge.editor}
-      />
+      {LazyEditorTestBridgeHost && fishmarkTest ? (
+        <Suspense fallback={null}>
+          <LazyEditorTestBridgeHost
+            fishmarkTest={fishmarkTest}
+            workspace={editorTestBridge.workspace}
+            resetAutosaveRuntime={editorTestBridge.resetAutosaveRuntime}
+            editor={editorTestBridge.editor}
+          />
+        </Suspense>
+      ) : null}
       <WorkspaceShell
         workspaceSnapshot={workspaceController.editorViewSnapshot}
         activeHeadingId={activeHeadingId}
