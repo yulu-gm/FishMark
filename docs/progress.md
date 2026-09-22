@@ -6,6 +6,10 @@
 
 ## 当前项目判断
 
+### 2026-09-22 M5 / RF-506 slice G：CodeEditor 按文档懒加载 + KaTeX 去重
+
+最新正式 CI bundle 已恢复完整 provenance：15 个 forbidden-initial 与 4 个 required-lazy 全部 PASS，单 chunk 两项也 PASS；仅剩 `totalInitialGzipBytes=267470/260000` 与 `totalJsGzipBytes=1436749/1430000`。产物同时暴露两个完整 KaTeX lazy chunk（各约 76KB gzip），因此 Vite 对 `node_modules/katex/**` 增加单一共享 `katex` chunk，消除重复打包而不改变其 lazy 属性。Initial 侧不再继续微调首屏 UI，而把 `CodeEditorView` 改为有文档时才通过 React lazy mount：空 workspace 壳层无需提前加载 CodeMirror editor，打开文档时再加载本地 editor runtime；M9 仍独立负责 document-open 延迟预算。新增源码合同钉住 editor lazy 与 KaTeX shared-lazy 边界，所有 bundle limit 继续保持原值。
+
 ### 2026-09-22 M5 / RF-506 slice F：撤销过宽 adapter manual chunk
 
 Provenance v2 后 CI 已能完整执行正式 bundle analyzer。实测确认 `totalJsGzipBytes=1427440/1430000` 已 PASS，但此前把整个 `packages/codemirror-adapter/src/**` 固定到一个 manual chunk 会跨越 adapter 内部的动态 import 边界，把 KaTeX/Mermaid/语言相关代码吸入 1.24MB initial chunk，导致 initial 三项和 forbidden-initial 证据同时回归。现删除该过宽 manual chunk，仅保留不会跨 lazy boundary 的 editor-model / markdown-engine / workspace package ownership chunk；Search lazy、Terser、Chromium target 均保留。新增构建配置合同禁止未来再次把整个 codemirror-adapter 强制合并。另补 Search document-identity reset 的精确 React lint 说明，保持原行为不变。
