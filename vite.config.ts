@@ -66,7 +66,7 @@ export default defineConfig({
       ecma: 2022,
       module: true,
       compress: {
-        passes: 5,
+        passes: 6,
         // All renderer chunks are strict ES modules targeting Chromium 146.
         // These transforms preserve that runtime contract while allowing Terser
         // to shorten legacy function/arguments patterns emitted by dependencies.
