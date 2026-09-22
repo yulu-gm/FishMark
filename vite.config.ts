@@ -73,6 +73,11 @@ export default defineConfig({
         arguments: true,
         unsafe_arrows: true,
         unsafe_undefined: true,
+        // FishMark's isolated Electron renderer does not monkey-patch standard
+        // ECMAScript built-ins. Allow Terser to use the corresponding compact
+        // built-in forms in production chunks.
+        unsafe: true,
+        builtins_ecma: 2022,
         // Production renderer diagnostics keep console.error, while routine
         // debug/info/warn output is stripped from both FishMark and bundled
         // optional libraries. This reduces shipped JS without changing any
