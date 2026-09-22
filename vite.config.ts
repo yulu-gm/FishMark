@@ -77,7 +77,11 @@ export default defineConfig({
         // debug/info/warn output is stripped from both FishMark and bundled
         // optional libraries. This reduces shipped JS without changing any
         // runtime feature or bundle budget.
-        drop_console: ["log", "debug", "info", "trace", "warn"]
+        drop_console: ["log", "debug", "info", "trace", "warn"],
+        // Keep evaluation of side-effectful error arguments while dropping the
+        // renderer-console sink itself in production. Main-process diagnostics
+        // are built separately and are unaffected by this renderer-only config.
+        pure_funcs: ["console.error"]
       }
     },
     modulePreload: {
