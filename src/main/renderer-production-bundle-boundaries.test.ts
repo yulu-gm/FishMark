@@ -27,24 +27,31 @@ describe("renderer production bundle boundaries", () => {
 
     expect(source).toContain('target: "chrome146"');
     expect(source).toContain('minify: "terser"');
-    expect(source).toContain("passes: 3");
-    expect(source).toContain('"console.log"');
-    expect(source).toContain('"console.debug"');
-    expect(source).toContain('"console.info"');
-    expect(source).toContain('"console.trace"');
+    expect(source).toContain("passes: 5");
+    expect(source).toContain("arguments: true");
+    expect(source).toContain("unsafe_arrows: true");
+    expect(source).toContain("unsafe_undefined: true");
+    expect(source).toContain("pure_getters: true");
+    expect(source).toContain("drop_console: true");
     expect(source).toContain("polyfill: false");
-    expect(source).toContain("codeSplitting: {");
-    expect(source).toContain('name: "katex"');
-    expect(source).toContain('name: "codemirror-view"');
-    expect(source).toContain('name: "codemirror-state"');
-    expect(source).toContain('name: "fishmark-editor-model"');
-    expect(source).toContain('name: "fishmark-markdown-engine"');
-    expect(source).toContain('name: "fishmark-workspace-application"');
-    expect(source).toContain('name: "fishmark-workspace-infrastructure"');
-    expect(source).toContain('name: "mermaid-small"');
-    expect(source).toContain("maxModuleSize: 12_000");
-    expect(source).toContain("entriesAware: true");
-    expect(source).not.toContain("manualChunks(");
+    expect(source).toContain("manualChunks(id)");
+    expect(source).toContain('return "katex"');
+    expect(source).toContain('return "codemirror-view"');
+    expect(source).toContain('return "codemirror-state"');
+    expect(source).toContain('return "fishmark-editor-model"');
+    expect(source).toContain('return "fishmark-markdown-engine"');
+    expect(source).toContain('return "fishmark-workspace-application"');
+    expect(source).toContain('return "fishmark-workspace-infrastructure"');
+    expect(source).not.toContain('name: "mermaid-small"');
+    expect(source).not.toContain("codeSplitting: {");
+  });
+
+  it("measures bundle budgets with hidden sourcemaps so analysis comments are not counted as production JS", () => {
+    const packageJson = JSON.parse(
+      readFileSync(join(process.cwd(), "package.json"), "utf8")
+    ) as { scripts?: Record<string, string> };
+
+    expect(packageJson.scripts?.["perf:bundle"]).toContain("vite -- build --sourcemap hidden");
   });
 
   it("bundles workspace packages from source entries instead of their emitted dist facades", () => {
