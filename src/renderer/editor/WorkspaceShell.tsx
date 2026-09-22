@@ -15,11 +15,9 @@ import {
   type SVGProps
 } from "react";
 
-import {
-  DEFAULT_TEXT_SHORTCUT_GROUP,
-  formatShortcutHintKey,
-  type EditorViewMode,
-  type ShortcutGroup
+import type {
+  EditorViewMode,
+  ShortcutGroupId
 } from "@fishmark/codemirror-adapter";
 import type { ActiveBlockState } from "@fishmark/editor-model";
 import type { AppNotification } from "../../shared/app-update";
@@ -46,7 +44,6 @@ import type { ThemeSurfaceHostDescriptor } from "./ThemeSurfaceHost";
 import type { ExternalMarkdownFileState } from "./editor-shell-state";
 import type { EditorLoadIdentity } from "./editor-load-identity";
 import type { EditorTransition } from "./workspace-renderer-application";
-import { ShortcutHintOverlay } from "./shortcut-hint-overlay";
 import type { TitlebarLayoutDescriptor } from "./titlebar-layout";
 import type { ThemePackageEntry, ResolvedThemeMode } from "./useThemeController";
 import fishmarkMarkSvg from "../../../assets/branding/fishmark_mark.svg?raw";
@@ -69,6 +66,11 @@ const ThemeSurfaceHost = lazy(async () => {
 const TitlebarHost = lazy(async () => {
   const module = await import("./TitlebarHost");
   return { default: module.TitlebarHost };
+});
+
+const ShortcutHintOverlay = lazy(async () => {
+  const module = await import("./shortcut-hint-overlay");
+  return { default: module.ShortcutHintOverlay };
 });
 
 type ShellMode = "reading" | "editing";
@@ -113,21 +115,10 @@ const VIEW_CONTAINER_LABELS: Record<WorkspaceViewContainerId, string> = {
 /** Keyboard resize step for the panel separator, in CSS pixels. */
 const SIDE_PANEL_RESIZE_KEY_STEP = 16;
 
-function createWelcomeShortcutTip(platform: string, random = Math.random) {
-  const shortcuts = DEFAULT_TEXT_SHORTCUT_GROUP.shortcuts;
-  const shortcutIndex = Math.min(
-    shortcuts.length - 1,
-    Math.max(0, Math.floor(random() * shortcuts.length))
-  );
-  const shortcut = shortcuts[shortcutIndex];
-
-  if (!shortcut) {
-    return "Tip: Hold Ctrl for shortcuts";
-  }
-
-  return `Tip: ${formatShortcutHintKey(shortcut.key, platform)} · ${shortcut.label}`;
+function createWelcomeShortcutTip(platform: string) {
+  const modifier = platform === "darwin" ? "Cmd" : "Ctrl";
+  return `Tip: Hold ${modifier} for shortcuts`;
 }
-
 function RowAboveIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" {...props}>
@@ -221,7 +212,7 @@ function SettingsDrawerFallback({ surfaceState }: { surfaceState: "open" | "clos
 export type WorkspaceShellProps = {
   workspaceSnapshot: WorkspaceWindowSnapshot | null;
   activeHeadingId: string | null;
-  activeShortcutGroup: ShortcutGroup;
+  activeShortcutGroupId: ShortcutGroupId;
   activeTableToolId: string | null;
   activeThemePackageSurface?: never;
   activeTitlebarSurface: ThemeSurfaceHostDescriptor | null;
@@ -409,7 +400,7 @@ function createTableToolActions({
 
 export function WorkspaceShell({
   activeHeadingId,
-  activeShortcutGroup,
+  activeShortcutGroupId,
   activeTableToolId,
   activeTitlebarSurface,
   activeViewContainer,
@@ -868,7 +859,7 @@ export function WorkspaceShell({
         <aside
           className="app-rail"
           data-fishmark-layout="rail"
-          data-fishmark-rail-mode={activeShortcutGroup.id}
+          data-fishmark-rail-mode={activeShortcutGroupId}
         >
           <div className="app-rail-brand">
             <p className="app-name">FishMark</p>
@@ -877,8 +868,8 @@ export function WorkspaceShell({
           <div className="app-rail-content">
             <div
               className="app-rail-mode-group app-rail-mode-group-default"
-              data-state={activeShortcutGroup.id === "default-text" ? "open" : "closing"}
-              aria-hidden={activeShortcutGroup.id !== "default-text"}
+              data-state={activeShortcutGroupId === "default-text" ? "open" : "closing"}
+              aria-hidden={activeShortcutGroupId !== "default-text"}
             >
               <button
                 type="button"
@@ -911,8 +902,8 @@ export function WorkspaceShell({
             </div>
             <div
               className="app-rail-mode-group app-rail-mode-group-table"
-              data-state={activeShortcutGroup.id === "table-editing" ? "open" : "closing"}
-              aria-hidden={activeShortcutGroup.id !== "table-editing"}
+              data-state={activeShortcutGroupId === "table-editing" ? "open" : "closing"}
+              aria-hidden={activeShortcutGroupId !== "table-editing"}
             >
               <div className="table-tool-strip" data-fishmark-region="table-tool-strip">
                 {tableToolActions.map((action) => {
@@ -1153,11 +1144,13 @@ export function WorkspaceShell({
                   className="shortcut-hint-overlay-shell"
                   data-shortcut-hint-state={isShortcutHintVisible ? "visible" : "hidden"}
                 >
-                  <ShortcutHintOverlay
-                    visible={isShortcutHintVisible}
-                    platform={fishmarkPlatform}
-                    group={activeShortcutGroup}
-                  />
+                  <Suspense fallback={null}>
+                    <ShortcutHintOverlay
+                      visible={isShortcutHintVisible}
+                      platform={fishmarkPlatform}
+                      groupId={activeShortcutGroupId}
+                    />
+                  </Suspense>
                 </div>
                 <section
                   className={`workspace-shell ${isSidePanelOpen ? "is-side-panel-open" : ""} ${

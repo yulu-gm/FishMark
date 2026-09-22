@@ -10,12 +10,9 @@ import {
   type CSSProperties
 } from "react";
 
-import {
-  DEFAULT_TEXT_SHORTCUT_GROUP,
-  TABLE_EDITING_SHORTCUT_GROUP,
-  type EditorViewMode,
-  type ShortcutGroup,
-  type ShortcutGroupId
+import type {
+  EditorViewMode,
+  ShortcutGroupId
 } from "@fishmark/codemirror-adapter";
 import type { ActiveBlockState } from "@fishmark/editor-model";
 import type { AppNotification, AppUpdateState } from "../../shared/app-update";
@@ -139,10 +136,12 @@ function getPrimaryShortcutModifierId(
   return primaryModifierKey;
 }
 
-function resolveEditorShortcutGroup(activeBlockState: ActiveBlockState | null): ShortcutGroup {
+function resolveEditorShortcutGroupId(
+  activeBlockState: ActiveBlockState | null
+): ShortcutGroupId {
   return activeBlockState?.tableCursor?.mode === "inside"
-    ? TABLE_EDITING_SHORTCUT_GROUP
-    : DEFAULT_TEXT_SHORTCUT_GROUP;
+    ? "table-editing"
+    : "default-text";
 }
 
 type AppNotificationBannerState = "hidden" | "open" | "closing";
@@ -444,10 +443,6 @@ function EditorShell({
     [fishmark.platform]
   );
   const shortcutHintModifierKey: "Control" | "Meta" = fishmark.platform === "darwin" ? "Meta" : "Control";
-  const activeShortcutGroup =
-    activeShortcutGroupId === "table-editing"
-      ? TABLE_EDITING_SHORTCUT_GROUP
-      : DEFAULT_TEXT_SHORTCUT_GROUP;
   const isShortcutHintVisible = isDocumentOpen && isEditorFocused && isShortcutHintArmed;
 
   const syncThemeRuntimeEnv = useEffectEvent((themeMode: ResolvedThemeMode = resolvedThemeMode): void => {
@@ -534,11 +529,11 @@ function EditorShell({
   }, [activeDocument]);
 
   useEffect(() => {
-    if (activeShortcutGroup.id !== "table-editing") {
+    if (activeShortcutGroupId !== "table-editing") {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- Leaving table mode clears the table-specific toolbar selection.
       setActiveTableToolId(null);
     }
-  }, [activeShortcutGroup.id]);
+  }, [activeShortcutGroupId]);
 
   function clearViewContainerCloseTimer(): void {
     if (viewContainerCloseTimerRef.current !== null) {
@@ -1524,7 +1519,7 @@ function EditorShell({
       }
     }
 
-    setActiveShortcutGroupId(resolveEditorShortcutGroup(nextActiveBlockState).id);
+    setActiveShortcutGroupId(resolveEditorShortcutGroupId(nextActiveBlockState));
     setActiveHeadingId(nextActiveBlockState.activeHeadingId);
   }, [applyDocumentDerivedDataNow, scheduleDocumentDerivedDataUpdate]);
 
@@ -1561,7 +1556,7 @@ function EditorShell({
       <WorkspaceShell
         workspaceSnapshot={workspaceController.editorViewSnapshot}
         activeHeadingId={activeHeadingId}
-        activeShortcutGroup={activeShortcutGroup}
+        activeShortcutGroupId={activeShortcutGroupId}
         activeTableToolId={activeTableToolId}
         activeTitlebarSurface={activeTitlebarSurface}
         activeViewContainer={activeViewContainer}

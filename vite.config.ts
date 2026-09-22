@@ -80,6 +80,9 @@ export default defineConfig({
           if (/node_modules[\\/]katex[\\/]/u.test(id)) {
             return "katex";
           }
+          if (/node_modules[\\/]lodash-es[\\/]/u.test(id)) {
+            return "lodash-es";
+          }
           if (/node_modules[\\/]@codemirror[\\/]view[\\/]/u.test(id)) {
             return "codemirror-view";
           }

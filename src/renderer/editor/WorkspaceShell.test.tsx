@@ -6,7 +6,6 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 
-import { DEFAULT_TEXT_SHORTCUT_GROUP } from "@fishmark/codemirror-adapter";
 import { DEFAULT_PREFERENCES } from "../../shared/preferences";
 import { WorkspaceShell } from "./WorkspaceShell";
 
@@ -146,7 +145,7 @@ it("renders workspace tabs and delegates commands without owning persistence log
             saveState: "idle"
           }
         },
-        activeShortcutGroup: DEFAULT_TEXT_SHORTCUT_GROUP,
+        activeShortcutGroupId: "default-text",
         activeTableToolId: null,
         appVersionLabel: "FishMark v0.0.0-test",
         appUpdateStatusLabel: null,
@@ -383,7 +382,7 @@ it("opens find and replace controls and delegates search actions to the editor",
             saveState: "idle"
           }
         },
-        activeShortcutGroup: DEFAULT_TEXT_SHORTCUT_GROUP,
+        activeShortcutGroupId: "default-text",
         activeTableToolId: null,
         appVersionLabel: "FishMark v0.0.0-test",
         appUpdateStatusLabel: null,
@@ -635,7 +634,7 @@ it("opens the Search view container from the Ctrl/Cmd+F shortcut", async () => {
             saveState: "idle"
           }
         },
-        activeShortcutGroup: DEFAULT_TEXT_SHORTCUT_GROUP,
+        activeShortcutGroupId: "default-text",
         activeTableToolId: null,
         appVersionLabel: "FishMark v0.0.0-test",
         appUpdateStatusLabel: null,
@@ -796,7 +795,7 @@ it("resizes the shared panel on the right edge and persists the width once on po
             saveState: "idle"
           }
         },
-        activeShortcutGroup: DEFAULT_TEXT_SHORTCUT_GROUP,
+        activeShortcutGroupId: "default-text",
         activeTableToolId: null,
         appVersionLabel: "FishMark v0.0.0-test",
         appUpdateStatusLabel: null,
@@ -995,7 +994,7 @@ it("never exceeds the panel bounds while dragging and keeps the stored width oth
             saveState: "idle"
           }
         },
-        activeShortcutGroup: DEFAULT_TEXT_SHORTCUT_GROUP,
+        activeShortcutGroupId: "default-text",
         activeTableToolId: null,
         appVersionLabel: "FishMark v0.0.0-test",
         appUpdateStatusLabel: null,
@@ -1179,7 +1178,6 @@ it("never exceeds the panel bounds while dragging and keeps the stored width oth
 it("renders recent files without the old empty headline and delegates open and clear actions", async () => {
   const onOpenRecentFile = vi.fn();
   const onClearRecentFile = vi.fn();
-  const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
   container = document.createElement("div");
   root = createRoot(container);
 
@@ -1192,7 +1190,7 @@ it("renders recent files without the old empty headline and delegates open and c
           tabs: [],
           activeDocument: null
         },
-        activeShortcutGroup: DEFAULT_TEXT_SHORTCUT_GROUP,
+        activeShortcutGroupId: "default-text",
         activeTableToolId: null,
         appVersionLabel: "FishMark v0.0.0-test",
         appUpdateStatusLabel: null,
@@ -1316,11 +1314,10 @@ it("renders recent files without the old empty headline and delegates open and c
   expect(container.textContent).not.toContain(
     "Open a Markdown file to begin. Edits are written back without reformatting."
   );
-  expect(container.querySelector(".empty-copy")?.textContent).toBe("Tip: Ctrl+B · Bold");
+  expect(container.querySelector(".empty-copy")?.textContent).toBe("Tip: Hold Ctrl for shortcuts");
   expect(container.querySelector(".empty-inner h1")).toBeNull();
   expect(readSvgFingerprint(container.querySelector<SVGSVGElement>(".empty-mark svg") ?? ""))
     .toEqual(readSvgFingerprint(readSharedFishMarkSvg()));
   expect(onOpenRecentFile).toHaveBeenCalledWith("C:/notes/today.md");
   expect(onClearRecentFile).toHaveBeenCalledWith("C:/notes/today.md");
-  randomSpy.mockRestore();
 });

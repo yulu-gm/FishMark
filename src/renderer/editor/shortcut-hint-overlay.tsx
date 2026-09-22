@@ -1,7 +1,13 @@
 import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
 
-import { formatShortcutHintKey, type ShortcutGroup } from "@fishmark/codemirror-adapter";
+import {
+  DEFAULT_TEXT_SHORTCUT_GROUP,
+  TABLE_EDITING_SHORTCUT_GROUP,
+  formatShortcutHintKey,
+  type ShortcutGroup,
+  type ShortcutGroupId
+} from "@fishmark/codemirror-adapter";
 
 const CONTAINER_FADE_DURATION_MS = 105;
 const ITEM_STAGGER_DURATION_MS = 18;
@@ -10,7 +16,7 @@ const ITEM_ANIMATION_DURATION_MS = 105;
 type ShortcutHintOverlayProps = {
   visible: boolean;
   platform: string;
-  group: ShortcutGroup;
+  groupId: ShortcutGroupId;
 };
 
 type OverlayState = "hidden" | "open" | "closing";
@@ -47,7 +53,11 @@ function ShortcutHintOverlayContent({
   );
 }
 
-export function ShortcutHintOverlay({ visible, platform, group }: ShortcutHintOverlayProps) {
+export function ShortcutHintOverlay({ visible, platform, groupId }: ShortcutHintOverlayProps) {
+  const group: ShortcutGroup =
+    groupId === "table-editing"
+      ? TABLE_EDITING_SHORTCUT_GROUP
+      : DEFAULT_TEXT_SHORTCUT_GROUP;
   const [renderState, setRenderState] = useState<OverlayRenderState>({
     phase: visible ? "open" : "hidden",
     visible

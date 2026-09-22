@@ -38,7 +38,7 @@ describe("ShortcutHintOverlay", () => {
         createElement(ShortcutHintOverlay, {
           visible: true,
           platform: "win32",
-          group: DEFAULT_TEXT_SHORTCUT_GROUP
+          groupId: "default-text"
         })
       );
     });
@@ -62,7 +62,7 @@ describe("ShortcutHintOverlay", () => {
         createElement(ShortcutHintOverlay, {
           visible: true,
           platform: "win32",
-          group: DEFAULT_TEXT_SHORTCUT_GROUP
+          groupId: "default-text"
         })
       );
     });
@@ -85,7 +85,7 @@ describe("ShortcutHintOverlay", () => {
         createElement(ShortcutHintOverlay, {
           visible: false,
           platform: "win32",
-          group: DEFAULT_TEXT_SHORTCUT_GROUP
+          groupId: "default-text"
         })
       );
     });
@@ -104,7 +104,7 @@ describe("ShortcutHintOverlay", () => {
         createElement(ShortcutHintOverlay, {
           visible: true,
           platform: "win32",
-          group: DEFAULT_TEXT_SHORTCUT_GROUP
+          groupId: "default-text"
         })
       );
     });
@@ -114,7 +114,7 @@ describe("ShortcutHintOverlay", () => {
         createElement(ShortcutHintOverlay, {
           visible: false,
           platform: "win32",
-          group: DEFAULT_TEXT_SHORTCUT_GROUP
+          groupId: "default-text"
         })
       );
     });
@@ -146,7 +146,7 @@ describe("ShortcutHintOverlay", () => {
         createElement(ShortcutHintOverlay, {
           visible: true,
           platform: "win32",
-          group: DEFAULT_TEXT_SHORTCUT_GROUP
+          groupId: "default-text"
         })
       );
     });
@@ -156,7 +156,7 @@ describe("ShortcutHintOverlay", () => {
         createElement(ShortcutHintOverlay, {
           visible: false,
           platform: "win32",
-          group: DEFAULT_TEXT_SHORTCUT_GROUP
+          groupId: "default-text"
         })
       );
     });
@@ -166,7 +166,7 @@ describe("ShortcutHintOverlay", () => {
         createElement(ShortcutHintOverlay, {
           visible: true,
           platform: "win32",
-          group: DEFAULT_TEXT_SHORTCUT_GROUP
+          groupId: "default-text"
         })
       );
     });
@@ -198,7 +198,7 @@ describe("ShortcutHintOverlay", () => {
         createElement(ShortcutHintOverlay, {
           visible: true,
           platform: "win32",
-          group: DEFAULT_TEXT_SHORTCUT_GROUP
+          groupId: "default-text"
         })
       );
     });
@@ -210,7 +210,7 @@ describe("ShortcutHintOverlay", () => {
         createElement(ShortcutHintOverlay, {
           visible: true,
           platform: "win32",
-          group: TABLE_EDITING_SHORTCUT_GROUP
+          groupId: "table-editing"
         })
       );
     });

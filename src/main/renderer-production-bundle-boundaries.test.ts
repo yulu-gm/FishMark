@@ -30,6 +30,7 @@ describe("renderer production bundle boundaries", () => {
     expect(source).toContain("passes: 2");
     expect(source).toContain("polyfill: false");
     expect(source).toContain('return "katex";');
+    expect(source).toContain('return "lodash-es";');
     expect(source).toContain('return "codemirror-view";');
     expect(source).toContain('return "codemirror-state";');
     expect(source).toContain('return "fishmark-editor-model";');
@@ -65,10 +66,16 @@ describe("renderer production bundle boundaries", () => {
   });
 
   it("keeps the CodeMirror editor runtime outside the empty-workspace initial graph", () => {
-    const source = readRendererSource("editor/WorkspaceShell.tsx");
+    const appSource = readRendererSource("editor/App.tsx");
+    const shellSource = readRendererSource("editor/WorkspaceShell.tsx");
 
-    expect(source).not.toContain('import { CodeEditorView, type CodeEditorHandle } from "../code-editor-view";');
-    expect(source).toContain('await import("../code-editor-view")');
+    expect(appSource).not.toContain("DEFAULT_TEXT_SHORTCUT_GROUP");
+    expect(appSource).not.toContain("TABLE_EDITING_SHORTCUT_GROUP");
+    expect(shellSource).not.toContain("DEFAULT_TEXT_SHORTCUT_GROUP");
+    expect(shellSource).not.toContain("formatShortcutHintKey");
+    expect(shellSource).not.toContain('import { ShortcutHintOverlay } from "./shortcut-hint-overlay";');
+    expect(shellSource).toContain('await import("../code-editor-view")');
+    expect(shellSource).toContain('await import("./shortcut-hint-overlay")');
   });
 
   it("keeps CodeMirror search outside the editor initial graph", () => {

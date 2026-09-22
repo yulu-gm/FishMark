@@ -6,6 +6,12 @@
 
 ## 当前项目判断
 
+### 2026-09-22 M5 / RF-506 slice F：壳层 shortcut metadata 延迟加载 + lodash 聚合
+
+GitHub CI 在 `272c094` 给出正式剩余预算：`maxInitialChunkBytes 198742/300000 PASS`、`maxInitialChunkGzipBytes 57367/90000 PASS`、`totalInitialGzipBytes 265046/260000 FAIL`、`totalJsGzipBytes 1438872/1430000 FAIL`；15 个 forbidden-initial 与 4 个 required-lazy 均 PASS。Quality 同时暴露 `markdown-shortcuts.ts` 四个 shortcut metadata import 在最近拆分后已未使用，本切片直接删除。
+
+初始 closure 仍把 editor-model / CodeMirror 拉入，根因之一是 App/WorkspaceShell 为 rail 与快捷键提示静态读取 `@fishmark/codemirror-adapter` runtime shortcut group。现壳层只持有轻量 `ShortcutGroupId`（type-only），`ShortcutHintOverlay` 本身改为 lazy module，并在真正显示时再由 adapter 的 canonical descriptor 解析 group；编辑器 keymap 与 shortcut 定义仍只有 adapter 一份。欢迎页不再为了随机 shortcut tip 加载 editor runtime，改为平台化通用提示 `Tip: Hold Ctrl/Cmd for shortcuts`。为处理剩余 total-JS gzip，`lodash-es` 统一进入一个仍为 lazy 的 vendor chunk，减少 Mermaid 多 chunk 各自 gzip 的重复字典成本；不删除 Mermaid 能力、不调整任何预算。等待本提交 CI 实测决定是否还需后续 slice。
+
 ### 2026-09-22 M5 / RF-506 slice G：CodeEditor 按文档懒加载 + KaTeX 去重
 
 最新正式 CI bundle 已恢复完整 provenance：15 个 forbidden-initial 与 4 个 required-lazy 全部 PASS，单 chunk 两项也 PASS；仅剩 `totalInitialGzipBytes=267470/260000` 与 `totalJsGzipBytes=1436749/1430000`。产物同时暴露两个完整 KaTeX lazy chunk（各约 76KB gzip），因此 Vite 对 `node_modules/katex/**` 增加单一共享 `katex` chunk，消除重复打包而不改变其 lazy 属性。Initial 侧不再继续微调首屏 UI，而把 `CodeEditorView` 改为有文档时才通过 React lazy mount：空 workspace 壳层无需提前加载 CodeMirror editor，打开文档时再加载本地 editor runtime；M9 仍独立负责 document-open 延迟预算。新增源码合同钉住 editor lazy 与 KaTeX shared-lazy 边界，所有 bundle limit 继续保持原值。

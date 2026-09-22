@@ -18,12 +18,8 @@ import {
 import { toggleEmphasis, toggleStrong } from "./toggle-inline-commands";
 import {
   DEFAULT_TEXT_SHORTCUT_GROUP,
-  SHORTCUT_GROUPS,
   TABLE_EDITING_SHORTCUT_GROUP,
-  formatShortcutHintKey,
   type ShortcutDescriptor,
-  type ShortcutGroup,
-  type ShortcutGroupId,
   type ShortcutId
 } from "./shortcut-descriptors";
 
