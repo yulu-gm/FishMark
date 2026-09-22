@@ -34,7 +34,7 @@ import {
 import type { RecentFilesSnapshot } from "../../shared/recent-files";
 import type { ThemeEffectsMode } from "../../shared/theme-package";
 import type { WorkspaceWindowSnapshot } from "../../shared/workspace";
-import { CodeEditorView, type CodeEditorHandle } from "../code-editor-view";
+import type { CodeEditorHandle } from "../code-editor-view";
 import type {
   CodeEditorDiscardedDocumentText,
   CodeEditorDocumentChangeFrame
@@ -50,6 +50,11 @@ import { ShortcutHintOverlay } from "./shortcut-hint-overlay";
 import type { TitlebarLayoutDescriptor } from "./titlebar-layout";
 import type { ThemePackageEntry, ResolvedThemeMode } from "./useThemeController";
 import fishmarkMarkSvg from "../../../assets/branding/fishmark_mark.svg?raw";
+
+const CodeEditorView = lazy(async () => {
+  const module = await import("../code-editor-view");
+  return { default: module.CodeEditorView };
+});
 
 const SettingsView = lazy(async () => {
   const module = await import("./settings-view");
@@ -1165,29 +1170,31 @@ export function WorkspaceShell({
                     className="document-canvas"
                     ref={editorContainerRef}
                   >
-                    <CodeEditorView
-                      ref={editorRef}
-                      initialContent={activeDocument.content}
-                      documentPath={activeDocument.path}
-                      documentTabId={activeDocument.tabId}
-                      editorEpoch={editorEpoch}
-                      loadRevision={editorLoadRevision}
-                      readOnly={editorTransition?.readOnly ?? false}
-                      editorTransitionToken={editorTransition?.token ?? null}
-                      importClipboardImage={onImportClipboardImage}
-                      openExternalLink={onOpenExternalLink}
-                      viewMode={editorViewMode}
-                      onActiveBlockChange={onActiveBlockChange}
-                      onDocumentChangeFrame={onDocumentChangeFrame}
-                      onDiscardedDocumentText={onDiscardedDocumentText}
-                      onPendingDocumentChangesChange={onPendingDocumentChangesChange}
-                      onEditorBarrierChange={onEditorBarrierChange}
-                      onEditorRemotePatchChange={onEditorRemotePatchChange}
-                      onEditorCanonicalRestoreChange={onEditorCanonicalRestoreChange}
-                      onEditorTransitionApplied={onEditorTransitionApplied}
-                      onLoadRevisionApplied={onEditorLoadRevisionApplied}
-                      onBlur={onEditorBlur}
-                    />
+                    <Suspense fallback={null}>
+                      <CodeEditorView
+                        ref={editorRef}
+                        initialContent={activeDocument.content}
+                        documentPath={activeDocument.path}
+                        documentTabId={activeDocument.tabId}
+                        editorEpoch={editorEpoch}
+                        loadRevision={editorLoadRevision}
+                        readOnly={editorTransition?.readOnly ?? false}
+                        editorTransitionToken={editorTransition?.token ?? null}
+                        importClipboardImage={onImportClipboardImage}
+                        openExternalLink={onOpenExternalLink}
+                        viewMode={editorViewMode}
+                        onActiveBlockChange={onActiveBlockChange}
+                        onDocumentChangeFrame={onDocumentChangeFrame}
+                        onDiscardedDocumentText={onDiscardedDocumentText}
+                        onPendingDocumentChangesChange={onPendingDocumentChangesChange}
+                        onEditorBarrierChange={onEditorBarrierChange}
+                        onEditorRemotePatchChange={onEditorRemotePatchChange}
+                        onEditorCanonicalRestoreChange={onEditorCanonicalRestoreChange}
+                        onEditorTransitionApplied={onEditorTransitionApplied}
+                        onLoadRevisionApplied={onEditorLoadRevisionApplied}
+                        onBlur={onEditorBlur}
+                      />
+                    </Suspense>
                   </div>
                   {visibleViewContainer && visibleViewContainerLabel ? (
                     <aside
