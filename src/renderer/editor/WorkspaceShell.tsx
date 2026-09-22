@@ -548,6 +548,17 @@ export function WorkspaceShell({
     : null;
 
   useEffect(() => {
+    if (!isDocumentOpen) {
+      return;
+    }
+
+    // Search is not part of the editor's initial bundle. Warm its CodeMirror
+    // runtime after the document has mounted so the first explicit Search
+    // activation normally has no visible loading delay.
+    void editorRef.current?.prepareFindReplace?.();
+  }, [editorLoadRevision, editorRef, isDocumentOpen]);
+
+  useEffect(() => {
     if (!isSearchViewActive) {
       return;
     }
@@ -766,6 +777,17 @@ export function WorkspaceShell({
     }
   };
 
+  const toggleSearchViewContainer = () => {
+    if (isSearchViewActive) {
+      onToggleViewContainer("search");
+      return;
+    }
+
+    void (editorRef.current?.prepareFindReplace?.() ?? Promise.resolve()).then(() => {
+      onToggleViewContainer("search");
+    });
+  };
+
   const handleWorkspaceKeyDownCapture = (event: KeyboardEvent<HTMLElement>) => {
     if (
       !isViewContainerEnabled ||
@@ -784,7 +806,7 @@ export function WorkspaceShell({
       findInputRef.current?.focus();
       return;
     }
-    onToggleViewContainer("search");
+    toggleSearchViewContainer();
   };
 
   const matchStatusLabel = findText.length === 0
@@ -860,7 +882,7 @@ export function WorkspaceShell({
                 aria-pressed={activeViewContainer === "search"}
                 title="Find and replace"
                 disabled={!isViewContainerEnabled}
-                onClick={() => onToggleViewContainer("search")}
+                onClick={toggleSearchViewContainer}
               >
                 <SearchIcon className="rail-tool-button-icon" />
               </button>

@@ -522,7 +522,7 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("finds and replaces matches while preserving undo history", () => {
+  it("finds and replaces matches while preserving undo history", async () => {
     const host = document.createElement("div");
     const changes: string[] = [];
     const controller = createCodeEditorController({
@@ -531,6 +531,8 @@ describe("createCodeEditorController", () => {
       onChange: (content) => changes.push(content)
     });
     const view = getEditorView(host);
+
+    await controller.prepareFindReplace();
 
     const firstSnapshot = controller.updateFindReplaceQuery({
       search: "beta",

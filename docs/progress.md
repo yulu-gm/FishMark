@@ -6,6 +6,10 @@
 
 ## 当前项目判断
 
+### 2026-09-22 M5 / RF-506 最终收口 slice C：Search lazy + CodeMirror vendor chunk
+
+继续按原预算减首屏：`@codemirror/search` 不再由 `code-editor.ts` 静态导入；新增 `search-runtime.ts`，第一次文档 mount 后低优先预热，并在显式打开 Search 前由 `prepareFindReplace()` 保证 runtime 已装入 CodeMirror Compartment。查找/替换仍完全使用 CodeMirror `SearchQuery/search state/find/replace`，没有第二套搜索语义。Vite 同时把 `@codemirror/view` 与 `@codemirror/state` 分成独立 initial vendor chunk，用单-chunk gate 约束各自大小；`totalInitialGzipBytes` 仍会统计整个静态 closure，因此该拆分不能掩盖总量。Chromium 146 原生 modulepreload，production build 关闭 Vite polyfill。新增源码合同钉住 Search lazy、CodeMirror chunk 与 polyfill 边界。等待真实 bundle 产物复测后再判断是否需要继续削减 total JS。
+
 ### 2026-09-22 M5 / RF-506 最终收口 slice B：renderer target 对齐 Electron Chromium
 
 为压缩 `totalJsGzipBytes` 而不删除功能或放宽预算，Vite renderer build 明确从默认广泛浏览器 target 收敛到 `chrome146`。仓库锁定 Electron 41.2.0，其 Chromium 为 146；因此这是运行时事实的显式化，而不是降低兼容承诺。新增 bundle source contract 防止未来无意退回广泛浏览器转译。此改动与 slice A 一起等待真实 `perf:bundle` 复测，四个 maximum 未全绿前 M5 仍保持 IN_PROGRESS。

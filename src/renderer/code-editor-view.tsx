@@ -21,6 +21,7 @@ import type { EditorLoadIdentity } from "./editor/editor-load-identity";
 export type CodeEditorHandle = {
   getContent: () => string;
   getSelection: () => { anchor: number; head: number };
+  prepareFindReplace: () => Promise<void>;
   updateFindReplaceQuery: (query: FindReplaceQueryInput) => FindReplaceSnapshot;
   findNextMatch: () => FindReplaceSnapshot;
   findPreviousMatch: () => FindReplaceSnapshot;
@@ -272,6 +273,8 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
             anchor: 0,
             head: 0
           },
+        prepareFindReplace: () =>
+          controllerRef.current?.prepareFindReplace() ?? Promise.resolve(),
         updateFindReplaceQuery: (query: FindReplaceQueryInput) =>
           controllerRef.current?.updateFindReplaceQuery(query) ?? {
             matchCount: 0,

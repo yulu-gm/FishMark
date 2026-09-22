@@ -52,6 +52,24 @@ export default defineConfig({
     // Avoid Vite's broad-browser transpilation so shipped JS matches the
     // actual desktop runtime contract instead of carrying unused fallbacks.
     target: "chrome146",
+    modulePreload: {
+      // Chromium 146 implements modulepreload natively; the Vite compatibility
+      // polyfill would be dead code in every supported FishMark renderer.
+      polyfill: false
+    },
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (/node_modules[\\/]@codemirror[\\/]view[\\/]/u.test(id)) {
+            return "codemirror-view";
+          }
+          if (/node_modules[\\/]@codemirror[\\/]state[\\/]/u.test(id)) {
+            return "codemirror-state";
+          }
+          return undefined;
+        }
+      }
+    },
     outDir: "../../dist",
     emptyOutDir: true,
     // Keep standard backdrop-filter declarations in built CSS so Electron/Windows

@@ -19,6 +19,7 @@ const navigateToOffsetMock = vi.fn<(offset: number) => void>();
 const destroyMock = vi.fn<() => void>();
 const getContentMock = vi.fn<() => string>(() => "# Initial\n");
 const getSelectionMock = vi.fn<() => { anchor: number; head: number }>(() => ({ anchor: 0, head: 0 }));
+const prepareFindReplaceMock = vi.fn<() => Promise<void>>(() => Promise.resolve());
 const pressEnterMock = vi.fn<() => void>();
 const pressBackspaceMock = vi.fn<() => void>();
 const pressTabMock = vi.fn<(shiftKey?: boolean) => void>();
@@ -78,6 +79,8 @@ describe("CodeEditorView", () => {
     navigateToOffsetMock.mockReset();
     getContentMock.mockReset();
     getSelectionMock.mockReset();
+    prepareFindReplaceMock.mockReset();
+    prepareFindReplaceMock.mockResolvedValue(undefined);
     pressEnterMock.mockReset();
     pressBackspaceMock.mockReset();
     pressTabMock.mockReset();
@@ -89,6 +92,7 @@ describe("CodeEditorView", () => {
     createCodeEditorControllerMock.mockReturnValue({
       getContent: getContentMock,
       getSelection: getSelectionMock,
+      prepareFindReplace: prepareFindReplaceMock,
       setContent: setContentMock,
       replaceDocument: replaceDocumentMock,
       setDocumentPath: setDocumentPathMock,

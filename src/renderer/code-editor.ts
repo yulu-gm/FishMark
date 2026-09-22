@@ -1,17 +1,11 @@
-import { Annotation, ChangeSet, Compartment, EditorState, Transaction } from "@codemirror/state";
 import {
-  closeSearchPanel,
-  findNext,
-  findPrevious,
-  getSearchQuery,
-  openSearchPanel,
-  replaceAll,
-  replaceNext,
-  search,
-  searchPanelOpen,
-  SearchQuery,
-  setSearchQuery
-} from "@codemirror/search";
+  Annotation,
+  ChangeSet,
+  Compartment,
+  EditorState,
+  Transaction,
+  type Extension
+} from "@codemirror/state";
 import { EditorView, type ViewUpdate } from "@codemirror/view";
 
 import {
@@ -89,6 +83,7 @@ export type CreateCodeEditorControllerOptions = {
 export type CodeEditorController = {
   getContent: () => string;
   getSelection: () => { anchor: number; head: number };
+  prepareFindReplace: () => Promise<void>;
   updateFindReplaceQuery: (query: FindReplaceQueryInput) => FindReplaceSnapshot;
   findNextMatch: () => FindReplaceSnapshot;
   findPreviousMatch: () => FindReplaceSnapshot;
@@ -159,6 +154,10 @@ export function createCodeEditorController(
   let currentViewMode = options.viewMode ?? "wysiwym";
   let currentReadOnly = options.readOnly ?? false;
   const readOnlyCompartment = new Compartment();
+  const searchCompartment = new Compartment();
+  let searchExtension: Extension = [];
+  let searchRuntime: typeof import("./search-runtime") | null = null;
+  let searchRuntimePromise: Promise<typeof import("./search-runtime")> | null = null;
   let isDestroyed = false;
   let semanticCommands: SemanticCommandBindings;
   let documentIdentity: EditorLoadIdentity | null = null;
@@ -377,15 +376,7 @@ export function createCodeEditorController(
           onBlur: options.onBlur,
           viewMode: currentViewMode
         }),
-        search({
-          createPanel: () => {
-            const dom = document.createElement("div");
-
-            dom.hidden = true;
-            dom.setAttribute("aria-hidden", "true");
-            return { dom, top: true };
-          }
-        })
+        searchCompartment.of(searchExtension)
       ]
     });
 
@@ -452,14 +443,45 @@ export function createCodeEditorController(
   view.contentDOM.addEventListener("compositionend", handleCompositionEnd);
   view.dom.addEventListener("paste", handlePaste);
 
+  const ensureSearchRuntime = async (): Promise<typeof import("./search-runtime") | null> => {
+    if (searchRuntime) {
+      return searchRuntime;
+    }
+
+    searchRuntimePromise ??= import("./search-runtime");
+    const runtime = await searchRuntimePromise;
+
+    if (isDestroyed) {
+      return null;
+    }
+
+    if (!searchRuntime) {
+      searchRuntime = runtime;
+      searchExtension = runtime.createFishmarkSearchExtension();
+      view.dispatch({
+        effects: searchCompartment.reconfigure(searchExtension)
+      });
+    }
+
+    return searchRuntime;
+  };
+
+  const emptyFindReplaceSnapshot = (): FindReplaceSnapshot => ({
+    matchCount: 0,
+    currentMatchIndex: null
+  });
+
   const readFindReplaceSnapshot = (): FindReplaceSnapshot => {
-    const query = getSearchQuery(view.state);
+    const runtime = searchRuntime;
+
+    if (!runtime) {
+      return emptyFindReplaceSnapshot();
+    }
+
+    const query = runtime.getSearchQuery(view.state);
 
     if (!query.valid || query.search.length === 0) {
-      return {
-        matchCount: 0,
-        currentMatchIndex: null
-      };
+      return emptyFindReplaceSnapshot();
     }
 
     let matchCount = 0;
@@ -487,14 +509,26 @@ export function createCodeEditorController(
   };
 
   const ensureSearchPanelOpen = () => {
-    if (!searchPanelOpen(view.state)) {
-      openSearchPanel(view);
+    const runtime = searchRuntime;
+
+    if (!runtime) {
+      return;
+    }
+
+    if (!runtime.searchPanelOpen(view.state)) {
+      runtime.openSearchPanel(view);
     }
   };
 
   const updateSearchQuery = (input: FindReplaceQueryInput): FindReplaceSnapshot => {
+    const runtime = searchRuntime;
+
+    if (!runtime) {
+      return emptyFindReplaceSnapshot();
+    }
+
     const trimmedSearch = input.search;
-    const query = new SearchQuery({
+    const query = new runtime.SearchQuery({
       search: trimmedSearch,
       replace: input.replace,
       literal: true
@@ -502,21 +536,21 @@ export function createCodeEditorController(
 
     if (trimmedSearch.length === 0) {
       view.dispatch({
-        effects: setSearchQuery.of(query)
+        effects: runtime.setSearchQuery.of(query)
       });
-      closeSearchPanel(view);
+      runtime.closeSearchPanel(view);
       return readFindReplaceSnapshot();
     }
 
     ensureSearchPanelOpen();
     view.dispatch({
-      effects: setSearchQuery.of(query)
+      effects: runtime.setSearchQuery.of(query)
     });
 
     let snapshot = readFindReplaceSnapshot();
 
     if (snapshot.matchCount > 0 && snapshot.currentMatchIndex === null) {
-      findNext(view);
+      runtime.findNext(view);
       snapshot = readFindReplaceSnapshot();
     }
 
@@ -524,11 +558,13 @@ export function createCodeEditorController(
   };
 
   const selectNextMatchWhenNeeded = (snapshot: FindReplaceSnapshot): FindReplaceSnapshot => {
-    if (snapshot.matchCount === 0 || snapshot.currentMatchIndex !== null) {
+    const runtime = searchRuntime;
+
+    if (!runtime || snapshot.matchCount === 0 || snapshot.currentMatchIndex !== null) {
       return snapshot;
     }
 
-    findNext(view);
+    runtime.findNext(view);
     return readFindReplaceSnapshot();
   };
 
@@ -632,34 +668,47 @@ export function createCodeEditorController(
       anchor: view.state.selection.main.anchor,
       head: view.state.selection.main.head
     }),
+    async prepareFindReplace() {
+      await ensureSearchRuntime();
+    },
     updateFindReplaceQuery: updateSearchQuery,
     findNextMatch() {
-      findNext(view);
+      const runtime = searchRuntime;
+      if (!runtime) return emptyFindReplaceSnapshot();
+      runtime.findNext(view);
       return readFindReplaceSnapshot();
     },
     findPreviousMatch() {
-      findPrevious(view);
+      const runtime = searchRuntime;
+      if (!runtime) return emptyFindReplaceSnapshot();
+      runtime.findPrevious(view);
       return readFindReplaceSnapshot();
     },
     replaceCurrentMatch() {
-      replaceNext(view);
+      const runtime = searchRuntime;
+      if (!runtime) return emptyFindReplaceSnapshot();
+      runtime.replaceNext(view);
       return selectNextMatchWhenNeeded(readFindReplaceSnapshot());
     },
     replaceAllMatches() {
-      replaceAll(view);
+      const runtime = searchRuntime;
+      if (!runtime) return emptyFindReplaceSnapshot();
+      runtime.replaceAll(view);
       return readFindReplaceSnapshot();
     },
     clearFindReplaceQuery() {
-      const query = new SearchQuery({
+      const runtime = searchRuntime;
+      if (!runtime) return emptyFindReplaceSnapshot();
+      const query = new runtime.SearchQuery({
         search: "",
         replace: "",
         literal: true
       });
 
       view.dispatch({
-        effects: setSearchQuery.of(query)
+        effects: runtime.setSearchQuery.of(query)
       });
-      closeSearchPanel(view);
+      runtime.closeSearchPanel(view);
       return readFindReplaceSnapshot();
     },
     setContent(content: string) {
