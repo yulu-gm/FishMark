@@ -6,6 +6,10 @@
 
 ## 当前项目判断
 
+### 2026-09-22 CI clean-install lock portability 修复
+
+首个 GitHub Actions CI 在 Ubuntu / Node 22 / npm 10.9.8 的 `npm ci` 阶段 fail-closed，错误为 `Missing: @emnapi/runtime@1.11.3 from lock file`。当前 lock 已包含 `@emnapi/core@1.11.3`，但 Windows npm 生成的 lock 漏掉了 `@napi-rs/wasm-runtime` optional peer 所需的顶层 `@emnapi/runtime`。按 npm registry 元数据补录精确 `1.11.3` 条目（dev + optional + peer，依赖 `tslib ^2.4.0`），不增加产品运行时依赖。该问题由 clean Linux `npm ci` 首次暴露，后续 CI 将持续防止跨平台 lock 漂移。
+
 ### 2026-09-22 常备 CI 上线：quality + bundle budget
 
 新增 `.github/workflows/ci.yml`，对 main push、PR 与手动 dispatch 生效。CI 使用 Node 22 + `npm ci`，分成两个 blocking job：`quality` 执行 typecheck、lint、architecture/provenance/release-isolation/RF-703 focused contracts 与完整 build；`bundle` 独立执行正式 `npm run perf:bundle` 并上传 14 天 bundle 日志 artifact。两个 job 末尾都检查 tracked working tree 必须保持干净，测试或构建若修改 package/release metadata 会直接 fail。当前全量 Vitest 仍含已登记 known-failure 集合，因此暂不把原始 `npm test` 作为 blocking job；后续若建立 exact known-failure runner 再接入，避免 CI 永久红而失去信号。
