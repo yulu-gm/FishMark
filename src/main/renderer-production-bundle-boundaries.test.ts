@@ -27,10 +27,13 @@ describe("renderer production bundle boundaries", () => {
 
     expect(source).toContain('target: "chrome146"');
     expect(source).toContain('minify: "terser"');
-    expect(source).toContain("passes: 2");
+    expect(source).toContain("passes: 3");
+    expect(source).toContain('"console.log"');
+    expect(source).toContain('"console.debug"');
+    expect(source).toContain('"console.info"');
+    expect(source).toContain('"console.trace"');
     expect(source).toContain("polyfill: false");
     expect(source).toContain('return "katex";');
-    expect(source).toContain('return "lodash-es";');
     expect(source).toContain('return "codemirror-view";');
     expect(source).toContain('return "codemirror-state";');
     expect(source).toContain('return "fishmark-editor-model";');

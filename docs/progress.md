@@ -6,6 +6,12 @@
 
 ## 当前项目判断
 
+### 2026-09-22 M5 / RF-506 slice G：只剩 total JS，改做真实 minification
+
+CI 对 `e591dc5` 的正式 bundle 结果为：`maxInitialChunkBytes 182006/300000 PASS`、`maxInitialChunkGzipBytes 57287/90000 PASS`、`totalInitialGzipBytes 94585/260000 PASS`，说明壳层 shortcut metadata / CodeEditor lazy 边界已把 initial 债彻底清零；唯一剩余为 `totalJsGzipBytes 1439079/1430000 FAIL`（差 9079 B）。上一刀的 `lodash-es` manual chunk 未改善 aggregate gzip，故撤回，避免为 budget 保留无收益 chunk 策略。
+
+本切片只做 release minifier 收口：Terser compression passes 2→3，并把 `console.log/debug/info/trace` 声明为 pure calls 以便在 production 压缩时移除；`console.warn/error` 保留，产品错误诊断仍存在。另修复 shortcut overlay groupId 拆分后暴露的 TypeScript props 适配错误。预算与功能集合均不变化；等待 CI 实测 total JS 是否进入 1,430,000 B 原上限。
+
 ### 2026-09-22 M5 / RF-506 slice F：壳层 shortcut metadata 延迟加载 + lodash 聚合
 
 GitHub CI 在 `272c094` 给出正式剩余预算：`maxInitialChunkBytes 198742/300000 PASS`、`maxInitialChunkGzipBytes 57367/90000 PASS`、`totalInitialGzipBytes 265046/260000 FAIL`、`totalJsGzipBytes 1438872/1430000 FAIL`；15 个 forbidden-initial 与 4 个 required-lazy 均 PASS。Quality 同时暴露 `markdown-shortcuts.ts` 四个 shortcut metadata import 在最近拆分后已未使用，本切片直接删除。

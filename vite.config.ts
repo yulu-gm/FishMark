@@ -66,7 +66,13 @@ export default defineConfig({
       ecma: 2022,
       module: true,
       compress: {
-        passes: 2
+        passes: 3,
+        pure_funcs: [
+          "console.log",
+          "console.debug",
+          "console.info",
+          "console.trace"
+        ]
       }
     },
     modulePreload: {
@@ -79,9 +85,6 @@ export default defineConfig({
         manualChunks(id) {
           if (/node_modules[\\/]katex[\\/]/u.test(id)) {
             return "katex";
-          }
-          if (/node_modules[\\/]lodash-es[\\/]/u.test(id)) {
-            return "lodash-es";
           }
           if (/node_modules[\\/]@codemirror[\\/]view[\\/]/u.test(id)) {
             return "codemirror-view";

@@ -28,7 +28,10 @@ type OverlayRenderState = {
 function ShortcutHintOverlayContent({
   platform,
   group
-}: Omit<ShortcutHintOverlayProps, "visible">) {
+}: {
+  platform: string;
+  group: ShortcutGroup;
+}) {
   return (
     <ul
       key={group.id}

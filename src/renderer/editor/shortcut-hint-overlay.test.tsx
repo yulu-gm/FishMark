@@ -5,10 +5,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
 
-import {
-  DEFAULT_TEXT_SHORTCUT_GROUP,
-  TABLE_EDITING_SHORTCUT_GROUP
-} from "@fishmark/codemirror-adapter";
+import { DEFAULT_TEXT_SHORTCUT_GROUP } from "@fishmark/codemirror-adapter";
 
 import { ShortcutHintOverlay } from "./shortcut-hint-overlay";
 
