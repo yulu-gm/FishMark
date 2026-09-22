@@ -83,9 +83,6 @@ export default defineConfig({
           if (/node_modules[\\/]@codemirror[\\/]state[\\/]/u.test(id)) {
             return "codemirror-state";
           }
-          if (/[\\/]packages[\\/]codemirror-adapter[\\/]src[\\/]/u.test(id)) {
-            return "fishmark-codemirror-adapter";
-          }
           if (/[\\/]packages[\\/]editor-model[\\/]src[\\/]/u.test(id)) {
             return "fishmark-editor-model";
           }
