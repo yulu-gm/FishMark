@@ -6,6 +6,10 @@
 
 ## 当前项目判断
 
+### 2026-09-22 M5 / bundle provenance v2：显式记录 Rolldown facade chunk
+
+CI clean install 修复后，Linux sourcemap build 仍稳定产出同一 `moduleIds=[]` 的 `dist-BFdHydeb.js`，证明该 chunk 不是 workspace dist alias 遗留，而是 Rolldown 的真实 facade 输出。Provenance contract 升级到 v2：每个 chunk 新增 `facade: boolean` 与 `facadeModuleId: string|null`；普通 chunk 仍必须至少包含一个 moduleId，**只有 Rolldown 明确提供非空 facadeModuleId 的 facade 才允许 moduleIds 为空**。这种 facade 的空 sources/mappings map 不再伪装成普通 COMPLETE map，而报告为显式 `sourceMapEvidence.status=FACADE`；任何其它 map 问题仍 INCOMPLETE。Forbidden-source 归属同时把 `facadeModuleId` 纳入 provenance source groups，并继续校验 facade 的 static/dynamic import closure，因此零-module facade 不能成为隐藏依赖的绕过点。新增 producer + analyzer 两层回归，未降低 bundle budget 或 provenance fail-closed 约束。
+
 ### 2026-09-22 CI clean-install lock portability 修复
 
 首个 GitHub Actions CI 在 Ubuntu / Node 22 / npm 10.9.8 的 `npm ci` 阶段 fail-closed，错误为 `Missing: @emnapi/runtime@1.11.3 from lock file`。当前 lock 已包含 `@emnapi/core@1.11.3`，但 Windows npm 生成的 lock 漏掉了 `@napi-rs/wasm-runtime` optional peer 所需的顶层 `@emnapi/runtime`。按 npm registry 元数据补录精确 `1.11.3` 条目（dev + optional + peer，依赖 `tslib ^2.4.0`），不增加产品运行时依赖。该问题由 clean Linux `npm ci` 首次暴露，后续 CI 将持续防止跨平台 lock 漂移。

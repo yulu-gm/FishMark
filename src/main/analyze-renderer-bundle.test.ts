@@ -227,6 +227,75 @@ describe("scripts/analyze-renderer-bundle.mjs", () => {
     }
   });
 
+  it("accepts an explicit zero-module facade while keeping provenance and source-map evidence fail-closed", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "fishmark-bundle-facade-"));
+    const assetsDir = path.join(root, "assets");
+
+    await mkdir(assetsDir);
+    await writeFile(
+      path.join(root, "index.html"),
+      '<script type="module" src="./assets/index-test.js"></script>'
+    );
+    await writeFile(
+      path.join(assetsDir, "App-test.js"),
+      'import "./facade-test.js"; console.log("editor");'
+    );
+    await writeFile(path.join(assetsDir, "index-test.js"), "console.log('entry');");
+    await writeFile(
+      path.join(assetsDir, "facade-test.js"),
+      'export { sharedValue } from "./shared-test.js";'
+    );
+    await writeFile(path.join(assetsDir, "shared-test.js"), "export const sharedValue = true;");
+    await writeCompleteSourceMap(assetsDir, "App-test.js");
+    await writeCompleteSourceMap(assetsDir, "index-test.js");
+    await writeCompleteSourceMap(assetsDir, "shared-test.js");
+    await writeFile(
+      path.join(assetsDir, "facade-test.js.map"),
+      JSON.stringify({
+        version: 3,
+        sources: [],
+        sourcesContent: [],
+        names: [],
+        mappings: ""
+      })
+    );
+    await writeBundleProvenance(
+      root,
+      { "facade-test.js": [] },
+      { "facade-test.js": "../../src/renderer/facade-entry.ts" }
+    );
+
+    try {
+      const { stdout } = await execFileAsync(
+        process.execPath,
+        [
+          "scripts/analyze-renderer-bundle.mjs",
+          "--dist",
+          root,
+          "--json",
+          "--forbid-initial-source-group",
+          "mermaid"
+        ],
+        { cwd: process.cwd() }
+      );
+      const report = JSON.parse(stdout) as {
+        bundleEvidence: { status: string };
+        chunks: Array<{
+          name: string;
+          provenanceEvidence: { status: string };
+          sourceMapEvidence: { status: string };
+        }>;
+      };
+      const facade = report.chunks.find((chunk) => chunk.name === "facade-test.js");
+
+      expect(report.bundleEvidence.status).toBe("PASS");
+      expect(facade?.provenanceEvidence.status).toBe("COMPLETE");
+      expect(facade?.sourceMapEvidence.status).toBe("FACADE");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("keeps the public bundle baseline policy only in the architecture manifest", async () => {
     const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
       scripts: Record<string, string>;
@@ -1208,7 +1277,8 @@ async function writeCompleteSourceMap(
 
 async function writeBundleProvenance(
   root: string,
-  moduleIdsByChunk: Record<string, string[]> = {}
+  moduleIdsByChunk: Record<string, string[]> = {},
+  facadeModuleIdsByChunk: Record<string, string> = {}
 ): Promise<void> {
   const assetsDir = path.join(root, "assets");
   const chunkNames = (await readdir(assetsDir))
@@ -1228,6 +1298,7 @@ async function writeBundleProvenance(
     chunks.push({
       code,
       dynamicImports,
+      facadeModuleId: facadeModuleIdsByChunk[chunkName] ?? null,
       fileName: `assets/${chunkName}`,
       hasSourceMap,
       imports: staticImports,

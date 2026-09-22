@@ -555,6 +555,27 @@ function attestSourceMapEvidence(evidence, provenanceRecord) {
       status: "NOT_EMITTED"
     };
   }
+
+  if (
+    isRecord(provenanceRecord) &&
+    provenanceRecord.facade === true &&
+    Array.isArray(provenanceRecord.moduleIds) &&
+    provenanceRecord.moduleIds.length === 0 &&
+    typeof provenanceRecord.facadeModuleId === "string" &&
+    provenanceRecord.facadeModuleId.length > 0 &&
+    evidence.status === "INCOMPLETE" &&
+    evidence.issues.length > 0 &&
+    evidence.issues.every((issue) =>
+      issue === "source-map-mappings-empty" || issue === "source-map-sources-empty"
+    )
+  ) {
+    return {
+      map: evidence.map,
+      issues: [],
+      status: "FACADE"
+    };
+  }
+
   return evidence;
 }
 
@@ -853,11 +874,18 @@ function readProvenanceSourceGroups(record) {
     return [];
   }
 
-  return sortUnique(
-    record.moduleIds
-      .filter((moduleId) => typeof moduleId === "string" && moduleId.length > 0)
-      .map((moduleId) => resolveSourceGroup(moduleId))
+  const sourceIds = record.moduleIds.filter(
+    (moduleId) => typeof moduleId === "string" && moduleId.length > 0
   );
+  if (
+    record.facade === true &&
+    typeof record.facadeModuleId === "string" &&
+    record.facadeModuleId.length > 0
+  ) {
+    sourceIds.push(record.facadeModuleId);
+  }
+
+  return sortUnique(sourceIds.map((moduleId) => resolveSourceGroup(moduleId)));
 }
 
 function resolveSourceGroup(source) {

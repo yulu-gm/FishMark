@@ -53,6 +53,8 @@ describe("createBundleProvenanceAsset", () => {
       {
         codeSha256: sha256("const first = true;\n"),
         dynamicImports: [],
+        facade: false,
+        facadeModuleId: null,
         fileName: "assets/first.js",
         hasSourceMap: true,
         imports: [],
@@ -65,6 +67,8 @@ describe("createBundleProvenanceAsset", () => {
       {
         codeSha256: sha256("const second = true;\n"),
         dynamicImports: ["assets/lazy-a.js", "assets/lazy-z.js"],
+        facade: false,
+        facadeModuleId: null,
         fileName: "assets/second.js",
         hasSourceMap: true,
         imports: ["assets/shared-a.js", "assets/shared-z.js"],
@@ -82,6 +86,43 @@ describe("createBundleProvenanceAsset", () => {
       payloadSha256: sha256(JSON.stringify(expectedChunks)),
       schemaVersion: BUNDLE_PROVENANCE_SCHEMA_VERSION
     });
+  });
+
+  it("attests an explicit zero-module facade without weakening ordinary chunks", () => {
+    const asset = createBundleProvenanceAsset(true, [
+      createChunk({
+        facadeModuleId: "src/facade-entry.ts",
+        fileName: "assets/facade.js",
+        moduleIds: []
+      })
+    ]);
+    const document = JSON.parse(asset?.source ?? "null") as {
+      chunks: Array<{
+        facade: boolean;
+        facadeModuleId: string | null;
+        moduleIds: string[];
+      }>;
+    };
+
+    expect(document.chunks).toEqual([
+      expect.objectContaining({
+        facade: true,
+        facadeModuleId: "src/facade-entry.ts",
+        moduleIds: []
+      })
+    ]);
+
+    expect(() =>
+      createBundleProvenanceAsset(true, [
+        createChunk({
+          facadeModuleId: null,
+          fileName: "assets/not-a-facade.js",
+          moduleIds: []
+        })
+      ])
+    ).toThrow(
+      "Cannot emit bundle provenance without modules or an explicit facade for assets/not-a-facade.js."
+    );
   });
 
   it("attests an all-virtual mapless chunk without inventing source-map evidence", () => {
@@ -215,6 +256,7 @@ function createChunk(
   return {
     code: "const value = true;\n",
     dynamicImports: [],
+    facadeModuleId: null,
     fileName: "assets/App-test.js",
     hasSourceMap: true,
     imports: [],

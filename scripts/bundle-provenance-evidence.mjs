@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 export const BUNDLE_PROVENANCE_FILE_NAME = "fishmark-bundle-provenance.json";
-export const BUNDLE_PROVENANCE_SCHEMA_VERSION = 1;
+export const BUNDLE_PROVENANCE_SCHEMA_VERSION = 2;
 
 const ROOT_FIELDS = new Set([
   "chunks",
@@ -14,6 +14,8 @@ const ROOT_FIELDS = new Set([
 const CHUNK_FIELDS = new Set([
   "codeSha256",
   "dynamicImports",
+  "facade",
+  "facadeModuleId",
   "fileName",
   "hasSourceMap",
   "imports",
@@ -141,9 +143,22 @@ function validateChunkRecord(distDir, chunk, record, recordsByFileName) {
     issues.push(`bundle-provenance-dynamic-entry-flag-invalid:${chunk.fileName}`);
   }
 
+  const facadeModuleId =
+    typeof record.facadeModuleId === "string" && record.facadeModuleId.length > 0
+      ? record.facadeModuleId
+      : null;
+  if (typeof record.facade !== "boolean") {
+    issues.push(`bundle-provenance-facade-flag-invalid:${chunk.fileName}`);
+  } else if (record.facade !== (facadeModuleId !== null)) {
+    issues.push(`bundle-provenance-facade-module-invalid:${chunk.fileName}`);
+  }
+  if (record.facadeModuleId !== null && facadeModuleId === null) {
+    issues.push(`bundle-provenance-facade-module-invalid:${chunk.fileName}`);
+  }
+
   const imports = validateStringArray(record.imports, false);
   const dynamicImports = validateStringArray(record.dynamicImports, false);
-  const moduleIds = validateStringArray(record.moduleIds, true);
+  const moduleIds = validateStringArray(record.moduleIds, false);
   if (!imports.valid) {
     issues.push(`bundle-provenance-imports-invalid:${chunk.fileName}`);
   }
@@ -152,6 +167,11 @@ function validateChunkRecord(distDir, chunk, record, recordsByFileName) {
   }
   if (!moduleIds.valid) {
     issues.push(`bundle-provenance-module-ids-invalid:${chunk.fileName}`);
+  } else if (
+    moduleIds.values.length === 0 &&
+    !(record.facade === true && facadeModuleId !== null)
+  ) {
+    issues.push(`bundle-provenance-module-ids-empty-without-facade:${chunk.fileName}`);
   }
 
   if (imports.valid) {

@@ -5,11 +5,12 @@ import path from "node:path";
 import type { Plugin } from "vite";
 
 export const BUNDLE_PROVENANCE_FILE_NAME = "fishmark-bundle-provenance.json";
-export const BUNDLE_PROVENANCE_SCHEMA_VERSION = 1;
+export const BUNDLE_PROVENANCE_SCHEMA_VERSION = 2;
 
 export interface BundleProvenanceChunkInput {
   code: string;
   dynamicImports: readonly string[];
+  facadeModuleId: string | null;
   fileName: string;
   hasSourceMap: boolean;
   imports: readonly string[];
@@ -27,6 +28,8 @@ export interface BundleProvenanceAsset {
 interface BundleProvenanceChunk {
   codeSha256: string;
   dynamicImports: string[];
+  facade: boolean;
+  facadeModuleId: string | null;
   fileName: string;
   hasSourceMap: boolean;
   imports: string[];
@@ -50,6 +53,7 @@ export function createBundleProvenancePlugin(): Plugin {
         .filter((output) => output.type === "chunk")
         .map((output) => ({
           dynamicImports: output.dynamicImports,
+          facadeModuleId: output.facadeModuleId,
           fileName: output.fileName,
           hasSourceMap: output.map !== null,
           imports: output.imports,
@@ -137,14 +141,22 @@ export function createBundleProvenanceAsset(
 }
 
 function createChunkRecord(chunk: BundleProvenanceChunkInput): BundleProvenanceChunk {
-  if (chunk.moduleIds.length === 0) {
-    throw new Error(`Cannot emit bundle provenance without modules for ${chunk.fileName}.`);
+  const facade = chunk.facadeModuleId !== null;
+  if (chunk.moduleIds.length === 0 && !facade) {
+    throw new Error(
+      `Cannot emit bundle provenance without modules or an explicit facade for ${chunk.fileName}.`
+    );
+  }
+  if (chunk.facadeModuleId !== null && chunk.facadeModuleId.length === 0) {
+    throw new Error(`Cannot emit bundle provenance with an empty facadeModuleId for ${chunk.fileName}.`);
   }
 
   const mapSource = readSourceMapSource(chunk);
   return {
     codeSha256: sha256(chunk.code),
     dynamicImports: sortUnique(chunk.dynamicImports),
+    facade,
+    facadeModuleId: chunk.facadeModuleId,
     fileName: chunk.fileName,
     hasSourceMap: chunk.hasSourceMap,
     imports: sortUnique(chunk.imports),
