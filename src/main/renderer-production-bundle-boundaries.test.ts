@@ -31,7 +31,6 @@ describe("renderer production bundle boundaries", () => {
     expect(source).toContain("polyfill: false");
     expect(source).toContain('return "codemirror-view";');
     expect(source).toContain('return "codemirror-state";');
-    expect(source).toContain('return "fishmark-codemirror-adapter";');
     expect(source).toContain('return "fishmark-editor-model";');
     expect(source).toContain('return "fishmark-markdown-engine";');
     expect(source).toContain('return "fishmark-workspace-application";');
@@ -56,6 +55,12 @@ describe("renderer production bundle boundaries", () => {
     );
     expect(source).toContain('await import("./editor-test-bridge-host")');
     expect(source).toContain("LazyEditorTestBridgeHost && fishmarkTest");
+  });
+
+  it("does not force the whole CodeMirror adapter into one initial manual chunk", () => {
+    const source = readFileSync(join(process.cwd(), "vite.config.ts"), "utf8").replace(/\r\n/g, "\n");
+
+    expect(source).not.toContain('return "fishmark-codemirror-adapter";');
   });
 
   it("keeps CodeMirror search outside the editor initial graph", () => {
