@@ -67,12 +67,11 @@ export default defineConfig({
       module: true,
       compress: {
         passes: 3,
-        pure_funcs: [
-          "console.log",
-          "console.debug",
-          "console.info",
-          "console.trace"
-        ]
+        // Production renderer diagnostics keep console.error, while routine
+        // debug/info/warn output is stripped from both FishMark and bundled
+        // optional libraries. This reduces shipped JS without changing any
+        // runtime feature or bundle budget.
+        drop_console: ["log", "debug", "info", "trace", "warn"]
       }
     },
     modulePreload: {
@@ -82,51 +81,29 @@ export default defineConfig({
     },
     rollupOptions: {
       output: {
-        codeSplitting: {
-          groups: [
-            {
-              name: "katex",
-              test: /node_modules[\\/]katex[\\/]/u,
-              priority: 100
-            },
-            {
-              name: "codemirror-view",
-              test: /node_modules[\\/]@codemirror[\\/]view[\\/]/u,
-              priority: 90
-            },
-            {
-              name: "codemirror-state",
-              test: /node_modules[\\/]@codemirror[\\/]state[\\/]/u,
-              priority: 90
-            },
-            {
-              name: "fishmark-editor-model",
-              test: /[\\/]packages[\\/]editor-model[\\/]src[\\/]/u,
-              priority: 80
-            },
-            {
-              name: "fishmark-markdown-engine",
-              test: /[\\/]packages[\\/]markdown-engine[\\/]src[\\/]/u,
-              priority: 80
-            },
-            {
-              name: "fishmark-workspace-application",
-              test: /[\\/]packages[\\/]workspace-application[\\/]src[\\/]/u,
-              priority: 80
-            },
-            {
-              name: "fishmark-workspace-infrastructure",
-              test: /[\\/]packages[\\/]workspace-infrastructure[\\/]src[\\/]/u,
-              priority: 80
-            },
-            {
-              name: "mermaid-small",
-              test: /node_modules[\\/]mermaid[\\/]dist[\\/]/u,
-              maxModuleSize: 12_000,
-              entriesAware: true,
-              priority: 20
-            }
-          ]
+        manualChunks(id) {
+          if (/node_modules[\\/]katex[\\/]/u.test(id)) {
+            return "katex";
+          }
+          if (/node_modules[\\/]@codemirror[\\/]view[\\/]/u.test(id)) {
+            return "codemirror-view";
+          }
+          if (/node_modules[\\/]@codemirror[\\/]state[\\/]/u.test(id)) {
+            return "codemirror-state";
+          }
+          if (/[\\/]packages[\\/]editor-model[\\/]src[\\/]/u.test(id)) {
+            return "fishmark-editor-model";
+          }
+          if (/[\\/]packages[\\/]markdown-engine[\\/]src[\\/]/u.test(id)) {
+            return "fishmark-markdown-engine";
+          }
+          if (/[\\/]packages[\\/]workspace-application[\\/]src[\\/]/u.test(id)) {
+            return "fishmark-workspace-application";
+          }
+          if (/[\\/]packages[\\/]workspace-infrastructure[\\/]src[\\/]/u.test(id)) {
+            return "fishmark-workspace-infrastructure";
+          }
+          return undefined;
         }
       }
     },
