@@ -66,7 +66,7 @@ export default defineConfig({
       ecma: 2022,
       module: true,
       compress: {
-        passes: 6,
+        passes: 5,
         // All renderer chunks are strict ES modules targeting Chromium 146.
         // These transforms preserve that runtime contract while allowing Terser
         // to shorten legacy function/arguments patterns emitted by dependencies.
@@ -74,10 +74,8 @@ export default defineConfig({
         unsafe_arrows: true,
         unsafe_undefined: true,
         pure_getters: true,
-        // Production renderer diagnostics keep console.error, while routine
-        // debug/info/warn output is stripped from both FishMark and bundled
-        // optional libraries. This reduces shipped JS without changing any
-        // runtime feature or bundle budget.
+        // Renderer console output is stripped only from production renderer
+        // chunks; main-process diagnostics are built separately and unaffected.
         drop_console: true
       }
     },
