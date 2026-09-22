@@ -246,8 +246,11 @@ describe("build-win-release", () => {
       }
     }
 
+    const projectDirectory = mkdtempSync(path.join(tmpdir(), "fishmark-build-win-release-project-"));
+    createdDirectories.push(projectDirectory);
+
     await buildWindowsArtifacts({
-      projectDir: process.cwd(),
+      projectDir: projectDirectory,
       builderConfig: createBuilderConfig(),
       platformPackagerClass: FakePlatformPackager,
       preparePackagedAppImpl: vi.fn(async () => {
@@ -271,8 +274,11 @@ describe("build-win-release", () => {
 
     const buildMock = vi.fn(async () => {});
 
+    const projectDirectory = mkdtempSync(path.join(tmpdir(), "fishmark-build-win-release-project-"));
+    createdDirectories.push(projectDirectory);
+
     await buildWindowsArtifacts({
-      projectDir: process.cwd(),
+      projectDir: projectDirectory,
       builderConfig: createBuilderConfig(),
       platformPackagerClass: FakePlatformPackager,
       electronBuilderBuildImpl: buildMock

@@ -6,6 +6,12 @@
 
 ## 当前项目判断
 
+### 2026-09-22 M5 / RF-506 slice E：修复 sourcemap provenance 阻塞 + release test 仓库隔离
+
+owner 在 `18d1b85` 上复测发现 `perf:bundle` 的 sourcemap build 被 provenance 插件提前阻塞：workspace-application / workspace-infrastructure 未配置 Vite source alias，renderer 通过 package exports 打包其 `dist/**` 构建产物，Rollup 生成多个匿名 `dist-*.js`，其中一个纯 re-export facade 的 `moduleIds=[]` 触发 provenance 的 fail-closed 不变量。修复选择**对齐 Vitest/tsconfig 的既有做法**：Vite 直接 alias 两个 workspace package 到各自 `src/index.ts`，并按 package owner 命名 chunk；不修改 provenance schema，也不允许零-module chunk 静默通过。这样 renderer 不再“二次打包 workspace dist”。
+
+同批处理仓库卫生：Windows/macOS release 单测中的 builder `projectDir` 不再指向真实 `process.cwd()`，每个测试使用 OS temp project directory 并纳入现有 cleanup。即使 mock/timeout 行为未来变化，release helper 也没有权限写真实仓库的 package/release metadata。后续 CI 还会增加 `git diff --exit-code` 作为 fail-closed 脏树门禁。
+
 ### 2026-09-22 M5 / RF-506 最终收口 slice D：固定 Terser + package-owned initial chunks
 
 基于 owner 对 `257cc90` 的实测，剩余三项 FAIL 已明确为：`maxInitialChunkBytes 325153/300000`、`totalInitialGzipBytes 267050/260000`、`totalJsGzipBytes 1439520/1430000`；其余 20 项 bundle 检查全 PASS，KaTeX/Mermaid forbidden-initial 与 4 个 required lazy chunks 均保持绿色。下一刀不再继续移动用户功能：release JS minifier 从 Vite 8 默认 Oxc 改为**精确锁定 Terser 5.51.2**，`module=true + compress passes=2`，用于真实压缩 total JS / initial gzip；Terser 及其 lock entry 固定，避免 minifier 漂移改变冻结预算。与此同时仅为解决单块 raw gate，把 `codemirror-adapter / editor-model / markdown-engine` 按 package owner 拆为稳定 initial chunks；总 initial gzip 仍统计完整 static closure，因此这项 chunking 不能掩盖总量。预算上限没有修改。等待本提交真实 `perf:bundle` 后决定是否可直接进入 RF-506/M5 最终验收。

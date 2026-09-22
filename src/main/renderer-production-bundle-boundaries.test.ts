@@ -34,6 +34,17 @@ describe("renderer production bundle boundaries", () => {
     expect(source).toContain('return "fishmark-codemirror-adapter";');
     expect(source).toContain('return "fishmark-editor-model";');
     expect(source).toContain('return "fishmark-markdown-engine";');
+    expect(source).toContain('return "fishmark-workspace-application";');
+    expect(source).toContain('return "fishmark-workspace-infrastructure";');
+  });
+
+  it("bundles workspace packages from source entries instead of their emitted dist facades", () => {
+    const source = readFileSync(join(process.cwd(), "vite.config.ts"), "utf8").replace(/\r\n/g, "\n");
+
+    expect(source).toContain('"@fishmark/workspace-application": fileURLToPath(');
+    expect(source).toContain('new URL("./packages/workspace-application/src/index.ts", import.meta.url)');
+    expect(source).toContain('"@fishmark/workspace-infrastructure": fileURLToPath(');
+    expect(source).toContain('new URL("./packages/workspace-infrastructure/src/index.ts", import.meta.url)');
   });
 
   it("compiles the editor automation bridge out of production mode", () => {

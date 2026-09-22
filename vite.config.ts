@@ -36,8 +36,14 @@ export default defineConfig({
       "@fishmark/test-harness": fileURLToPath(
         new URL("./packages/test-harness/src/index.ts", import.meta.url)
       ),
+      "@fishmark/workspace-application": fileURLToPath(
+        new URL("./packages/workspace-application/src/index.ts", import.meta.url)
+      ),
       "@fishmark/workspace-domain": fileURLToPath(
         new URL("./packages/workspace-domain/src/index.ts", import.meta.url)
+      ),
+      "@fishmark/workspace-infrastructure": fileURLToPath(
+        new URL("./packages/workspace-infrastructure/src/index.ts", import.meta.url)
       )
     }
   },
@@ -85,6 +91,12 @@ export default defineConfig({
           }
           if (/[\\/]packages[\\/]markdown-engine[\\/]src[\\/]/u.test(id)) {
             return "fishmark-markdown-engine";
+          }
+          if (/[\\/]packages[\\/]workspace-application[\\/]src[\\/]/u.test(id)) {
+            return "fishmark-workspace-application";
+          }
+          if (/[\\/]packages[\\/]workspace-infrastructure[\\/]src[\\/]/u.test(id)) {
+            return "fishmark-workspace-infrastructure";
           }
           return undefined;
         }

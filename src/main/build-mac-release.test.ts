@@ -89,15 +89,18 @@ describe("build-mac-release", () => {
   it("builds macOS dmg and zip artifacts without publishing from electron-builder", async () => {
     const buildMock = vi.fn(async () => undefined);
 
+    const projectDirectory = mkdtempSync(path.join(tmpdir(), "fishmark-build-mac-release-project-"));
+    createdDirectories.push(projectDirectory);
+
     await buildMacArtifacts({
-      projectDir: process.cwd(),
+      projectDir: projectDirectory,
       builderConfig: createBuilderConfig(),
       electronBuilderBuildImpl: buildMock
     });
 
     expect(buildMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        projectDir: process.cwd(),
+        projectDir: projectDirectory,
         mac: ["dmg", "zip"],
         arm64: true,
         publish: "never",
@@ -135,15 +138,18 @@ describe("build-mac-release", () => {
   it("builds a dmg-only beta artifact with ad-hoc signing and without notarization requirements", async () => {
     const buildMock = vi.fn(async () => undefined);
 
+    const projectDirectory = mkdtempSync(path.join(tmpdir(), "fishmark-build-mac-release-project-"));
+    createdDirectories.push(projectDirectory);
+
     await buildMacBetaArtifacts({
-      projectDir: process.cwd(),
+      projectDir: projectDirectory,
       builderConfig: createBuilderConfig(),
       electronBuilderBuildImpl: buildMock
     });
 
     expect(buildMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        projectDir: process.cwd(),
+        projectDir: projectDirectory,
         mac: ["dmg"],
         arm64: true,
         publish: "never",
