@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fishmark-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Focused architecture and regression tests
+        run: >
+          npm run test --
+          src/main/renderer-production-bundle-boundaries.test.ts
+          src/main/vite-bundle-provenance.test.ts
+          src/main/analyze-renderer-bundle.test.ts
+          src/main/editor-foundation-architecture.test.ts
+          src/main/build-win-release.test.ts
+          src/main/build-mac-release.test.ts
+          src/renderer/performance/editor-foundation-baseline.test.ts
+          src/renderer/outline.test.ts
+          src/renderer/document-metrics.test.ts
+          src/renderer/editor/useDocumentDerivedDataController.test.tsx
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify tests/build did not modify tracked repository files
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
+            echo "::error::CI commands modified tracked repository files."
+            git status --short
+            git diff -- .
+            exit 1
+          fi
+
+  bundle:
+    name: Bundle budget
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run renderer bundle contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .artifacts/ci
+          npm run perf:bundle 2>&1 | tee .artifacts/ci/perf-bundle.log
+
+      - name: Verify bundle analysis did not modify tracked repository files
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
+            echo "::error::Bundle analysis modified tracked repository files."
+            git status --short
+            git diff -- .
+            exit 1
+          fi
+
+      - name: Upload bundle log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-bundle-${{ github.sha }}
+          path: .artifacts/ci/perf-bundle.log
+          if-no-files-found: warn
+          retention-days: 14

@@ -6,6 +6,10 @@
 
 ## 当前项目判断
 
+### 2026-09-22 常备 CI 上线：quality + bundle budget
+
+新增 `.github/workflows/ci.yml`，对 main push、PR 与手动 dispatch 生效。CI 使用 Node 22 + `npm ci`，分成两个 blocking job：`quality` 执行 typecheck、lint、architecture/provenance/release-isolation/RF-703 focused contracts 与完整 build；`bundle` 独立执行正式 `npm run perf:bundle` 并上传 14 天 bundle 日志 artifact。两个 job 末尾都检查 tracked working tree 必须保持干净，测试或构建若修改 package/release metadata 会直接 fail。当前全量 Vitest 仍含已登记 known-failure 集合，因此暂不把原始 `npm test` 作为 blocking job；后续若建立 exact known-failure runner 再接入，避免 CI 永久红而失去信号。
+
 ### 2026-09-22 M5 / RF-506 slice E：修复 sourcemap provenance 阻塞 + release test 仓库隔离
 
 owner 在 `18d1b85` 上复测发现 `perf:bundle` 的 sourcemap build 被 provenance 插件提前阻塞：workspace-application / workspace-infrastructure 未配置 Vite source alias，renderer 通过 package exports 打包其 `dist/**` 构建产物，Rollup 生成多个匿名 `dist-*.js`，其中一个纯 re-export facade 的 `moduleIds=[]` 触发 provenance 的 fail-closed 不变量。修复选择**对齐 Vitest/tsconfig 的既有做法**：Vite 直接 alias 两个 workspace package 到各自 `src/index.ts`，并按 package owner 命名 chunk；不修改 provenance schema，也不允许零-module chunk 静默通过。这样 renderer 不再“二次打包 workspace dist”。
