@@ -29,6 +29,7 @@ describe("renderer production bundle boundaries", () => {
     expect(source).toContain('minify: "terser"');
     expect(source).toContain("passes: 2");
     expect(source).toContain("polyfill: false");
+    expect(source).toContain('return "katex";');
     expect(source).toContain('return "codemirror-view";');
     expect(source).toContain('return "codemirror-state";');
     expect(source).toContain('return "fishmark-editor-model";');
@@ -61,6 +62,13 @@ describe("renderer production bundle boundaries", () => {
     const source = readFileSync(join(process.cwd(), "vite.config.ts"), "utf8").replace(/\r\n/g, "\n");
 
     expect(source).not.toContain('return "fishmark-codemirror-adapter";');
+  });
+
+  it("keeps the CodeMirror editor runtime outside the empty-workspace initial graph", () => {
+    const source = readRendererSource("editor/WorkspaceShell.tsx");
+
+    expect(source).not.toContain('import { CodeEditorView, type CodeEditorHandle } from "../code-editor-view";');
+    expect(source).toContain('await import("../code-editor-view")');
   });
 
   it("keeps CodeMirror search outside the editor initial graph", () => {
