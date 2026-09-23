@@ -5,6 +5,32 @@ import path from "node:path";
 import { mkdtempSync, rmSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
+function expectCommandBefore(source: string, before: string, after: string): void {
+  const lines = source.split(/\r?\n/u).map((line) => line.trim());
+  expect(lines.filter((line) => line === before)).toHaveLength(1);
+  expect(lines.filter((line) => line === after)).toHaveLength(1);
+  expect(lines.indexOf(before)).toBeLessThan(lines.indexOf(after));
+}
+
+describe("dev command order assertion", () => {
+  it.each(["\n", "\r\n"])("distinguishes complete commands with shared prefixes using %j", (newline) => {
+    expect(() => expectCommandBefore(
+      ["  npm run dev:prepare", "npm run dev"].join(newline),
+      "npm run dev:prepare",
+      "npm run dev"
+    )).not.toThrow();
+  });
+
+  it.each([
+    "npm run dev\nnpm run dev:prepare",
+    "npm run dev:prepare",
+    "npm run dev",
+    "npm run dev:prepare\nnpm run dev\nnpm run dev"
+  ])("rejects reversed, missing or duplicate commands: %j", (source) => {
+    expect(() => expectCommandBefore(source, "npm run dev:prepare", "npm run dev")).toThrow();
+  });
+});
+
 describe("package scripts", () => {
   it("waits for the shared Electron build output before launching the app in dev", () => {
     const packageJsonPath = path.join(process.cwd(), "package.json");
@@ -588,10 +614,7 @@ describe("package scripts", () => {
     expect(batchSource).toContain("call npm.cmd ci");
     expect(batchSource).toContain("call npm.cmd run dev:prepare");
     expect(batchSource).toContain("node scripts/sync-dev-themes.mjs");
-    expect(batchSource).toContain("call npm.cmd run dev");
-    expect(batchSource.indexOf("call npm.cmd run dev:prepare")).toBeLessThan(
-      batchSource.indexOf("call npm.cmd run dev")
-    );
+    expectCommandBefore(batchSource, "call npm.cmd run dev:prepare", "call npm.cmd run dev");
     expect(syncScriptSource).toContain("FishMark-dev");
     expect(syncScriptSource).toContain("fixtures");
     expect(syncScriptSource).toContain("themes");
@@ -608,10 +631,7 @@ describe("package scripts", () => {
     expect(shellSource).toContain('cd "$(dirname "$0")/.."');
     expect(shellSource).toContain("npm run dev:prepare");
     expect(shellSource).toContain("node scripts/sync-dev-themes.mjs");
-    expect(shellSource).toContain("npm run dev");
-    expect(shellSource.indexOf("npm run dev:prepare")).toBeLessThan(
-      shellSource.indexOf("npm run dev")
-    );
+    expectCommandBefore(shellSource, "npm run dev:prepare", "npm run dev");
     expect(existsSync(legacyHyphenPath)).toBe(false);
     expect(existsSync(legacyUnderscorePath)).toBe(false);
   });
