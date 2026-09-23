@@ -1,0 +1,48 @@
+name: Apply verified pre-M8 closure
+on:
+  push:
+    branches: [main]
+    paths: ['.github/m8-closure/**']
+permissions:
+  contents: read
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+      - name: Verify exact base and patch digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = 6a14133e48f597ab189c635358bfd45f87af7563
+          python3 - <<'PY'
+          import base64, gzip, hashlib, os
+          from pathlib import Path
+          parts = [Path(f'.github/m8-closure/{n}.b64').read_text().strip() for n in range(3)]
+          # Normalize four transcription errors in the uploaded transport only.
+          for part, old, new in [(0, '/ox+eCLf', '/ox+CLf'), (0, 'Hq9vo9RTn', 'Hq9RTn'), (0, 'OSJUq9/a4qbkZ', 'OSJUq9/a4qkZ'), (1, 'PR88T7PDs4', 'PR88+PDs4')]:
+              assert parts[part].count(old) == 1
+              parts[part] = parts[part].replace(old, new)
+          patch = gzip.decompress(base64.b64decode(''.join(parts), validate=True))
+          assert len(patch) == 63462
+          assert hashlib.sha256(patch).hexdigest() == 'ac0922b9ad86c3452b0af5231d014f643139ac85e0a49b5a1afd7194ebc62010'
+          Path(os.environ['RUNNER_TEMP'], 'm8-closure.patch').write_bytes(patch)
+          PY
+      - name: Apply verified source changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git apply --check --index "$RUNNER_TEMP/m8-closure.patch"
+          git apply --index "$RUNNER_TEMP/m8-closure.patch"
+          git rm .github/m8-closure/0.b64 .github/m8-closure/1.b64 .github/m8-closure/2.b64
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: close pre-M8 regression and cancelled-window safety gaps'
+          git push origin HEAD:main
