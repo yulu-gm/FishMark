@@ -46,12 +46,25 @@ jobs:
           src/main/ipc/register-workspace-handlers.test.ts
           src/main/workspace-file-identity-races.integration.test.ts
           src/main/main.test.ts
+          src/main/full-regression.test.ts
+          src/renderer/editor/workspace-renderer-application.test.ts
+          src/renderer/app.autosave.test.ts
           src/renderer/performance/editor-foundation-baseline.test.ts
           src/renderer/outline.test.ts
           src/renderer/document-metrics.test.ts
           src/renderer/editor/useDocumentDerivedDataController.test.tsx
       - name: Build
         run: npm run build
+      - name: Real Electron workspace safety smoke
+        run: xvfb-run -a npm run test:workspace-safety
+      - name: Upload workspace safety report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workspace-safety-${{ github.sha }}
+          path: .artifacts/ci/workspace-safety.json
+          if-no-files-found: warn
+          retention-days: 14
       - name: Verify tests/build did not modify tracked repository files
         if: always()
         shell: bash
@@ -85,7 +98,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p .artifacts/ci
-          npm run test -- --reporter=default --reporter=json --outputFile.json=.artifacts/ci/vitest-full.json 2>&1 | tee .artifacts/ci/vitest-full.log
+          npm run test:regression 2>&1 | tee .artifacts/ci/vitest-full.log
       - name: Verify regression tests did not modify tracked files
         if: always()
         shell: bash
@@ -97,26 +110,6 @@ jobs:
             git diff -- .
             exit 1
           fi
-      - name: Capture reproducible regression inputs
-        if: failure() && github.ref == 'refs/heads/main'
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p .artifacts/ci/repro
-          git archive --format=tar HEAD | gzip > .artifacts/ci/repro/source.tar.gz
-          tar -czf .artifacts/ci/repro/dependencies.tar.gz node_modules
-          node --version > .artifacts/ci/repro/runtime.txt
-          npm --version >> .artifacts/ci/repro/runtime.txt
-          git rev-parse HEAD >> .artifacts/ci/repro/runtime.txt
-      - name: Upload isolated reproduction inputs
-        if: failure() && github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@v4
-        with:
-          name: regression-repro-${{ github.sha }}
-          path: .artifacts/ci/repro/
-          if-no-files-found: warn
-          compression-level: 0
-          retention-days: 1
       - name: Upload full regression report
         if: always()
         uses: actions/upload-artifact@v4
