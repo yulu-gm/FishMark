@@ -116,9 +116,10 @@ function reportFor(source: string, at = "Plain paragraph one"): CandidatePerform
 }
 
 describe("candidate structure cache performance", () => {
-  // Parsing a 20k-line document is the measured cost itself, so these two cases get a longer
-  // budget than the default instead of being trimmed to a friendlier size.
-  const TWENTY_K_BUDGET_MS = 60000;
+  // This is a test-runner watchdog, not an accepted editing latency. Keep the
+  // full fixtures and every parse/reuse/revision assertion: both 20k probes and
+  // the three-edit 5k fallback sequence can exceed the default 5s under CI load.
+  const LARGE_FIXTURE_TIMEOUT_MS = 60000;
 
   it("keeps ordinary plain-paragraph typing at zero full parses on a 20k mixed fixture", () => {
     const source = mixedFixtureWithPlainParagraphs(20000);
@@ -134,7 +135,7 @@ describe("candidate structure cache performance", () => {
     expect(report.operations[0]!.parsedSourceLength).toBeLessThan(1000);
     expect(report.operations[0]!.reusedNodes).toBeGreaterThan(0);
     expect(report.coldParseMs).toBeGreaterThan(0);
-  }, TWENTY_K_BUDGET_MS);
+  }, LARGE_FIXTURE_TIMEOUT_MS);
 
   it("reports the whole-document cost of a document-start edit on a 20k mixed fixture", () => {
     const source = mixedFixtureWithPlainParagraphs(20000);
@@ -148,7 +149,7 @@ describe("candidate structure cache performance", () => {
     expect(operation.fallbackReason).toBe("unproven-block-boundary");
     expect(operation.parsedSourceLength).toBe(source.length + 1);
     expect(Number.isFinite(operation.durationMs)).toBe(true);
-  }, TWENTY_K_BUDGET_MS);
+  }, LARGE_FIXTURE_TIMEOUT_MS);
 
   it("keeps ordinary plain-paragraph typing at zero full parses on a 5k mixed fixture", () => {
     const source = mixedFixtureWithPlainParagraphs(5000);
@@ -267,7 +268,7 @@ describe("candidate structure cache performance", () => {
     const revisions = report.operations.map((operation) => operation.cacheRevision);
     expect(revisions).toEqual([2, 3, 4]);
     expect(report.operations[1]!.fullParseCount).toBe(1);
-  });
+  }, LARGE_FIXTURE_TIMEOUT_MS);
 
   it("counts lines with the shared LF policy", () => {
     expect(countMarkdownLines("a\nb\nc")).toBe(3);
