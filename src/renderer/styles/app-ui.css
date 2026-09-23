@@ -249,21 +249,19 @@
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--fishmark-panel-border, rgba(15, 23, 42, 0.12)) 56%, transparent);
+  border: 0;
   border-radius: 14px;
-  background: color-mix(in srgb, var(--fishmark-panel-bg, rgba(255, 255, 255, 0.92)) 92%, transparent);
+  background: transparent;
   color: var(--fishmark-text-secondary, #31353d);
   cursor: pointer;
   transition:
     transform var(--yu-t-fast),
-    border-color var(--yu-t-fast),
     background-color var(--yu-t-fast),
     color var(--yu-t-fast);
 }
 
 .table-tool-button:hover {
   transform: translateX(1px);
-  border-color: var(--fishmark-panel-border, rgba(15, 23, 42, 0.12));
   background: color-mix(
     in srgb,
     var(--fishmark-panel-bg, rgba(255, 255, 255, 0.92)) 82%,
@@ -314,9 +312,9 @@
   display: inline-grid;
   place-items: center;
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--fishmark-panel-border, rgba(15, 23, 42, 0.12)) 56%, transparent);
+  border: 0;
   border-radius: 14px;
-  background: color-mix(in srgb, var(--fishmark-panel-bg, rgba(255, 255, 255, 0.92)) 90%, transparent);
+  background: transparent;
   color: var(--fishmark-text-secondary, #31353d);
   cursor: pointer;
 }
@@ -339,7 +337,6 @@
 /* The rail icon owns one shared side panel view container; `aria-pressed`
    marks the container that is currently expanded. */
 .rail-tool-button[aria-pressed="true"] {
-  border-color: color-mix(in srgb, var(--fishmark-text-accent, #4f7cff) 36%, transparent);
   background: color-mix(
     in srgb,
     var(--fishmark-control-bg-active, rgba(79, 124, 255, 0.12)) 88%,

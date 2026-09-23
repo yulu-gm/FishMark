@@ -42,21 +42,17 @@
   opacity: 0.55;
 }
 
-/* ── Solid icon button (rail, standalone contexts) ───────────── */
+/* ── Borderless icon button (rail, standalone contexts) ─────── */
 
 .settings-entry {
   padding: 0;
-  border: 1px solid var(--fishmark-rail-control-border, var(--fishmark-control-border));
-  background: var(--fishmark-rail-control-bg, var(--fishmark-control-bg));
+  border: 0;
+  background: transparent;
   color: var(--fishmark-rail-control-fg, var(--fishmark-control-fg));
-  box-shadow: var(--fishmark-rail-control-shadow, var(--fishmark-shadow-1));
+  box-shadow: none;
 }
 
 .settings-entry:hover {
-  border-color: var(
-    --fishmark-rail-control-border-hover,
-    color-mix(in srgb, var(--fishmark-control-border) 82%, var(--fishmark-panel-border))
-  );
   background: var(--fishmark-rail-control-bg-hover, var(--fishmark-control-bg-hover));
   color: var(--fishmark-rail-control-fg-hover, var(--fishmark-text-primary));
 }

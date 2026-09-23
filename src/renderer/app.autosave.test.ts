@@ -5155,8 +5155,9 @@ describe("App autosave", () => {
     expect(statusBarGeometryGuardRule).not.toContain("display:");
   });
 
-  it("defines compact icon rail tool styles and tooltip positioning", () => {
+  it("defines compact borderless rail tool styles and tooltip positioning", () => {
     const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8");
+    const primitivesStylesheet = readFileSync(primitivesStylesheetPath, "utf-8");
     const workspaceShellSource = readFileSync(
       join(process.cwd(), "src/renderer/editor/WorkspaceShell.tsx"),
       "utf-8"
@@ -5168,6 +5169,8 @@ describe("App autosave", () => {
     const railRule = getCssRule(appUiStylesheet, ".app-rail");
     const stripRule = getCssRule(appUiStylesheet, ".table-tool-strip");
     const buttonRule = getCssRule(appUiStylesheet, ".table-tool-button");
+    const railToolRule = getCssRule(appUiStylesheet, ".rail-tool-button");
+    const settingsEntryRule = getCssRule(primitivesStylesheet, ".settings-entry");
     const tooltipRule = getCssRule(appUiStylesheet, ".table-tool-tooltip");
     const dangerRule = getCssRule(appUiStylesheet, '.table-tool-button[data-tone="danger"]');
     const pressedRailToolRule = getCssRule(
@@ -5182,12 +5185,20 @@ describe("App autosave", () => {
     expect(stripRule).toContain("justify-items: center;");
     expect(buttonRule).toContain("inline-size: 44px;");
     expect(buttonRule).toContain("block-size: 44px;");
+    expect(buttonRule).toContain("border: 0;");
+    expect(buttonRule).toContain("background: transparent;");
+    expect(railToolRule).toContain("border: 0;");
+    expect(railToolRule).toContain("background: transparent;");
+    expect(settingsEntryRule).toContain("border: 0;");
+    expect(settingsEntryRule).toContain("background: transparent;");
+    expect(settingsEntryRule).toContain("box-shadow: none;");
     expect(tooltipRule).toContain("position: absolute;");
     expect(tooltipRule).toContain("left: calc(100% + var(--fishmark-space-2));");
     expect(tooltipRule).toContain("transform: translateY(-50%);");
     expect(tooltipRule).toContain("z-index: 3;");
     expect(pressedRailToolRule).toContain("background:");
     expect(pressedRailToolRule).toContain("color:");
+    expect(pressedRailToolRule).not.toContain("border-color:");
     expect(workspaceShellSource).not.toContain('data-fishmark-region="table-tool-tooltip-layer"');
     expect(dangerRule).toContain("color:");
   });
