@@ -1,6 +1,6 @@
 # Pre-M8 stabilization and readiness — 2026-09-23
 
-Scope: finish the M5/M7 review follow-up and protect existing workspace workflows before RF-801. No M8 implementation or M9 acceptance is claimed. Production fixes are in `63eb7974c24180c4b35d4df361153a3894fe302c`.
+Scope: finish the M5/M7 review follow-up and protect existing workspace workflows before RF-801. No M8 implementation or M9 acceptance is claimed. Production fixes are in `63eb7974c24180c4b35d4df361153a3894fe302c`; final CI wiring is in `625259b9b71ee439a96c3595b8867a2c9c7a0e9c`.
 
 ## Changes
 
@@ -27,7 +27,7 @@ Environment: Linux, Node 22.16.0, npm 10.9.2, Electron 41.2.0. Source and instal
 | `npm run dev:prepare` | PASS |
 | `npm run typecheck` | PASS |
 | `npm run lint` | PASS; 0 errors, 8 existing warnings |
-| Build plus final production renderer rebuild | PASS |
+| Full build, then real product smoke (repeated after the close fix) | PASS |
 | Entire Vitest regression gate | PASS; 215 files, 2,855 passed, 10 exact known failures, 0 unexpected, 0 skips, 0 unhandled/collection errors |
 | Regression gate self-tests | 24/24 PASS |
 | Derived data hook tests | 11/11 PASS |
@@ -38,6 +38,14 @@ Environment: Linux, Node 22.16.0, npm 10.9.2, Electron 41.2.0. Source and instal
 | `git diff --check` | PASS |
 
 Final measured bundle: maximum initial chunk 179,699 / 300,000 B; maximum initial gzip 56,955 / 90,000 B; total initial gzip 94,097 / 260,000 B; total JS gzip 1,425,636 / 1,430,000 B. All forbidden-initial groups and required lazy boundaries pass. Total JS gzip headroom is only 4,364 B; do not solve future regressions by silently raising the limit.
+
+## Remote verification and watchdog follow-up
+
+GitHub Actions run `35813622602`, on `625259b9`, independently passed Quality (including typecheck, lint, focused regressions, full build, real Electron safety and tracked-file cleanliness) and Bundle budget. Its downloaded bundle artifact exactly matched all four measured numbers above. The full regression job correctly failed: 10 exact known failures plus one unexpected default 5-second timeout in `candidate-performance.test.ts`, `advances the cache revision for every candidate edit, including fallbacks`.
+
+That test uses a 5k rich document and three successive edits/fallbacks, not a 20k fixture. Commit `885978f2c913bf3ec3eb1c26a08787dbef1df4bf` gives this multi-edit test the same 60-second test-runner watchdog already used by the two 20k probes. The fixture size, edits, parse/reuse/revision assertions, recorded measurements and bundle limits are unchanged. This is not a claim that 60-second editing latency is acceptable, and the timeout was not added to the known-failure baseline. The targeted suite passed 11/11 locally after this follow-up (8.78 seconds total; the three-edit test took 1.973 seconds).
+
+The CI run associated with the latest revision is the final remote gate; this report distinguishes the isolated PASS from the first remote run's intercepted timeout rather than labeling that failed run successful.
 
 ## Real-process coverage and limits
 
@@ -51,6 +59,4 @@ This is Linux/Xvfb data-safety evidence, not native Windows/macOS/IME acceptance
 
 CI now has three blocking jobs: Quality (including startup/persistence regressions and the real Electron smoke), Full regression (the exact known-defect gate), and the original Bundle budget. Each checks that tracked files remain clean; JSON/log artifacts are retained for 14 days. Temporary source/dependency transfer artifacts and the one-shot apply workflow are not retained as permanent CI steps.
 
-M5, M6/M6.5 and M7 remain COMPLETE. RF-801 remains PLANNED and is the next implementation task after this stabilization verification. Start it by auditing and consolidating existing M1/M2 clients, queues and commands; do not add a second workspace store or command pipeline merely to satisfy a proposed filename list.
-
-Remote CI results for the final workflow revision must be checked separately from the isolated results above.
+M5, M6/M6.5 and M7 remain COMPLETE. RF-801 remains PLANNED and is the next implementation task once the corresponding CI is green. Start it by auditing and consolidating existing M1/M2 clients, queues and commands; do not add a second workspace store or command pipeline merely to satisfy a proposed filename list.
