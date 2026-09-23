@@ -19,26 +19,20 @@ jobs:
     name: Quality
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-
       - name: Install dependencies
         run: npm ci
-
       - name: Typecheck
         run: npm run typecheck
-
       - name: Lint
         run: npm run lint
-
       - name: Focused architecture and regression tests
         run: >
           npm run test --
@@ -56,10 +50,8 @@ jobs:
           src/renderer/outline.test.ts
           src/renderer/document-metrics.test.ts
           src/renderer/editor/useDocumentDerivedDataController.test.tsx
-
       - name: Build
         run: npm run build
-
       - name: Verify tests/build did not modify tracked repository files
         if: always()
         shell: bash
@@ -105,6 +97,26 @@ jobs:
             git diff -- .
             exit 1
           fi
+      - name: Capture reproducible regression inputs
+        if: failure() && github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .artifacts/ci/repro
+          git archive --format=tar HEAD | gzip > .artifacts/ci/repro/source.tar.gz
+          tar -czf .artifacts/ci/repro/dependencies.tar.gz node_modules
+          node --version > .artifacts/ci/repro/runtime.txt
+          npm --version >> .artifacts/ci/repro/runtime.txt
+          git rev-parse HEAD >> .artifacts/ci/repro/runtime.txt
+      - name: Upload isolated reproduction inputs
+        if: failure() && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: regression-repro-${{ github.sha }}
+          path: .artifacts/ci/repro/
+          if-no-files-found: warn
+          compression-level: 0
+          retention-days: 1
       - name: Upload full regression report
         if: always()
         uses: actions/upload-artifact@v4
@@ -118,27 +130,22 @@ jobs:
     name: Bundle budget
     runs-on: ubuntu-latest
     timeout-minutes: 25
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-
       - name: Install dependencies
         run: npm ci
-
       - name: Run renderer bundle contract
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p .artifacts/ci
           npm run perf:bundle 2>&1 | tee .artifacts/ci/perf-bundle.log
-
       - name: Verify bundle analysis did not modify tracked repository files
         if: always()
         shell: bash
@@ -150,7 +157,6 @@ jobs:
             git diff -- .
             exit 1
           fi
-
       - name: Upload bundle log
         if: always()
         uses: actions/upload-artifact@v4
