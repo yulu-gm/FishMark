@@ -48,6 +48,10 @@ jobs:
           src/main/editor-foundation-architecture.test.ts
           src/main/build-win-release.test.ts
           src/main/build-mac-release.test.ts
+          src/main/package-scripts.test.ts
+          src/main/ipc/register-workspace-handlers.test.ts
+          src/main/workspace-file-identity-races.integration.test.ts
+          src/main/main.test.ts
           src/renderer/performance/editor-foundation-baseline.test.ts
           src/renderer/outline.test.ts
           src/renderer/document-metrics.test.ts
@@ -57,6 +61,7 @@ jobs:
         run: npm run build
 
       - name: Verify tests/build did not modify tracked repository files
+        if: always()
         shell: bash
         run: |
           set -euo pipefail
@@ -66,6 +71,48 @@ jobs:
             git diff -- .
             exit 1
           fi
+
+  regression:
+    name: Full regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Prepare workspace runtime
+        run: npm run dev:prepare
+      - name: Run complete Vitest suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .artifacts/ci
+          npm run test -- --reporter=default --reporter=json --outputFile.json=.artifacts/ci/vitest-full.json 2>&1 | tee .artifacts/ci/vitest-full.log
+      - name: Verify regression tests did not modify tracked files
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
+            echo "::error::Regression tests modified tracked repository files."
+            git status --short
+            git diff -- .
+            exit 1
+          fi
+      - name: Upload full regression report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-full-${{ github.sha }}
+          path: .artifacts/ci/vitest-full.*
+          if-no-files-found: warn
+          retention-days: 14
 
   bundle:
     name: Bundle budget
