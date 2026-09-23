@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "recordedHead": "6a14133e48f597ab189c635358bfd45f87af7563",
+  "evidenceRun": 35809691195,
+  "failures": [
+    {
+      "file": "packages/markdown-engine/src/parse-block-map.test.ts",
+      "name": "parseMarkdownDocument block structure > captures list item metadata for ordered, unordered, task, and nested items",
+      "occurrence": 0,
+      "fingerprints": [
+        "23a71ca64362dce7998c05b93a6004da372f19e42ff5ea6e0c28d3623e7ff8e2"
+      ],
+      "reason": "Existing M6 parser/display projection debt (bare markers or nested-container metadata). Deferred to RF-901/RF-902; canonical parser semantics are not changed by M8 entry cleanup."
+    },
+    {
+      "file": "packages/markdown-engine/src/parse-block-map.test.ts",
+      "name": "parseMarkdownDocument block structure > keeps a bare ordered marker as paragraph text until a space commits the list marker",
+      "occurrence": 0,
+      "fingerprints": [
+        "d06cf6c34a0d25824b5a99b7d53c2e0b27e7c82d6b3bc968b2a1d922e8c63d1c"
+      ],
+      "reason": "Existing M6 parser/display projection debt (bare markers or nested-container metadata). Deferred to RF-901/RF-902; canonical parser semantics are not changed by M8 entry cleanup."
+    },
+    {
+      "file": "packages/markdown-engine/src/parse-block-map.test.ts",
+      "name": "parseMarkdownDocument block structure > keeps a quote marker after tab padding and extra spaces in blockquote content",
+      "occurrence": 0,
+      "fingerprints": [
+        "e49a3e21328b354b98c5f094083269a0760c46e75748a2ac3b7bde5ccbfd71dd"
+      ],
+      "reason": "Existing M6 parser/display projection debt (bare markers or nested-container metadata). Deferred to RF-901/RF-902; canonical parser semantics are not changed by M8 entry cleanup."
+    },
+    {
+      "file": "packages/markdown-engine/src/parse-block-map.test.ts",
+      "name": "parseMarkdownDocument block structure > keeps a quote marker after too much normal-space padding in blockquote content",
+      "occurrence": 0,
+      "fingerprints": [
+        "839c5ad491eab691c52cd12b081328dd21d3147a0b2283783ea07f93a6eeaa21"
+      ],
+      "reason": "Existing M6 parser/display projection debt (bare markers or nested-container metadata). Deferred to RF-901/RF-902; canonical parser semantics are not changed by M8 entry cleanup."
+    },
+    {
+      "file": "packages/markdown-engine/src/parse-block-map.test.ts",
+      "name": "parseMarkdownDocument block structure > keeps absolute offsets correct on CRLF source",
+      "occurrence": 0,
+      "fingerprints": [
+        "f77f896b3d337cb39a32067cc5ca657b7baeec649141d18365bfb90633d2523b"
+      ],
+      "reason": "Existing M6 parser/display projection debt (bare markers or nested-container metadata). Deferred to RF-901/RF-902; canonical parser semantics are not changed by M8 entry cleanup."
+    },
+    {
+      "file": "packages/markdown-engine/src/parse-block-map.test.ts",
+      "name": "parseMarkdownDocument block structure > stitches multi-line blockquote line ranges and inline AST",
+      "occurrence": 0,
+      "fingerprints": [
+        "670632e8fb6baa2ac18afe53960d486dc857e2ac1bae8c06d2d04a9fefbd1503"
+      ],
+      "reason": "Existing M6 parser/display projection debt (bare markers or nested-container metadata). Deferred to RF-901/RF-902; canonical parser semantics are not changed by M8 entry cleanup."
+    },
+    {
+      "file": "packages/markdown-engine/src/parse-block-map.test.ts",
+      "name": "parseMarkdownDocument block structure > stitches nested blockquote markers and inline content from the deepest quote prefix",
+      "occurrence": 0,
+      "fingerprints": [
+        "ff0c8a9752100c23a1b44703e4644778343fe34fd99479cb18984c945a5c1b63"
+      ],
+      "reason": "Existing M6 parser/display projection debt (bare markers or nested-container metadata). Deferred to RF-901/RF-902; canonical parser semantics are not changed by M8 entry cleanup."
+    },
+    {
+      "file": "packages/markdown-engine/src/parse-block-map.test.ts",
+      "name": "parseMarkdownDocument block structure > stitches task list item content range and inline code AST on item level",
+      "occurrence": 0,
+      "fingerprints": [
+        "e4ce21b98f8ce77afc2a35eac8b578c61c8536be040cc603004f90dcf5aa3ddc"
+      ],
+      "reason": "Existing M6 parser/display projection debt (bare markers or nested-container metadata). Deferred to RF-901/RF-902; canonical parser semantics are not changed by M8 entry cleanup."
+    },
+    {
+      "file": "src/renderer/code-editor.test.ts",
+      "name": "createCodeEditorController > commits a trailing dash as a list marker only after marker padding is typed",
+      "occurrence": 0,
+      "fingerprints": [
+        "153a44284317869e865d292619dc18564837be5b40aefbe04576c460e7a0c4b6"
+      ],
+      "reason": "Existing M6 bare-marker editing-experience defect: list rendering commits before marker padding. Deferred to RF-901/RF-902; not fixed or skipped by M8 entry cleanup."
+    },
+    {
+      "file": "src/renderer/code-editor.test.ts",
+      "name": "createCodeEditorController > commits a trailing ordered marker only after marker padding is typed",
+      "occurrence": 0,
+      "fingerprints": [
+        "153a44284317869e865d292619dc18564837be5b40aefbe04576c460e7a0c4b6"
+      ],
+      "reason": "Existing M6 bare-marker editing-experience defect: list rendering commits before marker padding. Deferred to RF-901/RF-902; not fixed or skipped by M8 entry cleanup."
+    }
+  ],
+  "skipped": []
+}

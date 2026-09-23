@@ -31,6 +31,8 @@
     "lint": "eslint .",
     "typecheck": "npm run build:workspace-application && npm run build:workspace-infrastructure && tsc --noEmit -p tsconfig.renderer.json && tsc --noEmit -p tsconfig.electron.json && tsc --noEmit -p tsconfig.vitest.json && tsc --noEmit -p tsconfig.cli.json",
     "test": "vitest run",
+    "test:regression": "node scripts/run-full-regression.mjs",
+    "test:workspace-safety": "node scripts/probe-workspace-safety.mjs",
     "test:list-geometry": "node scripts/probe-list-geometry.mjs",
     "test:cursor-hit-geometry": "node scripts/probe-cursor-hit-geometry.mjs",
     "test:editing-experience": "node scripts/probe-markdown-editing-experience.mjs",

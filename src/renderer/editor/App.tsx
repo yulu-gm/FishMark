@@ -47,6 +47,7 @@ import {
   shouldWarnForThemeDynamicFallback,
 } from "./theme-dynamic-mode";
 import { type ExternalMarkdownFileState } from "./editor-shell-state";
+import type { EditorLoadIdentity } from "./editor-load-identity";
 import type { ThemeSurfaceRuntimeMode } from "../shader/theme-surface-runtime";
 import { WorkspaceShell, type WorkspaceViewContainerId } from "./WorkspaceShell";
 import { useEditorApplicationController } from "./useEditorApplicationController";
@@ -330,13 +331,6 @@ function EditorShell({
     return editorRef.current?.getContent() ?? editorContentRef.current;
   }, []);
 
-  const {
-    outlineItems,
-    currentDocumentMetrics,
-    applyDocumentDerivedDataNow,
-    scheduleDocumentDerivedDataUpdate
-  } = useDocumentDerivedDataController();
-
   const editorApplicationController = useEditorApplicationController({
     fishmark,
     setEditorContentSnapshot: (content) => {
@@ -365,6 +359,21 @@ function EditorShell({
     reorderWorkspaceTab,
     loadInitialWorkspaceSnapshot
   } = workspaceController;
+  const activeDocumentTabId = activeDocument?.tabId ?? null;
+  const documentIdentity = useMemo<EditorLoadIdentity | null>(
+    () => activeDocumentTabId === null ? null : {
+      tabId: activeDocumentTabId,
+      epoch: state.editorEpoch,
+      loadRevision: editorLoadRevision
+    },
+    [activeDocumentTabId, state.editorEpoch, editorLoadRevision]
+  );
+  const {
+    outlineItems,
+    currentDocumentMetrics,
+    applyDocumentDerivedDataNow,
+    scheduleDocumentDerivedDataUpdate
+  } = useDocumentDerivedDataController({ documentIdentity });
   const {
     resetAutosaveRuntime,
     scheduleAutosave,
@@ -449,7 +458,6 @@ function EditorShell({
     applyThemeRuntimeEnv(document.documentElement, createThemeRuntimeEnv(themeMode));
   });
   const readActiveDocumentLoadContent = useEffectEvent(() => activeDocument?.content ?? null);
-  const activeDocumentTabId = activeDocument?.tabId ?? null;
 
   useEffect(() => {
     const activeDocumentContent = readActiveDocumentLoadContent();
@@ -1506,22 +1514,14 @@ function EditorShell({
   );
 
   const handleActiveBlockChange = useCallback((nextActiveBlockState: ActiveBlockState): void => {
-    const previousSnapshot = activeBlockStateRef.current?.snapshot ?? null;
-    const nextSnapshot = nextActiveBlockState.snapshot;
-
     activeBlockStateRef.current = nextActiveBlockState;
-
-    if (previousSnapshot !== nextSnapshot) {
-      if (previousSnapshot === null) {
-        applyDocumentDerivedDataNow(nextSnapshot);
-      } else {
-        scheduleDocumentDerivedDataUpdate(nextSnapshot);
-      }
-    }
+    // The controller owns snapshot de-duplication within the current load identity.
+    // An epoch-only rebind can publish the same snapshot for a new load boundary.
+    scheduleDocumentDerivedDataUpdate(nextActiveBlockState.snapshot);
 
     setActiveShortcutGroupId(resolveEditorShortcutGroupId(nextActiveBlockState));
     setActiveHeadingId(nextActiveBlockState.activeHeadingId);
-  }, [applyDocumentDerivedDataNow, scheduleDocumentDerivedDataUpdate]);
+  }, [scheduleDocumentDerivedDataUpdate]);
 
   const handleReloadExternalFile = useCallback((): void => {
     void externalConflictController.reloadFromDisk().then(() => {

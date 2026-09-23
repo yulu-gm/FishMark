@@ -1301,11 +1301,10 @@ describe("App autosave", () => {
       root.render(createElement(App));
     });
 
-    await vi.dynamicImportSettled();
-
+    // Keep lazy module resolution inside act so Suspense commits are flushed,
+    // rather than leaving React's reveal delay pending behind fake timers.
     await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
+      await vi.dynamicImportSettled();
     });
   }
 
@@ -5385,6 +5384,71 @@ describe("App autosave", () => {
     expect(
       document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.viewportHeight)
     ).toBe(String(window.innerHeight));
+  });
+
+  it("replaces outline offsets and metrics immediately when switching with a pending derived update", async () => {
+    queueWorkspaceOpenDocuments(
+      { path: "C:/notes/first.md", name: "first.md", content: "# First\n" },
+      { path: "C:/notes/second.md", name: "second.md", content: "intro\n\n## Second\n" }
+    );
+    await renderApp();
+    applyDocumentEdits.mockImplementation(async (input: Parameters<Window["fishmark"]["applyDocumentEdits"]>[0]) => {
+      const tab = workspaceTabs.find((entry) => entry.tabId === input.tabId);
+      if (!tab) throw new Error(`Unknown fixture tab ${input.tabId}`);
+      expect(input.baseRevision).toBe(tab.revision);
+      let content = tab.content;
+      for (const change of [...input.changes].reverse()) {
+        content = content.slice(0, change.from) + change.insert + content.slice(change.to);
+      }
+      const revision = input.baseRevision + 1;
+      workspaceTabs = workspaceTabs.map((entry) => entry.tabId === input.tabId
+        ? { ...entry, content, revision, isDirty: revision !== entry.savedRevision }
+        : entry);
+      return { kind: "applied", acknowledgedSequence: input.clientSequence, revision, isDirty: true };
+    });
+    await act(async () => {
+      menuCommandListener?.("open-markdown-file");
+    });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-fishmark-command="outline"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await act(async () => {
+      codeEditorMock.changeContent("# PendingAlpha\n");
+    });
+    // The typing update is still debounced when the other document opens.
+    expect(document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.wordCount)).toBe("5");
+    await act(async () => {
+      menuCommandListener?.("open-markdown-file");
+    });
+
+    const outline = container.querySelector('[data-fishmark-region="outline-panel"]');
+    expect(outline?.textContent).toContain("Second");
+    expect(outline?.textContent).not.toContain("First");
+    expect(outline?.textContent).not.toContain("PendingAlpha");
+    expect(document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.wordCount)).toBe("11");
+    const heading = Array.from(outline?.querySelectorAll("button") ?? [])
+      .find((button) => button.textContent?.includes("Second"));
+    expect(heading).toBeDefined();
+    await act(async () => {
+      heading!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(codeEditorMock.getNavigateCalls()).toEqual([7]);
+    await act(async () => {
+      vi.advanceTimersByTime(DOCUMENT_DERIVED_DATA_UPDATE_DELAY_MS);
+    });
+    expect(outline?.textContent).toContain("Second");
+    expect(document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.wordCount)).toBe("11");
+
+    const firstTab = Array.from(container.querySelectorAll<HTMLButtonElement>('[data-fishmark-region="workspace-tab"]'))
+      .find((button) => button.textContent?.includes("first.md"));
+    expect(firstTab).toBeDefined();
+    await act(async () => {
+      firstTab!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(outline?.textContent).toContain("PendingAlpha");
+    expect(outline?.textContent).not.toContain("Second");
+    expect(document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.wordCount)).toBe("12");
   });
 
   it("defers derived metrics refresh after editor content changes", async () => {

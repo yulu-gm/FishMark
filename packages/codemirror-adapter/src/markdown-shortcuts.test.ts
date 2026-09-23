@@ -75,7 +75,14 @@ describe("markdown shortcut metadata", () => {
       }
     ]);
 
-    expect(DEFAULT_TEXT_SHORTCUT_GROUP.shortcuts).toBe(TEXT_EDITING_SHORTCUTS);
+    // Display metadata intentionally stays separate from lazy command runners.
+    expect(DEFAULT_TEXT_SHORTCUT_GROUP.shortcuts).toEqual(
+      TEXT_EDITING_SHORTCUTS.map(({ id, key, label }) => ({ id, key, label }))
+    );
+    for (const group of SHORTCUT_GROUPS) {
+      for (const descriptor of group.shortcuts) expect(descriptor).not.toHaveProperty("run");
+    }
+    for (const shortcut of TEXT_EDITING_SHORTCUTS) expect(shortcut.run).toBeTypeOf("function");
     expect(TABLE_EDITING_SHORTCUT_GROUP.shortcuts.map(({ label }) => label)).toEqual([
       "Next Cell",
       "Previous Cell",

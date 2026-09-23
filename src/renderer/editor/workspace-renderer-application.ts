@@ -1215,10 +1215,18 @@ export class WorkspaceRendererApplication {
   }
 
   private ensureEditorEditBinding(identity: EditorLoadIdentity): WorkspaceEditTabBinding | null {
-    const document = getActiveDocument(this.state);
+    // Transport hydration must use canonical metadata, never the UI's dirty overlay.
+    const document = this.canonical.kind === "known" ? this.canonical.snapshot.activeDocument : null;
     if (document === null || document.tabId !== identity.tabId) return null;
     const existing = this.editBindings.get(identity.tabId);
     if (existing !== undefined) {
+      // Cancelling a close changes only the epoch. Its acknowledged queue may be
+      // newer than the last full workspace snapshot; retiring it would lose that
+      // checkpoint and hydrate incompatible revision/dirty presentation data.
+      if (existing.identity.loadRevision === identity.loadRevision) {
+        existing.identity = identity;
+        return existing.binding;
+      }
       const queue = this.editClient.getTabState(identity.tabId);
       if (
         queue !== null &&

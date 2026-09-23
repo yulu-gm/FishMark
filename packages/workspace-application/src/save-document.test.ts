@@ -39,21 +39,25 @@ describe("createSaveDocument", () => {
       expectedWindowId: "window-1",
       content: "captured"
     });
-    const writeDocument = vi.fn(async (input: { path: string; content: string }) => ({
-      status: "success" as const,
-      diskVersion: {
-        normalizedPath: "C:/notes/a.md",
+    let persistedVersion: { normalizedPath: string; mtimeMs: number; size: number; contentHash: string } | null = null;
+    const writeDocument = vi.fn(async (input: { path: string; content: string }) => {
+      persistedVersion = {
+        normalizedPath: input.path,
         mtimeMs: 1,
         size: input.content.length,
         contentHash: "hash-a"
-      },
-      document: {
-        path: input.path,
-        name: "a.md",
-        content: input.content,
-        encoding: "utf-8" as const
-      }
-    }));
+      };
+      return {
+        status: "success" as const,
+        diskVersion: persistedVersion,
+        document: {
+          path: input.path,
+          name: "a.md",
+          content: input.content,
+          encoding: "utf-8" as const
+        }
+      };
+    });
     const resolved = async () => ({
       canonicalPath: "C:/notes/a.md",
       identity,
@@ -67,7 +71,7 @@ describe("createSaveDocument", () => {
       fileLocationOperations: createImmediateCoordinator(),
       fileObjectOperations: createImmediateCoordinator(),
       fileIdentity: { resolveExisting: resolved, resolveProspective: resolved },
-      disk: { readDiskVersion: async () => null, writeDocument },
+      disk: { readDiskVersion: async () => persistedVersion, writeDocument },
       dialog: { chooseSavePath: vi.fn() },
       watcher: {
         beginInternalWrite: vi.fn(),

@@ -6,11 +6,13 @@
 
 **Created:** 2026-07-11
 
-**Last updated:** 2026-09-22
+**Last updated:** 2026-09-23
 
 **Overall status:** `IN_PROGRESS`
 
 **Current task:** none. `RF-506` / M5 is complete; the next dependency-ready task is `RF-801` (M8), which remains `PLANNED` until explicitly started.
+
+**M8 entry stabilization:** see `reports/reviews/2026-09-23-m8-readiness.md` for the startup-test, load-identity, cancelled-close, exact regression baseline, and real Electron safety evidence. This does not start RF-801 or claim M9 completion.
 
 **Next required work:** start `RF-801` when M8 work is authorized. M9 still owns the broader reproducible open/input/selection/scroll/tab-switch/memory and real-platform performance/E2E/security budgets.
 

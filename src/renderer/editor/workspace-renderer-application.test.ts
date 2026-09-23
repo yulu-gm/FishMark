@@ -143,6 +143,52 @@ async function acknowledgeEditorEditable(application: WorkspaceRendererApplicati
 }
 
 describe("WorkspaceRendererApplication", () => {
+  it("retains the acknowledged edit queue across a cancelled close epoch rebind", async () => {
+    const applyDocumentEdits = vi.fn(async (input: { clientSequence: number; baseRevision: number }) => ({
+      kind: "applied" as const, acknowledgedSequence: input.clientSequence,
+      revision: input.baseRevision + 1, isDirty: true
+    }));
+    const application = createApplication({
+      bridge: {
+        applyDocumentEdits,
+        flushDocumentEdits: vi.fn(async (input: { throughSequence: number }) => ({
+          kind: "flushed" as const, acknowledgedSequence: input.throughSequence,
+          revision: input.throughSequence, savedRevision: 0, isDirty: true
+        })),
+        confirmWorkspaceWindowClose: vi.fn(async () => ({ status: "cancelled" as const })),
+        onDocumentProjection: vi.fn(() => () => {})
+      }
+    });
+    const before = consumeEditorLoad(application);
+    expect(application.recordEditorDocumentChangeFrame({
+      identity: before, baseText: "# First\n", resultingText: "# First!\n",
+      changes: [{ from: 7, to: 7, insert: "!" }]
+    })).toBe(true);
+    await vi.waitFor(() => expect(applyDocumentEdits).toHaveBeenCalledTimes(1));
+    // The shell intentionally has old canonical text/revisions and a disposable
+    // dirty overlay. It must not become a fresh transport hydration checkpoint.
+    expect(application.getState().workspaceSnapshot?.activeDocument).toMatchObject({
+      content: "# First\n", revision: 0, savedRevision: 0, isDirty: true
+    });
+    const closing = application.confirmWorkspaceWindowClose("close-1");
+    await acknowledgeEditorReadOnly(application);
+    await vi.waitFor(() => expect(application.getState().editorTransition?.phase).toBe("releasing"));
+    const rebound = consumeEditorLoad(application);
+    expect(rebound.epoch).toBeGreaterThan(before.epoch);
+    expect(rebound.loadRevision).toBe(before.loadRevision);
+    await acknowledgeEditorEditable(application);
+    await expect(closing).resolves.toEqual({ kind: "committed", value: false });
+    expect(application.getEditorViewSnapshot()?.activeDocument?.content).toBe("# First!\n");
+    expect(application.recordEditorDocumentChangeFrame({
+      identity: rebound, baseText: "# First!\n", resultingText: "# First!!\n",
+      changes: [{ from: 8, to: 8, insert: "!" }]
+    })).toBe(true);
+    await vi.waitFor(() => expect(applyDocumentEdits).toHaveBeenCalledTimes(2));
+    expect(applyDocumentEdits.mock.calls[1]?.[0]).toMatchObject({ clientSequence: 2, baseRevision: 1 });
+    expect(application.getEditorViewSnapshot()?.activeDocument?.content).toBe("# First!!\n");
+    application.dispose();
+  });
+
   it("routes an editor frame only through revisioned edits while keeping canonical content disposable", async () => {
     const applyDocumentEdits = vi.fn(async (input: {
       clientSequence: number;
