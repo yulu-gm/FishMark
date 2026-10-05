@@ -29,7 +29,9 @@ application 生产模块没有 React、`editor/` 或 CodeMirror 实现反向依�
 
 ## Open questions
 
-无 RF-801 阻断性未决问题。主体提交后的 Node 22 默认并发远端 CI 由父代理继续核验；当前报告只确认本地冻结树。十条既有测试缺陷、正式行为的 99 个 known-defect 观测、全面 Windows/macOS IME、端到端延迟及 Electron 安全验收仍归 M9。安全探针出现与基线相同的 `MaxListenersExceededWarning`（11 个 destroyed listeners），记录为非阻断观察，不据此声称 M9 已完成。
+无 RF-801 阻断性未决问题。主体 `5af4c96aa1eaf8c65b312a7293fbbf1c61e701a2` 已推送 main；独立核验 [CI 37318182770](https://github.com/yulu-gm/FishMark/actions/runs/37318182770) 的精确 head、完成状态及执行日志，Quality、Full regression、Bundle budget 三个 job 全部成功。Node v22.23.3 默认并发原完整回归为 216 文件/2884 项、2874 passed / 10 exact known failures、0 unexpected/errors；Quality focused 684/684，类型、lint、构建及 Linux 真实生产安全七项通过。原包预算全部通过，详细数值见测试报告。本机双 worker 结果与默认远端结果分别保留。
+
+十条既有测试缺陷、正式行为的 99 个 known-defect 观测、全面 Windows/macOS IME、端到端延迟及 Electron 安全验收仍归 M9。安全探针出现与基线相同的 `MaxListenersExceededWarning`（11 个 destroyed listeners），记录为非阻断观察，不据此声称 M9 已完成。
 
 ## Result: PASS
 

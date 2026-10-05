@@ -14,7 +14,7 @@
 | RF-802 / RF-803 | PLANNED | 未启动组件或主进程拆分 |
 | M9 | 未完成 | 未宣称全面性能、平台 IME、E2E、安全验收完成 |
 
-前置入口修复 `f15bc8e` 仅更新已提交 borderless rail 的旧断言，focused 先红后绿；父代理确认 main CI `37306043326` 三个 job 全绿。主体复用唯一 WorkspaceRendererApplication、edit client、pending queue 与 coordinator，迁移 owner 至 application；save scheduler 只负责 timer/replay/origin。初审两项 P1 已修复并回归。独立 focused 450/450、foundation 310/310、typecheck/lint/build、原 bundle、正式行为 121/121、macOS 真实生产 safety 七项通过。完整精确回归用官方双 worker 环境入口执行全部 216 文件/2884 项，2874 passed、10 exact known、0 unexpected/skip/error；两轮默认并发失败和同机基线前置修复保留。详见 [任务总结](../reports/task-summaries/RF-801.md) 与 [测试报告](test-report.md)。主体提交及远端默认 Node 22 CI 由父代理继续核验。
+前置入口修复 `f15bc8e` 仅更新已提交 borderless rail 的旧断言，focused 先红后绿；父代理确认 main CI `37306043326` 三个 job 全绿。主体复用唯一 WorkspaceRendererApplication、edit client、pending queue 与 coordinator，迁移 owner 至 application；save scheduler 只负责 timer/replay/origin。初审两项 P1 已修复并回归。独立 focused 450/450、foundation 310/310、typecheck/lint/build、原 bundle、正式行为 121/121、macOS 真实生产 safety 七项通过。完整精确回归用官方双 worker 环境入口执行全部 216 文件/2884 项，2874 passed、10 exact known、0 unexpected/skip/error；两轮默认并发失败和同机基线前置修复保留。详见 [任务总结](../reports/task-summaries/RF-801.md) 与 [测试报告](test-report.md)。主体 `5af4c96` 已推送 main；独立核验 [CI 37318182770](https://github.com/yulu-gm/FishMark/actions/runs/37318182770) 精确 head 与日志，Node v22.23.3 默认完整回归、Quality（684 focused 及 Linux safety 七项）和原 Bundle budget 全部 PASS。
 
 以下为历史记录；其中“RF-801 仍 PLANNED”只反映当日状态。
 

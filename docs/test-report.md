@@ -15,7 +15,19 @@ RF-801 已达到 COMPLETE，M8 为 **1/3**；RF-802、RF-803 与 M9 保持后续
 | 正式编辑行为探针 | `npm run test:editor-behavior -- --report .artifacts/editor-behavior/rf801-acceptance.json` | PASS，121/121 cases、2541 targets；verified-existing 79、verified-runner 2363、known-defect 99、unexpected 0、not-run 0，25.503 秒。manual save 走迁入后的 application 命令入口。 |
 | diff 格式 | `git diff --check` | PASS。 |
 
-完整回归的 PASS 是原精确已知失败门禁接受这 10 条已登记失败，**不是 raw Vitest 全绿**。本机使用 Vitest 官方环境变量限制 2 workers，不过滤文件或 case，不更改仓库默认配置、watchdog、baseline 或 fingerprint。RF-801 提交后的默认 Node 22 远端 CI 由父代理补证，不能用前置修复 CI 替代主体 CI。
+完整回归的 PASS 是原精确已知失败门禁接受这 10 条已登记失败，**不是 raw Vitest 全绿**。本机使用 Vitest 官方环境变量限制 2 workers，不过滤文件或 case，不更改仓库默认配置、watchdog、baseline 或 fingerprint。主体默认 Node 22 远端 CI 已单独核验，证据如下，不使用前置修复 CI 替代。
+
+### 主体提交后的默认远端 CI
+
+主体已推送 main，精确 head 为 `5af4c96aa1eaf8c65b312a7293fbbf1c61e701a2`。独立通过 GitHub API 核验 [Actions run 37318182770](https://github.com/yulu-gm/FishMark/actions/runs/37318182770) 为 completed / success，三个 job 全部 success；同时读取三个 job 的真实执行日志及安全产物。运行环境为 Linux、Node v22.23.3；该 run 没有设置本机 worker 限制。
+
+| Job | 新鲜远端证据 |
+| --- | --- |
+| Quality | typecheck、lint、build 全部通过；focused 17 files / 684 tests 全通过；`xvfb-run -a npm run test:workspace-safety` PASS，下载产物确认 Linux / Electron 41.2.0、七项 checks、promptResponses `[2,0]` 及精确最终文本；tracked-tree 检查通过。 |
+| Full regression | 默认 `npm run test:regression` 原 wrapper，216 files / 2884 cases、2874 passed / 10 exact known failures、0 unexpected / collection-hook-unhandled errors，86.82 秒；gate PASS，tracked-tree 检查通过。 |
+| Bundle budget | 原 `npm run perf:bundle` 合同 PASS；179699/300000 B、56957/90000 B、94905/260000 B、1426441/1430000 B；forbidden-initial 与 required-lazy 全通过，tracked-tree 检查通过。 |
+
+本机与远端包体积因构建环境存在差异，分别保留实测数字，不互相替换。日志副本为 `/tmp/rf801-ci-quality.log`、`/tmp/rf801-ci-full.log`、`/tmp/rf801-ci-bundle.log`；安全报告副本为 `/tmp/rf801-ci-safety-final/workspace-safety.json`。原始日志与 artifacts 可从上述 run 查看。远端安全日志同样保留 destroyed listeners warning；不影响该门禁，也不替代 M9 完整安全验收。
 
 ### 首次失败与同机基线对照（保留）
 
