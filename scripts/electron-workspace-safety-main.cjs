@@ -61,7 +61,8 @@ async function until(label, check) {
     window.focus();
     await evaluate('document.querySelector(".cm-content").focus()');
     const modifiers = process.platform === "darwin" ? ["meta"] : ["control"];
-    const keyCode = process.platform === "darwin" ? "ArrowDown" : "End";
+    // Electron 使用 Accelerator 键码 Down，收到的 DOM key 才是 ArrowDown。
+    const keyCode = process.platform === "darwin" ? "Down" : "End";
     window.webContents.sendInputEvent({ type: "keyDown", keyCode, modifiers });
     window.webContents.sendInputEvent({ type: "keyUp", keyCode, modifiers });
     await until("caret at document end", () => evaluate(`(() => {
