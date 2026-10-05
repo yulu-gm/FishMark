@@ -5962,10 +5962,10 @@ describe("App autosave", () => {
     expect(welcomeMetaRule).toContain("color: var(--fishmark-welcome-meta-text, var(--fishmark-text-muted, #687180));");
     expect(recentFileListRule).toContain("max-height: min(42vh, 18rem);");
     expect(recentFileListRule).toContain("overflow-y: auto;");
-    expect(settingsEntryRule).toContain("border: 1px solid var(--fishmark-rail-control-border, var(--fishmark-control-border));");
-    expect(settingsEntryRule).toContain("background: var(--fishmark-rail-control-bg, var(--fishmark-control-bg));");
+    expect(settingsEntryRule).toContain("border: 0;");
+    expect(settingsEntryRule).toContain("background: transparent;");
+    expect(settingsEntryRule).toContain("box-shadow: none;");
     expect(settingsEntryRule).toContain("color: var(--fishmark-rail-control-fg, var(--fishmark-control-fg));");
-    expect(settingsEntryHoverRule).toContain("--fishmark-rail-control-border-hover");
     expect(settingsEntryHoverRule).toContain("background: var(--fishmark-rail-control-bg-hover, var(--fishmark-control-bg-hover));");
     expect(settingsEntryHoverRule).toContain("color: var(--fishmark-rail-control-fg-hover, var(--fishmark-text-primary));");
   });
