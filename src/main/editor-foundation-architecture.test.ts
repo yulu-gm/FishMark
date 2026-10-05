@@ -23,7 +23,7 @@ afterEach(() => {
 describe("editor foundation architecture guard", () => {
   it("keeps the editor test bridge behind application-owned commands", () => {
     const applicationSource = readFileSync(
-      resolve(process.cwd(), "src/renderer/editor/workspace-renderer-application.ts"),
+      resolve(process.cwd(), "src/renderer/application/workspace-renderer-application.ts"),
       "utf8"
     );
     const hookSource = readFileSync(
@@ -47,7 +47,7 @@ describe("editor foundation architecture guard", () => {
       "utf8"
     );
     const editorShellStateSource = readFileSync(
-      resolve(process.cwd(), "src/renderer/editor/editor-shell-state.ts"),
+      resolve(process.cwd(), "src/renderer/application/editor-shell-state.ts"),
       "utf8"
     );
 
@@ -105,7 +105,7 @@ describe("editor foundation architecture guard", () => {
       "src/preload/product-api.ts",
       "src/preload/preload.ts",
       "src/main/main.ts",
-      "src/renderer/editor/workspace-renderer-application.ts",
+      "src/renderer/application/workspace-renderer-application.ts",
       "src/renderer/editor/useWorkspaceController.ts",
       "src/renderer/editor/WorkspaceShell.tsx"
     ];

@@ -6,6 +6,18 @@
 
 ## 当前项目判断
 
+### 2026-10-05 RF-801：独立统一验收 PASS / COMPLETE
+
+| 任务 | 当前状态 | 本轮边界 |
+| --- | --- | --- |
+| RF-801 | COMPLETE | 独立架构与任务验收 PASS；M8 完成 1/3 |
+| RF-802 / RF-803 | PLANNED | 未启动组件或主进程拆分 |
+| M9 | 未完成 | 未宣称全面性能、平台 IME、E2E、安全验收完成 |
+
+前置入口修复 `f15bc8e` 仅更新已提交 borderless rail 的旧断言，focused 先红后绿；父代理确认 main CI `37306043326` 三个 job 全绿。主体复用唯一 WorkspaceRendererApplication、edit client、pending queue 与 coordinator，迁移 owner 至 application；save scheduler 只负责 timer/replay/origin。初审两项 P1 已修复并回归。独立 focused 450/450、foundation 310/310、typecheck/lint/build、原 bundle、正式行为 121/121、macOS 真实生产 safety 七项通过。完整精确回归用官方双 worker 环境入口执行全部 216 文件/2884 项，2874 passed、10 exact known、0 unexpected/skip/error；两轮默认并发失败和同机基线前置修复保留。详见 [任务总结](../reports/task-summaries/RF-801.md) 与 [测试报告](test-report.md)。主体提交及远端默认 Node 22 CI 由父代理继续核验。
+
+以下为历史记录；其中“RF-801 仍 PLANNED”只反映当日状态。
+
 ### 2026-09-22 M5 / RF-506 正式收口 COMPLETE
 
 最终 GitHub CI 在 `3977d5f` 上确认 Quality 与 Bundle budget 两个 blocking job 全绿。Quality：typecheck PASS、lint PASS、focused architecture/regression **347/347**、build PASS、tracked tree clean PASS。Bundle 按**原预算**全部 PASS：`maxInitialChunkBytes=179699/300000`、`maxInitialChunkGzipBytes=56955/90000`、`totalInitialGzipBytes=93918/260000`、`totalJsGzipBytes=1425457/1430000`；KaTeX/Mermaid 等 forbidden-initial 与 required-lazy 合同继续保持。
@@ -432,7 +444,6 @@ Editor Foundation 重构中的 `RF-101` 已进入 `DEV_DONE`，等待独立架�
 **非 Electron 批次**：`npm run typecheck`（2 个 workspace 构建 + renderer/electron/vitest/cli 四套配置）**exit 0**；`npm run lint` **0 error / 8 既有 warning**；`npm run build`（clean + renderer + electron + cli）**exit 0**；architecture guard **234/234**；全量 vitest **2788 passed / 1 skipped / 11 failed（2800）**，失败集合与 M6 前**逐条相同**——`packages/markdown-engine/src/parse-block-map.test.ts` 8 + `src/renderer/document-metrics.test.ts` 1 + `src/renderer/code-editor.test.ts` 2（bare-marker 引擎漂移同族，**无新增、无删除覆盖**）。
 **Electron 批次（串行独占，先 oracle 后探针）**：oracle **`passed 121/121 cases / 2541 targets / verified-existing=79 / verified-runner=2363 / known-defect=99 / unexpected=0 / not-run=0`**，报告 `.artifacts/editor-behavior/m6.5-final.json`；`test:empty-document-layout`、`test:blockquote-typora-visual`、`test:mermaid-footnote-render`、`test:table-layout`、`test:table-focus-scroll` **全部 exit 0**；`test:editing-experience` **exit 1**，失败恰为已记录的 **5 条 bare-marker 族**（bare `-`、bare ordered marker、两条 IME 组合预览、空白行中文输入），表格类 case 全 pass，与 `parse-block-map`/`code-editor` 同根因，非本批引入。
 **仍明确不做（留给后续任务，不属本次声明）**：RF-702（HTML 导出切到 canonical）、RF-703（outline/指标统一到 `EditorDerivedSnapshot`，合并渲染层 `deriveOutlineItems` 与 `EditorDerivedState.outlineHeadings` 两条派生）、包体积预算（`perf:bundle` 仍为同样 4 个上限 FAIL：344036/300000、92375/90000、267192/260000、1437041/1430000；15 个 `forbiddenInitialSourceGroup` 与 4 个 `requiredLazyChunk` 全 PASS，source group 中已无 `editor-core`）、M5 最终性能验收、M7–M10，以及三个已测量待定契约的产品行为候选（未聚焦时异步预览长高会把视口推移整图高；编辑轴 wysiwym↔source 切换上方内容高度变化导致的有界位移；widget 池 DOM 复用累积 cell 监听器）。
-
 
 
 

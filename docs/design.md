@@ -34,7 +34,7 @@ MVP 应当像一个原生桌面写作工具：
 
 M6 / M6.5 已于 2026-09-20 收口：`packages/editor-core/` 已删除，architecture guard 为 7 包 / 13 规则 / `exceptions: []`；canonical snapshot 与共享 render plan 已成为编辑显示主路径，嵌套 list/blockquote 中的 heading、code fence、table、math/Mermaid 等叶子复用同一语义结构。左侧壳层采用常驻 rail + Search/Outline 共用的 docked sidebar，正文采用固定 measure，避免模式切换和普通面板开合导致整篇重新排版。
 
-M7 已于 2026-09-22 收口：HTML export 经 `markdown-presentation` 消费 canonical render plan，Outline 与 document metrics 统一消费同一 `EditorDerivedSnapshot` / revision，renderer 不再为这些消费者维护独立 Markdown parser。当前重构剩余重点转为应用组合层与产品级收尾：RF-506 的最终性能/bundle 预算仍 pending；M8 清理 React/main/preload 组合层，M9 完成性能、真实 Electron E2E 与安全门禁，M10 做兼容/死代码清理和最终验收。
+M7 已于 2026-09-22 收口：HTML export 经 `markdown-presentation` 消费 canonical render plan，Outline 与 document metrics 统一消费同一 `EditorDerivedSnapshot` / revision，renderer 不再为这些消费者维护独立 Markdown parser。当前重构剩余重点转为应用组合层与产品级收尾：RF-506/M5 已按原 bundle 预算收口；M8 的 RF-801 已完成非 React 命令与订阅层，RF-802/803 继续清理 React/main/preload 组合层，M9 完成更广泛的性能、真实 Electron E2E 与安全门禁，M10 做兼容/死代码清理和最终验收。
 
 特殊区域的光标视口行为由 `codemirror-adapter/src/viewport-reveal.ts` 开始统一：鼠标点击使用 `preserve`（已可见则不滚），连续键盘导航使用 `nearest`（只做带安全边距的最小修正），显式导航使用 `navigate`（允许居中）。表格和图片已迁入该策略；异步 widget 高度变化造成的 viewport anchor 漂移仍是独立后续问题。
 
@@ -188,3 +188,11 @@ DOM widget 的 reveal 应在 CodeMirror `requestMeasure` 中读取最终几何�
 最终排空发生在 `will-quit`，保留此前窗口关闭确认和 renderer flush。最多等待 5 秒；超时或失败记录错误，保留已完成日志。恢复跳过快照已覆盖的 revision；client sequence 属于瞬态状态，重放每个 entry 使用独立 recovery client。最后一行写入中断时恢复有效前缀并显式提示；untitled 的 null fileIdentity 是合法持久化状态。这是进程崩溃保证，不承诺掉电或硬盘损坏恢复（尚无 fsync/目录同步保证）。
 
 增量缓存目前只对无全局定义的单行纯文本段落证明块边界不变，直接重建该段 inline，并映射后续 inline/table 的位置；支持正文、行尾/EOF 输入和 Backspace。结构编辑、复杂行内语法和含定义文档显式 full fallback，提供 `fallbackReason/fullParseCount/parsedSourceLength`，不得把 fallback 包装成局部性能。树索引、root fingerprint 和后方位置映射仍有全篇成本。桥接拒绝过期计划，多范围事务保持本地版本单调，selection-only 操作复用同一派生快照；该本地版本不是 main 权威版本。
+
+## RF-801：工作区应用边界（2026-10-05，COMPLETE）
+
+`WorkspaceRendererApplication` 位于 `renderer/application`，继续拥有唯一 canonical workspace 投影、edit client、pending queue 与 mutation coordinator。`getState` 和 `getEditorViewSnapshot` 在未变化时返回稳定引用，optimistic text 只从既有队列派生；dirty 不变的后续 frame 仍发出订阅更新。React 的 useWorkspaceController / useEditorApplicationController 仅负责实例、presentation 注入、useSyncExternalStore 和生命周期绑定。
+
+application 的命令 API 统一打开、保存、另存、重载、关闭、排序、跨窗口移动、detach、drop、外部冲突与导出；所有文档写入继续穿过原 coordinator 和 edit barrier。WorkspaceSaveScheduler 负责自动保存 timer/replay/origin，既不写 Markdown 也不建立第二个事务队列。测试驱动的 saveDocument 与用户手动保存共享 scheduler。销毁清理 timer 和订阅，并阻止晚到通知及 replay；StrictMode effect rehearsal 继续使用 start/scheduleDispose 的 epoch 协议。
+
+RendererPlatformGateway 私有持有有限 bridge port，负责 recent/clipboard/link 通知、设置操作错误文本、图片目录选择到 preference 更新以及 preference 更新后的 autosave 调度。组件只处理可见状态和回调；纯平台读取、事件绑定、DOM file 路径转换仍归 composition。EditorLoadIdentity 与 frame/remote-patch 契约归 application，避免该层反向依赖 React 或 CodeMirror 实现。

@@ -1278,3 +1278,18 @@
 - 旧 revision plan 拒绝 dispatch，多范围编辑 revision 不回退，selection-only 读取复用 physical snapshot。
 
 此处不替代 RF-506 前真实 Electron 消费入口、平台 IME/history 和按键到绘制性能验收。
+
+## RF-801 非 React 命令与订阅层（2026-10-05）
+
+- Node/Vitest 直接构建 application：菜单与 test driver 保存共享外部冲突 save-as 策略；drop 批次走同一打开入口，取消不产生错误通知。
+- move/close/detach：编辑 frame 尚未 ack 时先 sealing，不能提前调用 bridge；ack+flush 后才移除，并正确 release。
+- 连续 optimistic frame：canonical Markdown 不被覆盖，getState/getEditorViewSnapshot 无变化时保持引用稳定，dirty 已 true 时后续 frame 仍通知订阅。
+- scheduler：手动保存与导航 reset 不清空真实 in-flight；disposal 清理 timer，晚到 rejection 不发通知、不 replay；设置目录取消不写 preferences。
+- React 集成继续覆盖 StrictMode 单订阅、外部冲突、native-close cancellation、取消后编辑/保存、settings UI 与菜单/按钮/drop 行为。
+- 验收命令：`npm test -- src/renderer/application src/renderer/editor src/renderer/app.autosave.test.ts src/renderer/editor-test-driver.test.ts`、`npm run typecheck`、`npm run lint`、`npm run build`；完整 regression、Electron safety、foundation 与 bundle 原预算由统一验收记录。
+
+RF-801 独立审查退回补充：外部冲突操作排队前捕获 A 的 editor identity，较早 activation 选中 B 后该操作必须 superseded；pending frame 先 ack/flush 后才 resolve；reload 的成功、typed error、cancelled、transport error 均 release。create/activate 的真实 barrier 完成至 caller continuation 间销毁，不得再调 main；IPC 晚到也不得替换旧 projection。
+
+独立 macOS 图标基线修复：`scripts/generate-icons.mjs` 对仅含路径/圆形的 SVG 禁用 Resvg 系统字体扫描。沿用 `src/main/generate-icons.test.ts` 与 `src/main/after-pack-win-icon.test.ts` 原 8 项测试和原 5 秒/30 秒门限；临时对照完整 29 个图标 SHA-256 一致，验证此修复不改变图标数据语义。该项不计入 RF-801 产品能力。
+
+独立 macOS safety probe 输入修复：Electron `sendInputEvent` 必须传 Accelerator 键码 `Down`，不能传 DOM 键名 `ArrowDown`。同机 f15bc8e 临时诊断确认前者生成正常 ArrowDown/meta 事件，后者生成空键/keyCode 0。仅修正 mac 输入参数，保留 Linux End/control、原生输入、15 秒/90 秒原门限和全部保存/关闭断言。受控基线已通过全部 7 checks、prompt `[2,0]`，磁盘精确内容 `Smoke first-save second-save pending-close after-cancel`；冻结 RF-801 主体由独立验收重跑原 probe。

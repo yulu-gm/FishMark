@@ -35,34 +35,12 @@ import { readCompositionState } from "@fishmark/codemirror-adapter";
 
 import { createPreviewAssetUrl } from "../shared/preview-asset-url";
 import type { DocumentTextChange } from "../shared/document-edit";
-import { isSameEditorLoadIdentity, type EditorLoadIdentity } from "./editor/editor-load-identity";
+import { isSameEditorLoadIdentity, type EditorLoadIdentity } from "./application/editor-load-identity";
 
 export const internalDocumentTransaction = Annotation.define<true>();
 
-export type CodeEditorDocumentChangeFrame = Readonly<{
-  identity: EditorLoadIdentity | null;
-  baseText: string;
-  resultingText: string;
-  changes: readonly DocumentTextChange[];
-}>;
-
-export type CodeEditorDiscardedDocumentText = Readonly<{
-  identity: EditorLoadIdentity | null;
-  text: string;
-}>;
-
-export type CodeEditorRemotePatchResult =
-  | Readonly<{ kind: "applied" }>
-  | Readonly<{ kind: "stale-identity" }>
-  | Readonly<{ kind: "text-mismatch" }>
-  | Readonly<{ kind: "invalid-range" }>
-  | Readonly<{ kind: "disposed" }>;
-
-export type CodeEditorCanonicalRestoreResult =
-  | Readonly<{ kind: "restored" }>
-  | Readonly<{ kind: "stale-identity" }>
-  | Readonly<{ kind: "text-mismatch" }>
-  | Readonly<{ kind: "disposed" }>;
+import type { CodeEditorDocumentChangeFrame, CodeEditorDiscardedDocumentText, CodeEditorRemotePatchResult, CodeEditorCanonicalRestoreResult } from "./application/editor-port";
+export type { CodeEditorDocumentChangeFrame, CodeEditorDiscardedDocumentText, CodeEditorRemotePatchResult, CodeEditorCanonicalRestoreResult } from "./application/editor-port";
 
 export type CreateCodeEditorControllerOptions = {
   parent: Element;

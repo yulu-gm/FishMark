@@ -127,8 +127,21 @@ Intake：`docs/plans/2026-09-18-rf-601-intake.md`。执行交接：`docs/plans/2
 状态：**M7 COMPLETE**；RF-701 / RF-702 / RF-703 全部 ACCEPTED。
 
 - [x] RF-702：HTML export 改由 `MarkdownDocumentTree + markdown-presentation render plan` 驱动；focused 42/42、typecheck/build、guard、全量回归及 KaTeX/Mermaid lazy bundle source-group 契约均通过，2026-09-21 ACCEPTED。
-- [x] RF-703 实现：Outline 与 document metrics 改为订阅 `EditorDerivedSnapshot` / revision，删除独立结构解析；保留 120ms presentation debounce，但不再重复 parse。\n- [ ] RF-703 验证：focused tests / typecheck / build / full suite / perf baseline，按实测更新冻结性能基线后再 acceptance。
-- [ ] 完成 M7 后再进入 M8 renderer/main/preload composition cleanup。
+- [x] RF-703 实现：Outline 与 document metrics 改为订阅 `EditorDerivedSnapshot` / revision，删除独立结构解析；保留 120ms presentation debounce，但不再重复 parse。
+- [x] RF-703 验证：2026-09-22 已随正式验收完成 focused tests / typecheck / build / regression 与性能基线核验；此为历史完成记录，不作为 RF-801 本轮 fresh gate。
+- [x] M7 已完成；2026-10-05 已授权进入 M8，当前只推进 RF-801。
+
+### RF-801 — 非 React 工作区命令与订阅层
+
+状态：**COMPLETE，独立统一验收 PASS（2026-10-05）**。M8 完成 1/3。范围以 [intake](docs/plans/2026-10-05-rf-801-intake.md) 和 [M8 roadmap](docs/refactor/editor-foundation/roadmap.md) 为准；RF-802/803 与 M9 未完成。
+
+- [x] 审计并迁移既有 application、coordinator、projection/identity owner，复用唯一 edit client / pending queue。
+- [x] 稳定 projection 引用与 `useSyncExternalStore` 订阅；后续 optimistic frame 在 dirty 不变时仍发布视图变化。
+- [x] open/save/save-as/autosave/reload/close/reorder/move/detach、外部冲突和导出流程进入非 React application。
+- [x] timer/replay/origin、typed outcome 和通知映射离开 hooks；菜单、快捷键、按钮、drop 和 test driver 共享命令与 barrier。
+- [x] recent/settings/clipboard/link 业务流程进入 application gateway，纯事件绑定及平台只读能力仍归 composition。
+- [x] 删除退休 hooks / 旧 owner 路径，同步 CI/architecture 引用；补充必要的 Node 回归与执行交接。
+- [x] 独立 high 架构与任务验收 PASS；450 focused、310 foundation、216 文件完整精确 regression（本机双 worker）、真实 Electron safety 七项、原 bundle 与正式行为门禁通过。详见 [RF-801 总结](reports/task-summaries/RF-801.md)；默认并发初轮失败与前置修复保留在测试报告。
 
 ## Epic 1：项目骨架
 

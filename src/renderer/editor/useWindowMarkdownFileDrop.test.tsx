@@ -51,9 +51,8 @@ describe("useWindowMarkdownFileDrop", () => {
     } as unknown as Window["fishmark"];
 
     const { root } = renderDropProbe({
-      fishmark,
-      getHasOpenDocument: () => true,
-      openMarkdownFromPaths
+      getPathForDroppedFile: fishmark.getPathForDroppedFile,
+      dropMarkdownFiles: openMarkdownFromPaths
     });
     const dropEvent = new Event("drop", { bubbles: true, cancelable: true }) as unknown as DragEvent;
 
@@ -72,10 +71,6 @@ describe("useWindowMarkdownFileDrop", () => {
       await Promise.resolve();
     });
 
-    expect(fishmark.handleDroppedMarkdownFile).toHaveBeenCalledWith({
-      targetPaths: ["C:/notes/alpha.md", "C:/notes/beta.md"],
-      hasOpenDocument: true
-    });
     expect(openMarkdownFromPaths).toHaveBeenCalledWith(["C:/notes/alpha.md", "C:/notes/beta.md"]);
 
     act(() => {

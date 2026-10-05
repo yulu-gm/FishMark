@@ -46,8 +46,8 @@ import {
   type ThemeDynamicAggregateMode,
   shouldWarnForThemeDynamicFallback,
 } from "./theme-dynamic-mode";
-import { type ExternalMarkdownFileState } from "./editor-shell-state";
-import type { EditorLoadIdentity } from "./editor-load-identity";
+import { type ExternalMarkdownFileState } from "../application/editor-shell-state";
+import type { EditorLoadIdentity } from "../application/editor-load-identity";
 import type { ThemeSurfaceRuntimeMode } from "../shader/theme-surface-runtime";
 import { WorkspaceShell, type WorkspaceViewContainerId } from "./WorkspaceShell";
 import { useEditorApplicationController } from "./useEditorApplicationController";
@@ -339,6 +339,7 @@ function EditorShell({
     autosaveDelayMs: preferences.autosave.idleDelayMs,
     showNotification
   });
+  const gateway = editorApplicationController.gateway;
   const workspaceController = editorApplicationController.workspace;
   const saveController = editorApplicationController.save;
   const externalConflictController = editorApplicationController.externalConflict;
@@ -470,7 +471,6 @@ function EditorShell({
     if (activeDocumentTabId === null) {
       activeBlockStateRef.current = null;
       applyDocumentDerivedDataNow(null);
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- Closing the document clears editor affordance state.
       setActiveHeadingId(null);
       setActiveShortcutGroupId("default-text");
       setActiveTableToolId(null);
@@ -514,12 +514,10 @@ function EditorShell({
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Runtime mode is recalculated by the mounted shader surface after its inputs change.
     setWorkbenchSurfaceRuntimeMode(null);
   }, [activeWorkbenchSurface?.sceneId, activeWorkbenchSurface?.shaderUrl, activeWorkbenchChannel0Src, preferences.theme.effectsMode]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Runtime mode is recalculated by the mounted shader surface after its inputs change.
     setTitlebarSurfaceRuntimeMode(null);
   }, [
     activeTitlebarSurface?.sceneId,
@@ -531,14 +529,12 @@ function EditorShell({
 
   useEffect(() => {
     if (!activeDocument) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- Closing the active document returns shortcut hints to their default group.
       setActiveShortcutGroupId("default-text");
     }
   }, [activeDocument]);
 
   useEffect(() => {
     if (activeShortcutGroupId !== "table-editing") {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- Leaving table mode clears the table-specific toolbar selection.
       setActiveTableToolId(null);
     }
   }, [activeShortcutGroupId]);
@@ -730,20 +726,10 @@ function EditorShell({
     }
   });
 
-  const handleClearRecentFile = useCallback(
-    async (targetPath: string): Promise<void> => {
-      try {
-        const nextRecentFiles = await fishmark.clearRecentFile({ path: targetPath });
-        setRecentFiles(nextRecentFiles);
-      } catch (error) {
-        showNotification({
-          kind: "error",
-          message: error instanceof Error ? error.message : String(error)
-        });
-      }
-    },
-    [fishmark, showNotification]
-  );
+  const handleClearRecentFile = useCallback(async (targetPath: string): Promise<void> => {
+    const nextRecentFiles = await gateway.clearRecentFile({ path: targetPath });
+    if (nextRecentFiles !== null) setRecentFiles(nextRecentFiles);
+  }, [gateway]);
 
   const handleLoadFontFamilies = useEffectEvent(async (): Promise<void> => {
     if (fontFamilyLoadStateRef.current !== "idle") {
@@ -766,21 +752,20 @@ function EditorShell({
     setIsRefreshingThemePackages(true);
 
     try {
-      const nextThemePackages = await fishmark.refreshThemePackages();
+      const nextThemePackages = await gateway.refreshThemePackages();
       setThemePackages(nextThemePackages);
       setThemePackageCatalogState("loaded");
     } finally {
       setIsRefreshingThemePackages(false);
     }
-  }, [fishmark]);
+  }, [gateway]);
 
   async function handleUpdatePreferences(
     patch: PreferencesUpdate
   ): Promise<Awaited<ReturnType<Window["fishmark"]["updatePreferences"]>>> {
-    const result = await fishmark.updatePreferences(patch);
+    const result = await gateway.updatePreferences(patch);
     preferencesRef.current = result.preferences;
     setPreferences(result.preferences);
-    scheduleAutosave(result.preferences.autosave.idleDelayMs);
     return result;
   }
 
@@ -866,22 +851,14 @@ function EditorShell({
     blurFocusedEditorElementAfterOpen,
     editorCommands
   ]);
-  const handleOpenMarkdownFromPaths = useCallback(async (targetPaths: string[]): Promise<void> => {
-    const opened = await editorCommands.openMarkdownFromPaths(targetPaths);
-
-    if (opened) {
-      setShellMode("reading");
-      blurFocusedEditorElementAfterOpen();
-    }
-  }, [
-    blurFocusedEditorElementAfterOpen,
-    editorCommands
-  ]);
-
   useWindowMarkdownFileDrop({
-    fishmark,
-    getHasOpenDocument: () => getWorkspaceActiveDocument() !== null,
-    openMarkdownFromPaths: handleOpenMarkdownFromPaths
+    getPathForDroppedFile: fishmark.getPathForDroppedFile,
+    dropMarkdownFiles: async (targetPaths) => {
+      if (await editorCommands.dropMarkdownFiles(targetPaths)) {
+        setShellMode("reading");
+        blurFocusedEditorElementAfterOpen();
+      }
+    }
   });
 
   async function handleActivateWorkspaceTab(tabId: string): Promise<void> {
@@ -977,27 +954,11 @@ function EditorShell({
   async function handleImportClipboardImage(
     input: { documentPath: string | null }
   ): Promise<string | null> {
-    const result = await fishmark.importClipboardImage({
-      documentPath: input.documentPath
-    });
-
-    if (result.status === "success") {
-      return result.markdown;
-    }
-
-    showNotification({ kind: "error", message: result.error.message });
-    return null;
+    return gateway.importClipboardImage(input);
   }
 
   async function handleOpenExternalLink(href: string): Promise<void> {
-    try {
-      await fishmark.openExternalLink(href);
-    } catch (error) {
-      showNotification({
-        kind: "error",
-        message: error instanceof Error ? error.message : "Unable to open link."
-      });
-    }
+    await gateway.openExternalLink(href);
   }
 
   const editorTestBridge = useMemo(
@@ -1063,23 +1024,8 @@ function EditorShell({
   }, [fishmark]);
 
   useEffect(() => {
-    let isCancelled = false;
-
-    void fishmark.syncWatchedMarkdownFile().catch((error) => {
-      if (isCancelled) {
-        return;
-      }
-
-      showNotification({
-        kind: "error",
-        message: error instanceof Error ? error.message : String(error)
-      });
-    });
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [activeDocument?.path, activeDocument?.tabId, fishmark, showNotification]);
+    void gateway.syncWatchedMarkdownFile();
+  }, [activeDocument?.path, activeDocument?.tabId, gateway]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -1164,14 +1110,13 @@ function EditorShell({
       detachPreferences();
       detachRecentFiles();
     };
-  }, [fishmark]);
+  }, [gateway, fishmark]);
 
   useEffect(() => {
     if (!isSettingsOpen) {
       return;
     }
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Opening settings lazily loads font options into the settings panel.
     void handleLoadFontFamilies();
   }, [isSettingsOpen]);
 
@@ -1336,7 +1281,6 @@ function EditorShell({
 
     clearShortcutHintHoldTimer();
     pressedShortcutModifiersRef.current.clear();
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Closing the document clears transient shortcut focus state.
     setIsEditorFocused(false);
     setIsShortcutHintArmed(false);
   }, [isDocumentOpen]);
@@ -1634,6 +1578,15 @@ function EditorShell({
         onToggleViewContainer={toggleViewContainer}
         onReloadExternalFile={handleReloadExternalFile}
         onRefreshThemePackages={handleRefreshThemePackages}
+        onOpenThemesDirectory={gateway.openThemesDirectory}
+        onSelectTemporaryImageDirectory={async () => {
+          const result = await gateway.selectTemporaryImageDirectory();
+          if (result !== null) {
+            preferencesRef.current = result.preferences;
+            setPreferences(result.preferences);
+          }
+          return result;
+        }}
         onSaveAs={handleSaveMarkdownAsCommand}
         onSettingsOpen={openSettingsDrawer}
         onSidePanelWidthCommit={handleSidePanelWidthCommit}

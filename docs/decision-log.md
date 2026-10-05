@@ -230,3 +230,11 @@ RF506 父独立行为/安全验收 PASS，最终 2671 tests、lint/typecheck/bui
 
 ## 2026-09-19 M6 尾随空格几何合同裁定
 旧list-geometry将三个真实空格末尾的光标要求对齐零列，与既有生产用例 keeps the selection after inserted spaces / returns to whitespace-only line below ordered list 的源码末端选区合同冲突；父在fdddabd与M5新路径均测得相同11.578px。M6探针改为要求空格起点与正文左边界对齐、光标与独立DOM Range量出的三个空格右边界对齐，同时保留源码/选区精确、无list缩进类、可见行高要求。没有录入11.578作为expected，也没有改正式manifest或known豁免。最终须在真实Electron复验。
+
+## 2026-10-05 RF-801：保留既有事务 owner，迁移工作流职责
+
+决策：迁移而非替换 WorkspaceRendererApplication，连同 coordinator、shell projection 与 load identity 收至 application。新增独立 save scheduler 仅持有调度状态，所有保存仍调用原 runSaveTransaction；不新增 workspace-client/store facade、Markdown 副本或写队列。命令结果与通知策略离开 hooks，UI 仅保留订阅、视觉切换与平台事件 composition。
+
+原因：原 edit client 已覆盖 sequence、ack、恢复、close lease、IME 与取消关闭后的 rebind，重写会破坏成熟安全协议。move 复用 removal sealing/drain/reconciliation；test driver 保存采用相同手动策略，防止外部冲突绕过 save-as。设置 gateway 对结果和错误承担明确职责，纯只读和事件能力无需机械转发。
+
+状态：2026-10-05 独立统一验收 PASS / COMPLETE；两项初审 P1 的目标 identity 和异步存活检查已修复并通过回归。RF-802/803 和 M9 不在本次收口范围，详见 `reports/reviews/2026-10-05-rf-801-architecture.md`。

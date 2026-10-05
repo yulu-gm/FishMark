@@ -1,7 +1,7 @@
 import { useEffect, useEffectEvent } from "react";
 
 import type { EditorTestCommandEnvelope } from "../../shared/editor-test-command";
-import type { WorkspaceRendererTestAdapter } from "./workspace-renderer-application";
+import type { WorkspaceRendererTestAdapter } from "../application/workspace-renderer-application";
 
 type EditorBridge = {
   getContent: () => string;

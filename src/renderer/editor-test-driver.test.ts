@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { WorkspaceDocumentSnapshot, WorkspaceWindowSnapshot } from "../shared/workspace";
-import { getActiveDocument } from "./editor/editor-shell-state";
+import { getActiveDocument } from "./application/editor-shell-state";
 import {
   WorkspaceRendererApplication,
   type WorkspaceRendererBridge
-} from "./editor/workspace-renderer-application";
+} from "./application/workspace-renderer-application";
 import { createEditorTestDriver } from "./editor-test-driver";
 
 function createHarness() {

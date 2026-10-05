@@ -5,7 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { EditorTestCommandEnvelope } from "../../shared/editor-test-command";
-import { createInitialEditorShellState } from "./editor-shell-state";
+import { createInitialEditorShellState } from "../application/editor-shell-state";
 import { EditorTestBridgeHost } from "./editor-test-bridge-host";
 
 const { createEditorTestDriver, run } = vi.hoisted(() => {

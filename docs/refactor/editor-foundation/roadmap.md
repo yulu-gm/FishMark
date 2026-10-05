@@ -1642,38 +1642,21 @@ npm.cmd run perf:baseline
 
 ### Milestone 8 — Renderer and main composition cleanup
 
-#### RF-801: Non-React workspace client/store
+#### RF-801：非 React 工作区命令与订阅层
 
-**Re-scoped (2026-09-17):** audit and consolidate the clients, queue, and transaction orchestration already delivered in M1/M2. The files below are target responsibilities, not a requirement to build replacement facades. Reuse existing modules where their boundary already fits; any move must remove the superseded entry point in the same task.
+**状态（2026-10-05）：COMPLETE，独立统一验收 PASS。** 复用 M1/M2 的 edit client、pending queue 与 coordinator；不新增第二份文档真值或替代 facade。
 
-**Outcome:** application workflows are callable without hooks or JSX.
+**实际落点：** `src/renderer/application/workspace-renderer-application.ts` 迁自 editor，继续拥有成熟事务和编辑 barrier，并收口用户命令。`workspace-save-scheduler.ts` 只拥有 timer/replay/origin，不拥有保存队列；`renderer-platform-gateway.ts` 拥有设置与平台业务操作的结果/通知映射。`editor-shell-state.ts`、`editor-load-identity.ts` 和 `editor-port.ts` 属于 application，React / CodeMirror adapter 依赖这些契约。
 
-**Files:**
+- [x] projection subscription 与 `useSyncExternalStore` 兼容，读取引用稳定；dirty 不变的后续 optimistic frame 仍可触发订阅。
+- [x] open/save/save-as/autosave/reload/close/reorder/move/detach 集中；move 使用同一 sealing/drain/reconciliation 事务。
+- [x] flush barrier、typed outcome 与错误通知由非 React owner 处理；保留 close lease、undo/IME 与取消后 epoch rebind。
+- [x] menu/shortcuts/buttons/drop/test driver 共享命令；test driver 手动保存使用相同外部冲突、in-flight 与通知策略。
+- [x] 受影响组件及 settings 的业务 bridge 调用移入 gateway；纯事件订阅、DOM file 路径提取和平台只读 bootstrap 仍由 composition 绑定。
 
-- Create: `src/renderer/application/workspace-client.ts`
-- Create: `src/renderer/application/workspace-client.test.ts`
-- Create: `src/renderer/application/workspace-store.ts`
-- Create: `src/renderer/application/workspace-store.test.ts`
-- Create: `src/renderer/application/editor-command-gateway.ts`
-- Create: `src/renderer/application/editor-command-gateway.test.ts`
-- Modify: controllers under `src/renderer/editor/`.
+**验收证据：** [架构审查](../../../reports/reviews/2026-10-05-rf-801-architecture.md)、[任务总结](../../../reports/task-summaries/RF-801.md)、[执行交接](../../plans/2026-10-05-rf-801-handoff.md)。独立 focused 450/450、foundation 310/310、typecheck/lint/build、完整精确 regression（216 文件/2884 项，本机双 worker）、真实 Electron safety、原 bundle 和正式行为均通过。默认并发失败与前置修复单独记录；M8 为 1/3，RF-802/803 和 M9 未完成。
 
-**Steps:**
-
-- [ ] Implement projection subscription with `useSyncExternalStore` compatibility.
-- [ ] Centralize open/save/save-as/autosave/reload/close/move/detach commands.
-- [ ] Centralize flush barriers and typed error/notification mapping.
-- [ ] Route menu, shortcuts, buttons, drag/drop, and test driver through the command gateway.
-- [ ] Remove direct bridge calls from components and settings views.
-
-**Verification:**
-
-```powershell
-npm.cmd run test -- src/renderer/application src/renderer/editor
-npm.cmd run typecheck
-```
-
-**Exit:** application behavior can be tested without rendering React.
+**Exit：** 无需挂载 React 即可调用、验证工作区命令，且独立统一验收通过。
 
 #### RF-802: React shell decomposition
 

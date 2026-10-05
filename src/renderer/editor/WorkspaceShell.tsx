@@ -41,9 +41,9 @@ import type { OutlineItem } from "../outline";
 import type { ThemeRuntimeEnv } from "../theme-runtime-env";
 import type { ThemeSurfaceRuntimeMode } from "../shader/theme-surface-runtime";
 import type { ThemeSurfaceHostDescriptor } from "./ThemeSurfaceHost";
-import type { ExternalMarkdownFileState } from "./editor-shell-state";
-import type { EditorLoadIdentity } from "./editor-load-identity";
-import type { EditorTransition } from "./workspace-renderer-application";
+import type { ExternalMarkdownFileState } from "../application/editor-shell-state";
+import type { EditorLoadIdentity } from "../application/editor-load-identity";
+import type { EditorTransition } from "../application/workspace-renderer-application";
 import type { TitlebarLayoutDescriptor } from "./titlebar-layout";
 import type { ThemePackageEntry, ResolvedThemeMode } from "./useThemeController";
 import fishmarkMarkSvg from "../../../assets/branding/fishmark_mark.svg?raw";
@@ -324,6 +324,8 @@ export type WorkspaceShellProps = {
     patch: PreferencesUpdate
   ) => Promise<Awaited<ReturnType<Window["fishmark"]["updatePreferences"]>>>;
   onRefreshThemePackages: () => Promise<void>;
+  onOpenThemesDirectory: () => Promise<void>;
+  onSelectTemporaryImageDirectory: () => Promise<Awaited<ReturnType<Window["fishmark"]["updatePreferences"]>> | null>;
   onWorkbenchSurfaceRuntimeModeChange: (mode: ThemeSurfaceRuntimeMode) => void;
 };
 
@@ -476,6 +478,8 @@ export function WorkspaceShell({
   onClearRecentFile,
   onReloadExternalFile,
   onRefreshThemePackages,
+  onOpenThemesDirectory,
+  onSelectTemporaryImageDirectory,
   onSaveAs,
   onSettingsOpen,
   onSidePanelWidthCommit,
@@ -1518,6 +1522,8 @@ export function WorkspaceShell({
                 themePackages={themePackages}
                 isRefreshingThemes={isRefreshingThemePackages}
                 onRefreshThemes={onRefreshThemePackages}
+                onOpenThemesDirectory={onOpenThemesDirectory}
+                onSelectTemporaryImageDirectory={onSelectTemporaryImageDirectory}
                 onUpdate={onUpdatePreferences}
                 onOpenExternalLink={onOpenExternalLink}
                 onClose={onCloseSettingsDrawer}

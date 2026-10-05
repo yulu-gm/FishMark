@@ -1,6 +1,6 @@
 import type { EditorTestCommand, EditorTestCommandResult } from "../shared/editor-test-command";
-import { getActiveDocument } from "./editor/editor-shell-state";
-import type { WorkspaceRendererTestAdapter } from "./editor/workspace-renderer-application";
+import { getActiveDocument } from "./application/editor-shell-state";
+import type { WorkspaceRendererTestAdapter } from "./application/workspace-renderer-application";
 
 type EditorHandle = {
   getContent: () => string;

@@ -1,3 +1,9 @@
+import { RendererPlatformGateway, type WorkspaceApplicationGateway } from "./renderer-platform-gateway";
+import type { AppNotification } from "../../shared/app-update";
+import type { AppMenuCommand } from "../../shared/menu-command";
+import { RELOAD_WORKSPACE_TAB_FROM_PATH_ERROR_MESSAGES, type MoveWorkspaceTabToWindowInput } from "../../shared/workspace";
+import { WorkspaceSaveScheduler } from "./workspace-save-scheduler";
+import type { ExternalMarkdownFileState } from "./editor-shell-state";
 import type { SaveMarkdownFileResult } from "../../shared/save-markdown-file";
 import type { DocumentTextChange } from "../../shared/document-edit";
 import type {
@@ -8,15 +14,15 @@ import type {
   CodeEditorDiscardedDocumentText,
   CodeEditorDocumentChangeFrame,
   CodeEditorRemotePatchResult
-} from "../code-editor";
+} from "./editor-port";
 import {
   WorkspaceEditClient,
   type WorkspaceEditBarrierLease,
   type WorkspaceEditClientStateChange,
   type WorkspaceEditConflictClaim,
   type WorkspaceEditTabBinding
-} from "../application/workspace-edit-client";
-import { isPendingEditQueueDirty } from "../application/pending-edit-queue";
+} from "./workspace-edit-client";
+import { isPendingEditQueueDirty } from "./pending-edit-queue";
 import {
   applyWorkspaceSnapshot,
   createInitialEditorShellState,
@@ -64,6 +70,11 @@ export type WorkspaceRendererBridge = Pick<
   | "applyDocumentEdits"
   | "flushDocumentEdits"
   | "onDocumentProjection"
+  | "moveWorkspaceTabToWindow"
+  | "handleDroppedMarkdownFile"
+  | "resolveExternalChange"
+  | "exportHtmlFile"
+  | "onWorkspaceOwnerTabActivationRequest"
 >;
 
 export type WorkspaceRendererApplicationState = EditorShellState & Readonly<{
@@ -208,12 +219,31 @@ export class WorkspaceRendererApplication {
   // publish its canonical+local dirty overlay atomically instead of exposing an intermediate
   // per-tab dirty state to subscribers.
   private applyingCanonicalSnapshot = false;
+  readonly save: WorkspaceSaveScheduler;
+  readonly gateway: RendererPlatformGateway;
+  private presentation: {
+    showNotification: (notification: AppNotification) => void;
+    setEditorContentSnapshot: (content: string) => void;
+  } = { showNotification: () => {}, setEditorContentSnapshot: () => {} };
+  private detachOwnerActivation: (() => void) | null = null;
+  private publishedEditorView: WorkspaceWindowSnapshot | null = null;
+  private viewCache: { snapshot: WorkspaceWindowSnapshot; text: string; value: WorkspaceWindowSnapshot } | null = null;
+
 
   constructor(input: {
     bridge: WorkspaceRendererBridge;
     initialSnapshot?: WorkspaceWindowSnapshot | null;
+    gateway?: WorkspaceApplicationGateway;
   }) {
     this.bridge = input.bridge;
+    this.gateway = new RendererPlatformGateway(input.gateway ?? input.bridge as WorkspaceRendererBridge & WorkspaceApplicationGateway, (notification) => this.notify(notification), () => this.assertActive(), (delay) => { this.save.setDelay(delay); this.save.scheduleAutosave(delay); });
+    this.save = new WorkspaceSaveScheduler({
+      getActiveDocument: () => this.getActiveDocument(),
+      runSaveTransaction: (request) => this.runSaveTransaction(request),
+      hasExternalFileConflict: () => this.hasExternalFileConflict(),
+      autosaveDelayMs: 1000,
+      showNotification: (notification) => this.notify(notification)
+    });
     const shellState = input.initialSnapshot
       ? applyWorkspaceSnapshot(createInitialEditorShellState(), input.initialSnapshot)
       : createInitialEditorShellState();
@@ -239,6 +269,205 @@ export class WorkspaceRendererApplication {
     this.pendingEditorLoadIdentity = this.createCurrentEditorLoadIdentity();
   }
 
+  private notify(notification: AppNotification): void {
+    if (!this.disposed) this.presentation.showNotification(notification);
+  }
+
+  private notifyFailure(outcome: WorkspaceApplicationOutcome<unknown>): void {
+    if (outcome.kind === "failed" || outcome.kind === "failed-reconciled" || outcome.kind === "canonical-unavailable") {
+      this.notify({ kind: "error", message: failureMessage(outcome.error) });
+    }
+  }
+
+  updatePresentation(input: { showNotification: (notification: AppNotification) => void; setEditorContentSnapshot?: (content: string) => void; autosaveDelayMs?: number }): void {
+    this.presentation = { showNotification: input.showNotification, setEditorContentSnapshot: input.setEditorContentSnapshot ?? this.presentation.setEditorContentSnapshot };
+    if (input.autosaveDelayMs !== undefined) this.save.setDelay(input.autosaveDelayMs);
+  }
+
+  readonly commands = {
+    dropMarkdownFiles: async (targetPaths: string[]): Promise<boolean> => {
+      try {
+        this.assertActive();
+        const result = await this.bridge.handleDroppedMarkdownFile({ targetPaths, hasOpenDocument: this.getActiveDocument() !== null });
+        this.assertActive();
+        if (result.disposition === "open-in-place") return this.commands.openMarkdownFromPaths(targetPaths);
+        return false;
+      } catch (error) { this.notify({ kind: "error", message: failureMessage(error) }); return false; }
+    },
+    openMarkdown: async (): Promise<"opened" | "cancelled" | "failed"> => {
+      this.save.resetAutosaveRuntime();
+      const outcome = await this.openMarkdown();
+      this.notifyFailure(outcome);
+      return outcome.kind === "committed" ? "opened" : outcome.kind === "cancelled" || outcome.kind === "superseded" ? "cancelled" : "failed";
+    },
+    openMarkdownFromPath: async (path: string): Promise<boolean> => {
+      this.save.resetAutosaveRuntime();
+      const outcome = await this.openMarkdownFromPath(path);
+      this.notifyFailure(outcome);
+      return outcome.kind === "committed";
+    },
+    openRecentMarkdown: async (path: string): Promise<boolean> => {
+      const opened = await this.commands.openMarkdownFromPath(path);
+      if (!opened && !this.disposed) {
+        try { await this.gateway.clearRecentFile({ path }); }
+        catch (error) { this.notify({ kind: "error", message: failureMessage(error) }); }
+      }
+      return opened;
+    },
+    openMarkdownFromPaths: async (paths: string[]): Promise<boolean> => {
+      this.save.resetAutosaveRuntime();
+      const outcome = await this.openMarkdownFromPaths(paths);
+      this.notifyFailure(outcome);
+      return outcome.kind === "committed";
+    },
+    createUntitledMarkdown: async (): Promise<boolean> => {
+      this.save.resetAutosaveRuntime();
+      const outcome = await this.createUntitledMarkdown();
+      this.notifyFailure(outcome);
+      return outcome.kind === "committed";
+    },
+    activateWorkspaceTab: async (tabId: string): Promise<boolean> => {
+      this.save.resetAutosaveRuntime();
+      const outcome = await this.activateWorkspaceTab(tabId);
+      this.notifyFailure(outcome);
+      this.save.scheduleAutosave();
+      return outcome.kind === "committed";
+    },
+    closeWorkspaceTab: async (tabId: string): Promise<void> => {
+      const active = this.getActiveTabId() === tabId;
+      if (active) this.save.resetAutosaveRuntime();
+      this.notifyFailure(await this.closeWorkspaceTab(tabId));
+      if (active) this.save.scheduleAutosave();
+    },
+    detachWorkspaceTab: async (tabId: string): Promise<void> => {
+      this.save.resetAutosaveRuntime();
+      this.notifyFailure(await this.detachWorkspaceTab(tabId));
+      this.save.scheduleAutosave();
+    },
+    moveWorkspaceTab: async (input: MoveWorkspaceTabToWindowInput): Promise<void> => {
+      this.save.resetAutosaveRuntime();
+      this.notifyFailure(await this.moveWorkspaceTab(input));
+      this.save.scheduleAutosave();
+    },
+    reorderWorkspaceTab: async (tabId: string, index: number): Promise<void> => {
+      this.notifyFailure(await this.reorderWorkspaceTab(tabId, index));
+    },
+    reloadWorkspaceTabFromPath: async (input: { tabId: string }): Promise<boolean> => {
+      this.save.resetAutosaveRuntime();
+      const outcome = await this.reloadWorkspaceTabFromPath(input.tabId);
+      if (outcome.kind === "revision-stale") this.notify({ kind: "warning", message: "重新加载期间检测到新的编辑，已保留当前内容。请重试。" });
+      else if (outcome.kind === "reload-error") this.notify({ kind: "error", message: RELOAD_WORKSPACE_TAB_FROM_PATH_ERROR_MESSAGES[outcome.error.code] });
+      else this.notifyFailure(outcome);
+      this.save.scheduleAutosave();
+      return outcome.kind === "committed";
+    },
+    confirmWorkspaceWindowClose: async (requestId: string): Promise<boolean> => {
+      this.save.resetAutosaveRuntime();
+      const outcome = await this.confirmWorkspaceWindowClose(requestId);
+      this.notifyFailure(outcome);
+      if (outcome.kind !== "committed" || !outcome.value) this.save.scheduleAutosave();
+      return outcome.kind === "committed" && outcome.value;
+    },
+    flushActiveWorkspaceDraft: async (): Promise<void> => {
+      const outcome = await this.flushActiveWorkspaceDraft();
+      if (outcome.kind === "committed") return;
+      this.notifyFailure(outcome);
+      throw outcome.kind === "failed" || outcome.kind === "failed-reconciled" || outcome.kind === "canonical-unavailable" ? outcome.error : new Error(`Workspace draft flush ended with ${outcome.kind}.`);
+    },
+    loadInitialWorkspaceSnapshot: async (): Promise<void> => { await this.refreshWorkspaceSnapshot(); },
+    saveMarkdown: async (): Promise<void> => { await this.save.runManualSave(); },
+    saveMarkdownAs: async (): Promise<void> => { await this.save.runManualSave({ forceSaveAs: true }); },
+    exportHtml: async (): Promise<void> => {
+      if (!this.getActiveDocument()) return;
+      try {
+        const barrier = await this.runWithActiveEditBarrier(async (documentSnapshot, markdown) => {
+          const { collectReadableStyleSheetText, collectRootExportAttributes, createFishmarkExportHtml } = await import("../export-html");
+          const html = createFishmarkExportHtml({ markdown, title: documentSnapshot.name, cssText: collectReadableStyleSheetText(document), rootAttributes: collectRootExportAttributes(document) });
+          this.assertActive();
+          return this.bridge.exportHtmlFile({ tabId: documentSnapshot.tabId, currentPath: documentSnapshot.path, html });
+        });
+        if (barrier.kind !== "committed") { this.notifyFailure(barrier); return; }
+        if (barrier.value.status === "error") this.notify({ kind: "error", message: barrier.value.error.message });
+        else if (barrier.value.status === "success") this.notify({ kind: "info", message: "HTML exported." });
+      } catch (error) { this.notify({ kind: "error", message: failureMessage(error) }); }
+    },
+    runMenuCommand: (command: AppMenuCommand): boolean => {
+      const actions: Partial<Record<AppMenuCommand, () => Promise<unknown>>> = {
+        "new-markdown-document": this.commands.createUntitledMarkdown,
+        "open-markdown-file": this.commands.openMarkdown,
+        "save-markdown-file": this.commands.saveMarkdown,
+        "save-markdown-file-as": this.commands.saveMarkdownAs,
+        "export-html-file": this.commands.exportHtml
+      };
+      const action = actions[command];
+      if (!action) return false;
+      void action();
+      return true;
+    }
+  };
+
+  getActiveDocument = () => getActiveDocument(this.state);
+  getActiveTabId = () => getActiveTabId(this.state);
+  handleEditorDocumentChangeFrame = (frame: CodeEditorDocumentChangeFrame): void => {
+    if (!this.recordEditorDocumentChangeFrame(frame)) throw new Error("The editor frame was not accepted by the active document transport.");
+    this.presentation.setEditorContentSnapshot(frame.resultingText);
+    this.save.scheduleAutosave();
+  };
+  handleEditorBlur = (): void => { void this.save.runAutosave(); };
+  hasExternalFileConflict = (): boolean => (this.getActiveDocument()?.externalChange ?? null) !== null;
+  getExternalFileState = (): ExternalMarkdownFileState => {
+    const document = this.getActiveDocument();
+    return document?.externalChange ? { status: "pending", path: document.path ?? "", kind: document.externalChange.kind } : { status: "idle" };
+  };
+  keepMemoryVersion = (): Promise<void> => this.resolveExternalChange("keep-memory");
+  reloadFromDisk = (): Promise<void> => this.resolveExternalChange("reload");
+  dismissConflict = (): Promise<void> => this.resolveExternalChange("cancel");
+
+  private async resolveExternalChange(command: "keep-memory" | "reload" | "cancel"): Promise<void> {
+    // The gesture belongs to this editor incarnation, not whichever tab happens to be
+    // active after earlier coordinator operations finish.
+    const target = this.createCurrentEditorLoadIdentity();
+    if (target === null) return;
+    this.save.resetAutosaveRuntime();
+    const outcome = await this.enqueue("external-change", async (): Promise<WorkspaceApplicationOutcome<void>> => {
+      const recovery = this.getRecoveryPendingOutcome();
+      if (recovery !== null) return recovery;
+      const known = await this.ensureCanonicalKnown();
+      if (known !== null) return known;
+      const currentIdentity = this.createCurrentEditorLoadIdentity();
+      if (currentIdentity === null || !isSameEditorLoadIdentity(target, currentIdentity)) {
+        return { kind: "superseded" };
+      }
+      let lease: WorkspaceEditBarrierLease | null = null;
+      try {
+        this.assertActive();
+        if (command === "reload") await this.sealEditor("reloading");
+        lease = (await this.acquireEditBarrier(target.tabId)).lease;
+        this.assertActive();
+        const result = await this.bridge.resolveExternalChange({ tabId: target.tabId, command });
+        this.assertActive();
+        if (result.kind === "error") return { kind: "failed", error: new Error(result.message) };
+        const snapshot = await this.bridge.getWorkspaceSnapshot();
+        this.assertActive();
+        this.recordCanonicalSnapshot(snapshot);
+        return result.kind === "cancelled" ? { kind: "cancelled" } : { kind: "committed", value: undefined };
+      } catch (error) { return this.recoverMutationOutcome(error); }
+      finally {
+        lease?.release();
+        if (command === "reload" && this.state.editorTransition !== null) await this.releaseEditor();
+      }
+    });
+    this.notifyFailure(outcome);
+    this.save.scheduleAutosave();
+  }
+
+  moveWorkspaceTab(input: MoveWorkspaceTabToWindowInput): Promise<WorkspaceApplicationOutcome<void>> {
+    return this.removeTabMutation("move", input.tabId, async () => {
+      const result = await this.bridge.moveWorkspaceTabToWindow(input);
+      return result.sourceWindowSnapshot;
+    });
+  }
+
   getState = (): WorkspaceRendererApplicationState => this.state;
 
   getEditorViewSnapshot = (): WorkspaceWindowSnapshot | null => {
@@ -254,10 +483,10 @@ export class WorkspaceRendererApplication {
         !this.hasPendingAdapterFrame(document.tabId) &&
         queue.acknowledgedTextRevision <= document.revision)
     ) return snapshot;
-    return {
-      ...snapshot,
-      activeDocument: { ...document, content: queue.optimisticText }
-    };
+    if (this.viewCache?.snapshot === snapshot && this.viewCache.text === queue.optimisticText) return this.viewCache.value;
+    const value = { ...snapshot, activeDocument: { ...document, content: queue.optimisticText } };
+    this.viewCache = { snapshot, text: queue.optimisticText, value };
+    return value;
   };
 
   subscribe = (listener: () => void): (() => void) => {
@@ -271,6 +500,7 @@ export class WorkspaceRendererApplication {
     if (this.disposed) return;
     this.lifecycleEpoch += 1;
     this.editClient.start();
+    if (this.detachOwnerActivation === null) this.detachOwnerActivation = this.bridge.onWorkspaceOwnerTabActivationRequest?.(({ tabId }) => this.commands.activateWorkspaceTab(tabId)) ?? null;
   }
 
   scheduleDispose(): void {
@@ -294,6 +524,9 @@ export class WorkspaceRendererApplication {
 
   dispose(): void {
     this.disposed = true;
+    this.save.dispose();
+    this.detachOwnerActivation?.();
+    this.detachOwnerActivation = null;
     this.lifecycleEpoch += 1;
     this.activationGeneration += 1;
     this.pendingEditorTransitionBarrier?.resolve(false);
@@ -351,12 +584,14 @@ export class WorkspaceRendererApplication {
   getEditorTestAdapter(): WorkspaceRendererTestAdapter {
     return {
       readState: this.getState,
-      openFixture: (targetPath) => this.openMarkdownFromPath(targetPath),
+      openFixture: async (targetPath) => {
+        this.save.resetAutosaveRuntime();
+        const outcome = await this.openMarkdownFromPath(targetPath);
+        this.notifyFailure(outcome);
+        return outcome;
+      },
       commitDraft: () => this.flushActiveWorkspaceDraft(),
-      saveDocument: () => this.runSaveTransaction({
-        forceSaveAs: false,
-        hasExternalConflict: false
-      })
+      saveDocument: () => this.save.runManualSave()
     };
   }
 
@@ -518,6 +753,7 @@ export class WorkspaceRendererApplication {
   refreshWorkspaceSnapshot(): Promise<WorkspaceApplicationOutcome<WorkspaceWindowSnapshot>> {
     return this.enqueue("refresh", async () => {
       try {
+        this.assertActive();
         const snapshot = await this.bridge.getWorkspaceSnapshot();
         this.recordCanonicalSnapshot(snapshot);
         return { kind: "committed", value: snapshot };
@@ -541,6 +777,7 @@ export class WorkspaceRendererApplication {
 
       try {
         await this.captureAndDrainActiveDraft();
+        this.assertActive();
         this.setOpenState("opening");
         const result = await this.bridge.openWorkspaceFile();
         if (result.kind === "cancelled") {
@@ -575,6 +812,7 @@ export class WorkspaceRendererApplication {
 
       try {
         await this.captureAndDrainActiveDraft();
+        this.assertActive();
         this.setOpenState("opening");
         const result = await this.bridge.openWorkspaceFileFromPath(targetPath);
         if (result.kind === "error") {
@@ -608,8 +846,10 @@ export class WorkspaceRendererApplication {
 
       try {
         await this.captureAndDrainActiveDraft();
+        this.assertActive();
         this.setOpenState("opening");
         for (const targetPath of targetPaths) {
+          this.assertActive();
           const result = await this.bridge.openWorkspaceFileFromPath(targetPath);
           if (result.kind === "error") {
             this.setOpenState("idle");
@@ -638,7 +878,9 @@ export class WorkspaceRendererApplication {
       }
       try {
         await this.captureAndDrainActiveDraft();
+        this.assertActive();
         const snapshot = await this.bridge.createWorkspaceTab({ kind: "untitled" });
+        this.assertActive();
         this.recordCanonicalSnapshot(snapshot);
         return { kind: "committed", value: undefined };
       } catch (error) {
@@ -666,11 +908,13 @@ export class WorkspaceRendererApplication {
         if (sourceTabId !== null) {
           await this.drainTab(sourceTabId);
         }
+        this.assertActive();
         if (this.canonical.kind !== "known") {
           return { kind: "canonical-unavailable", error: this.canonical.cause };
         }
         if (this.canonical.snapshot.activeTabId !== tabId) {
           const snapshot = await this.bridge.activateWorkspaceTab({ tabId });
+          this.assertActive();
           this.recordCanonicalSnapshot(snapshot);
         } else {
           this.applyCanonicalSnapshot(this.canonical.snapshot);
@@ -682,6 +926,7 @@ export class WorkspaceRendererApplication {
           await this.drainTab(sourceTabId);
         }
         await this.drainTab(tabId);
+        this.assertActive();
         return getActiveTabId(this.state) === tabId
           ? { kind: "committed", value: undefined }
           : { kind: "failed", error: new Error("Activated tab is not canonical active tab.") };
@@ -858,6 +1103,7 @@ export class WorkspaceRendererApplication {
       let editLease: WorkspaceEditBarrierLease | null = null;
       try {
         editLease = (await this.acquireEditBarrier(tabId)).lease;
+        this.assertActive();
         const shouldSaveAs = input.forceSaveAs ||
           capturedDocument.path === null ||
           input.hasExternalConflict;
@@ -865,6 +1111,7 @@ export class WorkspaceRendererApplication {
           ? await this.bridge.saveMarkdownFileAs({ tabId })
           : await this.bridge.saveMarkdownFile({ tabId });
 
+        this.assertActive();
         if (value.status === "success") {
           try {
             const snapshot = await this.bridge.getWorkspaceSnapshot();
@@ -905,6 +1152,7 @@ export class WorkspaceRendererApplication {
     | Extract<WorkspaceApplicationOutcome<never>, { kind: "canonical-unavailable" }>
     | null
   > {
+    if (this.disposed) return { kind: "canonical-unavailable", error: new WorkspaceRendererApplicationDisposedError() };
     if (this.canonical.kind === "known") {
       return null;
     }
@@ -926,7 +1174,7 @@ export class WorkspaceRendererApplication {
   }
 
   private async removeTabMutation(
-    kind: "close" | "detach",
+    kind: "close" | "detach" | "move",
     tabId: string,
     operation: () => Promise<WorkspaceWindowSnapshot>
   ): Promise<WorkspaceApplicationOutcome<void>> {
@@ -1263,7 +1511,13 @@ export class WorkspaceRendererApplication {
       this.captureRecovery(change.binding, change.outcome.recovery);
       this.scheduleRecoveryMaterialization(change.binding.tabId);
     }
+    const before = this.state;
     this.applyDisposableDirtyState(change.binding.tabId, change.isDirty);
+    // A second optimistic frame can change text while dirty remains true. Notify the
+    // external-store subscriber without turning that optimistic text into canonical state.
+    if (before === this.state && this.getEditorViewSnapshot() !== this.publishedEditorView) {
+      this.updateState({ ...this.state });
+    }
   }
 
   private scheduleConflictResolution(
@@ -1821,7 +2075,7 @@ export class WorkspaceRendererApplication {
   }
 
   private updateState(next: WorkspaceRendererApplicationState): void {
-    if (next === this.state) {
+    if (this.disposed || next === this.state) {
       return;
     }
     this.state = next;
@@ -1832,6 +2086,7 @@ export class WorkspaceRendererApplication {
     if (this.disposed) {
       return;
     }
+    this.publishedEditorView = this.getEditorViewSnapshot();
     for (const listener of this.listeners) {
       listener();
     }
@@ -1851,4 +2106,8 @@ function createEditorTransitionBarrier(
 
 function createRendererEditClientId(): string {
   return `renderer-${globalThis.crypto.randomUUID()}`;
+}
+
+function failureMessage(error: unknown): string {
+  return error instanceof Error ? error.message : typeof error === "object" && error !== null && "message" in error && typeof error.message === "string" ? error.message : String(error);
 }

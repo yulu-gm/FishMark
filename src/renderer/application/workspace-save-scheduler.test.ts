@@ -1,16 +1,6 @@
-// @vitest-environment jsdom
-
-import { act, createElement, createRef, useEffect } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { flushSync } from "react-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-
 import type { WorkspaceDocumentSnapshot } from "../../shared/workspace";
-import { useSaveController } from "./useSaveController";
-
-globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-type Controller = ReturnType<typeof useSaveController>;
+import { WorkspaceSaveScheduler } from "./workspace-save-scheduler";
 
 function createDocument(): WorkspaceDocumentSnapshot {
   return {
@@ -26,30 +16,16 @@ function createDocument(): WorkspaceDocumentSnapshot {
   };
 }
 
-function renderController(input: Parameters<typeof useSaveController>[0]) {
-  const latestRef = createRef<Controller>();
-  const root: Root = createRoot(document.createElement("div"));
-  function Probe(): null {
-    const controller = useSaveController(input);
-    useEffect(() => {
-      latestRef.current = controller;
-    }, [controller]);
-    return null;
-  }
-  act(() => flushSync(() => root.render(createElement(Probe))));
-  return { latestRef, root };
-}
-
 afterEach(() => vi.useRealTimers());
 
-describe("useSaveController", () => {
+describe("WorkspaceSaveScheduler", () => {
   it("forwards a manual save as one application transaction", async () => {
     const runSaveTransaction = vi.fn(async () => ({
       kind: "committed" as const,
       tabId: "tab-1",
       value: { status: "cancelled" as const }
     }));
-    const { latestRef, root } = renderController({
+    const scheduler = new WorkspaceSaveScheduler({
       getActiveDocument: () => createDocument(),
       runSaveTransaction,
       hasExternalFileConflict: () => true,
@@ -57,12 +33,12 @@ describe("useSaveController", () => {
       showNotification: vi.fn()
     });
 
-    await act(async () => latestRef.current!.runManualSave());
+    await scheduler.runManualSave();
     expect(runSaveTransaction).toHaveBeenCalledWith({
       forceSaveAs: false,
       hasExternalConflict: true
     });
-    act(() => root.unmount());
+    scheduler.dispose();
   });
 
   it("does not clear a real in-flight save when navigation resets autosave runtime", async () => {
@@ -77,7 +53,7 @@ describe("useSaveController", () => {
       value: { status: "cancelled" };
     }>((resolve) => { resolveSave = resolve; });
     const runSaveTransaction = vi.fn(() => transaction);
-    const { latestRef, root } = renderController({
+    const scheduler = new WorkspaceSaveScheduler({
       getActiveDocument: () => createDocument(),
       runSaveTransaction,
       hasExternalFileConflict: () => false,
@@ -85,13 +61,13 @@ describe("useSaveController", () => {
       showNotification: vi.fn()
     });
 
-    const save = latestRef.current!.runManualSave();
-    await vi.waitFor(() => expect(latestRef.current!.isSaveInFlight()).toBe(true));
-    act(() => latestRef.current!.resetAutosaveRuntime());
-    expect(latestRef.current!.isSaveInFlight()).toBe(true);
+    const save = scheduler.runManualSave();
+    await vi.waitFor(() => expect(scheduler.isSaveInFlight()).toBe(true));
+    scheduler.resetAutosaveRuntime();
+    expect(scheduler.isSaveInFlight()).toBe(true);
     resolveSave({ kind: "committed", tabId: "tab-1", value: { status: "cancelled" } });
     await save;
-    act(() => root.unmount());
+    scheduler.dispose();
   });
 
   it("schedules autosave through the transaction boundary", async () => {
@@ -100,19 +76,39 @@ describe("useSaveController", () => {
       tabId: "tab-1",
       value: { status: "cancelled" as const }
     }));
-    const { latestRef, root } = renderController({
+    const scheduler = new WorkspaceSaveScheduler({
       getActiveDocument: () => createDocument(),
       runSaveTransaction,
       hasExternalFileConflict: () => false,
       autosaveDelayMs: 1,
       showNotification: vi.fn()
     });
-    act(() => latestRef.current!.scheduleAutosave());
+    scheduler.scheduleAutosave();
     await vi.waitFor(() => expect(runSaveTransaction).toHaveBeenCalledTimes(1));
     expect(runSaveTransaction).toHaveBeenCalledWith({
       forceSaveAs: false,
       hasExternalConflict: false
     });
-    act(() => root.unmount());
+    scheduler.dispose();
+  });
+});
+
+describe("save scheduler disposal", () => {
+  it("cancels a queued autosave and suppresses late failure notification and replay", async () => {
+    vi.useFakeTimers();
+    let rejectSave!: (reason: Error) => void;
+    const runSaveTransaction = vi.fn(() => new Promise<never>((_, reject) => { rejectSave = reject; }));
+    const showNotification = vi.fn();
+    const scheduler = new WorkspaceSaveScheduler({ getActiveDocument: createDocument, runSaveTransaction, hasExternalFileConflict: () => false, autosaveDelayMs: 10, showNotification });
+    scheduler.scheduleAutosave();
+    const saving = scheduler.runManualSave();
+    scheduler.scheduleAutosave();
+    scheduler.dispose();
+    rejectSave(new Error("late transport failure"));
+    await saving;
+    await vi.runAllTimersAsync();
+    expect(runSaveTransaction).toHaveBeenCalledTimes(1);
+    expect(showNotification).not.toHaveBeenCalled();
+    expect(scheduler.isSaveInFlight()).toBe(false);
   });
 });

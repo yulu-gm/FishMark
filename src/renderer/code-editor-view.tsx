@@ -16,7 +16,7 @@ import {
 } from "./code-editor";
 import type { EditorViewMode } from "@fishmark/codemirror-adapter";
 import type { ActiveBlockState } from "@fishmark/editor-model";
-import type { EditorLoadIdentity } from "./editor/editor-load-identity";
+import type { EditorLoadIdentity } from "./application/editor-load-identity";
 
 export type CodeEditorHandle = {
   getContent: () => string;

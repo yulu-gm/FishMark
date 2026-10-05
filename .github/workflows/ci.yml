@@ -47,7 +47,7 @@ jobs:
           src/main/workspace-file-identity-races.integration.test.ts
           src/main/main.test.ts
           src/main/full-regression.test.ts
-          src/renderer/editor/workspace-renderer-application.test.ts
+          src/renderer/application/workspace-renderer-application.test.ts
           src/renderer/app.autosave.test.ts
           src/renderer/performance/editor-foundation-baseline.test.ts
           src/renderer/outline.test.ts

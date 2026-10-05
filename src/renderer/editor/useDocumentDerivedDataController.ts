@@ -9,7 +9,7 @@ import {
   deriveOutlineItems as deriveDefaultOutlineItems,
   type OutlineItem
 } from "../outline";
-import { isSameEditorLoadIdentity, type EditorLoadIdentity } from "./editor-load-identity";
+import { isSameEditorLoadIdentity, type EditorLoadIdentity } from "../application/editor-load-identity";
 
 export const DOCUMENT_DERIVED_DATA_UPDATE_DELAY_MS = 120;
 

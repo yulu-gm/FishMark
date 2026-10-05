@@ -6,17 +6,17 @@
 
 **Created:** 2026-07-11
 
-**Last updated:** 2026-09-23
+**Last updated:** 2026-10-05
 
 **Overall status:** `IN_PROGRESS`
 
-**Current task:** none. `RF-506` / M5 is complete; the next dependency-ready task is `RF-801` (M8), which remains `PLANNED` until explicitly started.
+**当前任务：** 无活动实现任务。`RF-801` 于 2026-10-05 独立统一验收 PASS，状态 `COMPLETE`；M8 为 1/3，RF-802/803 与 M9 尚未完成。
 
-**M8 entry stabilization:** see `reports/reviews/2026-09-23-m8-readiness.md` for the startup-test, load-identity, cancelled-close, exact regression baseline, and real Electron safety evidence. This does not start RF-801 or claim M9 completion.
+**M8 入口历史证据：** `reports/reviews/2026-09-23-m8-readiness.md` 记录启动、load identity、取消关闭、精确回归与真实 Electron 安全基线；该报告当时未启动 RF-801。本轮 RF-801 的当前状态以上方独立验收为准，M9 仍未完成。
 
-**Next required work:** start `RF-801` when M8 work is authorized. M9 still owns the broader reproducible open/input/selection/scroll/tab-switch/memory and real-platform performance/E2E/security budgets.
+**下一步：** 完成 RF-801 最终提交与远端 CI 核验；下一依赖已满足的实现任务为 RF-802，仍为 PLANNED。M9 继续拥有更广泛的真实平台性能、E2E 与安全预算。
 
-**Current gate:** M5, M6/M6.5, and M7 are complete. RF-506 behavior/safety remained accepted, and the unchanged bundle budgets now all PASS in CI; M8 is the next planned milestone.
+**Current gate:** M5, M6/M6.5, and M7 are complete. RF-506 behavior/safety remained accepted, and the unchanged bundle budgets now all PASS in CI; RF-801 本地独立验收已 PASS，完整精确回归使用本机双 worker，原预算与 known failures 保持；主体远端 CI 待最终提交后核验。
 
 **Current performance evidence:** the 20k-line controller probe improved typing dispatch p95 from 1,934 ms to 66.9 ms and selection p95 from 1,697 ms to 13.9 ms after canonical-tree reuse and physical-range indexing. Final M5 CI bundle evidence: max initial chunk **179,699 / 300,000 B**, max initial chunk gzip **56,955 / 90,000 B**, total initial gzip **93,918 / 260,000 B**, total JS gzip **1,425,457 / 1,430,000 B** — all PASS without relaxing budgets. M9 still owns broader reproducible end-to-end performance budgets.
 **User priorities:** maintainability/extensibility, editing/interaction quality, and measured performance. Preserve the existing stack and owners; do not optimize progress percentages, package count, or deleted lines.
@@ -46,7 +46,7 @@ At most one `RF-xxx` task may be `IN_PROGRESS` or `ACCEPTING` at a time. A later
 | M5 | Pure semantic editing engine | `COMPLETE` | 6 | 6 | RF-506 semantic cutover, behavior/safety, deletion obligations, and original bundle budgets all accepted |
 | M6 | Thin CodeMirror adapter | `COMPLETE` | 4 | 4 | RF-601/602/603/604 accepted; `editor-core` deleted and adapter is the production owner |
 | M7 | Shared presentation and derived consumers | `COMPLETE` | 3 | 3 | RF-701/702/703 accepted; editor/export/outline/metrics now share canonical derived inputs |
-| M8 | Renderer/main composition cleanup | `PLANNED` | 0 | 3 | React/main/preload are composition or presentation only |
+| M8 | Renderer/main composition cleanup | `IN_PROGRESS` | 1 | 3 | RF-801 COMPLETE；RF-802/803 仍 PLANNED |
 | M9 | Performance, E2E, and security | `PLANNED` | 0 | 3 | Budgets, Playwright flows, and Electron security pass |
 | M10 | Purge and final acceptance | `PLANNED` | 0 | 2 | No compatibility/dead code; final verdict `PASS` |
 
@@ -88,7 +88,7 @@ Evidence columns are filled only with fresh command output/report paths from the
 | RF-701 | Semantic render plan | RF-506 behavior/safety gate | `COMPLETE` | `@fishmark/markdown-presentation` exposes the canonical semantic render plan; nested list/blockquote leaves use the same traversal and production CodeMirror decorations consume it. | Focused presentation/adapter suites plus the combined M6 frozen-tree acceptance. | Accepted as the completed prerequisite used by RF-602/603/604; M7 remains open because RF-702/703 are still planned. | `main` (`4a66136`) |
 | RF-702 | HTML export cutover | RF-604, RF-701 | `COMPLETE` | Renderer export orchestration parses one canonical tree, builds the shared render plan, and delegates pure Markdown-content HTML to `markdown-presentation`; legacy export-local block/inline parsing is removed. KaTeX stays in the lazy renderer export chunk via injected `renderMath`, so presentation root consumers do not pull it into the initial graph. | Clean-tree rerun at `1b08a2c`: focused 5 files / 42 passed; typecheck exit 0; build exit 0; full Vitest 2799 passed / 1 skipped / 11 known failures; guard 234/234; `forbiddenInitialSourceGroup:katex` and Mermaid plus all required lazy-chunk checks PASS. `perf:bundle` remains red only on the four pre-existing maximum budgets. | Accepted 2026-09-21 from owner-provided clean-tree verification; no new failing test or bundle source-group regression remains. | `main` (`df3b562` + `1b08a2c`) |
 | RF-703 | Outline and metrics cutover | RF-702 | `COMPLETE` | `EditorDerivedSnapshot` owns root outline headings and lazy document metrics; renderer consumers accept only a snapshot, App refreshes by snapshot identity/revision, raw-content scheduling is removed. Runtime evidence uses one shared `MarkdownParseInstrumentation` tracker with per-consumer before/after deltas; consumer cacheHit remains 0 because snapshot reuse belongs upstream. RF-602 canonical-id regression coverage is restored. | Owner independently confirmed the post-`b6a2c8e` focused/full/frozen-baseline rerun passed. Earlier typecheck/build and guard 234/234 were green; structural review confirmed production legacy parser calls are zero. Frozen baseline changes are limited to the two legitimately changed outline/metrics operations. | Owner acceptance PASS on 2026-09-22; `reports/task-summaries/RF-703.md`. | `main` (`265694d` + hardening through `b6a2c8e`) |
-| RF-801 | Non-React workspace client/store | RF-703 | `PLANNED` | — | typecheck/test | — | — |
+| RF-801 | 非 React 工作区命令与订阅层 | RF-703 | `COMPLETE` | 2026-10-05 独立 focused 23 文件/450 通过；application 无 React | typecheck/lint/build；foundation 310；全量 216 文件/2884 项（双 worker，10 exact known、0 unexpected）；真实 safety 七项；bundle 原预算；正式行为 121/121 | [独立验收 PASS](../../../reports/reviews/2026-10-05-rf-801-architecture.md)；[任务总结](../../../reports/task-summaries/RF-801.md) | `codex/rf-801-workspace-store`；主体提交/远端 CI 待父代理核验 |
 | RF-802 | React shell decomposition | RF-801 | `PLANNED` | — | lint/typecheck/test | — | — |
 | RF-803 | Main/preload composition split | RF-802 | `PLANNED` | — | lint/typecheck/test/build | — | — |
 | RF-901 | Final performance gate | RF-803 | `PLANNED` | — | perf/editing probes | — | — |
@@ -476,3 +476,11 @@ When acceptance fails:
 - [ ] Architecture acceptance result is `PASS`.
 - [ ] Task acceptance result is `PASS`.
 - [ ] Stable docs, backlog, progress, test cases/report, package READMEs, and task summaries agree.
+
+## 2026-10-05 RF-801 执行与独立验收记录（COMPLETE）
+
+沿用既有 WorkspaceRendererApplication / WorkspaceEditClient / PendingEditQueue / WorkspaceMutationCoordinator。React 只订阅与绑定，保存调度、外部冲突、导出、drop 与通知进入非 React owner；application 向 CodeMirror 暴露纯契约，不依赖 editor React 目录。保留一份 canonical workspace 与既有 optimistic queue；新增 projection cache 仅为派生视图缓存。
+
+入口旧 rail 断言在 `f15bc8e` 单独修复，仅对齐已提交 borderless 样式。父代理确认 main CI `37306043326` 在该 commit 的 Quality / Full regression / Bundle budget 全绿。后续同机基线发现的图标字体扫描与 mac 探针键码分别独立修复为 `33a886c`、`01dd503`，不计为 RF-801 产品范围。
+
+两条初审 P1 修复后，独立验收 focused 450、foundation 310、typecheck/lint/build、真实 safety 七项、原 bundle 与正式行为门禁全部通过。完整精确 regression 以官方 `VITEST_MAX_WORKERS=2` 运行全部 216 文件/2884 项，2874 passed / 10 exact known failed，无新增、跳过或运行错误；两轮默认并发失败保留。RF-801 已 PASS / COMPLETE，M8 为 1/3；原十条 known failures 和原 bundle 限额不变。详见 [任务总结](../../../reports/task-summaries/RF-801.md)，主体默认 Node 22 远端 CI 待父代理提交后补证。

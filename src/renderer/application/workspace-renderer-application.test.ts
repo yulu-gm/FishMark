@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { WorkspaceEditClient } from "./workspace-edit-client";
 
 import type { WorkspaceWindowSnapshot } from "../../shared/workspace";
 import {
@@ -1249,6 +1250,10 @@ describe("WorkspaceRendererApplication", () => {
     })).toBe(true);
     expect(application.getState().workspaceSnapshot?.activeDocument?.content).toBe("# First\n");
     expect(application.getEditorViewSnapshot()?.activeDocument?.content).toBe("# First!?\n");
+    const projection = application.getEditorViewSnapshot();
+    const store = application.getState();
+    expect(application.getEditorViewSnapshot()).toBe(projection);
+    expect(application.getState()).toBe(store);
     deferredApply.resolve({
       kind: "applied",
       acknowledgedSequence: 1,
@@ -1439,7 +1444,7 @@ describe("WorkspaceRendererApplication", () => {
     }
   );
 
-  it.each(["close", "detach"] as const)(
+  it.each(["close", "detach", "move"] as const)(
     "seals but does not dispatch %s until its incremental frame acknowledges",
     async (command) => {
       const applyDeferred = createDeferred<{
@@ -1451,6 +1456,7 @@ describe("WorkspaceRendererApplication", () => {
       const removed = createSnapshot({ activeTabId: "tab-2", includeFirst: false });
       const closeWorkspaceTab = vi.fn(async () => removed);
       const detachWorkspaceTabToNewWindow = vi.fn(async () => removed);
+      const moveWorkspaceTabToWindow = vi.fn(async () => ({ sourceWindowSnapshot: removed, targetWindowSnapshot: createSnapshot() }));
       const application = createApplication({
         bridge: {
           applyDocumentEdits: vi.fn(() => applyDeferred.promise),
@@ -1463,6 +1469,7 @@ describe("WorkspaceRendererApplication", () => {
           })),
           onDocumentProjection: vi.fn(() => () => {}),
           closeWorkspaceTab,
+          moveWorkspaceTabToWindow,
           detachWorkspaceTabToNewWindow
         }
       });
@@ -1475,14 +1482,15 @@ describe("WorkspaceRendererApplication", () => {
       })).toBe(true);
       const operation = command === "close"
         ? application.closeWorkspaceTab("tab-1")
-        : application.detachWorkspaceTab("tab-1");
+        : command === "detach" ? application.detachWorkspaceTab("tab-1") : application.moveWorkspaceTab({ tabId: "tab-1", targetWindowId: "window-2", targetIndex: 0 });
       await acknowledgeEditorReadOnly(application);
       expect(closeWorkspaceTab).not.toHaveBeenCalled();
       expect(detachWorkspaceTabToNewWindow).not.toHaveBeenCalled();
+      expect(moveWorkspaceTabToWindow).not.toHaveBeenCalled();
 
       applyDeferred.resolve({ kind: "applied", acknowledgedSequence: 1, revision: 1, isDirty: true });
       await vi.waitFor(() => expect(
-        command === "close" ? closeWorkspaceTab : detachWorkspaceTabToNewWindow
+        command === "close" ? closeWorkspaceTab : command === "detach" ? detachWorkspaceTabToNewWindow : moveWorkspaceTabToWindow
       ).toHaveBeenCalledTimes(1));
       await acknowledgeEditorEditable(application);
       await expect(operation).resolves.toMatchObject({ kind: "committed" });
@@ -1957,12 +1965,14 @@ describe("WorkspaceRendererApplication", () => {
       const reloadWorkspaceTabFromPath = vi.fn();
       const closeWorkspaceTab = vi.fn();
       const detachWorkspaceTabToNewWindow = vi.fn();
+      const moveWorkspaceTabToWindow = vi.fn();
       const confirmWorkspaceWindowClose = vi.fn();
       const application = createApplication({
         bridge: {
           getWorkspaceSnapshot: vi.fn(() => blocker.promise),
           reloadWorkspaceTabFromPath,
           closeWorkspaceTab,
+          moveWorkspaceTabToWindow,
           detachWorkspaceTabToNewWindow,
           confirmWorkspaceWindowClose
         }
@@ -1987,6 +1997,7 @@ describe("WorkspaceRendererApplication", () => {
       expect(reloadWorkspaceTabFromPath).not.toHaveBeenCalled();
       expect(closeWorkspaceTab).not.toHaveBeenCalled();
       expect(detachWorkspaceTabToNewWindow).not.toHaveBeenCalled();
+      expect(moveWorkspaceTabToWindow).not.toHaveBeenCalled();
       expect(confirmWorkspaceWindowClose).not.toHaveBeenCalled();
     }
   );
@@ -2040,3 +2051,178 @@ describe("WorkspaceRendererApplication", () => {
   });
 });
 
+
+describe("RF-801 application commands without React", () => {
+  it("shares conflict-aware manual save policy between test driver and menu", async () => {
+    const snapshot = createSnapshot();
+    snapshot.activeDocument = { ...snapshot.activeDocument!, externalChange: { kind: "modified" } };
+    const saveMarkdownFile = vi.fn();
+    const saveMarkdownFileAs = vi.fn(async () => ({ status: "cancelled" as const }));
+    const application = createApplication({ initialSnapshot: snapshot, bridge: { saveMarkdownFile, saveMarkdownFileAs } });
+    await application.getEditorTestAdapter().saveDocument();
+    expect(saveMarkdownFileAs).toHaveBeenCalledTimes(1);
+    expect(application.commands.runMenuCommand("save-markdown-file")).toBe(true);
+    await vi.waitFor(() => expect(saveMarkdownFileAs).toHaveBeenCalledTimes(2));
+    expect(saveMarkdownFile).not.toHaveBeenCalled();
+    application.dispose();
+  });
+
+  it("routes dropped batches through the same opening command and preserves cancel silence", async () => {
+    const handleDroppedMarkdownFile = vi.fn(async () => ({ disposition: "open-in-place" as const }));
+    const openWorkspaceFileFromPath = vi.fn(async () => ({ kind: "focused-existing" as const }));
+    const notify = vi.fn();
+    const application = createApplication({ bridge: { handleDroppedMarkdownFile, openWorkspaceFileFromPath } });
+    application.updatePresentation({ showNotification: notify });
+    await expect(application.commands.dropMarkdownFiles(["a.md", "b.md"])).resolves.toBe(true);
+    expect(handleDroppedMarkdownFile).toHaveBeenCalledWith({ targetPaths: ["a.md", "b.md"], hasOpenDocument: true });
+    expect(openWorkspaceFileFromPath).toHaveBeenCalledTimes(2);
+    await expect(application.commands.openMarkdownFromPaths([])).resolves.toBe(false);
+    expect(notify).not.toHaveBeenCalled();
+    application.dispose();
+  });
+
+  it("does not notify or dispatch a queued operation after disposal", async () => {
+    const deferred = createDeferred<{ kind: "cancelled" }>();
+    const openWorkspaceFile = vi.fn(() => deferred.promise);
+    const createWorkspaceTab = vi.fn();
+    const notify = vi.fn();
+    const application = createApplication({ bridge: { openWorkspaceFile, createWorkspaceTab } });
+    application.updatePresentation({ showNotification: notify });
+    const opening = application.commands.openMarkdown();
+    await vi.waitFor(() => expect(openWorkspaceFile).toHaveBeenCalledTimes(1));
+    const queued = application.commands.createUntitledMarkdown();
+    application.dispose();
+    deferred.resolve({ kind: "cancelled" });
+    await Promise.all([opening, queued]);
+    expect(createWorkspaceTab).not.toHaveBeenCalled();
+    expect(notify).not.toHaveBeenCalled();
+  });
+});
+
+describe("external conflict command identity and barriers", () => {
+  it("does not redirect a queued gesture for tab A after an earlier activation selects tab B", async () => {
+    const blocker = createDeferred<WorkspaceWindowSnapshot>();
+    const resolveExternalChange = vi.fn();
+    const application = createApplication({ bridge: {
+      getWorkspaceSnapshot: vi.fn(() => blocker.promise),
+      activateWorkspaceTab: vi.fn(async () => createSnapshot({ activeTabId: "tab-2" })),
+      resolveExternalChange
+    } });
+    const refreshing = application.refreshWorkspaceSnapshot();
+    await vi.waitFor(() => expect(application.getPendingOperationKind()).toBe("refresh"));
+    const activating = application.commands.activateWorkspaceTab("tab-2");
+    const resolving = application.keepMemoryVersion();
+    blocker.resolve(createSnapshot());
+    await Promise.all([refreshing, activating, resolving]);
+    expect(application.getActiveTabId()).toBe("tab-2");
+    expect(resolveExternalChange).not.toHaveBeenCalled();
+    application.dispose();
+  });
+
+  it("waits for pending frame acknowledgement and flush before resolving a conflict", async () => {
+    const acknowledgement = createDeferred<{ kind: "applied"; acknowledgedSequence: number; revision: number; isDirty: boolean }>();
+    const flushDocumentEdits = vi.fn(async () => ({ kind: "flushed" as const, acknowledgedSequence: 1, revision: 1, savedRevision: 0, isDirty: true }));
+    const resolveExternalChange = vi.fn(async () => ({ kind: "resolved" as const }));
+    const snapshot = createSnapshot({ firstContent: "# Pending\n" });
+    snapshot.activeDocument = { ...snapshot.activeDocument!, revision: 1, isDirty: true };
+    const application = createApplication({ bridge: {
+      applyDocumentEdits: vi.fn(() => acknowledgement.promise), flushDocumentEdits,
+      resolveExternalChange, getWorkspaceSnapshot: vi.fn(async () => snapshot)
+    } });
+    const identity = consumeEditorLoad(application);
+    application.recordEditorDocumentChangeFrame({ identity, baseText: "# First\n", resultingText: "# Pending\n", changes: [{ from: 2, to: 7, insert: "Pending" }] });
+    const resolving = application.keepMemoryVersion();
+    await vi.waitFor(() => expect(application.getPendingOperationKind()).toBe("external-change"));
+    expect(resolveExternalChange).not.toHaveBeenCalled();
+    acknowledgement.resolve({ kind: "applied", acknowledgedSequence: 1, revision: 1, isDirty: true });
+    await resolving;
+    expect(resolveExternalChange).toHaveBeenCalledWith({ tabId: "tab-1", command: "keep-memory" });
+    expect(flushDocumentEdits.mock.invocationCallOrder[0]).toBeLessThan(resolveExternalChange.mock.invocationCallOrder[0]!);
+    application.dispose();
+  });
+
+  it.each(["resolved", "error", "cancelled", "transport-error"] as const)("releases reload sealing after %s", async (kind) => {
+    const notification = vi.fn();
+    const resolveExternalChange = vi.fn(async () => {
+      if (kind === "transport-error") throw new Error("transport offline");
+      if (kind === "error") return { kind, message: "reload rejected" };
+      return { kind };
+    });
+    const application = createApplication({ bridge: {
+      resolveExternalChange, getWorkspaceSnapshot: vi.fn(async () => createSnapshot()),
+      flushDocumentEdits: vi.fn(async () => ({ kind: "flushed" as const, acknowledgedSequence: 0, revision: 0, savedRevision: 0, isDirty: false }))
+    } });
+    application.updatePresentation({ showNotification: notification });
+    consumeEditorLoad(application);
+    const reloading = application.reloadFromDisk();
+    await acknowledgeEditorReadOnly(application);
+    await acknowledgeEditorEditable(application);
+    await reloading;
+    expect(application.getState().editorTransition).toBeNull();
+    expect(application.getPendingEditorLoadIdentity()?.tabId).toBe("tab-1");
+    expect(notification).toHaveBeenCalledTimes(kind === "error" || kind === "transport-error" ? 1 : 0);
+    application.dispose();
+  });
+
+  it("suppresses late resolve callbacks and releases sealing when disposed during external reload", async () => {
+    const result = createDeferred<{ kind: "resolved" }>();
+    const resolveExternalChange = vi.fn(() => result.promise);
+    const getWorkspaceSnapshot = vi.fn();
+    const notification = vi.fn();
+    const application = createApplication({ bridge: { resolveExternalChange, getWorkspaceSnapshot,
+      flushDocumentEdits: vi.fn(async () => ({ kind: "flushed" as const, acknowledgedSequence: 0, revision: 0, savedRevision: 0, isDirty: false }))
+    } });
+    application.updatePresentation({ showNotification: notification });
+    consumeEditorLoad(application);
+    const reloading = application.reloadFromDisk();
+    await acknowledgeEditorReadOnly(application);
+    await vi.waitFor(() => expect(resolveExternalChange).toHaveBeenCalledTimes(1));
+    application.dispose();
+    result.resolve({ kind: "resolved" });
+    await reloading;
+    expect(getWorkspaceSnapshot).not.toHaveBeenCalled();
+    expect(notification).not.toHaveBeenCalled();
+    expect(application.getState().editorTransition).toBeNull();
+  });
+});
+
+describe("application disposal at completed drain boundary", () => {
+  it.each(["create", "activate"] as const)("does not dispatch %s when disposal occurs as the started barrier releases", async (kind) => {
+    const checkpoint = createDeferred<{ kind: "flushed"; acknowledgedSequence: number; revision: number; savedRevision: number; isDirty: boolean }>();
+    const createWorkspaceTab = vi.fn();
+    const activateWorkspaceTab = vi.fn();
+    const flushDocumentEdits = vi.fn(() => checkpoint.promise);
+    const application = createApplication({ bridge: { createWorkspaceTab, activateWorkspaceTab, flushDocumentEdits } });
+    consumeEditorLoad(application);
+    // Fault injection at the public edit-client lease boundary: the real checkpoint
+    // succeeds, then the application is disposed before its awaiting command resumes.
+    const acquire = WorkspaceEditClient.prototype.acquireFlushBarrier;
+    const spy = vi.spyOn(WorkspaceEditClient.prototype, "acquireFlushBarrier").mockImplementation(async function (this: WorkspaceEditClient, tabId) {
+      const result = await acquire.call(this, tabId);
+      if (result.kind !== "acquired") return result;
+      return { ...result, lease: { release() { result.lease.release(); application.dispose(); } } };
+    });
+    try {
+      const operation = kind === "create" ? application.createUntitledMarkdown() : application.activateWorkspaceTab("tab-2");
+      await vi.waitFor(() => expect(flushDocumentEdits).toHaveBeenCalledTimes(1));
+      checkpoint.resolve({ kind: "flushed" as const, acknowledgedSequence: 0, revision: 0, savedRevision: 0, isDirty: false });
+      await expect(operation).resolves.toMatchObject({ kind: "failed" });
+      expect(createWorkspaceTab).not.toHaveBeenCalled();
+      expect(activateWorkspaceTab).not.toHaveBeenCalled();
+    } finally { spy.mockRestore(); application.dispose(); }
+  });
+
+  it.each(["create", "activate"] as const)("rejects a late %s IPC result after disposal without replacing the projection", async (kind) => {
+    const response = createDeferred<WorkspaceWindowSnapshot>();
+    const createWorkspaceTab = vi.fn(() => response.promise);
+    const activateWorkspaceTab = vi.fn(() => response.promise);
+    const application = createApplication({ bridge: { createWorkspaceTab, activateWorkspaceTab } });
+    const original = application.getState();
+    const operation = kind === "create" ? application.createUntitledMarkdown() : application.activateWorkspaceTab("tab-2");
+    await vi.waitFor(() => expect(kind === "create" ? createWorkspaceTab : activateWorkspaceTab).toHaveBeenCalledTimes(1));
+    application.dispose();
+    response.resolve(createSnapshot({ activeTabId: "tab-2" }));
+    await expect(operation).resolves.toMatchObject({ kind: "failed" });
+    expect(application.getState()).toBe(original);
+  });
+});

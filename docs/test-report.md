@@ -1,5 +1,39 @@
 # FishMark 测试报告
 
+## 2026-10-05 RF-801 独立统一验收：PASS
+
+RF-801 已达到 COMPLETE，M8 为 **1/3**；RF-802、RF-803 与 M9 保持后续范围。独立验收环境为 macOS arm64、Node v25.8.0、npm 11.11.0、Electron 41.2.0，所有重门禁串行执行。两条 P1（排队外部冲突操作的身份失效、drain/IPC 期间 disposal）修复后重新验收；开发侧早期 build 结果不作为本节证据。
+
+| 范围 | 原命令 / 证据 | 新鲜结果 |
+| --- | --- | --- |
+| 受影响 application / editor / App / driver | `npm test -- src/renderer/application src/renderer/editor src/renderer/app.autosave.test.ts src/renderer/editor-test-driver.test.ts` | PASS，23 files / 450 tests，5.32 秒。 |
+| 类型、lint、生产构建 | `npm run typecheck`；`npm run lint`；`npm run build` | 全部 exit 0；最终探针脚本修复后再跑 lint，0 error / 0 warning。 |
+| 精确完整回归 | `VITEST_MAX_WORKERS=2 npm run test:regression` | PASS，216 files / 2884 tests 全量执行，2874 passed / 10 exact known failed；unexpected、skip、collection/hook/unhandled error、unresolved baseline 均为 0，72.64 秒。原 wrapper、独立 reporter、退出状态/信号校验均未改变。 |
+| 架构与性能基线 | `npm run test:editor-foundation` | PASS，6 files / 310 tests，19.21 秒。 |
+| 真实生产 Electron 安全 | `npm run test:workspace-safety` | PASS，7/7 checks；生产 bridge 缺席、两次原子保存、取消关闭后继续编辑、pending-close-save 与最终磁盘文本全部验证。promptResponses=`[2,0]`，最终文本精确为 `Smoke first-save second-save pending-close after-cancel`。 |
+| 原包预算 | `npm run perf:bundle` | PASS；max initial 179699/300000 B，max initial gzip 56949/90000 B，total initial gzip 94764/260000 B，total JS gzip 1417631/1430000 B；forbidden-initial 与 4 个 required-lazy 合同通过。 |
+| 正式编辑行为探针 | `npm run test:editor-behavior -- --report .artifacts/editor-behavior/rf801-acceptance.json` | PASS，121/121 cases、2541 targets；verified-existing 79、verified-runner 2363、known-defect 99、unexpected 0、not-run 0，25.503 秒。manual save 走迁入后的 application 命令入口。 |
+| diff 格式 | `git diff --check` | PASS。 |
+
+完整回归的 PASS 是原精确已知失败门禁接受这 10 条已登记失败，**不是 raw Vitest 全绿**。本机使用 Vitest 官方环境变量限制 2 workers，不过滤文件或 case，不更改仓库默认配置、watchdog、baseline 或 fingerprint。RF-801 提交后的默认 Node 22 远端 CI 由父代理补证，不能用前置修复 CI 替代主体 CI。
+
+### 首次失败与同机基线对照（保留）
+
+1. 首轮默认 `npm run test:regression` exit 1：216 files / 2884 tests，2866 passed / 18 failed（10 exact known + 8 unexpected），148.87 秒。额外失败为 6 条图标生成超时与 2 条 process cleanup 时序失败。四文件 focused 复验为 9 passed / 6 failed，cleanup 两文件通过，图标超时稳定复现。
+2. 干净 `f15bc8e` 同机同依赖复现相同图标失败；测试、脚本、SVG 与 lockfile 逐文件相同。受控完整图标生成默认 44.262 秒，唯一增加 `font: { loadSystemFonts: false }` 后 0.217 秒；独立重算 29 个 PNG/ICO/ICNS 的 SHA-256 全部一致，两个 SVG 无字体或文本。父代理将该生产脚本修复独立提交为 `33a886c`，原图标 focused 8/8 通过；其 Node 22 CI `37315633235` 全绿，仅证明前置修复。
+3. 图标修复后第二轮默认完整回归仍 exit 1：2872 passed / 12 failed（10 exact known + 性能基线 60 秒超时 + 1 条 process-tree cleanup），73.01 秒。随后授权使用上述官方 worker 环境变量，原完整 wrapper 全量通过。两轮默认失败报告均保留，不把未知失败加入 known baseline。
+4. 首轮 workspace safety 在首次保存前的 caret 检查失败；干净 `f15bc8e` 同机生产 build 同样失败。临时诊断显示 mac `sendInputEvent` 的 `keyCode: "ArrowDown"` 产生空 key/code、keyCode 0；改为 Electron Accelerator 键码 `Down` 后产生真实 ArrowDown 事件。父代理独立提交探针修复 `01dd503`，仅修改 mac 键码及注释，原 native 输入、全部断言、15 秒/90 秒超时和 Linux 分支保留。上述 RF-801 冻结 build 的 fresh 7/7 PASS 来自独立重跑，不借用基线 PASS。
+
+安全探针成功运行时仍输出与基线一致的 `MaxListenersExceededWarning`（11 个 destroyed listeners）；没有运行错误或断言失败，作为非阻断观察保留，不据此宣称 M9 安全验收完成。
+
+### 证据与验收边界
+
+- 完整回归报告：`.artifacts/ci/rf801-regression-first{,.gate}.json`、`rf801-regression-second{,.gate}.json`、`rf801-regression-workers2{,.gate}.json`；最终标准输出为 `.artifacts/ci/vitest-full{,.gate}.json`。
+- 真实安全报告：`.artifacts/ci/rf801-workspace-safety-first.json` 与 `.artifacts/ci/workspace-safety.json`。正式行为报告：`.artifacts/editor-behavior/rf801-acceptance.json`。
+- 验收日志：`/tmp/rf801-accept-focused.log`、`typecheck.log`、`lint-final.log`、`build.log`、`foundation.log`、`bundle.log`、`behavior.log`、`regression-workers2.log`、`workspace-safety-final.log`（后八项同用 `/tmp/rf801-accept-` 前缀）。图标受控原始证据在 `/var/folders/m_/cg_3qhbj725gv73f55v9pn940000gn/T/rf801-icons-controlled-40fg5htm/`。
+- 冻结的 `src` 与 CI diff（相对 `f15bc8e`）SHA-256：`d11b83f4fdecae8689e157427528544d144e1d8ae99b04f5427b89f810c0f046`。独立验收未改主体实现。
+- 五项 RF-801 标准、两条已修 P1 和单 owner 审查见 [架构验收](../reports/reviews/2026-10-05-rf-801-architecture.md)；人工验收步骤见 [任务总结](../reports/task-summaries/RF-801.md)。真实平台 IME、输入到绘制、全量 E2E/安全预算及既有 known defects 继续由 M9/相应任务处理。
+
 ## 2026-09-22 RF-506 / M5 最终验收
 
 | 范围 | 命令 / 证据 | 结果 | 说明 |

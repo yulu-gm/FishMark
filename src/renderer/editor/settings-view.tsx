@@ -25,6 +25,8 @@ type SettingsViewProps = {
   themePackages: ThemePackageEntry[];
   isRefreshingThemes: boolean;
   onRefreshThemes: () => Promise<void>;
+  onOpenThemesDirectory: () => Promise<void>;
+  onSelectTemporaryImageDirectory: () => Promise<Awaited<ReturnType<Window["fishmark"]["updatePreferences"]>> | null>;
   onUpdate: (patch: PreferencesUpdate) => Promise<UpdatePreferencesResult>;
   onOpenExternalLink: (href: string) => void;
   onClose: () => void;
@@ -351,6 +353,8 @@ export function SettingsView({
   themePackages,
   isRefreshingThemes,
   onRefreshThemes,
+  onOpenThemesDirectory,
+  onSelectTemporaryImageDirectory,
   onUpdate,
   onOpenExternalLink,
   onClose
@@ -365,7 +369,6 @@ export function SettingsView({
   ]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Settings draft state mirrors the latest persisted preferences when they change externally.
     setDraft(buildDraft(preferences));
   }, [preferences]);
 
@@ -433,17 +436,17 @@ export function SettingsView({
     try {
       await onRefreshThemes();
       setErrorMessage(null);
-    } catch {
-      setErrorMessage("主题列表刷新失败。");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
     }
   }
 
   async function handleOpenThemesDirectory(): Promise<void> {
     try {
-      await window.fishmark.openThemesDirectory();
+      await onOpenThemesDirectory();
       setErrorMessage(null);
-    } catch {
-      setErrorMessage("无法打开主题目录。");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -454,17 +457,16 @@ export function SettingsView({
 
   async function handleSelectTemporaryImageDirectory(): Promise<void> {
     try {
-      const selectedDirectory = await window.fishmark.selectTemporaryImageDirectory();
+      const result = await onSelectTemporaryImageDirectory();
 
-      if (!selectedDirectory) {
+      if (result === null) {
         return;
       }
 
-      await applyPatch({
-        images: { temporaryDirectory: selectedDirectory }
-      });
-    } catch {
-      setErrorMessage("无法选择临时图片目录。");
+      if (result.status === "error") setErrorMessage(result.error.message);
+      else { setErrorMessage(null); setHasSavedChanges(true); }
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
     }
   }
 

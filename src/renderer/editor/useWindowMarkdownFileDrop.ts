@@ -9,7 +9,7 @@ export function isMarkdownFilePath(targetPath: string): boolean {
 }
 
 export function getDroppedMarkdownPaths(
-  fishmark: Window["fishmark"],
+  getPathForDroppedFile: (file: File) => string,
   dataTransfer: DataTransfer | null
 ): string[] {
   const resolvedPaths = new Set<string>();
@@ -19,7 +19,7 @@ export function getDroppedMarkdownPaths(
       continue;
     }
 
-    const filePath = fishmark.getPathForDroppedFile(file);
+    const filePath = getPathForDroppedFile(file);
 
     if (typeof filePath !== "string" || !isMarkdownFilePath(filePath)) {
       continue;
@@ -44,9 +44,8 @@ export function hasFileDrag(dataTransfer: DataTransfer | null): boolean {
 }
 
 export function useWindowMarkdownFileDrop(input: {
-  fishmark: Window["fishmark"];
-  getHasOpenDocument: () => boolean;
-  openMarkdownFromPaths: (targetPaths: string[]) => Promise<void>;
+  getPathForDroppedFile: (file: File) => string;
+  dropMarkdownFiles: (targetPaths: string[]) => Promise<void>;
 }): void {
   const handleWindowDragOver = useEffectEvent((event: DragEvent): void => {
     if (!hasFileDrag(event.dataTransfer)) {
@@ -65,22 +64,13 @@ export function useWindowMarkdownFileDrop(input: {
     event.preventDefault();
     event.stopPropagation();
 
-    const targetPaths = getDroppedMarkdownPaths(input.fishmark, event.dataTransfer);
+    const targetPaths = getDroppedMarkdownPaths(input.getPathForDroppedFile, event.dataTransfer);
 
     if (targetPaths.length === 0) {
       return;
     }
 
-    void input.fishmark
-      .handleDroppedMarkdownFile({
-        targetPaths,
-        hasOpenDocument: input.getHasOpenDocument()
-      })
-      .then(async (result) => {
-        if (result.disposition === "open-in-place") {
-          await input.openMarkdownFromPaths(targetPaths);
-        }
-      });
+    void input.dropMarkdownFiles(targetPaths);
   });
 
   useEffect(() => {

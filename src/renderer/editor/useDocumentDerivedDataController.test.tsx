@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createEditorDerivedSnapshotFromCache, type EditorDerivedSnapshot } from "@fishmark/editor-model";
 import { createDocumentStructureCache } from "@fishmark/markdown-engine";
-import type { EditorLoadIdentity } from "./editor-load-identity";
+import type { EditorLoadIdentity } from "../application/editor-load-identity";
 import {
   DOCUMENT_DERIVED_DATA_UPDATE_DELAY_MS,
   useDocumentDerivedDataController
