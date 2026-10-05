@@ -1,61 +1,32 @@
 import {
   Suspense,
   lazy,
-  useEffect,
   useRef,
   useState,
-  type ChangeEvent,
   type CSSProperties,
-  type DragEvent,
-  type KeyboardEvent,
-  type MouseEvent,
-  type PointerEvent as ReactPointerEvent,
-  type ReactElement,
-  type RefObject,
   type SVGProps
 } from "react";
+import { ConflictBanner } from "./components/ConflictBanner";
+import { FindReplacePanel } from "./components/FindReplacePanel";
+import { NotificationHost } from "./components/NotificationHost";
+import { OutlinePanel } from "./components/OutlinePanel";
+import { SettingsDrawer } from "./components/SettingsDrawer";
+import { StatusBar } from "./components/StatusBar";
+import { TableToolbar } from "./components/TableToolbar";
+import { WelcomeWorkspace } from "./components/WelcomeWorkspace";
+import { WorkspaceTabStrip } from "./components/WorkspaceTabStrip";
+import { useFindReplacePresentation } from "./useFindReplacePresentation";
+import { useSidePanelResize } from "./useSidePanelResize";
+import type { WorkspaceShellProps, WorkspaceViewContainerId } from "./workspace-shell-props";
 
-import type {
-  EditorViewMode,
-  ShortcutGroupId
-} from "@fishmark/codemirror-adapter";
-import type { ActiveBlockState } from "@fishmark/editor-model";
-import type { AppNotification } from "../../shared/app-update";
 import {
-  SIDE_PANEL_WIDTH_DEFAULT,
   SIDE_PANEL_WIDTH_MAX,
-  SIDE_PANEL_WIDTH_MIN,
-  clampSidePanelWidth,
-  type Preferences,
-  type PreferencesUpdate
+  SIDE_PANEL_WIDTH_MIN
 } from "../../shared/preferences";
-import type { RecentFilesSnapshot } from "../../shared/recent-files";
-import type { ThemeEffectsMode } from "../../shared/theme-package";
-import type { WorkspaceWindowSnapshot } from "../../shared/workspace";
-import type { CodeEditorHandle } from "../code-editor-view";
-import type {
-  CodeEditorDiscardedDocumentText,
-  CodeEditorDocumentChangeFrame
-} from "../code-editor";
-import type { OutlineItem } from "../outline";
-import type { ThemeRuntimeEnv } from "../theme-runtime-env";
-import type { ThemeSurfaceRuntimeMode } from "../shader/theme-surface-runtime";
-import type { ThemeSurfaceHostDescriptor } from "./ThemeSurfaceHost";
-import type { ExternalMarkdownFileState } from "../application/editor-shell-state";
-import type { EditorLoadIdentity } from "../application/editor-load-identity";
-import type { EditorTransition } from "../application/workspace-renderer-application";
-import type { TitlebarLayoutDescriptor } from "./titlebar-layout";
-import type { ThemePackageEntry, ResolvedThemeMode } from "./useThemeController";
-import fishmarkMarkSvg from "../../../assets/branding/fishmark_mark.svg?raw";
 
 const CodeEditorView = lazy(async () => {
   const module = await import("../code-editor-view");
   return { default: module.CodeEditorView };
-});
-
-const SettingsView = lazy(async () => {
-  const module = await import("./settings-view");
-  return { default: module.SettingsView };
 });
 
 const ThemeSurfaceHost = lazy(async () => {
@@ -73,111 +44,16 @@ const ShortcutHintOverlay = lazy(async () => {
   return { default: module.ShortcutHintOverlay };
 });
 
-type ShellMode = "reading" | "editing";
-/**
- * The rail switches the shared side panel between view containers; the same
- * container id is what `aria-pressed` on the rail button reports, and `null`
- * means the region is collapsed.
- */
-export type WorkspaceViewContainerId = "search" | "outline";
-type AppNotificationBannerState = "hidden" | "open" | "closing";
-type TableToolTone = "default" | "danger";
-type TableToolIconComponent = (props: SVGProps<SVGSVGElement>) => ReactElement;
-type FindReplaceSnapshot = {
-  matchCount: number;
-  currentMatchIndex: number | null;
-};
-/**
- * In-flight pointer drag of the shared side panel's right edge. `startWidth` is
- * the width when the drag began and `availableWidth` is the space the panel
- * column may occupy; both are captured at pointerdown so a frame only needs the
- * pointer delta.
- */
-type SidePanelResizeSession = {
-  pointerId: number;
-  startX: number;
-  startWidth: number;
-  availableWidth: number;
-};
-type TableToolAction = {
-  id: string;
-  label: string;
-  tone: TableToolTone;
-  icon: TableToolIconComponent;
-  onClick: () => void;
-};
-
 const VIEW_CONTAINER_LABELS: Record<WorkspaceViewContainerId, string> = {
   search: "Search",
   outline: "Outline"
 };
 
-/** Keyboard resize step for the panel separator, in CSS pixels. */
-const SIDE_PANEL_RESIZE_KEY_STEP = 16;
 
 function createWelcomeShortcutTip(platform: string) {
   const modifier = platform === "darwin" ? "Cmd" : "Ctrl";
   return `Tip: Hold ${modifier} for shortcuts`;
 }
-function RowAboveIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" {...props}>
-      <path d="M12 3v4M10 5h4M4 9h16M4 9v11M20 9v11M8 9v11M16 9v11M4 14.5h16" />
-    </svg>
-  );
-}
-
-function RowBelowIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" {...props}>
-      <path d="M4 4h16M4 4v11M20 4v11M8 4v11M16 4v11M4 9.5h16M12 17v4M10 19h4" />
-    </svg>
-  );
-}
-
-function ColumnLeftIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" {...props}>
-      <path d="M4 4h14M4 20h14M8 4v16M13 4v16M18 4v16M2 12h4M4 10v4" />
-    </svg>
-  );
-}
-
-function ColumnRightIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" {...props}>
-      <path d="M6 4h14M6 20h14M6 4v16M11 4v16M16 4v16M18 12h4M20 10v4" />
-    </svg>
-  );
-}
-
-function DeleteRowIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" {...props}>
-      <path d="M4 4h16M4 4v16M20 4v16M8 4v16M16 4v16M4 9.5h16M9 14.5h6" />
-      <path d="M18 12l3 3M21 12l-3 3" />
-    </svg>
-  );
-}
-
-function DeleteColumnIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" {...props}>
-      <path d="M4 4h16M4 20h16M4 4v16M9 4v16M14 4v16M4 9.5h16M4 14.5h16" />
-      <path d="M17 3l3 3M20 3l-3 3" />
-    </svg>
-  );
-}
-
-function DeleteTableIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" {...props}>
-      <path d="M5 5h14M5 5v14M19 5v14M9.5 5v14M14.5 5v14M5 9.5h14M5 14.5h14" />
-      <path d="M7 7l10 10M17 7L7 17" />
-    </svg>
-  );
-}
-
 function SearchIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" {...props}>
@@ -193,211 +69,6 @@ function OutlineIcon(props: SVGProps<SVGSVGElement>) {
       <path d="M4 6h3M4 12h3M4 18h3M10 6h10M10 12h10M10 18h6" />
     </svg>
   );
-}
-
-function SettingsDrawerFallback({ surfaceState }: { surfaceState: "open" | "closing" }) {
-  return (
-    <section
-      className="settings-shell"
-      data-fishmark-panel="settings-drawer"
-      data-fishmark-surface="settings-drawer"
-      data-state={surfaceState}
-      role="dialog"
-      aria-modal="true"
-      aria-busy="true"
-    />
-  );
-}
-
-export type WorkspaceShellProps = {
-  workspaceSnapshot: WorkspaceWindowSnapshot | null;
-  activeHeadingId: string | null;
-  activeShortcutGroupId: ShortcutGroupId;
-  activeTableToolId: string | null;
-  activeThemePackageSurface?: never;
-  activeTitlebarSurface: ThemeSurfaceHostDescriptor | null;
-  activeViewContainer: WorkspaceViewContainerId | null;
-  activeWorkbenchSurface: ThemeSurfaceHostDescriptor | null;
-  appUpdateStatusLabel: string | null;
-  appVersionLabel: string;
-  closingViewContainer: WorkspaceViewContainerId | null;
-  controlledTitlebarEnabled: boolean;
-  currentDocumentMetrics: { meaningfulCharacterCount: number } | null;
-  effectiveSaveState: "idle" | "manual-saving" | "autosaving";
-  editorContainerRef: RefObject<HTMLDivElement | null>;
-  editorLoadRevision: number;
-  editorEpoch: number;
-  editorTransition: EditorTransition | null;
-  editorRef: RefObject<CodeEditorHandle | null>;
-  editorViewMode: EditorViewMode;
-  externalFileConflictMessage: string;
-  externalFileState: ExternalMarkdownFileState;
-  fishmarkPlatform: NodeJS.Platform;
-  fontFamilies: string[];
-  headerTitle: string;
-  isDocumentOpen: boolean;
-  isReadingMode: boolean;
-  isRefreshingThemePackages: boolean;
-  isSettingsDrawerVisible: boolean;
-  isSettingsOpen: boolean;
-  isShortcutHintVisible: boolean;
-  notification: AppNotification | null;
-  notificationState: AppNotificationBannerState;
-  outlineItems: OutlineItem[];
-  recentFiles: RecentFilesSnapshot;
-  preferences: Preferences;
-  preferencesThemeEffectsMode: ThemeEffectsMode;
-  resolvedThemeMode: ResolvedThemeMode;
-  saveStatusLabel: string;
-  settingsEntryRef: RefObject<HTMLButtonElement | null>;
-  shellMode: ShellMode;
-  /**
-   * Stored width of the shared side panel region, shared by every view
-   * container. `null` means "not set yet" and resolves to the default.
-   */
-  sidePanelStoredWidth: number | null;
-  themePackages: ThemePackageEntry[];
-  themeRuntimeEnv: ThemeRuntimeEnv;
-  titlebarHeight: number;
-  titlebarLayout: TitlebarLayoutDescriptor;
-  onActiveBlockChange: (activeBlockState: ActiveBlockState) => void;
-  onAppWorkspaceMouseDownCapture: (event: MouseEvent<HTMLElement>) => void;
-  onCaptureSettingsOpenOrigin: () => void;
-  onCloseViewContainer: () => void;
-  onCloseSettingsDrawer: () => void;
-  onCloseWorkspaceTab: (tabId: string) => void;
-  onDismissExternalFileConflict: () => void;
-  onDocumentChangeFrame: (frame: CodeEditorDocumentChangeFrame) => void;
-  onDiscardedDocumentText: (discarded: CodeEditorDiscardedDocumentText) => void;
-  onPendingDocumentChangesChange: (input: {
-    hasPending: boolean;
-    identity: EditorLoadIdentity | null;
-  }) => void;
-  onEditorBarrierChange: (barrier: (() => Promise<{
-    readonly text: string;
-    readonly identity: EditorLoadIdentity | null;
-  }>) | null) => void;
-  onEditorRemotePatchChange?: (patch: ((input: {
-    readonly identity: EditorLoadIdentity;
-    readonly expectedBefore: string;
-    readonly expectedAfter: string;
-    readonly from: number;
-    readonly to: number;
-    readonly insert: string;
-  }) => Promise<import("../code-editor").CodeEditorRemotePatchResult>) | null) => void;
-  onEditorCanonicalRestoreChange?: (restore: ((input: {
-    readonly identity: EditorLoadIdentity;
-    readonly expectedBefore: string;
-    readonly canonicalText: string;
-  }) => Promise<import("../code-editor").CodeEditorCanonicalRestoreResult>) | null) => void;
-  onEditorTransitionApplied: (input: { token: number; readOnly: boolean }) => void;
-  onEditorLoadRevisionApplied: (identity: EditorLoadIdentity) => void;
-  onEditorBlur: () => void;
-  onEditorViewModeChange: (mode: EditorViewMode) => void;
-  onImportClipboardImage: (input: { documentPath: string | null }) => Promise<string | null>;
-  onOpenExternalLink: (href: string) => void;
-  onInsertTableColumnLeft: () => void;
-  onInsertTableColumnRight: () => void;
-  onInsertTableRowAbove: () => void;
-  onInsertTableRowBelow: () => void;
-  onDeleteTable: () => void;
-  onDeleteTableColumn: () => void;
-  onDeleteTableRow: () => void;
-  onKeepMemoryVersion: () => void;
-  onNavigateToOutlineItem: (startOffset: number) => void;
-  onToggleViewContainer: (viewContainerId: WorkspaceViewContainerId) => void;
-  onOpenRecentFile: (targetPath: string) => void;
-  onClearRecentFile: (targetPath: string) => void;
-  onReloadExternalFile: () => void;
-  onSaveAs: () => void;
-  onSettingsOpen: () => void;
-  /** Persist a pointerup/keyboard side panel width. Never called per frame. */
-  onSidePanelWidthCommit: (width: number) => void;
-  onTableToolHoverChange: (toolId: string | null) => void;
-  onTabActivate: (tabId: string) => void;
-  onTabDragEnd: (tabId: string) => void;
-  onTabDragOver: (event: DragEvent<HTMLElement>) => void;
-  onTabDragStart: (tabId: string, event: DragEvent<HTMLElement>) => void;
-  onTabDrop: (tabId: string, index: number, event: DragEvent<HTMLElement>) => void;
-  onTitlebarSurfaceRuntimeModeChange: (mode: ThemeSurfaceRuntimeMode) => void;
-  onUpdatePreferences: (
-    patch: PreferencesUpdate
-  ) => Promise<Awaited<ReturnType<Window["fishmark"]["updatePreferences"]>>>;
-  onRefreshThemePackages: () => Promise<void>;
-  onOpenThemesDirectory: () => Promise<void>;
-  onSelectTemporaryImageDirectory: () => Promise<Awaited<ReturnType<Window["fishmark"]["updatePreferences"]>> | null>;
-  onWorkbenchSurfaceRuntimeModeChange: (mode: ThemeSurfaceRuntimeMode) => void;
-};
-
-function createTableToolActions({
-  onDeleteTable,
-  onDeleteTableColumn,
-  onDeleteTableRow,
-  onInsertTableColumnLeft,
-  onInsertTableColumnRight,
-  onInsertTableRowAbove,
-  onInsertTableRowBelow
-}: Pick<
-  WorkspaceShellProps,
-  | "onDeleteTable"
-  | "onDeleteTableColumn"
-  | "onDeleteTableRow"
-  | "onInsertTableColumnLeft"
-  | "onInsertTableColumnRight"
-  | "onInsertTableRowAbove"
-  | "onInsertTableRowBelow"
->): TableToolAction[] {
-  return [
-    {
-      id: "row-above",
-      label: "Row Above",
-      tone: "default",
-      icon: RowAboveIcon,
-      onClick: onInsertTableRowAbove
-    },
-    {
-      id: "row-below",
-      label: "Row Below",
-      tone: "default",
-      icon: RowBelowIcon,
-      onClick: onInsertTableRowBelow
-    },
-    {
-      id: "column-left",
-      label: "Column Left",
-      tone: "default",
-      icon: ColumnLeftIcon,
-      onClick: onInsertTableColumnLeft
-    },
-    {
-      id: "column-right",
-      label: "Column Right",
-      tone: "default",
-      icon: ColumnRightIcon,
-      onClick: onInsertTableColumnRight
-    },
-    {
-      id: "delete-row",
-      label: "Delete Row",
-      tone: "danger",
-      icon: DeleteRowIcon,
-      onClick: onDeleteTableRow
-    },
-    {
-      id: "delete-column",
-      label: "Delete Column",
-      tone: "danger",
-      icon: DeleteColumnIcon,
-      onClick: onDeleteTableColumn
-    },
-    {
-      id: "delete-table",
-      label: "Delete Table",
-      tone: "danger",
-      icon: DeleteTableIcon,
-      onClick: onDeleteTable
-    }
-  ];
 }
 
 export function WorkspaceShell({
@@ -496,23 +167,8 @@ export function WorkspaceShell({
   const activeDocument = workspaceSnapshot?.activeDocument ?? null;
   const workspaceTabs = workspaceSnapshot?.tabs ?? [];
   const activeTabId = workspaceSnapshot?.activeTabId ?? null;
-  const nextEditorViewMode: EditorViewMode = editorViewMode === "source" ? "wysiwym" : "source";
-  const [findText, setFindText] = useState("");
-  const [replaceText, setReplaceText] = useState("");
   const [welcomeShortcutTip] = useState(() => createWelcomeShortcutTip(fishmarkPlatform));
-  const [findReplaceSnapshot, setFindReplaceSnapshot] = useState<FindReplaceSnapshot>({
-    matchCount: 0,
-    currentMatchIndex: null
-  });
-  const [resizeSession, setResizeSession] = useState<SidePanelResizeSession | null>(null);
-  const [draggedPanelWidth, setDraggedPanelWidth] = useState<number | null>(null);
-  const findInputRef = useRef<HTMLInputElement | null>(null);
-  const resizeSessionRef = useRef<SidePanelResizeSession | null>(null);
-  const draggedPanelWidthRef = useRef<number | null>(null);
   const workspaceShellRef = useRef<HTMLElement | null>(null);
-  const searchDocumentIdentityRef = useRef<string | null>(
-    activeTabId === null ? null : `${activeTabId}:${editorEpoch}:${editorLoadRevision}`
-  );
   /*
    * The rail switches the shared side panel between view containers and
    * `Ctrl/Cmd+F` opens the Search container; the inline find bar no longer
@@ -523,22 +179,17 @@ export function WorkspaceShell({
   const isSidePanelOpen = activeViewContainer !== null;
   const isSidePanelVisible = visibleViewContainer !== null;
   const isSearchViewActive = activeViewContainer === "search";
-  const tableToolActions = createTableToolActions({
-    onDeleteTable,
-    onDeleteTableColumn,
-    onDeleteTableRow,
-    onInsertTableColumnLeft,
-    onInsertTableColumnRight,
-    onInsertTableRowAbove,
-    onInsertTableRowBelow
-  });
   const isViewContainerEnabled = isDocumentOpen && activeDocument !== null;
-  /*
-   * The stored width is resolved for the drag maths (the CSS clamps it for
-   * display); a collapsed region never overwrites it.
-   */
-  const displayedSidePanelWidth = draggedPanelWidth ?? sidePanelStoredWidth ?? SIDE_PANEL_WIDTH_DEFAULT;
-  const isResizingSidePanel = resizeSession !== null;
+  const { findText, replaceText, findReplaceSnapshot, setFindReplaceSnapshot,
+    findInputRef, matchStatusLabel, closeFindReplacePanel, handleFindReplaceKeyDown,
+    handleFindTextChange, handleReplaceTextChange, toggleSearchViewContainer, handleWorkspaceKeyDownCapture
+  } = useFindReplacePresentation({
+    activeTabId, editorEpoch, editorLoadRevision, editorRef,
+    isDocumentOpen, isSearchViewActive, isViewContainerEnabled, onCloseViewContainer, onToggleViewContainer
+  });
+  const { displayedSidePanelWidth, isResizingSidePanel, handleSidePanelResizePointerDown,
+    handleSidePanelResizePointerMove, finishSidePanelResize, handleSidePanelResizeKeyDown
+  } = useSidePanelResize({ workspaceShellRef, sidePanelStoredWidth, onSidePanelWidthCommit });
   /*
    * The shared side panel renders `activeViewContainer` while it is expanded
    * and keeps `closingViewContainer` mounted until the exit animation ends.
@@ -546,48 +197,6 @@ export function WorkspaceShell({
   const visibleViewContainerLabel = visibleViewContainer
     ? VIEW_CONTAINER_LABELS[visibleViewContainer]
     : null;
-
-  useEffect(() => {
-    if (!isDocumentOpen) {
-      return;
-    }
-
-    // Search is not part of the editor's initial bundle. Warm its CodeMirror
-    // runtime after the document has mounted so the first explicit Search
-    // activation normally has no visible loading delay.
-    void editorRef.current?.prepareFindReplace?.();
-  }, [editorLoadRevision, editorRef, isDocumentOpen]);
-
-  useEffect(() => {
-    if (!isSearchViewActive) {
-      return;
-    }
-
-    findInputRef.current?.focus();
-  }, [isSearchViewActive]);
-
-  useEffect(() => {
-    const nextDocumentIdentity = activeTabId === null
-      ? null
-      : `${activeTabId}:${editorEpoch}:${editorLoadRevision}`;
-
-    if (searchDocumentIdentityRef.current === nextDocumentIdentity) {
-      return;
-    }
-
-    searchDocumentIdentityRef.current = nextDocumentIdentity;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- A document identity boundary intentionally resets the Search view's local presentation state.
-    setFindText("");
-    setReplaceText("");
-    setFindReplaceSnapshot({
-      matchCount: 0,
-      currentMatchIndex: null
-    });
-
-    if (isSearchViewActive) {
-      editorRef.current?.clearFindReplaceQuery();
-    }
-  }, [activeTabId, editorEpoch, editorLoadRevision, editorRef, isSearchViewActive]);
 
   /*
    * While the region is expanded the canvas publishes the stored width as a CSS
@@ -598,26 +207,9 @@ export function WorkspaceShell({
   const sidePanelWidthVariables =
     isSidePanelVisible
       ? ({
-          "--fishmark-side-panel-stored-width": `${displayedSidePanelWidth}px`
-        } as CSSProperties)
+        "--fishmark-side-panel-stored-width": `${displayedSidePanelWidth}px`
+      } as CSSProperties)
       : undefined;
-
-  const closeFindReplacePanel = () => {
-    setFindText("");
-    setReplaceText("");
-    setFindReplaceSnapshot(
-      editorRef.current?.clearFindReplaceQuery() ?? {
-        matchCount: 0,
-        currentMatchIndex: null
-      }
-    );
-    editorRef.current?.focus();
-  };
-
-  const exitSearchViewContainer = () => {
-    closeFindReplacePanel();
-    onCloseViewContainer();
-  };
 
   /*
    * The panel's collapse affordance clears this view container's query as well
@@ -631,190 +223,6 @@ export function WorkspaceShell({
 
     onCloseViewContainer();
   };
-
-  /*
-   * The panel column may occupy the workspace stage minus the gap; when the
-   * shell has not been laid out (or is not mounted) fall back to the window so
-   * the drag still has a sane maximum.
-   */
-  const measureSidePanelAvailableWidth = (): number => {
-    const shell = workspaceShellRef.current;
-    const shellWidth = shell?.getBoundingClientRect().width ?? 0;
-
-    return shellWidth > 0 ? shellWidth : window.innerWidth;
-  };
-
-  const applyDraggedPanelWidth = (width: number | null) => {
-    draggedPanelWidthRef.current = width;
-    setDraggedPanelWidth(width);
-  };
-
-  const handleSidePanelResizePointerDown = (event: ReactPointerEvent<HTMLElement>) => {
-    if (event.button !== 0) {
-      return;
-    }
-
-    // Keep focus (and the caret) where it was while the pointer drags.
-    event.preventDefault();
-    // Pointer capture keeps move/up delivery on the separator after the cursor
-    // leaves its narrow hit target, so every drag has one deterministic finish.
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-
-    const availableWidth = measureSidePanelAvailableWidth();
-    const displayWidth = clampSidePanelWidth(displayedSidePanelWidth, availableWidth);
-    const session: SidePanelResizeSession = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startWidth: displayWidth,
-      availableWidth
-    };
-
-    resizeSessionRef.current = session;
-    setResizeSession(session);
-    applyDraggedPanelWidth(displayWidth);
-  };
-
-  const handleSidePanelResizePointerMove = (event: ReactPointerEvent<HTMLElement>) => {
-    const session = resizeSessionRef.current;
-
-    if (!session || session.pointerId !== event.pointerId) {
-      return;
-    }
-
-    const pointerDelta = event.clientX - session.startX;
-
-    applyDraggedPanelWidth(
-      clampSidePanelWidth(session.startWidth + pointerDelta, session.availableWidth)
-    );
-  };
-
-  /**
-   * End the drag. `commit` writes the resulting width to preferences exactly
-   * once; cancelling (Escape) restores the pre-drag width without writing.
-   */
-  const finishSidePanelResize = (commit: boolean) => {
-    const session = resizeSessionRef.current;
-    const width = draggedPanelWidthRef.current;
-
-    resizeSessionRef.current = null;
-    setResizeSession(null);
-    applyDraggedPanelWidth(null);
-
-    if (!commit || session === null || width === null) {
-      return;
-    }
-
-    onSidePanelWidthCommit(clampSidePanelWidth(width, session.availableWidth));
-  };
-
-  const handleSidePanelResizeKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.key === "Escape" && resizeSessionRef.current !== null) {
-      event.preventDefault();
-      finishSidePanelResize(false);
-      return;
-    }
-
-    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
-      return;
-    }
-
-    event.preventDefault();
-    const availableWidth = measureSidePanelAvailableWidth();
-    const baseWidth = clampSidePanelWidth(displayedSidePanelWidth, availableWidth);
-    const direction = event.key === "ArrowLeft" ? -1 : 1;
-    const nextWidth = clampSidePanelWidth(
-      baseWidth + direction * SIDE_PANEL_RESIZE_KEY_STEP,
-      availableWidth
-    );
-
-    applyDraggedPanelWidth(nextWidth);
-    onSidePanelWidthCommit(nextWidth);
-  };
-
-  const handleFindTextChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const nextFindText = event.currentTarget.value;
-
-    setFindText(nextFindText);
-    setFindReplaceSnapshot(
-      editorRef.current?.updateFindReplaceQuery({
-        search: nextFindText,
-        replace: replaceText
-      }) ?? {
-        matchCount: 0,
-        currentMatchIndex: null
-      }
-    );
-  };
-
-  const handleReplaceTextChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const nextReplaceText = event.currentTarget.value;
-
-    setReplaceText(nextReplaceText);
-    setFindReplaceSnapshot(
-      editorRef.current?.updateFindReplaceQuery({
-        search: findText,
-        replace: nextReplaceText
-      }) ?? {
-        matchCount: 0,
-        currentMatchIndex: null
-      }
-    );
-  };
-
-  const handleFindReplaceKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      exitSearchViewContainer();
-      return;
-    }
-
-    if (event.key === "Enter") {
-      event.preventDefault();
-      setFindReplaceSnapshot(
-        event.shiftKey
-          ? editorRef.current?.findPreviousMatch() ?? findReplaceSnapshot
-          : editorRef.current?.findNextMatch() ?? findReplaceSnapshot
-      );
-    }
-  };
-
-  const toggleSearchViewContainer = () => {
-    if (isSearchViewActive) {
-      onToggleViewContainer("search");
-      return;
-    }
-
-    void (editorRef.current?.prepareFindReplace?.() ?? Promise.resolve()).then(() => {
-      onToggleViewContainer("search");
-    });
-  };
-
-  const handleWorkspaceKeyDownCapture = (event: KeyboardEvent<HTMLElement>) => {
-    if (
-      !isViewContainerEnabled ||
-      event.key.toLowerCase() !== "f" ||
-      (!event.metaKey && !event.ctrlKey)
-    ) {
-      return;
-    }
-
-    /*
-     * `Ctrl/Cmd+F` is the keyboard entry point into the shared region's Search
-     * view container; the rail button drives the same toggle.
-     */
-    event.preventDefault();
-    if (isSearchViewActive) {
-      findInputRef.current?.focus();
-      return;
-    }
-    toggleSearchViewContainer();
-  };
-
-  const matchStatusLabel = findText.length === 0
-    ? "No query"
-    : findReplaceSnapshot.matchCount === 0
-      ? "No matches"
-      : `${findReplaceSnapshot.currentMatchIndex ?? 0} / ${findReplaceSnapshot.matchCount}`;
 
   return (
     <main
@@ -909,39 +317,17 @@ export function WorkspaceShell({
               data-state={activeShortcutGroupId === "table-editing" ? "open" : "closing"}
               aria-hidden={activeShortcutGroupId !== "table-editing"}
             >
-              <div className="table-tool-strip" data-fishmark-region="table-tool-strip">
-                {tableToolActions.map((action) => {
-                  const Icon = action.icon;
-                  const isTooltipVisible = activeTableToolId === action.id;
-
-                  return (
-                    <button
-                      key={action.id}
-                      type="button"
-                      className="table-tool-button"
-                      data-tone={action.tone}
-                      data-fishmark-region="table-tool-button"
-                      aria-label={action.label}
-                      onClick={action.onClick}
-                      onMouseEnter={() => onTableToolHoverChange(action.id)}
-                      onMouseLeave={() => onTableToolHoverChange(null)}
-                      onFocus={() => onTableToolHoverChange(action.id)}
-                      onBlur={() => onTableToolHoverChange(null)}
-                    >
-                      <Icon className="table-tool-button-icon" />
-                      {isTooltipVisible ? (
-                        <span
-                          className="table-tool-tooltip"
-                          data-fishmark-region="table-tool-tooltip"
-                          role="tooltip"
-                        >
-                          {action.label}
-                        </span>
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
+              <TableToolbar
+                activeTableToolId={activeTableToolId}
+                onTableToolHoverChange={onTableToolHoverChange}
+                onDeleteTable={onDeleteTable}
+                onDeleteTableColumn={onDeleteTableColumn}
+                onDeleteTableRow={onDeleteTableRow}
+                onInsertTableColumnLeft={onInsertTableColumnLeft}
+                onInsertTableColumnRight={onInsertTableColumnRight}
+                onInsertTableRowAbove={onInsertTableRowAbove}
+                onInsertTableRowBelow={onInsertTableRowBelow}
+              />
             </div>
           </div>
           <button
@@ -987,153 +373,30 @@ export function WorkspaceShell({
           onMouseDownCapture={onAppWorkspaceMouseDownCapture}
           onKeyDownCapture={handleWorkspaceKeyDownCapture}
         >
-          {notification && notificationState !== "hidden" ? (
-            <div
-              className={`app-notification-banner is-${notification.kind}`}
-              data-fishmark-region="app-notification-banner"
-              data-state={notificationState}
-              role="status"
-              aria-live="polite"
-            >
-              <p className="app-notification-message">
-                {notification.kind === "loading" ? (
-                  <span
-                    className="app-notification-spinner"
-                    data-fishmark-region="app-notification-spinner"
-                    aria-hidden="true"
-                  />
-                ) : null}
-                <span>{notification.message}</span>
-              </p>
-            </div>
-          ) : null}
-          {externalFileState.status !== "idle" ? (
-            <section
-              className="external-file-conflict-banner"
-              data-fishmark-region="external-file-conflict-banner"
-              data-status={externalFileState.status}
-              role="status"
-              aria-live="polite"
-            >
-              <p className="external-file-conflict-message">{externalFileConflictMessage}</p>
-              <div className="external-file-conflict-actions">
-                <button
-                  type="button"
-                  className="external-file-conflict-button"
-                  onClick={onReloadExternalFile}
-                >
-                  重载磁盘版本
-                </button>
-                {externalFileState.status === "pending" ? (
-                  <button
-                    type="button"
-                    className="external-file-conflict-button"
-                    onClick={onKeepMemoryVersion}
-                  >
-                    保留当前编辑
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  className="external-file-conflict-button"
-                  onClick={onSaveAs}
-                >
-                  另存为新文件
-                </button>
-                {externalFileState.status === "keeping-memory" ? (
-                  <button
-                    type="button"
-                    className="external-file-conflict-button is-secondary"
-                    onClick={onDismissExternalFileConflict}
-                  >
-                    关闭提示
-                  </button>
-                ) : null}
-              </div>
-            </section>
-          ) : null}
-          {workspaceTabs.length > 0 ? (
-            <nav
-              className="workspace-tab-strip"
-              data-fishmark-region="workspace-tab-strip"
-              data-visibility={isReadingMode && isDocumentOpen ? "collapsed" : "visible"}
-              aria-label="Open documents"
-            >
-              <div className="workspace-tab-strip-scroll">
-                {workspaceTabs.map((tab, index) => {
-                  const isActive = tab.tabId === activeTabId;
-                  const tooltip = tab.path ?? tab.name;
-
-                  return (
-                    <div
-                      key={tab.tabId}
-                      className={`workspace-tab-shell ${isActive ? "is-active" : ""}`}
-                      data-fishmark-region="workspace-tab-shell"
-                      data-active={isActive ? "true" : "false"}
-                      data-dirty={tab.isDirty ? "true" : "false"}
-                    >
-                      <button
-                        type="button"
-                        className={`workspace-tab ${isActive ? "is-active" : ""}`}
-                        data-fishmark-region="workspace-tab"
-                        data-active={isActive ? "true" : "false"}
-                        data-dirty={tab.isDirty ? "true" : "false"}
-                        title={tooltip}
-                        draggable
-                        onClick={() => onTabActivate(tab.tabId)}
-                        onAuxClick={(event) => {
-                          if (event.button === 1) {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            onCloseWorkspaceTab(tab.tabId);
-                          }
-                        }}
-                        onDragStart={(event) => onTabDragStart(tab.tabId, event)}
-                        onDragOver={onTabDragOver}
-                        onDrop={(event) => onTabDrop(tab.tabId, index, event)}
-                        onDragEnd={() => onTabDragEnd(tab.tabId)}
-                      >
-                        <span className="workspace-tab-label">{tab.name}</span>
-                        <span
-                          className="workspace-tab-dirty-indicator"
-                          data-visibility={tab.isDirty ? "visible" : "hidden"}
-                          aria-hidden="true"
-                        >
-                          •
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        className="workspace-tab-close"
-                        data-fishmark-region="workspace-tab-close"
-                        aria-label={`Close ${tab.name}`}
-                        title={`Close ${tab.name}`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onCloseWorkspaceTab(tab.tabId);
-                        }}
-                      >
-                        <svg
-                          width="12"
-                          height="12"
-                          viewBox="0 0 12 12"
-                          aria-hidden="true"
-                          focusable="false"
-                        >
-                          <path
-                            d="M3 3 L9 9 M9 3 L3 9"
-                            stroke="currentColor"
-                            strokeWidth="1.4"
-                            strokeLinecap="round"
-                          />
-                        </svg>
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </nav>
-          ) : null}
+          <NotificationHost
+            notification={notification}
+            notificationState={notificationState}
+          />
+          <ConflictBanner
+            externalFileState={externalFileState}
+            externalFileConflictMessage={externalFileConflictMessage}
+            onReloadExternalFile={onReloadExternalFile}
+            onKeepMemoryVersion={onKeepMemoryVersion}
+            onSaveAs={onSaveAs}
+            onDismissExternalFileConflict={onDismissExternalFileConflict}
+          />
+          <WorkspaceTabStrip
+            isReadingMode={isReadingMode}
+            isDocumentOpen={isDocumentOpen}
+            onTabActivate={onTabActivate}
+            onCloseWorkspaceTab={onCloseWorkspaceTab}
+            onTabDragStart={onTabDragStart}
+            onTabDragOver={onTabDragOver}
+            onTabDrop={onTabDrop}
+            onTabDragEnd={onTabDragEnd}
+            workspaceTabs={workspaceTabs}
+            activeTabId={activeTabId}
+          />
           <section
             className={`workspace-canvas ${activeDocument ? "is-editor-open" : ""}`}
             data-fishmark-region="workspace-canvas"
@@ -1157,9 +420,8 @@ export function WorkspaceShell({
                   </Suspense>
                 </div>
                 <section
-                  className={`workspace-shell ${isSidePanelOpen ? "is-side-panel-open" : ""} ${
-                    isResizingSidePanel ? "is-side-panel-resizing" : ""
-                  }`}
+                  className={`workspace-shell ${isSidePanelOpen ? "is-side-panel-open" : ""} ${isResizingSidePanel ? "is-side-panel-resizing" : ""
+                    }`}
                   ref={workspaceShellRef}
                   style={sidePanelWidthVariables}
                 >
@@ -1235,128 +497,27 @@ export function WorkspaceShell({
                         data-fishmark-region="side-panel-body"
                       >
                         {visibleViewContainer === "search" ? (
-                          <div
-                            className="find-replace-panel"
-                            data-fishmark-region="search"
-                            aria-label="Find and replace"
-                            onKeyDown={handleFindReplaceKeyDown}
-                          >
-                            <label className="find-replace-field">
-                              <span>Find</span>
-                              <input
-                                type="search"
-                                className="find-replace-input"
-                                aria-label="Find text"
-                                ref={findInputRef}
-                                value={findText}
-                                onChange={handleFindTextChange}
-                              />
-                            </label>
-                            <div className="find-replace-row">
-                              <p
-                                className="find-replace-status"
-                                data-fishmark-region="find-replace-status"
-                                aria-live="polite"
-                              >
-                                {matchStatusLabel}
-                              </p>
-                              <button
-                                type="button"
-                                className="find-replace-icon-button"
-                                aria-label="Previous match"
-                                disabled={findReplaceSnapshot.matchCount === 0}
-                                onClick={() =>
-                                  setFindReplaceSnapshot(
-                                    editorRef.current?.findPreviousMatch() ?? findReplaceSnapshot
-                                  )
-                                }
-                              >
-                                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                                  <path d="M6 14l6-6 6 6" />
-                                </svg>
-                              </button>
-                              <button
-                                type="button"
-                                className="find-replace-icon-button"
-                                aria-label="Next match"
-                                disabled={findReplaceSnapshot.matchCount === 0}
-                                onClick={() =>
-                                  setFindReplaceSnapshot(
-                                    editorRef.current?.findNextMatch() ?? findReplaceSnapshot
-                                  )
-                                }
-                              >
-                                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                                  <path d="M6 10l6 6 6-6" />
-                                </svg>
-                              </button>
-                            </div>
-                            <label className="find-replace-field">
-                              <span>Replace</span>
-                              <input
-                                type="text"
-                                className="find-replace-input"
-                                aria-label="Replace with"
-                                value={replaceText}
-                                onChange={handleReplaceTextChange}
-                              />
-                            </label>
-                            <div className="find-replace-row">
-                              <button
-                                type="button"
-                                className="find-replace-text-button"
-                                aria-label="Replace current match"
-                                disabled={findReplaceSnapshot.matchCount === 0}
-                                onClick={() =>
-                                  setFindReplaceSnapshot(
-                                    editorRef.current?.replaceCurrentMatch() ?? findReplaceSnapshot
-                                  )
-                                }
-                              >
-                                Replace
-                              </button>
-                              <button
-                                type="button"
-                                className="find-replace-text-button"
-                                aria-label="Replace all matches"
-                                disabled={findReplaceSnapshot.matchCount === 0}
-                                onClick={() =>
-                                  setFindReplaceSnapshot(
-                                    editorRef.current?.replaceAllMatches() ?? findReplaceSnapshot
-                                  )
-                                }
-                              >
-                                Replace all
-                              </button>
-                            </div>
-                          </div>
+                          <FindReplacePanel
+                            findText={findText}
+                            replaceText={replaceText}
+                            matchStatusLabel={matchStatusLabel}
+                            findInputRef={findInputRef}
+                            handleFindReplaceKeyDown={handleFindReplaceKeyDown}
+                            handleFindTextChange={handleFindTextChange}
+                            handleReplaceTextChange={handleReplaceTextChange}
+                            hasMatches={findReplaceSnapshot.matchCount > 0}
+                            onPrevious={() => setFindReplaceSnapshot(editorRef.current?.findPreviousMatch() ?? findReplaceSnapshot)}
+                            onNext={() => setFindReplaceSnapshot(editorRef.current?.findNextMatch() ?? findReplaceSnapshot)}
+                            onReplaceCurrent={() => setFindReplaceSnapshot(editorRef.current?.replaceCurrentMatch() ?? findReplaceSnapshot)}
+                            onReplaceAll={() => setFindReplaceSnapshot(editorRef.current?.replaceAllMatches() ?? findReplaceSnapshot)}
+                          />
                         ) : null}
                         {visibleViewContainer === "outline" ? (
-                          <div
-                            className="outline-panel"
-                            data-fishmark-region="outline-panel"
-                          >
-                            {outlineItems.length > 0 ? (
-                              <ol className="outline-panel-list">
-                                {outlineItems.map((item) => (
-                                  <li key={item.id}>
-                                    <button
-                                      type="button"
-                                      className={`outline-panel-item ${activeHeadingId === item.id ? "is-current" : ""}`}
-                                      style={{
-                                        paddingInlineStart: `${10 + Math.max(item.depth - 1, 0) * 10}px`
-                                      }}
-                                      onClick={() => onNavigateToOutlineItem(item.startOffset)}
-                                    >
-                                      <span className="outline-panel-item-label">{item.label}</span>
-                                    </button>
-                                  </li>
-                                ))}
-                              </ol>
-                            ) : (
-                              <p className="outline-panel-empty">No headings yet.</p>
-                            )}
-                          </div>
+                          <OutlinePanel
+                            outlineItems={outlineItems}
+                            activeHeadingId={activeHeadingId}
+                            onNavigateToOutlineItem={onNavigateToOutlineItem}
+                          />
                         ) : null}
                       </div>
                     </aside>
@@ -1383,155 +544,42 @@ export function WorkspaceShell({
                 </section>
               </>
             ) : (
-              <section
-                className="empty-workspace"
-                data-fishmark-region="empty-state"
-              >
-                <div className="empty-inner">
-                  <span
-                    className="empty-mark"
-                    aria-hidden="true"
-                    dangerouslySetInnerHTML={{ __html: fishmarkMarkSvg }}
-                  />
-                  <p className="empty-kicker">FishMark</p>
-                  <p className="empty-copy">{welcomeShortcutTip}</p>
-                  <p className="empty-meta">⌘ O · Ctrl O</p>
-                  {recentFiles.entries.length > 0 ? (
-                    <section
-                      className="recent-files"
-                      aria-label="Recent files"
-                    >
-                      <h2>Recent files</h2>
-                      <ul className="recent-file-list">
-                        {recentFiles.entries.map((entry) => (
-                          <li
-                            key={entry.path}
-                            className="recent-file-item"
-                          >
-                            <button
-                              type="button"
-                              className="recent-file-open"
-                              data-fishmark-recent-action="open"
-                              onClick={() => onOpenRecentFile(entry.path)}
-                            >
-                              <span className="recent-file-name">{entry.name}</span>
-                              <span className="recent-file-path">{entry.path}</span>
-                            </button>
-                            <button
-                              type="button"
-                              className="recent-file-clear"
-                              data-fishmark-recent-action="clear"
-                              aria-label={`Remove ${entry.name} from recent files`}
-                              onClick={() => onClearRecentFile(entry.path)}
-                            >
-                              <svg
-                                width="16"
-                                height="16"
-                                viewBox="0 0 24 24"
-                                aria-hidden="true"
-                                focusable="false"
-                              >
-                                <path
-                                  d="M18 6L6 18M6 6l12 12"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="1.8"
-                                  strokeLinecap="round"
-                                />
-                              </svg>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </section>
-                  ) : null}
-                </div>
-              </section>
-            )}
+              <WelcomeWorkspace
+                recentFiles={recentFiles}
+                onOpenRecentFile={onOpenRecentFile}
+                onClearRecentFile={onClearRecentFile}
+                welcomeShortcutTip={welcomeShortcutTip}
+              />)}
           </section>
 
-          <footer
-            className="app-status-bar"
-            data-fishmark-region="app-status-bar"
-            data-visibility={isReadingMode && isDocumentOpen ? "collapsed" : "visible"}
-          >
-            <div data-fishmark-region="status-strip">
-              {isDocumentOpen ? (
-                <>
-                  {appUpdateStatusLabel ? (
-                    <p className="app-update-status">{appUpdateStatusLabel}</p>
-                  ) : null}
-                  <p
-                    className={`save-status ${activeDocument?.isDirty ? "is-dirty" : "is-clean"}`}
-                  >
-                    {saveStatusLabel}
-                  </p>
-                  <p className="document-word-count">
-                    字数 {currentDocumentMetrics?.meaningfulCharacterCount ?? 0}
-                  </p>
-                  <button
-                    type="button"
-                    className="editor-view-mode-toggle"
-                    aria-label={
-                      editorViewMode === "source"
-                        ? "Switch to WYSIWYM mode"
-                        : "Switch to source mode"
-                    }
-                    aria-pressed={editorViewMode === "source"}
-                    title={
-                      editorViewMode === "source"
-                        ? "Switch to WYSIWYM mode"
-                        : "Switch to source mode"
-                    }
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => onEditorViewModeChange(nextEditorViewMode)}
-                  >
-                    &lt;/&gt;
-                  </button>
-                </>
-              ) : (
-                <>
-                  <p className="app-version-label">{appVersionLabel}</p>
-                  {appUpdateStatusLabel ? (
-                    <p className="app-update-status">{appUpdateStatusLabel}</p>
-                  ) : null}
-                </>
-              )}
-            </div>
-          </footer>
+          <StatusBar
+            isReadingMode={isReadingMode}
+            isDocumentOpen={isDocumentOpen}
+            appUpdateStatusLabel={appUpdateStatusLabel}
+            saveStatusLabel={saveStatusLabel}
+            currentDocumentMetrics={currentDocumentMetrics}
+            editorViewMode={editorViewMode}
+            onEditorViewModeChange={onEditorViewModeChange}
+            appVersionLabel={appVersionLabel}
+            isDirty={activeDocument?.isDirty ?? false}
+          />
         </div>
       </div>
 
-      {isSettingsDrawerVisible ? (
-        <div
-          data-fishmark-dialog="settings-drawer"
-          data-fishmark-overlay-style="floating-drawer"
-          data-state={isSettingsOpen ? "open" : "closing"}
-          onClick={onCloseSettingsDrawer}
-        >
-          <div onClick={(event) => event.stopPropagation()}>
-            <Suspense
-              fallback={
-                <SettingsDrawerFallback surfaceState={isSettingsOpen ? "open" : "closing"} />
-              }
-            >
-              <SettingsView
-                surfaceState={isSettingsOpen ? "open" : "closing"}
-                preferences={preferences}
-                fontFamilies={fontFamilies}
-                themePackages={themePackages}
-                isRefreshingThemes={isRefreshingThemePackages}
-                onRefreshThemes={onRefreshThemePackages}
-                onOpenThemesDirectory={onOpenThemesDirectory}
-                onSelectTemporaryImageDirectory={onSelectTemporaryImageDirectory}
-                onUpdate={onUpdatePreferences}
-                onOpenExternalLink={onOpenExternalLink}
-                onClose={onCloseSettingsDrawer}
-              />
-            </Suspense>
-          </div>
-        </div>
-      ) : null}
+      <SettingsDrawer
+        isSettingsDrawerVisible={isSettingsDrawerVisible}
+        isSettingsOpen={isSettingsOpen}
+        onCloseSettingsDrawer={onCloseSettingsDrawer}
+        preferences={preferences}
+        fontFamilies={fontFamilies}
+        themePackages={themePackages}
+        isRefreshingThemePackages={isRefreshingThemePackages}
+        onRefreshThemePackages={onRefreshThemePackages}
+        onOpenThemesDirectory={onOpenThemesDirectory}
+        onSelectTemporaryImageDirectory={onSelectTemporaryImageDirectory}
+        onUpdatePreferences={onUpdatePreferences}
+        onOpenExternalLink={onOpenExternalLink}
+      />
     </main>
   );
 }

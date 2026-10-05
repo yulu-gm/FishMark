@@ -53,10 +53,22 @@ jobs:
           src/renderer/outline.test.ts
           src/renderer/document-metrics.test.ts
           src/renderer/editor/useDocumentDerivedDataController.test.tsx
+          src/renderer/editor/components/presentation.test.tsx
+          src/renderer/editor/WorkspaceShell.test.tsx
       - name: Build
         run: npm run build
       - name: Real Electron workspace safety smoke
         run: xvfb-run -a npm run test:workspace-safety
+      - name: Formal Electron editing behavior manifest
+        run: xvfb-run -a npm run test:editor-behavior -- --report .artifacts/ci/editor-behavior.json
+      - name: Upload editing behavior report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: editor-behavior-${{ github.sha }}
+          path: .artifacts/ci/editor-behavior.json
+          if-no-files-found: warn
+          retention-days: 14
       - name: Upload workspace safety report
         if: always()
         uses: actions/upload-artifact@v4

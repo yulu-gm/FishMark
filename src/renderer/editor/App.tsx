@@ -1,5 +1,5 @@
 import {
-  Suspense,
+  Component, Suspense,
   lazy,
   useCallback,
   useEffect,
@@ -7,17 +7,22 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties
+  type CSSProperties, type ReactNode
 } from "react";
+import { useEditorFocusPresentation } from "./useEditorFocusPresentation";
+import { useNotificationPresentation } from "./useNotificationPresentation";
+import { useShortcutHintPresentation } from "./useShortcutHintPresentation";
+import { useThemePresentation } from "./useThemePresentation";
+import { useViewContainerPresentation } from "./useViewContainerPresentation";
+import { useWorkspaceTabDrag } from "./useWorkspaceTabDrag";
 
 import type {
   EditorViewMode,
   ShortcutGroupId
 } from "@fishmark/codemirror-adapter";
 import type { ActiveBlockState } from "@fishmark/editor-model";
-import type { AppNotification, AppUpdateState } from "../../shared/app-update";
+import type { AppUpdateState } from "../../shared/app-update";
 import type { AppMenuCommand } from "../../shared/menu-command";
-import type { WorkspaceWindowCloseRequest } from "../../shared/workspace";
 import {
   DEFAULT_PREFERENCES,
   clampSidePanelWidth,
@@ -28,50 +33,26 @@ import {
   DEFAULT_RECENT_FILES_SNAPSHOT,
   type RecentFilesSnapshot
 } from "../../shared/recent-files";
+import type { WorkspaceWindowCloseRequest } from "../../shared/workspace";
+import type { EditorLoadIdentity } from "../application/editor-load-identity";
+import { type ExternalMarkdownFileState } from "../application/editor-shell-state";
 import type { CodeEditorHandle } from "../code-editor-view";
-import { createThemePackageRuntime } from "../theme-package-runtime";
-import {
-  applyThemeParameterCssVariables,
-  clearThemeParameterCssVariables,
-} from "../theme-style-runtime";
-import {
-  applyThemeRuntimeEnv,
-  clearThemeRuntimeEnv,
-} from "../theme-runtime-env";
+import { WorkspaceShell } from "./WorkspaceShell";
 import {
   normalizeTitlebarLayout,
   resolveDefaultTitlebarLayout
 } from "./titlebar-layout";
-import {
-  type ThemeDynamicAggregateMode,
-  shouldWarnForThemeDynamicFallback,
-} from "./theme-dynamic-mode";
-import { type ExternalMarkdownFileState } from "../application/editor-shell-state";
-import type { EditorLoadIdentity } from "../application/editor-load-identity";
-import type { ThemeSurfaceRuntimeMode } from "../shader/theme-surface-runtime";
-import { WorkspaceShell, type WorkspaceViewContainerId } from "./WorkspaceShell";
+import { useDocumentDerivedDataController } from "./useDocumentDerivedDataController";
 import { useEditorApplicationController } from "./useEditorApplicationController";
 import { useSettingsController } from "./useSettingsController";
-import {
-  isEditingContentPointerEvent,
-  isEditorScrollbarPointerEvent,
-  isFocusedEditorInteractiveElement,
-  isWorkspaceNonEditorInteractiveTarget
-} from "./editor-pointer-utils";
 import { useWindowMarkdownFileDrop } from "./useWindowMarkdownFileDrop";
-import {
-  resolveActiveThemePackageManifest,
-  useThemeController,
-  type ResolvedThemeMode
-} from "./useThemeController";
-import { useDocumentDerivedDataController } from "./useDocumentDerivedDataController";
 
 const canRenderEditorTestBridge = import.meta.env.DEV || import.meta.env.MODE === "test";
 const LazyEditorTestBridgeHost = canRenderEditorTestBridge
   ? lazy(async () => {
-      const module = await import("./editor-test-bridge-host");
-      return { default: module.EditorTestBridgeHost };
-    })
+    const module = await import("./editor-test-bridge-host");
+    return { default: module.EditorTestBridgeHost };
+  })
   : null;
 
 const EXTERNAL_FILE_MODIFIED_PENDING_MESSAGE =
@@ -80,14 +61,6 @@ const EXTERNAL_FILE_DELETED_PENDING_MESSAGE =
   "当前文件已在磁盘上被删除或移走。你可以重载、保留当前编辑，或另存为新文件。";
 const EXTERNAL_FILE_KEEPING_MEMORY_MESSAGE =
   "正在保留当前内存版本，autosave 已暂停。请另存为新文件，避免覆盖外部变化。";
-const THEME_ATTRIBUTE = "data-fishmark-theme";
-const UI_FONT_FAMILY_CSS_VAR = "--fishmark-ui-font-family";
-const UI_FONT_SIZE_CSS_VAR = "--fishmark-ui-font-size";
-const DOCUMENT_FONT_FAMILY_CSS_VAR = "--fishmark-document-font-family";
-const DOCUMENT_CJK_FONT_FAMILY_CSS_VAR = "--fishmark-document-cjk-font-family";
-const DOCUMENT_FONT_SIZE_CSS_VAR = "--fishmark-document-font-size";
-const THEME_DYNAMIC_MODE_ATTRIBUTE = "data-fishmark-theme-dynamic-mode";
-const VIEW_CONTAINER_EXIT_ANIMATION_MS = 180;
 const SETTINGS_DRAWER_EXIT_ANIMATION_MS = 180;
 
 function getExternalFileConflictMessage(externalFileState: ExternalMarkdownFileState): string {
@@ -104,39 +77,6 @@ function getExternalFileConflictMessage(externalFileState: ExternalMarkdownFileS
     : EXTERNAL_FILE_MODIFIED_PENDING_MESSAGE;
 }
 
-const APP_NOTIFICATION_DURATION_MS = 3000;
-const APP_NOTIFICATION_EXIT_ANIMATION_MS = 180;
-const THEME_DYNAMIC_FALLBACK_MESSAGE = "主题动态效果已自动关闭，已回退到静态样式。";
-const SHORTCUT_HINT_HOLD_DELAY_MS = 1000;
-const PRIMARY_MODIFIER_LEFT_LOCATION = 1;
-const PRIMARY_MODIFIER_RIGHT_LOCATION = 2;
-
-function getPrimaryShortcutModifierId(
-  event: KeyboardEvent,
-  primaryModifierKey: "Control" | "Meta"
-): string | null {
-  if (event.key !== primaryModifierKey) {
-    return null;
-  }
-
-  if (
-    event.code === `${primaryModifierKey}Left` ||
-    event.code === `${primaryModifierKey}Right`
-  ) {
-    return event.code;
-  }
-
-  if (event.location === PRIMARY_MODIFIER_LEFT_LOCATION) {
-    return `${primaryModifierKey}Left`;
-  }
-
-  if (event.location === PRIMARY_MODIFIER_RIGHT_LOCATION) {
-    return `${primaryModifierKey}Right`;
-  }
-
-  return primaryModifierKey;
-}
-
 function resolveEditorShortcutGroupId(
   activeBlockState: ActiveBlockState | null
 ): ShortcutGroupId {
@@ -145,72 +85,10 @@ function resolveEditorShortcutGroupId(
     : "default-text";
 }
 
-type AppNotificationBannerState = "hidden" | "open" | "closing";
 type ShellMode = "reading" | "editing";
 
 function supportsControlledTitlebar(platform: NodeJS.Platform): boolean {
   return platform === "darwin";
-}
-
-function applyPreferencesToDocument(
-  root: HTMLElement,
-  preferences: Preferences,
-  resolvedThemeMode: ResolvedThemeMode
-): void {
-  root.setAttribute(THEME_ATTRIBUTE, resolvedThemeMode);
-  root.style.colorScheme = resolvedThemeMode;
-
-  if (preferences.ui.fontFamily) {
-    root.style.setProperty(UI_FONT_FAMILY_CSS_VAR, preferences.ui.fontFamily);
-  } else {
-    root.style.removeProperty(UI_FONT_FAMILY_CSS_VAR);
-  }
-
-  if (preferences.ui.fontSize !== null) {
-    root.style.setProperty(UI_FONT_SIZE_CSS_VAR, `${preferences.ui.fontSize}px`);
-  } else {
-    root.style.removeProperty(UI_FONT_SIZE_CSS_VAR);
-  }
-
-  if (preferences.document.fontFamily) {
-    root.style.setProperty(DOCUMENT_FONT_FAMILY_CSS_VAR, preferences.document.fontFamily);
-  } else {
-    root.style.removeProperty(DOCUMENT_FONT_FAMILY_CSS_VAR);
-  }
-
-  if (preferences.document.cjkFontFamily) {
-    root.style.setProperty(DOCUMENT_CJK_FONT_FAMILY_CSS_VAR, preferences.document.cjkFontFamily);
-  } else {
-    root.style.removeProperty(DOCUMENT_CJK_FONT_FAMILY_CSS_VAR);
-  }
-
-  if (preferences.document.fontSize !== null) {
-    root.style.setProperty(DOCUMENT_FONT_SIZE_CSS_VAR, `${preferences.document.fontSize}px`);
-  } else {
-    root.style.removeProperty(DOCUMENT_FONT_SIZE_CSS_VAR);
-  }
-}
-
-function clearDocumentPreferences(root: HTMLElement): void {
-  root.removeAttribute(THEME_ATTRIBUTE);
-  root.style.removeProperty("color-scheme");
-  root.style.removeProperty(UI_FONT_FAMILY_CSS_VAR);
-  root.style.removeProperty(UI_FONT_SIZE_CSS_VAR);
-  root.style.removeProperty(DOCUMENT_FONT_FAMILY_CSS_VAR);
-  root.style.removeProperty(DOCUMENT_CJK_FONT_FAMILY_CSS_VAR);
-  root.style.removeProperty(DOCUMENT_FONT_SIZE_CSS_VAR);
-  clearThemeParameterCssVariables(root);
-}
-
-function applyThemeDynamicModeToDocument(
-  root: HTMLElement,
-  mode: ThemeDynamicAggregateMode
-): void {
-  root.setAttribute(THEME_DYNAMIC_MODE_ATTRIBUTE, mode);
-}
-
-function clearThemeDynamicModeFromDocument(root: HTMLElement): void {
-  root.removeAttribute(THEME_DYNAMIC_MODE_ATTRIBUTE);
 }
 
 export default function EditorApp() {
@@ -221,11 +99,37 @@ export default function EditorApp() {
   }
 
   return (
-    <EditorShell
-      fishmark={fishmark}
-      fishmarkTest={window.fishmarkTest}
-    />
+    <AppErrorBoundary>
+      <EditorShell
+        fishmark={fishmark}
+        fishmarkTest={window.fishmarkTest}
+      />
+    </AppErrorBoundary>
   );
+}
+
+/** A terminal presentation fallback. Never retries or resets document/application state. */
+export class AppErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError(): { failed: boolean } {
+    return { failed: true };
+  }
+
+  render() {
+    if (this.state.failed) {
+      return (
+        <main className="app-shell" style={{ "--fishmark-titlebar-height": "0px" } as CSSProperties}>
+          <div className="app-shell-fallback">
+            <p className="error-banner" role="alert">
+              FishMark could not display the workspace. Restart the window to continue.
+            </p>
+          </div>
+        </main>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 function EditorShell({
@@ -236,16 +140,7 @@ function EditorShell({
   fishmarkTest?: Window["fishmarkTest"];
 }) {
   const [activeHeadingId, setActiveHeadingId] = useState<string | null>(null);
-  /*
-   * The rail switches the shared side panel between view containers; `null`
-   * means collapsed. `closingViewContainer` keeps the last container mounted
-   * until its exit animation ends.
-   */
-  const [activeViewContainer, setActiveViewContainer] = useState<WorkspaceViewContainerId | null>(
-    null
-  );
-  const [closingViewContainer, setClosingViewContainer] =
-    useState<WorkspaceViewContainerId | null>(null);
+  const { activeViewContainer, closingViewContainer, toggleViewContainer, closeViewContainer } = useViewContainerPresentation();
   const [shellMode, setShellMode] = useState<ShellMode>("reading");
   const [editorViewMode, setEditorViewMode] = useState<EditorViewMode>("wysiwym");
   const [preferences, setPreferences] = useState<Preferences>(DEFAULT_PREFERENCES);
@@ -261,16 +156,7 @@ function EditorShell({
   const [appUpdateState, setAppUpdateState] = useState<AppUpdateState>({
     kind: "idle"
   });
-  const [notification, setNotification] = useState<AppNotification | null>(null);
-  const [notificationState, setNotificationState] = useState<AppNotificationBannerState>("hidden");
-  const [workbenchSurfaceRuntimeMode, setWorkbenchSurfaceRuntimeMode] = useState<
-    ThemeSurfaceRuntimeMode | null
-  >(null);
-  const [titlebarSurfaceRuntimeMode, setTitlebarSurfaceRuntimeMode] = useState<
-    ThemeSurfaceRuntimeMode | null
-  >(null);
   const [isEditorFocused, setIsEditorFocused] = useState(false);
-  const [isShortcutHintArmed, setIsShortcutHintArmed] = useState(false);
   const [activeShortcutGroupId, setActiveShortcutGroupId] =
     useState<ShortcutGroupId>("default-text");
   const [activeTableToolId, setActiveTableToolId] = useState<string | null>(null);
@@ -281,51 +167,8 @@ function EditorShell({
   const startupOpenPathRef = useRef(fishmark.startupOpenPath);
   const preferencesRef = useRef<Preferences>(DEFAULT_PREFERENCES);
   const settingsEntryRef = useRef<HTMLButtonElement | null>(null);
-  const themePackageRuntimeRef = useRef<ReturnType<typeof createThemePackageRuntime> | null>(null);
-  const viewContainerCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const notificationHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const notificationCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const shortcutHintHoldTimerRef = useRef<number | null>(null);
-  const lastEditorPointerIntentRef = useRef<"editing" | "blank" | null>(null);
-  const pendingEditorOpenBlurTokenRef = useRef(0);
-  const suppressNextEditorBlurAutosaveRef = useRef(false);
-  const lastThemeNotificationKeyRef = useRef<string | null>(null);
-  const lastThemeDynamicNotificationKeyRef = useRef<string | null>(null);
   const fontFamilyLoadStateRef = useRef<"idle" | "loading" | "loaded">("idle");
-  const pressedShortcutModifiersRef = useRef<Set<string>>(new Set());
-  const draggedWorkspaceTabIdRef = useRef<string | null>(null);
-  const handledWorkspaceTabDropRef = useRef(false);
-  const clearNotificationTimers = useCallback((): void => {
-    if (notificationHideTimerRef.current !== null) {
-      clearTimeout(notificationHideTimerRef.current);
-      notificationHideTimerRef.current = null;
-    }
-
-    if (notificationCloseTimerRef.current !== null) {
-      clearTimeout(notificationCloseTimerRef.current);
-      notificationCloseTimerRef.current = null;
-    }
-  }, []);
-
-  const showNotification = useCallback((nextNotification: AppNotification): void => {
-    clearNotificationTimers();
-    setNotification(nextNotification);
-    setNotificationState("open");
-
-    if (nextNotification.kind === "loading") {
-      return;
-    }
-
-    notificationHideTimerRef.current = setTimeout(() => {
-      notificationHideTimerRef.current = null;
-      setNotificationState("closing");
-      notificationCloseTimerRef.current = setTimeout(() => {
-        notificationCloseTimerRef.current = null;
-        setNotificationState("hidden");
-        setNotification(null);
-      }, APP_NOTIFICATION_EXIT_ANIMATION_MS);
-    }, APP_NOTIFICATION_DURATION_MS);
-  }, [clearNotificationTimers]);
+  const { notification, notificationState, showNotification } = useNotificationPresentation();
 
   const getEditorContent = useCallback((): string => {
     return editorRef.current?.getContent() ?? editorContentRef.current;
@@ -360,6 +203,7 @@ function EditorShell({
     reorderWorkspaceTab,
     loadInitialWorkspaceSnapshot
   } = workspaceController;
+  const { handleWorkspaceTabDragStart, handleWorkspaceTabDragOver, handleWorkspaceTabDrop, handleWorkspaceTabDragEnd } = useWorkspaceTabDrag({ reorderWorkspaceTab, detachWorkspaceTab: detachWorkspaceTabWorkflow });
   const activeDocumentTabId = activeDocument?.tabId ?? null;
   const documentIdentity = useMemo<EditorLoadIdentity | null>(
     () => activeDocumentTabId === null ? null : {
@@ -404,6 +248,11 @@ function EditorShell({
   const isDocumentOpen = activeDocument !== null;
   const isReadingMode = shellMode === "reading";
   const isDocumentReadingMode = isDocumentOpen && isReadingMode;
+  const { handleEditorBlurFromShell, blurFocusedEditorElementAfterOpen, handleAppWorkspaceMouseDownCapture } = useEditorFocusPresentation({
+    activeDocument, isSettingsOpen, isSettingsClosing, editorContainerRef, editorRef,
+    handleEditorBlur, getWorkspaceActiveDocument, isDocumentOpen, editorLoadRevision: state.editorLoadRevision,
+    shellMode, setShellMode, setIsEditorFocused
+  });
   const headerTitle = isDocumentOpen
     ? activeDocument?.name ?? "Untitled"
     : "Local-first Markdown writing";
@@ -414,9 +263,9 @@ function EditorShell({
         ? "Autosaving..."
         : activeDocument && !activeDocument.path && !activeDocument.isDirty
           ? "Not saved yet"
-        : activeDocument?.isDirty
-          ? "Unsaved changes"
-          : "All changes saved";
+          : activeDocument?.isDirty
+            ? "Unsaved changes"
+            : "All changes saved";
   const externalFileConflictMessage = getExternalFileConflictMessage(
     externalConflictController.externalFileState
   );
@@ -424,40 +273,14 @@ function EditorShell({
     ? `正在下载更新${Number.isFinite(appUpdateState.percent) ? ` ${Math.round(appUpdateState.percent)}%` : "…"}`
     : null;
   const appVersionLabel = `FishMark v${__FISHMARK_APP_VERSION__}`;
+  const handleWindowBlur = useCallback(() => setIsEditorFocused(false), []);
+  const { isShortcutHintVisible } = useShortcutHintPresentation({ platform: fishmark.platform, isDocumentOpen, isEditorFocused, onWindowBlur: handleWindowBlur });
   const controlledTitlebarEnabled = supportsControlledTitlebar(fishmark.platform);
-  const {
-    activeThemeParameterOverrides,
-    activeThemePackageResolution,
-    activeTitlebarSurface,
-    activeWorkbenchSurface,
-    createThemeRuntimeEnv,
-    resolvedThemeMode,
-    themeDynamicMode,
-    themeRuntimeEnv,
-    themeWarningMessage
-  } = useThemeController({
-    preferences,
-    themePackages,
-    themePackageCatalogState,
-    isRefreshingThemePackages,
-    currentDocumentWordCount,
-    isDocumentReadingMode,
-    controlledTitlebarEnabled,
-    workbenchSurfaceRuntimeMode,
-    titlebarSurfaceRuntimeMode
-  });
-  const activeWorkbenchChannel0Src = activeWorkbenchSurface?.channels?.["0"]?.src ?? null;
-  const activeTitlebarChannel0Src = activeTitlebarSurface?.channels?.["0"]?.src ?? null;
+  const { activeTitlebarSurface, activeWorkbenchSurface, resolvedThemeMode, themeRuntimeEnv, handleWorkbenchSurfaceRuntimeModeChange, handleTitlebarSurfaceRuntimeModeChange } = useThemePresentation({ preferences, themePackages, themePackageCatalogState, isRefreshingThemePackages, currentDocumentWordCount, isDocumentReadingMode, controlledTitlebarEnabled, showNotification });
   const titlebarLayout = useMemo(
     () => normalizeTitlebarLayout(resolveDefaultTitlebarLayout(fishmark.platform)),
     [fishmark.platform]
   );
-  const shortcutHintModifierKey: "Control" | "Meta" = fishmark.platform === "darwin" ? "Meta" : "Control";
-  const isShortcutHintVisible = isDocumentOpen && isEditorFocused && isShortcutHintArmed;
-
-  const syncThemeRuntimeEnv = useEffectEvent((themeMode: ResolvedThemeMode = resolvedThemeMode): void => {
-    applyThemeRuntimeEnv(document.documentElement, createThemeRuntimeEnv(themeMode));
-  });
   const readActiveDocumentLoadContent = useEffectEvent(() => activeDocument?.content ?? null);
 
   useEffect(() => {
@@ -505,28 +328,6 @@ function EditorShell({
     editorRef.current?.deleteTable();
   }, []);
 
-  const handleWorkbenchSurfaceRuntimeModeChange = useCallback((mode: ThemeSurfaceRuntimeMode) => {
-    setWorkbenchSurfaceRuntimeMode((current) => (current === mode ? current : mode));
-  }, []);
-
-  const handleTitlebarSurfaceRuntimeModeChange = useCallback((mode: ThemeSurfaceRuntimeMode) => {
-    setTitlebarSurfaceRuntimeMode((current) => (current === mode ? current : mode));
-  }, []);
-
-  useEffect(() => {
-    setWorkbenchSurfaceRuntimeMode(null);
-  }, [activeWorkbenchSurface?.sceneId, activeWorkbenchSurface?.shaderUrl, activeWorkbenchChannel0Src, preferences.theme.effectsMode]);
-
-  useEffect(() => {
-    setTitlebarSurfaceRuntimeMode(null);
-  }, [
-    activeTitlebarSurface?.sceneId,
-    activeTitlebarSurface?.shaderUrl,
-    activeTitlebarChannel0Src,
-    controlledTitlebarEnabled,
-    preferences.theme.effectsMode
-  ]);
-
   useEffect(() => {
     if (!activeDocument) {
       setActiveShortcutGroupId("default-text");
@@ -538,151 +339,6 @@ function EditorShell({
       setActiveTableToolId(null);
     }
   }, [activeShortcutGroupId]);
-
-  function clearViewContainerCloseTimer(): void {
-    if (viewContainerCloseTimerRef.current !== null) {
-      clearTimeout(viewContainerCloseTimerRef.current);
-      viewContainerCloseTimerRef.current = null;
-    }
-  }
-
-  const enterEditingMode = useCallback((): void => {
-    pendingEditorOpenBlurTokenRef.current += 1;
-    setShellMode("editing");
-  }, []);
-
-  const blurFocusedEditorElement = useCallback(
-    (options: { suppressAutosave?: boolean } = {}): void => {
-      const activeElement = document.activeElement;
-      if (
-        !(activeElement instanceof HTMLElement) ||
-        !editorContainerRef.current?.contains(activeElement)
-      ) {
-        return;
-      }
-
-      if (!options.suppressAutosave) {
-        activeElement.blur();
-        return;
-      }
-
-      suppressNextEditorBlurAutosaveRef.current = true;
-
-      try {
-        activeElement.blur();
-      } finally {
-        suppressNextEditorBlurAutosaveRef.current = false;
-      }
-    },
-    []
-  );
-
-  const handleEditorBlurFromShell = useCallback((): void => {
-    if (suppressNextEditorBlurAutosaveRef.current) {
-      return;
-    }
-
-    handleEditorBlur();
-  }, [handleEditorBlur]);
-
-  const blurFocusedEditorElementWithoutAutosave = useCallback((): void => {
-    const activeElement = document.activeElement;
-    if (activeElement instanceof HTMLElement && editorContainerRef.current?.contains(activeElement)) {
-      blurFocusedEditorElement({ suppressAutosave: true });
-    }
-  }, [blurFocusedEditorElement]);
-
-  const cancelPendingEditorOpenBlur = useCallback((): void => {
-    pendingEditorOpenBlurTokenRef.current += 1;
-  }, []);
-
-  const blurFocusedEditorElementAfterOpen = useCallback((): void => {
-    const blurToken = pendingEditorOpenBlurTokenRef.current + 1;
-    pendingEditorOpenBlurTokenRef.current = blurToken;
-    blurFocusedEditorElementWithoutAutosave();
-    requestAnimationFrame(() => {
-      if (pendingEditorOpenBlurTokenRef.current !== blurToken) {
-        return;
-      }
-
-      blurFocusedEditorElementWithoutAutosave();
-      requestAnimationFrame(() => {
-        if (pendingEditorOpenBlurTokenRef.current !== blurToken) {
-          return;
-        }
-
-        blurFocusedEditorElementWithoutAutosave();
-      });
-    });
-  }, [blurFocusedEditorElementWithoutAutosave]);
-
-  const enterReadingMode = useCallback((): void => {
-    if (
-      !activeDocument ||
-      isSettingsOpen ||
-      isSettingsClosing
-    ) {
-      return;
-    }
-
-    setShellMode("reading");
-    blurFocusedEditorElement();
-  }, [
-    activeDocument,
-    blurFocusedEditorElement,
-    isSettingsClosing,
-    isSettingsOpen
-  ]);
-
-  const handleAppWorkspaceMouseDownCapture = useCallback(
-    (event: React.MouseEvent<HTMLElement>): void => {
-      if (event.button !== 0 || !activeDocument) {
-        return;
-      }
-
-      const target = event.target;
-      const editorContainer = editorContainerRef.current;
-
-      if (!(target instanceof Element)) {
-        return;
-      }
-
-      if (target.closest(".side-panel")) {
-        return;
-      }
-
-      if (
-        editorContainer &&
-        editorContainer.contains(target) &&
-        (
-          isEditingContentPointerEvent(event.nativeEvent, editorContainer) ||
-          isEditorScrollbarPointerEvent(event.nativeEvent, editorContainer)
-        )
-      ) {
-        return;
-      }
-
-      if (
-        !editorContainer?.contains(target) &&
-        isWorkspaceNonEditorInteractiveTarget(target)
-      ) {
-        return;
-      }
-
-      lastEditorPointerIntentRef.current = null;
-      event.preventDefault();
-      event.stopPropagation();
-      enterReadingMode();
-    },
-    [activeDocument, enterReadingMode]
-  );
-
-  function clearShortcutHintHoldTimer(): void {
-    if (shortcutHintHoldTimerRef.current !== null) {
-      clearTimeout(shortcutHintHoldTimerRef.current);
-      shortcutHintHoldTimerRef.current = null;
-    }
-  }
 
   const handlePreferencesSync = useEffectEvent((nextPreferences: Preferences): void => {
     preferencesRef.current = nextPreferences;
@@ -773,31 +429,6 @@ function EditorShell({
     closeSettingsDrawer();
   });
 
-  function toggleViewContainer(viewContainerId: WorkspaceViewContainerId): void {
-    if (activeViewContainer === viewContainerId) {
-      closeViewContainer();
-      return;
-    }
-
-    clearViewContainerCloseTimer();
-    setClosingViewContainer(null);
-    setActiveViewContainer(viewContainerId);
-  }
-
-  function closeViewContainer(): void {
-    if (activeViewContainer === null) {
-      return;
-    }
-
-    clearViewContainerCloseTimer();
-    setClosingViewContainer(activeViewContainer);
-    setActiveViewContainer(null);
-    viewContainerCloseTimerRef.current = setTimeout(() => {
-      viewContainerCloseTimerRef.current = null;
-      setClosingViewContainer(null);
-    }, VIEW_CONTAINER_EXIT_ANIMATION_MS);
-  }
-
   /*
    * One shared panel width for every view container. The shell reports the
    * final width once per drag (never per frame); an unchanged width is not
@@ -870,74 +501,6 @@ function EditorShell({
   }, [
     closeWorkspaceTabWorkflow
   ]);
-
-  const handleReorderWorkspaceTab = useCallback(
-    async (tabId: string, toIndex: number): Promise<void> => {
-      await reorderWorkspaceTab(tabId, toIndex);
-    },
-    [reorderWorkspaceTab]
-  );
-
-  const handleDetachWorkspaceTab = useCallback(async (tabId: string): Promise<void> => {
-    await detachWorkspaceTabWorkflow(tabId);
-  }, [
-    detachWorkspaceTabWorkflow
-  ]);
-
-  const handleWorkspaceTabDragStart = useCallback(
-    (tabId: string, event: React.DragEvent<HTMLElement>): void => {
-      draggedWorkspaceTabIdRef.current = tabId;
-      handledWorkspaceTabDropRef.current = false;
-      event.dataTransfer.effectAllowed = "move";
-      event.dataTransfer.setData("text/plain", tabId);
-    },
-    []
-  );
-
-  const handleWorkspaceTabDragOver = useCallback((event: React.DragEvent<HTMLElement>): void => {
-    if (!draggedWorkspaceTabIdRef.current) {
-      return;
-    }
-
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
-  }, []);
-
-  const handleWorkspaceTabDrop = useCallback(
-    (targetTabId: string, targetIndex: number, event: React.DragEvent<HTMLElement>): void => {
-      const draggedTabId = draggedWorkspaceTabIdRef.current;
-
-      if (!draggedTabId) {
-        return;
-      }
-
-      event.preventDefault();
-      handledWorkspaceTabDropRef.current = true;
-      draggedWorkspaceTabIdRef.current = null;
-
-      if (draggedTabId === targetTabId) {
-        return;
-      }
-
-      void handleReorderWorkspaceTab(draggedTabId, targetIndex);
-    },
-    [handleReorderWorkspaceTab]
-  );
-
-  const handleWorkspaceTabDragEnd = useCallback(
-    (tabId: string): void => {
-      const shouldDetach =
-        draggedWorkspaceTabIdRef.current === tabId && !handledWorkspaceTabDropRef.current;
-
-      draggedWorkspaceTabIdRef.current = null;
-      handledWorkspaceTabDropRef.current = false;
-
-      if (shouldDetach) {
-        void handleDetachWorkspaceTab(tabId);
-      }
-    },
-    [handleDetachWorkspaceTab]
-  );
 
   async function handleSaveMarkdown(): Promise<void> {
     await editorCommands.saveMarkdown();
@@ -1121,201 +684,6 @@ function EditorShell({
   }, [isSettingsOpen]);
 
   useEffect(() => {
-    const handleResize = () => syncThemeRuntimeEnv();
-
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
-
-  useEffect(() => {
-    syncThemeRuntimeEnv(resolvedThemeMode);
-  }, [currentDocumentWordCount, isDocumentReadingMode, resolvedThemeMode]);
-
-  useEffect(() => {
-    const editorContainer = editorContainerRef.current;
-
-    if (!editorContainer) {
-      return undefined;
-    }
-
-    const handleMouseDownCapture = (event: MouseEvent) => {
-      if (event.target instanceof Node && editorContainer.contains(event.target)) {
-        if (event.button !== 0) {
-          lastEditorPointerIntentRef.current = null;
-          return;
-        }
-
-        const isEditingContentClick = isEditingContentPointerEvent(event, editorContainer);
-        const isScrollbarClick = isEditorScrollbarPointerEvent(event, editorContainer);
-        if (isScrollbarClick) {
-          lastEditorPointerIntentRef.current = null;
-          return;
-        }
-
-        lastEditorPointerIntentRef.current = isEditingContentClick ? "editing" : "blank";
-
-        if (isEditingContentClick) {
-          if (getWorkspaceActiveDocument()) {
-            enterEditingMode();
-          }
-          return;
-        }
-
-        event.preventDefault();
-        enterReadingMode();
-      }
-    };
-
-    const clearLastPointerIntent = () => {
-      lastEditorPointerIntentRef.current = null;
-    };
-
-    const handleFocusIn = (event: FocusEvent) => {
-      if (event.target instanceof Node && editorContainer.contains(event.target)) {
-        cancelPendingEditorOpenBlur();
-        const pointerIntent = lastEditorPointerIntentRef.current;
-        lastEditorPointerIntentRef.current = null;
-        setIsEditorFocused(true);
-
-        if (pointerIntent !== "editing") {
-          return;
-        }
-
-        if (getWorkspaceActiveDocument()) {
-          enterEditingMode();
-        }
-      }
-    };
-
-    const handleFocusOut = () => {
-      const activeElement = document.activeElement;
-      setIsEditorFocused(activeElement instanceof Node && editorContainer.contains(activeElement));
-    };
-
-    editorContainer.addEventListener("mousedown", handleMouseDownCapture, true);
-    editorContainer.addEventListener("focusin", handleFocusIn);
-    editorContainer.addEventListener("focusout", handleFocusOut);
-    window.addEventListener("mouseup", clearLastPointerIntent);
-
-    return () => {
-      editorContainer.removeEventListener("mousedown", handleMouseDownCapture, true);
-      editorContainer.removeEventListener("focusin", handleFocusIn);
-      editorContainer.removeEventListener("focusout", handleFocusOut);
-      window.removeEventListener("mouseup", clearLastPointerIntent);
-    };
-  }, [
-    cancelPendingEditorOpenBlur,
-    enterEditingMode,
-    enterReadingMode,
-    getWorkspaceActiveDocument,
-    isDocumentOpen,
-    state.editorLoadRevision
-  ]);
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const modifierId = getPrimaryShortcutModifierId(event, shortcutHintModifierKey);
-
-      if (!modifierId) {
-        return;
-      }
-
-      const wasHeld = pressedShortcutModifiersRef.current.size > 0;
-      pressedShortcutModifiersRef.current.add(modifierId);
-
-      if (wasHeld || shortcutHintHoldTimerRef.current !== null) {
-        return;
-      }
-
-      shortcutHintHoldTimerRef.current = window.setTimeout(() => {
-        shortcutHintHoldTimerRef.current = null;
-
-        if (
-          pressedShortcutModifiersRef.current.size > 0 &&
-          isDocumentOpen &&
-          isEditorFocused
-        ) {
-          setIsShortcutHintArmed(true);
-        }
-      }, SHORTCUT_HINT_HOLD_DELAY_MS);
-    };
-
-    const handleKeyUp = (event: KeyboardEvent) => {
-      const modifierId = getPrimaryShortcutModifierId(event, shortcutHintModifierKey);
-
-      if (!modifierId) {
-        return;
-      }
-
-      pressedShortcutModifiersRef.current.delete(modifierId);
-
-      if (pressedShortcutModifiersRef.current.size === 0) {
-        clearShortcutHintHoldTimer();
-        setIsShortcutHintArmed(false);
-      }
-    };
-
-    const handleWindowBlur = () => {
-      clearShortcutHintHoldTimer();
-      pressedShortcutModifiersRef.current.clear();
-      setIsEditorFocused(false);
-      setIsShortcutHintArmed(false);
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
-    window.addEventListener("blur", handleWindowBlur);
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
-      window.removeEventListener("blur", handleWindowBlur);
-      clearShortcutHintHoldTimer();
-    };
-  }, [isDocumentOpen, isEditorFocused, shortcutHintModifierKey]);
-
-  useEffect(() => {
-    if (isDocumentOpen) {
-      return;
-    }
-
-    clearShortcutHintHoldTimer();
-    pressedShortcutModifiersRef.current.clear();
-    setIsEditorFocused(false);
-    setIsShortcutHintArmed(false);
-  }, [isDocumentOpen]);
-
-  useEffect(() => {
-    const themePackageRuntime =
-      themePackageRuntimeRef.current ?? createThemePackageRuntime(document);
-    themePackageRuntimeRef.current = themePackageRuntime;
-
-    const applyCurrentTheme = () => {
-      const root = document.documentElement;
-      const activeThemeManifest = resolveActiveThemePackageManifest(
-        preferences.theme.selectedId,
-        themePackages,
-        resolvedThemeMode
-      );
-
-      applyPreferencesToDocument(root, preferences, resolvedThemeMode);
-      applyThemeParameterCssVariables(root, activeThemeManifest, activeThemeParameterOverrides);
-      themePackageRuntime.applyPackage(
-        activeThemePackageResolution.descriptor,
-        resolvedThemeMode
-      );
-    };
-
-    applyCurrentTheme();
-  }, [
-    activeThemePackageResolution.descriptor,
-    activeThemeParameterOverrides,
-    preferences,
-    resolvedThemeMode,
-    themePackages
-  ]);
-
-  useEffect(() => {
     return fishmark.onAppUpdateState((nextState) => {
       setAppUpdateState(nextState);
     });
@@ -1326,82 +694,6 @@ function EditorShell({
       showNotification(nextNotification);
     });
   }, [showNotification, fishmark]);
-
-  useEffect(() => {
-    if (!themeWarningMessage) {
-      lastThemeNotificationKeyRef.current = null;
-      return;
-    }
-
-    const notificationKey = `${activeThemePackageResolution.requestedId ?? "default"}:${activeThemePackageResolution.resolvedMode}:${activeThemePackageResolution.fallbackReason ?? "none"}`;
-
-    if (lastThemeNotificationKeyRef.current === notificationKey) {
-      return;
-    }
-
-    lastThemeNotificationKeyRef.current = notificationKey;
-    showNotification({
-      kind: "warning",
-      message: themeWarningMessage
-    });
-  }, [
-    activeThemePackageResolution.fallbackReason,
-    activeThemePackageResolution.requestedId,
-    activeThemePackageResolution.resolvedMode,
-    showNotification,
-    themeWarningMessage
-  ]);
-
-  useEffect(() => {
-    const root = document.documentElement;
-    applyThemeDynamicModeToDocument(root, themeDynamicMode);
-
-    if (!shouldWarnForThemeDynamicFallback(themeDynamicMode)) {
-      lastThemeDynamicNotificationKeyRef.current = null;
-      return () => {
-        clearThemeDynamicModeFromDocument(root);
-      };
-    }
-
-    const notificationKey = `${activeThemePackageResolution.requestedId ?? "default"}:${activeThemePackageResolution.resolvedMode}:${themeDynamicMode}`;
-
-    if (lastThemeDynamicNotificationKeyRef.current !== notificationKey) {
-      lastThemeDynamicNotificationKeyRef.current = notificationKey;
-      showNotification({
-        kind: "warning",
-        message: THEME_DYNAMIC_FALLBACK_MESSAGE
-      });
-    }
-
-    return () => {
-      clearThemeDynamicModeFromDocument(root);
-    };
-  }, [
-    activeThemePackageResolution.requestedId,
-    activeThemePackageResolution.resolvedMode,
-    showNotification,
-    themeDynamicMode
-  ]);
-
-  useEffect(() => {
-    if (!isDocumentOpen) {
-      return;
-    }
-
-    if (shellMode !== "editing") {
-      return;
-    }
-
-    const frame = requestAnimationFrame(() => {
-      if (isFocusedEditorInteractiveElement(editorContainerRef.current)) {
-        return;
-      }
-
-      editorRef.current?.focus();
-    });
-
-    return () => cancelAnimationFrame(frame);
-  }, [activeDocument?.path, isDocumentOpen, shellMode, state.editorLoadRevision]);
 
   useEffect(() => {
     if (!isSettingsOpen) {
@@ -1418,43 +710,12 @@ function EditorShell({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isSettingsOpen]);
 
-  useEffect(() => {
-    if (
-      !isDocumentOpen ||
-      isSettingsOpen ||
-      isSettingsClosing
-    ) {
-      return undefined;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && shellMode === "editing") {
-        enterReadingMode();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [
-    enterReadingMode,
-    isDocumentOpen,
-    isSettingsClosing,
-    isSettingsOpen,
-    shellMode
-  ]);
-
   useEffect(
     () => () => {
       resetAutosaveRuntime();
-      clearViewContainerCloseTimer();
       clearSettingsCloseTimer();
-      clearNotificationTimers();
-      themePackageRuntimeRef.current?.clear();
-      clearThemeDynamicModeFromDocument(document.documentElement);
-      clearThemeRuntimeEnv(document.documentElement);
-      clearDocumentPreferences(document.documentElement);
     },
-    [clearNotificationTimers, clearSettingsCloseTimer, resetAutosaveRuntime]
+    [clearSettingsCloseTimer, resetAutosaveRuntime]
   );
 
   const handleActiveBlockChange = useCallback((nextActiveBlockState: ActiveBlockState): void => {

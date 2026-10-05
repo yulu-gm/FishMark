@@ -143,6 +143,17 @@ Intake：`docs/plans/2026-09-18-rf-601-intake.md`。执行交接：`docs/plans/2
 - [x] 删除退休 hooks / 旧 owner 路径，同步 CI/architecture 引用；补充必要的 Node 回归与执行交接。
 - [x] 独立 high 架构与任务验收 PASS；450 focused、310 foundation、216 文件完整精确 regression（本机双 worker）、真实 Electron safety 七项、原 bundle 与正式行为门禁通过。详见 [RF-801 总结](reports/task-summaries/RF-801.md)；默认并发初轮失败与前置修复保留在测试报告。
 
+### RF-802 — React shell decomposition
+
+状态：**DEV_DONE（2026-10-05）**。仅推进 RF-802；RF-803/M9 不进入本轮。
+
+- [x] App composition 保留唯一订阅、bootstrap/lifecycle 与 presentation-only error boundary。
+- [x] 直接消费 tab/status/conflict/outline/find/settings/notification/table 组件，复用 TitlebarHost。
+- [x] 小型显式 props/commands，保留焦点、动画、epoch/loadRevision、resize commit 与 lazy splits。
+- [x] 补充 focused 行为测试，完成本地可执行原门禁并写 DEV_DONE handoff；native 门禁转 CI，独立验收另行执行。
+
+独立架构/任务验收待执行；本地 native Electron 门禁因 cloud socket/display 限制未运行，待 GitHub CI 精确 commit 证据。详见 [执行交接](docs/plans/2026-10-05-rf-802-handoff.md)。
+
 ## Epic 1：项目骨架
 
 ### TASK-001 初始化桌面工程

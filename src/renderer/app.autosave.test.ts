@@ -2,7 +2,7 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { act, createElement } from "react";
+import { act, createElement, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -1410,6 +1410,26 @@ describe("App autosave", () => {
       getByLabelText
     };
   }
+
+  it("keeps one application subscription and startup open through the decomposed StrictMode shell", async () => {
+    const detach = vi.fn();
+    const onDocumentProjection = vi.fn(() => detach);
+    queueWorkspaceOpenDocuments({ path: "C:/notes/strict.md", name: "strict.md", content: "# Strict\n" });
+    window.fishmark = { ...window.fishmark, onDocumentProjection, startupOpenPath: "C:/notes/strict.md" };
+    await act(async () => root.render(createElement(StrictMode, null, createElement(App))));
+    await act(async () => { await vi.dynamicImportSettled(); });
+    expect(onDocumentProjection).toHaveBeenCalledTimes(1);
+    expect(openWorkspaceFileFromPath).toHaveBeenCalledExactlyOnceWith("C:/notes/strict.md");
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.querySelector('[data-fishmark-region="workspace-tab"]')?.textContent).toContain("strict.md");
+    await act(async () => root.render(null));
+    await Promise.resolve();
+    expect(detach).toHaveBeenCalledTimes(1);
+    expect(appNotificationListener).toBeNull();
+    expect(preferencesChangedListener).toBeNull();
+    expect(document.documentElement.hasAttribute("data-fishmark-theme")).toBe(false);
+    expect(document.documentElement.style.getPropertyValue("--fishmark-ui-font-family")).toBe("");
+  });
 
   it("does not autosave a clean document immediately after opening", async () => {
     await renderAndOpenDocument();
@@ -5636,7 +5656,11 @@ describe("App autosave", () => {
     // region hook so theme packages keep theming it.
     expect(appUiStylesheet).toContain(".outline-panel");
     expect(appUiStylesheet).toContain(".outline-panel-list");
-    expect(workspaceShellSource).toContain('data-fishmark-region="outline-panel"');
+    expect(workspaceShellSource).toContain('<OutlinePanel');
+    const outlinePanelSource = readFileSync(
+      join(process.cwd(), "src/renderer/editor/components/OutlinePanel.tsx"), "utf-8"
+    );
+    expect(outlinePanelSource).toContain('data-fishmark-region="outline-panel"');
     expect(appUiStylesheet).toContain(".workspace-shell.is-side-panel-open");
     expect(appUiStylesheet).toContain('.side-panel[data-state="closing"]');
     expect(appUiStylesheet).toContain('.side-panel[data-state="open"] .side-panel-body');

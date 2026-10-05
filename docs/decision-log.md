@@ -238,3 +238,12 @@ RF506 父独立行为/安全验收 PASS，最终 2671 tests、lint/typecheck/bui
 原因：原 edit client 已覆盖 sequence、ack、恢复、close lease、IME 与取消关闭后的 rebind，重写会破坏成熟安全协议。move 复用 removal sealing/drain/reconciliation；test driver 保存采用相同手动策略，防止外部冲突绕过 save-as。设置 gateway 对结果和错误承担明确职责，纯只读和事件能力无需机械转发。
 
 状态：2026-10-05 独立统一验收 PASS / COMPLETE；两项初审 P1 的目标 identity 和异步存活检查已修复并通过回归。RF-802/803 和 M9 不在本次收口范围，详见 `reports/reviews/2026-10-05-rf-801-architecture.md`。
+
+## 2026-10-05 RF-802：拆表现层，不再建 application
+
+- 决策：复用 RF-801 application/gateway，把原大组件中的直接 JSX 按可见区域拆为 `editor/components`，用小型明确 props/命令回调连接。共享 `workspace-shell-props.ts` 仅是类型契约，没有运行时服务入口；叶子组件按字段 Pick，不接 application/store。
+- 生命周期：Search/resize hooks 留在常驻 shell；SettingsView 留住表单 draft；CodeEditor 不加 key，不因 tab chrome、notification 或 drawer 状态 remount。TitlebarHost 和所有既有 lazy splits 保留。
+- 本地 runtime feedback：theme surface scene/shader/channel/effects identity 改变时只重置该 surface 的展示反馈。用带 identity 的本地状态在 render 边界调整，避免抽出 hook 后同步 setState effect；旧 identity 的迟到 callback 不污染新 surface。该状态不是主题偏好或文档真值。
+- 错误边界：App 内提供终止式 presentation fallback。无 retry/reset 控件，不自动重建应用、重新保存或改变文档内容。已有 bridge-unavailable 文案不变。
+- 验证：新增 focused tests 直接覆盖命令委托、table focus、Escape/reopen 与 load identity、settings 取消、StrictMode timer 和 fallback cleanup。原 outline 源文件静态断言改为检查真实 OutlinePanel 文件及 WorkspaceShell 直接消费，不删除主题 hook 断言。
+- CI：用户明确批准为受限 cloud 补充正式 `test:editor-behavior` xvfb gate，串行跟在 workspace safety 后并上传原 JSON。cloud 禁止 AF_UNIX socket，不能启动 Xvfb；不绕过限制，不把本地未运行的 Electron 门禁写为通过。

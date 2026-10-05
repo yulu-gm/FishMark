@@ -196,3 +196,11 @@ DOM widget 的 reveal 应在 CodeMirror `requestMeasure` 中读取最终几何�
 application 的命令 API 统一打开、保存、另存、重载、关闭、排序、跨窗口移动、detach、drop、外部冲突与导出；所有文档写入继续穿过原 coordinator 和 edit barrier。WorkspaceSaveScheduler 负责自动保存 timer/replay/origin，既不写 Markdown 也不建立第二个事务队列。测试驱动的 saveDocument 与用户手动保存共享 scheduler。销毁清理 timer 和订阅，并阻止晚到通知及 replay；StrictMode effect rehearsal 继续使用 start/scheduleDispose 的 epoch 协议。
 
 RendererPlatformGateway 私有持有有限 bridge port，负责 recent/clipboard/link 通知、设置操作错误文本、图片目录选择到 preference 更新以及 preference 更新后的 autosave 调度。组件只处理可见状态和回调；纯平台读取、事件绑定、DOM file 路径转换仍归 composition。EditorLoadIdentity 与 frame/remote-patch 契约归 application，避免该层反向依赖 React 或 CodeMirror 实现。
+
+### RF-802 React presentation 边界（2026-10-05）
+
+`editor/App.tsx` 是 renderer composition root：只组合 RF-801 application 的唯一订阅、bootstrap/平台事件、命令入口和视图绑定。顶层 `AppErrorBoundary` 只给出终止式展示错误，不重试命令、不重建 workspace、不修改保存状态。
+
+`WorkspaceShell` 负责布局与编辑器挂载位置；`editor/components/` 下的 WorkspaceTabStrip、StatusBar、ConflictBanner、OutlinePanel、FindReplacePanel、SettingsDrawer、NotificationHost、TableToolbar 与 WelcomeWorkspace 接受显式小型 view props/command callbacks。TitlebarHost 继续是既有标题栏 owner，不新增包装 owner。CodeEditor、settings、theme surface、shortcut hint 和开发 test bridge 保留原 lazy import 边界。没有新增 store/context/service locator、Markdown 副本、IPC facade 或第二个 coordinator。
+
+Search 的输入草稿、match display、panel animation、pointer resize、tab drag、notification timers、focus/shortcut hints 与 theme DOM runtime 是各自 presentation hook 的本地状态。Search hook 与 shell 同寿命，关闭动画或 outline 切换不会暗中创建新 owner；active tab、epoch、loadRevision 边界仍重置 query。resize 仅在 pointerup/键盘提交偏好，不逐帧写入；取消恢复原宽度。设置表单 draft 继续由 SettingsView 持有，切换 section 和 closing 状态不会重建整个 draft，叶子 section 不订阅业务状态。

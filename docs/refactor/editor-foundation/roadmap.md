@@ -1660,17 +1660,19 @@ npm.cmd run perf:baseline
 
 #### RF-802: React shell decomposition
 
+**状态（2026-10-05）：** DEV_DONE；本地开发自检完成，native gates 待 CI，独立验收待执行。
+
 **Outcome:** `App.tsx` is a composition root and `WorkspaceShell` is focused presentation.
 
 **Files:** split `src/renderer/editor/App.tsx`, `WorkspaceShell.tsx`, and `settings-view.tsx` into named components under `editor/components/`.
 
 **Steps:**
 
-- [ ] Keep bootstrapping, store subscription, and top-level error boundary in `App.tsx`.
-- [ ] Extract tab strip, titlebar, status bar, conflict banner, outline, find/replace, settings drawer, notification host, and table toolbar.
-- [ ] Give each component explicit view props and command callbacks.
-- [ ] Remove business IPC and document synchronization effects from React.
-- [ ] Keep component tests focused on projection-to-view behavior.
+- [x] Keep bootstrapping, store subscription, and top-level error boundary in `App.tsx`.
+- [x] Extract tab strip, titlebar, status bar, conflict banner, outline, find/replace, settings drawer, notification host, and table toolbar.
+- [x] Give each component explicit view props and command callbacks.
+- [x] Remove business IPC and document synchronization effects from React.
+- [x] Keep component tests focused on projection-to-view behavior.
 
 **Verification:**
 
@@ -1681,6 +1683,8 @@ npm.cmd run typecheck
 ```
 
 **Exit:** no large React component owns document or workspace workflows.
+
+**执行证据：** [handoff](../../plans/2026-10-05-rf-802-handoff.md)。459 focused / 310 foundation，typecheck/lint/build、完整精确 regression（217 files，2883 passed + 10 exact known）和原 bundle（total JS gzip 1428000/1430000）开发自检通过。真实 Electron 本地未运行，待 CI；不提前声明 task acceptance 或 M8/M9 完成。
 
 #### RF-803: Main/preload composition split
 

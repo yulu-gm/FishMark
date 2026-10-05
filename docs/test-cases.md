@@ -1293,3 +1293,15 @@ RF-801 独立审查退回补充：外部冲突操作排队前捕获 A 的 editor
 独立 macOS 图标基线修复：`scripts/generate-icons.mjs` 对仅含路径/圆形的 SVG 禁用 Resvg 系统字体扫描。沿用 `src/main/generate-icons.test.ts` 与 `src/main/after-pack-win-icon.test.ts` 原 8 项测试和原 5 秒/30 秒门限；临时对照完整 29 个图标 SHA-256 一致，验证此修复不改变图标数据语义。该项不计入 RF-801 产品能力。
 
 独立 macOS safety probe 输入修复：Electron `sendInputEvent` 必须传 Accelerator 键码 `Down`，不能传 DOM 键名 `ArrowDown`。同机 f15bc8e 临时诊断确认前者生成正常 ArrowDown/meta 事件，后者生成空键/keyCode 0。仅修正 mac 输入参数，保留 Linux End/control、原生输入、15 秒/90 秒原门限和全部保存/关闭断言。受控基线已通过全部 7 checks、prompt `[2,0]`，磁盘精确内容 `Smoke first-save second-save pending-close after-cancel`；冻结 RF-801 主体由独立验收重跑原 probe。
+
+## RF-802 React presentation 拆分回归（2026-10-05）
+
+1. 多 tab 激活、关闭、中键关闭、同 tab drop、跨 tab reorder 与拖出 detach 均只调既有 application command 一次；操作前后编辑器 DOM/undo/load identity 不因 chrome 变化重挂。
+2. 外部文件冲突 pending/keeping-memory/idle 只显示相应按钮；reload/keep/save-as/dismiss 精确委托，不在 banner 中决策或发 IPC。
+3. 表格按钮获得焦点后 tooltip 投影更新保留同一按钮和焦点；点击只执行所选命令。真实 table-cell 焦点和编辑行为由既有 App/behavior gates 覆盖。
+4. Search 输入和 Replace 输入委托现有 editor port；Escape 清空 editor query、归还 editor focus 并开始关闭。180ms 退出期间重开保持 input identity，旧 timer 不能把新 panel 隐藏。tab/epoch/loadRevision 改变清空本地草稿和激活的 query。
+5. side panel pointermove 只更新 CSS 展示；pointerup 恰提交一次，Escape/pointercancel/lost capture 不写偏好，键盘与 min/max clamp 沿用原测试。
+6. Settings section navigation 不改变 preference patch；drawer closing/reopen 期间 field DOM/焦点不重建，取消临时图片目录不显示已保存。关闭后焦点恢复与 autosave 仍经过既有 settings controller/application。
+7. StrictMode App rehearsal 只有一个 projection subscription 和一次 startup open；卸载清理订阅、主题 DOM 和 notification callbacks。notification loading 替换 closing 通知清理旧 timer；退出阶段卸载也清理 timer。
+8. render/effect 抛错显示 App 顶层 role=alert fallback，子树正常 cleanup；后续 children 更新不自动 retry，不调保存或 reset。
+9. 原完整精确 regression 保持 10 条 known failures；foundation、bundle 原预算和 CI 真实 Electron safety/formal behavior gate 均必须新鲜执行。M9 全平台 IME/性能范围未在本任务宣称完成。
