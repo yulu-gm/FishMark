@@ -64,6 +64,8 @@ function parseArguments(argv) {
 
 function renderPng(svgSource, size) {
   const renderer = new Resvg(svgSource, {
+    // 图标仅含矢量路径，无需逐尺寸扫描系统字体。
+    font: { loadSystemFonts: false },
     fitTo: {
       mode: "width",
       value: size
