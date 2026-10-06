@@ -5,7 +5,6 @@ import {
 } from "../shared/preload-bridge-mode";
 
 export const RUNTIME_MODE_ARGUMENT_PREFIX = "--fishmark-runtime-mode=";
-export { formatStartupOpenPathArgument } from "./launch-open-path";
 
 export type RuntimeMode = "editor" | "test-workbench";
 
@@ -41,13 +40,6 @@ export function resolveAppRuntimeMode(env: NodeJS.ProcessEnv): RuntimeMode {
   return env.FISHMARK_START_MODE === "test-workbench" ? "test-workbench" : "editor";
 }
 
-export function resolveWindowRuntimeMode(argv: string[]): RuntimeMode {
-  const runtimeArgument = argv.find((entry) => entry.startsWith(RUNTIME_MODE_ARGUMENT_PREFIX));
-  const runtimeValue = runtimeArgument?.slice(RUNTIME_MODE_ARGUMENT_PREFIX.length);
-
-  return runtimeValue === "test-workbench" ? "test-workbench" : "editor";
-}
-
 export function createRuntimeWindowManager<TWindow extends WindowLike>(input: {
   runtimeMode: RuntimeMode;
   platform?: NodeJS.Platform;
@@ -68,6 +60,8 @@ export function createRuntimeWindowManager<TWindow extends WindowLike>(input: {
     getAllWindows,
     loadRenderer
   } = input;
+
+  const policies = new WeakMap<TWindow, { runtimeMode: RuntimeMode; preloadBridgeMode: PreloadBridgeMode }>();
 
   function resolveEditorWindowChrome(): Partial<CreateWindowInput> {
     if (platform === "darwin") {
@@ -94,9 +88,7 @@ export function createRuntimeWindowManager<TWindow extends WindowLike>(input: {
       additionalArguments.push(formatStartupOpenPathArgument(options.startupOpenPath));
     }
 
-    if (preloadBridgeMode !== "product") {
-      additionalArguments.push(`${PRELOAD_BRIDGE_MODE_ARGUMENT_PREFIX}${preloadBridgeMode}`);
-    }
+    additionalArguments.push(`${PRELOAD_BRIDGE_MODE_ARGUMENT_PREFIX}${preloadBridgeMode}`);
 
     const window = createWindow({
       ...(nextRuntimeMode === "test-workbench"
@@ -129,6 +121,8 @@ export function createRuntimeWindowManager<TWindow extends WindowLike>(input: {
       }
     });
 
+    policies.set(window, { runtimeMode: nextRuntimeMode, preloadBridgeMode });
+
     window.webContents.on("will-navigate", (event) => {
       event.preventDefault();
     });
@@ -157,6 +151,8 @@ export function createRuntimeWindowManager<TWindow extends WindowLike>(input: {
   }
 
   return {
+    getPreloadBridgeMode(window: TWindow) { return policies.get(window)?.preloadBridgeMode; },
+    getRuntimeMode(window: TWindow) { return policies.get(window)?.runtimeMode; },
     openPrimaryWindow(options?: { startupOpenPath?: string }) {
       return openWindow(runtimeMode, options);
     },

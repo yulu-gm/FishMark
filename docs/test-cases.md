@@ -1311,3 +1311,13 @@ RF-801 独立审查退回补充：外部冲突操作排队前捕获 A 的 editor
 - 仅 Linux + CI=true + FISHMARK_EDITOR_BEHAVIOR_CI_NO_SANDBOX=1 返回 `--no-sandbox` + 原 manifest entry；缺 opt-in、值为 0、缺 CI、CI=false 或 macOS/Windows 均只返回原 entry。
 - formal probe 真实使用此 argument builder，workflow 仅该步骤设置 opt-in；产品 main 不读取它。
 - 原全 manifest 与 process-tree hard-timeout cleanup 继续执行；Linux CI 测试不作为 M9 OS-sandbox/security 证据。
+
+## RF-803：main/preload composition 与 IPC 边界
+
+- 对每组 service handler 输入 invalid/destroyed/foreign sender、subframe、detached frame、非 app entry URL、main-owned 不允许的 runtime 与 malformed request：调用在任何 service side effect 前拒绝。
+- 重复注册保留原 handler；dispose 只移除自身 channels、幂等，保留外部注册，旧 callback 不再可执行。
+- window readiness/service await 后替换 frame：不得进入后续 mutation 或返回数据。原 edit/flush 在 document lease 排队期间替换 frame，canonical text 不变、不发 projection。
+- product window 不暴露 test bridge；packaged main 不启动 workbench；dev workbench 才能启动/中止 scenario，editor-test completion 必须属于该 session 的真实 webContents。
+- 真 Electron：打开、编辑、保存、再次保存；pending edit 后 native close Cancel，再输入并 close Save，磁盘与内存一致；移动/detach tab 后 source window 不得保存/修改新 owner 的 tab。
+- 设置/主题/字体/recent、图片目录取消、clipboard import、HTML export 与安全 external link 保持原行为；非法外链 scheme 被拒绝。
+- 原 focused/main/preload、完整 exact regression、foundation、typecheck/lint/build、bundle、workspace-safety 和 formal behavior 都必须保留；无法启动真实 Electron 的环境明确标为阻塞，不用 headless unit 代替。

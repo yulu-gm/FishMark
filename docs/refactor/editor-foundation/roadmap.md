@@ -1688,28 +1688,32 @@ npm.cmd run typecheck
 
 #### RF-803: Main/preload composition split
 
+**状态（2026-10-06）：** DEV_DONE；实现与本地开发自检已完成，独立验收未开始，M8 仍为 2/3。
+
 **Outcome:** main and preload entry files are wiring roots with grouped handler/API modules.
 
 **Files:** create `main/ipc/register-*.ts`, `preload/product-api.ts`, `preload/test-api.ts`; reduce `main.ts` and `preload.ts`.
 
 **Steps:**
 
-- [ ] Group IPC registration by workspace, preferences, themes, export, updates, and tests.
-- [ ] Validate sender/runtime mode at every privileged handler.
-- [ ] Keep product and test bridges physically and conditionally separate.
-- [ ] Make entry files construct dependencies, register modules, and own lifecycle only.
-- [ ] Remove duplicate channel wiring and re-export noise.
+- [x] Group IPC registration by workspace, preferences, themes, export, updates, and tests.
+- [x] Validate sender/runtime mode at every privileged handler.
+- [x] Keep product and test bridges physically and conditionally separate.
+- [x] Make entry files construct dependencies, register modules, and own lifecycle only.
+- [x] Remove duplicate channel wiring and re-export noise.
 
 **Verification:**
 
 ```powershell
-npm.cmd run test -- src/main src/preload
+npm.cmd run test -- src/main src/preload src/shared/preload-bridge-mode.test.ts
 npm.cmd run lint
 npm.cmd run typecheck
 npm.cmd run build
 ```
 
 **Exit:** process entry points are understandable as composition roots.
+
+**开发证据：** [handoff](../../plans/2026-10-06-rf-803-handoff.md)：1008 focused、typecheck/lint/build、全量双 worker exact regression 3111+10、310 foundation 与原 bundle 1428000/1430000；默认本地并发 timing failure 保留，native CI 与独立验收待执行，不提前 COMPLETE。
 
 ### Milestone 9 — Performance, E2E, and security gates
 

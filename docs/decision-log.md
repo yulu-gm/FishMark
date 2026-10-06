@@ -251,3 +251,12 @@ RF506 父独立行为/安全验收 PASS，最终 2671 tests、lint/typecheck/bui
 ## 2026-10-06 RF-802：Linux CI 行为探针显式 sandbox opt-in
 
 正式行为测试在 GitHub runner 的 setuid-helper 启动阶段失败，尚未执行用例。经用户明确批准，仅 test launcher 在 Linux + CI=true + `FISHMARK_EDITOR_BEHAVIOR_CI_NO_SANDBOX=1` 时加 `--no-sandbox`；该变量只设在 CI formal behavior 步骤。默认启动与产品配置不变，不修改系统 helper 权限。此 CI 证据只验证编辑行为，不构成 M9 OS sandbox/security acceptance。回归精确覆盖平台、CI 与 opt-in 缺失/关闭以及 workflow 接线；原 process-tree cleanup、180 秒 hard limit、cases/oracles/budgets 保留。
+
+## 2026-10-06 RF-803：显式 IPC registrars 与 main-owned 调用身份
+
+- 将 transport handlers 移入有明确 service owner 的 registrar；不以通用 channel schema/router/service locator 替代它们。composition root 仅注入既有服务与生命周期。
+- 不重写已验证的 edit/flush registrar。通过 invocation-local sender 包装携带 live frame/runtime authorization，确保排队期间 renderer 被替换时不能 commit、ACK 或发 projection。应用原 lease/CAS 规则不变。
+- runtime policy 存在 main-owned window WeakMap；preload 只认单个明确 bridge-mode 参数，不从 runtime label 推断测试权限；不信任 renderer payload、DOM 或 sender 自报 mode。test completion 同时绑定 session 的实际 webContents。
+- 注册生命周期仅负责重复保护和 own-channel disposal。native-close completion 可合法销毁自身 sender，已校验请求不因事后销毁产生错误；有数据的请求继续检查响应时身份。
+- preload 删除旧类型 re-export，测试改为对真正 builder method 的输入/输出契约验证。删除无消费者的重复 runtime argv parser；运行时主权继续留在 main。
+- 不改 sandbox、CSP、资源目录策略、known-failure manifest、bundle budgets 或 CI test-only launcher 条件。M9 保持未完成。

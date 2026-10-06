@@ -222,7 +222,7 @@ describe("package scripts", () => {
 
     expect(localImports).not.toContain("./");
     expect(localImports.filter((importPath) => !importPath.startsWith("../shared/"))).toEqual([
-      "./product-api"
+      "./product-api", "./test-api"
     ]);
   });
 

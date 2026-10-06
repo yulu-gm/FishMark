@@ -62,6 +62,10 @@ export function createEditorTestSessions(input: {
 
   return {
     ensureSession,
+    ownsSession(sessionId: string, sender: unknown): boolean {
+      const session = resolveActiveSession(sessionId);
+      return session !== null && session.window.webContents === sender;
+    },
     async dispatchCommand(inputArgs: {
       sessionId: string;
       command: EditorTestCommand;

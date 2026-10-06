@@ -2,8 +2,7 @@ import path from "node:path";
 import {
   createWorkspaceState,
   type FileLocationIdentity,
-  type FileObjectIdentity,
-  type WorkspaceWindowProjection
+  type FileObjectIdentity
 } from "@fishmark/workspace-domain";
 import {
   createApplyDocumentEdits,
@@ -20,11 +19,7 @@ import {
   createWorkspaceTabTransfer,
   createWorkspaceWindowClose,
   createResolveExternalChange,
-  type CloseWorkspaceTabResult,
   type KeyedOperationLease,
-  type WorkspaceMoveCommandResult,
-  type WorkspaceProjectionCommandResult,
-  type WorkspaceProjectionMutationResult,
   type WorkspaceWindowCloseConfirmation
 } from "@fishmark/workspace-application";
 import { createCodeMirrorTextBuffer } from "@fishmark/workspace-infrastructure";
@@ -73,109 +68,46 @@ import { createWorkspaceWindowCloseConfirmationHandler } from "./workspace-windo
 import { createWorkspaceWindowCloseRequestBroker } from "./workspace-window-close-request-broker";
 import { createWorkspaceOwnerTabActivationRequestBroker } from "./workspace-owner-tab-activation-request-broker";
 import { createWorkspaceWindowRegistrationApplication } from "./workspace-window-registration-application";
-import { registerWorkspaceHandlers } from "./ipc/register-workspace-handlers";
+import { registerTestHandlers } from "./ipc/register-test-handlers";
+import { createIpcLifecycle } from "./ipc/ipc-lifecycle";
+import { createIpcSenderAuthorization } from "./ipc/ipc-sender";
+import { registerWorkspaceCommandHandlers } from "./ipc/register-workspace-command-handlers";
+import { registerPreferencesHandlers } from "./ipc/register-preferences-handlers";
+import { registerRecentFilesHandlers } from "./ipc/register-recent-files-handlers";
+import { registerFontsHandlers } from "./ipc/register-fonts-handlers";
+import { registerThemesHandlers } from "./ipc/register-themes-handlers";
+import { registerUpdatesHandlers } from "./ipc/register-updates-handlers";
+import { registerExportHandlers } from "./ipc/register-export-handlers";
+import { registerClipboardHandlers } from "./ipc/register-clipboard-handlers";
+import { registerExternalHandlers } from "./ipc/register-external-handlers";
+import { registerWorkspaceEditHandlers } from "./ipc/register-workspace-edit-handlers";
 import {
-  toWorkspaceMoveTabResult,
-  toWorkspaceWindowSnapshot
-} from "./workspace-ipc-projection";
-import {
-  COMPLETE_EDITOR_TEST_COMMAND_CHANNEL,
   type EditorTestCommandResultEnvelope
 } from "../shared/editor-test-command";
 import {
-  INTERRUPT_SCENARIO_RUN_CHANNEL,
-  OPEN_EDITOR_TEST_WINDOW_CHANNEL,
   type RunnerEventEnvelope,
   SCENARIO_RUN_EVENT,
   type ScenarioRunTerminal,
-  SCENARIO_RUN_TERMINAL_EVENT,
-  START_SCENARIO_RUN_CHANNEL
+  SCENARIO_RUN_TERMINAL_EVENT
 } from "../shared/test-run-session";
-import {
-  HANDLE_DROPPED_MARKDOWN_FILE_CHANNEL,
-  type HandleDroppedMarkdownFileInput,
-  type HandleDroppedMarkdownFileResult
-} from "../shared/open-markdown-file";
 import { APP_MENU_COMMAND_EVENT, type AppMenuCommand } from "../shared/menu-command";
 import {
-  GET_PREFERENCES_CHANNEL,
-  PREFERENCES_CHANGED_EVENT,
-  SELECT_TEMPORARY_IMAGE_DIRECTORY_CHANNEL,
-  UPDATE_PREFERENCES_CHANNEL,
-  type PreferencesUpdate
+  PREFERENCES_CHANGED_EVENT
 } from "../shared/preferences";
 import {
-  CLEAR_RECENT_FILE_CHANNEL,
-  GET_RECENT_FILES_CHANNEL,
-  RECENT_FILES_CHANGED_EVENT,
-  type ClearRecentFileInput
+  RECENT_FILES_CHANGED_EVENT
 } from "../shared/recent-files";
-import { LIST_FONT_FAMILIES_CHANNEL } from "../shared/font-families";
-import {
-  IMPORT_CLIPBOARD_IMAGE_CHANNEL,
-  type ImportClipboardImageInput
-} from "../shared/clipboard-image-import";
-import {
-  SAVE_MARKDOWN_FILE_AS_CHANNEL,
-  SAVE_MARKDOWN_FILE_CHANNEL,
-  type SaveMarkdownFileAsInput,
-  type SaveMarkdownFileInput
-} from "../shared/save-markdown-file";
-import {
-  EXPORT_HTML_FILE_CHANNEL,
-  type ExportHtmlFileInput
-} from "../shared/export-html-file";
-import { SYNC_WATCHED_MARKDOWN_FILE_CHANNEL } from "../shared/external-file-change";
 import {
   APP_NOTIFICATION_EVENT,
   APP_UPDATE_STATE_EVENT,
-  CHECK_FOR_APP_UPDATES_CHANNEL,
   type AppNotification,
   type AppUpdateState
 } from "../shared/app-update";
 import {
-  LIST_THEME_PACKAGES_CHANNEL,
-  OPEN_THEMES_DIRECTORY_CHANNEL,
-  REFRESH_THEME_PACKAGES_CHANNEL
-} from "../shared/theme-package";
-import {
-  OPEN_EXTERNAL_LINK_CHANNEL,
-  type OpenExternalLinkInput
-} from "../shared/external-link";
-import {
-  ACTIVATE_WORKSPACE_TAB_CHANNEL,
-  CLOSE_WORKSPACE_TAB_CHANNEL,
-  COMPLETE_WORKSPACE_WINDOW_CLOSE_CHANNEL,
-  CONFIRM_WORKSPACE_OWNER_TAB_ACTIVATION_CHANNEL,
-  CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL,
-  CREATE_WORKSPACE_TAB_CHANNEL,
-  DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL,
-  GET_WORKSPACE_SNAPSHOT_CHANNEL,
-  MOVE_WORKSPACE_TAB_TO_WINDOW_CHANNEL,
-  OPEN_WORKSPACE_FILE_CHANNEL,
-  OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL,
   OPEN_WORKSPACE_PATH_EVENT,
-  RELOAD_WORKSPACE_TAB_FROM_PATH_CHANNEL,
-  REORDER_WORKSPACE_TAB_CHANNEL,
   REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT,
   REQUEST_WORKSPACE_OWNER_TAB_ACTIVATION_EVENT,
-  RESOLVE_EXTERNAL_CHANGE_CHANNEL,
-  type ActivateWorkspaceTabInput,
-  type CloseWorkspaceTabInput,
-  type ConfirmWorkspaceOwnerTabActivationInput,
-  type CompleteWorkspaceWindowCloseInput,
-  type ConfirmWorkspaceWindowCloseInput,
-  type ConfirmWorkspaceWindowCloseResult,
-  type CreateWorkspaceTabInput,
-  type DetachWorkspaceTabToNewWindowInput,
-  type MoveWorkspaceTabToWindowInput,
   type OpenWorkspacePathRequest,
-  type OpenWorkspaceFileFromPathResult,
-  type OpenWorkspaceFileResult,
-  type ReloadWorkspaceTabFromPathInput,
-  type ReloadWorkspaceTabFromPathResult,
-  type ReorderWorkspaceTabInput,
-  type ResolveExternalChangeInput,
   type WorkspaceWindowCloseRequest
 } from "../shared/workspace";
 
@@ -185,52 +117,6 @@ const WORKSPACE_WINDOW_CLOSE_REQUEST_TIMEOUT_MS = 15_000;
 const WORKSPACE_WINDOW_CLOSE_POST_CONFIRM_WATCHDOG_MS = 15_000;
 const WORKSPACE_OWNER_TAB_ACTIVATION_REQUEST_TIMEOUT_MS = 15_000;
 
-function mapResolveExternalChangeResult(
-  result: import("@fishmark/workspace-application").ResolveExternalChangeResult
-): import("../shared/workspace").ResolveExternalChangeResult {
-  if (result.kind === "resolved" || result.kind === "reloaded" || result.kind === "saved-as") {
-    return { kind: "resolved" };
-  }
-  if (result.kind === "cancelled") {
-    return { kind: "cancelled" };
-  }
-  return { kind: "error", message: "The tab is no longer available." };
-}
-
-function requireWorkspaceCommandProjection(
-  result: WorkspaceProjectionMutationResult
-): WorkspaceWindowProjection;
-function requireWorkspaceCommandProjection(
-  result: WorkspaceMoveCommandResult
-): import("@fishmark/workspace-domain").WorkspaceMoveProjection;
-function requireWorkspaceCommandProjection(
-  result: CloseWorkspaceTabResult |
-    Extract<WorkspaceProjectionCommandResult, { readonly kind: "watch-error" }>
-): WorkspaceWindowProjection;
-function requireWorkspaceCommandProjection(
-  result:
-    | WorkspaceProjectionMutationResult
-    | WorkspaceMoveCommandResult
-    | CloseWorkspaceTabResult
-): WorkspaceWindowProjection | import("@fishmark/workspace-domain").WorkspaceMoveProjection {
-  if ("status" in result) {
-    if (result.status === "error") throw new Error(result.error.message);
-    return result.snapshot;
-  }
-  if (result.kind === "success" || result.kind === "applied") {
-    return result.projection;
-  }
-  if (result.kind === "watch-error") {
-    throw new Error(result.error.message);
-  }
-  const messages = {
-    "tab-missing": "The tab no longer exists.",
-    "window-missing": "The owner window no longer exists.",
-    "window-changed": "The tab moved to another window.",
-    "revision-changed": "The document changed before the command could be committed."
-  } as const;
-  throw new Error(messages[result.reason]);
-}
 registerPreviewAssetScheme({ protocol });
 configureMainProcessRuntime(app, process.env);
 const hasSingleInstanceLock = shouldRequestSingleInstanceLock(process.env)
@@ -254,6 +140,7 @@ type EditorTestSessionsController = {
     command: import("../shared/editor-test-command").EditorTestCommand;
     signal?: AbortSignal;
   }) => Promise<import("../shared/editor-test-command").EditorTestCommandResult>;
+  ownsSession: (sessionId: string, sender: Electron.WebContents) => boolean;
   completeCommand: (payload: EditorTestCommandResultEnvelope) => boolean;
 };
 
@@ -340,34 +227,8 @@ function broadcastToWindows(channel: string, payload: unknown): void {
   }
 }
 
-function isSafeExternalLinkProtocol(protocol: string): boolean {
-  return protocol === "http:" || protocol === "https:" || protocol === "mailto:";
-}
-
-function resolveSafeExternalLinkHref(input: OpenExternalLinkInput | undefined): string {
-  const rawHref = typeof input?.href === "string" ? input.href.trim() : "";
-
-  if (!rawHref) {
-    throw new Error("External link is empty.");
-  }
-
-  let url: URL;
-
-  try {
-    url = new URL(rawHref);
-  } catch {
-    throw new Error(`Unsupported external link: ${rawHref}`);
-  }
-
-  if (!isSafeExternalLinkProtocol(url.protocol)) {
-    throw new Error(`Unsupported external link protocol: ${url.protocol}`);
-  }
-
-  return url.toString();
-}
-
 app.whenReady().then(async () => {
-  const runtimeMode = resolveAppRuntimeMode(process.env);
+  const runtimeMode = app.isPackaged ? "editor" : resolveAppRuntimeMode(process.env);
   registerPreviewAssetProtocol({ protocol });
   const preferencesService = createPreferencesService({
     userDataDir: app.getPath("userData"),
@@ -941,19 +802,26 @@ app.whenReady().then(async () => {
       focusWindow: (windowId) => workspaceState.focusWindow(windowId)
     });
 
-  registerWorkspaceHandlers<Electron.WebContents>({
-    register: (channel, handler) => {
-      ipcMain.handle(channel, handler);
-    },
+  const ipc = createIpcLifecycle(ipcMain);
+  const authorize = createIpcSenderAuthorization({
+    resolveWindow: (sender) => BrowserWindow.fromWebContents(sender),
+    getWindowPolicy: (window) => {
+      const mode = windowManager.getPreloadBridgeMode(window);
+      const modeRuntime = windowManager.getRuntimeMode(window);
+      return mode === undefined || modeRuntime === undefined ? undefined : {
+        mode,
+        entryUrl: resolveRendererEntry(path.join(__dirname, "../../dist"), process.env.VITE_DEV_SERVER_URL, modeRuntime)
+      };
+    }
+  });
+  app.once("quit", () => ipc.dispose());
+
+  registerWorkspaceEditHandlers({
+    ipc, authorize,
     ensureWindow: workspaceWindowRegistrationApplication.ensureWindow,
-    isCurrentSender: (sender, windowId) => {
-      if (sender.isDestroyed()) return false;
-      const ownerWindow = BrowserWindow.fromWebContents(sender);
-      return ownerWindow !== null &&
-        !ownerWindow.isDestroyed() &&
-        !ownerWindow.webContents.isDestroyed() &&
-        ownerWindow.webContents === sender &&
-        String(ownerWindow.id) === windowId;
+    getWindowId: (sender) => {
+      const owner = BrowserWindow.fromWebContents(sender);
+      return owner === null ? undefined : String(owner.id);
     },
     application: {
       applyDocumentEdits(input, authorize) {
@@ -976,301 +844,26 @@ app.whenReady().then(async () => {
               closeLease
             );
       }
-    },
-    publish: (sender, channel, payload) => {
-      sender.send(channel, payload);
     }
   });
 
-  ipcMain.handle(GET_WORKSPACE_SNAPSHOT_CHANNEL, async (event) => {
-    const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
-    return toWorkspaceWindowSnapshot(requireWorkspaceCommandProjection(
-      await workspaceApplication.getSnapshot({ context: event.sender, windowId })
-    ));
+  registerWorkspaceCommandHandlers({
+    ipc, authorize, ensureWindow: workspaceWindowRegistrationApplication.ensureWindow,
+    workspaceApplication, workspaceState, documentRepository, resolveExternalChange,
+    workspaceOwnerTabActivationRequestBroker, workspaceWindowCloseRequestBroker,
+    handleWorkspaceWindowCloseConfirmation
   });
-  ipcMain.handle(
-    RESOLVE_EXTERNAL_CHANGE_CHANNEL,
-    async (event, input: ResolveExternalChangeInput) => {
-      const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
-      let tab;
-      try {
-        tab = workspaceState.getTabSession(input.tabId);
-      } catch {
-        return { kind: "error", message: "The tab no longer exists." };
-      }
-      if (tab.windowId !== windowId) {
-        return { kind: "error", message: "The tab moved to another window." };
-      }
-
-      const context = { context: event.sender, tabId: input.tabId, expectedWindowId: windowId };
-      if (input.command === "keep-memory") {
-        const diskVersion = tab.path === null
-          ? null
-          : await documentRepository.readDiskVersion(tab.path);
-        const result = await resolveExternalChange.resolve(context, {
-          kind: "keep-memory",
-          diskVersion
-        });
-        return mapResolveExternalChangeResult(result);
-      }
-      const result = await resolveExternalChange.resolve(
-        context,
-        input.command === "reload"
-          ? { kind: "reload" }
-          : input.command === "save-as"
-            ? { kind: "save-as" }
-            : { kind: "cancel" }
-      );
-      return mapResolveExternalChangeResult(result);
-    }
-  );
-  ipcMain.handle(
-    CONFIRM_WORKSPACE_OWNER_TAB_ACTIVATION_CHANNEL,
-    async (event, input: ConfirmWorkspaceOwnerTabActivationInput) => {
-      const windowId = await workspaceWindowRegistrationApplication.ensureWindow(
-        event.sender
-      );
-      return workspaceOwnerTabActivationRequestBroker.complete({
-        ...input,
-        windowId
-      });
-    }
-  );
-  ipcMain.handle(
-    CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL,
-    async (event, input: ConfirmWorkspaceWindowCloseInput):
-      Promise<ConfirmWorkspaceWindowCloseResult> => {
-      const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
-      return handleWorkspaceWindowCloseConfirmation({
-        windowId,
-        requestId: input.requestId
-      });
-    }
-  );
-  ipcMain.handle(
-    COMPLETE_WORKSPACE_WINDOW_CLOSE_CHANNEL,
-    async (event, input: CompleteWorkspaceWindowCloseInput) => {
-      const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
-
-      workspaceWindowCloseRequestBroker.complete(
-        input.requestId,
-        windowId,
-        input.shouldClose
-      );
-    }
-  );
-  ipcMain.handle(CREATE_WORKSPACE_TAB_CHANNEL, async (event, input: CreateWorkspaceTabInput) => {
-    const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
-    return toWorkspaceWindowSnapshot(requireWorkspaceCommandProjection(
-      await workspaceApplication.createTab({
-        context: event.sender,
-        windowId,
-        kind: input.kind
-      })
-    ));
-  });
-  ipcMain.handle(OPEN_WORKSPACE_FILE_CHANNEL, async (event) => {
-    const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
-    const result = await workspaceApplication.open({ context: event.sender, windowId });
-    if (result.kind !== "success") {
-      if (result.kind === "watch-error") throw new Error(result.error.message);
-      return result satisfies OpenWorkspaceFileResult;
-    }
-    return {
-      kind: "success",
-      snapshot: toWorkspaceWindowSnapshot(result.projection)
-    } satisfies OpenWorkspaceFileResult;
-  });
-  ipcMain.handle(OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL, async (event, input: { targetPath: string }) => {
-    const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
-    const result = await workspaceApplication.openPath({
-      context: event.sender,
-      windowId,
-      targetPath: input.targetPath
-    });
-    if (result.kind !== "success") {
-      if (result.kind === "watch-error") throw new Error(result.error.message);
-      return result satisfies OpenWorkspaceFileFromPathResult;
-    }
-    return {
-      kind: "success",
-      snapshot: toWorkspaceWindowSnapshot(result.projection)
-    } satisfies OpenWorkspaceFileFromPathResult;
-  });
-  ipcMain.handle(
-    RELOAD_WORKSPACE_TAB_FROM_PATH_CHANNEL,
-    async (event, input: ReloadWorkspaceTabFromPathInput) => {
-      const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
-      const result = await workspaceApplication.reloadTab({
-        context: event.sender,
-        tabId: input.tabId,
-        expectedWindowId: windowId
-      });
-      if (result.kind !== "success") {
-        if (result.kind === "watch-error" || result.kind === "stale") {
-          requireWorkspaceCommandProjection(result);
-          throw new Error("Workspace command failure mapping returned unexpectedly.");
-        }
-        if (result.kind === "error") {
-          const code = result.error.code;
-          if (code === "file-identity-missing") {
-            throw new Error(result.error.message);
-          }
-          return {
-            kind: "error",
-            error: { code, message: result.error.message }
-          } satisfies ReloadWorkspaceTabFromPathResult;
-        }
-        return result satisfies ReloadWorkspaceTabFromPathResult;
-      }
-
-      return {
-        kind: "success",
-        snapshot: toWorkspaceWindowSnapshot(result.projection)
-      } satisfies ReloadWorkspaceTabFromPathResult;
-    }
-  );
-  ipcMain.handle(ACTIVATE_WORKSPACE_TAB_CHANNEL, async (event, input: ActivateWorkspaceTabInput) => {
-    const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
-    return toWorkspaceWindowSnapshot(requireWorkspaceCommandProjection(
-      await workspaceApplication.activateTab({
-        context: event.sender,
-        windowId,
-        tabId: input.tabId
-      })
-    ));
-  });
-  ipcMain.handle(CLOSE_WORKSPACE_TAB_CHANNEL, async (event, input: CloseWorkspaceTabInput) => {
-    const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
-    const result = await workspaceApplication.closeTab({
-      context: event.sender,
-      tabId: input.tabId,
-      expectedWindowId: windowId
-    });
-    return toWorkspaceWindowSnapshot(requireWorkspaceCommandProjection(result));
-  });
-  ipcMain.handle(REORDER_WORKSPACE_TAB_CHANNEL, async (event, input: ReorderWorkspaceTabInput) => {
-    const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
-    return toWorkspaceWindowSnapshot(requireWorkspaceCommandProjection(
-      await workspaceApplication.reorderTab({
-        context: event.sender,
-        tabId: input.tabId,
-        expectedWindowId: windowId,
-        targetIndex: input.toIndex
-      })
-    ));
-  });
-  ipcMain.handle(
-    MOVE_WORKSPACE_TAB_TO_WINDOW_CHANNEL,
-    async (event, input: MoveWorkspaceTabToWindowInput) => {
-      const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
-      return toWorkspaceMoveTabResult(
-        requireWorkspaceCommandProjection(await workspaceApplication.moveTab({
-          context: event.sender,
-          tabId: input.tabId,
-          expectedWindowId: windowId,
-          targetWindowId: input.targetWindowId,
-          targetIndex: input.targetIndex
-        }))
-      );
-    }
-  );
-  ipcMain.handle(
-    DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL,
-    async (event, input: DetachWorkspaceTabToNewWindowInput) => {
-      const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
-      const result = await workspaceApplication.detachTab({
-        context: event.sender,
-        tabId: input.tabId,
-        expectedWindowId: windowId
-      });
-      return toWorkspaceWindowSnapshot(
-        requireWorkspaceCommandProjection(result).sourceWindowSnapshot
-      );
-    }
-  );
-  ipcMain.handle(
-    HANDLE_DROPPED_MARKDOWN_FILE_CHANNEL,
-    async (
-      _event,
-      input: HandleDroppedMarkdownFileInput
-    ): Promise<HandleDroppedMarkdownFileResult> => {
-      if (input.targetPaths.length === 0) {
-        throw new Error("Dropped Markdown payload did not include any file paths.");
-      }
-
-      return {
-        disposition: "open-in-place"
-      };
-    }
-  );
-  ipcMain.handle(SAVE_MARKDOWN_FILE_CHANNEL, async (event, input: SaveMarkdownFileInput) => {
-    const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
-    const result = await workspaceApplication.saveDocument({
-      context: event.sender,
-      expectedWindowId: windowId,
-      tabId: input.tabId
-    });
-    if ("kind" in result) throw new Error(result.error.message);
-    return result;
-  });
-  ipcMain.handle(SAVE_MARKDOWN_FILE_AS_CHANNEL, async (event, input: SaveMarkdownFileAsInput) => {
-    const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender);
-    const result = await workspaceApplication.saveDocumentAs({
-      context: event.sender,
-      expectedWindowId: windowId,
-      tabId: input.tabId
-    });
-    if ("kind" in result) throw new Error(result.error.message);
-    return result;
-  });
-  ipcMain.handle(EXPORT_HTML_FILE_CHANNEL, async (_event, input: ExportHtmlFileInput) =>
-    showExportHtmlDialog(input)
-  );
-  ipcMain.handle(
-    SYNC_WATCHED_MARKDOWN_FILE_CHANNEL,
-    async (event) => {
-      const windowId = await workspaceWindowRegistrationApplication.ensureWindow(
-        event.sender
-      );
-      return workspaceApplication.syncWindow({
-        context: event.sender,
-        windowId
-      });
-    }
-  );
-  ipcMain.handle(IMPORT_CLIPBOARD_IMAGE_CHANNEL, async (_event, input: ImportClipboardImageInput) =>
-    importClipboardImage(input, {
-      clipboard,
-      temporaryDirectory: resolveTemporaryImageDirectory(
-        app.getPath("userData"),
-        preferencesService.getPreferences()
-      )
-    })
-  );
-  ipcMain.handle(GET_PREFERENCES_CHANNEL, async () => preferencesService.getPreferences());
-  ipcMain.handle(UPDATE_PREFERENCES_CHANNEL, async (_event, patch: PreferencesUpdate | undefined) =>
-    preferencesService.updatePreferences(patch)
-  );
-  ipcMain.handle(SELECT_TEMPORARY_IMAGE_DIRECTORY_CHANNEL, async () =>
-    selectTemporaryImageDirectory()
-  );
-  ipcMain.handle(GET_RECENT_FILES_CHANNEL, async () => recentFilesService.getRecentFiles());
-  ipcMain.handle(CLEAR_RECENT_FILE_CHANNEL, async (_event, input: ClearRecentFileInput) =>
-    recentFilesService.clearFile(input.path)
-  );
-  ipcMain.handle(LIST_FONT_FAMILIES_CHANNEL, async () => fontCatalogService.listFontFamilies());
-  ipcMain.handle(CHECK_FOR_APP_UPDATES_CHANNEL, async () => runAppUpdateCheck("manual"));
-  ipcMain.handle(LIST_THEME_PACKAGES_CHANNEL, async () => themePackageService.listThemePackages());
-  ipcMain.handle(REFRESH_THEME_PACKAGES_CHANNEL, async () =>
-    themePackageService.refreshThemePackages()
-  );
-  ipcMain.handle(OPEN_THEMES_DIRECTORY_CHANNEL, async () =>
-    openThemesDirectory(app.getPath("userData"))
-  );
-  ipcMain.handle(OPEN_EXTERNAL_LINK_CHANNEL, async (_event, input: OpenExternalLinkInput | undefined) =>
-    shell.openExternal(resolveSafeExternalLinkHref(input))
-  );
+  registerPreferencesHandlers({ ipc, authorize, service: preferencesService, selectTemporaryDirectory: selectTemporaryImageDirectory });
+  registerRecentFilesHandlers({ ipc, authorize, service: recentFilesService });
+  registerFontsHandlers({ ipc, authorize, service: fontCatalogService });
+  registerThemesHandlers({ ipc, authorize, service: themePackageService, openDirectory: () => openThemesDirectory(app.getPath("userData")) });
+  registerUpdatesHandlers({ ipc, authorize, checkForUpdates: () => runAppUpdateCheck("manual") });
+  registerExportHandlers({ ipc, authorize, exportHtml: showExportHtmlDialog });
+  registerClipboardHandlers({ ipc, authorize, importImage: (input) => importClipboardImage(input, {
+    clipboard,
+    temporaryDirectory: resolveTemporaryImageDirectory(app.getPath("userData"), preferencesService.getPreferences())
+  }) });
+  registerExternalHandlers({ ipc, authorize, openExternal: (href) => shell.openExternal(href) });
 
   if (!app.isPackaged && runtimeMode === "test-workbench") {
     const [
@@ -1331,20 +924,9 @@ app.whenReady().then(async () => {
       broadcastToWindows(SCENARIO_RUN_TERMINAL_EVENT, payload);
     });
 
-    ipcMain.handle(OPEN_EDITOR_TEST_WINDOW_CHANNEL, async () => {
-      editorTestSessions.ensureSession();
-    });
-    ipcMain.handle(
-      COMPLETE_EDITOR_TEST_COMMAND_CHANNEL,
-      async (_event, payload: EditorTestCommandResultEnvelope) => {
-        editorTestSessions.completeCommand(payload);
-      }
-    );
-    ipcMain.handle(START_SCENARIO_RUN_CHANNEL, async (_event, input: { scenarioId: string }) =>
-      testRunSessions.startScenarioRun(input)
-    );
-    ipcMain.handle(INTERRUPT_SCENARIO_RUN_CHANNEL, async (_event, input: { runId: string }) => {
-      testRunSessions.interruptScenarioRun(input);
+    registerTestHandlers({
+      ipc, authorize, enabled: !app.isPackaged && runtimeMode === "test-workbench",
+      editorSessions: editorTestSessions, runSessions: testRunSessions
     });
   }
 

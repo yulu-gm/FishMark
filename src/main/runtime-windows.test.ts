@@ -1,3 +1,4 @@
+import { formatStartupOpenPathArgument } from "./launch-open-path";
 import { describe, expect, it, vi } from "vitest";
 
 import { PRELOAD_BRIDGE_MODE_ARGUMENT_PREFIX } from "../shared/preload-bridge-mode";
@@ -5,7 +6,6 @@ import {
   createRuntimeWindowManager,
   resolveAppRuntimeMode,
   RUNTIME_MODE_ARGUMENT_PREFIX,
-  formatStartupOpenPathArgument,
   type RuntimeMode
 } from "./runtime-windows";
 
@@ -33,6 +33,18 @@ describe("resolveAppRuntimeMode", () => {
 });
 
 describe("createRuntimeWindowManager", () => {
+  it("owns runtime metadata only for windows it creates", () => {
+    const harness = createWindowHarness("test-workbench");
+    expect(harness.manager.getRuntimeMode(harness.window)).toBeUndefined();
+    expect(harness.manager.getPreloadBridgeMode(harness.window)).toBeUndefined();
+    const window = harness.manager.openPrimaryWindow();
+    expect(harness.manager.getRuntimeMode(window)).toBe("test-workbench");
+    expect(harness.manager.getPreloadBridgeMode(window)).toBe("test-workbench");
+    harness.manager.openEditorWindow({ preloadBridgeMode: "editor-test" });
+    expect(harness.manager.getRuntimeMode(window)).toBe("editor");
+    expect(harness.manager.getPreloadBridgeMode(window)).toBe("editor-test");
+  });
+
   it("creates the test workbench as the primary window in test mode", () => {
     const harness = createWindowHarness("test-workbench");
 
@@ -102,7 +114,8 @@ describe("createRuntimeWindowManager", () => {
         webPreferences: expect.objectContaining({
           additionalArguments: [
             `${RUNTIME_MODE_ARGUMENT_PREFIX}editor`,
-            formatStartupOpenPathArgument("C:/notes/startup.md")
+            formatStartupOpenPathArgument("C:/notes/startup.md"),
+            `${PRELOAD_BRIDGE_MODE_ARGUMENT_PREFIX}product`
           ]
         })
       })

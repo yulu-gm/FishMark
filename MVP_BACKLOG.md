@@ -156,6 +156,19 @@ Intake：`docs/plans/2026-09-18-rf-601-intake.md`。执行交接：`docs/plans/2
 
 详见 [任务总结](reports/task-summaries/RF-802.md) 与 [测试报告](docs/test-report.md)。两次本地默认并发时序失败和首次 CI 启动失败如实保留；CI test-only no-sandbox 不构成 M9 security 验收。
 
+### RF-803 — Main/preload composition split
+
+状态：**DEV_DONE（2026-10-06）**。本地可执行开发门禁完成，独立验收待执行，M8 仍为 2/3；M9 未开始。
+
+- [x] 工作区命令与 preferences/recent/fonts/themes/export/clipboard/external/updates/test IPC 分组为显式 registrar。
+- [x] live sender/main-frame/window/main-owned runtime 和请求形状校验，保留原 edit/flush 队列授权与原 close leases。
+- [x] preload product/test API 物理分离且产品不暴露 test bridge；删除旧 re-export 与重复 runtime parser。
+- [x] 通道重复注册/释放、非法 sender/runtime/request、异步 frame 失效、test session ownership 回归。
+- [x] 本地完整开发门禁与 DEV_DONE handoff。
+- [ ] 独立架构/任务验收及精确树 CI native gates。
+
+详见 [intake](docs/plans/2026-10-06-rf-803-intake.md)、[handoff](docs/plans/2026-10-06-rf-803-handoff.md) 与 [执行总结](reports/task-summaries/RF-803.md)。最终验收与发布由独立 reviewer/父任务处理。
+
 ## Epic 1：项目骨架
 
 ### TASK-001 初始化桌面工程

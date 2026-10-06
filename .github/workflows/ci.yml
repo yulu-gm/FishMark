@@ -43,7 +43,11 @@ jobs:
           src/main/build-win-release.test.ts
           src/main/build-mac-release.test.ts
           src/main/package-scripts.test.ts
-          src/main/ipc/register-workspace-handlers.test.ts
+          src/main/ipc
+          src/preload
+          src/shared/preload-bridge-mode.test.ts
+          src/main/runtime-windows.test.ts
+          src/main/editor-test-sessions.test.ts
           src/main/workspace-file-identity-races.integration.test.ts
           src/main/main.test.ts
           src/main/full-regression.test.ts

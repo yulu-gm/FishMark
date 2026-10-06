@@ -22,6 +22,18 @@ function createWindowHarness() {
 }
 
 describe("createEditorTestSessions", () => {
+  it("binds completion authority to the live session's exact webContents", () => {
+    const first = createWindowHarness();
+    const sessions = createEditorTestSessions({ openEditorWindow: () => first.window });
+    expect(sessions.ownsSession("missing", first.window.webContents)).toBe(false);
+    const { sessionId } = sessions.ensureSession();
+    expect(sessions.ownsSession(sessionId, first.window.webContents)).toBe(true);
+    expect(sessions.ownsSession(sessionId, { ...first.window.webContents })).toBe(false);
+    expect(sessions.ownsSession("other", first.window.webContents)).toBe(false);
+    first.window.isDestroyed.mockReturnValue(true);
+    expect(sessions.ownsSession(sessionId, first.window.webContents)).toBe(false);
+  });
+
   it("opens one editor window and reuses the same session", () => {
     const first = createWindowHarness();
     const openEditorWindow = vi.fn(() => first.window);

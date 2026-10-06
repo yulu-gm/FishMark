@@ -6,10 +6,7 @@ import {
   type EditorTestCommandResultEnvelope as SharedEditorTestCommandResultEnvelope,
   EDITOR_TEST_COMMAND_EVENT
 } from "../shared/editor-test-command";
-import {
-  type EditorTestCommandEnvelope as PreloadEditorTestCommandEnvelope,
-  type EditorTestCommandResultEnvelope as PreloadEditorTestCommandResultEnvelope
-} from "./preload";
+
 import { APP_MENU_COMMAND_EVENT, type AppMenuCommand } from "../shared/menu-command";
 import {
   HANDLE_DROPPED_MARKDOWN_FILE_CHANNEL
@@ -29,12 +26,15 @@ import {
   RECENT_FILES_CHANGED_EVENT,
   type RecentFilesSnapshot
 } from "../shared/recent-files";
-import type {
-  PreloadPreferences,
-  PreloadThemePackageDescriptor,
-  PreloadPreferencesUpdate,
-  PreloadUpdatePreferencesResult
-} from "./preload";
+import type { createProductApi } from "./product-api";
+import type { createTestApi } from "./test-api";
+type PreloadPreferences = Awaited<ReturnType<ReturnType<typeof createProductApi>["getPreferences"]>>;
+type PreloadPreferencesUpdate = Parameters<ReturnType<typeof createProductApi>["updatePreferences"]>[0];
+type PreloadUpdatePreferencesResult = Awaited<ReturnType<ReturnType<typeof createProductApi>["updatePreferences"]>>;
+type PreloadThemePackageDescriptor = Awaited<ReturnType<ReturnType<typeof createProductApi>["listThemePackages"]>>[number];
+type PreloadEditorTestCommandEnvelope = Parameters<Parameters<ReturnType<typeof createTestApi>["onEditorTestCommand"]>[0]>[0];
+type PreloadEditorTestCommandResultEnvelope = Parameters<ReturnType<typeof createTestApi>["completeEditorTestCommand"]>[0];
+
 import {
   SAVE_MARKDOWN_FILE_AS_CHANNEL,
   SAVE_MARKDOWN_FILE_CHANNEL
@@ -196,7 +196,8 @@ describe("preload contract", () => {
 
   it("exposes the test bridge in the test-workbench runtime", async () => {
     const { api, testApi } = await loadApi({
-      runtimeMode: "test-workbench"
+      runtimeMode: "test-workbench",
+      preloadBridgeMode: "test-workbench"
     });
 
     expect(exposeInMainWorld).toHaveBeenCalledTimes(2);

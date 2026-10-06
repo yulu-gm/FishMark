@@ -1,9 +1,14 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 const readMainSource = () =>
-  readFileSync(path.join(process.cwd(), "src", "main", "main.ts"), "utf8").replace(/\r\n/g, "\n");
+  [
+    readFileSync(path.join(process.cwd(), "src", "main", "main.ts"), "utf8"),
+    ...readdirSync(path.join(process.cwd(), "src", "main", "ipc"))
+      .filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))
+      .map((name) => readFileSync(path.join(process.cwd(), "src", "main", "ipc", name), "utf8"))
+  ].join("\n").replace(/\r\n/g, "\n");
 const readCloseConfirmationHandlerSource = () =>
   readFileSync(
     path.join(process.cwd(), "src", "main", "workspace-window-close-confirmation-handler.ts"),
@@ -11,12 +16,28 @@ const readCloseConfirmationHandlerSource = () =>
   ).replace(/\r\n/g, "\n");
 
 describe("main process window wiring", () => {
+  it("keeps entry points as service composition rather than inline channel owners", () => {
+    const source = readFileSync(path.join(process.cwd(), "src/main/main.ts"), "utf8");
+    expect(source).not.toContain("ipcMain.handle(");
+    expect(source).not.toContain("ipc.handle(");
+    for (const name of ["WorkspaceEdit", "WorkspaceCommand", "Preferences", "RecentFiles", "Fonts", "Themes", "Export", "Clipboard", "External", "Updates", "Test"]) {
+      expect(source).toContain(`register${name}Handlers({`);
+    }
+    expect(source).toContain('app.once("quit", () => ipc.dispose())');
+    expect(source).toContain('app.isPackaged ? "editor" : resolveAppRuntimeMode(process.env)');
+    const preload = readFileSync(path.join(process.cwd(), "src/preload/preload.ts"), "utf8");
+    expect(preload).not.toContain("export type");
+    expect(preload).not.toContain("_CHANNEL");
+    expect(preload).toContain('if (preloadBridgeMode !== "product")');
+    expect(readFileSync(path.join(process.cwd(), "src/preload/product-api.ts"), "utf8")).not.toContain("test-api");
+  });
+
   it("keeps the window-close IPC result explicitly constrained to the shared transport DTO", () => {
     const mainSource = readMainSource();
     const handlerSource = readCloseConfirmationHandlerSource();
 
     expect(mainSource).toMatch(
-      /async \(event, input: ConfirmWorkspaceWindowCloseInput\):\s*Promise<ConfirmWorkspaceWindowCloseResult> =>/
+      /async \(event, \.\.\.args\):\s*Promise<ConfirmWorkspaceWindowCloseResult> =>/
     );
     expect(handlerSource).not.toContain(
       "export type WorkspaceWindowCloseConfirmationHandlerResult"
@@ -46,7 +67,7 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain('import("electron-updater")');
     expect(mainSource).toContain('createAppUpdater({');
     expect(mainSource).toContain('const runAppUpdateCheck = createAppUpdateCheckRunner({');
-    expect(mainSource).toContain('ipcMain.handle(CHECK_FOR_APP_UPDATES_CHANNEL');
+    expect(mainSource).toContain('ipc.handle(CHECK_FOR_APP_UPDATES_CHANNEL');
     expect(mainSource).toContain('broadcastToWindows(APP_UPDATE_STATE_EVENT, state)');
     expect(mainSource).toContain('setTimeout(() => {');
     expect(mainSource).toContain('void runAppUpdateCheck("manual")');
@@ -60,17 +81,17 @@ describe("main process window wiring", () => {
 
     expect(mainSource).toContain('import { createFileWatchRegistry } from "./infrastructure/file-watch-registry"');
     expect(mainSource).toContain('import { resolveTemporaryImageDirectory, selectTemporaryImageDirectory } from "./temporary-image-directory"');
-    expect(mainSource).toContain('ipcMain.handle(GET_PREFERENCES_CHANNEL');
-    expect(mainSource).toContain('ipcMain.handle(UPDATE_PREFERENCES_CHANNEL');
-    expect(mainSource).toContain('ipcMain.handle(SELECT_TEMPORARY_IMAGE_DIRECTORY_CHANNEL');
+    expect(mainSource).toContain('ipc.handle(GET_PREFERENCES_CHANNEL');
+    expect(mainSource).toContain('ipc.handle(UPDATE_PREFERENCES_CHANNEL');
+    expect(mainSource).toContain('ipc.handle(SELECT_TEMPORARY_IMAGE_DIRECTORY_CHANNEL');
     expect(mainSource).toContain('SYNC_WATCHED_MARKDOWN_FILE_CHANNEL');
-    expect(mainSource).toContain('ipcMain.handle(LIST_FONT_FAMILIES_CHANNEL');
-    expect(mainSource).toContain('ipcMain.handle(LIST_THEME_PACKAGES_CHANNEL');
-    expect(mainSource).toContain('ipcMain.handle(REFRESH_THEME_PACKAGES_CHANNEL');
-    expect(mainSource).toContain('ipcMain.handle(OPEN_THEMES_DIRECTORY_CHANNEL');
+    expect(mainSource).toContain('ipc.handle(LIST_FONT_FAMILIES_CHANNEL');
+    expect(mainSource).toContain('ipc.handle(LIST_THEME_PACKAGES_CHANNEL');
+    expect(mainSource).toContain('ipc.handle(REFRESH_THEME_PACKAGES_CHANNEL');
+    expect(mainSource).toContain('ipc.handle(OPEN_THEMES_DIRECTORY_CHANNEL');
     expect(mainSource).toContain("const workspaceWatcher = {");
     expect(mainSource).toContain(
-      "workspaceWindowRegistrationApplication.ensureWindow("
+      "ensureWindow: workspaceWindowRegistrationApplication.ensureWindow"
     );
     expect(mainSource).toContain("workspaceApplication.syncWindow({");
     expect(mainSource).not.toContain("workspaceState.getTabPath(input.tabId)");
@@ -81,7 +102,7 @@ describe("main process window wiring", () => {
     const mainSource = readMainSource();
 
     expect(mainSource).toContain("OPEN_EXTERNAL_LINK_CHANNEL");
-    expect(mainSource).toContain("isSafeExternalLinkProtocol");
+    expect(mainSource).toContain('["https:", "http:", "mailto:"].includes(url.protocol)');
     expect(mainSource).toContain("shell.openExternal");
     expect(mainSource).not.toContain("shell.openPath(input.href)");
   });
@@ -124,7 +145,7 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain('import { createWorkspaceWindowCloseConfirmationHandler } from "./workspace-window-close-confirmation-handler"');
     expect(mainSource).toContain('import { createWorkspaceWindowCloseRequestBroker } from "./workspace-window-close-request-broker"');
     expect(mainSource).toContain('import { createWorkspaceWindowRegistrationApplication } from "./workspace-window-registration-application"');
-    expect(mainSource).toContain('import {\n  toWorkspaceMoveTabResult,\n  toWorkspaceWindowSnapshot\n} from "./workspace-ipc-projection"');
+    expect(mainSource).toContain('import { toWorkspaceMoveTabResult, toWorkspaceWindowSnapshot } from "../workspace-ipc-projection"');
     expect(mainSource).toContain("GET_WORKSPACE_SNAPSHOT_CHANNEL");
     expect(mainSource).toContain("CREATE_WORKSPACE_TAB_CHANNEL");
     expect(mainSource).toContain("OPEN_WORKSPACE_FILE_CHANNEL");
@@ -174,12 +195,12 @@ describe("main process window wiring", () => {
     );
     expect(mainSource).toContain("return () => clearTimeout(timeout)");
     expect(mainSource).toContain("workspace: workspaceState");
-    expect(mainSource).toContain("ipcMain.handle(GET_WORKSPACE_SNAPSHOT_CHANNEL");
-    expect(mainSource).toContain("ipcMain.handle(CREATE_WORKSPACE_TAB_CHANNEL");
-    expect(mainSource).toContain("ipcMain.handle(OPEN_WORKSPACE_FILE_CHANNEL");
-    expect(mainSource).toContain("ipcMain.handle(OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL");
-    expect(mainSource).toContain("ipcMain.handle(ACTIVATE_WORKSPACE_TAB_CHANNEL");
-    expect(mainSource).toContain("ipcMain.handle(CLOSE_WORKSPACE_TAB_CHANNEL");
+    expect(mainSource).toContain("register(GET_WORKSPACE_SNAPSHOT_CHANNEL");
+    expect(mainSource).toContain("register(CREATE_WORKSPACE_TAB_CHANNEL");
+    expect(mainSource).toContain("register(OPEN_WORKSPACE_FILE_CHANNEL");
+    expect(mainSource).toContain("register(OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL");
+    expect(mainSource).toContain("register(ACTIVATE_WORKSPACE_TAB_CHANNEL");
+    expect(mainSource).toContain("register(CLOSE_WORKSPACE_TAB_CHANNEL");
     expect(mainSource).toContain("await workspaceApplication.reorderTab({");
     expect(mainSource).toContain("expectedWindowId: windowId");
     expect(mainSource).not.toContain("workspaceState.reorderTab(input.tabId, input.toIndex)");
@@ -192,13 +213,13 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain("ownerWindow.webContents.send(REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT");
     expect(mainSource).toContain('ownerWindow.webContents.on("render-process-gone", abort)');
     expect(mainSource).toContain('ownerWindow.webContents.on("destroyed", abort)');
-    expect(mainSource).toContain("ipcMain.handle(\n    CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL");
-    expect(mainSource).toContain("ipcMain.handle(\n    COMPLETE_WORKSPACE_WINDOW_CLOSE_CHANNEL");
+    expect(mainSource).toContain("register(\n    CONFIRM_WORKSPACE_WINDOW_CLOSE_CHANNEL");
+    expect(mainSource).toContain("register(\n    COMPLETE_WORKSPACE_WINDOW_CLOSE_CHANNEL");
     expect(mainSource).toContain("const handle = workspaceWindowCloseRequestBroker.request({");
     expect(mainSource).toContain("return await handle.result");
     expect(mainSource).toContain("await handle.drained");
     expect(mainSource).toContain("createWorkspaceWindowCloseConfirmationHandler({");
-    expect(mainSource).toContain("async (event, input: ConfirmWorkspaceWindowCloseInput)");
+    expect(mainSource).toContain("const input = value as ConfirmWorkspaceWindowCloseInput");
     expect(mainSource).toContain("requestId: input.requestId");
     expect(mainSource).not.toContain("getPendingIdentity(");
     expect(mainSource).toContain("workspaceWindowCloseRequestBroker.complete(");
@@ -215,10 +236,10 @@ describe("main process window wiring", () => {
     expect(mainSource).toContain("await workspaceApplication.closeTab({");
     expect(mainSource).toContain("expectedWindowId: windowId");
     expect(mainSource).toContain(
-      "const windowId = await workspaceWindowRegistrationApplication.ensureWindow(event.sender)"
+      "const windowId = await ensureWindow(event.sender)"
     );
     expect(mainSource).not.toContain("workspaceApplication.updateDocumentDraft({");
-    expect(mainSource).toContain("registerWorkspaceHandlers<Electron.WebContents>({");
+    expect(mainSource).toContain("registerWorkspaceEditHandlers({");
     expect(mainSource).toContain("createApplyDocumentEdits({");
     expect(mainSource).toContain("createFlushDocumentEdits({");
     expect(mainSource).toContain(

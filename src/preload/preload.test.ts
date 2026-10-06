@@ -102,6 +102,15 @@ describe("preload bridge", () => {
     expect(exposeInMainWorld).toHaveBeenCalledTimes(1);
     expect(exposeInMainWorld).toHaveBeenCalledWith("fishmark", api);
     expect(testApi).toBeNull();
+    expect(api).not.toHaveProperty("openEditorTestWindow");
+    expect(api).not.toHaveProperty("startScenarioRun");
+    expect(api).not.toHaveProperty("completeEditorTestCommand");
+  });
+
+  it("does not infer test exposure from a runtime label without main's bridge argument", async () => {
+    const { testApi } = await loadApi({ runtimeMode: "test-workbench" });
+    expect(testApi).toBeNull();
+    expect(exposeInMainWorld).toHaveBeenCalledTimes(1);
   });
 
   it("exposes the test bridge in editor-test runtime", async () => {
@@ -121,7 +130,8 @@ describe("preload bridge", () => {
 
   it("exposes the test bridge in test-workbench runtime", async () => {
     const { testApi } = await loadApi({
-      runtimeMode: "test-workbench"
+      runtimeMode: "test-workbench",
+      preloadBridgeMode: "test-workbench"
     });
 
     expect(exposeInMainWorld).toHaveBeenCalledTimes(2);

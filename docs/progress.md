@@ -6,14 +6,16 @@
 
 ## 当前项目判断
 
-### 2026-10-06 RF-802：独立统一验收 PASS / COMPLETE
+### 2026-10-06 RF-803：DEV_DONE；独立验收待执行
 
 | 任务 | 当前状态 | 本轮边界 |
 | --- | --- | --- |
 | RF-801 | COMPLETE | 2026-10-05 独立验收 PASS；本轮保持已验收边界 |
 | RF-802 | COMPLETE | 独立验收 PASS；M8 为 2/3；471 focused、13 launcher/cleanup、310 foundation、type/lint/build、精确 regression/原 bundle 及精确树 CI native gates 通过 |
-| RF-803 | PLANNED | 未启动主进程拆分 |
+| RF-803 | DEV_DONE | 分组 registrar / main-owned sender-frame-runtime 校验与 preload 分离；1008 focused、type/lint/build、完整双 worker exact regression、foundation/原 bundle 完成；独立验收与精确树 native CI 待执行 |
 | M9 | 未完成 | 未宣称全面性能、平台 IME、E2E、安全验收完成 |
+
+RF-803 [执行交接](plans/2026-10-06-rf-803-handoff.md) 已就绪；M8 仍 2/3，不提前标 COMPLETE 或开始 RF-901。默认本地并发 regression 的既有 100ms 子进程启动失败保留，原 manifest/budgets 未改。
 
 RF-802 [独立架构验收](../reports/reviews/2026-10-06-rf-802-architecture.md) 与 [任务总结](../reports/task-summaries/RF-802.md) 已完成。精确候选树 `29fcb6e` 的 [CI 37393076342](https://github.com/yulu-gm/FishMark/actions/runs/37393076342) 三项全绿：默认完整回归2891+10exact、Quality699、safety七项、正式行为121/121和原bundle1428000/1430000。两次本地默认并发100ms子进程启动失败保留，本地双worker全量通过。CI test-only no-sandbox由用户批准，不代表M9 OS-sandbox/security验收。
 

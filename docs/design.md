@@ -204,3 +204,13 @@ RendererPlatformGateway 私有持有有限 bridge port，负责 recent/clipboard
 `WorkspaceShell` 负责布局与编辑器挂载位置；`editor/components/` 下的 WorkspaceTabStrip、StatusBar、ConflictBanner、OutlinePanel、FindReplacePanel、SettingsDrawer、NotificationHost、TableToolbar 与 WelcomeWorkspace 接受显式小型 view props/command callbacks。TitlebarHost 继续是既有标题栏 owner，不新增包装 owner。CodeEditor、settings、theme surface、shortcut hint 和开发 test bridge 保留原 lazy import 边界。没有新增 store/context/service locator、Markdown 副本、IPC facade 或第二个 coordinator。
 
 Search 的输入草稿、match display、panel animation、pointer resize、tab drag、notification timers、focus/shortcut hints 与 theme DOM runtime 是各自 presentation hook 的本地状态。Search hook 与 shell 同寿命，关闭动画或 outline 切换不会暗中创建新 owner；active tab、epoch、loadRevision 边界仍重置 query。resize 仅在 pointerup/键盘提交偏好，不逐帧写入；取消恢复原宽度。设置表单 draft 继续由 SettingsView 持有，切换 section 和 closing 状态不会重建整个 draft，叶子 section 不订阅业务状态。
+
+### RF-803 main/preload 边界（2026-10-06）
+
+main 组合已有 workspace/domain、磁盘、偏好、主题、更新与测试服务，保留原窗口/native-close/recovery 生命周期；IPC 请求与 transport 结果映射由 `main/ipc/register-*-handlers.ts` 各自拥有。`ipc-lifecycle` 仅记账本 composition 成功注册的 channels，重复注册不替换旧 handler，quit 后移除且释放幂等；不是通用路由或依赖容器。
+
+`runtime-windows` 的私有 WeakMap 保存由 main 构造的 runtime/bridge mode。每个 privileged 请求验证 BrowserWindow 与 WebContents 活性及同一身份、senderFrame 是当前未 detached 的 mainFrame、加载 URL 与该窗口的 main-owned entry 一致，以及 channel 允许的 runtime。请求只提供业务数据，不决定权限。service registrar 检查 transport shape；领域规范化仍属于现有 service。窗口 ready await 后重新验证，返回有数据响应前重新验证；native-close completion 成功后可能合法销毁 sender，不在该无数据完成响应上错误拒绝已授权的 close。
+
+原 `register-workspace-handlers.ts` 保持不变。其外部 edit registrar 将 invocation 的 frame/runtime 检查作为 sender identity 携带，原 queued authorization、held-tab close lease、执行前/ACK/projection 前校验继续运行。workspace move/reload/save/close 的 owner/CAS/lease 仍由原 application 负责，没有新队列或 Markdown owner。
+
+preload 只构造原 product API，并仅在 main 明确传入且无歧义的 editor-test/test-workbench bridge mode 下构造/暴露独立 test API；仅 runtime label、缺失/非法/重复 bridge 参数都降为 product。main 对每个窗口明确传入 product 或 test bridge mode。packaged main 固定 product/editor；test handlers 仅 dev test-workbench 初始化，scenario 管理仅 workbench 可调用，completion 仅绑定该 session 的 editor-test webContents 可调用。此为 RF-803 transport 边界，不宣称 M9 CSP、资源根或 OS sandbox 验收。
