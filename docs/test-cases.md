@@ -1305,3 +1305,9 @@ RF-801 独立审查退回补充：外部冲突操作排队前捕获 A 的 editor
 7. StrictMode App rehearsal 只有一个 projection subscription 和一次 startup open；卸载清理订阅、主题 DOM 和 notification callbacks。notification loading 替换 closing 通知清理旧 timer；退出阶段卸载也清理 timer。
 8. render/effect 抛错显示 App 顶层 role=alert fallback，子树正常 cleanup；后续 children 更新不自动 retry，不调保存或 reset。
 9. 原完整精确 regression 保持 10 条 known failures；foundation、bundle 原预算和 CI 真实 Electron safety/formal behavior gate 均必须新鲜执行。M9 全平台 IME/性能范围未在本任务宣称完成。
+
+### RF-802 Linux CI test launcher gating（2026-10-06）
+
+- 仅 Linux + CI=true + FISHMARK_EDITOR_BEHAVIOR_CI_NO_SANDBOX=1 返回 `--no-sandbox` + 原 manifest entry；缺 opt-in、值为 0、缺 CI、CI=false 或 macOS/Windows 均只返回原 entry。
+- formal probe 真实使用此 argument builder，workflow 仅该步骤设置 opt-in；产品 main 不读取它。
+- 原全 manifest 与 process-tree hard-timeout cleanup 继续执行；Linux CI 测试不作为 M9 OS-sandbox/security 证据。

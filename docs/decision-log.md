@@ -247,3 +247,7 @@ RF506 父独立行为/安全验收 PASS，最终 2671 tests、lint/typecheck/bui
 - 错误边界：App 内提供终止式 presentation fallback。无 retry/reset 控件，不自动重建应用、重新保存或改变文档内容。已有 bridge-unavailable 文案不变。
 - 验证：新增 focused tests 直接覆盖命令委托、table focus、Escape/reopen 与 load identity、settings 取消、StrictMode timer 和 fallback cleanup。原 outline 源文件静态断言改为检查真实 OutlinePanel 文件及 WorkspaceShell 直接消费，不删除主题 hook 断言。
 - CI：用户明确批准为受限 cloud 补充正式 `test:editor-behavior` xvfb gate，串行跟在 workspace safety 后并上传原 JSON。cloud 禁止 AF_UNIX socket，不能启动 Xvfb；不绕过限制，不把本地未运行的 Electron 门禁写为通过。
+
+## 2026-10-06 RF-802：Linux CI 行为探针显式 sandbox opt-in
+
+正式行为测试在 GitHub runner 的 setuid-helper 启动阶段失败，尚未执行用例。经用户明确批准，仅 test launcher 在 Linux + CI=true + `FISHMARK_EDITOR_BEHAVIOR_CI_NO_SANDBOX=1` 时加 `--no-sandbox`；该变量只设在 CI formal behavior 步骤。默认启动与产品配置不变，不修改系统 helper 权限。此 CI 证据只验证编辑行为，不构成 M9 OS sandbox/security acceptance。回归精确覆盖平台、CI 与 opt-in 缺失/关闭以及 workflow 接线；原 process-tree cleanup、180 秒 hard limit、cases/oracles/budgets 保留。

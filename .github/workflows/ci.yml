@@ -60,6 +60,9 @@ jobs:
       - name: Real Electron workspace safety smoke
         run: xvfb-run -a npm run test:workspace-safety
       - name: Formal Electron editing behavior manifest
+        # Test-only opt-in: behavior evidence is not M9 OS-sandbox acceptance.
+        env:
+          FISHMARK_EDITOR_BEHAVIOR_CI_NO_SANDBOX: "1"
         run: xvfb-run -a npm run test:editor-behavior -- --report .artifacts/ci/editor-behavior.json
       - name: Upload editing behavior report
         if: always()

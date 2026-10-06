@@ -488,3 +488,7 @@ When acceptance fails:
 ## 2026-10-05 RF-802 执行记录（DEV_DONE）
 
 直接消费 presentation components，保留唯一 RF-801 application 与订阅、CodeEditor mount/lazy/Markdown 行为。新增 9 项交互/StrictMode/fallback 测试，原全部 headless gates 开发自检完成。cloud 拒绝 AF_UNIX socket，两个 native Electron gates 未运行；已按用户批准补齐 CI 正式行为 probe。独立 reviewer 必须核验冻结 commit 与 CI 后才可正式收口，M8 COMPLETE 数仍为 1/3。
+
+### 2026-10-06 RF-802 CI 启动修复（仍 DEV_DONE）
+
+旧候选 CI 的正式行为测试尚未进入 manifest 即被 setuid-helper 配置阻止。用户明确批准的修复只给 Linux CI 的 formal probe 显式 opt-in no-sandbox；新增 gating/wiring + 原 cleanup focused 13/13。等待新冻结树的 CI native 证据与独立验收，不提前推进 RF-803，也不作为 M9 security acceptance。

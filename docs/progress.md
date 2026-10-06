@@ -449,3 +449,7 @@ Editor Foundation 重构中的 `RF-101` 已进入 `DEV_DONE`，等待独立架�
 
 
 
+
+### 2026-10-06 RF-802 CI test launcher 补丁（DEV_DONE，待独立验收）
+
+formal behavior probe 的旧 CI 在 manifest 前因 setuid-helper 启动失败。用户批准 Linux CI test-only no-sandbox 显式 opt-in；三条件 gating 与原 process cleanup focused 13/13，产品配置、cases/oracles/budgets/timeout 不改。native 结果等待新 commit 的 CI，不作为 M9 OS sandbox/security 验收。详见 RF-802 handoff。
