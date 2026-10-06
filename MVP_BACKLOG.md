@@ -158,16 +158,16 @@ Intake：`docs/plans/2026-09-18-rf-601-intake.md`。执行交接：`docs/plans/2
 
 ### RF-803 — Main/preload composition split
 
-状态：**DEV_DONE（2026-10-06）**。本地可执行开发门禁完成，独立验收待执行，M8 仍为 2/3；M9 未开始。
+状态：**COMPLETE（2026-10-06），独立架构/任务验收 PASS**。本机原静态/精确回归/bundle与真实Electron safety七项、formal behavior121/121通过；M8为3/3 COMPLETE，M9未开始。远端新鲜度、发布及最终CI由父线程处理。
 
 - [x] 工作区命令与 preferences/recent/fonts/themes/export/clipboard/external/updates/test IPC 分组为显式 registrar。
 - [x] live sender/main-frame/window/main-owned runtime 和请求形状校验，保留原 edit/flush 队列授权与原 close leases。
 - [x] preload product/test API 物理分离且产品不暴露 test bridge；删除旧 re-export 与重复 runtime parser。
 - [x] 通道重复注册/释放、非法 sender/runtime/request、异步 frame 失效、test session ownership 回归。
 - [x] 本地完整开发门禁与 DEV_DONE handoff。
-- [ ] 独立架构/任务验收及精确树 CI native gates。
+- [x] 独立架构/任务验收PASS；冻结候选本机原生safety七项和formal behavior121/121全量通过，原门禁不变。默认并发启动竞态保留，完整双worker3111+10exact通过；发布/最终CI另行跟进。
 
-详见 [intake](docs/plans/2026-10-06-rf-803-intake.md)、[handoff](docs/plans/2026-10-06-rf-803-handoff.md) 与 [执行总结](reports/task-summaries/RF-803.md)。最终验收与发布由独立 reviewer/父任务处理。
+详见 [intake](docs/plans/2026-10-06-rf-803-intake.md)、[handoff](docs/plans/2026-10-06-rf-803-handoff.md) 与 [验收总结](reports/task-summaries/RF-803.md)、[独立架构验收](reports/reviews/2026-10-06-rf-803-architecture.md)。本地验收完成，父线程处理发布与CI。
 
 ## Epic 1：项目骨架
 

@@ -10,13 +10,13 @@
 
 **Overall status:** `IN_PROGRESS`
 
-**当前任务：** RF-803 `DEV_DONE`；main/preload 分组与本地开发自检完成，独立验收待执行。RF-801/802 COMPLETE，M8 仍为 2/3；M9 未开始。
+**当前任务：** RF-803 `COMPLETE`，本机独立架构/任务验收PASS；RF-801/802/803均COMPLETE，M8为3/3 COMPLETE；RF-901/M9未开始。
 
 **M8 入口历史证据：** `reports/reviews/2026-09-23-m8-readiness.md` 记录启动、load identity、取消关闭、精确回归与真实 Electron 安全基线；该报告当时未启动 RF-801。RF-801 / RF-802 的当前状态以上方独立验收为准，M9 仍未完成。
 
-**下一步：** RF-803 冻结实现树并独立验收；CI 提供真实 Electron safety/behavior。M9 继续拥有真实平台性能、IME、E2E 与 OS-sandbox/security 门禁。
+**下一步：** 父线程核验实时main、正常发布验收文档提交并跟进CI。本机精确候选已取得真实Electron safety/behavior；M9继续拥有真实平台性能、IME、E2E与OS-sandbox/security门禁，尚未开始。
 
-**Current gate:** RF-803 local development verification is complete (DEV_DONE); independent architecture/task acceptance and exact-tree native CI are pending. RF-802 historical independent acceptance PASS; exact-tree [CI 37393076342](https://github.com/yulu-gm/FishMark/actions/runs/37393076342) passed default full regression, native safety/behavior and unchanged bundle gates. M8 is 2/3 complete; M9 OS-sandbox/security remains open. Historical RF-801 evidence: M5, M6/M6.5, and M7 are complete. RF-506 behavior/safety remained accepted, and the unchanged bundle budgets now all PASS in CI; RF-801 本地独立验收已 PASS，完整精确回归使用本机双 worker，原预算与 known failures 保持；主体 `5af4c96` 的 [CI 37318182770](https://github.com/yulu-gm/FishMark/actions/runs/37318182770) 已独立核验三项 PASS，默认 Node v22.23.3 全量回归通过原精确门禁。
+**Current gate:** RF-803 independent Mac architecture/task acceptance PASS on candidate `9f0fe233` / tree `25c526fc`; 1008 focused tests, 310 foundation tests, typecheck/lint/build, original bundle, full exact regression with 2 workers (3111 passed + 10 exact known), native safety 7/7 and formal behavior 121/121 passed. The default-concurrency 100ms child-startup failure is preserved. M8 is 3/3 COMPLETE; M9 has not started. Publication, main freshness and final CI remain with the parent; no remote publication is claimed.
 
 **Current performance evidence:** the 20k-line controller probe improved typing dispatch p95 from 1,934 ms to 66.9 ms and selection p95 from 1,697 ms to 13.9 ms after canonical-tree reuse and physical-range indexing. Final M5 CI bundle evidence: max initial chunk **179,699 / 300,000 B**, max initial chunk gzip **56,955 / 90,000 B**, total initial gzip **93,918 / 260,000 B**, total JS gzip **1,425,457 / 1,430,000 B** — all PASS without relaxing budgets. M9 still owns broader reproducible end-to-end performance budgets.
 **User priorities:** maintainability/extensibility, editing/interaction quality, and measured performance. Preserve the existing stack and owners; do not optimize progress percentages, package count, or deleted lines.
@@ -46,7 +46,7 @@ At most one `RF-xxx` task may be `IN_PROGRESS` or `ACCEPTING` at a time. A later
 | M5 | Pure semantic editing engine | `COMPLETE` | 6 | 6 | RF-506 semantic cutover, behavior/safety, deletion obligations, and original bundle budgets all accepted |
 | M6 | Thin CodeMirror adapter | `COMPLETE` | 4 | 4 | RF-601/602/603/604 accepted; `editor-core` deleted and adapter is the production owner |
 | M7 | Shared presentation and derived consumers | `COMPLETE` | 3 | 3 | RF-701/702/703 accepted; editor/export/outline/metrics now share canonical derived inputs |
-| M8 | Renderer/main composition cleanup | `IN_PROGRESS` | 2 | 3 | RF-801/802 COMPLETE；RF-803 DEV_DONE，独立/native 验收待执行 |
+| M8 | Renderer/main composition cleanup | `COMPLETE` | 3 | 3 | RF-801/802/803独立验收PASS；RF-803真Mac原生门禁已通过，发布/最终CI待父线程处理 |
 | M9 | Performance, E2E, and security | `PLANNED` | 0 | 3 | Budgets, Playwright flows, and Electron security pass |
 | M10 | Purge and final acceptance | `PLANNED` | 0 | 2 | No compatibility/dead code; final verdict `PASS` |
 
@@ -90,7 +90,7 @@ Evidence columns are filled only with fresh command output/report paths from the
 | RF-703 | Outline and metrics cutover | RF-702 | `COMPLETE` | `EditorDerivedSnapshot` owns root outline headings and lazy document metrics; renderer consumers accept only a snapshot, App refreshes by snapshot identity/revision, raw-content scheduling is removed. Runtime evidence uses one shared `MarkdownParseInstrumentation` tracker with per-consumer before/after deltas; consumer cacheHit remains 0 because snapshot reuse belongs upstream. RF-602 canonical-id regression coverage is restored. | Owner independently confirmed the post-`b6a2c8e` focused/full/frozen-baseline rerun passed. Earlier typecheck/build and guard 234/234 were green; structural review confirmed production legacy parser calls are zero. Frozen baseline changes are limited to the two legitimately changed outline/metrics operations. | Owner acceptance PASS on 2026-09-22; `reports/task-summaries/RF-703.md`. | `main` (`265694d` + hardening through `b6a2c8e`) |
 | RF-801 | 非 React 工作区命令与订阅层 | RF-703 | `COMPLETE` | 2026-10-05 独立 focused 23 文件/450 通过；application 无 React | typecheck/lint/build；foundation 310；全量 216 文件/2884 项（双 worker，10 exact known、0 unexpected）；真实 safety 七项；bundle 原预算；正式行为 121/121 | [独立验收 PASS](../../../reports/reviews/2026-10-05-rf-801-architecture.md)；[任务总结](../../../reports/task-summaries/RF-801.md) | `5af4c96` 已推送 main；[主体 CI 三项 PASS](https://github.com/yulu-gm/FishMark/actions/runs/37318182770) |
 | RF-802 | React shell decomposition | RF-801 | `COMPLETE` | 471 focused、13 launcher/cleanup；[handoff](../../plans/2026-10-05-rf-802-handoff.md) | type/lint/build；foundation310；全量217 files / 2891+10exact（本地双worker、默认CI）；原bundle1428000/1430000；CI safety7/7、正式行为121/121 | [独立验收 PASS](../../../reports/reviews/2026-10-06-rf-802-architecture.md)；[任务总结](../../../reports/task-summaries/RF-802.md) | 本地e20af0e/远端44e5767；[精确树CI全绿](https://github.com/yulu-gm/FishMark/actions/runs/37393076342) |
-| RF-803 | Main/preload composition split | RF-802 | `DEV_DONE` | [handoff](../../plans/2026-10-06-rf-803-handoff.md) | 1008 focused/type/lint/build/full exact regression/foundation/bundle | 独立/native CI 待执行 | — |
+| RF-803 | Main/preload composition split | RF-802 | `COMPLETE` | 69 files/1008 focused；[验收总结](../../../reports/task-summaries/RF-803.md) | type/lint/build、310 foundation、全部220 files/3111+10exact双worker、原bundle、真Mac safety7/7和behavior121/121；默认并发竞态保留 | [独立验收PASS](../../../reports/reviews/2026-10-06-rf-803-architecture.md) | candidate `9f0fe233` / tree `25c526fc`；发布待父线程 |
 | RF-901 | Final performance gate | RF-803 | `PLANNED` | — | perf/editing probes | — | — |
 | RF-902 | Playwright Electron data-safety/editing suite | RF-901 | `PLANNED` | — | build/e2e | — | — |
 | RF-903 | Electron security hardening | RF-902 | `PLANNED` | — | test/build/e2e | — | — |
@@ -501,3 +501,7 @@ When acceptance fails:
 ## 2026-10-06 RF-803 执行交接 / DEV_DONE
 
 实际 service registrars、main-owned sender/frame/window/runtime 校验、request validation 与显式 preload bridge-mode 分离已落地。原 queued edit/flush registrar 字节不变，application/renderer/known-failure/budget/launcher 保持原边界。69 focused files/1008 tests、typecheck/lint/build、完整双 worker 220 files/3121 cases（3111 passed+10 exact）、310 foundation 与原 bundle1428000/1430000完成。默认并发的既有100ms descendant PID启动时序失败保留；精确树native CI与独立架构/任务验收待执行。M8仍2/3，RF-901/M9未开始。
+
+## 2026-10-06 RF-803 Mac 独立验收 / COMPLETE
+
+上方DEV_DONE为历史执行记录；当前以本节及dashboard为准。独立detached候选`9f0fe233`通过本机静态门禁、1008 focused、310 foundation、完整双worker3111+10exact、原bundle1419189/1430000，以及原Mac Electron safety7/7与behavior121/121/2541 targets。默认回归3110+10exact+1个100ms启动竞态保留，原断言/名单/预算/超时不变。reviewer未修改产品代码，M8为3/3 COMPLETE；M9未开始。远端新鲜度/正常push/最终CI由父线程另行处理，不将本机PASS称为已发布。

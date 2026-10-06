@@ -1,5 +1,45 @@
 # FishMark 测试报告
 
+## 2026-10-06 RF-803 Mac 独立统一验收：PASS
+
+RF-803 COMPLETE，M8 **3/3 COMPLETE**，RF-901/M9 未开始。审查范围 `b1d4a805cf0d2cd6928144a9b6959f16781b0451..9f0fe2339056db7aa74be75da4942d2721231cd9`，冻结 tree `25c526fc52c849f054d01b131f5517e83c5512c6`。本地独立 detached worktree 验收，不修改实现。远端 main 新鲜度、推送及最终提交 CI 尚待父线程处理，本节不表示已发布。
+
+### 本轮证据
+
+环境：macOS 26.5.1 (25F80) arm64，Node v25.8.0 / npm 11.11.0 / Electron 41.2.0；按冻结 lockfile `npm ci`，所有重门禁串行。
+
+| 命令 / 范围 | 结果 |
+| --- | --- |
+| `npm run typecheck` | exit 0，18.59 秒 |
+| `npm run lint` | exit 0，0 errors / 0 warnings，14.49 秒 |
+| `npm run build` | exit 0，29.98 秒 |
+| `npm test -- src/main src/preload src/shared/preload-bridge-mode.test.ts` | 69 files / 1008 passed，命令16.88秒 |
+| `npm run test:editor-foundation` | 6 files / 310 passed，命令22.31秒 |
+| `VITEST_MAX_WORKERS=2 npm run test:regression` | 原精确门禁 PASS；全部220 files /3121 cases，3111 passed +10 exact known，0 unexpected/skipped/collection-hook-unhandled errors/unresolved baseline，命令66.30秒 |
+| `npm run perf:bundle` | 原门禁PASS：maxInitialChunkBytes179699/300000、maxInitialChunkGzipBytes56949/90000、totalInitialGzipBytes96014/260000、totalJsGzipBytes1419189/1430000 B；source provenance、forbidden-initial、required-lazy 全部PASS，恢复普通 renderer build；命令37.75秒 |
+| `npm run test:workspace-safety` | 真 Mac production main/preload/renderer，7/7 checks PASS；promptResponses `[2,0]`；最终磁盘文本 `Smoke first-save second-save pending-close after-cancel` |
+| `npm run test:editor-behavior -- --report .artifacts/ci/rf803-editor-behavior.json` | 原始全部121/121 cases，2541 targets；79 verified-existing、2363 verified-runner、99 known-defect、0 unexpected/not-run；1 window/1 view、363 observations，24.600秒 |
+| `git diff --check`、冻结实现核对 | PASS；无产品代码、lockfile、原 queued edit/flush、manifest、预算或原生脚本修改 |
+
+完整回归 PASS 是原 wrapper 精确接受已有十条失败，raw Vitest 仍为2 failed files /10 failed tests。没有过滤文件/case 或调整仓库默认并发、100ms timeout、fingerprints、known-failure 名单。Mac 未使用 no-sandbox，产品安全配置保持原样。
+
+### 失败与非阻断观察（保留）
+
+1. 首轮默认完整回归 exit 1，命令51.65秒：220 files /3121 cases，3110 passed +10 exact known +1 unexpected，0 runtime/collection errors。额外失败为 `packages/test-harness/src/handlers/probe-editor-behavior.test.ts:58`：原100ms hard timeout前 descendant PID文件未建立。该测试、process-tree实现和Vitest配置均与基线一致，交接亦记录相同类型启动竞态；双worker复跑仍执行全部用例并通过原门禁，不将此失败塞入名单。默认并发不能称通过，最终远端默认CI仍须跟进。
+2. sandbox 内 workspace-safety 首次运行未生成JSON并退出1（ENOENT），无场景成功证据。随后通过工具正规权限申请，在本机正常启动原命令，取得上述七项PASS。不改系统helper、安全配置或测试脚本，不添加no-sandbox。
+3. 成功 safety 日志保留 `MaxListenersExceededWarning`（11 destroyed listeners）及 `fishmark:save-markdown-file` 返回阶段 `Untrusted IPC sender`。栈位于新 registrar 的 handler await 后复核；该检查拒绝失效sender的响应，原关闭和精确磁盘断言通过。未改warning阈值，也不宣称日志无警告。
+4. 十条已知测试失败、99个行为known-defect与上述并发时序风险仍是既有债务。M9 IME、全平台性能/E2E/CSP/resource-root/OS sandbox验收未执行。
+
+### 本机证据与交付
+
+工作目录：`/Users/chenglinwu/Documents/Codex/2026-10-06/task/rf803-acceptance`。原FishMark工作区与TASK062脏文件保留；本机候选无远端branch/PR，也未push。
+
+- `.artifacts/rf803-local/gates.json` / `environment.json`：命令退出码、环境、冻结commit/tree、关键文件SHA256。
+- 同目录 `typecheck.log`、`lint.log`、`build.log`、`focused.log`、`foundation.log`、`bundle.log`；`regression-default.log`、`default-vitest-full{,.gate}.json`保留首次失败，`regression-workers2.log`、`workers2-vitest-full{,.gate}.json`保留完整最终结果。
+- 同目录 `workspace-safety-sandbox.log`、`workspace-safety.log`、`workspace-safety.json`；`editor-behavior.log`、`editor-behavior.json`保留真实Electron全部场景原始结果。标准报告亦在 `.artifacts/ci/`。
+- 输入完整包7881851字节，SHA256 `46273187df0748f182ae828d35bb3fcde3fc9030fbaf33b664a6845fd311b864`；内部完整bundle SHA256 `43db26e0ab473a2c1ad47f72c7531556bcc29255b6632f4b9f47128e3d027655`。本地空bare库验证complete history，candidate/tree/base均精确匹配。
+- [独立架构验收](../reports/reviews/2026-10-06-rf-803-architecture.md)、[任务总结与人工复验步骤](../reports/task-summaries/RF-803.md)。验收文档单独提交；父线程接收证据包后处理远端新鲜度、正常发布和CI。SSH端口22的原权限拒绝未绕过、未重复网络请求。
+
 ## 2026-10-06 RF-802 独立统一验收：PASS
 
 RF-802 为 COMPLETE，M8 为 **2/3**；RF-803/M9 未开始。独立审查范围 `1d33e6a..e20af0e`，无阻断架构 findings。测试使用最终冻结树 `29fcb6e50ffe73834e9f2c6ea61c52d5b1a85e63`；实现与 reviewer 分离，重门禁串行。

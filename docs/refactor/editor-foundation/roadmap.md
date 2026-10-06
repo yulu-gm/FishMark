@@ -1688,7 +1688,7 @@ npm.cmd run typecheck
 
 #### RF-803: Main/preload composition split
 
-**状态（2026-10-06）：** DEV_DONE；实现与本地开发自检已完成，独立验收未开始，M8 仍为 2/3。
+**状态（2026-10-06）：** COMPLETE；独立架构/任务验收PASS，M8为3/3 COMPLETE，RF-901/M9未开始。本机精确候选已通过原native gates；远端新鲜度/发布/最终CI由父线程处理。
 
 **Outcome:** main and preload entry files are wiring roots with grouped handler/API modules.
 
@@ -1713,7 +1713,9 @@ npm.cmd run build
 
 **Exit:** process entry points are understandable as composition roots.
 
-**开发证据：** [handoff](../../plans/2026-10-06-rf-803-handoff.md)：1008 focused、typecheck/lint/build、全量双 worker exact regression 3111+10、310 foundation 与原 bundle 1428000/1430000；默认本地并发 timing failure 保留，native CI 与独立验收待执行，不提前 COMPLETE。
+**验收证据：** [独立架构验收](../../../reports/reviews/2026-10-06-rf-803-architecture.md)、[任务总结](../../../reports/task-summaries/RF-803.md)、[测试报告](../../test-report.md)。候选`9f0fe233`/tree`25c526fc`：1008 focused、310 foundation、type/lint/build、全部220 files双worker3111+10exact、原bundle1419189/1430000、本机Mac safety七项、原formal behavior121/121/2541 targets通过。默认并发100ms descendant PID失败与sandbox首次启动无报告均保留；原断言/名单/预算不变，Mac未使用no-sandbox。发布和最终CI另行跟进。
+
+**历史开发证据：** [handoff](../../plans/2026-10-06-rf-803-handoff.md)：1008 focused、typecheck/lint/build、全量双 worker exact regression 3111+10、310 foundation 与原 bundle 1428000/1430000；当时 native 与独立验收待执行，执行阶段仅标 DEV_DONE。当前状态以上方本机独立验收为准，默认并发 timing failure 继续保留。
 
 ### Milestone 9 — Performance, E2E, and security gates
 
