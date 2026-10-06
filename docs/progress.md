@@ -6,16 +6,18 @@
 
 ## 当前项目判断
 
-### 2026-10-05 RF-801：独立统一验收 PASS / COMPLETE
+### 2026-10-06 RF-802：独立统一验收 PASS / COMPLETE
 
 | 任务 | 当前状态 | 本轮边界 |
 | --- | --- | --- |
-| RF-801 | COMPLETE | 独立架构与任务验收 PASS；M8 完成 1/3 |
-| RF-802 | DEV_DONE | 459 focused、310 foundation、type/lint/build、217 文件精确 regression 与原 bundle 开发自检完成；native gates 待 CI，独立验收待执行 |
+| RF-801 | COMPLETE | 2026-10-05 独立验收 PASS；本轮保持已验收边界 |
+| RF-802 | COMPLETE | 独立验收 PASS；M8 为 2/3；471 focused、13 launcher/cleanup、310 foundation、type/lint/build、精确 regression/原 bundle 及精确树 CI native gates 通过 |
 | RF-803 | PLANNED | 未启动主进程拆分 |
 | M9 | 未完成 | 未宣称全面性能、平台 IME、E2E、安全验收完成 |
 
-前置入口修复 `f15bc8e` 仅更新已提交 borderless rail 的旧断言，focused 先红后绿；父代理确认 main CI `37306043326` 三个 job 全绿。主体复用唯一 WorkspaceRendererApplication、edit client、pending queue 与 coordinator，迁移 owner 至 application；save scheduler 只负责 timer/replay/origin。初审两项 P1 已修复并回归。独立 focused 450/450、foundation 310/310、typecheck/lint/build、原 bundle、正式行为 121/121、macOS 真实生产 safety 七项通过。完整精确回归用官方双 worker 环境入口执行全部 216 文件/2884 项，2874 passed、10 exact known、0 unexpected/skip/error；两轮默认并发失败和同机基线前置修复保留。详见 [任务总结](../reports/task-summaries/RF-801.md) 与 [测试报告](test-report.md)。主体 `5af4c96` 已推送 main；独立核验 [CI 37318182770](https://github.com/yulu-gm/FishMark/actions/runs/37318182770) 精确 head 与日志，Node v22.23.3 默认完整回归、Quality（684 focused 及 Linux safety 七项）和原 Bundle budget 全部 PASS。
+RF-802 [独立架构验收](../reports/reviews/2026-10-06-rf-802-architecture.md) 与 [任务总结](../reports/task-summaries/RF-802.md) 已完成。精确候选树 `29fcb6e` 的 [CI 37393076342](https://github.com/yulu-gm/FishMark/actions/runs/37393076342) 三项全绿：默认完整回归2891+10exact、Quality699、safety七项、正式行为121/121和原bundle1428000/1430000。两次本地默认并发100ms子进程启动失败保留，本地双worker全量通过。CI test-only no-sandbox由用户批准，不代表M9 OS-sandbox/security验收。
+
+RF-801 历史验收：前置入口修复 `f15bc8e` 仅更新已提交 borderless rail 的旧断言，focused 先红后绿；父代理确认 main CI `37306043326` 三个 job 全绿。主体复用唯一 WorkspaceRendererApplication、edit client、pending queue 与 coordinator，迁移 owner 至 application；save scheduler 只负责 timer/replay/origin。初审两项 P1 已修复并回归。独立 focused 450/450、foundation 310/310、typecheck/lint/build、原 bundle、正式行为 121/121、macOS 真实生产 safety 七项通过。完整精确回归用官方双 worker 环境入口执行全部 216 文件/2884 项，2874 passed、10 exact known、0 unexpected/skip/error；两轮默认并发失败和同机基线前置修复保留。详见 [任务总结](../reports/task-summaries/RF-801.md) 与 [测试报告](test-report.md)。主体 `5af4c96` 已推送 main；独立核验 [CI 37318182770](https://github.com/yulu-gm/FishMark/actions/runs/37318182770) 精确 head 与日志，Node v22.23.3 默认完整回归、Quality（684 focused 及 Linux safety 七项）和原 Bundle budget 全部 PASS。
 
 以下为历史记录；其中“RF-801 仍 PLANNED”只反映当日状态。
 
@@ -450,6 +452,6 @@ Editor Foundation 重构中的 `RF-101` 已进入 `DEV_DONE`，等待独立架�
 
 
 
-### 2026-10-06 RF-802 CI test launcher 补丁（DEV_DONE，待独立验收）
+### 2026-10-06 RF-802 CI test launcher 补丁（历史交接时为 DEV_DONE）
 
 formal behavior probe 的旧 CI 在 manifest 前因 setuid-helper 启动失败。用户批准 Linux CI test-only no-sandbox 显式 opt-in；三条件 gating 与原 process cleanup focused 13/13，产品配置、cases/oracles/budgets/timeout 不改。native 结果等待新 commit 的 CI，不作为 M9 OS sandbox/security 验收。详见 RF-802 handoff。

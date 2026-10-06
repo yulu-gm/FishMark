@@ -145,14 +145,16 @@ Intake：`docs/plans/2026-09-18-rf-601-intake.md`。执行交接：`docs/plans/2
 
 ### RF-802 — React shell decomposition
 
-状态：**DEV_DONE（2026-10-05）**。仅推进 RF-802；RF-803/M9 不进入本轮。
+状态：**COMPLETE（2026-10-06）**。独立架构与任务验收 PASS；M8 为 2/3，RF-803/M9 不进入本轮。
 
 - [x] App composition 保留唯一订阅、bootstrap/lifecycle 与 presentation-only error boundary。
 - [x] 直接消费 tab/status/conflict/outline/find/settings/notification/table 组件，复用 TitlebarHost。
 - [x] 小型显式 props/commands，保留焦点、动画、epoch/loadRevision、resize commit 与 lazy splits。
 - [x] 补充 focused 行为测试，完成本地可执行原门禁并写 DEV_DONE handoff；native 门禁转 CI，独立验收另行执行。
 
-独立架构/任务验收待执行；本地 native Electron 门禁因 cloud socket/display 限制未运行，待 GitHub CI 精确 commit 证据。详见 [执行交接](docs/plans/2026-10-05-rf-802-handoff.md)。
+- [x] 独立验收 PASS；471 focused、13 launcher/cleanup、310 foundation、type/lint/build、完整精确回归与原 bundle 通过。精确树 [CI 37393076342](https://github.com/yulu-gm/FishMark/actions/runs/37393076342) 全绿，native safety 七项与正式行为121/121通过。
+
+详见 [任务总结](reports/task-summaries/RF-802.md) 与 [测试报告](docs/test-report.md)。两次本地默认并发时序失败和首次 CI 启动失败如实保留；CI test-only no-sandbox 不构成 M9 security 验收。
 
 ## Epic 1：项目骨架
 

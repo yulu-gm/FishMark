@@ -6,17 +6,17 @@
 
 **Created:** 2026-07-11
 
-**Last updated:** 2026-10-05
+**Last updated:** 2026-10-06
 
 **Overall status:** `IN_PROGRESS`
 
-**当前任务：** RF-802，`DEV_DONE`。RF-801 已 COMPLETE；本轮仅拆分 React presentation，RF-803/M9 尚未开始。
+**当前任务：** RF-802 独立统一验收 PASS / `COMPLETE`；M8 为 2/3。RF-803/M9 尚未开始。
 
-**M8 入口历史证据：** `reports/reviews/2026-09-23-m8-readiness.md` 记录启动、load identity、取消关闭、精确回归与真实 Electron 安全基线；该报告当时未启动 RF-801。本轮 RF-801 的当前状态以上方独立验收为准，M9 仍未完成。
+**M8 入口历史证据：** `reports/reviews/2026-09-23-m8-readiness.md` 记录启动、load identity、取消关闭、精确回归与真实 Electron 安全基线；该报告当时未启动 RF-801。RF-801 / RF-802 的当前状态以上方独立验收为准，M9 仍未完成。
 
-**下一步：** 在冻结 RF-802 commit 上核验 CI native gates，再由独立 high 执行架构与任务验收。M9 继续拥有更广泛的真实平台性能、E2E 与安全预算。
+**下一步：** 核验 RF-802 最终文档树发布 CI 后推进下一依赖已满足任务 RF-803；M9 继续拥有真实平台性能、IME、E2E 与 OS-sandbox/security 门禁。
 
-**Current gate:** M5, M6/M6.5, and M7 are complete. RF-506 behavior/safety remained accepted, and the unchanged bundle budgets now all PASS in CI; RF-801 本地独立验收已 PASS，完整精确回归使用本机双 worker，原预算与 known failures 保持；主体 `5af4c96` 的 [CI 37318182770](https://github.com/yulu-gm/FishMark/actions/runs/37318182770) 已独立核验三项 PASS，默认 Node v22.23.3 全量回归通过原精确门禁。
+**Current gate:** RF-802 independent acceptance PASS; exact-tree [CI 37393076342](https://github.com/yulu-gm/FishMark/actions/runs/37393076342) passed default full regression, native safety/behavior and unchanged bundle gates. M8 is 2/3 complete; M9 OS-sandbox/security remains open. Historical RF-801 evidence: M5, M6/M6.5, and M7 are complete. RF-506 behavior/safety remained accepted, and the unchanged bundle budgets now all PASS in CI; RF-801 本地独立验收已 PASS，完整精确回归使用本机双 worker，原预算与 known failures 保持；主体 `5af4c96` 的 [CI 37318182770](https://github.com/yulu-gm/FishMark/actions/runs/37318182770) 已独立核验三项 PASS，默认 Node v22.23.3 全量回归通过原精确门禁。
 
 **Current performance evidence:** the 20k-line controller probe improved typing dispatch p95 from 1,934 ms to 66.9 ms and selection p95 from 1,697 ms to 13.9 ms after canonical-tree reuse and physical-range indexing. Final M5 CI bundle evidence: max initial chunk **179,699 / 300,000 B**, max initial chunk gzip **56,955 / 90,000 B**, total initial gzip **93,918 / 260,000 B**, total JS gzip **1,425,457 / 1,430,000 B** — all PASS without relaxing budgets. M9 still owns broader reproducible end-to-end performance budgets.
 **User priorities:** maintainability/extensibility, editing/interaction quality, and measured performance. Preserve the existing stack and owners; do not optimize progress percentages, package count, or deleted lines.
@@ -46,7 +46,7 @@ At most one `RF-xxx` task may be `IN_PROGRESS` or `ACCEPTING` at a time. A later
 | M5 | Pure semantic editing engine | `COMPLETE` | 6 | 6 | RF-506 semantic cutover, behavior/safety, deletion obligations, and original bundle budgets all accepted |
 | M6 | Thin CodeMirror adapter | `COMPLETE` | 4 | 4 | RF-601/602/603/604 accepted; `editor-core` deleted and adapter is the production owner |
 | M7 | Shared presentation and derived consumers | `COMPLETE` | 3 | 3 | RF-701/702/703 accepted; editor/export/outline/metrics now share canonical derived inputs |
-| M8 | Renderer/main composition cleanup | `IN_PROGRESS` | 1 | 3 | RF-801 COMPLETE；RF-802 DEV_DONE，RF-803 PLANNED |
+| M8 | Renderer/main composition cleanup | `IN_PROGRESS` | 2 | 3 | RF-801/802 COMPLETE；RF-803 PLANNED |
 | M9 | Performance, E2E, and security | `PLANNED` | 0 | 3 | Budgets, Playwright flows, and Electron security pass |
 | M10 | Purge and final acceptance | `PLANNED` | 0 | 2 | No compatibility/dead code; final verdict `PASS` |
 
@@ -89,7 +89,7 @@ Evidence columns are filled only with fresh command output/report paths from the
 | RF-702 | HTML export cutover | RF-604, RF-701 | `COMPLETE` | Renderer export orchestration parses one canonical tree, builds the shared render plan, and delegates pure Markdown-content HTML to `markdown-presentation`; legacy export-local block/inline parsing is removed. KaTeX stays in the lazy renderer export chunk via injected `renderMath`, so presentation root consumers do not pull it into the initial graph. | Clean-tree rerun at `1b08a2c`: focused 5 files / 42 passed; typecheck exit 0; build exit 0; full Vitest 2799 passed / 1 skipped / 11 known failures; guard 234/234; `forbiddenInitialSourceGroup:katex` and Mermaid plus all required lazy-chunk checks PASS. `perf:bundle` remains red only on the four pre-existing maximum budgets. | Accepted 2026-09-21 from owner-provided clean-tree verification; no new failing test or bundle source-group regression remains. | `main` (`df3b562` + `1b08a2c`) |
 | RF-703 | Outline and metrics cutover | RF-702 | `COMPLETE` | `EditorDerivedSnapshot` owns root outline headings and lazy document metrics; renderer consumers accept only a snapshot, App refreshes by snapshot identity/revision, raw-content scheduling is removed. Runtime evidence uses one shared `MarkdownParseInstrumentation` tracker with per-consumer before/after deltas; consumer cacheHit remains 0 because snapshot reuse belongs upstream. RF-602 canonical-id regression coverage is restored. | Owner independently confirmed the post-`b6a2c8e` focused/full/frozen-baseline rerun passed. Earlier typecheck/build and guard 234/234 were green; structural review confirmed production legacy parser calls are zero. Frozen baseline changes are limited to the two legitimately changed outline/metrics operations. | Owner acceptance PASS on 2026-09-22; `reports/task-summaries/RF-703.md`. | `main` (`265694d` + hardening through `b6a2c8e`) |
 | RF-801 | 非 React 工作区命令与订阅层 | RF-703 | `COMPLETE` | 2026-10-05 独立 focused 23 文件/450 通过；application 无 React | typecheck/lint/build；foundation 310；全量 216 文件/2884 项（双 worker，10 exact known、0 unexpected）；真实 safety 七项；bundle 原预算；正式行为 121/121 | [独立验收 PASS](../../../reports/reviews/2026-10-05-rf-801-architecture.md)；[任务总结](../../../reports/task-summaries/RF-801.md) | `5af4c96` 已推送 main；[主体 CI 三项 PASS](https://github.com/yulu-gm/FishMark/actions/runs/37318182770) |
-| RF-802 | React shell decomposition | RF-801 | `DEV_DONE` | 24 files / 459 tests；[handoff](../../plans/2026-10-05-rf-802-handoff.md) | type/lint/build；foundation 310；regression 217 files / 2883 passed + 10 exact known；原 bundle 1428000/1430000；native gates 本地阻塞，待 CI | 独立验收待执行；[执行状态](../../../reports/task-summaries/RF-802.md) | `codex/vine-m8-m9` |
+| RF-802 | React shell decomposition | RF-801 | `COMPLETE` | 471 focused、13 launcher/cleanup；[handoff](../../plans/2026-10-05-rf-802-handoff.md) | type/lint/build；foundation310；全量217 files / 2891+10exact（本地双worker、默认CI）；原bundle1428000/1430000；CI safety7/7、正式行为121/121 | [独立验收 PASS](../../../reports/reviews/2026-10-06-rf-802-architecture.md)；[任务总结](../../../reports/task-summaries/RF-802.md) | 本地e20af0e/远端44e5767；[精确树CI全绿](https://github.com/yulu-gm/FishMark/actions/runs/37393076342) |
 | RF-803 | Main/preload composition split | RF-802 | `PLANNED` | — | lint/typecheck/test/build | — | — |
 | RF-901 | Final performance gate | RF-803 | `PLANNED` | — | perf/editing probes | — | — |
 | RF-902 | Playwright Electron data-safety/editing suite | RF-901 | `PLANNED` | — | build/e2e | — | — |
@@ -489,6 +489,10 @@ When acceptance fails:
 
 直接消费 presentation components，保留唯一 RF-801 application 与订阅、CodeEditor mount/lazy/Markdown 行为。新增 9 项交互/StrictMode/fallback 测试，原全部 headless gates 开发自检完成。cloud 拒绝 AF_UNIX socket，两个 native Electron gates 未运行；已按用户批准补齐 CI 正式行为 probe。独立 reviewer 必须核验冻结 commit 与 CI 后才可正式收口，M8 COMPLETE 数仍为 1/3。
 
-### 2026-10-06 RF-802 CI 启动修复（仍 DEV_DONE）
+### 2026-10-06 RF-802 CI 启动修复（历史交接时为 DEV_DONE）
 
 旧候选 CI 的正式行为测试尚未进入 manifest 即被 setuid-helper 配置阻止。用户明确批准的修复只给 Linux CI 的 formal probe 显式 opt-in no-sandbox；新增 gating/wiring + 原 cleanup focused 13/13。等待新冻结树的 CI native 证据与独立验收，不提前推进 RF-803，也不作为 M9 security acceptance。
+
+## 2026-10-06 RF-802 独立验收 PASS / COMPLETE
+
+冻结树 `29fcb6e` 的 [CI37393076342](https://github.com/yulu-gm/FishMark/actions/runs/37393076342) Quality/Full regression/Bundle budget 全部成功；实际 PR merge `dc90fa5` 与候选 `44e5767`、本地 `e20af0e` tree 相同。独立 reviewer 检查原日志与 artifacts，确认 safety七项、正式行为121/121/2541 targets、0unexpected/not-run，默认完整回归2891+10exact及原bundle1428000/1430000。独立本地全部门禁通过；完整回归使用官方双worker，两个默认并发启动时序失败保留。首次native helper失败与获准的CI test-only opt-in见测试报告，不构成M9安全验收。M8完成2/3，RF-803仍PLANNED；最终文档树发布CI另核验。

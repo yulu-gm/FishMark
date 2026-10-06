@@ -1,5 +1,52 @@
 # FishMark 测试报告
 
+## 2026-10-06 RF-802 独立统一验收：PASS
+
+RF-802 为 COMPLETE，M8 为 **2/3**；RF-803/M9 未开始。独立审查范围 `1d33e6a..e20af0e`，无阻断架构 findings。测试使用最终冻结树 `29fcb6e50ffe73834e9f2c6ea61c52d5b1a85e63`；实现与 reviewer 分离，重门禁串行。
+
+### 本地独立证据
+
+Linux cloud，Node v24.19.0 / npm 11.9.0，Electron 41.2.0。
+
+| 范围 / 命令 | 新鲜结果 |
+| --- | --- |
+| application/editor/App/driver + launcher focused | 25 files / 471 passed |
+| `npm test -- src/main/editor-behavior-manifest-launcher.test.ts packages/test-harness/src/handlers/probe-editor-behavior.test.ts` | 2 files / 13 passed，原 cleanup 与新增 gating/wiring，两次均通过 |
+| `npm run typecheck`、`npm run lint`、`npm run build` | 全部 exit 0；lint 0 errors / 0 warnings |
+| `VITEST_MAX_WORKERS=2 npm run test:regression` | 全量 217 files / 2901 cases，2891 passed + 10 exact known，0 unexpected / skip / collection-hook-unhandled errors，89.70 秒；原 wrapper gate PASS |
+| `npm run test:editor-foundation` | 6 files / 310 passed，22.66 秒 |
+| `npm run perf:bundle` | 原 budget、15 forbidden-initial 与4 required-lazy contracts 全部 PASS；max initial 179699/300000 B，max initial gzip 56959/90000 B，total initial gzip 96157/260000 B，total JS gzip 1428000/1430000 B |
+| 修改的两个 launcher 脚本 `node --check` 与 `git diff --check` | PASS |
+
+本地 cloud 的 socket/display 限制未改变，两个 native Electron probes 不在本地执行。不以开发日志替代本轮证据，也不把原 Vitest 的十条已知失败称为全绿。
+
+### 精确树远端 CI 与 native artifacts
+
+[CI 37393076342](https://github.com/yulu-gm/FishMark/actions/runs/37393076342)，Linux / Node v22.23.3。候选 head `44e5767d5af534ea6e9ae7e5db520b87154ea630`；三个 job 实际 checkout 均为 synthetic PR merge `dc90fa53f82c6ec675eda3b2a88f5ae5187cead6`。两者 tree 均为 `29fcb6e50ffe73834e9f2c6ea61c52d5b1a85e63`，与本地 `e20af0ea3eaa7bc66a508dfba1b293d1d527148e` 完全一致。三个 job 均 terminal success，tracked-tree 检查通过；独立 reviewer 已读取全部 job logs 及原 artifacts。
+
+| Job / artifact | 新鲜结果 |
+| --- | --- |
+| Quality | typecheck/lint/build，19 files / 699 focused tests 全通过 |
+| `workspace-safety.json` | PASS，Linux / Electron 41.2.0；built-product-startup、test-bridge-absent、two-atomic-saves、dirty-close-cancel、edit-after-cancel、pending-close-save、disk-content-exact 七项；prompts `[2,0]`，最终磁盘文本 `Smoke first-save second-save pending-close after-cancel` |
+| `editor-behavior.json` | pass=true；未筛选全 manifest 121/121 cases，363 observations，1 window / 1 view，2541 targets；verified-existing 79、verified-runner 2363、known-defect-observed 99、unexpected 0、not-run 0；24.579 秒 |
+| Full regression | 默认完整原 wrapper，217 files / 2901 tests；2891 passed + 10 exact known failures；0 unexpected/skips/errors/unresolved baseline，PASS |
+| Bundle budget | 原四个上限实测与本地相同：179699、56959、96157、1428000 B，所有 source/lazy contracts PASS |
+
+行为 CI 显式设置 `FISHMARK_EDITOR_BEHAVIOR_CI_NO_SANDBOX=1`，且 launcher 同时要求 Linux 与 CI=true；用户已批准仅此测试进程模式。没有改产品 BrowserWindow 配置或系统 helper 权限；该结果不构成 M9 OS-sandbox/security 验收。安全 smoke 的既有 headless Linux launch 限制同样保留。
+
+### 首次失败与复验（保留）
+
+1. 原候选本地 `cf016f6` / 远端 `a8262d1`（tree `a6daaed`）的 [CI 37326810472](https://github.com/yulu-gm/FishMark/actions/runs/37326810472)：regression/bundle/safety 通过，formal behavior 因 `chrome-sandbox` helper 不是 root-owned / 4755 而在 manifest 前 abort。脚本虽然打印预定 report 路径，但没有生成 JSON；未将此运行当作行为 PASS。获准的三条件 test-only launcher 修复后，上述新 CI 才取得原始成功报告。
+2. 最终本地 `e20af0e` 默认全回归首轮 38.99 秒、次轮 44.67 秒，均 2890 passed + 10 exact known + 1 unexpected、0运行错误。相同额外失败：`packages/test-harness/src/handlers/probe-editor-behavior.test.ts:58`，100ms hard-timeout 前 descendant PID 文件未建立。该测试及实际 cleanup 函数与基线不变；新增 argument builder 不介入它的执行。两次 focused 13/13、官方双 worker 全量和默认远端全量均通过。记录为本地高并发启动时序风险，不删除断言、不增加 timeout、不修改 baseline，不宣称默认本地全绿。
+3. 上一冻结树 `cf016f6` 的独立本地默认完整回归也曾通过（2883 + 10 exact known）；该证据只用于历史对照，不替代最终树的测试。
+
+### 证据位置与边界
+
+- 当前本地日志：`/tmp/rf802-review-final-focused.log`、`rf802-review-final-launcher.log`、`rf802-review-final-launcher-repeat.log`、`rf802-review-final-typecheck.log`、`rf802-review-final-lint.log`、`rf802-review-final-build.log`、`rf802-review-final-workers2-test-regression.log`、`rf802-review-final-test-editor-foundation.log`、`rf802-review-final-perf-bundle.log`。
+- 两轮本地失败日志：`/tmp/rf802-review-final-test-regression.log` 与 `/tmp/rf802-review-final-repeat-test-regression.log`；JSON 分别保留在 `.artifacts/ci/rf802-review-final-first-vitest-full{,.gate}.json` 与 `rf802-review-final-second-vitest-full{,.gate}.json`，最终标准 `vitest-full{,.gate}.json` 为双 worker PASS。
+- 远端日志和 artifacts 可在各 run 查看；下载副本位于 `/workspace/shared/fishmark_rf802_ci/run_37393076342/` 与 `run_37326810472/`，包含原 JSON、日志与 ZIP。
+- [架构验收](../reports/reviews/2026-10-06-rf-802-architecture.md)、[任务总结与人工步骤](../reports/task-summaries/RF-802.md)。没有宣称 M9 完成：真实平台 IME、全面性能/E2E/安全门禁、10 条已知测试缺陷及99个行为 known-defect 观测继续保留。bundle 仅余2000 B gzip。最终文档树发布 CI 需另核验，候选 run 不冒充 main run。
+
 ## 2026-10-05 RF-801 独立统一验收：PASS
 
 RF-801 已达到 COMPLETE，M8 为 **1/3**；RF-802、RF-803 与 M9 保持后续范围。独立验收环境为 macOS arm64、Node v25.8.0、npm 11.11.0、Electron 41.2.0，所有重门禁串行执行。两条 P1（排队外部冲突操作的身份失效、drain/IPC 期间 disposal）修复后重新验收；开发侧早期 build 结果不作为本节证据。

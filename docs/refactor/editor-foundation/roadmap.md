@@ -1660,7 +1660,7 @@ npm.cmd run perf:baseline
 
 #### RF-802: React shell decomposition
 
-**状态（2026-10-05）：** DEV_DONE；本地开发自检完成，native gates 待 CI，独立验收待执行。
+**状态（2026-10-06）：** COMPLETE；独立架构/任务验收 PASS，M8 为 2/3。
 
 **Outcome:** `App.tsx` is a composition root and `WorkspaceShell` is focused presentation.
 
@@ -1684,7 +1684,7 @@ npm.cmd run typecheck
 
 **Exit:** no large React component owns document or workspace workflows.
 
-**执行证据：** [handoff](../../plans/2026-10-05-rf-802-handoff.md)。459 focused / 310 foundation，typecheck/lint/build、完整精确 regression（217 files，2883 passed + 10 exact known）和原 bundle（total JS gzip 1428000/1430000）开发自检通过。真实 Electron 本地未运行，待 CI；不提前声明 task acceptance 或 M8/M9 完成。
+**验收证据：** [任务总结](../../../reports/task-summaries/RF-802.md)、[架构验收](../../../reports/reviews/2026-10-06-rf-802-architecture.md)。471 focused / 13 launcher-cleanup / 310 foundation，typecheck/lint/build、完整精确regression（217 files / 2891+10exact，本地双worker与默认CI）和原bundle1428000/1430000通过。[精确树CI37393076342](https://github.com/yulu-gm/FishMark/actions/runs/37393076342) 全绿，native safety七项、正式行为121/121通过。两个本地默认并发失败与首次CI启动失败保留；获准的CI test-only no-sandbox不构成M9安全验收。
 
 #### RF-803: Main/preload composition split
 
