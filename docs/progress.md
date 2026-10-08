@@ -1,5 +1,10 @@
 # FishMark 进展记录
 
+## 2026-10-08 TASK-UX-TABLE-001：独立几何诊断
+
+仅诊断完成，产品未修复/未验收。冻结main53d86ac；8个真实Electron样例复现shell导致53px下移，字体YaHei→Noto Sans SC使本机glyph box24→21px；CSS占位对照位移归零。需父线程选择阅读空间取舍，字体层方案仍待验证；Typora/IME未测。详见[任务总结](../reports/task-summaries/TASK-UX-TABLE-001.md)。
+
+
 ## 2026-10-08 TASK-UX-LAUNCH-001：yuluStation 激活切片
 
 状态：**CHANGES_REQUESTED；窄修复代码/独立review PASS，Windows原门禁FAIL**。已完成激活四场景及多文件/未ready/send failure/发送前后销毁/reload/退出取消和确认的真实八场景。223定向、build/lint/typecheck、正式121/121/2541与bundle1429199/1430000通过。最后同目录精确main3151 passed、补丁3175 passed，均10exact known+同一symlink skip，新增异常0但wrapper仍FAIL；前两次搜索timeout保留，最后控制不复现。发布需具备symlink能力的获准环境或明确门禁例外批准；Explorer关联/远端CI未测。e338回退点保留，本地候选不push，不变更M9/cp13/cp16/RF902/903。详见 [任务总结](../reports/task-summaries/TASK-UX-LAUNCH-001.md)。
