@@ -10,6 +10,7 @@ import { EditorView, type ViewUpdate } from "@codemirror/view";
 
 import {
   createFishMarkMarkdownExtensions,
+  readEditorSelection,
   refreshMarkdownDecorations,
   runTableDelete,
   runTableDeleteColumn,
@@ -642,10 +643,7 @@ export function createCodeEditorController(
 
   return {
     getContent: () => view.state.doc.toString(),
-    getSelection: () => ({
-      anchor: view.state.selection.main.anchor,
-      head: view.state.selection.main.head
-    }),
+    getSelection: () => readEditorSelection(view),
     async prepareFindReplace() {
       await ensureSearchRuntime();
     },

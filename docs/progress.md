@@ -1,5 +1,11 @@
 # FishMark 进展记录
 
+## 2026-10-08 TASK-UX-SEARCH-001：独立 Windows 检查点
+
+状态：**CHANGES_REQUESTED；整体验收 FAIL**。搜索小修定向 41/41、实际产品搜索 18/18 断言（另 1 条拖选前置观察）、build/lint/typecheck 与原体积门禁通过（1429191/1430000 B）。全量原门禁仍 FAIL：3151 passed、10 exact known、1 Windows symlink unexpected skip；纯 main 同机复现该 EPERM 条件。中文字体/约1px高度差仍未解决；实验补丁因英文继承及原生撤销风险撤回。Typora 实际界面对照未运行。
+
+本地隔离分支 `codex/windows-search-ux-20261008`，不推送，不修改用户原仓库或主线里程碑。RF901准确候选未获取；用户提供的1431588/1431000失败和16/24ms目标状态不变，RF902/903未启动。完整证据、范围和人工验收见 [任务总结](../reports/task-summaries/TASK-UX-SEARCH-001.md)。下方 M8/M9 表保留其 2026-10-06 历史口径。
+
 工作流状态：
 
 `TODO` -> `DEV_IN_PROGRESS` -> `DEV_DONE` -> `REVIEW_IN_PROGRESS` -> `CHANGES_REQUESTED` / `ACCEPTED` -> `CLOSED`

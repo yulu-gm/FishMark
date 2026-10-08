@@ -831,7 +831,7 @@ function readTableCellText(editor: HTMLElement): string {
   return editor.textContent ?? "";
 }
 
-function readEditableSelection(editor: HTMLElement): { start: number; end: number } {
+export function readEditableSelection(editor: HTMLElement): { start: number; end: number } {
   const selection = editor.ownerDocument.getSelection();
   const contentLength = readTableCellText(editor).length;
 

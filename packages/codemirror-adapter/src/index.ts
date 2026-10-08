@@ -71,6 +71,7 @@ export {
   type SemanticCommandResult
 } from "./semantic-keypress";
 export { createCanonicalSeparatorField } from "./canonical-separators";
+export { readEditorSelection } from "./editor-selection";
 export {
   resolveArrowDown,
   resolveArrowUp,
@@ -111,6 +112,7 @@ export {
   INACTIVE_INLINE_FOOTNOTE_REFERENCE_SELECTOR
 } from "./decorations/footnote-widgets";
 export { clearCodeHighlightCache } from "./decorations/code-highlight-cache";
+export { computeEditorRevealDelta } from "./viewport-reveal";
 export {
   clearCodeHighlightLanguageLoaderState,
   subscribeCodeHighlightParserLoaded,

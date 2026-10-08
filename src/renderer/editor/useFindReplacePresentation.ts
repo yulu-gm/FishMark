@@ -5,8 +5,8 @@ type FindReplaceSnapshot = { matchCount: number; currentMatchIndex: number | nul
 /** Local form values mirror CodeMirror's query; no document/workspace state is owned here. */
 export function useFindReplacePresentation({
   activeTabId, editorEpoch, editorLoadRevision, editorRef, isDocumentOpen,
-  isSearchViewActive, isViewContainerEnabled, onCloseViewContainer, onToggleViewContainer
-}: Pick<WorkspaceShellProps, "editorEpoch" | "editorLoadRevision" | "editorRef" | "isDocumentOpen" | "onCloseViewContainer" | "onToggleViewContainer"> & {
+  activeViewContainer, isSearchViewActive, isViewContainerEnabled, onCloseViewContainer, onToggleViewContainer
+}: Pick<WorkspaceShellProps, "activeViewContainer" | "editorEpoch" | "editorLoadRevision" | "editorRef" | "isDocumentOpen" | "onCloseViewContainer" | "onToggleViewContainer"> & {
   activeTabId: string | null; isSearchViewActive: boolean; isViewContainerEnabled: boolean;
 }) {
   const [findText, setFindText] = useState("");
@@ -16,9 +16,13 @@ export function useFindReplacePresentation({
     currentMatchIndex: null
   });
   const findInputRef = useRef<HTMLInputElement | null>(null);
+  const openRequestRef = useRef(0);
   const searchDocumentIdentityRef = useRef<string | null>(
     activeTabId === null ? null : `${activeTabId}:${editorEpoch}:${editorLoadRevision}`
   );
+  useEffect(() => () => {
+    openRequestRef.current += 1;
+  }, [activeTabId, activeViewContainer, editorEpoch, editorLoadRevision, isDocumentOpen]);
   useEffect(() => {
     if (!isDocumentOpen) {
       return;
@@ -62,6 +66,7 @@ export function useFindReplacePresentation({
   }, [activeTabId, editorEpoch, editorLoadRevision, editorRef, isSearchViewActive]);
 
   const closeFindReplacePanel = () => {
+    openRequestRef.current += 1;
     setFindText("");
     setReplaceText("");
     setFindReplaceSnapshot(
@@ -109,6 +114,9 @@ export function useFindReplacePresentation({
   };
 
   const handleFindReplaceKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) {
+      return;
+    }
     if (event.key === "Escape") {
       event.preventDefault();
       exitSearchViewContainer();
@@ -125,22 +133,54 @@ export function useFindReplacePresentation({
     }
   };
 
+  const applySelectedTextQuery = (selectedText: string | undefined) => {
+    // search 输入会移除换行；仅带入非空单行，避免显示文本与实际查询不一致。
+    if (!selectedText || /[\r\n]/u.test(selectedText)) {
+      return;
+    }
+    setFindText(selectedText);
+    setFindReplaceSnapshot(editorRef.current?.updateFindReplaceQuery({
+      search: selectedText,
+      replace: replaceText
+    }) ?? { matchCount: 0, currentMatchIndex: null });
+  };
+
+  const openSearchViewContainer = (selectedText?: string) => {
+    const request = ++openRequestRef.current;
+    void (editorRef.current?.prepareFindReplace?.() ?? Promise.resolve()).then(() => {
+      if (openRequestRef.current !== request) {
+        return;
+      }
+      applySelectedTextQuery(selectedText);
+      onToggleViewContainer("search");
+    });
+  };
+
   const toggleSearchViewContainer = () => {
     if (isSearchViewActive) {
       onToggleViewContainer("search");
       return;
     }
-
-    void (editorRef.current?.prepareFindReplace?.() ?? Promise.resolve()).then(() => {
-      onToggleViewContainer("search");
-    });
+    openSearchViewContainer();
   };
 
   const handleWorkspaceKeyDownCapture = (event: KeyboardEvent<HTMLElement>) => {
     if (
+      event.defaultPrevented ||
+      event.nativeEvent.isComposing ||
+      event.nativeEvent.keyCode === 229
+    ) {
+      return;
+    }
+    if (event.key === "Escape") {
+      openRequestRef.current += 1;
+      return;
+    }
+    if (
       !isViewContainerEnabled ||
       event.key.toLowerCase() !== "f" ||
-      (!event.metaKey && !event.ctrlKey)
+      event.altKey || event.shiftKey ||
+      event.metaKey === event.ctrlKey
     ) {
       return;
     }
@@ -150,11 +190,21 @@ export function useFindReplacePresentation({
      * view container; the rail button drives the same toggle.
      */
     event.preventDefault();
+    // 移焦前读取正文的源文档选区；Search 自身的快捷键不带入旧的编辑器选区。
+    const selection = event.target instanceof Element && event.target.closest(".cm-editor")
+      ? editorRef.current?.getSelection()
+      : null;
+    const selectedText = selection && selection.anchor !== selection.head
+      ? editorRef.current?.getContent().slice(
+        Math.min(selection.anchor, selection.head), Math.max(selection.anchor, selection.head)
+      )
+      : undefined;
     if (isSearchViewActive) {
+      applySelectedTextQuery(selectedText);
       findInputRef.current?.focus();
       return;
     }
-    toggleSearchViewContainer();
+    openSearchViewContainer(selectedText);
   };
 
   const matchStatusLabel = findText.length === 0

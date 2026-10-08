@@ -1,5 +1,13 @@
 # FishMark 决策日志
 
+## 2026-10-08：搜索采用现有源码权威，字体实验不进入检查点
+
+- Ctrl+F的异步打开以请求身份取消；新Search焦点意图优先于旧RAF/表格微任务。Esc、切Outline/文档与卸载均有竞态回归。
+- 表格查找只读当前规范快照与CM完整match，在布局阶段同步reveal当前DOM；高亮整格，不持有旧widget offset权威，不建立第二文档。
+- controller选择接口仅对活动plain cell、同一当前单元格及DOM/source全文一致的范围作精确投射，不dispatch改变CM selection。只自动带入非空单行；多行与转义解码差异有明确安全fallback。
+- 字体方案按实际Windows证据撤回：span导致新增英文继承CJK字体，输入后重分段破坏原生撤销。既有CJK设计排除普通fallback；另行考虑字体层Unicode范围/face能力，不改列宽或固定行高掩盖问题。
+- 原完整回归的Windows symlink skip仍判FAIL，保留同机main基线证据，不改known失败/skip/权限。原1430000预算PASS但只剩809B余量；RF901用户批准1431000与其+588失败均不变。本检查点整体FAIL，不推送。
+
 用于记录会影响后续工作的简短架构或流程决策。
 
 ## 模板

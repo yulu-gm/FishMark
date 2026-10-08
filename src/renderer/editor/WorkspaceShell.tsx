@@ -185,7 +185,7 @@ export function WorkspaceShell({
     handleFindTextChange, handleReplaceTextChange, toggleSearchViewContainer, handleWorkspaceKeyDownCapture
   } = useFindReplacePresentation({
     activeTabId, editorEpoch, editorLoadRevision, editorRef,
-    isDocumentOpen, isSearchViewActive, isViewContainerEnabled, onCloseViewContainer, onToggleViewContainer
+    isDocumentOpen, activeViewContainer, isSearchViewActive, isViewContainerEnabled, onCloseViewContainer, onToggleViewContainer
   });
   const { displayedSidePanelWidth, isResizingSidePanel, handleSidePanelResizePointerDown,
     handleSidePanelResizePointerMove, finishSidePanelResize, handleSidePanelResizeKeyDown

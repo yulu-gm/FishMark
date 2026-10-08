@@ -246,7 +246,12 @@ export function useEditorFocusPresentation({
     }
 
     const frame = requestAnimationFrame(() => {
-      if (isFocusedEditorInteractiveElement(editorContainerRef.current)) {
+      // 进入编辑模式或加载文档后，Search 可能先于此帧取得焦点；保留这次较新的聚焦意图。
+      const activeElement = document.activeElement;
+      if (
+        isFocusedEditorInteractiveElement(editorContainerRef.current) ||
+        (activeElement instanceof Element && activeElement.closest('[data-fishmark-region="search"]'))
+      ) {
         return;
       }
 
@@ -266,6 +271,9 @@ export function useEditorFocusPresentation({
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing || event.keyCode === 229) {
+        return;
+      }
       if (event.key === "Escape" && shellMode === "editing") {
         enterReadingMode();
       }

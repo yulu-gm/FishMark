@@ -1,5 +1,21 @@
 # MVP Backlog
 
+## TASK-UX-SEARCH-001：Windows 搜索体验检查点（2026-10-08）
+
+状态：**CHANGES_REQUESTED；整体验收 FAIL**。独立 published-main 分支，本地检查点，不推送，不改变 M8/M9/RF901 主线状态。
+
+目标：Ctrl+F/异步取消保持焦点；表格命中保留完整 source range 并正确定位；局部单行选择带入查询；按真实 Windows 证据调查表格布局与中文字体。
+
+- [x] 固定 main996cb349、独立 checkout/依赖/产品配置，保留用户原仓库 dirty 内容。
+- [x] 搜索焦点、Esc 过时打开取消、单行选区带入、表格 current-match/reveal 与排队焦点修复；41 项定向回归和 Windows 18 项搜索断言通过（另 1 条拖选前置观察）。
+- [x] 同机原版/补丁后的功能与字体取证；未据少量样例否定更广泛布局反馈，未改列宽算法。
+- [x] 新鲜 build/lint/typecheck、原 full regression、原 bundle contract 与独立 review；保存通过、失败及未测项。
+- [ ] 中文字体一致性修复：原约 1px 高度差仍复现；span/输入后重分段实验因英文继承和原生撤销风险撤回，需字体层专项方案。
+- [ ] 原全量门禁通过：3151 PASS + 10 exact known + 1 Windows symlink unexpected skip，原 wrapper FAIL；同机纯 main 也因 EPERM skip，不改白名单。
+- [ ] Typora 实际界面对照及整体验收/发布。Native IME、M9 性能和远端 CI 本轮未运行。
+
+原体积门禁 PASS：1429191/1430000 B（余量 809 B），预算/fixture/lockfile 不变。执行交接见 `docs/plans/2026-10-08-search-ux-handoff.md`；统一结果和人工步骤见 `reports/task-summaries/TASK-UX-SEARCH-001.md`。
+
 > 这是项目唯一有效的执行计划文档。不要创建 `v01`、`v02`、`draft` 之类的计划副本；如果计划需要调整，直接修改本文件。`docs/progress.md` 只负责记录状态，不重复定义计划内容。
 
 ## 使用规则

@@ -1321,3 +1321,15 @@ RF-801 独立审查退回补充：外部冲突操作排队前捕获 A 的 editor
 - 真 Electron：打开、编辑、保存、再次保存；pending edit 后 native close Cancel，再输入并 close Save，磁盘与内存一致；移动/detach tab 后 source window 不得保存/修改新 owner 的 tab。
 - 设置/主题/字体/recent、图片目录取消、clipboard import、HTML export 与安全 external link 保持原行为；非法外链 scheme 被拒绝。
 - 原 focused/main/preload、完整 exact regression、foundation、typecheck/lint/build、bundle、workspace-safety 和 formal behavior 都必须保留；无法启动真实 Electron 的环境明确标为阻塞，不用 headless unit 代替。
+## TASK-UX-SEARCH-001：Windows 搜索焦点与表格命中
+
+本节是定向体验回归清单；具体运行结果见当轮 test-report，不据此宣称 M9/native IME/完整性能验收通过。
+
+1. 新建或切换文档进入 editing 后立刻 Ctrl/Cmd+F；首次冷加载、再次调用、Esc立即/动画结束后重开均由 Search 输入持焦，后续 RAF/microtask 不抢回编辑器。
+2. Search 准备期间按 Esc、切 Outline、换文档或卸载，过时请求不能重新打开 Search。
+3. 从正文反向/正向单行 source 选区带入查询；从可与源码精确对应的活动 plain 表格格局部 DOM 单行选区带入查询；多行选区不覆盖已有查询，转义竖线解码等不等文本安全回退原 CM 范围；Search/Replace 输入内再次 Ctrl+F 不覆盖用户已输入查询。自动 controller/mock 选区与真实 DOM 选择分别取证。
+4. Ctrl+Alt/AltGraph、Ctrl+Shift、同时 Ctrl+Meta、已 defaultPrevented 的事件不得误开搜索。composition/isComposing/229 时 Ctrl+F、Enter、Esc不误导航或清空；真实 OS IME仍需另列平台证据。
+5. 文档中混合普通段落和表格命中：前后一个、同格多命中、多格、首尾循环均保持完整 canonical match 范围及计数，Search 输入保持焦点。
+6. 可见和离屏长表命中时当前格高亮，目标在 editor scroller 内可见；记录 cell/scroller rect、scrollTop/Left及页面滚动，不通过强制cell focus折叠匹配选区。
+7. 表前插入、替换、刷新、换文档、切源码/展示模式后，当前位置、高亮与source selection一致；过时 reveal不得滚动新文档。无第二canonical模型或旧widget位置缓存。
+8. 表格布局在同字体/DPR下比较短文本、长散文、无空格长串、中英、2/4/8列，在产品允许宽度和编辑/退出状态记录列宽/行高/scrollWidth。只有复现证据支持时才调整布局规则；Typora界面对照缺失不能说已达到Typora一致。

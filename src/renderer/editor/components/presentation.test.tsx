@@ -100,7 +100,7 @@ it("clears Search on Escape and identity changes, reopens during exit without st
   const editorRef = { current: { clearFindReplaceQuery, updateFindReplaceQuery, focus, prepareFindReplace: vi.fn(async () => { }) } as unknown as CodeEditorHandle };
   function Harness({ epoch = 1, revision = 1 }: { epoch?: number; revision?: number }) {
     const panel = useViewContainerPresentation();
-    const search = useFindReplacePresentation({ activeTabId: "tab-a", editorEpoch: epoch, editorLoadRevision: revision, editorRef, isDocumentOpen: true, isSearchViewActive: panel.activeViewContainer === "search", isViewContainerEnabled: true, onCloseViewContainer: panel.closeViewContainer, onToggleViewContainer: panel.toggleViewContainer });
+    const search = useFindReplacePresentation({ activeTabId: "tab-a", editorEpoch: epoch, editorLoadRevision: revision, editorRef, isDocumentOpen: true, activeViewContainer: panel.activeViewContainer, isSearchViewActive: panel.activeViewContainer === "search", isViewContainerEnabled: true, onCloseViewContainer: panel.closeViewContainer, onToggleViewContainer: panel.toggleViewContainer });
     return <div onKeyDownCapture={search.handleWorkspaceKeyDownCapture}>
       <button onClick={search.toggleSearchViewContainer}>Search</button>
       {(panel.activeViewContainer ?? panel.closingViewContainer) === "search" ? <FindReplacePanel

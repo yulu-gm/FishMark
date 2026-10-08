@@ -92,12 +92,14 @@
   background: var(--fishmark-current-line-bg, transparent);
 }
 
-.document-editor .cm-searchMatch {
+.document-editor .cm-searchMatch,
+.document-editor .cm-table-widget-input.cm-table-search-match {
   background: color-mix(in srgb, var(--fishmark-text-accent, #4f7cff) 22%, transparent);
   outline: 1px solid color-mix(in srgb, var(--fishmark-text-accent, #4f7cff) 32%, transparent);
 }
 
-.document-editor .cm-searchMatch-selected {
+.document-editor .cm-searchMatch-selected,
+.document-editor .cm-table-widget-input.cm-table-search-match {
   background: color-mix(in srgb, var(--fishmark-text-accent, #4f7cff) 34%, transparent);
   outline-color: color-mix(in srgb, var(--fishmark-text-accent, #4f7cff) 58%, transparent);
 }

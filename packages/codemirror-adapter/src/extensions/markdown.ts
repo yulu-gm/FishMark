@@ -251,7 +251,14 @@ export function createFishMarkMarkdownExtensions(
     target: TablePosition,
     options?: { restoreSelection?: boolean; revealIntent?: EditorRevealIntent }
   ) => {
+    const focusOwner = view.dom.ownerDocument.activeElement;
     queueMicrotask(() => {
+      // 已排队的光标转移不能折叠后来产生的搜索或其他范围选区。
+      if (tableInteractionView !== view || !view.state.selection.main.empty) return;
+      const currentFocus = view.dom.ownerDocument.activeElement;
+      // 排队后用户已转到另一个外部控件时放弃焦点；DOM 重建退回 body 不算主动转移。
+      if (currentFocus !== focusOwner && currentFocus !== view.dom.ownerDocument.body &&
+          currentFocus !== null && !view.dom.contains(currentFocus)) return;
       const liveActiveState = createLiveActiveBlockState(view.state);
       const liveCursor = liveActiveState.tableCursor;
 

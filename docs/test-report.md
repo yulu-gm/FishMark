@@ -1,5 +1,24 @@
 # FishMark 测试报告
 
+## 2026-10-08 TASK-UX-SEARCH-001 Windows 检查点：FAIL
+
+独立来源 main `996cb3496986386a56a022583b61af4f5e5e3e54`。搜索修复局部通过，但中文字体仍失败、原全量门禁仍失败，不能发布或宣称任务全部完成。
+
+| 范围 | 最终本轮结果 |
+| --- | --- |
+| Find/selection/focus/table search 独立定向 | 4 文件 41/41 PASS；Esc异步取消、LF/CRLF不覆盖单行查询、解码不等文本安全fallback均有回归 |
+| build / lint / typecheck | PASS；最终源码12:12 UTC重新lint/typecheck，UI使用最后正常产品build |
+| 原完整回归（双worker） | FAIL；224文件/3162cases：3151 passed +10 exact known +1 unexpected skip；0 collection/hook/unhandled errors、0 unresolved baseline |
+| 原 bundle contract | PASS；totalJSgzip1429191/1430000 B；初始179699/300000、56956/90000、totalInitial96451/260000；15 forbidden与4 required-lazy通过；预算未变 |
+| 实际Windows v2窗口 | 18/18搜索断言PASS（另1条拖选前置观察）；两项字体场景FAIL，report总体FAIL/exit1；48行长表用真实cell rect验证离屏跳转 |
+| Typora/nativeIME/完整M9矩阵/远端CI | 未运行 |
+
+Windows symlink用例自身因EPERM动态skip，未匹配原known-failure contract，故wrapper原判FAIL。独立published-main副本运行同文件也是7PASS+1SKIP，源码经EOL转换与996cb blob精确一致；不将平台原因改写成门禁PASS。十项既有parser/list失败保持原指纹。
+
+普通/表格单行选区带入、Esc后重开、表格范围与focus已修。中文字体原缺陷在Georgia+YaHei、1200/900宽度复现：mixed表高162.1875→161.1875→162.1875，编辑中文字体变Noto Sans SC。span实验静态改善却导致末尾英文继承CJK字体；模拟输入后重分段使真实CtrlZ/Y失效，全部字体实验撤回。诊断另有关闭Hard timeout，失败记录保留，未据小样例否定用户更广泛布局反馈。
+
+最终命令与完整JSON/PNG在`.artifacts/windows-search-ux/`，同机纯main对照在相邻`fishmark-search-baseline-main/.artifacts/`。早期两行fixture、无效末尾caret前置条件和font实验结果单独保留；不与最终v2作性能AB比较。环境、源码身份、界限及人工步骤见 [任务总结](../reports/task-summaries/TASK-UX-SEARCH-001.md)，结构复核见 [独立review](../reports/reviews/2026-10-08-search-ux-architecture.md)。
+
 ## 2026-10-06 RF-803 Mac 独立统一验收：PASS
 
 RF-803 COMPLETE，M8 **3/3 COMPLETE**，RF-901/M9 未开始。审查范围 `b1d4a805cf0d2cd6928144a9b6959f16781b0451..9f0fe2339056db7aa74be75da4942d2721231cd9`，冻结 tree `25c526fc52c849f054d01b131f5517e83c5512c6`。本地独立 detached worktree 验收，不修改实现。远端 main 新鲜度、推送及最终提交 CI 尚待父线程处理，本节不表示已发布。
