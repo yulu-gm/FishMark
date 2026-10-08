@@ -1,8 +1,8 @@
 # FishMark 进展记录
 
-## 2026-10-08 TASK-UX-TABLE-002：字体一致性本地候选
+## 2026-10-08 TASK-UX-TABLE-002：字体候选独立审查 CHANGES_REQUESTED
 
-表格限定Unicode字体映射避免输入DOM重建；真实Electron11/11、原生选区替换/undo/redo/重复进入通过。build/lint/typecheck及原bundle1429561/1430000通过；完整3179pass+10exactknown+原symlink skip，门禁仍FAIL。IME/Typora及跨字体原生粗体等价性未测，尚未独立review、不push。短文档无滚动空间，锚点补偿无法通用消除53px；未提交布局取舍。详见[总结](../reports/task-summaries/TASK-UX-TABLE-002.md)。
+表格限定Unicode字体映射避免输入DOM重建；真实Electron11/11、原生选区替换/undo/redo/重复进入通过。build/lint/typecheck及原bundle1429561/1430000通过；完整3179pass+10exactknown+原symlink skip，门禁仍FAIL。独立review发现两项P2：丢失原生Bold字形、编辑行内代码错误使用正文CJK偏好；候选不得原样合入。IME/Typora/跨平台未测，不push。短文档无滚动空间，锚点补偿无法通用消除53px；未提交布局取舍。详见[总结](../reports/task-summaries/TASK-UX-TABLE-002.md)。
 
 
 ## 2026-10-08 TASK-UX-TABLE-001：独立几何诊断

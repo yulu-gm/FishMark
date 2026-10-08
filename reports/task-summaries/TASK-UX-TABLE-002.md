@@ -1,6 +1,6 @@
 # TASK-UX-TABLE-002 — Table CJK font consistency candidate
 
-Status: local candidate; no push, no release acceptance. Base diagnosis: `7d8fc870ead8b160e4beb54ca0cd0f593c3cae66`. Local main remains frozen at `53d86ac377e6a8610c45be8d8f8c6cde3c611b4b`.
+Status: **CHANGES_REQUESTED after independent review**; no push, no release acceptance. Base diagnosis: `7d8fc870ead8b160e4beb54ca0cd0f593c3cae66`. Local main remains frozen at `53d86ac377e6a8610c45be8d8f8c6cde3c611b4b`.
 
 ## Change and scope
 
@@ -43,4 +43,4 @@ Evidence: `.artifacts/table-transition/anchor-short/` and `anchor-scrolled/`. Th
 - Full regression: **3179 passed, 10 exact known failures, 1 unexpected symlink skip, 0 collection/hook/unhandled errors**. Four new passing tests versus frozen53d86ac; Windows gate remains FAIL. Raw `.artifacts/table-transition/font-regression.json` and `.log` preserve it. No allowlist or OS settings changed.
 - Original bundle budget PASS: **1429561 / 1430000 gzip bytes** (+362 versus frozen checkpoint).
 - Initial script quoting, test-environment setup and strict-zero geometry failures are retained in local logs. They were corrected before the asserted matrix; the earlier strict-zero result rejected only the recorded 1/64px rounding, not a whole-pixel difference.
-- No new independent review yet. Frozen launch release still awaits the user's Windows gate decision. M9/cp13/cp16 untouched.
+- Independent review completed: **CHANGES_REQUESTED**, two P2 contract regressions (native bold-face selection replaced by regular synthesis; active inline code newly uses prose CJK preference). See [review](../reviews/2026-10-08-table-font-review.md). Existing CSS family stacks also are not faithfully represented by one local face name. The candidate remains isolated and must not merge as-is. No safe minimal code correction was made in this review slice: uniform code-point font mapping cannot distinguish prose from code in the same plain cell, and guessing bold font names would not preserve arbitrary selected families. Frozen launch release still awaits the user's Windows gate decision. M9/cp13/cp16 untouched.
