@@ -1,5 +1,17 @@
 # MVP Backlog
 
+## TASK-UX-LAUNCH-001：yuluStation 窗口激活切片（2026-10-08）
+
+状态：**CHANGES_REQUESTED；整体验收 FAIL**。来自 main dfcfe36b1，独立本地 checkpoint，不 push，不改变 M9/RF901。
+
+- [x] 新机器环境/官方 main/tree 核验；原版与修后同协议双进程证据。
+- [x] 隐藏/最小化窗口 restore/show/focus；无参数 second-instance 激活；34 定向测试、build/lint/typecheck 通过。
+- [ ] 多文件保序、renderer 未 ready 队列、send failure 与销毁竞态完整覆盖。
+- [ ] Windows 原全量门禁通过（main 3151+10exact+1skip；修后3156+10exact+1skip，均 FAIL）。
+- [ ] 独立 review、打包版系统双击、正式行为/bundle 验证及整体收尾。
+
+本轮结果与人工步骤见 `reports/task-summaries/TASK-UX-LAUNCH-001.md`。Typora/表格和冻结性能候选未改。
+
 ## TASK-UX-SEARCH-001：Windows 搜索体验检查点（2026-10-08）
 
 状态：**CHANGES_REQUESTED；整体验收 FAIL**。独立 published-main 分支，本地检查点，不推送，不改变 M8/M9/RF901 主线状态。

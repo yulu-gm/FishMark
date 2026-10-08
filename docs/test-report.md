@@ -1,5 +1,9 @@
 # FishMark 测试报告
 
+## 2026-10-08 TASK-UX-LAUNCH-001：FAIL（激活切片通过）
+
+yuluStation / main dfcfe36b1：真实双进程原版隐藏打开不显示、最小化不恢复、无参数不激活；修后四场景（加可见）均 visible=true/minimized=false/focused=true，第二进程退出0。34定向、build/lint/typecheck通过。完整回归原版重跑3151 passed+10exact+1symlink skip，修后3156+10exact+1symlink skip，均FAIL且0 hook/collection/unhandled errors。原版首轮另出现打包测试hook超时，原始证据保留。未改白名单。独立review与启动边界其余切片未完成；见 `reports/task-summaries/TASK-UX-LAUNCH-001.md`。
+
 ## 2026-10-08 TASK-UX-SEARCH-001 Windows 检查点：FAIL
 
 独立来源 main `996cb3496986386a56a022583b61af4f5e5e3e54`。搜索修复局部通过，但中文字体仍失败、原全量门禁仍失败，不能发布或宣称任务全部完成。

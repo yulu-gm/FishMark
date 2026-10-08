@@ -1,5 +1,11 @@
 # FishMark 决策日志
 
+## 2026-10-08：Windows 启动激活采用最小独立切片
+
+- 基于官方 main dfcfe36b1 独立实现 restore/show/focus，未依赖旧机未提交文件；激活在发送打开事件之前执行，无参数第二进程也激活编辑窗口。
+- 多文件和 ready/send/destroy 恢复不混入本切片完成声明；保留原 Windows symlink FAIL，不放宽 allowlist。原版/修后用同一 Electron 双进程探针对照及隔离 userData。
+- 不改系统关联、Typora许可、renderer字体/列宽或冻结cp13/cp16；整体FAIL，本地checkpoint，待后续覆盖和独立review。
+
 ## 2026-10-08：搜索采用现有源码权威，字体实验不进入检查点
 
 - Ctrl+F的异步打开以请求身份取消；新Search焦点意图优先于旧RAF/表格微任务。Esc、切Outline/文档与卸载均有竞态回归。

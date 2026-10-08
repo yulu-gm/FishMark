@@ -1,5 +1,9 @@
 # FishMark 进展记录
 
+## 2026-10-08 TASK-UX-LAUNCH-001：yuluStation 激活切片
+
+状态：**CHANGES_REQUESTED；整体验收 FAIL**。隐藏、最小化、可见、无参数四场景真实双进程对照完成；34 定向测试及 build/lint/typecheck 通过。原门禁 main 3151 passed、修后3156 passed，均10 exact known +1 symlink unexpected skip，FAIL。多文件/未ready/send failure/销毁竞态、独立 review、打包版双击未完成。本地 checkpoint，不 push，不变更 M9/cp13/cp16/RF902/903。详见 [任务总结](../reports/task-summaries/TASK-UX-LAUNCH-001.md)。
+
 ## 2026-10-08 TASK-UX-SEARCH-001：独立 Windows 检查点
 
 状态：**CHANGES_REQUESTED；整体验收 FAIL**。搜索小修定向 41/41、实际产品搜索 18/18 断言（另 1 条拖选前置观察）、build/lint/typecheck 与原体积门禁通过（1429191/1430000 B）。全量原门禁仍 FAIL：3151 passed、10 exact known、1 Windows symlink unexpected skip；纯 main 同机复现该 EPERM 条件。中文字体/约1px高度差仍未解决；实验补丁因英文继承及原生撤销风险撤回。Typora 实际界面对照未运行。

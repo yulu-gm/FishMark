@@ -35,6 +35,7 @@ import {
   type MenuItemConstructorOptions
 } from "electron";
 import { createApplicationMenuTemplate } from "./application-menu";
+import { activateEditorWindow } from "./activate-editor-window";
 import { importClipboardImage } from "./clipboard-image-import";
 import { resolveMarkdownLaunchPathFromArgv } from "./launch-open-path";
 import { openMarkdownFileFromPath, showOpenMarkdownPathDialog } from "./open-markdown-file";
@@ -126,6 +127,7 @@ const pendingLaunchOpenPaths: string[] = [];
 
 let openEditorWindowForLaunchPath: ((targetPath: string) => void) | null = null;
 let openEmptyEditorWindow: (() => void) | null = null;
+let activateExistingEditorWindow: (() => void) | null = null;
 let runManualAppUpdateCheck: (() => void) | null = null;
 
 type AppUpdaterController = {
@@ -180,7 +182,9 @@ if (!hasSingleInstanceLock) {
   void handleLaunchOpenFromArgv(process.argv);
 
   app.on("second-instance", (_event, argv) => {
-    void handleLaunchOpenFromArgv(argv);
+    if (!handleLaunchOpenFromArgv(argv)) {
+      activateExistingEditorWindow?.();
+    }
   });
 
   app.on("open-file", (event, targetPath) => {
@@ -596,11 +600,22 @@ app.whenReady().then(async () => {
   }
 
   function requestWorkspacePathOpen(window: BrowserWindow, targetPath: string): void {
+    activateEditorWindow(window);
     window.webContents.send(OPEN_WORKSPACE_PATH_EVENT, {
       targetPath
     } satisfies OpenWorkspacePathRequest);
-    window.focus();
   }
+
+  activateExistingEditorWindow = () => {
+    const window = getPreferredWorkspaceWindow() ?? BrowserWindow.getAllWindows().find(
+      (candidate) => !candidate.isDestroyed() && windowManager.getRuntimeMode(candidate) === "editor"
+    );
+    if (window) {
+      activateEditorWindow(window);
+    } else {
+      windowManager.openEditorWindow();
+    }
+  };
 
   function openPathInWorkspace(targetPath: string): void {
     const existingWindow = getPreferredWorkspaceWindow();
