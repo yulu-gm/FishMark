@@ -2,7 +2,7 @@
 
 ## 2026-10-08 TASK-UX-LAUNCH-001：yuluStation 激活切片
 
-状态：**CHANGES_REQUESTED；整体验收 FAIL**。隐藏、最小化、可见、无参数四场景真实双进程对照完成；34 定向测试及 build/lint/typecheck 通过。原门禁 main 3151 passed、修后3156 passed，均10 exact known +1 symlink unexpected skip，FAIL。多文件/未ready/send failure/销毁竞态、独立 review、打包版双击未完成。本地 checkpoint，不 push，不变更 M9/cp13/cp16/RF902/903。详见 [任务总结](../reports/task-summaries/TASK-UX-LAUNCH-001.md)。
+状态：**CHANGES_REQUESTED；窄修复代码/独立review PASS，Windows原门禁FAIL**。已完成激活四场景及多文件/未ready/send failure/发送前后销毁/reload/退出取消和确认的真实八场景。223定向、build/lint/typecheck、正式121/121/2541与bundle1429199/1430000通过。最后同目录精确main3151 passed、补丁3175 passed，均10exact known+同一symlink skip，新增异常0但wrapper仍FAIL；前两次搜索timeout保留，最后控制不复现。发布需具备symlink能力的获准环境或明确门禁例外批准；Explorer关联/远端CI未测。e338回退点保留，本地候选不push，不变更M9/cp13/cp16/RF902/903。详见 [任务总结](../reports/task-summaries/TASK-UX-LAUNCH-001.md)。
 
 ## 2026-10-08 TASK-UX-SEARCH-001：独立 Windows 检查点
 

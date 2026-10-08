@@ -575,12 +575,6 @@ function EditorShell({
   }, [fishmark]);
 
   useEffect(() => {
-    return fishmark.onOpenWorkspacePath((payload) => {
-      void handleOpenMarkdownFromPath(payload.targetPath);
-    });
-  }, [fishmark, handleOpenMarkdownFromPath]);
-
-  useEffect(() => {
     return fishmark.onWorkspaceWindowCloseRequest((input) =>
       handleWorkspaceWindowCloseRequest(input)
     );
@@ -592,6 +586,7 @@ function EditorShell({
 
   useEffect(() => {
     let isCancelled = false;
+    let detachLaunchListener: (() => void) | undefined;
 
     void loadInitialWorkspaceSnapshot().then(async () => {
       if (isCancelled) {
@@ -600,18 +595,21 @@ function EditorShell({
 
       const startupOpenPath = startupOpenPathRef.current;
 
-      if (!startupOpenPath) {
-        return;
+      if (startupOpenPath) {
+        startupOpenPathRef.current = null;
+        await handleOpenMarkdownFromPath(startupOpenPath);
       }
-
-      startupOpenPathRef.current = null;
-      await handleOpenMarkdownFromPath(startupOpenPath);
+      if (isCancelled) return;
+      detachLaunchListener = fishmark.onOpenWorkspacePath((payload) =>
+        handleOpenMarkdownFromPath(payload.targetPath)
+      );
     });
 
     return () => {
       isCancelled = true;
+      detachLaunchListener?.();
     };
-  }, [handleOpenMarkdownFromPath, loadInitialWorkspaceSnapshot]);
+  }, [fishmark, handleOpenMarkdownFromPath, loadInitialWorkspaceSnapshot]);
 
   useEffect(() => {
     let isCancelled = false;

@@ -96,7 +96,7 @@ export interface ProductBridge {
   syncWatchedMarkdownFile: () => Promise<void>;
   importClipboardImage: (input: ImportClipboardImageInput) => Promise<ImportClipboardImageResult>;
   onMenuCommand: (listener: (command: AppMenuCommand) => void) => () => void;
-  onOpenWorkspacePath: (listener: (payload: OpenWorkspacePathRequest) => void) => () => void;
+  onOpenWorkspacePath: (listener: (payload: OpenWorkspacePathRequest) => void | Promise<void>) => () => void;
   onWorkspaceOwnerTabActivationRequest: (
     listener: (request: WorkspaceOwnerTabActivationRequest) => Promise<boolean>
   ) => () => void;

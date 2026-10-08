@@ -220,6 +220,7 @@ describe("preload bridge", () => {
     void api.reorderWorkspaceTab({ tabId: "tab-1", toIndex: 0 });
     void api.moveWorkspaceTabToWindow({ tabId: "tab-1", targetWindowId: "window-2" });
     void api.detachWorkspaceTabToNewWindow({ tabId: "tab-1" });
+    invoke.mockResolvedValue(undefined);
     void api.onOpenWorkspacePath(() => {});
     void api.confirmWorkspaceWindowClose({ requestId: "window-1:close-1" });
     void api.onWorkspaceWindowCloseRequest(async () => false);

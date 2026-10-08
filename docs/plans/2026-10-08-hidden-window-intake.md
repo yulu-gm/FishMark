@@ -5,3 +5,5 @@
 本切片解决已运行编辑窗口隐藏/最小化后第二次启动不能显示，以及无文件参数启动不能激活。复用既有 workspace 路由，不修改 Markdown 数据、renderer DOM、列宽或系统文件关联。
 
 整体启动任务仍要求后续覆盖多文件保序、renderer 未 ready 队列、销毁及 send failure 的端到端恢复；本切片不将这些宣称为已完成。按 AGENTS、MVP_BACKLOG 与 docs/acceptance 的文件打开及稳定交互约束验收，保持原完整回归 allowlist。
+
+续轮用户明确授权收尾以上边界并独立review。范围加入renderer ready/完成握手、FIFO与有界恢复，以及review发现的quit取消/确认退出；Typora后置，不扩大M9，不修改symlink系统前置或白名单。实际完成状态以handoff与任务总结为准。

@@ -2,13 +2,14 @@
 
 ## TASK-UX-LAUNCH-001：yuluStation 窗口激活切片（2026-10-08）
 
-状态：**CHANGES_REQUESTED；整体验收 FAIL**。来自 main dfcfe36b1，独立本地 checkpoint，不 push，不改变 M9/RF901。
+状态：**CHANGES_REQUESTED；窄修复代码/独立review PASS，Windows原完整门禁 FAIL**。来自 main dfcfe36b1；e338d35a保留为首轮回退点，本地候选不push，不改变M9/RF901。
 
 - [x] 新机器环境/官方 main/tree 核验；原版与修后同协议双进程证据。
 - [x] 隐藏/最小化窗口 restore/show/focus；无参数 second-instance 激活；34 定向测试、build/lint/typecheck 通过。
-- [ ] 多文件保序、renderer 未 ready 队列、send failure 与销毁竞态完整覆盖。
-- [ ] Windows 原全量门禁通过（main 3151+10exact+1skip；修后3156+10exact+1skip，均 FAIL）。
-- [ ] 独立 review、打包版系统双击、正式行为/bundle 验证及整体收尾。
+- [x] 多文件FIFO、renderer ready/完成握手、send failure有界恢复、发送前后销毁/重载；真实八场景通过（含退出取消及确认退出）。
+- [x] 独立review PASS；223定向测试、正式121/121/2541、原bundle1429199/1430000通过；原激活四场景仍通过。
+- [ ] Windows原全量门禁通过（最后main3151+10exact+1symlink；补丁3175+10exact+同一symlink，均FAIL；最后控制新增异常0）。需合适环境或明确环境门禁例外批准。
+- [ ] 打包版Explorer实际双击、远端CI和发布；前两次搜索timeout记录保留，最终控制未再复现，不称根因已证实。
 
 本轮结果与人工步骤见 `reports/task-summaries/TASK-UX-LAUNCH-001.md`。Typora/表格和冻结性能候选未改。
 

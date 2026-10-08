@@ -20,9 +20,9 @@ export function resolveStartupOpenPathFromArgv(argv: string[]): string | null {
 }
 
 export function resolveMarkdownLaunchPathFromArgv(argv: string[]): string | null {
-  const launchPath = [...argv]
-    .reverse()
-    .find((entry) => !entry.startsWith("-") && /\.(md|markdown)$/i.test(entry));
+  return resolveMarkdownLaunchPathsFromArgv(argv).at(-1) ?? null;
+}
 
-  return launchPath ?? null;
+export function resolveMarkdownLaunchPathsFromArgv(argv: string[]): string[] {
+  return argv.filter((entry) => !entry.startsWith("-") && /\.(md|markdown)$/i.test(entry));
 }

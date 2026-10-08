@@ -79,6 +79,7 @@ import {
   OPEN_WORKSPACE_FILE_CHANNEL,
   OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL,
   OPEN_WORKSPACE_PATH_EVENT,
+  LAUNCH_OPEN_CONTROL_CHANNEL,
   RELOAD_WORKSPACE_TAB_FROM_PATH_CHANNEL,
   REORDER_WORKSPACE_TAB_CHANNEL,
   REQUEST_WORKSPACE_OWNER_TAB_ACTIVATION_EVENT,
@@ -132,6 +133,7 @@ const RUNTIME_MODE_ARGUMENT_PREFIX = "--fishmark-runtime-mode=";
 const STARTUP_OPEN_PATH_ARGUMENT_PREFIX = "--fishmark-startup-open-path=";
 
 export function createProductApi({ ipc, filePath, runtime }: CreateProductApiInput): ProductBridge {
+  let lastLaunch: { requestId: string; result: Promise<boolean> } | null = null;
   const subscribe = <TPayload>(
     channel: string,
     listener: (payload: TPayload) => void
@@ -186,8 +188,27 @@ export function createProductApi({ ipc, filePath, runtime }: CreateProductApiInp
       ipc.invoke<ImportClipboardImageResult>(IMPORT_CLIPBOARD_IMAGE_CHANNEL, input),
     onMenuCommand: (listener: (command: AppMenuCommand) => void) =>
       subscribe(APP_MENU_COMMAND_EVENT, listener),
-    onOpenWorkspacePath: (listener: (payload: OpenWorkspacePathRequest) => void) =>
-      subscribe(OPEN_WORKSPACE_PATH_EVENT, listener),
+    onOpenWorkspacePath: (listener) => {
+      const control = (payload: unknown) => ipc.invoke(LAUNCH_OPEN_CONTROL_CHANNEL, payload);
+      const callback = async (_event: unknown, payload: unknown) => {
+        const request = payload as OpenWorkspacePathRequest;
+        if (!request.requestId) { await listener(request); return; }
+        if (lastLaunch?.requestId !== request.requestId) {
+          const result = (async () => {
+            try { await listener(request); return true; } catch { return false; }
+          })();
+          lastLaunch = { requestId: request.requestId, result };
+        }
+        const success = await lastLaunch.result;
+        await control({ kind: "complete", requestId: request.requestId, success }).catch(console.error);
+      };
+      ipc.on(OPEN_WORKSPACE_PATH_EVENT, callback);
+      void control({ kind: "ready", ready: true }).catch(console.error);
+      return () => {
+        ipc.off(OPEN_WORKSPACE_PATH_EVENT, callback);
+        void control({ kind: "ready", ready: false }).catch(console.error);
+      };
+    },
     onWorkspaceOwnerTabActivationRequest: (listener) => {
       const callback = async (_event: unknown, payload: unknown) => {
         const request = payload as WorkspaceOwnerTabActivationRequest;

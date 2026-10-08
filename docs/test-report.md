@@ -1,8 +1,8 @@
 # FishMark 测试报告
 
-## 2026-10-08 TASK-UX-LAUNCH-001：FAIL（激活切片通过）
+## 2026-10-08 TASK-UX-LAUNCH-001：Windows原门禁FAIL，窄修复候选PASS
 
-yuluStation / main dfcfe36b1：真实双进程原版隐藏打开不显示、最小化不恢复、无参数不激活；修后四场景（加可见）均 visible=true/minimized=false/focused=true，第二进程退出0。34定向、build/lint/typecheck通过。完整回归原版重跑3151 passed+10exact+1symlink skip，修后3156+10exact+1symlink skip，均FAIL且0 hook/collection/unhandled errors。原版首轮另出现打包测试hook超时，原始证据保留。未改白名单。独立review与启动边界其余切片未完成；见 `reports/task-summaries/TASK-UX-LAUNCH-001.md`。
+yuluStation / main dfcfe36b1：激活四场景继续通过；续轮真实startup multi/notready/send failure/destroy before/destroy after/reload/quit cancel/quit approve八场景通过。223定向、build/lint/typecheck、正式121/121/2541（0unexpected）、原bundle1429199/1430000与独立review通过。最后精确main3151 passed+10exact+1symlink，补丁3175+10exact+同一symlink，均原wrapper FAIL、0 hook/collection/unhandled，最后控制新增异常0。两次搜索5秒timeout及初轮打包hook超时保留；搜索隔离117ms PASS、最后main/patch控制无timeout，根因未证实。未改白名单或系统；Explorer关联与远端CI未测。发布仍需适当symlink环境或明确例外批准；见 `reports/task-summaries/TASK-UX-LAUNCH-001.md`。
 
 ## 2026-10-08 TASK-UX-SEARCH-001 Windows 检查点：FAIL
 

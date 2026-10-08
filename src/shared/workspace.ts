@@ -138,6 +138,7 @@ export type OpenWorkspaceFileFromPathResult =
   | WorkspaceCommandError;
 
 export type OpenWorkspacePathRequest = {
+  requestId?: string;
   targetPath: string;
 };
 
@@ -218,6 +219,7 @@ export const MOVE_WORKSPACE_TAB_TO_WINDOW_CHANNEL = "fishmark:move-workspace-tab
 export const DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL = "fishmark:detach-workspace-tab-to-new-window";
 export const RELOAD_WORKSPACE_TAB_FROM_PATH_CHANNEL = "fishmark:reload-workspace-tab-from-path";
 export const OPEN_WORKSPACE_PATH_EVENT = "fishmark:open-workspace-path";
+export const LAUNCH_OPEN_CONTROL_CHANNEL = "fishmark:launch-open-control";
 export const REQUEST_WORKSPACE_OWNER_TAB_ACTIVATION_EVENT =
   "fishmark:request-workspace-owner-tab-activation";
 export const CONFIRM_WORKSPACE_OWNER_TAB_ACTIVATION_CHANNEL =

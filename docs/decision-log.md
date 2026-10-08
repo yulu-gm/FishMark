@@ -1,5 +1,14 @@
 # FishMark 决策日志
 
+## 2026-10-08：启动队列续轮完成
+
+- 用户授权后完成main FIFO、renderer ready/完成ACK与preload重试去重；send失败有界恢复，销毁/重载保留未确认路径。
+- 独立review的quit取消/确认两项P1已修并通过真实Electron验证；watch预先捕获webContents，避免销毁后native getter访问。
+- 最后main3151+10exact+1symlink，补丁3175+10exact+同一symlink，新增异常0但原门禁仍FAIL；早前搜索timeout保留，最终控制未复现，不称根因已证实。
+- 独立review PASS、正式121/121/2541、bundle1429199/1430000通过；可交付窄候选，发布需合适symlink环境或明确门禁例外。未push，M9/cp16不变；不承诺renderer崩溃自动重启或未测Explorer关联。
+
+
+
 ## 2026-10-08：Windows 启动激活采用最小独立切片
 
 - 基于官方 main dfcfe36b1 独立实现 restore/show/focus，未依赖旧机未提交文件；激活在发送打开事件之前执行，无参数第二进程也激活编辑窗口。

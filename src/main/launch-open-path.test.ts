@@ -3,11 +3,16 @@ import { describe, expect, it } from "vitest";
 import {
   formatStartupOpenPathArgument,
   resolveMarkdownLaunchPathFromArgv,
+  resolveMarkdownLaunchPathsFromArgv,
   resolveStartupOpenPathFromArgv,
   STARTUP_OPEN_PATH_ARGUMENT_PREFIX
 } from "./launch-open-path";
 
 describe("resolveMarkdownLaunchPathFromArgv", () => {
+  it("preserves every markdown argument in shell order", () => {
+    expect(resolveMarkdownLaunchPathsFromArgv(["electron.exe", "--ignored.md", "a.md", "b.MARKDOWN", "c.txt", "中文 file.md"]))
+      .toEqual(["a.md", "b.MARKDOWN", "中文 file.md"]);
+  });
   it("returns the markdown file path passed to the app on startup", () => {
     expect(
       resolveMarkdownLaunchPathFromArgv([

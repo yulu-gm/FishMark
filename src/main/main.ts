@@ -37,7 +37,9 @@ import {
 import { createApplicationMenuTemplate } from "./application-menu";
 import { activateEditorWindow } from "./activate-editor-window";
 import { importClipboardImage } from "./clipboard-image-import";
-import { resolveMarkdownLaunchPathFromArgv } from "./launch-open-path";
+import { resolveMarkdownLaunchPathsFromArgv } from "./launch-open-path";
+import { createLaunchOpenCoordinator } from "./launch-open-coordinator";
+import { registerLaunchOpenHandlers } from "./ipc/register-launch-open-handlers";
 import { openMarkdownFileFromPath, showOpenMarkdownPathDialog } from "./open-markdown-file";
 import {
   registerPreviewAssetProtocol,
@@ -108,7 +110,6 @@ import {
   OPEN_WORKSPACE_PATH_EVENT,
   REQUEST_WORKSPACE_WINDOW_CLOSE_EVENT,
   REQUEST_WORKSPACE_OWNER_TAB_ACTIVATION_EVENT,
-  type OpenWorkspacePathRequest,
   type WorkspaceWindowCloseRequest
 } from "../shared/workspace";
 
@@ -128,6 +129,8 @@ const pendingLaunchOpenPaths: string[] = [];
 let openEditorWindowForLaunchPath: ((targetPath: string) => void) | null = null;
 let openEmptyEditorWindow: (() => void) | null = null;
 let activateExistingEditorWindow: (() => void) | null = null;
+let hasPendingLaunchRequests = () => false;
+let quitRequested = false;
 let runManualAppUpdateCheck: (() => void) | null = null;
 
 type AppUpdaterController = {
@@ -165,15 +168,10 @@ function handleLaunchOpenPath(targetPath: string): void {
   }
 }
 
-function handleLaunchOpenFromArgv(argv: string[]): boolean {
-  const launchPath = resolveMarkdownLaunchPathFromArgv(argv);
-
-  if (!launchPath) {
-    return false;
-  }
-
-  handleLaunchOpenPath(launchPath);
-  return true;
+function handleLaunchOpenFromArgv(argv: string[], cwd = process.cwd()): boolean {
+  const launchPaths = resolveMarkdownLaunchPathsFromArgv(argv);
+  for (const launchPath of launchPaths) handleLaunchOpenPath(path.resolve(cwd, launchPath));
+  return launchPaths.length > 0;
 }
 
 if (!hasSingleInstanceLock) {
@@ -181,8 +179,8 @@ if (!hasSingleInstanceLock) {
 } else {
   void handleLaunchOpenFromArgv(process.argv);
 
-  app.on("second-instance", (_event, argv) => {
-    if (!handleLaunchOpenFromArgv(argv)) {
+  app.on("second-instance", (_event, argv, cwd) => {
+    if (!handleLaunchOpenFromArgv(argv, cwd)) {
       activateExistingEditorWindow?.();
     }
   });
@@ -518,6 +516,8 @@ app.whenReady().then(async () => {
             });
 
             if (heldLease === null) {
+              quitRequested = false;
+              launchOpenCoordinator.resume();
               return;
             }
 
@@ -532,6 +532,8 @@ app.whenReady().then(async () => {
               throw error;
             }
           } catch (error) {
+            quitRequested = false;
+            launchOpenCoordinator.resume();
             try {
               await dialog.showMessageBox({
                 type: "error",
@@ -599,17 +601,14 @@ app.whenReady().then(async () => {
     return null;
   }
 
-  function requestWorkspacePathOpen(window: BrowserWindow, targetPath: string): void {
-    activateEditorWindow(window);
-    window.webContents.send(OPEN_WORKSPACE_PATH_EVENT, {
-      targetPath
-    } satisfies OpenWorkspacePathRequest);
+  function getLaunchWindow(): BrowserWindow | null {
+    return getPreferredWorkspaceWindow() ?? BrowserWindow.getAllWindows().find(
+      (candidate) => !candidate.isDestroyed() && windowManager.getRuntimeMode(candidate) === "editor"
+    ) ?? null;
   }
 
   activateExistingEditorWindow = () => {
-    const window = getPreferredWorkspaceWindow() ?? BrowserWindow.getAllWindows().find(
-      (candidate) => !candidate.isDestroyed() && windowManager.getRuntimeMode(candidate) === "editor"
-    );
+    const window = getLaunchWindow();
     if (window) {
       activateEditorWindow(window);
     } else {
@@ -617,20 +616,37 @@ app.whenReady().then(async () => {
     }
   };
 
-  function openPathInWorkspace(targetPath: string): void {
-    const existingWindow = getPreferredWorkspaceWindow();
-
-    if (existingWindow) {
-      requestWorkspacePathOpen(existingWindow, targetPath);
-      return;
+  const launchOpenCoordinator = createLaunchOpenCoordinator<BrowserWindow>({
+    preferredWindow: getLaunchWindow,
+    createWindow: () => windowManager.openEditorWindow(),
+    activate: (window) => { activateEditorWindow(window); },
+    send: (window, payload) => window.webContents.send(OPEN_WORKSPACE_PATH_EVENT, payload),
+    watch: (window, lost) => {
+      const contents = window.webContents;
+      window.on("closed", lost);
+      contents.on("render-process-gone", lost);
+      contents.on("did-start-loading", lost);
+      return () => {
+        window.removeListener("closed", lost);
+        contents.removeListener("render-process-gone", lost);
+        contents.removeListener("did-start-loading", lost);
+      };
+    },
+    schedule: (callback, delayMs) => {
+      const timer = setTimeout(callback, delayMs);
+      return () => clearTimeout(timer);
+    },
+    reportFailure: (targetPath, error) => {
+      console.error("[fishmark] external open failed", targetPath, error);
+      dialog.showErrorBox("Unable to open file", `${targetPath}\n${error instanceof Error ? error.message : String(error)}`);
     }
-
-    windowManager.openEditorWindow({ startupOpenPath: targetPath });
-  }
-
-  openEditorWindowForLaunchPath = (targetPath: string) => {
-    openPathInWorkspace(targetPath);
-  };
+  });
+  hasPendingLaunchRequests = launchOpenCoordinator.hasPending;
+  app.on("before-quit", () => {
+    quitRequested = true;
+    launchOpenCoordinator.suspend();
+  });
+  openEditorWindowForLaunchPath = (targetPath) => launchOpenCoordinator.enqueue([targetPath]);
 
   async function recordRecentFilePath(targetPath: string | null): Promise<void> {
     if (!targetPath) {
@@ -862,6 +878,11 @@ app.whenReady().then(async () => {
     }
   });
 
+  registerLaunchOpenHandlers({
+    ipc, authorize, resolveWindow: (sender) => BrowserWindow.fromWebContents(sender),
+    setReady: launchOpenCoordinator.setReady,
+    complete: launchOpenCoordinator.complete
+  });
   registerWorkspaceCommandHandlers({
     ipc, authorize, ensureWindow: workspaceWindowRegistrationApplication.ensureWindow,
     workspaceApplication, workspaceState, documentRepository, resolveExternalChange,
@@ -946,18 +967,8 @@ app.whenReady().then(async () => {
   }
 
   installApplicationMenu();
-  const startupOpenPath = pendingLaunchOpenPaths.shift();
-  windowManager.openPrimaryWindow(
-    startupOpenPath
-      ? {
-          startupOpenPath
-        }
-      : undefined
-  );
-
-  for (const targetPath of pendingLaunchOpenPaths.splice(0)) {
-    openEditorWindowForLaunchPath(targetPath);
-  }
+  windowManager.openPrimaryWindow();
+  launchOpenCoordinator.enqueue(pendingLaunchOpenPaths.splice(0));
 
   setTimeout(() => {
     void runAppUpdateCheck("auto");
@@ -970,6 +981,7 @@ app.whenReady().then(async () => {
   let recoveryShutdownStarted = false;
   let recoveryShutdownFinished = false;
   app.on("will-quit", (event) => {
+    launchOpenCoordinator.dispose();
     if (recoveryShutdownFinished) return;
     event.preventDefault();
     if (recoveryShutdownStarted) return;
@@ -992,7 +1004,7 @@ app.whenReady().then(async () => {
 });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
+  if (process.platform !== "darwin" && (quitRequested || !hasPendingLaunchRequests())) {
     app.quit();
   }
 });

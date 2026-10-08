@@ -463,6 +463,7 @@ describe("preload contract", () => {
     const detachTerminal = testApi.onScenarioRunTerminal(terminalListener);
     const detachEditor = testApi.onEditorTestCommand(editorListener);
     const detachMenu = api.onMenuCommand(menuListener);
+    invoke.mockResolvedValue(undefined);
     const detachOpenWorkspacePath = api.onOpenWorkspacePath(openWorkspacePathListener);
     const detachPreferences = api.onPreferencesChanged(preferencesListener);
     const detachRecentFiles = api.onRecentFilesChanged(recentFilesListener);
