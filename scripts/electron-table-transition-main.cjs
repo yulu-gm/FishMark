@@ -13,7 +13,8 @@ const fixtures = {
   saturated: "# Long cells\n\n| prose | unbroken |\n| --- | --- |\n| " + "这是一段用于观察自动换行的中文散文。".repeat(9) + " | " + "ABCDEFGHIJKLMNOPQRSTUVWXYZ".repeat(9) + " |\n\nAfter table.\n",
   scrolled: "# Scrolled table\n\n" + Array.from({length:16},(_,i)=>`前置段落 ${i+1}。\n\n`).join("") + "| 项目 | 说明 |\n| --- | --- |\n| 中文测试 | 中文字号变化测试 |\n| 第二行 | 对照文本 |\n\n" + Array.from({length:12},(_,i)=>`后置段落 ${i+1}。\n\n`).join("")
 };
-if (!(caseId in fixtures) || ![900,1200].includes(width) || !["baseline","reserve-tabs"].includes(variant)) throw new Error("Invalid diagnostic scenario.");
+fixtures.header=fixtures.mixed;
+if (!(caseId in fixtures) || ![900,1200].includes(width) || !["baseline","reserve-tabs","anchor-scroll"].includes(variant)) throw new Error("Invalid diagnostic scenario.");
 fs.mkdirSync(output, {recursive:true});
 const userData = path.join(output,"userData");
 fs.mkdirSync(userData,{recursive:true});
@@ -32,7 +33,7 @@ function sample() {
     const c=getComputedStyle(e);
     return Object.fromEntries(["fontFamily","fontSize","fontWeight","lineHeight","letterSpacing","paddingTop","paddingBottom","marginTop","marginBottom","rowGap","gridTemplateRows","gridRow","position","display","transform","overflowAnchor"].map(k=>[k,c[k]]));
   };
-  const selectors={workspace:".app-workspace",tabs:".workspace-tab-strip",canvas:".workspace-canvas",editor:".document-editor",scroller:".cm-scroller",content:".cm-content",table:".cm-table-widget-table",widget:".cm-table-widget",toolbar:".app-rail-mode-group-table",cell:'[data-table-cell="1:0"]'};
+  const selectors={workspace:".app-workspace",tabs:".workspace-tab-strip",canvas:".workspace-canvas",editor:".document-editor",scroller:".cm-scroller",content:".cm-content",table:".cm-table-widget-table",widget:".cm-table-widget",toolbar:".app-rail-mode-group-table",cell:window.__tableProbeTarget??'[data-table-cell="1:0"]'};
   const nodes=Object.fromEntries(Object.entries(selectors).map(([k,s])=>[k,document.querySelector(s)]));
   const cell=nodes.cell;
   const glyphs=[];
@@ -66,6 +67,7 @@ app.whenReady().then(async()=>{
   win.setSize(width,850);win.show();win.focus();
   await waitFor(async()=>!win.webContents.isLoading() && await win.webContents.executeJavaScript('Boolean(document.querySelector(\'[data-table-cell="1:0"]\'))'));
   await win.webContents.executeJavaScript(`window.__sampleTableTransition=${sample.toString()}; undefined`);
+  if(caseId==="header") await win.webContents.executeJavaScript(`window.__tableProbeTarget='[data-table-cell="0:0"]'; undefined`);
   if(variant==="reserve-tabs"){
     // Counterfactual only: keep the existing editing grid in reading mode.
     result.counterfactualCss='.app-workspace.app-workspace[data-fishmark-layout="workspace"][data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"]{grid-template-rows:auto auto minmax(0,1fr)!important}.app-workspace[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"]>.workspace-tab-strip[data-fishmark-region="workspace-tab-strip"]{grid-row:2!important;grid-column:auto!important;max-height:44px!important;transform:none!important}.workspace-canvas[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"]{grid-row:3!important;grid-column:auto!important}';
@@ -81,7 +83,7 @@ app.whenReady().then(async()=>{
   await win.webContents.debugger.sendCommand("DOM.enable");await win.webContents.debugger.sendCommand("CSS.enable");
   async function fonts(){
     const doc=await win.webContents.debugger.sendCommand("DOM.getDocument");
-    const {nodeId}=await win.webContents.debugger.sendCommand("DOM.querySelector",{nodeId:doc.root.nodeId,selector:'[data-table-cell="1:0"]'});
+    const {nodeId}=await win.webContents.debugger.sendCommand("DOM.querySelector",{nodeId:doc.root.nodeId,selector:caseId==="header"?'[data-table-cell="0:0"]':'[data-table-cell="1:0"]'});
     return win.webContents.debugger.sendCommand("CSS.getPlatformFontsForNode",{nodeId});
   }
   result.before=await measure();result.beforeFonts=await fonts();
@@ -92,6 +94,10 @@ app.whenReady().then(async()=>{
   result.click={x,y};
   win.webContents.sendInputEvent({type:"mouseDown",x,y,button:"left",clickCount:1});win.webContents.sendInputEvent({type:"mouseUp",x,y,button:"left",clickCount:1});
   await delay(600);
+  if(variant==="anchor-scroll") {
+    const current=await measure();result.anchorRequestedScrollTop=result.before.scrollTop+current.rects.scroller.top-result.before.rects.scroller.top;
+    await win.webContents.executeJavaScript('document.querySelector(".cm-scroller").scrollTop='+result.anchorRequestedScrollTop);await delay(100);
+  }
   result.after=await measure();result.afterFonts=await fonts();
   result.frames=await win.webContents.executeJavaScript("window.__transitionFrames");
   fs.writeFileSync(path.join(output,"after.png"),(await win.webContents.capturePage()).toPNG());
@@ -106,10 +112,40 @@ app.whenReady().then(async()=>{
     }
     result.nativeUndo={oldText,typed,undoRestored:result.undo===oldText,redoRestored:result.redo===typed};
   }
+
+  const glyphShape = m => m.glyphs.map(g=>({text:g.text,rects:g.rects.map(r=>({x:r.x-m.rects.cell.x,y:r.y-m.rects.cell.y,width:r.width,height:r.height}))}));
+  const maxGlyphDelta=(a,b)=>{
+    const left=glyphShape(a),right=glyphShape(b);let max=0;
+    if(left.length!==right.length)return Infinity;
+    for(let i=0;i<left.length;i++){if(left[i].text!==right[i].text||left[i].rects.length!==right[i].rects.length)return Infinity;for(let j=0;j<left[i].rects.length;j++)for(const key of ["x","y","width","height"])max=Math.max(max,Math.abs(left[i].rects[j][key]-right[i].rects[j][key]));}return max;
+  };
+  result.maxGlyphDelta=maxGlyphDelta(result.before,result.after);
+  // 0.05px permits Chromium's 1/64px text-run boundary quantization, not 1px font shifts.
+  result.fontGeometryStable=result.maxGlyphDelta<=0.05;
+  if(caseId==="mixed" && variant==="baseline") {
+    const key=async(keyCode,modifiers=[])=>{win.webContents.sendInputEvent({type:"keyDown",keyCode,modifiers});win.webContents.sendInputEvent({type:"keyUp",keyCode,modifiers});await delay(80);};
+    // Return to the unchanged sample, then select four Han characters using native keys.
+    await key("z",["control"]);
+    await key("Home"); for(let i=0;i<4;i++)await key("Right",["shift"]);
+    result.selected=(await measure()).selection.text;
+    await win.webContents.insertText("替换 X");await delay(120);const replaced=(await measure()).cellText;
+    await key("z",["control"]);const undone=(await measure()).cellText;
+    await key("y",["control"]);const redone=(await measure()).cellText;
+    result.selectionReplacement={selected:result.selected,replaced,undoRestored:undone===result.after.cellText,redoRestored:redone===replaced};
+    await key("z",["control"]);
+    result.reentry=[];
+    for(let i=0;i<3;i++){
+      // Native mouse focus to another cell and back; measure fresh coordinates each time.
+      const other=await win.webContents.executeJavaScript(`(()=>{const r=document.querySelector('[data-table-cell="2:0"]').getBoundingClientRect();return {x:Math.round(r.x+30),y:Math.round(r.y+20)}})()`);
+      for(const type of ["mouseDown","mouseUp"])win.webContents.sendInputEvent({type,...other,button:"left",clickCount:1});await delay(120);
+      const preview=await measure();const r=preview.rects.cell;const point={x:Math.round(r.x+30),y:Math.round(r.y+20)};
+      for(const type of ["mouseDown","mouseUp"])win.webContents.sendInputEvent({type,...point,button:"left",clickCount:1});await delay(120);
+      const active=await measure();result.reentry.push({previewMode:preview.cellMode,activeMode:active.cellMode,textStable:active.cellText===result.after.cellText,geometryStable:maxGlyphDelta(preview,active)<=0.05,maxGlyphDelta:maxGlyphDelta(preview,active),fonts:await fonts()});
+    }
+  }
   result.dpr=await win.webContents.executeJavaScript("devicePixelRatio");
   result.valid=result.before.shellMode==="reading" && result.after.shellMode==="editing" && result.after.cellMode==="plain";
   win.webContents.debugger.detach();
+  if(process.env.FISHMARK_EXPECT_FONT_STABLE==="1") result.valid=result.valid && result.fontGeometryStable && (!result.nativeUndo || (result.nativeUndo.undoRestored && result.nativeUndo.redoRestored)) && (!result.selectionReplacement || (result.selectionReplacement.selected==="中文测试" && result.selectionReplacement.undoRestored && result.selectionReplacement.redoRestored)) && (!result.reentry || result.reentry.every(r=>r.previewMode==="preview" && r.activeMode==="plain" && r.textStable && r.geometryStable));
   finish(result.valid?null:new Error("Did not observe reading-to-editing table transition"));
 }).catch(finish);
-
-

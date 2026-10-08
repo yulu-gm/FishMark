@@ -1,3 +1,4 @@
+import { installTableCjkFont } from "./table-cjk-font";
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import type { AppNotification } from "../../shared/app-update";
 import type { Preferences } from "../../shared/preferences";
@@ -87,6 +88,7 @@ export function useThemePresentation({ preferences, themePackages, themePackageC
   controlledTitlebarEnabled: boolean;
   showNotification: (notification: AppNotification) => void;
 }) {
+  useEffect(() => installTableCjkFont(document, preferences.document.cjkFontFamily), [preferences.document.cjkFontFamily]);
   const [workbenchRuntime, setWorkbenchRuntime] = useState<{ key: string; mode: ThemeSurfaceRuntimeMode | null }>({ key: "", mode: null });
   const [titlebarRuntime, setTitlebarRuntime] = useState<{ key: string; mode: ThemeSurfaceRuntimeMode | null }>({ key: "", mode: null });
   const workbenchSurfaceRuntimeMode = workbenchRuntime.mode;

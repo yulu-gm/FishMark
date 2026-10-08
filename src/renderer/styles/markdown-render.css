@@ -1154,3 +1154,13 @@
 .document-editor .cm-inactive-code-block .cm-typeName {
   color: var(--fishmark-markdown-code-token-type, #be185d);
 }
+
+/* Both preview spans and native editable text share one Unicode font mapping.
+   The local face is enabled only after loading; no input DOM is rewritten. */
+:root[data-fishmark-table-cjk-font="ready"] .document-editor .cm-table-widget-input {
+  font-family: "FishMark Table CJK", var(--fishmark-document-font-family, var(--fishmark-editor-font-family));
+}
+
+:root[data-fishmark-table-cjk-font="ready"] .document-editor .cm-table-widget-input .cm-fishmark-cjk-font {
+  font-family: inherit;
+}

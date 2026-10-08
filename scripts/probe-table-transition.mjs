@@ -10,7 +10,7 @@ if(!/^[a-z0-9-]+$/i.test(runId))throw new Error("Invalid run id");
 const output=path.join(root,".artifacts/table-transition",runId);
 if(fs.existsSync(output))throw new Error("Run output already exists; choose a new run id.");
 fs.mkdirSync(output,{recursive:true});
-const matrix=[...([1200,900].flatMap(width=>["short","mixed","saturated","scrolled"].map(caseId=>({width,caseId,variant:"baseline"})))),{width:1200,caseId:"short",variant:"reserve-tabs"}];
+const matrix=[...([1200,900].flatMap(width=>["short","mixed","saturated","scrolled","header"].map(caseId=>({width,caseId,variant:"baseline"})))),{width:1200,caseId:"short",variant:"reserve-tabs"}];
 const summary=[];
 for(const scenario of matrix){
   const dir=path.join(output,`${scenario.caseId}-${scenario.width}-${scenario.variant}`);
@@ -22,7 +22,7 @@ for(const scenario of matrix){
   clearTimeout(timeout);await tree.terminate();fs.writeFileSync(path.join(dir,"process.log"),Buffer.concat(chunks));
   const resultPath=path.join(dir,"result.json");
   const result=fs.existsSync(resultPath)?JSON.parse(fs.readFileSync(resultPath,"utf8")):null;
-  summary.push({...scenario,code,valid:result?.valid,delta:result?.delta,beforeFonts:result?.beforeFonts,afterFonts:result?.afterFonts,nativeUndo:result?.nativeUndo,error:result?.error});
+  summary.push({...scenario,code,valid:result?.valid,delta:result?.delta,beforeFonts:result?.beforeFonts,afterFonts:result?.afterFonts,nativeUndo:result?.nativeUndo,fontGeometryStable:result?.fontGeometryStable,maxGlyphDelta:result?.maxGlyphDelta,selectionReplacement:result?.selectionReplacement,reentry:result?.reentry,error:result?.error});
   process.stdout.write(JSON.stringify(summary.at(-1))+"\n");
 }
 fs.writeFileSync(path.join(output,"summary.json"),JSON.stringify(summary,null,2));

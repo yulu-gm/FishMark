@@ -1,5 +1,10 @@
 # FishMark 进展记录
 
+## 2026-10-08 TASK-UX-TABLE-002：字体一致性本地候选
+
+表格限定Unicode字体映射避免输入DOM重建；真实Electron11/11、原生选区替换/undo/redo/重复进入通过。build/lint/typecheck及原bundle1429561/1430000通过；完整3179pass+10exactknown+原symlink skip，门禁仍FAIL。IME/Typora及跨字体原生粗体等价性未测，尚未独立review、不push。短文档无滚动空间，锚点补偿无法通用消除53px；未提交布局取舍。详见[总结](../reports/task-summaries/TASK-UX-TABLE-002.md)。
+
+
 ## 2026-10-08 TASK-UX-TABLE-001：独立几何诊断
 
 仅诊断完成，产品未修复/未验收。冻结main53d86ac；8个真实Electron样例复现shell导致53px下移，字体YaHei→Noto Sans SC使本机glyph box24→21px；CSS占位对照位移归零。需父线程选择阅读空间取舍，字体层方案仍待验证；Typora/IME未测。详见[任务总结](../reports/task-summaries/TASK-UX-TABLE-001.md)。
