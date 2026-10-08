@@ -1,5 +1,10 @@
 # FishMark 进展记录
 
+## 2026-10-08 表格字体候选撤回与有界评估
+
+正常提交7ac968e撤回被拒的产品改动，src/packages与冻结53d86ac无差异；历史与证据保留，不push。已有富文本标记只解决初始样式，缺少与原生撤销/IME协同的动态字体及代码边界维护；未发现现成安全小修，不扩展架构。见[技术评估](plans/2026-10-08-table-rich-font-assessment.md)。字体不一致及布局跳动仍未修复，标签栏行为不变。
+
+
 ## 2026-10-08 TASK-UX-TABLE-002：字体候选独立审查 CHANGES_REQUESTED
 
 表格限定Unicode字体映射避免输入DOM重建；真实Electron11/11、原生选区替换/undo/redo/重复进入通过。build/lint/typecheck及原bundle1429561/1430000通过；完整3179pass+10exactknown+原symlink skip，门禁仍FAIL。独立review发现两项P2：丢失原生Bold字形、编辑行内代码错误使用正文CJK偏好；候选不得原样合入。IME/Typora/跨平台未测，不push。短文档无滚动空间，锚点补偿无法通用消除53px；未提交布局取舍。详见[总结](../reports/task-summaries/TASK-UX-TABLE-002.md)。
