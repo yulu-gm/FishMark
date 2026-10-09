@@ -5152,7 +5152,7 @@ describe("App autosave", () => {
     const railRule = getCssRule(appUiStylesheet, ".app-rail");
     const readingWorkspaceRule = getCssRule(
       appUiStylesheet,
-      '.app-workspace[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"]'
+      ".app-workspace"
     );
     const tabStripRule = getCssRule(appUiStylesheet, ".workspace-tab-strip");
     const collapsedTabStripRule = getCssRule(appUiStylesheet, '.workspace-tab-strip[data-visibility="collapsed"]');
@@ -5170,12 +5170,12 @@ describe("App autosave", () => {
     expect(appUiStylesheet).not.toContain(
       '.app-layout[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"]'
     );
-    expect(readingWorkspaceRule).toContain("grid-template-rows: minmax(0, 1fr);");
+    expect(readingWorkspaceRule).toContain("grid-template-rows: auto auto minmax(0, 1fr);");
     expect(tabStripRule).toContain("transition:");
     expect(tabStripRule).not.toContain("display var(--fishmark-focus-transition-duration) allow-discrete;");
     expect(tabStripRule).not.toContain("transition-behavior: allow-discrete;");
-    expect(collapsedTabStripRule).toContain("transform:");
-    expect(collapsedTabStripRule).toContain("max-height: 0;");
+    expect(collapsedTabStripRule).toContain("visibility: hidden;");
+    expect(collapsedTabStripRule).not.toContain("max-height:");
     expect(statusBarRule).toContain("transition:");
     expect(statusBarRule).toContain("display var(--fishmark-focus-transition-duration) allow-discrete;");
     expect(statusBarRule).toContain("transition-behavior: allow-discrete;");
@@ -5184,12 +5184,12 @@ describe("App autosave", () => {
     expect(appUiStylesheet).toContain('.app-status-bar[data-visibility="visible"]');
   });
 
-  it("anchors collapsed reading-mode tab chrome to the top while it folds out", () => {
+  it("reserves reading-mode tab space while hidden controls cannot receive input", () => {
     const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8");
     const collapsedTabStripRule = getCssRule(appUiStylesheet, '.workspace-tab-strip[data-visibility="collapsed"]');
     const readingTabStripRule = getCssRule(
       appUiStylesheet,
-      '.app-workspace[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] > .workspace-tab-strip[data-fishmark-region="workspace-tab-strip"]'
+      ".workspace-tab-strip"
     );
     const collapsedReadingStatusBarRule = getCssRule(
       appUiStylesheet,
@@ -5197,12 +5197,10 @@ describe("App autosave", () => {
     );
 
     expect(collapsedTabStripRule).toContain("opacity: 0;");
-    expect(collapsedTabStripRule).toContain("transform: translateY(-8px);");
-    expect(collapsedTabStripRule).toContain("max-height: 0;");
-    expect(readingTabStripRule).toContain("grid-row: 1;");
-    expect(readingTabStripRule).toContain("grid-column: 1;");
-    expect(readingTabStripRule).toContain("align-self: start;");
-    expect(readingTabStripRule).not.toContain("display: none;");
+    expect(collapsedTabStripRule).toContain("visibility: hidden;");
+    expect(collapsedTabStripRule).toContain("pointer-events: none;");
+    expect(collapsedTabStripRule).not.toContain("max-height:");
+    expect(readingTabStripRule).toContain("grid-row: 2;");
     expect(collapsedReadingStatusBarRule).toContain("display: none !important;");
   });
 
@@ -5214,7 +5212,7 @@ describe("App autosave", () => {
     );
     const readingWorkspaceGuardRule = getCssRule(
       appUiStylesheet,
-      '.app-workspace[data-fishmark-layout="workspace"][data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"]'
+      '.app-workspace[data-fishmark-layout="workspace"]'
     );
     const statusBarGeometryGuardRule = getCssRule(
       appUiStylesheet,
@@ -5224,9 +5222,7 @@ describe("App autosave", () => {
     expect(editingWorkspaceGuardRule).toContain(
       "grid-template-rows: auto auto minmax(0, 1fr) !important;"
     );
-    expect(readingWorkspaceGuardRule).toContain(
-      "grid-template-rows: minmax(0, 1fr) !important;"
-    );
+    expect(readingWorkspaceGuardRule).toContain("grid-template-rows: auto auto minmax(0, 1fr) !important;");
     expect(statusBarGeometryGuardRule).toContain("position: fixed !important;");
     expect(statusBarGeometryGuardRule).toContain("left: var(--fishmark-status-bar-left) !important;");
     expect(statusBarGeometryGuardRule).toContain("right: var(--fishmark-status-bar-right) !important;");
@@ -5739,7 +5735,7 @@ describe("App autosave", () => {
     const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8").replace(/\r\n/g, "\n");
 
     expect(appUiStylesheet).toContain(
-      '.workspace-canvas[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] {\n  grid-row: 1;\n  grid-column: 1;\n  width: 100%;\n  max-width: none;\n  margin: 0;\n}'
+      '.workspace-canvas[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] {\n  grid-row: 3;\n  grid-column: 1;\n  width: 100%;\n  max-width: none;\n  margin: 0;\n}'
     );
     expect(appUiStylesheet).toContain(
       '.workspace-canvas[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] .workspace-shell {\n  width: 100%;\n  max-width: none;\n  margin: 0;\n}'

@@ -389,20 +389,10 @@
   background: var(--fishmark-workspace-bg, transparent);
 }
 
-.app-workspace[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] {
-  grid-template-rows: minmax(0, 1fr);
-  align-content: stretch;
-  padding-bottom: var(--fishmark-space-4);
-}
-
 /* App-owned layout geometry. Theme packages are loaded after app CSS, so
    protect the workspace row contract from legacy community theme overrides. */
 .app-workspace[data-fishmark-layout="workspace"] {
   grid-template-rows: auto auto minmax(0, 1fr) !important;
-}
-
-.app-workspace[data-fishmark-layout="workspace"][data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] {
-  grid-template-rows: minmax(0, 1fr) !important;
 }
 
 .app-workspace[data-fishmark-layout="workspace"] > .app-status-bar[data-fishmark-region="app-status-bar"] {
@@ -575,22 +565,15 @@
   transition:
     opacity var(--fishmark-focus-transition-duration) ease,
     transform var(--fishmark-focus-transition-duration) var(--fishmark-focus-transition-easing),
-    max-height var(--fishmark-focus-transition-duration) var(--fishmark-focus-transition-easing),
     border-color var(--fishmark-focus-transition-duration) ease;
 }
 
+/* Keep the tab row and viewport stable; hidden controls cannot receive focus. */
 .workspace-tab-strip[data-visibility="collapsed"] {
   opacity: 0;
-  transform: translateY(-8px);
-  max-height: 0;
+  visibility: hidden;
   border-bottom-color: transparent;
   pointer-events: none;
-}
-
-.app-workspace[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] > .workspace-tab-strip[data-fishmark-region="workspace-tab-strip"] {
-  grid-row: 1;
-  grid-column: 1;
-  align-self: start;
 }
 
 .workspace-tab-strip-scroll {
@@ -811,7 +794,7 @@
 }
 
 .workspace-canvas[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] {
-  grid-row: 1;
+  grid-row: 3;
   grid-column: 1;
   width: 100%;
   max-width: none;

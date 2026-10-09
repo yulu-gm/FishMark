@@ -1,0 +1,11 @@
+import {createRequire} from 'node:module';
+import fs from 'node:fs';
+import path from 'node:path';
+import {runEditorBehaviorProcess} from './editor-behavior-process-launcher.mjs';
+const [runId,width='1200',theme='dark']=process.argv.slice(2);
+if(!runId||!/^[a-z0-9-]+$/i.test(runId)||!['900','1200'].includes(width)||!['light','dark'].includes(theme))throw Error('Supply fresh run id, width900/1200 and light/dark');
+const root=process.cwd(),output=path.join(root,'.artifacts/reading-top-space',runId);
+if(fs.existsSync(output))throw Error('Choose a fresh run id');
+fs.mkdirSync(path.dirname(output),{recursive:true});
+const require=createRequire(import.meta.url);
+process.exitCode=await runEditorBehaviorProcess({command:require('electron'),args:[path.join(root,'scripts/electron-explicit-mode-main.cjs')],options:{cwd:root,env:{...process.env,FISHMARK_MODE_OUTPUT:output,FISHMARK_MODE_WIDTH:width,FISHMARK_MODE_THEME:theme,FISHMARK_MODE_TOP_SPACE_CHECK:'1'},stdio:'inherit'},timeoutMs:95000,timeoutExitCode:124,onTimeout(){process.stderr.write('Owned reading-space probe timeout\n')}});

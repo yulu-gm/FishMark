@@ -41,3 +41,7 @@ The first built-product cache extension called the backend workspace bridge dire
 Reading-to-editing full-shell heading reveal still moves line top56→109 (+53px). No vertical app-ui layout choice has been adopted; the horizontal fixed-gutter/long-prefix-source boundary is already approved. The Windows symlink skip is not permitted by the existing gate, and the operating-system developer/security settings were not changed. Native Windows IME remains UNMEASURED. Existing EventEmitter listener warning appears in both the prior heading product run and this run; it is not certified resolved.
 
 The independent table-font diagnostic branch aba0c73 remains separate; no Typora installation/licensing or font/undo fix was attempted here. cp13/cp16 are frozen, blocked Library materialization was not retried, RF902/903 and M10 remain unstarted.
+
+## Subsequent authorized top-space trial
+
+TASK-UX-HEADING-003 records the separately authorized reading tab-space trial. Its actual1200/900px product windows now pass88/88 each with heading top109→109; the historical53px failure above remains retained as baseline evidence. The Windows symlink gate and nativeIME limit remain unchanged.
