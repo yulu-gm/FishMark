@@ -26,9 +26,6 @@ import {
   createActiveInlineImageDecorations,
   createInactiveHtmlImagePreviewDecoration
 } from "./image-widgets";
-import {
-  createBlockDecorationSignature
-} from "./signature";
 import { createTableWidgetDecoration, type TableWidgetCallbacks } from "./table-widget";
 import { createInactiveBlockMathPreviewDecoration } from "./math-widgets";
 import { createInactiveMermaidPreviewDecoration, isMermaidCodeFence } from "./mermaid-widgets";
@@ -471,7 +468,7 @@ function appendDecorationsForNode(
 ): void {
   if (!isMarkdownLeafNode(node)) {
     const active = node.id === context.activeRootNodeId;
-    signatures?.push(`${createCanonicalContainerSignature(node)}${
+    signatures?.push(`${createCanonicalNodeSignature(node)}${
       active ? node.kind === "blockquote" ? ":content-edit" : `:line-edit:${context.activeListLineStart ?? "none"}` : ""
     }`);
     appendCanonicalContainerDecorations(node, context, ranges, signatures);
@@ -481,9 +478,10 @@ function appendDecorationsForNode(
   appendDecorationsForBlock(canonicalLeafView(node, context.snapshot), context, ranges, signatures);
 }
 
-// Container decorations depend on the whole subtree, so the container's own source fingerprint
-// (its node id) plus its projected offsets is a complete cache key.
-function createCanonicalContainerSignature(node: MarkdownNode): string {
+// Canonical nodes already own their source fingerprint and projected offsets.
+// Source changes are applied unconditionally by the host, including changes to
+// external reference definitions; selection-only refreshes reuse these identities.
+function createCanonicalNodeSignature(node: MarkdownNode): string {
   return `${node.kind}:${node.id}:${node.source.startOffset}:${node.source.endOffset}`;
 }
 
@@ -507,7 +505,7 @@ function appendDecorationsForBlock(
             containerDepth: containerContext.depth
           }
         : {};
-    const tableSignature = `${createBlockDecorationSignature(block)}${
+    const tableSignature = `${createCanonicalNodeSignature(context.snapshot.nodeById(block.id)!)}${
       containerContext ? `:container:${containerContext.type}:${containerContext.depth}` : ""
     }`;
 
@@ -538,7 +536,7 @@ function appendDecorationsForBlock(
   if (block.id === context.activeRootNodeId) {
 
     if (context.activeCodeFenceInContentEdit && block.type === "codeFence") {
-      signatures?.push(`${createBlockDecorationSignature(block)}:content-edit`);
+      signatures?.push(`${createCanonicalNodeSignature(context.snapshot.nodeById(block.id)!)}:content-edit`);
       appendCodeFenceDecorations(block.startOffset, block.endOffset, context.source, ranges, block.info, block.kind);
       return;
     }
@@ -547,7 +545,7 @@ function appendDecorationsForBlock(
     return;
   }
 
-  signatures?.push(createBlockDecorationSignature(block));
+  signatures?.push(createCanonicalNodeSignature(context.snapshot.nodeById(block.id)!));
 
   appendInactiveDecorationsForBlock(block, context, ranges, signatures);
 }

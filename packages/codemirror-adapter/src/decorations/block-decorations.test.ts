@@ -1031,13 +1031,13 @@ describe("createBlockDecorations", () => {
     expect(result.signature).toBe(
       [
         "view-mode:wysiwym:marker-mode:editing:86:86:none:active:paragraph@5#5293aed9:blank-line:86:physical-line:15:86:95:text",
-        'heading:heading@0#036d0de0:0:1|inline:root(2-7:text(2-7:"Title"))',
+        'heading:heading@0#036d0de0:0:7',
         // Containers key on their canonical node id, whose fingerprint covers the whole subtree
         // source, so nested inline and marker edits still invalidate the decoration cache.
         "list:list@1#7b601b2d:9:25",
         "blockquote:blockquote@2#7f99c849:27:49",
-        "codeFence:code-fence@3#c9e9bdd1:ts",
-        "thematicBreak:thematic-break@4#c4e4dc86:-"
+        "code-fence:code-fence@3#c9e9bdd1:51:79",
+        "thematic-break:thematic-break@4#c4e4dc86:81:84"
       ].join("|")
     );
 

@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { RangeSet, StateEffect, Transaction } from "@codemirror/state";
-import { readCompositionState } from "@fishmark/codemirror-adapter";
+import { readCompositionState, readEditorStructureCache } from "@fishmark/codemirror-adapter";
 import { isolateHistory, redo, redoDepth, undo, undoDepth } from "@codemirror/commands";
 import { EditorView } from "@codemirror/view";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -9957,6 +9957,90 @@ describe("progressive heading marker presentation", () => {
       expect(p.controller.getContent()).toBe("## T中itle");
       expect(p.onUserDocumentEdit).toHaveBeenCalledTimes(1);
       expect(p.host.querySelector(".cm-active-heading-marker")).toBeNull();
+    } finally { p.destroy(); }
+  });
+});
+
+// These equal-length fixtures intentionally collide in the canonical FNV source id.
+// Their rendered metadata still differs, so source changes must never be suppressed
+// by a matching decoration signature.
+describe("canonical decoration cache invalidation", () => {
+  function setup(source: string, head = source.length) {
+    const host = document.createElement("div"); document.body.appendChild(host);
+    const controller = createCodeEditorController({ parent: host, initialContent: source, onChange: vi.fn() });
+    const view = getEditorView(host)!; controller.focus(); controller.setSelection(head);
+    return { host, view, controller, destroy() { controller.destroy(); host.remove(); } };
+  }
+  it("refreshes image rendering context while canonical source and identity stay unchanged", () => {
+    const source = "![hero](./hero.png)\n\nTail", p = setup(source);
+    const image = () => getImagePreviews(p.host)[0]?.querySelector("img");
+    try {
+      const id = readEditorStructureCache(p.view.state).tree.root.children[0]!.id;
+      const selection = p.controller.getSelection();
+      for (const directory of ["first", "second"]) {
+        p.controller.setDocumentPath("D:/" + directory + "/note.md");
+        expect(image()?.getAttribute("src")).toBe("fishmark-asset://preview?path=D%3A%2F" + directory + "%2Fhero.png");
+        expect(p.controller.getContent()).toBe(source);
+        expect(readEditorStructureCache(p.view.state).tree.root.children[0]!.id).toBe(id);
+        expect(p.controller.getSelection()).toEqual(selection);
+        expect(undoDepth(p.view.state)).toBe(0);
+      }
+    } finally { p.destroy(); }
+  });
+  it("refreshes inactive heading depth when canonical source ids collide", () => {
+    const first = "# 1yrme6z", second = "## na4i8q";
+    const p = setup(first + "\n\nTail");
+    try {
+      const id = readEditorStructureCache(p.view.state).tree.root.children[0]!.id;
+      expect(p.host.querySelector(".cm-inactive-heading-depth-1")).not.toBeNull();
+      p.view.dispatch({ changes: { from: 0, to: first.length, insert: second }, userEvent: "input.type" });
+      expect(readEditorStructureCache(p.view.state).tree.root.children[0]!.id).toBe(id);
+      expect(p.host.querySelector(".cm-inactive-heading-depth-2")).not.toBeNull();
+      expect(p.host.querySelector(".cm-inactive-heading-depth-1")).toBeNull();
+      undo(p.view); expect(p.host.querySelector(".cm-inactive-heading-depth-1")).not.toBeNull();
+      redo(p.view); expect(p.host.querySelector(".cm-inactive-heading-depth-2")).not.toBeNull();
+    } finally { p.destroy(); }
+  });
+  it.each([
+    ["[ref]: https://example.test/1nkv0bc", "[ref]: https://example.test/1ggyhq0", true],
+    ['[ref]: https://example.test/a "First"', '[ref]: https://example.test/b "Other"', false]
+  ])("refreshes a preceding reference when its active definition changes: %s", (first, second, collision) => {
+    const lead = "# [Label][ref]\n\n", p = setup(lead + first);
+    const link = () => p.host.querySelector<HTMLElement>("[data-fishmark-link-href]");
+    try {
+      const id = readEditorStructureCache(p.view.state).tree.root.children.at(-1)!.id;
+      expect(link()?.dataset.fishmarkLinkHref).toBe(first.split(" ")[1]);
+      p.view.dispatch({ changes: { from: lead.length, to: lead.length + first.length, insert: second }, userEvent: "input.type" });
+      if (collision) expect(readEditorStructureCache(p.view.state).tree.root.children.at(-1)!.id).toBe(id);
+      expect(link()?.dataset.fishmarkLinkHref).toBe(second.split(" ")[1]);
+      if (!collision) expect(link()?.title).toBe("Other");
+      expect(p.controller.getSelection().head).toBe(lead.length + second.length);
+      undo(p.view); expect(link()?.dataset.fishmarkLinkHref).toBe(first.split(" ")[1]);
+      redo(p.view); expect(link()?.dataset.fishmarkLinkHref).toBe(second.split(" ")[1]);
+    } finally { p.destroy(); }
+  });
+  it("refreshes duplicate footnote status outside the active definition", () => {
+    const source = "# note[^x]\n\n[^x]: first\n\n[^x]: second\n\nTail";
+    const first = source.indexOf("[^x]: first"), p = setup(source, first + "[^x]: first".length);
+    const secondLine = () => Array.from(p.host.querySelectorAll<HTMLElement>(".cm-line")).find(line => line.textContent?.includes("second"));
+    try {
+      expect(secondLine()?.classList.contains("cm-inactive-footnote-definition")).toBe(false);
+      p.view.dispatch({ changes: { from: first + 2, to: first + 3, insert: "y" }, userEvent: "input.type" });
+      expect(secondLine()?.classList.contains("cm-inactive-footnote-definition")).toBe(true);
+      undo(p.view); expect(secondLine()?.classList.contains("cm-inactive-footnote-definition")).toBe(false);
+      redo(p.view); expect(secondLine()?.classList.contains("cm-inactive-footnote-definition")).toBe(true);
+    } finally { p.destroy(); }
+  });
+  it("moves inactive heading decorations with their source after a preceding insertion", () => {
+    const source = "# Title\n\nTail", p = setup(source);
+    const heading = () => p.host.querySelector<HTMLElement>(".cm-inactive-heading")!;
+    try {
+      expect(p.view.posAtDOM(heading(), 0)).toBe(0);
+      p.view.dispatch({ changes: { from: 0, insert: "Lead\n\n" }, userEvent: "input.type" });
+      expect(p.view.posAtDOM(heading(), 0)).toBe(6);
+      expect(p.controller.getContent()).toBe("Lead\n\n" + source);
+      undo(p.view); expect(p.view.posAtDOM(heading(), 0)).toBe(0);
+      redo(p.view); expect(p.view.posAtDOM(heading(), 0)).toBe(6);
     } finally { p.destroy(); }
   });
 });

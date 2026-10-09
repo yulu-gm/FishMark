@@ -57,5 +57,27 @@ app.whenReady().then(async()=>{
  await setup('###### Title','editing',7);await key('Backspace');
  const positions=await js("(()=>{const view=EditorView.findFromDOM(document.querySelector('.cm-editor'));return Array.from({length:7},(_,i)=>({offset:i,rect:view.coordsAtPos(i)}));})()");
  for(const {offset,rect} of positions) {if(!rect)throw Error('missing prefix coordinates '+offset);win.webContents.sendInputEvent({type:'mouseDown',button:'left',clickCount:1,x:Math.round(rect.left),y:Math.round((rect.top+rect.bottom)/2)});win.webContents.sendInputEvent({type:'mouseUp',button:'left',clickCount:1,x:Math.round(rect.left),y:Math.round((rect.top+rect.bottom)/2)});await delay(80);const hit=await sample();check('native mouse hit at heading prefix '+offset,hit.selection.head===offset&&hit.nativeSelection.head===offset,hit);}
+ const cacheCases=[];
+ for(const [first,second,collision] of [
+  ['[ref]: https://example.test/1nkv0bc','[ref]: https://example.test/1ggyhq0',true],
+  ['[ref]: https://example.test/a "First"','[ref]: https://example.test/b "Other"',false]
+ ]) {
+  const lead='# [Label][ref]\n\n';await setup(lead+first,'editing',lead.length+first.length);const ids=await js('proof.nodes()');
+  await js('proof.controller.setSelection('+lead.length+','+(lead.length+first.length)+');undefined');await win.webContents.insertText(second);await delay(100);
+  const link=await js("(()=>{const e=document.querySelector('[data-fishmark-link-href]');return {href:e?.dataset.fishmarkLinkHref,title:e?.title};})()");
+  check('native reference definition refresh '+first,link.href===second.split(' ')[1]&&(collision||link.title==='Other'),link);
+  if(collision)check('native reference fixture retains colliding canonical id',ids.at(-1).id===(await js('proof.nodes()')).at(-1).id,{before:ids,after:await js('proof.nodes()')});
+  check('native reference source exact '+first,(await sample()).source===lead+second,await sample());
+  await key('z',['control']);check('native reference Undo restores href '+first,(await js("document.querySelector('[data-fishmark-link-href]')?.dataset.fishmarkLinkHref"))===first.split(' ')[1],await sample());
+  await key('y',['control']);check('native reference Redo restores href '+first,(await js("document.querySelector('[data-fishmark-link-href]')?.dataset.fishmarkLinkHref"))===second.split(' ')[1],await sample());cacheCases.push({first,second,collision,link});
+ }
+ const headingFirst='# 1yrme6z',headingSecond='## na4i8q';await setup(headingFirst+'\n\nTail','editing',headingFirst.length);const beforeIds=await js('proof.nodes()');
+ await js('proof.controller.setSelection(0,'+headingFirst.length+');undefined');await win.webContents.insertText(headingSecond);await delay(100);
+ check('native colliding heading depth refresh',!!(await js("document.querySelector('.cm-active-heading-depth-2')"))&&beforeIds[0].id===(await js('proof.nodes()'))[0].id,await sample());
+ await key('z',['control']);check('native heading collision Undo restores depth',!!(await js("document.querySelector('.cm-active-heading-depth-1')")),await sample());await key('y',['control']);check('native heading collision Redo restores depth',!!(await js("document.querySelector('.cm-active-heading-depth-2')")),await sample());
+ await setup('\n\n# Title\n\nTail','editing',0);await win.webContents.insertText('Lead');await delay(100);const shifted=await js("(()=>{const view=EditorView.findFromDOM(document.querySelector('.cm-editor'));const heading=document.querySelector('.cm-active-heading,.cm-inactive-heading');return heading?view.posAtDOM(heading,0):null;})()");check('native heading range moves after preceding insertion',shifted===6&&(await sample()).source==='Lead\n\n# Title\n\nTail',{shifted,state:await sample()});
+ const footnote='# note[^x]\n\n[^x]: first\n\n[^x]: second\n\nTail',firstDefinition=footnote.indexOf('[^x]: first');await setup(footnote,'editing',firstDefinition+11);await js('proof.controller.setSelection('+(firstDefinition+2)+','+(firstDefinition+3)+');undefined');await win.webContents.insertText('y');await delay(100);
+ const duplicateVisible=()=>js("[...document.querySelectorAll('.cm-line')].find(e=>e.textContent.includes('second'))?.classList.contains('cm-inactive-footnote-definition')");check('native duplicate footnote status refresh',await duplicateVisible(),await sample());await key('z',['control']);check('native duplicate footnote Undo restores duplicate status',!(await duplicateVisible()),await sample());await key('y',['control']);check('native duplicate footnote Redo restores valid status',await duplicateVisible(),await sample());
+ result.cacheCases=cacheCases;
  fs.writeFileSync(path.join(output,'matrix.png'),(await win.webContents.capturePage()).toPNG());result.dpr=await js('devicePixelRatio');finish();
 }).catch(finish);

@@ -39,3 +39,7 @@ The 178 checks include H1–H6, empty hash-only/padded headings, quote/list fixt
 - Codex failed to open the preview PNG in its panel; files and real Electron screenshots are saved locally. No claim of native desktop automation capability is made.
 
 Table fonts remain unresolved, Typora is not installed for comparison, and the independent font diagnostic checkpoint `aba0c73` remains on its separate branch. RF901/cp13/cp16 are frozen; the blocked Library transfer was not retried. RF902/903/M10 and M9 completion are not claimed.
+
+## Subsequent local budget work
+
+The historical594-byte budget failure above is resolved by TASK-UX-HEADING-002: current gzip1,429,970/1,430,000. Its exact source/context invalidation evidence is separate. The full-shell53px geometry failure and Windows symlink gate failure remain unresolved; no vertical layout change or push occurred.

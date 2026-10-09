@@ -679,9 +679,10 @@ export function createFishMarkMarkdownExtensions(
       state
     );
 
+    const sourceChanged = runtime.editorDerivedState.source !== editorDerivedState.source;
     runtime.editorDerivedState = editorDerivedState;
     notifyActiveBlockChange(activeBlockState, force);
-    applyBlockDecorations(view, decorationSet, signature, force, effects);
+    applyBlockDecorations(view, decorationSet, signature, force || sourceChanged, effects);
     syncTableInteractionFocus(view, activeBlockState);
   };
 
