@@ -5800,8 +5800,8 @@ describe("App autosave", () => {
     expect(editorStylesheet).toContain(".document-editor .cm-content");
     expect(editorContentRule).toContain("width: 100%;");
     expect(editorContentRule).toContain("box-sizing: border-box;");
-    expect(editorContentRule).toContain("--fishmark-document-padding-inline: max(");
-    expect(editorContentRule).toContain("(100% - var(--fishmark-document-measure)) / 2");
+    expect(editorContentRule).toContain("--fishmark-document-padding-inline: max(var(--fishmark-document-gutter), 6rem);");
+    expect(editorStylesheet).not.toContain("--fishmark-document-measure");
     expect(editorContentRule).toContain("padding: 40px var(--fishmark-document-padding-inline) 56px;");
     expect(editorContentRule).not.toContain("12vw");
     expect(editorContentRule).not.toContain("max-width: 72ch;");

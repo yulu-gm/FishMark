@@ -186,38 +186,21 @@ const MAX_LINE_TOP_FROM_WORKSPACE = 240;
 const MAX_MODE_TEXT_COLUMN_WIDTH_DELTA = 1;
 const MAX_CONTENT_HORIZONTAL_OVERFLOW = 0.5;
 const MIN_OPEN_SIDE_PANEL_WIDTH = 200;
-/*
- * Mirrors `--fishmark-document-gutter` (24px). The probe cannot read a custom
- * property off `:root` reliably before layout, and it only needs the value to
- * reconstruct the expected column width when the stage is narrower than the
- * measure, so it is duplicated here as an explicit contract.
- */
+/* Minimum gutter contract; the revealed heading prefix also needs 6rem. */
 const MIN_DOCUMENT_GUTTER = 24;
-/*
- * Stored panel widths exercised through the real drag contract: the resizer
- * writes `--fishmark-side-panel-stored-width` inline on the canvas/shell and
- * the stylesheet resolves it to `min(stored, 60vw)`.
- */
-/*
- * Stored panel widths exercised through the real drag contract: the resizer
- * writes `--fishmark-side-panel-stored-width` inline on the canvas/shell and
- * the stylesheet resolves it to `min(stored, 60vw)`. `invariant: true` marks
- * widths whose stage is still wide enough for the full measure; the `false`
- * width is expected to force the clamp and is reported as a threshold instead
- * of being asserted as invariance.
- */
+/* Exercise persisted side-panel widths through the real resize variable. */
 const SIDE_PANEL_DRAG_STORED_WIDTHS: ReadonlyArray<{
-  invariant: boolean;
   key: SidePanelDragSampleKey;
   storedWidth: string;
 }> = [
-  { invariant: true, key: "stored-200", storedWidth: "200px" },
-  { invariant: false, key: "stored-360", storedWidth: "360px" }
+  { key: "stored-200", storedWidth: "200px" },
+  { key: "stored-360", storedWidth: "360px" }
 ];
-/* Panel widths that still leave the document stage room for the full measure. */
-const INVARIANT_DRAG_KEYS: ReadonlyArray<SidePanelDragSampleKey> = [
+/* Every stored width participates in the adaptive resize contract. */
+const ADAPTIVE_DRAG_KEYS: ReadonlyArray<SidePanelDragSampleKey> = [
   "stored-default",
-  "stored-200"
+  "stored-200",
+  "stored-360"
 ];
 const MAX_DOCUMENT_STAGE_WIDTH_DELTA = 1;
 const MIN_CANVAS_HEIGHT = 420;
@@ -450,15 +433,13 @@ function mountProbeEditor(
   return { content, controller, editorRoot, host };
 }
 
-/*
- * The shell animates its grid columns for 220ms. Eight frames is far more than
- * the transition needs while keeping the probe cheap inside a hidden window
- * where frames can be expensive.
- */
-async function settleTransitions(frames = 8): Promise<void> {
-  for (let frame = 0; frame < frames; frame += 1) {
-    await nextFrame();
-  }
+/* Await actual finite transitions, independent of monitor refresh rate. */
+async function settleTransitions(): Promise<void> {
+  await nextFrame();
+  await Promise.all(document.getAnimations()
+    .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
+    .map((animation) => animation.finished.catch(() => {})));
+  await nextFrame();
 }
 
 async function measureShellMode(root: HTMLElement, shellMode: ShellMode): Promise<ShellModeMeasurement> {
@@ -516,13 +497,7 @@ async function measureShellMode(root: HTMLElement, shellMode: ShellMode): Promis
   };
 }
 
-/*
- * The document measure probe presses the same prose document through all four
- * shell states (reading/editing x outline closed/open) and checks that the
- * rendered text column never moves. Widths are read from the rendered boxes,
- * not from the stylesheet, so a wrapping change shows up as a line count
- * change on the same CodeMirror instance.
- */
+/* Compare modes at each panel state; panel resizing naturally reflows prose. */
 async function measureDocumentMeasureMatrix(root: HTMLElement): Promise<EmptyDocumentLayoutProbeResult["documentMeasure"]> {
   const editor = mountProbeEditor(root, "editing", createMeasureProbeContent(24));
   const { content, controller, editorRoot } = editor;
@@ -598,18 +573,11 @@ async function measureDocumentMeasureMatrix(root: HTMLElement): Promise<EmptyDoc
     const paddingStart = Number.parseFloat(contentStyle.paddingLeft);
     const paddingEnd = Number.parseFloat(contentStyle.paddingRight);
     const lineHeight = firstLineRect.height;
-    /*
-     * The rendered text width is `measure` capped by the space the document
-     * stage actually has. `.cm-content` is `width: 100%`, so its padding box is
-     * exactly the stage content box and `paddingStart`/`paddingEnd` are the
-     * symmetric leftover on both sides of the measure.
-     */
+    /* The adaptive column fills the stage minus the permanent marker gutters. */
     const measuredColumnWidth = content.clientWidth - paddingStart - paddingEnd;
-    const measureProperty = contentStyle.getPropertyValue("--fishmark-document-measure").trim();
-    const measurePx = Number.parseFloat(measureProperty);
-    const expectedColumnWidth = Number.isFinite(measurePx)
-      ? Math.min(measurePx, content.clientWidth - 2 * MIN_DOCUMENT_GUTTER)
-      : measuredColumnWidth;
+    const expectedColumnWidth = content.clientWidth - 2 * Math.max(
+      MIN_DOCUMENT_GUTTER, 6 * Number.parseFloat(getComputedStyle(document.documentElement).fontSize)
+    );
 
     return {
       canvasLeftFromWorkspace: canvasRect.left - workspaceRect.left,
@@ -621,8 +589,8 @@ async function measureDocumentMeasureMatrix(root: HTMLElement): Promise<EmptyDoc
       documentHeight: contentRect.height,
       documentStageWidth: documentCanvas.clientWidth,
       innerPaddingDelta: Math.abs(paddingStart - paddingEnd),
-      measure: measureProperty,
-      measurePx: Number.isFinite(measurePx) ? measurePx : 0,
+      measure: "adaptive",
+      measurePx: 0,
       paddingEnd,
       paddingStart,
       renderedLineCount: lines.length,
@@ -778,30 +746,13 @@ async function measureDocumentMeasureMatrix(root: HTMLElement): Promise<EmptyDoc
     );
   }
 
-  if (spread.textColumnWidth > MAX_MODE_TEXT_COLUMN_WIDTH_DELTA) {
-    failures.push(
-      `document text column width varies by ${spread.textColumnWidth.toFixed(2)}px across shell states`
-    );
-  }
-
-  if (spread.renderedLineCount !== 0) {
-    failures.push(
-      `document rendered line count varies by ${spread.renderedLineCount} across shell states`
-    );
-  }
-
-  if (spread.totalTextHeight > MAX_MODE_TEXT_COLUMN_WIDTH_DELTA) {
-    failures.push(
-      `document rendered text height varies by ${spread.totalTextHeight.toFixed(
-        2
-      )}px across shell states`
-    );
-  }
-
-  if (spread.documentHeight > MAX_MODE_TEXT_COLUMN_WIDTH_DELTA) {
-    failures.push(
-      `document text height varies by ${spread.documentHeight.toFixed(2)}px across shell states`
-    );
+  // Side-panel changes reflow adaptive prose; mode changes at the same panel
+  // width must preserve its width, wrapping and height.
+  for (const key of ["textColumnWidth", "renderedLineCount", "totalTextHeight", "documentHeight"] as const) {
+    const delta = Math.max(Math.abs(closedEditing[key] - closedReading[key]), Math.abs(openEditing[key] - openReading[key]));
+    if (delta > (key === "renderedLineCount" ? 0 : MAX_MODE_TEXT_COLUMN_WIDTH_DELTA)) {
+      failures.push(`${key} differs between reading and editing by ${delta}px within a panel state`);
+    }
   }
 
   /*
@@ -816,12 +767,7 @@ async function measureDocumentMeasureMatrix(root: HTMLElement): Promise<EmptyDoc
     );
   }
 
-  /*
-   * The stage width legitimately shrinks when the panel opens (the whitespace
-   * is what shrinks). What must hold is that the stage never becomes narrower
-   * than the text column plus the gutter floor; `documentStageWidth` is
-   * reported per sample and as a spread so the narrowing is visible.
-   */
+  /* Opening the side panel shrinks the document stage and its adaptive column. */
 
   for (const [key, panelWidth] of Object.entries(panelWidths)) {
     if (key.endsWith("-outline-open") && panelWidth < MIN_OPEN_SIDE_PANEL_WIDTH) {
@@ -846,11 +792,7 @@ async function measureDocumentMeasureMatrix(root: HTMLElement): Promise<EmptyDoc
       );
     }
 
-    /*
-     * The stage content box is exactly the `.cm-content` padding box, so the
-     * centring contract is "equal inner padding on both sides of the measure".
-     * This stays valid wherever the shell docks its side panel or rail.
-     */
+    /* Equal inner gutters centre the adaptive text column inside its stage. */
     if (sample.innerPaddingDelta > MAX_MODE_TEXT_MARGIN_DELTA) {
       failures.push(
         `${key} does not centre the text column inside the document stage: padding ${sample.paddingStart.toFixed(
@@ -861,7 +803,7 @@ async function measureDocumentMeasureMatrix(root: HTMLElement): Promise<EmptyDoc
 
     if (sample.textColumnWidthVsMeasure > MAX_MODE_TEXT_COLUMN_WIDTH_DELTA) {
       failures.push(
-        `${key} text column ${sample.textColumnWidth.toFixed(2)}px does not match the clamped measure ${
+        `${key} text column ${sample.textColumnWidth.toFixed(2)}px does not match the adaptive width ${
           sample.measure
         } (stage content width ${sample.contentClientWidth}px)`
       );
@@ -890,36 +832,28 @@ async function measureDocumentMeasureMatrix(root: HTMLElement): Promise<EmptyDoc
     }
   }
 
-  /*
-   * Drag dimension. The panel column really changes width (non-vacuity), while
-   * every drag width that still leaves the stage room for the full measure must
-   * leave the document completely untouched: same rendered/wrapped lines, same
-   * text height, same column width and same absolute left edge. A width that
-   * squeezes the stage below `measure + 2 * gutter` is reported as a measured
-   * threshold, because at that point the clamp (not the shell state) resizes
-   * the column and re-wrapping is geometrically unavoidable.
-   */
+  /* Every panel resize must change the text column by the opposite width delta. */
   const dragFailures: string[] = [];
   const dragEntries = Object.entries(dragSamples) as [SidePanelDragSampleKey, SidePanelDragSample][];
-  const invariantDragSamples = INVARIANT_DRAG_KEYS.map((key) => dragSamples[key]);
+  const adaptiveDragSamples = ADAPTIVE_DRAG_KEYS.map((key) => dragSamples[key]);
   const dragPanelWidths = dragEntries.map(([, sample]) => sample.sidePanelWidth);
   const dragSpread = {
     documentHeight:
-      Math.max(...invariantDragSamples.map((sample) => sample.documentHeight)) -
-      Math.min(...invariantDragSamples.map((sample) => sample.documentHeight)),
+      Math.max(...adaptiveDragSamples.map((sample) => sample.documentHeight)) -
+      Math.min(...adaptiveDragSamples.map((sample) => sample.documentHeight)),
     renderedLineCount:
-      Math.max(...invariantDragSamples.map((sample) => sample.renderedLineCount)) -
-      Math.min(...invariantDragSamples.map((sample) => sample.renderedLineCount)),
+      Math.max(...adaptiveDragSamples.map((sample) => sample.renderedLineCount)) -
+      Math.min(...adaptiveDragSamples.map((sample) => sample.renderedLineCount)),
     sidePanelWidth: Math.max(...dragPanelWidths) - Math.min(...dragPanelWidths),
     textColumnLeft:
-      Math.max(...invariantDragSamples.map((sample) => sample.textColumnLeft)) -
-      Math.min(...invariantDragSamples.map((sample) => sample.textColumnLeft)),
+      Math.max(...adaptiveDragSamples.map((sample) => sample.textColumnLeft)) -
+      Math.min(...adaptiveDragSamples.map((sample) => sample.textColumnLeft)),
     textColumnWidth:
-      Math.max(...invariantDragSamples.map((sample) => sample.textColumnWidth)) -
-      Math.min(...invariantDragSamples.map((sample) => sample.textColumnWidth)),
+      Math.max(...adaptiveDragSamples.map((sample) => sample.textColumnWidth)) -
+      Math.min(...adaptiveDragSamples.map((sample) => sample.textColumnWidth)),
     totalTextHeight:
-      Math.max(...invariantDragSamples.map((sample) => sample.totalTextHeight)) -
-      Math.min(...invariantDragSamples.map((sample) => sample.totalTextHeight))
+      Math.max(...adaptiveDragSamples.map((sample) => sample.totalTextHeight)) -
+      Math.min(...adaptiveDragSamples.map((sample) => sample.totalTextHeight))
   };
 
   /*
@@ -936,14 +870,8 @@ async function measureDocumentMeasureMatrix(root: HTMLElement): Promise<EmptyDoc
     );
   }
 
-  /*
-   * The 360px stored width is excluded from the invariance assertions by
-   * design: at this window it leaves the document stage 714px, below
-   * `measure + 2 * gutter` (768px), so the clamp shrinks the column and the
-   * text genuinely re-wraps. That sample is reported instead (see
-   * `sidePanelDrag.samples["stored-360"]`).
-   */
-  for (const key of INVARIANT_DRAG_KEYS) {
+  /* Check all stored widths, including the narrowest stage. */
+  for (const key of ADAPTIVE_DRAG_KEYS) {
     const sample = dragSamples[key];
 
     if (key !== "stored-default") {
@@ -958,7 +886,7 @@ async function measureDocumentMeasureMatrix(root: HTMLElement): Promise<EmptyDoc
 
     if (sample.textColumnWidthVsMeasure > MAX_MODE_TEXT_COLUMN_WIDTH_DELTA) {
       dragFailures.push(
-        `${key} text column ${sample.textColumnWidth.toFixed(2)}px does not match the clamped measure ${
+        `${key} text column ${sample.textColumnWidth.toFixed(2)}px does not match the adaptive width ${
           sample.measure
         } during a panel resize`
       );
@@ -969,44 +897,14 @@ async function measureDocumentMeasureMatrix(root: HTMLElement): Promise<EmptyDoc
         `${key} overflows horizontally during a panel resize: scrollWidth ${sample.contentScrollWidth}px vs clientWidth ${sample.contentClientWidth}px`
       );
     }
+    const baseline = dragSamples["stored-default"];
+    if (Math.abs(sample.textColumnWidth - baseline.textColumnWidth + sample.sidePanelWidth - baseline.sidePanelWidth) > MAX_MODE_TEXT_COLUMN_WIDTH_DELTA) {
+      dragFailures.push(`${key} text column did not track the signed side-panel width change`);
+    }
   }
 
-  if (dragSpread.renderedLineCount !== 0) {
-    dragFailures.push(
-      `rendered line count changes by ${dragSpread.renderedLineCount} when the panel is resized within the roomy range`
-    );
-  }
 
-  if (dragSpread.totalTextHeight > MAX_MODE_TEXT_COLUMN_WIDTH_DELTA) {
-    dragFailures.push(
-      `rendered text height changes by ${dragSpread.totalTextHeight.toFixed(
-        2
-      )}px when the panel is resized within the roomy range`
-    );
-  }
-
-  if (dragSpread.documentHeight > MAX_MODE_TEXT_COLUMN_WIDTH_DELTA) {
-    dragFailures.push(
-      `document text height changes by ${dragSpread.documentHeight.toFixed(
-        2
-      )}px when the panel is resized within the roomy range`
-    );
-  }
-
-  if (dragSpread.textColumnWidth > MAX_MODE_TEXT_COLUMN_WIDTH_DELTA) {
-    dragFailures.push(
-      `text column width changes by ${dragSpread.textColumnWidth.toFixed(
-        2
-      )}px when the panel is resized within the roomy range`
-    );
-  }
-
-  /*
-   * `textColumnLeft` is intentionally NOT asserted here: the column is centred
-   * in the document stage, so widening/narrowing the panel translates the whole
-   * centred column by half the panel delta without re-wrapping anything. That
-   * translation is reported in `spread.textColumnLeft`.
-   */
+  /* Panel translation and natural text reflow are reported separately. */
   failures.push(...dragFailures);
 
   return {

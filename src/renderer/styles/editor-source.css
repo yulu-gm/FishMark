@@ -37,19 +37,8 @@
   width: 100%;
   min-height: 100%;
   box-sizing: border-box;
-  /*
-   * Layout-invariant measure. The horizontal padding is the leftover space
-   * between the fixed document measure and the surrounding area, so the text
-   * column stays exactly `--fishmark-document-measure` wide no matter how much
-   * room the rail or the outline panel leave behind. The remainder becomes
-   * symmetric whitespace on both sides. `--fishmark-document-gutter` is the
-   * floor that keeps the narrow-window case from collapsing to zero padding.
-   */
-  --fishmark-document-padding-inline: max(
-    var(--fishmark-document-gutter),
-    6rem,
-    (100% - var(--fishmark-document-measure)) / 2
-  );
+  /* Fill the available stage; keep revealed heading syntax inside its gutter. */
+  --fishmark-document-padding-inline: max(var(--fishmark-document-gutter), 6rem);
   padding: 40px var(--fishmark-document-padding-inline) 56px;
   caret-color: var(--fishmark-caret-color);
 }
@@ -109,19 +98,4 @@
   border: none;
   background: transparent;
   color: var(--fishmark-gutter-fg, var(--fishmark-editor-muted, #687180));
-}
-
-/*
- * Narrow canvas: the fixed measure no longer fits next to the rail and/or the
- * outline panel, so it contracts to the canvas width minus a symmetric
- * `--fishmark-document-gutter` on each side. The column stays centred either
- * way, which keeps narrow windows sane without introducing horizontal
- * scrolling. At the probe window width (1204px viewport) this query does not
- * apply, so all shell states keep the full 720px measure.
- */
-@container editor-canvas (max-width: 640px) {
-  .document-editor {
-    --fishmark-document-measure: 100cqw - 2 * var(--fishmark-document-gutter);
-    --fishmark-document-padding-inline: var(--fishmark-document-gutter);
-  }
 }
