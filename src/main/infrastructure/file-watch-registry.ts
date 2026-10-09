@@ -1,6 +1,8 @@
 import { watch as defaultWatch, type Stats } from "node:fs";
 import { stat as defaultStat } from "node:fs/promises";
 
+import { normalizeFilePath } from "../file-path";
+
 import { EXTERNAL_MARKDOWN_FILE_CHANGED_EVENT } from "../../shared/external-file-change";
 
 type ExternalWatchEventType = "change" | "rename";
@@ -21,6 +23,7 @@ type FSWatcherLike = {
 };
 
 type WatchDependencies = {
+  platform: NodeJS.Platform;
   watch: (
     targetPath: string,
     listener: (eventType: ExternalWatchEventType) => void
@@ -48,6 +51,7 @@ type RegistryEntry = {
 };
 
 const defaultDependencies: WatchDependencies = {
+  platform: process.platform,
   watch: (targetPath, listener) =>
     defaultWatch(targetPath, (eventType) =>
       listener(eventType === "rename" ? "rename" : "change")
@@ -81,7 +85,8 @@ export function createFileWatchRegistry(
 
   function normalizedPath(targetPath: string | null): string | null {
     if (targetPath === null || targetPath.length === 0) return null;
-    return targetPath.replace(/\\/g, "/").replace(/\/+/g, "/");
+    const normalized = normalizeFilePath(targetPath, resolved.platform);
+    return resolved.platform === "win32" ? normalized.replace(/\\/g, "/") : normalized;
   }
 
   function isLive(target: WatchedTarget): boolean {

@@ -75,6 +75,7 @@ export type WorkspaceRendererBridge = Pick<
   | "resolveExternalChange"
   | "exportHtmlFile"
   | "onWorkspaceOwnerTabActivationRequest"
+  | "onExternalMarkdownFileChanged"
 >;
 
 export type WorkspaceRendererApplicationState = EditorShellState & Readonly<{
@@ -225,6 +226,7 @@ export class WorkspaceRendererApplication {
     showNotification: (notification: AppNotification) => void;
     setEditorContentSnapshot: (content: string) => void;
   } = { showNotification: () => {}, setEditorContentSnapshot: () => {} };
+  private detachExternalChange: (() => void) | null = null;
   private detachOwnerActivation: (() => void) | null = null;
   private publishedEditorView: WorkspaceWindowSnapshot | null = null;
   private viewCache: { snapshot: WorkspaceWindowSnapshot; text: string; value: WorkspaceWindowSnapshot } | null = null;
@@ -500,6 +502,12 @@ export class WorkspaceRendererApplication {
     if (this.disposed) return;
     this.lifecycleEpoch += 1;
     this.editClient.start();
+    if (this.detachExternalChange === null) {
+      this.detachExternalChange = this.bridge.onExternalMarkdownFileChanged?.(() => {
+        // Main owns conflict detection; refresh through the existing serialized, dirty-safe path.
+        void this.refreshWorkspaceSnapshot().then((outcome) => this.notifyFailure(outcome));
+      }) ?? null;
+    }
     if (this.detachOwnerActivation === null) this.detachOwnerActivation = this.bridge.onWorkspaceOwnerTabActivationRequest?.(({ tabId }) => this.commands.activateWorkspaceTab(tabId)) ?? null;
   }
 
@@ -525,6 +533,8 @@ export class WorkspaceRendererApplication {
   dispose(): void {
     this.disposed = true;
     this.save.dispose();
+    this.detachExternalChange?.();
+    this.detachExternalChange = null;
     this.detachOwnerActivation?.();
     this.detachOwnerActivation = null;
     this.lifecycleEpoch += 1;
@@ -755,6 +765,7 @@ export class WorkspaceRendererApplication {
       try {
         this.assertActive();
         const snapshot = await this.bridge.getWorkspaceSnapshot();
+        this.assertActive();
         this.recordCanonicalSnapshot(snapshot);
         return { kind: "committed", value: snapshot };
       } catch (error) {

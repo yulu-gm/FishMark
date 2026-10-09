@@ -39,3 +39,5 @@ Actual built Electron probe: `scripts/electron-explicit-mode-main.cjs`. Set `FIS
 [Independent review](../reviews/2026-10-09-explicit-reading-mode.md) found two issues during implementation (stale settings dependency, competing settings-close focus frame); both were corrected before final tests. Current source review PASS is limited to this F11 change.
 
 The Windows watcher/session path mismatch needs a separate focused fix and real reload verification. The existing symlink gate still needs an authorized environment/gate decision; no exception is assumed. This checkpoint does not accept M9 or launch release. Frozen cp13/cp16 and RF902/903 are untouched. [Current interaction specification](../../docs/plans/2026-10-09-explicit-reading-presentation.md).
+
+Follow-up: [TASK-UX-RELOAD-001](TASK-UX-RELOAD-001.md) fixes the separately recorded external reload integration blocker. The historical failures above remain valid evidence for this checkpoint.

@@ -6,7 +6,7 @@ if(fs.existsSync(output))throw Error('Choose a fresh output directory');
 fs.mkdirSync(output,{recursive:true});app.setPath('userData',path.join(output,'userData'));fs.mkdirSync(app.getPath('userData'),{recursive:true});
 const {DEFAULT_PREFERENCES}=require(path.join(root,'dist-electron/shared/preferences.js'));
 fs.writeFileSync(path.join(app.getPath('userData'),'preferences.json'),JSON.stringify({...DEFAULT_PREFERENCES,autosave:{idleDelayMs:60000},document:{fontFamily:'Georgia',cjkFontFamily:'Microsoft YaHei',fontSize:18}}));
-const file=path.join(output,'fixture.md');const source='# F11 mode\n\n| 项目 | Notes |\n| --- | --- |\n| 中文测试 ABC | Second cell |\n| next | row |\n\nEnd.\n';fs.writeFileSync(file,source);process.argv.push(file.replaceAll('\\','/'));
+const file=path.join(output,process.env.FISHMARK_MODE_RELOAD_CHECK==='1'?'中文 空格 Note.MD':'fixture.md');const source='# F11 mode\n\n| 项目 | Notes |\n| --- | --- |\n| 中文测试 ABC | Second cell |\n| next | row |\n\nEnd.\n';fs.writeFileSync(file,source);const otherFile=path.join(output,'Other 中文.md');if(process.env.FISHMARK_MODE_RELOAD_CHECK==='1'){fs.writeFileSync(otherFile,'# Other document\n\nUntouched.\n');process.argv.push(otherFile);}process.argv.push(file.replaceAll('\\','/'));
 require(path.join(root,'dist-electron/main/main.js'));
 const result={checks:[],versions:process.versions,width:Number(process.env.FISHMARK_MODE_WIDTH??1200)};let win,done=false;
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
@@ -39,8 +39,25 @@ app.whenReady().then(async()=>{
  await click('[data-fishmark-command="toggle-reading-mode"]');check('visible entry enters reading',(await state()).mode==='reading');await click('[data-fishmark-command="toggle-reading-mode"]');check('visible entry exits reading',(await state()).mode==='editing');
  await click('[data-table-cell="1:0"]');const original=(await state()).cell;await win.webContents.insertText('X');await delay(150);const typed=(await state()).cell;await key('F11');await key('F11');await key('z',['control']);check('native undo survives mode toggles',(await state()).cell===original);await key('y',['control']);check('native redo survives mode toggles',(await state()).cell===typed);await key('s',['control']);await waitFor(()=>fs.readFileSync(file,'utf8').includes(typed));check('manual save uses current text',true);
  await click('[data-table-cell="1:0"]');await win.webContents.insertText('dirty');await waitFor(async()=>(await state()).cell?.includes('dirty'));await delay(1000);result.preExternal=await state();result.workspaceBeforeExternal=await js("window.fishmark.getWorkspaceSnapshot()");await js('window.__externalEvents=[];window.fishmark.onExternalMarkdownFileChanged(event=>window.__externalEvents.push(event));undefined');fs.writeFileSync(file,source.replace('中文测试 ABC','磁盘版本'));await waitFor(async()=>await js('!!document.querySelector(".external-file-conflict-button")'));
- await click('.external-file-conflict-button');await waitFor(async()=>(await state()).cell==='磁盘版本');check('external reload preserves editing',(await state()).mode==='editing');await screenshot('reloaded');
+ if(process.env.FISHMARK_MODE_RELOAD_CHECK==='1') {
+   result.conflictSnapshot=await js('window.fishmark.getWorkspaceSnapshot()');
+   check('dirty conflict preserves unsaved text',result.conflictSnapshot.activeDocument.isDirty&&result.conflictSnapshot.activeDocument.content.includes('dirty')&&(await state()).cell.includes('dirty'),result.conflictSnapshot);
+   check('multiple documents remain distinct',result.conflictSnapshot.tabs.length===2&&result.conflictSnapshot.tabs.filter(t=>t.isDirty).length===1);
+   await screenshot('dirty-conflict');
+   const diskBeforeKeep=fs.readFileSync(file,'utf8');const memoryBeforeKeep=(await state()).cell;
+   await click('.external-file-conflict-button:nth-child(2)');await waitFor(async()=>!(await js('window.fishmark.getWorkspaceSnapshot()')).activeDocument.externalChange);
+   check('keep-memory retains dirty text and does not write disk',(await state()).cell===memoryBeforeKeep&&(await js('window.fishmark.getWorkspaceSnapshot()')).activeDocument.isDirty&&fs.readFileSync(file,'utf8')===diskBeforeKeep);
+   await delay(500);fs.writeFileSync(file,source.replace('中文测试 ABC','再次磁盘版本'));await waitFor(async()=>await js('!!document.querySelector(".external-file-conflict-button")'));
+   check('later external change still asks for a choice',(await state()).cell===memoryBeforeKeep);
+ }
+ await click('.external-file-conflict-button');await waitFor(async()=>(await state()).cell===(process.env.FISHMARK_MODE_RELOAD_CHECK==='1'?'再次磁盘版本':'磁盘版本'));check('external reload preserves editing',(await state()).mode==='editing');await screenshot('reloaded');
+ if(process.env.FISHMARK_MODE_RELOAD_CHECK==='1') {
+   result.reloadedSnapshot=await js('window.fishmark.getWorkspaceSnapshot()');check('explicit reload resolves conflict and clears dirty',!result.reloadedSnapshot.activeDocument.isDirty&&!result.reloadedSnapshot.activeDocument.externalChange);
+   check('other document remains unchanged',fs.readFileSync(otherFile,'utf8')==='# Other document\n\nUntouched.\n');
+   await click('[data-fishmark-region="workspace-tab"]');await waitFor(async()=>(await js('window.fishmark.getWorkspaceSnapshot()')).activeDocument.name==='Other 中文.md');
+   check('switching to other document retains its clean content',(await js('window.fishmark.getWorkspaceSnapshot()')).activeDocument.content==='# Other document\n\nUntouched.\n'&&!(await js('window.fishmark.getWorkspaceSnapshot()')).activeDocument.externalChange);
+ }
  await key('n',['control']);await waitFor(async()=>await js('!document.querySelector(".cm-table-widget-table")'));check('new document preserves editing',(await state()).mode==='editing');
  check('no fullscreen across all input',!win.isFullScreen()&&result.fullscreenEvents.length===0);
- result.dpr=await js('devicePixelRatio');finish();
-}).catch(async error=>{if(win&&!win.isDestroyed()){result.failureState=await state().catch(()=>null);result.externalEvents=await js('window.__externalEvents').catch(()=>null);await screenshot('failed').catch(()=>{});}finish(error);});
+ result.windowBounds=win.getBounds();result.dpr=await js('devicePixelRatio');finish();
+}).catch(async error=>{if(win&&!win.isDestroyed()){result.failureState=await state().catch(()=>null);result.failureSnapshot=await js('window.fishmark.getWorkspaceSnapshot()').catch(()=>null);result.externalEvents=await js('window.__externalEvents').catch(()=>null);await screenshot('failed').catch(()=>{});}finish(error);});

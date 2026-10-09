@@ -62,6 +62,7 @@ import { createRuntimeWindowManager, resolveAppRuntimeMode } from "./runtime-win
 import { resolveWindowIconPath } from "./window-icon";
 import { createAppUpdateCheckRunner } from "./app-update-check-runner";
 import { resolveAutoUpdaterModule } from "./resolve-auto-updater-module";
+import { markExternalWorkspaceChange } from "./mark-external-workspace-change";
 import { createFileWatchRegistry } from "./infrastructure/file-watch-registry";
 import { createDocumentRepository } from "./infrastructure/document-repository";
 import { createRecoveryService } from "./infrastructure/recovery-service";
@@ -258,14 +259,7 @@ app.whenReady().then(async () => {
   const workspaceState = createWorkspaceState({ createTextBuffer: createCodeMirrorTextBuffer });
   const fileWatchRegistry = createFileWatchRegistry({
     onExternalChange: (path, kind) => {
-      const session = workspaceState.exportSnapshot().sessions.find((s) => s.path === path);
-      if (session !== undefined) {
-        workspaceState.markExternalChange({
-          tabId: session.tabId,
-          expectedWindowId: session.windowId,
-          change: { kind }
-        });
-      }
+      markExternalWorkspaceChange(workspaceState, path, kind);
     }
   });
   const documentRepository = createDocumentRepository();

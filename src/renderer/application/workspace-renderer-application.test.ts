@@ -1991,7 +1991,8 @@ describe("WorkspaceRendererApplication", () => {
       application.dispose();
       blocker.resolve(createSnapshot());
 
-      await expect(first).resolves.toMatchObject({ kind: "committed" });
+      // The in-flight refresh also rejects its late result after disposal.
+      await expect(first).resolves.toMatchObject({ kind: "failed" });
       await expect(destructive).resolves.toMatchObject({ kind: "failed" });
       expect(application.getState().editorTransition).toBeNull();
       expect(reloadWorkspaceTabFromPath).not.toHaveBeenCalled();
@@ -2225,4 +2226,55 @@ describe("application disposal at completed drain boundary", () => {
     await expect(operation).resolves.toMatchObject({ kind: "failed" });
     expect(application.getState()).toBe(original);
   });
+});
+
+it("refreshes external conflict metadata once per subscription without replacing pending editor text", async () => {
+  let notify!: Parameters<Window["fishmark"]["onExternalMarkdownFileChanged"]>[0];
+  const detach = vi.fn();
+  const subscribe = vi.fn((listener: typeof notify) => { notify = listener; return detach; });
+  const canonical = createSnapshot();
+  canonical.activeDocument = { ...canonical.activeDocument!, externalChange: { kind: "modified" } };
+  const getWorkspaceSnapshot = vi.fn(async () => canonical);
+  const application = createApplication({ bridge: {
+    onExternalMarkdownFileChanged: subscribe,
+    onDocumentProjection: () => () => {},
+    getWorkspaceSnapshot
+  } });
+  application.start();
+  application.start();
+  expect(subscribe).toHaveBeenCalledTimes(1);
+  const identity = consumeEditorLoad(application);
+  application.recordEditorFramePending({ hasPending: true, identity });
+  notify({ path: "C:\\notes\\first.md", kind: "modified" });
+  await vi.waitFor(() => expect(application.getActiveDocument()?.externalChange).toEqual({ kind: "modified" }));
+  expect(application.getEditorBinding()).toEqual(identity);
+  expect(application.getEditorViewSnapshot()?.activeDocument?.content).toBe("# First\n");
+  expect(application.getEditorViewSnapshot()?.activeDocument?.isDirty).toBe(true);
+  expect(application.recordDiscardedEditorDocumentText({ identity, text: "# Unsaved adapter text\n" })).toBe(true);
+  expect(application.getEditorViewSnapshot()?.activeDocument?.content).toBe("# Unsaved adapter text\n");
+  expect(getWorkspaceSnapshot).toHaveBeenCalledTimes(1);
+  application.dispose();
+  expect(detach).toHaveBeenCalledTimes(1);
+});
+
+it("ignores an external-notification snapshot that returns after disposal", async () => {
+  let notify!: Parameters<Window["fishmark"]["onExternalMarkdownFileChanged"]>[0];
+  const pending = createDeferred<WorkspaceWindowSnapshot>();
+  const getWorkspaceSnapshot = vi.fn(() => pending.promise);
+  const application = createApplication({ bridge: {
+    onExternalMarkdownFileChanged: (listener) => { notify = listener; return () => {}; },
+    onDocumentProjection: () => () => {},
+    getWorkspaceSnapshot
+  } });
+  application.start();
+  consumeEditorLoad(application);
+  notify({ path: "C:/notes/first.md", kind: "modified" });
+  await vi.waitFor(() => expect(getWorkspaceSnapshot).toHaveBeenCalledTimes(1));
+  application.dispose();
+  const before = application.getState();
+  const binding = application.getEditorBinding();
+  pending.resolve(createSnapshot({ firstContent: "late replacement must not appear" }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(application.getState()).toBe(before);
+  expect(application.getEditorBinding()).toEqual(binding);
 });

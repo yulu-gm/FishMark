@@ -176,6 +176,7 @@ describe("createFileWatchRegistry", () => {
   it("normalizes paths and skips null and empty entries", async () => {
     const watched: string[] = [];
     const registry = createFileWatchRegistry({
+      platform: "win32",
       watch: vi.fn((targetPath: string) => {
         watched.push(targetPath);
         return { close: vi.fn() };
@@ -208,4 +209,15 @@ describe("createFileWatchRegistry", () => {
     await registry.syncWindowPaths(sender, ["C:/notes/a.md"]).catch(() => undefined);
     expect(watch).not.toHaveBeenCalled();
   });
+});
+
+it.each([
+  ["win32", "\\\\server\\share\\中文 空格.md", "//server/share/中文 空格.md"],
+  ["linux", "/notes/a\\b.md", "/notes/a\\b.md"],
+  ["darwin", "/Notes/Case.MD", "/Notes/Case.MD"]
+] as const)("preserves %s watcher path semantics", async (platform, input, expected) => {
+  const watch = vi.fn(() => ({ close: vi.fn() }));
+  const registry = createFileWatchRegistry({ platform, watch, stat: async () => stats(1, 2) });
+  await registry.syncWindowPaths(createTarget(), [input]);
+  expect(watch).toHaveBeenCalledWith(expected, expect.any(Function));
 });

@@ -3,6 +3,7 @@ import {
   stat as defaultStat
 } from "node:fs/promises";
 import path from "node:path";
+import { filePathIdentity } from "./file-path";
 
 import {
   fileIdentity,
@@ -42,10 +43,7 @@ export function createFileIdentityResolver(
     canonicalPath: string,
     exists: boolean
   ): Promise<ResolvedFileIdentity> {
-    const identityPath =
-      dependencies.platform === "win32"
-        ? canonicalPath.toLocaleLowerCase("en-US")
-        : canonicalPath;
+    const identityPath = filePathIdentity(canonicalPath, dependencies.platform);
     const filesystemIdentity = exists
       ? await resolveFilesystemIdentity(canonicalPath, dependencies.stat)
       : null;
