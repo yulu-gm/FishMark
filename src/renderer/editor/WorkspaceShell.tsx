@@ -128,6 +128,7 @@ export function WorkspaceShell({
   onDeleteTableRow,
   onDismissExternalFileConflict,
   onDocumentChangeFrame,
+  onUserDocumentEdit,
   onDiscardedDocumentText,
   onPendingDocumentChangesChange,
   onEditorBarrierChange,
@@ -461,6 +462,7 @@ export function WorkspaceShell({
                         viewMode={editorViewMode}
                         onActiveBlockChange={onActiveBlockChange}
                         onDocumentChangeFrame={onDocumentChangeFrame}
+                        onUserDocumentEdit={onUserDocumentEdit}
                         onDiscardedDocumentText={onDiscardedDocumentText}
                         onPendingDocumentChangesChange={onPendingDocumentChangesChange}
                         onEditorBarrierChange={onEditorBarrierChange}

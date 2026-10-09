@@ -243,7 +243,7 @@ function EditorShell({
   const isDocumentOpen = activeDocument !== null;
   const isReadingMode = shellMode === "reading";
   const isDocumentReadingMode = isDocumentOpen && isReadingMode;
-  const { toggleReadingMode, handleEditorBlurFromShell, blurFocusedEditorElementAfterOpen, handleAppWorkspaceMouseDownCapture } = useEditorFocusPresentation({
+  const { handleUserDocumentEdit, toggleReadingMode, handleEditorBlurFromShell, blurFocusedEditorElementAfterOpen, handleAppWorkspaceMouseDownCapture } = useEditorFocusPresentation({
     activeDocument, isSettingsOpen, isSettingsClosing, editorContainerRef, editorRef,
     handleEditorBlur, isDocumentOpen, editorLoadRevision: state.editorLoadRevision,
     shellMode, setShellMode, setIsEditorFocused
@@ -798,6 +798,7 @@ function EditorShell({
         }}
         onDismissExternalFileConflict={externalConflictController.dismissConflict}
         onDocumentChangeFrame={handleEditorDocumentChangeFrame}
+        onUserDocumentEdit={handleUserDocumentEdit}
         onDiscardedDocumentText={workspaceController.recordDiscardedDocumentText}
         onPendingDocumentChangesChange={workspaceController.recordPendingDocumentChanges}
         onEditorBarrierChange={workspaceController.registerEditorBarrier}

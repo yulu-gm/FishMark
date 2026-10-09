@@ -1,5 +1,7 @@
 # TASK-UX-MODE-001 — Explicit F11 reading presentation
 
+Historical checkpoint: the later user-approved input entry is documented in TASK-UX-MODE-002. Its accepted user document edits can enter editing automatically; clicks and focus still do not. The remaining historical evidence below describes this original checkpoint.
+
 Status: **LOCAL CHECKPOINT; NOT RELEASE-ACCEPTED.** Independent F11 source review PASS. Windows full gate remains FAIL and real external reload is blocked. No push. Branch: `codex/table-geometry-diagnosis-20261008`; parent `f5159821d6f0befaa25c29d0a25253e327ce8371`. Local main remains `53d86ac377e6a8610c45be8d8f8c6cde3c611b4b`.
 
 ## Behavior

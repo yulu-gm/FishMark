@@ -16,7 +16,7 @@ function check(name,pass,detail){result.checks.push({name,pass,detail});if(!pass
 async function waitFor(fn){for(let i=0;i<140;i++){if(await fn())return;await delay(100);}throw Error('Readiness timeout');}
 const js=source=>win.webContents.executeJavaScript(source);
 const state=()=>js(`(()=>{const cell=document.querySelector('[data-table-cell="1:0"]'),table=document.querySelector('.cm-table-widget-table');return {mode:document.querySelector('.app-shell')?.dataset.fishmarkShellMode,active:document.activeElement?.outerHTML.slice(0,300),cell:cell?.textContent,tableTop:table?.getBoundingClientRect().top,settings:!!document.querySelector('[aria-modal="true"]'),searchFocused:document.activeElement?.getAttribute('aria-label')==='Find text'}})()`);
-async function key(keyCode,modifiers=[]){win.webContents.sendInputEvent({type:'keyDown',keyCode,modifiers});win.webContents.sendInputEvent({type:'keyUp',keyCode,modifiers});await delay(250);}
+async function key(keyCode,modifiers=[]){win.focus();win.webContents.focus();win.webContents.sendInputEvent({type:'keyDown',keyCode,modifiers});win.webContents.sendInputEvent({type:'keyUp',keyCode,modifiers});await delay(250);}
 async function click(selector){const point=await js(`(()=>{const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return{x:Math.round(r.x+Math.min(r.width/2,35)),y:Math.round(r.y+Math.min(r.height/2,20))}})()`);for(const type of ['mouseDown','mouseUp'])win.webContents.sendInputEvent({type,...point,button:'left',clickCount:1});await delay(350);}
 async function screenshot(name){fs.writeFileSync(path.join(output,name+'.png'),(await win.webContents.capturePage()).toPNG());}
 app.whenReady().then(async()=>{
@@ -26,6 +26,11 @@ app.whenReady().then(async()=>{
  const menuItems=items=>items.flatMap(i=>[{label:i.label,role:i.role,accelerator:i.accelerator},...menuItems(i.submenu?.items??[])]);result.menu=menuItems(Menu.getApplicationMenu()?.items??[]);
  const before=await state();check('initial reading',before.mode==='reading',before);await screenshot('reading');
  await click('[data-table-cell="1:0"]');const clicked=await state();check('table click keeps reading and geometry',clicked.mode==='reading'&&Math.abs(clicked.tableTop-before.tableTop)<0.1,clicked);
+ const cellBeforeInput=(await state()).cell;await win.webContents.insertText('初X');await waitFor(async()=>(await state()).mode==='editing');
+ const cellAfterInput=(await state()).cell;check('table first input enters editing once without losing text',cellAfterInput.replace('初X','')===cellBeforeInput,await state());
+ await key('z',['control']);check('native table undo survives automatic entry',(await state()).cell===cellBeforeInput);
+ await key('y',['control']);check('native table redo survives automatic entry',(await state()).cell===cellAfterInput);
+ await key('z',['control']);await key('F11');check('explicit return after automatic entry',(await state()).mode==='reading');
  await key('F11');check('native F11 exits reading',(await state()).mode==='editing');
  await key('F11',['isautorepeat']);check('native repeated F11 ignored',(await state()).mode==='editing');
  const edit=await state();await click('[data-table-cell="1:0"]');check('table click keeps editing and geometry',(await state()).mode==='editing'&&Math.abs((await state()).tableTop-edit.tableTop)<0.1);
@@ -58,6 +63,18 @@ app.whenReady().then(async()=>{
    check('switching to other document retains its clean content',(await js('window.fishmark.getWorkspaceSnapshot()')).activeDocument.content==='# Other document\n\nUntouched.\n'&&!(await js('window.fishmark.getWorkspaceSnapshot()')).activeDocument.externalChange);
  }
  await key('n',['control']);await waitFor(async()=>await js('!document.querySelector(".cm-table-widget-table")'));check('new document preserves editing',(await state()).mode==='editing');
+ await key('F11');check('new blank can return to reading',(await state()).mode==='reading');
+ await win.webContents.insertText('First字');await waitFor(async()=>(await state()).mode==='editing');
+ const text=()=>js("window.fishmark.getWorkspaceSnapshot().then(s=>s.activeDocument.content)");
+ await waitFor(async()=>(await text())==='First字');check('paragraph first insertion is exact',true);
+ await key('z',['control']);await waitFor(async()=>(await text())==='');check('paragraph undo survives automatic entry',true);
+ await key('y',['control']);await waitFor(async()=>(await text())==='First字');check('paragraph redo survives automatic entry',true);
+ await key('F11');await key('Left');check('arrow movement keeps reading',(await state()).mode==='reading');await key('Right');
+ await key('Enter');await waitFor(async()=>(await state()).mode==='editing');check('Enter enters editing',(await text()).startsWith('First字'),await text());
+ await key('F11');await key('Backspace');await waitFor(async()=>(await state()).mode==='editing');check('Backspace enters editing',(await text()).startsWith('First字'));
+ await key('F11');await key('f',['control']);await waitFor(async()=>(await state()).searchFocused);await win.webContents.insertText('First');await delay(300);
+ check('search input keeps reading and focus',(await state()).mode==='reading'&&(await state()).searchFocused);await key('Escape');await delay(250);
+ await screenshot('user-input-entry');
  check('no fullscreen across all input',!win.isFullScreen()&&result.fullscreenEvents.length===0);
  result.windowBounds=win.getBounds();result.dpr=await js('devicePixelRatio');finish();
 }).catch(async error=>{if(win&&!win.isDestroyed()){result.failureState=await state().catch(()=>null);result.failureSnapshot=await js('window.fishmark.getWorkspaceSnapshot()').catch(()=>null);result.externalEvents=await js('window.__externalEvents').catch(()=>null);await screenshot('failed').catch(()=>{});}finish(error);});

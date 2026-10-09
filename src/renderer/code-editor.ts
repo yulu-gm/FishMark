@@ -49,6 +49,7 @@ export type CreateCodeEditorControllerOptions = {
   documentPath?: string | null;
   onChange: (content: string) => void;
   onDocumentChangeFrame?: (frame: CodeEditorDocumentChangeFrame) => void;
+  onUserDocumentEdit?: () => void;
   onDiscardedDocumentText?: (discarded: CodeEditorDiscardedDocumentText) => void;
   onPendingDocumentChangesChange?: (hasPending: boolean) => void;
   onBlur?: () => void;
@@ -282,7 +283,29 @@ export function createCodeEditorController(
     notifyPendingDocumentChanges();
   };
 
+  // Presentation follows accepted user edits, never document loads or remote patches.
+  // Keep provisional composition text from changing shell geometry until it is sealed.
+  let pendingUserCompositionBase: EditorState["doc"] | null = null;
+  const observeUserDocumentEdit = (update: ViewUpdate) => {
+    if (update.transactions.some((transaction) =>
+      transaction.docChanged && !observeDocumentTransaction(transaction))) {
+      pendingUserCompositionBase = null;
+      return;
+    }
+    const userEdit = update.transactions.some((transaction) => transaction.docChanged &&
+      (transaction.isUserEvent("input") || transaction.isUserEvent("delete")));
+    if (readCompositionState(update.state).active) {
+      if (userEdit) pendingUserCompositionBase ??= update.startState.doc;
+      return;
+    }
+    const changedComposition = pendingUserCompositionBase !== null &&
+      !pendingUserCompositionBase.eq(update.state.doc);
+    pendingUserCompositionBase = null;
+    if (userEdit || changedComposition) options.onUserDocumentEdit?.();
+  };
+
   const observeDocumentUpdate = (update: ViewUpdate) => {
+    observeUserDocumentEdit(update);
     if (!update.docChanged) {
       // Composition can finish without another text change. The adapter's finish
       // transaction, not the DOM compositionend event, releases pending barriers.
@@ -405,6 +428,7 @@ export function createCodeEditorController(
         const nextAnchor = selection.from + markdown.length;
 
         view.dispatch({
+          userEvent: "input.paste",
           changes: {
             from: selection.from,
             to: selection.to,
@@ -636,6 +660,7 @@ export function createCodeEditorController(
       return Object.freeze({ kind: "text-mismatch" });
     }
     // A recovery boundary deliberately starts a fresh editor history.
+    pendingUserCompositionBase = null;
     view.setState(createState(input.canonicalText));
     semanticCommands.bindSession(view, documentIdentity?.tabId);
     return Object.freeze({ kind: "restored" });
@@ -704,6 +729,7 @@ export function createCodeEditorController(
       } else {
         emitPendingDocumentChanges();
       }
+      pendingUserCompositionBase = null;
       view.setState(createState(nextContent));
       semanticCommands.bindSession(view, documentIdentity?.tabId);
     },

@@ -9809,3 +9809,63 @@ describe("document change frames", () => {
     vi.useRealTimers();
   });
 });
+
+describe("user document edit presentation signal", () => {
+  function setup(readOnly = false) {
+    const host = document.createElement("div");
+    const onUserDocumentEdit = vi.fn();
+    const controller = createCodeEditorController({ parent: host, initialContent: "Body", onChange: vi.fn(), onUserDocumentEdit, readOnly });
+    return { host, controller, view: getEditorView(host)!, onUserDocumentEdit };
+  }
+  it.each(["input.type", "input.paste", "input.enter", "delete.backward", "delete.forward"])("signals accepted %s without changing its content or selection", (userEvent) => {
+    const { controller, view, onUserDocumentEdit } = setup();
+    try {
+      view.dispatch({ changes: { from: 1, to: 2, insert: "X" }, selection: { anchor: 2 }, userEvent });
+      expect(onUserDocumentEdit).toHaveBeenCalledTimes(1);
+      expect(controller.getContent()).toBe("BXdy");
+      expect(controller.getSelection()).toEqual({ anchor: 2, head: 2 });
+      undo(view);
+      expect(controller.getContent()).toBe("Body");
+      redo(view);
+      expect(controller.getContent()).toBe("BXdy");
+      expect(onUserDocumentEdit).toHaveBeenCalledTimes(1);
+    } finally { controller.destroy(); }
+  });
+  it("ignores selection, unannotated projection, internal patches and blocked read-only input", () => {
+    const { controller, view, onUserDocumentEdit } = setup();
+    try {
+      view.dispatch({ selection: { anchor: 2 }, userEvent: "select" });
+      view.dispatch({ changes: { from: 0, insert: "P" } });
+      view.dispatch({ changes: { from: 0, insert: "R" }, userEvent: "input.type", annotations: internalDocumentTransaction.of(true) });
+      controller.replaceDocument("Reloaded");
+      controller.setReadOnly(true);
+      getEditorView(view.dom.parentElement!)?.dispatch({ changes: { from: 0, insert: "X" }, userEvent: "input.type" });
+      expect(controller.getContent()).toBe("Reloaded");
+      expect(onUserDocumentEdit).not.toHaveBeenCalled();
+    } finally { controller.destroy(); }
+  });
+  it.each([false, true])("defers synthetic composition and ignores cancellation=%s", async (cancel) => {
+    const { controller, view, onUserDocumentEdit } = setup();
+    try {
+      dispatchCompositionEvent(view.dom, "compositionstart", "中");
+      view.dispatch({ changes: { from: 4, insert: "中" }, userEvent: "input.type.compose" });
+      expect(onUserDocumentEdit).not.toHaveBeenCalled();
+      if (cancel) view.dispatch({ changes: { from: 4, to: 5 }, userEvent: "input.type.compose" });
+      const finished = waitForCompositionFinish(view);
+      dispatchCompositionEvent(view.dom, "compositionend", cancel ? "" : "中");
+      await finished;
+      expect(onUserDocumentEdit).toHaveBeenCalledTimes(cancel ? 0 : 1);
+      expect(controller.getContent()).toBe(cancel ? "Body" : "Body中");
+    } finally { controller.destroy(); }
+  });
+  it("does not carry a provisional user edit into a replacement document", () => {
+    const { controller, view, onUserDocumentEdit } = setup();
+    try {
+      dispatchCompositionEvent(view.dom, "compositionstart", "中");
+      view.dispatch({ changes: { from: 4, insert: "中" }, userEvent: "input.type.compose" });
+      controller.replaceDocument("New document");
+      view.dispatch({ selection: { anchor: 2 } });
+      expect(onUserDocumentEdit).not.toHaveBeenCalled();
+    } finally { controller.destroy(); }
+  });
+});

@@ -4,7 +4,7 @@ import type { CodeEditorHandle } from "../code-editor-view";
 import { isEditingContentPointerEvent, isEditorScrollbarPointerEvent, isFocusedEditorInteractiveElement, isWorkspaceNonEditorInteractiveTarget } from "./editor-pointer-utils";
 
 type ActiveDocument = WorkspaceWindowSnapshot["activeDocument"];
-/** Pointer/focus presentation only. Document commands remain application-owned. */
+/** Shell presentation only. Document commands remain application-owned. */
 export function useEditorFocusPresentation({
   activeDocument, isSettingsOpen, isSettingsClosing, editorContainerRef, editorRef,
   handleEditorBlur, isDocumentOpen, editorLoadRevision,
@@ -19,6 +19,7 @@ export function useEditorFocusPresentation({
   setIsEditorFocused: (focused: boolean) => void;
 }) {
   const composingRef = useRef(false);
+  const preserveFocusOnUserEditRef = useRef(false);
   const openingRef = useRef(false);
   const pendingEditorOpenBlurTokenRef = useRef(0);
   const suppressNextEditorBlurAutosaveRef = useRef(false);
@@ -97,6 +98,13 @@ export function useEditorFocusPresentation({
     openingRef.current = false;
     setShellMode(shellMode === "reading" ? "editing" : "reading");
   }, [activeDocument, isSettingsOpen, isSettingsClosing, shellMode, setShellMode]);
+
+  const handleUserDocumentEdit = useCallback(() => {
+    if (!activeDocument || shellMode !== "reading" || isSettingsOpen || isSettingsClosing) return;
+    // The editor already owns this input. Never refocus or replace its selection.
+    preserveFocusOnUserEditRef.current = true;
+    setShellMode("editing");
+  }, [activeDocument, shellMode, isSettingsOpen, isSettingsClosing, setShellMode]);
 
   const handleAppWorkspaceMouseDownCapture = useCallback(
     (event: React.MouseEvent<HTMLElement>): void => {
@@ -184,6 +192,11 @@ export function useEditorFocusPresentation({
       return;
     }
 
+    if (preserveFocusOnUserEditRef.current) {
+      preserveFocusOnUserEditRef.current = false;
+      return;
+    }
+
     const frame = requestAnimationFrame(() => {
       // 进入编辑模式或加载文档后，Search 可能先于此帧取得焦点；保留这次较新的聚焦意图。
       const activeElement = document.activeElement;
@@ -223,5 +236,5 @@ export function useEditorFocusPresentation({
   }, [toggleReadingMode]);
 
   useEffect(() => () => { pendingEditorOpenBlurTokenRef.current += 1; }, []);
-  return { toggleReadingMode, handleEditorBlurFromShell, blurFocusedEditorElementAfterOpen, handleAppWorkspaceMouseDownCapture };
+  return { handleUserDocumentEdit, toggleReadingMode, handleEditorBlurFromShell, blurFocusedEditorElementAfterOpen, handleAppWorkspaceMouseDownCapture };
 }

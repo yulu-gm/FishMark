@@ -61,6 +61,7 @@ type CodeEditorViewProps = {
   editorTransitionToken: number | null;
   onChange?: (content: string, identity: EditorLoadIdentity | null) => void;
   onDocumentChangeFrame?: (frame: CodeEditorDocumentChangeFrame) => void;
+  onUserDocumentEdit?: () => void;
   onDiscardedDocumentText?: (discarded: CodeEditorDiscardedDocumentText) => void;
   onPendingDocumentChangesChange?: (input: {
     hasPending: boolean;
@@ -104,6 +105,7 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
       editorTransitionToken,
       onChange,
       onDocumentChangeFrame,
+      onUserDocumentEdit,
       onDiscardedDocumentText,
       onPendingDocumentChangesChange,
       onEditorBarrierChange,
@@ -168,6 +170,7 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
     const handleLoadRevisionApplied = useEffectEvent((identity: EditorLoadIdentity) => {
       onLoadRevisionApplied(identity);
     });
+    const handleUserDocumentEdit = useEffectEvent(() => onUserDocumentEdit?.());
     const handleBlur = useEffectEvent(() => onBlur?.());
     const handleActiveBlockChange = useEffectEvent((state: ActiveBlockState) =>
       onActiveBlockChange?.(state)
@@ -191,6 +194,7 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
         onDiscardedDocumentText: (discarded) => handleDiscardedDocumentText(discarded),
         onPendingDocumentChangesChange: (hasPending) =>
           handlePendingDocumentChangesChange(hasPending),
+        onUserDocumentEdit: () => handleUserDocumentEdit(),
         onBlur: () => handleBlur(),
         onActiveBlockChange: (state) => handleActiveBlockChange(state),
         importClipboardImage: (input) => handleImportClipboardImage(input),

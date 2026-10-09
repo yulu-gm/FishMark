@@ -101,6 +101,7 @@ export type WorkspaceShellProps = {
   onCloseWorkspaceTab: (tabId: string) => void;
   onDismissExternalFileConflict: () => void;
   onDocumentChangeFrame: (frame: CodeEditorDocumentChangeFrame) => void;
+  onUserDocumentEdit?: () => void;
   onDiscardedDocumentText: (discarded: CodeEditorDiscardedDocumentText) => void;
   onPendingDocumentChangesChange: (input: {
     hasPending: boolean;

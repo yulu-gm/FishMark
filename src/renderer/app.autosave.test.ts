@@ -196,6 +196,7 @@ declare global {
 
 type MockCodeEditorModule = typeof codeEditorViewModule & {
   __mock: {
+    userEdit: () => void;
     changeContent: (content: string) => void;
     blur: () => void;
     focus: () => void;
@@ -348,6 +349,7 @@ vi.mock("./code-editor-view", async () => {
           epoch: number;
           loadRevision: number;
         } | null) => void;
+        onUserDocumentEdit?: () => void;
         onDocumentChangeFrame?: (frame: {
           identity: { tabId: string; epoch: number; loadRevision: number } | null;
           baseText: string;
@@ -551,6 +553,7 @@ vi.mock("./code-editor-view", async () => {
   return {
     CodeEditorView,
     __mock: {
+      userEdit() { latestProps?.onUserDocumentEdit?.(); },
       changeContent(content: string) {
         if (latestProps?.readOnly) return;
         const baseText = currentContent;
@@ -3853,6 +3856,26 @@ describe("App autosave", () => {
     await pressModeKey();expect(mode()).toBe("editing");
     await act(async()=>{vi.advanceTimersByTime(180);await Promise.resolve();});
     await pressModeKey();expect(mode()).toBe("reading");
+  });
+
+  it("enters editing on an accepted body edit and keeps focus until explicit return", async () => {
+    await renderAndOpenDocument();
+    const mode = () => container.querySelector<HTMLElement>(".app-shell")?.dataset.fishmarkShellMode;
+    await act(async () => { codeEditorMock.focus(); });
+    const focused = document.activeElement;
+    expect(mode()).toBe("reading");
+    await act(async () => { codeEditorMock.userEdit(); vi.advanceTimersByTime(40); });
+    expect(mode()).toBe("editing");
+    expect(document.activeElement).toBe(focused);
+    await act(async () => { codeEditorMock.blur(); });
+    expect(mode()).toBe("editing");
+    await pressModeKey();
+    expect(mode()).toBe("reading");
+    await act(async () => { codeEditorMock.changeContent("Programmatic projection"); });
+    expect(mode()).toBe("reading");
+    await act(async () => container.querySelector<HTMLButtonElement>(".settings-entry")!.click());
+    await act(async () => { codeEditorMock.userEdit(); });
+    expect(mode()).toBe("reading");
   });
 
   it("opens an existing document in reading mode", async () => {
