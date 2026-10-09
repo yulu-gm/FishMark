@@ -17,7 +17,6 @@ import type { ActiveBlockState } from "@fishmark/editor-model";
 import { getInactiveCodeFenceLines } from "@fishmark/editor-model";
 import { appendCodeHighlightRanges } from "./code-highlight";
 import {
-  createCjkTextDecorations,
   createActiveInlineDecorations,
   createInactiveInlineDecorations
 } from "./inline-decorations";
@@ -361,7 +360,9 @@ function appendCanonicalContainerDecorations(
         contentStartOffset: first.contentStartOffset, children: [],
         task: task && item.data.checked !== null ? { checked: item.data.checked, markerStart: task.startOffset, markerEnd: task.endOffset } : null };
       if (line.lineNumber === first.lineNumber) {
-        if (active) appendActiveListItemFirstLineDecorations(view, source, ordered, ranges);
+        const prefix = { from: view.markerStart, to: resolveListItemContentStartOffset(view, source) };
+        if (headingMarkerIsVisible(prefix, context.activeBlockState.selection, context.hasEditorFocus,
+          context.headingMarkerPresentation)) appendActiveListItemFirstLineDecorations(view, source, ordered, ranges);
         else appendInactiveListItemFirstLineDecorations(view, source, ordered, ranges);
       } else {
         const mode = active ? "active" : "inactive";
@@ -402,8 +403,9 @@ function appendCanonicalContainerDecorations(
           class: "cm-inactive-paragraph cm-inactive-paragraph-leading"
         } }).range(firstLine.range.startOffset));
       }
-      const inactive = createInactiveInlineDecorations(node.inline, { resolveImagePreviewUrl: context.resolveImagePreviewUrl });
-      const active = [...createActiveInlineDecorations(node.inline), ...createActiveInlineImageDecorations(node.inline, source, context.resolveImagePreviewUrl)];
+      const options = inlinePresentationOptions(context);
+      const inactive = createInactiveInlineDecorations(node.inline, options);
+      const active = [...createActiveInlineDecorations(node.inline, options), ...createActiveInlineImageDecorations(node.inline, source, context.resolveImagePreviewUrl)];
       for (const line of nodeLines) {
         appendClippedInlineDecorations(
           context.activeSelectionLineStart === line.range.startOffset ? active : inactive,
@@ -417,7 +419,7 @@ function appendCanonicalContainerDecorations(
     const activeLine = context.activeSelectionLineStart;
     if (activeLine !== null && node.kind !== "table" &&
       snapshot.lineAt(node.source.startOffset)!.range.startOffset <= activeLine && activeLine < node.source.endOffset) {
-      appendActiveDecorationsForBlock(canonicalLeafView(node, snapshot), source, ranges, context.resolveImagePreviewUrl, context);
+      appendActiveDecorationsForBlock(canonicalLeafView(node, snapshot), source, ranges, context.resolveImagePreviewUrl);
       continue;
     }
     appendInactiveDecorationsForBlock(canonicalLeafView(node, snapshot), context, ranges, signatures,
@@ -492,6 +494,17 @@ function appendDecorationsForBlock(
   signatures?: string[],
   containerContext: BlockDecorationContainerContext = null
 ): void {
+  if (block.type === "heading" || block.type === "paragraph") {
+    const active = block.id === context.activeRootNodeId, mode = active ? "active" : "inactive";
+    if (!active) signatures?.push(createCanonicalNodeSignature(context.snapshot.nodeById(block.id)!));
+    ranges.push(Decoration.line({ attributes: { class: block.type === "heading" ?
+      `cm-${mode}-heading cm-${mode}-heading-depth-${block.depth}` : `cm-${mode}-paragraph cm-${mode}-paragraph-leading`
+    } }).range(block.startOffset));
+    if (block.type === "heading") appendHeadingMarker(block.startOffset, context, ranges);
+    ranges.push(...createInactiveInlineDecorations(block.inline, { ...inlinePresentationOptions(context), active }));
+    if (active) ranges.push(...createActiveInlineImageDecorations(block.inline, context.source, context.resolveImagePreviewUrl));
+    return;
+  }
   if (block.type === "table") {
     const cursorForBlock =
       context.activeTableCursor?.mode === "inside" &&
@@ -541,7 +554,7 @@ function appendDecorationsForBlock(
       return;
     }
 
-    appendActiveDecorationsForBlock(block, context.source, ranges, context.resolveImagePreviewUrl, context);
+    appendActiveDecorationsForBlock(block, context.source, ranges, context.resolveImagePreviewUrl);
     return;
   }
 
@@ -565,35 +578,6 @@ function appendInactiveDecorationsForBlock(
 
   if (block.type === "htmlImage") {
     ranges.push(createInactiveHtmlImagePreviewDecoration(block, context.resolveImagePreviewUrl));
-    return;
-  }
-
-  if (block.type === "heading") {
-    ranges.push(
-      Decoration.line({
-        attributes: {
-          class: `cm-inactive-heading cm-inactive-heading-depth-${block.depth}`
-        }
-      }).range(block.startOffset)
-    );
-    appendHeadingMarker(block.startOffset, context, ranges);
-    ranges.push(...createInactiveInlineDecorations(block.inline, {
-      resolveImagePreviewUrl: context.resolveImagePreviewUrl
-    }));
-    return;
-  }
-
-  if (block.type === "paragraph") {
-    ranges.push(
-      Decoration.line({
-        attributes: {
-          class: "cm-inactive-paragraph cm-inactive-paragraph-leading"
-        }
-      }).range(block.startOffset)
-    );
-    ranges.push(...createInactiveInlineDecorations(block.inline, {
-      resolveImagePreviewUrl: context.resolveImagePreviewUrl
-    }));
     return;
   }
 
@@ -1144,29 +1128,6 @@ class TaskMarkerWidget extends WidgetType {
   }
 }
 
-class ActiveListMarkerWidget extends WidgetType {
-  constructor(private readonly marker: string) {
-    super();
-  }
-
-  override eq(other: ActiveListMarkerWidget): boolean {
-    return other.marker === this.marker;
-  }
-
-  override toDOM(): HTMLElement {
-    const marker = document.createElement("span");
-    marker.className = "cm-active-list-marker";
-    marker.dataset.fishmarkListMarker = this.marker;
-    marker.textContent = this.marker;
-
-    return marker;
-  }
-
-  override ignoreEvent(): boolean {
-    return true;
-  }
-}
-
 function appendInactiveListItemSourcePrefixDecorations(item: ListItemBlock, ranges: Range<Decoration>[]): void {
   appendInactiveListItemHiddenPrefixDecoration(item.startOffset, item.markerStart, ranges);
 }
@@ -1178,7 +1139,6 @@ function appendActiveListItemSourcePrefixDecorations(
 ): void {
   const contentStartOffset = resolveListItemContentStartOffset(item, source);
   const activeMarkerEnd = item.task?.markerEnd ?? item.markerEnd;
-  const activeMarkerText = source.slice(item.markerStart, activeMarkerEnd);
 
   if (item.markerStart > item.startOffset) {
     ranges.push(
@@ -1192,9 +1152,7 @@ function appendActiveListItemSourcePrefixDecorations(
 
   if (activeMarkerEnd > item.markerStart) {
     ranges.push(
-      Decoration.replace({
-        widget: new ActiveListMarkerWidget(activeMarkerText)
-      }).range(item.markerStart, activeMarkerEnd)
+      Decoration.mark({ attributes: { class: "cm-active-list-marker" } }).range(item.markerStart, activeMarkerEnd)
     );
   }
 
@@ -1473,52 +1431,19 @@ function appendHeadingMarker(from: number, context: BlockDecorationContext, rang
   }).range(from, to));
 }
 
+function inlinePresentationOptions(context: BlockDecorationContext) {
+  return { resolveImagePreviewUrl: context.resolveImagePreviewUrl,
+    markerVisible: (from: number, to: number) => headingMarkerIsVisible({ from, to }, context.activeBlockState.selection,
+      context.hasEditorFocus, context.headingMarkerPresentation) };
+}
+
 function appendActiveDecorationsForBlock(
   block: DecoratableBlock,
   source: string,
   ranges: Range<Decoration>[],
-  resolveImagePreviewUrl: ((href: string | null) => string | null) | undefined,
-  context: BlockDecorationContext
+  resolveImagePreviewUrl: ((href: string | null) => string | null) | undefined
 ): void {
-  if (block.type === "heading") {
-    appendHeadingMarker(block.startOffset, context, ranges);
-    ranges.push(
-      Decoration.line({
-        attributes: {
-          class: `cm-active-heading cm-active-heading-depth-${block.depth}`
-        }
-      }).range(block.startOffset)
-    );
-    ranges.push(...createActiveInlineImageDecorations(block.inline, source, resolveImagePreviewUrl));
-    ranges.push(...createActiveInlineDecorations(block.inline));
-    ranges.push(...createCjkTextDecorations(block.inline));
-    return;
-  }
-
-  if (block.type === "paragraph") {
-    ranges.push(
-      Decoration.line({
-        attributes: {
-          class: "cm-active-paragraph cm-active-paragraph-leading"
-        }
-      }).range(block.startOffset)
-    );
-    ranges.push(...createActiveInlineImageDecorations(block.inline, source, resolveImagePreviewUrl));
-    ranges.push(...createActiveInlineDecorations(block.inline));
-    ranges.push(...createCjkTextDecorations(block.inline));
-    return;
-  }
-
   if (block.type === "htmlImage") {
     ranges.push(createActiveHtmlImagePreviewDecoration(block, source, resolveImagePreviewUrl));
-    return;
-  }
-
-  if (block.type === "blockquote" && block.lines) {
-    for (const line of block.lines) {
-      ranges.push(...createActiveInlineImageDecorations(line.inline, source, resolveImagePreviewUrl));
-      ranges.push(...createActiveInlineDecorations(line.inline));
-      ranges.push(...createCjkTextDecorations(line.inline));
-    }
   }
 }

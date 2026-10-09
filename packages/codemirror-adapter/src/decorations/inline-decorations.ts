@@ -24,6 +24,8 @@ type InlineDecorationRange = Range<Decoration>;
 
 type CreateInactiveInlineDecorationsOptions = {
   resolveImagePreviewUrl?: (href: string | null) => string | null;
+  active?: boolean;
+  markerVisible?: (from: number, to: number) => boolean;
 };
 
 export function createInactiveInlineDecorations(
@@ -51,15 +53,9 @@ export function createCjkTextDecorations(inline: InlineRoot | undefined): Inline
   return ranges;
 }
 
-export function createActiveInlineDecorations(inline: InlineRoot | undefined): InlineDecorationRange[] {
-  const ranges: InlineDecorationRange[] = [];
-
-  if (!inline) {
-    return ranges;
-  }
-
-  appendActiveInlineDecorations(inline, ranges);
-  return ranges;
+export function createActiveInlineDecorations(inline: InlineRoot | undefined,
+  options: CreateInactiveInlineDecorationsOptions = {}): InlineDecorationRange[] {
+  return createInactiveInlineDecorations(inline, { ...options, active: true });
 }
 
 function appendInlineDecorations(
@@ -77,23 +73,22 @@ function appendInlineDecorations(
       appendCjkTextRanges(ranges, node.startOffset, node.value);
       return;
     case "hardBreak":
-      appendHardBreakDecoration(ranges, node.startOffset, node.endOffset);
-      return;
-    case "codeSpan":
-      appendMarkerDecoration(ranges, node.openMarker.startOffset, node.openMarker.endOffset);
-      appendContentDecoration(
-        ranges,
-        node.openMarker.endOffset,
-        node.closeMarker.startOffset,
-        INACTIVE_INLINE_CONTENT_CLASSES.codeSpan
-      );
-      appendMarkerDecoration(ranges, node.closeMarker.startOffset, node.closeMarker.endOffset);
+      if (options.active) appendActiveHardBreakDecoration(ranges, node.endOffset);
+      else appendHardBreakDecoration(ranges, node.startOffset, node.endOffset);
       return;
     case "inlineMath":
-      ranges.push(createInactiveInlineMathPreviewDecoration(node).range(node.startOffset, node.endOffset));
+      if (options.active) {
+        appendActiveMarkerDecoration(ranges, node.openMarker.startOffset, node.openMarker.endOffset);
+        appendContentDecoration(ranges, node.openMarker.endOffset, node.closeMarker.startOffset, "cm-active-inline-math");
+        appendActiveMarkerDecoration(ranges, node.closeMarker.startOffset, node.closeMarker.endOffset);
+      } else ranges.push(createInactiveInlineMathPreviewDecoration(node).range(node.startOffset, node.endOffset));
       return;
     case "footnoteReference":
-      ranges.push(
+      if (options.active) {
+        appendActiveMarkerDecoration(ranges, node.openMarker.startOffset, node.openMarker.endOffset);
+        appendContentDecoration(ranges, node.labelStartOffset, node.labelEndOffset, INACTIVE_INLINE_FOOTNOTE_REFERENCE_CLASS);
+        appendActiveMarkerDecoration(ranges, node.closeMarker.startOffset, node.closeMarker.endOffset);
+      } else ranges.push(
         createInactiveFootnoteReferenceDecoration(
           node,
           node.label
@@ -103,20 +98,19 @@ function appendInlineDecorations(
     case "strong":
     case "emphasis":
     case "strikethrough":
-      appendMarkerDecoration(ranges, node.openMarker.startOffset, node.openMarker.endOffset);
+    case "codeSpan":
+      appendMarkerDecoration(ranges, node.openMarker.startOffset, node.openMarker.endOffset, options);
       appendContentDecoration(
         ranges,
         node.openMarker.endOffset,
         node.closeMarker.startOffset,
         INACTIVE_INLINE_CONTENT_CLASSES[node.type]
       );
-      for (const child of node.children) {
-        appendInlineDecorations(child, ranges, options);
-      }
-      appendMarkerDecoration(ranges, node.closeMarker.startOffset, node.closeMarker.endOffset);
+      if ("children" in node) for (const child of node.children) appendInlineDecorations(child, ranges, options);
+      appendMarkerDecoration(ranges, node.closeMarker.startOffset, node.closeMarker.endOffset, options);
       return;
     case "link":
-      appendMarkerDecoration(ranges, node.openMarker.startOffset, node.openMarker.endOffset);
+      appendMarkerDecoration(ranges, node.openMarker.startOffset, node.openMarker.endOffset, options);
       appendContentDecoration(
         ranges,
         node.openMarker.endOffset,
@@ -131,77 +125,19 @@ function appendInlineDecorations(
       for (const child of node.children) {
         appendInlineDecorations(child, ranges, options);
       }
-      appendMarkerDecoration(ranges, node.closeMarker.startOffset, node.endOffset);
+      appendMarkerDecoration(ranges, node.closeMarker.startOffset, node.endOffset, options);
       return;
     case "image":
+      if (options.active) {
+        for (const child of node.children) appendInlineDecorations(child, ranges, { ...options, markerVisible: undefined });
+        return;
+      }
       ranges.push(createInactiveImagePreviewDecoration(node, options.resolveImagePreviewUrl));
       appendMarkerDecoration(ranges, node.openMarker.startOffset, node.openMarker.endOffset);
       for (const child of node.children) {
         appendInlineDecorations(child, ranges, options);
       }
       appendMarkerDecoration(ranges, node.closeMarker.startOffset, node.closeMarker.endOffset);
-      return;
-  }
-}
-
-function appendActiveInlineDecorations(node: InlineASTNode, ranges: InlineDecorationRange[]) {
-  switch (node.type) {
-    case "root":
-      for (const child of node.children) {
-        appendActiveInlineDecorations(child, ranges);
-      }
-      return;
-    case "text":
-      appendCjkTextRanges(ranges, node.startOffset, node.value);
-      return;
-    case "hardBreak":
-      appendActiveHardBreakDecoration(ranges, node.endOffset);
-      return;
-    case "codeSpan":
-    case "inlineMath":
-      appendActiveMarkerDecoration(ranges, node.openMarker.startOffset, node.openMarker.endOffset);
-      appendContentDecoration(
-        ranges,
-        node.openMarker.endOffset,
-        node.closeMarker.startOffset,
-        node.type === "codeSpan" ? INACTIVE_INLINE_CONTENT_CLASSES.codeSpan : "cm-active-inline-math"
-      );
-      appendActiveMarkerDecoration(ranges, node.closeMarker.startOffset, node.closeMarker.endOffset);
-      return;
-    case "footnoteReference":
-      appendActiveMarkerDecoration(ranges, node.openMarker.startOffset, node.openMarker.endOffset);
-      appendContentDecoration(
-        ranges,
-        node.labelStartOffset,
-        node.labelEndOffset,
-        INACTIVE_INLINE_FOOTNOTE_REFERENCE_CLASS
-      );
-      appendActiveMarkerDecoration(ranges, node.closeMarker.startOffset, node.closeMarker.endOffset);
-      return;
-    case "strong":
-    case "emphasis":
-    case "strikethrough":
-      appendActiveMarkerDecoration(ranges, node.openMarker.startOffset, node.openMarker.endOffset);
-      appendContentDecoration(
-        ranges,
-        node.openMarker.endOffset,
-        node.closeMarker.startOffset,
-        INACTIVE_INLINE_CONTENT_CLASSES[node.type]
-      );
-      for (const child of node.children) {
-        appendActiveInlineDecorations(child, ranges);
-      }
-      appendActiveMarkerDecoration(ranges, node.closeMarker.startOffset, node.closeMarker.endOffset);
-      return;
-    case "link":
-      for (const child of node.children) {
-        appendActiveInlineDecorations(child, ranges);
-      }
-      return;
-    case "image":
-      for (const child of node.children) {
-        appendActiveInlineDecorations(child, ranges);
-      }
       return;
   }
 }
@@ -273,9 +209,11 @@ function appendActiveHardBreakDecoration(
 function appendMarkerDecoration(
   ranges: InlineDecorationRange[],
   startOffset: number,
-  endOffset: number
+  endOffset: number,
+  options: CreateInactiveInlineDecorationsOptions = {}
 ) {
-  appendInlineMarkerDecoration(ranges, startOffset, endOffset, INACTIVE_INLINE_MARKER_CLASS);
+  appendInlineMarkerDecoration(ranges, startOffset, endOffset,
+    (options.markerVisible?.(startOffset, endOffset) ?? options.active) ? ACTIVE_INLINE_MARKER_CLASS : INACTIVE_INLINE_MARKER_CLASS);
 }
 
 function appendActiveMarkerDecoration(

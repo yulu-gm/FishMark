@@ -786,7 +786,9 @@ function resolveListPointer(context: PointerInteractionContext): number | null {
     context.target.closest(".cm-inactive-task-marker") ||
     (context.paddingLeft > 0 && isPointerWithinLeftPadding(context))
   ) {
-    return context.lineStart;
+    // Rendered bullets/checkboxes and blank padding target content directly;
+    // editable source markers no longer rely on hidden-selection normalization.
+    return context.snapshot.lineAt(context.lineStart)?.contentStartOffset ?? context.lineStart;
   }
 
   return resolveVisibleTextPointerAnchor(context);

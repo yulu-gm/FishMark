@@ -46,58 +46,18 @@ export function normalizeHiddenInlineAnchor(
   }
 
   const normalizeNode = (node: InlineASTNode): number | null => {
-    switch (node.type) {
-      case "root":
-        for (const child of node.children) {
-          const nextAnchor = normalizeNode(child);
-
-          if (nextAnchor !== null) {
-            return nextAnchor;
-          }
-        }
-        return null;
-      case "text":
-      case "hardBreak":
-        return null;
-      case "codeSpan":
-      case "inlineMath":
-      case "footnoteReference":
-        return (
-          normalizeHiddenOpenMarkerAnchor(anchor, node.openMarker.startOffset, node.openMarker.endOffset, direction) ??
-          normalizeHiddenCloseMarkerAnchor(anchor, node.closeMarker.startOffset, node.closeMarker.endOffset, direction)
-        );
-      case "strong":
-      case "emphasis":
-      case "strikethrough":
-      case "link":
-      case "image": {
-        const openAnchor = normalizeHiddenOpenMarkerAnchor(
-          anchor,
-          node.openMarker.startOffset,
-          node.openMarker.endOffset,
-          direction
-        );
-
-        if (openAnchor !== null) {
-          return openAnchor;
-        }
-
-        for (const child of node.children) {
-          const childAnchor = normalizeNode(child);
-
-          if (childAnchor !== null) {
-            return childAnchor;
-          }
-        }
-
-        return normalizeHiddenCloseMarkerAnchor(
-          anchor,
-          node.closeMarker.startOffset,
-          node.closeMarker.endOffset,
-          direction
-        );
-      }
+    if (node.type === "text" || node.type === "hardBreak") return null;
+    // Preserve open → child → close precedence for every canonical inline owner.
+    if (node.type !== "root") {
+      const open = normalizeHiddenOpenMarkerAnchor(anchor, node.openMarker.startOffset, node.openMarker.endOffset, direction);
+      if (open !== null) return open;
     }
+    if ("children" in node) for (const child of node.children) {
+      const result = normalizeNode(child);
+      if (result !== null) return result;
+    }
+    return node.type === "root" ? null :
+      normalizeHiddenCloseMarkerAnchor(anchor, node.closeMarker.startOffset, node.closeMarker.endOffset, direction);
   };
 
   return normalizeNode(inline);

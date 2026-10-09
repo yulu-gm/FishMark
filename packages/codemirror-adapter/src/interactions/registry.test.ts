@@ -138,7 +138,7 @@ describe("block interaction registry", () => {
         clientY: 1
       });
 
-      expect(resolvePointerSelectionAnchor(view, activeState, event)).toBe(source.indexOf("- item"));
+      expect(resolvePointerSelectionAnchor(view, activeState, event)).toBe(source.indexOf("item"));
     } finally {
       if (originalElementFromPoint) {
         Object.defineProperty(document, "elementFromPoint", {

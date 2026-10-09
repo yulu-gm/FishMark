@@ -2,6 +2,7 @@
 
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
+import { undo, redo } from "@codemirror/commands";
 import { describe, expect, it, vi } from "vitest";
 
 import { editorStructureObserver, readCompositionState, type EditorStructureObserver } from "../transaction-adapter";
@@ -73,6 +74,29 @@ const createHarness = (options: HarnessOptions) => {
 };
 
 describe("createFishMarkMarkdownExtensions", () => {
+  it("navigates Unicode link source by grapheme and preserves native delete history", () => {
+    const source = "[label](https://example.test/😀é)", { view, destroy } = createHarness({ source });
+    const emoji = source.indexOf("😀");
+    view.dispatch({ selection: { anchor: emoji + 2 } });
+    const left = new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true, cancelable: true });
+    view.contentDOM.dispatchEvent(left);
+    expect(view.state.selection.main.head).toBe(emoji);
+    const right = new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true });
+    view.contentDOM.dispatchEvent(right);
+    expect(view.state.selection.main.head).toBe(emoji + 2);
+    view.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }));
+    expect(view.state.selection.main.head).toBe(emoji + 4);
+    view.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true, cancelable: true }));
+    expect(view.state.selection.main.head).toBe(emoji + 2);
+    view.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "Backspace", bubbles: true, cancelable: true }));
+    expect(view.state.doc.toString()).toBe(source.slice(0, emoji) + source.slice(emoji + 2));
+    expect(undo(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe(source);
+    expect(redo(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe(source.slice(0, emoji) + source.slice(emoji + 2));
+    destroy();
+  });
+
   it("calls onContentChange when the document changes", () => {
     const onContentChange = vi.fn();
     const { view, destroy } = createHarness({

@@ -6,6 +6,7 @@ import {
 import {
   Annotation,
   EditorState,
+  findClusterBreak,
   StateEffect,
   StateField,
   Transaction,
@@ -79,7 +80,7 @@ import {
   createEditorDerivedState,
   type EditorDerivedState
 } from "@fishmark/editor-model";
-import { createHeadingPresentationExtension, headingMarkerAt, headingMarkerIsVisible, readHeadingPresentation, revealHeadingMarkerEffect, setHeadingPresentationEffect, type HeadingPresentationMode } from "../heading-marker-presentation";
+import { createHeadingPresentationExtension, headingMarkerAt, progressiveMarkerAt, headingMarkerIsVisible, readHeadingPresentation, revealHeadingMarkerEffect, setHeadingPresentationEffect, type HeadingPresentationMode } from "../heading-marker-presentation";
 import { deriveInactiveBlockDecorationsState } from "../derived-state/inactive-block-decorations";
 import { readTableContext, type TablePosition } from "../table-context";
 import { createGroupedShortcutKeymaps } from "../markdown-shortcuts";
@@ -564,22 +565,25 @@ export function createFishMarkMarkdownExtensions(
     },
     provide: (field) => EditorView.decorations.from(field)
   });
-  const moveIntoHeadingMarker = (view: EditorView, direction: -1 | 1, extend = false): boolean => {
+  const moveIntoSourceMarker = (view: EditorView, direction: -1 | 1, extend = false): boolean => {
     if (getMarkdownEditorViewMode(view.state) === "source" || readCompositionState(view.state).active ||
       readHeadingPresentation(view.state).mode !== "editing") return false;
     const selection = view.state.selection.main;
     if (!selection.empty && !extend) return false;
-    const range = headingMarkerAt(readStateSnapshot(view.state), selection.head);
+    const range = progressiveMarkerAt(readStateSnapshot(view.state), selection.head);
     if (range === null || selection.head < range.from || selection.head > range.to ||
       (direction > 0 && selection.head === range.to) || (direction < 0 && selection.head === range.from)) return false;
-    const head = selection.head + direction;
-    view.dispatch({ selection: { anchor: extend ? selection.anchor : head, head }, userEvent: "select", scrollIntoView: true });
+    const line = view.state.doc.lineAt(selection.head);
+    const head = line.from + findClusterBreak(line.text, selection.head - line.from, direction > 0);
+    if (head === selection.head) return false;
+    view.dispatch({ selection: { anchor: extend ? selection.anchor : head, head }, userEvent: "select.source-marker", scrollIntoView: true });
     return true;
   };
-  const revealHeadingForBackspace = (view: EditorView): boolean => {
+  const revealSourceForBackspace = (view: EditorView): boolean => {
     if (view.state.readOnly || getMarkdownEditorViewMode(view.state) === "source" || readCompositionState(view.state).active) return false;
     const selection = view.state.selection.main;
-    const range = headingMarkerAt(readStateSnapshot(view.state), selection.head);
+    // List content-start Backspace retains its existing semantic detach/delete.
+    const range = progressiveMarkerAt(readStateSnapshot(view.state), selection.head, false);
     const presentation = readHeadingPresentation(view.state);
     if (!selection.empty || range === null ||
       (presentation.mode === "editing" ? selection.head !== range.to : selection.head < range.from || selection.head > range.to) ||
@@ -1172,10 +1176,16 @@ export function createFishMarkMarkdownExtensions(
             ) ?? nextAnchor;
         }
 
-        const headingMarker = headingMarkerAt(snapshot, nextAnchor);
-        const isEditingHeadingMarker = readHeadingPresentation(effectiveState).mode === "editing" &&
-          headingMarker !== null && nextAnchor >= headingMarker.from && nextAnchor < headingMarker.to;
-        if (shouldNormalizeHiddenSelection && !isEditingHeadingMarker) {
+        const headingMarker = progressiveMarkerAt(snapshot, nextAnchor);
+        const headingPrefix = headingMarkerAt(snapshot, nextAnchor);
+        const isEditingSourceMarker = readHeadingPresentation(effectiveState).mode === "editing" &&
+          headingMarker !== null && nextAnchor >= headingMarker.from && nextAnchor < headingMarker.to &&
+          (userEvent === "select.source-marker" ||
+            (headingPrefix !== null && nextAnchor >= headingPrefix.from && nextAnchor < headingPrefix.to) ||
+            (userEvent === "select.pointer" &&
+              headingMarkerIsVisible(headingMarker, transaction.startState.selection.main, runtime.hasEditorFocus,
+                readHeadingPresentation(transaction.startState))));
+        if (shouldNormalizeHiddenSelection && !isEditingSourceMarker) {
           nextAnchor =
             normalizeHiddenSelectionAnchor(
               snapshot,
@@ -1224,8 +1234,8 @@ export function createFishMarkMarkdownExtensions(
         key: "Mod-Enter",
         run: (view) => openLinkAtSelection(view)
       },
-      { key: "ArrowLeft", run: (view) => moveIntoHeadingMarker(view, -1), shift: (view) => moveIntoHeadingMarker(view, -1, true) },
-      { key: "ArrowRight", run: (view) => moveIntoHeadingMarker(view, 1), shift: (view) => moveIntoHeadingMarker(view, 1, true) },
+      { key: "ArrowLeft", run: (view) => moveIntoSourceMarker(view, -1), shift: (view) => moveIntoSourceMarker(view, -1, true) },
+      { key: "ArrowRight", run: (view) => moveIntoSourceMarker(view, 1), shift: (view) => moveIntoSourceMarker(view, 1, true) },
       {
         key: "ArrowUp",
         run: (view) => {
@@ -1256,7 +1266,7 @@ export function createFishMarkMarkdownExtensions(
       },
       {
         key: "Backspace",
-        run: (view) => revealHeadingForBackspace(view) || semanticCommands.run(view, planSemanticBackspace) !== "unhandled"
+        run: (view) => revealSourceForBackspace(view) || semanticCommands.run(view, planSemanticBackspace) !== "unhandled"
       },
       {
         key: "Delete",

@@ -1,6 +1,7 @@
 import { StateEffect, StateField, Transaction, type EditorState, type Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import type { ActiveBlockSelection, EditorDerivedSnapshot } from "@fishmark/editor-model";
+import type { InlineASTNode } from "@fishmark/markdown-engine";
 
 export type HeadingPresentationMode = "reading" | "editing";
 export type HeadingMarkerRange = { from: number; to: number };
@@ -52,4 +53,33 @@ export function headingMarkerAt(snapshot: EditorDerivedSnapshot, offset: number)
   // Long whitespace/tab prefixes stay source-visible from the outset. The same
   // qualification owns decorations and keyboard behavior, including in reading.
   return /^#{1,6} ?$/u.test(snapshot.source.slice(from, to)) ? { from, to } : null;
+}
+
+// Only ordinary list/task prefixes and supported inline syntax join the heading
+// protocol. Tables, images, math, footnotes and fence boundaries retain their owners.
+export function progressiveMarkerAt(snapshot: EditorDerivedSnapshot, offset: number, includeList = true): HeadingMarkerRange | null {
+  const heading = headingMarkerAt(snapshot, offset);
+  if (heading !== null && offset >= heading.from && offset <= heading.to) return heading;
+  const line = snapshot.lineAt(offset);
+  const list = line?.segments.find(segment => segment.kind === "list-marker");
+  if (includeList && line && list && offset >= list.range.startOffset && offset <= line.contentStartOffset) {
+    return { from: list.range.startOffset, to: line.contentStartOffset };
+  }
+  const node = line?.nodeId == null ? null : snapshot.nodeById(line.nodeId);
+  return node && (node.kind === "paragraph" || node.kind === "heading") && node.inline
+    ? inlineMarkerAt(node.inline, offset) : null;
+}
+
+function inlineMarkerAt(node: InlineASTNode, offset: number): HeadingMarkerRange | null {
+  if (offset < node.startOffset || offset > node.endOffset) return null;
+  if (node.type !== "root" && node.type !== "strong" && node.type !== "emphasis" && node.type !== "strikethrough" &&
+    node.type !== "codeSpan" && node.type !== "link") return null;
+  if ("children" in node) {
+    for (const child of node.children) { const range = inlineMarkerAt(child, offset); if (range) return range; }
+  }
+  if (node.type === "root") return null;
+  const from = node.openMarker.startOffset, to = node.openMarker.endOffset;
+  if (offset >= from && offset <= to) return { from, to };
+  const close = { from: node.closeMarker.startOffset, to: node.type === "link" ? node.endOffset : node.closeMarker.endOffset };
+  return offset >= close.from && offset <= close.to ? close : null;
 }
