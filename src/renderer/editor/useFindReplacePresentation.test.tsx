@@ -15,7 +15,6 @@ const activeDocument: WorkspaceDocumentSnapshot = {
   tabId: "tab-a", path: "C:/note.md", content: "alpha beta", name: "note.md",
   encoding: "utf-8", revision: 1, savedRevision: 1, isDirty: false, saveState: "idle"
 };
-const getWorkspaceActiveDocument = () => activeDocument;
 const setShellMode = vi.fn();
 const noop = () => {};
 let root: Root;
@@ -37,7 +36,7 @@ function Harness({ revision = 1, shellMode = "editing" }: { revision?: number; s
   });
   useEditorFocusPresentation({
     activeDocument, isSettingsOpen: false, isSettingsClosing: false, editorContainerRef,
-    editorRef, handleEditorBlur: noop, getWorkspaceActiveDocument, isDocumentOpen: true,
+    editorRef, handleEditorBlur: noop, isDocumentOpen: true,
     editorLoadRevision: revision, shellMode, setShellMode, setIsEditorFocused: noop
   });
   return <div onKeyDownCapture={search.handleWorkspaceKeyDownCapture}>

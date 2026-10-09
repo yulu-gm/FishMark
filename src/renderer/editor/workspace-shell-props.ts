@@ -69,6 +69,7 @@ export type WorkspaceShellProps = {
   headerTitle: string;
   isDocumentOpen: boolean;
   isReadingMode: boolean;
+  onToggleReadingMode?: () => void;
   isRefreshingThemePackages: boolean;
   isSettingsDrawerVisible: boolean;
   isSettingsOpen: boolean;

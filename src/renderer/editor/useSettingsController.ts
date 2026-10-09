@@ -1,25 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 
 import type { CodeEditorHandle } from "../code-editor-view";
-import type { WorkspaceDocumentSnapshot } from "../../shared/workspace";
 
 type FocusRestoreTarget = "editor" | "settings-entry";
 type SettingsOpenOrigin = "editor" | null;
 
 export function useSettingsController({
-  activeDocument,
   editorContainerRef,
   editorRef,
   settingsEntryRef,
-  exitAnimationMs,
-  onOpenWithActiveDocument
+  exitAnimationMs
 }: {
-  activeDocument: WorkspaceDocumentSnapshot | null;
   editorContainerRef: RefObject<HTMLDivElement | null>;
   editorRef: RefObject<CodeEditorHandle | null>;
   settingsEntryRef: RefObject<HTMLButtonElement | null>;
   exitAnimationMs: number;
-  onOpenWithActiveDocument: () => void;
 }) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSettingsClosing, setIsSettingsClosing] = useState(false);
@@ -44,10 +39,6 @@ export function useSettingsController({
   }, [editorContainerRef]);
 
   const openSettingsDrawer = useCallback((): void => {
-    if (activeDocument) {
-      onOpenWithActiveDocument();
-    }
-
     const activeElement = document.activeElement;
     shouldRestoreEditorFocusRef.current =
       openOriginRef.current === "editor" ||
@@ -57,10 +48,8 @@ export function useSettingsController({
     setIsSettingsClosing(false);
     setIsSettingsOpen(true);
   }, [
-    activeDocument,
     clearSettingsCloseTimer,
-    editorContainerRef,
-    onOpenWithActiveDocument
+    editorContainerRef
   ]);
 
   const closeSettingsDrawer = useCallback((): void => {

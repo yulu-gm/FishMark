@@ -1,3 +1,5 @@
+> The automatic mode entry/exit rules below are historical. The user-approved [2026-10-09 explicit F11 interaction](../../plans/2026-10-09-explicit-reading-presentation.md) supersedes them in the current local candidate.
+
 Date: 2026-04-19
 Scope: renderer shell, workspace layout, renderer tests, shared runtime naming, design docs
 

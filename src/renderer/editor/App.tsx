@@ -199,7 +199,6 @@ function EditorShell({
     state,
     activeDocument,
     editorLoadRevision,
-    getActiveDocument: getWorkspaceActiveDocument,
     reorderWorkspaceTab,
     loadInitialWorkspaceSnapshot
   } = workspaceController;
@@ -227,14 +226,10 @@ function EditorShell({
   const effectiveSaveState = getEffectiveSaveState(activeDocument);
   const currentDocumentWordCount = currentDocumentMetrics?.meaningfulCharacterCount ?? 0;
   const settingsController = useSettingsController({
-    activeDocument,
     editorContainerRef,
     editorRef,
     settingsEntryRef,
-    exitAnimationMs: SETTINGS_DRAWER_EXIT_ANIMATION_MS,
-    onOpenWithActiveDocument: () => {
-      setShellMode("editing");
-    }
+    exitAnimationMs: SETTINGS_DRAWER_EXIT_ANIMATION_MS
   });
   const {
     captureSettingsOpenOrigin,
@@ -248,9 +243,9 @@ function EditorShell({
   const isDocumentOpen = activeDocument !== null;
   const isReadingMode = shellMode === "reading";
   const isDocumentReadingMode = isDocumentOpen && isReadingMode;
-  const { handleEditorBlurFromShell, blurFocusedEditorElementAfterOpen, handleAppWorkspaceMouseDownCapture } = useEditorFocusPresentation({
+  const { toggleReadingMode, handleEditorBlurFromShell, blurFocusedEditorElementAfterOpen, handleAppWorkspaceMouseDownCapture } = useEditorFocusPresentation({
     activeDocument, isSettingsOpen, isSettingsClosing, editorContainerRef, editorRef,
-    handleEditorBlur, getWorkspaceActiveDocument, isDocumentOpen, editorLoadRevision: state.editorLoadRevision,
+    handleEditorBlur, isDocumentOpen, editorLoadRevision: state.editorLoadRevision,
     shellMode, setShellMode, setIsEditorFocused
   });
   const headerTitle = isDocumentOpen
@@ -449,7 +444,6 @@ function EditorShell({
     const result = await editorCommands.openMarkdown();
 
     if (result === "opened") {
-      setShellMode("reading");
       blurFocusedEditorElementAfterOpen();
     }
   }
@@ -458,24 +452,18 @@ function EditorShell({
     const opened = await editorCommands.openRecentMarkdown(targetPath);
 
     if (opened) {
-      setShellMode("reading");
       blurFocusedEditorElementAfterOpen();
     }
   }
 
   async function handleNewMarkdown(): Promise<void> {
-    const created = await editorCommands.createUntitledMarkdown();
-
-    if (created) {
-      setShellMode("editing");
-    }
+    await editorCommands.createUntitledMarkdown();
   }
 
   const handleOpenMarkdownFromPath = useCallback(async (targetPath: string): Promise<void> => {
     const opened = await editorCommands.openMarkdownFromPath(targetPath);
 
     if (opened) {
-      setShellMode("reading");
       blurFocusedEditorElementAfterOpen();
     }
   }, [
@@ -486,7 +474,6 @@ function EditorShell({
     getPathForDroppedFile: fishmark.getPathForDroppedFile,
     dropMarkdownFiles: async (targetPaths) => {
       if (await editorCommands.dropMarkdownFiles(targetPaths)) {
-        setShellMode("reading");
         blurFocusedEditorElementAfterOpen();
       }
     }
@@ -727,9 +714,7 @@ function EditorShell({
   }, [scheduleDocumentDerivedDataUpdate]);
 
   const handleReloadExternalFile = useCallback((): void => {
-    void externalConflictController.reloadFromDisk().then(() => {
-      setShellMode("reading");
-    });
+    void externalConflictController.reloadFromDisk();
   }, [externalConflictController]);
 
   function handleSaveMarkdownAsCommand(): void {
@@ -804,6 +789,7 @@ function EditorShell({
         titlebarLayout={titlebarLayout}
         onActiveBlockChange={handleActiveBlockChange}
         onAppWorkspaceMouseDownCapture={handleAppWorkspaceMouseDownCapture}
+        onToggleReadingMode={toggleReadingMode}
         onCaptureSettingsOpenOrigin={captureSettingsOpenOrigin}
         onCloseViewContainer={closeViewContainer}
         onCloseSettingsDrawer={closeSettingsDrawer}
