@@ -750,6 +750,9 @@ export function createCodeEditorController(
       documentIdentity = nextIdentity === null ? null : Object.freeze({ ...nextIdentity });
       semanticCommands.bindSession(view, documentIdentity?.tabId);
       view.dispatch({ effects: semanticCommands.adapter.resetComposition() });
+      // A barrier release rebinds the same document to a new epoch without a text
+      // or selection transaction. Publish its snapshot to the new load owner too.
+      options.onActiveBlockChange?.(activeBlockState);
     },
     flushPendingDocumentChanges() {
       emitPendingDocumentChanges();

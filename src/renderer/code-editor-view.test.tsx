@@ -398,6 +398,31 @@ describe("CodeEditorView", () => {
     expect(onDocumentChangeFrame).toHaveBeenCalledWith(frame);
   });
 
+  it("routes a persistent controller's derived snapshot through the committed load callback", async () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const binding = createBindingProps();
+    const render = async (loadRevision: number, onActiveBlockChange: typeof first) => {
+      await act(async () => root.render(createElement(CodeEditorView, {
+        ...binding, initialContent: loadRevision === 1 ? "# First" : "## Second",
+        documentPath: "D:/notes/current.md", loadRevision, onActiveBlockChange
+      })));
+    };
+    await render(1, first);
+    const options = createCodeEditorControllerMock.mock.calls[0]![0];
+    const snapshot = { snapshot: { outlineHeadings: [{ label: "Second", startOffset: 0 }] } };
+    replaceDocumentMock.mockImplementation(() => options.onActiveBlockChange(snapshot));
+
+    await render(2, second);
+    options.onActiveBlockChange(snapshot);
+
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledTimes(2);
+    expect(second).toHaveBeenLastCalledWith(snapshot);
+    expect(createCodeEditorControllerMock).toHaveBeenCalledTimes(1);
+    expect(replaceDocumentMock).toHaveBeenLastCalledWith("## Second");
+  });
+
   it("waits for the latest seal and fences prior tokens and unmounted controllers", async () => {
     const first = createDeferred();
     const second = createDeferred();

@@ -3,6 +3,7 @@ import {
   useEffect,
   useEffectEvent,
   useImperativeHandle,
+  useLayoutEffect,
   useRef
 } from "react";
 
@@ -175,9 +176,9 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
     });
     const handleUserDocumentEdit = useEffectEvent(() => onUserDocumentEdit?.());
     const handleBlur = useEffectEvent(() => onBlur?.());
-    const handleActiveBlockChange = useEffectEvent((state: ActiveBlockState) =>
-      onActiveBlockChange?.(state)
-    );
+    // The persistent controller must publish to the latest committed load owner.
+    const activeBlockChangeRef = useRef(onActiveBlockChange);
+    useLayoutEffect(() => { activeBlockChangeRef.current = onActiveBlockChange; });
     const handleImportClipboardImage = useEffectEvent((input: { documentPath: string | null }) =>
       importClipboardImage?.(input) ?? Promise.resolve(null)
     );
@@ -199,7 +200,7 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
           handlePendingDocumentChangesChange(hasPending),
         onUserDocumentEdit: () => handleUserDocumentEdit(),
         onBlur: () => handleBlur(),
-        onActiveBlockChange: (state) => handleActiveBlockChange(state),
+        onActiveBlockChange: (state) => activeBlockChangeRef.current?.(state),
         importClipboardImage: (input) => handleImportClipboardImage(input),
         openExternalLink: (href) => handleOpenExternalLink(href),
         headingPresentationMode: initialHeadingPresentationModeRef.current,

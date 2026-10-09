@@ -232,6 +232,41 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("publishes the current canonical snapshot on an epoch-only load rebind without changing text, selection or history", () => {
+    const host = document.createElement("div");
+    const onActiveBlockChange = vi.fn();
+    const onChange = vi.fn();
+    const controller = createCodeEditorController({
+      parent: host, initialContent: "# Initial\n", onChange, onActiveBlockChange
+    });
+    const view = getEditorView(host)!;
+    controller.setDocumentIdentity({ tabId: "first", epoch: 1, loadRevision: 1 });
+    controller.replaceDocument("Intro\n\n## Reloaded\n\n### Child\n");
+    controller.setDocumentIdentity({ tabId: "first", epoch: 1, loadRevision: 2 });
+    controller.setSelection(18);
+    controller.insertText("X");
+    controller.flushPendingDocumentChanges();
+    const before = onActiveBlockChange.mock.lastCall![0];
+    const depth = undoDepth(view.state);
+    const selection = controller.getSelection();
+    onActiveBlockChange.mockClear(); onChange.mockClear();
+
+    controller.setDocumentIdentity({ tabId: "first", epoch: 2, loadRevision: 2 });
+
+    expect(onActiveBlockChange).toHaveBeenCalledTimes(1);
+    expect(onActiveBlockChange.mock.lastCall![0].snapshot).toBe(before.snapshot);
+    expect(onActiveBlockChange.mock.lastCall![0].snapshot.outlineHeadings.map((heading: { label: string }) => heading.label))
+      .toEqual(["ReloadedX", "Child"]);
+    expect(controller.getSelection()).toEqual(selection);
+    expect(undoDepth(view.state)).toBe(depth);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(undo(view)).toBe(true);
+    expect(controller.getContent()).toBe("Intro\n\n## Reloaded\n\n### Child\n");
+    expect(redo(view)).toBe(true);
+    expect(controller.getContent()).toBe("Intro\n\n## ReloadedX\n\n### Child\n");
+    controller.destroy();
+  });
+
   it("blocks every imperative edit while read-only but still permits an internal replacement", () => {
     const host = document.createElement("div");
     const onChange = vi.fn();
