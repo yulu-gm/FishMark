@@ -678,7 +678,7 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("removes inactive heading decorations when the heading becomes active again", async () => {
+  it("keeps heading prefixes hidden in active prose and reveals actual prefix selection", async () => {
     const host = document.createElement("div");
     const source = ["# Title", "", "Paragraph"].join("\n");
 
@@ -708,7 +708,9 @@ describe("createCodeEditorController", () => {
 
     expect(headingLine).not.toBeNull();
     expect(headingLine?.classList.contains("cm-inactive-heading")).toBe(false);
-    expect(host.querySelector(".cm-inactive-heading-marker")).toBeNull();
+    expect(host.querySelector(".cm-inactive-heading-marker")).not.toBeNull();
+    view?.dispatch({ selection: { anchor: 1 } });
+    expect(host.querySelector(".cm-active-heading-marker")).not.toBeNull();
 
     controller.destroy();
   });
@@ -2459,7 +2461,7 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("normalizes paragraph and heading hidden markers away from invisible cursor positions", async () => {
+  it("normalizes inline markers while keeping editing heading prefixes reachable", async () => {
     const host = document.createElement("div");
     const source = [
       "**Bold**",
@@ -2501,7 +2503,7 @@ describe("createCodeEditorController", () => {
 
     advancedController.setSelection(headingMarker + 1);
     await flushMicrotasks();
-    expect(view?.state.selection.main.anchor).toBe(source.indexOf("加粗标题"));
+    expect(view?.state.selection.main.anchor).toBe(headingMarker + 1);
 
     advancedController.setSelection(headingStrongOpenMarker + 1);
     await flushMicrotasks();
@@ -2510,7 +2512,7 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("reactivates a heading line after hidden marker normalization moves the cursor into visible heading content", async () => {
+  it("reactivates a heading without moving the source prefix selection", async () => {
     const host = document.createElement("div");
     const source = ["## **加粗标题**", "", "Paragraph"].join("\n");
 
@@ -2539,7 +2541,7 @@ describe("createCodeEditorController", () => {
     advancedController.setSelection(source.indexOf("## **加粗标题**") + 1);
     await flushMicrotasks();
 
-    expect(view?.state.selection.main.anchor).toBe(source.indexOf("加粗标题"));
+    expect(view?.state.selection.main.anchor).toBe(1);
     expect(headingLine()?.classList.contains("cm-inactive-heading")).toBe(false);
     expect(host.querySelector(".cm-inactive-heading-marker")).toBeNull();
 
@@ -9867,5 +9869,94 @@ describe("user document edit presentation signal", () => {
       view.dispatch({ selection: { anchor: 2 } });
       expect(onUserDocumentEdit).not.toHaveBeenCalled();
     } finally { controller.destroy(); }
+  });
+});
+
+describe("progressive heading marker presentation", () => {
+  function setup(source: string, mode: "reading" | "editing" = "editing", viewMode: "source" | "wysiwym" = "wysiwym", readOnly = false) {
+    const host = document.createElement("div"); document.body.appendChild(host);
+    const onUserDocumentEdit = vi.fn();
+    const controller = createCodeEditorController({ parent: host, initialContent: source, onChange: vi.fn(), onUserDocumentEdit, headingPresentationMode: mode, viewMode, readOnly });
+    const view = getEditorView(host)!; controller.focus();
+    return { host, view, controller, onUserDocumentEdit, destroy: () => { controller.destroy(); host.remove(); } };
+  }
+  it.each(["# ", "###### ", "###", "> ## ", "- ### "])("reveals %s without editing or adding history, then deletes normally", (prefix) => {
+    const source = prefix + (prefix === "###" ? "" : "Title") + "\n\nTail";
+    const p = setup(source, "reading");
+    try {
+      p.controller.setSelection(prefix.length);
+      const before = p.controller.getSelection();
+      p.controller.pressBackspace();
+      expect(p.controller.getContent()).toBe(source);
+      expect(p.controller.getSelection()).toEqual(before);
+      expect(p.host.querySelector(".cm-active-heading-marker")).not.toBeNull();
+      expect(undoDepth(p.view.state)).toBe(0);
+      expect(p.onUserDocumentEdit).toHaveBeenCalledTimes(1);
+      p.controller.pressBackspace();
+      const deleted = source.slice(0, prefix.length - 1) + source.slice(prefix.length);
+      expect(p.controller.getContent()).toBe(deleted);
+      expect(undoDepth(p.view.state)).toBe(1);
+      undo(p.view); expect(p.controller.getContent()).toBe(source);
+      redo(p.view); expect(p.controller.getContent()).toBe(deleted);
+    } finally { p.destroy(); }
+  });
+  it("refreshes all crossed heading prefixes in either selection direction without changing selection", () => {
+    const source = "# First\n\n## Second\n\nTail";
+    const p = setup(source);
+    try {
+      p.controller.setSelection(1, source.length);
+      expect(p.host.querySelectorAll(".cm-active-heading-marker")).toHaveLength(2);
+      expect(p.controller.getSelection()).toEqual({ anchor: 1, head: source.length });
+      p.controller.setSelection(source.length, 1);
+      expect(p.host.querySelectorAll(".cm-active-heading-marker")).toHaveLength(2);
+      p.controller.setSelection(source.length);
+      expect(p.host.querySelectorAll(".cm-active-heading-marker")).toHaveLength(0);
+      expect(p.host.querySelectorAll(".cm-inactive-heading-marker")).toHaveLength(2);
+      expect(undoDepth(p.view.state)).toBe(0);
+    } finally { p.destroy(); }
+  });
+  it("keeps reading hidden and preserves source-mode and read-only input rules", () => {
+    const p = setup("## Title");
+    try {
+      p.controller.setSelection(1);
+      expect(p.host.querySelector(".cm-active-heading-marker")).not.toBeNull();
+      p.controller.setHeadingPresentationMode("reading");
+      expect(p.host.querySelector(".cm-active-heading-marker")).toBeNull();
+      expect(p.controller.getSelection().head).toBe(1);
+      p.controller.setSelection(3);
+      p.controller.setReadOnly(true); p.controller.pressBackspace();
+      expect(p.controller.getContent()).toBe("## Title");
+      expect(p.host.querySelector(".cm-active-heading-marker")).toBeNull();
+      expect(p.onUserDocumentEdit).not.toHaveBeenCalled();
+      p.controller.setReadOnly(false); p.controller.setViewMode("source"); p.controller.pressBackspace();
+      expect(p.controller.getContent()).toBe("##Title");
+      expect(p.host.querySelector(".cm-active-heading-marker")).toBeNull();
+    } finally { p.destroy(); }
+  });
+  it.each(["#Title\n======", "##Title\n------", "Plain\n======"])("does not treat Setext prose %s as an ATX opening prefix", (source) => {
+    const p = setup(source);
+    try {
+      p.controller.setSelection(1); p.controller.pressBackspace();
+      expect(p.controller.getContent()).toBe(source.slice(1));
+      expect(p.host.querySelector(".cm-active-heading-marker")).toBeNull();
+      expect(p.host.querySelector(".cm-inactive-heading-marker")).toBeNull();
+    } finally { p.destroy(); }
+  });
+  it("keeps heading DOM stable during synthetic composition and flushes after completion", async () => {
+    const p = setup("## Title");
+    try {
+      p.controller.setSelection(4);
+      const marker = p.host.querySelector(".cm-inactive-heading-marker");
+      dispatchCompositionEvent(p.view.dom, "compositionstart", "中");
+      p.controller.setHeadingPresentationMode("reading");
+      p.view.dispatch({ changes: { from: 4, insert: "中" }, userEvent: "input.type.compose" });
+      expect(p.host.querySelector(".cm-inactive-heading-marker")).toBe(marker);
+      expect(p.onUserDocumentEdit).not.toHaveBeenCalled();
+      const finished = waitForCompositionFinish(p.view);
+      dispatchCompositionEvent(p.view.dom, "compositionend", "中"); await finished;
+      expect(p.controller.getContent()).toBe("## T中itle");
+      expect(p.onUserDocumentEdit).toHaveBeenCalledTimes(1);
+      expect(p.host.querySelector(".cm-active-heading-marker")).toBeNull();
+    } finally { p.destroy(); }
   });
 });

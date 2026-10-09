@@ -90,6 +90,7 @@ type CodeEditorViewProps = {
   onActiveBlockChange?: (state: ActiveBlockState) => void;
   importClipboardImage?: (input: { documentPath: string | null }) => Promise<string | null>;
   openExternalLink?: (href: string) => void;
+  headingPresentationMode?: "reading" | "editing";
   viewMode?: EditorViewMode;
 };
 
@@ -117,6 +118,7 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
       onActiveBlockChange,
       importClipboardImage,
       openExternalLink,
+      headingPresentationMode = "editing",
       viewMode = "wysiwym"
     },
     ref
@@ -125,6 +127,7 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
     const controllerRef = useRef<CodeEditorController | null>(null);
     const initialContentRef = useRef(initialContent);
     const initialViewModeRef = useRef(viewMode);
+    const initialHeadingPresentationModeRef = useRef(headingPresentationMode);
     const initialReadOnlyRef = useRef(readOnly);
     const latestLoadedContentRef = useRef(initialContent);
     const appliedIdentityRef = useRef<EditorLoadIdentity | null>(null);
@@ -199,6 +202,7 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
         onActiveBlockChange: (state) => handleActiveBlockChange(state),
         importClipboardImage: (input) => handleImportClipboardImage(input),
         openExternalLink: (href) => handleOpenExternalLink(href),
+        headingPresentationMode: initialHeadingPresentationModeRef.current,
         viewMode: initialViewModeRef.current,
         readOnly: initialReadOnlyRef.current
       });
@@ -247,6 +251,7 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
     useEffect(() => {
       controllerRef.current?.setViewMode(viewMode);
     }, [viewMode]);
+    useEffect(() => { controllerRef.current?.setHeadingPresentationMode(headingPresentationMode); }, [headingPresentationMode]);
 
     useEffect(() => {
       const controller = controllerRef.current;

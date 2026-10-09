@@ -88,7 +88,7 @@ describe("canonical nested rendering through the production editor", () => {
     expect(controller.getContent()).toBe(source);
   });
 
-  it("hides a nested heading marker only while its line is inactive", () => {
+  it("reveals a nested heading marker only when its prefix is selected", () => {
     const source = ["> # Title", ">", "> body", "", "after"].join("\n");
     const { host, controller } = create(source);
     const markerCount = () => host.querySelectorAll(".cm-inactive-heading-marker").length;
@@ -98,7 +98,10 @@ describe("canonical nested rendering through the production editor", () => {
     host.querySelector(".cm-editor")?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
     controller.setSelection(source.indexOf("Title"));
 
+    expect(markerCount()).toBe(1);
+    controller.setSelection(source.indexOf("#"));
     expect(markerCount()).toBe(0);
+    expect(host.querySelector(".cm-active-heading-marker")).not.toBeNull();
     expect(host.querySelector(".cm-active-heading")).not.toBeNull();
     expect(controller.getContent()).toBe(source);
   });

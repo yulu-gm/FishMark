@@ -566,7 +566,7 @@ describe("createBlockDecorations", () => {
     expect(spanning.widgets.filter((widget) => widget.name === "MarkdownImagePreviewWidget")).toEqual([]);
   });
 
-  it("hides a nested heading marker only while its line is inactive", () => {
+  it("reveals a nested heading marker only when selection enters its prefix", () => {
     const source = ["> # Title", "", "Tail"].join("\n");
     const decorateFor = (head: number) => collectDecorations(source, createBlockDecorations({
       activeBlockState: createActiveBlockState(snapshotOf(source), { anchor: head, head }),
@@ -582,7 +582,8 @@ describe("createBlockDecorations", () => {
 
     const activeRanges = decorateFor(source.indexOf("Title"));
     expect(getExactClassesAtRange(activeRanges, 0, 0)).toContain("cm-active-heading cm-active-heading-depth-1");
-    expect(getExactClassesAtRange(activeRanges, 2, 4)).not.toContain("cm-inactive-heading-marker");
+    expect(getExactClassesAtRange(activeRanges, 2, 4)).toContain("cm-inactive-heading-marker");
+    expect(getExactClassesAtRange(decorateFor(3), 2, 4)).toContain("cm-active-heading-marker");
   });
 
   it("marks structural blank lines as inactive reading blanks", () => {
@@ -1029,7 +1030,7 @@ describe("createBlockDecorations", () => {
 
     expect(result.signature).toBe(
       [
-        "view-mode:wysiwym:active:paragraph@5#5293aed9:blank-line:86:physical-line:15:86:95:text",
+        "view-mode:wysiwym:marker-mode:editing:86:86:none:active:paragraph@5#5293aed9:blank-line:86:physical-line:15:86:95:text",
         'heading:heading@0#036d0de0:0:1|inline:root(2-7:text(2-7:"Title"))',
         // Containers key on their canonical node id, whose fingerprint covers the whole subtree
         // source, so nested inline and marker edits still invalidate the decoration cache.
@@ -2209,7 +2210,7 @@ describe("createBlockDecorations", () => {
     expectExactRangeClasses(ranges, 3, 4, ["cm-active-blockquote-padding-anchor"]);
   });
 
-  it("omits the active block only while the editor has focus", () => {
+  it("keeps active typography and hidden heading prefixes independent of focus", () => {
     const source = ["# Title", "", "Paragraph"].join("\n");
     const activeState = createActiveBlockState(snapshotOf(source), {
       anchor: source.indexOf("Title"),
@@ -2234,6 +2235,7 @@ describe("createBlockDecorations", () => {
         className: "cm-active-heading cm-active-heading-depth-1",
         text: ""
       },
+      { from: 0, to: 2, className: "cm-inactive-heading-marker", text: "# " },
       {
         from: 8,
         to: 8,

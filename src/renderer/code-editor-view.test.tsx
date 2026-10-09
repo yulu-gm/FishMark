@@ -9,6 +9,7 @@ import { CodeEditorView, type CodeEditorHandle } from "./code-editor-view";
 const replaceDocumentMock = vi.fn<(content: string) => void>();
 const setContentMock = vi.fn<(content: string) => void>();
 const setDocumentPathMock = vi.fn<(documentPath: string | null) => void>();
+const setHeadingPresentationModeMock = vi.fn();
 const setViewModeMock = vi.fn<(viewMode: "wysiwym" | "source") => void>();
 const setReadOnlyMock = vi.fn<(readOnly: boolean) => void>();
 const setDocumentIdentityMock = vi.fn<(identity: { tabId: string; epoch: number; loadRevision: number } | null) => void>();
@@ -68,6 +69,7 @@ describe("CodeEditorView", () => {
     setContentMock.mockReset();
     setDocumentPathMock.mockReset();
     setViewModeMock.mockReset();
+    setHeadingPresentationModeMock.mockReset();
     setReadOnlyMock.mockReset();
     setDocumentIdentityMock.mockReset();
     sealForBarrierMock.mockReset();
@@ -97,6 +99,7 @@ describe("CodeEditorView", () => {
       replaceDocument: replaceDocumentMock,
       setDocumentPath: setDocumentPathMock,
       setViewMode: setViewModeMock,
+      setHeadingPresentationMode: setHeadingPresentationModeMock,
       setReadOnly: setReadOnlyMock,
       setDocumentIdentity: setDocumentIdentityMock,
       sealForBarrier: sealForBarrierMock,

@@ -6488,7 +6488,7 @@ describe("App autosave", () => {
     );
     expect(blockquoteRule).toContain("box-shadow: none;");
     expect(blockquoteRule).toContain(
-      "padding-left: calc(var(--fishmark-blockquote-padding-inline) + var(--fishmark-blockquote-depth-offset));"
+      "padding-left: calc(var(--fishmark-blockquote-padding-inline) + var(--fishmark-blockquote-depth-offset) + var(--fishmark-heading-marker-gutter, 0px));"
     );
     expect(blockquoteSeparatorRule).toContain("min-height: 0.8em;");
     expect(blockquoteSeparatorRule).toContain("line-height: 0.8;");

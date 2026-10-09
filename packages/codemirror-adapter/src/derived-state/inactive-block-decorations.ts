@@ -11,6 +11,7 @@ import {
   type EditorDerivedState
 } from "@fishmark/editor-model";
 import type { EditorViewMode } from "../editor-view-mode";
+import type { HeadingMarkerPresentation } from "../heading-marker-presentation";
 
 export type DeriveInactiveBlockDecorationsStateOptions = {
   snapshot: EditorDerivedSnapshot;
@@ -20,6 +21,7 @@ export type DeriveInactiveBlockDecorationsStateOptions = {
   resolveImagePreviewUrl?: (href: string | null) => string | null;
   tableWidgetCallbacks?: TableWidgetCallbacks | null;
   previousTableCursor?: TableCursorState | null;
+  headingMarkerPresentation?: HeadingMarkerPresentation;
   viewMode?: EditorViewMode;
 };
 
@@ -49,6 +51,7 @@ export function deriveInactiveBlockDecorationsState(
     footnoteDefinitions: editorDerivedState.footnoteDefinitions,
     resolveImagePreviewUrl: options.resolveImagePreviewUrl,
     tableWidgetCallbacks: options.tableWidgetCallbacks,
+    headingMarkerPresentation: options.headingMarkerPresentation,
     viewMode: options.viewMode
   });
 

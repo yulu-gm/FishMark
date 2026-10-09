@@ -27,8 +27,7 @@ import {
   createInactiveHtmlImagePreviewDecoration
 } from "./image-widgets";
 import {
-  createBlockDecorationSignature,
-  getInactiveHeadingMarkerEnd
+  createBlockDecorationSignature
 } from "./signature";
 import { createTableWidgetDecoration, type TableWidgetCallbacks } from "./table-widget";
 import { createInactiveBlockMathPreviewDecoration } from "./math-widgets";
@@ -46,6 +45,7 @@ import {
   type SemanticLineRole
 } from "@fishmark/editor-model";
 import type { EditorViewMode } from "../editor-view-mode";
+import { headingMarkerAt, headingMarkerIsVisible, type HeadingMarkerPresentation } from "../heading-marker-presentation";
 
 
 export type CreateBlockDecorationsOptions = {
@@ -59,6 +59,7 @@ export type CreateBlockDecorationsOptions = {
   footnoteDefinitions?: ReadonlyMap<string, FootnoteDefinition>;
   resolveImagePreviewUrl?: (href: string | null) => string | null;
   tableWidgetCallbacks?: TableWidgetCallbacks | null;
+  headingMarkerPresentation?: HeadingMarkerPresentation;
   viewMode?: EditorViewMode;
 };
 
@@ -106,6 +107,7 @@ type BlockDecorationContext = {
   footnoteDefinitions?: ReadonlyMap<string, FootnoteDefinition>;
   resolveImagePreviewUrl?: (href: string | null) => string | null;
   tableWidgetCallbacks?: TableWidgetCallbacks | null;
+  headingMarkerPresentation?: HeadingMarkerPresentation;
   viewMode: EditorViewMode;
 };
 
@@ -178,6 +180,7 @@ export function createSelectionScopedBlockDecorations(
       footnoteDefinitions: options.footnoteDefinitions,
       resolveImagePreviewUrl: options.resolveImagePreviewUrl,
       tableWidgetCallbacks: options.tableWidgetCallbacks,
+      headingMarkerPresentation: options.headingMarkerPresentation,
       viewMode: options.viewMode
     });
 
@@ -287,6 +290,7 @@ function createBlockDecorationContext(
     footnoteDefinitions,
     resolveImagePreviewUrl,
     tableWidgetCallbacks,
+    headingMarkerPresentation: options.headingMarkerPresentation,
     viewMode: options.viewMode ?? "wysiwym"
   };
 }
@@ -390,18 +394,12 @@ function appendCanonicalContainerDecorations(
       const nodeLines = linesByNode.get(node.id) ?? [];
       const leafActive = nodeLines.some(line => context.activeSelectionLineStart === line.range.startOffset);
       if (node.data.kind === "heading") {
-        // Heading size and weight stay with the leaf even inside a container. Only its source
-        // markers are inactive presentation, so the active line keeps them visible.
+        // Leaf typography and source-marker visibility are independent.
         const mode = leafActive ? "active" : "inactive";
         ranges.push(Decoration.line({ attributes: {
           class: `cm-${mode}-heading cm-${mode}-heading-depth-${node.data.depth}`
         } }).range(firstLine.range.startOffset));
-        if (!leafActive) {
-          const markerEnd = getInactiveHeadingMarkerEnd(node.source.startOffset, node.data.depth, source);
-          if (markerEnd > node.source.startOffset) ranges.push(Decoration.mark({
-            attributes: { class: "cm-inactive-heading-marker" }
-          }).range(node.source.startOffset, markerEnd));
-        }
+        appendHeadingMarker(node.source.startOffset, context, ranges);
       } else if (!inContainer && !leafActive) {
         ranges.push(Decoration.line({ attributes: {
           class: "cm-inactive-paragraph cm-inactive-paragraph-leading"
@@ -422,7 +420,7 @@ function appendCanonicalContainerDecorations(
     const activeLine = context.activeSelectionLineStart;
     if (activeLine !== null && node.kind !== "table" &&
       snapshot.lineAt(node.source.startOffset)!.range.startOffset <= activeLine && activeLine < node.source.endOffset) {
-      appendActiveDecorationsForBlock(canonicalLeafView(node, snapshot), source, ranges, context.resolveImagePreviewUrl);
+      appendActiveDecorationsForBlock(canonicalLeafView(node, snapshot), source, ranges, context.resolveImagePreviewUrl, context);
       continue;
     }
     appendInactiveDecorationsForBlock(canonicalLeafView(node, snapshot), context, ranges, signatures,
@@ -545,7 +543,7 @@ function appendDecorationsForBlock(
       return;
     }
 
-    appendActiveDecorationsForBlock(block, context.source, ranges, context.resolveImagePreviewUrl);
+    appendActiveDecorationsForBlock(block, context.source, ranges, context.resolveImagePreviewUrl, context);
     return;
   }
 
@@ -573,7 +571,6 @@ function appendInactiveDecorationsForBlock(
   }
 
   if (block.type === "heading") {
-    const markerEnd = getInactiveHeadingMarkerEnd(block.startOffset, block.depth, context.source);
     ranges.push(
       Decoration.line({
         attributes: {
@@ -581,13 +578,7 @@ function appendInactiveDecorationsForBlock(
         }
       }).range(block.startOffset)
     );
-    ranges.push(
-      Decoration.mark({
-        attributes: {
-          class: "cm-inactive-heading-marker"
-        }
-      }).range(block.startOffset, markerEnd)
-    );
+    appendHeadingMarker(block.startOffset, context, ranges);
     ranges.push(...createInactiveInlineDecorations(block.inline, {
       resolveImagePreviewUrl: context.resolveImagePreviewUrl
     }));
@@ -675,7 +666,15 @@ function collectSelectionAffectedNodes(
 
   appendUniqueNode(nodes, rootNodeOf(previousActiveBlockState));
   appendUniqueNode(nodes, rootNodeOf(nextActiveBlockState));
-
+  // Nonempty selections can reveal prefixes in roots other than their active head.
+  for (const state of [previousActiveBlockState, nextActiveBlockState]) {
+    const from = Math.min(state.selection.anchor, state.selection.head);
+    const to = Math.max(state.selection.anchor, state.selection.head);
+    if (from === to) continue;
+    for (const node of childrenOf(state.snapshot.tree.root)) {
+      if (node.source.startOffset < to && node.source.endOffset > from) appendUniqueNode(nodes, node);
+    }
+  }
   return nodes;
 }
 
@@ -745,6 +744,7 @@ function rangeTouchesSpan(
 function createActiveDecorationSignature(context: BlockDecorationContext): string {
   return [
     `view-mode:${context.viewMode}`,
+    `marker-mode:${context.headingMarkerPresentation?.mode ?? "editing"}:${context.activeBlockState.selection.anchor}:${context.activeBlockState.selection.head}:${context.headingMarkerPresentation?.revealed?.from ?? "none"}`,
     `active:${context.activeRootNodeId ?? "none"}`,
     `blank-line:${context.activeSelectionLineStart ?? "none"}`,
     `physical-line:${context.hasEditorFocus ? context.activeLine.number : "none"}:${context.activeLine.from}:${context.activeLine.to}:${context.activeLine.kind}`
@@ -1452,13 +1452,38 @@ function consumeHorizontalSpace(source: string, startOffset: number, endOffset: 
   return cursor;
 }
 
+class EmptyHeadingCaretWidget extends WidgetType {
+  eq(other: WidgetType): boolean { return other instanceof EmptyHeadingCaretWidget; }
+  toDOM(): HTMLElement {
+    const span = document.createElement("span");
+    span.textContent = "\u200b";
+    span.setAttribute("aria-hidden", "true");
+    return span;
+  }
+}
+const emptyHeadingCaretWidget = new EmptyHeadingCaretWidget();
+
+function appendHeadingMarker(from: number, context: BlockDecorationContext, ranges: Range<Decoration>[]): void {
+  const marker = headingMarkerAt(context.snapshot, from);
+  if (marker === null) return;
+  const to = marker.to;
+  if (to > from && context.snapshot.lineAt(from)?.contentEndOffset === to)
+    ranges.push(Decoration.widget({ widget: emptyHeadingCaretWidget, side: 1 }).range(to));
+  if (to > from) ranges.push(Decoration.mark({
+    attributes: { class: headingMarkerIsVisible({ from, to }, context.activeBlockState.selection,
+      context.hasEditorFocus, context.headingMarkerPresentation) ? "cm-active-heading-marker" : "cm-inactive-heading-marker" }
+  }).range(from, to));
+}
+
 function appendActiveDecorationsForBlock(
   block: DecoratableBlock,
   source: string,
   ranges: Range<Decoration>[],
-  resolveImagePreviewUrl?: (href: string | null) => string | null
+  resolveImagePreviewUrl: ((href: string | null) => string | null) | undefined,
+  context: BlockDecorationContext
 ): void {
   if (block.type === "heading") {
+    appendHeadingMarker(block.startOffset, context, ranges);
     ranges.push(
       Decoration.line({
         attributes: {

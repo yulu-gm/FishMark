@@ -60,6 +60,18 @@
   display: none;
 }
 
+/* Nested headings reserve their source gutter within the container, clear of its rail/bullet. */
+.document-editor .cm-line:is(.cm-active-list, .cm-inactive-list, .cm-active-list-continuation, .cm-inactive-list-continuation, .cm-inactive-blockquote):has(.cm-active-heading-marker, .cm-inactive-heading-marker) {
+  --fishmark-heading-marker-gutter: 6rem;
+}
+
+/* Revealed syntax hangs before the title so visibility changes preserve its text/caret geometry. */
+.document-editor .cm-active-heading-marker {
+  position: absolute;
+  transform: translateX(-100%);
+  white-space: pre;
+}
+
 .document-editor .cm-active-heading {
   color: var(--fishmark-markdown-heading, var(--fishmark-text-primary, #171a1f));
 }
@@ -294,7 +306,7 @@
   padding-left: calc(
     var(--fishmark-list-container-offset) +
     var(--fishmark-list-depth-offset) +
-    var(--fishmark-list-content-offset)
+    var(--fishmark-list-content-offset) + var(--fishmark-heading-marker-gutter, 0px)
   );
   min-height: 1.84em;
   white-space: pre-wrap;
@@ -311,7 +323,7 @@
   padding-left: calc(
     var(--fishmark-list-container-offset) +
     var(--fishmark-list-depth-offset) +
-    var(--fishmark-list-content-offset)
+    var(--fishmark-list-content-offset) + var(--fishmark-heading-marker-gutter, 0px)
   );
   min-height: 1.84em;
   white-space: pre-wrap;
@@ -328,7 +340,7 @@
   padding-left: calc(
     var(--fishmark-list-container-offset) +
     var(--fishmark-list-depth-offset) +
-    var(--fishmark-list-content-offset)
+    var(--fishmark-list-content-offset) + var(--fishmark-heading-marker-gutter, 0px)
   );
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -343,7 +355,7 @@
   padding-left: calc(
     var(--fishmark-list-container-offset) +
     var(--fishmark-list-depth-offset) +
-    var(--fishmark-list-content-offset)
+    var(--fishmark-list-content-offset) + var(--fishmark-heading-marker-gutter, 0px)
   );
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -616,7 +628,7 @@
   box-shadow: none;
   position: relative;
   line-height: 1.6;
-  padding-left: calc(var(--fishmark-blockquote-padding-inline) + var(--fishmark-blockquote-depth-offset));
+  padding-left: calc(var(--fishmark-blockquote-padding-inline) + var(--fishmark-blockquote-depth-offset) + var(--fishmark-heading-marker-gutter, 0px));
   padding-right: var(--fishmark-blockquote-padding-inline);
 }
 

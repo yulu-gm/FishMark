@@ -166,6 +166,7 @@ export {
   refreshMarkdownDecorations,
   type CreateFishMarkMarkdownExtensionsOptions
 } from "./extensions/markdown";
+export { setHeadingPresentation, type HeadingPresentationMode } from "./heading-marker-presentation";
 export {
   DEFAULT_EDITOR_VIEW_MODE,
   createMarkdownEditorViewModeExtension,

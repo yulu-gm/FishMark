@@ -75,6 +75,13 @@ app.whenReady().then(async()=>{
  await key('F11');await key('f',['control']);await waitFor(async()=>(await state()).searchFocused);await win.webContents.insertText('First');await delay(300);
  check('search input keeps reading and focus',(await state()).mode==='reading'&&(await state()).searchFocused);await key('Escape');await delay(250);
  await screenshot('user-input-entry');
+ await click('.cm-content');await key('a',['control']);await win.webContents.insertText('# Title');await waitFor(async()=>(await text())==='# Title');await key('Home');
+ check('full shell heading hides prefix at visible start',!!(await js("document.querySelector('.cm-inactive-heading-marker')")));
+ await key('F11');const headingBefore=await js("document.querySelector('.cm-line').getBoundingClientRect().toJSON()");await key('Backspace');await waitFor(async()=>(await state()).mode==='editing');
+ check('full shell first heading Backspace reveals without deleting',(await text())==='# Title'&&!!(await js("document.querySelector('.cm-active-heading-marker')")));
+ const headingAfter=await js("document.querySelector('.cm-line').getBoundingClientRect().toJSON()");check('full shell heading reveal preserves line geometry',Math.abs(headingBefore.top-headingAfter.top)<0.2&&Math.abs(headingBefore.left-headingAfter.left)<0.2,{headingBefore,headingAfter});await screenshot('heading-revealed');
+ await key('Backspace');await waitFor(async()=>(await text())==='#Title');check('full shell next Backspace deletes prefix source',true);await key('z',['control']);await waitFor(async()=>(await text())==='# Title');check('full shell heading undo restores exact source',true);
+ await key('F11');check('full shell explicit reading hides heading prefix',(await state()).mode==='reading'&&!!(await js("document.querySelector('.cm-inactive-heading-marker')")));await screenshot('heading-reading');
  check('no fullscreen across all input',!win.isFullScreen()&&result.fullscreenEvents.length===0);
  result.windowBounds=win.getBounds();result.dpr=await js('devicePixelRatio');finish();
 }).catch(async error=>{if(win&&!win.isDestroyed()){result.failureState=await state().catch(()=>null);result.failureSnapshot=await js('window.fishmark.getWorkspaceSnapshot()').catch(()=>null);result.externalEvents=await js('window.__externalEvents').catch(()=>null);await screenshot('failed').catch(()=>{});}finish(error);});

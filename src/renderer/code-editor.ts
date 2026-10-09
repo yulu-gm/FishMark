@@ -22,6 +22,8 @@ import {
   runTableSelectCell,
   runTableUpdateCell,
   setMarkdownEditorViewMode,
+  setHeadingPresentation,
+  type HeadingPresentationMode,
   type SemanticCommandBindings,
   type EditorViewMode
 } from "@fishmark/codemirror-adapter";
@@ -56,6 +58,7 @@ export type CreateCodeEditorControllerOptions = {
   onActiveBlockChange?: (state: ActiveBlockState) => void;
   importClipboardImage?: (input: { documentPath: string | null }) => Promise<string | null>;
   openExternalLink?: (href: string) => void;
+  headingPresentationMode?: HeadingPresentationMode;
   viewMode?: EditorViewMode;
   readOnly?: boolean;
 };
@@ -95,6 +98,7 @@ export type CodeEditorController = {
   hasPendingDocumentChanges: () => boolean;
   setDocumentPath: (nextDocumentPath: string | null) => void;
   setViewMode: (nextMode: EditorViewMode) => void;
+  setHeadingPresentationMode: (mode: HeadingPresentationMode) => void;
   setReadOnly: (readOnly: boolean) => void;
   focus: () => void;
   navigateToOffset: (offset: number) => void;
@@ -132,6 +136,7 @@ export function createCodeEditorController(
 ): CodeEditorController {
   let currentDocumentPath = options.documentPath ?? null;
   let currentViewMode = options.viewMode ?? "wysiwym";
+  let currentHeadingPresentationMode = options.headingPresentationMode ?? "editing";
   let currentReadOnly = options.readOnly ?? false;
   const readOnlyCompartment = new Compartment();
   const searchCompartment = new Compartment();
@@ -376,6 +381,8 @@ export function createCodeEditorController(
           resolveImagePreviewUrl: (href) => resolveImagePreviewUrl(currentDocumentPath, href),
           onOpenLink: (href) => options.openExternalLink?.(href),
           onBlur: options.onBlur,
+          headingPresentationMode: currentHeadingPresentationMode,
+          onUserEditIntent: () => { currentHeadingPresentationMode = "editing"; options.onUserDocumentEdit?.(); },
           viewMode: currentViewMode
         }),
         searchCompartment.of(searchExtension)
@@ -765,6 +772,10 @@ export function createCodeEditorController(
     setDocumentPath(nextDocumentPath: string | null) {
       currentDocumentPath = nextDocumentPath;
       refreshMarkdownDecorations(view);
+    },
+    setHeadingPresentationMode(mode: HeadingPresentationMode) {
+      currentHeadingPresentationMode = mode;
+      setHeadingPresentation(view, mode);
     },
     setViewMode(nextMode: EditorViewMode) {
       currentViewMode = nextMode;

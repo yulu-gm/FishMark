@@ -460,6 +460,7 @@ export function WorkspaceShell({
                         importClipboardImage={onImportClipboardImage}
                         openExternalLink={onOpenExternalLink}
                         viewMode={editorViewMode}
+                        headingPresentationMode={shellMode}
                         onActiveBlockChange={onActiveBlockChange}
                         onDocumentChangeFrame={onDocumentChangeFrame}
                         onUserDocumentEdit={onUserDocumentEdit}

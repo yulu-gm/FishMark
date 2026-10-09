@@ -79,6 +79,7 @@ import {
   createEditorDerivedState,
   type EditorDerivedState
 } from "@fishmark/editor-model";
+import { createHeadingPresentationExtension, headingMarkerAt, headingMarkerIsVisible, readHeadingPresentation, revealHeadingMarkerEffect, setHeadingPresentationEffect, type HeadingPresentationMode } from "../heading-marker-presentation";
 import { deriveInactiveBlockDecorationsState } from "../derived-state/inactive-block-decorations";
 import { readTableContext, type TablePosition } from "../table-context";
 import { createGroupedShortcutKeymaps } from "../markdown-shortcuts";
@@ -114,6 +115,8 @@ export type CreateFishMarkMarkdownExtensionsOptions = {
   onBlur?: () => void;
   onOpenLink?: (href: string) => void;
   resolveImagePreviewUrl?: (href: string | null) => string | null;
+  headingPresentationMode?: HeadingPresentationMode;
+  onUserEditIntent?: () => void;
   viewMode?: EditorViewMode;
 };
 
@@ -523,6 +526,7 @@ export function createFishMarkMarkdownExtensions(
       editorDerivedState,
       resolveImagePreviewUrl: options.resolveImagePreviewUrl,
       tableWidgetCallbacks,
+      headingMarkerPresentation: readHeadingPresentation(state),
       viewMode
     });
 
@@ -560,6 +564,32 @@ export function createFishMarkMarkdownExtensions(
     },
     provide: (field) => EditorView.decorations.from(field)
   });
+  const moveIntoHeadingMarker = (view: EditorView, direction: -1 | 1, extend = false): boolean => {
+    if (getMarkdownEditorViewMode(view.state) === "source" || readCompositionState(view.state).active ||
+      readHeadingPresentation(view.state).mode !== "editing") return false;
+    const selection = view.state.selection.main;
+    if (!selection.empty && !extend) return false;
+    const range = headingMarkerAt(readStateSnapshot(view.state), selection.head);
+    if (range === null || selection.head < range.from || selection.head > range.to ||
+      (direction > 0 && selection.head === range.to) || (direction < 0 && selection.head === range.from)) return false;
+    const head = selection.head + direction;
+    view.dispatch({ selection: { anchor: extend ? selection.anchor : head, head }, userEvent: "select", scrollIntoView: true });
+    return true;
+  };
+  const revealHeadingForBackspace = (view: EditorView): boolean => {
+    if (view.state.readOnly || getMarkdownEditorViewMode(view.state) === "source" || readCompositionState(view.state).active) return false;
+    const selection = view.state.selection.main;
+    const range = headingMarkerAt(readStateSnapshot(view.state), selection.head);
+    const presentation = readHeadingPresentation(view.state);
+    if (!selection.empty || range === null ||
+      (presentation.mode === "editing" ? selection.head !== range.to : selection.head < range.from || selection.head > range.to) ||
+      headingMarkerIsVisible(range, selection, true, presentation)) return false;
+    view.dispatch({ effects: [setHeadingPresentationEffect.of("editing"), revealHeadingMarkerEffect.of(range)],
+      annotations: Transaction.addToHistory.of(false) });
+    options.onUserEditIntent?.();
+    return true;
+  };
+
   const whitespaceInputHandler = EditorView.inputHandler.of((view, from, to, text) => {
     if (from !== to || text.trim().length > 0 || /[\r\n]/u.test(text)) {
       return false;
@@ -624,6 +654,7 @@ export function createFishMarkMarkdownExtensions(
         referenceDefinitions: editorDerivedState.referenceDefinitions,
         resolveImagePreviewUrl: options.resolveImagePreviewUrl,
         tableWidgetCallbacks,
+        headingMarkerPresentation: readHeadingPresentation(state),
         viewMode: getMarkdownEditorViewMode(state)
       });
 
@@ -1050,6 +1081,7 @@ export function createFishMarkMarkdownExtensions(
   return [
     ...(semanticCommands === null ? [] : [semanticCommands.adapter.extension()]),
     createMarkdownEditorViewModeExtension(options.viewMode),
+    createHeadingPresentationExtension(options.headingPresentationMode),
     blockDecorationsField,
     createCanonicalSeparatorField(getMarkdownEditorViewMode),
     lifecyclePlugin,
@@ -1139,7 +1171,10 @@ export function createFishMarkMarkdownExtensions(
             ) ?? nextAnchor;
         }
 
-        if (shouldNormalizeHiddenSelection) {
+        const headingMarker = headingMarkerAt(snapshot, nextAnchor);
+        const isEditingHeadingMarker = readHeadingPresentation(effectiveState).mode === "editing" &&
+          headingMarker !== null && nextAnchor >= headingMarker.from && nextAnchor < headingMarker.to;
+        if (shouldNormalizeHiddenSelection && !isEditingHeadingMarker) {
           nextAnchor =
             normalizeHiddenSelectionAnchor(
               snapshot,
@@ -1188,6 +1223,8 @@ export function createFishMarkMarkdownExtensions(
         key: "Mod-Enter",
         run: (view) => openLinkAtSelection(view)
       },
+      { key: "ArrowLeft", run: (view) => moveIntoHeadingMarker(view, -1), shift: (view) => moveIntoHeadingMarker(view, -1, true) },
+      { key: "ArrowRight", run: (view) => moveIntoHeadingMarker(view, 1), shift: (view) => moveIntoHeadingMarker(view, 1, true) },
       {
         key: "ArrowUp",
         run: (view) => {
@@ -1218,7 +1255,7 @@ export function createFishMarkMarkdownExtensions(
       },
       {
         key: "Backspace",
-        run: (view) => semanticCommands.run(view, planSemanticBackspace) !== "unhandled"
+        run: (view) => revealHeadingForBackspace(view) || semanticCommands.run(view, planSemanticBackspace) !== "unhandled"
       },
       {
         key: "Delete",
@@ -1263,7 +1300,7 @@ export function createFishMarkMarkdownExtensions(
         transaction.effects.some((effect) => effect.is(forceRefreshMarkdownDecorationsEffect))
       );
       const didChangeViewMode = update.transactions.some((transaction) =>
-        transaction.effects.some((effect) => effect.is(setMarkdownEditorViewModeEffect))
+        transaction.effects.some((effect) => (effect.is(setMarkdownEditorViewModeEffect) || effect.is(setHeadingPresentationEffect) || effect.is(revealHeadingMarkerEffect)))
       );
       const shouldRefreshDecorations = shouldForceRefresh || didChangeViewMode;
 

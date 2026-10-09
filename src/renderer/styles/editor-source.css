@@ -47,6 +47,7 @@
    */
   --fishmark-document-padding-inline: max(
     var(--fishmark-document-gutter),
+    6rem,
     (100% - var(--fishmark-document-measure)) / 2
   );
   padding: 40px var(--fishmark-document-padding-inline) 56px;

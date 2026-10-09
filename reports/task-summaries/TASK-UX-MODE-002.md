@@ -28,3 +28,7 @@ This is the input-entry stage only. The authorized heading change is **not imple
 Table fonts remain unresolved. The independent diagnostic checkpoint `aba0c73` on `codex/table-font-boundary-proof-20261009` contains 8/8 inspected owner-comparison results and the read-only RF901 resource audit; it is not stacked into this product branch. Paragraph has the expected dynamic CJK/Latin/code/bold faces; table native editable text still has the known font mismatch. No Typora installation/license change or font replacement was performed.
 
 RF901/cp13/cp16 remain frozen, blocked Library transfer was not retried, RF902/903/M10 not started, and this checkpoint does not close M9. Return this bounded stage with the Windows gate limitation before extending the heading work.
+
+## Later local heading checkpoint
+
+The heading work described above as future work is now implemented locally in TASK-UX-HEADING-001 on this same branch. Its marker matrix passes, but whole-product acceptance remains blocked by the original gzip budget, Windows symlink skip and the measured 53px reading-to-editing shell movement. This later stage does not change the historical input-entry gate results above. No push.

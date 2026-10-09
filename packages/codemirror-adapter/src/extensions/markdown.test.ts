@@ -641,6 +641,8 @@ describe("createFishMarkMarkdownExtensions", () => {
       }
     });
 
+    expect(getHeadingMarker()).not.toBeNull();
+    view.dispatch({ selection: { anchor: 1 } });
     expect(getHeadingMarker()).toBeNull();
 
     view.dom.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
