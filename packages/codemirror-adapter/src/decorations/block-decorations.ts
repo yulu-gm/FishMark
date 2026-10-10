@@ -1,7 +1,7 @@
 import { Decoration, WidgetType, type DecorationSet } from "@codemirror/view";
 import { type Range } from "@codemirror/state";
 import type { EditorDerivedSnapshot, PhysicalLine } from "@fishmark/editor-model";
-import { buildRenderPlan, consumeHorizontalSpace, createListLineAttributes, type RenderPlan, type RenderPlanEntry } from "@fishmark/markdown-presentation";
+import { buildRenderPlan, consumeHorizontalSpace, createInactiveBlockquoteDepthClass, createListLineAttributes, resolveListItemMarkerContentStartOffset, type RenderPlan, type RenderPlanEntry } from "@fishmark/markdown-presentation";
 import { canonicalLeafView } from "./canonical-leaf-view";
 
 import {
@@ -98,8 +98,6 @@ type BlockDecorationContext = {
   activeSelectionLineStart: number | null;
   hasEditorFocus: boolean;
   source: string;
-  referenceDefinitions?: ReadonlyMap<string, InlineReferenceDefinition>;
-  footnoteDefinitions?: ReadonlyMap<string, FootnoteDefinition>;
   resolveImagePreviewUrl?: (href: string | null) => string | null;
   tableWidgetCallbacks?: TableWidgetCallbacks | null;
   headingMarkerPresentation?: HeadingMarkerPresentation;
@@ -236,8 +234,6 @@ function createBlockDecorationContext(
     activeBlockState,
     hasEditorFocus,
     source,
-    referenceDefinitions: providedReferenceDefinitions,
-    footnoteDefinitions: providedFootnoteDefinitions,
     resolveImagePreviewUrl,
     tableWidgetCallbacks
   } = options;
@@ -259,10 +255,6 @@ function createBlockDecorationContext(
   const activeSelectionLineStart = hasEditorFocus
     ? resolveLineStartOffset(source, activeBlockState.selection.head)
     : null;
-  // Definition indexes live on the canonical tree (always present, empty included), so decoration
-  // building never rescans the source for reference or footnote definitions.
-  const referenceDefinitions = providedReferenceDefinitions ?? options.snapshot.tree.referenceDefinitions;
-  const footnoteDefinitions = providedFootnoteDefinitions ?? options.snapshot.tree.footnoteDefinitions;
   return {
     snapshot: options.snapshot,
     plan: buildRenderPlan(options.snapshot.tree, { revision: options.snapshot.revision }),
@@ -276,8 +268,6 @@ function createBlockDecorationContext(
     activeSelectionLineStart,
     hasEditorFocus,
     source,
-    referenceDefinitions,
-    footnoteDefinitions,
     resolveImagePreviewUrl,
     tableWidgetCallbacks,
     headingMarkerPresentation: options.headingMarkerPresentation,
@@ -934,10 +924,6 @@ function appendActiveDraftBlockquoteSourcePrefixDecorations(
   appendSourcePrefixMark(lineStartOffset, draftMarker.hiddenPrefixEndOffset, "cm-active-blockquote-marker", ranges);
 }
 
-function createInactiveBlockquoteDepthClass(depth: number): string {
-  return `cm-inactive-blockquote-depth-${Math.max(1, Math.min(depth, 4))}`;
-}
-
 function isCodeFenceContentSelection(
   node: MarkdownNode,
   selectionHead: number,
@@ -1262,13 +1248,7 @@ function resolveListItemContentStartOffset(item: ListItemBlock, source: string):
   }
 
   const lineEndOffset = findLineEndOffset(source, item.startOffset, item.endOffset);
-  let cursor = consumeHorizontalSpace(source, item.markerEnd, lineEndOffset);
-
-  if (item.task && item.task.markerStart === cursor) {
-    cursor = consumeHorizontalSpace(source, item.task.markerEnd, lineEndOffset);
-  }
-
-  return Math.min(cursor, lineEndOffset);
+  return resolveListItemMarkerContentStartOffset(item, source, lineEndOffset);
 }
 
 function findLineEndOffset(source: string, startOffset: number, upperBound: number): number {

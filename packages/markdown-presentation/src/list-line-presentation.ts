@@ -1,9 +1,26 @@
 import type { ListItemBlock } from "@fishmark/markdown-engine";
 
+export function createInactiveBlockquoteDepthClass(depth: number): string {
+  return `cm-inactive-blockquote-depth-${Math.max(1, Math.min(depth, 4))}`;
+}
+
 export function consumeHorizontalSpace(source: string, startOffset: number, endOffset: number): number {
   let cursor = startOffset;
   while (cursor < endOffset && (source[cursor] === " " || source[cursor] === "\t")) cursor += 1;
   return cursor;
+}
+
+/** Resolve the body after a raw list marker when no canonical content offset is available. */
+export function resolveListItemMarkerContentStartOffset(
+  item: ListItemBlock,
+  source: string,
+  lineEndOffset: number
+): number {
+  let cursor = consumeHorizontalSpace(source, item.markerEnd, lineEndOffset);
+  if (item.task && item.task.markerStart === cursor) {
+    cursor = consumeHorizontalSpace(source, item.task.markerEnd, lineEndOffset);
+  }
+  return Math.min(cursor, lineEndOffset);
 }
 
 /** Shared source geometry for the live editor and HTML export. */

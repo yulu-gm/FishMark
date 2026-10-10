@@ -11,4 +11,4 @@ export {
   type HtmlMathRenderer,
   type RenderFishmarkMarkdownContentOptions
 } from "./html/render-export-content";
-export { consumeHorizontalSpace, createListLineAttributes } from "./list-line-presentation";
+export { consumeHorizontalSpace, createInactiveBlockquoteDepthClass, createListLineAttributes, resolveListItemMarkerContentStartOffset } from "./list-line-presentation";

@@ -80,26 +80,9 @@ function createTableToolActions({
 }
 
 
-export function TableToolbar({
-  activeTableToolId,
-  onTableToolHoverChange,
-  onDeleteTable,
-  onDeleteTableColumn,
-  onDeleteTableRow,
-  onInsertTableColumnLeft,
-  onInsertTableColumnRight,
-  onInsertTableRowAbove,
-  onInsertTableRowBelow
-}: Pick<WorkspaceShellProps, "activeTableToolId" | "onTableToolHoverChange" | "onDeleteTable" | "onDeleteTableColumn" | "onDeleteTableRow" | "onInsertTableColumnLeft" | "onInsertTableColumnRight" | "onInsertTableRowAbove" | "onInsertTableRowBelow">) {
-  const tableToolActions = createTableToolActions({
-    onDeleteTable,
-    onDeleteTableColumn,
-    onDeleteTableRow,
-    onInsertTableColumnLeft,
-    onInsertTableColumnRight,
-    onInsertTableRowAbove,
-    onInsertTableRowBelow
-  });
+export function TableToolbar(props: Pick<WorkspaceShellProps, "activeTableToolId" | "onTableToolHoverChange" | "onDeleteTable" | "onDeleteTableColumn" | "onDeleteTableRow" | "onInsertTableColumnLeft" | "onInsertTableColumnRight" | "onInsertTableRowAbove" | "onInsertTableRowBelow">) {
+  const { activeTableToolId, onTableToolHoverChange } = props;
+  const tableToolActions = createTableToolActions(props);
 
   return (
     <div className="table-tool-strip" data-fishmark-region="table-tool-strip">

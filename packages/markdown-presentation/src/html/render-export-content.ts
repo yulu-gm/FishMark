@@ -22,7 +22,7 @@ import {
 } from "@fishmark/markdown-engine";
 
 import type { RenderPlan } from "../render-plan";
-import { consumeHorizontalSpace, createListLineAttributes } from "../list-line-presentation";
+import { consumeHorizontalSpace, createInactiveBlockquoteDepthClass, createListLineAttributes, resolveListItemMarkerContentStartOffset } from "../list-line-presentation";
 
 type SourceLine = {
   endOffset: number;
@@ -452,10 +452,6 @@ function findBlockquoteLineForOffset(
   lines: readonly BlockquoteExportLine[]
 ): BlockquoteExportLine | null {
   return lines.find((line) => offset >= line.startOffset && offset <= line.endOffset) ?? null;
-}
-
-function createInactiveBlockquoteDepthClass(depth: number): string {
-  return `cm-inactive-blockquote-depth-${Math.max(1, Math.min(depth, 4))}`;
 }
 
 function renderCodeFenceBlock(block: CodeFenceBlock, source: string): string {
@@ -1076,13 +1072,7 @@ function resolveListItemContentStartOffset(
     return Math.min(item.contentStartOffset, lineEndOffset);
   }
 
-  let cursor = consumeHorizontalSpace(source, item.markerEnd, lineEndOffset);
-
-  if (item.task && item.task.markerStart === cursor) {
-    cursor = consumeHorizontalSpace(source, item.task.markerEnd, lineEndOffset);
-  }
-
-  return Math.min(cursor, lineEndOffset);
+  return resolveListItemMarkerContentStartOffset(item, source, lineEndOffset);
 }
 
 function shouldRenderNodeAsPlainText(node: InlineNode): boolean {
