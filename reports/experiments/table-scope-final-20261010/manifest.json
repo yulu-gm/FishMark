@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "sourceRoot": ".artifacts/table-scope-final-20261010",
+  "excluded": [
+    "userData/**"
+  ],
+  "archiveLayout": "blobs/<sha256>; logical paths map to exact original bytes",
+  "fileCount": 9,
+  "bytes": 17160,
+  "uniqueBlobCount": 9,
+  "archiveSha256": "bff6f5df54716282f5cfc696e82b9cd5bc8901427e0a964e3ff3f5c989198366",
+  "files": [
+    {
+      "path": "audit-prototype.py",
+      "bytes": 1635,
+      "sha256": "95d972c5b96f625be39e0b6885f87c2623256e3ee4c5c202f29771a0f27a21c8"
+    },
+    {
+      "path": "cleanup.json",
+      "bytes": 2346,
+      "sha256": "024f1f0ca505cb867a73dced0b6893c85924e9c736eaecf247ecf4a1aa98abf0"
+    },
+    {
+      "path": "cleanup.ps1",
+      "bytes": 2967,
+      "sha256": "2653e9010c01d0f76076c94c4254f23625e96a4ea222e101c655edd3b7067393"
+    },
+    {
+      "path": "final-audit.json",
+      "bytes": 1311,
+      "sha256": "e17d5959fb7528f385d2827b5dedb12f4d2439ce5153377231c437d6cbe986c3"
+    },
+    {
+      "path": "independent-review.txt",
+      "bytes": 1015,
+      "sha256": "814ef5db0170b20498a9197207ea84db96fe365a9f5d50760daf9f0ab9e254a2"
+    },
+    {
+      "path": "prototype-audit.json",
+      "bytes": 558,
+      "sha256": "a76187ae023a3eb495136f7c4fdc332cd26ef6a62b982b99bc36824c0cb3a38c"
+    },
+    {
+      "path": "symlink-check.json",
+      "bytes": 3061,
+      "sha256": "f43cc6e8c7b3afd59281f83a0481e863f880d0a4a5bf44875de3eaff159fbe52"
+    },
+    {
+      "path": "symlink-check.log",
+      "bytes": 500,
+      "sha256": "ce8d7b0efdd90275d5fb1bb255e11783bed7d27267dba42005a8aafa5a999c84"
+    },
+    {
+      "path": "verify.mjs",
+      "bytes": 3767,
+      "sha256": "2c4ef24e81e0c496157a3af34428dad5e0584713b909db7e13998f031b927593"
+    }
+  ]
+}
