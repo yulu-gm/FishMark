@@ -1386,6 +1386,44 @@ describe("createBlockDecorations", () => {
     );
   });
 
+  it.each([
+    ["123456789. plain\n           continued\n\nParagraph", "123456789.", 10],
+    ["> 123456789. quoted\n>            continued\n\nParagraph", "123456789.", 10],
+    ["- parent\n  123456789. nested\n             continued\n\nParagraph", "123456789.", 10],
+    ["123456789. [ ] task\n              continued\n\nParagraph", "123456789. [ ]", 14],
+    ["123456789.\t[ ] tabtask\n              continued\n\nParagraph", "123456789.\t[ ]", 17]
+  ] as const)("keeps the canonical gutter stable for long list markers: %s", (source, marker, columns) => {
+    const markerStart = source.indexOf(marker);
+    const firstLineStart = source.lastIndexOf("\n", markerStart - 1) + 1;
+    const continuationStart = source.indexOf("\n", markerStart) + 1;
+    for (const head of [markerStart + 1, source.indexOf("continued"), source.length]) {
+      const result = createBlockDecorations({
+        activeBlockState: createActiveBlockState(snapshotOf(source), { anchor: head, head }),
+        hasEditorFocus: true,
+        source
+      });
+      const ranges = collectDecorations(source, result.decorationSet);
+      for (const lineStart of [firstLineStart, continuationStart]) {
+        expect(getLineDecorationStyleAt(source, result.decorationSet, lineStart)).toContain(
+          `--fishmark-list-marker-source-width: ${columns}ch;`
+        );
+        expect(ranges.some(range => range.from === lineStart && range.className.includes("cm-list-wide-marker"))).toBe(true);
+      }
+      if (head === markerStart + 1) {
+        expect(ranges.find(range => range.className === "cm-active-list-marker")?.text).toBe(marker);
+      }
+    }
+  });
+
+  it.each(["- ordinary", "12. ordinary", "- [ ] ordinary task"])("preserves the fixed gutter for %s", source => {
+    const result = createBlockDecorations({
+      activeBlockState: createActiveBlockState(snapshotOf(source), { anchor: 0, head: 0 }),
+      hasEditorFocus: true,
+      source
+    });
+    expect(collectDecorations(source, result.decorationSet).some(range => range.className.includes("cm-list-wide-marker"))).toBe(false);
+  });
+
   it("separates active child list source prefixes from visual depth geometry", () => {
     const source = ["- parent", "  - child", "    - grandchild", "", "Paragraph"].join("\n");
     const childLineStart = source.indexOf("  - child");
@@ -1506,6 +1544,68 @@ describe("createBlockDecorations", () => {
     expectExactRangeClasses(ranges, continuationStart, continuationStart + "  > ".length, [
       "cm-inactive-blockquote-marker"
     ]);
+  });
+
+  it.each([
+    ["> 123456789. quoted\n>            continued\n\nParagraph", "> ", 11],
+    ["> 123456789. [ ] quoted\n>               continued\n\nParagraph", "> ", 14],
+    ["> > 123456789. quoted\n> >            continued\n\nParagraph", "> > ", 11],
+    ["> - quoted\n>   continued\n\nParagraph", "> ", 2]
+  ] as const)("hides canonical list continuation indentation after an outer quote: %s", (source, quotePrefix, indentation) => {
+    const labelStart = source.indexOf("continued");
+    const lineStart = source.lastIndexOf("\n", labelStart) + 1;
+    const indentationStart = lineStart + quotePrefix.length;
+    const snapshot = snapshotOf(source);
+    expect(snapshot.lineAt(labelStart)?.segments.filter(segment => segment.kind === "indentation")
+      .map(segment => [segment.range.startOffset, segment.range.endOffset])).toContainEqual([indentationStart, labelStart]);
+    expect(labelStart - indentationStart).toBe(indentation);
+
+    for (const [head, mode] of [[labelStart, "active"], [source.length, "inactive"]] as const) {
+      const { decorationSet } = createBlockDecorations({
+        activeBlockState: createActiveBlockState(snapshot, { anchor: head, head }),
+        hasEditorFocus: true,
+        source
+      });
+      const ranges = collectDecorations(source, decorationSet);
+      expectExactRangeClasses(ranges, indentationStart, labelStart, [`cm-${mode}-list-source-prefix`]);
+      if (mode === "active") expectExactRangeClasses(ranges, indentationStart - 1, indentationStart,
+        ["cm-active-blockquote-padding-anchor"]);
+      else expectExactRangeClasses(ranges, lineStart, indentationStart, ["cm-inactive-blockquote-marker"]);
+      expect(ranges.filter(range => range.className.includes("list-source-prefix"))
+        .some(range => range.from <= labelStart && range.to > labelStart)).toBe(false);
+      expect(snapshot.tree.source).toBe(source);
+    }
+  });
+
+  it("leaves quoted list fence-content indentation to the code fence", () => {
+    const source = "> - parent\n>   ```\n>       indentedCode\n>   ```\n\nParagraph";
+    const labelStart = source.indexOf("indentedCode");
+    const lineStart = source.lastIndexOf("\n", labelStart) + 1;
+    expect(snapshotOf(source).lineAt(labelStart)?.role).toBe("fence-content");
+    for (const head of [labelStart, source.length]) {
+      const { decorationSet } = createBlockDecorations({
+        activeBlockState: createActiveBlockState(snapshotOf(source), { anchor: head, head }),
+        hasEditorFocus: true,
+        source
+      });
+      expect(collectDecorations(source, decorationSet).filter(range => range.className.includes("list-source-prefix"))
+        .some(range => range.from < labelStart && range.to > lineStart + 2)).toBe(false);
+    }
+  });
+
+  it("preserves body spaces after a quote inside a list continuation", () => {
+    const source = "- > quote\n  >   preserved\n\nParagraph";
+    const bodySpacesStart = source.indexOf("  >") + 4;
+    const labelStart = source.indexOf("preserved");
+    for (const head of [labelStart, source.length]) {
+      const { decorationSet } = createBlockDecorations({
+        activeBlockState: createActiveBlockState(snapshotOf(source), { anchor: head, head }),
+        hasEditorFocus: true,
+        source
+      });
+      expect(collectDecorations(source, decorationSet).filter(range => range.className.includes("list-source-prefix"))
+        .some(range => range.from < labelStart && range.to > bodySpacesStart)).toBe(false);
+    }
   });
 
   it("keeps an empty list marker hidden until its prefix is entered", () => {

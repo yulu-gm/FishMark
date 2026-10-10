@@ -22,6 +22,7 @@ import {
 } from "@fishmark/markdown-engine";
 
 import type { RenderPlan } from "../render-plan";
+import { consumeHorizontalSpace, createListLineAttributes } from "../list-line-presentation";
 
 type SourceLine = {
   endOffset: number;
@@ -30,7 +31,10 @@ type SourceLine = {
 };
 type BlockquoteExportLine = NonNullable<BlockquoteBlock["lines"]>[number];
 type FootnoteDefinitions = ReadonlyMap<string, FootnoteDefinition>;
-type ExtraLineClassResolver = (lineStartOffset: number) => string;
+type ExtraLineClassResolver = (lineStartOffset: number) => {
+  className: string;
+  contentStartOffset: number;
+};
 export type HtmlMathRenderer = (value: string, displayMode: boolean) => string | null;
 
 export type RenderFishmarkMarkdownContentOptions = {
@@ -192,7 +196,7 @@ function renderListItemFirstLine(
 ): string {
   const contentStartOffset = resolveListItemContentStartOffset(item, source, line.endOffset);
   const lineAttributes = createListItemLineAttributes(item, source, ordered, "first");
-  const className = mergeLineClassNames(extraLineClassResolver?.(line.startOffset), lineAttributes.className);
+  const className = mergeLineClassNames(extraLineClassResolver?.(line.startOffset).className, lineAttributes.className);
   const taskHtml = item.task ? renderTaskMarker(item.task.checked) : "";
   const taskStartOffset = item.task?.markerStart ?? contentStartOffset;
   const taskEndOffset = item.task?.markerEnd ?? contentStartOffset;
@@ -217,25 +221,30 @@ function renderListItemContinuationLine(
   footnoteState: FootnoteRenderState,
   extraLineClassResolver?: ExtraLineClassResolver
 ): string {
+  const extraLine = extraLineClassResolver?.(line.startOffset);
   if (isExplicitThematicBreakLine(line.text)) {
     return renderLine(
-      mergeLineClassNames(extraLineClassResolver?.(line.startOffset), "cm-inactive-thematic-break"),
+      mergeLineClassNames(extraLine?.className, "cm-inactive-thematic-break"),
       renderSpan("cm-inactive-thematic-break-marker", line.text)
     );
   }
 
-  const contentStartOffset = consumeHorizontalSpace(source, line.startOffset, line.endOffset);
+  const sourcePrefixEndOffset = consumeHorizontalSpace(source, line.startOffset, line.endOffset);
+  // In a list inside a quote, the projected quote line already owns the boundary
+  // after its marker and this list's continuation indentation. Keep that source
+  // in the hidden prefix instead of emitting it as body text.
+  const contentStartOffset = Math.max(sourcePrefixEndOffset, extraLine?.contentStartOffset ?? line.startOffset);
   const lineAttributes = createListItemLineAttributes(
     item,
     source,
     ordered,
     "continuation",
-    Math.max(contentStartOffset - line.startOffset, 0)
+    Math.max(sourcePrefixEndOffset - line.startOffset, 0)
   );
-  const className = mergeLineClassNames(extraLineClassResolver?.(line.startOffset), lineAttributes.className);
+  const className = mergeLineClassNames(extraLine?.className, lineAttributes.className);
   const innerHtml = [
     renderSpan("cm-inactive-list-source-prefix", source.slice(line.startOffset, contentStartOffset)),
-    renderInlineRange(item.inline, source, contentStartOffset, line.endOffset, footnoteState)
+    renderInlineRange(item.inline, source, contentStartOffset, line.endOffset, footnoteState) || "<br>"
   ].join("");
 
   return renderLine(className, innerHtml || "<br>", { style: lineAttributes.style });
@@ -292,7 +301,10 @@ function renderBlockquoteInnerBlocks(
         case "paragraph":
           return renderBlockquoteParagraphBlock(innerBlock, source, footnoteState, lines, lineClassesByStartOffset);
         case "list":
-          return renderListBlock(innerBlock, source, footnoteState, extraLineClass);
+          return renderListBlock(innerBlock, source, footnoteState, (lineStartOffset) => ({
+            className: extraLineClass(lineStartOffset),
+            contentStartOffset: findBlockquoteLineForOffset(lineStartOffset, lines)?.contentStartOffset ?? lineStartOffset
+          }));
         case "codeFence":
           return renderBlockquoteCodeFenceBlock(innerBlock, source, lines, lineClassesByStartOffset);
         case "blockMath":
@@ -1044,24 +1056,9 @@ function createListItemLineAttributes(
   lineKind: "first" | "continuation",
   sourcePrefixLength: number | null = null
 ): { className: string; style: string } {
-  const mode = "inactive";
-  const classNames = [
-    lineKind === "continuation" ? `cm-${mode}-list-continuation` : `cm-${mode}-list`,
-    ordered ? `cm-${mode}-list-ordered` : `cm-${mode}-list-unordered`,
-    `cm-${mode}-list-depth-${Math.floor(item.indent / 2)}`
-  ];
-
-  if (item.task) {
-    classNames.push(
-      `cm-${mode}-list-task`,
-      item.task.checked ? `cm-${mode}-list-task-checked` : `cm-${mode}-list-task-unchecked`
-    );
-  }
-
-  return {
-    className: classNames.join(" "),
-    style: `--fishmark-list-source-prefix-offset: ${sourcePrefixLength ?? getListItemSourcePrefixLength(item, source)}ch;`
-  };
+  const attributes = createListLineAttributes("inactive", item, source, ordered, lineKind,
+    sourcePrefixLength ?? getListItemSourcePrefixLength(item, source));
+  return { className: attributes.class, style: attributes.style };
 }
 
 function getListItemSourcePrefixLength(item: ListItemBlock, source: string): number {
@@ -1221,21 +1218,6 @@ function createSourceLines(source: string, startOffset: number, endOffset: numbe
   }
 
   return lines;
-}
-
-function consumeHorizontalSpace(source: string, startOffset: number, endOffset: number): number {
-  let cursor = startOffset;
-
-  while (cursor < endOffset) {
-    const character = source[cursor];
-    if (character !== " " && character !== "\t") {
-      break;
-    }
-
-    cursor += 1;
-  }
-
-  return cursor;
 }
 
 function findLineEndOffset(source: string, startOffset: number, upperBound: number): number {

@@ -1,7 +1,7 @@
 import { Decoration, WidgetType, type DecorationSet } from "@codemirror/view";
 import { type Range } from "@codemirror/state";
 import type { EditorDerivedSnapshot, PhysicalLine } from "@fishmark/editor-model";
-import { buildRenderPlan, type RenderPlan, type RenderPlanEntry } from "@fishmark/markdown-presentation";
+import { buildRenderPlan, consumeHorizontalSpace, createListLineAttributes, type RenderPlan, type RenderPlanEntry } from "@fishmark/markdown-presentation";
 import { canonicalLeafView } from "./canonical-leaf-view";
 
 import {
@@ -93,7 +93,6 @@ type BlockDecorationContext = {
   editingDocument: PhysicalEditingDocument;
   activeRootNodeId: string | null;
   activeTableCursor: ActiveBlockState["tableCursor"];
-  activeBlockquoteInContentEdit: boolean;
   activeCodeFenceInContentEdit: boolean;
   activeListLineStart: number | null;
   activeSelectionLineStart: number | null;
@@ -249,10 +248,6 @@ function createBlockDecorationContext(
     editingDocument.lines[0]!;
   const activeRootNodeId = hasEditorFocus ? activeBlockState.activeRootNodeId : null;
   const activeRootNode = activeRootNodeId === null ? null : options.snapshot.nodeById(activeRootNodeId);
-  const activeBlockquoteInContentEdit =
-    hasEditorFocus &&
-    activeRootNode?.kind === "blockquote" &&
-    hasRenderableBlockquotePresentation(activeRootNode, options.snapshot);
   const activeCodeFenceInContentEdit =
     hasEditorFocus &&
     activeRootNode?.kind === "code-fence" &&
@@ -276,7 +271,6 @@ function createBlockDecorationContext(
     editingDocument,
     activeRootNodeId,
     activeTableCursor: activeBlockState.tableCursor,
-    activeBlockquoteInContentEdit,
     activeCodeFenceInContentEdit,
     activeListLineStart,
     activeSelectionLineStart,
@@ -343,7 +337,7 @@ function appendCanonicalContainerDecorations(
         ranges.push(Decoration.line({ attributes: { class: classes.join(" ") } }).range(line.range.startOffset));
         if (active && draft) appendActiveDraftBlockquoteSourcePrefixDecorations(line.range.startOffset, draft, ranges);
         else if (active) appendActiveBlockquoteSourcePrefixDecorations(line.range.startOffset, markerEnd, quoteContentStart, ranges);
-        else if (quoteContentStart > line.range.startOffset) ranges.push(Decoration.mark({ attributes: { class: "cm-inactive-blockquote-marker" } }).range(line.range.startOffset, quoteContentStart));
+        else appendSourcePrefixMark(line.range.startOffset, quoteContentStart, "cm-inactive-blockquote-marker", ranges);
       }
     }
     if (item?.data.kind === "list-item") {
@@ -366,17 +360,20 @@ function appendCanonicalContainerDecorations(
         else appendInactiveListItemFirstLineDecorations(view, source, ordered, ranges);
       } else {
         const mode = active ? "active" : "inactive";
-        // A continuation line owns only its leading horizontal whitespace. Everything after it (a
-        // quote marker and the padding anchor that follows it) belongs to the container prefix:
-        // the anchor is what keeps the row in flow, and an absolutely positioned source-prefix mark
-        // would drag it out of the flow and collapse a bare quote row.
+        // Leading list indentation and canonical indentation after an outer quote belong to the
+        // list. Quote markers and their padding anchors stay in flow, including on bare quote rows.
         const sourcePrefixEndOffset = consumeHorizontalSpace(source, line.range.startOffset, line.contentEndOffset);
         const sourcePrefixLength = sourcePrefixEndOffset - line.range.startOffset;
+        const sourcePrefixClassName = `cm-${mode}-list-source-prefix`;
         ranges.push(Decoration.line({ attributes: createListItemLineAttributes(mode, view, source, ordered,
           "continuation", sourcePrefixLength) }).range(line.range.startOffset));
-        if (sourcePrefixEndOffset > line.range.startOffset) ranges.push(Decoration.mark({
-          attributes: { class: `cm-${mode}-list-source-prefix` }
-        }).range(line.range.startOffset, sourcePrefixEndOffset));
+        appendSourcePrefixMark(line.range.startOffset, sourcePrefixEndOffset, sourcePrefixClassName, ranges);
+        const quoteEndOffset = quoteMarkers.at(-1)?.range.endOffset;
+        if (quoteEndOffset !== undefined && (entry.node.kind === "paragraph" || entry.node.kind === "heading")) for (const segment of line.segments) {
+          if (segment.kind === "indentation" && segment.range.startOffset >= quoteEndOffset) {
+            appendSourcePrefixMark(segment.range.startOffset, segment.range.endOffset, sourcePrefixClassName, ranges);
+          }
+        }
       }
     }
   }
@@ -886,25 +883,12 @@ function appendActiveBlockquoteSourcePrefixDecorations(
   contentStartOffset: number,
   ranges: Range<Decoration>[]
 ): void {
-  if (markerEndOffset > lineStartOffset) {
-    ranges.push(
-      Decoration.mark({
-        attributes: {
-          class: "cm-active-blockquote-marker"
-        }
-      }).range(lineStartOffset, markerEndOffset)
-    );
-  }
+  appendSourcePrefixMark(lineStartOffset, markerEndOffset, "cm-active-blockquote-marker", ranges);
+  appendSourcePrefixMark(markerEndOffset, contentStartOffset, "cm-active-blockquote-padding-anchor", ranges);
+}
 
-  if (contentStartOffset > markerEndOffset) {
-    ranges.push(
-      Decoration.mark({
-        attributes: {
-          class: "cm-active-blockquote-padding-anchor"
-        }
-      }).range(markerEndOffset, contentStartOffset)
-    );
-  }
+function appendSourcePrefixMark(from: number, to: number, className: string, ranges: Range<Decoration>[]): void {
+  if (to > from) ranges.push(Decoration.mark({ attributes: { class: className } }).range(from, to));
 }
 
 type DraftBlockquoteMarker = {
@@ -947,31 +931,11 @@ function appendActiveDraftBlockquoteSourcePrefixDecorations(
   draftMarker: DraftBlockquoteMarker,
   ranges: Range<Decoration>[]
 ): void {
-  if (draftMarker.hiddenPrefixEndOffset <= lineStartOffset) {
-    return;
-  }
-
-  ranges.push(
-    Decoration.mark({
-      attributes: {
-        class: "cm-active-blockquote-marker"
-      }
-    }).range(lineStartOffset, draftMarker.hiddenPrefixEndOffset)
-  );
+  appendSourcePrefixMark(lineStartOffset, draftMarker.hiddenPrefixEndOffset, "cm-active-blockquote-marker", ranges);
 }
 
 function createInactiveBlockquoteDepthClass(depth: number): string {
   return `cm-inactive-blockquote-depth-${Math.max(1, Math.min(depth, 4))}`;
-}
-
-// A quoted presentation is renderable as soon as one of its lines actually carries a quote marker.
-function hasRenderableBlockquotePresentation(
-  node: MarkdownNode,
-  snapshot: EditorDerivedSnapshot
-): boolean {
-  return snapshot.document.lineForNode(node).some((line) =>
-    line.segments.some((segment) => segment.kind === "quote-marker")
-  );
 }
 
 function isCodeFenceContentSelection(
@@ -1070,22 +1034,15 @@ function appendInactiveListItemFirstLineDecorations(
     }).range(item.startOffset)
   );
 
-  appendInactiveListItemSourcePrefixDecorations(item, ranges);
-
-  ranges.push(
-    Decoration.mark({
-      attributes: {
-        class: "cm-inactive-list-marker"
-      }
-    }).range(item.markerStart, item.markerEnd)
-  );
+  appendSourcePrefixMark(item.startOffset, item.markerStart, "cm-inactive-list-source-prefix", ranges);
+  appendSourcePrefixMark(item.markerStart, item.markerEnd, "cm-inactive-list-marker", ranges);
 
   if (!item.task) {
-    appendInactiveListItemHiddenPrefixDecoration(item.markerEnd, contentStartOffset, ranges);
+    appendSourcePrefixMark(item.markerEnd, contentStartOffset, "cm-inactive-list-source-prefix", ranges);
     return;
   }
 
-  appendInactiveListItemHiddenPrefixDecoration(item.markerEnd, item.task.markerStart, ranges);
+  appendSourcePrefixMark(item.markerEnd, item.task.markerStart, "cm-inactive-list-source-prefix", ranges);
 
   ranges.push(
     Decoration.replace({
@@ -1093,7 +1050,7 @@ function appendInactiveListItemFirstLineDecorations(
     }).range(item.task.markerStart, item.task.markerEnd)
   );
 
-  appendInactiveListItemHiddenPrefixDecoration(item.task.markerEnd, contentStartOffset, ranges);
+  appendSourcePrefixMark(item.task.markerEnd, contentStartOffset, "cm-inactive-list-source-prefix", ranges);
 }
 
 class TaskMarkerWidget extends WidgetType {
@@ -1128,10 +1085,6 @@ class TaskMarkerWidget extends WidgetType {
   }
 }
 
-function appendInactiveListItemSourcePrefixDecorations(item: ListItemBlock, ranges: Range<Decoration>[]): void {
-  appendInactiveListItemHiddenPrefixDecoration(item.startOffset, item.markerStart, ranges);
-}
-
 function appendActiveListItemSourcePrefixDecorations(
   item: ListItemBlock,
   source: string,
@@ -1140,49 +1093,9 @@ function appendActiveListItemSourcePrefixDecorations(
   const contentStartOffset = resolveListItemContentStartOffset(item, source);
   const activeMarkerEnd = item.task?.markerEnd ?? item.markerEnd;
 
-  if (item.markerStart > item.startOffset) {
-    ranges.push(
-      Decoration.mark({
-        attributes: {
-          class: "cm-active-list-source-prefix"
-        }
-      }).range(item.startOffset, item.markerStart)
-    );
-  }
-
-  if (activeMarkerEnd > item.markerStart) {
-    ranges.push(
-      Decoration.mark({ attributes: { class: "cm-active-list-marker" } }).range(item.markerStart, activeMarkerEnd)
-    );
-  }
-
-  if (contentStartOffset > activeMarkerEnd) {
-    ranges.push(
-      Decoration.mark({
-        attributes: {
-          class: "cm-active-list-padding-anchor"
-        }
-      }).range(activeMarkerEnd, contentStartOffset)
-    );
-  }
-}
-
-function appendInactiveListItemHiddenPrefixDecoration(
-  from: number,
-  to: number,
-  ranges: Range<Decoration>[]
-): void {
-  if (to <= from) {
-    return;
-  }
-
-  ranges.push(
-    Decoration.mark({
-      attributes: {
-        class: "cm-inactive-list-source-prefix"
-      }
-    }).range(from, to)
-  );
+  appendSourcePrefixMark(item.startOffset, item.markerStart, "cm-active-list-source-prefix", ranges);
+  appendSourcePrefixMark(item.markerStart, activeMarkerEnd, "cm-active-list-marker", ranges);
+  appendSourcePrefixMark(activeMarkerEnd, contentStartOffset, "cm-active-list-padding-anchor", ranges);
 }
 
 function createListItemLineAttributes(
@@ -1193,26 +1106,8 @@ function createListItemLineAttributes(
   lineKind: "first" | "continuation" = "first",
   sourcePrefixLength: number | null = null
 ): Record<string, string> {
-  const lineClasses = [
-    lineKind === "continuation" ? `cm-${mode}-list-continuation` : `cm-${mode}-list`,
-    ordered ? `cm-${mode}-list-ordered` : `cm-${mode}-list-unordered`,
-    `cm-${mode}-list-depth-${Math.floor(item.indent / 2)}`
-  ];
-
-  if (item.task) {
-    lineClasses.push(
-      `cm-${mode}-list-task`,
-      item.task.checked ? `cm-${mode}-list-task-checked` : `cm-${mode}-list-task-unchecked`
-    );
-  }
-
-  return {
-    class: lineClasses.join(" "),
-    style: `--fishmark-list-source-prefix-offset: ${getListSourcePrefixOffsetStyle(
-      mode,
-      sourcePrefixLength ?? getListItemSourcePrefixLength(item, source)
-    )};`
-  };
+  return createListLineAttributes(mode, item, source, ordered, lineKind,
+    sourcePrefixLength ?? getListItemSourcePrefixLength(item, source));
 }
 
 function appendInactiveBlankLineDecorations(
@@ -1356,17 +1251,6 @@ function skipSingleLeadingLineBreak(source: string, startOffset: number, endOffs
   return startOffset + 1;
 }
 
-function getListSourcePrefixOffsetStyle(
-  mode: "active" | "inactive",
-  sourcePrefixLength: number
-): string {
-  if (mode === "active") {
-    return "0em";
-  }
-
-  return `${sourcePrefixLength}ch`;
-}
-
 function getListItemSourcePrefixLength(item: ListItemBlock, source: string): number {
   const contentStartOffset = resolveListItemContentStartOffset(item, source);
   return Math.max(contentStartOffset - item.startOffset, 0);
@@ -1390,22 +1274,6 @@ function resolveListItemContentStartOffset(item: ListItemBlock, source: string):
 function findLineEndOffset(source: string, startOffset: number, upperBound: number): number {
   const newlineOffset = source.indexOf("\n", startOffset);
   return newlineOffset === -1 ? upperBound : Math.min(newlineOffset, upperBound);
-}
-
-function consumeHorizontalSpace(source: string, startOffset: number, endOffset: number): number {
-  let cursor = startOffset;
-
-  while (cursor < endOffset) {
-    const character = source[cursor];
-
-    if (character !== " " && character !== "\t") {
-      break;
-    }
-
-    cursor += 1;
-  }
-
-  return cursor;
 }
 
 class EmptyHeadingCaretWidget extends WidgetType {

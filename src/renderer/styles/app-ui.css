@@ -959,10 +959,10 @@
 
 .find-replace-icon-button,
 .find-replace-text-button {
-  height: 30px;
-  border: 1px solid var(--fishmark-control-border, rgba(15, 23, 42, 0.12));
-  border-radius: 8px;
-  background: var(--fishmark-control-bg, rgba(255, 255, 255, 0.9));
+  height: 26px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
   color: var(--fishmark-control-fg, #31353d);
   font: inherit;
   font-size: 0.78rem;
@@ -970,7 +970,7 @@
 }
 
 .find-replace-icon-button {
-  width: 32px;
+  width: 26px;
   display: inline-grid;
   place-items: center;
   padding: 0;
@@ -987,8 +987,7 @@
 }
 
 .find-replace-text-button {
-  min-width: 64px;
-  padding: 0 10px;
+  padding: 0 7px;
 }
 
 .find-replace-icon-button:hover,
@@ -1007,6 +1006,61 @@
 .find-replace-text-button:disabled {
   opacity: 0.42;
   cursor: default;
+}
+
+.find-replace-results-list {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.find-replace-result {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.find-replace-result:hover,
+.find-replace-result[aria-current="true"] {
+  background: var(--fishmark-control-bg-hover, rgba(255, 255, 255, 0.94));
+}
+
+.find-replace-result[aria-current="true"] {
+  border-color: var(--fishmark-focus-ring);
+}
+
+.find-replace-result:focus-visible {
+  outline: 2px solid var(--fishmark-focus-ring);
+  outline-offset: -2px;
+}
+
+.find-replace-result-location,
+.find-replace-results-pages,
+.find-replace-results-empty {
+  color: var(--fishmark-text-muted, #687180);
+  font-size: 0.72rem;
+}
+
+.find-replace-result-snippet {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  font-size: 0.8rem;
+}
+
+.find-replace-results-pages {
+  justify-content: space-between;
+  margin-bottom: 7px;
 }
 
 .shortcut-hint-overlay {

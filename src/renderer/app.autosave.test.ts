@@ -6408,7 +6408,24 @@ describe("App autosave", () => {
     expect(orderedListRule).toContain("--fishmark-list-content-offset: var(--fishmark-list-ordered-content-offset);");
     expect(taskListRule).toContain("--fishmark-list-content-offset: var(--fishmark-list-task-content-offset);");
     expect(listSourcePrefixRule).toContain("font-size: 0;");
+    expect(listSourcePrefixRule).toContain("tab-size: 0;");
+    expect(listSourcePrefixRule).not.toContain("display: none;");
+    expect(getCssRule(markdownRenderStylesheet,
+      ".document-editor .cm-inactive-list-source-prefix .cm-tab")).toContain("width: 0 !important;");
+    const wideMarkerRule = getCssRule(markdownRenderStylesheet, ".document-editor .cm-line.cm-list-wide-marker");
+    expect(wideMarkerRule).toContain("max(var(--fishmark-list-content-offset)");
+    expect(wideMarkerRule).toContain("var(--fishmark-list-marker-source-width) + var(--fishmark-list-marker-text-gap)");
+    expect(wideMarkerRule).toContain("var(--fishmark-list-container-offset)");
+    expect(wideMarkerRule).toContain("var(--fishmark-list-depth-offset)");
+    expect(wideMarkerRule).toContain("var(--fishmark-heading-marker-gutter, 0px)");
+    expect(wideMarkerRule).not.toContain("transform:");
+    const wideTaskRule = getCssRule(markdownRenderStylesheet,
+      ".document-editor .cm-line.cm-list-wide-marker.cm-inactive-list-task .cm-inactive-task-marker");
+    expect(wideTaskRule).toContain("max(var(--fishmark-list-content-offset)");
+    expect(wideTaskRule).toContain("- var(--fishmark-task-size) - var(--fishmark-list-marker-text-gap)");
+    expect(wideTaskRule).not.toContain("transform:");
     expect(activeListSourcePrefixRule).not.toContain("font-size: 0;");
+    expect(activeListSourcePrefixRule).not.toContain("tab-size: 0;");
     expect(activeListSourcePrefixRule).toContain("position: absolute;");
     expect(activeListSourcePrefixRule).toContain("var(--fishmark-list-container-offset) +");
     expect(activeListSourcePrefixRule).toContain("var(--fishmark-list-depth-offset) +");

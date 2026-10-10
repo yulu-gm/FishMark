@@ -574,7 +574,7 @@ describe("createCodeEditorController", () => {
       replace: "gamma"
     });
 
-    expect(firstSnapshot).toEqual({
+    expect(firstSnapshot).toMatchObject({
       matchCount: 2,
       currentMatchIndex: 1
     });
@@ -583,18 +583,18 @@ describe("createCodeEditorController", () => {
       head: "alpha beta".length
     });
 
-    expect(controller.findNextMatch()).toEqual({
+    expect(controller.findNextMatch()).toMatchObject({
       matchCount: 2,
       currentMatchIndex: 2
     });
 
-    expect(controller.replaceCurrentMatch()).toEqual({
+    expect(controller.replaceCurrentMatch()).toMatchObject({
       matchCount: 1,
       currentMatchIndex: 1
     });
     expect(controller.getContent()).toBe("alpha beta\ngamma alpha\n");
 
-    expect(controller.replaceAllMatches()).toEqual({
+    expect(controller.replaceAllMatches()).toMatchObject({
       matchCount: 0,
       currentMatchIndex: null
     });

@@ -184,7 +184,7 @@ export function WorkspaceShell({
   const isViewContainerEnabled = isDocumentOpen && activeDocument !== null;
   const { findText, replaceText, findReplaceSnapshot, setFindReplaceSnapshot,
     findInputRef, matchStatusLabel, closeFindReplacePanel, handleFindReplaceKeyDown,
-    handleFindTextChange, handleReplaceTextChange, toggleSearchViewContainer, handleWorkspaceKeyDownCapture
+    handleFindTextChange, handleReplaceTextChange, toggleSearchViewContainer, handleWorkspaceKeyDownCapture, selectFindReplaceMatch
   } = useFindReplacePresentation({
     activeTabId, editorEpoch, editorLoadRevision, editorRef,
     isDocumentOpen, activeViewContainer, isSearchViewActive, isViewContainerEnabled, onCloseViewContainer, onToggleViewContainer
@@ -518,6 +518,7 @@ export function WorkspaceShell({
                       >
                         {visibleViewContainer === "search" ? (
                           <FindReplacePanel
+                            autoFocus={isSearchViewActive}
                             findText={findText}
                             replaceText={replaceText}
                             matchStatusLabel={matchStatusLabel}
@@ -526,6 +527,9 @@ export function WorkspaceShell({
                             handleFindTextChange={handleFindTextChange}
                             handleReplaceTextChange={handleReplaceTextChange}
                             hasMatches={findReplaceSnapshot.matchCount > 0}
+                            matches={findReplaceSnapshot.matches}
+                            currentMatchIndex={findReplaceSnapshot.currentMatchIndex}
+                            onSelectMatch={selectFindReplaceMatch}
                             onPrevious={() => setFindReplaceSnapshot(editorRef.current?.findPreviousMatch() ?? findReplaceSnapshot)}
                             onNext={() => setFindReplaceSnapshot(editorRef.current?.findNextMatch() ?? findReplaceSnapshot)}
                             onReplaceCurrent={() => setFindReplaceSnapshot(editorRef.current?.replaceCurrentMatch() ?? findReplaceSnapshot)}

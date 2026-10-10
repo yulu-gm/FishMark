@@ -391,6 +391,11 @@
   color: transparent;
   font-size: 0;
   line-height: 0;
+  tab-size: 0;
+}
+
+.document-editor .cm-inactive-list-source-prefix .cm-tab {
+  width: 0 !important;
 }
 
 .document-editor .cm-active-list-source-prefix {
@@ -532,6 +537,16 @@
   --fishmark-list-content-offset: var(--fishmark-list-task-content-offset);
 }
 
+.document-editor .cm-line.cm-list-wide-marker {
+  padding-left: calc(
+    var(--fishmark-list-container-offset) +
+    var(--fishmark-list-depth-offset) +
+    max(var(--fishmark-list-content-offset), calc(
+      var(--fishmark-list-marker-source-width) + var(--fishmark-list-marker-text-gap)
+    )) + var(--fishmark-heading-marker-gutter, 0px)
+  );
+}
+
 .document-editor .cm-inactive-task-marker {
   position: absolute;
   top: 50%;
@@ -552,6 +567,15 @@
   transform: translateY(-50%);
   vertical-align: -0.12rem;
   pointer-events: none;
+}
+
+.document-editor .cm-line.cm-list-wide-marker.cm-inactive-list-task .cm-inactive-task-marker {
+  left: calc(
+    var(--fishmark-list-container-offset) + var(--fishmark-list-depth-offset) +
+    max(var(--fishmark-list-content-offset), calc(
+      var(--fishmark-list-marker-source-width) + var(--fishmark-list-marker-text-gap)
+    )) - var(--fishmark-task-size) - var(--fishmark-list-marker-text-gap)
+  );
 }
 
 .document-editor .cm-inactive-task-marker-unchecked {

@@ -1,6 +1,7 @@
 import { useMemo, type MouseEvent } from "react";
 import type { Preferences, PreferencesUpdate, ThemeMode } from "../../../shared/preferences";
 import type { ThemeParameterDescriptor } from "../../../shared/theme-package";
+import { resolveEffectiveThemeParameterValue } from "../../theme-style-runtime";
 import { SettingsGroup, SettingsRow } from "./SettingsFields";
 type ThemePackageEntry = Awaited<ReturnType<Window["fishmark"]["listThemePackages"]>>[number];
 const THEME_LABELS: Record<ThemeMode, string> = {
@@ -16,29 +17,6 @@ const THEME_EFFECT_LABELS = {
 } as const;
 
 const THEME_GALLERY_URL = "https://yulu-gm.github.io/fishmark-themes/";
-
-function resolveParameterDefaultValue(parameter: ThemeParameterDescriptor): number {
-  if (parameter.type === "toggle") {
-    return parameter.default ? 1 : 0;
-  }
-
-  return parameter.default;
-}
-
-function resolveParameterCurrentValue(
-  parameter: ThemeParameterDescriptor,
-  overrides: Record<string, number> | undefined
-): number {
-  const override = overrides?.[parameter.id];
-  if (typeof override === "number" && Number.isFinite(override)) {
-    if (parameter.type === "toggle") {
-      return override > 0.5 ? 1 : 0;
-    }
-    return Math.min(Math.max(override, parameter.min), parameter.max);
-  }
-
-  return resolveParameterDefaultValue(parameter);
-}
 
 function resolveThemePackageSelectionValue(
   packages: ThemePackageEntry[],
@@ -129,7 +107,7 @@ export function ThemeSettings({ preferences, themePackages, isRefreshingThemes, 
           : 0
         : typeof rawValue === "number"
           ? Math.min(Math.max(rawValue, parameter.min), parameter.max)
-          : resolveParameterDefaultValue(parameter);
+          : resolveEffectiveThemeParameterValue(parameter, undefined);
 
     void applyPatch({
       theme: {
@@ -143,7 +121,7 @@ export function ThemeSettings({ preferences, themePackages, isRefreshingThemes, 
   function handleResetThemeParameters(themeId: string): void {
     const resetEntries: Record<string, number> = {};
     for (const parameter of activeThemeParameters) {
-      resetEntries[parameter.id] = resolveParameterDefaultValue(parameter);
+      resetEntries[parameter.id] = resolveEffectiveThemeParameterValue(parameter, undefined);
     }
 
     void applyPatch({
@@ -307,7 +285,7 @@ export function ThemeSettings({ preferences, themePackages, isRefreshingThemes, 
           themeId={activeThemePackage.id}
         >
           {activeThemeParameters.map((parameter) => {
-            const value = resolveParameterCurrentValue(parameter, activeThemeParameterOverrides);
+            const value = resolveEffectiveThemeParameterValue(parameter, activeThemeParameterOverrides);
 
             if (parameter.type === "toggle") {
               const checked = value > 0.5;

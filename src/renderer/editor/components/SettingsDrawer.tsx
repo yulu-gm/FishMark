@@ -1,25 +1,5 @@
-import { lazy, Suspense } from "react";
+import { SettingsView } from "../settings-view";
 import type { WorkspaceShellProps } from "../workspace-shell-props";
-const SettingsView = lazy(async () => {
-  const module = await import("../settings-view");
-  return { default: module.SettingsView };
-});
-
-function SettingsDrawerFallback({ surfaceState }: { surfaceState: "open" | "closing" }) {
-  return (
-    <section
-      className="settings-shell"
-      data-fishmark-panel="settings-drawer"
-      data-fishmark-surface="settings-drawer"
-      data-state={surfaceState}
-      role="dialog"
-      aria-modal="true"
-      aria-busy="true"
-    />
-  );
-}
-
-
 export function SettingsDrawer({
   isSettingsDrawerVisible,
   isSettingsOpen,
@@ -44,25 +24,19 @@ export function SettingsDrawer({
         onClick={onCloseSettingsDrawer}
       >
         <div onClick={(event) => event.stopPropagation()}>
-          <Suspense
-            fallback={
-              <SettingsDrawerFallback surfaceState={isSettingsOpen ? "open" : "closing"} />
-            }
-          >
-            <SettingsView
-              surfaceState={isSettingsOpen ? "open" : "closing"}
-              preferences={preferences}
-              fontFamilies={fontFamilies}
-              themePackages={themePackages}
-              isRefreshingThemes={isRefreshingThemePackages}
-              onRefreshThemes={onRefreshThemePackages}
-              onOpenThemesDirectory={onOpenThemesDirectory}
-              onSelectTemporaryImageDirectory={onSelectTemporaryImageDirectory}
-              onUpdate={onUpdatePreferences}
-              onOpenExternalLink={onOpenExternalLink}
-              onClose={onCloseSettingsDrawer}
-            />
-          </Suspense>
+          <SettingsView
+            surfaceState={isSettingsOpen ? "open" : "closing"}
+            preferences={preferences}
+            fontFamilies={fontFamilies}
+            themePackages={themePackages}
+            isRefreshingThemes={isRefreshingThemePackages}
+            onRefreshThemes={onRefreshThemePackages}
+            onOpenThemesDirectory={onOpenThemesDirectory}
+            onSelectTemporaryImageDirectory={onSelectTemporaryImageDirectory}
+            onUpdate={onUpdatePreferences}
+            onOpenExternalLink={onOpenExternalLink}
+            onClose={onCloseSettingsDrawer}
+          />
         </div>
       </div>
     ) : null

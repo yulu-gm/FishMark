@@ -332,23 +332,23 @@ it("renders workspace tabs and delegates commands without owning persistence log
 it("opens find and replace controls and delegates search actions to the editor", async () => {
   const updateFindReplaceQuery = vi.fn(() => ({
     matchCount: 2,
-    currentMatchIndex: 1
+    currentMatchIndex: 1, matches: []
   }));
   const findNextMatch = vi.fn(() => ({
     matchCount: 2,
-    currentMatchIndex: 2
+    currentMatchIndex: 2, matches: []
   }));
   const replaceCurrentMatch = vi.fn(() => ({
     matchCount: 1,
-    currentMatchIndex: 1
+    currentMatchIndex: 1, matches: []
   }));
   const replaceAllMatches = vi.fn(() => ({
     matchCount: 0,
-    currentMatchIndex: null
+    currentMatchIndex: null, matches: []
   }));
   const clearFindReplaceQuery = vi.fn(() => ({
     matchCount: 0,
-    currentMatchIndex: null
+    currentMatchIndex: null, matches: []
   }));
   const onCloseViewContainer = vi.fn();
   const onToggleViewContainer = vi.fn();
@@ -447,6 +447,8 @@ it("opens find and replace controls and delegates search actions to the editor",
             updateFindReplaceQuery,
             findNextMatch,
             findPreviousMatch: vi.fn(),
+            selectFindReplaceMatch: vi.fn(() => ({ matchCount: 0, currentMatchIndex: null, matches: [] })),
+            subscribeFindReplace: vi.fn(() => () => {}),
             replaceCurrentMatch,
             replaceAllMatches,
             clearFindReplaceQuery
@@ -536,6 +538,7 @@ it("opens find and replace controls and delegates search actions to the editor",
 
   // The search view container reports the same pressed state as the outline.
   expect(searchRailButton?.getAttribute("aria-pressed")).toBe("true");
+
 
   const sidePanel = activeContainer.querySelector<HTMLElement>('[data-fishmark-region="side-panel"]');
   const panel = activeContainer.querySelector('[data-fishmark-region="search"]');

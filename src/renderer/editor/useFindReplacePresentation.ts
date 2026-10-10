@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
 import type { WorkspaceShellProps } from "./workspace-shell-props";
-type FindReplaceSnapshot = { matchCount: number; currentMatchIndex: number | null };
+import type { FindReplaceMatch, FindReplaceSnapshot } from "../code-editor";
+const emptySnapshot: FindReplaceSnapshot = { matchCount: 0, currentMatchIndex: null, matches: [] };
 
 /** Local form values mirror CodeMirror's query; no document/workspace state is owned here. */
 export function useFindReplacePresentation({
@@ -11,10 +12,7 @@ export function useFindReplacePresentation({
 }) {
   const [findText, setFindText] = useState("");
   const [replaceText, setReplaceText] = useState("");
-  const [findReplaceSnapshot, setFindReplaceSnapshot] = useState<FindReplaceSnapshot>({
-    matchCount: 0,
-    currentMatchIndex: null
-  });
+  const [findReplaceSnapshot, setFindReplaceSnapshot] = useState<FindReplaceSnapshot>(emptySnapshot);
   const findInputRef = useRef<HTMLInputElement | null>(null);
   const openRequestRef = useRef(0);
   const searchDocumentIdentityRef = useRef<string | null>(
@@ -55,25 +53,24 @@ export function useFindReplacePresentation({
     // eslint-disable-next-line react-hooks/set-state-in-effect -- A document identity boundary intentionally resets the Search view's local presentation state.
     setFindText("");
     setReplaceText("");
-    setFindReplaceSnapshot({
-      matchCount: 0,
-      currentMatchIndex: null
-    });
+    setFindReplaceSnapshot(emptySnapshot);
 
     if (isSearchViewActive) {
       editorRef.current?.clearFindReplaceQuery();
     }
   }, [activeTabId, editorEpoch, editorLoadRevision, editorRef, isSearchViewActive]);
 
+  useEffect(() => {
+    if (!isSearchViewActive || !isDocumentOpen) return;
+    return editorRef.current?.subscribeFindReplace?.(setFindReplaceSnapshot);
+  }, [activeTabId, editorEpoch, editorLoadRevision, editorRef, isSearchViewActive, isDocumentOpen]);
+
   const closeFindReplacePanel = () => {
     openRequestRef.current += 1;
     setFindText("");
     setReplaceText("");
     setFindReplaceSnapshot(
-      editorRef.current?.clearFindReplaceQuery() ?? {
-        matchCount: 0,
-        currentMatchIndex: null
-      }
+      editorRef.current?.clearFindReplaceQuery() ?? emptySnapshot
     );
     editorRef.current?.focus();
   };
@@ -83,34 +80,22 @@ export function useFindReplacePresentation({
     onCloseViewContainer();
   };
 
+  const updateQuery = (search: string, replace: string) => {
+    setFindReplaceSnapshot(editorRef.current?.updateFindReplaceQuery({ search, replace }) ?? emptySnapshot);
+  };
+
   const handleFindTextChange = (event: ChangeEvent<HTMLInputElement>) => {
     const nextFindText = event.currentTarget.value;
 
     setFindText(nextFindText);
-    setFindReplaceSnapshot(
-      editorRef.current?.updateFindReplaceQuery({
-        search: nextFindText,
-        replace: replaceText
-      }) ?? {
-        matchCount: 0,
-        currentMatchIndex: null
-      }
-    );
+    updateQuery(nextFindText, replaceText);
   };
 
   const handleReplaceTextChange = (event: ChangeEvent<HTMLInputElement>) => {
     const nextReplaceText = event.currentTarget.value;
 
     setReplaceText(nextReplaceText);
-    setFindReplaceSnapshot(
-      editorRef.current?.updateFindReplaceQuery({
-        search: findText,
-        replace: nextReplaceText
-      }) ?? {
-        matchCount: 0,
-        currentMatchIndex: null
-      }
-    );
+    updateQuery(findText, nextReplaceText);
   };
 
   const handleFindReplaceKeyDown = (event: KeyboardEvent<HTMLElement>) => {
@@ -123,7 +108,7 @@ export function useFindReplacePresentation({
       return;
     }
 
-    if (event.key === "Enter") {
+    if (event.key === "Enter" && event.target instanceof HTMLInputElement) {
       event.preventDefault();
       setFindReplaceSnapshot(
         event.shiftKey
@@ -139,10 +124,11 @@ export function useFindReplacePresentation({
       return;
     }
     setFindText(selectedText);
-    setFindReplaceSnapshot(editorRef.current?.updateFindReplaceQuery({
-      search: selectedText,
-      replace: replaceText
-    }) ?? { matchCount: 0, currentMatchIndex: null });
+    updateQuery(selectedText, replaceText);
+  };
+
+  const selectFindReplaceMatch = (match: FindReplaceMatch) => {
+    setFindReplaceSnapshot(editorRef.current?.selectFindReplaceMatch(match) ?? emptySnapshot);
   };
 
   const openSearchViewContainer = (selectedText?: string) => {
@@ -174,6 +160,11 @@ export function useFindReplacePresentation({
     }
     if (event.key === "Escape") {
       openRequestRef.current += 1;
+      // The Search container may be active before its lazy form mounts.
+      if (isSearchViewActive && !findInputRef.current) {
+        event.preventDefault();
+        exitSearchViewContainer();
+      }
       return;
     }
     if (
@@ -216,6 +207,7 @@ export function useFindReplacePresentation({
   return {
     findText, replaceText, findReplaceSnapshot, setFindReplaceSnapshot,
     findInputRef, matchStatusLabel, closeFindReplacePanel, handleFindReplaceKeyDown,
-    handleFindTextChange, handleReplaceTextChange, toggleSearchViewContainer, handleWorkspaceKeyDownCapture
+    handleFindTextChange, handleReplaceTextChange, toggleSearchViewContainer, handleWorkspaceKeyDownCapture,
+    selectFindReplaceMatch
   };
 }

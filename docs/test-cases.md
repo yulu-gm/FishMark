@@ -1330,6 +1330,24 @@ RF-801 独立审查退回补充：外部冲突操作排队前捕获 A 的 editor
 3. 从正文反向/正向单行 source 选区带入查询；从可与源码精确对应的活动 plain 表格格局部 DOM 单行选区带入查询；多行选区不覆盖已有查询，转义竖线解码等不等文本安全回退原 CM 范围；Search/Replace 输入内再次 Ctrl+F 不覆盖用户已输入查询。自动 controller/mock 选区与真实 DOM 选择分别取证。
 4. Ctrl+Alt/AltGraph、Ctrl+Shift、同时 Ctrl+Meta、已 defaultPrevented 的事件不得误开搜索。composition/isComposing/229 时 Ctrl+F、Enter、Esc不误导航或清空；真实 OS IME仍需另列平台证据。
 5. 文档中混合普通段落和表格命中：前后一个、同格多命中、多格、首尾循环均保持完整 canonical match 范围及计数，Search 输入保持焦点。
+
 6. 可见和离屏长表命中时当前格高亮，目标在 editor scroller 内可见；记录 cell/scroller rect、scrollTop/Left及页面滚动，不通过强制cell focus折叠匹配选区。
 7. 表前插入、替换、刷新、换文档、切源码/展示模式后，当前位置、高亮与source selection一致；过时 reveal不得滚动新文档。无第二canonical模型或旧widget位置缓存。
 8. 表格布局在同字体/DPR下比较短文本、长散文、无空格长串、中英、2/4/8列，在产品允许宽度和编辑/退出状态记录列宽/行高/scrollWidth。只有复现证据支持时才调整布局规则；Typora界面对照缺失不能说已达到Typora一致。
+
+#### Search 结果列表（2026-10-09）
+
+1. Find/Replace 表单下逐项显示当前 CodeMirror query 的规范命中，含序号、源码行列、短上下文和当前项；空查询/无结果有明确提示。普通文本、重复文本、表格和多行正则沿用同一 cursor，不增加第二套搜索语义。
+2. 点击结果选择其完整 source 范围并沿用现有表格高亮/reveal；表单输入持焦。Tab 可进入按钮，Enter/Space 激活结果/分页，Find/Replace 输入的 Enter/Shift+Enter 仍前后导航，Esc 仍清空并关闭。按钮缩小并弱化边框，保留可见键盘 focus ring。
+3. 编辑、替换、撤销、query 改变和游标导航更新结果/当前项；source/query/load identity 改变后旧结果对象不可激活，composition 期间不改变选区。
+4. 结果每页最多 50 个 DOM 条目，完整 count 不截断，所有页和首尾结果可达。手动翻页不修改正文选区，也不因 Replace 草稿或同一投影重发布跳回第一页；前后导航随当前项切换页，结果减少时页码收敛。
+
+#### 列表与行内源码标记（2026-10-10）
+
+1. 正文中部真实点击、同一行获得焦点、正文内方向键移动不揭示列表前缀。只在靠近标记进入源码、明确源码编辑动作或选区跨越标记时揭示；离开后隐藏。强调、斜体、删除线、行内代码和链接按各自标记范围处理，保留图片等现有 owner。
+2. 普通 bullet、两位编号、任务框保持原固定 gutter；三位至九位编号及内部 tab 前缀按本项实际源码长度扩展，禁止对普通列表统一预留九位编号宽度。引用 rail、祖先缩进不重复计入 marker 宽度。
+3. 在 900px/1200px 窗口，揭示、离开、reading 切换时正文 label 左缘及行内纵向位置稳定。测量必须等待 Search 侧栏关闭，Range 只包含 label，不把前导空格误当正文。
+4. 长编号任务框在阅读态紧邻其正文，保留原 marker gap；active 源码仍完整可编辑。引用、嵌套、tab、已勾选与未勾选分别截图并记录实际坐标。引用列表续行必须与首行 label 对齐，并保留裸 quote anchor 和 fenced code 的额外代码缩进。
+5. 标记文本编辑与原生 Ctrl+Z/Y 精确恢复 Markdown；程序跳转、ArrowUp、语义 Backspace、Unicode grapheme 保留既有协议。标题沿用已批准固定留白；超长空格/tab 前缀始终显示源码。
+
+局部通过不替代原完整 regression、formal protocol、未更改的 gzip contract 和独立 review；Windows symlink EPERM 不得通过放宽 allowlist 或修改系统设置掩盖。真实 OS IME 与 Typora 同屏对照缺失时明确列为未测。

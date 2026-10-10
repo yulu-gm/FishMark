@@ -9,10 +9,12 @@ import {
 
 import {
   createCodeEditorController,
+  emptyFindReplaceSnapshot,
   type CodeEditorController,
   type CodeEditorDocumentChangeFrame,
   type CodeEditorDiscardedDocumentText,
   type FindReplaceQueryInput,
+  type FindReplaceMatch,
   type FindReplaceSnapshot
 } from "./code-editor";
 import type { EditorViewMode } from "@fishmark/codemirror-adapter";
@@ -26,6 +28,8 @@ export type CodeEditorHandle = {
   updateFindReplaceQuery: (query: FindReplaceQueryInput) => FindReplaceSnapshot;
   findNextMatch: () => FindReplaceSnapshot;
   findPreviousMatch: () => FindReplaceSnapshot;
+  selectFindReplaceMatch: (match: FindReplaceMatch) => FindReplaceSnapshot;
+  subscribeFindReplace: (listener: (snapshot: FindReplaceSnapshot) => void) => () => void;
   replaceCurrentMatch: () => FindReplaceSnapshot;
   replaceAllMatches: () => FindReplaceSnapshot;
   clearFindReplaceQuery: () => FindReplaceSnapshot;
@@ -286,35 +290,21 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
         prepareFindReplace: () =>
           controllerRef.current?.prepareFindReplace() ?? Promise.resolve(),
         updateFindReplaceQuery: (query: FindReplaceQueryInput) =>
-          controllerRef.current?.updateFindReplaceQuery(query) ?? {
-            matchCount: 0,
-            currentMatchIndex: null
-          },
+          controllerRef.current?.updateFindReplaceQuery(query) ?? emptyFindReplaceSnapshot,
         findNextMatch: () =>
-          controllerRef.current?.findNextMatch() ?? {
-            matchCount: 0,
-            currentMatchIndex: null
-          },
+          controllerRef.current?.findNextMatch() ?? emptyFindReplaceSnapshot,
         findPreviousMatch: () =>
-          controllerRef.current?.findPreviousMatch() ?? {
-            matchCount: 0,
-            currentMatchIndex: null
-          },
+          controllerRef.current?.findPreviousMatch() ?? emptyFindReplaceSnapshot,
+        selectFindReplaceMatch: (match: FindReplaceMatch) =>
+          controllerRef.current?.selectFindReplaceMatch(match) ?? emptyFindReplaceSnapshot,
+        subscribeFindReplace: (listener: (snapshot: FindReplaceSnapshot) => void) =>
+          controllerRef.current?.subscribeFindReplace(listener) ?? (() => {}),
         replaceCurrentMatch: () =>
-          controllerRef.current?.replaceCurrentMatch() ?? {
-            matchCount: 0,
-            currentMatchIndex: null
-          },
+          controllerRef.current?.replaceCurrentMatch() ?? emptyFindReplaceSnapshot,
         replaceAllMatches: () =>
-          controllerRef.current?.replaceAllMatches() ?? {
-            matchCount: 0,
-            currentMatchIndex: null
-          },
+          controllerRef.current?.replaceAllMatches() ?? emptyFindReplaceSnapshot,
         clearFindReplaceQuery: () =>
-          controllerRef.current?.clearFindReplaceQuery() ?? {
-            matchCount: 0,
-            currentMatchIndex: null
-          },
+          controllerRef.current?.clearFindReplaceQuery() ?? emptyFindReplaceSnapshot,
         setContent: (content: string) => {
           controllerRef.current?.setContent(content);
         },
