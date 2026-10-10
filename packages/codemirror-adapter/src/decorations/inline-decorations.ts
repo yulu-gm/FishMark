@@ -26,6 +26,7 @@ type CreateInactiveInlineDecorationsOptions = {
   resolveImagePreviewUrl?: (href: string | null) => string | null;
   active?: boolean;
   markerVisible?: (from: number, to: number) => boolean;
+  preserveOpeningCaretMetrics?: boolean;
 };
 
 export function createInactiveInlineDecorations(
@@ -99,7 +100,7 @@ function appendInlineDecorations(
     case "emphasis":
     case "strikethrough":
     case "codeSpan":
-      appendMarkerDecoration(ranges, node.openMarker.startOffset, node.openMarker.endOffset, options);
+      appendOpeningMarkerDecoration(ranges, node, options);
       appendContentDecoration(
         ranges,
         node.openMarker.endOffset,
@@ -110,7 +111,7 @@ function appendInlineDecorations(
       appendMarkerDecoration(ranges, node.closeMarker.startOffset, node.closeMarker.endOffset, options);
       return;
     case "link":
-      appendMarkerDecoration(ranges, node.openMarker.startOffset, node.openMarker.endOffset, options);
+      appendOpeningMarkerDecoration(ranges, node, options);
       appendContentDecoration(
         ranges,
         node.openMarker.endOffset,
@@ -129,13 +130,14 @@ function appendInlineDecorations(
       return;
     case "image":
       if (options.active) {
-        for (const child of node.children) appendInlineDecorations(child, ranges, { ...options, markerVisible: undefined });
+        for (const child of node.children) appendInlineDecorations(child, ranges, { ...options,
+          markerVisible: undefined, preserveOpeningCaretMetrics: false });
         return;
       }
       ranges.push(createInactiveImagePreviewDecoration(node, options.resolveImagePreviewUrl));
       appendMarkerDecoration(ranges, node.openMarker.startOffset, node.openMarker.endOffset);
       for (const child of node.children) {
-        appendInlineDecorations(child, ranges, options);
+        appendInlineDecorations(child, ranges, { ...options, preserveOpeningCaretMetrics: false });
       }
       appendMarkerDecoration(ranges, node.closeMarker.startOffset, node.closeMarker.endOffset);
       return;
@@ -216,6 +218,18 @@ function appendMarkerDecoration(
     (options.markerVisible?.(startOffset, endOffset) ?? options.active) ? ACTIVE_INLINE_MARKER_CLASS : INACTIVE_INLINE_MARKER_CLASS);
 }
 
+function appendOpeningMarkerDecoration(
+  ranges: InlineDecorationRange[],
+  node: Extract<InlineASTNode, { type: "strong" | "emphasis" | "strikethrough" | "codeSpan" | "link" }>,
+  options: CreateInactiveInlineDecorationsOptions
+) {
+  const { startOffset, endOffset } = node.openMarker;
+  const visible = options.markerVisible?.(startOffset, endOffset) ?? options.active;
+  appendInlineMarkerDecoration(ranges, startOffset, endOffset,
+    visible ? ACTIVE_INLINE_MARKER_CLASS : INACTIVE_INLINE_MARKER_CLASS,
+    !visible && options.preserveOpeningCaretMetrics ? { "data-inline-opening-caret": node.type } : {});
+}
+
 function appendActiveMarkerDecoration(
   ranges: InlineDecorationRange[],
   startOffset: number,
@@ -228,7 +242,8 @@ function appendInlineMarkerDecoration(
   ranges: InlineDecorationRange[],
   startOffset: number,
   endOffset: number,
-  className: string
+  className: string,
+  attributes: Record<string, string> = {}
 ) {
   if (endOffset <= startOffset) {
     return;
@@ -237,6 +252,7 @@ function appendInlineMarkerDecoration(
   ranges.push(
     Decoration.mark({
       attributes: {
+        ...attributes,
         class: className
       }
     }).range(startOffset, endOffset)

@@ -5,16 +5,27 @@ import "../src/renderer/styles/markdown-render.css";
 import { EditorView } from "@codemirror/view";
 import { createCodeEditorController } from "../src/renderer/code-editor";
 const baseSource = "Paragraph control.\n\n- Plain list\n\n1. Ordered list\n\n- [ ] Task list\n\n- Parent list\n  - Nested list\n\n> - Quoted list\n>   - Quoted nested\n\nTail.";
-const source = new URLSearchParams(location.search).has("extra")
-    ? baseSource.replace("Tail.", "-   Wide space list\n\n-\tTab list\n\n- **Bold list**\n\nTail.") : baseSource;
+const query = new URLSearchParams(location.search);
+const extra = "-   Wide space list\n\n-\tTab list\n\n- **Bold list**\n\n";
+const inline = "- *Italic list*\n\n- ~~Strike list~~\n\n- `Code list`\n\n- [Link list](https://example.test)\n\n- ***Mixed list***\n\n- [**Bold link**](https://example.test)\n\n";
+const adjacent = ["- Lead ***Mid strong*** and *italic* adjacent.", "- Lead *Mid emphasis*~~strike~~ adjacent.", "- Lead ~~Mid strike~~`code` adjacent.", "- Lead `Mid code`[link](https://example.test/long-destination) adjacent.", "- Lead [**Mid link**](https://example.test/" + "destination".repeat(12) + ")**bold** adjacent."]
+    .map(line => line + " Narrow wrapped 中文正文保持相同列宽和高度。".repeat(2)).join("\n\n");
+const source = query.has("adjacent") ? "Paragraph control.\n\n- Plain list\n\n" + adjacent + "\n\nTail." : query.has("extra") || query.has("inline")
+    ? baseSource.replace("Tail.", extra + (query.has("inline") ? inline : "") + "Tail.") : baseSource;
 document.body.style.cssText = "margin:0;background:white;color:#111827;--fishmark-caret-color:#ff0000;--fishmark-document-font-family:Georgia;--fishmark-document-font-size:18px";
 const root = document.getElementById("probe-root")!;
 root.className = "document-editor";
 root.style.cssText = "height:740px;width:860px";
+if (query.has("adjacent")) root.style.width = "380px";
 const controller = createCodeEditorController({ parent: root, initialContent: source, onChange: () => undefined });
 if (new URLSearchParams(location.search).get("variant") === "prefix-box") {
     const style = document.createElement("style");
     style.textContent = ".document-editor .cm-inactive-list-source-prefix:last-of-type {display:inline-block;width:0;height:1em;font-size:inherit;line-height:1;vertical-align:baseline;caret-color:var(--fishmark-caret-color);overflow:visible;white-space:pre;word-spacing:-1em}";
+    document.head.append(style);
+}
+if (query.get("variant") === "inline-box") {
+    const style = document.createElement("style");
+    style.textContent = ".document-editor .cm-line.cm-inactive-list .cm-inactive-inline-marker {display:inline-block;width:0;height:1em;font-size:inherit;line-height:1;vertical-align:baseline;caret-color:var(--fishmark-caret-color);overflow:visible;white-space:pre;letter-spacing:-1em;word-spacing:-1em}";
     document.head.append(style);
 }
 const view = EditorView.findFromDOM(root.querySelector<HTMLElement>(".cm-editor")!)!;

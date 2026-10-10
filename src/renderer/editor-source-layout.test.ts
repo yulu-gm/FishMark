@@ -280,9 +280,22 @@ describe("editor source layout stylesheet", () => {
   it("keeps markdown text out of negative letter spacing", async () => {
     const standard = await readMarkdownTextStandard();
     const stylesheet = await readFile(resolve(process.cwd(), "src/renderer/styles/markdown-render.css"), "utf8");
-    const violations = Array.from(stylesheet.matchAll(/letter-spacing:\s*(-\d+(?:\.\d+)?)em;/g)).map(
-      (match) => match[0]
-    );
+    // Hidden source delimiters need normal font metrics for Chromium's native
+    // caret, with zero glyph advance. This exception cannot reach body text,
+    // closing syntax, destinations, or active source markers.
+    const selector = ".document-editor .cm-inactive-inline-marker[data-inline-opening-caret]";
+    const markerRule = getCssRule(stylesheet, selector);
+    expect(getCssRule(stylesheet, ".document-editor .cm-inactive-inline-marker"))
+      .toContain("color: transparent;");
+    for (const declaration of ["display: inline-block;", "width: 0;", "font-size: inherit;", "letter-spacing: -1em;"])
+      expect(markerRule).toContain(declaration);
+    const rules = Array.from(stylesheet.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^{}]*)\}/g));
+    const negativeRules = rules.filter(match => /letter-spacing:\s*-/.test(match[2] ?? ""));
+    expect(negativeRules).toHaveLength(1);
+    expect(negativeRules[0]?.[1]?.trim()).toBe(selector);
+    expect(Array.from(stylesheet.matchAll(/letter-spacing:\s*-[^;]+;/g), match => match[0]))
+      .toEqual(["letter-spacing: -1em;"]);
+    const violations = negativeRules.filter(match => match[1]?.trim() !== selector);
 
     expect(standard.typography.base.letterSpacing.value).toBe(0);
     expect(violations).toEqual([]);

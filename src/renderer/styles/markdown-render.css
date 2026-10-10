@@ -185,6 +185,27 @@
   line-height: 0;
 }
 
+/* Only supported list opening markers retain native caret metrics. Closing
+   syntax, link destinations and image owners keep their existing presentation. */
+.document-editor .cm-inactive-inline-marker[data-inline-opening-caret] {
+  display: inline-block;
+  width: 0;
+  height: 1em;
+  font-size: inherit;
+  line-height: 1;
+  vertical-align: baseline;
+  caret-color: var(--fishmark-caret-color);
+  overflow: visible;
+  white-space: pre;
+  letter-spacing: -1em;
+  word-spacing: -1em;
+}
+
+.document-editor .cm-inactive-inline-marker[data-inline-opening-caret="codeSpan"] {
+  padding-left: 0.34em;
+  margin-right: -0.34em;
+}
+
 .document-editor .cm-active-inline-marker {
   color: var(--fishmark-text-muted, #687180);
 }
@@ -204,6 +225,10 @@
   border-radius: 0.38em;
   background: var(--fishmark-markdown-inline-code-bg, rgba(17, 24, 39, 0.06));
   color: var(--fishmark-markdown-inline-code-fg, #0f172a);
+}
+
+.document-editor .cm-inactive-inline-code,
+.document-editor .cm-inactive-inline-marker[data-inline-opening-caret="codeSpan"] {
   font-family:
     "Cascadia Code",
     "Consolas",

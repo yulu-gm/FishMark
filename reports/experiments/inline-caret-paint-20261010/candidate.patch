@@ -1,0 +1,216 @@
+diff --git a/packages/codemirror-adapter/src/decorations/block-decorations.test.ts b/packages/codemirror-adapter/src/decorations/block-decorations.test.ts
+index 71c9ee3..e04c160 100644
+--- a/packages/codemirror-adapter/src/decorations/block-decorations.test.ts
++++ b/packages/codemirror-adapter/src/decorations/block-decorations.test.ts
+@@ -14,6 +14,40 @@ function createBlockDecorations(options: Omit<Parameters<typeof buildDecorations
+ // One canonical snapshot per source keeps repeated selection assertions on the same document revision.
+ const snapshots = new Map<string, EditorDerivedSnapshot>();
+ 
++it.each([
++  ["- **Body**", "**", 1], ["- *Body*", "*", 1], ["- ~~Body~~", "~~", 1],
++  ["- `Body`", "`", 1], ["- [Body](https://example.test/中文 \"title\")", "[", 1],
++  ["- ***Body***", "***", 2], ["- [**Body**](https://example.test)", "[**", 2],
++  ["> - Parent\n>   - **Body**", "**", 1], ["- Before **Body** after", "**", 1]
++] as const)("keeps caret metrics only on supported list opening syntax: %s", (source, syntax, count) => {
++  const head = source.indexOf("Body") + 1;
++  const { decorationSet } = createBlockDecorations({ source,
++    activeBlockState: createActiveBlockState(snapshotOf(source), { anchor: head, head }), hasEditorFocus: false });
++  const anchors: Array<{ from: number; to: number; type: string }> = [];
++  decorationSet.between(0, source.length, (from, to, decoration) => {
++    const type = decoration.spec.attributes?.["data-inline-opening-caret"];
++    if (type !== undefined) {
++      expect(decoration.spec.attributes.class).toBe("cm-inactive-inline-marker");
++      anchors.push({ from, to, type });
++    }
++  });
++  anchors.sort((a, b) => a.from - b.from);
++  expect(anchors).toHaveLength(count);
++  expect(anchors.map(anchor => source.slice(anchor.from, anchor.to)).join("")).toBe(syntax);
++  expect(anchors.every(anchor => anchor.to <= source.indexOf("Body"))).toBe(true);
++});
++
++it.each(["**Body**", "# **Body**", "> **Body**", "- ![**Body**](https://example.test)", "- $Body$", "- [^Body]"])(
++  "leaves non-list and other inline owner metrics unchanged: %s", (source) => {
++    const head = source.indexOf("Body");
++    const { decorationSet } = createBlockDecorations({ source,
++      activeBlockState: createActiveBlockState(snapshotOf(source), { anchor: head, head }), hasEditorFocus: false });
++    decorationSet.between(0, source.length, (_from, _to, decoration) => {
++      expect(decoration.spec.attributes?.["data-inline-opening-caret"]).toBeUndefined();
++    });
++  }
++);
++
+ it.each(["- Body", "1. Body", "- [ ] Body", "- Parent\n  - Body", "> - Body", "> - Parent\n>   - Body", "-   Body", "-\tBody", "- **Body**"])(
+   "keeps a native caret anchor only in the final hidden list padding: %s", (source) => {
+     const head = source.indexOf("Body");
+diff --git a/packages/codemirror-adapter/src/decorations/block-decorations.ts b/packages/codemirror-adapter/src/decorations/block-decorations.ts
+index f5728f8..676d01a 100644
+--- a/packages/codemirror-adapter/src/decorations/block-decorations.ts
++++ b/packages/codemirror-adapter/src/decorations/block-decorations.ts
+@@ -390,7 +390,8 @@ function appendCanonicalContainerDecorations(
+           class: "cm-inactive-paragraph cm-inactive-paragraph-leading"
+         } }).range(firstLine.range.startOffset));
+       }
+-      const options = inlinePresentationOptions(context);
++      const options = { ...inlinePresentationOptions(context),
++        preserveOpeningCaretMetrics: ancestors.some(value => value.node.kind === "list-item") };
+       const inactive = createInactiveInlineDecorations(node.inline, options);
+       const active = [...createActiveInlineDecorations(node.inline, options), ...createActiveInlineImageDecorations(node.inline, source, context.resolveImagePreviewUrl)];
+       for (const line of nodeLines) {
+diff --git a/packages/codemirror-adapter/src/decorations/inline-decorations.ts b/packages/codemirror-adapter/src/decorations/inline-decorations.ts
+index ac825de..2ab2443 100644
+--- a/packages/codemirror-adapter/src/decorations/inline-decorations.ts
++++ b/packages/codemirror-adapter/src/decorations/inline-decorations.ts
+@@ -26,6 +26,7 @@ type CreateInactiveInlineDecorationsOptions = {
+   resolveImagePreviewUrl?: (href: string | null) => string | null;
+   active?: boolean;
+   markerVisible?: (from: number, to: number) => boolean;
++  preserveOpeningCaretMetrics?: boolean;
+ };
+ 
+ export function createInactiveInlineDecorations(
+@@ -99,7 +100,7 @@ function appendInlineDecorations(
+     case "emphasis":
+     case "strikethrough":
+     case "codeSpan":
+-      appendMarkerDecoration(ranges, node.openMarker.startOffset, node.openMarker.endOffset, options);
++      appendOpeningMarkerDecoration(ranges, node, options);
+       appendContentDecoration(
+         ranges,
+         node.openMarker.endOffset,
+@@ -110,7 +111,7 @@ function appendInlineDecorations(
+       appendMarkerDecoration(ranges, node.closeMarker.startOffset, node.closeMarker.endOffset, options);
+       return;
+     case "link":
+-      appendMarkerDecoration(ranges, node.openMarker.startOffset, node.openMarker.endOffset, options);
++      appendOpeningMarkerDecoration(ranges, node, options);
+       appendContentDecoration(
+         ranges,
+         node.openMarker.endOffset,
+@@ -129,13 +130,14 @@ function appendInlineDecorations(
+       return;
+     case "image":
+       if (options.active) {
+-        for (const child of node.children) appendInlineDecorations(child, ranges, { ...options, markerVisible: undefined });
++        for (const child of node.children) appendInlineDecorations(child, ranges, { ...options,
++          markerVisible: undefined, preserveOpeningCaretMetrics: false });
+         return;
+       }
+       ranges.push(createInactiveImagePreviewDecoration(node, options.resolveImagePreviewUrl));
+       appendMarkerDecoration(ranges, node.openMarker.startOffset, node.openMarker.endOffset);
+       for (const child of node.children) {
+-        appendInlineDecorations(child, ranges, options);
++        appendInlineDecorations(child, ranges, { ...options, preserveOpeningCaretMetrics: false });
+       }
+       appendMarkerDecoration(ranges, node.closeMarker.startOffset, node.closeMarker.endOffset);
+       return;
+@@ -216,6 +218,18 @@ function appendMarkerDecoration(
+     (options.markerVisible?.(startOffset, endOffset) ?? options.active) ? ACTIVE_INLINE_MARKER_CLASS : INACTIVE_INLINE_MARKER_CLASS);
+ }
+ 
++function appendOpeningMarkerDecoration(
++  ranges: InlineDecorationRange[],
++  node: Extract<InlineASTNode, { type: "strong" | "emphasis" | "strikethrough" | "codeSpan" | "link" }>,
++  options: CreateInactiveInlineDecorationsOptions
++) {
++  const { startOffset, endOffset } = node.openMarker;
++  const visible = options.markerVisible?.(startOffset, endOffset) ?? options.active;
++  appendInlineMarkerDecoration(ranges, startOffset, endOffset,
++    visible ? ACTIVE_INLINE_MARKER_CLASS : INACTIVE_INLINE_MARKER_CLASS,
++    !visible && options.preserveOpeningCaretMetrics ? { "data-inline-opening-caret": node.type } : {});
++}
++
+ function appendActiveMarkerDecoration(
+   ranges: InlineDecorationRange[],
+   startOffset: number,
+@@ -228,7 +242,8 @@ function appendInlineMarkerDecoration(
+   ranges: InlineDecorationRange[],
+   startOffset: number,
+   endOffset: number,
+-  className: string
++  className: string,
++  attributes: Record<string, string> = {}
+ ) {
+   if (endOffset <= startOffset) {
+     return;
+@@ -237,6 +252,7 @@ function appendInlineMarkerDecoration(
+   ranges.push(
+     Decoration.mark({
+       attributes: {
++        ...attributes,
+         class: className
+       }
+     }).range(startOffset, endOffset)
+diff --git a/src/renderer/editor-source-layout.test.ts b/src/renderer/editor-source-layout.test.ts
+index 65e1621..5d47ec9 100644
+--- a/src/renderer/editor-source-layout.test.ts
++++ b/src/renderer/editor-source-layout.test.ts
+@@ -280,9 +280,22 @@ describe("editor source layout stylesheet", () => {
+   it("keeps markdown text out of negative letter spacing", async () => {
+     const standard = await readMarkdownTextStandard();
+     const stylesheet = await readFile(resolve(process.cwd(), "src/renderer/styles/markdown-render.css"), "utf8");
+-    const violations = Array.from(stylesheet.matchAll(/letter-spacing:\s*(-\d+(?:\.\d+)?)em;/g)).map(
+-      (match) => match[0]
+-    );
++    // Hidden source delimiters need normal font metrics for Chromium's native
++    // caret, with zero glyph advance. This exception cannot reach body text,
++    // closing syntax, destinations, or active source markers.
++    const selector = ".document-editor .cm-inactive-inline-marker[data-inline-opening-caret]";
++    const markerRule = getCssRule(stylesheet, selector);
++    expect(getCssRule(stylesheet, ".document-editor .cm-inactive-inline-marker"))
++      .toContain("color: transparent;");
++    for (const declaration of ["display: inline-block;", "width: 0;", "font-size: inherit;", "letter-spacing: -1em;"])
++      expect(markerRule).toContain(declaration);
++    const rules = Array.from(stylesheet.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^{}]*)\}/g));
++    const negativeRules = rules.filter(match => /letter-spacing:\s*-/.test(match[2] ?? ""));
++    expect(negativeRules).toHaveLength(1);
++    expect(negativeRules[0]?.[1]?.trim()).toBe(selector);
++    expect(Array.from(stylesheet.matchAll(/letter-spacing:\s*-[^;]+;/g), match => match[0]))
++      .toEqual(["letter-spacing: -1em;"]);
++    const violations = negativeRules.filter(match => match[1]?.trim() !== selector);
+ 
+     expect(standard.typography.base.letterSpacing.value).toBe(0);
+     expect(violations).toEqual([]);
+diff --git a/src/renderer/styles/markdown-render.css b/src/renderer/styles/markdown-render.css
+index 97f2c91..fa5b1a6 100644
+--- a/src/renderer/styles/markdown-render.css
++++ b/src/renderer/styles/markdown-render.css
+@@ -185,6 +185,27 @@
+   line-height: 0;
+ }
+ 
++/* Only supported list opening markers retain native caret metrics. Closing
++   syntax, link destinations and image owners keep their existing presentation. */
++.document-editor .cm-inactive-inline-marker[data-inline-opening-caret] {
++  display: inline-block;
++  width: 0;
++  height: 1em;
++  font-size: inherit;
++  line-height: 1;
++  vertical-align: baseline;
++  caret-color: var(--fishmark-caret-color);
++  overflow: visible;
++  white-space: pre;
++  letter-spacing: -1em;
++  word-spacing: -1em;
++}
++
++.document-editor .cm-inactive-inline-marker[data-inline-opening-caret="codeSpan"] {
++  padding-left: 0.34em;
++  margin-right: -0.34em;
++}
++
+ .document-editor .cm-active-inline-marker {
+   color: var(--fishmark-text-muted, #687180);
+ }
+@@ -204,6 +225,10 @@
+   border-radius: 0.38em;
+   background: var(--fishmark-markdown-inline-code-bg, rgba(17, 24, 39, 0.06));
+   color: var(--fishmark-markdown-inline-code-fg, #0f172a);
++}
++
++.document-editor .cm-inactive-inline-code,
++.document-editor .cm-inactive-inline-marker[data-inline-opening-caret="codeSpan"] {
+   font-family:
+     "Cascadia Code",
+     "Consolas",

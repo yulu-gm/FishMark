@@ -390,7 +390,8 @@ function appendCanonicalContainerDecorations(
           class: "cm-inactive-paragraph cm-inactive-paragraph-leading"
         } }).range(firstLine.range.startOffset));
       }
-      const options = inlinePresentationOptions(context);
+      const options = { ...inlinePresentationOptions(context),
+        preserveOpeningCaretMetrics: ancestors.some(value => value.node.kind === "list-item") };
       const inactive = createInactiveInlineDecorations(node.inline, options);
       const active = [...createActiveInlineDecorations(node.inline, options), ...createActiveInlineImageDecorations(node.inline, source, context.resolveImagePreviewUrl)];
       for (const line of nodeLines) {

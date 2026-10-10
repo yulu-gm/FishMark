@@ -29,12 +29,19 @@ const samples = report.samples.map((sample) => {
             best = { pixels, bounds: { left, top, right, bottom } };
     }
     const bounds = best.bounds, range = sample.state.domSelection.range;
+    // Chromium's collapsed Range can choose the preceding visual line at a
+    // soft wrap. The native caret follows CodeMirror's canonical visual affinity.
+    // Keep both measurements; only narrow adjacent samples may use this route.
+    const coords = sample.state.coords;
+    const wrapAffinity = sample.label.includes("adjacent") && coords && range &&
+        Math.abs(coords.top - range.top) >= 10;
+    const expected = wrapAffinity ? coords : range;
     const pass = frames.length === 12 && sample.screenCapture.exit === 0 && sample.foreground &&
         sample.state.hasFocus && bounds !== null && bounds.right === bounds.left &&
         bounds.bottom - bounds.top + 1 >= 15 && best.pixels >= 15 &&
-        Math.abs(bounds.left - range.left) <= 2 && Math.abs(bounds.top - range.top - 26) <= 2;
+        Math.abs(bounds.left - expected.left) <= 2 && Math.abs(bounds.top - expected.top - 26) <= 2;
     return { name: sample.name, label: sample.label, pass, visibleFrames, frames: frames.length, ...best,
-        selection: sample.state.selection, range, line: sample.state.line.rect };
+        selection: sample.state.selection, range, coords, wrapAffinity, line: sample.state.line.rect };
 });
 const result = { pass: samples.every(sample => sample.pass), samples };
 writeFileSync(resolve(directory, "caret-pixel-verdict.json"), JSON.stringify(result, null, 2) + "\n", { flag: "wx" });

@@ -14,6 +14,40 @@ function createBlockDecorations(options: Omit<Parameters<typeof buildDecorations
 // One canonical snapshot per source keeps repeated selection assertions on the same document revision.
 const snapshots = new Map<string, EditorDerivedSnapshot>();
 
+it.each([
+  ["- **Body**", "**", 1], ["- *Body*", "*", 1], ["- ~~Body~~", "~~", 1],
+  ["- `Body`", "`", 1], ["- [Body](https://example.test/中文 \"title\")", "[", 1],
+  ["- ***Body***", "***", 2], ["- [**Body**](https://example.test)", "[**", 2],
+  ["> - Parent\n>   - **Body**", "**", 1], ["- Before **Body** after", "**", 1]
+] as const)("keeps caret metrics only on supported list opening syntax: %s", (source, syntax, count) => {
+  const head = source.indexOf("Body") + 1;
+  const { decorationSet } = createBlockDecorations({ source,
+    activeBlockState: createActiveBlockState(snapshotOf(source), { anchor: head, head }), hasEditorFocus: false });
+  const anchors: Array<{ from: number; to: number; type: string }> = [];
+  decorationSet.between(0, source.length, (from, to, decoration) => {
+    const type = decoration.spec.attributes?.["data-inline-opening-caret"];
+    if (type !== undefined) {
+      expect(decoration.spec.attributes.class).toBe("cm-inactive-inline-marker");
+      anchors.push({ from, to, type });
+    }
+  });
+  anchors.sort((a, b) => a.from - b.from);
+  expect(anchors).toHaveLength(count);
+  expect(anchors.map(anchor => source.slice(anchor.from, anchor.to)).join("")).toBe(syntax);
+  expect(anchors.every(anchor => anchor.to <= source.indexOf("Body"))).toBe(true);
+});
+
+it.each(["**Body**", "# **Body**", "> **Body**", "- ![**Body**](https://example.test)", "- $Body$", "- [^Body]"])(
+  "leaves non-list and other inline owner metrics unchanged: %s", (source) => {
+    const head = source.indexOf("Body");
+    const { decorationSet } = createBlockDecorations({ source,
+      activeBlockState: createActiveBlockState(snapshotOf(source), { anchor: head, head }), hasEditorFocus: false });
+    decorationSet.between(0, source.length, (_from, _to, decoration) => {
+      expect(decoration.spec.attributes?.["data-inline-opening-caret"]).toBeUndefined();
+    });
+  }
+);
+
 it.each(["- Body", "1. Body", "- [ ] Body", "- Parent\n  - Body", "> - Body", "> - Parent\n>   - Body", "-   Body", "-\tBody", "- **Body**"])(
   "keeps a native caret anchor only in the final hidden list padding: %s", (source) => {
     const head = source.indexOf("Body");

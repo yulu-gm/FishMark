@@ -9,7 +9,8 @@ const result = { samples: [], complete: false }, delay = ms => new Promise(d => 
 async function sample(label) { const state = await js("window.__listCaret.snapshot()"), name = String(result.samples.length + 1).padStart(3, "0"); fs.writeFileSync(path.join(out, name + "-page.png"), (await win.webContents.capturePage()).toPNG()); const handle = win.getNativeWindowHandle().readBigUInt64LE().toString(); const screenPath = path.join(out, name + "-screen.png"); const captureScript = fs.readFileSync(path.resolve("scripts/capture-owned-list-caret.ps1"), "utf8"); const capture = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "& {" + captureScript + "} -OwnedHandle " + handle + " -OutputPath '" + screenPath.replaceAll("'", "''") + "'"], { windowsHide: true, encoding: "utf8", timeout: 10000 }); result.samples.push({ name, label, state, foreground: win.isFocused(), screenCapture: { exit: capture.status, stderr: capture.stderr, stdout: capture.stdout } }); console.log(JSON.stringify({ name, label, selection: state.selection, parent: state.domSelection.parentClass, range: state.domSelection.range, screenExit: capture.status })); }
 async function key(keyCode, modifiers = []) { win.webContents.sendInputEvent({ type: "keyDown", keyCode, modifiers }); win.webContents.sendInputEvent({ type: "keyUp", keyCode, modifiers }); await delay(180); }
 app.whenReady().then(async () => {
-    win = new BrowserWindow({ width: 900, height: 810, x: 50, y: 50, show: true, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false } });
+    const adjacent = process.env.FISHMARK_LIST_CARET_URL.includes("adjacent=1");
+    win = new BrowserWindow({ width: adjacent ? 420 : 900, height: 810, x: 50, y: 50, show: true, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false } });
     win.show();
     win.focus();
     await win.loadURL(process.env.FISHMARK_LIST_CARET_URL);
@@ -20,13 +21,30 @@ app.whenReady().then(async () => {
     result.environment = { platform: process.platform, arch: process.arch, versions: process.versions,
         display: require("electron").screen.getPrimaryDisplay(), userData: app.getPath("userData"),
         url: process.env.FISHMARK_LIST_CARET_URL, nativeInput: "webContents.sendInputEvent" };
-    const labels = process.env.FISHMARK_LIST_CARET_URL.includes("extra=1")
+    const labels = adjacent ? ["Mid strong", "Mid emphasis", "Mid strike", "Mid code", "Mid link"] : process.env.FISHMARK_LIST_CARET_URL.includes("inline=1")
+        ? ["Bold list", "Italic list", "Strike list", "Code list", "Link list", "Mixed list", "Bold link"]
+        : process.env.FISHMARK_LIST_CARET_URL.includes("extra=1")
         ? ["Wide space list", "Tab list", "Bold list"]
         : ["Plain list", "Ordered list", "Task list", "Nested list", "Quoted list", "Quoted nested"];
     for (const label of labels) {
         await js(`window.__listCaret.prepare(${JSON.stringify(label)},1)`);
         await key("Left");
         await sample(label + " body start ArrowLeft");
+        if (adjacent) {
+            await key("Right", ["shift"]); await key("Left");
+            await sample(label + " adjacent selection collapse");
+            const point = await js(`window.__listCaret.point(${JSON.stringify(label)})`);
+            for (const type of ["mouseDown", "mouseUp"]) win.webContents.sendInputEvent({ type, x: point.x + 1, y: point.y, button: "left", clickCount: 1 });
+            await delay(180); await sample(label + " adjacent native click");
+            await js(`window.__listCaret.prepare(${JSON.stringify(label)},${label.length})`);
+            await key("Left"); await sample(label + " adjacent text end Left");
+            await key("Right"); await sample(label + " adjacent text end Right");
+            await js("window.__listCaret.sourceMode(true)");
+            await js(`window.__listCaret.prepare(${JSON.stringify(label)},1)`); await key("Home");
+            await sample(label + " adjacent source Home");
+            await js("window.__listCaret.sourceMode(false)");
+            continue;
+        }
         await key("Home");
         await sample(label + " Home");
         await key("Left");
