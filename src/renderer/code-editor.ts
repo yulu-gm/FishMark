@@ -70,6 +70,8 @@ export type CodeEditorController = {
   updateFindReplaceQuery: (query: FindReplaceQueryInput) => FindReplaceSnapshot;
   findNextMatch: () => FindReplaceSnapshot;
   findPreviousMatch: () => FindReplaceSnapshot;
+  selectFindReplaceMatch: (match: FindReplaceMatch) => FindReplaceSnapshot;
+  subscribeFindReplace: (listener: (snapshot: FindReplaceSnapshot) => void) => () => void;
   replaceCurrentMatch: () => FindReplaceSnapshot;
   replaceAllMatches: () => FindReplaceSnapshot;
   clearFindReplaceQuery: () => FindReplaceSnapshot;
@@ -129,6 +131,19 @@ export type FindReplaceQueryInput = {
 export type FindReplaceSnapshot = {
   matchCount: number;
   currentMatchIndex: number | null;
+  matches: readonly FindReplaceMatch[];
+};
+
+export type FindReplaceMatch = {
+  from: number;
+  to: number;
+  line: number;
+  column: number;
+  snippet: string;
+};
+
+export const emptyFindReplaceSnapshot: FindReplaceSnapshot = {
+  matchCount: 0, currentMatchIndex: null, matches: []
 };
 
 export function createCodeEditorController(
@@ -158,6 +173,18 @@ export function createCodeEditorController(
   let compositionCheckpointPending = false;
   let hasPendingDocumentChanges = false;
   const compositionSealWaiters = new Set<() => void>();
+  const searchListeners = new Set<(snapshot: FindReplaceSnapshot) => void>();
+  let searchNotificationQueued = false;
+  const notifySearch = () => {
+    if (searchNotificationQueued || !searchListeners.size) return;
+    searchNotificationQueued = true;
+    queueMicrotask(() => {
+      searchNotificationQueued = false;
+      if (isDestroyed || !searchListeners.size) return;
+      const snapshot = readFindReplaceSnapshot();
+      for (const listener of searchListeners) listener(snapshot);
+    });
+  };
 
   const notifyPendingDocumentChanges = () => {
     const nextValue = pendingDocumentChanges !== null;
@@ -310,6 +337,9 @@ export function createCodeEditorController(
   };
 
   const observeDocumentUpdate = (update: ViewUpdate) => {
+    if (update.docChanged || update.selectionSet || update.transactions.some(transaction => transaction.effects.length)) {
+      notifySearch();
+    }
     observeUserDocumentEdit(update);
     if (!update.docChanged) {
       // Composition can finish without another text change. The adapter's finish
@@ -476,46 +506,8 @@ export function createCodeEditorController(
     return searchRuntime;
   };
 
-  const emptyFindReplaceSnapshot = (): FindReplaceSnapshot => ({
-    matchCount: 0,
-    currentMatchIndex: null
-  });
-
   const readFindReplaceSnapshot = (): FindReplaceSnapshot => {
-    const runtime = searchRuntime;
-
-    if (!runtime) {
-      return emptyFindReplaceSnapshot();
-    }
-
-    const query = runtime.getSearchQuery(view.state);
-
-    if (!query.valid || query.search.length === 0) {
-      return emptyFindReplaceSnapshot();
-    }
-
-    let matchCount = 0;
-    let currentMatchIndex: number | null = null;
-    const selection = view.state.selection.main;
-
-    const cursor = query.getCursor(view.state);
-    let nextMatch = cursor.next();
-
-    while (!nextMatch.done) {
-      const match = nextMatch.value;
-      matchCount += 1;
-
-      if (match.from === selection.from && match.to === selection.to) {
-        currentMatchIndex = matchCount;
-      }
-
-      nextMatch = cursor.next();
-    }
-
-    return {
-      matchCount,
-      currentMatchIndex
-    };
+    return searchRuntime?.readFindReplaceSnapshot(view) ?? emptyFindReplaceSnapshot;
   };
 
   const ensureSearchPanelOpen = () => {
@@ -534,7 +526,7 @@ export function createCodeEditorController(
     const runtime = searchRuntime;
 
     if (!runtime) {
-      return emptyFindReplaceSnapshot();
+      return emptyFindReplaceSnapshot;
     }
 
     const trimmedSearch = input.search;
@@ -669,6 +661,7 @@ export function createCodeEditorController(
     // A recovery boundary deliberately starts a fresh editor history.
     pendingUserCompositionBase = null;
     view.setState(createState(input.canonicalText));
+    notifySearch();
     semanticCommands.bindSession(view, documentIdentity?.tabId);
     return Object.freeze({ kind: "restored" });
   };
@@ -682,31 +675,40 @@ export function createCodeEditorController(
     updateFindReplaceQuery: updateSearchQuery,
     findNextMatch() {
       const runtime = searchRuntime;
-      if (!runtime) return emptyFindReplaceSnapshot();
+      if (!runtime) return emptyFindReplaceSnapshot;
       runtime.findNext(view);
       return readFindReplaceSnapshot();
     },
     findPreviousMatch() {
       const runtime = searchRuntime;
-      if (!runtime) return emptyFindReplaceSnapshot();
+      if (!runtime) return emptyFindReplaceSnapshot;
       runtime.findPrevious(view);
       return readFindReplaceSnapshot();
     },
+    selectFindReplaceMatch(match) {
+      searchRuntime?.selectFindReplaceMatch(view, match);
+      return readFindReplaceSnapshot();
+    },
+    subscribeFindReplace(listener) {
+      searchListeners.add(listener);
+      listener(readFindReplaceSnapshot());
+      return () => { searchListeners.delete(listener); };
+    },
     replaceCurrentMatch() {
       const runtime = searchRuntime;
-      if (!runtime) return emptyFindReplaceSnapshot();
+      if (!runtime) return emptyFindReplaceSnapshot;
       runtime.replaceNext(view);
       return selectNextMatchWhenNeeded(readFindReplaceSnapshot());
     },
     replaceAllMatches() {
       const runtime = searchRuntime;
-      if (!runtime) return emptyFindReplaceSnapshot();
+      if (!runtime) return emptyFindReplaceSnapshot;
       runtime.replaceAll(view);
       return readFindReplaceSnapshot();
     },
     clearFindReplaceQuery() {
       const runtime = searchRuntime;
-      if (!runtime) return emptyFindReplaceSnapshot();
+      if (!runtime) return emptyFindReplaceSnapshot;
       const query = new runtime.SearchQuery({
         search: "",
         replace: "",
@@ -738,6 +740,7 @@ export function createCodeEditorController(
       }
       pendingUserCompositionBase = null;
       view.setState(createState(nextContent));
+      notifySearch();
       semanticCommands.bindSession(view, documentIdentity?.tabId);
     },
     setDocumentIdentity(nextIdentity: EditorLoadIdentity | null) {
@@ -748,6 +751,7 @@ export function createCodeEditorController(
         emitPendingDocumentChanges();
       }
       documentIdentity = nextIdentity === null ? null : Object.freeze({ ...nextIdentity });
+      searchRuntime?.invalidateFindReplaceResults(view);
       semanticCommands.bindSession(view, documentIdentity?.tabId);
       view.dispatch({ effects: semanticCommands.adapter.resetComposition() });
       // A barrier release rebinds the same document to a new epoch without a text

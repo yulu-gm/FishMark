@@ -12,6 +12,7 @@ import {
   setSearchQuery
 } from "@codemirror/search";
 import { EditorView, ViewPlugin } from "@codemirror/view";
+import { EditorSelection, type Text } from "@codemirror/state";
 import {
   getMarkdownEditorViewMode,
   readCompositionState,
@@ -19,6 +20,7 @@ import {
   computeEditorRevealDelta
 } from "@fishmark/codemirror-adapter";
 import { createEditorDerivedSnapshotFromCache } from "@fishmark/editor-model";
+import type { FindReplaceMatch, FindReplaceSnapshot } from "./code-editor";
 
 export {
   closeSearchPanel,
@@ -32,6 +34,47 @@ export {
   SearchQuery,
   setSearchQuery
 };
+
+const resultProjections = new WeakMap<EditorView, { doc: Text; query: SearchQuery; matches: FindReplaceMatch[] }>();
+
+export function invalidateFindReplaceResults(view: EditorView) {
+  resultProjections.delete(view);
+}
+
+export function readFindReplaceSnapshot(view: EditorView): FindReplaceSnapshot {
+  const { state } = view;
+  const query = getSearchQuery(state);
+  let projection = resultProjections.get(view);
+  if (!projection || projection.doc !== state.doc || projection.query !== query) {
+    const matches: FindReplaceMatch[] = [];
+    if (query.valid && query.search) {
+      const cursor = query.getCursor(state);
+      for (let next = cursor.next(); !next.done; next = cursor.next()) {
+        const { from, to } = next.value;
+        const line = state.doc.lineAt(from);
+        const start = Math.max(line.from, from - 35);
+        const end = Math.max(Math.min(line.to, from + 65), Math.min(to, from + 100));
+        matches.push({ from, to, line: line.number, column: from - line.from + 1,
+          snippet: `${start > line.from ? "…" : ""}${state.sliceDoc(start, end).replace(/\s+/gu, " ")}${end < line.to || end < to ? "…" : ""}` });
+      }
+    }
+    projection = { doc: state.doc, query, matches };
+    resultProjections.set(view, projection);
+  }
+  const { matches } = projection;
+  const selected = matches.findIndex(match => match.from === state.selection.main.from && match.to === state.selection.main.to);
+  return { matchCount: matches.length, currentMatchIndex: selected < 0 ? null : selected + 1, matches };
+}
+
+export function selectFindReplaceMatch(view: EditorView, match: FindReplaceMatch) {
+  const query = getSearchQuery(view.state);
+  if (!query.valid || !query.search || !searchPanelOpen(view.state) || readCompositionState(view.state).active) return;
+  // Objects belong to this exact query and immutable source document projection.
+  // An old result from a reload, edit, or query change must never select a new match.
+  if (!readFindReplaceSnapshot(view).matches.includes(match)) return;
+  view.dispatch({ selection: { anchor: match.from, head: match.to },
+    effects: EditorView.scrollIntoView(EditorSelection.range(match.from, match.to), { y: "center" }), userEvent: "select.search" });
+}
 
 export function createFishmarkSearchExtension() {
   return [search({

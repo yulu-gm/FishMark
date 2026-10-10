@@ -93,9 +93,9 @@ it.each(["render", "effect"])("shows a terminal %s failure without retrying chil
 
 it("clears Search on Escape and identity changes, reopens during exit without stealing the input instance", async () => {
   vi.useFakeTimers();
-  const empty = { matchCount: 0, currentMatchIndex: null };
+  const empty = { matchCount: 0, currentMatchIndex: null, matches: [] };
   const clearFindReplaceQuery = vi.fn(() => empty);
-  const updateFindReplaceQuery = vi.fn(() => ({ matchCount: 2, currentMatchIndex: 1 }));
+  const updateFindReplaceQuery = vi.fn(() => ({ matchCount: 2, currentMatchIndex: 1, matches: [] }));
   const focus = vi.fn();
   const editorRef = { current: { clearFindReplaceQuery, updateFindReplaceQuery, focus, prepareFindReplace: vi.fn(async () => { }) } as unknown as CodeEditorHandle };
   function Harness({ epoch = 1, revision = 1 }: { epoch?: number; revision?: number }) {
@@ -108,6 +108,8 @@ it("clears Search on Escape and identity changes, reopens during exit without st
         findInputRef={search.findInputRef} handleFindReplaceKeyDown={search.handleFindReplaceKeyDown}
         handleFindTextChange={search.handleFindTextChange} handleReplaceTextChange={search.handleReplaceTextChange}
         hasMatches={search.findReplaceSnapshot.matchCount > 0} onPrevious={vi.fn()} onNext={vi.fn()} onReplaceCurrent={vi.fn()} onReplaceAll={vi.fn()}
+        matches={search.findReplaceSnapshot.matches} currentMatchIndex={search.findReplaceSnapshot.currentMatchIndex}
+        onSelectMatch={search.selectFindReplaceMatch}
       /> : null}
     </div>;
   }

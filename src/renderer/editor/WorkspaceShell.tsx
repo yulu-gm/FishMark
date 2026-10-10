@@ -7,7 +7,6 @@ import {
   type SVGProps
 } from "react";
 import { ConflictBanner } from "./components/ConflictBanner";
-import { FindReplacePanel } from "./components/FindReplacePanel";
 import { NotificationHost } from "./components/NotificationHost";
 import { OutlinePanel } from "./components/OutlinePanel";
 import { SettingsDrawer } from "./components/SettingsDrawer";
@@ -27,6 +26,11 @@ import {
 const CodeEditorView = lazy(async () => {
   const module = await import("../code-editor-view");
   return { default: module.CodeEditorView };
+});
+
+const FindReplacePanel = lazy(async () => {
+  const module = await import("./components/FindReplacePanel");
+  return { default: module.FindReplacePanel };
 });
 
 const ThemeSurfaceHost = lazy(async () => {
@@ -184,7 +188,7 @@ export function WorkspaceShell({
   const isViewContainerEnabled = isDocumentOpen && activeDocument !== null;
   const { findText, replaceText, findReplaceSnapshot, setFindReplaceSnapshot,
     findInputRef, matchStatusLabel, closeFindReplacePanel, handleFindReplaceKeyDown,
-    handleFindTextChange, handleReplaceTextChange, toggleSearchViewContainer, handleWorkspaceKeyDownCapture
+    handleFindTextChange, handleReplaceTextChange, toggleSearchViewContainer, handleWorkspaceKeyDownCapture, selectFindReplaceMatch
   } = useFindReplacePresentation({
     activeTabId, editorEpoch, editorLoadRevision, editorRef,
     isDocumentOpen, activeViewContainer, isSearchViewActive, isViewContainerEnabled, onCloseViewContainer, onToggleViewContainer
@@ -517,7 +521,9 @@ export function WorkspaceShell({
                         data-fishmark-region="side-panel-body"
                       >
                         {visibleViewContainer === "search" ? (
+                          <Suspense fallback={null}>
                           <FindReplacePanel
+                            autoFocus={isSearchViewActive}
                             findText={findText}
                             replaceText={replaceText}
                             matchStatusLabel={matchStatusLabel}
@@ -526,11 +532,15 @@ export function WorkspaceShell({
                             handleFindTextChange={handleFindTextChange}
                             handleReplaceTextChange={handleReplaceTextChange}
                             hasMatches={findReplaceSnapshot.matchCount > 0}
+                            matches={findReplaceSnapshot.matches}
+                            currentMatchIndex={findReplaceSnapshot.currentMatchIndex}
+                            onSelectMatch={selectFindReplaceMatch}
                             onPrevious={() => setFindReplaceSnapshot(editorRef.current?.findPreviousMatch() ?? findReplaceSnapshot)}
                             onNext={() => setFindReplaceSnapshot(editorRef.current?.findNextMatch() ?? findReplaceSnapshot)}
                             onReplaceCurrent={() => setFindReplaceSnapshot(editorRef.current?.replaceCurrentMatch() ?? findReplaceSnapshot)}
                             onReplaceAll={() => setFindReplaceSnapshot(editorRef.current?.replaceAllMatches() ?? findReplaceSnapshot)}
                           />
+                          </Suspense>
                         ) : null}
                         {visibleViewContainer === "outline" ? (
                           <OutlinePanel

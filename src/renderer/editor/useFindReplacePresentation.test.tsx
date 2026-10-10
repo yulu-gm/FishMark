@@ -10,7 +10,7 @@ import { useFindReplacePresentation } from "./useFindReplacePresentation";
 import { useViewContainerPresentation } from "./useViewContainerPresentation";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-const empty = { matchCount: 0, currentMatchIndex: null };
+const empty = { matchCount: 0, currentMatchIndex: null, matches: [] };
 const activeDocument: WorkspaceDocumentSnapshot = {
   tabId: "tab-a", path: "C:/note.md", content: "alpha beta", name: "note.md",
   encoding: "utf-8", revision: 1, savedRevision: 1, isDirty: false, saveState: "idle"
@@ -23,7 +23,7 @@ let frames: Map<number, FrameRequestCallback>;
 let nextFrame: number;
 let controller: CodeEditorHandle;
 
-function Harness({ revision = 1, shellMode = "editing" }: { revision?: number; shellMode?: "editing" | "reading" }) {
+function Harness({ revision = 1, shellMode = "editing", panelReady = true }: { revision?: number; shellMode?: "editing" | "reading"; panelReady?: boolean }) {
   const editorRef = useRef(controller);
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const panel = useViewContainerPresentation();
@@ -45,11 +45,14 @@ function Harness({ revision = 1, shellMode = "editing" }: { revision?: number; s
     <button onClick={() => panel.toggleViewContainer("outline")}>Outline</button>
     <output data-testid="active-container">{panel.activeViewContainer}</output>
     {(panel.activeViewContainer ?? panel.closingViewContainer) === "search" ? <aside className="side-panel" data-state={panel.activeViewContainer ? "open" : "closing"}>
-      <FindReplacePanel findText={search.findText} replaceText={search.replaceText}
+      {panelReady ? <FindReplacePanel findText={search.findText} replaceText={search.replaceText}
+        autoFocus={panel.activeViewContainer === "search"}
         matchStatusLabel={search.matchStatusLabel} findInputRef={search.findInputRef}
         handleFindReplaceKeyDown={search.handleFindReplaceKeyDown}
         handleFindTextChange={search.handleFindTextChange} handleReplaceTextChange={search.handleReplaceTextChange}
-        hasMatches={false} onPrevious={noop} onNext={noop} onReplaceCurrent={noop} onReplaceAll={noop} />
+        hasMatches={false} onPrevious={noop} onNext={noop} onReplaceCurrent={noop} onReplaceAll={noop}
+        matches={search.findReplaceSnapshot.matches} currentMatchIndex={search.findReplaceSnapshot.currentMatchIndex}
+        onSelectMatch={search.selectFindReplaceMatch} /> : null}
     </aside> : null}
   </div>;
 }
@@ -67,6 +70,7 @@ beforeEach(() => {
     prepareFindReplace: vi.fn(async () => {}), clearFindReplaceQuery: vi.fn(() => empty),
     getContent: vi.fn(() => activeDocument.content), getSelection: vi.fn(() => ({ anchor: 0, head: 0 })),
     updateFindReplaceQuery: vi.fn(() => empty), findNextMatch: vi.fn(() => empty), findPreviousMatch: vi.fn(() => empty),
+    selectFindReplaceMatch: vi.fn(() => empty),
     focus: vi.fn(() => container.querySelector<HTMLElement>('[aria-label="Markdown editor"]')!.focus())
   } as unknown as CodeEditorHandle;
 });
@@ -204,6 +208,46 @@ it("does not let a delayed Search preparation reopen after a document revision c
   await render({ revision: 2 });
   await act(async () => ready());
   expect(input()).toBeNull();
+});
+
+it("closes Search on Escape before its lazy form mounts, without late autofocus during exit", async () => {
+  await render({ panelReady: false });
+  await flushFrames();
+  await key(editor(), "f", { ctrlKey: true });
+  expect(container.querySelector("output")?.textContent).toBe("search");
+  expect(input()).toBeNull();
+  const event = await key(editor(), "Escape");
+  expect(event.defaultPrevented).toBe(true);
+  expect(container.querySelector("output")?.textContent).toBe("");
+  expect(controller.clearFindReplaceQuery).toHaveBeenCalledTimes(1);
+  expect(document.activeElement).toBe(editor());
+  // Model the chunk finishing while the closing animation still owns its view.
+  await render({ panelReady: true });
+  expect(container.querySelector(".side-panel")?.getAttribute("data-state")).toBe("closing");
+  expect(document.activeElement).toBe(editor());
+  await act(async () => vi.advanceTimersByTime(180));
+  expect(input()).toBeNull();
+  expect(container.querySelector("output")?.textContent).toBe("");
+});
+
+it("leaves Enter on a result button available for native activation instead of navigating next", async () => {
+  const match = { from: 0, to: 5, line: 1, column: 1, snippet: "alpha beta" };
+  const snapshot = { matchCount: 1, currentMatchIndex: 1, matches: [match] };
+  vi.mocked(controller.updateFindReplaceQuery).mockReturnValue(snapshot);
+  vi.mocked(controller.selectFindReplaceMatch).mockReturnValue(snapshot);
+  vi.mocked(controller.getSelection).mockReturnValue({ anchor: 0, head: 5 });
+  await render();
+  await key(editor(), "f", { ctrlKey: true });
+  const result = container.querySelector<HTMLButtonElement>(".find-replace-result")!;
+  result.focus();
+  const event = await key(result, "Enter");
+  expect(event.defaultPrevented).toBe(false);
+  expect(controller.findNextMatch).not.toHaveBeenCalled();
+  expect(controller.findPreviousMatch).not.toHaveBeenCalled();
+  // jsdom does not synthesize button activation from keydown; test the preserved click path too.
+  await act(async () => result.click());
+  expect(controller.selectFindReplaceMatch).toHaveBeenCalledWith(match);
+  expect(document.activeElement).toBe(result);
 });
 
 it.each(["Escape", "Outline"])("cancels a cold Search request after %s", async action => {
