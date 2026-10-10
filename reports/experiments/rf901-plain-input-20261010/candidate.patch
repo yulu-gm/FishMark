@@ -1,0 +1,471 @@
+diff --git a/packages/codemirror-adapter/src/decorations/block-decorations.ts b/packages/codemirror-adapter/src/decorations/block-decorations.ts
+index 3670111..ab8e6a8 100644
+--- a/packages/codemirror-adapter/src/decorations/block-decorations.ts
++++ b/packages/codemirror-adapter/src/decorations/block-decorations.ts
+@@ -1,6 +1,6 @@
+ import { Decoration, WidgetType, type DecorationSet } from "@codemirror/view";
+-import { type Range } from "@codemirror/state";
+-import type { EditorDerivedSnapshot, PhysicalLine } from "@fishmark/editor-model";
++import { Transaction, type Range } from "@codemirror/state";
++import type { EditorDerivedSnapshot, EditorDerivedState, PhysicalLine } from "@fishmark/editor-model";
+ import { buildRenderPlan, consumeHorizontalSpace, createInactiveBlockquoteDepthClass, createListLineAttributes, resolveListItemMarkerContentStartOffset, type RenderPlan, type RenderPlanEntry } from "@fishmark/markdown-presentation";
+ import { canonicalLeafView } from "./canonical-leaf-view";
+ 
+@@ -74,6 +74,87 @@ export type CreateSelectionScopedBlockDecorationsOptions = CreateBlockDecoration
+   previousActiveLine?: EditingLine;
+ };
+ 
++type PlainInputDecorationsOptions = CreateBlockDecorationsOptions & {
++  baseDecorationSet: DecorationSet;
++  previousDerivedState: EditorDerivedState;
++  transaction: Transaction;
++  compositionActive: boolean;
++  previousHeadingMarkerPresentation: HeadingMarkerPresentation;
++  previousViewMode: EditorViewMode;
++};
++
++// The field has already mapped the base set. This conservative opt-in only replaces one
++// plain paragraph and its physical line; everything outside it must retain canonical identity.
++export function createPlainInputScopedBlockDecorations(
++  options: PlainInputDecorationsOptions
++): BlockDecorationsResult | null {
++  const { transaction, previousDerivedState: previous, snapshot } = options;
++  const presentation = options.headingMarkerPresentation;
++  if (!options.hasEditorFocus || options.compositionActive || options.viewMode !== "wysiwym" ||
++      options.previousViewMode !== options.viewMode || transaction.effects.length > 0 ||
++      transaction.annotation(Transaction.userEvent) !== "input.type" ||
++      presentation?.mode !== options.previousHeadingMarkerPresentation.mode ||
++      presentation.revealed !== null || options.previousHeadingMarkerPresentation.revealed !== null ||
++      transaction.startState.selection.ranges.length !== 1 || transaction.state.selection.ranges.length !== 1 ||
++      previous.source !== transaction.startState.doc.toString() || options.source !== transaction.newDoc.toString()) return null;
++
++  const changes: Array<{ from: number; to: number; text: string }> = [];
++  transaction.changes.iterChanges((from, to, _fromB, _toB, text) => changes.push({ from, to, text: text.toString() }));
++  const change = changes[0];
++  if (changes.length !== 1 || !change || change.from !== change.to || !/^[\p{L}\p{N}]$/u.test(change.text)) return null;
++  const oldSelection = previous.selection, newSelection = options.activeBlockState.selection;
++  if (oldSelection.anchor !== change.from || oldSelection.head !== change.from ||
++      newSelection.anchor !== change.from + change.text.length || newSelection.head !== newSelection.anchor ||
++      transaction.startState.selection.main.anchor !== oldSelection.anchor || transaction.startState.selection.main.head !== oldSelection.head ||
++      transaction.state.selection.main.anchor !== newSelection.anchor || transaction.state.selection.main.head !== newSelection.head) return null;
++
++  const oldSnapshot = previous.activeBlockState.snapshot;
++  if (oldSnapshot.tree.referenceDefinitions.size || oldSnapshot.tree.footnoteDefinitions.size ||
++      snapshot.tree.referenceDefinitions.size || snapshot.tree.footnoteDefinitions.size) return null;
++  const oldNodes = childrenOf(oldSnapshot.tree.root), newNodes = childrenOf(snapshot.tree.root);
++  const oldActive = oldSnapshot.nodeById(previous.activeBlockState.activeRootNodeId ?? "");
++  const newActive = snapshot.nodeById(options.activeBlockState.activeRootNodeId ?? "");
++  const oldLine = previous.activeLine, newLine = options.activeLine;
++  if (!oldActive || !newActive || oldActive.kind !== "paragraph" || newActive.kind !== "paragraph" ||
++      change.from <= oldActive.content.startOffset || change.from > oldActive.content.endOffset ||
++      oldActive.source.startOffset !== newActive.source.startOffset || oldLine.kind !== "text" || newLine?.kind !== "text" ||
++      oldLine.from !== newLine.from || oldLine.number !== newLine.number ||
++      oldLine.to + change.text.length !== newLine.to ||
++      previous.editingDocument.lines.length !== options.editingDocument?.lines.length ||
++      oldActive.content.startOffset !== oldLine.from || oldActive.content.endOffset !== oldLine.to ||
++      newActive.content.startOffset !== newLine.from || newActive.content.endOffset !== newLine.to ||
++      previous.editingDocument.semanticLineMap.byLineNumber.get(oldLine.number)?.role !==
++        options.editingDocument.semanticLineMap.byLineNumber.get(newLine.number)?.role || oldNodes.length !== newNodes.length) return null;
++
++  for (let i = 0; i < oldNodes.length; i++) {
++    const oldNode = oldNodes[i]!, newNode = newNodes[i]!;
++    if (!isMarkdownLeafNode(oldNode) || !isMarkdownLeafNode(newNode) ||
++        (oldNode.kind !== "paragraph" && oldNode.kind !== "heading") || oldNode.kind !== newNode.kind ||
++        !oldNode.inline || !newNode.inline || oldNode.inline.children.some((node) => node.type !== "text") ||
++        newNode.inline.children.some((node) => node.type !== "text") ||
++        /[\r\n]/u.test(previous.source.slice(oldNode.content.startOffset, oldNode.content.endOffset)) ||
++        /[\r\n]/u.test(options.source.slice(newNode.content.startOffset, newNode.content.endOffset)) ||
++        transaction.changes.mapPos(oldNode.source.startOffset) !== newNode.source.startOffset ||
++        transaction.changes.mapPos(oldNode.source.endOffset, 1) !== newNode.source.endOffset ||
++        (oldNode.id === oldActive.id ? newNode.id !== newActive.id : oldNode.id !== newNode.id)) return null;
++  }
++
++  const context = createBlockDecorationContext(options);
++  const ranges: Range<Decoration>[] = [];
++  const role = context.editingDocument.semanticLineMap.byLineNumber.get(newLine.number)?.role ?? null;
++  ranges.push(Decoration.line({ attributes: { class: createPhysicalLineClassNames(newLine, role, true).join(" ") } }).range(newLine.from));
++  appendDecorationsForNode(newActive, context, ranges);
++  const from = newActive.content.startOffset, to = newActive.content.endOffset;
++  return {
++    decorationSet: options.baseDecorationSet.update({
++      filterFrom: from, filterTo: to,
++      filter: (start, end) => start === end ? start < from || start >= to : end <= from || start >= to,
++      add: ranges, sort: true
++    }),
++    signature: `plain-input:${snapshot.revision}:${createActiveDecorationSignature(context)}`
++  };
++}
++
+ // Widget and preview paths consume this DTO; it is built from the canonical leaf node, not from
+ // the rich projection.
+ type DecoratableBlock = MarkdownBlock;
+diff --git a/packages/codemirror-adapter/src/decorations/plain-input-decoration-reuse.test.ts b/packages/codemirror-adapter/src/decorations/plain-input-decoration-reuse.test.ts
+new file mode 100644
+index 0000000..ca6947e
+--- /dev/null
++++ b/packages/codemirror-adapter/src/decorations/plain-input-decoration-reuse.test.ts
+@@ -0,0 +1,130 @@
++import { EditorSelection, EditorState, StateEffect, Transaction } from "@codemirror/state";
++import { type DecorationSet } from "@codemirror/view";
++import { createEditorDerivedSnapshotFromCache, createEditorDerivedState } from "@fishmark/editor-model";
++import { applyIncrementalEdit, createDocumentStructureCache } from "@fishmark/markdown-engine";
++import { describe, expect, it } from "vitest";
++import { createBlockDecorations, createPlainInputScopedBlockDecorations } from "./block-decorations";
++
++function setup(source = "# Before\n\nPlain paragraph.\n\n\n# After\n\nAnother paragraph.", insert = "x", at = source.indexOf("paragraph") + 4, event = "input.type", removed = 0) {
++  const cache = createDocumentStructureCache(source);
++  const snapshot = createEditorDerivedSnapshotFromCache(cache);
++  const previous = createEditorDerivedState({ snapshot, selection: { anchor: at, head: at } });
++  const transaction = EditorState.create({ doc: source, selection: { anchor: at } }).update({
++    changes: { from: at, to: at + removed, insert }, selection: { anchor: at + insert.length },
++    annotations: Transaction.userEvent.of(event)
++  });
++  const nextCache = applyIncrementalEdit(cache, { fromOffset: at, toOffset: at + removed, insertedText: insert }).cache;
++  const nextSnapshot = createEditorDerivedSnapshotFromCache(nextCache);
++  const next = createEditorDerivedState({ snapshot: nextSnapshot, selection: { anchor: at + insert.length, head: at + insert.length } });
++  const presentation = { mode: "editing" as const, revealed: null };
++  const oldSet = createBlockDecorations({ snapshot, ...previous, hasEditorFocus: true, headingMarkerPresentation: presentation }).decorationSet;
++  const options = {
++    snapshot: nextSnapshot, ...next, hasEditorFocus: true,
++    baseDecorationSet: oldSet.map(transaction.changes), previousDerivedState: previous,
++    transaction, compositionActive: false,
++    headingMarkerPresentation: presentation, previousHeadingMarkerPresentation: presentation,
++    viewMode: "wysiwym" as const, previousViewMode: "wysiwym" as const
++  };
++  return { options, next };
++}
++
++function allRanges(set: DecorationSet) {
++  const result: unknown[] = [];
++  for (let cursor = set.iter(); cursor.value; cursor.next()) {
++    result.push({ from: cursor.from, to: cursor.to, spec: cursor.value.spec });
++  }
++  return result.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
++}
++
++describe("plain input decoration reuse", () => {
++  it.each(["x", "中", "7", "𐐀"])("matches every full decoration spec and position for %s", (insert) => {
++    const { options } = setup(undefined, insert);
++    const scoped = createPlainInputScopedBlockDecorations(options);
++    expect(scoped).not.toBeNull();
++    expect(allRanges(scoped!.decorationSet)).toEqual(allRanges(createBlockDecorations(options).decorationSet));
++  });
++
++  it.each(["Plain paragraph.", "# Before\n\nPlain paragraph.\n\n# After", `Plain ${"paragraph ".repeat(200)}end.\n\n# After`])("preserves end and adjacent line decorations: %s", (source) => {
++    const at = source.indexOf("\n\n# After") < 0 ? source.length : source.indexOf("\n\n# After");
++    const { options } = setup(source, "x", at);
++    const scoped = createPlainInputScopedBlockDecorations(options);
++    expect(scoped).not.toBeNull();
++    expect(allRanges(scoped!.decorationSet)).toEqual(allRanges(createBlockDecorations(options).decorationSet));
++  });
++
++  it("matches full rebuilds through repeated mapped edits", () => {
++    let source = "# Before\n\nPlain paragraph.\n\n\n# After";
++    let at = source.indexOf("paragraph") + 4;
++    let set: DecorationSet | null = null;
++    for (let i = 0; i < 30; i++) {
++      const { options, next } = setup(source, i % 2 ? "中" : "x", at);
++      if (set) options.baseDecorationSet = set.map(options.transaction.changes);
++      set = createPlainInputScopedBlockDecorations(options)!.decorationSet;
++      expect(allRanges(set)).toEqual(allRanges(createBlockDecorations(options).decorationSet));
++      source = next.source;
++      at++;
++    }
++  });
++
++  it("retains complete decoration equivalence in stable reading mode", () => {
++    const { options } = setup();
++    const presentation = { mode: "reading" as const, revealed: null };
++    const old = options.previousDerivedState;
++    options.baseDecorationSet = createBlockDecorations({ snapshot: old.activeBlockState.snapshot, ...old, hasEditorFocus: true, headingMarkerPresentation: presentation }).decorationSet.map(options.transaction.changes);
++    const readingOptions = { ...options, headingMarkerPresentation: presentation, previousHeadingMarkerPresentation: presentation };
++    const scoped = createPlainInputScopedBlockDecorations(readingOptions);
++    expect(scoped).not.toBeNull();
++    expect(allRanges(scoped!.decorationSet)).toEqual(allRanges(createBlockDecorations(readingOptions).decorationSet));
++  });
++
++  it("rejects raw CRLF sources that disagree with the transaction document", () => {
++    expect(createPlainInputScopedBlockDecorations(setup("# Before\r\n\r\nPlain paragraph.\r\n\r\n# After").options)).toBeNull();
++  });
++
++  it("rejects multiple changes and selection ranges", () => {
++    const { options } = setup();
++    const at = options.previousDerivedState.selection.head;
++    const multiple = options.transaction.startState.update({ changes: [{ from: at, insert: "x" }, { from: at + 2, insert: "y" }], selection: { anchor: at + 1 }, userEvent: "input.type" });
++    expect(createPlainInputScopedBlockDecorations({ ...options, transaction: multiple, source: multiple.newDoc.toString() })).toBeNull();
++    const state = EditorState.create({ doc: options.previousDerivedState.source, selection: EditorSelection.create([EditorSelection.cursor(at), EditorSelection.cursor(at + 2)]), extensions: EditorState.allowMultipleSelections.of(true) });
++    const transaction = state.update({ changes: { from: at, insert: "x" }, userEvent: "input.type" });
++    expect(createPlainInputScopedBlockDecorations({ ...options, transaction })).toBeNull();
++  });
++
++  it.each(["input.type.compose", "input.paste", "undo", "redo", "input.complete", "input.command"])("rejects provenance %s", (event) => {
++    expect(createPlainInputScopedBlockDecorations(setup(undefined, "x", undefined, event).options)).toBeNull();
++  });
++  it.each(["xx", "\n", " ", "*", "", "😀"])("rejects nonordinary insertion %j", (insert) => {
++    expect(createPlainInputScopedBlockDecorations(setup(undefined, insert).options)).toBeNull();
++  });
++  it("rejects deletion, replacement, start insertion and changed line structure", () => {
++    expect(createPlainInputScopedBlockDecorations(setup(undefined, "x", undefined, "input.type", 1).options)).toBeNull();
++    expect(createPlainInputScopedBlockDecorations(setup(undefined, "", undefined, "input.type", 1).options)).toBeNull();
++    expect(createPlainInputScopedBlockDecorations(setup("Plain paragraph.", "x", 0).options)).toBeNull();
++    expect(createPlainInputScopedBlockDecorations(setup("# Title\n\nPlain paragraph.", "x", 4).options)).toBeNull();
++  });
++
++  it.each([
++    "**rich**", "[link](https://example.test)", "`code`", "![alt](image.png)", "$math$",
++    "> Quote", "- List", "```\ncode\n```", "---", "$$\nmath\n$$",
++    "<img src='x'>", "| A | B |\n| --- | --- |\n| C | D |",
++    "[ref]: https://example.test", "[^n]: Footnote", "Multiline\nparagraph"
++  ])("rejects other document dependencies or complex blocks %s", (other) => {
++    expect(createPlainInputScopedBlockDecorations(setup(`Plain paragraph.\n\n${other}`).options)).toBeNull();
++  });
++
++  it("rejects composition, blur, source mode, reveal, effects and unexpected selection", () => {
++    const { options } = setup();
++    expect(createPlainInputScopedBlockDecorations({ ...options, compositionActive: true })).toBeNull();
++    expect(createPlainInputScopedBlockDecorations({ ...options, hasEditorFocus: false })).toBeNull();
++    expect(createPlainInputScopedBlockDecorations({ ...options, previousViewMode: "source" })).toBeNull();
++    expect(createPlainInputScopedBlockDecorations({ ...options, viewMode: "source" })).toBeNull();
++    expect(createPlainInputScopedBlockDecorations({ ...options, previousHeadingMarkerPresentation: { mode: "reading", revealed: null } })).toBeNull();
++    expect(createPlainInputScopedBlockDecorations({ ...options, headingMarkerPresentation: { mode: "editing", revealed: { from: 0, to: 2 } } })).toBeNull();
++    const effect = StateEffect.define<null>();
++    const transaction = options.transaction.startState.update({ changes: { from: options.previousDerivedState.selection.head, insert: "x" }, effects: effect.of(null), annotations: Transaction.userEvent.of("input.type") });
++    expect(createPlainInputScopedBlockDecorations({ ...options, transaction })).toBeNull();
++    expect(createPlainInputScopedBlockDecorations({ ...options, activeBlockState: { ...options.activeBlockState, selection: { anchor: 0, head: 1 } } })).toBeNull();
++    expect(createPlainInputScopedBlockDecorations({ ...options, previousDerivedState: { ...options.previousDerivedState, selection: { anchor: 0, head: 0 } } })).toBeNull();
++  });
++});
+diff --git a/packages/codemirror-adapter/src/extensions/markdown.test.ts b/packages/codemirror-adapter/src/extensions/markdown.test.ts
+index e3cc552..0da4b49 100644
+--- a/packages/codemirror-adapter/src/extensions/markdown.test.ts
++++ b/packages/codemirror-adapter/src/extensions/markdown.test.ts
+@@ -38,6 +38,7 @@ type HarnessOptions = {
+   onOpenLink?: (href: string) => void;
+   onBlur?: () => void;
+   structureObserver?: EditorStructureObserver;
++  reusePlainParagraphDecorations?: boolean;
+ };
+ 
+ const createHarness = (options: HarnessOptions) => {
+@@ -54,7 +55,8 @@ const createHarness = (options: HarnessOptions) => {
+         },
+         onBlockDecorationsBuilt: options.onBlockDecorationsBuilt,
+         onOpenLink: options.onOpenLink,
+-        onBlur: options.onBlur
++        onBlur: options.onBlur,
++        reusePlainParagraphDecorations: options.reusePlainParagraphDecorations
+       } as Parameters<typeof createFishMarkMarkdownExtensions>[0] & {
+         onBlockDecorationsBuilt?: () => void;
+         onOpenLink?: (href: string) => void;
+@@ -74,6 +76,51 @@ const createHarness = (options: HarnessOptions) => {
+ };
+ 
+ describe("createFishMarkMarkdownExtensions", () => {
++  it("opts into plain input reuse while retaining source, selection and native history behavior", async () => {
++    const source = "# Before\n\nPlain paragraph.\n\n# After";
++    const fullBuilds = vi.fn(), reusedBuilds = vi.fn();
++    const full = createHarness({ source, onBlockDecorationsBuilt: fullBuilds });
++    const reused = createHarness({ source, onBlockDecorationsBuilt: reusedBuilds, reusePlainParagraphDecorations: true });
++    const rendered: string[] = [];
++    const immediatelyAfterInput: string[] = [];
++    for (const harness of [full, reused]) {
++      harness.view.focus();
++      await flushMicrotasks();
++      harness.view.dispatch({ selection: { anchor: source.indexOf("paragraph") + 4 } });
++      const before = harness === full ? fullBuilds.mock.calls.length : reusedBuilds.mock.calls.length;
++      const at = harness.view.state.selection.main.head;
++      harness.view.dispatch({ changes: { from: at, insert: "中" }, selection: { anchor: at + 1 }, userEvent: "input.type" });
++      expect((harness === full ? fullBuilds : reusedBuilds).mock.calls.length - before).toBe(harness === full ? 1 : 0);
++      expect(harness.view.state.doc.toString()).toBe(source.slice(0, at) + "中" + source.slice(at));
++      expect(harness.view.state.selection.main.head).toBe(at + 1);
++      immediatelyAfterInput.push(harness.view.contentDOM.innerHTML);
++      expect(undo(harness.view)).toBe(true);
++      expect(harness.view.state.doc.toString()).toBe(source);
++      expect(redo(harness.view)).toBe(true);
++      expect(harness.view.state.doc.toString()).toBe(source.slice(0, at) + "中" + source.slice(at));
++      harness.view.dispatch({ selection: { anchor: 3 } });
++      expect(harness.view.state.selection.main.head).toBe(3);
++      rendered.push(harness.view.contentDOM.innerHTML);
++    }
++    expect(immediatelyAfterInput[1]).toBe(immediatelyAfterInput[0]);
++    expect(rendered[1]).toBe(rendered[0]);
++    full.destroy();
++    reused.destroy();
++  });
++
++  it("uses full rebuilds for table documents even with the candidate enabled", async () => {
++    const source = "Plain paragraph.\n\n| A | B |\n| --- | --- |\n| C | D |";
++    const builds = vi.fn();
++    const harness = createHarness({ source, reusePlainParagraphDecorations: true, onBlockDecorationsBuilt: builds });
++    harness.view.focus();
++    await flushMicrotasks();
++    harness.view.dispatch({ selection: { anchor: 6 } });
++    const before = builds.mock.calls.length;
++    harness.view.dispatch({ changes: { from: 6, insert: "x" }, selection: { anchor: 7 }, userEvent: "input.type" });
++    expect(builds.mock.calls.length - before).toBe(1);
++    expect(harness.view.contentDOM.querySelector(".cm-table-widget")).not.toBeNull();
++    harness.destroy();
++  });
+   it("navigates Unicode link source by grapheme and preserves native delete history", () => {
+     const source = "[label](https://example.test/😀é)", { view, destroy } = createHarness({ source });
+     const emoji = source.indexOf("😀");
+diff --git a/packages/codemirror-adapter/src/extensions/markdown.ts b/packages/codemirror-adapter/src/extensions/markdown.ts
+index 7c25aaf..95d97d2 100644
+--- a/packages/codemirror-adapter/src/extensions/markdown.ts
++++ b/packages/codemirror-adapter/src/extensions/markdown.ts
+@@ -87,7 +87,7 @@ import { createGroupedShortcutKeymaps } from "../markdown-shortcuts";
+ import {
+   type TableWidgetCallbacks
+ } from "../decorations";
+-import { createSelectionScopedBlockDecorations } from "../decorations/block-decorations";
++import { createPlainInputScopedBlockDecorations, createSelectionScopedBlockDecorations } from "../decorations/block-decorations";
+ import {
+   INACTIVE_INLINE_LINK_HREF_ATTRIBUTE,
+   INACTIVE_INLINE_LINK_SELECTOR
+@@ -119,6 +119,8 @@ export type CreateFishMarkMarkdownExtensionsOptions = {
+   headingPresentationMode?: HeadingPresentationMode;
+   onUserEditIntent?: () => void;
+   viewMode?: EditorViewMode;
++  /** Conservative plain-input decoration experiment. Disabled unless explicitly requested. */
++  reusePlainParagraphDecorations?: boolean;
+ };
+ 
+ type MarkdownExtensionRuntime = {
+@@ -636,7 +638,7 @@ export function createFishMarkMarkdownExtensions(
+   const recomputeDerivedState = (
+     view: EditorView,
+     state: EditorState,
+-    recomputeOptions: boolean | { force?: boolean; reuseMappedDecorations?: boolean } = false,
++    recomputeOptions: boolean | { force?: boolean; reuseMappedDecorations?: boolean; plainInputTransaction?: Transaction } = false,
+     effects: readonly StateEffect<unknown>[] = []
+   ) => {
+     const force = typeof recomputeOptions === "boolean" ? recomputeOptions : recomputeOptions.force === true;
+@@ -644,6 +646,30 @@ export function createFishMarkMarkdownExtensions(
+       typeof recomputeOptions === "object" && recomputeOptions.reuseMappedDecorations === true;
+     const editorDerivedState = createLiveEditorDerivedState(state);
+ 
++    const plainInputTransaction = typeof recomputeOptions === "object" ? recomputeOptions.plainInputTransaction : undefined;
++    if (!force && effects.length === 0 && options.reusePlainParagraphDecorations && plainInputTransaction) {
++      const scoped = createPlainInputScopedBlockDecorations({
++        snapshot: editorDerivedState.activeBlockState.snapshot,
++        ...editorDerivedState,
++        baseDecorationSet: state.field(blockDecorationsField),
++        previousDerivedState: runtime.editorDerivedState,
++        transaction: plainInputTransaction,
++        compositionActive: readCompositionState(plainInputTransaction.startState).active || readCompositionState(state).active,
++        hasEditorFocus: runtime.hasEditorFocus,
++        headingMarkerPresentation: readHeadingPresentation(state),
++        previousHeadingMarkerPresentation: readHeadingPresentation(plainInputTransaction.startState),
++        viewMode: getMarkdownEditorViewMode(state),
++        previousViewMode: getMarkdownEditorViewMode(plainInputTransaction.startState)
++      });
++      if (scoped) {
++        runtime.editorDerivedState = editorDerivedState;
++        notifyActiveBlockChange(editorDerivedState.activeBlockState);
++        applyBlockDecorations(view, scoped.decorationSet, scoped.signature, true);
++        syncTableInteractionFocus(view, editorDerivedState.activeBlockState);
++        return;
++      }
++    }
++
+     if (!force && reuseMappedDecorations && runtime.editorDerivedState.source === editorDerivedState.source) {
+       const scopedDecorations = createSelectionScopedBlockDecorations({
+         snapshot: createEditorDerivedSnapshotFromCache(readEditorStructureCache(state)),
+@@ -1350,7 +1376,8 @@ export function createFishMarkMarkdownExtensions(
+       }
+ 
+       recomputeDerivedState(update.view, update.state, {
+-        reuseMappedDecorations: !update.docChanged && update.selectionSet
++        reuseMappedDecorations: !update.docChanged && update.selectionSet,
++        plainInputTransaction: update.docChanged && update.transactions.length === 1 ? update.transactions[0] : undefined
+       });
+     })
+   ];
+diff --git a/scripts/plain-input-experiment.mjs b/scripts/plain-input-experiment.mjs
+new file mode 100644
+index 0000000..55ae80d
+--- /dev/null
++++ b/scripts/plain-input-experiment.mjs
+@@ -0,0 +1,50 @@
++import { execFileSync } from "node:child_process";
++import { createHash } from "node:crypto";
++import { readFileSync } from "node:fs";
++import { resolve } from "node:path";
++import ts from "typescript";
++
++const baseline = "1654e82cd28008cc4f6ae9adec04c5a4d56389ec";
++const files = ["packages/codemirror-adapter/src/decorations/block-decorations.ts", "packages/codemirror-adapter/src/extensions/markdown.ts"];
++const hash = (source) => createHash("sha256").update(source).digest("hex");
++
++// Local diagnostic transform only. Normal product builds never load this plugin.
++export function createPlainInputExperiment(projectRoot, variant, counters = false) {
++  if (!["A", "B"].includes(variant)) throw new Error("Experiment variant must be A or B");
++  const sources = new Map(files.map((file) => [resolve(projectRoot, file).replaceAll("\\", "/"), {
++    file, baseline: execFileSync("git", ["show", `${baseline}:${file}`], { cwd: projectRoot, encoding: "utf8" }),
++    candidate: readFileSync(resolve(projectRoot, file), "utf8")
++  }]));
++  const manifest = [];
++  return {
++    manifest: () => ({ variant, baseline, counters, files: [...sources.values()].map((entry) => ({ file: entry.file,
++      baselineSha256: hash(entry.baseline), candidateSha256: hash(entry.candidate) })), applied: manifest }),
++    plugin: {
++      name: "fishmark-local-plain-input-experiment", enforce: "pre",
++      load(id) {
++        const entry = sources.get(id.split("?")[0]);
++        if (variant !== "A" || !entry) return null;
++        manifest.push({ file: entry.file, action: "load-official-baseline", sha256: hash(entry.baseline) });
++        return entry.baseline;
++      },
++      transform(source, id) {
++        const entry = sources.get(id.split("?")[0]);
++        if (variant !== "B" || !entry) return null;
++        let transformed = source;
++        if (entry.file.endsWith("extensions/markdown.ts")) {
++          const ast = ts.createSourceFile(entry.file, source, ts.ScriptTarget.Latest, true);
++          const declarations = ast.statements.filter((node) => ts.isFunctionDeclaration(node) && node.name?.text === "createFishMarkMarkdownExtensions" && node.body);
++          if (declarations.length !== 1) throw new Error("Expected one extension constructor");
++          const at = declarations[0].body.getStart(ast) + 1;
++          transformed = source.slice(0, at) + "\noptions = { ...options, reusePlainParagraphDecorations: true };\n" + source.slice(at);
++        } else if (counters) {
++          const needle = "const from = newActive.content.startOffset, to = newActive.content.endOffset;";
++          if (source.split(needle).length !== 2) throw new Error("Expected one scoped input completion point");
++          transformed = source.replace(needle, `${needle}\n(globalThis as unknown as { __plainReuseCount: number }).__plainReuseCount = ((globalThis as unknown as { __plainReuseCount?: number }).__plainReuseCount ?? 0) + 1;`);
++        }
++        manifest.push({ file: entry.file, action: "candidate-opt-in", sourceSha256: hash(source), transformedSha256: hash(transformed) });
++        return transformed === source ? null : transformed;
++      }
++    }
++  };
++}
+diff --git a/scripts/probe-editor-runtime-performance.mjs b/scripts/probe-editor-runtime-performance.mjs
+index d24ce23..713ac8b 100644
+--- a/scripts/probe-editor-runtime-performance.mjs
++++ b/scripts/probe-editor-runtime-performance.mjs
+@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
+ import { createServer } from "vite";
+ import { runEditorBehaviorProcess } from "./editor-behavior-process-launcher.mjs";
+ import { createRuntimePhaseInstrumentation } from "./runtime-phase-instrumentation.mjs";
++import { createPlainInputExperiment } from "./plain-input-experiment.mjs";
+ const require = createRequire(import.meta.url);
+ const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+ const port = Number(process.env.FISHMARK_RUNTIME_PERF_PORT ?? "5197");
+@@ -15,10 +16,12 @@ const userDataPath = mkdtempSync(join(dirname(reportPath), "runtime-userData-"))
+ const phaseMode = process.env.FISHMARK_RUNTIME_PHASE_TIMING ?? "off";
+ if (!["on", "off"].includes(phaseMode)) throw new Error("Runtime phase timing must be on or off");
+ const instrumentation = createRuntimePhaseInstrumentation(projectRoot);
++const experiment = process.env.FISHMARK_RUNTIME_DECORATION_VARIANT
++  ? createPlainInputExperiment(projectRoot, process.env.FISHMARK_RUNTIME_DECORATION_VARIANT) : undefined;
+ const server = await createServer({ configFile: resolve(projectRoot, "vite.config.ts"),
+   define: { __FISHMARK_RUNTIME_PHASE_TIMING__: JSON.stringify(phaseMode === "on"),
+     __FISHMARK_RUNTIME_PHASE_TARGETS__: JSON.stringify(instrumentation.targets) },
+-  plugins: phaseMode === "on" ? [instrumentation.plugin] : [],
++  plugins: [...(experiment ? [experiment.plugin] : []), ...(phaseMode === "on" ? [instrumentation.plugin] : [])],
+   server: { host: "localhost", port, strictPort: true, watch: null, hmr: false }, logLevel: "silent" });
+ try {
+   await server.listen();
+@@ -36,4 +39,5 @@ try {
+   await server.close();
+   writeFileSync(join(dirname(reportPath), "phase-transform-manifest.json"),
+     JSON.stringify({ phaseMode, targets: instrumentation.targets, applied: instrumentation.manifest() }, null, 2), { flag: "wx" });
++  if (experiment) writeFileSync(join(dirname(reportPath), "plain-input-experiment-manifest.json"), JSON.stringify(experiment.manifest(), null, 2), { flag: "wx" });
+ }
