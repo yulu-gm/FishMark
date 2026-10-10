@@ -102,7 +102,8 @@ import {
   normalizeStructuralBlankSelectionAnchor
 } from "@fishmark/editor-model";
 import { resolveArrowUp, resolveArrowDown, resolvePointerSelectionAnchor as resolveBlockPointerSelectionAnchor } from "../interactions";
-import { requestEditorElementReveal, type EditorRevealIntent } from "../viewport-reveal";
+import { type EditorRevealIntent } from "../viewport-reveal";
+import { clearTableCaretReveal, noteTableCaretReveal, revealTableCaret } from "../table-caret-reveal";
 
 export type CreateFishMarkMarkdownExtensionsOptions = {
   readAcknowledgedRevision?: () => number | null;
@@ -287,7 +288,12 @@ export function createFishMarkMarkdownExtensions(
         Math.min(liveCursor.offsetInCell ?? target.offsetInCell ?? contentLength, contentLength)
       );
 
-      const shouldRestoreSelection = options?.restoreSelection !== false || document.activeElement !== editor;
+      const domSelection = editor.ownerDocument.getSelection();
+      const hasOwnedSelection = domSelection !== null && domSelection.rangeCount > 0 &&
+        domSelection.anchorNode !== null && editor.contains(domSelection.anchorNode) &&
+        domSelection.focusNode !== null && editor.contains(domSelection.focusNode);
+      const shouldRestoreSelection = options?.restoreSelection !== false ||
+        editor.ownerDocument.activeElement !== editor || !hasOwnedSelection;
 
       if (shouldRestoreSelection) {
         setTableCellSelection(editor, nextOffset);
@@ -295,7 +301,7 @@ export function createFishMarkMarkdownExtensions(
         setTableCellSelection(editor, nextOffset);
       }
 
-      requestEditorElementReveal(view, editor, options?.revealIntent ?? "nearest");
+      noteTableCaretReveal(view, editor, nextOffset, options?.revealIntent ?? "nearest");
     });
   };
 
@@ -1066,6 +1072,7 @@ export function createFishMarkMarkdownExtensions(
     };
 
     destroy() {
+      clearTableCaretReveal(this.view);
       if (this.compositionFinishTimer !== null) clearTimeout(this.compositionFinishTimer);
       pendingTableComposition = null;
       semanticCommands.releaseSession();
@@ -1301,6 +1308,9 @@ export function createFishMarkMarkdownExtensions(
       ...historyKeymap,
       ...defaultKeymap
     ]),
+    EditorView.scrollHandler.of((view, range) =>
+      getMarkdownEditorViewMode(view.state) !== "source" && !readCompositionState(view.state).active &&
+      revealTableCaret(view, range)),
     EditorView.lineWrapping,
     EditorView.contentAttributes.of({
       "aria-label": "Markdown editor",

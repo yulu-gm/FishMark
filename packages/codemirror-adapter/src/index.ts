@@ -113,6 +113,8 @@ export {
 } from "./decorations/footnote-widgets";
 export { clearCodeHighlightCache } from "./decorations/code-highlight-cache";
 export { computeEditorRevealDelta } from "./viewport-reveal";
+export { readTableSourceRangeRects } from "./table-caret-geometry";
+export { revealTableRect } from "./table-caret-reveal";
 export {
   clearCodeHighlightLanguageLoaderState,
   subscribeCodeHighlightParserLoaded,

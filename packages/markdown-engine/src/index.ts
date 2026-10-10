@@ -20,6 +20,7 @@ export type {
   ThematicBreakBlock
 } from "./block-map";
 export type { MarkdownDocument } from "./markdown-document";
+export { projectTableCellSource } from "./table-cell-source";
 // The recursive document model. It is intentionally parser-agnostic and is not yet the
 // production parse path: the legacy block-map parser stays authoritative until RF-405.
 export {

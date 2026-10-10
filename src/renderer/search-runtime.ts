@@ -17,7 +17,8 @@ import {
   getMarkdownEditorViewMode,
   readCompositionState,
   readEditorStructureCache,
-  computeEditorRevealDelta
+  readTableSourceRangeRects,
+  revealTableRect
 } from "@fishmark/codemirror-adapter";
 import { createEditorDerivedSnapshotFromCache } from "@fishmark/editor-model";
 import type { FindReplaceMatch, FindReplaceSnapshot } from "./code-editor";
@@ -93,11 +94,21 @@ export function createFishmarkSearchExtension() {
 
     // 此时 CodeMirror 已挂载滚动目标所在视口；默认源码几何只认识整张替换表格。
     // scrollHandler 本身处于布局阶段，须在 CM 清除目标并重算视口前完成滚动。
-    const scroller = view.scrollDOM;
-    const delta = computeEditorRevealDelta(cell.getBoundingClientRect(), scroller.getBoundingClientRect(), "navigate");
-    scroller.scrollTop = Math.max(0, scroller.scrollTop + delta.top);
-    scroller.scrollLeft = Math.max(0, scroller.scrollLeft + delta.left);
-    return true;
+    const snapshot = createEditorDerivedSnapshotFromCache(readEditorStructureCache(view.state));
+    const target = snapshot.tableAt(selection.from);
+    if (!target) return false;
+    const from = target.cell.content.startOffset;
+    const source = view.state.doc.sliceString(from, target.cell.content.endOffset);
+    const boxes = readTableSourceRangeRects(cell, source, selection.from - from, selection.to - from);
+    if (!boxes.length) return false;
+    const rect = { left: Math.min(...boxes.map(b => b.left)), right: Math.max(...boxes.map(b => b.right)),
+      top: Math.min(...boxes.map(b => b.top)), bottom: Math.max(...boxes.map(b => b.bottom)), width: 0, height: 0 };
+    rect.width = rect.right - rect.left;
+    rect.height = rect.bottom - rect.top;
+    // A match spanning more than a viewport reveals its active end, not the
+    // thousands-pixel cell containing it.
+    const fragment = rect.height <= view.scrollDOM.clientHeight ? rect : boxes[boxes.length - 1]!;
+    return revealTableRect(view, cell, fragment, "navigate");
   })];
 }
 
