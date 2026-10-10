@@ -1,0 +1,86 @@
+diff --git a/packages/codemirror-adapter/src/decorations/block-decorations.test.ts b/packages/codemirror-adapter/src/decorations/block-decorations.test.ts
+index 4f6b8f7..71c9ee3 100644
+--- a/packages/codemirror-adapter/src/decorations/block-decorations.test.ts
++++ b/packages/codemirror-adapter/src/decorations/block-decorations.test.ts
+@@ -14,6 +14,27 @@ function createBlockDecorations(options: Omit<Parameters<typeof buildDecorations
+ // One canonical snapshot per source keeps repeated selection assertions on the same document revision.
+ const snapshots = new Map<string, EditorDerivedSnapshot>();
+ 
++it.each(["- Body", "1. Body", "- [ ] Body", "- Parent\n  - Body", "> - Body", "> - Parent\n>   - Body", "-   Body", "-\tBody", "- **Body**"])(
++  "keeps a native caret anchor only in the final hidden list padding: %s", (source) => {
++    const head = source.indexOf("Body");
++    const { decorationSet } = createBlockDecorations({ source,
++      activeBlockState: createActiveBlockState(snapshotOf(source), { anchor: head, head }),
++      hasEditorFocus: true });
++    const anchors: Array<{ from: number; to: number; text: string }> = [];
++    decorationSet.between(0, source.length, (from, to, decoration) => {
++      if (decoration.spec.attributes?.["data-list-padding-anchor"] !== undefined) {
++        expect(decoration.spec.attributes.class).toBe("cm-inactive-list-source-prefix");
++        anchors.push({ from, to, text: source.slice(from, to) });
++      }
++    });
++    const bodyStart = source.indexOf("**") >= 0 ? head - 2 : head;
++    const anchor = anchors.find(value => value.to === bodyStart);
++    expect(anchor).toBeDefined();
++    expect(anchor!.text).toMatch(/^[ \t]+$/u);
++    expect(anchors.every(value => /^[ \t]+$/u.test(value.text))).toBe(true);
++  }
++);
++
+ function snapshotOf(source: string): EditorDerivedSnapshot {
+   let snapshot = snapshots.get(source);
+ 
+diff --git a/packages/codemirror-adapter/src/decorations/block-decorations.ts b/packages/codemirror-adapter/src/decorations/block-decorations.ts
+index 3670111..f5728f8 100644
+--- a/packages/codemirror-adapter/src/decorations/block-decorations.ts
++++ b/packages/codemirror-adapter/src/decorations/block-decorations.ts
+@@ -1024,7 +1024,7 @@ function appendInactiveListItemFirstLineDecorations(
+   appendSourcePrefixMark(item.markerStart, item.markerEnd, "cm-inactive-list-marker", ranges);
+ 
+   if (!item.task) {
+-    appendSourcePrefixMark(item.markerEnd, contentStartOffset, "cm-inactive-list-source-prefix", ranges);
++    appendInactiveListPaddingAnchor(item.markerEnd, contentStartOffset, ranges);
+     return;
+   }
+ 
+@@ -1036,7 +1036,13 @@ function appendInactiveListItemFirstLineDecorations(
+     }).range(item.task.markerStart, item.task.markerEnd)
+   );
+ 
+-  appendSourcePrefixMark(item.task.markerEnd, contentStartOffset, "cm-inactive-list-source-prefix", ranges);
++  appendInactiveListPaddingAnchor(item.task.markerEnd, contentStartOffset, ranges);
++}
++
++function appendInactiveListPaddingAnchor(from: number, to: number, ranges: Range<Decoration>[]): void {
++  if (to > from) ranges.push(Decoration.mark({ attributes: {
++    class: "cm-inactive-list-source-prefix", "data-list-padding-anchor": ""
++  } }).range(from, to));
+ }
+ 
+ class TaskMarkerWidget extends WidgetType {
+diff --git a/src/renderer/styles/markdown-render.css b/src/renderer/styles/markdown-render.css
+index 946e7fe..97f2c91 100644
+--- a/src/renderer/styles/markdown-render.css
++++ b/src/renderer/styles/markdown-render.css
+@@ -398,6 +398,21 @@
+   width: 0 !important;
+ }
+ 
++/* Chromium paints a body-start native caret using the preceding padding's
++   font metrics. Keep its height while hiding the source and its advance. */
++.document-editor .cm-inactive-list-source-prefix[data-list-padding-anchor] {
++  display: inline-block;
++  width: 0;
++  height: 1em;
++  font-size: inherit;
++  line-height: 1;
++  vertical-align: baseline;
++  caret-color: var(--fishmark-caret-color);
++  overflow: visible;
++  white-space: pre;
++  word-spacing: -1em;
++}
++
+ .document-editor .cm-active-list-source-prefix {
+   position: absolute;
+   top: 0;

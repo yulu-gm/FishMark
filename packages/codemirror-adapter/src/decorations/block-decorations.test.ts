@@ -14,6 +14,27 @@ function createBlockDecorations(options: Omit<Parameters<typeof buildDecorations
 // One canonical snapshot per source keeps repeated selection assertions on the same document revision.
 const snapshots = new Map<string, EditorDerivedSnapshot>();
 
+it.each(["- Body", "1. Body", "- [ ] Body", "- Parent\n  - Body", "> - Body", "> - Parent\n>   - Body", "-   Body", "-\tBody", "- **Body**"])(
+  "keeps a native caret anchor only in the final hidden list padding: %s", (source) => {
+    const head = source.indexOf("Body");
+    const { decorationSet } = createBlockDecorations({ source,
+      activeBlockState: createActiveBlockState(snapshotOf(source), { anchor: head, head }),
+      hasEditorFocus: true });
+    const anchors: Array<{ from: number; to: number; text: string }> = [];
+    decorationSet.between(0, source.length, (from, to, decoration) => {
+      if (decoration.spec.attributes?.["data-list-padding-anchor"] !== undefined) {
+        expect(decoration.spec.attributes.class).toBe("cm-inactive-list-source-prefix");
+        anchors.push({ from, to, text: source.slice(from, to) });
+      }
+    });
+    const bodyStart = source.indexOf("**") >= 0 ? head - 2 : head;
+    const anchor = anchors.find(value => value.to === bodyStart);
+    expect(anchor).toBeDefined();
+    expect(anchor!.text).toMatch(/^[ \t]+$/u);
+    expect(anchors.every(value => /^[ \t]+$/u.test(value.text))).toBe(true);
+  }
+);
+
 function snapshotOf(source: string): EditorDerivedSnapshot {
   let snapshot = snapshots.get(source);
 

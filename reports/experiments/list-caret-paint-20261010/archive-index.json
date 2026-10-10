@@ -1,0 +1,9 @@
+{
+  "archive": "evidence.zip",
+  "sha256": "9f1d860db28bebf8ccfa529d12de524a070a62e10d9e5bced91c170cc59a6f42",
+  "zipBytes": 7336306,
+  "logicalFiles": 3276,
+  "logicalBytes": 50380612,
+  "uniqueBlobs": 855,
+  "verifiedAllBlobHashes": true
+}

@@ -1024,7 +1024,7 @@ function appendInactiveListItemFirstLineDecorations(
   appendSourcePrefixMark(item.markerStart, item.markerEnd, "cm-inactive-list-marker", ranges);
 
   if (!item.task) {
-    appendSourcePrefixMark(item.markerEnd, contentStartOffset, "cm-inactive-list-source-prefix", ranges);
+    appendInactiveListPaddingAnchor(item.markerEnd, contentStartOffset, ranges);
     return;
   }
 
@@ -1036,7 +1036,13 @@ function appendInactiveListItemFirstLineDecorations(
     }).range(item.task.markerStart, item.task.markerEnd)
   );
 
-  appendSourcePrefixMark(item.task.markerEnd, contentStartOffset, "cm-inactive-list-source-prefix", ranges);
+  appendInactiveListPaddingAnchor(item.task.markerEnd, contentStartOffset, ranges);
+}
+
+function appendInactiveListPaddingAnchor(from: number, to: number, ranges: Range<Decoration>[]): void {
+  if (to > from) ranges.push(Decoration.mark({ attributes: {
+    class: "cm-inactive-list-source-prefix", "data-list-padding-anchor": ""
+  } }).range(from, to));
 }
 
 class TaskMarkerWidget extends WidgetType {

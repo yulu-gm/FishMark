@@ -398,6 +398,21 @@
   width: 0 !important;
 }
 
+/* Chromium paints a body-start native caret using the preceding padding's
+   font metrics. Keep its height while hiding the source and its advance. */
+.document-editor .cm-inactive-list-source-prefix[data-list-padding-anchor] {
+  display: inline-block;
+  width: 0;
+  height: 1em;
+  font-size: inherit;
+  line-height: 1;
+  vertical-align: baseline;
+  caret-color: var(--fishmark-caret-color);
+  overflow: visible;
+  white-space: pre;
+  word-spacing: -1em;
+}
+
 .document-editor .cm-active-list-source-prefix {
   position: absolute;
   top: 0;
