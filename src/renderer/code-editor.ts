@@ -510,18 +510,6 @@ export function createCodeEditorController(
     return searchRuntime?.readFindReplaceSnapshot(view) ?? emptyFindReplaceSnapshot;
   };
 
-  const ensureSearchPanelOpen = () => {
-    const runtime = searchRuntime;
-
-    if (!runtime) {
-      return;
-    }
-
-    if (!runtime.searchPanelOpen(view.state)) {
-      runtime.openSearchPanel(view);
-    }
-  };
-
   const updateSearchQuery = (input: FindReplaceQueryInput): FindReplaceSnapshot => {
     const runtime = searchRuntime;
 
@@ -544,19 +532,12 @@ export function createCodeEditorController(
       return readFindReplaceSnapshot();
     }
 
-    ensureSearchPanelOpen();
+    if (!runtime.searchPanelOpen(view.state)) runtime.openSearchPanel(view);
     view.dispatch({
       effects: runtime.setSearchQuery.of(query)
     });
 
-    let snapshot = readFindReplaceSnapshot();
-
-    if (snapshot.matchCount > 0 && snapshot.currentMatchIndex === null) {
-      runtime.findNext(view);
-      snapshot = readFindReplaceSnapshot();
-    }
-
-    return snapshot;
+    return selectNextMatchWhenNeeded(readFindReplaceSnapshot());
   };
 
   const selectNextMatchWhenNeeded = (snapshot: FindReplaceSnapshot): FindReplaceSnapshot => {
@@ -707,19 +688,7 @@ export function createCodeEditorController(
       return readFindReplaceSnapshot();
     },
     clearFindReplaceQuery() {
-      const runtime = searchRuntime;
-      if (!runtime) return emptyFindReplaceSnapshot;
-      const query = new runtime.SearchQuery({
-        search: "",
-        replace: "",
-        literal: true
-      });
-
-      view.dispatch({
-        effects: runtime.setSearchQuery.of(query)
-      });
-      runtime.closeSearchPanel(view);
-      return readFindReplaceSnapshot();
+      return updateSearchQuery({ search: "", replace: "" });
     },
     setContent(content: string) {
       view.dispatch({

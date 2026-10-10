@@ -7,6 +7,7 @@ import {
   type SVGProps
 } from "react";
 import { ConflictBanner } from "./components/ConflictBanner";
+import { FindReplacePanel } from "./components/FindReplacePanel";
 import { NotificationHost } from "./components/NotificationHost";
 import { OutlinePanel } from "./components/OutlinePanel";
 import { SettingsDrawer } from "./components/SettingsDrawer";
@@ -26,11 +27,6 @@ import {
 const CodeEditorView = lazy(async () => {
   const module = await import("../code-editor-view");
   return { default: module.CodeEditorView };
-});
-
-const FindReplacePanel = lazy(async () => {
-  const module = await import("./components/FindReplacePanel");
-  return { default: module.FindReplacePanel };
 });
 
 const ThemeSurfaceHost = lazy(async () => {
@@ -521,7 +517,6 @@ export function WorkspaceShell({
                         data-fishmark-region="side-panel-body"
                       >
                         {visibleViewContainer === "search" ? (
-                          <Suspense fallback={null}>
                           <FindReplacePanel
                             autoFocus={isSearchViewActive}
                             findText={findText}
@@ -540,7 +535,6 @@ export function WorkspaceShell({
                             onReplaceCurrent={() => setFindReplaceSnapshot(editorRef.current?.replaceCurrentMatch() ?? findReplaceSnapshot)}
                             onReplaceAll={() => setFindReplaceSnapshot(editorRef.current?.replaceAllMatches() ?? findReplaceSnapshot)}
                           />
-                          </Suspense>
                         ) : null}
                         {visibleViewContainer === "outline" ? (
                           <OutlinePanel

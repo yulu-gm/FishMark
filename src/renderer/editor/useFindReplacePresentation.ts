@@ -80,28 +80,22 @@ export function useFindReplacePresentation({
     onCloseViewContainer();
   };
 
+  const updateQuery = (search: string, replace: string) => {
+    setFindReplaceSnapshot(editorRef.current?.updateFindReplaceQuery({ search, replace }) ?? emptySnapshot);
+  };
+
   const handleFindTextChange = (event: ChangeEvent<HTMLInputElement>) => {
     const nextFindText = event.currentTarget.value;
 
     setFindText(nextFindText);
-    setFindReplaceSnapshot(
-      editorRef.current?.updateFindReplaceQuery({
-        search: nextFindText,
-        replace: replaceText
-      }) ?? emptySnapshot
-    );
+    updateQuery(nextFindText, replaceText);
   };
 
   const handleReplaceTextChange = (event: ChangeEvent<HTMLInputElement>) => {
     const nextReplaceText = event.currentTarget.value;
 
     setReplaceText(nextReplaceText);
-    setFindReplaceSnapshot(
-      editorRef.current?.updateFindReplaceQuery({
-        search: findText,
-        replace: nextReplaceText
-      }) ?? emptySnapshot
-    );
+    updateQuery(findText, nextReplaceText);
   };
 
   const handleFindReplaceKeyDown = (event: KeyboardEvent<HTMLElement>) => {
@@ -130,10 +124,7 @@ export function useFindReplacePresentation({
       return;
     }
     setFindText(selectedText);
-    setFindReplaceSnapshot(editorRef.current?.updateFindReplaceQuery({
-      search: selectedText,
-      replace: replaceText
-    }) ?? emptySnapshot);
+    updateQuery(selectedText, replaceText);
   };
 
   const selectFindReplaceMatch = (match: FindReplaceMatch) => {

@@ -539,8 +539,6 @@ it("opens find and replace controls and delegates search actions to the editor",
   // The search view container reports the same pressed state as the outline.
   expect(searchRailButton?.getAttribute("aria-pressed")).toBe("true");
 
-  // Let the Search-only lazy surface finish mounting before querying its form.
-  await act(async () => { await import("./components/FindReplacePanel"); });
 
   const sidePanel = activeContainer.querySelector<HTMLElement>('[data-fishmark-region="side-panel"]');
   const panel = activeContainer.querySelector('[data-fishmark-region="search"]');

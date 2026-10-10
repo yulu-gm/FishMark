@@ -1,5 +1,23 @@
-import { useState, type ChangeEvent, type KeyboardEvent, type MouseEvent, type RefObject } from "react";
+import { useState, type ChangeEvent, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
 import type { FindReplaceMatch } from "../../code-editor";
+
+function preserveInputFocus(event: MouseEvent<HTMLButtonElement>) {
+  if (document.activeElement instanceof HTMLInputElement) event.preventDefault();
+}
+
+function FindAction({ label, disabled, onClick, path, icon, children }: {
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+  path?: string;
+  icon?: boolean;
+  children?: ReactNode;
+}) {
+  return <button type="button" className={path || icon ? "find-replace-icon-button" : "find-replace-text-button"}
+    aria-label={label} disabled={disabled} onMouseDown={preserveInputFocus} onClick={onClick}>
+    {path ? <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d={path} /></svg> : children}
+  </button>;
+}
 
 export function FindReplacePanel({ findText, replaceText, matchStatusLabel, findInputRef, handleFindReplaceKeyDown, handleFindTextChange, handleReplaceTextChange, hasMatches, onPrevious, onNext, onReplaceCurrent, onReplaceAll, matches, currentMatchIndex, onSelectMatch, autoFocus = true }: {
   findText: string;
@@ -31,9 +49,6 @@ export function FindReplacePanel({ findText, replaceText, matchStatusLabel, find
     pageState.findText === findText && pageState.currentMatchIndex === currentMatchIndex ? pageState.page : currentPage);
   const start = page * pageSize;
   const visibleMatches = matches.slice(start, start + pageSize);
-  const preserveInputFocus = (event: MouseEvent<HTMLButtonElement>) => {
-    if (document.activeElement instanceof HTMLInputElement) event.preventDefault();
-  };
   return (
     <div
       className="find-replace-panel"
@@ -61,30 +76,8 @@ export function FindReplacePanel({ findText, replaceText, matchStatusLabel, find
         >
           {matchStatusLabel}
         </p>
-        <button
-          type="button"
-          className="find-replace-icon-button"
-          aria-label="Previous match"
-          disabled={!hasMatches}
-          onMouseDown={preserveInputFocus}
-          onClick={onPrevious}
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path d="M6 14l6-6 6 6" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          className="find-replace-icon-button"
-          aria-label="Next match"
-          disabled={!hasMatches}
-          onMouseDown={preserveInputFocus}
-          onClick={onNext}
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path d="M6 10l6 6 6-6" />
-          </svg>
-        </button>
+        <FindAction label="Previous match" disabled={!hasMatches} onClick={onPrevious} path="M6 14l6-6 6 6" />
+        <FindAction label="Next match" disabled={!hasMatches} onClick={onNext} path="M6 10l6 6 6-6" />
       </div>
       <label className="find-replace-field">
         <span>Replace</span>
@@ -97,35 +90,17 @@ export function FindReplacePanel({ findText, replaceText, matchStatusLabel, find
         />
       </label>
       <div className="find-replace-row">
-        <button
-          type="button"
-          className="find-replace-text-button"
-          aria-label="Replace current match"
-          disabled={!hasMatches}
-          onMouseDown={preserveInputFocus}
-          onClick={onReplaceCurrent}
-        >
-          Replace
-        </button>
-        <button
-          type="button"
-          className="find-replace-text-button"
-          aria-label="Replace all matches"
-          disabled={!hasMatches}
-          onMouseDown={preserveInputFocus}
-          onClick={onReplaceAll}
-        >
-          Replace all
-        </button>
+        <FindAction label="Replace current match" disabled={!hasMatches} onClick={onReplaceCurrent}>Replace</FindAction>
+        <FindAction label="Replace all matches" disabled={!hasMatches} onClick={onReplaceAll}>Replace all</FindAction>
       </div>
       <div className="find-replace-results" data-fishmark-region="search-results" aria-label="Search results">
         {matches.length === 0 ? <p className="find-replace-results-empty">{findText ? "No matches" : "Enter text to find matches"}</p> : <>
           {matches.length > pageSize ? <div className="find-replace-row find-replace-results-pages">
-            <button type="button" className="find-replace-icon-button" aria-label="Previous results page" disabled={page === 0}
-              onMouseDown={preserveInputFocus} onClick={() => setPageState({ findText, currentMatchIndex, page: page - 1 })}>‹</button>
+            <FindAction icon label="Previous results page" disabled={page === 0}
+              onClick={() => setPageState({ findText, currentMatchIndex, page: page - 1 })}>‹</FindAction>
             <span aria-live="polite">{start + 1}–{Math.min(start + pageSize, matches.length)} of {matches.length}</span>
-            <button type="button" className="find-replace-icon-button" aria-label="Next results page" disabled={start + pageSize >= matches.length}
-              onMouseDown={preserveInputFocus} onClick={() => setPageState({ findText, currentMatchIndex, page: page + 1 })}>›</button>
+            <FindAction icon label="Next results page" disabled={start + pageSize >= matches.length}
+              onClick={() => setPageState({ findText, currentMatchIndex, page: page + 1 })}>›</FindAction>
           </div> : null}
           <ol className="find-replace-results-list" start={start + 1}>
             {visibleMatches.map((match, offset) => {

@@ -512,7 +512,7 @@ function EditorShell({
   }
 
   const editorTestBridge = useMemo(
-    () => ({
+    () => canRenderEditorTestBridge ? ({
       workspace: workspaceController.editorTestAdapter,
       resetAutosaveRuntime,
       editor: {
@@ -547,7 +547,7 @@ function EditorShell({
           editorRef.current?.pressArrowDown();
         }
       }
-    }),
+    }) : null,
     [
       getEditorContent,
       resetAutosaveRuntime,
@@ -731,7 +731,7 @@ function EditorShell({
 
   return (
     <>
-      {LazyEditorTestBridgeHost && fishmarkTest ? (
+      {LazyEditorTestBridgeHost && fishmarkTest && editorTestBridge ? (
         <Suspense fallback={null}>
           <LazyEditorTestBridgeHost
             fishmarkTest={fishmarkTest}
