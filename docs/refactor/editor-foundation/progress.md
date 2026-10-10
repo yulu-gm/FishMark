@@ -6,7 +6,7 @@
 
 **Created:** 2026-07-11
 
-**Last updated:** 2026-10-06
+**Last updated:** 2026-10-10
 
 **Overall status:** `IN_PROGRESS`
 
@@ -18,7 +18,11 @@
 
 **Current gate:** RF-803 independent Mac architecture/task acceptance PASS on candidate `9f0fe233` / tree `25c526fc`; 1008 focused tests, 310 foundation tests, typecheck/lint/build, original bundle, full exact regression with 2 workers (3111 passed + 10 exact known), native safety 7/7 and formal behavior 121/121 passed. The default-concurrency 100ms child-startup failure is preserved. M8 is 3/3 COMPLETE; M9 has not started. Publication, main freshness and final CI remain with the parent; no remote publication is claimed.
 
-**Current performance evidence:** the 20k-line controller probe improved typing dispatch p95 from 1,934 ms to 66.9 ms and selection p95 from 1,697 ms to 13.9 ms after canonical-tree reuse and physical-range indexing. Final M5 CI bundle evidence: max initial chunk **179,699 / 300,000 B**, max initial chunk gzip **56,955 / 90,000 B**, total initial gzip **93,918 / 260,000 B**, total JS gzip **1,425,457 / 1,430,000 B** — all PASS without relaxing budgets. M9 still owns broader reproducible end-to-end performance budgets.
+**Historical M5 performance evidence:** the 20k-line controller probe improved typing dispatch p95 from 1,934 ms to 66.9 ms and selection p95 from 1,697 ms to 13.9 ms after canonical-tree reuse and physical-range indexing. Final M5 CI bundle evidence: max initial chunk **179,699 / 300,000 B**, max initial chunk gzip **56,955 / 90,000 B**, total initial gzip **93,918 / 260,000 B**, total JS gzip **1,425,457 / 1,430,000 B** — all PASS without relaxing budgets at that time. M9 still owns broader reproducible end-to-end performance budgets.
+
+**Current bundle policy (2026-10-10):** the user explicitly approved a **1,500,000 B total JS gzip** ceiling for the integrated Windows UX batch. The authoritative `bundle.max-total-gzip-bytes` check is in `fixtures/architecture/editor-foundation-guard.json`; other bundle checks and the failure/skip allowlist remain unchanged. Historical 1,430,000 B measurements above and below retain their original meaning. This published-main UX budget change does not alter the frozen RF-901 cp13/cp16 experiment protocol.
+
+**Batch-only release exception (2026-10-10):** the user accepted this batch's single Windows symlink test not running because of platform permissions and authorized normal main publication. The strict regression result remains FAIL with that unexpected skip; this is not a future exception or an allowlist/system-setting change. M9 remains incomplete. See the [approved budget task report](../../../reports/task-summaries/TASK-UX-APPROVED-GZIP-BUDGET-004.md) for the final measurement and publication evidence.
 **User priorities:** maintainability/extensibility, editing/interaction quality, and measured performance. Preserve the existing stack and owners; do not optimize progress percentages, package count, or deleted lines.
 
 ## 1. Status vocabulary

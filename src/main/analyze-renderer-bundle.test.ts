@@ -308,7 +308,7 @@ describe("scripts/analyze-renderer-bundle.mjs", () => {
     expect(perfBundle).not.toMatch(
       /--max-|--require-lazy-chunk|--forbid-initial-source-group/u
     );
-    expect(perfBundle).not.toMatch(/300000|90000|260000|1430000/u);
+    expect(perfBundle).not.toMatch(/300000|90000|260000|1430000|1500000/u);
   });
 
   it("loads all 23 canonical checks from one contract and emits stable contract identity", async () => {

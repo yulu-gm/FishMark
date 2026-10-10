@@ -380,7 +380,7 @@
         "id": "bundle.max-total-gzip-bytes",
         "kind": "maximum",
         "metric": "totalJsGzipBytes",
-        "limit": 1430000
+        "limit": 1500000
       },
       {
         "id": "bundle.required-lazy-chunk:export-html",
