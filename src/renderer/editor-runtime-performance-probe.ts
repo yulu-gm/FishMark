@@ -3,6 +3,10 @@ import "./styles/primitives.css";
 import "./styles/editor-source.css";
 import "./styles/markdown-render.css";
 import { createCodeEditorController } from "./code-editor";
+import { createRuntimePhaseTiming, type RuntimePhaseSpan } from "./runtime-phase-timing";
+
+declare const __FISHMARK_RUNTIME_PHASE_TIMING__: boolean;
+declare const __FISHMARK_RUNTIME_PHASE_TARGETS__: Record<string, string[]>;
 
 // Uses the actual product controller, including its transaction filters, derived state and
 // decorations. Two animation frames are a rendering opportunity, not a native IME or
@@ -24,6 +28,7 @@ interface RuntimeFixtureReport {
   openMs: number | null;
   emittedFrames: number;
   raw: { typingDispatchMs: number[]; typingToFrameMs: number[]; selectionDispatchMs: number[] };
+  phaseSamples: { kind: "typing" | "selection"; sample: number; aborted: boolean; spans: RuntimePhaseSpan[] }[];
   complete: boolean;
   sourcePreserved: boolean;
   typingDispatchMs: ReturnType<typeof summarize> | null;
@@ -33,10 +38,14 @@ interface RuntimeFixtureReport {
 }
 
 async function runEditorRuntimePerformanceProbe() {
+  const timing = __FISHMARK_RUNTIME_PHASE_TIMING__ ? createRuntimePhaseTiming() : undefined;
+  window.__fishmarkRuntimePhaseTiming = timing;
   const root = document.getElementById("probe-root")!;
   root.style.cssText = "height:720px;width:1000px;overflow:hidden";
   const fixtures: RuntimeFixtureReport[] = [];
   const report = { schemaVersion: 2, measurement: "production-controller-dispatch-and-two-animation-frames",
+    phaseTimingEnabled: Boolean(timing), phaseTargets: __FISHMARK_RUNTIME_PHASE_TARGETS__,
+    calibration: null as { iterations: number; emptySpanTotalMs: number; loopTotalMs: number; retainedSpans: number } | null,
     complete: false, fixtures };
   window.__editorRuntimePerformancePartial = report;
   for (const lineCount of [5000, 20000]) {
@@ -45,7 +54,7 @@ async function runEditorRuntimePerformanceProbe() {
       `# Section ${index}\n\nPlain paragraph number ${index}.\n\n`).join("\n");
     const raw = { typingDispatchMs: [] as number[], typingToFrameMs: [] as number[], selectionDispatchMs: [] as number[] };
     const fixture: RuntimeFixtureReport = { lineCount, chars: source.length, source, openMs: null,
-      emittedFrames: 0, raw, complete: false, sourcePreserved: false,
+      emittedFrames: 0, raw, phaseSamples: [], complete: false, sourcePreserved: false,
       typingDispatchMs: null,
       typingToFrameMs: null,
       selectionDispatchMs: null,
@@ -72,22 +81,38 @@ async function runEditorRuntimePerformanceProbe() {
       fixture.presentation = { dpr: devicePixelRatio, fontFamily: contentStyle.fontFamily,
         fontSize: contentStyle.fontSize, lineHeight: contentStyle.lineHeight };
       for (let sample = 0; sample < 30; sample++) {
+        timing?.startSample();
         const start = performance.now();
-        editor.insertText("x");
-        typingDispatchMs.push(performance.now() - start);
+        let completed = false;
+        try {
+          editor.insertText("x");
+          typingDispatchMs.push(performance.now() - start);
+          completed = true;
+        } finally {
+          if (timing) fixture.phaseSamples.push({ kind: "typing", sample, aborted: !completed, spans: timing.finishSample() });
+        }
         await frames();
         typingToFrameMs.push(performance.now() - start);
         console.info(`runtime-perf: sample ${JSON.stringify({ lineCount, kind: "typing", sample,
           dispatchMs: typingDispatchMs.at(-1), toTwoFramesMs: typingToFrameMs.at(-1) })}`);
+        if (timing) console.info(`runtime-perf: phases ${JSON.stringify({ lineCount, ...fixture.phaseSamples.at(-1) })}`);
         if (sample % 10 === 9) console.info(`runtime-perf: ${lineCount} lines typing ${sample + 1}/30`);
       }
       for (let sample = 0; sample < 30; sample++) {
+        timing?.startSample();
         const start = performance.now();
-        editor.setSelection(source.indexOf("paragraph") + sample % 5);
-        selectionDispatchMs.push(performance.now() - start);
+        let completed = false;
+        try {
+          editor.setSelection(source.indexOf("paragraph") + sample % 5);
+          selectionDispatchMs.push(performance.now() - start);
+          completed = true;
+        } finally {
+          if (timing) fixture.phaseSamples.push({ kind: "selection", sample, aborted: !completed, spans: timing.finishSample() });
+        }
         await frames();
         console.info(`runtime-perf: sample ${JSON.stringify({ lineCount, kind: "selection", sample,
           dispatchMs: selectionDispatchMs.at(-1) })}`);
+        if (timing) console.info(`runtime-perf: phases ${JSON.stringify({ lineCount, ...fixture.phaseSamples.at(-1) })}`);
       }
       editor.flushPendingDocumentChanges();
       fixture.emittedFrames = emittedFrames;
@@ -98,6 +123,19 @@ async function runEditorRuntimePerformanceProbe() {
       fixture.complete = true;
     } finally { editor.destroy(); root.replaceChildren(); }
   }
+  if (timing) {
+    const iterations = 10000;
+    let start = performance.now();
+    for (let i = 0; i < iterations; i++) Math.imul(i, i);
+    const loopTotalMs = performance.now() - start;
+    timing.startSample();
+    start = performance.now();
+    for (let i = 0; i < iterations; i++) timing.end(timing.begin("calibration.empty"));
+    const emptySpanTotalMs = performance.now() - start;
+    const retainedSpans = timing.finishSample().length;
+    report.calibration = { iterations, loopTotalMs, emptySpanTotalMs, retainedSpans };
+  }
+  delete window.__fishmarkRuntimePhaseTiming;
   report.complete = true;
   return report;
 }

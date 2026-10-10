@@ -49,7 +49,7 @@ async function main() {
   const result = await window.webContents.executeJavaScript("window.__runEditorRuntimePerformanceProbe()", true);
   result.environment = environment();
   persistReport(result, reportPath);
-  process.stdout.write(`${JSON.stringify({ reportPath, fixtures: result.fixtures.map(({ source, raw, ...fixture }) => fixture) })}\n`);
+  process.stdout.write(`${JSON.stringify({ reportPath, fixtures: result.fixtures.map(({ source, raw, phaseSamples, ...fixture }) => fixture) })}\n`);
   window.close();
   app.exit(result.fixtures.every((fixture) => fixture.sourcePreserved && fixture.emittedFrames === 30) ? 0 : 1);
 }
