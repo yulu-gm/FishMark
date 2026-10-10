@@ -60,6 +60,39 @@ describe("canonical table caret scroll target", () => {
     } finally { restore(); }
   });
 
+  it.each([{ y: -12000, start: 15000, expected: 2976 }, { y: 200, start: 0, expected: 145 }])(
+    "retains DOMRect vertical geometry when horizontal reveal is already clamped: $y", ({ y, start, expected }) => {
+      const { view, editor, scroller, restore } = setup();
+      try {
+        const table = document.createElement("div"); table.className = "cm-table-widget";
+        editor.replaceWith(table); table.append(editor);
+        let left = 17;
+        Object.defineProperties(table, { scrollWidth: { value: 117 }, clientWidth: { value: 100 }, offsetWidth: { value: 100 },
+          scrollLeft: { get: () => left, set: (value: number) => { left = Math.max(0, Math.min(17, value)); } } });
+        vi.spyOn(table, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 100, 15000));
+        scroller.scrollTop = start;
+        expect(revealTableRect(view, editor, new DOMRect(90, y, 0, 21), "nearest")).toBe(true);
+        expect(table.scrollLeft).toBe(17);
+        expect(scroller.scrollTop).toBe(expected);
+        expect(scroller.scrollLeft).toBe(6);
+      } finally { restore(); }
+    }
+  );
+
+  it("retains DOMRect vertical geometry after an actual inner horizontal movement", () => {
+    const { view, editor, scroller, restore } = setup();
+    try {
+      const table = document.createElement("div"); table.className = "cm-table-widget";
+      editor.replaceWith(table); table.append(editor);
+      Object.defineProperties(table, { scrollWidth: { value: 300 }, clientWidth: { value: 100 }, offsetWidth: { value: 100 } });
+      vi.spyOn(table, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 100, 5000));
+      expect(revealTableRect(view, editor, new DOMRect(180, 200, 0, 21), "nearest")).toBe(true);
+      expect(table.scrollLeft).toBe(96);
+      expect(scroller.scrollLeft).toBe(0);
+      expect(scroller.scrollTop).toBe(145);
+    } finally { restore(); }
+  });
+
   it("reveals horizontal table overflow before the outer viewport", () => {
     const { view, editor, scroller, restore } = setup();
     try {

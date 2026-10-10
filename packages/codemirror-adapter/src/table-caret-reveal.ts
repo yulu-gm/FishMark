@@ -80,7 +80,9 @@ export function revealTableRect(
       const previous = table.scrollLeft;
       table.scrollLeft = previous + dx / innerScale;
       const actual = (table.scrollLeft - previous) * innerScale;
-      target = { ...rect, left: rect.left - actual, right: rect.right - actual };
+      // DOMRect geometry lives on prototype getters and is lost by object spread.
+      target = { top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height,
+        left: rect.left - actual, right: rect.right - actual };
     }
   }
   const delta = computeEditorRevealDelta(target, viewport, intent);

@@ -1020,7 +1020,9 @@
   background: var(--fishmark-table-bg);
   border: var(--fishmark-table-border-width) solid var(--fishmark-table-border-color);
   border-radius: var(--fishmark-table-radius);
-  overflow: hidden;
+  /* The wrapper owns horizontal scrolling. Clipping here would hide the
+     minimum editable width of narrow columns before it reaches that scroller. */
+  overflow: visible;
 }
 
 .document-editor .cm-table-widget-cell {
