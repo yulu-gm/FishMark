@@ -9174,6 +9174,42 @@ describe("createCodeEditorController", () => {
 });
 
 describe("document change frames", () => {
+  it("does not dirty or add history for unchanged table history input and seals the saved source", async () => {
+    const host = document.createElement("div"), frames = createDocumentFrameCollector(), onChange = vi.fn();
+    document.body.appendChild(host);
+    const controller = createCodeEditorController({
+      parent: host,
+      initialContent: "| Name | Value |\n| --- | --- |\n| Alpha | Beta |",
+      onChange,
+      onDocumentChangeFrame: frames.onDocumentChangeFrame
+    });
+    const advanced = controller as typeof controller & {
+      setDocumentIdentity: (identity: DocumentFrame["identity"]) => void;
+      flushPendingDocumentChanges: () => void;
+      sealForBarrier: () => Promise<{ text: string; identity: DocumentFrame["identity"] }>;
+    };
+    advanced.setDocumentIdentity({ tabId: "table-history", epoch: 1, loadRevision: 1 });
+    controller.editTableCell({ row: 1, column: 0, text: "Delta" });
+    advanced.flushPendingDocumentChanges();
+    const savedSource = controller.getContent(), view = getEditorView(host)!;
+    const depth = undoDepth(view.state);
+    frames.frames.length = 0;
+    onChange.mockClear();
+    const cell = host.querySelector<HTMLElement>('[data-table-cell="1:0"]')!;
+    for (const inputType of ["historyUndo", "historyRedo"]) {
+      cell.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, inputType }));
+      cell.dispatchEvent(new InputEvent("input", { bubbles: true, inputType }));
+    }
+    advanced.flushPendingDocumentChanges();
+    expect(controller.getContent()).toBe(savedSource);
+    expect(undoDepth(view.state)).toBe(depth);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(frames.frames).toEqual([]);
+    await expect(advanced.sealForBarrier()).resolves.toMatchObject({ text: savedSource, identity: { tabId: "table-history" } });
+    controller.destroy();
+    host.remove();
+  });
+
   it("serializes multi-range UTF-16 and CRLF edits in the original document coordinates", () => {
     const host = document.createElement("div");
     const frames = createDocumentFrameCollector();

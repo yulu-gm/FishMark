@@ -1,0 +1,466 @@
+diff --git a/packages/codemirror-adapter/src/decorations/table-widget.test.ts b/packages/codemirror-adapter/src/decorations/table-widget.test.ts
+index 52ea925..e377cdb 100644
+--- a/packages/codemirror-adapter/src/decorations/table-widget.test.ts
++++ b/packages/codemirror-adapter/src/decorations/table-widget.test.ts
+@@ -71,12 +71,13 @@ function createWidget(
+     block?: TableBlock;
+     source?: string;
+     renderOptions?: TableWidgetRenderOptions;
++    activePosition?: TablePosition;
+   } = {}
+ ): { readonly widget: TableWidget; readonly dom: HTMLElement } {
+   const block = options.block ?? parseTableBlock();
+   const decoration = createTableWidgetDecoration(
+     block,
+-    { row: 1, column: 0 },
++    options.activePosition ?? { row: 1, column: 0 },
+     spies,
+     options.source ?? TABLE_SOURCE,
+     options.renderOptions ?? {}
+@@ -118,6 +119,94 @@ afterEach(() => {
+   document.body.replaceChildren();
+ });
+ 
++describe("table cell native history DOM", () => {
++  it.each(["Alpha", "**中文**", "`code`"])("restores the same editable nodes after previewing %s", (text) => {
++    const source = `| Name | Value |\n| --- | --- |\n| ${text} | Beta |`;
++    const spies = createCallbackSpies();
++    const { dom } = createWidget(spies, { source, block: parseTableBlock(source) });
++    document.body.appendChild(dom);
++    const editor = readCell(dom, 1, 0);
++    const originalNodes = Array.from(editor.childNodes);
++    for (let cycle = 0; cycle < 3; cycle += 1) {
++      const inactive = createWidget(spies, { source, block: parseTableBlock(source), activePosition: { row: 1, column: 1 } });
++      expect(inactive.widget.updateDOM(dom)).toBe(true);
++      expect(editor.textContent).toBe(text);
++      if (text === "**中文**") expect(editor.querySelector(".cm-inactive-inline-strong")?.textContent).toBe("中文");
++      const active = createWidget(spies, { source, block: parseTableBlock(source) });
++      expect(active.widget.updateDOM(dom)).toBe(true);
++      expect(Array.from(editor.childNodes)).toEqual(originalNodes);
++      originalNodes.forEach((node, index) => expect(editor.childNodes[index]).toBe(node));
++      expect(editor.querySelector(".cm-inactive-inline-marker")).toBeNull();
++    }
++  });
++
++  it("does not restore parked text after a document history update changes that cell", () => {
++    const spies = createCallbackSpies();
++    const { dom } = createWidget(spies);
++    document.body.appendChild(dom);
++    const editor = readCell(dom, 1, 0), previousNode = editor.firstChild;
++    createWidget(spies, { activePosition: { row: 1, column: 1 } }).widget.updateDOM(dom);
++    const source = TABLE_SOURCE.replace("pen", "pencil");
++    createWidget(spies, { source, block: parseTableBlock(source), activePosition: { row: 1, column: 1 } }).widget.updateDOM(dom);
++    createWidget(spies, { source, block: parseTableBlock(source) }).widget.updateDOM(dom);
++    expect(editor.textContent).toBe("pencil");
++    expect(editor.firstChild).not.toBe(previousNode);
++  });
++
++  it("rejects parked nodes mutated while detached rather than overwriting canonical source", () => {
++    const spies = createCallbackSpies();
++    const { dom } = createWidget(spies);
++    document.body.appendChild(dom);
++    const editor = readCell(dom, 1, 0), original = editor.firstChild!;
++    createWidget(spies, { activePosition: { row: 1, column: 1 } }).widget.updateDOM(dom);
++    original.textContent = "stale browser mutation";
++    createWidget(spies).widget.updateDOM(dom);
++    expect(editor.textContent).toBe("pen");
++    expect(editor.firstChild).not.toBe(original);
++  });
++
++  it("restores the native target's original nodes before history input while another cell is active", () => {
++    const spies = createCallbackSpies();
++    const { dom } = createWidget(spies);
++    document.body.appendChild(dom);
++    const editor = readCell(dom, 1, 0), original = editor.firstChild!;
++    createWidget(spies, { activePosition: { row: 1, column: 1 } }).widget.updateDOM(dom);
++    editor.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, inputType: "historyUndo" }));
++    expect(editor.firstChild).toBe(original);
++    original.textContent = "pencil";
++    editor.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "historyUndo" }));
++    expect(spies.updateCell.mock.calls[0]?.[1]).toBe("pencil");
++  });
++
++  it("retains rich inactive preview and its parked nodes when native history changes nothing", () => {
++    const source = TABLE_SOURCE.replace("pen", "**中文**"), spies = createCallbackSpies();
++    const { dom } = createWidget(spies, { source, block: parseTableBlock(source) });
++    document.body.appendChild(dom);
++    const editor = readCell(dom, 1, 0), original = editor.firstChild;
++    createWidget(spies, { source, block: parseTableBlock(source), activePosition: { row: 1, column: 1 } }).widget.updateDOM(dom);
++    const preview = editor.querySelector(".cm-inactive-inline-strong");
++    editor.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, inputType: "historyUndo" }));
++    editor.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "historyUndo" }));
++    expect(spies.updateCell).not.toHaveBeenCalled();
++    expect(editor.querySelector(".cm-inactive-inline-strong")).toBe(preview);
++    createWidget(spies, { source, block: parseTableBlock(source) }).widget.updateDOM(dom);
++    expect(editor.firstChild).toBe(original);
++  });
++
++  it.each(["historyUndo", "historyRedo"])("does not commit unchanged %s input, but commits actual text restoration", (inputType) => {
++    const spies = createCallbackSpies();
++    const { dom } = createWidget(spies);
++    document.body.appendChild(dom);
++    const editor = readCell(dom, 1, 0);
++    editor.dispatchEvent(new InputEvent("input", { bubbles: true, inputType }));
++    expect(spies.updateCell).not.toHaveBeenCalled();
++    editor.textContent = "pencil";
++    editor.dispatchEvent(new InputEvent("input", { bubbles: true, inputType }));
++    expect(spies.updateCell).toHaveBeenCalledTimes(1);
++    expect(spies.updateCell.mock.calls[0]?.[1]).toBe("pencil");
++  });
++});
++
+ describe("table widget cell dispatch ownership", () => {
+   it("drops input, composition fallback and keydown from a widget the view already removed", async () => {
+     const spies = createCallbackSpies();
+diff --git a/packages/codemirror-adapter/src/decorations/table-widget.ts b/packages/codemirror-adapter/src/decorations/table-widget.ts
+index a2bb341..aac61cc 100644
+--- a/packages/codemirror-adapter/src/decorations/table-widget.ts
++++ b/packages/codemirror-adapter/src/decorations/table-widget.ts
+@@ -35,6 +35,7 @@ const INLINE_CONTAINER_CLASS_BY_TYPE = {
+ type TableCellRenderMode = "plain" | "preview";
+ const compositionCommitFallbackTimers = new WeakMap<HTMLElement, number>();
+ const renderedCellInline = new WeakMap<HTMLElement, InlineRoot | undefined>();
++const parkedPlainCellNodes = new WeakMap<HTMLElement, { text: string; nodes: Node[] }>();
+ 
+ // The editable cell elements are snapshotted per widget root so `destroy` can cancel every
+ // composition fallback this instance scheduled. The snapshot lives in a `WeakMap` keyed by the root,
+@@ -208,6 +209,7 @@ export class TableWidget extends WidgetType {
+       // detached, or handed to a newer instance, drops the event instead of writing through the
+       // `tableStartOffset` it recorded for a document revision that may no longer exist.
+       const isCellLive = () => isCellOwnedByRoot(root, editor);
++      let historyPreviewNodes: Node[] | null = null;
+ 
+       const commitEditorInput = () => {
+         if (!isCellLive()) {
+@@ -283,7 +285,24 @@ export class TableWidget extends WidgetType {
+         schedulePendingCompositionCommitFallback(editor, commitEditorInput);
+       });
+ 
+-      editor.addEventListener("input", () => {
++      editor.addEventListener("beforeinput", (event) => {
++        if (
++          !isCellLive() || !(event instanceof InputEvent) || event.isComposing ||
++          editor.dataset.tableCellComposing === "true" ||
++          (event.inputType !== "historyUndo" && event.inputType !== "historyRedo") ||
++          readTableCellRenderMode(editor) !== "preview"
++        ) {
++          return;
++        }
++        // Chromium can target the last edited cell while another cell has focus.
++        // Give its original editing nodes back before the native command runs.
++        const previewNodes = Array.from(editor.childNodes);
++        if (restoreParkedPlainCellNodes(editor, editor.dataset.tableCellText ?? "")) {
++          historyPreviewNodes = previewNodes;
++        }
++      });
++
++      editor.addEventListener("input", (event) => {
+         if (!isCellLive()) {
+           return;
+         }
+@@ -294,6 +313,20 @@ export class TableWidget extends WidgetType {
+ 
+         delete editor.dataset.tableCellPendingCompositionCommit;
+         clearPendingCompositionCommitFallback(editor);
++        const previewNodes = historyPreviewNodes;
++        historyPreviewNodes = null;
++        if (
++          event instanceof InputEvent &&
++          (event.inputType === "historyUndo" || event.inputType === "historyRedo") &&
++          readTableCellText(editor) === editor.dataset.tableCellText
++        ) {
++          if (previewNodes) {
++            parkedPlainCellNodes.set(editor, { text: readTableCellText(editor), nodes: Array.from(editor.childNodes) });
++            editor.replaceChildren(...previewNodes);
++            editor.dataset.tableCellRenderMode = "preview";
++          }
++          return;
++        }
+         commitEditorInput();
+       });
+ 
+@@ -597,16 +630,42 @@ function syncTableCellEditor(
+     return;
+   }
+ 
+-  editor.replaceChildren(
+-    nextRenderMode === "plain"
+-      ? buildPlainTextFragment(editor.ownerDocument, text)
+-      : buildInlinePreviewFragment(editor.ownerDocument, options.source ?? "", options.inline)
+-  );
++  const parked = parkedPlainCellNodes.get(editor);
++  if (
++    nextRenderMode === "preview" &&
++    editor.dataset.tableCellRenderMode === "plain" &&
++    readTableCellText(editor) === text
++  ) {
++    // Chromium's editing history refers to the original editable nodes. Preserve
++    // those nodes while rendering an inactive preview, then put them back on focus.
++    parkedPlainCellNodes.set(editor, { text, nodes: Array.from(editor.childNodes) });
++  } else if (parked?.text !== text) {
++    parkedPlainCellNodes.delete(editor);
++  }
++  if (nextRenderMode !== "plain" || !restoreParkedPlainCellNodes(editor, text)) {
++    editor.replaceChildren(
++      nextRenderMode === "plain"
++        ? buildPlainTextFragment(editor.ownerDocument, text)
++        : buildInlinePreviewFragment(editor.ownerDocument, options.source ?? "", options.inline)
++    );
++  }
+   editor.dataset.tableCellText = text;
+   editor.dataset.tableCellRenderMode = nextRenderMode;
+   renderedCellInline.set(editor, options.inline);
+ }
+ 
++function restoreParkedPlainCellNodes(editor: HTMLElement, text: string): boolean {
++  const parked = parkedPlainCellNodes.get(editor);
++  if (!parked) return false;
++  parkedPlainCellNodes.delete(editor);
++  // Detached nodes remain mutable; canonical source still decides whether they
++  // can be reused. Never restore a stale browser mutation over document history.
++  if (parked.text !== text || parked.nodes.map((node) => node.textContent ?? "").join("") !== text) return false;
++  editor.replaceChildren(...parked.nodes);
++  editor.dataset.tableCellRenderMode = "plain";
++  return true;
++}
++
+ function readTableCellRenderMode(editor: HTMLElement): TableCellRenderMode {
+   return editor.dataset.tableCellRenderMode === "preview" ? "preview" : "plain";
+ }
+diff --git a/scripts/electron-table-history-main.cjs b/scripts/electron-table-history-main.cjs
+index ae9c06e..e9aadd8 100644
+--- a/scripts/electron-table-history-main.cjs
++++ b/scripts/electron-table-history-main.cjs
+@@ -9,6 +9,7 @@ app.setPath("appData", userData); app.setPath("userData", userData); app.setPath
+ let win;
+ const result = { schemaVersion: 1, route, fixture: null, protocol: "one fresh process/editor per route; one native cell edit; 3 undo/redo cycles then 2 focus roundtrips; explicit document focus before every document-history key", checks: [], snapshots: [], eventsAndTransactions: [], complete: false };
+ const delay = (ms) => new Promise((done) => setTimeout(done, ms));
++const extended = process.env.FISHMARK_TABLE_HISTORY_EXTENDED === "1";
+ const js = (code) => win.webContents.executeJavaScript(code, true);
+ const action = (label) => js(`window.__tableHistory.setAction(${JSON.stringify(label)})`);
+ async function snapshot(label) { const value = await js(`window.__tableHistory.snapshot(${JSON.stringify(label)})`); result.snapshots.push(value); return value; }
+@@ -52,6 +53,88 @@ async function finish(error) {
+   if (win && !win.isDestroyed()) win.close();
+   app.exit(error ? 1 : result.checks.every((check) => check.pass) ? 0 : 2);
+ }
++async function extendedChecks() {
++  result.extendedProtocol = "native selection replacement, two-cell edits, rich/CJK preview, paragraph focus/edit roundtrips, empty history frames";
++  async function expectCells(label, left, right, paragraph = "Plain paragraph.") {
++    const after = await snapshot(label);
++    for (const [cell, expected] of [["1:0", left], ["1:1", right]]) {
++      check(label + " " + cell + " source and DOM", after.cellTexts.find((value) => value.cell === cell)?.text === expected && after.sourceCells.find((value) => value.cell === cell)?.text === expected, after);
++    }
++    check(label + " paragraph unchanged", after.source.startsWith(paragraph + "\n\n"), after.source);
++    return after;
++  }
++  async function replace(cell, start, end, text, label) {
++    await click(cell, label + " focus");
++    await action(label + " selection"); await js(`window.__tableHistory.selectCellRange(${JSON.stringify(cell)},${start},${end})`);
++    await action(label); await win.webContents.insertText(text); await delay(180);
++  }
++  await replace("1:1", 0, 4, "Gamma", "extended Beta replace");
++  await expectCells("extended Gamma", "Delta", "Gamma");
++  await key("z", "extended:Gamma:undo-step"); await expectCells("extended Gamma undone", "Delta", "Beta");
++  await key("y", "extended:Gamma:redo-step"); await expectCells("extended Gamma redone", "Delta", "Gamma");
++  await replace("1:0", 0, 5, "Echo", "extended Delta replace");
++  await expectCells("extended Echo", "Echo", "Gamma");
++  await click("1:1", "extended Beta roundtrip"); await click("1:0", "extended Echo return");
++  await key("z", "extended:Echo:undo-step"); await expectCells("extended Echo undone", "Delta", "Gamma");
++  await key("y", "extended:Echo:redo-step"); await expectCells("extended Echo redone", "Echo", "Gamma");
++  await replace("1:0", 1, 3, "**中文**", "extended partial rich replacement");
++  await expectCells("extended rich", "E**中文**o", "Gamma");
++  await click("1:1", "extended rich blur");
++  check("extended inactive rich/CJK preview retained", await js("Boolean(document.querySelector('[data-table-cell=\"1:0\"] .cm-inactive-inline-strong .cm-fishmark-cjk-font'))"));
++  await click("1:0", "extended rich return");
++  await key("z", "extended:rich:undo-step"); await expectCells("extended rich undone", "Echo", "Gamma");
++  await key("y", "extended:rich:redo-step"); await expectCells("extended rich redone", "E**中文**o", "Gamma");
++  await documentFocus("extended paragraph focus");
++  await click("1:0", "extended paragraph return");
++  await key("z", "extended:paragraph:undo-step"); await expectCells("extended paragraph undo", "Echo", "Gamma");
++  await key("y", "extended:paragraph:redo-step"); await expectCells("extended paragraph redo", "E**中文**o", "Gamma");
++  await documentFocus("extended paragraph edit focus");
++  await action("extended paragraph insert"); await win.webContents.insertText("!"); await delay(180);
++  await click("1:0", "extended paragraph edit return");
++  // Existing Chromium beforeinput may target CM's most recent paragraph edit
++  // even when keydown starts in a cell. The fresh main control proves this route.
++  await key("z", "extended:paragraph-edit:undo-step"); await expectCells("extended paragraph edit undo", "E**中文**o", "Gamma");
++  await key("y", "extended:paragraph-edit:redo-step"); await expectCells("extended paragraph edit redo", "E**中文**o", "Gamma", "Plain !paragraph.");
++  const before = await snapshot("extended unchanged history before");
++  const beforeRecords = await js("window.__tableHistory.records()");
++  await action("extended unchanged history");
++  await js("document.querySelector('[data-table-cell=\"1:0\"]').dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'historyUndo'}))");
++  await delay(180); const after = await snapshot("extended unchanged history after");
++  const additions = (await js("window.__tableHistory.records()")).slice(beforeRecords.length);
++  check("extended unchanged history source/depth preserved", before.source === after.source && JSON.stringify(before.history) === JSON.stringify(after.history), { before, after });
++  check("extended unchanged history no document/dirty notifications", !additions.some((entry) => entry.kind === "content" || entry.kind === "frame" || (entry.kind === "transaction" && entry.docChanged)), additions);
++  await replace("1:0", 0, 8, "Foxtrot", "extended inactive target edit");
++  await click("1:1", "extended inactive target blur");
++  await key("z", "extended:inactive-target:undo-step");
++  await expectCells("extended inactive target undo", "E**中文**o", "Gamma", "Plain !paragraph.");
++  await key("y", "extended:inactive-target:redo-step");
++  await expectCells("extended inactive target redo", "Foxtrot", "Gamma", "Plain !paragraph.");
++  // Separate opt-in evidence: CDP does not certify OS IME event provenance.
++  if (process.env.FISHMARK_TABLE_HISTORY_COMPOSITION !== "1") return;
++  await click("1:0", "extended browser composition focus");
++  await js("window.__tableHistory.selectCellRange('1:0',0,7)");
++  const compositionBefore = await snapshot("extended browser composition before");
++  const compositionStartRecords = await js("window.__tableHistory.records()");
++  win.webContents.debugger.attach("1.3");
++  try {
++    await action("extended browser composition intermediate");
++    await win.webContents.debugger.sendCommand("Input.imeSetComposition", { text: "中", selectionStart: 1, selectionEnd: 1 });
++    await delay(180);
++    const middle = await snapshot("extended browser composition intermediate");
++    check("extended browser composition does not commit intermediate source", middle.source === compositionBefore.source && await js("document.querySelector('[data-table-cell=\"1:0\"]').dataset.tableCellComposing === 'true'"), middle);
++    await win.webContents.debugger.sendCommand("Input.imeSetComposition", { text: "中文", selectionStart: 2, selectionEnd: 2 });
++    await action("extended browser composition commit");
++    await win.webContents.debugger.sendCommand("Input.insertText", { text: "中文" });
++    await delay(250);
++    await expectCells("extended browser composition committed", "中文", "Gamma", "Plain !paragraph.");
++    const additions = (await js("window.__tableHistory.records()")).slice(compositionStartRecords.length);
++    check("extended browser composition trusted start/end", ["compositionstart", "compositionend"].every((type) => additions.some((entry) => entry.kind === "event" && entry.type === type && entry.phase === "capture" && entry.isTrusted)), additions);
++    check("extended browser composition commits one frame", additions.filter((entry) => entry.kind === "frame").length === 1, additions);
++  } finally { win.webContents.debugger.detach(); }
++  await click("1:1", "extended browser composition blur");
++  await key("z", "extended:composition:undo-step"); await expectCells("extended browser composition undone", "Foxtrot", "Gamma", "Plain !paragraph.");
++  await key("y", "extended:composition:redo-step"); await expectCells("extended browser composition redone", "中文", "Gamma", "Plain !paragraph.");
++}
+ app.whenReady().then(async () => {
+   win = new BrowserWindow({ width: 1200, height: 900, x: 80, y: 80, show: true, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } });
+   win.focus(); await win.loadURL(process.env.FISHMARK_TABLE_HISTORY_URL); win.focus();
+@@ -82,5 +165,6 @@ app.whenReady().then(async () => {
+     const transactions = relevant.filter((entry) => entry.kind === "transaction" && entry.docChanged);
+     check(kind + " correct history provenance", route === "native-cell" ? nativeInputs.length === 5 && nativeInputs.every((entry) => entry.isTrusted && entry.inputType === (kind === "undo" ? "historyUndo" : "historyRedo")) && transactions.length === 5 && transactions.every((entry) => entry.userEvent === "input.table-edit") : nativeInputs.length === 0 && transactions.length === 5 && transactions.every((entry) => entry.userEvent === kind), { nativeInputs, transactions });
+   }
++  if (extended && route === "native-cell") await extendedChecks();
+   await finish();
+ }).catch(finish);
+diff --git a/scripts/probe-table-history.mjs b/scripts/probe-table-history.mjs
+index 21c7a87..04f8462 100644
+--- a/scripts/probe-table-history.mjs
++++ b/scripts/probe-table-history.mjs
+@@ -8,7 +8,8 @@ import { execFileSync } from "node:child_process";
+ import { runEditorBehaviorProcess } from "./editor-behavior-process-launcher.mjs";
+ 
+ const root = resolve(dirname(fileURLToPath(import.meta.url)), ".."), route = process.argv[2], out = resolve(process.argv[3] ?? "");
+-if (!["native-cell", "document-history"].includes(route) || process.argv.length !== 4) throw new Error("Usage: node scripts/probe-table-history.mjs native-cell|document-history FRESH_OUTPUT_DIR");
++const candidateSha256 = process.argv[4];
++if (!["native-cell", "document-history"].includes(route) || ![4, 5].includes(process.argv.length) || (candidateSha256 !== undefined && !/^[a-f0-9]{64}$/u.test(candidateSha256))) throw new Error("Usage: node scripts/probe-table-history.mjs native-cell|document-history FRESH_OUTPUT_DIR [TABLE_WIDGET_CANDIDATE_SHA256]");
+ if (existsSync(out)) throw new Error("Fresh output directory required");
+ mkdirSync(out, { recursive: true });
+ const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
+@@ -18,10 +19,12 @@ const files = ["src/renderer/code-editor.ts", "packages/codemirror-adapter/src/e
+ const identity = files.map((file) => {
+   const expected = execFileSync("git", ["show", `${baseline}:${file}`], { cwd: root }), actual = readFileSync(resolve(root, file));
+   const normalized = Buffer.from(actual.toString().replaceAll("\r\n", "\n"));
+-  if (!normalized.equals(expected)) throw new Error("Published product source mismatch " + file);
++  if (file === "packages/codemirror-adapter/src/decorations/table-widget.ts" && candidateSha256 !== undefined) {
++    if (hash(actual) !== candidateSha256) throw new Error("Pinned table widget candidate mismatch");
++  } else if (!normalized.equals(expected)) throw new Error("Published product source mismatch " + file);
+   return { file, publishedSha256: hash(expected), normalizedWorkingSha256: hash(normalized), workingByteSha256: hash(actual) };
+ });
+-writeFileSync(resolve(out, "source-identity.json"), JSON.stringify({ baseline, route, phaseTiming: "off", productTransforms: 0, files: identity,
++writeFileSync(resolve(out, "source-identity.json"), JSON.stringify({ baseline, candidateSha256: candidateSha256 ?? null, route, phaseTiming: "off", productTransforms: 0, files: identity,
+   scripts: ["scripts/probe-table-history.mjs", "scripts/table-history-renderer.ts", "scripts/electron-table-history-main.cjs"].map((file) => ({ file, sha256: hash(readFileSync(resolve(root, file))) })) }, null, 2), { flag: "wx" });
+ const port = 5199;
+ const server = await createServer({ configFile: resolve(root, "vite.config.ts"), server: { host: "localhost", port, strictPort: true, watch: null, hmr: false, fs: { allow: [root] } }, logLevel: "silent",
+diff --git a/scripts/table-history-renderer.ts b/scripts/table-history-renderer.ts
+index 6923d4a..f41b35f 100644
+--- a/scripts/table-history-renderer.ts
++++ b/scripts/table-history-renderer.ts
+@@ -6,6 +6,7 @@ import { EditorView } from "@codemirror/view";
+ import { StateEffect, Transaction } from "@codemirror/state";
+ import { undoDepth, redoDepth } from "@codemirror/commands";
+ import { createCodeEditorController } from "../src/renderer/code-editor";
++import { parseMarkdownDocument } from "@fishmark/markdown-engine";
+ 
+ // Diagnostic observers only: no event prevention, product transform, history reset or undo shim.
+ const initial = "Plain paragraph.\n\n| Name | Value |\n| --- | --- |\n| Alpha | Beta |";
+@@ -25,8 +26,10 @@ if (!view) throw new Error("Product EditorView missing");
+ 
+ function state() {
+   const active = document.activeElement as HTMLElement | null;
++  const table = parseMarkdownDocument(controller.getContent()).blocks.find((block) => block.type === "table");
+   return { source: controller.getContent(), cellTexts: [...root.querySelectorAll<HTMLElement>("[data-table-cell]")].map((element) => ({
+     cell: element.dataset.tableCell, text: element.textContent })),
++  sourceCells: table?.type === "table" ? [table.header, ...table.rows].flatMap((cells) => cells.map((cell) => ({ cell: `${cell.rowIndex}:${cell.columnIndex}`, text: cell.text }))) : [],
+   selection: controller.getSelection(), domSelection: window.getSelection()?.toString() ?? null,
+   focus: { className: active?.className ?? null, cell: active?.dataset.tableCell ?? null },
+   history: { undo: undoDepth(view.state), redo: redoDepth(view.state) } };
+@@ -42,7 +45,7 @@ view.dispatch({ effects: StateEffect.appendConfig.of(EditorView.updateListener.o
+   }
+ })) });
+ 
+-for (const type of ["keydown", "keyup", "beforeinput", "input", "mousedown", "mouseup", "click", "focusin", "focusout"]) {
++for (const type of ["keydown", "keyup", "beforeinput", "input", "mousedown", "mouseup", "click", "focusin", "focusout", "compositionstart", "compositionupdate", "compositionend"]) {
+   for (const capture of [true, false]) document.addEventListener(type, (event) => {
+     const target = event.target instanceof HTMLElement ? event.target : null;
+     const keyboard = event instanceof KeyboardEvent ? event : null;
+@@ -65,6 +68,12 @@ window.__tableHistory = {
+     element.focus(); const range = document.createRange(); range.selectNodeContents(element);
+     const selection = window.getSelection()!; selection.removeAllRanges(); selection.addRange(range);
+     return { preparation: "DOM range, not trusted keyboard selection", text: selection.toString(), ...state() }; },
++  selectCellRange(cell: string, start: number, end: number) {
++    const element = root.querySelector<HTMLElement>(`[data-table-cell="${cell}"]`)!;
++    element.focus();
++    (element as HTMLElement & { setSelectionRange(start: number, end: number): void }).setSelectionRange(start, end);
++    return { preparation: "DOM range, not trusted keyboard selection", text: window.getSelection()?.toString(), ...state() };
++  },
+   focusDocument() { const before = state(); controller.setSelection(6); controller.focus(); return { before, after: state() }; },
+   presentation() { const css = getComputedStyle(view.contentDOM); return { dpr: devicePixelRatio, fontFamily: css.fontFamily, fontSize: css.fontSize,
+     lineHeight: css.lineHeight, width: root.getBoundingClientRect().width }; }
+@@ -77,6 +86,7 @@ declare global { interface Window { __tableHistory: {
+   records(): unknown[];
+   cellPoint(cell: string): { x: number; y: number };
+   selectAlpha(): ReturnType<typeof state> & { preparation: string; text: string };
++  selectCellRange(cell: string, start: number, end: number): ReturnType<typeof state> & { preparation: string; text: string | undefined };
+   focusDocument(): { before: ReturnType<typeof state>; after: ReturnType<typeof state> };
+   presentation(): { dpr: number; fontFamily: string; fontSize: string; lineHeight: string; width: number };
+ } } }
+diff --git a/src/renderer/code-editor.test.ts b/src/renderer/code-editor.test.ts
+index 559aeac..36ef068 100644
+--- a/src/renderer/code-editor.test.ts
++++ b/src/renderer/code-editor.test.ts
+@@ -9174,6 +9174,42 @@ describe("createCodeEditorController", () => {
+ });
+ 
+ describe("document change frames", () => {
++  it("does not dirty or add history for unchanged table history input and seals the saved source", async () => {
++    const host = document.createElement("div"), frames = createDocumentFrameCollector(), onChange = vi.fn();
++    document.body.appendChild(host);
++    const controller = createCodeEditorController({
++      parent: host,
++      initialContent: "| Name | Value |\n| --- | --- |\n| Alpha | Beta |",
++      onChange,
++      onDocumentChangeFrame: frames.onDocumentChangeFrame
++    });
++    const advanced = controller as typeof controller & {
++      setDocumentIdentity: (identity: DocumentFrame["identity"]) => void;
++      flushPendingDocumentChanges: () => void;
++      sealForBarrier: () => Promise<{ text: string; identity: DocumentFrame["identity"] }>;
++    };
++    advanced.setDocumentIdentity({ tabId: "table-history", epoch: 1, loadRevision: 1 });
++    controller.editTableCell({ row: 1, column: 0, text: "Delta" });
++    advanced.flushPendingDocumentChanges();
++    const savedSource = controller.getContent(), view = getEditorView(host)!;
++    const depth = undoDepth(view.state);
++    frames.frames.length = 0;
++    onChange.mockClear();
++    const cell = host.querySelector<HTMLElement>('[data-table-cell="1:0"]')!;
++    for (const inputType of ["historyUndo", "historyRedo"]) {
++      cell.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, inputType }));
++      cell.dispatchEvent(new InputEvent("input", { bubbles: true, inputType }));
++    }
++    advanced.flushPendingDocumentChanges();
++    expect(controller.getContent()).toBe(savedSource);
++    expect(undoDepth(view.state)).toBe(depth);
++    expect(onChange).not.toHaveBeenCalled();
++    expect(frames.frames).toEqual([]);
++    await expect(advanced.sealForBarrier()).resolves.toMatchObject({ text: savedSource, identity: { tabId: "table-history" } });
++    controller.destroy();
++    host.remove();
++  });
++
+   it("serializes multi-range UTF-16 and CRLF edits in the original document coordinates", () => {
+     const host = document.createElement("div");
+     const frames = createDocumentFrameCollector();

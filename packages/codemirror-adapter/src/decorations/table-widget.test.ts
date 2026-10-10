@@ -71,12 +71,13 @@ function createWidget(
     block?: TableBlock;
     source?: string;
     renderOptions?: TableWidgetRenderOptions;
+    activePosition?: TablePosition;
   } = {}
 ): { readonly widget: TableWidget; readonly dom: HTMLElement } {
   const block = options.block ?? parseTableBlock();
   const decoration = createTableWidgetDecoration(
     block,
-    { row: 1, column: 0 },
+    options.activePosition ?? { row: 1, column: 0 },
     spies,
     options.source ?? TABLE_SOURCE,
     options.renderOptions ?? {}
@@ -116,6 +117,94 @@ const nextTask = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 afterEach(() => {
   document.body.replaceChildren();
+});
+
+describe("table cell native history DOM", () => {
+  it.each(["Alpha", "**中文**", "`code`"])("restores the same editable nodes after previewing %s", (text) => {
+    const source = `| Name | Value |\n| --- | --- |\n| ${text} | Beta |`;
+    const spies = createCallbackSpies();
+    const { dom } = createWidget(spies, { source, block: parseTableBlock(source) });
+    document.body.appendChild(dom);
+    const editor = readCell(dom, 1, 0);
+    const originalNodes = Array.from(editor.childNodes);
+    for (let cycle = 0; cycle < 3; cycle += 1) {
+      const inactive = createWidget(spies, { source, block: parseTableBlock(source), activePosition: { row: 1, column: 1 } });
+      expect(inactive.widget.updateDOM(dom)).toBe(true);
+      expect(editor.textContent).toBe(text);
+      if (text === "**中文**") expect(editor.querySelector(".cm-inactive-inline-strong")?.textContent).toBe("中文");
+      const active = createWidget(spies, { source, block: parseTableBlock(source) });
+      expect(active.widget.updateDOM(dom)).toBe(true);
+      expect(Array.from(editor.childNodes)).toEqual(originalNodes);
+      originalNodes.forEach((node, index) => expect(editor.childNodes[index]).toBe(node));
+      expect(editor.querySelector(".cm-inactive-inline-marker")).toBeNull();
+    }
+  });
+
+  it("does not restore parked text after a document history update changes that cell", () => {
+    const spies = createCallbackSpies();
+    const { dom } = createWidget(spies);
+    document.body.appendChild(dom);
+    const editor = readCell(dom, 1, 0), previousNode = editor.firstChild;
+    createWidget(spies, { activePosition: { row: 1, column: 1 } }).widget.updateDOM(dom);
+    const source = TABLE_SOURCE.replace("pen", "pencil");
+    createWidget(spies, { source, block: parseTableBlock(source), activePosition: { row: 1, column: 1 } }).widget.updateDOM(dom);
+    createWidget(spies, { source, block: parseTableBlock(source) }).widget.updateDOM(dom);
+    expect(editor.textContent).toBe("pencil");
+    expect(editor.firstChild).not.toBe(previousNode);
+  });
+
+  it("rejects parked nodes mutated while detached rather than overwriting canonical source", () => {
+    const spies = createCallbackSpies();
+    const { dom } = createWidget(spies);
+    document.body.appendChild(dom);
+    const editor = readCell(dom, 1, 0), original = editor.firstChild!;
+    createWidget(spies, { activePosition: { row: 1, column: 1 } }).widget.updateDOM(dom);
+    original.textContent = "stale browser mutation";
+    createWidget(spies).widget.updateDOM(dom);
+    expect(editor.textContent).toBe("pen");
+    expect(editor.firstChild).not.toBe(original);
+  });
+
+  it("restores the native target's original nodes before history input while another cell is active", () => {
+    const spies = createCallbackSpies();
+    const { dom } = createWidget(spies);
+    document.body.appendChild(dom);
+    const editor = readCell(dom, 1, 0), original = editor.firstChild!;
+    createWidget(spies, { activePosition: { row: 1, column: 1 } }).widget.updateDOM(dom);
+    editor.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, inputType: "historyUndo" }));
+    expect(editor.firstChild).toBe(original);
+    original.textContent = "pencil";
+    editor.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "historyUndo" }));
+    expect(spies.updateCell.mock.calls[0]?.[1]).toBe("pencil");
+  });
+
+  it("retains rich inactive preview and its parked nodes when native history changes nothing", () => {
+    const source = TABLE_SOURCE.replace("pen", "**中文**"), spies = createCallbackSpies();
+    const { dom } = createWidget(spies, { source, block: parseTableBlock(source) });
+    document.body.appendChild(dom);
+    const editor = readCell(dom, 1, 0), original = editor.firstChild;
+    createWidget(spies, { source, block: parseTableBlock(source), activePosition: { row: 1, column: 1 } }).widget.updateDOM(dom);
+    const preview = editor.querySelector(".cm-inactive-inline-strong");
+    editor.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, inputType: "historyUndo" }));
+    editor.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "historyUndo" }));
+    expect(spies.updateCell).not.toHaveBeenCalled();
+    expect(editor.querySelector(".cm-inactive-inline-strong")).toBe(preview);
+    createWidget(spies, { source, block: parseTableBlock(source) }).widget.updateDOM(dom);
+    expect(editor.firstChild).toBe(original);
+  });
+
+  it.each(["historyUndo", "historyRedo"])("does not commit unchanged %s input, but commits actual text restoration", (inputType) => {
+    const spies = createCallbackSpies();
+    const { dom } = createWidget(spies);
+    document.body.appendChild(dom);
+    const editor = readCell(dom, 1, 0);
+    editor.dispatchEvent(new InputEvent("input", { bubbles: true, inputType }));
+    expect(spies.updateCell).not.toHaveBeenCalled();
+    editor.textContent = "pencil";
+    editor.dispatchEvent(new InputEvent("input", { bubbles: true, inputType }));
+    expect(spies.updateCell).toHaveBeenCalledTimes(1);
+    expect(spies.updateCell.mock.calls[0]?.[1]).toBe("pencil");
+  });
 });
 
 describe("table widget cell dispatch ownership", () => {

@@ -8,7 +8,8 @@ import { execFileSync } from "node:child_process";
 import { runEditorBehaviorProcess } from "./editor-behavior-process-launcher.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), ".."), route = process.argv[2], out = resolve(process.argv[3] ?? "");
-if (!["native-cell", "document-history"].includes(route) || process.argv.length !== 4) throw new Error("Usage: node scripts/probe-table-history.mjs native-cell|document-history FRESH_OUTPUT_DIR");
+const candidateSha256 = process.argv[4];
+if (!["native-cell", "document-history"].includes(route) || ![4, 5].includes(process.argv.length) || (candidateSha256 !== undefined && !/^[a-f0-9]{64}$/u.test(candidateSha256))) throw new Error("Usage: node scripts/probe-table-history.mjs native-cell|document-history FRESH_OUTPUT_DIR [TABLE_WIDGET_CANDIDATE_SHA256]");
 if (existsSync(out)) throw new Error("Fresh output directory required");
 mkdirSync(out, { recursive: true });
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
@@ -18,10 +19,12 @@ const files = ["src/renderer/code-editor.ts", "packages/codemirror-adapter/src/e
 const identity = files.map((file) => {
   const expected = execFileSync("git", ["show", `${baseline}:${file}`], { cwd: root }), actual = readFileSync(resolve(root, file));
   const normalized = Buffer.from(actual.toString().replaceAll("\r\n", "\n"));
-  if (!normalized.equals(expected)) throw new Error("Published product source mismatch " + file);
+  if (file === "packages/codemirror-adapter/src/decorations/table-widget.ts" && candidateSha256 !== undefined) {
+    if (hash(actual) !== candidateSha256) throw new Error("Pinned table widget candidate mismatch");
+  } else if (!normalized.equals(expected)) throw new Error("Published product source mismatch " + file);
   return { file, publishedSha256: hash(expected), normalizedWorkingSha256: hash(normalized), workingByteSha256: hash(actual) };
 });
-writeFileSync(resolve(out, "source-identity.json"), JSON.stringify({ baseline, route, phaseTiming: "off", productTransforms: 0, files: identity,
+writeFileSync(resolve(out, "source-identity.json"), JSON.stringify({ baseline, candidateSha256: candidateSha256 ?? null, route, phaseTiming: "off", productTransforms: 0, files: identity,
   scripts: ["scripts/probe-table-history.mjs", "scripts/table-history-renderer.ts", "scripts/electron-table-history-main.cjs"].map((file) => ({ file, sha256: hash(readFileSync(resolve(root, file))) })) }, null, 2), { flag: "wx" });
 const port = 5199;
 const server = await createServer({ configFile: resolve(root, "vite.config.ts"), server: { host: "localhost", port, strictPort: true, watch: null, hmr: false, fs: { allow: [root] } }, logLevel: "silent",

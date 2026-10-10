@@ -35,6 +35,7 @@ const INLINE_CONTAINER_CLASS_BY_TYPE = {
 type TableCellRenderMode = "plain" | "preview";
 const compositionCommitFallbackTimers = new WeakMap<HTMLElement, number>();
 const renderedCellInline = new WeakMap<HTMLElement, InlineRoot | undefined>();
+const parkedPlainCellNodes = new WeakMap<HTMLElement, { text: string; nodes: Node[] }>();
 
 // The editable cell elements are snapshotted per widget root so `destroy` can cancel every
 // composition fallback this instance scheduled. The snapshot lives in a `WeakMap` keyed by the root,
@@ -208,6 +209,7 @@ export class TableWidget extends WidgetType {
       // detached, or handed to a newer instance, drops the event instead of writing through the
       // `tableStartOffset` it recorded for a document revision that may no longer exist.
       const isCellLive = () => isCellOwnedByRoot(root, editor);
+      let historyPreviewNodes: Node[] | null = null;
 
       const commitEditorInput = () => {
         if (!isCellLive()) {
@@ -283,7 +285,24 @@ export class TableWidget extends WidgetType {
         schedulePendingCompositionCommitFallback(editor, commitEditorInput);
       });
 
-      editor.addEventListener("input", () => {
+      editor.addEventListener("beforeinput", (event) => {
+        if (
+          !isCellLive() || !(event instanceof InputEvent) || event.isComposing ||
+          editor.dataset.tableCellComposing === "true" ||
+          (event.inputType !== "historyUndo" && event.inputType !== "historyRedo") ||
+          readTableCellRenderMode(editor) !== "preview"
+        ) {
+          return;
+        }
+        // Chromium can target the last edited cell while another cell has focus.
+        // Give its original editing nodes back before the native command runs.
+        const previewNodes = Array.from(editor.childNodes);
+        if (restoreParkedPlainCellNodes(editor, editor.dataset.tableCellText ?? "")) {
+          historyPreviewNodes = previewNodes;
+        }
+      });
+
+      editor.addEventListener("input", (event) => {
         if (!isCellLive()) {
           return;
         }
@@ -294,6 +313,20 @@ export class TableWidget extends WidgetType {
 
         delete editor.dataset.tableCellPendingCompositionCommit;
         clearPendingCompositionCommitFallback(editor);
+        const previewNodes = historyPreviewNodes;
+        historyPreviewNodes = null;
+        if (
+          event instanceof InputEvent &&
+          (event.inputType === "historyUndo" || event.inputType === "historyRedo") &&
+          readTableCellText(editor) === editor.dataset.tableCellText
+        ) {
+          if (previewNodes) {
+            parkedPlainCellNodes.set(editor, { text: readTableCellText(editor), nodes: Array.from(editor.childNodes) });
+            editor.replaceChildren(...previewNodes);
+            editor.dataset.tableCellRenderMode = "preview";
+          }
+          return;
+        }
         commitEditorInput();
       });
 
@@ -597,14 +630,40 @@ function syncTableCellEditor(
     return;
   }
 
-  editor.replaceChildren(
-    nextRenderMode === "plain"
-      ? buildPlainTextFragment(editor.ownerDocument, text)
-      : buildInlinePreviewFragment(editor.ownerDocument, options.source ?? "", options.inline)
-  );
+  const parked = parkedPlainCellNodes.get(editor);
+  if (
+    nextRenderMode === "preview" &&
+    editor.dataset.tableCellRenderMode === "plain" &&
+    readTableCellText(editor) === text
+  ) {
+    // Chromium's editing history refers to the original editable nodes. Preserve
+    // those nodes while rendering an inactive preview, then put them back on focus.
+    parkedPlainCellNodes.set(editor, { text, nodes: Array.from(editor.childNodes) });
+  } else if (parked?.text !== text) {
+    parkedPlainCellNodes.delete(editor);
+  }
+  if (nextRenderMode !== "plain" || !restoreParkedPlainCellNodes(editor, text)) {
+    editor.replaceChildren(
+      nextRenderMode === "plain"
+        ? buildPlainTextFragment(editor.ownerDocument, text)
+        : buildInlinePreviewFragment(editor.ownerDocument, options.source ?? "", options.inline)
+    );
+  }
   editor.dataset.tableCellText = text;
   editor.dataset.tableCellRenderMode = nextRenderMode;
   renderedCellInline.set(editor, options.inline);
+}
+
+function restoreParkedPlainCellNodes(editor: HTMLElement, text: string): boolean {
+  const parked = parkedPlainCellNodes.get(editor);
+  if (!parked) return false;
+  parkedPlainCellNodes.delete(editor);
+  // Detached nodes remain mutable; canonical source still decides whether they
+  // can be reused. Never restore a stale browser mutation over document history.
+  if (parked.text !== text || parked.nodes.map((node) => node.textContent ?? "").join("") !== text) return false;
+  editor.replaceChildren(...parked.nodes);
+  editor.dataset.tableCellRenderMode = "plain";
+  return true;
 }
 
 function readTableCellRenderMode(editor: HTMLElement): TableCellRenderMode {
