@@ -1,0 +1,186 @@
+{
+  "schemaVersion": 1,
+  "productBaseline": "1654e82cd28008cc4f6ae9adec04c5a4d56389ec",
+  "archive": {
+    "file": "evidence.json.gz",
+    "byteLength": 136145,
+    "sha256": "c99cf56b06177b5e992395e460fca3bea3e9cf92e9c58d9e689185fcc88952c4"
+  },
+  "files": [
+    {
+      "path": ".artifacts/table-history-contract-20261010/01-native-cell/report.json",
+      "byteLength": 294576,
+      "sha256": "00372cdfea6a7464f6939ccd5710b1a4f92d91e0a308ea67368d8fbdb452b1ae"
+    },
+    {
+      "path": ".artifacts/table-history-contract-20261010/01-native-cell/source-identity.json",
+      "byteLength": 3189,
+      "sha256": "bdc29e139feb9d0b915ed9c68d75ea48baf5d47b9e74e2bd48d518a39d244d2d"
+    },
+    {
+      "path": ".artifacts/table-history-contract-20261010/01-native-cell/edited.png",
+      "byteLength": 5829,
+      "sha256": "1e616dcedf1381b7e0cc211a8d67a99d4ec897d7baee4d48699b158625b22cbe"
+    },
+    {
+      "path": ".artifacts/table-history-contract-20261010/01-native-cell/final.png",
+      "byteLength": 5834,
+      "sha256": "d51d0239ef3b2f4eca98768e018d4d4061ebf071638ad8434d15e5abf7b78b1c"
+    },
+    {
+      "path": ".artifacts/table-history-contract-20261010/01-native-cell.stdout.log",
+      "byteLength": 178,
+      "sha256": "cf68c903cb535d0a9ec4fdbf5134d030effc6465a80c99ab50f515139ecdfa42"
+    },
+    {
+      "path": ".artifacts/table-history-contract-20261010/02-document-history/report.json",
+      "byteLength": 365444,
+      "sha256": "b417592299aff9b3614bb26105589cfa80cbcb493a01c6bc68a6207cd071c888"
+    },
+    {
+      "path": ".artifacts/table-history-contract-20261010/02-document-history/source-identity.json",
+      "byteLength": 3194,
+      "sha256": "d4ff75c87f3d0d7f2479d301dce86e89415d3e07d471d04aae8996bd29d26a88"
+    },
+    {
+      "path": ".artifacts/table-history-contract-20261010/02-document-history/edited.png",
+      "byteLength": 5829,
+      "sha256": "1e616dcedf1381b7e0cc211a8d67a99d4ec897d7baee4d48699b158625b22cbe"
+    },
+    {
+      "path": ".artifacts/table-history-contract-20261010/02-document-history/final.png",
+      "byteLength": 5829,
+      "sha256": "1e616dcedf1381b7e0cc211a8d67a99d4ec897d7baee4d48699b158625b22cbe"
+    },
+    {
+      "path": ".artifacts/table-history-contract-20261010/02-document-history.stdout.log",
+      "byteLength": 72,
+      "sha256": "78f26b8d589c75116a98b63105b986a4e106488f7d77397917fe5bd1a189b5e6"
+    },
+    {
+      "path": ".artifacts/table-history-contract-20261010/03-native-cell/report.json",
+      "byteLength": 294564,
+      "sha256": "12ba6514041e1b2d4d8441b1fb68937ae9f9664f4caf0640d81e8a17200429ea"
+    },
+    {
+      "path": ".artifacts/table-history-contract-20261010/03-native-cell/source-identity.json",
+      "byteLength": 3189,
+      "sha256": "bdc29e139feb9d0b915ed9c68d75ea48baf5d47b9e74e2bd48d518a39d244d2d"
+    },
+    {
+      "path": ".artifacts/table-history-contract-20261010/03-native-cell/edited.png",
+      "byteLength": 5829,
+      "sha256": "1e616dcedf1381b7e0cc211a8d67a99d4ec897d7baee4d48699b158625b22cbe"
+    },
+    {
+      "path": ".artifacts/table-history-contract-20261010/03-native-cell/final.png",
+      "byteLength": 5834,
+      "sha256": "d51d0239ef3b2f4eca98768e018d4d4061ebf071638ad8434d15e5abf7b78b1c"
+    },
+    {
+      "path": ".artifacts/table-history-contract-20261010/03-native-cell.stdout.log",
+      "byteLength": 178,
+      "sha256": "cf68c903cb535d0a9ec4fdbf5134d030effc6465a80c99ab50f515139ecdfa42"
+    },
+    {
+      "path": ".artifacts/table-history-contract-20261010/04-document-history/report.json",
+      "byteLength": 365370,
+      "sha256": "6003a99344eb6b6bb9f2caecb661a3a8ae4d2e8a3000995ff77347155a273d32"
+    },
+    {
+      "path": ".artifacts/table-history-contract-20261010/04-document-history/source-identity.json",
+      "byteLength": 3194,
+      "sha256": "d4ff75c87f3d0d7f2479d301dce86e89415d3e07d471d04aae8996bd29d26a88"
+    },
+    {
+      "path": ".artifacts/table-history-contract-20261010/04-document-history/edited.png",
+      "byteLength": 5829,
+      "sha256": "1e616dcedf1381b7e0cc211a8d67a99d4ec897d7baee4d48699b158625b22cbe"
+    },
+    {
+      "path": ".artifacts/table-history-contract-20261010/04-document-history/final.png",
+      "byteLength": 5829,
+      "sha256": "1e616dcedf1381b7e0cc211a8d67a99d4ec897d7baee4d48699b158625b22cbe"
+    },
+    {
+      "path": ".artifacts/table-history-contract-20261010/04-document-history.stdout.log",
+      "byteLength": 72,
+      "sha256": "78f26b8d589c75116a98b63105b986a4e106488f7d77397917fe5bd1a189b5e6"
+    },
+    {
+      "path": ".artifacts/table-history-contract-20261010/analysis.json",
+      "byteLength": 52065,
+      "sha256": "0e5a01159bc9b13644471c6f07b58e88b56fe3d119b7d031887741a2c2246bb5"
+    },
+    {
+      "path": ".artifacts/table-history-contract-20261010/build.log",
+      "byteLength": 16594,
+      "sha256": "0b0d8b30f125522c2b51cd2f4e25b6cb53c734de51e7a1a1c923548967d541b4"
+    },
+    {
+      "path": ".artifacts/table-history-contract-20261010/lint-final.log",
+      "byteLength": 40,
+      "sha256": "8be39c588feaaa2f3550a270dda58e02c643fc4631f9a403f27ae164581d05b6"
+    },
+    {
+      "path": ".artifacts/table-history-contract-20261010/lint.log",
+      "byteLength": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": ".artifacts/table-history-contract-20261010/typecheck.log",
+      "byteLength": 26,
+      "sha256": "1b1c940ec62053474f5d0086d8f8dd6e5312d82142a06fdd7f65104cb04d8b39"
+    },
+    {
+      "path": ".artifacts/table-history-contract-20261010/independent-review.txt",
+      "byteLength": 2419,
+      "sha256": "11f6c8e805bc7bbfd51bd16bc3095373088c8eca6df9c70f54a5539278e804eb"
+    },
+    {
+      "path": ".artifacts/table-history-contract-20261010/validation.json",
+      "byteLength": 796,
+      "sha256": "b323a14d2d62c5c48fcc4b9917379ae370478abeae8e2e442b7f47dc985ccba5"
+    },
+    {
+      "path": ".artifacts/table-history-contract-20261010/archive-evidence.mjs",
+      "byteLength": 2485,
+      "sha256": "32d9ffb4901c82005fe4887ac4fddc465c244da3d986b1b9bf868849b4f4b30c"
+    },
+    {
+      "path": "scripts/analyze-table-history.mjs",
+      "byteLength": 4914,
+      "sha256": "0d0501119b0f45e60cf2c8f8d289a9b174dc6ee094c7022640d2cd0279dcdcf4"
+    },
+    {
+      "path": "scripts/electron-table-history-main.cjs",
+      "byteLength": 8018,
+      "sha256": "e59ca5b88c313140de4b12eb821e56a460fca5d6109806df0792b7e60116f00a"
+    },
+    {
+      "path": "scripts/probe-table-history.mjs",
+      "byteLength": 3558,
+      "sha256": "516150d756e5818e706f8e33d8f668cc081f636d89f62efc23d2f39c1be66c80"
+    },
+    {
+      "path": "scripts/table-history-renderer.ts",
+      "byteLength": 5655,
+      "sha256": "51f33d1950909af7901baaaf0eef02ff779d0b44a80a8b62deb31b7ba3cac098"
+    },
+    {
+      "path": "scripts/editor-behavior-process-launcher.mjs",
+      "byteLength": 1411,
+      "sha256": "e91c32991eb95cc3a169ed01465cea15ac924c9725d33074768c047118f2d0c8"
+    },
+    {
+      "path": "vite.config.ts",
+      "byteLength": 4664,
+      "sha256": "2192c815b40ff75ec0cc6624a5ddc1668e631636ad3062ecb68a44d737d99d7e"
+    },
+    {
+      "path": "reports/task-summaries/TASK-TABLE-HISTORY-CONTRACT-008.md",
+      "byteLength": 9725,
+      "sha256": "3e3958fe1f20f84b7d1a3bd1b3834007105d028a2733862ec2cb60ff7618635e"
+    }
+  ]
+}
