@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readTableCaretGeometry, readTableSourceRangeRects } from "./table-caret-geometry";
 
-const box = new DOMRect(20, 40, 0, 21);
+const box = new DOMRect(20, 40, 15, 21);
 let rects: (range: Range) => DOMRect[];
 let original: PropertyDescriptor | undefined;
 function cell(text: string, offset = 0): HTMLElement {
@@ -108,6 +108,15 @@ describe("native table caret geometry", () => {
 });
 
 describe("table search source projection", () => {
+  it.each([[0, 2], [7, 9]])("reveals adjacent actual text when only hidden syntax is selected: %s..%s", (from, to) => {
+    const editor = cell("**hello**");
+    const open = document.createElement("span"), content = document.createElement("span"), close = document.createElement("span");
+    open.textContent = "**"; content.textContent = "hello"; close.textContent = "**";
+    editor.replaceChildren(open, content, close);
+    rects = range => range.startContainer === content.firstChild ? [box] : [];
+    expect(readTableSourceRangeRects(editor, "**hello**", from, to)).toEqual([box]);
+    expect(editor.textContent).toBe("**hello**");
+  });
   it.each([[1, 3], [2, 3], [1, 2]])("maps an escaped pipe's canonical range %s..%s to its real rendered glyph", (from, to) => {
     const editor = cell("a|b");
     const ranges: [number, number][] = [];

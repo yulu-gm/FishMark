@@ -100,7 +100,14 @@ export function createFishmarkSearchExtension() {
     const from = target.cell.content.startOffset;
     const source = view.state.doc.sliceString(from, target.cell.content.endOffset);
     const boxes = readTableSourceRangeRects(cell, source, selection.from - from, selection.to - from);
-    if (!boxes.length) return false;
+    if (!boxes.length) {
+      // Preserve the existing canonical-cell reveal for previews whose text
+      // normalization has no proven source projection. This is a cell fallback,
+      // not evidence that the requested source characters have visible geometry.
+      const fallback = cell.getBoundingClientRect();
+      if (!(fallback.height > 0) || ![fallback.top, fallback.bottom, fallback.left, fallback.right].every(Number.isFinite)) return false;
+      return revealTableRect(view, cell, fallback, "navigate");
+    }
     const rect = { left: Math.min(...boxes.map(b => b.left)), right: Math.max(...boxes.map(b => b.right)),
       top: Math.min(...boxes.map(b => b.top)), bottom: Math.max(...boxes.map(b => b.bottom)), width: 0, height: 0 };
     rect.width = rect.right - rect.left;

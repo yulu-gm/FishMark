@@ -98,10 +98,33 @@ export function readTableTextRangeRects(editor: HTMLElement, from: number, to: n
 /** Prove the rendered text projection before using canonical source offsets. */
 export function readTableSourceRangeRects(editor: HTMLElement, source: string, from: number, to: number): DOMRect[] {
   if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to <= from || to > source.length) return [];
-  if (editor.textContent === source) return readTableTextRangeRects(editor, from, to);
-  const { text, boundaries } = projectTableCellSource(source);
-  if (editor.textContent !== text) return [];
-  const start = boundaries.findIndex(boundary => boundary > from) - 1;
-  const end = boundaries.findIndex(boundary => boundary >= to);
-  return readTableTextRangeRects(editor, start, end);
+  let start = from, end = to;
+  if (editor.textContent !== source) {
+    const { text, boundaries } = projectTableCellSource(source);
+    if (editor.textContent !== text) return [];
+    start = boundaries.findIndex(boundary => boundary > from) - 1;
+    end = boundaries.findIndex(boundary => boundary >= to);
+  }
+  const boxes = readTableTextRangeRects(editor, start, end).filter(box => box.width > 0);
+  if (boxes.length) return boxes;
+  // Hidden Markdown markers have source coordinates but no visible glyph.
+  // Reveal the adjacent real text line, without claiming the marker is visible.
+  const walker = editor.ownerDocument.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+  const before: { from: number; to: number }[] = [];
+  let node = walker.nextNode(), offset = 0;
+  while (node) {
+    const next = offset + (node.nodeValue?.length ?? 0);
+    if (offset < start) before.push({ from: offset, to: Math.min(start, next) });
+    if (next > end) {
+      const adjacent = readTableTextRangeRects(editor, Math.max(end, offset), next).filter(box => box.width > 0);
+      if (adjacent.length) return [adjacent[0]!];
+    }
+    offset = next;
+    node = walker.nextNode();
+  }
+  for (const range of before.reverse()) {
+    const adjacent = readTableTextRangeRects(editor, range.from, range.to).filter(box => box.width > 0);
+    if (adjacent.length) return [adjacent[adjacent.length - 1]!];
+  }
+  return [];
 }

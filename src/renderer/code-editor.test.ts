@@ -7522,6 +7522,7 @@ describe("createCodeEditorController", () => {
     const originalFocus = HTMLElement.prototype.focus;
     const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
     const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+    const originalGetClientRects = Range.prototype.getClientRects;
     const focusCalls: Array<{ cell: string | undefined; options: FocusOptions | undefined }> = [];
     const scrollCalls: Array<{ cell: string | undefined; options: ScrollIntoViewOptions | boolean | undefined }> = [];
 
@@ -7549,15 +7550,25 @@ describe("createCodeEditorController", () => {
 
       if (this.dataset.tableCell === "1:0") {
         const scroller = host.querySelector<HTMLElement>(".cm-scroller");
-        return createDomRect(20, 160 - (scroller?.scrollTop ?? 0), 120, 24);
+        return createDomRect(20, 160 - (scroller?.scrollTop ?? 0), 120, 5000);
       }
 
       if (this.dataset.tableCell === "2:0") {
         const scroller = host.querySelector<HTMLElement>(".cm-scroller");
-        return createDomRect(20, 330 - (scroller?.scrollTop ?? 0), 120, 24);
+        return createDomRect(20, 330 - (scroller?.scrollTop ?? 0), 120, 5000);
       }
 
       return originalGetBoundingClientRect.call(this);
+    };
+    Range.prototype.getClientRects = function(this: Range) {
+      const element = this.startContainer instanceof HTMLElement ? this.startContainer : this.startContainer.parentElement;
+      const cell = element?.closest<HTMLElement>(".cm-table-widget-input");
+      if (cell?.dataset.tableCell === "1:0" || cell?.dataset.tableCell === "2:0") {
+        const scroller = host.querySelector<HTMLElement>(".cm-scroller");
+        const top = cell.dataset.tableCell === "1:0" ? 160 : 330;
+        return [createDomRect(20, top - (scroller?.scrollTop ?? 0), 0, 21)] as unknown as DOMRectList;
+      }
+      return originalGetClientRects.call(this);
     };
 
     try {
@@ -7572,6 +7583,7 @@ describe("createCodeEditorController", () => {
 
       expect(input).toBeInstanceOf(HTMLElement);
       expect(scroller).toBeInstanceOf(HTMLElement);
+      Object.defineProperties(scroller!, { clientWidth: { value: 600 }, clientHeight: { value: 200 } });
 
       input?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
       await flushMicrotasks();
@@ -7600,13 +7612,14 @@ describe("createCodeEditorController", () => {
       expect(scrollCalls).toEqual([]);
       // The 24px nearest-reveal margin keeps the caret away from the hard
       // viewport edge while still applying the smallest possible correction.
-      expect(scroller?.scrollTop).toBe(78);
+      expect(scroller?.scrollTop).toBe(75);
 
       controller.destroy();
     } finally {
       HTMLElement.prototype.focus = originalFocus;
       HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
       HTMLElement.prototype.getBoundingClientRect = originalGetBoundingClientRect;
+      Range.prototype.getClientRects = originalGetClientRects;
       host.remove();
     }
   });
