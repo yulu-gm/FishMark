@@ -26,6 +26,7 @@ type CreateInactiveInlineDecorationsOptions = {
   resolveImagePreviewUrl?: (href: string | null) => string | null;
   active?: boolean;
   markerVisible?: (from: number, to: number) => boolean;
+  elementVisible?: (from: number, to: number) => boolean;
   preserveOpeningCaretMetrics?: boolean;
 };
 
@@ -100,7 +101,7 @@ function appendInlineDecorations(
     case "emphasis":
     case "strikethrough":
     case "codeSpan":
-      appendOpeningMarkerDecoration(ranges, node, options);
+      appendOpeningMarkerDecoration(ranges, node, containingElementOptions(node, options));
       appendContentDecoration(
         ranges,
         node.openMarker.endOffset,
@@ -108,10 +109,10 @@ function appendInlineDecorations(
         INACTIVE_INLINE_CONTENT_CLASSES[node.type]
       );
       if ("children" in node) for (const child of node.children) appendInlineDecorations(child, ranges, options);
-      appendMarkerDecoration(ranges, node.closeMarker.startOffset, node.closeMarker.endOffset, options);
+      appendClosingMarkerDecoration(ranges, node, containingElementOptions(node, options));
       return;
     case "link":
-      appendOpeningMarkerDecoration(ranges, node, options);
+      appendOpeningMarkerDecoration(ranges, node, containingElementOptions(node, options));
       appendContentDecoration(
         ranges,
         node.openMarker.endOffset,
@@ -126,18 +127,18 @@ function appendInlineDecorations(
       for (const child of node.children) {
         appendInlineDecorations(child, ranges, options);
       }
-      appendMarkerDecoration(ranges, node.closeMarker.startOffset, node.endOffset, options);
+      appendClosingMarkerDecoration(ranges, node, containingElementOptions(node, options));
       return;
     case "image":
       if (options.active) {
         for (const child of node.children) appendInlineDecorations(child, ranges, { ...options,
-          markerVisible: undefined, preserveOpeningCaretMetrics: false });
+          markerVisible: undefined, elementVisible: undefined, preserveOpeningCaretMetrics: false });
         return;
       }
       ranges.push(createInactiveImagePreviewDecoration(node, options.resolveImagePreviewUrl));
       appendMarkerDecoration(ranges, node.openMarker.startOffset, node.openMarker.endOffset);
       for (const child of node.children) {
-        appendInlineDecorations(child, ranges, { ...options, preserveOpeningCaretMetrics: false });
+        appendInlineDecorations(child, ranges, { ...options, elementVisible: undefined, preserveOpeningCaretMetrics: false });
       }
       appendMarkerDecoration(ranges, node.closeMarker.startOffset, node.closeMarker.endOffset);
       return;
@@ -227,7 +228,36 @@ function appendOpeningMarkerDecoration(
   const visible = options.markerVisible?.(startOffset, endOffset) ?? options.active;
   appendInlineMarkerDecoration(ranges, startOffset, endOffset,
     visible ? ACTIVE_INLINE_MARKER_CLASS : INACTIVE_INLINE_MARKER_CLASS,
-    !visible && options.preserveOpeningCaretMetrics ? { "data-inline-opening-caret": node.type } : {});
+    visible ? { "data-inline-source-type": node.type } :
+      options.preserveOpeningCaretMetrics ? { "data-inline-opening-caret": node.type } : {});
+}
+
+type SupportedInlineElement = Extract<InlineASTNode, { type: "strong" | "emphasis" | "strikethrough" | "codeSpan" | "link" }>;
+
+function containingElementOptions(node: SupportedInlineElement, options: CreateInactiveInlineDecorationsOptions) {
+  return options.elementVisible?.(node.startOffset, node.endOffset)
+    ? { ...options, markerVisible: () => true } : options;
+}
+
+function appendClosingMarkerDecoration(ranges: InlineDecorationRange[], node: SupportedInlineElement,
+  options: CreateInactiveInlineDecorationsOptions) {
+  const from = node.closeMarker.startOffset, to = node.type === "link" ? node.endOffset : node.closeMarker.endOffset;
+  const visible = options.markerVisible?.(from, to) ?? options.active;
+  if (visible) {
+    appendInlineMarkerDecoration(ranges, from, to, ACTIVE_INLINE_MARKER_CLASS,
+      { "data-inline-source-type": node.type });
+    return;
+  }
+  if (!options.preserveOpeningCaretMetrics) {
+    appendMarkerDecoration(ranges, from, to, options);
+    return;
+  }
+  // A link destination can be arbitrarily long. Only its final delimiter owns
+  // boundary caret metrics; the URL/title retains the collapsed source style.
+  const caretFrom = node.type === "link" ? to - 1 : from;
+  appendMarkerDecoration(ranges, from, caretFrom, options);
+  appendInlineMarkerDecoration(ranges, caretFrom, to, INACTIVE_INLINE_MARKER_CLASS,
+    { "data-inline-closing-caret": node.type });
 }
 
 function appendActiveMarkerDecoration(

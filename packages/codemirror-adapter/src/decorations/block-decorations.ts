@@ -25,7 +25,8 @@ import {
   createActiveInlineImageDecorations,
   createInactiveHtmlImagePreviewDecoration
 } from "./image-widgets";
-import { createTableWidgetDecoration, type TableWidgetCallbacks } from "./table-widget";
+import { createTableWidgetDecoration, type TableWidgetCallbacks, type TableWidgetRenderOptions } from "./table-widget";
+import type { TableBlock } from "@fishmark/markdown-engine";
 import { createInactiveBlockMathPreviewDecoration } from "./math-widgets";
 import { createInactiveMermaidPreviewDecoration, isMermaidCodeFence } from "./mermaid-widgets";
 import {
@@ -41,7 +42,7 @@ import {
   type SemanticLineRole
 } from "@fishmark/editor-model";
 import type { EditorViewMode } from "../editor-view-mode";
-import { headingMarkerAt, headingMarkerIsVisible, type HeadingMarkerPresentation } from "../heading-marker-presentation";
+import { headingMarkerAt, headingMarkerIsVisible, inlineElementIsVisible, type HeadingMarkerPresentation } from "../heading-marker-presentation";
 
 
 export type CreateBlockDecorationsOptions = {
@@ -55,6 +56,7 @@ export type CreateBlockDecorationsOptions = {
   footnoteDefinitions?: ReadonlyMap<string, FootnoteDefinition>;
   resolveImagePreviewUrl?: (href: string | null) => string | null;
   tableWidgetCallbacks?: TableWidgetCallbacks | null;
+  readTableWidgetHeight?: (block: TableBlock, source: string, renderOptions: TableWidgetRenderOptions) => number;
   headingMarkerPresentation?: HeadingMarkerPresentation;
   viewMode?: EditorViewMode;
 };
@@ -100,6 +102,7 @@ type BlockDecorationContext = {
   source: string;
   resolveImagePreviewUrl?: (href: string | null) => string | null;
   tableWidgetCallbacks?: TableWidgetCallbacks | null;
+  readTableWidgetHeight?: CreateBlockDecorationsOptions["readTableWidgetHeight"];
   headingMarkerPresentation?: HeadingMarkerPresentation;
   viewMode: EditorViewMode;
 };
@@ -173,6 +176,7 @@ export function createSelectionScopedBlockDecorations(
       footnoteDefinitions: options.footnoteDefinitions,
       resolveImagePreviewUrl: options.resolveImagePreviewUrl,
       tableWidgetCallbacks: options.tableWidgetCallbacks,
+      readTableWidgetHeight: options.readTableWidgetHeight,
       headingMarkerPresentation: options.headingMarkerPresentation,
       viewMode: options.viewMode
     });
@@ -270,6 +274,7 @@ function createBlockDecorationContext(
     source,
     resolveImagePreviewUrl,
     tableWidgetCallbacks,
+    readTableWidgetHeight: options.readTableWidgetHeight,
     headingMarkerPresentation: options.headingMarkerPresentation,
     viewMode: options.viewMode ?? "wysiwym"
   };
@@ -390,8 +395,7 @@ function appendCanonicalContainerDecorations(
           class: "cm-inactive-paragraph cm-inactive-paragraph-leading"
         } }).range(firstLine.range.startOffset));
       }
-      const options = { ...inlinePresentationOptions(context),
-        preserveOpeningCaretMetrics: ancestors.some(value => value.node.kind === "list-item") };
+      const options = inlinePresentationOptions(context);
       const inactive = createInactiveInlineDecorations(node.inline, options);
       const active = [...createActiveInlineDecorations(node.inline, options), ...createActiveInlineImageDecorations(node.inline, source, context.resolveImagePreviewUrl)];
       for (const line of nodeLines) {
@@ -528,7 +532,8 @@ function appendDecorationsForBlock(
           : null,
         context.tableWidgetCallbacks ?? null,
         context.source,
-        tableRenderOptions
+        tableRenderOptions,
+        context.readTableWidgetHeight?.(block, context.source, tableRenderOptions) ?? -1
       )
     );
     return;
@@ -1288,6 +1293,9 @@ function appendHeadingMarker(from: number, context: BlockDecorationContext, rang
 
 function inlinePresentationOptions(context: BlockDecorationContext) {
   return { resolveImagePreviewUrl: context.resolveImagePreviewUrl,
+    preserveOpeningCaretMetrics: true,
+    elementVisible: (from: number, to: number) => inlineElementIsVisible({ from, to }, context.activeBlockState.selection,
+      context.hasEditorFocus, context.headingMarkerPresentation),
     markerVisible: (from: number, to: number) => headingMarkerIsVisible({ from, to }, context.activeBlockState.selection,
       context.hasEditorFocus, context.headingMarkerPresentation) };
 }

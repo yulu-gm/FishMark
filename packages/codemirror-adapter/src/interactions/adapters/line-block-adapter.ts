@@ -1,6 +1,7 @@
 import { readEditorStructureCache } from "../../transaction-adapter";
 import { createEditorDerivedSnapshotFromCache } from "@fishmark/editor-model";
 import { childrenOf, type MarkdownNode } from "@fishmark/markdown-engine";
+import { hiddenInlinePointerBoundary, readHeadingPresentation } from "../../heading-marker-presentation";
 
 import {
   anchorForVisibleLineColumn,
@@ -836,13 +837,30 @@ function resolveThematicBreakPointer(context: PointerInteractionContext): number
   return node.source.startOffset;
 }
 
+function resolveHiddenInlineEdgePointer(context: PointerInteractionContext): number | null {
+  const { event, view, lineBlock } = context;
+  if (event.type !== "mousedown" || event.button !== 0 || event.detail > 1 ||
+    event.shiftKey || event.altKey || event.ctrlKey || event.metaKey ||
+    (lineBlock?.kind !== "paragraph" && lineBlock?.kind !== "heading") ||
+    !context.lineElement.querySelector(".cm-inactive-inline-marker")) return null;
+
+  // Chromium resolves the rendered caret even where nested zero-width markers
+  // make CodeMirror's geometry scan recurse. Keep the raw DOM offset so the
+  // existing pre-focus select.pointer transaction owns the boundary mapping.
+  const anchor = resolveDomCaretPointerAnchor(context);
+  return anchor !== null && hiddenInlinePointerBoundary(context.snapshot, anchor,
+    view.state.selection.main, view.hasFocus, readHeadingPresentation(view.state)) !== null
+    ? anchor : null;
+}
+
 export const lineBlockAdapter: BlockInteractionAdapter = {
   resolvePointerSelection(context) {
     return (
       resolveHeadingPointer(context) ??
       resolveListPointer(context) ??
       resolveBlockquotePointer(context) ??
-      resolveThematicBreakPointer(context)
+      resolveThematicBreakPointer(context) ??
+      resolveHiddenInlineEdgePointer(context)
     );
   },
   resolveArrowUp(context) {

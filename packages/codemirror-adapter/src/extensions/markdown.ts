@@ -80,7 +80,7 @@ import {
   createEditorDerivedState,
   type EditorDerivedState
 } from "@fishmark/editor-model";
-import { createHeadingPresentationExtension, headingMarkerAt, progressiveMarkerAt, headingMarkerIsVisible, readHeadingPresentation, revealHeadingMarkerEffect, setHeadingPresentationEffect, type HeadingPresentationMode } from "../heading-marker-presentation";
+import { createHeadingPresentationExtension, headingMarkerAt, progressiveMarkerAt, headingMarkerIsVisible, hiddenInlinePointerBoundary, inlineElementAt, inlineElementIsVisible, readHeadingPresentation, revealHeadingMarkerEffect, setHeadingPresentationEffect, type HeadingPresentationMode } from "../heading-marker-presentation";
 import { deriveInactiveBlockDecorationsState } from "../derived-state/inactive-block-decorations";
 import { readTableContext, type TablePosition } from "../table-context";
 import { createGroupedShortcutKeymaps } from "../markdown-shortcuts";
@@ -88,6 +88,7 @@ import {
   type TableWidgetCallbacks
 } from "../decorations";
 import { createSelectionScopedBlockDecorations } from "../decorations/block-decorations";
+import { readTableWidgetHeightEstimate } from "../decorations/table-widget";
 import {
   INACTIVE_INLINE_LINK_HREF_ATTRIBUTE,
   INACTIVE_INLINE_LINK_SELECTOR
@@ -156,6 +157,7 @@ export function createFishMarkMarkdownExtensions(
   });
   let tableInteractionView: EditorView | null = null;
   let pendingTableComposition: { position: TablePosition; text: string; source: string; generation: number } | null = null;
+  let pointerEntry: { state: EditorState; hadFocus: boolean; mapEdges: boolean } | null = null;
   const runtime: MarkdownExtensionRuntime = {
     activeBlockState: initialEditorDerivedState.activeBlockState,
     editorDerivedState: initialEditorDerivedState,
@@ -373,8 +375,8 @@ export function createFishMarkMarkdownExtensions(
     focusTableCellEditor(view, tableContext.position);
   };
 
-  const selectTablePosition = (view: EditorView, position: TablePosition) =>
-    runTableSelectCell(view, createLiveActiveBlockState(view.state), position);
+  const selectTablePosition = (view: EditorView, position: TablePosition, scrollIntoView = true) =>
+    runTableSelectCell(view, createLiveActiveBlockState(view.state), position, { scrollIntoView });
 
   const syncTableInteractionFocus = (
     view: EditorView,
@@ -437,7 +439,9 @@ export function createFishMarkMarkdownExtensions(
         return;
       }
 
-      if (!selectTablePosition(tableInteractionView, position)) {
+      // Native focus/mousedown run before the browser establishes its final caret.
+      // Their interim source selection must not reveal the whole replacement table.
+      if (!selectTablePosition(tableInteractionView, position, options?.restoreDomFocus !== false)) {
         return;
       }
 
@@ -523,7 +527,8 @@ export function createFishMarkMarkdownExtensions(
 
   const createDecoratedDerivedState = (
     editorDerivedState: EditorDerivedState,
-    state: EditorState
+    state: EditorState,
+    view?: EditorView
   ) => {
     const viewMode = getMarkdownEditorViewMode(state);
     const inactiveBlockDecorationsState = deriveInactiveBlockDecorationsState({
@@ -533,6 +538,8 @@ export function createFishMarkMarkdownExtensions(
       editorDerivedState,
       resolveImagePreviewUrl: options.resolveImagePreviewUrl,
       tableWidgetCallbacks,
+      readTableWidgetHeight: view ? (block, source, renderOptions) =>
+        readTableWidgetHeightEstimate(view, block, source, renderOptions) : undefined,
       headingMarkerPresentation: readHeadingPresentation(state),
       viewMode
     });
@@ -576,7 +583,7 @@ export function createFishMarkMarkdownExtensions(
       readHeadingPresentation(view.state).mode !== "editing") return false;
     const selection = view.state.selection.main;
     if (!selection.empty && !extend) return false;
-    const range = progressiveMarkerAt(readStateSnapshot(view.state), selection.head);
+    const range = progressiveMarkerAt(readStateSnapshot(view.state), selection.head, true, direction);
     if (range === null || selection.head < range.from || selection.head > range.to ||
       (direction > 0 && selection.head === range.to) || (direction < 0 && selection.head === range.from)) return false;
     const line = view.state.doc.lineAt(selection.head);
@@ -591,6 +598,8 @@ export function createFishMarkMarkdownExtensions(
     // List content-start Backspace retains its existing semantic detach/delete.
     const range = progressiveMarkerAt(readStateSnapshot(view.state), selection.head, false);
     const presentation = readHeadingPresentation(view.state);
+    const inlineElement = inlineElementAt(readStateSnapshot(view.state), selection.head);
+    if (inlineElement !== null && inlineElementIsVisible(inlineElement, selection, true, presentation)) return false;
     if (!selection.empty || range === null ||
       (presentation.mode === "editing" ? selection.head !== range.to : selection.head < range.from || selection.head > range.to) ||
       headingMarkerIsVisible(range, selection, true, presentation)) return false;
@@ -664,6 +673,8 @@ export function createFishMarkMarkdownExtensions(
         referenceDefinitions: editorDerivedState.referenceDefinitions,
         resolveImagePreviewUrl: options.resolveImagePreviewUrl,
         tableWidgetCallbacks,
+        readTableWidgetHeight: (block, source, renderOptions) =>
+          readTableWidgetHeightEstimate(view, block, source, renderOptions),
         headingMarkerPresentation: readHeadingPresentation(state),
         viewMode: getMarkdownEditorViewMode(state)
       });
@@ -686,7 +697,8 @@ export function createFishMarkMarkdownExtensions(
 
     const { activeBlockState, decorationSet, signature } = createDecoratedDerivedState(
       editorDerivedState,
-      state
+      state,
+      view
     );
 
     const sourceChanged = runtime.editorDerivedState.source !== editorDerivedState.source;
@@ -696,8 +708,9 @@ export function createFishMarkMarkdownExtensions(
     syncTableInteractionFocus(view, activeBlockState);
   };
 
-  const syncBlurDecorations = (view: EditorView) => {
+  const syncBlurDecorations = (view: EditorView, isAlive: () => boolean) => {
     queueMicrotask(() => {
+      if (!isAlive()) return;
       const nextHasEditorFocus = view.hasFocus;
 
       if (runtime.hasEditorFocus === nextHasEditorFocus) {
@@ -780,6 +793,7 @@ export function createFishMarkMarkdownExtensions(
 
   const lifecyclePlugin = ViewPlugin.fromClass(class {
     view: EditorView;
+    destroyed = false;
     compositionFinishTimer: ReturnType<typeof setTimeout> | null = null;
     compositionBaseSource: string | null = null;
     compositionGeneration: number | null = null;
@@ -811,7 +825,14 @@ export function createFishMarkMarkdownExtensions(
       }
 
       runtime.hasEditorFocus = true;
-      recomputeDerivedState(view, view.state, true);
+      // setState constructs plugins while CodeMirror is still updating. Refresh
+      // focused decorations only after that update, and never for a replaced
+      // plugin whose DOM listeners and semantic session have been released.
+      queueMicrotask(() => {
+        if (!this.destroyed && view.hasFocus) {
+          recomputeDerivedState(view, view.state, true);
+        }
+      });
     }
 
     handleCompositionStart = () => {
@@ -922,7 +943,7 @@ export function createFishMarkMarkdownExtensions(
         return;
       }
 
-      syncBlurDecorations(this.view);
+      syncBlurDecorations(this.view, () => !this.destroyed);
       options.onBlur?.();
     };
 
@@ -1000,6 +1021,12 @@ export function createFishMarkMarkdownExtensions(
     };
 
     handleMouseDown = (event: MouseEvent) => {
+      // CodeMirror focuses before it dispatches the pointer selection. Capture
+      // what was visible at hit time, before that focus can reveal old selection.
+      const entry = { state: this.view.state, hadFocus: runtime.hasEditorFocus,
+        mapEdges: event.button === 0 && !event.shiftKey && event.detail <= 1 };
+      pointerEntry = entry;
+      queueMicrotask(() => { if (pointerEntry === entry) pointerEntry = null; });
       const inactiveLinkTarget = resolveInactiveLinkTarget(event);
 
       if (inactiveLinkTarget) {
@@ -1032,14 +1059,22 @@ export function createFishMarkMarkdownExtensions(
 
       if (interactionAnchor !== null) {
         event.preventDefault();
+        if (entry.mapEdges && !event.altKey && !event.ctrlKey && !event.metaKey &&
+          hiddenInlinePointerBoundary(runtime.activeBlockState.snapshot, interactionAnchor,
+            entry.state.selection.main, entry.hadFocus, readHeadingPresentation(entry.state)) !== null) {
+          // Focus can dispatch presentation updates. Complete it before selecting
+          // this hidden edge, while pointerEntry retains the pre-focus intent.
+          this.view.focus();
+        }
         this.view.dispatch({
           selection: {
             anchor: interactionAnchor,
             head: interactionAnchor
-          }
+          },
+          userEvent: "select.pointer"
         });
         this.view.focus();
-        this.startBlockPointerDragSelection(event, interactionAnchor);
+        this.startBlockPointerDragSelection(event, this.view.state.selection.main.anchor);
         return;
       }
 
@@ -1066,12 +1101,14 @@ export function createFishMarkMarkdownExtensions(
         selection: {
           anchor: nextAnchor,
           head: nextAnchor
-        }
+        },
+        userEvent: "select.pointer"
       });
       this.view.focus();
     };
 
     destroy() {
+      this.destroyed = true;
       clearTableCaretReveal(this.view);
       if (this.compositionFinishTimer !== null) clearTimeout(this.compositionFinishTimer);
       pendingTableComposition = null;
@@ -1183,8 +1220,27 @@ export function createFishMarkMarkdownExtensions(
             ) ?? nextAnchor;
         }
 
+        const pointerStart = userEvent === "select.pointer" ? pointerEntry : null;
+        if (userEvent === "select.pointer") pointerEntry = null;
+        const pointerState = pointerStart?.state.doc.eq(transaction.startState.doc)
+          ? pointerStart.state : transaction.startState;
+        const pointerBoundary = userEvent === "select.pointer" && !transaction.docChanged &&
+          pointerStart?.mapEdges !== false && transaction.newSelection.ranges.length === 1
+          ? hiddenInlinePointerBoundary(snapshot, nextAnchor, pointerState.selection.main,
+            pointerStart?.hadFocus ?? runtime.hasEditorFocus, readHeadingPresentation(pointerState)) : null;
+        if (pointerBoundary !== null) nextAnchor = pointerBoundary;
         const headingMarker = progressiveMarkerAt(snapshot, nextAnchor);
         const headingPrefix = headingMarkerAt(snapshot, nextAnchor);
+        const inlineElement = inlineElementAt(snapshot, nextAnchor);
+        const isEditingInlineSource = pointerBoundary !== null ||
+          (inlineElement !== null &&
+          (userEvent === "select.pointer" || userEvent === "select" || userEvent === "select.source-marker" ||
+            transaction.isUserEvent("undo") || transaction.isUserEvent("redo")) &&
+          (inlineElementIsVisible(inlineElement, transaction.startState.selection.main, runtime.hasEditorFocus,
+            readHeadingPresentation(transaction.startState)) ||
+            transaction.isUserEvent("undo") || transaction.isUserEvent("redo") ||
+            (readHeadingPresentation(effectiveState).mode === "editing" &&
+              (nextAnchor === inlineElement.from || nextAnchor === inlineElement.to))));
         const isEditingSourceMarker = readHeadingPresentation(effectiveState).mode === "editing" &&
           headingMarker !== null && nextAnchor >= headingMarker.from && nextAnchor < headingMarker.to &&
           (userEvent === "select.source-marker" ||
@@ -1192,7 +1248,7 @@ export function createFishMarkMarkdownExtensions(
             (userEvent === "select.pointer" &&
               headingMarkerIsVisible(headingMarker, transaction.startState.selection.main, runtime.hasEditorFocus,
                 readHeadingPresentation(transaction.startState))));
-        if (shouldNormalizeHiddenSelection && !isEditingSourceMarker) {
+        if (shouldNormalizeHiddenSelection && !isEditingSourceMarker && !isEditingInlineSource) {
           nextAnchor =
             normalizeHiddenSelectionAnchor(
               snapshot,

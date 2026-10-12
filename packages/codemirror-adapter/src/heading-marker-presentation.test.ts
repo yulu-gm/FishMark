@@ -3,7 +3,7 @@ import { EditorState } from "@codemirror/state";
 import { createDocumentStructureCache } from "@fishmark/markdown-engine";
 import { createActiveBlockState, createEditorDerivedSnapshotFromCache } from "@fishmark/editor-model";
 import { createBlockDecorations } from "./decorations/block-decorations";
-import { createHeadingPresentationExtension, headingMarkerAt, headingMarkerIsVisible, progressiveMarkerAt,
+import { createHeadingPresentationExtension, headingMarkerAt, headingMarkerIsVisible, hiddenInlinePointerBoundary, inlineElementAt, progressiveMarkerAt,
   readHeadingPresentation, revealHeadingMarkerEffect, setHeadingPresentationEffect } from "./heading-marker-presentation";
 
 const snapshotOf = (source: string) => createEditorDerivedSnapshotFromCache(createDocumentStructureCache(source));
@@ -16,20 +16,33 @@ function visibleRanges(source: string, anchor: number, head = anchor, mode: "rea
     const name = value.spec.attributes?.class;
     if (name === "cm-active-inline-marker" || name === "cm-active-list-marker") ranges.push({ from, to, class: name });
   });
-  return ranges;
+  return ranges.sort((a, b) => a.from - b.from || a.to - b.to);
 }
 
 describe("canonical progressive source markers", () => {
+  it.each(["![alt](image.png)", "$math$", "[^note]"])("keeps %s pointer owner excluded inside formatting", owner => {
+    const paragraph = `**before ${owner} after**`;
+    const source = paragraph + (owner === "[^note]" ? "\n\n[^note]: note" : ""), snapshot = snapshotOf(source);
+    const from = source.indexOf(owner), to = from + owner.length;
+    for (let offset = from; offset <= to; offset++) {
+      expect(inlineElementAt(snapshot, offset)).toBeNull();
+      expect(hiddenInlinePointerBoundary(snapshot, offset, { anchor: source.length, head: source.length }, false,
+        { mode: "editing", revealed: null })).toBeNull();
+    }
+    expect(inlineElementAt(snapshot, source.indexOf("before") + 1)).toEqual({ from: 0, to: paragraph.length });
+  });
   it.each(["**bold**", "*emphasis*", "~~strike~~", "`code`", "[label](https://example.test)"])(
-    "keeps %s content rendered and reveals only the touched or crossed marker", source => {
+    "reveals both delimiters of %s while its element is entered", source => {
       const snapshot = snapshotOf(source), content = source.startsWith("**") || source.startsWith("~~") ? 2 : 1;
       const open = progressiveMarkerAt(snapshot, 0)!;
       expect(open).toEqual({ from: 0, to: content });
-      expect(visibleRanges(source, content + 1)).toEqual([]);
-      expect(visibleRanges(source, 0)).toEqual([{ ...open, class: "cm-active-inline-marker" }]);
-      expect(visibleRanges(source, 0, content + 1)).toEqual([{ ...open, class: "cm-active-inline-marker" }]);
       const close = progressiveMarkerAt(snapshot, source.length - 1)!;
-      expect(visibleRanges(source, close.from)).toEqual([{ ...close, class: "cm-active-inline-marker" }]);
+      const both = [{ ...open, class: "cm-active-inline-marker" }, { ...close, class: "cm-active-inline-marker" }];
+      expect(visibleRanges(source, content + 1)).toEqual(both);
+      expect(visibleRanges(source, 0)).toEqual(both);
+      expect(visibleRanges(source, 0, content + 1)).toEqual(both);
+      expect(visibleRanges(source, close.from)).toEqual(both);
+      expect(visibleRanges(source, source.length)).toEqual(both);
       expect(visibleRanges(source, close.from, source.length, "reading")).toEqual([]);
       expect(visibleRanges(source, close.from, source.length, "editing", false)).toEqual([]);
     });
@@ -48,13 +61,32 @@ describe("canonical progressive source markers", () => {
       expect(progressiveMarkerAt(snapshot, prefix.from, false)).toBeNull();
     });
 
-  it("does not reveal an outer formatting marker for an inner marker or label caret", () => {
+  it("reveals containing formatting and link elements while keeping siblings hidden", () => {
     const source = "***both*** and [**label**](url)", snapshot = snapshotOf(source);
-    expect(visibleRanges(source, 4)).toEqual([]);
-    expect(visibleRanges(source, 1)).toEqual([{ from: 1, to: 3, class: "cm-active-inline-marker" }]);
+    expect(visibleRanges(source, 4)).toEqual([
+      { from: 0, to: 1, class: "cm-active-inline-marker" },
+      { from: 1, to: 3, class: "cm-active-inline-marker" },
+      { from: 7, to: 9, class: "cm-active-inline-marker" },
+      { from: 9, to: 10, class: "cm-active-inline-marker" }
+    ]);
+    expect(visibleRanges(source, 1)).toEqual([
+      { from: 0, to: 1, class: "cm-active-inline-marker" },
+      { from: 1, to: 3, class: "cm-active-inline-marker" },
+      { from: 7, to: 9, class: "cm-active-inline-marker" },
+      { from: 9, to: 10, class: "cm-active-inline-marker" }
+    ]);
     const inner = source.indexOf("**label");
     expect(progressiveMarkerAt(snapshot, inner)).toEqual({ from: inner, to: inner + 2 });
-    expect(visibleRanges(source, inner)).toEqual([{ from: inner, to: inner + 2, class: "cm-active-inline-marker" }]);
+    expect(visibleRanges(source, inner + 3)).toEqual([
+      { from: inner - 1, to: inner, class: "cm-active-inline-marker" },
+      { from: inner, to: inner + 2, class: "cm-active-inline-marker" },
+      { from: inner + 7, to: inner + 9, class: "cm-active-inline-marker" },
+      { from: inner + 9, to: source.length, class: "cm-active-inline-marker" }
+    ]);
+    expect(visibleRanges(source, source.indexOf("url") + 1)).toEqual([
+      { from: inner - 1, to: inner, class: "cm-active-inline-marker" },
+      { from: inner + 9, to: source.length, class: "cm-active-inline-marker" }
+    ]);
   });
 
   it.each(["![alt](image.png)", "$x$", "[^note]", "```text\nx\n```", "| a |\n| --- |\n| b |"])(

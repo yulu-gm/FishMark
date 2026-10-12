@@ -31,6 +31,7 @@ import { createDocumentStructureCache } from "@fishmark/markdown-engine";
 import {
   createActiveBlockState,
   createEditorDerivedSnapshotFromCache,
+  createVisibleLine,
   planPrintableInput,
   type ActiveBlockState
 } from "@fishmark/editor-model";
@@ -169,6 +170,8 @@ export function createCodeEditorController(
   } | null = null;
   let pendingFrameHandle: number | null = null;
   let pendingFrameEpoch = 0;
+  let navigationMeasureFrame: number | null = null;
+  let navigationMeasureEpoch = 0;
   let isComposing = false;
   let compositionCheckpointPending = false;
   let hasPendingDocumentChanges = false;
@@ -202,6 +205,12 @@ export function createCodeEditorController(
     cancelAnimationFrame(pendingFrameHandle);
     pendingFrameHandle = null;
     pendingFrameEpoch += 1;
+  };
+
+  const cancelNavigationMeasure = () => {
+    if (navigationMeasureFrame !== null) cancelAnimationFrame(navigationMeasureFrame);
+    navigationMeasureFrame = null;
+    navigationMeasureEpoch += 1;
   };
 
   const reportDiscardedDocumentText = (
@@ -691,6 +700,7 @@ export function createCodeEditorController(
       return updateSearchQuery({ search: "", replace: "" });
     },
     setContent(content: string) {
+      cancelNavigationMeasure();
       view.dispatch({
         changes: {
           from: 0,
@@ -701,6 +711,7 @@ export function createCodeEditorController(
       });
     },
     replaceDocument(nextContent: string) {
+      cancelNavigationMeasure();
       if (isComposing || compositionCheckpointPending || readCompositionState(view.state).active) {
         discardPendingDocumentChanges();
         abortCompositionCheckpoint();
@@ -713,6 +724,7 @@ export function createCodeEditorController(
       semanticCommands.bindSession(view, documentIdentity?.tabId);
     },
     setDocumentIdentity(nextIdentity: EditorLoadIdentity | null) {
+      cancelNavigationMeasure();
       if (isComposing || compositionCheckpointPending || readCompositionState(view.state).active) {
         discardPendingDocumentChanges();
         abortCompositionCheckpoint();
@@ -750,10 +762,12 @@ export function createCodeEditorController(
       refreshMarkdownDecorations(view);
     },
     setHeadingPresentationMode(mode: HeadingPresentationMode) {
+      cancelNavigationMeasure();
       currentHeadingPresentationMode = mode;
       setHeadingPresentation(view, mode);
     },
     setViewMode(nextMode: EditorViewMode) {
+      cancelNavigationMeasure();
       currentViewMode = nextMode;
       setMarkdownEditorViewMode(view, nextMode);
     },
@@ -773,19 +787,44 @@ export function createCodeEditorController(
       view.focus();
     },
     navigateToOffset(offset: number) {
+      cancelNavigationMeasure();
       const nextOffset = Math.max(0, Math.min(offset, view.state.doc.length));
+      const snapshot = activeBlockState.snapshot;
+      const heading = snapshot.nodeAt(nextOffset);
+      const line = snapshot.lineAt(nextOffset);
+      // Outline offsets identify the source heading. Its hidden prefix has no
+      // DOM rectangle, so reveal the visible title while retaining selection.
+      const isHeadingNavigation = currentViewMode !== "source" && heading?.kind === "heading" &&
+        heading.source.startOffset === nextOffset && line !== null;
+      const revealOffset = isHeadingNavigation
+        ? createVisibleLine({ snapshot, lineStart: line.range.startOffset,
+          lineEnd: line.contentEndOffset }).visibleStartAnchor
+        : nextOffset;
 
       view.dispatch({
         selection: {
           anchor: nextOffset,
           head: nextOffset
         },
-        effects: EditorView.scrollIntoView(nextOffset, {
+        effects: EditorView.scrollIntoView(revealOffset, {
           y: "center",
           yMargin: 24
         })
       });
       view.focus();
+      if (isHeadingNavigation) {
+        const epoch = navigationMeasureEpoch, doc = view.state.doc;
+        const selection = view.state.selection, identity = documentIdentity;
+        // A distant virtual viewport can exhaust CodeMirror's per-frame layout
+        // limit before consuming its scroll effect. Allow one subsequent frame
+        // to finish measuring; never replay selection or the reveal effect.
+        navigationMeasureFrame = requestAnimationFrame(() => {
+          if (epoch !== navigationMeasureEpoch) return;
+          navigationMeasureFrame = null;
+          if (!isDestroyed && view.state.doc === doc && documentIdentity === identity &&
+            view.state.selection.eq(selection)) view.requestMeasure();
+        });
+      }
     },
     insertText(text: string) {
       semanticCommands.run(view, context => planPrintableInput(context, text));
@@ -842,6 +881,7 @@ export function createCodeEditorController(
     },
     destroy() {
       isDestroyed = true;
+      cancelNavigationMeasure();
       const exactText = view.state.doc.toString();
       const shouldReportDiscard = pendingDocumentChanges !== null;
       cancelPendingFrame();

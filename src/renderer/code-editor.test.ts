@@ -786,7 +786,8 @@ describe("createCodeEditorController", () => {
     view?.dispatch({ selection: { anchor: source.indexOf(sourceLine) + 2 } });
 
     expect(inactiveLine?.textContent).toBe(sourceLine);
-    expect(getInlineDecorationCount(inactiveLine, "cm-inactive-inline-marker")).toBe(8);
+    expect(getInlineDecorationCount(inactiveLine, "cm-inactive-inline-marker")).toBe(6);
+    expect(getInlineDecorationCount(inactiveLine, "cm-active-inline-marker")).toBe(2);
     expect(getInlineDecorationCount(inactiveLine, "cm-inactive-inline-strong")).toBeGreaterThan(0);
     expect(getInlineDecorationCount(inactiveLine, "cm-inactive-inline-emphasis")).toBeGreaterThan(0);
     expect(getInlineDecorationCount(inactiveLine, "cm-inactive-inline-code")).toBeGreaterThan(0);
@@ -796,9 +797,13 @@ describe("createCodeEditorController", () => {
     await flushMicrotasks();
     expect(view?.state.selection.main.anchor).toBe(1);
     expect(inactiveLine?.querySelector(".cm-active-inline-marker")?.textContent).toBe("**");
-    expect(getInlineDecorationCount(inactiveLine, "cm-inactive-inline-marker")).toBe(7);
+    expect(getInlineDecorationCount(inactiveLine, "cm-inactive-inline-marker")).toBe(6);
+    expect(getInlineDecorationCount(inactiveLine, "cm-active-inline-marker")).toBe(2);
     expect(controller.getContent()).toBe(source);
 
+    view?.dispatch({ selection: { anchor: source.indexOf("Paragraph") } });
+    expect(getInlineDecorationCount(inactiveLine, "cm-inactive-inline-marker")).toBe(8);
+    expect(getInlineDecorationCount(inactiveLine, "cm-active-inline-marker")).toBe(0);
     controller.destroy();
   });
 
@@ -2630,13 +2635,15 @@ describe("createCodeEditorController", () => {
     await flushMicrotasks();
 
     expect(view?.state.selection.main.anchor).toBe(source.indexOf("内联代码"));
-    expect(getInlineDecorationCount(codeLine(), "cm-inactive-inline-marker")).toBe(2);
+    expect(getInlineDecorationCount(codeLine(), "cm-inactive-inline-marker")).toBe(0);
+    expect(getInlineDecorationCount(codeLine(), "cm-active-inline-marker")).toBe(2);
 
     advancedController.setSelection(source.indexOf("~~todo~~"));
     await flushMicrotasks();
 
     expect(view?.state.selection.main.anchor).toBe(source.indexOf("todo"));
-    expect(getInlineDecorationCount(strikeLine(), "cm-inactive-inline-marker")).toBe(2);
+    expect(getInlineDecorationCount(strikeLine(), "cm-inactive-inline-marker")).toBe(0);
+    expect(getInlineDecorationCount(strikeLine(), "cm-active-inline-marker")).toBe(2);
 
     controller.destroy();
   });
@@ -8903,14 +8910,16 @@ describe("createCodeEditorController", () => {
 
     const strikeLine = getLineElementByText(host, "~~todo~~");
     expect(view?.state.selection.main.anchor).toBe(source.indexOf("todo", source.indexOf("~~todo~~")));
-    expect(getInlineDecorationCount(strikeLine, "cm-inactive-inline-marker")).toBe(2);
+    expect(getInlineDecorationCount(strikeLine, "cm-inactive-inline-marker")).toBe(0);
+    expect(getInlineDecorationCount(strikeLine, "cm-active-inline-marker")).toBe(2);
 
     dispatchEditorKeydown(view, "ArrowUp");
     await flushMicrotasks();
 
     const codeLine = getLineElementByText(host, "`内联代码`");
     expect(view?.state.selection.main.anchor).toBe(source.indexOf("内联代码"));
-    expect(getInlineDecorationCount(codeLine, "cm-inactive-inline-marker")).toBe(2);
+    expect(getInlineDecorationCount(codeLine, "cm-inactive-inline-marker")).toBe(0);
+    expect(getInlineDecorationCount(codeLine, "cm-active-inline-marker")).toBe(2);
 
     dispatchEditorKeydown(view, "ArrowUp");
     await flushMicrotasks();
@@ -8918,7 +8927,8 @@ describe("createCodeEditorController", () => {
     const listLine = getLineElementByText(host, "- ~~Todo~~");
     expect(view?.state.selection.main.anchor).toBe(source.indexOf("Todo"));
     expect(listLine?.classList.contains("cm-inactive-list")).toBe(true);
-    expect(getInlineDecorationCount(listLine, "cm-inactive-inline-marker")).toBe(2);
+    expect(getInlineDecorationCount(listLine, "cm-inactive-inline-marker")).toBe(0);
+    expect(getInlineDecorationCount(listLine, "cm-active-inline-marker")).toBe(2);
 
     dispatchEditorKeydown(view, "ArrowUp");
     await flushMicrotasks();
@@ -9068,7 +9078,8 @@ describe("createCodeEditorController", () => {
     const thematicBreakLine = getLineElementByText(host, "+++");
 
     expect(listLine?.classList.contains("cm-inactive-list")).toBe(true);
-    expect(getInlineDecorationCount(listLine, "cm-inactive-inline-marker")).toBe(2);
+    expect(getInlineDecorationCount(listLine, "cm-inactive-inline-marker")).toBe(0);
+    expect(getInlineDecorationCount(listLine, "cm-active-inline-marker")).toBe(2);
 
     expect(getInlineDecorationCount(codeLine, "cm-inactive-inline-marker")).toBeGreaterThan(0);
     expect(getInlineDecorationCount(strikeLine, "cm-inactive-inline-marker")).toBeGreaterThan(0);

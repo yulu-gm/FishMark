@@ -8,7 +8,7 @@ import {
   type EditorSemanticContext
 } from "@fishmark/editor-model";
 import type { ActiveBlockState } from "@fishmark/editor-model";
-import { runSemanticCommand, type SemanticCommandPlanner } from "./semantic-keypress";
+import { runSemanticCommand, type SemanticCommandPlanner, type SemanticCommandDispatchOptions } from "./semantic-keypress";
 import type { TablePosition } from "./table-context";
 
 // Widget callbacks carry the table's source identity because focus may still be in a neighbouring
@@ -72,9 +72,9 @@ export function runTableDelete(view: EditorView, _state: ActiveBlockState): bool
   void _state;
   return run(view, planTableDelete);
 }
-export function runTableSelectCell(view: EditorView, _state: ActiveBlockState, target: TablePosition): boolean {
+export function runTableSelectCell(view: EditorView, _state: ActiveBlockState, target: TablePosition, options?: SemanticCommandDispatchOptions): boolean {
   void _state;
-  return run(view, context => planTableMoveToCell(contextForTable(context, target), target));
+  return runSemanticCommand(view, context => planTableMoveToCell(contextForTable(context, target), target), options);
 }
 export function runTableUpdateCell(view: EditorView, _state: ActiveBlockState, target: TablePosition, text: string): boolean {
   void _state;

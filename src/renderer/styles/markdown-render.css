@@ -185,9 +185,10 @@
   line-height: 0;
 }
 
-/* Only supported list opening markers retain native caret metrics. Closing
-   syntax, link destinations and image owners keep their existing presentation. */
-.document-editor .cm-inactive-inline-marker[data-inline-opening-caret] {
+/* Supported delimiters retain native caret metrics in ordinary paragraphs and
+   containers. Link destinations and special preview owners stay collapsed. */
+.document-editor .cm-inactive-inline-marker[data-inline-opening-caret],
+.document-editor .cm-inactive-inline-marker[data-inline-closing-caret] {
   display: inline-block;
   width: 0;
   height: 1em;
@@ -227,8 +228,15 @@
   color: var(--fishmark-markdown-inline-code-fg, #0f172a);
 }
 
+/* Revealed delimiters already separate code from its neighbours. Removing
+   horizontal pill padding gives the native caret and text Range the same edge. */
+.document-editor .cm-active-inline-marker + .cm-inactive-inline-code {
+  padding-inline: 0;
+}
+
 .document-editor .cm-inactive-inline-code,
-.document-editor .cm-inactive-inline-marker[data-inline-opening-caret="codeSpan"] {
+.document-editor .cm-inactive-inline-marker[data-inline-opening-caret="codeSpan"],
+.document-editor .cm-active-inline-marker[data-inline-source-type="codeSpan"] {
   font-family:
     "Cascadia Code",
     "Consolas",
@@ -1013,6 +1021,11 @@
 
 .document-editor .cm-table-widget-table {
   width: 100%;
+  min-width: calc(
+    var(--fishmark-table-min-width-columns, 1) *
+      (1ch + var(--fishmark-table-cell-padding-inline) * 2 + var(--fishmark-table-cell-border-width) * 2 + 1px) +
+      var(--fishmark-table-border-width) * 2
+  );
   max-width: 100%;
   border-collapse: separate;
   border-spacing: 0;
@@ -1045,7 +1058,25 @@
   background: var(--fishmark-table-cell-active-bg);
 }
 
-.document-editor .cm-table-widget-input {
+.document-editor .cm-table-widget-cell-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.document-editor .cm-table-widget-cell-layout > * {
+  grid-area: 1 / 1;
+}
+
+.document-editor .cm-table-widget-height-source,
+.document-editor .cm-table-widget-height-preview {
+  visibility: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+
+.document-editor .cm-table-widget-input,
+.document-editor .cm-table-widget-height-source,
+.document-editor .cm-table-widget-height-preview {
   display: block;
   min-width: 1ch;
   min-height: var(--fishmark-table-cell-min-height);
@@ -1137,7 +1168,9 @@
   margin-left: 0.3em;
 }
 
-.document-editor .cm-table-widget-row-header .cm-table-widget-input {
+.document-editor .cm-table-widget-row-header .cm-table-widget-input,
+.document-editor .cm-table-widget-row-header .cm-table-widget-height-source,
+.document-editor .cm-table-widget-row-header .cm-table-widget-height-preview {
   color: var(--fishmark-table-header-text);
   font-weight: var(--fishmark-table-header-font-weight);
 }

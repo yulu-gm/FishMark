@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 function getCssRule(stylesheet: string, selector: string): string {
-  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
   const match = stylesheet.match(new RegExp(`${escapedSelector}\\s*\\{([\\s\\S]*?)\\n\\}`, "m"));
   return match?.[1] ?? "";
 }
@@ -279,11 +279,13 @@ describe("editor source layout stylesheet", () => {
 
   it("keeps markdown text out of negative letter spacing", async () => {
     const standard = await readMarkdownTextStandard();
-    const stylesheet = await readFile(resolve(process.cwd(), "src/renderer/styles/markdown-render.css"), "utf8");
+    const stylesheet = (await readFile(resolve(process.cwd(), "src/renderer/styles/markdown-render.css"), "utf8"))
+      .replaceAll("\r\n", "\n");
     // Hidden source delimiters need normal font metrics for Chromium's native
-    // caret, with zero glyph advance. This exception cannot reach body text,
-    // closing syntax, destinations, or active source markers.
-    const selector = ".document-editor .cm-inactive-inline-marker[data-inline-opening-caret]";
+    // caret, with zero glyph advance. This exception is limited to supported
+    // delimiters; destinations, body text and active syntax cannot receive it.
+    const selector = ".document-editor .cm-inactive-inline-marker[data-inline-opening-caret],\n" +
+      ".document-editor .cm-inactive-inline-marker[data-inline-closing-caret]";
     const markerRule = getCssRule(stylesheet, selector);
     expect(getCssRule(stylesheet, ".document-editor .cm-inactive-inline-marker"))
       .toContain("color: transparent;");
@@ -352,7 +354,11 @@ describe("editor source layout stylesheet", () => {
     const standard = await readMarkdownTextStandard();
     const stylesheet = await readFile(resolve(process.cwd(), "src/renderer/styles/markdown-render.css"), "utf8");
     const tableRule = getCssRule(stylesheet, ".document-editor .cm-table-widget-table");
-    const inputRule = getCssRule(stylesheet, ".document-editor .cm-table-widget-input");
+    const inputRule = getCssRule(stylesheet, [
+      ".document-editor .cm-table-widget-input",
+      ".document-editor .cm-table-widget-height-source",
+      ".document-editor .cm-table-widget-height-preview"
+    ].join(",\n"));
 
     expect(standard.blocks.table.columnSizing.mode).toBe("content-weighted-fixed-layout");
     expect(standard.blocks.table.columnSizing.minReadableWeight).toBe(8);
@@ -360,6 +366,7 @@ describe("editor source layout stylesheet", () => {
     expect(standard.blocks.table.columnSizing.cellPaddingWeight).toBe(8);
     expect(standard.blocks.table.columnSizing.longWordWrap).toBe("break-word");
     expect(tableRule).toContain("table-layout: fixed;");
+    expect(inputRule).toContain("min-width: 1ch;");
     expect(inputRule).toContain("overflow-wrap: break-word;");
     expect(inputRule).toContain("word-break: normal;");
     expect(inputRule).not.toContain("overflow-wrap: anywhere;");

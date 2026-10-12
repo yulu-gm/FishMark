@@ -2,10 +2,13 @@
 
 import { afterEach, describe, expect, it, vi, type MockedFunction } from "vitest";
 import { parseMarkdownDocument, type TableBlock } from "@fishmark/markdown-engine";
+import { BlockType, type BlockInfo } from "@codemirror/view";
 
 import {
   TableWidget,
   createTableWidgetDecoration,
+  readMountedTableWidgetHeight,
+  readTableWidgetHeightEstimate,
   type TableWidgetCallbacks,
   type TableWidgetRenderOptions
 } from "./table-widget";
@@ -119,7 +122,146 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
+describe("mounted table height estimates", () => {
+  function mount(spies = createCallbackSpies()) {
+    const { widget, dom } = createWidget(spies);
+    const host = document.createElement("div");
+    host.appendChild(dom);
+    document.body.appendChild(host);
+    const view = { dom: host, requestMeasure: vi.fn() };
+    const height = vi.spyOn(dom, "getBoundingClientRect")
+      .mockReturnValue(new DOMRect(0, 0, 500, 4243.8125));
+    const read = (source = TABLE_SOURCE, context: TableWidgetRenderOptions = {}) =>
+      readMountedTableWidgetHeight(view, parseTableBlock(source), source, context);
+    return { widget, dom, host, view, height, read };
+  }
+
+  it("uses the live fractional height independently in two views sharing callbacks", () => {
+    const spies = createCallbackSpies();
+    const first = mount(spies), second = mount(spies);
+    second.height.mockReturnValue(new DOMRect(0, 0, 300, 839.25));
+    expect(first.read()).toBe(4243.8125);
+    expect(second.read()).toBe(839.25);
+    first.height.mockReturnValue(new DOMRect(0, 0, 250, 6800.5));
+    expect(first.read()).toBe(6800.5);
+    expect(second.read()).toBe(839.25);
+    const next = createTableWidgetDecoration(parseTableBlock(), null, spies, TABLE_SOURCE, {}, first.read());
+    expect(next.value.spec.widget.estimatedHeight).toBe(6800.5);
+  });
+
+  it("rejects another source, range, container, disconnected root or invalid measurement", () => {
+    const mounted = mount();
+    expect(mounted.read(TABLE_SOURCE.replace("pen", "ink"))).toBe(-1);
+    expect(readMountedTableWidgetHeight(mounted.view,
+      { ...parseTableBlock(), endOffset: TABLE_SOURCE.length - 1 }, TABLE_SOURCE, {})).toBe(-1);
+    expect(mounted.read(TABLE_SOURCE, { containerClassName: "cm-table-widget-blockquote", containerDepth: 1 })).toBe(-1);
+    for (const invalid of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      mounted.height.mockReturnValue(new DOMRect(0, 0, 500, invalid));
+      expect(mounted.read()).toBe(-1);
+    }
+    mounted.height.mockReturnValue(new DOMRect(0, 0, 500, 4243.8125));
+    mounted.dom.remove();
+    expect(mounted.read()).toBe(-1);
+    mounted.host.appendChild(mounted.dom);
+    expect(mounted.read()).toBe(4243.8125);
+  });
+
+  it("keeps the new owner measurement when an old widget is destroyed after DOM transfer", () => {
+    const mounted = mount();
+    const next = createWidget(createCallbackSpies(), { activePosition: { row: 1, column: 1 } });
+    expect(next.widget.updateDOM(mounted.dom)).toBe(true);
+    mounted.widget.destroy(mounted.dom);
+    expect(mounted.read()).toBe(4243.8125);
+    next.widget.destroy(mounted.dom);
+    expect(mounted.read()).toBe(-1);
+  });
+
+  it("retains this view's known block height after viewport virtualization and prefers live geometry", () => {
+    const mounted = mount();
+    const block = parseTableBlock();
+    const previous = {
+      from: block.startOffset, to: block.endOffset, length: block.endOffset - block.startOffset,
+      top: 0, bottom: 6800.5, height: 6800.5, type: BlockType.WidgetRange,
+      widget: mounted.widget, widgetLineBreaks: 0
+    } satisfies BlockInfo;
+    const view = { ...mounted.view, contentHeight: 6800.5, documentPadding: { top: 0, bottom: 0 },
+      lineBlockAt: vi.fn<() => BlockInfo>(() => previous) };
+    expect(readTableWidgetHeightEstimate(view, block, TABLE_SOURCE, {})).toBe(4243.8125);
+    expect(view.lineBlockAt).not.toHaveBeenCalled();
+    mounted.dom.remove();
+    expect(readTableWidgetHeightEstimate(view, block, TABLE_SOURCE, {})).toBe(6800.5);
+    expect(view.lineBlockAt).toHaveBeenCalledWith(block.startOffset);
+    expect(readTableWidgetHeightEstimate(view, block, TABLE_SOURCE.replace("pen", "ink"), {})).toBe(-1);
+    expect(readTableWidgetHeightEstimate(view, { ...block, startOffset: 1 }, TABLE_SOURCE, {})).toBe(-1);
+    expect(readTableWidgetHeightEstimate(view, { ...block, endOffset: block.endOffset - 1 }, TABLE_SOURCE, {})).toBe(-1);
+    expect(readTableWidgetHeightEstimate(view, block, TABLE_SOURCE, { containerDepth: 1 })).toBe(-1);
+    for (const invalid of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      view.lineBlockAt.mockReturnValue({ ...previous, height: invalid });
+      expect(readTableWidgetHeightEstimate(view, block, TABLE_SOURCE, {})).toBe(-1);
+    }
+    view.lineBlockAt.mockReturnValue({ ...previous, type: BlockType.Text });
+    expect(readTableWidgetHeightEstimate(view, block, TABLE_SOURCE, {})).toBe(-1);
+    view.lineBlockAt.mockReturnValue({ ...previous, widget: null });
+    expect(readTableWidgetHeightEstimate(view, block, TABLE_SOURCE, {})).toBe(-1);
+    view.lineBlockAt.mockReturnValue(previous);
+    for (const compressed of [6999999, 7000000, 7000000.00001, Number.NaN, Number.POSITIVE_INFINITY]) {
+      view.contentHeight = compressed;
+      expect(readTableWidgetHeightEstimate(view, block, TABLE_SOURCE, {})).toBe(-1);
+    }
+    view.contentHeight = 6999998.5 + 24;
+    view.documentPadding = { top: 12, bottom: 12 };
+    expect(readTableWidgetHeightEstimate(view, block, TABLE_SOURCE, {})).toBe(6800.5);
+  });
+});
+
 describe("table cell native history DOM", () => {
+  it("retains column ratios and updates the whole-table editable width floor without replacing cells", () => {
+    const spies = createCallbackSpies(), { dom } = createWidget(spies);
+    const editor = readCell(dom, 1, 0), columns = dom.querySelector("colgroup");
+    const widths = () => Array.from(dom.querySelectorAll("col")).map(column => column.style.width);
+    const floor = () => Number(dom.style.getPropertyValue("--fishmark-table-min-width-columns"));
+    expect(widths()).toEqual(["50%", "50%"]);
+    expect(floor()).toBe(2);
+    const source = TABLE_SOURCE.replace("pen", "x".repeat(100));
+    expect(new TableWidget(parseTableBlock(source), { row: 1, column: 0 }, spies, source).updateDOM(dom)).toBe(true);
+    expect(widths()).toEqual(["77.78%", "22.22%"]);
+    expect(floor() * 22.22).toBeCloseTo(100);
+    expect(readCell(dom, 1, 0)).toBe(editor);
+    expect(dom.querySelector("colgroup")).toBe(columns);
+    expect(new TableWidget(parseTableBlock(), { row: 1, column: 0 }, spies, TABLE_SOURCE).updateDOM(dom)).toBe(true);
+    expect(widths()).toEqual(["50%", "50%"]);
+    expect(floor()).toBe(2);
+  });
+
+  it("keeps inert height reservations outside editable history and reuses them until canonical content changes", () => {
+    const source = TABLE_SOURCE.replace("pen", "**中文** [link](https://example.test)");
+    const block = parseTableBlock(source), spies = createCallbackSpies();
+    const { dom } = createWidget(spies, { source, block });
+    document.body.appendChild(dom);
+    const editor = readCell(dom, 1, 0), original = Array.from(editor.childNodes), layout = editor.parentElement!;
+    const plain = layout.querySelector<HTMLElement>(".cm-table-widget-height-source")!;
+    const preview = layout.querySelector<HTMLElement>(".cm-table-widget-height-preview")!;
+    expect(editor.contains(plain)).toBe(false);
+    expect(editor.contains(preview)).toBe(false);
+    for (const reservation of [plain, preview]) {
+      expect(reservation.getAttribute("aria-hidden")).toBe("true");
+      expect(reservation.contentEditable).toBe("false");
+      expect(reservation.inert).toBe(true);
+      expect(reservation.hasAttribute("data-table-cell")).toBe(false);
+    }
+    const plainNode = plain.firstChild, previewNode = preview.firstChild;
+    new TableWidget(block, { row: 1, column: 1 }, spies, source).updateDOM(dom);
+    new TableWidget(block, { row: 1, column: 0 }, spies, source).updateDOM(dom);
+    expect(plain.firstChild).toBe(plainNode);
+    expect(preview.firstChild).toBe(previewNode);
+    expect(Array.from(editor.childNodes)).toEqual(original);
+    const changed = source.replace("中文", "修改");
+    createWidget(spies, { source: changed, block: parseTableBlock(changed) }).widget.updateDOM(dom);
+    expect(plain.textContent).toBe("**修改** [link](https://example.test)");
+    expect(preview.querySelector(".cm-inactive-inline-strong")?.textContent).toBe("修改");
+    expect(readCell(dom, 1, 0)).toBe(editor);
+  });
+
   it.each(["Alpha", "**中文**", "`code`"])("restores the same editable nodes after previewing %s", (text) => {
     const source = `| Name | Value |\n| --- | --- |\n| ${text} | Beta |`;
     const spies = createCallbackSpies();

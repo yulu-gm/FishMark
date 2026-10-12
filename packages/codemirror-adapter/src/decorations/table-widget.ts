@@ -1,5 +1,5 @@
 import type { Range } from "@codemirror/state";
-import { Decoration, WidgetType } from "@codemirror/view";
+import { BlockType, Decoration, WidgetType, type EditorView } from "@codemirror/view";
 
 import {
   computeTableColumnLayout,
@@ -12,6 +12,7 @@ import {
 
 import type { TablePosition } from "../table-context";
 import type { WidgetMeasurementTarget } from "./widget-lifecycle";
+import { isWidgetMounted } from "./widget-lifecycle";
 
 export type TableWidgetCallbacks = {
   selectCell: (position: TablePosition, options?: { restoreDomFocus?: boolean }) => void;
@@ -36,6 +37,7 @@ type TableCellRenderMode = "plain" | "preview";
 const compositionCommitFallbackTimers = new WeakMap<HTMLElement, number>();
 const renderedCellInline = new WeakMap<HTMLElement, InlineRoot | undefined>();
 const parkedPlainCellNodes = new WeakMap<HTMLElement, { text: string; nodes: Node[] }>();
+const reservedCellContent = new WeakMap<HTMLElement, { text: string; source: string; inline: InlineRoot | undefined }>();
 
 // The editable cell elements are snapshotted per widget root so `destroy` can cancel every
 // composition fallback this instance scheduled. The snapshot lives in a `WeakMap` keyed by the root,
@@ -87,15 +89,83 @@ export type TableWidgetRenderOptions = {
   readonly containerDepth?: number;
 };
 
+const mountedTableMeasurements = new WeakMap<HTMLElement, {
+  owner: TableWidget;
+  source: string;
+  block: TableBlock;
+  renderOptions: TableWidgetRenderOptions;
+}>();
+
+// State decorations are rebuilt before CodeMirror updates widget DOM. Preserve
+// the currently mounted table's height for that synchronous estimate, rather
+// than temporarily replacing a tall table with the default one-line estimate.
+// The caller supplies the actual view, so even shared callbacks cannot mix views.
+export function readMountedTableWidgetHeight(
+  view: { readonly dom: HTMLElement; requestMeasure(): void },
+  block: TableBlock,
+  source: string,
+  renderOptions: TableWidgetRenderOptions
+): number {
+  const root = view.dom.querySelector<HTMLElement>(
+    `.cm-table-widget[data-table-start-offset="${block.startOffset}"]`
+  );
+  const mounted = root ? mountedTableMeasurements.get(root) : undefined;
+  if (!root || !mounted || !isWidgetMounted(view, root) ||
+    mounted.source !== source || mounted.block.id !== block.id ||
+    mounted.block.startOffset !== block.startOffset ||
+    mounted.block.endOffset !== block.endOffset ||
+    mounted.renderOptions.containerClassName !== renderOptions.containerClassName ||
+    mounted.renderOptions.containerDepth !== renderOptions.containerDepth) return -1;
+  const height = root.getBoundingClientRect().height;
+  return Number.isFinite(height) && height > 0 ? height : -1;
+}
+
+// A previously measured table can have just left the viewport. Its DOM is then
+// absent, but this view's height map still holds its measured block height.
+// Reuse that public BlockInfo only for the exact same source, range and context;
+// otherwise a rebuild would collapse the offscreen table to a one-line estimate.
+export function readTableWidgetHeightEstimate(
+  view: Pick<EditorView, "dom" | "requestMeasure" | "lineBlockAt" | "contentHeight" | "documentPadding">,
+  block: TableBlock,
+  source: string,
+  renderOptions: TableWidgetRenderOptions
+): number {
+  const mountedHeight = readMountedTableWidgetHeight(view, block, source, renderOptions);
+  if (mountedHeight > 0) return mountedHeight;
+  // The pinned CM view compresses offscreen heights at 7,000,000px. Its public
+  // BlockInfo is then in DOM coordinates, unsuitable for an unscaled estimate.
+  // Conservatively reject that boundary (including rounding near the limit).
+  const padding = view.documentPadding;
+  const documentHeight = view.contentHeight - padding.top - padding.bottom;
+  if (!Number.isFinite(documentHeight) || documentHeight >= 6999999) return -1;
+  const previous = view.lineBlockAt(block.startOffset);
+  if (previous.type !== BlockType.WidgetRange || previous.from !== block.startOffset ||
+    previous.to !== block.endOffset || !(previous.widget instanceof TableWidget) ||
+    !previous.widget.matchesHeightSource(block, source, renderOptions)) return -1;
+  return Number.isFinite(previous.height) && previous.height > 0 ? previous.height : -1;
+}
+
 export class TableWidget extends WidgetType {
   constructor(
     private readonly block: TableBlock,
     private readonly activePosition: TablePosition | null,
     private readonly callbacks: TableWidgetCallbacks | null,
     private readonly source: string,
-    private readonly renderOptions: TableWidgetRenderOptions = {}
+    private readonly renderOptions: TableWidgetRenderOptions = {},
+    private readonly mountedHeight = -1
   ) {
     super();
+  }
+
+  override get estimatedHeight(): number {
+    return this.mountedHeight;
+  }
+
+  matchesHeightSource(block: TableBlock, source: string, renderOptions: TableWidgetRenderOptions): boolean {
+    return this.source === source && this.block.id === block.id &&
+      this.block.startOffset === block.startOffset && this.block.endOffset === block.endOffset &&
+      this.renderOptions.containerClassName === renderOptions.containerClassName &&
+      this.renderOptions.containerDepth === renderOptions.containerDepth;
   }
 
   override eq(other: TableWidget): boolean {
@@ -116,6 +186,7 @@ export class TableWidget extends WidgetType {
     }
 
     this.syncDOM(dom);
+    this.trackMeasurement(dom);
     return true;
   }
 
@@ -129,7 +200,7 @@ export class TableWidget extends WidgetType {
     const table = document.createElement("table");
     table.className = "cm-table-widget-table";
     root.appendChild(table);
-    table.appendChild(createTableColumnGroup(document, this.block));
+    table.appendChild(createTableColumnGroup(document, this.block, root));
 
     const tbody = document.createElement("tbody");
     table.appendChild(tbody);
@@ -147,6 +218,7 @@ export class TableWidget extends WidgetType {
     });
 
     trackLiveCellEditors(root);
+    this.trackMeasurement(root);
     return root;
   }
 
@@ -154,6 +226,7 @@ export class TableWidget extends WidgetType {
   // here means a teardown never leaves a timer that would dispatch a cell update for a widget (or a
   // document revision) that no longer exists.
   override destroy(dom: HTMLElement): void {
+    if (mountedTableMeasurements.get(dom)?.owner === this) mountedTableMeasurements.delete(dom);
     const editors = mountedCellEditors.get(dom) ?? readLiveCellEditors(dom);
 
     editors.forEach((editor) => {
@@ -165,6 +238,11 @@ export class TableWidget extends WidgetType {
 
   override ignoreEvent(): boolean {
     return true;
+  }
+
+  private trackMeasurement(root: HTMLElement): void {
+    mountedTableMeasurements.set(root, { owner: this, source: this.source,
+      block: this.block, renderOptions: this.renderOptions });
   }
 
   private renderRow(
@@ -451,7 +529,19 @@ export class TableWidget extends WidgetType {
         }
       });
 
-      cellElement.appendChild(editor);
+      const layout = document.createElement("div");
+      layout.className = "cm-table-widget-cell-layout";
+      for (const mode of ["source", "preview"]) {
+        const reservation = document.createElement("div");
+        reservation.className = `cm-table-widget-height-${mode}`;
+        reservation.contentEditable = "false";
+        reservation.setAttribute("aria-hidden", "true");
+        reservation.inert = true;
+        layout.appendChild(reservation);
+      }
+      syncTableCellHeightReservation(layout, cell.text, cell.inline, this.source);
+      layout.appendChild(editor);
+      cellElement.appendChild(layout);
       rowElement.appendChild(cellElement);
     });
 
@@ -480,7 +570,11 @@ export class TableWidget extends WidgetType {
       return false;
     }
 
-    return root.querySelectorAll("[data-table-cell]").length === expectedEditorCount;
+    const editors = Array.from(root.querySelectorAll<HTMLElement>("[data-table-cell]"));
+    return editors.length === expectedEditorCount && editors.every((editor) =>
+      editor.parentElement?.classList.contains("cm-table-widget-cell-layout") &&
+      editor.parentElement.querySelector(".cm-table-widget-height-source") &&
+      editor.parentElement.querySelector(".cm-table-widget-height-preview"));
   }
 
   private syncDOM(root: HTMLElement): void {
@@ -509,10 +603,27 @@ export class TableWidget extends WidgetType {
           source: this.source,
           renderMode: isActive ? "plain" : "preview"
         });
+        syncTableCellHeightReservation(editor.parentElement!, cell.text, cell.inline, this.source);
         cellElement.dataset.active = isActive ? "true" : "false";
       });
     });
   }
+}
+
+// These inert siblings reserve the greater preview/source height at the current
+// column width. They never enter the editable subtree or its native undo history,
+// and focus changes reuse their nodes. Only canonical content changes redraw them.
+function syncTableCellHeightReservation(
+  layout: HTMLElement, text: string, inline: InlineRoot | undefined, source: string
+): void {
+  const previous = reservedCellContent.get(layout);
+  if (previous?.text === text && previous.inline === inline && previous.source === source) return;
+  const plain = layout.querySelector<HTMLElement>(".cm-table-widget-height-source")!;
+  const preview = layout.querySelector<HTMLElement>(".cm-table-widget-height-preview")!;
+  plain.replaceChildren(buildPlainTextFragment(layout.ownerDocument, text));
+  preview.replaceChildren(inline ? buildInlinePreviewFragment(layout.ownerDocument, source, inline) :
+    buildPlainTextFragment(layout.ownerDocument, text));
+  reservedCellContent.set(layout, { text, source, inline });
 }
 
 function applyTableWidgetRenderOptions(
@@ -550,11 +661,11 @@ function applyTableWidgetRenderOptions(
   }
 }
 
-function createTableColumnGroup(document: Document, block: TableBlock): HTMLTableColElement {
+function createTableColumnGroup(document: Document, block: TableBlock, root: HTMLElement): HTMLTableColElement {
   const colgroup = document.createElement("colgroup");
 
   colgroup.className = "cm-table-widget-column-group";
-  syncTableColumnElements(colgroup, block);
+  syncTableColumnElements(colgroup, block, root);
   return colgroup;
 }
 
@@ -568,16 +679,29 @@ function syncTableColumnGroup(root: HTMLElement, block: TableBlock): void {
   let colgroup = table.querySelector<HTMLTableColElement>(".cm-table-widget-column-group");
 
   if (!colgroup) {
-    colgroup = createTableColumnGroup(table.ownerDocument, block);
+    colgroup = createTableColumnGroup(table.ownerDocument, block, root);
     table.insertBefore(colgroup, table.firstChild);
     return;
   }
 
-  syncTableColumnElements(colgroup, block);
+  syncTableColumnElements(colgroup, block, root);
 }
 
-function syncTableColumnElements(colgroup: HTMLElement, block: TableBlock): void {
+function syncTableColumnElements(colgroup: HTMLElement, block: TableBlock, root: HTMLElement): void {
   const layout = computeTableColumnLayout(tableBlockToCanonicalModel(block));
+
+  // Preserve the existing column ratios, but ensure even the smallest column
+  // can contain its editable padding and one character. Grid-item hit testing
+  // otherwise lets a later narrow cell cover its neighbour's overflow glyph.
+  const percentages = layout.map(column =>
+    Number.parseFloat(formatTableColumnWidthPercent(column.widthPercent)) || column.widthPercent);
+  const minimumPercent = percentages.reduce((minimum, percent) => Math.min(minimum, percent), Infinity);
+  const totalPercent = percentages.reduce((total, percent) => total + percent, 0);
+  if (Number.isFinite(minimumPercent) && minimumPercent > 0) {
+    root.style.setProperty("--fishmark-table-min-width-columns", String(Math.max(100, totalPercent) / minimumPercent));
+  } else {
+    root.style.removeProperty("--fishmark-table-min-width-columns");
+  }
 
   while (colgroup.children.length > layout.length) {
     colgroup.lastElementChild?.remove();
@@ -1059,10 +1183,11 @@ export function createTableWidgetDecoration(
   activePosition: TablePosition | null,
   callbacks: TableWidgetCallbacks | null,
   source: string,
-  renderOptions: TableWidgetRenderOptions = {}
+  renderOptions: TableWidgetRenderOptions = {},
+  mountedHeight = -1
 ): Range<Decoration> {
   return Decoration.replace({
     block: true,
-    widget: new TableWidget(block, activePosition, callbacks, source, renderOptions)
+    widget: new TableWidget(block, activePosition, callbacks, source, renderOptions, mountedHeight)
   }).range(block.startOffset, block.endOffset);
 }

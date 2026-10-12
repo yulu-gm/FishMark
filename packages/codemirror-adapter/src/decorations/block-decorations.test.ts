@@ -37,8 +37,8 @@ it.each([
   expect(anchors.every(anchor => anchor.to <= source.indexOf("Body"))).toBe(true);
 });
 
-it.each(["**Body**", "# **Body**", "> **Body**", "- ![**Body**](https://example.test)", "- $Body$", "- [^Body]"])(
-  "leaves non-list and other inline owner metrics unchanged: %s", (source) => {
+it.each(["- ![**Body**](https://example.test)", "- $Body$", "- [^Body]"])(
+  "leaves special inline owner metrics unchanged: %s", (source) => {
     const head = source.indexOf("Body");
     const { decorationSet } = createBlockDecorations({ source,
       activeBlockState: createActiveBlockState(snapshotOf(source), { anchor: head, head }), hasEditorFocus: false });
@@ -47,6 +47,19 @@ it.each(["**Body**", "# **Body**", "> **Body**", "- ![**Body**](https://example.
     });
   }
 );
+
+it.each(["**Body**", "# **Body**", "> **Body**"])("preserves both ordinary inline boundary metrics: %s", source => {
+  const head = source.indexOf("Body");
+  const { decorationSet } = createBlockDecorations({ source,
+    activeBlockState: createActiveBlockState(snapshotOf(source), { anchor: head, head }), hasEditorFocus: false });
+  const anchors: string[] = [];
+  decorationSet.between(0, source.length, (_from, _to, decoration) => {
+    const attrs = decoration.spec.attributes;
+    if (attrs?.["data-inline-opening-caret"]) anchors.push("opening");
+    if (attrs?.["data-inline-closing-caret"]) anchors.push("closing");
+  });
+  expect(anchors.sort()).toEqual(["closing", "opening"]);
+});
 
 it.each(["- Body", "1. Body", "- [ ] Body", "- Parent\n  - Body", "> - Body", "> - Parent\n>   - Body", "-   Body", "-\tBody", "- **Body**"])(
   "keeps a native caret anchor only in the final hidden list padding: %s", (source) => {
@@ -877,7 +890,7 @@ describe("createBlockDecorations", () => {
     expectCoveredRangeClasses(ranges, 9, 10, ["cm-inactive-inline-marker"]);
   });
 
-  it("reveals only the entered inline marker while preserving styled content", () => {
+  it("reveals the entered element's pair at its outer boundary while preserving styled content", () => {
     const source = "**bold** `code`";
     const ranges = createActiveParagraphInlineDecorations(source);
     const codeStart = source.indexOf("`code`");
@@ -885,11 +898,11 @@ describe("createBlockDecorations", () => {
     expectExactRangeClasses(ranges, 0, 0, ["cm-active-paragraph cm-active-paragraph-leading"]);
     expectCoveredRangeClasses(ranges, 2, 6, ["cm-inactive-inline-strong"]);
     expectCoveredRangeClasses(ranges, 0, 2, ["cm-active-inline-marker"]);
-    expectCoveredRangeClasses(ranges, 6, 8, ["cm-inactive-inline-marker"]);
+    expectCoveredRangeClasses(ranges, 6, 8, ["cm-active-inline-marker"]);
     expectCoveredRangeClasses(ranges, codeStart, codeStart + 1, ["cm-inactive-inline-marker"]);
     expectCoveredRangeClasses(ranges, codeStart + 1, codeStart + 5, ["cm-inactive-inline-code"]);
     expectCoveredRangeClasses(ranges, codeStart + 5, codeStart + 6, ["cm-inactive-inline-marker"]);
-    expect(ranges.filter((range) => range.className === "cm-active-inline-marker")).toHaveLength(1);
+    expect(ranges.filter((range) => range.className === "cm-active-inline-marker")).toHaveLength(2);
   });
 
   it("uses active inline decorations inside active list item content", () => {
@@ -905,9 +918,9 @@ describe("createBlockDecorations", () => {
     const codeStart = source.indexOf("`code`");
 
     expectExactRangeClasses(ranges, 0, 0, ["cm-inactive-list cm-inactive-list-unordered cm-inactive-list-depth-0"]);
-    expectCoveredRangeClasses(ranges, boldStart, boldStart + 2, ["cm-inactive-inline-marker"]);
+    expectCoveredRangeClasses(ranges, boldStart, boldStart + 2, ["cm-active-inline-marker"]);
     expectCoveredRangeClasses(ranges, boldStart + 2, boldStart + 6, ["cm-inactive-inline-strong"]);
-    expectCoveredRangeClasses(ranges, boldStart + 6, boldStart + 8, ["cm-inactive-inline-marker"]);
+    expectCoveredRangeClasses(ranges, boldStart + 6, boldStart + 8, ["cm-active-inline-marker"]);
     expectCoveredRangeClasses(ranges, emphasisStart, emphasisStart + 1, ["cm-inactive-inline-marker"]);
     expectCoveredRangeClasses(ranges, emphasisStart + 1, emphasisStart + 3, ["cm-inactive-inline-emphasis"]);
     expectCoveredRangeClasses(ranges, emphasisStart + 3, emphasisStart + 4, ["cm-inactive-inline-marker"]);
@@ -917,7 +930,7 @@ describe("createBlockDecorations", () => {
     expectCoveredRangeClasses(ranges, codeStart, codeStart + 1, ["cm-inactive-inline-marker"]);
     expectCoveredRangeClasses(ranges, codeStart + 1, codeStart + 5, ["cm-inactive-inline-code"]);
     expectCoveredRangeClasses(ranges, codeStart + 5, codeStart + 6, ["cm-inactive-inline-marker"]);
-    expect(ranges.some((range) => range.className === "cm-active-inline-marker")).toBe(false);
+    expect(ranges.filter((range) => range.className === "cm-active-inline-marker")).toHaveLength(2);
   });
 
   it("uses active inline decorations inside active list continuation content", () => {
@@ -929,10 +942,10 @@ describe("createBlockDecorations", () => {
       true
     );
 
-    expectCoveredRangeClasses(ranges, boldStart, boldStart + 2, ["cm-inactive-inline-marker"]);
+    expectCoveredRangeClasses(ranges, boldStart, boldStart + 2, ["cm-active-inline-marker"]);
     expectCoveredRangeClasses(ranges, boldStart + 2, boldStart + 6, ["cm-inactive-inline-strong"]);
-    expectCoveredRangeClasses(ranges, boldStart + 6, boldStart + 8, ["cm-inactive-inline-marker"]);
-    expect(ranges.some((range) => range.className === "cm-active-inline-marker")).toBe(false);
+    expectCoveredRangeClasses(ranges, boldStart + 6, boldStart + 8, ["cm-active-inline-marker"]);
+    expect(ranges.filter((range) => range.className === "cm-active-inline-marker")).toHaveLength(2);
   });
 
   it("layers active inline marker visibility with nested strong and emphasis styling", () => {
@@ -947,7 +960,7 @@ describe("createBlockDecorations", () => {
       "cm-inactive-inline-strong"
     ]);
     expectCoveredRangeClasses(ranges, 7, 9, ["cm-inactive-inline-emphasis", "cm-inactive-inline-marker"]);
-    expectCoveredRangeClasses(ranges, 9, 10, ["cm-inactive-inline-marker"]);
+    expectCoveredRangeClasses(ranges, 9, 10, ["cm-active-inline-marker"]);
   });
 
   it("keeps nested strikethrough and strong decorations layered for inactive content", () => {
@@ -997,8 +1010,9 @@ describe("createBlockDecorations", () => {
       "cm-inactive-inline-link",
       "cm-inactive-inline-marker"
     ]);
-    expectCoveredRangeClasses(linkRanges, 10, linkSource.length, ["cm-inactive-inline-marker"]);
-    expectCoveredRangeClasses(linkRanges, 12, 31, ["cm-inactive-inline-marker"]);
+    expectCoveredRangeClasses(linkRanges, 10, linkSource.length - 1, ["cm-inactive-inline-marker"]);
+    expectCoveredRangeClasses(linkRanges, linkSource.length - 1, linkSource.length, ["cm-inactive-inline-marker"]);
+    expectCoveredRangeClasses(linkRanges, 12, linkSource.length - 1, ["cm-inactive-inline-marker"]);
 
     expectExactRangeClasses(imageRanges, 0, 0, ["cm-inactive-paragraph cm-inactive-paragraph-leading"]);
     expectCoveredRangeClasses(imageRanges, 1, 2, ["cm-inactive-inline-marker"]);
@@ -1967,10 +1981,10 @@ describe("createBlockDecorations", () => {
     expect(result.signature).toContain(":content-edit");
     expectExactRangeClasses(ranges, 0, 1, ["cm-active-blockquote-marker"]);
     expectExactRangeClasses(ranges, 1, 2, ["cm-active-blockquote-padding-anchor"]);
-    expectCoveredRangeClasses(ranges, contentStart, contentStart + 1, ["cm-inactive-inline-marker"]);
+    expectCoveredRangeClasses(ranges, contentStart, contentStart + 1, ["cm-active-inline-marker"]);
     expectCoveredRangeClasses(ranges, contentStart + 1, contentStart + 3, [
-      "cm-inactive-inline-emphasis",
-      "cm-inactive-inline-marker"
+      "cm-active-inline-marker",
+      "cm-inactive-inline-emphasis"
     ]);
     expectCoveredRangeClasses(ranges, source.indexOf("中文"), source.indexOf("中文") + "中文".length, [
       "cm-fishmark-cjk-font",
@@ -1978,11 +1992,11 @@ describe("createBlockDecorations", () => {
       "cm-inactive-inline-strong"
     ]);
     expectCoveredRangeClasses(ranges, contentStart + 5, contentStart + 7, [
-      "cm-inactive-inline-emphasis",
-      "cm-inactive-inline-marker"
+      "cm-active-inline-marker",
+      "cm-inactive-inline-emphasis"
     ]);
-    expectCoveredRangeClasses(ranges, contentStart + 7, contentStart + 8, ["cm-inactive-inline-marker"]);
-    expect(ranges.some((range) => range.className === "cm-active-inline-marker")).toBe(false);
+    expectCoveredRangeClasses(ranges, contentStart + 7, contentStart + 8, ["cm-active-inline-marker"]);
+    expect(ranges.filter((range) => range.className === "cm-active-inline-marker")).toHaveLength(4);
     expect(collectWidgets(source, result.decorationSet)).toContainEqual({
       from: imageEnd,
       to: imageEnd,

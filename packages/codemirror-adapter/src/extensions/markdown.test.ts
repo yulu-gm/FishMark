@@ -74,6 +74,93 @@ const createHarness = (options: HarnessOptions) => {
 };
 
 describe("createFishMarkMarkdownExtensions", () => {
+  it.each([
+    { source: "`a`**b**", boundary: 3 },
+    { source: "[a](url)**b**", boundary: 8 },
+    { source: "*a*~~b~~", boundary: 3 },
+    { source: "**a**``b``", boundary: 5 },
+    { source: "`a`*b*", boundary: 3 },
+    { source: "***both***", boundary: 1 },
+    { source: "***both***", boundary: 9 },
+    { source: "[**label**](url)", boundary: 1 },
+    { source: "[**label**](url)", boundary: 10 }
+  ])("steps once in either direction at shared marker boundary $boundary of $source", ({ source, boundary }) => {
+    const { view, destroy } = createHarness({ source });
+    try {
+      view.focus();
+      for (const shiftKey of [false, true]) for (const direction of [-1, 1]) {
+        view.dispatch({ selection: { anchor: boundary }, userEvent: "select.pointer" });
+        expect(view.state.selection.main.head).toBe(boundary);
+        view.contentDOM.dispatchEvent(new KeyboardEvent("keydown", {
+          key: direction < 0 ? "ArrowLeft" : "ArrowRight", shiftKey, bubbles: true, cancelable: true
+        }));
+        expect(view.state.selection.main.head).toBe(boundary + direction);
+        expect(view.state.selection.main.anchor).toBe(shiftKey ? boundary : boundary + direction);
+        expect(view.state.doc.toString()).toBe(source);
+      }
+    } finally { destroy(); }
+  });
+
+  it.each([
+    { source: "**b**", boundary: 0 },
+    { source: "a **b**", boundary: 2 },
+    { source: "``b``", boundary: 0 }
+  ])("steps into the opening marker of $source", ({ source, boundary }) => {
+    const { view, destroy } = createHarness({ source });
+    try {
+      view.focus();
+      for (const shiftKey of [false, true]) {
+        view.dispatch({ selection: { anchor: boundary }, userEvent: "select.pointer" });
+        view.contentDOM.dispatchEvent(new KeyboardEvent("keydown", {
+          key: "ArrowRight", shiftKey, bubbles: true, cancelable: true
+        }));
+        expect(view.state.selection.main.head).toBe(boundary + 1);
+        expect(view.state.selection.main.anchor).toBe(shiftKey ? boundary : boundary + 1);
+        expect(view.state.doc.toString()).toBe(source);
+      }
+    } finally { destroy(); }
+  });
+
+  it.each(["**bold**", "*italic*", "~~strike~~", "`code`", "[label](https://example.test)"])(
+    "preserves the exact outer pointer boundaries of %s from another paragraph", inline => {
+      const source = `Control\n\n${inline}`, { view, destroy } = createHarness({ source });
+      view.focus();
+      for (const target of [source.indexOf(inline), source.length]) {
+        view.dispatch({ selection: { anchor: 2 } });
+        view.dispatch({ selection: { anchor: target }, userEvent: "select.pointer" });
+        expect(view.state.selection.main.head).toBe(target);
+        expect(view.state.doc.toString()).toBe(source);
+      }
+      destroy();
+    }
+  );
+  it.each(["**bold**", "*italic*", "~~strike~~", "`code`", "[label](https://example.test)"])(
+    "keeps pointer source offsets editable after entering %s", source => {
+      const { view, destroy } = createHarness({ source });
+      view.focus();
+      const content = source.startsWith("**") || source.startsWith("~~") ? 2 : 1;
+      view.dispatch({ selection: { anchor: content + 1 } });
+      const target = source.startsWith("[") ? source.indexOf("example") + 2 : content - 1;
+      view.dispatch({ selection: { anchor: target }, userEvent: "select.pointer" });
+      expect(view.state.selection.main.head).toBe(target);
+      expect(view.state.doc.toString()).toBe(source);
+      destroy();
+    }
+  );
+
+  it.each(["**bold**", "*italic*", "~~strike~~", "`code`"])(
+    "deletes the already revealed opening delimiter of %s on first Backspace", source => {
+      const { view, destroy } = createHarness({ source });
+      view.focus();
+      const content = source.startsWith("**") || source.startsWith("~~") ? 2 : 1;
+      view.dispatch({ selection: { anchor: content } });
+      view.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "Backspace", bubbles: true, cancelable: true }));
+      expect(view.state.doc.toString()).toBe(source.slice(0, content - 1) + source.slice(content));
+      expect(undo(view)).toBe(true);
+      expect(view.state.doc.toString()).toBe(source);
+      destroy();
+    }
+  );
   it("navigates Unicode link source by grapheme and preserves native delete history", () => {
     const source = "[label](https://example.test/😀é)", { view, destroy } = createHarness({ source });
     const emoji = source.indexOf("😀");

@@ -17,7 +17,8 @@ import {
   runTableMoveLeft,
   runTableMoveRight,
   runTableMoveUp,
-  runTableNextCell
+  runTableNextCell,
+  runTableSelectCell
 } from "./table-commands";
 
 const snapshotFor = (source: string) =>
@@ -49,6 +50,19 @@ const createHarness = (doc: string, anchor: number) => {
 };
 
 describe("table commands", () => {
+  it.each([true, false])("preserves semantic cell selection while requesting scroll=%s", scrollIntoView => {
+    const doc = "Before\n\n| name | qty |\n| --- | --- |\n| pen | 2 |\n\nAfter";
+    const harness = createHarness(doc, 2);
+    const dispatch = vi.fn(harness.view.dispatch.bind(harness.view));
+    harness.view.dispatch = dispatch as unknown as typeof harness.view.dispatch;
+    expect(runTableSelectCell(harness.view, harness.activeState, { tableStartOffset: doc.indexOf("| name"), row: 1, column: 1, offsetInCell: 1 }, { scrollIntoView })).toBe(true);
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(dispatch.mock.calls[0]![0]).toMatchObject({ scrollIntoView });
+    expect(harness.view.state.selection.main.head).toBe(doc.indexOf("2 |") + 1);
+    expect(harness.view.state.doc.toString()).toBe(doc);
+    harness.destroy();
+  });
+
   it("dispatches table next-cell navigation from Tab before list indent fallback", () => {
     const doc = ["| name | qty |", "| --- | ---: |", "| pen | 2 |"].join("\n");
     const harness = createHarness(doc, doc.indexOf("pen") + 1);

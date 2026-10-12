@@ -28,6 +28,8 @@ export type SemanticCommandPlanner = (
   context: EditorSemanticContext
 ) => EditTransactionPlan | null;
 
+export type SemanticCommandDispatchOptions = { readonly scrollIntoView?: boolean };
+
 export type SemanticCommandResult =
   | "applied"
   | "unchanged"
@@ -39,19 +41,19 @@ export type SemanticCommandBindings = {
   readonly adapter: EditorTransactionAdapter;
   readonly bindSession: (view: EditorView, tabId?: string) => void;
   readonly releaseSession: () => void;
-  readonly run: (view: EditorView, planner: SemanticCommandPlanner) => SemanticCommandResult;
+  readonly run: (view: EditorView, planner: SemanticCommandPlanner, options?: SemanticCommandDispatchOptions) => SemanticCommandResult;
 };
 
 const viewBindings = new WeakMap<EditorView, SemanticCommandBindings>();
 
-export function runSemanticCommand(view: EditorView, planner: SemanticCommandPlanner): boolean {
+export function runSemanticCommand(view: EditorView, planner: SemanticCommandPlanner, options?: SemanticCommandDispatchOptions): boolean {
   let bindings = viewBindings.get(view);
   if (bindings === undefined) {
     bindings = createSemanticCommandBindings();
     view.dispatch({ effects: StateEffect.appendConfig.of(bindings.adapter.extension()) });
     bindings.bindSession(view);
   }
-  return bindings.run(view, planner) !== "unhandled";
+  return bindings.run(view, planner, options) !== "unhandled";
 }
 
 export function createSemanticCommandBindings(input: {
@@ -78,8 +80,8 @@ export function createSemanticCommandBindings(input: {
     releaseSession: () => {
       adapter.releaseSession();
     },
-    run: (view, planner) =>
-      applyPreparedSemanticCommand(view, adapter, adapter.prepareCommand(view.state, planner))
+    run: (view, planner, options) =>
+      applyPreparedSemanticCommand(view, adapter, adapter.prepareCommand(view.state, planner), options)
   };
   return bindings;
 }
@@ -92,7 +94,8 @@ export const SEMANTIC_EDITOR_SESSION_ID = "editor";
 function applyPreparedSemanticCommand(
   view: EditorView,
   adapter: EditorTransactionAdapter,
-  prepared: EditorPreparedCommand
+  prepared: EditorPreparedCommand,
+  options?: SemanticCommandDispatchOptions
 ): SemanticCommandResult {
   if (prepared.kind === "frozen") {
     const effect = adapter.noteFrozenPlan(view.state);
@@ -107,7 +110,7 @@ function applyPreparedSemanticCommand(
   if (prepared.kind === "unhandled") {
     return "unhandled";
   }
-  view.dispatch({ ...prepared.transaction, scrollIntoView: true });
+  view.dispatch({ ...prepared.transaction, scrollIntoView: options?.scrollIntoView ?? true });
   if (prepared.kind === "unchanged") {
     return "unchanged";
   }
