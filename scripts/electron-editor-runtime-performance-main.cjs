@@ -49,9 +49,14 @@ async function main() {
   const result = await window.webContents.executeJavaScript("window.__runEditorRuntimePerformanceProbe()", true);
   result.environment = environment();
   persistReport(result, reportPath);
+  const { evaluateEditorRuntimePerformance, runtimePerformanceExitCode } = await import("./evaluate-editor-runtime-performance.mjs");
+  const assessment = evaluateEditorRuntimePerformance(result);
+  writeFileSync(`${reportPath}.assessment.json`, JSON.stringify(assessment, null, 2), { flag: "wx" });
   process.stdout.write(`${JSON.stringify({ reportPath, fixtures: result.fixtures.map(({ source, raw, phaseSamples, ...fixture }) => fixture) })}\n`);
+  process.stdout.write(`${JSON.stringify({ reportValidity: assessment.reportValidity,
+    roadmapBudgetAssessment: assessment.roadmapBudgetAssessment, errors: assessment.errors })}\n`);
   window.close();
-  app.exit(result.fixtures.every((fixture) => fixture.sourcePreserved && fixture.emittedFrames === 30) ? 0 : 1);
+  app.exit(runtimePerformanceExitCode(assessment));
 }
 main().catch(async (error) => {
   process.stderr.write(`${error.stack ?? error}\n`);

@@ -1,5 +1,13 @@
 # FishMark 进展记录
 
+## 2026-10-13 RF-901：恢复 M9，报告验证小批
+
+当前 M9 为 **IN_PROGRESS，0/3**；RF-901 的真实预算验收未完成，RF-902/903 仍 PLANNED。以下“未开始”行保留原日期的历史口径。新工作区从公开 main `59b2f2e369739670b4fc230a79cb05eacb290790` / tree `8c50ad1d75b6e3f5099f5e32ae65c32dfea848bd` 建立，保留旧检查点与独立 UI 目录。
+
+本批补现有性能报告完整性验证与预算适用性结论，不修改生产编辑路径、采样协议或阈值。控制基线严格回归 3485 passed +10 exact known、0 skip/unexpected/errors，symlink 实际通过。具体范围、指标边界及本批验收见[执行计划](plans/2026-10-13-rf901-report-validation.md)和[任务总结](../reports/task-summaries/TASK-RF901-REPORT-VALIDATION-020.md)。历史表格 288px 问题、真实平台 IME、安全及完整 M9 均未关闭。
+
+本批实现 review PASS，但完整验收 **BLOCKED，未推送**：修后 strict 3537+10exact 与其余标准/正式门禁通过；原 `test:editing-experience` 仅 70/79，通过精确干净 main 对照确认同样 9 失败、全部实际/期望结果相同。该主线既有失败仍保留为失败，不增加豁免或修改 oracle。
+
 ## 2026-10-13 TASK-UX-UI-001：极简界面统一候选
 
 状态：**ACCEPTED**；本地候选独立评审PASS。已获授权普通推送main，发布状态以远端精确提交及对应CI结果为准。

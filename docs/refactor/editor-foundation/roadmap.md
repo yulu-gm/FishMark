@@ -1723,6 +1723,8 @@ npm.cmd run build
 
 **Outcome:** the completed cache/adapter architecture meets section 8 budgets with reproducible evidence.
 
+**Status (2026-10-13):** `IN_PROGRESS`, not accepted. The [report-validation batch](../../plans/2026-10-13-rf901-report-validation.md) adds a shared integrity check for the existing schema 2 diagnostic. A valid report is still insufficient for §8: plain-fixture controller dispatch/construction/two-rAF intervals are not mixed-fixture semantic/editor-ready/compositor measurements. The historical withdrawn reuse experiment and frozen cp13/cp16 are not adopted by this batch. RF-902/903 remain planned.
+
 **Files:** update performance probes, fixtures, reports, and budget scripts.
 
 **Steps:**

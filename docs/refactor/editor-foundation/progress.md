@@ -6,17 +6,19 @@
 
 **Created:** 2026-07-11
 
-**Last updated:** 2026-10-10
+**Last updated:** 2026-10-13
 
 **Overall status:** `IN_PROGRESS`
 
-**当前任务：** RF-803 `COMPLETE`，本机独立架构/任务验收PASS；RF-801/802/803均COMPLETE，M8为3/3 COMPLETE；RF-901/M9未开始。
+**当前任务：** RF-901 `IN_PROGRESS`，M9 为 0/3。公开 main `59b2f2e` 已包含前序 Windows UX 与界面统一；本批只补既有 runtime 性能报告完整性验证和预算适用性判断。此前纯段落复用实验已撤回，不作为已发布优化；RF-902/903 仍 `PLANNED`。
 
 **M8 入口历史证据：** `reports/reviews/2026-09-23-m8-readiness.md` 记录启动、load identity、取消关闭、精确回归与真实 Electron 安全基线；该报告当时未启动 RF-801。RF-801 / RF-802 的当前状态以上方独立验收为准，M9 仍未完成。
 
-**下一步：** 父线程核验实时main、正常发布验收文档提交并跟进CI。本机精确候选已取得真实Electron safety/behavior；M9继续拥有真实平台性能、IME、E2E与OS-sandbox/security门禁，尚未开始。
+**下一步：** 先诊断下述原编辑体验门禁的 9 项断言差异，之后在 canonical mixed 夹具上定义并测量完整同步语义区间及 cold/warm editor-ready，按 §8 收集剩余计数器、交互和呈现证据。现有 schema 2 的 controller dispatch、构造时间和两次 rAF 不替代这些指标。参见[本批范围与验收](../../plans/2026-10-13-rf901-report-validation.md)。
 
-**Current gate:** RF-803 independent Mac architecture/task acceptance PASS on candidate `9f0fe233` / tree `25c526fc`; 1008 focused tests, 310 foundation tests, typecheck/lint/build, original bundle, full exact regression with 2 workers (3111 passed + 10 exact known), native safety 7/7 and formal behavior 121/121 passed. The default-concurrency 100ms child-startup failure is preserved. M8 is 3/3 COMPLETE; M9 has not started. Publication, main freshness and final CI remain with the parent; no remote publication is claimed.
+**Current gate:** RF-901 acceptance remains incomplete. The fresh YULUSTATION `59b2f2e` control passes strict regression with 3485 passed + 10 exact known failures, zero skips/unexpected/errors; the actual symlink test ran and passed after the previously user-approved Developer Mode change. This is the current baseline, not a permission waiver. Earlier Mac/M8 evidence below remains historical. The current batch's verification and release status are recorded in its task summary.
+
+**本批阻碍：** 报告验证器独立 review 与 52 项定向测试通过，修后 strict 3537+10exact/0skip、标准静态/构建、bundle、foundation、安全及正式行为门禁通过。但路线规定的 `test:editing-experience` 为 70/79（9 失败）；干净 `59b2f2e` 对照全部 79 项结果与候选完全相同。未扩大 allowlist、未豁免该失败；只保留本地检查点，不推送。后续先诊断这 9 项行为/预期差异，再继续完整性能测量。[证据总结](../../../reports/task-summaries/TASK-RF901-REPORT-VALIDATION-020.md)。
 
 **Historical M5 performance evidence:** the 20k-line controller probe improved typing dispatch p95 from 1,934 ms to 66.9 ms and selection p95 from 1,697 ms to 13.9 ms after canonical-tree reuse and physical-range indexing. Final M5 CI bundle evidence: max initial chunk **179,699 / 300,000 B**, max initial chunk gzip **56,955 / 90,000 B**, total initial gzip **93,918 / 260,000 B**, total JS gzip **1,425,457 / 1,430,000 B** — all PASS without relaxing budgets at that time. M9 still owns broader reproducible end-to-end performance budgets.
 
@@ -51,7 +53,7 @@ At most one `RF-xxx` task may be `IN_PROGRESS` or `ACCEPTING` at a time. A later
 | M6 | Thin CodeMirror adapter | `COMPLETE` | 4 | 4 | RF-601/602/603/604 accepted; `editor-core` deleted and adapter is the production owner |
 | M7 | Shared presentation and derived consumers | `COMPLETE` | 3 | 3 | RF-701/702/703 accepted; editor/export/outline/metrics now share canonical derived inputs |
 | M8 | Renderer/main composition cleanup | `COMPLETE` | 3 | 3 | RF-801/802/803独立验收PASS；RF-803真Mac原生门禁已通过，发布/最终CI待父线程处理 |
-| M9 | Performance, E2E, and security | `PLANNED` | 0 | 3 | Budgets, Playwright flows, and Electron security pass |
+| M9 | Performance, E2E, and security | `IN_PROGRESS` | 0 | 3 | RF-901 report validity is separate from unmet final performance evidence; RF-902/903 remain planned |
 | M10 | Purge and final acceptance | `PLANNED` | 0 | 2 | No compatibility/dead code; final verdict `PASS` |
 
 **Historical recorded completion:** 29 / 38 original tasks. The supplemental RF-HARDEN-001 repair gate is tracked separately; this count is not a current quality or release-readiness percentage.
@@ -95,7 +97,7 @@ Evidence columns are filled only with fresh command output/report paths from the
 | RF-801 | 非 React 工作区命令与订阅层 | RF-703 | `COMPLETE` | 2026-10-05 独立 focused 23 文件/450 通过；application 无 React | typecheck/lint/build；foundation 310；全量 216 文件/2884 项（双 worker，10 exact known、0 unexpected）；真实 safety 七项；bundle 原预算；正式行为 121/121 | [独立验收 PASS](../../../reports/reviews/2026-10-05-rf-801-architecture.md)；[任务总结](../../../reports/task-summaries/RF-801.md) | `5af4c96` 已推送 main；[主体 CI 三项 PASS](https://github.com/yulu-gm/FishMark/actions/runs/37318182770) |
 | RF-802 | React shell decomposition | RF-801 | `COMPLETE` | 471 focused、13 launcher/cleanup；[handoff](../../plans/2026-10-05-rf-802-handoff.md) | type/lint/build；foundation310；全量217 files / 2891+10exact（本地双worker、默认CI）；原bundle1428000/1430000；CI safety7/7、正式行为121/121 | [独立验收 PASS](../../../reports/reviews/2026-10-06-rf-802-architecture.md)；[任务总结](../../../reports/task-summaries/RF-802.md) | 本地e20af0e/远端44e5767；[精确树CI全绿](https://github.com/yulu-gm/FishMark/actions/runs/37393076342) |
 | RF-803 | Main/preload composition split | RF-802 | `COMPLETE` | 69 files/1008 focused；[验收总结](../../../reports/task-summaries/RF-803.md) | type/lint/build、310 foundation、全部220 files/3111+10exact双worker、原bundle、真Mac safety7/7和behavior121/121；默认并发竞态保留 | [独立验收PASS](../../../reports/reviews/2026-10-06-rf-803-architecture.md) | candidate `9f0fe233` / tree `25c526fc`；发布待父线程 |
-| RF-901 | Final performance gate | RF-803 | `PLANNED` | — | perf/editing probes | — | — |
+| RF-901 | Final performance gate | RF-803 | `IN_PROGRESS` | [Report validation batch](../../plans/2026-10-13-rf901-report-validation.md) | Final semantic/mixed/paint/platform evidence remains incomplete | No RF-901 completion verdict | Based on `59b2f2e` |
 | RF-902 | Playwright Electron data-safety/editing suite | RF-901 | `PLANNED` | — | build/e2e | — | — |
 | RF-903 | Electron security hardening | RF-902 | `PLANNED` | — | test/build/e2e | — | — |
 | RF-1001 | Dead code and compatibility purge | RF-903 | `PLANNED` | — | lint/typecheck/test/build/bundle | — | — |
