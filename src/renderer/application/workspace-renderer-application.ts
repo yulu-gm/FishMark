@@ -1146,7 +1146,7 @@ export class WorkspaceRendererApplication {
           : await this.bridge.saveMarkdownFile({ tabId });
 
         this.assertActive();
-        if (value.status === "success") {
+        if (value.status === "success" || (value.status === "error" && value.error.code === "disk-version-conflict")) {
           try {
             const snapshot = await this.bridge.getWorkspaceSnapshot();
             this.recordCanonicalSnapshot(snapshot);

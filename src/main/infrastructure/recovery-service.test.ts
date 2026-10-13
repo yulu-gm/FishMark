@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { appendFile, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -52,6 +52,71 @@ afterEach(async () => {
 });
 
 describe("createRecoveryService", () => {
+  it.each(["not-json\n", '{"interrupted":', '{"invalid":true}\n'])("preserves the original raw pair once before replacing damaged recovery: %s", async (tail) => {
+    const directory = await createDirectory();
+    const seed = createRecoveryService(directory);
+    await seed.compact(snapshot);
+    await seed.recordEditBatch(editBatch);
+    await appendFile(path.join(directory, "recovery-journal.jsonl"), tail);
+    const originalSnapshot = await readFile(path.join(directory, "recovery-snapshot.json"));
+    const originalJournal = await readFile(path.join(directory, "recovery-journal.jsonl"));
+    const service = createRecoveryService(directory);
+    await expect(service.loadRecovery()).resolves.toMatchObject({ kind: "recovery-available", snapshot, editBatches: [editBatch] });
+    await service.compact(snapshot);
+    const preserved = await service.preserveRecovery();
+    expect(await readFile(path.join(preserved, "recovery-snapshot.json"))).toEqual(originalSnapshot);
+    expect(await readFile(path.join(preserved, "recovery-journal.jsonl"))).toEqual(originalJournal);
+    await service.recordEditBatch(editBatch);
+    await service.markCleanShutdown();
+    expect(await service.preserveRecovery()).toBe(preserved);
+    expect(await readdir(path.join(directory, "recovery-preserved"))).toHaveLength(1);
+  });
+
+  it("preserves a corrupt snapshot and its journal before a fresh workspace can overwrite them", async () => {
+    const directory = await createDirectory();
+    const snapshotPath = path.join(directory, "recovery-snapshot.json");
+    const journalPath = path.join(directory, "recovery-journal.jsonl");
+    await writeFile(snapshotPath, Buffer.from([0xff, 0xfe, 0x7b]));
+    await writeFile(journalPath, JSON.stringify(editBatch) + "\n");
+    const service = createRecoveryService(directory);
+    await expect(service.loadRecovery()).resolves.toEqual({ kind: "corrupt", path: snapshotPath });
+    await service.compact(snapshot);
+    const preserved = await service.preserveRecovery();
+    expect(await readFile(path.join(preserved, "recovery-snapshot.json"))).toEqual(Buffer.from([0xff, 0xfe, 0x7b]));
+    expect(await readFile(path.join(preserved, "recovery-journal.jsonl"), "utf8")).toBe(JSON.stringify(editBatch) + "\n");
+  });
+
+  it("blocks compaction, append, and truncation when raw preservation cannot be completed", async () => {
+    const directory = await createDirectory();
+    const seed = createRecoveryService(directory);
+    await seed.compact(snapshot);
+    await seed.recordEditBatch(editBatch);
+    await appendFile(path.join(directory, "recovery-journal.jsonl"), "not-json\n");
+    const originalSnapshot = await readFile(path.join(directory, "recovery-snapshot.json"));
+    const originalJournal = await readFile(path.join(directory, "recovery-journal.jsonl"));
+    await writeFile(path.join(directory, "recovery-preserved"), "blocked");
+    const service = createRecoveryService(directory);
+    await service.loadRecovery();
+    await expect(service.compact(snapshot)).rejects.toThrow();
+    await expect(service.recordEditBatch(editBatch)).rejects.toThrow();
+    await expect(service.markCleanShutdown()).rejects.toThrow();
+    expect(await readFile(path.join(directory, "recovery-snapshot.json"))).toEqual(originalSnapshot);
+    expect(await readFile(path.join(directory, "recovery-journal.jsonl"))).toEqual(originalJournal);
+  });
+
+  it("explicitly records missing original files in the preservation manifest", async () => {
+    const directory = await createDirectory();
+    await writeFile(path.join(directory, "recovery-journal.jsonl"), "not-json\n");
+    const service = createRecoveryService(directory);
+    await service.loadRecovery();
+    const preserved = await service.preserveRecovery();
+    const manifest = JSON.parse(await readFile(path.join(preserved, "manifest.json"), "utf8")) as { files: { name: string; missing: boolean }[] };
+    expect(manifest.files).toEqual([
+      expect.objectContaining({ name: "recovery-snapshot.json", missing: true }),
+      expect.objectContaining({ name: "recovery-journal.jsonl", missing: false })
+    ]);
+  });
+
   it("round-trips a recorded edit batch through loadRecovery", async () => {
     const directory = await createDirectory();
     const service = createRecoveryService(directory);

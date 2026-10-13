@@ -66,6 +66,7 @@ import { markExternalWorkspaceChange } from "./mark-external-workspace-change";
 import { createFileWatchRegistry } from "./infrastructure/file-watch-registry";
 import { createDocumentRepository } from "./infrastructure/document-repository";
 import { createRecoveryService } from "./infrastructure/recovery-service";
+import { restoreWorkspaceRecovery } from "./restore-workspace-recovery";
 import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator";
 import { createFileIdentityResolver } from "./file-identity-resolver";
 import { createWorkspaceEditorViewHandoffs } from "./workspace-editor-view-handoffs";
@@ -268,40 +269,10 @@ app.whenReady().then(async () => {
   const documentRepository = createDocumentRepository();
   const recoveryService = createRecoveryService(app.getPath("userData"));
 
-  const recovery = await recoveryService.loadRecovery();
-  if (recovery.kind === "recovery-available") {
-    if (recovery.incompleteTail) {
-      console.warn("[fishmark] Recovery journal has an incomplete final write; replaying its valid prefix.");
-      dialog.showErrorBox("Recovery incomplete", "The final recovery write was interrupted. Earlier completed edits have been recovered.");
-    }
-    if (recovery.snapshot !== null) {
-      workspaceState.restoreSnapshot(recovery.snapshot);
-    }
-    for (const batch of recovery.editBatches) {
-      try {
-        const session = workspaceState.getTabSession(batch.tabId);
-        // Snapshot replacement may have completed before journal truncation.
-        if (session.revision > batch.baseRevision) continue;
-        const result = workspaceState.applyDocumentEdits({
-          tabId: batch.tabId,
-          expectedWindowId: session.windowId,
-          // Client ACK counters are transient and are not part of the workspace snapshot.
-          clientId: `recovery:${batch.clientId}:${batch.baseRevision}`,
-          clientSequence: 1,
-          baseRevision: batch.baseRevision,
-          changes: batch.changes
-        });
-        if (result.kind !== "applied" && result.kind !== "duplicate") {
-          throw new Error(`Recovery replay stopped: ${result.kind}`);
-        }
-      } catch (error) {
-        console.error("[fishmark] Recovery replay stopped; original files retained.", error);
-        dialog.showErrorBox("Recovery incomplete", "Some recovery entries could not be replayed. The recovered prefix is available.");
-        break;
-      }
-    }
-  } else if (recovery.kind === "corrupt") {
-    console.error(`[fishmark] recovery data is corrupt at ${recovery.path}; starting fresh.`);
+  const recoveryReport = await restoreWorkspaceRecovery({ workspace: workspaceState, recovery: recoveryService });
+  for (const diagnostic of recoveryReport.diagnostics) console.warn(`[fishmark] ${diagnostic}`);
+  if (recoveryReport.notification !== null) {
+    dialog.showErrorBox(recoveryReport.notification.title, recoveryReport.notification.content);
   }
 
   const workspaceWatcher = {

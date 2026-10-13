@@ -21,6 +21,38 @@ function createImmediateCoordinator<TKey extends string>(): KeyedOperationCoordi
 }
 
 describe("createSaveDocument", () => {
+  it.each(["modified", "deleted"] as const)("publishes a %s conflict on the requested tab without accepting the external version or writing", async (kind) => {
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
+    workspace.registerWindow("window-1");
+    const identity = fileIdentity("file:c:/notes/a.md");
+    const accepted = { normalizedPath: "C:/notes/a.md", mtimeMs: 1, size: 5, contentHash: "accepted" };
+    const opened = workspace.openDocument("window-1", {
+      fileIdentity: identity, path: "C:/notes/a.md", name: "a.md", content: "saved", encoding: "utf-8"
+    }, accepted);
+    if (opened.kind !== "opened") throw new Error("expected opened document");
+    const tabId = opened.projection.activeTabId!;
+    workspace.updateTabDraft({ tabId, expectedWindowId: "window-1", content: "recovered draft" });
+    const otherTabId = workspace.createUntitledTab("window-1").activeTabId!;
+    const external = kind === "deleted" ? null : { ...accepted, mtimeMs: 2, contentHash: "external" };
+    const writeDocument = vi.fn();
+    const resolve = async () => ({ canonicalPath: accepted.normalizedPath, identity, exists: true as const, pathKey: identity.location, physicalKey: identity.object });
+    const saveDocument = createSaveDocument({ workspace,
+      tabOperations: createImmediateCoordinator(), fileLocationOperations: createImmediateCoordinator(), fileObjectOperations: createImmediateCoordinator(),
+      fileIdentity: { resolveExisting: resolve, resolveProspective: resolve },
+      disk: { readDiskVersion: async () => external, writeDocument }, dialog: { chooseSavePath: vi.fn() },
+      watcher: { beginInternalWrite: vi.fn(), completeInternalWrite: vi.fn(), syncWindowPaths: vi.fn() },
+      recentFiles: { record: vi.fn() }, cleanupReporter: { report: vi.fn() }
+    });
+    await expect(saveDocument.save({ context: {}, tabId, expectedWindowId: "window-1" })).resolves.toMatchObject({
+      status: "error", error: { code: "disk-version-conflict" }
+    });
+    expect(writeDocument).not.toHaveBeenCalled();
+    expect(workspace.getTabSession(tabId)).toMatchObject({ content: "recovered draft", revision: 1, savedRevision: 0,
+      diskVersion: accepted, isDirty: true, externalChange: { kind } });
+    expect(workspace.exportSnapshot().sessions.find((session) => session.tabId === tabId)?.savedContent).toBe("saved");
+    expect(workspace.getTabSession(otherTabId).externalChange).toBeNull();
+  });
+
   it("writes a captured canonical checkpoint and commits it clean", async () => {
     const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");

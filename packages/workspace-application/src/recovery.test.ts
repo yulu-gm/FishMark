@@ -65,6 +65,23 @@ describe("createRecovery", () => {
     });
   });
 
+  it("keeps the trusted prefix but stops the global tail at a schema-invalid entry", async () => {
+    const recovery = createRecovery(createStore({ kind: "loaded", snapshot, entries: [editBatch, { invalid: true }, editBatch] }));
+    await expect(recovery.loadRecovery(parseSnapshot, parseEditBatch)).resolves.toEqual({
+      kind: "recovery-available", snapshot, editBatches: [editBatch], journalDamage: "invalid-entry"
+    });
+  });
+
+  it.each([
+    { incompleteTail: true as const },
+    { journalDamage: "malformed-entry" as const }
+  ])("does not report damaged empty recovery as a clean start: %j", async (damage) => {
+    const recovery = createRecovery(createStore({ kind: "loaded", snapshot: null, entries: [], ...damage }));
+    await expect(recovery.loadRecovery(parseSnapshot, parseEditBatch)).resolves.toEqual({
+      kind: "recovery-available", snapshot: null, editBatches: [], ...damage
+    });
+  });
+
   it("compacts by writing a snapshot then truncating the journal", async () => {
     const store = createStore({ kind: "empty" });
     const recovery = createRecovery(store);

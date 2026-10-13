@@ -2,7 +2,7 @@
 // registers every IPC handler, and executes the unchanged close protocol.
 const { appendFileSync, mkdirSync } = require("node:fs");
 const { resolve, dirname } = require("node:path");
-const { app, BrowserWindow, ipcMain } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog } = require("electron");
 
 const profile = process.env.FISHMARK_E2E_PROFILE;
 const telemetryPath = process.env.FISHMARK_E2E_TELEMETRY;
@@ -18,8 +18,20 @@ delete process.env.FISHMARK_START_MODE;
 function record(event, detail) {
   appendFileSync(telemetryPath, `${JSON.stringify({ epochMs: Date.now(), event, detail })}\n`, "utf8");
 }
+const showErrorBox = dialog.showErrorBox.bind(dialog);
+dialog.showErrorBox = (title, content) => {
+  record("dialog:error-box", { pid: process.pid, title, content });
+  const result = showErrorBox(title, content);
+  record("dialog:error-box-returned", { pid: process.pid, title });
+  return result;
+};
 const describe = (value) => value instanceof Error ? value.stack ?? value.message : String(value);
 const originalError = console.error.bind(console);
+const originalWarn = console.warn.bind(console);
+console.warn = (...args) => {
+  record("console:warn", { messages: args.map(describe) });
+  originalWarn(...args);
+};
 let currentWarningId = null;
 let warningSequence = 0;
 process.prependListener("warning", (warning) => {
@@ -120,6 +132,7 @@ ipcMain.handle = (channel, listener) => {
         await holdBoundary("edit-ack", detail);
       }
       record(`${prefix}:end`, { ...detail, status: result?.status,
+        ...(prefix === "save" && result?.status === "error" ? { error: result.error } : {}),
         ...(["edit", "flush"].includes(prefix) ? { kind: result?.kind, acknowledgedSequence: result?.acknowledgedSequence, revision: result?.revision, isDirty: result?.isDirty } : {}),
         ...(prefix === "detach" ? { windowId: result?.windowId, tabs: result?.tabs } : {}) });
       return result;

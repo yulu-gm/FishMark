@@ -144,6 +144,40 @@ async function acknowledgeEditorEditable(application: WorkspaceRendererApplicati
 }
 
 describe("WorkspaceRendererApplication", () => {
+  it.each(["modified", "deleted"] as const)("refreshes canonical metadata after a disk-version-conflict so the %s conflict is actionable", async (kind) => {
+    const conflicted = createSnapshot();
+    conflicted.activeDocument = { ...conflicted.activeDocument!, externalChange: { kind } };
+    const saveMarkdownFile = vi.fn(async () => ({ status: "error" as const, error: { code: "disk-version-conflict" as const, message: "External file changed." } }));
+    const getWorkspaceSnapshot = vi.fn(async () => conflicted);
+    const application = createApplication({ bridge: { saveMarkdownFile, getWorkspaceSnapshot } });
+    await expect(application.runSaveTransaction({ forceSaveAs: false, hasExternalConflict: false })).resolves.toMatchObject({
+      kind: "committed", tabId: "tab-1", value: { status: "error", error: { code: "disk-version-conflict" } }
+    });
+    expect(getWorkspaceSnapshot).toHaveBeenCalledTimes(1);
+    expect(application.getState().workspaceSnapshot?.activeDocument?.externalChange).toEqual({ kind });
+    application.dispose();
+  });
+
+  it("retains canonical-unavailable handling when conflict metadata cannot be refreshed", async () => {
+    const application = createApplication({ bridge: {
+      saveMarkdownFile: vi.fn(async () => ({ status: "error" as const, error: { code: "disk-version-conflict" as const, message: "External file changed." } })),
+      getWorkspaceSnapshot: vi.fn(async () => { throw new Error("snapshot unavailable"); })
+    } });
+    await expect(application.runSaveTransaction({ forceSaveAs: false, hasExternalConflict: false })).resolves.toMatchObject({ kind: "canonical-unavailable" });
+    expect(application.getCanonicalStatus()).toBe("unknown");
+    application.dispose();
+  });
+
+  it("does not refresh canonical metadata for unrelated ordinary-save errors", async () => {
+    const getWorkspaceSnapshot = vi.fn();
+    const application = createApplication({ bridge: {
+      saveMarkdownFile: vi.fn(async () => ({ status: "error" as const, error: { code: "write-failed" as const, message: "Write failed." } })), getWorkspaceSnapshot
+    } });
+    await expect(application.runSaveTransaction({ forceSaveAs: false, hasExternalConflict: false })).resolves.toMatchObject({ kind: "committed" });
+    expect(getWorkspaceSnapshot).not.toHaveBeenCalled();
+    application.dispose();
+  });
+
   it("applies a target selection handoff once before its document load acknowledges", () => {
     const initialSnapshot = { ...createSnapshot({ firstContent: "0123456789" }),
       editorViewHandoff: { handoffId: "view-1", tabId: "tab-1", revision: 0, selection: { anchor: 7, head: 3 } } };

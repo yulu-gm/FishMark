@@ -10,6 +10,8 @@
 
 **Overall status:** `IN_PROGRESS`
 
+**恢复故障后续（报告034）：** RF902四项隔离故障产品覆盖通过：截断尾行、完整坏行、单文档失败不阻断其他文档、离线磁盘外改拒写及显式处置后继续保存。原始文件成对保全及真实可见提示补齐；完整16条Windows产品E2E通过。正式门禁与发布见[报告034](../../../reports/task-summaries/TASK-RF902-RECOVERY-FAULTS-034.md)。运行中inactive-tab外改、嵌套编辑/选区、平台IME及既有窗口移动用户入口仍未据此验收。RF901 PAUSED、RF902 IN_PROGRESS、RF903 PLANNED、M9 0/3。
+
 **跨窗口后续（报告033）：** RF902真实复现并修复分离光标、Escape取消和失败后编辑重绑，12条产品Windows E2E通过；原生离窗释放与拖到已有窗口仍新建分离窗口均核验，尚无已有窗口合并移动入口。标准/严格/正式门禁、独立审查及失败保留见[报告033](../../../reports/task-summaries/TASK-RF902-TRANSFER-033.md)。RF902仍唯一活动源码任务，RF901 PAUSED、RF903 PLANNED、M9 0/3。
 
 **当前实施（2026-10-13）：** RF-902为唯一活动实施任务；RF-901为`PAUSED`，仅暂停源码执行，性能债务及验收未完成；RF-903仍PLANNED。保存重启及idle流程已发布`e006460`、CI38374591185四项全绿。随后真实异常退出恢复发现合法小数mtime被拒绝，最小校验修复使相同协议FAIL→PASS，恢复后继续编辑保存成功；完整门禁/review/发布见[报告032](../../../reports/task-summaries/TASK-RF902-RECOVERY-032.md)。跨窗口、其他故障模式及平台流程仍未完成，M9仍0/3。

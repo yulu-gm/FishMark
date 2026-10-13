@@ -23,6 +23,7 @@ export type RecoveryStoreLoadResult =
       readonly snapshot: unknown | null;
       readonly entries: readonly unknown[];
       readonly incompleteTail?: boolean;
+      readonly journalDamage?: "malformed-entry";
     }
   | { readonly kind: "corrupt"; readonly path: string };
 
@@ -40,6 +41,7 @@ export type RecoveryOutcome =
       readonly snapshot: WorkspaceSnapshot | null;
       readonly editBatches: readonly RecoveryEditBatch[];
       readonly incompleteTail?: boolean;
+      readonly journalDamage?: "malformed-entry" | "invalid-entry";
     }
   | { readonly kind: "corrupt"; readonly path: string };
 
@@ -81,19 +83,22 @@ export function createRecovery(store: RecoveryStorePort): RecoveryUseCase {
       }
 
       const editBatches: RecoveryEditBatch[] = [];
+      let journalDamage: "malformed-entry" | "invalid-entry" | undefined = loaded.journalDamage;
       for (const entry of loaded.entries) {
         const parsed = parseEditBatch(entry);
         if (parsed === null) {
-          return { kind: "corrupt", path: "<journal>" };
+          journalDamage = "invalid-entry";
+          break;
         }
         editBatches.push(parsed);
       }
 
-      if (snapshot === null && editBatches.length === 0) {
+      if (snapshot === null && editBatches.length === 0 && !loaded.incompleteTail && journalDamage === undefined) {
         return { kind: "no-recovery-needed" };
       }
       return { kind: "recovery-available", snapshot, editBatches,
-        ...(loaded.incompleteTail ? { incompleteTail: true } : {}) };
+        ...(loaded.incompleteTail ? { incompleteTail: true } : {}),
+        ...(journalDamage === undefined ? {} : { journalDamage }) };
     }
   };
 }

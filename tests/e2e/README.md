@@ -4,7 +4,7 @@
 
 Playwright `_electron` 启动 `product-main.cjs`，后者只配置隔离和被动观测，然后加载真实 `dist-electron/main/main.js`。窗口、preload、renderer、保存处理器和关闭协议全部由产品创建。每次测试新建独立临时目录、Markdown 文件和 userData，先于产品单实例锁设置 profile；不使用 `fishmarkTest`、不替换 BrowserWindow、对话框、保存结果或关闭确认。断言 profile 和 `file://` 构建入口；通过 CDP 已执行脚本重放及源码读取验证真实 preload 路径和构建源码，记录 SHA256。Electron41 的 getLastWebPreferences 不返回 preload 字段，不能据其缺字段判定未加载。`chromiumSandbox:true` 无绕过开关；这不改变产品当前的 renderer sandbox 设置，也不构成 RF903 安全验收。
 
-三条流程：
+基础持久化流程：
 
 - 原生 `webContents.insertText` 编辑产品 CodeMirror，通过真实 File > Save 菜单回调保存，核验 UTF-8 字节、产品源文和 dirty=false；正常 BrowserWindow.close，等待拥有的进程 exit0，再用同一隔离 profile 和路径重启，核验准确读回。手动保存用例仅在独立 profile 中设置 idleDelay=60000ms。
 - 独立 idleDelay=1500ms 用例；真实编辑后不调用 Save，先确认文件仍为原文且 dirty=true，再等真实计时器/保存完成。被动记录配置延迟的 setTimeout/clearTimeout、可信 input、窗口 blur、编辑器 focusout、可见性变化、保存键和实际 main 菜单/保存 IPC；保持编辑器焦点，断言 timer fired 到 save 的顺序、最少完整 idle 间隔、没有菜单/手动/blur 触发、最终 UTF-8 字节和 dirty=false。该观测包装保留原生 timer 的回调、参数和延迟，增加的日志开销不作为性能测量。
@@ -21,4 +21,10 @@ ACK 故障屏障在真实 edit 处理器完成后暂缓其响应；B 输入仍�
 
 拖到已有窗口的原生用例保留原产品的“分离到新窗口”行为；修改前目标 renderer 只读本地 drag ref，没有跨窗口接收入口。本批不增加“合并到已有窗口”交互，底层 move API 不等同于完成该真实用户流程。独立审查和基线失败记录见[报告033](../../reports/task-summaries/TASK-RF902-TRANSFER-033.md)。
 
-实际执行和 CI 目标是 Windows。Linux/macOS、OS IME、外部冲突、已有窗口合并移动、断电与写入中断恢复仍未由本套件验收；M9 依赖和 RF902 整体状态不因局部覆盖改变。既有 workspace-safety 关闭协议和 Vitest 严格基线不变。
+`recovery-faults.spec.mjs` 增加四项，可用 `--grep "recovery fault"` 选择：截断尾行、完整坏行、单文档失败后其他文档独立恢复、退出期间原路径被外改。先由产品生成真实 ACK 恢复记录并确认所属进程退出，再只改该临时目录中的数据。前三项确认一次真实恢复通知、源文/dirty、原始 snapshot/journal 成对保全、新编辑保存，以及正常退出后原始对仍未改写；离线外改确认普通保存返回精确冲突且不覆盖磁盘，再点击现有重载按钮并继续编辑保存。详情与失败基线见[报告034](../../reports/task-summaries/TASK-RF902-RECOVERY-FAULTS-034.md)。
+
+Windows 恢复提示测试需要现有 `pwsh.exe`（PowerShell 7）和可交互桌面，不修改执行策略。`windows-recovery-dialog.ps1` 读取被动观测事件，验证单一 isolated profile、活进程可执行文件/启动时间、owned HWND 与完整题文，随后点击真实确定控件并验证关闭。Electron 的 TaskDialog 外层 caption 可能为 `Error`，标题正文通过 UIAutomation 树精确核验；特定 `CommandButton_1` 同时须对应所属进程可见可用的 native Button。它不伪造恢复结果、不替代弹窗。无通知或 helper 错误不能使测试通过。前三项为平台标记 Windows 用例；本机 Windows 完整运行必须无 skip。
+
+单文档回放失败用例还要求该次启动的精确 `console.warn` 诊断（完整实际 tab ID）与 stderr 同行各出现一次；分类副本只扣除此已证明来源的一行。原始日志保留，同文 `console.error`、重复诊断及其他错误仍失败。它不改变 Vitest 已知失败名单，也不能替代源文/弹窗/保存断言。
+
+实际执行和 CI 目标是 Windows。Linux/macOS、OS IME、运行中 inactive-tab 外改、已有窗口合并移动、实际断电/fsync 耐久性仍未由本套件验收。退出后修改原始文件是明确故障注入，不等于捕捉真实写入中断瞬间；M9 依赖和 RF902 整体状态不因局部覆盖改变。既有 workspace-safety 关闭协议和 Vitest 严格基线不变。

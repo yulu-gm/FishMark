@@ -88,14 +88,29 @@ describe("createRecoveryJournal", () => {
     });
   });
 
-  it("quarantines a journal with a malformed entry line", async () => {
+  it("retains the valid prefix and stops at a complete malformed journal line", async () => {
     const { journal } = createJournal({
-      "/data/journal.jsonl": '{"kind":"edit-batch"}\nnot-json\n'
+      "/data/journal.jsonl": '{"kind":"edit-batch"}\nnot-json\n{"untrusted":"tail"}\n'
     });
     await expect(journal.load()).resolves.toEqual({
-      kind: "corrupt",
-      path: "/data/journal.jsonl"
+      kind: "loaded", snapshot: null,
+      entries: [{ kind: "edit-batch" }], journalDamage: "malformed-entry"
     });
+  });
+
+  it("retains a trusted snapshot and completed entries before a truncated tail", async () => {
+    const { journal, fs } = createJournal();
+    await journal.writeSnapshot({ baseline: "trusted" });
+    fs.files.set("/data/journal.jsonl", '{"completed":1}\n{"interrupted":');
+    await expect(journal.load()).resolves.toEqual({
+      kind: "loaded", snapshot: { baseline: "trusted" }, entries: [{ completed: 1 }], incompleteTail: true
+    });
+  });
+
+  it.each(["not-json\n", '{"interrupted":'])("reports damaged recovery even when no prefix can be recovered: %s", async (raw) => {
+    const { journal } = createJournal({ "/data/journal.jsonl": raw });
+    await expect(journal.load()).resolves.toEqual({ kind: "loaded", snapshot: null, entries: [],
+      ...(raw.endsWith("\n") ? { journalDamage: "malformed-entry" } : { incompleteTail: true }) });
   });
 
   it("truncates the journal so entries are discarded", async () => {

@@ -122,7 +122,7 @@ class ProductSession {
     this.initialContent = content;
   }
 
-  async launch(expectedContent, { openDocument = true } = {}) {
+  async launch(expectedContent, { openDocument = true, recoveryDialog = false, selectTabId } = {}) {
     const index = this.launches.length + 1;
     const state = { index, openDocument, telemetryPath: this.testInfo.outputPath(`launch-${index}-main.jsonl`), stdout: "", stderr: "", pageErrors: [], renderer: null, windowPages: [] };
     this.launches.push(state);
@@ -132,6 +132,15 @@ class ProductSession {
     delete env.ELECTRON_RUN_AS_NODE;
     delete env.NO_COLOR;
     delete env.FORCE_COLOR;
+    let dialogHelper;
+    if (recoveryDialog) {
+      if (process.platform !== "win32") throw new Error("Native recovery dialog observation requires Windows.");
+      state.dialogEvidencePath = this.testInfo.outputPath(`launch-${index}-native-dialog.json`);
+      dialogHelper = {};
+      dialogHelper.done = new Promise((done) => {
+        dialogHelper.child = execFile("pwsh.exe", ["-NoProfile", "-File", resolve(root, "tests/e2e/windows-recovery-dialog.ps1"), "-TelemetryPath", state.telemetryPath, "-OutputPath", state.dialogEvidencePath, "-ExpectedCount", "1"], { windowsHide: true, timeout: 35_000 }, (error, stdout, stderr) => done({ error: error?.message, stdout, stderr }));
+      });
+    }
     try {
       state.app = await electron.launch({ executablePath: require("electron"), args: [resolve(root, "tests/e2e/product-main.cjs")], cwd: root, env, chromiumSandbox: true, timeout: 20_000 });
       state.child = state.app.process();
@@ -149,6 +158,11 @@ class ProductSession {
       await state.app.context().tracing.start({ screenshots: true, snapshots: true, sources: true });
       state.tracing = true;
       await expect(state.page.locator(".cm-content[contenteditable=true]")).toBeVisible();
+      if (selectTabId) {
+        const exitReading = state.page.getByRole("button", { name: "退出阅读模式 (F11)", exact: true });
+        if (await exitReading.isVisible()) await exitReading.click();
+        await state.page.locator(`[data-tab-id="${selectTabId}"]`).click();
+      }
       await expect.poll(async () => (await this.snapshot()).activeDocument?.content).toBe(expectedContent);
       expect(await state.page.evaluate(() => typeof window.fishmarkTest)).toBe("undefined");
       state.identity = await state.app.evaluate(({ app, BrowserWindow }) => {
@@ -181,10 +195,21 @@ class ProductSession {
       expect(state.identity.preferences.nodeIntegration).toBe(false);
       await state.page.evaluate(observeRenderer, { idleDelayMs: this.idleDelayMs });
       await this.checkpoint("ready");
+      if (dialogHelper) {
+        const calls = (await this.mainEvidence(state)).filter((entry) => entry.event === "dialog:error-box");
+        if (calls.length === 0) dialogHelper.child.kill();
+        state.dialogHelper = await dialogHelper.done;
+        if (calls.length > 0) expect(state.dialogHelper.error).toBeUndefined();
+      }
       return state.page;
     } catch (error) {
       state.launchError = error.stack ?? String(error);
       throw error;
+    } finally {
+      if (dialogHelper && !state.dialogHelper) {
+        dialogHelper.child.kill();
+        state.dialogHelper = await dialogHelper.done;
+      }
     }
   }
 
@@ -305,7 +330,7 @@ class ProductSession {
     return evidence;
   }
 
-  async forceTerminate() {
+  async forceTerminate({ expectedMenuCommands = [] } = {}) {
     const state = this.current;
     await this.captureOwnedProcesses(state);
     expect(exists(state.mainPid)).toBe(true);
@@ -326,7 +351,7 @@ class ProductSession {
     const events = await this.mainEvidence(state);
     expect(events.filter((entry) => ["app:before-quit", "app:will-quit", "app:quit", "window:close", "window:closed"].includes(entry.event))).toEqual([]);
     expect(events.filter((entry) => entry.event === "save:start")).toEqual([]);
-    expect(events.filter((entry) => entry.event === "menu:command")).toEqual([]);
+    expect(events.filter((entry) => entry.event === "menu:command").map((entry) => entry.detail)).toEqual(expectedMenuCommands);
     state.forcedExit.completedEpochMs = Date.now();
   }
 
@@ -352,6 +377,14 @@ class ProductSession {
     const events = await this.mainEvidence(state);
     const expectedEvents = new Set();
     let checkedStderr = state.stderr;
+    for (const warning of state.expectedRecoveryWarnings ?? []) {
+      const observed = events.filter((entry) => entry.event === "console:warn" && entry.detail.messages?.length === 1 && entry.detail.messages[0] === warning);
+      expect(observed).toHaveLength(1);
+      expect(checkedStderr.split(/\r?\n/).filter((line) => line === warning)).toHaveLength(1);
+      // Only this case's exact observed handled diagnostic is accounted for.
+      // Keep raw telemetry/stderr intact, and fail every other error as before.
+      checkedStderr = checkedStderr.replace(warning, "");
+    }
     for (const expected of this.expectedIpcFailures ?? []) {
       const failures = events.filter((entry) => entry.event === expected.event && entry.detail.channel === expected.channel && entry.detail.webContentsId === expected.webContentsId && entry.detail.tabId === expected.tabId);
       expect(failures).toHaveLength(1);

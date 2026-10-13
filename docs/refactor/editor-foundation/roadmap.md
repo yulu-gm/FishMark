@@ -1748,7 +1748,7 @@ npm.cmd run test:editing-experience
 
 #### RF-902: Playwright Electron data-safety and editing suite
 
-**Implementation status (2026-10-13):** `IN_PROGRESS` under the user's early-execution authorization; RF-901 source work is paused, not accepted. The [first product batch](../../../reports/task-summaries/TASK-RF902-PERSISTENCE-031.md) shipped as e006460 with exact CI38374591185 success. The [recovery batch](../../../reports/task-summaries/TASK-RF902-RECOVERY-032.md) reproduces and fixes rejection of valid fractional file timestamps, then verifies acknowledged unsaved edits after external process termination and relaunch without a document argument. Cross-window, other failure modes and platform evidence below remain open; M9 remains 0/3.
+**Implementation status (2026-10-13):** `IN_PROGRESS` under the user's early-execution authorization; RF-901 source work is paused, not accepted. The [persistence batch](../../../reports/task-summaries/TASK-RF902-PERSISTENCE-031.md), [crash recovery batch](../../../reports/task-summaries/TASK-RF902-RECOVERY-032.md), and [transfer batch](../../../reports/task-summaries/TASK-RF902-TRANSFER-033.md) establish real save/reopen/idle, acknowledged recovery, detach/cancel/pending-ACK and failed-target recovery. The [bounded recovery-fault batch](../../../reports/task-summaries/TASK-RF902-RECOVERY-FAULTS-034.md) adds truncated/complete malformed journals, per-document replay isolation, raw-pair preservation, and offline disk conflict resolution. These four fault cases are the user's additional batch scope; they do not imply power-loss durability or complete corruption coverage. Running inactive-tab changes, existing-window move UI, nested editing/selection and platform evidence remain open; M9 remains 0/3.
 
 **Outcome:** critical workflows are proven in real Electron windows and processes.
 
@@ -1756,8 +1756,8 @@ npm.cmd run test:editing-experience
 
 **Steps:**
 
-- [ ] Add Electron launch fixture and isolated user-data/temp directories.
-- [ ] Cover open/edit/save/reopen and autosave.
+- [x] Add Electron launch fixture and isolated user-data/temp directories.
+- [x] Cover open/edit/save/reopen and autosave.
 - [ ] Cover inactive-tab external modification and blocked overwrite.
 - [ ] Cover move/detach with pending edits and revision acknowledgements.
 - [ ] Cover window close prompts and crash recovery.

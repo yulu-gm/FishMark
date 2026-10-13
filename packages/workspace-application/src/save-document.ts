@@ -29,7 +29,7 @@ export type SaveDocumentInput<TContext> = {
 export type SaveDocumentDependencies<TContext> = {
   workspace: Pick<
     WorkspaceState,
-    "getFileOwner" | "getTabSession" | "saveTabDocument"
+    "getFileOwner" | "getTabSession" | "saveTabDocument" | "markExternalChange"
   >;
   tabOperations: Pick<
     KeyedOperationCoordinator<string>,
@@ -144,7 +144,7 @@ export function createSaveDocument<TContext>(
             return saveError("file-identity-changed");
           }
 
-          const conflictError = await checkOrdinarySaveConflict(checkpoint);
+          const conflictError = await checkOrdinarySaveConflict(checkpoint, input);
           if (conflictError !== null) return conflictError;
 
           let writeStarted = false;
@@ -367,10 +367,12 @@ export function createSaveDocument<TContext>(
   async function checkOrdinarySaveConflict(checkpoint: {
     readonly path: string | null;
     readonly diskVersion: DiskVersion | null;
-  }): Promise<Extract<SaveDocumentResult, { readonly status: "error" }> | null> {
+  }, input: SaveDocumentInput<TContext>): Promise<Extract<SaveDocumentResult, { readonly status: "error" }> | null> {
     if (checkpoint.diskVersion === null || checkpoint.path === null) return null;
     const current = await dependencies.disk.readDiskVersion(checkpoint.path);
     if (current === null || current.contentHash !== checkpoint.diskVersion.contentHash) {
+      dependencies.workspace.markExternalChange({ tabId: input.tabId, expectedWindowId: input.expectedWindowId,
+        change: { kind: current === null ? "deleted" : "modified" } });
       return saveError("disk-version-conflict");
     }
     return null;
