@@ -677,7 +677,7 @@ describe("App autosave", () => {
       }>
     >
   >;
-  let getPathForDroppedFile: ReturnType<typeof vi.fn<(file: File) => string>>;
+  let getPathForDroppedFile: ReturnType<typeof vi.fn<(file: File) => Promise<string>>>;
   let saveMarkdownFile: ReturnType<
     typeof vi.fn<(input: SaveMarkdownFileInput) => Promise<SaveMarkdownFileResult>>
   >;
@@ -1108,7 +1108,7 @@ describe("App autosave", () => {
     handleDroppedMarkdownFile = vi.fn().mockResolvedValue({
       disposition: "open-in-place"
     });
-    getPathForDroppedFile = vi.fn((file: File) => {
+    getPathForDroppedFile = vi.fn(async (file: File) => {
       const fileWithPath = file as File & { path?: string };
       return fileWithPath.path ?? "";
     });
@@ -1517,7 +1517,7 @@ describe("App autosave", () => {
       name: "bridge-drop.md",
       content: "# Bridge Drop\n"
     });
-    getPathForDroppedFile = vi.fn().mockReturnValue("C:/notes/bridge-drop.md");
+    getPathForDroppedFile = vi.fn().mockResolvedValue("C:/notes/bridge-drop.md");
 
     window.fishmark = {
       ...window.fishmark,

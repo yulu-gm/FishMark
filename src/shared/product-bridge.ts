@@ -67,7 +67,7 @@ export interface ProductBridge {
   handleDroppedMarkdownFile: (
     input: HandleDroppedMarkdownFileInput
   ) => Promise<HandleDroppedMarkdownFileResult>;
-  getPathForDroppedFile: (file: File) => string;
+  getPathForDroppedFile: (file: File) => Promise<string>;
   getWorkspaceSnapshot: () => Promise<WorkspaceWindowSnapshot>;
   resolveExternalChange: (
     input: ResolveExternalChangeInput

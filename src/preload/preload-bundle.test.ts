@@ -43,7 +43,8 @@ describe("sandbox preload build", () => {
     const { bridges, invoke, on, off, getPathForFile, requireModule } = runBundle([
       `--fishmark-runtime-mode=${mode === "test-workbench" ? mode : "editor"}`,
       `--fishmark-preload-bridge-mode=${mode}`,
-      "--fishmark-startup-open-path=C%3A%2Fnotes%2Fhello%20world.md"
+      "--fishmark-startup-open-path=C%3A%2Fnotes%2Fhello%20world.md",
+      "--fishmark-native-file-token=bundle-native-token"
     ]);
     expect(requireModule.mock.calls).toEqual([["electron"]]);
     const product = bridges.get("fishmark") as ProductBridge;
@@ -56,7 +57,8 @@ describe("sandbox preload build", () => {
     await product.getPreferences();
     expect(invoke).toHaveBeenCalledWith(GET_PREFERENCES_CHANNEL);
     const file = {} as File;
-    expect(product.getPathForDroppedFile(file)).toBe("C:/notes/dropped.md");
+    await expect(product.getPathForDroppedFile(file)).resolves.toBe("C:/notes/dropped.md");
+    expect(invoke).toHaveBeenCalledWith("fishmark:grant-native-file-path", { token: "bundle-native-token", targetPath: "C:/notes/dropped.md" });
     expect(getPathForFile).toHaveBeenCalledWith(file);
 
     const listener = vi.fn();

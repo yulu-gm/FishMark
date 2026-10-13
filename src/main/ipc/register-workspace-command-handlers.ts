@@ -104,6 +104,7 @@ export function registerWorkspaceCommandHandlers(dependencies: {
   ipc: IpcRegistration;
   authorize: AuthorizeIpcSender;
   ensureWindow(sender: WebContents): Promise<string>;
+  requireOpenPath(sender: WebContents, targetPath: string): void;
   workspaceApplication: ReturnType<typeof createWorkspaceApplication<WebContents>>;
   workspaceState: ReturnType<typeof createWorkspaceState>;
   documentRepository: Pick<ReturnType<typeof createDocumentRepository>, "readDiskVersion">;
@@ -272,6 +273,7 @@ export function registerWorkspaceCommandHandlers(dependencies: {
       request.record(value);
       request.string(value.targetPath);
       const input = value as { targetPath: string };
+    dependencies.requireOpenPath(event.sender, input.targetPath);
     const windowId = await ensureWindow(event.sender);
     check();
     const result = await workspaceApplication.openPath({
@@ -438,6 +440,7 @@ export function registerWorkspaceCommandHandlers(dependencies: {
       if (!Array.isArray(value.targetPaths) || value.targetPaths.length === 0) request.invalidRequest();
       value.targetPaths.forEach(request.string);
       const input = value as HandleDroppedMarkdownFileInput;
+      for (const targetPath of input.targetPaths) dependencies.requireOpenPath(event.sender, targetPath);
       check();
       if (input.targetPaths.length === 0) {
         throw new Error("Dropped Markdown payload did not include any file paths.");

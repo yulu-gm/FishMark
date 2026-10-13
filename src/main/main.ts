@@ -1,4 +1,6 @@
 import path from "node:path";
+import { randomBytes } from "node:crypto";
+import { readFile, stat } from "node:fs/promises";
 import {
   createWorkspaceState,
   type FileLocationIdentity,
@@ -51,7 +53,7 @@ import { createPreferencesService } from "./preferences-service";
 import { createRecentFilesService } from "./recent-files-service";
 import { createFontCatalogService } from "./font-catalog-service";
 import { openThemesDirectory } from "./open-themes-directory";
-import { resolveTemporaryImageDirectory, selectTemporaryImageDirectory } from "./temporary-image-directory";
+import { resolveTemporaryImageDirectory, selectTemporaryImageDirectory, selectAndPersistTemporaryImageDirectory } from "./temporary-image-directory";
 import {
   createThemePackageService,
   resolveBuiltinThemePackagesDir
@@ -69,6 +71,9 @@ import { createRecoveryService } from "./infrastructure/recovery-service";
 import { restoreWorkspaceRecovery } from "./restore-workspace-recovery";
 import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator";
 import { createFileIdentityResolver } from "./file-identity-resolver";
+import { createPathAuthority, createClipboardTargetAuthority, denyPathAuthority } from "./path-authority";
+import { NATIVE_FILE_TOKEN_ARGUMENT } from "../shared/native-file-path";
+import { registerNativeFileHandlers } from "./ipc/register-native-file-handlers";
 import { createWorkspaceEditorViewHandoffs } from "./workspace-editor-view-handoffs";
 import { createWorkspaceWindowCloseConfirmationHandler } from "./workspace-window-close-confirmation-handler";
 import { createWorkspaceWindowCloseRequestBroker } from "./workspace-window-close-request-broker";
@@ -286,6 +291,30 @@ app.whenReady().then(async () => {
   const workspaceFileObjectOperations =
     createKeyedOperationCoordinator<FileObjectIdentity>();
   const fileIdentityResolver = createFileIdentityResolver();
+  const pathAuthority = createPathAuthority({ fileIdentity: fileIdentityResolver, workspace: workspaceState });
+  await pathAuthority.syncRecent(recentFilesService.getRecentFiles().entries.map((entry) => entry.path));
+  const defaultTemporaryDirectory = path.join(app.getPath("userData"), "temp", "clipboard-images");
+  const temporaryDirectories = new Map<string, { path: string; canonicalPath: string }>();
+  async function trustTemporaryDirectory(directory: string) {
+    const resolved = await fileIdentityResolver.resolveProspective(directory);
+    const approval = { path: directory, canonicalPath: resolved.canonicalPath };
+    temporaryDirectories.set(directory, approval);
+    return approval;
+  }
+  await trustTemporaryDirectory(defaultTemporaryDirectory);
+  const initialTemporaryDirectory = preferencesService.getPreferences().images.temporaryDirectory;
+  if (initialTemporaryDirectory !== null) {
+    try { await trustTemporaryDirectory(initialTemporaryDirectory); }
+    catch { /* Keep the local preference; an unavailable custom directory denies paste, not app startup. */ }
+  }
+  const withClipboardTarget = createClipboardTargetAuthority({
+    workspace: workspaceState, tabOperations: workspaceTabOperations, paths: pathAuthority,
+    fileIdentity: fileIdentityResolver,
+    getTemporaryDirectory() {
+      const directory = resolveTemporaryImageDirectory(app.getPath("userData"), preferencesService.getPreferences());
+      return temporaryDirectories.get(directory) ?? denyPathAuthority();
+    }
+  });
   const recoverableEdits = createRecoverableDocumentEdits({
     workspace: workspaceState,
     recovery: recoveryService
@@ -396,6 +425,7 @@ app.whenReady().then(async () => {
     void recentFilesService.applyMaxEntries(preferences.recentFiles.maxEntries);
   });
   recentFilesService.onChange((snapshot) => {
+    void pathAuthority.syncRecent(snapshot.entries.map((entry) => entry.path));
     broadcastToWindows(RECENT_FILES_CHANGED_EVENT, snapshot);
   });
 
@@ -444,18 +474,44 @@ app.whenReady().then(async () => {
     void runAppUpdateCheck("manual");
   };
 
+  const startupWindowPaths = new WeakMap<BrowserWindow, string>();
   const windowManager = createRuntimeWindowManager({
     runtimeMode,
     preloadPath: path.join(__dirname, "../preload/preload.js"),
     windowIconPath: resolveWindowIconPath(),
     showStrategy: app.isPackaged ? "immediate" : "ready-to-show",
-    createWindow: (input) =>
-      new BrowserWindow({
+    createWindow: (input) => {
+      const token = randomBytes(32).toString("hex");
+      const window = new BrowserWindow({
         ...input,
+        webPreferences: { ...input.webPreferences, additionalArguments: [
+          ...(input.webPreferences?.additionalArguments ?? []), `${NATIVE_FILE_TOKEN_ARGUMENT}${token}`
+        ] },
         show: false
-      }),
+      });
+      const sender = window.webContents;
+      const startupArgument = input.webPreferences?.additionalArguments?.find((value) => value.startsWith("--fishmark-startup-open-path="));
+      if (startupArgument) startupWindowPaths.set(window, decodeURIComponent(startupArgument.slice("--fishmark-startup-open-path=".length)));
+      pathAuthority.bind(sender, String(window.id), token);
+      let initialNavigation = true;
+      sender.on("did-start-navigation", (_event, _url, _inPlace, mainFrame) => {
+        if (!mainFrame) return;
+        if (initialNavigation) { initialNavigation = false; return; }
+        pathAuthority.invalidate(sender);
+      });
+      sender.on("render-process-gone", () => pathAuthority.invalidate(sender));
+      sender.on("destroyed", () => pathAuthority.invalidate(sender, true));
+      return window;
+    },
     getAllWindows: () => BrowserWindow.getAllWindows(),
-    loadRenderer
+    loadRenderer: (window, mode) => {
+      const targetPath = startupWindowPaths.get(window);
+      if (!targetPath) { loadRenderer(window, mode); return; }
+      void pathAuthority.grant(window.webContents, targetPath, "startup").then(() => loadRenderer(window, mode)).catch((error) => {
+        console.error("[fishmark] startup path authorization failed", error);
+        if (!window.isDestroyed()) window.destroy();
+      });
+    }
   });
   openEmptyEditorWindow = () => {
     windowManager.openEditorWindow();
@@ -599,7 +655,9 @@ app.whenReady().then(async () => {
     preferredWindow: getLaunchWindow,
     createWindow: () => windowManager.openEditorWindow(),
     activate: (window) => { activateEditorWindow(window); },
+    prepare: (window, payload) => pathAuthority.grant(window.webContents, payload.targetPath, payload.requestId!),
     send: (window, payload) => window.webContents.send(OPEN_WORKSPACE_PATH_EVENT, payload),
+    revoke: (window, requestId) => pathAuthority.revokeRequest(window.webContents, requestId),
     watch: (window, lost) => {
       const contents = window.webContents;
       window.on("closed", lost);
@@ -634,6 +692,7 @@ app.whenReady().then(async () => {
 
     try {
       await recentFilesService.recordFile(targetPath);
+      await pathAuthority.syncRecent(recentFilesService.getRecentFiles().entries.map((entry) => entry.path), targetPath);
     } catch (error) {
       console.warn(
         `[fishmark] recent file list could not be updated: ${error instanceof Error ? error.message : String(error)}`
@@ -666,7 +725,7 @@ app.whenReady().then(async () => {
       focusWindow: (window) => window.focus()
     });
 
-  const workspaceOpenApplication = createWorkspaceOpen({
+  const workspaceOpenDependencies = {
     workspace: workspaceState,
     tabOperations: workspaceTabOperations,
     fileLocationOperations: workspaceFileLocationOperations,
@@ -676,7 +735,37 @@ app.whenReady().then(async () => {
     ownerActivation: workspaceOwnerTabActivationApplication,
     recentFiles: { record: recordRecentFilePath },
     chooseOpenPath: showOpenMarkdownPathDialog
-  });
+  };
+  const workspaceOpenApplication = {
+    async open(input: { windowId: string }) {
+      const ownerWindow = getWorkspaceWindowById(input.windowId);
+      if (ownerWindow === null) denyPathAuthority();
+      const owner = pathAuthority.capture(ownerWindow.webContents);
+      const selected = await showOpenMarkdownPathDialog();
+      owner.check();
+      if (selected.status === "cancelled") return { kind: "cancelled" as const };
+      if (selected.status === "error") return { kind: "error" as const, error: selected.error };
+      await pathAuthority.grant(ownerWindow.webContents, selected.path, "chooser");
+      return this.openPath({ windowId: input.windowId, targetPath: selected.path });
+    },
+    async openPath(input: { windowId: string; targetPath: string }) {
+      const ownerWindow = getWorkspaceWindowById(input.windowId);
+      if (ownerWindow === null) denyPathAuthority();
+      const permit = pathAuthority.consume(ownerWindow.webContents, input.targetPath);
+      const operation = createWorkspaceOpen({ ...workspaceOpenDependencies,
+        fileIdentity: permit.fileIdentity,
+        file: { read: async (candidate: string) => {
+          await permit.beforeRead(candidate);
+          return openMarkdownFileFromPath(candidate, {
+            stat: async (targetPath) => { await permit.beforeRead(targetPath); return stat(targetPath); },
+            readFile: async (targetPath) => { await permit.beforeRead(targetPath); return readFile(targetPath); }
+          });
+        } }
+      });
+      try { return await operation.openPath(input); }
+      finally { permit.finish(); }
+    }
+  };
 
   const workspaceReloadApplication = createWorkspaceReload({
     workspace: workspaceState,
@@ -869,20 +958,28 @@ app.whenReady().then(async () => {
   });
   registerWorkspaceCommandHandlers({
     ipc, authorize, ensureWindow: workspaceWindowRegistrationApplication.ensureWindow,
+    requireOpenPath: pathAuthority.requirePath,
     workspaceApplication, workspaceState, documentRepository, resolveExternalChange, editorViewHandoffs,
     workspaceOwnerTabActivationRequestBroker, workspaceWindowCloseRequestBroker,
     handleWorkspaceWindowCloseConfirmation
   });
-  registerPreferencesHandlers({ ipc, authorize, service: preferencesService, selectTemporaryDirectory: selectTemporaryImageDirectory });
+  registerPreferencesHandlers({ ipc, authorize, service: preferencesService, selectTemporaryDirectory: async (check, sender) => {
+    const owner = pathAuthority.capture(sender);
+    return selectAndPersistTemporaryImageDirectory({ select: selectTemporaryImageDirectory, fileIdentity: fileIdentityResolver,
+      check: () => { check(); owner.check(); }, service: preferencesService,
+      commit: (directory) => { temporaryDirectories.set(directory, { path: directory, canonicalPath: directory }); }
+    });
+  } });
   registerRecentFilesHandlers({ ipc, authorize, service: recentFilesService });
   registerFontsHandlers({ ipc, authorize, service: fontCatalogService });
   registerThemesHandlers({ ipc, authorize, service: themePackageService, openDirectory: () => openThemesDirectory(app.getPath("userData")) });
   registerUpdatesHandlers({ ipc, authorize, checkForUpdates: () => runAppUpdateCheck("manual") });
   registerExportHandlers({ ipc, authorize, exportHtml: showExportHtmlDialog });
-  registerClipboardHandlers({ ipc, authorize, importImage: (input) => importClipboardImage(input, {
-    clipboard,
-    temporaryDirectory: resolveTemporaryImageDirectory(app.getPath("userData"), preferencesService.getPreferences())
-  }) });
+  registerNativeFileHandlers({ ipc, authorize, paths: pathAuthority });
+  registerClipboardHandlers({ ipc, authorize, importImage: (input, sender, check) =>
+    withClipboardTarget(sender, input.tabId, check, (target) => importClipboardImage(
+      { documentPath: target.documentPath }, { clipboard, ...target }
+    )) });
   registerExternalHandlers({ ipc, authorize, openExternal: (href) => shell.openExternal(href) });
 
   if (!app.isPackaged && runtimeMode === "test-workbench") {
@@ -898,7 +995,8 @@ app.whenReady().then(async () => {
 
     const editorTestSessions: EditorTestSessionsController = createEditorTestSessions({
       openEditorWindow: () =>
-        windowManager.openEditorWindow({ preloadBridgeMode: "editor-test" })
+        windowManager.openEditorWindow({ preloadBridgeMode: "editor-test" }),
+      authorizeFixture: (sender, targetPath, requestId) => pathAuthority.grant(sender, targetPath, requestId)
     });
 
     const cliRunner = createCliProcessRunner({

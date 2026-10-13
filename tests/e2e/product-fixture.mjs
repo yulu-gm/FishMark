@@ -347,7 +347,7 @@ class ProductSession {
     const snapshot = await this.snapshot(page);
     const content = await this.disk();
     this.checkpoints.push({ label, launch: state.index, epochMs: Date.now(), snapshot, diskContent: content, diskSha256: digest(content) });
-    await page.screenshot({ path: this.testInfo.outputPath(`launch-${state.index}-${label}.png`) });
+    if (!state.suppressScreenshots) await page.screenshot({ path: this.testInfo.outputPath(`launch-${state.index}-${label}.png`) });
   }
 
   async capture(state) {
@@ -457,7 +457,7 @@ class ProductSession {
       checkedStderr = withoutExactStderrLine(checkedStderr, exactLine);
       checkedNodeStderr = withoutExactStderrLine(checkedNodeStderr, exactLine);
     }
-    const mainErrors = events.filter((entry) => !expectedEvents.has(entry) && (entry.event.startsWith("main:") || ["save:error", "edit:error", "flush:error", "detach:error", "watch:error", "snapshot:error"].includes(entry.event) || ["renderer:preload-error", "renderer:process-gone", "renderer:load-failed"].includes(entry.event) || (entry.event === "renderer:console" && ["error", 3].includes(entry.detail.level))));
+    const mainErrors = events.filter((entry) => !expectedEvents.has(entry) && (entry.event.startsWith("main:") || ["save:error", "edit:error", "flush:error", "detach:error", "watch:error", "snapshot:error", "authority:error"].includes(entry.event) || ["renderer:preload-error", "renderer:process-gone", "renderer:load-failed"].includes(entry.event) || (entry.event === "renderer:console" && ["error", 3].includes(entry.detail.level))));
     const renderer = state.renderer ?? await this.rendererEvidence();
     const rendererErrors = state.rendererByWindow ? state.rendererByWindow.flatMap((entry) => entry.renderer?.events.filter((event) => ["error", "unhandledrejection"].includes(event.event)) ?? []) : renderer?.events.filter((entry) => ["error", "unhandledrejection"].includes(entry.event)) ?? [];
     expect({ mainErrors, pageErrors: state.pageErrors, rendererErrors,
@@ -490,7 +490,7 @@ class ProductSession {
       }
       if (state.app && state.child.exitCode === null && state.child.signalCode === null) {
         await bounded("owned process capture", () => this.captureOwnedProcesses(state), 5000).catch((error) => recordCleanupError("owned capture", error));
-        if (state.page && !state.page.isClosed()) {
+        if (state.page && !state.page.isClosed() && !state.suppressScreenshots) {
           await bounded("failure screenshot", () => state.page.screenshot({ path: this.testInfo.outputPath(`launch-${state.index}-final.png`) })).catch((error) => recordCleanupError("screenshot", error));
         }
         await this.capture(state).catch((error) => recordCleanupError("capture", error));

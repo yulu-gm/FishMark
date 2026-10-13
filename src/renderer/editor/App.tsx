@@ -470,6 +470,7 @@ function EditorShell({
   ]);
   useWindowMarkdownFileDrop({
     getPathForDroppedFile: fishmark.getPathForDroppedFile,
+    reportError: (error) => showNotification({ kind: "error", message: error instanceof Error ? error.message : String(error) }),
     dropMarkdownFiles: async (targetPaths) => {
       if (await editorCommands.dropMarkdownFiles(targetPaths)) {
         blurFocusedEditorElementAfterOpen();
@@ -500,7 +501,7 @@ function EditorShell({
   }
 
   async function handleImportClipboardImage(
-    input: { documentPath: string | null }
+    input: { tabId: string }
   ): Promise<string | null> {
     return gateway.importClipboardImage(input);
   }

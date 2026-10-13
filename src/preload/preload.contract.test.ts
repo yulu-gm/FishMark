@@ -319,7 +319,7 @@ describe("preload contract", () => {
       tabId: "tab-2"
     };
     const importClipboardImageInput: ImportClipboardImageInput = {
-      documentPath: "D:/fixtures/note.md"
+      tabId: "paste-tab"
     };
     const startRunInput = { scenarioId: "open-markdown-file-basic" };
     const interruptInput = { runId: "run-1" };
@@ -430,13 +430,26 @@ describe("preload contract", () => {
   });
 
   it("resolves dropped file paths through Electron webUtils", async () => {
+    const originalArgv = process.argv;
+    process.argv = [...originalArgv, "--fishmark-native-file-token=unit-native-token"];
     const { api } = await loadApi();
+    process.argv = originalArgv;
     const droppedFile = new File(["content"], "drop.md", { type: "text/markdown" });
     getPathForFile.mockReturnValueOnce("D:/fixtures/drop.md");
 
-    expect(api.getPathForDroppedFile(droppedFile)).toBe("D:/fixtures/drop.md");
+    await expect(api.getPathForDroppedFile(droppedFile)).resolves.toBe("D:/fixtures/drop.md");
+    expect(invoke).toHaveBeenCalledWith("fishmark:grant-native-file-path", { token: "unit-native-token", targetPath: "D:/fixtures/drop.md" });
     expect(getPathForFile).toHaveBeenCalledTimes(1);
     expect(getPathForFile).toHaveBeenCalledWith(droppedFile);
+  });
+
+  it("does not grant renderer-created files or disclose the private native token", async () => {
+    const { api } = await loadApi();
+    getPathForFile.mockReturnValueOnce("");
+    await expect(api.getPathForDroppedFile(new File(["x"], "fake.md"))).resolves.toBe("");
+    expect(invoke).not.toHaveBeenCalled();
+    expect(api).not.toHaveProperty("nativeFileToken");
+    expect(api).not.toHaveProperty("grantNative");
   });
 
   it("forwards shared event payloads without reshaping them", async () => {

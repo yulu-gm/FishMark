@@ -67,7 +67,7 @@ const cases: { channel: string; args: unknown[]; mode?: PreloadBridgeMode }[] = 
   { channel: "open-themes-directory", args: [] },
   { channel: "check-for-app-updates", args: [] },
   { channel: "export-html-file", args: [{ tabId: "tab", currentPath: null, html: "<p>hello</p>" }] },
-  { channel: "import-clipboard-image", args: [{ documentPath: null }] },
+  { channel: "import-clipboard-image", args: [{ tabId: "paste-tab" }] },
   { channel: "open-external-link", args: [{ href: "https://example.com" }] },
   { channel: "open-editor-test-window", args: [], mode: "test-workbench" },
   { channel: "start-scenario-run", args: [{ scenarioId: "scenario" }], mode: "test-workbench" },

@@ -96,7 +96,7 @@ type CodeEditorViewProps = {
   getEditorLoadSelection?: (identity: EditorLoadIdentity) => WorkspaceEditorSelection | null;
   onBlur?: () => void;
   onActiveBlockChange?: (state: ActiveBlockState) => void;
-  importClipboardImage?: (input: { documentPath: string | null }) => Promise<string | null>;
+  importClipboardImage?: (input: { tabId: string }) => Promise<string | null>;
   openExternalLink?: (href: string) => void;
   headingPresentationMode?: "reading" | "editing";
   viewMode?: EditorViewMode;
@@ -188,7 +188,7 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
     // The persistent controller must publish to the latest committed load owner.
     const activeBlockChangeRef = useRef(onActiveBlockChange);
     useLayoutEffect(() => { activeBlockChangeRef.current = onActiveBlockChange; });
-    const handleImportClipboardImage = useEffectEvent((input: { documentPath: string | null }) =>
+    const handleImportClipboardImage = useEffectEvent((input: { tabId: string }) =>
       importClipboardImage?.(input) ?? Promise.resolve(null)
     );
     const handleOpenExternalLink = useEffectEvent((href: string) => openExternalLink?.(href));

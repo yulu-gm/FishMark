@@ -3,6 +3,14 @@ import { DEFAULT_PREFERENCES } from "../../shared/preferences";
 import { RendererPlatformGateway, type WorkspaceApplicationGateway } from "./renderer-platform-gateway";
 
 describe("renderer application gateway", () => {
+  it("reports a rejected main clipboard authority request and returns no insertion", async () => {
+    const notify = vi.fn();
+    const importClipboardImage = vi.fn(async () => { throw new Error("Path authority denied."); });
+    const gateway = new RendererPlatformGateway({ importClipboardImage } as unknown as WorkspaceApplicationGateway, notify, () => {}, vi.fn());
+    await expect(gateway.importClipboardImage({ tabId: "stale-tab" })).resolves.toBeNull();
+    expect(importClipboardImage).toHaveBeenCalledWith({ tabId: "stale-tab" });
+    expect(notify).toHaveBeenCalledExactlyOnceWith({ kind: "error", message: "Path authority denied." });
+  });
   it("updates the selected image directory and schedules autosave from the committed preferences", async () => {
     const updatePreferences = vi.fn(async () => ({ status: "success" as const, preferences: DEFAULT_PREFERENCES }));
     const onPreferencesUpdated = vi.fn();
@@ -29,7 +37,7 @@ describe("renderer application gateway", () => {
       importClipboardImage: async () => ({ status: "error", error: { code: "write-failed", message: "image offline" } })
     } as unknown as WorkspaceApplicationGateway, notify, () => {}, vi.fn());
     await expect(gateway.clearRecentFile({ path: "a.md" })).resolves.toBeNull();
-    await expect(gateway.importClipboardImage({ documentPath: "a.md" })).resolves.toBeNull();
+    await expect(gateway.importClipboardImage({ tabId: "paste-tab" })).resolves.toBeNull();
     expect(notify.mock.calls).toEqual([[{ kind: "error", message: "recent offline" }], [{ kind: "error", message: "image offline" }]]);
   });
 });

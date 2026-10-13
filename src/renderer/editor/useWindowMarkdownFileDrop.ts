@@ -8,10 +8,11 @@ export function isMarkdownFilePath(targetPath: string): boolean {
   return MARKDOWN_FILE_EXTENSIONS.some((extension) => normalizedPath.endsWith(extension));
 }
 
-export function getDroppedMarkdownPaths(
-  getPathForDroppedFile: (file: File) => string,
-  dataTransfer: DataTransfer | null
-): string[] {
+export async function getDroppedMarkdownPaths(
+  getPathForDroppedFile: (file: File) => string | Promise<string>,
+  dataTransfer: DataTransfer | null,
+  reportError: (error: unknown) => void
+): Promise<string[]> {
   const resolvedPaths = new Set<string>();
 
   for (const file of Array.from(dataTransfer?.files ?? [])) {
@@ -19,7 +20,9 @@ export function getDroppedMarkdownPaths(
       continue;
     }
 
-    const filePath = getPathForDroppedFile(file);
+    let filePath: string;
+    try { filePath = await getPathForDroppedFile(file); }
+    catch (error) { reportError(error); continue; }
 
     if (typeof filePath !== "string" || !isMarkdownFilePath(filePath)) {
       continue;
@@ -44,8 +47,9 @@ export function hasFileDrag(dataTransfer: DataTransfer | null): boolean {
 }
 
 export function useWindowMarkdownFileDrop(input: {
-  getPathForDroppedFile: (file: File) => string;
+  getPathForDroppedFile: (file: File) => string | Promise<string>;
   dropMarkdownFiles: (targetPaths: string[]) => Promise<void>;
+  reportError: (error: unknown) => void;
 }): void {
   const handleWindowDragOver = useEffectEvent((event: DragEvent): void => {
     if (!hasFileDrag(event.dataTransfer)) {
@@ -64,13 +68,9 @@ export function useWindowMarkdownFileDrop(input: {
     event.preventDefault();
     event.stopPropagation();
 
-    const targetPaths = getDroppedMarkdownPaths(input.getPathForDroppedFile, event.dataTransfer);
-
-    if (targetPaths.length === 0) {
-      return;
-    }
-
-    void input.dropMarkdownFiles(targetPaths);
+    void getDroppedMarkdownPaths(input.getPathForDroppedFile, event.dataTransfer, input.reportError)
+      .then((targetPaths) => targetPaths.length === 0 ? undefined : input.dropMarkdownFiles(targetPaths))
+      .catch(input.reportError);
   });
 
   useEffect(() => {

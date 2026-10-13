@@ -46,6 +46,7 @@ import {
   type UpdatePreferencesResult
 } from "../shared/preferences";
 import type { ProductBridge } from "../shared/product-bridge";
+import { NATIVE_FILE_PATH_CHANNEL, NATIVE_FILE_TOKEN_ARGUMENT } from "../shared/native-file-path";
 import {
   CLEAR_RECENT_FILE_CHANNEL,
   GET_RECENT_FILES_CHANNEL,
@@ -133,6 +134,7 @@ const RUNTIME_MODE_ARGUMENT_PREFIX = "--fishmark-runtime-mode=";
 const STARTUP_OPEN_PATH_ARGUMENT_PREFIX = "--fishmark-startup-open-path=";
 
 export function createProductApi({ ipc, filePath, runtime }: CreateProductApiInput): ProductBridge {
+  const nativeFileToken = runtime.argv.find((argument) => argument.startsWith(NATIVE_FILE_TOKEN_ARGUMENT))?.slice(NATIVE_FILE_TOKEN_ARGUMENT.length);
   let lastLaunch: { requestId: string; result: Promise<boolean> } | null = null;
   const subscribe = <TPayload>(
     channel: string,
@@ -149,7 +151,13 @@ export function createProductApi({ ipc, filePath, runtime }: CreateProductApiInp
     startupOpenPath: resolveStartupOpenPathFromArgv(runtime.argv),
     handleDroppedMarkdownFile: (input: HandleDroppedMarkdownFileInput) =>
       ipc.invoke<HandleDroppedMarkdownFileResult>(HANDLE_DROPPED_MARKDOWN_FILE_CHANNEL, input),
-    getPathForDroppedFile: (file: File) => filePath.getPathForFile(file),
+    getPathForDroppedFile: async (file: File) => {
+      // Electron returns an empty path for renderer-created Files. Never accept a renderer path declaration.
+      const targetPath = filePath.getPathForFile(file);
+      if (!targetPath || !nativeFileToken) return "";
+      await ipc.invoke<void>(NATIVE_FILE_PATH_CHANNEL, { token: nativeFileToken, targetPath });
+      return targetPath;
+    },
     getWorkspaceSnapshot: () =>
       ipc.invoke<WorkspaceWindowSnapshot>(GET_WORKSPACE_SNAPSHOT_CHANNEL),
     resolveExternalChange: (input: ResolveExternalChangeInput) =>

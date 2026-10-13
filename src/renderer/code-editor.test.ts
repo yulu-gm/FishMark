@@ -12,6 +12,7 @@ import { EditorView } from "@codemirror/view";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { createCodeEditorController, internalDocumentTransaction } from "./code-editor";
+import { RendererPlatformGateway, type WorkspaceApplicationGateway } from "./application/renderer-platform-gateway";
 
 function waitForCompositionFinish(view: EditorView): Promise<void> {
   return new Promise((resolve) => {
@@ -1137,7 +1138,7 @@ describe("createCodeEditorController", () => {
   it("intercepts image paste, imports the clipboard image, and inserts the returned Markdown", async () => {
     const host = document.createElement("div");
     const importClipboardImage = vi
-      .fn<(input: { documentPath: string | null }) => Promise<string | null>>()
+      .fn<(input: { tabId: string }) => Promise<string | null>>()
       .mockResolvedValue("![today](assets/pasted.png)");
 
     const controller = createCodeEditorController({
@@ -1147,7 +1148,7 @@ describe("createCodeEditorController", () => {
       onChange: vi.fn(),
       importClipboardImage
     });
-
+    controller.setDocumentIdentity({ tabId: "paste-tab", epoch: 1, loadRevision: 0 });
     const advancedController = controller as typeof controller & {
       setSelection: (anchor: number, head?: number) => void;
     };
@@ -1175,7 +1176,7 @@ describe("createCodeEditorController", () => {
     expect(pasteEvent.defaultPrevented).toBe(true);
     expect(importClipboardImage).toHaveBeenCalledTimes(1);
     expect(importClipboardImage).toHaveBeenCalledWith({
-      documentPath: "D:/notes/today.md"
+      tabId: "paste-tab"
     });
     expect(controller.getContent()).toBe("Paragraph![today](assets/pasted.png)");
 
@@ -1185,7 +1186,7 @@ describe("createCodeEditorController", () => {
   it("falls back to main clipboard image import when the DOM paste payload has no pasteable text", async () => {
     const host = document.createElement("div");
     const importClipboardImage = vi
-      .fn<(input: { documentPath: string | null }) => Promise<string | null>>()
+      .fn<(input: { tabId: string }) => Promise<string | null>>()
       .mockResolvedValue("![image](D:/FishMark/temp/pasted.png)");
 
     const controller = createCodeEditorController({
@@ -1194,6 +1195,7 @@ describe("createCodeEditorController", () => {
       onChange: vi.fn(),
       importClipboardImage
     });
+    controller.setDocumentIdentity({ tabId: "paste-tab", epoch: 1, loadRevision: 0 });
 
     const editorRoot = host.querySelector(".cm-editor");
 
@@ -1218,16 +1220,43 @@ describe("createCodeEditorController", () => {
 
     expect(pasteEvent.defaultPrevented).toBe(true);
     expect(importClipboardImage).toHaveBeenCalledWith({
-      documentPath: null
+      tabId: "paste-tab"
     });
     expect(controller.getContent()).toBe("![image](D:/FishMark/temp/pasted.png)");
 
     controller.destroy();
   });
 
+  it("handles main's stale clipboard rejection without an unhandled promise or editor insertion", async () => {
+    const host = document.createElement("div"); const notify = vi.fn();
+    const gateway = new RendererPlatformGateway({ importClipboardImage: async () => { throw new Error("Path authority denied."); } } as unknown as WorkspaceApplicationGateway, notify, () => {}, vi.fn());
+    const controller = createCodeEditorController({ parent: host, initialContent: "unchanged", onChange: vi.fn(), importClipboardImage: gateway.importClipboardImage });
+    controller.setDocumentIdentity({ tabId: "one", epoch: 1, loadRevision: 0 });
+    const paste = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, "clipboardData", { value: { items: [{ type: "image/png" }] } });
+    host.querySelector(".cm-editor")!.dispatchEvent(paste); await flushMicrotasks(); await flushMicrotasks();
+    expect(notify).toHaveBeenCalledExactlyOnceWith({ kind: "error", message: "Path authority denied." });
+    expect(controller.getContent()).toBe("unchanged"); controller.destroy();
+  });
+
+  it.each(["tab", "reload"])("does not insert a deferred image into a replacement %s view", async (kind) => {
+    const host = document.createElement("div");
+    let complete!: (markdown: string) => void;
+    const importClipboardImage = vi.fn(() => new Promise<string>((resolve) => { complete = resolve; }));
+    const controller = createCodeEditorController({ parent: host, initialContent: "first", onChange: vi.fn(), importClipboardImage });
+    controller.setDocumentIdentity({ tabId: "one", epoch: 1, loadRevision: 0 });
+    const paste = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, "clipboardData", { value: { items: [{ type: "image/png" }] } });
+    host.querySelector(".cm-editor")!.dispatchEvent(paste);
+    expect(importClipboardImage).toHaveBeenCalledWith({ tabId: "one" });
+    controller.setDocumentIdentity({ tabId: kind === "tab" ? "two" : "one", epoch: 2, loadRevision: 1 });
+    complete("![image](assets/x.png)"); await flushMicrotasks();
+    expect(controller.getContent()).toBe("first"); controller.destroy();
+  });
+
   it("does not intercept normal text paste while checking for clipboard images", () => {
     const host = document.createElement("div");
-    const importClipboardImage = vi.fn<(input: { documentPath: string | null }) => Promise<string | null>>();
+    const importClipboardImage = vi.fn<(input: { tabId: string }) => Promise<string | null>>();
 
     const controller = createCodeEditorController({
       parent: host,

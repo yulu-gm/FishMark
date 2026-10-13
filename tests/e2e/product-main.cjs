@@ -97,6 +97,7 @@ async function holdBoundary(kind, detail) {
   const current = barrier;
   if (!current || current.kind !== kind || !["armed", "held"].includes(current.phase)) return;
   if (kind === "edit-ack" && (detail.webContentsId !== current.webContentsId || detail.tabId !== current.tabId || detail.clientSequence !== current.clientSequence)) return;
+  if (kind === "clipboard-response" && (detail.webContentsId !== current.webContentsId || detail.tabId !== current.tabId)) return;
   if (kind === "target-ready" && detail.webContentsId === current.sourceWebContentsId) return;
   if (current.phase === "held") {
     if (kind === "target-ready" && detail.webContentsId === current.detail.webContentsId) {
@@ -120,7 +121,8 @@ ipcMain.handle = (channel, listener) => {
       : channel === "fishmark:detach-workspace-tab-to-new-window" ? "detach"
         : channel === "fishmark:get-workspace-snapshot" ? "snapshot"
           : channel === "fishmark:sync-watched-markdown-file" ? "watch"
-          : ["fishmark:save-markdown-file", "fishmark:save-markdown-file-as"].includes(channel) ? "save" : null;
+          : ["fishmark:save-markdown-file", "fishmark:save-markdown-file-as"].includes(channel) ? "save"
+            : ["fishmark:open-workspace-file-from-path", "fishmark:handle-dropped-markdown-file", "fishmark:import-clipboard-image", "fishmark:update-preferences"].includes(channel) ? "authority" : null;
   if (prefix === null) return originalHandle(channel, listener);
   return originalHandle(channel, async (...args) => {
     const detail = { channel, webContentsId: args[0].sender.id, tabId: args[1]?.tabId,
@@ -134,6 +136,7 @@ ipcMain.handle = (channel, listener) => {
         record("edit:handled", { ...detail, result });
         await holdBoundary("edit-ack", detail);
       }
+      if (channel === "fishmark:import-clipboard-image") await holdBoundary("clipboard-response", detail);
       record(`${prefix}:end`, { ...detail, status: result?.status,
         ...(prefix === "save" && result?.status === "error" ? { error: result.error } : {}),
         ...(["edit", "flush"].includes(prefix) ? { kind: result?.kind, acknowledgedSequence: result?.acknowledgedSequence, revision: result?.revision, isDirty: result?.isDirty } : {}),

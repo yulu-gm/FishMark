@@ -80,7 +80,7 @@ describe("main process window wiring", () => {
     const mainSource = readMainSource();
 
     expect(mainSource).toContain('import { createFileWatchRegistry } from "./infrastructure/file-watch-registry"');
-    expect(mainSource).toContain('import { resolveTemporaryImageDirectory, selectTemporaryImageDirectory } from "./temporary-image-directory"');
+    expect(mainSource).toContain('import { resolveTemporaryImageDirectory, selectTemporaryImageDirectory, selectAndPersistTemporaryImageDirectory } from "./temporary-image-directory"');
     expect(mainSource).toContain('ipc.handle(GET_PREFERENCES_CHANNEL');
     expect(mainSource).toContain('ipc.handle(UPDATE_PREFERENCES_CHANNEL');
     expect(mainSource).toContain('ipc.handle(SELECT_TEMPORARY_IMAGE_DIRECTORY_CHANNEL');
@@ -95,7 +95,8 @@ describe("main process window wiring", () => {
     );
     expect(mainSource).toContain("workspaceApplication.syncWindow({");
     expect(mainSource).not.toContain("workspaceState.getTabPath(input.tabId)");
-    expect(mainSource).toContain('temporaryDirectory: resolveTemporaryImageDirectory(');
+    expect(mainSource).toContain('const directory = resolveTemporaryImageDirectory(');
+    expect(mainSource).toContain('withClipboardTarget(sender, input.tabId, check');
   });
 
   it("registers a safe system-browser opener for external Markdown links", () => {

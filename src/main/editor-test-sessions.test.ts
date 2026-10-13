@@ -22,6 +22,28 @@ function createWindowHarness() {
 }
 
 describe("createEditorTestSessions", () => {
+  it.each(["complete", "abort", "lost"])("revokes main fixture grants on %s without exposing a renderer issuer", async (kind) => {
+    const f = createWindowHarness(); const revoke = vi.fn();
+    let issue!: (value: () => void) => void;
+    const authorizeFixture = vi.fn(() => new Promise<() => void>((resolve) => { issue = resolve; }));
+    const sessions = createEditorTestSessions({ openEditorWindow: () => f.window, authorizeFixture, createCommandId: () => "fixture-command" });
+    const { sessionId } = sessions.ensureSession(); const controller = new AbortController();
+    const result = sessions.dispatchCommand({ sessionId, command: { type: "open-fixture-file", fixturePath: "/fixtures/main.md" }, signal: controller.signal });
+    expect(authorizeFixture).toHaveBeenCalledWith(f.window.webContents, "/fixtures/main.md", "fixture-command");
+    expect(f.send).not.toHaveBeenCalled();
+    if (kind === "abort") controller.abort();
+    if (kind === "lost") f.window.isDestroyed.mockReturnValue(true);
+    issue(revoke); await Promise.resolve();
+    if (kind === "complete") {
+      expect(f.send).toHaveBeenCalledTimes(1);
+      sessions.completeCommand({ sessionId, commandId: "fixture-command", result: { ok: true, message: "opened" } });
+      await expect(result).resolves.toMatchObject({ ok: true });
+    } else {
+      await expect(result).rejects.toThrow(kind === "abort" ? "aborted" : "unavailable");
+      expect(f.send).not.toHaveBeenCalled();
+    }
+    expect(revoke).toHaveBeenCalledTimes(1);
+  });
   it("binds completion authority to the live session's exact webContents", () => {
     const first = createWindowHarness();
     const sessions = createEditorTestSessions({ openEditorWindow: () => first.window });

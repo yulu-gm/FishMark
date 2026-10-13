@@ -6,13 +6,13 @@ import { IMPORT_CLIPBOARD_IMAGE_CHANNEL, type ImportClipboardImageInput, type Im
 export function registerClipboardHandlers({ ipc, authorize, importImage }: {
   ipc: IpcRegistration;
   authorize: AuthorizeIpcSender;
-  importImage(input: ImportClipboardImageInput): Promise<ImportClipboardImageResult>;
+  importImage(input: ImportClipboardImageInput, sender: Electron.WebContents, check: () => void): Promise<ImportClipboardImageResult>;
 }): void {
   ipc.handle(IMPORT_CLIPBOARD_IMAGE_CHANNEL, async (event, ...args) => {
     const check = authorize(event, ["product", "editor-test"]);
     const value = request.oneArgument(args);
-    request.record(value); request.nullableString(value.documentPath);
-    const result = await importImage({ documentPath: value.documentPath });
+    request.record(value); request.string(value.tabId);
+    const result = await importImage({ tabId: value.tabId }, event.sender, check);
     check();
     return result;
   });

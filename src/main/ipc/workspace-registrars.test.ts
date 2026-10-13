@@ -44,12 +44,13 @@ function commands() {
   const effect = vi.fn(async () => ({ kind: "success", projection }));
   const service = new Proxy({}, { get: () => effect });
   const ensureWindow = vi.fn(async () => "owner");
-  registerWorkspaceCommandHandlers({ ...f, ensureWindow, workspaceApplication: service, workspaceState: service,
+  const requireOpenPath = vi.fn();
+  registerWorkspaceCommandHandlers({ ...f, ensureWindow, requireOpenPath, workspaceApplication: service, workspaceState: service,
     documentRepository: service, resolveExternalChange: service,
     workspaceOwnerTabActivationRequestBroker: service, workspaceWindowCloseRequestBroker: service,
     handleWorkspaceWindowCloseConfirmation: effect
   } as unknown as Parameters<typeof registerWorkspaceCommandHandlers>[0]);
-  return { ...f, effect, ensureWindow };
+  return { ...f, effect, ensureWindow, requireOpenPath };
 }
 
 describe.each(commandRequests)("workspace %s boundary", (channel, args) => {
@@ -68,6 +69,12 @@ describe.each(commandRequests)("workspace %s boundary", (channel, args) => {
 });
 
 describe("workspace authorization after awaits", () => {
+  it.each(["open-workspace-file-from-path", "handle-dropped-markdown-file"])("rejects unknown %s authority before window registration or workspace I/O", async (channel) => {
+    const f = commands();
+    f.requireOpenPath.mockImplementation(() => { throw new Error("Path authority denied."); });
+    await expect(f.invoke(channel, [channel === "handle-dropped-markdown-file" ? { targetPaths: ["/untrusted/a.md"] } : { targetPath: "/untrusted/a.md" }])).rejects.toThrow("Path authority denied");
+    expect(f.ensureWindow).not.toHaveBeenCalled(); expect(f.effect).not.toHaveBeenCalled();
+  });
   it("revalidates after window readiness before invoking the command", async () => {
     const f = commands();
     f.ensureWindow.mockImplementation(async () => { f.sender.isDestroyed.mockReturnValue(true); return "owner"; });

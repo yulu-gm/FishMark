@@ -20,12 +20,14 @@ type PendingCommand = {
   readonly reject: (reason: unknown) => void;
   readonly abortSignal?: AbortSignal;
   readonly handleAbort?: () => void;
+  readonly revoke?: () => void;
 };
 
 export function createEditorTestSessions(input: {
   openEditorWindow: () => EditorCommandWindow;
   createSessionId?: () => string;
   createCommandId?: () => string;
+  authorizeFixture?: (sender: object, targetPath: string, requestId: string) => Promise<() => void>;
 }) {
   let activeSession:
     | {
@@ -86,8 +88,17 @@ export function createEditorTestSessions(input: {
         };
       }
 
+      const revoke = inputArgs.command.type === "open-fixture-file"
+        ? await input.authorizeFixture?.(session.window.webContents, inputArgs.command.fixturePath, commandId)
+        : undefined;
+      if (resolveActiveSession(inputArgs.sessionId) !== session) {
+        revoke?.();
+        throw new Error("The editor test session became unavailable.");
+      }
+
       return await new Promise<EditorTestCommandResult>((resolve, reject) => {
         const handleAbort = () => {
+          revoke?.();
           pendingCommands.delete(commandId);
           reject(new Error(`Editor test command ${commandId} aborted.`));
         };
@@ -97,7 +108,8 @@ export function createEditorTestSessions(input: {
           resolve,
           reject,
           abortSignal: inputArgs.signal,
-          handleAbort
+          handleAbort,
+          revoke
         });
 
         if (inputArgs.signal) {
@@ -109,11 +121,15 @@ export function createEditorTestSessions(input: {
           inputArgs.signal.addEventListener("abort", handleAbort, { once: true });
         }
 
-        session.window.webContents.send(EDITOR_TEST_COMMAND_EVENT, {
+        try { session.window.webContents.send(EDITOR_TEST_COMMAND_EVENT, {
           sessionId: session.sessionId,
           commandId,
           command: inputArgs.command
-        });
+        }); } catch (error) {
+          pendingCommands.delete(commandId);
+          inputArgs.signal?.removeEventListener("abort", handleAbort);
+          revoke?.(); reject(error);
+        }
       });
     },
     completeCommand(payload: EditorTestCommandResultEnvelope): boolean {
@@ -123,6 +139,7 @@ export function createEditorTestSessions(input: {
       }
 
       pendingCommands.delete(payload.commandId);
+      pending.revoke?.();
       if (pending.abortSignal && pending.handleAbort) {
         pending.abortSignal.removeEventListener("abort", pending.handleAbort);
       }

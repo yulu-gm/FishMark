@@ -10,7 +10,9 @@ export function createLaunchOpenCoordinator<TWindow extends LaunchWindow>(input:
   preferredWindow(): TWindow | null;
   createWindow(): TWindow;
   activate(window: TWindow): void;
-  send(window: TWindow, request: OpenWorkspacePathRequest): void;
+  send(window: TWindow, request: OpenWorkspacePathRequest): void | Promise<void>;
+  prepare?(window: TWindow, request: OpenWorkspacePathRequest): Promise<() => void>;
+  revoke?(window: TWindow, requestId: string): void;
   watch(window: TWindow, lost: () => void): () => void;
   schedule(callback: () => void, delayMs: number): () => void;
   reportFailure(targetPath: string, error: unknown): void;
@@ -23,6 +25,7 @@ export function createLaunchOpenCoordinator<TWindow extends LaunchWindow>(input:
   let cancelDeadline: (() => void) | null = null;
   let cancelRetry: (() => void) | null = null;
   let nextId = 0;
+  let deliveryAttempt = 0;
   let disposed = false;
   let suspended = false;
   const live = (window: TWindow) => !window.isDestroyed() && !window.webContents.isDestroyed();
@@ -33,6 +36,7 @@ export function createLaunchOpenCoordinator<TWindow extends LaunchWindow>(input:
   }
   function fail(error: unknown) {
     const head = queue.shift();
+    if (head && target) input.revoke?.(target, head.requestId);
     clearTimers();
     target = null;
     inFlight = false;
@@ -40,6 +44,7 @@ export function createLaunchOpenCoordinator<TWindow extends LaunchWindow>(input:
     pump();
   }
   function retry(error: unknown) {
+    if (target && queue[0]) input.revoke?.(target, queue[0].requestId);
     inFlight = false;
     clearTimers();
     const head = queue[0];
@@ -57,6 +62,7 @@ export function createLaunchOpenCoordinator<TWindow extends LaunchWindow>(input:
         watched.delete(window);
       }
       if (target === window && queue.length) {
+        input.revoke?.(window, queue[0]!.requestId);
         target = null;
         retry(new Error("The editor window became unavailable."));
       }
@@ -80,8 +86,33 @@ export function createLaunchOpenCoordinator<TWindow extends LaunchWindow>(input:
       }
       cancelDeadline?.(); cancelDeadline = null;
       inFlight = true;
+      const attempt = ++deliveryAttempt;
       input.activate(target);
-      input.send(target, { requestId: head.requestId, targetPath: head.targetPath });
+      const sendingWindow = target;
+      const request = { requestId: head.requestId, targetPath: head.targetPath };
+      const current = () => !disposed && !suspended && deliveryAttempt === attempt && target === sendingWindow && queue[0] === head && inFlight && ready.has(sendingWindow);
+      const failed = (error: unknown) => {
+        if (deliveryAttempt === attempt && target === sendingWindow && queue[0] === head && inFlight) {
+          head.attempts += 1;
+          retry(error);
+        }
+      };
+      const deliver = () => {
+        if (!current()) return;
+        try {
+          const sent = input.send(sendingWindow, request);
+          if (sent) void sent.catch(failed);
+        } catch (error) { failed(error); }
+      };
+      if (input.prepare) void input.prepare(sendingWindow, request).then((revoke) => {
+        if (!current()) {
+          revoke();
+          if (deliveryAttempt === attempt && target === sendingWindow && queue[0] === head) inFlight = false;
+          return;
+        }
+        deliver();
+      }).catch(failed);
+      else deliver();
       // Do not time out an open already being processed: the user may be
       // responding to a dialog. Renderer loss explicitly triggers recovery.
     } catch (error) {
@@ -104,6 +135,7 @@ export function createLaunchOpenCoordinator<TWindow extends LaunchWindow>(input:
     complete(window: TWindow, requestId: string, success: boolean) {
       if (disposed || !live(window) || window !== target || !inFlight || queue[0]?.requestId !== requestId) return false;
       const head = queue.shift()!;
+      input.revoke?.(window, head.requestId);
       clearTimers();
       inFlight = false;
       if (!queue.length) target = null;
@@ -116,6 +148,7 @@ export function createLaunchOpenCoordinator<TWindow extends LaunchWindow>(input:
     resume() { suspended = false; pump(); },
     dispose() {
       disposed = true;
+      if (target && queue[0]) input.revoke?.(target, queue[0].requestId);
       clearTimers();
       for (const unwatch of watched.values()) unwatch();
       watched.clear(); ready.clear(); queue.length = 0;

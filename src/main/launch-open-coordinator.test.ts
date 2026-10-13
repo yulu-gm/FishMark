@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createLaunchOpenCoordinator } from "./launch-open-coordinator";
 
-function fixture() {
+function fixture(prepare?: Parameters<typeof createLaunchOpenCoordinator>[0]["prepare"]) {
   vi.useFakeTimers();
   const makeWindow = () => ({ destroyed: false, isDestroyed() { return this.destroyed; }, webContents: { isDestroyed: () => false } });
   const first = makeWindow();
@@ -13,7 +13,7 @@ function fixture() {
   const activate = vi.fn();
   const coordinator = createLaunchOpenCoordinator({
     preferredWindow: () => first,
-    createWindow, activate, send, reportFailure,
+    createWindow, activate, send, reportFailure, prepare,
     watch: (window, lost) => { watchers.set(window, lost); return () => { watchers.delete(window); }; },
     schedule: (callback, ms) => { const timer = setTimeout(callback, ms); return () => clearTimeout(timer); }
   });
@@ -23,6 +23,24 @@ function fixture() {
 afterEach(() => vi.useRealTimers());
 
 describe("launch open coordinator", () => {
+  it.each(["lost", "dispose", "suspend"])("revokes pending main grants instead of sending after %s", async (kind) => {
+    let issue!: (value: () => void) => void;
+    const revoke = vi.fn();
+    const prepare = vi.fn(() => new Promise<() => void>((resolve) => { issue = resolve; }));
+    const f = fixture(prepare); f.coordinator.setReady(f.first, true); f.coordinator.enqueue(["a.md"]);
+    expect(f.send).not.toHaveBeenCalled();
+    if (kind === "lost") f.watchers.get(f.first)!();
+    if (kind === "dispose") f.coordinator.dispose();
+    if (kind === "suspend") f.coordinator.suspend();
+    issue(revoke); await Promise.resolve(); await Promise.resolve();
+    expect(f.send).not.toHaveBeenCalled(); expect(revoke).toHaveBeenCalledTimes(1);
+  });
+  it("recovers a rejected asynchronous main grant without losing the request id", async () => {
+    const prepare = vi.fn().mockRejectedValueOnce(new Error("grant unavailable")).mockResolvedValue(() => {});
+    const f = fixture(prepare); f.coordinator.setReady(f.first, true); f.coordinator.enqueue(["a.md"]);
+    await Promise.resolve(); await Promise.resolve(); vi.advanceTimersByTime(100); await Promise.resolve();
+    expect(f.send).toHaveBeenCalledTimes(1); expect(f.lastRequest()).toEqual({ requestId: "launch:1", targetPath: "a.md" });
+  });
   it("queues multiple startup and second-instance paths behind renderer readiness and completion", () => {
     const f = fixture();
     f.coordinator.enqueue(["a.md", "b.md"]);

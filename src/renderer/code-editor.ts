@@ -57,7 +57,7 @@ export type CreateCodeEditorControllerOptions = {
   onPendingDocumentChangesChange?: (hasPending: boolean) => void;
   onBlur?: () => void;
   onActiveBlockChange?: (state: ActiveBlockState) => void;
-  importClipboardImage?: (input: { documentPath: string | null }) => Promise<string | null>;
+  importClipboardImage?: (input: { tabId: string }) => Promise<string | null>;
   openExternalLink?: (href: string) => void;
   headingPresentationMode?: HeadingPresentationMode;
   viewMode?: EditorViewMode;
@@ -461,13 +461,15 @@ export function createCodeEditorController(
     event.preventDefault();
 
     const selection = view.state.selection.main;
+    const identity = documentIdentity;
+    if (identity === null) return;
 
     void options
       .importClipboardImage({
-        documentPath: currentDocumentPath
+        tabId: identity.tabId
       })
       .then((markdown) => {
-        if (!markdown || isDestroyed) {
+        if (!markdown || isDestroyed || documentIdentity === null || !isSameEditorLoadIdentity(identity, documentIdentity)) {
           return;
         }
 

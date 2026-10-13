@@ -8,7 +8,7 @@ export function registerPreferencesHandlers({ ipc, authorize, service, selectTem
   ipc: IpcRegistration;
   authorize: AuthorizeIpcSender;
   service: Pick<ReturnType<typeof createPreferencesService>, "getPreferences" | "updatePreferences">;
-  selectTemporaryDirectory(): Promise<string | null>;
+  selectTemporaryDirectory(check: () => void, sender: Electron.WebContents): Promise<string | null>;
 }): void {
   ipc.handle(GET_PREFERENCES_CHANNEL, async (event, ...args) => {
     const check = authorize(event, ["product", "editor-test", "test-workbench"]);
@@ -21,6 +21,10 @@ export function registerPreferencesHandlers({ ipc, authorize, service, selectTem
     const check = authorize(event, ["product", "editor-test", "test-workbench"]);
     const value = request.oneArgument(args);
     validatePreferencesPatch(value);
+    const directory = value.images?.temporaryDirectory;
+    if (directory !== undefined && directory !== null && directory !== service.getPreferences().images.temporaryDirectory) {
+      throw new Error("Path authority denied.");
+    }
     const result = await service.updatePreferences(value);
     check();
     return result;
@@ -28,7 +32,7 @@ export function registerPreferencesHandlers({ ipc, authorize, service, selectTem
   ipc.handle(SELECT_TEMPORARY_IMAGE_DIRECTORY_CHANNEL, async (event, ...args) => {
     const check = authorize(event, ["product", "editor-test", "test-workbench"]);
     request.noArguments(args);
-    const result = await selectTemporaryDirectory();
+    const result = await selectTemporaryDirectory(check, event.sender);
     check();
     return result;
   });

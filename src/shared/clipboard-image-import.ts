@@ -1,7 +1,7 @@
 export const IMPORT_CLIPBOARD_IMAGE_CHANNEL = "fishmark:import-clipboard-image";
 
 export type ImportClipboardImageInput = {
-  documentPath: string | null;
+  tabId: string;
 };
 
 export type ImportClipboardImageResult =

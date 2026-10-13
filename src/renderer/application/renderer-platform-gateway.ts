@@ -44,12 +44,17 @@ export class RendererPlatformGateway {
     catch (error) { this.notify({ kind: "error", message: error instanceof Error ? error.message : String(error) }); }
   };
   importClipboardImage = async (input: Parameters<WorkspaceApplicationGateway["importClipboardImage"]>[0]): Promise<string | null> => {
-    this.assertActive();
-    const result = await this.bridge.importClipboardImage(input);
-    this.assertActive();
-    if (result.status === "success") return result.markdown;
-    this.notify({ kind: "error", message: result.error.message });
-    return null;
+    try {
+      this.assertActive();
+      const result = await this.bridge.importClipboardImage(input);
+      this.assertActive();
+      if (result.status === "success") return result.markdown;
+      this.notify({ kind: "error", message: result.error.message });
+      return null;
+    } catch (error) {
+      this.notify({ kind: "error", message: error instanceof Error ? error.message : String(error) });
+      return null;
+    }
   };
   openExternalLink = async (href: string): Promise<void> => {
     try { this.assertActive(); await this.bridge.openExternalLink(href); }

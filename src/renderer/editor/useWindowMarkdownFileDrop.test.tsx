@@ -5,7 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { useWindowMarkdownFileDrop } from "./useWindowMarkdownFileDrop";
+import { getDroppedMarkdownPaths, useWindowMarkdownFileDrop } from "./useWindowMarkdownFileDrop";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -41,6 +41,16 @@ afterEach(() => {
 });
 
 describe("useWindowMarkdownFileDrop", () => {
+  it("reports a rejected native grant and retains the remaining valid paths in original deduplicated order", async () => {
+    const reportError = vi.fn();
+    const files = [new File([""], "a.md"), new File([""], "lost.md"), new File([""], "b.md"), new File([""], "a.md")];
+    const getPath = vi.fn(async (file: File) => {
+      if (file.name === "lost.md") throw new Error("native grant lost");
+      return `C:/notes/${file.name}`;
+    });
+    await expect(getDroppedMarkdownPaths(getPath, { files } as unknown as DataTransfer, reportError)).resolves.toEqual(["C:/notes/a.md", "C:/notes/b.md"]);
+    expect(reportError).toHaveBeenCalledWith(expect.objectContaining({ message: "native grant lost" }));
+  });
   it("opens one dropped file batch instead of replaying single-file opens", async () => {
     const openMarkdownFromPaths = vi.fn(async () => {});
     const fishmark = {
@@ -52,6 +62,7 @@ describe("useWindowMarkdownFileDrop", () => {
 
     const { root } = renderDropProbe({
       getPathForDroppedFile: fishmark.getPathForDroppedFile,
+      reportError: vi.fn(),
       dropMarkdownFiles: openMarkdownFromPaths
     });
     const dropEvent = new Event("drop", { bubbles: true, cancelable: true }) as unknown as DragEvent;

@@ -2,7 +2,6 @@ import path from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
 
 import type {
-  ImportClipboardImageInput,
   ImportClipboardImageResult
 } from "../shared/clipboard-image-import";
 
@@ -26,7 +25,12 @@ type ClipboardImageDependencies = {
   mkdir?: typeof mkdir;
   writeFile?: typeof writeFile;
   now?: () => Date;
+  beforeDirectoryIO?: (directory: string) => Promise<void>;
+  beforeWrite?: (directory: string) => Promise<void>;
 };
+
+// Paths are resolved by main from a leased tab, never supplied by the renderer.
+type ImportClipboardImageInput = { documentPath: string | null };
 
 type ImportTarget =
   | {
@@ -93,7 +97,9 @@ export async function importClipboardImage(
     };
   }
 
+  await dependencies.beforeDirectoryIO?.(target.directory);
   await createDirectory(target.directory, { recursive: true });
+  await dependencies.beforeWrite?.(target.directory);
 
   let attempt = 1;
 
@@ -106,6 +112,7 @@ export async function importClipboardImage(
     });
     const imagePath = normalizePathForFs(path.join(target.directory, candidateName));
 
+    await dependencies.beforeWrite?.(target.directory);
     try {
       await writeImageFile(imagePath, imageFile.buffer, { flag: "wx" });
 
