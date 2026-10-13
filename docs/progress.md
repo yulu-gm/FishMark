@@ -1,5 +1,9 @@
 # FishMark 进展记录
 
+## 2026-10-13 RF-901：标题首输入与 IME 引擎归因
+
+从已发布 `cf0502c` 继续。真实构建20k标题首输入三样本从1499–1795ms降至151–172ms，受限ATX纯文本标题复用既有局部解析；打开ready本身未改善且仍超预算。strict3663+8exact/0skip、完整门禁与独立review通过。隐藏无应用代码的相同Electron对照复现native compositionend=false，支持Blink引擎路径解释；旧OS IME严格失败保留，没有再次占用前台。M9仍0/3，RF-902/903仍PLANNED。[协议、结果与剩余条件](../reports/task-summaries/TASK-RF901-FIRST-EDIT-026.md)。
+
 ## 2026-10-13 关闭意图竞态修复
 
 混合词内解析 `f6f922e` 已发布，[CI38348736059](https://github.com/yulu-gm/FishMark/actions/runs/38348736059) 全绿。随后确定性复现 Cancel 响应后、COMPLETE 前的第二次 native close 被吞；新增每窗口意图队列等待完整握手，Cancel 清除旧重复点击但保留响应后的新操作。真实构建基线FAIL、最终同协议及取消前重复反例PASS；strict3618+8exact/0skip，完整门禁/review PASS。[修复及证据](../reports/task-summaries/TASK-WINDOW-CLOSE-INTENT-024.md)。本批不等于所有关闭并发风险或RF-901/M9完成。

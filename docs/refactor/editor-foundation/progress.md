@@ -10,6 +10,8 @@
 
 **Overall status:** `IN_PROGRESS`
 
+**2026-10-13 最新：** 高亮复用 `cf0502c` 已发布、CI38351813984全绿；后续真实磁盘打开标题首输入定位全篇解析，受限ATX内容局部更新使20k三样本1499–1795ms→151–172ms。strict3663+8exact、完整门禁与独立review通过，打开ready预算仍未达标。后台引擎对照复现compositionend=false，旧OS IME strict失败不改绿。RF-901继续、M9 0/3、RF-902/903 PLANNED。[本批证据](../../../reports/task-summaries/TASK-RF901-FIRST-EDIT-026.md)。
+
 **2026-10-13 最新：** 混合词内解析 `f6f922e` 已发布，精确CI38348736059全绿；后续关闭意图丢失已真实屏障复现并修复，本地完整门禁3618+8exact/0skip及独立review通过。RF-901/M9仍未完成，下一步整篇装饰/派生更新与完整预算。[关闭小批证据](../../../reports/task-summaries/TASK-WINDOW-CLOSE-INTENT-024.md)。
 
 **2026-10-13 后续：** 结构行复用 `6301d0b` 已发布，精确 CI `38347148385` attempt 2 success，attempt 1 关闭超时保留待修。词内局部解析本地门禁/review PASS：OFF mixed20k 输入 p95 2385.2→278.8ms，ON full parse 30→0，strict3610+8exact/0skip，formal121/2541。完整预算仍未通过，M9 0/3。[证据与剩余工作](../../../reports/task-summaries/TASK-RF901-MIXED-INCREMENTAL-023.md)。

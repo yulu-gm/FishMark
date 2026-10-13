@@ -54,28 +54,30 @@ export function applyIncrementalEdit(
     return fullParseFallback(newSource, "no-safe-window");
   }
 
-  // A plain paragraph, or a word-internal edit in an existing single-line paragraph,
-  // proves that the block boundary remains unchanged. Structural edits still fall back.
+  // Plain paragraph/ATX heading text and word-internal paragraph edits can prove
+  // that the block boundary remains unchanged. Structural edits still fall back.
   const target = cache.tree.root.children.find((node) =>
-    node.kind === "paragraph" && edit.fromOffset >= node.source.startOffset &&
+    (node.kind === "paragraph" || node.kind === "heading") && edit.fromOffset >= node.source.startOffset &&
     edit.toOffset <= node.content.endOffset
   );
   if (target === undefined || isMarkdownContainerNode(target)) {
     return fullParseFallback(newSource, "unproven-block-boundary");
   }
   const plainParagraphEdit =
+    target.kind === "paragraph" &&
     /^[\p{L}][\p{L}\p{N} ,.!?]*(?:\r?\n)?$/u.test(cache.source.slice(target.source.startOffset, target.source.endOffset)) &&
     /^[\p{L}\p{N} ,.!?]*$/u.test(edit.insertedText) &&
     /^[\p{L}\p{N} ,.!?]*$/u.test(cache.source.slice(edit.fromOffset, edit.toOffset)) &&
     /^[\p{L}][\p{L}\p{N} ,.!?]*(?:\r?\n)?$/u.test(newSource.slice(target.source.startOffset, target.source.endOffset + delta));
-  const wordEdit = isInlineWordEdit(target, cache.source, edit);
-  if (!plainParagraphEdit && !wordEdit) return fullParseFallback(newSource, "unproven-block-boundary");
+  const wordEdit = target.kind === "paragraph" && isInlineWordEdit(target, cache.source, edit);
+  const headingEdit = isPlainAtxHeadingEdit(target, cache.source, newSource, edit, delta);
+  if (!plainParagraphEdit && !wordEdit && !headingEdit) return fullParseFallback(newSource, "unproven-block-boundary");
   const hasDefinitions = cache.tree.referenceDefinitions.size > 0 || cache.tree.footnoteDefinitions.size > 0;
-  if (hasDefinitions && !wordEdit) {
+  if (hasDefinitions && !wordEdit && !headingEdit) {
     return fullParseFallback(newSource, "global-definition-dependencies");
   }
   try {
-    return applyParagraphEdit(cache, edit, target, newSource, options, hasDefinitions);
+    return applyInlineLeafEdit(cache, edit, target, newSource, options, hasDefinitions);
   } catch (error) {
     if (error instanceof OverlappingSourceOffset) return fullParseFallback(newSource, "overlapping-source-offset");
     throw error;
@@ -97,6 +99,20 @@ export function applyIncrementalEdit(
   }
 }
 
+function isPlainAtxHeadingEdit(
+  target: MarkdownLeafNode, source: string, newSource: string, edit: TextEdit, delta: number
+): boolean {
+  if (target.kind !== "heading" || edit.fromOffset < target.content.startOffset ||
+      !/^ {0,3}#{1,6}[\t ]+$/u.test(source.slice(target.source.startOffset, target.content.startOffset)) ||
+      !/^(?:\r?\n)?$/u.test(source.slice(target.content.endOffset, target.source.endOffset)) ||
+      !/^[\p{L}\p{N} ,.!?]*$/u.test(edit.insertedText)) return false;
+  // Keep both content edges and the ATX prefix unchanged. In particular, do not
+  // reuse closing hashes, trimmed whitespace, setext markers, or inline syntax.
+  const plain = (text: string) => /^[\p{L}\p{N}][\p{L}\p{N} ,.!?]*$/u.test(text) && !text.endsWith(" ");
+  return plain(source.slice(target.content.startOffset, target.content.endOffset)) &&
+    plain(newSource.slice(target.content.startOffset, target.content.endOffset + delta));
+}
+
 function isInlineWordEdit(target: MarkdownLeafNode, source: string, edit: TextEdit): boolean {
   if (!/^[A-Za-z]/u.test(source.slice(target.content.startOffset, target.content.endOffset)) ||
       /[\r\n]/u.test(source.slice(target.content.startOffset, target.content.endOffset)) ||
@@ -109,7 +125,7 @@ function isInlineWordEdit(target: MarkdownLeafNode, source: string, edit: TextEd
     node.value === source.slice(node.startOffset, node.endOffset)) ?? false;
 }
 
-function applyParagraphEdit(
+function applyInlineLeafEdit(
   cache: DocumentStructureCache, edit: TextEdit, target: MarkdownLeafNode,
   newSource: string, options: MarkdownParseOptions, hasDefinitions: boolean
 ): IncrementalParseResult {
@@ -132,8 +148,7 @@ function applyParagraphEdit(
   const content = createSourceRange(target.content.startOffset, target.content.endOffset + window.delta);
   const windowChildren = [createMarkdownLeafNode({
     ...target,
-    kind: "paragraph",
-    id: createNodeIdForSource({ path: target.path, kind: "paragraph", source: newSource.slice(window.newStart, window.newEnd) }),
+    id: createNodeIdForSource({ path: target.path, kind: target.kind, source: newSource.slice(window.newStart, window.newEnd) }),
     source: createSourceRange(window.newStart, window.newEnd),
     content,
     inline: parseInlineAst(newSource, content.startOffset, content.endOffset, {

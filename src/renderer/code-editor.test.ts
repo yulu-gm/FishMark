@@ -89,10 +89,13 @@ it("keeps structural geometry document-owned across presentation and configurati
   }
 });
 
-it("keeps mixed canonical trees correct through word typing, undo, modes and structural fallback", () => {
+it.each([
+  { body: "Paragraph **bold** [ref] [^note].", needle: "Paragraph", offset: 4 },
+  { body: "# Title", needle: "Title", offset: 0 }
+])("keeps mixed canonical trees correct through typing, undo, modes and structural fallback: $body", ({ body, needle, offset }) => {
   const host = document.createElement("div");
   document.body.append(host);
-  const source = "Before [ref].\n\nParagraph **bold** [ref] [^note].\n\n[ref]: /target \"Title\"\n\n[^note]: *Note*\n";
+  const source = "Before [ref].\n\n" + body + "\n\n[ref]: /target \"Title\"\n\n[^note]: *Note*\n";
   const controller = createCodeEditorController({ parent: host, initialContent: source, onChange: vi.fn() });
   try {
     const view = getEditorView(host)!;
@@ -105,7 +108,7 @@ it("keeps mixed canonical trees correct through word typing, undo, modes and str
       controller.setViewMode(mode);
       for (const presentation of ["reading", "editing"] as const) {
         controller.setHeadingPresentationMode(presentation);
-        controller.setSelection(source.indexOf("Paragraph") + 4);
+        controller.setSelection(source.indexOf(needle) + offset);
         controller.insertText("xyz");
         verify();
         expect(undo(view)).toBe(true);
@@ -117,7 +120,7 @@ it("keeps mixed canonical trees correct through word typing, undo, modes and str
         verify();
       }
     }
-    controller.setSelection(source.indexOf("Paragraph") + 4);
+    controller.setSelection(source.indexOf(needle) + offset);
     controller.insertText("\n\n# New heading\n\n");
     verify();
     expect(undo(view)).toBe(true);
