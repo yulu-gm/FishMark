@@ -161,7 +161,6 @@
   flex-direction: column;
   align-items: center;
   gap: var(--fishmark-space-4);
-  border-right: 1px solid var(--fishmark-panel-border, rgba(15, 23, 42, 0.12));
   background: var(--fishmark-rail-bg, rgba(255, 255, 255, 0.92));
 }
 
@@ -250,7 +249,7 @@
   justify-content: center;
   padding: 0;
   border: 0;
-  border-radius: 14px;
+  border-radius: var(--fishmark-ui-radius);
   background: transparent;
   color: var(--fishmark-text-secondary, #31353d);
   cursor: pointer;
@@ -285,7 +284,7 @@
 }
 
 .table-tool-button[data-tone="danger"] {
-  color: var(--fishmark-text-primary, #171a1f);
+  color: var(--fishmark-text-danger, #8b1e1e);
 }
 
 .table-tool-tooltip {
@@ -295,10 +294,10 @@
   transform: translateY(-50%);
   padding: var(--fishmark-space-2) var(--fishmark-space-3);
   border: 1px solid color-mix(in srgb, var(--fishmark-panel-border, rgba(15, 23, 42, 0.12)) 56%, transparent);
-  border-radius: var(--fishmark-radius-md);
-  background: var(--fishmark-panel-bg, rgba(255, 255, 255, 0.92));
+  border-radius: var(--fishmark-ui-surface-radius);
+  background: var(--fishmark-ui-surface-bg);
   color: var(--fishmark-text-secondary, #31353d);
-  font-size: 0.75rem;
+  font-size: var(--fishmark-ui-meta-size);
   line-height: 1;
   white-space: nowrap;
   box-shadow: var(--fishmark-shadow-1);
@@ -313,7 +312,7 @@
   place-items: center;
   padding: 0;
   border: 0;
-  border-radius: 14px;
+  border-radius: var(--fishmark-ui-radius);
   background: transparent;
   color: var(--fishmark-text-secondary, #31353d);
   cursor: pointer;
@@ -427,15 +426,16 @@
 
 .app-notification-message {
   margin: 0;
-  padding: 11px 18px;
+  max-width: 100%;
+  padding: 8px 12px;
   border: 1px solid var(--fishmark-control-border, rgba(15, 23, 42, 0.12));
-  border-radius: var(--fishmark-radius-pill);
-  background: var(--fishmark-banner-info-bg, rgba(255, 255, 255, 0.9));
-  box-shadow: var(--fishmark-panel-shadow, var(--fishmark-shadow-2));
+  border-radius: var(--fishmark-ui-surface-radius);
+  background: var(--fishmark-ui-surface-bg);
+  box-shadow: var(--fishmark-ui-surface-shadow);
   color: var(--fishmark-text-primary, #171a1f);
-  font-size: 0.84rem;
-  line-height: 1.35;
-  backdrop-filter: blur(18px) saturate(1.06);
+  font-size: var(--fishmark-ui-text-size);
+  line-height: var(--fishmark-ui-line-height);
+  overflow-wrap: anywhere;
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -459,15 +459,12 @@
 .external-file-conflict-banner {
   grid-row: 1;
   display: grid;
-  gap: 12px;
+  gap: var(--fishmark-space-2);
   margin: 0 var(--fishmark-shell-gutter) 16px;
-  padding: 16px 18px;
+  padding: 12px 14px;
   border: 1px solid color-mix(in srgb, var(--fishmark-banner-warning-border, #d9b75d) 55%, transparent);
-  border-radius: 18px;
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--fishmark-banner-warning-bg, #fff7e0) 92%, white) 0%, transparent 100%),
-    var(--fishmark-panel-bg, rgba(255, 255, 255, 0.94));
-  box-shadow: 0 18px 38px rgba(15, 23, 42, 0.08);
+  border-radius: var(--fishmark-ui-surface-radius);
+  background: color-mix(in srgb, var(--fishmark-banner-warning-bg, #fff7e0) 35%, var(--fishmark-ui-surface-bg));
 }
 
 .external-file-conflict-banner[data-status="keeping-memory"] {
@@ -477,8 +474,8 @@
 .external-file-conflict-message {
   margin: 0;
   color: var(--fishmark-text-primary, #171a1f);
-  font-size: 0.94rem;
-  line-height: 1.55;
+  font-size: var(--fishmark-ui-text-size);
+  line-height: var(--fishmark-ui-line-height);
 }
 
 .external-file-conflict-actions {
@@ -488,13 +485,9 @@
 }
 
 .external-file-conflict-button {
-  border: 1px solid color-mix(in srgb, var(--fishmark-control-border, rgba(15, 23, 42, 0.12)) 85%, transparent);
-  border-radius: 999px;
-  background: var(--fishmark-control-bg, rgba(255, 255, 255, 0.92));
-  color: var(--fishmark-text-primary, #171a1f);
-  padding: 9px 14px;
-  font: inherit;
-  cursor: pointer;
+  min-height: 30px;
+  padding: 4px 10px;
+  font-size: var(--fishmark-ui-text-size);
 }
 
 .external-file-conflict-button.is-secondary {
@@ -935,24 +928,13 @@
   min-width: 0;
   height: 30px;
   padding: 0 9px;
-  border: 1px solid var(--fishmark-control-border, rgba(15, 23, 42, 0.12));
-  border-radius: 8px;
-  background: var(--fishmark-control-bg, rgba(255, 255, 255, 0.9));
-  color: var(--fishmark-text-primary, #171a1f);
-  font: inherit;
-  font-size: 0.82rem;
-}
-
-.find-replace-input:focus {
-  outline: 2px solid var(--fishmark-focus-ring);
-  outline-offset: 1px;
 }
 
 .find-replace-status {
   min-width: 58px;
   margin: 0 auto 0 0;
   color: var(--fishmark-text-muted, #687180);
-  font-size: 0.78rem;
+  font-size: var(--fishmark-ui-meta-size);
   text-align: left;
   white-space: nowrap;
 }
@@ -961,11 +943,11 @@
 .find-replace-text-button {
   height: 26px;
   border: 1px solid transparent;
-  border-radius: 5px;
+  border-radius: var(--fishmark-ui-radius);
   background: transparent;
   color: var(--fishmark-control-fg, #31353d);
   font: inherit;
-  font-size: 0.78rem;
+  font-size: var(--fishmark-ui-meta-size);
   cursor: pointer;
 }
 
@@ -1023,7 +1005,7 @@
   min-width: 0;
   padding: 7px;
   border: 1px solid transparent;
-  border-radius: 5px;
+  border-radius: var(--fishmark-ui-radius);
   background: transparent;
   color: inherit;
   font: inherit;
@@ -1049,13 +1031,13 @@
 .find-replace-results-pages,
 .find-replace-results-empty {
   color: var(--fishmark-text-muted, #687180);
-  font-size: 0.72rem;
+  font-size: var(--fishmark-ui-meta-size);
 }
 
 .find-replace-result-snippet {
   overflow-wrap: anywhere;
   white-space: pre-wrap;
-  font-size: 0.8rem;
+  font-size: var(--fishmark-ui-text-size);
 }
 
 .find-replace-results-pages {
@@ -1093,13 +1075,9 @@
   max-width: min(18rem, calc(100vw - 32px));
   padding: 8px 10px;
   border: 1px solid var(--fishmark-panel-border, rgba(15, 23, 42, 0.12));
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--fishmark-panel-bg, rgba(255, 255, 255, 0.92)) 88%, transparent);
-  box-shadow:
-    var(--fishmark-shadow-1),
-    0 14px 30px -22px rgba(15, 23, 42, 0.38);
-  backdrop-filter: blur(18px) saturate(1.08);
-  -webkit-backdrop-filter: blur(18px) saturate(1.08);
+  border-radius: var(--fishmark-ui-surface-radius);
+  background: var(--fishmark-ui-surface-bg);
+  box-shadow: var(--fishmark-ui-surface-shadow);
 }
 
 .shortcut-hint-overlay-list {
@@ -1250,15 +1228,14 @@
   gap: var(--fishmark-space-2);
   padding: 12px 10px 10px;
   background: transparent;
-  border-bottom: 1px solid var(--fishmark-panel-border, rgba(15, 23, 42, 0.12));
 }
 
 .side-panel-title {
   margin: 0;
   color: var(--fishmark-text-muted, #687180);
-  font-size: 0.68rem;
+  font-size: var(--fishmark-ui-meta-size);
   font-weight: 650;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
@@ -1269,7 +1246,7 @@
   place-items: center;
   padding: 0;
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--fishmark-ui-radius);
   background: transparent;
   color: var(--fishmark-control-fg, #31353d);
 }
@@ -1359,7 +1336,7 @@
   width: 100%;
   padding: 6px 10px;
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--fishmark-ui-radius);
   background: transparent;
   color: var(--fishmark-text-secondary, #31353d);
   text-align: left;
@@ -1381,7 +1358,7 @@
 
 .outline-panel-item-label {
   display: block;
-  font-size: 0.8rem;
+  font-size: var(--fishmark-ui-text-size);
   line-height: 1.24;
   word-break: break-word;
 }

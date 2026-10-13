@@ -11,11 +11,12 @@
 
 .settings-entry,
 .settings-back,
-.settings-reset {
+.settings-reset,
+.external-file-conflict-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--fishmark-radius-md);
+  border-radius: var(--fishmark-ui-radius);
   cursor: pointer;
   /* font is inherited globally from base.css */
   transition:
@@ -29,7 +30,13 @@
 /* Focus ring — shared */
 .settings-entry:focus-visible,
 .settings-back:focus-visible,
-.settings-reset:focus-visible {
+.settings-reset:focus-visible,
+.external-file-conflict-button:focus-visible,
+.settings-navigation-parent:focus-visible,
+.settings-navigation-child:focus-visible,
+.settings-radio:has(input:focus-visible),
+.side-panel-close:focus-visible,
+.outline-panel-item:focus-visible {
   outline: 2px solid var(--fishmark-focus-ring);
   outline-offset: 2px;
 }
@@ -37,7 +44,8 @@
 /* Disabled — shared */
 .settings-entry:disabled,
 .settings-back:disabled,
-.settings-reset:disabled {
+.settings-reset:disabled,
+.external-file-conflict-button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
@@ -57,49 +65,56 @@
   color: var(--fishmark-rail-control-fg-hover, var(--fishmark-text-primary));
 }
 
-/* ── Glass controls (inside glass panels / drawers) ──────────── */
+/* ── Secondary controls ─────────────────────────────────────── */
 /*   .settings-back  — icon button                                */
 /*   .settings-reset — text button                                */
 
 .settings-back,
-.settings-reset {
+.settings-reset,
+.external-file-conflict-button {
   padding: 0;
   border: 1px solid var(--fishmark-panel-border);
-  background: color-mix(in srgb, var(--fishmark-panel-bg) 72%, transparent);
+  background: var(--fishmark-control-bg);
   color: var(--fishmark-control-fg);
+  font-size: var(--fishmark-ui-text-size);
+  line-height: var(--fishmark-ui-line-height);
 }
 
 .settings-back:hover,
-.settings-reset:hover {
+.settings-reset:hover,
+.external-file-conflict-button:hover {
   border-color: color-mix(in srgb, var(--fishmark-panel-border) 82%, transparent);
-  background: color-mix(in srgb, var(--fishmark-control-bg-hover) 78%, transparent);
+  background: var(--fishmark-control-bg-hover);
   color: var(--fishmark-text-primary);
 }
 
 /* ── Text input ──────────────────────────────────────────────── */
 
-.settings-input {
+.settings-input,
+.find-replace-input {
   display: block;
   width: 100%;
   border: 1px solid var(--fishmark-control-border);
-  border-radius: var(--fishmark-radius-md);
-  background: color-mix(in srgb, var(--fishmark-panel-bg) 94%, transparent);
+  border-radius: var(--fishmark-ui-radius);
+  background: var(--fishmark-control-bg);
   color: var(--fishmark-text-secondary);
-  font-size: 0.92rem;
+  font-size: var(--fishmark-ui-text-size);
+  line-height: var(--fishmark-ui-line-height);
   transition:
     border-color var(--yu-t-fast),
     background-color var(--yu-t-fast),
     box-shadow var(--yu-t-fast);
 }
 
-.settings-input:focus {
-  outline: none;
+.settings-input:focus,
+.find-replace-input:focus {
+  outline: 2px solid var(--fishmark-focus-ring);
+  outline-offset: 1px;
   border-color: var(--fishmark-focus-ring);
-  background: color-mix(in srgb, var(--fishmark-control-bg-hover) 92%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--fishmark-focus-ring) 16%, transparent);
 }
 
-.settings-input:disabled {
+.settings-input:disabled,
+.find-replace-input:disabled {
   color: var(--fishmark-text-muted);
   cursor: not-allowed;
   opacity: 0.72;
@@ -125,7 +140,7 @@
 }
 
 .settings-select option {
-  background-color: color-mix(in srgb, var(--fishmark-panel-bg) 94%, transparent);
+  background-color: var(--fishmark-ui-surface-bg);
   color: var(--fishmark-text-secondary);
 }
 
@@ -134,7 +149,7 @@
 }
 
 .settings-select optgroup {
-  background-color: color-mix(in srgb, var(--fishmark-panel-bg) 94%, transparent);
+  background-color: var(--fishmark-ui-surface-bg);
   color: var(--fishmark-text-muted);
 }
 
@@ -144,18 +159,21 @@
   display: inline-flex;
   padding: 3px;
   border: 1px solid var(--fishmark-control-border);
-  border-radius: var(--fishmark-radius-pill);
-  background: color-mix(in srgb, var(--fishmark-control-bg) 92%, transparent);
+  border-radius: var(--fishmark-ui-radius);
+  background: var(--fishmark-control-bg);
 }
 
 .settings-radio {
   display: inline-flex;
   align-items: center;
-  padding: 6px 14px;
-  border-radius: var(--fishmark-radius-pill);
+  min-height: 26px;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 4px;
   cursor: pointer;
   color: var(--fishmark-control-fg);
-  font-size: 0.88rem;
+  font-size: var(--fishmark-ui-text-size);
+  line-height: var(--fishmark-ui-line-height);
   user-select: none;
   transition:
     background-color var(--yu-t-fast),
@@ -169,7 +187,29 @@
 }
 
 .settings-radio.is-selected {
-  background: var(--fishmark-control-bg-active);
+  background: color-mix(in srgb, var(--fishmark-focus-ring) 16%, var(--fishmark-control-bg));
   color: var(--fishmark-text-primary);
-  box-shadow: var(--fishmark-shadow-1);
+  font-weight: 600;
+}
+
+.settings-radio:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.settings-navigation-parent:focus-visible,
+.settings-navigation-child:focus-visible {
+  outline-offset: -2px;
+}
+
+.settings-toggle input:focus-visible,
+.settings-slider:focus-visible {
+  outline: 2px solid var(--fishmark-focus-ring);
+  outline-offset: 2px;
+}
+
+.settings-toggle:has(input:disabled),
+.settings-slider:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }

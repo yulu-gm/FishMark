@@ -1,5 +1,13 @@
 # FishMark 进展记录
 
+## 2026-10-13 TASK-UX-UI-001：极简界面统一候选
+
+状态：**ACCEPTED**；本地候选独立评审PASS。已获授权普通推送main，发布状态以远端精确提交及对应CI结果为准。
+
+基于已发布 main `b0fcec272b3a3607fe223f73812b91c3a0572f22` 的独立副本完成设计取证与 CSS 统一：主题、字体、自动保存、图片、最近文件五个设置叶页，以及 Search、rail、快捷键提示、通知、外部修改冲突与表格工具栏。复用主题语义槽和共享控件，保留默认 Times 字体、社区主题显式覆盖及文档自适应布局。没有偏好存储、编辑语义、main/preload 或菜单逻辑改动。
+
+lint/typecheck/build 与严格回归已通过：3485 passed +10 exact known，0 skipped、0 unexpected、0 collection/hook/unhandled errors。原版同机同样为3485+10，真实 symlink 测试8/8；不扩大allowlist。bundle1434002/1500000 B、正式behavior121/121和2541targets通过；产品矩阵43截图/29checks、独立重开3checks及4张组件图通过。前后对比PDF已交付；证据边界及独立评审结论见[任务总结](../reports/task-summaries/TASK-UX-UI-001.md)。本地验收后按用户既有授权推进main发布与CI验证；本轮不关闭历史表格288px问题或M9。
+
 ## 2026-10-08 表格字体候选撤回与有界评估
 
 正常提交7ac968e撤回被拒的产品改动，src/packages与冻结53d86ac无差异；历史与证据保留，不push。已有富文本标记只解决初始样式，缺少与原生撤销/IME协同的动态字体及代码边界维护；未发现现成安全小修，不扩展架构。见[技术评估](plans/2026-10-08-table-rich-font-assessment.md)。字体不一致及布局跳动仍未修复，标签栏行为不变。

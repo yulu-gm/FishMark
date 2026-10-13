@@ -4849,18 +4849,18 @@ describe("App autosave", () => {
     expect(overlayItemExitKeyframes).toContain("scaleY");
   });
 
-  it("renders shortcut hints inside a readable translucent panel", () => {
+  it("renders shortcut hints inside a readable shared surface", () => {
     const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8");
     const panelRule = getCssRule(appUiStylesheet, ".shortcut-hint-overlay-panel");
 
     expect(panelRule).toContain("background:");
     expect(panelRule).toContain("border:");
     expect(panelRule).toContain("box-shadow:");
-    expect(panelRule).toContain("backdrop-filter:");
-    expect(panelRule).toContain("-webkit-backdrop-filter:");
+    expect(panelRule).toContain("background: var(--fishmark-ui-surface-bg);");
+    expect(panelRule).not.toContain("backdrop-filter:");
     expect(panelRule).toContain("max-width: min(18rem, calc(100vw - 32px));");
     expect(panelRule).toContain("padding: 8px 10px;");
-    expect(panelRule).toContain("border-radius: 8px;");
+    expect(panelRule).toContain("border-radius: var(--fishmark-ui-surface-radius);");
   });
 
   function getSettingsDrawerPanel(): HTMLElement {
@@ -5642,7 +5642,10 @@ describe("App autosave", () => {
     expect(appUiStylesheet).toContain("var(--fishmark-control-bg");
     expect(appUiStylesheet).not.toContain("var(--fishmark-surface-bg");
     expect(appUiStylesheet).not.toContain("var(--fishmark-text-body");
-    expect(settingsStylesheet).toContain("var(--fishmark-panel-bg");
+    expect(settingsStylesheet).toContain("var(--fishmark-ui-surface-bg)");
+    expect(baseStylesheet).toContain(
+      "--fishmark-ui-surface-bg: rgb(from var(--fishmark-workspace-bg) r g b / 1);"
+    );
     expect(primitivesStylesheet).not.toContain("--yu-ctrl-");
     expect(primitivesStylesheet).not.toContain("--yu-input-");
     expect(primitivesStylesheet).not.toContain("--yu-segment-");
@@ -5966,29 +5969,27 @@ describe("App autosave", () => {
     expect(activeParagraphRule).not.toContain("box-shadow:");
   });
 
-  it("styles preferences as a semi-transparent glass drawer", () => {
+  it("styles preferences as a calm opaque drawer without decorative glass", () => {
     const settingsStylesheet = readFileSync(settingsStylesheetPath, "utf-8").replace(/\r\n/g, "\n");
 
     expect(settingsStylesheet).toContain(
       "background: color-mix(in srgb, var(--fishmark-scrim, rgba(15, 18, 24, 0.12)) 72%, transparent);"
     );
-    expect(settingsStylesheet).toContain("backdrop-filter: blur(28px) saturate(1.12);");
-    expect(settingsStylesheet).toContain(".settings-shell::before");
+    expect(settingsStylesheet).not.toContain("backdrop-filter:");
+    expect(settingsStylesheet).not.toContain(".settings-shell::before");
+    expect(settingsStylesheet).not.toContain(".settings-row + .settings-row");
+    expect(settingsStylesheet).toContain("height: min(680px, calc(100dvh");
     expect(settingsStylesheet).toContain('.settings-shell[data-state="closing"]');
     expect(settingsStylesheet).toContain("@keyframes settings-drawer-exit");
     expect(settingsStylesheet).toContain("@keyframes settings-overlay-exit");
     expect(settingsStylesheet).toContain(
-      "background: var(--fishmark-panel-bg, rgba(255, 255, 255, 0.92));"
+      "background: var(--fishmark-ui-surface-bg);"
     );
-    expect(settingsStylesheet).toContain(
-      "background: color-mix(\n    in srgb,\n    var(--fishmark-panel-bg, rgba(255, 255, 255, 0.92)) 92%,"
-    );
+    expect(settingsStylesheet).toContain("border-radius: var(--fishmark-ui-surface-radius);");
     expect(settingsStylesheet).toContain(
       "border: 1px solid var(--fishmark-panel-border, rgba(15, 23, 42, 0.12));"
     );
-    expect(settingsStylesheet).toContain(
-      "background: color-mix(\n    in srgb,\n    var(--fishmark-panel-bg, rgba(255, 255, 255, 0.92)) 92%,"
-    );
+    expect(settingsStylesheet).toContain("grid-template-columns: 5.5rem minmax(0, 1fr);");
   });
 
   it("styles preferences as a nested navigation drawer with stable chrome", () => {
@@ -6021,7 +6022,7 @@ describe("App autosave", () => {
     expect(primitivesStylesheet).toContain(".settings-select option");
     expect(primitivesStylesheet).toContain(".settings-select optgroup");
     expect(primitivesStylesheet).toContain(
-      "background-color: color-mix(in srgb, var(--fishmark-panel-bg) 94%, transparent);"
+      "background-color: var(--fishmark-ui-surface-bg);"
     );
     expect(primitivesStylesheet).toContain("color: var(--fishmark-text-secondary);");
     expect(primitivesStylesheet).toContain("color: var(--fishmark-text-muted);");

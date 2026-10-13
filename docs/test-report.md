@@ -1,5 +1,27 @@
 # FishMark 测试报告
 
+## 2026-10-13 TASK-UX-UI-001：极简界面统一验证
+
+结果：**PASS**；本地实现、门禁与astra独立评审通过，不代表发布或完整跨平台验收。
+
+环境为 yuluStation / Windows / Node v24.13.0，独立本地副本基于 `b0fcec272b3a3607fe223f73812b91c3a0572f22`，冻结 lockfile 安装。用户原工作副本、文档与配置未修改。证据保存在 `.artifacts/ui-unification/`；最终原生矩阵、bundle和评审结论统一见[任务总结](../reports/task-summaries/TASK-UX-UI-001.md)。
+
+| 范围 | 已核验结果 |
+| --- | --- |
+| lint / typecheck / build | PASS；最终产品 CSS 对应正常构建；最后测试契约更新后 lint/typecheck 再通过 |
+| 原版严格回归 | PASS：237文件 / 3495 tests，3485 passed +10 exact known，0 skips / unexpected / errors |
+| 候选严格回归 | PASS：同样3485 passed +10 exact known，0 skips / unexpected / errors；allowlist未改 |
+| symlink | `file-identity` 8/8 真实执行通过，无动态skip |
+| bundle | PASS：totalJSgzip1434002/1500000 B、totalInitialgzip101851/260000 B；预算未变 |
+| 正式editor behavior | PASS：121/121 cases、2541targets、0unexpected、0not-run |
+| 实际产品UI | PASS：`candidate-final4/` 43截图、29checks；独立重开3100/27/Pearl Drift选择3checks；`candidate-surfaces-final/` 4张真实组件图 |
+| UI取证协议 | 独立appData/userData/sessionData与fixture文档；产品截图窗口位于屏幕外且OS不激活；页面焦点仿真仅用于原生键盘/blur事件；截图等待字体与动画稳定 |
+| 边界 | 原生OS菜单/消息框未重新绘制；macOS、真实IME、自然Ctrl长按快捷键弹层生命周期未在本轮执行；不据此声称M9或历史表格问题完成 |
+
+首次候选严格回归的一项旧玻璃表面断言失败已按新语义槽契约更新，原失败输出保留为 `candidate-first-*`。早期隐藏窗口截图存在动画未完成、DOM赋值不提交React状态及无页面焦点问题，对应目录保留但不能充当最终功能通过证据；后续使用真实输入、磁盘偏好断言及独立进程重开验证。辅助组件fixture使用真实产品React组件与CSS、受控props，明确区别于自然生命周期。
+
+真实App的Ctrl触发有DOM可见记录，对应PNG没有捕捉到弹层，像素检查来自组件fixture。长字体select箭头空间基于DOM/computed断言，其滚动后PNG不证明该控件视觉。独立重开的第三项旧标签实际只检查主题包选择，不将其算作参数UI跨进程验证；同轮参数1.05/0确已落盘。细节见最终任务总结与handoff。
+
 ## 2026-10-08 TASK-UX-LAUNCH-001：Windows原门禁FAIL，窄修复候选PASS
 
 yuluStation / main dfcfe36b1：激活四场景继续通过；续轮真实startup multi/notready/send failure/destroy before/destroy after/reload/quit cancel/quit approve八场景通过。223定向、build/lint/typecheck、正式121/121/2541（0unexpected）、原bundle1429199/1430000与独立review通过。最后精确main3151 passed+10exact+1symlink，补丁3175+10exact+同一symlink，均原wrapper FAIL、0 hook/collection/unhandled，最后控制新增异常0。两次搜索5秒timeout及初轮打包hook超时保留；搜索隔离117ms PASS、最后main/patch控制无timeout，根因未证实。未改白名单或系统；Explorer关联与远端CI未测。发布仍需适当symlink环境或明确例外批准；见 `reports/task-summaries/TASK-UX-LAUNCH-001.md`。

@@ -1,5 +1,20 @@
 # MVP Backlog
 
+## TASK-UX-UI-001：极简界面统一（2026-10-12）
+
+状态：**ACCEPTED**；实现、本地门禁、隔离UI验证与astra独立评审PASS。已获授权普通推送main，发布状态以远端精确提交及对应CI结果为准。
+
+目标：沿用当前编辑器、轻量 rail 与紧凑 Search，统一设置全部分类和应用绘制的辅助界面。复用现有 tokens/控件，不改编辑语义、偏好存储、原生菜单/消息框或文档自适应宽度。
+
+验收：五个设置叶页、共享控件、快捷键/通知/冲突提示的层级、密度与状态一致；明暗、窄窗/缩放/滚动、键盘焦点、Esc/返回、保存与重开验证通过。lint/typecheck/build、严格回归（10精确既有失败、零新增/零skip）、1500000 B bundle预算与独立astra评审通过后再交接发布。
+
+执行切片：
+- [x] 基于实际产品截图完成设计检查。
+- [x] 6.1-sol 实现界面统一和必要回归测试。
+- [x] 新鲜门禁、原生UI检查、astra独立评审和文档交接。
+
+Intake：`docs/plans/2026-10-12-ui-unification-intake.md`。本任务不关闭历史表格288px问题或M9；本地验收后按用户既有授权推进main发布与CI验证。
+
 ## TASK-UX-LAUNCH-001：yuluStation 窗口激活切片（2026-10-08）
 
 状态：**CHANGES_REQUESTED；窄修复代码/独立review PASS，Windows原完整门禁 FAIL**。来自 main dfcfe36b1；e338d35a保留为首轮回退点，本地候选不push，不改变M9/RF901。

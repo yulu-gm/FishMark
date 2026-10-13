@@ -19,12 +19,12 @@
   z-index: 1;
 }
 
-/* ── Glass drawer panel ─────────────────────────────────────── */
+/* ── Preferences surface ────────────────────────────────────── */
 
 .settings-shell {
   position: fixed;
   top: var(--fishmark-shell-edge);
-  bottom: var(--fishmark-shell-edge);
+  height: min(680px, calc(100dvh - (var(--fishmark-shell-edge) * 2)));
   left: calc(var(--fishmark-shell-rail-width) + var(--fishmark-shell-edge));
   width: min(700px, calc(100vw - var(--fishmark-shell-rail-width) - (var(--fishmark-shell-edge) * 3)));
   z-index: 31;
@@ -33,12 +33,10 @@
   margin: 0;
   padding: 0;
   border: 1px solid var(--fishmark-panel-border, rgba(15, 23, 42, 0.12));
-  border-radius: var(--fishmark-radius-2xl);
-  background: var(--fishmark-panel-bg, rgba(255, 255, 255, 0.92));
+  border-radius: var(--fishmark-ui-surface-radius);
+  background: var(--fishmark-ui-surface-bg);
   color: var(--fishmark-text-secondary, #31353d);
-  box-shadow: var(--fishmark-panel-shadow, var(--fishmark-shadow-3));
-  backdrop-filter: blur(28px) saturate(1.12);
-  -webkit-backdrop-filter: blur(28px) saturate(1.12);
+  box-shadow: var(--fishmark-ui-surface-shadow);
   overflow: hidden;
   isolation: isolate;
 }
@@ -50,29 +48,6 @@
 .settings-shell[data-state="closing"] {
   pointer-events: none;
   animation: settings-drawer-exit 180ms cubic-bezier(0.4, 0, 0.2, 1) both;
-}
-
-/* Subtle top-edge sheen */
-.settings-shell::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background:
-    linear-gradient(
-      140deg,
-      color-mix(in srgb, var(--fishmark-panel-border, rgba(15, 23, 42, 0.12)) 45%, transparent) 0%,
-      transparent 28%
-    ),
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--fishmark-panel-border, rgba(15, 23, 42, 0.12)) 28%, transparent) 0%,
-      transparent 22%,
-      transparent 76%,
-      color-mix(in srgb, var(--fishmark-panel-border, rgba(15, 23, 42, 0.12)) 12%, transparent) 100%
-    );
-  pointer-events: none;
-  z-index: 0;
 }
 
 .settings-shell > * {
@@ -87,15 +62,10 @@
   display: flex;
   align-items: center;
   gap: var(--fishmark-space-3);
-  padding: var(--fishmark-space-4) var(--fishmark-space-4) var(--fishmark-space-3);
-  background: color-mix(
-    in srgb,
-    var(--fishmark-panel-bg, rgba(255, 255, 255, 0.92)) 92%,
-    var(--fishmark-control-bg, rgba(255, 255, 255, 0.9)) 8%
-  );
+  min-height: 60px;
+  padding: var(--fishmark-space-2) var(--fishmark-space-4);
+  background: transparent;
   border-bottom: 1px solid var(--fishmark-panel-border, rgba(15, 23, 42, 0.12));
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
   z-index: 2;
 }
 
@@ -119,15 +89,15 @@
 .settings-kicker {
   margin: 0;
   color: var(--fishmark-text-muted, #687180);
-  font-size: 0.76rem;
-  letter-spacing: 0.1em;
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .settings-title-block h1 {
-  margin: var(--fishmark-space-1) 0 0;
+  margin: 0;
   color: var(--fishmark-text-primary, #171a1f);
-  font-size: 1.28rem;
+  font-size: 1.125rem;
   font-weight: 620;
 }
 
@@ -155,7 +125,7 @@
   min-width: 0;
   display: grid;
   align-content: start;
-  gap: var(--fishmark-space-2);
+  gap: var(--fishmark-space-3);
   padding: 0;
   overflow-y: auto;
 }
@@ -183,15 +153,14 @@
   gap: var(--fishmark-space-1);
   min-height: 32px;
   padding: 0 var(--fishmark-space-2);
-  border-radius: var(--fishmark-radius-lg);
+  border-radius: var(--fishmark-ui-radius);
   background: transparent;
-  font-size: 0.86rem;
+  font-size: var(--fishmark-ui-text-size);
   font-weight: 600;
 }
 
-.settings-navigation-parent:hover,
-.settings-navigation-parent.is-active {
-  background: color-mix(in srgb, var(--fishmark-control-bg, rgba(255, 255, 255, 0.9)) 72%, transparent);
+.settings-navigation-parent:hover {
+  background: var(--fishmark-control-bg-hover);
   color: var(--fishmark-text-primary, #171a1f);
 }
 
@@ -219,9 +188,9 @@
 .settings-navigation-child {
   min-height: 28px;
   padding: 0 var(--fishmark-space-2) 0 calc(18px + var(--fishmark-space-1));
-  border-radius: var(--fishmark-radius-md);
+  border-radius: var(--fishmark-ui-radius);
   background: transparent;
-  font-size: 0.82rem;
+  font-size: var(--fishmark-ui-text-size);
 }
 
 .settings-navigation-child:hover {
@@ -264,14 +233,15 @@
 .settings-group-header h2 {
   margin: 0;
   color: var(--fishmark-text-primary, #171a1f);
-  font-size: 1rem;
+  font-size: var(--fishmark-ui-heading-size);
   font-weight: 600;
 }
 
 .settings-group-header p {
   margin: var(--fishmark-space-1) 0 0;
   color: var(--fishmark-text-muted, #687180);
-  font-size: 0.86rem;
+  font-size: var(--fishmark-ui-meta-size);
+  line-height: var(--fishmark-ui-line-height);
 }
 
 /* ── Settings row (label + control) ────────────────────────── */
@@ -281,23 +251,20 @@
   grid-template-columns: minmax(0, 1fr) minmax(190px, 250px);
   align-items: start;
   gap: var(--fishmark-space-3);
-  padding: var(--fishmark-space-2) 0;
-}
-
-.settings-row + .settings-row {
-  border-top: 1px solid color-mix(in srgb, var(--fishmark-panel-border, rgba(15, 23, 42, 0.12)) 72%, transparent);
+  padding: var(--fishmark-space-3) 0;
 }
 
 .settings-label {
   display: grid;
   gap: 3px;
   color: var(--fishmark-text-secondary, #31353d);
-  font-size: 0.94rem;
+  font-size: var(--fishmark-ui-text-size);
+  line-height: var(--fishmark-ui-line-height);
 }
 
 .settings-hint {
   color: var(--fishmark-text-muted, #687180);
-  font-size: 0.8rem;
+  font-size: var(--fishmark-ui-meta-size);
   font-weight: 400;
 }
 
@@ -305,8 +272,12 @@
 /*   Visual appearance lives in primitives.css. Only size here.  */
 
 .settings-input {
-  min-height: 36px;
-  padding: 7px 10px;
+  min-height: 32px;
+  padding: 5px 9px;
+}
+
+.settings-input.settings-select {
+  padding-inline-end: 40px;
 }
 
 .settings-input-stack {
@@ -322,7 +293,7 @@
 }
 
 .settings-path-display {
-  min-height: 36px;
+  min-height: 32px;
   line-height: 1.35;
   overflow-wrap: anywhere;
   white-space: normal;
@@ -351,20 +322,14 @@
 /*   Visual appearance lives in primitives.css. Only size here.  */
 
 .settings-reset {
-  min-height: 32px;
-  padding: 0 12px;
-  font-size: 0.86rem;
-}
-
-.settings-reset:disabled {
-  cursor: progress;
-  opacity: 0.72;
+  min-height: 30px;
+  padding: 0 10px;
 }
 
 .settings-save-status {
   margin: 0;
   color: var(--fishmark-text-muted, #687180);
-  font-size: 0.82rem;
+  font-size: var(--fishmark-ui-meta-size);
   text-align: right;
 }
 
@@ -372,7 +337,7 @@
   grid-column: 2;
   margin: calc(var(--fishmark-space-2) * -1) 0 0;
   color: var(--fishmark-text-muted, #687180);
-  font-size: 0.8rem;
+  font-size: var(--fishmark-ui-meta-size);
   justify-self: end;
 }
 
@@ -385,7 +350,7 @@
 .settings-external-link {
   justify-self: start;
   color: var(--fishmark-markdown-link, var(--fishmark-text-accent, #2563eb));
-  font-size: 0.84rem;
+  font-size: var(--fishmark-ui-text-size);
   text-decoration: none;
   text-underline-offset: 3px;
 }
@@ -423,33 +388,41 @@
   }
 
   .settings-navigation {
-    display: flex;
-    gap: var(--fishmark-space-2);
+    display: grid;
+    gap: var(--fishmark-space-1);
     padding: 0 0 var(--fishmark-space-2);
-    overflow-x: auto;
-    overflow-y: hidden;
+    overflow: auto;
+    max-height: 7rem;
   }
 
   .settings-navigation-group {
-    min-width: max-content;
+    grid-template-columns: 5.5rem minmax(0, 1fr);
+    align-items: start;
+    min-width: 0;
   }
 
   .settings-navigation-parent {
-    grid-template-columns: 16px 22px max-content;
+    grid-template-columns: 12px 16px minmax(0, 1fr);
     padding-inline: var(--fishmark-space-2);
   }
 
   .settings-navigation-children {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
     padding-left: 0;
   }
 
   .settings-navigation-child {
+    width: auto;
+    min-height: 32px;
     white-space: nowrap;
-    padding: 0 var(--fishmark-space-3);
+    padding: 0 var(--fishmark-space-2);
   }
 
   .settings-row {
     grid-template-columns: 1fr;
+    gap: var(--fishmark-space-2);
   }
 
   .settings-radio-group,
@@ -474,7 +447,7 @@
     left: 12px;
     right: 12px;
     width: auto;
-    border-radius: var(--fishmark-radius-xl);
+    border-radius: var(--fishmark-ui-surface-radius);
   }
 
   .settings-header,
@@ -484,7 +457,7 @@
   }
 
   .settings-title-block h1 {
-    font-size: 1.25rem;
+    font-size: 1.125rem;
   }
 
   .settings-footer {
@@ -561,7 +534,7 @@
   text-align: right;
   font-variant-numeric: tabular-nums;
   color: var(--fishmark-text-secondary, #31353d);
-  font-size: 0.9em;
+  font-size: var(--fishmark-ui-text-size);
 }
 
 .settings-toggle {
@@ -581,9 +554,9 @@
 
 .settings-toggle-label {
   color: var(--fishmark-text-secondary, #31353d);
-  font-size: 0.9em;
+  font-size: var(--fishmark-ui-text-size);
 }
 
 [data-fishmark-panel="theme-parameters"] .settings-group-header h2 {
-  font-size: 1rem;
+  font-size: var(--fishmark-ui-heading-size);
 }

@@ -32,7 +32,7 @@ MVP 应当像一个原生桌面写作工具：
 
 生产编辑命令已经由 `@fishmark/editor-model` 的纯语义计划统一决定，`@fishmark/codemirror-adapter` 负责 CodeMirror 事务、选择映射、IME/history、decorations、widgets 与浏览器交互。每个 view 的结构缓存与本地 revision 由 adapter 的 StateField 管理；切换文档或重新加载会重建 session generation，旧计划不能修改新文档。renderer 既有 update listener 仍是文档 change frame 的唯一宿主，不建立第二套发送队列。
 
-M6 / M6.5 已于 2026-09-20 收口：`packages/editor-core/` 已删除，architecture guard 为 7 包 / 13 规则 / `exceptions: []`；canonical snapshot 与共享 render plan 已成为编辑显示主路径，嵌套 list/blockquote 中的 heading、code fence、table、math/Mermaid 等叶子复用同一语义结构。左侧壳层采用常驻 rail + Search/Outline 共用的 docked sidebar，正文采用固定 measure，避免模式切换和普通面板开合导致整篇重新排版。
+M6 / M6.5 已于 2026-09-20 收口：`packages/editor-core/` 已删除，architecture guard 为 7 包 / 13 规则 / `exceptions: []`；canonical snapshot 与共享 render plan 已成为编辑显示主路径，嵌套 list/blockquote 中的 heading、code fence、table、math/Mermaid 等叶子复用同一语义结构。该阶段左侧壳层采用常驻 rail + Search/Outline 共用的 docked sidebar，正文曾采用固定 measure。后续正文已改为按 document stage 自适应，当前布局基线见第10节。
 
 M7 已于 2026-09-22 收口：HTML export 经 `markdown-presentation` 消费 canonical render plan，Outline 与 document metrics 统一消费同一 `EditorDerivedSnapshot` / revision，renderer 不再为这些消费者维护独立 Markdown parser。当前重构剩余重点转为应用组合层与产品级收尾：RF-506/M5 已按原 bundle 预算收口；M8 的 RF-801 已完成非 React 命令与订阅层，RF-802/803 继续清理 React/main/preload 组合层，M9 完成更广泛的性能、真实 Electron E2E 与安全门禁，M10 做兼容/死代码清理和最终验收。
 
@@ -66,7 +66,7 @@ FishMark 当前基线是单窗口多标签页工作区，而不是单文档窗�
 - 面向块的 Markdown 解析与渲染
 - 当前块源码编辑，周边块偏渲染展示
 - 编辑器壳层采用常驻轻量 rail + 左侧共享 docked sidebar（Search/Outline）+ 多标签工作区画布 + 独立设置抽屉 + 状态条的桌面应用布局
-- 正文使用固定 measure；普通 sidebar 开合只改变 document stage 的水平位置，不改变正文列宽/换行
+- 正文按当前 document stage 的可用宽度自适应；保留共享侧栏所需留白，本轮辅助界面统一不改变正文宽度或排版几何
 - 表格、图片等特殊编辑区域通过统一 viewport reveal policy 控制 selection 后的滚动
 
 仍在 backlog 中、不要在当前文档中描述为已完成的能力：
@@ -162,12 +162,16 @@ P2：
 - Search 与 Outline 是同一块左侧 sidebar 的 view container，共享一份宽度与持久化偏好；rail 图标只负责切换/收起 view container。
 - sidebar 是平面的 docked panel，而不是悬浮玻璃卡片：外层无圆角、阴影或 backdrop blur，与正文之间用单一 1px divider 区分；内部输入框、按钮、outline hover/active 可保留轻微圆角表达交互层级。
 - sidebar 宽度拖拽只在 pointerup 时写入全局偏好；拖动过程实时更新 CSS 变量，收起不写 0，窄窗口 clamp 仅影响显示、不覆盖用户保存的宽度。
-- 正文采用固定 document measure。在正常宽度下，reading/editing、Search/Outline 切换和常规 panel 拖拽不应改变正文列宽、行数与文档高度；窄到无法容纳固定 measure 时才允许自然 clamp/reflow。
+- 正文填充 document stage 的可用宽度，保留阅读边距；窗口或侧栏可用空间变化时允许自然换行。reading/editing切换保持既有正文起点策略，本轮辅助界面统一不修改这些几何规则。
 - sidebar 开合恢复 220ms grid track 动画，使 document stage 平滑水平移动；sidebar 内部 header/body 始终按最终宽度排版，由外层 overflow 裁剪并配合淡入/轻位移，因此 Outline 长标题不会在 0→目标宽度期间反复 reflow。
 - Search 的查询真值仍是 CodeMirror search state；`Ctrl/Cmd+F` 打开并聚焦 Search，已打开时重复快捷键只重新聚焦而不关闭；切换文档 identity 时清掉旧 query/snapshot，避免跨 tab 显示陈旧结果。
 - 设置继续使用独立 overlay/drawer，不参与 sidebar 的共享宽度模型。
 
-该壳层的目标是让“内容区的位置变化”和“正文自身排版变化”分离：sidebar 可以让写作区域整体平移，但不应在用户没有主动改变可读宽度时让整篇 Markdown 重新换行。
+### 辅助界面视觉约定（TASK-UX-UI-001）
+
+默认设置与应用辅助面板使用平实表面、小圆角和轻边界；共享输入、选项和按钮通过`primitives.css`保持明确的焦点、选中、禁用状态。设置分类保持原有外观/文件层级，窄窗采用紧凑排列并独立滚动内容；不引入卡片层层嵌套。默认面板底色从主题workspace颜色保留RGB并设为不透明，社区主题显式设置的玻璃/动态样式仍允许保留。默认字体family及用户字体设置不变，字体层级和间距通过少量UI tokens统一。Electron菜单及系统消息框继续由平台绘制。
+
+该壳层以文档为中心，在自适应正文宽度和必要侧栏留白之间保持清晰关系。设置浮层不参与正文布局，不能因本轮视觉统一而退回固定列宽或改变编辑器滚动策略。
 
 ## 11. 编辑器 Viewport Reveal 与滚动契约
 
