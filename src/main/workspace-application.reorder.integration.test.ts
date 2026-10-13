@@ -126,7 +126,10 @@ describe("workspace tab reorder use case", () => {
     const closeUseCase = createWorkspaceWindowClose({
       workspace: fixture.workspace,
       documentOperations: fixture.documentOperations,
-      requestWorkspaceWindowClose: requestConfirmation
+      requestWorkspaceWindowClose: async (_ownerWindow, acquireTabLease) => {
+        if (await acquireTabLease() === null) return null;
+        return requestConfirmation();
+      }
     });
     const close = closeUseCase.requestWindowClose({
       windowId: "window-1",

@@ -100,7 +100,9 @@ describe("workspace window close use case", () => {
     const application = createWorkspaceWindowClose({
       workspace,
       documentOperations,
-      requestWorkspaceWindowClose: async (_ownerWindow, tabLease) => {
+      requestWorkspaceWindowClose: async (_ownerWindow, acquireTabLease) => {
+        const tabLease = await acquireTabLease();
+        if (tabLease === null) return null;
         const result = await closeUseCase.confirmWindowClose({
           windowId: "window-1",
           isActive: () => true
@@ -164,10 +166,12 @@ describe("workspace window close use case", () => {
     const application = createWorkspaceWindowClose({
       workspace,
       documentOperations,
-      requestWorkspaceWindowClose: () =>
-        new Promise((resolve) => {
+      requestWorkspaceWindowClose: async (_ownerWindow, acquireTabLease) => {
+        if (await acquireTabLease() === null) return null;
+        return new Promise((resolve) => {
           resolveRequest = resolve;
-        })
+        });
+      }
     });
     const write = vi.fn<
       (input: { readonly content: string; readonly path: string }) => Promise<WriteDocumentResult>
@@ -207,25 +211,26 @@ describe("workspace window close use case", () => {
     expect(workspace.getTabSession(tabId)).toMatchObject({ isDirty: false });
   });
 
-  it("cancels before the renderer handshake when the tab set changes during acquisition", async () => {
+  it("cancels before confirmation when the tab set changes during deferred acquisition", async () => {
     const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     const documentOperations = createKeyedOperationCoordinator();
     workspace.registerWindow("window-1");
     const tabId = openTestDocument(workspace, "window-1", document("first")).activeTabId!;
     const blocker = await documentOperations.acquireExclusive([tabId]);
-    const requestWorkspaceWindowClose = vi.fn(async () =>
-      closeConfirmation("window-1", [
+    const confirm = vi.fn(() => closeConfirmation("window-1", [
         {
           tabId,
           expectedWindowId: "window-1",
           expectedRevision: 0
         }
-      ])
-    );
+      ]));
     const application = createWorkspaceWindowClose({
       workspace,
       documentOperations,
-      requestWorkspaceWindowClose
+      requestWorkspaceWindowClose: async (_ownerWindow, acquireTabLease) => {
+        if (await acquireTabLease() === null) return null;
+        return confirm();
+      }
     });
 
     const closePromise = application.requestWindowClose({
@@ -240,7 +245,7 @@ describe("workspace window close use case", () => {
     blocker.release();
 
     await expect(closePromise).resolves.toBeNull();
-    expect(requestWorkspaceWindowClose).not.toHaveBeenCalled();
+    expect(confirm).not.toHaveBeenCalled();
     await expect(
       documentOperations.runExclusive(tabId, async () => "released")
     ).resolves.toBe("released");
@@ -260,10 +265,12 @@ describe("workspace window close use case", () => {
     const application = createWorkspaceWindowClose({
       workspace,
       documentOperations,
-      requestWorkspaceWindowClose: () =>
-        new Promise((resolve) => {
+      requestWorkspaceWindowClose: async (_ownerWindow, acquireTabLease) => {
+        if (await acquireTabLease() === null) return null;
+        return new Promise((resolve) => {
           resolveRequest = resolve;
-        })
+        });
+      }
     });
 
     const closePromise = application.requestWindowClose({
@@ -324,10 +331,12 @@ describe("workspace window close use case", () => {
     const application = createWorkspaceWindowClose({
       workspace,
       documentOperations,
-      requestWorkspaceWindowClose: () =>
-        new Promise((resolve) => {
+      requestWorkspaceWindowClose: async (_ownerWindow, acquireTabLease) => {
+        if (await acquireTabLease() === null) return null;
+        return new Promise((resolve) => {
           resolveRequest = resolve;
-        })
+        });
+      }
     });
 
     const closePromise = application.requestWindowClose({
@@ -371,7 +380,9 @@ describe("workspace window close use case", () => {
     const application = createWorkspaceWindowClose({
       workspace,
       documentOperations,
-      requestWorkspaceWindowClose: async (_ownerWindow, tabLease) => {
+      requestWorkspaceWindowClose: async (_ownerWindow, acquireTabLease) => {
+        const tabLease = await acquireTabLease();
+        if (tabLease === null) return null;
         workspace.updateTabDraft({ tabId: tabId, expectedWindowId: "window-1", content: "flushed before confirm" });
         const result = await closeUseCase.confirmWindowClose({
           windowId: "window-1",

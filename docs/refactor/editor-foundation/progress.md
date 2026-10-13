@@ -10,6 +10,8 @@
 
 **Overall status:** `IN_PROGRESS`
 
+**2026-10-13 关闭门禁恢复：** main `59e9cd19` 的 CI38358340321 Quality 保存关闭失败，完整回归和包体成功。真实产品后台屏障已证明保存 FIFO 与提前持有关闭锁互等；改为有效 CONFIRM 阶段延迟取锁，保持持锁至窗口销毁。最终门禁与发布见[报告028](../../../reports/task-summaries/TASK-WINDOW-CLOSE-SAVE-028.md)。M9仍0/3，暂停新增性能工作。
+
 **2026-10-13 最新：** 标题首输入 `6d91f50` 已发布且精确CI38356533360全绿；继续消除打开期脚注行号重复扫描，20k真实构建首次ready4179.6→2923.9ms、暖1602–1606→931–960ms。strict3677+8exact及完整门禁通过，首次ready仍超预算，M9保持0/3。[本批证据](../../../reports/task-summaries/TASK-RF901-FOOTNOTE-LINE-INDEX-027.md)。
 
 **2026-10-13 最新：** 高亮复用 `cf0502c` 已发布、CI38351813984全绿；后续真实磁盘打开标题首输入定位全篇解析，受限ATX内容局部更新使20k三样本1499–1795ms→151–172ms。strict3663+8exact、完整门禁与独立review通过，打开ready预算仍未达标。后台引擎对照复现compositionend=false，旧OS IME strict失败不改绿。RF-901继续、M9 0/3、RF-902/903 PLANNED。[本批证据](../../../reports/task-summaries/TASK-RF901-FIRST-EDIT-026.md)。

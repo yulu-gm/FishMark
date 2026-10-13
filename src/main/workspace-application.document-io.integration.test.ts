@@ -510,7 +510,9 @@ describe("workspace application document IO transactions", () => {
       const windowClose = createWorkspaceWindowClose({
         workspace,
         documentOperations,
-        requestWorkspaceWindowClose: async (_ownerWindow, tabLease) => {
+        requestWorkspaceWindowClose: async (_ownerWindow, acquireTabLease) => {
+          const tabLease = await acquireTabLease();
+          if (tabLease === null) return null;
           closeLease = tabLease;
           const handle = broker.request({
             windowId: "window-1",
@@ -617,7 +619,9 @@ describe("workspace application document IO transactions", () => {
     const windowClose = createWorkspaceWindowClose({
       workspace,
       documentOperations,
-      requestWorkspaceWindowClose: async (_ownerWindow, tabLease) => {
+      requestWorkspaceWindowClose: async (_ownerWindow, acquireTabLease) => {
+        const tabLease = await acquireTabLease();
+        if (tabLease === null) return null;
         closeLease = tabLease;
         const handle = broker.request({
           windowId: "window-1",
@@ -723,7 +727,9 @@ describe("workspace application document IO transactions", () => {
       const windowClose = createWorkspaceWindowClose({
         workspace,
         documentOperations,
-        requestWorkspaceWindowClose: async (_ownerWindow, tabLease) => {
+        requestWorkspaceWindowClose: async (_ownerWindow, acquireTabLease) => {
+          const tabLease = await acquireTabLease();
+          if (tabLease === null) return null;
           closeLease = tabLease;
           const handle = broker.request({
             windowId: "window-1",

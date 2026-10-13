@@ -364,17 +364,20 @@ app.whenReady().then(async () => {
     string,
     KeyedOperationLease<string>
   >();
+  const workspaceWindowCloseLeaseAcquirers = new Map<
+    string, () => Promise<KeyedOperationLease<string> | null>
+  >();
   const workspaceWindowCloseApplication =
     createWorkspaceWindowClose<BrowserWindow>({
       workspace: workspaceState,
       documentOperations: workspaceTabOperations,
-      requestWorkspaceWindowClose: async (ownerWindow, tabLease) => {
+      requestWorkspaceWindowClose: async (ownerWindow, acquireTabLease) => {
         if (ownerWindow.webContents.isDestroyed()) {
           return Promise.resolve(null);
         }
 
         const windowId = String(ownerWindow.id);
-        workspaceWindowCloseLeases.set(windowId, tabLease);
+        workspaceWindowCloseLeaseAcquirers.set(windowId, acquireTabLease);
         const handle = workspaceWindowCloseRequestBroker.request({
           windowId,
           sendRequest: (requestId) => {
@@ -396,7 +399,8 @@ app.whenReady().then(async () => {
           return await handle.result;
         } finally {
           await handle.drained;
-          if (workspaceWindowCloseLeases.get(windowId) === tabLease) {
+          if (workspaceWindowCloseLeaseAcquirers.get(windowId) === acquireTabLease) {
+            workspaceWindowCloseLeaseAcquirers.delete(windowId);
             workspaceWindowCloseLeases.delete(windowId);
           }
         }
@@ -810,10 +814,13 @@ app.whenReady().then(async () => {
       broker: workspaceWindowCloseRequestBroker,
       closeWorkspace: {
         async confirmWindowClose(input) {
-          const lease = workspaceWindowCloseLeases.get(input.windowId);
-          if (lease === undefined) {
+          const acquireTabLease = workspaceWindowCloseLeaseAcquirers.get(input.windowId);
+          if (acquireTabLease === undefined || !input.isActive()) {
             return Promise.resolve({ status: "cancelled" as const });
           }
+          const lease = await acquireTabLease();
+          if (lease === null || !input.isActive()) return { status: "cancelled" as const };
+          workspaceWindowCloseLeases.set(input.windowId, lease);
           const result = await workspaceApplication.confirmWindowClose(input, lease);
           if (result.status !== "confirmed") workspaceWindowCloseIntents.get(input.windowId)?.cancelQueued();
           return result;

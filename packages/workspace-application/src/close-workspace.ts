@@ -339,7 +339,7 @@ export function createWorkspaceWindowClose<TOwnerWindow>(dependencies: {
   documentOperations: Pick<KeyedOperationCoordinator<string>, "acquireExclusive">;
   requestWorkspaceWindowClose: (
     ownerWindow: TOwnerWindow,
-    tabLease: KeyedOperationLease<string>
+    acquireTabLease: () => Promise<KeyedOperationLease<string> | null>
   ) => Promise<WorkspaceWindowCloseConfirmation | null>;
 }) {
   return {
@@ -354,29 +354,42 @@ export function createWorkspaceWindowClose<TOwnerWindow>(dependencies: {
         return null;
       }
 
-      const lease = await dependencies.documentOperations.acquireExclusive(initialTabIds);
-      if (!hasSameOrderedTabs(input.windowId, initialTabIds)) {
-        lease.release();
-        return null;
-      }
-
+      let requesting = true;
+      const held: { lease: KeyedOperationLease<string> | null } = { lease: null };
+      let acquisition: Promise<KeyedOperationLease<string> | null> | undefined;
+      let retained = false;
+      // The renderer must finish prior saves and seal/drain edits before taking
+      // this lease. Holding it while awaiting that FIFO creates a wait cycle.
+      const acquireTabLease = (): Promise<KeyedOperationLease<string> | null> => {
+        if (!requesting) return Promise.resolve(null);
+        return acquisition ??= (async () => {
+          const acquired = await dependencies.documentOperations.acquireExclusive(initialTabIds);
+          if (!requesting || !hasSameOrderedTabs(input.windowId, initialTabIds)) {
+            acquired.release();
+            return null;
+          }
+          held.lease = acquired;
+          return acquired;
+        })();
+      };
       try {
         const confirmation = await dependencies.requestWorkspaceWindowClose(
           input.ownerWindow,
-          lease
+          acquireTabLease
         );
         if (
-          confirmation === null ||
+          confirmation === null || held.lease === null ||
           !hasSameOrderedTabs(input.windowId, initialTabIds) ||
           !matchesConfirmation(input.windowId, initialTabIds, confirmation)
         ) {
-          lease.release();
           return null;
         }
-        return { release: () => lease.release() };
-      } catch (error) {
-        lease.release();
-        throw error;
+        retained = true;
+        const heldLease = held.lease;
+        return { release: () => heldLease.release() };
+      } finally {
+        requesting = false;
+        if (!retained) held.lease?.release();
       }
     }
   };
