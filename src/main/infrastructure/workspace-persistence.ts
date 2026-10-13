@@ -151,7 +151,7 @@ function isDiskVersion(value: unknown): value is DiskVersion | null {
   return (
     isRecord(value) &&
     typeof value.normalizedPath === "string" &&
-    isNonNegativeInteger(value.mtimeMs) &&
+    typeof value.mtimeMs === "number" && Number.isFinite(value.mtimeMs) &&
     isNonNegativeInteger(value.size) &&
     typeof value.contentHash === "string" &&
     value.contentHash.length > 0

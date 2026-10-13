@@ -113,11 +113,11 @@ class ProductSession {
     this.initialContent = content;
   }
 
-  async launch(expectedContent) {
+  async launch(expectedContent, { openDocument = true } = {}) {
     const index = this.launches.length + 1;
-    const state = { index, telemetryPath: this.testInfo.outputPath(`launch-${index}-main.jsonl`), stdout: "", stderr: "", pageErrors: [], renderer: null };
+    const state = { index, openDocument, telemetryPath: this.testInfo.outputPath(`launch-${index}-main.jsonl`), stdout: "", stderr: "", pageErrors: [], renderer: null };
     this.launches.push(state);
-    const env = { ...process.env, FISHMARK_E2E_PROFILE: this.profile, FISHMARK_E2E_TELEMETRY: state.telemetryPath, FISHMARK_E2E_DOCUMENT: this.documentPath };
+    const env = { ...process.env, FISHMARK_E2E_PROFILE: this.profile, FISHMARK_E2E_TELEMETRY: state.telemetryPath, FISHMARK_E2E_DOCUMENT: this.documentPath, FISHMARK_E2E_OPEN_DOCUMENT: openDocument ? "1" : "0" };
     delete env.VITE_DEV_SERVER_URL;
     delete env.FISHMARK_START_MODE;
     delete env.ELECTRON_RUN_AS_NODE;
@@ -140,7 +140,7 @@ class ProductSession {
       expect(await state.page.evaluate(() => typeof window.fishmarkTest)).toBe("undefined");
       state.identity = await state.app.evaluate(({ app, BrowserWindow }) => {
         const window = BrowserWindow.getAllWindows()[0];
-        return { pid: process.pid, userData: app.getPath("userData"), url: window.webContents.getURL(), preferences: window.webContents.getLastWebPreferences(), versions: process.versions };
+        return { pid: process.pid, argv: process.argv, userData: app.getPath("userData"), url: window.webContents.getURL(), preferences: window.webContents.getLastWebPreferences(), versions: process.versions };
       });
       await this.captureOwnedProcesses(state);
       expect(resolve(state.identity.userData)).toBe(resolve(this.profile));
@@ -248,6 +248,45 @@ class ProductSession {
     }
   }
 
+  async preserveRecovery(label) {
+    const files = [];
+    for (const name of ["recovery-snapshot.json", "recovery-journal.jsonl"]) {
+      const bytes = await readFile(join(this.profile, name));
+      const evidencePath = this.testInfo.outputPath(`launch-${this.current.index}-${label}-${name}`);
+      await writeFile(evidencePath, bytes);
+      files.push({ name, bytes: bytes.length, sha256: digest(bytes), evidencePath, content: bytes.toString("utf8") });
+    }
+    const evidence = { label, launch: this.current.index, epochMs: Date.now(), files };
+    this.recoveryFiles ??= [];
+    this.recoveryFiles.push(evidence);
+    return evidence;
+  }
+
+  async forceTerminate() {
+    const state = this.current;
+    await this.captureOwnedProcesses(state);
+    expect(exists(state.mainPid)).toBe(true);
+    expect(state.child.exitCode).toBe(null);
+    expect(state.child.signalCode).toBe(null);
+    await this.capture(state);
+    await this.assertHealthy(state);
+    // No close/quit/app.exit request: the runner externally kills only its
+    // still-live owned launcher tree (actual main/metrics members captured above).
+    state.forcedExit = { requestedEpochMs: Date.now(), mainPid: state.mainPid, launcherPid: state.child.pid, method: process.platform === "win32" ? "external taskkill /PID /T /F" : "external owned process-group SIGKILL" };
+    await killOwnedLauncherTree(state);
+    await bounded("externally terminated product process exit", async () => {
+      while (state.child.exitCode === null && state.child.signalCode === null) await delay(25);
+    });
+    state.exit = { code: state.child.exitCode, signal: state.child.signalCode, normalClose: false, externallyTerminated: true };
+    expect(state.exit.code !== 0 || state.exit.signal !== null).toBe(true);
+    await this.verifyOwnedProcessesGone(state);
+    const events = await this.mainEvidence(state);
+    expect(events.filter((entry) => ["app:before-quit", "app:will-quit", "app:quit", "window:close", "window:closed"].includes(entry.event))).toEqual([]);
+    expect(events.filter((entry) => entry.event === "save:start")).toEqual([]);
+    expect(events.filter((entry) => entry.event === "menu:command")).toEqual([]);
+    state.forcedExit.completedEpochMs = Date.now();
+  }
+
   async normalClose() {
     const state = this.current;
     await this.captureOwnedProcesses(state);
@@ -268,7 +307,7 @@ class ProductSession {
 
   async assertHealthy(state = this.current) {
     const events = await this.mainEvidence(state);
-    const mainErrors = events.filter((entry) => entry.event.startsWith("main:") || entry.event === "save:error" || ["renderer:preload-error", "renderer:process-gone", "renderer:load-failed"].includes(entry.event) || (entry.event === "renderer:console" && ["error", 3].includes(entry.detail.level)));
+    const mainErrors = events.filter((entry) => entry.event.startsWith("main:") || ["save:error", "edit:error"].includes(entry.event) || ["renderer:preload-error", "renderer:process-gone", "renderer:load-failed"].includes(entry.event) || (entry.event === "renderer:console" && ["error", 3].includes(entry.detail.level)));
     const renderer = state.renderer ?? await this.rendererEvidence();
     expect({ mainErrors, pageErrors: state.pageErrors, rendererErrors: renderer?.events.filter((entry) => ["error", "unhandledrejection"].includes(entry.event)) ?? [], stderrErrors: stderrFailures(state.stderr) }).toEqual({ mainErrors: [], pageErrors: [], rendererErrors: [], stderrErrors: [] });
   }
@@ -319,6 +358,7 @@ class ProductSession {
       documentPath: this.documentPath, profile: this.profile, idleDelayMs: this.idleDelayMs,
       initialContent: this.initialContent, finalDiskContent: await this.disk().catch(() => null),
       provenance: this.provenance, checkpoints: this.checkpoints, idleProof: this.idleProof,
+      recoveryFiles: this.recoveryFiles, recoveryProof: this.recoveryProof,
       launches: this.launches.map(({ app: _app, page: _page, child: _child, ...state }) => state),
       cleanupErrors: this.cleanupErrors
     };

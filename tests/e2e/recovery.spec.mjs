@@ -1,0 +1,72 @@
+import { createHash } from "node:crypto";
+import { test, expect } from "./product-fixture.mjs";
+
+const sha256 = (value) => createHash("sha256").update(value).digest("hex");
+
+test("forced-exit recovery replays acknowledged unsaved product edits without a startup document path", async ({ product }) => {
+  const initial = "RF902 recovery 原文";
+  const suffix = " acknowledged unsaved 日本語";
+  const recoveredContent = initial + suffix;
+  await product.seed(initial, 60_000);
+  await product.launch(initial);
+  const initialSnapshot = await product.snapshot();
+  const tabId = initialSnapshot.activeTabId;
+  const baseRevision = initialSnapshot.activeDocument.revision;
+  await product.append(suffix);
+  // The original main apply handler completes only after baseline compaction
+  // and journal append. Observe that completion rather than forcing a flush.
+  await expect.poll(async () => (await product.mainEvidence()).filter((entry) => entry.event === "edit:end" && entry.detail.tabId === tabId && entry.detail.kind === "applied").length).toBe(1);
+  await expect.poll(async () => (await product.snapshot()).activeDocument?.content).toBe(recoveredContent);
+  const acknowledged = (await product.mainEvidence()).find((entry) => entry.event === "edit:end" && entry.detail.tabId === tabId && entry.detail.kind === "applied");
+  expect(acknowledged.detail).toMatchObject({ baseRevision, revision: baseRevision + 1, isDirty: true, clientSequence: 1, acknowledgedSequence: 1 });
+  const unsavedSnapshot = await product.snapshot();
+  expect(unsavedSnapshot.activeDocument).toMatchObject({ tabId, path: product.documentPath, content: recoveredContent, revision: baseRevision + 1, savedRevision: initialSnapshot.activeDocument.savedRevision, isDirty: true });
+  expect(await product.disk()).toBe(initial);
+  await product.checkpoint("acknowledged-unsaved");
+  const beforeKill = await product.preserveRecovery("before-force-exit");
+  const snapshotEnvelope = JSON.parse(beforeKill.files.find((file) => file.name === "recovery-snapshot.json").content);
+  expect(sha256(snapshotEnvelope.snapshot)).toBe(snapshotEnvelope.checksum);
+  const durableSnapshot = JSON.parse(snapshotEnvelope.snapshot);
+  expect(durableSnapshot.sessions.find((session) => session.tabId === tabId)).toMatchObject({ tabId, path: product.documentPath, content: initial, savedContent: initial, revision: baseRevision, savedRevision: initialSnapshot.activeDocument.savedRevision });
+  const journalFile = beforeKill.files.find((file) => file.name === "recovery-journal.jsonl");
+  expect(journalFile.content.endsWith("\n")).toBe(true);
+  const journal = journalFile.content.trim().split("\n").map((line) => JSON.parse(line));
+  expect(journal).toEqual([{ kind: "edit-batch", tabId, clientId: acknowledged.detail.clientId, clientSequence: 1, baseRevision, changes: [{ from: initial.length, to: initial.length, insert: suffix }] }]);
+  const renderer = await product.rendererEvidence();
+  const input = renderer.events.filter((entry) => entry.event === "input").at(-1);
+  expect(input.detail.trusted).toBe(true);
+  expect(renderer.events.filter((entry) => ["manual-save-key", "window:blur", "editor:focusout", "visibility", "idle-timer:fired"].includes(entry.event) && entry.epochMs >= input.epochMs)).toEqual([]);
+  await product.forceTerminate();
+  const terminated = product.current;
+  expect(await product.disk()).toBe(initial);
+  const afterKill = await product.preserveRecovery("after-force-exit");
+  expect(afterKill.files.map(({ name, bytes, sha256 }) => ({ name, bytes, sha256 }))).toEqual(beforeKill.files.map(({ name, bytes, sha256 }) => ({ name, bytes, sha256 })));
+
+  await product.launch(recoveredContent, { openDocument: false });
+  expect(product.current.identity.argv).not.toContain(product.documentPath);
+  expect(product.current.identity.argv.filter((argument) => /\.(md|markdown)$/i.test(argument))).toEqual([]);
+  const recovered = await product.snapshot();
+  expect(recovered.activeTabId).toBe(tabId);
+  expect(recovered.tabs).toEqual(unsavedSnapshot.tabs);
+  expect(recovered.activeDocument).toEqual(unsavedSnapshot.activeDocument);
+  expect(await product.disk()).toBe(initial);
+  expect((await product.mainEvidence()).filter((entry) => entry.event === "save:start")).toEqual([]);
+  await product.checkpoint("recovered-unsaved");
+  product.recoveryProof = { scope: "acknowledged unsaved edit followed by external owned-process termination; not power loss or a torn write", acknowledged, unsavedSnapshot, beforeKill, forcedExit: terminated.forcedExit, afterKill, recoveredSnapshot: recovered, relaunchWithoutDocumentArgv: product.current.identity.argv };
+  const continuedSuffix = " continued native edit café";
+  await product.append(continuedSuffix);
+  const expected = recoveredContent + continuedSuffix;
+  await expect.poll(async () => (await product.snapshot()).activeDocument?.content).toBe(expected);
+  expect((await product.snapshot()).activeDocument.isDirty).toBe(true);
+  expect(await product.disk()).toBe(initial);
+  await product.manualSave();
+  await product.expectSaved(expected);
+  const finalEvents = await product.mainEvidence();
+  const menus = finalEvents.filter((entry) => entry.event === "menu:command");
+  const saves = finalEvents.filter((entry) => entry.event === "save:start");
+  expect(menus.map((entry) => entry.detail)).toEqual([["save-markdown-file"]]);
+  expect(saves).toHaveLength(1);
+  expect(saves[0].epochMs).toBeGreaterThanOrEqual(menus[0].epochMs);
+  await product.checkpoint("continued-saved");
+  await product.normalClose();
+});

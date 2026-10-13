@@ -1,5 +1,9 @@
 # FishMark 进展记录
 
+## 2026-10-13 RF-902 真实异常退出恢复
+
+从已发布且CI四项全绿的`e006460`继续。真实产品恢复用例发现并复现：合法小数文件时间戳被当成损坏snapshot拒绝。仅修正mtime有限数值校验，保留精度；旧代码新增回归3失败/18通过，修后21通过；同一产品恢复协议从FAIL转PASS，强制退出后无文档参数重启恢复未保存内容，再编辑保存成功。完整门禁、独立审查和精确发布见[报告032](../reports/task-summaries/TASK-RF902-RECOVERY-032.md)。跨窗口流程暂缓到恢复修复发布后；RF901 PAUSED、RF902 IN_PROGRESS、RF903 PLANNED、M9 0/3。
+
 ## 2026-10-13 RF-902 产品持久化贯通
 
 从 `afccc0b` 实施真实产品Playwright入口：隔离profile下原生编辑→File Save→正常退出→重启准确读回，以及无手动Save/失焦的真实idle自动保存。新增Windows E2E CI，实际运行与开发失败均留存；最终完整门禁、独立review及发布见[报告031](../reports/task-summaries/TASK-RF902-PERSISTENCE-031.md)。RF-902实施中，RF-901执行暂停但预算仍未验收，RF-903仍PLANNED，M9仍0/3。用户允许测试接管无人使用桌面，本批仅使用隔离FishMark窗口，没有IME输入。

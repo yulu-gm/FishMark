@@ -7,6 +7,7 @@ const { app, BrowserWindow, ipcMain } = require("electron");
 const profile = process.env.FISHMARK_E2E_PROFILE;
 const telemetryPath = process.env.FISHMARK_E2E_TELEMETRY;
 const documentPath = process.env.FISHMARK_E2E_DOCUMENT;
+const openDocument = process.env.FISHMARK_E2E_OPEN_DOCUMENT !== "0";
 if (!profile || !telemetryPath || !documentPath) throw new Error("Use the isolated RF902 fixture to launch this helper.");
 mkdirSync(profile, { recursive: true });
 mkdirSync(dirname(telemetryPath), { recursive: true });
@@ -61,27 +62,33 @@ app.on("browser-window-created", (_event, window) => {
 });
 const originalHandle = ipcMain.handle.bind(ipcMain);
 ipcMain.handle = (channel, listener) => {
-  if (channel !== "fishmark:save-markdown-file" && channel !== "fishmark:save-markdown-file-as") return originalHandle(channel, listener);
+  const prefix = channel === "fishmark:apply-document-edits" ? "edit"
+    : ["fishmark:save-markdown-file", "fishmark:save-markdown-file-as"].includes(channel) ? "save" : null;
+  if (prefix === null) return originalHandle(channel, listener);
   return originalHandle(channel, async (...args) => {
-    const detail = { channel, webContentsId: args[0].sender.id, tabId: args[1]?.tabId };
-    record("save:start", detail);
+    const detail = { channel, webContentsId: args[0].sender.id, tabId: args[1]?.tabId,
+      ...(prefix === "edit" ? { clientId: args[1]?.clientId, clientSequence: args[1]?.clientSequence, baseRevision: args[1]?.baseRevision } : {}) };
+    record(`${prefix}:start`, detail);
     try {
       const result = await listener(...args);
-      record("save:end", { ...detail, status: result?.status });
+      record(`${prefix}:end`, { ...detail, status: result?.status,
+        ...(prefix === "edit" ? { kind: result?.kind, acknowledgedSequence: result?.acknowledgedSequence, revision: result?.revision, isDirty: result?.isDirty } : {}) });
       return result;
     } catch (error) {
-      record("save:error", { ...detail, error: describe(error) });
+      record(`${prefix}:error`, { ...detail, error: describe(error) });
       throw error;
     }
   });
 };
+app.on("before-quit", () => record("app:before-quit"));
+app.on("will-quit", () => record("app:will-quit"));
 app.on("quit", (_event, exitCode) => record("app:quit", { exitCode }));
-record("launch", { pid: process.pid, argv: process.argv, profile, documentPath, versions: process.versions });
 // A runner failure cannot leave this owned product instance alive indefinitely.
 const watchdog = setTimeout(() => {
   record("main:watchdog", { timeoutMs: 90_000 });
   app.exit(124);
 }, 90_000);
 watchdog.unref();
-process.argv.push(documentPath);
+if (openDocument) process.argv.push(documentPath);
+record("launch", { pid: process.pid, argv: process.argv, profile, documentPath, openDocument, versions: process.versions });
 require(resolve(__dirname, "../../dist-electron/main/main.js"));
