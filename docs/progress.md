@@ -1,5 +1,9 @@
 # FishMark 进展记录
 
+## 2026-10-13 RF-901：打开阶段脚注行号索引
+
+标题首输入 `6d91f50` 已发布、CI38356533360全绿。后续定位脚注行号2000次前缀扫描约620ms，复用既有二分行号实现为单次解析懒索引。真实构建20k首次ready4179.6→2923.9ms，暖1602–1606→931–960ms；首次预算仍未达到。strict3677+8exact与完整门禁通过，M9仍0/3，RF-902/903仍PLANNED。[协议和剩余条件](../reports/task-summaries/TASK-RF901-FOOTNOTE-LINE-INDEX-027.md)。
+
 ## 2026-10-13 RF-901：标题首输入与 IME 引擎归因
 
 从已发布 `cf0502c` 继续。真实构建20k标题首输入三样本从1499–1795ms降至151–172ms，受限ATX纯文本标题复用既有局部解析；打开ready本身未改善且仍超预算。strict3663+8exact/0skip、完整门禁与独立review通过。隐藏无应用代码的相同Electron对照复现native compositionend=false，支持Blink引擎路径解释；旧OS IME严格失败保留，没有再次占用前台。M9仍0/3，RF-902/903仍PLANNED。[协议、结果与剩余条件](../reports/task-summaries/TASK-RF901-FIRST-EDIT-026.md)。

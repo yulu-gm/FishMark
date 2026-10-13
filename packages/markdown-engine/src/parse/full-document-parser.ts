@@ -33,6 +33,7 @@ import {
 import { createLeafBlocksForToken, mergeLeafSiblingBlocks } from "./leaf-blocks";
 import { collectMicromarkEventViews } from "./micromark-event-adapter";
 import { normalizeListFrames } from "./list-frames";
+import { createLineLookup } from "./line-lookup";
 
 // One micromark-based recursive parser. Every container child comes from the event stream and
 // a container stack, so no renderer/editor/export regex scan is needed to discover nesting.
@@ -138,6 +139,9 @@ export function parseFullDocumentTree(
     options
   );
 
+  // Paragraph fragments around footnotes share one parse-local line index. Most
+  // documents never need it; do not scan their source just to build unused data.
+  let lineLookup: ReturnType<typeof createLineLookup> | undefined;
   const tree = createMarkdownDocumentTree(
     materializeContainer({
       frame: root,
@@ -146,6 +150,7 @@ export function parseFullDocumentTree(
       referenceDefinitions,
       footnoteDefinitions,
       footnoteCandidates: footnoteData.candidates,
+      lineAt: (offset) => (lineLookup ??= createLineLookup(source))(offset),
       options,
       maskedSource: source
     }),
@@ -382,6 +387,7 @@ function materializeContainer(input: {
   readonly referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition>;
   readonly footnoteDefinitions: ReadonlyMap<string, FootnoteDefinition>;
   readonly footnoteCandidates?: readonly FootnoteDefinitionCandidate[];
+  readonly lineAt: (offset: number) => number;
   readonly options?: MarkdownParseOptions;
   readonly maskedSource: SourceText;
 }): MarkdownContainerNode {
@@ -407,7 +413,7 @@ function materializeContainer(input: {
       candidates.push(input.footnoteCandidates[footnoteCandidateIndex++]!);
     }
     const blocks = candidates.length === 0 ? merged : attachFootnoteDefinitionBlocks(
-      merged, candidates, input.footnoteDefinitions, input.source
+      merged, candidates, input.footnoteDefinitions, input.source, input.lineAt
     );
     const nodes = createNodesFromBlocks({
       blocks,
@@ -434,6 +440,7 @@ function materializeContainer(input: {
       referenceDefinitions: input.referenceDefinitions,
       footnoteDefinitions: input.footnoteDefinitions,
       options: input.options,
+      lineAt: input.lineAt,
       maskedSource
     }));
     index += 1;

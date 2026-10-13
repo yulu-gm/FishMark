@@ -5,6 +5,7 @@ import { flattenMarkdownTree, type MarkdownDocumentTree } from "../model/documen
 import { isMarkdownContainerNode, type MarkdownContainerNode, type MarkdownLeafNode, type MarkdownNode, type MarkdownTableRow } from "../model/markdown-node";
 import type { SourceRange, SourceMarker } from "../model/source-range";
 import { consumeHorizontalSpace } from "./leaf-nodes";
+import { createLineLookup } from "./line-lookup";
 
 interface ProjectionContext {
   readonly source: string;
@@ -307,33 +308,5 @@ function trimTrailingCarriageReturn(source: string, startOffset: number, endOffs
   }
 
   return cursor;
-}
-
-// 1-based line lookup matching the parser's line numbering: the line an offset sits on, where an
-// offset exactly at a line start belongs to that line.
-function createLineLookup(source: string): (offset: number) => number {
-  const lineStarts: number[] = [0];
-
-  for (let offset = 0; offset < source.length; offset += 1) {
-    if (source[offset] === "\n") {
-      lineStarts.push(offset + 1);
-    }
-  }
-
-  return (offset: number): number => {
-    let low = 0;
-    let high = lineStarts.length - 1;
-
-    while (low < high) {
-      const middle = Math.ceil((low + high) / 2);
-      if (lineStarts[middle]! <= offset) {
-        low = middle;
-      } else {
-        high = middle - 1;
-      }
-    }
-
-    return low + 1;
-  };
 }
 

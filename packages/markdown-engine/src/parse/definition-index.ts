@@ -332,7 +332,8 @@ export function attachFootnoteDefinitionBlocks(
   blocks: MarkdownBlock[],
   candidates: readonly FootnoteDefinitionCandidate[],
   definitions: ReadonlyMap<string, FootnoteDefinition>,
-  source: string
+  source: string,
+  lineAt: (offset: number) => number
 ): MarkdownBlock[] {
   const sortedCandidates = [...candidates].sort((left, right) => left.startOffset - right.startOffset);
   const nextBlocks: MarkdownBlock[] = [];
@@ -371,12 +372,12 @@ export function attachFootnoteDefinitionBlocks(
     let segmentStartOffset = block.startOffset;
 
     for (const candidate of blockCandidates) {
-      appendParagraphSegmentIfPresent(nextBlocks, source, segmentStartOffset, candidate.startOffset, block.startLine);
+      appendParagraphSegmentIfPresent(nextBlocks, source, segmentStartOffset, candidate.startOffset, lineAt);
       nextBlocks.push(createFootnoteDefinitionBlock(candidate, definitions));
       segmentStartOffset = Math.max(segmentStartOffset, candidate.endOffset);
     }
 
-    appendParagraphSegmentIfPresent(nextBlocks, source, segmentStartOffset, block.endOffset, block.startLine);
+    appendParagraphSegmentIfPresent(nextBlocks, source, segmentStartOffset, block.endOffset, lineAt);
   }
 
   return nextBlocks;
@@ -424,7 +425,7 @@ function appendParagraphSegmentIfPresent(
   source: string,
   startOffset: number,
   endOffset: number,
-  fallbackStartLine: number
+  lineAt: (offset: number) => number
 ): void {
   const contentStartOffset = skipLineBreaks(source, startOffset, endOffset);
   const contentEndOffset = trimOuterWhitespace(source, contentStartOffset, endOffset);
@@ -433,8 +434,8 @@ function appendParagraphSegmentIfPresent(
     return;
   }
 
-  const startLine = resolveLineNumberAtOffset(source, contentStartOffset, fallbackStartLine);
-  const endLine = resolveLineNumberAtOffset(source, contentEndOffset, startLine);
+  const startLine = lineAt(contentStartOffset);
+  const endLine = lineAt(contentEndOffset);
 
   blocks.push({
     id: `paragraph:${contentStartOffset}-${contentEndOffset}`,
@@ -470,25 +471,6 @@ function trimOuterWhitespace(source: string, startOffset: number, endOffset: num
   }
 
   return cursor;
-}
-
-function resolveLineNumberAtOffset(source: string, offset: number, fallbackLine: number): number {
-  if (offset <= 0) {
-    return 1;
-  }
-
-  let line = 1;
-  let cursor = 0;
-
-  while (cursor < offset && cursor < source.length) {
-    if (source[cursor] === "\n") {
-      line += 1;
-    }
-
-    cursor += 1;
-  }
-
-  return line || fallbackLine;
 }
 
 function createFootnoteDefinitionBlockData(
