@@ -1,5 +1,9 @@
 # FishMark 进展记录
 
+## 2026-10-13 M9 当前验收盘点
+
+官方main `3fee9ef` 的CI38363749630 attempt1三项全绿，关闭门禁已恢复，标题/脚注优化保留。本批完成RF-902流程及RF-903安全的并行只读审查，更新[逐项验收清单](plans/2026-10-13-m9-acceptance-ledger.md)及[报告030](../reports/task-summaries/TASK-M9-ACCEPTANCE-LEDGER-030.md)。RF-901首开仍超预算，semantic/呈现/平台证据未齐；RF-902缺产品E2E入口与跨进程流程；RF-903缺sandbox/CSP/资源根和路径能力授权。M9仍0/3，RF-902/903实现仍PLANNED。本批只有文档，沿用相同代码3682+8exactknown和完整可靠门禁，发布后新SHA CI另验。以下各“当前/最新”均为其时点历史记录。
+
 ## 2026-10-13 关闭 Save 门禁协议
 
 锁序修复 `9fe0d3c` 本地完整门禁通过；新CI38362468526已正常关闭窗口，但 `[2] != [2,0]` 提示断言失败。保持强断言，新增真实保存入口屏障及期间新草稿，确定性验证关闭 Save；lint/strict3682+8exact与safety通过，独立审查PASS。旧失败不重跑，新提交CI另行核验。[报告029](../reports/task-summaries/TASK-WINDOW-CLOSE-PROTOCOL-029.md)。

@@ -1719,6 +1719,8 @@ npm.cmd run build
 
 ### Milestone 9 — Performance, E2E, and security gates
 
+**Current acceptance ledger (2026-10-13):** [itemized evidence and next batches](../../plans/2026-10-13-m9-acceptance-ledger.md), based on published `3fee9ef` and successful exact CI38363749630. M9 remains 0/3. RF-902/903 read-only gap audits are complete; their implementation remains planned. The user's current authorization permits early implementation/validation in serial focused batches while RF-901 remains unaccepted; only one source task executes at a time. Formal acceptance dependencies are unchanged. Existing close/data-safety and formal behavior evidence is reusable within its recorded scope; it does not close the three tasks below.
+
 #### RF-901: Final performance gate
 
 **Outcome:** the completed cache/adapter architecture meets section 8 budgets with reproducible evidence.

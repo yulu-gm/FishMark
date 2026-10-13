@@ -10,6 +10,10 @@
 
 **Overall status:** `IN_PROGRESS`
 
+**本轮顺序授权（2026-10-13）：** 用户允许RF-902/903并行只读审查及随后最小、不冲突的执行批次。故下方“依赖COMPLETE前不得开始”的规则对本轮提前实施验证不构成阻挡；一次仍仅执行一个源码任务，RF-902/903实施时暂停RF-901源码修改，正式验收依赖与M9计数保持不变。本次仅文档审查，RF-902/903实现尚未开始。
+
+**当前验收（2026-10-13）：** 官方main `3fee9ef`、CI38363749630 attempt1三项成功，关闭Save门禁已恢复。RF-901仍IN_PROGRESS，RF-902/903仍PLANNED但本批已完成并行只读缺口审查；M9为0/3。[统一清单](../../plans/2026-10-13-m9-acceptance-ledger.md)逐项区分产品缺口、局部已通过及缺测，明确E2E与安全后续小批。只改文档、沿用相同代码strict3682+8exact/0unexpected/skip/errors及完整门禁；发布后新SHA CI另验。[报告030](../../../reports/task-summaries/TASK-M9-ACCEPTANCE-LEDGER-030.md)。以下“最新/当前”是各自时点历史记录，不覆盖本段。
+
 **2026-10-13 关闭 Save 协议：** `9fe0d3c` CI38362468526 已越过窗口关闭等待，但提示[2]不满足强Save覆盖[2,0]。只改测试顺序：真实save入口屏障期间输入新草稿并关闭，保留Save/精确磁盘/销毁断言，lint/strict3682+8exact/safety与独立review通过；新CI另验。[报告029](../../../reports/task-summaries/TASK-WINDOW-CLOSE-PROTOCOL-029.md)。
 
 **2026-10-13 关闭门禁恢复：** main `59e9cd19` 的 CI38358340321 Quality 保存关闭失败，完整回归和包体成功。真实产品后台屏障已证明保存 FIFO 与提前持有关闭锁互等；改为有效 CONFIRM 阶段延迟取锁，保持持锁至窗口销毁。最终门禁与发布见[报告028](../../../reports/task-summaries/TASK-WINDOW-CLOSE-SAVE-028.md)。M9仍0/3，暂停新增性能工作。
@@ -69,7 +73,7 @@ At most one `RF-xxx` task may be `IN_PROGRESS` or `ACCEPTING` at a time. A later
 | M6 | Thin CodeMirror adapter | `COMPLETE` | 4 | 4 | RF-601/602/603/604 accepted; `editor-core` deleted and adapter is the production owner |
 | M7 | Shared presentation and derived consumers | `COMPLETE` | 3 | 3 | RF-701/702/703 accepted; editor/export/outline/metrics now share canonical derived inputs |
 | M8 | Renderer/main composition cleanup | `COMPLETE` | 3 | 3 | RF-801/802/803独立验收PASS；RF-803真Mac原生门禁已通过，发布/最终CI待父线程处理 |
-| M9 | Performance, E2E, and security | `IN_PROGRESS` | 0 | 3 | RF-901 report validity is separate from unmet final performance evidence; RF-902/903 remain planned |
+| M9 | Performance, E2E, and security | `IN_PROGRESS` | 0 | 3 | [Current acceptance ledger](../../plans/2026-10-13-m9-acceptance-ledger.md): RF-901 budgets/evidence incomplete; RF-902/903 read-only gap audits complete, implementation planned |
 | M10 | Purge and final acceptance | `PLANNED` | 0 | 2 | No compatibility/dead code; final verdict `PASS` |
 
 **Historical recorded completion:** 29 / 38 original tasks. The supplemental RF-HARDEN-001 repair gate is tracked separately; this count is not a current quality or release-readiness percentage.
@@ -113,9 +117,9 @@ Evidence columns are filled only with fresh command output/report paths from the
 | RF-801 | 非 React 工作区命令与订阅层 | RF-703 | `COMPLETE` | 2026-10-05 独立 focused 23 文件/450 通过；application 无 React | typecheck/lint/build；foundation 310；全量 216 文件/2884 项（双 worker，10 exact known、0 unexpected）；真实 safety 七项；bundle 原预算；正式行为 121/121 | [独立验收 PASS](../../../reports/reviews/2026-10-05-rf-801-architecture.md)；[任务总结](../../../reports/task-summaries/RF-801.md) | `5af4c96` 已推送 main；[主体 CI 三项 PASS](https://github.com/yulu-gm/FishMark/actions/runs/37318182770) |
 | RF-802 | React shell decomposition | RF-801 | `COMPLETE` | 471 focused、13 launcher/cleanup；[handoff](../../plans/2026-10-05-rf-802-handoff.md) | type/lint/build；foundation310；全量217 files / 2891+10exact（本地双worker、默认CI）；原bundle1428000/1430000；CI safety7/7、正式行为121/121 | [独立验收 PASS](../../../reports/reviews/2026-10-06-rf-802-architecture.md)；[任务总结](../../../reports/task-summaries/RF-802.md) | 本地e20af0e/远端44e5767；[精确树CI全绿](https://github.com/yulu-gm/FishMark/actions/runs/37393076342) |
 | RF-803 | Main/preload composition split | RF-802 | `COMPLETE` | 69 files/1008 focused；[验收总结](../../../reports/task-summaries/RF-803.md) | type/lint/build、310 foundation、全部220 files/3111+10exact双worker、原bundle、真Mac safety7/7和behavior121/121；默认并发竞态保留 | [独立验收PASS](../../../reports/reviews/2026-10-06-rf-803-architecture.md) | candidate `9f0fe233` / tree `25c526fc`；发布待父线程 |
-| RF-901 | Final performance gate | RF-803 | `IN_PROGRESS` | [Report validation batch](../../plans/2026-10-13-rf901-report-validation.md) | Final semantic/mixed/paint/platform evidence remains incomplete | No RF-901 completion verdict | Based on `59b2f2e` |
-| RF-902 | Playwright Electron data-safety/editing suite | RF-901 | `PLANNED` | — | build/e2e | — | — |
-| RF-903 | Electron security hardening | RF-902 | `PLANNED` | — | test/build/e2e | — | — |
+| RF-901 | Final performance gate | RF-803 | `IN_PROGRESS` | [Current ledger](../../plans/2026-10-13-m9-acceptance-ledger.md) | Initial ready budgets missed; semantic/paint/platform evidence incomplete | No RF-901 completion verdict | Baseline `3fee9ef`; CI38363749630 success |
+| RF-902 | Playwright Electron data-safety/editing suite | RF-901 | `PLANNED` | [Read-only flow audit complete](../../plans/2026-10-13-m9-acceptance-ledger.md) | Product E2E fixture/relaunch/autosave/conflict/move/crash gaps; build/e2e required | No RF-902 completion verdict | Baseline `3fee9ef` |
+| RF-903 | Electron security hardening | RF-902 | `PLANNED` | [Read-only security audit complete](../../plans/2026-10-13-m9-acceptance-ledger.md) | Sandbox/CSP/path grants/resource roots incomplete; test/build/e2e required | No RF-903 completion verdict | Baseline `3fee9ef` |
 | RF-1001 | Dead code and compatibility purge | RF-903 | `PLANNED` | — | lint/typecheck/test/build/bundle | — | — |
 | RF-1002 | Final architecture/behavior/docs acceptance | RF-1001 | `PLANNED` | — | all final gates | — | — |
 
