@@ -206,7 +206,9 @@ describe("main process window wiring", () => {
     expect(mainSource).not.toContain("workspaceState.reorderTab(input.tabId, input.toIndex)");
     expect(mainSource).not.toContain("UPDATE_WORKSPACE_TAB_DRAFT_CHANNEL");
     expect(mainSource).toContain('ownerWindow.on("close", (event) => {');
-    expect(mainSource).toContain("workspaceWindowCloseRequestBroker.hasPending(windowId)");
+    expect(mainSource).toContain("createWindowCloseIntent({");
+    expect(mainSource).toContain("void closeIntent.request()");
+    expect(mainSource).toContain("closeIntent.dispose()");
     expect(mainSource).toContain("workspaceWindowCloseApplication.requestWindowClose({");
     expect(mainSource).toContain("heldWorkspaceWindowCloseReleases.set(");
     expect(mainSource).toContain("heldWorkspaceWindowCloseReleases.delete(windowId)");

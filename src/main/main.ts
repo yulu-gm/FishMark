@@ -70,6 +70,7 @@ import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator";
 import { createFileIdentityResolver } from "./file-identity-resolver";
 import { createWorkspaceWindowCloseConfirmationHandler } from "./workspace-window-close-confirmation-handler";
 import { createWorkspaceWindowCloseRequestBroker } from "./workspace-window-close-request-broker";
+import { createWindowCloseIntent } from "./window-close-intent";
 import { createWorkspaceOwnerTabActivationRequestBroker } from "./workspace-owner-tab-activation-request-broker";
 import { createWorkspaceWindowRegistrationApplication } from "./workspace-window-registration-application";
 import { registerTestHandlers } from "./ipc/register-test-handlers";
@@ -402,6 +403,7 @@ app.whenReady().then(async () => {
       }
     });
   const workspaceWindowBindings = new Set<string>();
+  const workspaceWindowCloseIntents = new Map<string, ReturnType<typeof createWindowCloseIntent>>();
   const pendingWorkspaceWindowCloseIds = new Set<string>();
   const heldWorkspaceWindowCloseReleases = new Map<string, () => void>();
   let appUpdaterPromise: Promise<AppUpdaterController> | null = null;
@@ -490,63 +492,68 @@ app.whenReady().then(async () => {
       ownerWindow.on("focus", () => {
         workspaceState.focusWindow(windowId);
       });
+      const closeIntent = createWindowCloseIntent({
+        attempt: async () => {
+          const heldLease = await workspaceWindowCloseApplication.requestWindowClose({
+            windowId,
+            ownerWindow
+          });
+
+          if (heldLease === null) {
+            quitRequested = false;
+            launchOpenCoordinator.resume();
+            return "cancelled";
+          }
+
+          if (ownerWindow.isDestroyed()) {
+            heldLease.release();
+            return "closed";
+          }
+
+          heldWorkspaceWindowCloseReleases.set(windowId, heldLease.release);
+          pendingWorkspaceWindowCloseIds.add(windowId);
+          try {
+            ownerWindow.close();
+          } catch (error) {
+            pendingWorkspaceWindowCloseIds.delete(windowId);
+            heldWorkspaceWindowCloseReleases.delete(windowId);
+            heldLease.release();
+            throw error;
+          }
+          return "closed";
+        },
+        reportError: async (error) => {
+          quitRequested = false;
+          launchOpenCoordinator.resume();
+          try {
+            await dialog.showMessageBox({
+              type: "error",
+              buttons: ["OK"],
+              defaultId: 0,
+              title: "Unable to close window",
+              message: error instanceof Error ? error.message : String(error)
+            });
+          } catch (reportingError) {
+            console.error(
+              "[fishmark] unable to report workspace window close failure.",
+              error,
+              reportingError
+            );
+          }
+        }
+      });
+      workspaceWindowCloseIntents.set(windowId, closeIntent);
       ownerWindow.on("close", (event) => {
         if (pendingWorkspaceWindowCloseIds.has(windowId)) {
           pendingWorkspaceWindowCloseIds.delete(windowId);
           return;
         }
-
         event.preventDefault();
-
-        if (workspaceWindowCloseRequestBroker.hasPending(windowId)) {
-          return;
-        }
-
-        void (async () => {
-          try {
-            const heldLease = await workspaceWindowCloseApplication.requestWindowClose({
-              windowId,
-              ownerWindow
-            });
-
-            if (heldLease === null) {
-              quitRequested = false;
-              launchOpenCoordinator.resume();
-              return;
-            }
-
-            heldWorkspaceWindowCloseReleases.set(windowId, heldLease.release);
-            pendingWorkspaceWindowCloseIds.add(windowId);
-            try {
-              ownerWindow.close();
-            } catch (error) {
-              pendingWorkspaceWindowCloseIds.delete(windowId);
-              heldWorkspaceWindowCloseReleases.delete(windowId);
-              heldLease.release();
-              throw error;
-            }
-          } catch (error) {
-            quitRequested = false;
-            launchOpenCoordinator.resume();
-            try {
-              await dialog.showMessageBox({
-                type: "error",
-                buttons: ["OK"],
-                defaultId: 0,
-                title: "Unable to close window",
-                message: error instanceof Error ? error.message : String(error)
-              });
-            } catch (reportingError) {
-              console.error(
-                "[fishmark] unable to report workspace window close failure.",
-                error,
-                reportingError
-              );
-            }
-          }
-        })();
+        void closeIntent.request();
       });
       ownerWindow.once("closed", () => {
+        closeIntent.dispose();
+        workspaceWindowCloseIntents.delete(windowId);
         pendingWorkspaceWindowCloseIds.delete(windowId);
         workspaceWindowCloseRequestBroker.abortWindow(windowId);
         workspaceOwnerTabActivationRequestBroker.abortWindow(windowId);
@@ -802,12 +809,14 @@ app.whenReady().then(async () => {
     createWorkspaceWindowCloseConfirmationHandler({
       broker: workspaceWindowCloseRequestBroker,
       closeWorkspace: {
-        confirmWindowClose(input) {
+        async confirmWindowClose(input) {
           const lease = workspaceWindowCloseLeases.get(input.windowId);
           if (lease === undefined) {
             return Promise.resolve({ status: "cancelled" as const });
           }
-          return workspaceApplication.confirmWindowClose(input, lease);
+          const result = await workspaceApplication.confirmWindowClose(input, lease);
+          if (result.status !== "confirmed") workspaceWindowCloseIntents.get(input.windowId)?.cancelQueued();
+          return result;
         }
       }
     });
