@@ -33,14 +33,24 @@ partial baseline01–05 是辅助程序失败：旧 PowerShell 脚本策略、Ta
 | --- | --- |
 | lint / typecheck / build | PASS |
 | Windows 产品 E2E | **16/16 PASS**，0 skipped/flaky；22次启动全部退出，清理错误0 |
-| 严格 Vitest | **3746 PASS + 8 exact known**，0 unexpected/skip/collection/hook/unhandled；名单未改 |
+| 严格 Vitest | **3749 PASS + 8 exact known**，0 unexpected/skip/collection/hook/unhandled；含采集修复新增3项回归，名单未改 |
 | foundation / editing / workspace-safety | **310 / 79 / 7 PASS** |
 | 正式 editor-behavior | **121/121**，2541 targets，99既有known-defect，0 unexpected/not-run |
 | renderer gzip 合同 | **1,435,693 / 1,500,000 PASS**；未修改预算 |
 
-最终产品运行是 `.artifacts/e2e/rf902-recovery-faults-final-02/`，stdout 为 `.artifacts/rf902-recovery-faults/rf902-recovery-faults-final-02.log`。`check-e2e.log` 属于首次 final01 的15PASS/1FAIL，不能作为最终全绿证据：其partial已通过内容与保存断言，最后把预期warning中的 `error` 当成额外错误。修正后按该次launch精确验证单元素 `console:warn` 消息和stderr完整行各1次，只调整分类副本；同文console.error、重复警告及其他错误继续失败，原始日志不删。生产代码未因此改措辞，未扩大8known名单；随后重跑全部16条产品E2E及lint。typecheck/build沿用相同冻结生产代码通过结果。
+第一轮本机通过运行是 `.artifacts/e2e/rf902-recovery-faults-final-02/`，stdout 为 `.artifacts/rf902-recovery-faults/rf902-recovery-faults-final-02.log`。`check-e2e.log` 属于首次 final01 的15PASS/1FAIL，不能作为最终全绿证据：其partial已通过内容与保存断言，最后把预期warning中的 `error` 当成额外错误。修正后按该次launch精确验证单元素 `console:warn` 消息和stderr完整行各1次，只调整分类副本；同文console.error、重复警告及其他错误继续失败，原始日志不删。生产代码未因此改措辞，未扩大8known名单；随后重跑全部16条产品E2E及lint。typecheck/build沿用相同冻结生产代码通过结果。后续远端采集失败及最终本机final03见下节。
 
 原始门禁汇总 `check-results.json`、`strict.json`、`behavior.json`、`safety.json` 和所有stdout保留。safety既有MaxListenersWarning原样保留，未当成未处理错误或伪造“全日志无警告”。独立astra-high已审查生产、测试辅助、精确warning协议及16份原始产品报告。发布前再次fetch，官方main仍为`9337ff4e72757c58a3cdc2426e44f598617ee581`。普通main发布的精确SHA、tree及该SHA CI终态记录在本次交接与本机`publication.json`/`ci-terminal.json`，不以旧CI代替新提交结果。
+
+### 首轮远端 CI 的采集失败
+
+生产修复提交 `b4174166461d5a5deb614d736dd2d15ba8970114` 的 [CI 38389915384](https://github.com/yulu-gm/FishMark/actions/runs/38389915384) 为失败：Quality、完整回归、预算通过，Windows 产品 E2E 为15通过/1失败。partial 的恢复、独立文档、新编辑、保存与正常退出断言均已通过，最后的预期 stderr 行次数为0；同次 `console:warn` 原始事件为1。官方产物11808297341完整保留，ZIP SHA256 `7e6c08fe93de2925f891b669573781e864f83b9d3c4dbd6db54a68c305a7dccd`。
+
+原因是 Playwright 在 `electron.launch()` 返回之前已读取 stderr，fixture 后挂的监听器可能漏掉早期输出。后续只修改测试采集：bootstrap 在加载真实 main 前透明复制 `process.stderr.write` 原始字节，保留原参数、回调与返回值；不改变启动顺序或产品协议。Node 原始流与晚挂的进程管道分别保存、分别检查错误，不合并重复内容，也不根据 console 参数补造缺失行。预期警告仍须满足 Node 原始完整行1次及 `console:warn` 1次；晚挂管道只可能观察0或1次。既有 IPC 错误仍要求管道精确1次，并新增 Node 原始流精确1次。
+
+该采集范围从测试 bootstrap 开始，不能宣称捕获此前的原生 Electron 启动输出。最初失败的 CI 与本机 final01/final02 均保留；新提交需要独立复审和新的精确SHA CI终态。
+
+采集修复后最终本机运行 `.artifacts/e2e/rf902-recovery-faults-final-03/`：16/16通过，0skip/flaky，22次启动全部退出，清理错误0；2026-10-13T11:40:56Z核验前台与输入布局恢复。新增透传、早期丢行重现、拒绝覆盖/原写入异常3项单测通过；重跑lint、typecheck、严格回归3749PASS+8exactknown。`ci-fix-check-results.json`、`strict-ci-fix.json`、`ci-fix-product-summary.json`保存结果。main/preload/index/lock四项哈希与此前已通过构建一致，因此沿用冻结生产代码的build、foundation310、editing79、safety7、formal121/121和预算结果；后续精确提交CI会重新构建并执行远端完整门禁。
 
 ## 正式剩余项与额外建议
 

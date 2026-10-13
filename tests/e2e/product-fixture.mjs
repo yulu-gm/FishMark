@@ -46,6 +46,9 @@ async function bounded(label, action, timeoutMs = 10_000) {
 function stderrFailures(stderr) {
   return stderr.split(/\r?\n/).filter((line) => /Uncaught|UnhandledPromiseRejection|unhandled rejection|FATAL|\bERROR\b|\bError:|\[fishmark\].*(failed|timed out|corrupt)/i.test(line));
 }
+function withoutExactStderrLine(stderr, expected) {
+  return stderr.split(/\r?\n/).filter((line) => line !== expected).join("\n");
+}
 
 function observeRenderer({ idleDelayMs }) {
   const evidence = { events: [] };
@@ -124,9 +127,11 @@ class ProductSession {
 
   async launch(expectedContent, { openDocument = true, recoveryDialog = false, selectTabId } = {}) {
     const index = this.launches.length + 1;
-    const state = { index, openDocument, telemetryPath: this.testInfo.outputPath(`launch-${index}-main.jsonl`), stdout: "", stderr: "", pageErrors: [], renderer: null, windowPages: [] };
+    const state = { index, openDocument, telemetryPath: this.testInfo.outputPath(`launch-${index}-main.jsonl`),
+      stderrTeePath: this.testInfo.outputPath(`launch-${index}-stderr-node.log`), stdout: "", stderr: "", pageErrors: [], renderer: null, windowPages: [] };
     this.launches.push(state);
-    const env = { ...process.env, FISHMARK_E2E_PROFILE: this.profile, FISHMARK_E2E_TELEMETRY: state.telemetryPath, FISHMARK_E2E_DOCUMENT: this.documentPath, FISHMARK_E2E_OPEN_DOCUMENT: openDocument ? "1" : "0" };
+    const env = { ...process.env, FISHMARK_E2E_PROFILE: this.profile, FISHMARK_E2E_TELEMETRY: state.telemetryPath,
+      FISHMARK_E2E_STDERR_TEE: state.stderrTeePath, FISHMARK_E2E_DOCUMENT: this.documentPath, FISHMARK_E2E_OPEN_DOCUMENT: openDocument ? "1" : "0" };
     delete env.VITE_DEV_SERVER_URL;
     delete env.FISHMARK_START_MODE;
     delete env.ELECTRON_RUN_AS_NODE;
@@ -376,14 +381,21 @@ class ProductSession {
   async assertHealthy(state = this.current) {
     const events = await this.mainEvidence(state);
     const expectedEvents = new Set();
+    state.stderrNode = await readFile(state.stderrTeePath, "utf8");
     let checkedStderr = state.stderr;
+    let checkedNodeStderr = state.stderrNode;
     for (const warning of state.expectedRecoveryWarnings ?? []) {
       const observed = events.filter((entry) => entry.event === "console:warn" && entry.detail.messages?.length === 1 && entry.detail.messages[0] === warning);
       expect(observed).toHaveLength(1);
-      expect(checkedStderr.split(/\r?\n/).filter((line) => line === warning)).toHaveLength(1);
+      expect(checkedNodeStderr.split(/\r?\n/).filter((line) => line === warning)).toHaveLength(1);
+      // Playwright consumes startup pipe data before electron.launch resolves.
+      // A late pipe observer may see zero or one copy; the raw Node tee must
+      // contain exactly one actual formatted diagnostic, as does telemetry.
+      expect(checkedStderr.split(/\r?\n/).filter((line) => line === warning).length).toBeLessThanOrEqual(1);
       // Only this case's exact observed handled diagnostic is accounted for.
       // Keep raw telemetry/stderr intact, and fail every other error as before.
-      checkedStderr = checkedStderr.replace(warning, "");
+      checkedStderr = withoutExactStderrLine(checkedStderr, warning);
+      checkedNodeStderr = withoutExactStderrLine(checkedNodeStderr, warning);
     }
     for (const expected of this.expectedIpcFailures ?? []) {
       const failures = events.filter((entry) => entry.event === expected.event && entry.detail.channel === expected.channel && entry.detail.webContentsId === expected.webContentsId && entry.detail.tabId === expected.tabId);
@@ -396,12 +408,16 @@ class ProductSession {
       expectedEvents.add(logs[0]);
       const exactLine = `${label} ${expected.message}`;
       expect(checkedStderr.split(/\r?\n/).filter((line) => line === exactLine)).toHaveLength(1);
-      checkedStderr = checkedStderr.replace(exactLine, "");
+      expect(checkedNodeStderr.split(/\r?\n/).filter((line) => line === exactLine)).toHaveLength(1);
+      checkedStderr = withoutExactStderrLine(checkedStderr, exactLine);
+      checkedNodeStderr = withoutExactStderrLine(checkedNodeStderr, exactLine);
     }
     const mainErrors = events.filter((entry) => !expectedEvents.has(entry) && (entry.event.startsWith("main:") || ["save:error", "edit:error", "flush:error", "detach:error", "watch:error", "snapshot:error"].includes(entry.event) || ["renderer:preload-error", "renderer:process-gone", "renderer:load-failed"].includes(entry.event) || (entry.event === "renderer:console" && ["error", 3].includes(entry.detail.level))));
     const renderer = state.renderer ?? await this.rendererEvidence();
     const rendererErrors = state.rendererByWindow ? state.rendererByWindow.flatMap((entry) => entry.renderer?.events.filter((event) => ["error", "unhandledrejection"].includes(event.event)) ?? []) : renderer?.events.filter((entry) => ["error", "unhandledrejection"].includes(entry.event)) ?? [];
-    expect({ mainErrors, pageErrors: state.pageErrors, rendererErrors, stderrErrors: stderrFailures(checkedStderr) }).toEqual({ mainErrors: [], pageErrors: [], rendererErrors: [], stderrErrors: [] });
+    expect({ mainErrors, pageErrors: state.pageErrors, rendererErrors,
+      stderrErrors: stderrFailures(checkedStderr), nodeStderrErrors: stderrFailures(checkedNodeStderr) }).toEqual({
+      mainErrors: [], pageErrors: [], rendererErrors: [], stderrErrors: [], nodeStderrErrors: [] });
   }
 
   async finish() {
@@ -440,6 +456,10 @@ class ProductSession {
       if ((state.app || state.mainPid) && !state.processesVerifiedGone) await this.verifyOwnedProcessesGone(state).catch((error) => recordCleanupError("owned members exit", error));
       state.exit ??= state.child ? { code: state.child.exitCode, signal: state.child.signalCode, normalClose: false } : null;
       state.events = await this.mainEvidence(state);
+      state.stderrNode = await readFile(state.stderrTeePath, "utf8").catch((error) => {
+        if (state.app) recordCleanupError("Node stderr tee", error);
+        return null;
+      });
       await writeFile(this.testInfo.outputPath(`launch-${state.index}-stdout.log`), state.stdout, "utf8");
       await writeFile(this.testInfo.outputPath(`launch-${state.index}-stderr.log`), state.stderr, "utf8");
     }
@@ -447,6 +467,8 @@ class ProductSession {
       runId: process.env.FISHMARK_E2E_RUN_ID, title: this.testInfo.title, platform: process.platform,
       status: this.testInfo.status, errors: this.testInfo.errors, chromiumSandbox: true,
       diagnosticOverhead: "passive main IPC/console logging and renderer configured-delay timer/event observation; no save actions or timer advancement",
+      stderrCapture: { nodeTee: "Raw process.stderr.write bytes from test bootstrap onward; native Electron startup writes are outside this source",
+        childPipe: "Raw stdout/stderr pipe chunks observed after Playwright electron.launch resolves; retained independently without merging" },
       documentPath: this.documentPath, profile: this.profile, idleDelayMs: this.idleDelayMs,
       initialContent: this.initialContent, finalDiskContent: await this.disk().catch(() => null),
       provenance: this.provenance, checkpoints: this.checkpoints, idleProof: this.idleProof,
