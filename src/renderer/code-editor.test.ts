@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { RangeSet, StateEffect, Transaction } from "@codemirror/state";
-import { readCompositionState, readEditorStructureCache } from "@fishmark/codemirror-adapter";
+import { clearCodeHighlightCache, readCompositionState, readEditorStructureCache, waitForPendingCodeHighlightLanguageLoads } from "@fishmark/codemirror-adapter";
 import { createEditorDerivedSnapshotFromCache, createStructuralLineModel } from "@fishmark/editor-model";
 import { parseFullDocumentTree } from "@fishmark/markdown-engine";
 import { isolateHistory, redo, redoDepth, undo, undoDepth } from "@codemirror/commands";
@@ -129,6 +129,46 @@ it("keeps mixed canonical trees correct through word typing, undo, modes and str
   }
 });
 
+it("keeps warm-token decorations equal to cold full rebuilds through real undo, redo and modes", async () => {
+  const source = "Paragraph **bold** [ref] [^n].\n\n```ts\nconst value = 1;\n```\n\n" +
+    "| Head | Value |\n| --- | --- |\n| cell | text |\n\n![hero](./hero.png)\n\n[ref]: /first\n\n[^n]: Note";
+  const host = document.createElement("div"); document.body.append(host);
+  const controller = createCodeEditorController({ parent: host, initialContent: source, onChange: vi.fn() });
+  try {
+    const view = getEditorView(host)!;
+    controller.setDocumentPath("C:/probe/document.md");
+    await waitForPendingCodeHighlightLanguageLoads();
+    const decorations = () => view.state.facet(EditorView.decorations).map(value =>
+      typeof value === "function" ? value(view) : value);
+    const verify = () => {
+      const text = controller.getContent(), selection = controller.getSelection();
+      const warm = decorations();
+      clearCodeHighlightCache();
+      controller.setViewMode("source"); controller.setViewMode("wysiwym");
+      expect(RangeSet.eq(warm, decorations())).toBe(true);
+      expect(controller.getContent()).toBe(text);
+      expect(controller.getSelection()).toEqual(selection);
+      expect(readEditorStructureCache(view.state).tree).toEqual(parseFullDocumentTree(text));
+    };
+    for (const mode of ["reading", "editing"] as const) {
+      controller.setHeadingPresentationMode(mode);
+      controller.setViewMode("source"); controller.setViewMode("wysiwym");
+      controller.setSelection(4);
+      controller.insertText("xyz");
+      verify();
+      expect(undo(view)).toBe(true); expect(controller.getContent()).toBe(source); verify();
+      expect(redo(view)).toBe(true); verify();
+      expect(undo(view)).toBe(true); verify();
+    }
+    for (const [fromText, toText] of [["/first", "/second"], ["const value = 1;", "let changed = 'yes';"],
+      ["./hero.png", "./other.png"], ["Note", "Other note"]]) {
+      const from = controller.getContent().indexOf(fromText!);
+      view.dispatch({ changes: { from, to: from + fromText!.length, insert: toText! }, userEvent: "input.type" });
+      verify(); expect(undo(view)).toBe(true); verify(); expect(redo(view)).toBe(true); verify();
+      expect(undo(view)).toBe(true); verify();
+    }
+  } finally { controller.destroy(); host.remove(); }
+});
 type DocumentFrame = {
   identity: { tabId: string; epoch: number; loadRevision: number } | null;
   baseText: string;
