@@ -10,6 +10,8 @@
 
 **Overall status:** `IN_PROGRESS`
 
+**2026-10-13 关闭 Save 协议：** `9fe0d3c` CI38362468526 已越过窗口关闭等待，但提示[2]不满足强Save覆盖[2,0]。只改测试顺序：真实save入口屏障期间输入新草稿并关闭，保留Save/精确磁盘/销毁断言，lint/strict3682+8exact/safety与独立review通过；新CI另验。[报告029](../../../reports/task-summaries/TASK-WINDOW-CLOSE-PROTOCOL-029.md)。
+
 **2026-10-13 关闭门禁恢复：** main `59e9cd19` 的 CI38358340321 Quality 保存关闭失败，完整回归和包体成功。真实产品后台屏障已证明保存 FIFO 与提前持有关闭锁互等；改为有效 CONFIRM 阶段延迟取锁，保持持锁至窗口销毁。最终门禁与发布见[报告028](../../../reports/task-summaries/TASK-WINDOW-CLOSE-SAVE-028.md)。M9仍0/3，暂停新增性能工作。
 
 **2026-10-13 最新：** 标题首输入 `6d91f50` 已发布且精确CI38356533360全绿；继续消除打开期脚注行号重复扫描，20k真实构建首次ready4179.6→2923.9ms、暖1602–1606→931–960ms。strict3677+8exact及完整门禁通过，首次ready仍超预算，M9保持0/3。[本批证据](../../../reports/task-summaries/TASK-RF901-FOOTNOTE-LINE-INDEX-027.md)。

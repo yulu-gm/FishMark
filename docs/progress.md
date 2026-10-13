@@ -1,5 +1,9 @@
 # FishMark 进展记录
 
+## 2026-10-13 关闭 Save 门禁协议
+
+锁序修复 `9fe0d3c` 本地完整门禁通过；新CI38362468526已正常关闭窗口，但 `[2] != [2,0]` 提示断言失败。保持强断言，新增真实保存入口屏障及期间新草稿，确定性验证关闭 Save；lint/strict3682+8exact与safety通过，独立审查PASS。旧失败不重跑，新提交CI另行核验。[报告029](../reports/task-summaries/TASK-WINDOW-CLOSE-PROTOCOL-029.md)。
+
 ## 2026-10-13 保存排队与关闭锁
 
 `59e9cd19` 的 CI38358340321 关闭门禁失败保留。本机真实后台产品屏障证明保存 FIFO 与提前获取的关闭锁互等，延迟至有效 CONFIRM 阶段取锁并仍持有至窗口关闭；修后取消、继续编辑、保存准确内容与关闭通过。最终门禁、独立审查及发布身份见[本批总结](../reports/task-summaries/TASK-WINDOW-CLOSE-SAVE-028.md)。本批暂停新性能改动，M9仍未完成。

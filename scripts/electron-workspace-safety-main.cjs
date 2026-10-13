@@ -1,5 +1,7 @@
 // Drive the real built main/preload/renderer, not a replacement test BrowserWindow.
-// Only OS chooser/prompt responses are substituted. Editing is native input;
+// Only OS chooser/prompt responses are substituted. A save-entry ordering
+// barrier exercises close behind a real queued save without replacing its handler.
+// Editing is native input;
 // open/save use the actual application menu channel and close uses BrowserWindow.close.
 const assert = require("node:assert/strict");
 const { mkdirSync, readFileSync, writeFileSync } = require("node:fs");
@@ -21,6 +23,10 @@ const prompts = [];
 // Observe real handler intervals. Await/logging adds diagnostic overhead;
 // unmatched handlers retain their original registration and return behavior.
 const timeline = [];
+let holdNextSave = false;
+let releaseHeldSave;
+let heldSaveCount = 0;
+let expectedSaveIdentity;
 const startedAt = performance.now();
 const record = (event, detail) => timeline.push({ ms: performance.now() - startedAt, event, detail });
 const handle = ipcMain.handle.bind(ipcMain);
@@ -36,7 +42,17 @@ ipcMain.handle = (channel, listener) => {
       windowId: BrowserWindow.fromWebContents(args[0].sender)?.id,
       requestId: args[1]?.requestId };
     record("ipc:start", detail);
-    try { return await listener(...args); }
+    try {
+      if (channel === "fishmark:save-markdown-file" && holdNextSave) {
+        holdNextSave = false;
+        assert.deepEqual({ windowId: detail.windowId, webContentsId: detail.webContentsId, tabId: args[1]?.tabId }, expectedSaveIdentity);
+        heldSaveCount += 1;
+        record("test:hold-save-entry", expectedSaveIdentity);
+        await new Promise((resolveSave) => { releaseHeldSave = resolveSave; });
+        record("test:resume-save-entry");
+      }
+      return await listener(...args);
+    }
     finally { record("ipc:end", detail); }
   });
 };
@@ -85,6 +101,7 @@ async function until(label, check) {
   const snapshot = () => evaluate("window.fishmark.getWorkspaceSnapshot()");
   await until("startup document", async () => (await snapshot()).activeDocument?.content === "Smoke");
   const initialTab = (await snapshot()).activeTabId;
+  expectedSaveIdentity = { windowId: window.id, webContentsId: window.webContents.id, tabId: initialTab };
   await evaluate(`
     window.__smokeErrors = [];
     window.addEventListener('error', e => window.__smokeErrors.push({message:e.message,stack:e.error?.stack}));
@@ -127,7 +144,37 @@ async function until(label, check) {
   // Blur autosave may legitimately run after cancellation; only close is cancelled.
   await append(" after-cancel");
   expected += " after-cancel";
+  // Finish any legitimate blur autosave and the explicit save before constructing
+  // the dirty-close case. Prompt count must not depend on a blur/save race.
+  window.webContents.send("fishmark:app-menu-command", "save-markdown-file");
+  await until("post-cancel save exact and clean", async () => {
+    const current = (await snapshot()).activeDocument;
+    return readFileSync(targetPath, "utf8") === expected && current?.content === expected && !current.isDirty;
+  });
+  holdNextSave = true;
+  // Canonical clean can precede the renderer scheduler's final cleanup. Reissue
+  // only until the barrier is reached; the real scheduler coalesces in-flight Save.
+  await until("save held before main lease acquisition", () => {
+    if (releaseHeldSave) return true;
+    record("test:request-save-entry");
+    window.webContents.send("fishmark:app-menu-command", "save-markdown-file");
+    return false;
+  });
+  const cleanCheckpoint = expected;
+  await append(" final-close");
+  expected += " final-close";
   window.close();
+  await until("second close request behind save", () => timeline.filter((entry) =>
+    entry.event === "ipc:send" && entry.detail?.channel === "fishmark:request-workspace-window-close"
+  ).length === 2);
+  assert.equal(heldSaveCount, 1);
+  assert.equal(readFileSync(targetPath, "utf8"), cleanCheckpoint, "The held save must not persist the final-close draft before close confirmation");
+  const request = timeline.filter((entry) => entry.event === "ipc:send").at(-1);
+  assert.equal(request.detail.windowId, window.id);
+  assert.equal(request.detail.webContentsId, window.webContents.id);
+  record("test:second-close-request-held", request.detail);
+  record("test:release-save-after-close-request");
+  releaseHeldSave();
   await until("window closes after pending edit drain and Save", () => window.isDestroyed());
   assert.deepEqual(prompts, [2, 0]);
   assert.equal(readFileSync(targetPath, "utf8"), expected);
@@ -149,5 +196,6 @@ async function until(label, check) {
     : [];
   console.error(error);
   writeFileSync(reportPath, JSON.stringify({ verdict: "FAIL", error: error.stack ?? String(error), runtimeErrors, promptResponses: prompts, timeline }, null, 2) + "\n");
+  releaseHeldSave?.();
   app.exit(1);
 });
