@@ -1,5 +1,9 @@
 # FishMark 进展记录
 
+## 2026-10-13 RF-902 产品持久化贯通
+
+从 `afccc0b` 实施真实产品Playwright入口：隔离profile下原生编辑→File Save→正常退出→重启准确读回，以及无手动Save/失焦的真实idle自动保存。新增Windows E2E CI，实际运行与开发失败均留存；最终完整门禁、独立review及发布见[报告031](../reports/task-summaries/TASK-RF902-PERSISTENCE-031.md)。RF-902实施中，RF-901执行暂停但预算仍未验收，RF-903仍PLANNED，M9仍0/3。用户允许测试接管无人使用桌面，本批仅使用隔离FishMark窗口，没有IME输入。
+
 ## 2026-10-13 M9 当前验收盘点
 
 官方main `3fee9ef` 的CI38363749630 attempt1三项全绿，关闭门禁已恢复，标题/脚注优化保留。本批完成RF-902流程及RF-903安全的并行只读审查，更新[逐项验收清单](plans/2026-10-13-m9-acceptance-ledger.md)及[报告030](../reports/task-summaries/TASK-M9-ACCEPTANCE-LEDGER-030.md)。RF-901首开仍超预算，semantic/呈现/平台证据未齐；RF-902缺产品E2E入口与跨进程流程；RF-903缺sandbox/CSP/资源根和路径能力授权。M9仍0/3，RF-902/903实现仍PLANNED。本批只有文档，沿用相同代码3682+8exactknown和完整可靠门禁，发布后新SHA CI另验。以下各“当前/最新”均为其时点历史记录。

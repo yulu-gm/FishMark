@@ -15,6 +15,43 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  electron-e2e-windows:
+    name: Windows product E2E
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build product
+        run: npm run build
+      - name: Product persistence and idle autosave
+        run: npm run test:e2e
+      - name: Upload product E2E evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-e2e-windows-${{ github.sha }}
+          path: .artifacts/e2e
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Verify E2E did not modify tracked files
+        if: always()
+        shell: pwsh
+        run: |
+          $trackedChanges = git status --porcelain --untracked-files=no
+          if ($trackedChanges) {
+            git status --short
+            git diff -- .
+            throw "Product E2E modified tracked repository files."
+          }
+
   quality:
     name: Quality
     runs-on: ubuntu-latest

@@ -1748,6 +1748,8 @@ npm.cmd run test:editing-experience
 
 #### RF-902: Playwright Electron data-safety and editing suite
 
+**Implementation status (2026-10-13):** `IN_PROGRESS` under the user's early-execution authorization; RF-901 source work is paused, not accepted. The [first product batch](../../../reports/task-summaries/TASK-RF902-PERSISTENCE-031.md) adds isolated Playwright launches, native editing/manual save/normal-exit/relaunch and real idle autosave. Other workflows and platform evidence below remain open; M9 remains 0/3.
+
 **Outcome:** critical workflows are proven in real Electron windows and processes.
 
 **Files:** add Playwright dependency/config and create tests under `tests/e2e/editing`, `persistence`, and `performance`.
