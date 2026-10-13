@@ -2,6 +2,11 @@ import "./styles/base.css";
 import "./styles/primitives.css";
 import "./styles/editor-source.css";
 import "./styles/markdown-render.css";
+// The real marker is themed (unordered lists use ::before, not the raw '-').
+import "./theme-packages/default/tokens/light.css";
+import "./theme-packages/default/styles/ui.css";
+import "./theme-packages/default/styles/editor.css";
+import "./theme-packages/default/styles/markdown.css";
 
 import { EditorView } from "@codemirror/view";
 
@@ -379,6 +384,17 @@ function describeElement(element: Element | null): Record<string, string | null>
   };
 }
 
+function textNodeCanPaint(node: Node): boolean {
+  const parent = node.parentElement;
+  if (!parent || isTransparentColor(getComputedStyle(parent).color)) return false;
+  if (getComputedStyle(parent).visibility !== "visible") return false;
+  for (let element: Element | null = parent; element; element = element.parentElement) {
+    const style = getComputedStyle(element);
+    if (Number(style.opacity) <= 0 || style.display === "none") return false;
+  }
+  return true;
+}
+
 function findTextRect(root: ParentNode, text: string): DOMRect | null {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   let node = walker.nextNode();
@@ -387,7 +403,7 @@ function findTextRect(root: ParentNode, text: string): DOMRect | null {
     const value = node.nodeValue ?? "";
     const index = value.indexOf(text);
 
-    if (index >= 0) {
+    if (index >= 0 && textNodeCanPaint(node)) {
       const range = document.createRange();
       range.setStart(node, index);
       range.setEnd(node, index + text.length);
@@ -402,7 +418,66 @@ function findTextRect(root: ParentNode, text: string): DOMRect | null {
     node = walker.nextNode();
   }
 
+  // Font decorations may split one visible word across text nodes. Measure a
+  // real cross-node Range within one line, and require each fragment to paint.
+  for (const line of root.querySelectorAll(".cm-line")) {
+    const nodes: Node[] = [];
+    const lineWalker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+    for (let child = lineWalker.nextNode(); child; child = lineWalker.nextNode()) nodes.push(child);
+    const joined = nodes.map(child => child.nodeValue ?? "").join("");
+    const from = joined.indexOf(text);
+    if (from < 0 || text.length === 0) continue;
+    let offset = 0;
+    const fragments = nodes.flatMap(child => {
+      const start = offset; offset += child.nodeValue?.length ?? 0;
+      return offset > from && start < from + text.length
+        ? [{ child, from: Math.max(0, from - start), to: Math.min(offset, from + text.length) - start }] : [];
+    });
+    const visible = fragments.every(fragment => {
+      const range = document.createRange();
+      range.setStart(fragment.child, fragment.from); range.setEnd(fragment.child, fragment.to);
+      const painted = Array.from(range.getClientRects()).some(rect => rect.width > 0 && rect.height > 0);
+      return painted && textNodeCanPaint(fragment.child);
+    });
+    if (visible && fragments.length) {
+      const range = document.createRange();
+      range.setStart(fragments[0]!.child, fragments[0]!.from);
+      range.setEnd(fragments.at(-1)!.child, fragments.at(-1)!.to);
+      return Array.from(range.getClientRects()).find(rect => rect.width > 0 && rect.height > 0) ?? null;
+    }
+  }
+
   return null;
+}
+
+function assertTextMeasurementVisibility(): void {
+  const root = document.createElement("div");
+  root.style.cssText = "position:fixed;left:10px;top:10px;color:black;opacity:1;visibility:visible";
+  document.body.append(root);
+  try {
+    for (const split of [false, true]) {
+      for (const hidden of ["none", "color", "visibility", "opacity", "ancestor-opacity", "display"]) {
+        root.style.opacity = "1";
+        const line = document.createElement("div");
+        line.className = "cm-line";
+        const first = document.createElement("span");
+        first.textContent = split ? "正" : "正文";
+        line.append(first);
+        if (split) line.append(document.createTextNode("文"));
+        root.replaceChildren(line);
+        if (hidden === "color") first.style.color = "transparent";
+        if (hidden === "visibility") first.style.visibility = "hidden";
+        if (hidden === "opacity") first.style.opacity = "0";
+        if (hidden === "ancestor-opacity") root.style.opacity = "0";
+        if (hidden === "display") first.style.display = "none";
+        if ((findTextRect(root, "正文") !== null) !== (hidden === "none")) {
+          throw new Error(`Text measurement visibility regression: split=${split}, hidden=${hidden}`);
+        }
+      }
+    }
+  } finally {
+    root.remove();
+  }
 }
 
 function findTextRectOutsideClosestClasses(
@@ -449,6 +524,19 @@ function findLineByText(root: ParentNode, text: string): HTMLElement | null {
   return Array.from(root.querySelectorAll<HTMLElement>(".cm-line")).find((line) =>
     line.textContent?.includes(text)
   ) ?? null;
+}
+
+function listMarkerIsVisible(marker: Element | null): boolean {
+  if (!marker) return false;
+  const rect = marker.getBoundingClientRect();
+  const style = getComputedStyle(marker);
+  if (rect.width <= 0 || rect.height <= 0 || style.visibility !== "visible" || Number(style.opacity) <= 0) return false;
+  if (!isTransparentColor(style.color)) return true;
+  // Unordered source '-' is transparent; the user sees a CSS bullet.
+  const bullet = getComputedStyle(marker, "::before");
+  return bullet.content !== "none" && bullet.content !== "normal" &&
+    Number.parseFloat(bullet.width) > 0 && Number.parseFloat(bullet.height) > 0 &&
+    !isTransparentColor(bullet.backgroundColor);
 }
 
 function findLineByExactText(root: ParentNode, text: string): HTMLElement | null {
@@ -666,7 +754,14 @@ async function runNativeInsertCase(input: {
   const result = resultFor({
     details: {
       insertAccepted,
-      visibleTextMeasured: visibleRect !== null
+      visibleTextMeasured: visibleRect !== null,
+      ...(!visibleRect ? { visibilityDiagnostic: {
+        lines: Array.from(harness.root.querySelectorAll<HTMLElement>(".cm-line")).map(line => ({
+          html: line.outerHTML, top: line.getBoundingClientRect().top,
+          height: line.getBoundingClientRect().height, color: getComputedStyle(line).color
+        })),
+        viewport: harness.view.viewport, selection: describeDomSelectionGeometry()
+      } } : {})
     },
     expectedContent: input.expectedContent,
     grammar: input.grammar,
@@ -1290,7 +1385,7 @@ async function runBareMarkerDraftInputCase(input: {
   const selectionAfterMarker = harness.controller.getSelection();
   const lineAfterMarker = findLineByText(harness.root, input.markerInput);
   const lineAfterMarkerClasses = lineAfterMarker?.className ?? "";
-  const markerBeforePadding = lineAfterMarker?.querySelector(".cm-active-list-marker") ?? null;
+  const markerBeforePadding = lineAfterMarker?.querySelector(".cm-inactive-list-marker, .cm-active-list-marker") ?? null;
   const paddingInsertAccepted = nativeInsertText(harness.view, " ");
   await settle();
 
@@ -1298,7 +1393,7 @@ async function runBareMarkerDraftInputCase(input: {
   const selectionAfterPadding = harness.controller.getSelection();
   const lineAfterPadding = findLineByText(harness.root, committedMarker);
   const lineAfterPaddingClasses = lineAfterPadding?.className ?? "";
-  const activeMarker = lineAfterPadding?.querySelector(".cm-active-list-marker") ?? null;
+  const activeMarker = lineAfterPadding?.querySelector(".cm-inactive-list-marker") ?? null;
   const caretAfterPaddingRect = harness.view.coordsAtPos(selectionAfterPadding.anchor);
   const caretAfterPaddingHeight =
     caretAfterPaddingRect !== null &&
@@ -1318,7 +1413,7 @@ async function runBareMarkerDraftInputCase(input: {
     ? window.getComputedStyle(activeMarker)
     : null;
   const markerColor = markerStyle?.color ?? "";
-  const markerVisible = !isTransparentColor(markerColor);
+  const markerVisible = listMarkerIsVisible(activeMarker);
   const contentInsertAccepted = nativeInsertText(harness.view, input.contentText);
   await settle();
 
@@ -1347,13 +1442,13 @@ async function runBareMarkerDraftInputCase(input: {
     finalSelection.anchor === expectedContent.length &&
     finalSelection.head === expectedContent.length &&
     lineAfterPadding !== null &&
-    /\bcm-active-list\b/u.test(lineAfterPaddingClasses) &&
+    /\bcm-inactive-list\b/u.test(lineAfterPaddingClasses) &&
     activeMarker?.textContent === input.markerInput &&
     markerVisible &&
     caretAfterPaddingHasGeometry &&
     caretAfterPaddingIsAfterMarker &&
     finalLine !== null &&
-    /\bcm-active-list\b/u.test(finalLineClasses) &&
+    /\bcm-inactive-list\b/u.test(finalLineClasses) &&
     isVisibleTextPresent(harness.root, input.contentText) &&
     visibleLines.length === 1;
 
@@ -1742,7 +1837,7 @@ async function runCommittedDashListCompositionPreviewCase(): Promise<CaseResult>
   const selectionAfterMarker = harness.controller.getSelection();
   const lineAfterMarker = findLineByText(harness.root, "-");
   const lineAfterMarkerClasses = lineAfterMarker?.className ?? "";
-  const markerBeforePadding = lineAfterMarker?.querySelector(".cm-active-list-marker") ?? null;
+  const markerBeforePadding = lineAfterMarker?.querySelector(".cm-inactive-list-marker, .cm-active-list-marker") ?? null;
 
   const paddingInsertAccepted = nativeInsertText(harness.view, " ");
   await settle();
@@ -1751,9 +1846,9 @@ async function runCommittedDashListCompositionPreviewCase(): Promise<CaseResult>
   const selectionAfterPadding = harness.controller.getSelection();
   const lineAfterPadding = findLineByText(harness.root, committedMarker);
   const lineAfterPaddingClasses = lineAfterPadding?.className ?? "";
-  const activeMarker = lineAfterPadding?.querySelector<HTMLElement>(".cm-active-list-marker") ?? null;
-  const sourcePrefix = lineAfterPadding?.querySelector<HTMLElement>(".cm-active-list-source-prefix") ?? null;
-  const paddingAnchor = lineAfterPadding?.querySelector<HTMLElement>(".cm-active-list-padding-anchor") ?? null;
+  const activeMarker = lineAfterPadding?.querySelector<HTMLElement>(".cm-inactive-list-marker") ?? null;
+  const sourcePrefix = lineAfterPadding?.querySelector<HTMLElement>(".cm-inactive-list-source-prefix") ?? null;
+  const paddingAnchor = lineAfterPadding?.querySelector<HTMLElement>("[data-list-padding-anchor]") ?? null;
   const markerRect = activeMarker?.getBoundingClientRect() ?? null;
   const sourcePrefixRect = sourcePrefix?.getBoundingClientRect() ?? null;
   const paddingAnchorRect = paddingAnchor?.getBoundingClientRect() ?? null;
@@ -1781,10 +1876,10 @@ async function runCommittedDashListCompositionPreviewCase(): Promise<CaseResult>
   const finalLineRect = finalLine?.getBoundingClientRect() ?? null;
   const caretAfterPreviewRect = harness.view.coordsAtPos(finalSelection.anchor);
   const domSelectionAfterPreview = describeDomSelectionGeometry();
-  const activeMarkerAfterPreview = finalLine?.querySelector<HTMLElement>(".cm-active-list-marker") ?? null;
+  const activeMarkerAfterPreview = finalLine?.querySelector<HTMLElement>(".cm-inactive-list-marker") ?? null;
   const markerAfterPreviewRect = activeMarkerAfterPreview?.getBoundingClientRect() ?? null;
   const sourcePrefixAfterPreview =
-    finalLine?.querySelector<HTMLElement>(".cm-active-list-source-prefix") ?? null;
+    finalLine?.querySelector<HTMLElement>(".cm-inactive-list-source-prefix") ?? null;
   const sourcePrefixAfterPreviewRect = sourcePrefixAfterPreview?.getBoundingClientRect() ?? null;
   const visibleLines = Array.from(harness.root.querySelectorAll<HTMLElement>(".cm-line"))
     .map((line) => line.textContent ?? "")
@@ -1793,7 +1888,7 @@ async function runCommittedDashListCompositionPreviewCase(): Promise<CaseResult>
     ? window.getComputedStyle(activeMarkerAfterPreview)
     : null;
   const markerColor = markerStyle?.color ?? "";
-  const markerVisible = !isTransparentColor(markerColor);
+  const markerVisible = listMarkerIsVisible(activeMarkerAfterPreview);
   const caretAfterPaddingHasGeometry =
     caretAfterPaddingRect !== null &&
     Number.isFinite(caretAfterPaddingRect.left) &&
@@ -1826,8 +1921,8 @@ async function runCommittedDashListCompositionPreviewCase(): Promise<CaseResult>
     sourcePrefixAfterPreviewRect !== null &&
     previewRect.left >= sourcePrefixAfterPreviewRect.right - 2;
   const markerPaddingUsesEditableImeAnchor =
-    sourcePrefix === null &&
-    sourcePrefixAfterPreview === null &&
+    sourcePrefix === paddingAnchor &&
+    sourcePrefixAfterPreview?.textContent === " " &&
     paddingAnchor?.textContent === " " &&
     paddingAnchorWidth !== null &&
     paddingAnchorWidth > 0 &&
@@ -1839,7 +1934,7 @@ async function runCommittedDashListCompositionPreviewCase(): Promise<CaseResult>
     imePreeditVisibilityProbe.height !== null &&
     imePreeditVisibilityProbe.height > 0 &&
     !isTransparentColor(imePreeditVisibilityProbe.color ?? "") &&
-    domSelectionAfterPadding.anchorParentClass === "cm-active-list-padding-anchor" &&
+    domSelectionAfterPadding.anchorParentClass === "cm-inactive-list-source-prefix" &&
     domSelectionAfterPreview.anchorParentClass === finalLineClasses;
   const caretStaysAfterPreview =
     caretAfterPreviewRect !== null &&
@@ -1863,7 +1958,7 @@ async function runCommittedDashListCompositionPreviewCase(): Promise<CaseResult>
     selectionAfterPadding.anchor === committedMarker.length &&
     selectionAfterPadding.head === committedMarker.length &&
     lineAfterPadding !== null &&
-    /\bcm-active-list\b/u.test(lineAfterPaddingClasses) &&
+    /\bcm-inactive-list\b/u.test(lineAfterPaddingClasses) &&
     activeMarker?.textContent === "-" &&
     markerPaddingUsesEditableImeAnchor &&
     caretAfterPaddingHasGeometry &&
@@ -1875,7 +1970,7 @@ async function runCommittedDashListCompositionPreviewCase(): Promise<CaseResult>
     finalSelection.anchor === expectedContent.length &&
     finalSelection.head === expectedContent.length &&
     finalLine !== null &&
-    /\bcm-active-list\b/u.test(finalLineClasses) &&
+    /\bcm-inactive-list\b/u.test(finalLineClasses) &&
     activeMarkerAfterPreview?.textContent === "-" &&
     markerVisible &&
     previewStaysOnMarkerLine &&
@@ -4232,6 +4327,26 @@ async function runNestedQuoteListRepeatedEnterExitCase(): Promise<CaseResult> {
   return result;
 }
 
+function measureNestedListGeometry(root: HTMLElement, view: EditorView, position: number) {
+  const markers = root.querySelectorAll<HTMLElement>(".cm-inactive-list-marker");
+  const parent = markers[0] ?? null;
+  const child = markers[markers.length - 1] ?? null;
+  const parentRect = parent?.getBoundingClientRect();
+  const childRect = child?.getBoundingClientRect();
+  const lineRect = child?.closest(".cm-line")?.getBoundingClientRect();
+  const lineStyle = child?.closest(".cm-line") ? getComputedStyle(child.closest(".cm-line")!) : null;
+  const quoteRailVisible = !!lineStyle && Number.parseFloat(lineStyle.borderLeftWidth) > 0 &&
+    !isTransparentColor(lineStyle.borderLeftColor);
+  const caret = view.coordsAtPos(position);
+  const visible = listMarkerIsVisible(parent) && listMarkerIsVisible(child);
+  const indented = !!parentRect && !!childRect && childRect.left > parentRect.left + 1;
+  const caretOnChildLine = !!caret && !!lineRect && !!childRect && caret.bottom > caret.top &&
+    caret.top >= lineRect.top - 2 && caret.bottom <= lineRect.bottom + 2 && caret.left >= childRect.right;
+  return { visible, indented, caretOnChildLine, quoteRailVisible, parentLeft: parentRect?.left ?? null,
+    childLeft: childRect?.left ?? null, caretLeft: caret?.left ?? null,
+    pass: visible && indented && caretOnChildLine && quoteRailVisible };
+}
+
 async function runBlockquoteBareListMarkerTabCase(): Promise<CaseResult> {
   const initialContent = ["> > - parent", "> > -"].join("\n");
   const expectedContent = ["> > - parent", "> >   - "].join("\n");
@@ -4246,16 +4361,19 @@ async function runBlockquoteBareListMarkerTabCase(): Promise<CaseResult> {
   const actualContent = harness.controller.getContent();
   const actualSelection = harness.controller.getSelection();
   const activeLine = Array.from(harness.root.querySelectorAll<HTMLElement>(".cm-line")).at(-1) ?? null;
+  const geometry = measureNestedListGeometry(harness.root, harness.view, actualSelection.head);
   const pass =
+    geometry.pass &&
     actualContent === expectedContent &&
     actualSelection.anchor === expectedContent.length &&
     actualSelection.head === expectedContent.length &&
     activeLine?.classList.contains("cm-inactive-blockquote-depth-2") === true &&
-    activeLine.classList.contains("cm-active-list-depth-1") === true;
+    activeLine.classList.contains("cm-inactive-list-depth-1") === true;
 
   const result = resultFor({
     caseId: "blockquote-bare-list-marker-tab",
     details: {
+      geometry,
       activeLineClass: activeLine?.className ?? null,
       actualContent,
       actualSelection,
@@ -4286,16 +4404,19 @@ async function runBlockquotePaddedEmptyListItemTabCase(): Promise<CaseResult> {
   const actualContent = harness.controller.getContent();
   const actualSelection = harness.controller.getSelection();
   const activeLine = Array.from(harness.root.querySelectorAll<HTMLElement>(".cm-line")).at(-1) ?? null;
+  const geometry = measureNestedListGeometry(harness.root, harness.view, actualSelection.head);
   const pass =
+    geometry.pass &&
     actualContent === expectedContent &&
     actualSelection.anchor === expectedContent.length &&
     actualSelection.head === expectedContent.length &&
     activeLine?.classList.contains("cm-inactive-blockquote-depth-1") === true &&
-    activeLine.classList.contains("cm-active-list-depth-1") === true;
+    activeLine.classList.contains("cm-inactive-list-depth-1") === true;
 
   const result = resultFor({
     caseId: "blockquote-padded-empty-list-item-tab",
     details: {
+      geometry,
       activeLineClass: activeLine?.className ?? null,
       actualContent,
       actualSelection,
@@ -4378,16 +4499,19 @@ async function runBlockquoteListTabAfterResidualSeparatorCase(): Promise<CaseRes
   const residualQuoteSeparators = lines.filter((line) =>
     line.classList.contains("cm-inactive-blockquote-separator")
   );
+  const geometry = measureNestedListGeometry(harness.root, harness.view, actualSelection.head);
   const pass =
+    geometry.pass &&
     actualContent === expectedContent &&
     actualSelection.anchor === expectedContent.length &&
     actualSelection.head === expectedContent.length &&
-    activeLine?.classList.contains("cm-active-list-depth-1") === true &&
+    activeLine?.classList.contains("cm-inactive-list-depth-1") === true &&
     residualQuoteSeparators.length === 0;
 
   const result = resultFor({
     caseId: "blockquote-list-tab-after-residual-separator",
     details: {
+      geometry,
       activeLineClass: activeLine?.className ?? null,
       actualContent,
       actualSelection,
@@ -4619,15 +4743,17 @@ async function runBlockquoteInnerBlocksRenderingAndEnterCase(): Promise<CaseResu
   const quoteActiveChildLine = findLineByText(quoteActiveListHarness.root, "child");
   const quoteActiveSiblingLine = findLineByText(quoteActiveListHarness.root, "sibling");
   const quoteActiveListPass =
+    [quoteActiveParentLine, quoteActiveChildLine, quoteActiveSiblingLine].every(line =>
+      listMarkerIsVisible(line?.querySelector(".cm-inactive-list-marker") ?? null)) &&
     quoteActiveParentLine?.classList.contains("cm-inactive-list") === true &&
     quoteActiveParentLine.querySelector(".cm-inactive-list-marker")?.textContent === "-" &&
-    quoteActiveChildLine?.classList.contains("cm-active-list") === true &&
-    quoteActiveChildLine.querySelector(".cm-active-list-marker")?.textContent === "-" &&
+    quoteActiveChildLine?.classList.contains("cm-inactive-list") === true &&
+    quoteActiveChildLine.querySelector(".cm-inactive-list-marker")?.textContent === "-" &&
     quoteActiveSiblingLine?.classList.contains("cm-inactive-list") === true &&
     quoteActiveSiblingLine.querySelector(".cm-inactive-list-marker")?.textContent === "-";
   const quoteActiveListDetails = {
     childClass: quoteActiveChildLine?.className ?? null,
-    childMarker: quoteActiveChildLine?.querySelector(".cm-active-list-marker")?.textContent ?? null,
+    childMarker: quoteActiveChildLine?.querySelector(".cm-inactive-list-marker")?.textContent ?? null,
     parentClass: quoteActiveParentLine?.className ?? null,
     parentMarker: quoteActiveParentLine?.querySelector(".cm-inactive-list-marker")?.textContent ?? null,
     siblingClass: quoteActiveSiblingLine?.className ?? null,
@@ -5114,6 +5240,7 @@ async function runRequestedNamedProbeCase(
 }
 
 export async function runMarkdownEditingExperienceProbe(): Promise<ProbeResult> {
+  assertTextMeasurementVisibility();
   document.body.style.margin = "0";
   document.body.style.background = "#fff";
   document.body.style.color = "#1f2937";

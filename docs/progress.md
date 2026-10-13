@@ -1,5 +1,11 @@
 # FishMark 进展记录
 
+## 2026-10-13 RF-901：编辑体验门禁恢复
+
+后续小批已解决下文九项阻碍：独立裸列表草稿提前渲染和隐藏 padding anchor 的预编辑颜色/光标问题已修复；其余旧显示类名与跨 text-node 测量按已批准规则校准，并补可见性反例和真实几何断言。原 79 项全部通过；严格回归 3552 passed +8 exact known，0 skip/unexpected/errors。仅移除两条已实际修复的旧失败记录。
+
+lint/typecheck/build、foundation 310/310、bundle、workspace safety 与正式行为 121/121、2541 targets 均通过，独立审查 PASS。发布精确身份及 CI 在发布后核验。RF-901/M9 仍进行中，接续 mixed fixture 实测；本批通过不等于性能预算完成。详见[本批总结](../reports/task-summaries/TASK-RF901-EDITING-GATE-021.md)。下文检查点的 BLOCKED 为该时点记录。
+
 ## 2026-10-13 RF-901：恢复 M9，报告验证小批
 
 当前 M9 为 **IN_PROGRESS，0/3**；RF-901 的真实预算验收未完成，RF-902/903 仍 PLANNED。以下“未开始”行保留原日期的历史口径。新工作区从公开 main `59b2f2e369739670b4fc230a79cb05eacb290790` / tree `8c50ad1d75b6e3f5099f5e32ae65c32dfea848bd` 建立，保留旧检查点与独立 UI 目录。

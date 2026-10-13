@@ -342,6 +342,20 @@ function appendCanonicalContainerDecorations(
       const first = snapshot.lineAt(item.source.startOffset)!;
       const parentList = plan.ancestorsOf(item.id).findLast(value => value.node.kind === "list")?.node;
       const ordered = parentList?.data.kind === "list" && parentList.data.ordered;
+      // Keep an independent, unpadded marker editable as a paragraph draft.
+      // The canonical list remains available to Enter/Tab; only the focused
+      // first item's empty physical line has this presentation exception.
+      const selection = context.activeBlockState.selection;
+      const bareDraft = active && context.hasEditorFocus && (context.headingMarkerPresentation?.mode ?? "editing") === "editing" &&
+        selection.anchor === selection.head && selection.head === line.contentEndOffset &&
+        quotes.length === 0 && ancestors.filter(value => value.node.kind === "list-item").length === 1 &&
+        parentList && childrenOf(parentList)[0]?.id === item.id && !task &&
+        line.lineNumber === first.lineNumber && marker.endOffset === line.contentEndOffset &&
+        item.content.startOffset === item.content.endOffset;
+      if (bareDraft) {
+        ranges.push(Decoration.line({ attributes: { class: "cm-active-paragraph" } }).range(line.range.startOffset));
+        continue;
+      }
       const view: ListItemBlock = { id: item.id, startOffset: first.range.startOffset,
         endOffset: item.source.endOffset, startLine: first.lineNumber, endLine: line.lineNumber,
         indent: 2 * Math.max(0, ancestors.filter(value => value.node.kind === "list-item").length - 1),

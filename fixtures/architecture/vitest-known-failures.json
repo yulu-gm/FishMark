@@ -74,24 +74,6 @@
         "e4ce21b98f8ce77afc2a35eac8b578c61c8536be040cc603004f90dcf5aa3ddc"
       ],
       "reason": "Existing M6 parser/display projection debt (bare markers or nested-container metadata). Deferred to RF-901/RF-902; canonical parser semantics are not changed by M8 entry cleanup."
-    },
-    {
-      "file": "src/renderer/code-editor.test.ts",
-      "name": "createCodeEditorController > commits a trailing dash as a list marker only after marker padding is typed",
-      "occurrence": 0,
-      "fingerprints": [
-        "153a44284317869e865d292619dc18564837be5b40aefbe04576c460e7a0c4b6"
-      ],
-      "reason": "Existing M6 bare-marker editing-experience defect: list rendering commits before marker padding. Deferred to RF-901/RF-902; not fixed or skipped by M8 entry cleanup."
-    },
-    {
-      "file": "src/renderer/code-editor.test.ts",
-      "name": "createCodeEditorController > commits a trailing ordered marker only after marker padding is typed",
-      "occurrence": 0,
-      "fingerprints": [
-        "153a44284317869e865d292619dc18564837be5b40aefbe04576c460e7a0c4b6"
-      ],
-      "reason": "Existing M6 bare-marker editing-experience defect: list rendering commits before marker padding. Deferred to RF-901/RF-902; not fixed or skipped by M8 entry cleanup."
     }
   ],
   "skipped": []
