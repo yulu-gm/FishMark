@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { RangeSet, StateEffect, Transaction } from "@codemirror/state";
 import { readCompositionState, readEditorStructureCache } from "@fishmark/codemirror-adapter";
 import { createEditorDerivedSnapshotFromCache, createStructuralLineModel } from "@fishmark/editor-model";
+import { parseFullDocumentTree } from "@fishmark/markdown-engine";
 import { isolateHistory, redo, redoDepth, undo, undoDepth } from "@codemirror/commands";
 import { EditorView } from "@codemirror/view";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -82,6 +83,46 @@ it("keeps structural geometry document-owned across presentation and configurati
     expect(readModel()).not.toBe(initial);
     expect(readModel().getLineAtOffset(0)?.text).toBe("Alpha");
     expect(initial.getLineAtOffset(0)?.text).toBe("> one");
+  } finally {
+    controller.destroy();
+    host.remove();
+  }
+});
+
+it("keeps mixed canonical trees correct through word typing, undo, modes and structural fallback", () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const source = "Before [ref].\n\nParagraph **bold** [ref] [^note].\n\n[ref]: /target \"Title\"\n\n[^note]: *Note*\n";
+  const controller = createCodeEditorController({ parent: host, initialContent: source, onChange: vi.fn() });
+  try {
+    const view = getEditorView(host)!;
+    const verify = () => {
+      const cache = readEditorStructureCache(view.state);
+      expect(cache.source).toBe(controller.getContent());
+      expect(cache.tree).toEqual(parseFullDocumentTree(cache.source));
+    };
+    for (const mode of ["source", "wysiwym"] as const) {
+      controller.setViewMode(mode);
+      for (const presentation of ["reading", "editing"] as const) {
+        controller.setHeadingPresentationMode(presentation);
+        controller.setSelection(source.indexOf("Paragraph") + 4);
+        controller.insertText("xyz");
+        verify();
+        expect(undo(view)).toBe(true);
+        expect(controller.getContent()).toBe(source);
+        verify();
+        expect(redo(view)).toBe(true);
+        verify();
+        expect(undo(view)).toBe(true);
+        verify();
+      }
+    }
+    controller.setSelection(source.indexOf("Paragraph") + 4);
+    controller.insertText("\n\n# New heading\n\n");
+    verify();
+    expect(undo(view)).toBe(true);
+    expect(controller.getContent()).toBe(source);
+    verify();
   } finally {
     controller.destroy();
     host.remove();

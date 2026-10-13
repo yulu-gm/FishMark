@@ -4,7 +4,7 @@
 const assert = require("node:assert/strict");
 const { mkdirSync, readFileSync, writeFileSync } = require("node:fs");
 const { join, resolve } = require("node:path");
-const { app, BrowserWindow, dialog } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain } = require("electron");
 const temporaryDirectory = process.env.FISHMARK_SAFETY_TEMP;
 const reportPath = process.env.FISHMARK_SAFETY_REPORT;
 if (!temporaryDirectory || !reportPath) throw new Error("The isolated smoke launcher is required.");
@@ -18,12 +18,45 @@ let allowQuit = false;
 app.on("before-quit", (event) => { if (!allowQuit) event.preventDefault(); });
 const promptResponses = [2, 0]; // Cancel, then Save.
 const prompts = [];
+// Observe real handler intervals. Await/logging adds diagnostic overhead;
+// unmatched handlers retain their original registration and return behavior.
+const timeline = [];
+const startedAt = performance.now();
+const record = (event, detail) => timeline.push({ ms: performance.now() - startedAt, event, detail });
+const handle = ipcMain.handle.bind(ipcMain);
+const tracedChannels = new Set([
+  "fishmark:confirm-workspace-window-close", "fishmark:complete-workspace-window-close",
+  "fishmark:save-markdown-file", "fishmark:save-markdown-file-as",
+  "fishmark:flush-document-edits", "fishmark:apply-document-edits"
+]);
+ipcMain.handle = (channel, listener) => {
+  if (!tracedChannels.has(channel)) return handle(channel, listener);
+  return handle(channel, async (...args) => {
+    const detail = { channel, webContentsId: args[0].sender.id,
+      windowId: BrowserWindow.fromWebContents(args[0].sender)?.id,
+      requestId: args[1]?.requestId };
+    record("ipc:start", detail);
+    try { return await listener(...args); }
+    finally { record("ipc:end", detail); }
+  });
+};
+app.on("browser-window-created", (_event, window) => {
+  window.on("close", () => record("window:close", { windowId: window.id }));
+  const send = window.webContents.send.bind(window.webContents);
+  window.webContents.send = (channel, ...args) => {
+    if (channel === "fishmark:request-workspace-window-close") record("ipc:send", {
+      channel, windowId: window.id, webContentsId: window.webContents.id, requestId: args[0]?.requestId
+    });
+    return send(channel, ...args);
+  };
+});
 dialog.showMessageBox = async (...args) => {
   const options = args.at(-1);
   assert.equal(options.title, "Unsaved Changes", `Unexpected native dialog: ${JSON.stringify(options)}`);
   assert.ok(promptResponses.length > 0, "Unexpected repeated close prompt");
   const response = promptResponses.shift();
   prompts.push(response);
+  record("prompt:response", response);
   return { response, checkboxChecked: false };
 };
 dialog.showErrorBox = (title, message) => { throw new Error(`${title}: ${message}`); };
@@ -104,7 +137,8 @@ async function until(label, check) {
     electron: process.versions.electron,
     checks: ["built-product-startup", "test-bridge-absent", "two-atomic-saves", "dirty-close-cancel", "edit-after-cancel", "pending-close-save", "disk-content-exact"],
     promptResponses: prompts,
-    finalContent: expected
+    finalContent: expected,
+    timeline
   }, null, 2) + "\n");
   allowQuit = true;
   app.quit();
@@ -114,6 +148,6 @@ async function until(label, check) {
     ? await window.webContents.executeJavaScript("window.__smokeErrors ?? []").catch(() => [])
     : [];
   console.error(error);
-  writeFileSync(reportPath, JSON.stringify({ verdict: "FAIL", error: error.stack ?? String(error), runtimeErrors, promptResponses: prompts }, null, 2) + "\n");
+  writeFileSync(reportPath, JSON.stringify({ verdict: "FAIL", error: error.stack ?? String(error), runtimeErrors, promptResponses: prompts, timeline }, null, 2) + "\n");
   app.exit(1);
 });

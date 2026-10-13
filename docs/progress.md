@@ -1,5 +1,9 @@
 # FishMark 进展记录
 
+## 2026-10-13 RF-901：混合词内输入局部解析
+
+结构行复用已发布 `6301d0b`，CI `38347148385` attempt 2 全绿；attempt 1 Linux 第二次关闭超时原证据保留，竞态未称修复。新增受限单行顶层 paragraph ASCII 词内路径，全局引用/脚注坐标及共享身份保持完整解析等价。OFF mixed20k 输入 p95 2385.2→278.8ms，ON 30 次全量解析→0；尚不能据此证明 16ms semantic 预算达标。完整本地门禁通过：strict 3610+8 exact/0skip、editing79、formal121/2541、bundle1,434,552/1,500,000。详见[本批总结](../reports/task-summaries/TASK-RF901-MIXED-INCREMENTAL-023.md)。M9/RF-901 仍进行中，下一步关闭握手确定性复现及剩余整篇装饰/派生开销。
+
 ## 2026-10-13 RF-901：mixed fixture 结构行复用本地候选
 
 前一批编辑体验及报告验证已发布到 main `34ced08c99d3c45b2f0d7873b024d09133b65363`，[CI 38344986718](https://github.com/yulu-gm/FishMark/actions/runs/38344986718) 三项 job 全绿。后续已做真实 mixed20k/确定性派生5k 的 ON/OFF 实测，并针对 selection 重复构建文档语义行做最小复用候选；保持本地 checkpoint，未发布该候选。

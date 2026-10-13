@@ -9,6 +9,7 @@ import {
   createMarkdownContainerNode,
   createMarkdownLeafNode,
   isMarkdownContainerNode,
+  type MarkdownLeafNode,
   type MarkdownNode
 } from "../model/markdown-node";
 import { createSourceRange, type SourceMarker, type SourceRange } from "../model/source-range";
@@ -53,24 +54,75 @@ export function applyIncrementalEdit(
     return fullParseFallback(newSource, "no-safe-window");
   }
 
-  // Until parser continuation states are available, only edits within plain paragraph
-  // content prove that the old block boundary remains valid. Structural edits explicitly
-  // fall back; an old checkpoint alone is not a stability proof for the new document.
+  // A plain paragraph, or a word-internal edit in an existing single-line paragraph,
+  // proves that the block boundary remains unchanged. Structural edits still fall back.
   const target = cache.tree.root.children.find((node) =>
     node.kind === "paragraph" && edit.fromOffset >= node.source.startOffset &&
-    edit.toOffset <= node.content.endOffset &&
-    /^[\p{L}][\p{L}\p{N} ,.!?]*(?:\r?\n)?$/u.test(cache.source.slice(node.source.startOffset, node.source.endOffset))
+    edit.toOffset <= node.content.endOffset
   );
-  if (target === undefined || !/^[\p{L}\p{N} ,.!?]*$/u.test(edit.insertedText) ||
-      !/^[\p{L}\p{N} ,.!?]*$/u.test(cache.source.slice(edit.fromOffset, edit.toOffset)) ||
-      !/^[\p{L}][\p{L}\p{N} ,.!?]*(?:\r?\n)?$/u.test(newSource.slice(target.source.startOffset, target.source.endOffset + delta))) {
+  if (target === undefined || isMarkdownContainerNode(target)) {
     return fullParseFallback(newSource, "unproven-block-boundary");
   }
-  if (cache.tree.referenceDefinitions.size > 0 || cache.tree.footnoteDefinitions.size > 0) {
+  const plainParagraphEdit =
+    /^[\p{L}][\p{L}\p{N} ,.!?]*(?:\r?\n)?$/u.test(cache.source.slice(target.source.startOffset, target.source.endOffset)) &&
+    /^[\p{L}\p{N} ,.!?]*$/u.test(edit.insertedText) &&
+    /^[\p{L}\p{N} ,.!?]*$/u.test(cache.source.slice(edit.fromOffset, edit.toOffset)) &&
+    /^[\p{L}][\p{L}\p{N} ,.!?]*(?:\r?\n)?$/u.test(newSource.slice(target.source.startOffset, target.source.endOffset + delta));
+  const wordEdit = isInlineWordEdit(target, cache.source, edit);
+  if (!plainParagraphEdit && !wordEdit) return fullParseFallback(newSource, "unproven-block-boundary");
+  const hasDefinitions = cache.tree.referenceDefinitions.size > 0 || cache.tree.footnoteDefinitions.size > 0;
+  if (hasDefinitions && !wordEdit) {
     return fullParseFallback(newSource, "global-definition-dependencies");
   }
-  const referenceDefinitions = cache.tree.referenceDefinitions;
-  const footnoteDefinitions = cache.tree.footnoteDefinitions;
+  try {
+    return applyParagraphEdit(cache, edit, target, newSource, options, hasDefinitions);
+  } catch (error) {
+    if (error instanceof OverlappingSourceOffset) return fullParseFallback(newSource, "overlapping-source-offset");
+    throw error;
+  }
+
+  function fullParseFallback(source: string, reason: string): IncrementalParseResult {
+    const tree = parseFullDocumentTree(source, options);
+    return {
+      cache: createDocumentStructureCacheFromTree(cache.revision + 1, source, tree),
+      stats: {
+        reusedNodes: 0,
+        reparsedNodes: countNodes(tree.root),
+        parsedSourceLength: source.length,
+        fullParseCount: 1,
+        fallbackReason: reason,
+        window: null
+      }
+    };
+  }
+}
+
+function isInlineWordEdit(target: MarkdownLeafNode, source: string, edit: TextEdit): boolean {
+  if (!/^[A-Za-z]/u.test(source.slice(target.content.startOffset, target.content.endOffset)) ||
+      /[\r\n]/u.test(source.slice(target.content.startOffset, target.content.endOffset)) ||
+      !/^[A-Za-z]*$/u.test(edit.insertedText) ||
+      !/^[A-Za-z]*$/u.test(source.slice(edit.fromOffset, edit.toOffset)) ||
+      !/[A-Za-z]/u.test(source[edit.fromOffset - 1] ?? "") ||
+      !/[A-Za-z]/u.test(source[edit.toOffset] ?? "")) return false;
+  return target.inline?.children.some(node => node.type === "text" &&
+    edit.fromOffset > node.startOffset && edit.toOffset < node.endOffset &&
+    node.value === source.slice(node.startOffset, node.endOffset)) ?? false;
+}
+
+function applyParagraphEdit(
+  cache: DocumentStructureCache, edit: TextEdit, target: MarkdownLeafNode,
+  newSource: string, options: MarkdownParseOptions, hasDefinitions: boolean
+): IncrementalParseResult {
+  const delta = edit.insertedText.length - (edit.toOffset - edit.fromOffset);
+  // Reference destinations can lie on the opposite side of the edit from their
+  // link. One global coordinate mapper also preserves shared footnote line data.
+  const mapOffsets = hasDefinitions ? createAbsoluteOffsetMapper(edit, delta) : undefined;
+  const referenceDefinitions = mapOffsets
+    ? new Map([...cache.tree.referenceDefinitions].map(([key, value]) => [key, mapOffsets(value)]))
+    : cache.tree.referenceDefinitions;
+  const footnoteDefinitions = mapOffsets
+    ? new Map([...cache.tree.footnoteDefinitions].map(([key, value]) => [key, mapOffsets(value)]))
+    : cache.tree.footnoteDefinitions;
   const window = { delta, oldStart: target.source.startOffset, oldEnd: target.source.endOffset,
     newStart: target.source.startOffset, newEnd: target.source.endOffset + delta };
   const oldChildren = cache.tree.root.children;
@@ -84,7 +136,9 @@ export function applyIncrementalEdit(
     id: createNodeIdForSource({ path: target.path, kind: "paragraph", source: newSource.slice(window.newStart, window.newEnd) }),
     source: createSourceRange(window.newStart, window.newEnd),
     content,
-    inline: parseInlineAst(newSource, content.startOffset, content.endOffset, { instrumentation: options.instrumentation })
+    inline: parseInlineAst(newSource, content.startOffset, content.endOffset, {
+      instrumentation: options.instrumentation, referenceDefinitions, footnoteDefinitions
+    })
   })];
   const afterChildren = after.map((child, index) =>
     shiftSubtree({
@@ -98,11 +152,16 @@ export function applyIncrementalEdit(
       referenceDefinitions,
       footnoteDefinitions,
       reuseInline: true,
+      mapOffsets,
       options
     })
   );
 
-  const children = [...before, ...windowChildren, ...afterChildren];
+  const beforeChildren = mapOffsets ? before.map(node => shiftSubtree({
+    node, newPath: node.path, offsetDelta: 0, source: newSource,
+    referenceDefinitions, footnoteDefinitions, reuseInline: true, mapOffsets, options
+  })) : before;
+  const children = [...beforeChildren, ...windowChildren, ...afterChildren];
   const rootSource = createSourceRange(0, newSource.length);
   const root = createMarkdownContainerNode({
     id: createNodeIdForSource({
@@ -122,8 +181,8 @@ export function applyIncrementalEdit(
     root,
     nodesById: indexTree(root),
     source: newSource,
-    referenceDefinitions: cache.tree.referenceDefinitions,
-    footnoteDefinitions: cache.tree.footnoteDefinitions
+    referenceDefinitions,
+    footnoteDefinitions
   });
 
   const reparsedNodes = 1;
@@ -139,20 +198,6 @@ export function applyIncrementalEdit(
     }
   };
 
-  function fullParseFallback(source: string, reason: string): IncrementalParseResult {
-    const tree = parseFullDocumentTree(source, options);
-    return {
-      cache: createDocumentStructureCacheFromTree(cache.revision + 1, source, tree),
-      stats: {
-        reusedNodes: 0,
-        reparsedNodes: countNodes(tree.root),
-        parsedSourceLength: source.length,
-        fullParseCount: 1,
-        fallbackReason: reason,
-        window: null
-      }
-    };
-  }
 }
 
 function shiftSubtree(input: {
@@ -163,6 +208,7 @@ function shiftSubtree(input: {
   readonly referenceDefinitions: ReadonlyMap<string, InlineReferenceDefinition>;
   readonly footnoteDefinitions: ReadonlyMap<string, FootnoteDefinition>;
   readonly reuseInline?: boolean;
+  readonly mapOffsets?: <T>(value: T) => T;
   readonly options?: MarkdownParseOptions;
 }): MarkdownNode {
   const sourceRange = shiftRange(input.node.source, input.offsetDelta);
@@ -197,7 +243,7 @@ function shiftSubtree(input: {
   }
 
   const inline = input.reuseInline
-    ? mapSourceOffsets(input.node.inline, input.offsetDelta)
+    ? input.mapOffsets ? input.mapOffsets(input.node.inline) : mapSourceOffsets(input.node.inline, input.offsetDelta)
     : input.node.kind === "paragraph" || input.node.kind === "heading"
     ? parseInlineAst(input.source, contentRange.startOffset, contentRange.endOffset, {
         instrumentation: input.options?.instrumentation,
@@ -212,9 +258,34 @@ function shiftSubtree(input: {
     source: sourceRange,
     content: contentRange,
     markers,
-    data: mapSourceOffsets(input.node.data, input.offsetDelta),
+    data: input.mapOffsets ? input.mapOffsets(input.node.data) : mapSourceOffsets(input.node.data, input.offsetDelta),
     ...(inline === undefined ? {} : { inline })
   });
+}
+
+class OverlappingSourceOffset extends Error {}
+
+function createAbsoluteOffsetMapper(edit: TextEdit, delta: number): <T>(value: T) => T {
+  const mapped = new WeakMap<object, unknown>();
+  return function map<T>(value: T): T {
+    if (delta === 0 || value === null || typeof value !== "object") return value;
+    if (mapped.has(value)) return mapped.get(value) as T;
+    if (Array.isArray(value)) {
+      const result: unknown[] = [];
+      mapped.set(value, result);
+      for (const child of value) result.push(map(child));
+      return result as T;
+    }
+    const result: Record<string, unknown> = {};
+    mapped.set(value, result);
+    for (const [key, child] of Object.entries(value)) {
+      if (key.endsWith("Offset") && typeof child === "number") {
+        if (child > edit.fromOffset && child < edit.toOffset) throw new OverlappingSourceOffset();
+        result[key] = child >= edit.toOffset ? child + delta : child;
+      } else result[key] = map(child);
+    }
+    return result as T;
+  };
 }
 
 // Inline nodes and table metadata carry absolute offsets too. Shift their ranges rather

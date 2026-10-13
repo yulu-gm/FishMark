@@ -10,6 +10,8 @@
 
 **Overall status:** `IN_PROGRESS`
 
+**2026-10-13 后续：** 结构行复用 `6301d0b` 已发布，精确 CI `38347148385` attempt 2 success，attempt 1 关闭超时保留待修。词内局部解析本地门禁/review PASS：OFF mixed20k 输入 p95 2385.2→278.8ms，ON full parse 30→0，strict3610+8exact/0skip，formal121/2541。完整预算仍未通过，M9 0/3。[证据与剩余工作](../../../reports/task-summaries/TASK-RF901-MIXED-INCREMENTAL-023.md)。
+
 **2026-10-13 最新 checkpoint：** 前序 UX/报告验证已发布 `34ced08`，精确 CI `38344986718` success。当前继续 mixed fixture 性能，结构行模型复用候选保持本地：OFF 20k selection p95 36.0→17.4ms（首样本保留），ON 构建 30→1。普通输入每次 full parse、约两秒，完整 RF-901 尚未完成；模式/配置与 snapshot 生命周期边界见[后续总结](../../../reports/task-summaries/TASK-RF901-STRUCTURAL-LINE-REUSE-022.md)。
 
 **2026-10-13 后续更新：** 已完成九项编辑体验失败归因与最小产品/测量修复，79/79、strict 3552+8 exact known/0skip、标准门禁及独立 review PASS。仅移除两条已修复 code-editor 旧失败；未扩大豁免。下文 BLOCKED 是报告验证检查点的历史状态。发布后继续 mixed fixture 实测，RF-901/M9 未完成。[本批总结](../../../reports/task-summaries/TASK-RF901-EDITING-GATE-021.md)。
