@@ -2085,6 +2085,28 @@ describe("App autosave", () => {
     expect(workspaceTabs[0]?.textContent).toContain("first.md");
   });
 
+  async function dragWorkspaceTab(tab: HTMLElement, target: HTMLElement | null): Promise<void> {
+    const descriptor = Object.getOwnPropertyDescriptor(document, "elementFromPoint");
+    let captured = false;
+    tab.setPointerCapture = () => { captured = true; };
+    tab.hasPointerCapture = () => captured;
+    tab.releasePointerCapture = () => { captured = false; };
+    Object.defineProperty(document, "elementFromPoint", { configurable: true, value: () => target });
+    try {
+      await act(async () => {
+        for (const [type, x] of [["pointerdown", 0], ["pointermove", 20], ["pointerup", 20]] as const) {
+          const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: x });
+          Object.defineProperties(event, { pointerId: { value: 1 }, isPrimary: { value: true } });
+          tab.dispatchEvent(event);
+        }
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+    } finally {
+      if (descriptor) Object.defineProperty(document, "elementFromPoint", descriptor);
+      else Reflect.deleteProperty(document, "elementFromPoint");
+    }
+  }
   it("reorders workspace tabs when the user drops a dragged tab on another tab", async () => {
     queueWorkspaceOpenDocuments(
       {
@@ -2125,26 +2147,7 @@ describe("App autosave", () => {
     const firstTab = Array.from(workspaceTabs).find((element) => element.textContent?.includes("first.md"));
     const thirdTab = Array.from(workspaceTabs).find((element) => element.textContent?.includes("third.md"));
 
-    const dataTransfer = {
-      setData: vi.fn(),
-      getData: vi.fn()
-    };
-
-    await act(async () => {
-      const dragStartEvent = new Event("dragstart", { bubbles: true }) as DragEvent;
-      Object.defineProperty(dragStartEvent, "dataTransfer", { value: dataTransfer });
-      firstTab?.dispatchEvent(dragStartEvent);
-
-      const dragOverEvent = new Event("dragover", { bubbles: true, cancelable: true }) as DragEvent;
-      Object.defineProperty(dragOverEvent, "dataTransfer", { value: dataTransfer });
-      thirdTab?.dispatchEvent(dragOverEvent);
-
-      const dropEvent = new Event("drop", { bubbles: true, cancelable: true }) as DragEvent;
-      Object.defineProperty(dropEvent, "dataTransfer", { value: dataTransfer });
-      thirdTab?.dispatchEvent(dropEvent);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await dragWorkspaceTab(firstTab!, thirdTab!);
 
     const reorderedLabels = Array.from(
       container.querySelectorAll<HTMLElement>('[data-fishmark-region="workspace-tab"]')
@@ -2187,22 +2190,7 @@ describe("App autosave", () => {
       container.querySelectorAll<HTMLButtonElement>('[data-fishmark-region="workspace-tab"]')
     ).find((element) => element.textContent?.includes("second.md"));
 
-    const dataTransfer = {
-      setData: vi.fn(),
-      getData: vi.fn()
-    };
-
-    await act(async () => {
-      const dragStartEvent = new Event("dragstart", { bubbles: true }) as DragEvent;
-      Object.defineProperty(dragStartEvent, "dataTransfer", { value: dataTransfer });
-      secondTab?.dispatchEvent(dragStartEvent);
-
-      const dragEndEvent = new Event("dragend", { bubbles: true }) as DragEvent;
-      Object.defineProperty(dragEndEvent, "dataTransfer", { value: dataTransfer });
-      secondTab?.dispatchEvent(dragEndEvent);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await dragWorkspaceTab(secondTab!, null);
 
     const workspaceTabs = container.querySelectorAll<HTMLElement>(
       '[data-fishmark-region="workspace-tab"]'

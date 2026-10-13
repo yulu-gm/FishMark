@@ -9,7 +9,6 @@ import { SettingsView } from "../settings-view";
 import { useFindReplacePresentation } from "../useFindReplacePresentation";
 import { useNotificationPresentation } from "../useNotificationPresentation";
 import { useViewContainerPresentation } from "../useViewContainerPresentation";
-import { useWorkspaceTabDrag } from "../useWorkspaceTabDrag";
 import { ConflictBanner } from "./ConflictBanner";
 import { FindReplacePanel } from "./FindReplacePanel";
 import { NotificationHost } from "./NotificationHost";
@@ -174,26 +173,67 @@ it("keeps table controls focused across tooltip projection updates and sends one
   expect(hover).toHaveBeenLastCalledWith(null);
 });
 
-it("keeps same-tab drops local and delegates reorder/detach without duplicate commands", async () => {
-  const reorderWorkspaceTab = vi.fn(async () => { }), detachWorkspaceTab = vi.fn(async () => { });
+async function tabGestureHarness() {
+  const reorder = vi.fn(async () => {}), detach = vi.fn(async () => {});
   const activate = vi.fn(), close = vi.fn();
-  function Harness() {
-    const drag = useWorkspaceTabDrag({ reorderWorkspaceTab, detachWorkspaceTab });
-    return <WorkspaceTabStrip workspaceTabs={[{ tabId: "a", path: null, name: "A", isDirty: true, saveState: "idle" }, { tabId: "b", path: null, name: "B", isDirty: false, saveState: "idle" }]} activeTabId="a" isReadingMode={false} isDocumentOpen onTabActivate={activate} onCloseWorkspaceTab={close} onTabDragStart={drag.handleWorkspaceTabDragStart} onTabDragOver={drag.handleWorkspaceTabDragOver} onTabDrop={drag.handleWorkspaceTabDrop} onTabDragEnd={drag.handleWorkspaceTabDragEnd} />;
-  }
-  await render(<StrictMode><Harness /></StrictMode>);
+  await render(<StrictMode><WorkspaceTabStrip workspaceTabs={[{ tabId: "a", path: null, name: "A", isDirty: true, saveState: "idle" }, { tabId: "b", path: null, name: "B", isDirty: false, saveState: "idle" }]} activeTabId="a" isReadingMode={false} isDocumentOpen onTabActivate={activate} onCloseWorkspaceTab={close} onTabReorder={reorder} onTabDetach={detach} /></StrictMode>);
   const tabs = container.querySelectorAll<HTMLButtonElement>('[data-fishmark-region="workspace-tab"]');
-  const transfer = { effectAllowed: "", dropEffect: "", setData: vi.fn() };
-  async function drag(element: HTMLElement, name: string) { await act(async () => { const event = new Event(name, { bubbles: true, cancelable: true }); Object.defineProperty(event, "dataTransfer", { value: transfer }); element.dispatchEvent(event); }); }
-  await drag(tabs[0]!, "dragstart"); await drag(tabs[0]!, "drop"); await drag(tabs[0]!, "dragend");
-  expect(reorderWorkspaceTab).not.toHaveBeenCalled(); expect(detachWorkspaceTab).not.toHaveBeenCalled();
-  await drag(tabs[0]!, "dragstart"); await drag(tabs[1]!, "dragover"); await drag(tabs[1]!, "drop"); await drag(tabs[0]!, "dragend");
-  expect(reorderWorkspaceTab).toHaveBeenCalledExactlyOnceWith("a", 1); expect(detachWorkspaceTab).not.toHaveBeenCalled();
-  await drag(tabs[1]!, "dragstart"); await drag(tabs[1]!, "dragend");
-  expect(detachWorkspaceTab).toHaveBeenCalledExactlyOnceWith("b");
-  await click("Close A"); expect(close).toHaveBeenCalledExactlyOnceWith("a"); expect(activate).not.toHaveBeenCalled();
+  const captures = new Set<number>();
+  for (const tab of tabs) {
+    tab.setPointerCapture = (id) => { captures.add(id); };
+    tab.hasPointerCapture = (id) => captures.has(id);
+    tab.releasePointerCapture = (id) => { captures.delete(id); };
+  }
+  const hit = vi.fn((): Element | null => null);
+  Object.defineProperty(document, "elementFromPoint", { configurable: true, value: hit });
+  async function pointer(type: string, x = 0, id = 1, button = 0) {
+    await act(async () => {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      Object.defineProperties(event, { pointerId: { value: id }, isPrimary: { value: true }, button: { value: button }, buttons: { value: type === "pointerup" ? 0 : 1 }, clientX: { value: x }, clientY: { value: 0 } });
+      tabs[0]!.dispatchEvent(event);
+    });
+  }
+  return { reorder, detach, activate, close, tabs, captures, hit, pointer };
+}
+
+it("preserves clicks below the threshold, same-tab releases, reorder, and one detach on release", async () => {
+  const h = await tabGestureHarness();
+  await h.pointer("pointerdown"); await h.pointer("pointermove", 3); await h.pointer("pointerup", 3);
+  await act(async () => h.tabs[0]!.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 })));
+  expect(h.activate).toHaveBeenCalledExactlyOnceWith("a");
+  expect(h.detach).not.toHaveBeenCalled();
+  h.hit.mockReturnValue(h.tabs[0]!);
+  await h.pointer("pointerdown"); await h.pointer("pointermove", 10); await h.pointer("pointerup", 10);
+  expect(h.reorder).not.toHaveBeenCalled(); expect(h.detach).not.toHaveBeenCalled();
+  h.hit.mockReturnValue(h.tabs[1]!);
+  await h.pointer("pointerdown"); await h.pointer("pointermove", 10);
+  expect(h.reorder).not.toHaveBeenCalled();
+  await h.pointer("pointerup", 10);
+  expect(h.reorder).toHaveBeenCalledExactlyOnceWith("a", 1);
+  h.hit.mockReturnValue(null);
+  await h.pointer("pointerdown"); await h.pointer("pointermove", 100);
+  await h.pointer("pointerup", 100, 2); // unrelated pointer cannot commit
+  expect(h.detach).not.toHaveBeenCalled();
+  await h.pointer("pointerup", 100); await h.pointer("pointerup", 100);
+  expect(h.detach).toHaveBeenCalledExactlyOnceWith("a");
+  await act(async () => h.tabs[0]!.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 })));
+  expect(h.activate).toHaveBeenCalledTimes(1);
+  expect(h.captures.size).toBe(0);
+  await click("Close A"); expect(h.close).toHaveBeenCalledExactlyOnceWith("a");
 });
 
+it.each(["Escape", "pointercancel", "lostpointercapture", "unmount"])("cancels %s without committing on eventual release", async (reason) => {
+  const h = await tabGestureHarness();
+  await h.pointer("pointerdown"); await h.pointer("pointermove", 100);
+  expect(h.captures.has(1)).toBe(true);
+  if (reason === "Escape") await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  else if (reason === "unmount") await render(null);
+  else await h.pointer(reason, 100);
+  await h.pointer("pointerup", 100);
+  expect(h.captures.size).toBe(0);
+  expect(h.detach).not.toHaveBeenCalled(); expect(h.reorder).not.toHaveBeenCalled();
+  expect(h.tabs[0]!.dataset.dragging).toBeUndefined();
+});
 it("keeps settings draft identity during closing and treats a cancelled directory picker as no save", async () => {
   const onUpdate = vi.fn(async () => ({ status: "success" as const, preferences: DEFAULT_PREFERENCES }));
   const onSelectTemporaryImageDirectory = vi.fn(async () => null);

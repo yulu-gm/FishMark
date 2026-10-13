@@ -1,5 +1,4 @@
 import {
-  type DragEvent,
   type MouseEvent,
   type RefObject
 } from "react";
@@ -110,6 +109,7 @@ export type WorkspaceShellProps = {
   onEditorBarrierChange: (barrier: (() => Promise<{
     readonly text: string;
     readonly identity: EditorLoadIdentity | null;
+    readonly selection?: import("../../shared/workspace").WorkspaceEditorSelection;
   }>) | null) => void;
   onEditorRemotePatchChange?: (patch: ((input: {
     readonly identity: EditorLoadIdentity;
@@ -126,6 +126,7 @@ export type WorkspaceShellProps = {
   }) => Promise<import("../code-editor").CodeEditorCanonicalRestoreResult>) | null) => void;
   onEditorTransitionApplied: (input: { token: number; readOnly: boolean }) => void;
   onEditorLoadRevisionApplied: (identity: EditorLoadIdentity) => void;
+  getEditorLoadSelection?: (identity: EditorLoadIdentity) => import("../../shared/workspace").WorkspaceEditorSelection | null;
   onEditorBlur: () => void;
   onEditorViewModeChange: (mode: EditorViewMode) => void;
   onImportClipboardImage: (input: { documentPath: string | null }) => Promise<string | null>;
@@ -149,10 +150,8 @@ export type WorkspaceShellProps = {
   onSidePanelWidthCommit: (width: number) => void;
   onTableToolHoverChange: (toolId: string | null) => void;
   onTabActivate: (tabId: string) => void;
-  onTabDragEnd: (tabId: string) => void;
-  onTabDragOver: (event: DragEvent<HTMLElement>) => void;
-  onTabDragStart: (tabId: string, event: DragEvent<HTMLElement>) => void;
-  onTabDrop: (tabId: string, index: number, event: DragEvent<HTMLElement>) => void;
+  onTabReorder: (tabId: string, index: number) => Promise<unknown>;
+  onTabDetach: (tabId: string) => Promise<unknown>;
   onTitlebarSurfaceRuntimeModeChange: (mode: ThemeSurfaceRuntimeMode) => void;
   onUpdatePreferences: (
     patch: PreferencesUpdate

@@ -15,4 +15,10 @@ workers=1、retries=0，测试/启动/等待/清理都有有限超时；90秒 ow
 
 第三条用`--grep "forced-exit recovery"`选择：原生编辑后等待真实apply处理器成功完成，确认精确恢复日志和原始文件未保存，从外部强制结束所属进程树；同一profile重启不传文档路径，核验完整恢复文档/dirty/版本身份，再继续原生编辑、真实菜单保存和正常退出。记录强制退出与正常退出的差异，保存终止前后恢复文件原始字节及hash。该流程发现合法小数文件时间戳被解析器拒绝，修复和基线FAIL→修后PASS见[报告032](../../reports/task-summaries/TASK-RF902-RECOVERY-032.md)。
 
-本批实际执行和 CI 目标是 Windows。Linux/macOS、OS IME、外部冲突、多窗口 move/detach、未 ACK 编辑、断电与写入中断恢复尚未由本套件验收；M9 依赖和 RF902 整体完成状态不因这三条覆盖改变。既有 workspace-safety 关闭协议和 Vitest 严格基线不变。
+`cross-window.spec.mjs` 增加真实标签点击、同窗排序、分离、Escape 取消、浏览器捕获丢失、最后编辑 ACK 延迟以及目标提前关闭/15秒未就绪超时。普通拖动由 Playwright Chromium 鼠标/键盘产生可信事件，明确不是 OS SendInput。Windows 两项另用 `windows-pointer-drag.ps1`：核验 HWND/PID、点击命中与鼠标捕获后跨出顶层窗口，使用 SetCursorPos/SendInput 释放；再核验正文、光标、归属、后续插入、真实保存和正常退出。它需要可交互 Windows 桌面、DPR1 和能容纳测试窗口的屏幕，不静默跳过不满足的环境。仅操作临时 FishMark 窗口，恢复鼠标位置；本机执行包装另记录/恢复原前台及可验证键盘布局。
+
+ACK 故障屏障在真实 edit 处理器完成后暂缓其响应；B 输入仍走原生编辑，真实标签分离必须等待 A/B/flush 完成。未就绪屏障同时等待目标窗口首次 watch-sync 与 snapshot 原处理器，避免另一注册路径提前触发 ready；不替换返回值、不缩短产品15秒超时。释放屏障仍执行原处理器，已销毁目标会真实拒绝。故障用例逐项匹配精确 sender/channel/tab/message/count=1、对应完整 main 错误和 stderr 行，原始日志不删，其余错误仍失败。这是明确故障的预期结果断言，不修改 Vitest known-failure 清单。
+
+拖到已有窗口的原生用例保留原产品的“分离到新窗口”行为；修改前目标 renderer 只读本地 drag ref，没有跨窗口接收入口。本批不增加“合并到已有窗口”交互，底层 move API 不等同于完成该真实用户流程。独立审查和基线失败记录见[报告033](../../reports/task-summaries/TASK-RF902-TRANSFER-033.md)。
+
+实际执行和 CI 目标是 Windows。Linux/macOS、OS IME、外部冲突、已有窗口合并移动、断电与写入中断恢复仍未由本套件验收；M9 依赖和 RF902 整体状态不因局部覆盖改变。既有 workspace-safety 关闭协议和 Vitest 严格基线不变。

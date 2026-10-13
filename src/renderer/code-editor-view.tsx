@@ -20,6 +20,7 @@ import {
 import type { EditorViewMode } from "@fishmark/codemirror-adapter";
 import type { ActiveBlockState } from "@fishmark/editor-model";
 import type { EditorLoadIdentity } from "./application/editor-load-identity";
+import type { WorkspaceEditorSelection } from "../shared/workspace";
 
 export type CodeEditorHandle = {
   getContent: () => string;
@@ -75,6 +76,7 @@ type CodeEditorViewProps = {
   onEditorBarrierChange?: (barrier: (() => Promise<{
     readonly text: string;
     readonly identity: EditorLoadIdentity | null;
+    readonly selection?: WorkspaceEditorSelection;
   }>) | null) => void;
   onEditorRemotePatchChange?: (patch: ((input: {
     readonly identity: EditorLoadIdentity;
@@ -91,6 +93,7 @@ type CodeEditorViewProps = {
   }) => ReturnType<CodeEditorController["restoreCanonicalDocument"]>) | null) => void;
   onEditorTransitionApplied: (input: { token: number; readOnly: boolean }) => void;
   onLoadRevisionApplied: (identity: EditorLoadIdentity) => void;
+  getEditorLoadSelection?: (identity: EditorLoadIdentity) => WorkspaceEditorSelection | null;
   onBlur?: () => void;
   onActiveBlockChange?: (state: ActiveBlockState) => void;
   importClipboardImage?: (input: { documentPath: string | null }) => Promise<string | null>;
@@ -119,6 +122,7 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
       onEditorCanonicalRestoreChange,
       onEditorTransitionApplied,
       onLoadRevisionApplied,
+      getEditorLoadSelection,
       onBlur,
       onActiveBlockChange,
       importClipboardImage,
@@ -178,6 +182,7 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
     const handleLoadRevisionApplied = useEffectEvent((identity: EditorLoadIdentity) => {
       onLoadRevisionApplied(identity);
     });
+    const handleEditorLoadSelection = useEffectEvent((identity: EditorLoadIdentity) => getEditorLoadSelection?.(identity));
     const handleUserDocumentEdit = useEffectEvent(() => onUserDocumentEdit?.());
     const handleBlur = useEffectEvent(() => onBlur?.());
     // The persistent controller must publish to the latest committed load owner.
@@ -213,7 +218,7 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
       });
 
       controllerRef.current = controller;
-      handleEditorBarrierChange(() => controller.sealForBarrier());
+      handleEditorBarrierChange(async () => ({ ...await controller.sealForBarrier(), selection: controller.getSelection() }));
       handleEditorRemotePatchChange((input) => controller.applyRemoteDocumentPatch(input));
       handleEditorCanonicalRestoreChange((input) => controller.restoreCanonicalDocument(input));
 
@@ -246,6 +251,11 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
       const identity = { tabId: documentTabId, epoch: editorEpoch, loadRevision };
       controllerRef.current?.setDocumentIdentity(identity);
       appliedIdentityRef.current = identity;
+      const controller = controllerRef.current;
+      if (controller) {
+        const selection = handleEditorLoadSelection(identity);
+        if (selection) controller.setSelection(selection.anchor, selection.head);
+      }
       handleLoadRevisionApplied(identity);
     }, [documentTabId, editorEpoch, loadRevision]);
 

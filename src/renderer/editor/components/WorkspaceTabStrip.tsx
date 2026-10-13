@@ -1,20 +1,20 @@
 import type { WorkspaceShellProps } from "../workspace-shell-props";
+import { useWorkspaceTabDrag } from "../useWorkspaceTabDrag";
 
 export function WorkspaceTabStrip({
   isReadingMode,
   isDocumentOpen,
   onTabActivate,
   onCloseWorkspaceTab,
-  onTabDragStart,
-  onTabDragOver,
-  onTabDrop,
-  onTabDragEnd,
+  onTabReorder,
+  onTabDetach,
   workspaceTabs,
   activeTabId
-}: Pick<WorkspaceShellProps, "isReadingMode" | "isDocumentOpen" | "onTabActivate" | "onCloseWorkspaceTab" | "onTabDragStart" | "onTabDragOver" | "onTabDrop" | "onTabDragEnd"> & {
+}: Pick<WorkspaceShellProps, "isReadingMode" | "isDocumentOpen" | "onTabActivate" | "onCloseWorkspaceTab" | "onTabReorder" | "onTabDetach"> & {
   workspaceTabs: NonNullable<WorkspaceShellProps["workspaceSnapshot"]>["tabs"];
   activeTabId: string | null;
 }) {
+  const drag = useWorkspaceTabDrag({ reorderWorkspaceTab: onTabReorder, detachWorkspaceTab: onTabDetach });
 
   return (
     workspaceTabs.length > 0 ? (
@@ -25,7 +25,7 @@ export function WorkspaceTabStrip({
         aria-label="Open documents"
       >
         <div className="workspace-tab-strip-scroll">
-          {workspaceTabs.map((tab, index) => {
+          {workspaceTabs.map((tab) => {
             const isActive = tab.tabId === activeTabId;
             const tooltip = tab.path ?? tab.name;
 
@@ -41,11 +41,12 @@ export function WorkspaceTabStrip({
                   type="button"
                   className={`workspace-tab ${isActive ? "is-active" : ""}`}
                   data-fishmark-region="workspace-tab"
+                  data-tab-id={tab.tabId}
                   data-active={isActive ? "true" : "false"}
                   data-dirty={tab.isDirty ? "true" : "false"}
                   title={tooltip}
-                  draggable
-                  onClick={() => onTabActivate(tab.tabId)}
+                  draggable={false}
+                  onClick={(event) => { if (!drag.consumeClick(event)) onTabActivate(tab.tabId); }}
                   onAuxClick={(event) => {
                     if (event.button === 1) {
                       event.preventDefault();
@@ -53,10 +54,12 @@ export function WorkspaceTabStrip({
                       onCloseWorkspaceTab(tab.tabId);
                     }
                   }}
-                  onDragStart={(event) => onTabDragStart(tab.tabId, event)}
-                  onDragOver={onTabDragOver}
-                  onDrop={(event) => onTabDrop(tab.tabId, index, event)}
-                  onDragEnd={() => onTabDragEnd(tab.tabId)}
+                  onDragStart={(event) => event.preventDefault()}
+                  onPointerDown={(event) => drag.onPointerDown(tab.tabId, event)}
+                  onPointerMove={drag.onPointerMove}
+                  onPointerUp={drag.onPointerUp}
+                  onPointerCancel={drag.onPointerCancel}
+                  onLostPointerCapture={drag.onPointerCancel}
                 >
                   <span className="workspace-tab-label">{tab.name}</span>
                   <span

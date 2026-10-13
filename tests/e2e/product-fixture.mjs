@@ -59,9 +59,18 @@ function observeRenderer({ idleDelayMs }) {
     if (event.target.closest?.(".cm-editor")) record("editor:focusout");
   }, true);
   document.addEventListener("input", (event) => record("input", { inputType: event.inputType, data: event.data, trusted: event.isTrusted }), true);
-  document.addEventListener("keydown", (event) => {
+  window.addEventListener("keydown", (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") record("manual-save-key", { trusted: event.isTrusted });
+    if (event.key === "Escape") record("escape-key", { trusted: event.isTrusted });
   }, true);
+  for (const type of ["dragstart", "dragover", "drop", "dragend", "pointerdown", "pointermove", "pointerup", "pointercancel", "gotpointercapture", "lostpointercapture"]) {
+    document.addEventListener(type, (event) => record(type, {
+      trusted: event.isTrusted, x: event.clientX, y: event.clientY, button: event.button, buttons: event.buttons,
+      pointerId: event.pointerId, captured: event.target.hasPointerCapture?.(event.pointerId), dragging: event.target.dataset?.dragging,
+      target: event.target.closest?.("[data-fishmark-region]")?.getAttribute("data-fishmark-region"),
+      dropEffect: event.dataTransfer?.dropEffect, effectAllowed: event.dataTransfer?.effectAllowed
+    }), true);
+  }
   document.addEventListener("visibilitychange", () => record("visibility", { state: document.visibilityState }));
   // Observe configured-delay callbacks without calling, advancing, cancelling,
   // or replacing any application save action. Preserve native timer semantics.
@@ -115,7 +124,7 @@ class ProductSession {
 
   async launch(expectedContent, { openDocument = true } = {}) {
     const index = this.launches.length + 1;
-    const state = { index, openDocument, telemetryPath: this.testInfo.outputPath(`launch-${index}-main.jsonl`), stdout: "", stderr: "", pageErrors: [], renderer: null };
+    const state = { index, openDocument, telemetryPath: this.testInfo.outputPath(`launch-${index}-main.jsonl`), stdout: "", stderr: "", pageErrors: [], renderer: null, windowPages: [] };
     this.launches.push(state);
     const env = { ...process.env, FISHMARK_E2E_PROFILE: this.profile, FISHMARK_E2E_TELEMETRY: state.telemetryPath, FISHMARK_E2E_DOCUMENT: this.documentPath, FISHMARK_E2E_OPEN_DOCUMENT: openDocument ? "1" : "0" };
     delete env.VITE_DEV_SERVER_URL;
@@ -129,7 +138,11 @@ class ProductSession {
       state.pid = state.child.pid;
       state.child.stdout?.on("data", (chunk) => { state.stdout += String(chunk); });
       state.child.stderr?.on("data", (chunk) => { state.stderr += String(chunk); });
-      const attachPage = (page) => page.on("pageerror", (error) => state.pageErrors.push(error.stack ?? error.message));
+      const attachPage = (page) => {
+        if (state.windowPages.includes(page)) return;
+        state.windowPages.push(page);
+        page.on("pageerror", (error) => state.pageErrors.push(error.stack ?? error.message));
+      };
       state.app.on("window", attachPage);
       for (const page of state.app.windows()) attachPage(page);
       state.page = await state.app.firstWindow({ timeout: 15_000 });
@@ -176,9 +189,39 @@ class ProductSession {
   }
 
   get current() { return this.launches.at(-1); }
-  snapshot() { return this.current.page.evaluate(() => window.fishmark.getWorkspaceSnapshot()); }
+  snapshot(page = this.current.page) { return page.evaluate(() => window.fishmark.getWorkspaceSnapshot()); }
   disk() { return readFile(this.documentPath, "utf8"); }
-  rendererEvidence() { return this.current.page.evaluate(() => window.__rf902Evidence); }
+  rendererEvidence(page = this.current.page) { return page.evaluate(() => window.__rf902Evidence); }
+
+  async focus(page = this.current.page) {
+    const owner = await this.current.app.browserWindow(page);
+    try { await owner.evaluate((window) => window.focus()); }
+    finally { await owner.dispose(); }
+    await page.locator(".cm-content[contenteditable=true]").focus();
+  }
+
+  async nativeInsert(text, page = this.current.page) {
+    const owner = await this.current.app.browserWindow(page);
+    try { await owner.evaluate(async (window, value) => { await window.webContents.insertText(value); }, text); }
+    finally { await owner.dispose(); }
+  }
+
+  async observeNewWindow(page, expectedContent) {
+    await expect(page.locator(".cm-content[contenteditable=true]")).toBeVisible();
+    await expect.poll(async () => (await this.snapshot(page)).activeDocument?.content).toBe(expectedContent);
+    expect(page.url()).toBe(pathToFileURL(resolve(root, "dist/index.html")).href);
+    expect(await page.evaluate(() => typeof window.fishmarkTest)).toBe("undefined");
+    await page.evaluate(observeRenderer, { idleDelayMs: this.idleDelayMs });
+    const owner = await this.current.app.browserWindow(page);
+    try {
+      const identity = await owner.evaluate((window) => ({ windowId: String(window.id), webContentsId: window.webContents.id, preferences: window.webContents.getLastWebPreferences() }));
+      expect(identity.preferences.contextIsolation).toBe(true);
+      expect(identity.preferences.nodeIntegration).toBe(false);
+      this.current.additionalWindows ??= [];
+      this.current.additionalWindows.push(identity);
+      return identity;
+    } finally { await owner.dispose(); }
+  }
 
   async captureOwnedProcesses(state) {
     const identity = await state.app.evaluate(({ app }) => ({ mainPid: process.pid, members: app.getAppMetrics().map(({ pid, creationTime, type }) => ({ pid, creationTime, type })) }));
@@ -201,22 +244,21 @@ class ProductSession {
     return raw.trim() ? raw.trim().split("\n").map((line) => JSON.parse(line)) : [];
   }
 
-  async append(text) {
-    const state = this.current;
-    await state.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].focus());
-    await state.page.locator(".cm-content[contenteditable=true]").focus();
-    await state.page.keyboard.press(process.platform === "darwin" ? "Meta+ArrowDown" : "Control+End");
-    await expect.poll(() => state.page.evaluate(() => {
+  async append(text, page = this.current.page) {
+    await this.focus(page);
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+ArrowDown" : "Control+End");
+    await expect.poll(() => page.evaluate(() => {
       const selection = document.getSelection();
       const lastLine = document.querySelector(".cm-content .cm-line:last-child");
       return !!selection && !!lastLine && selection.isCollapsed && lastLine.contains(selection.anchorNode) && selection.anchorOffset === selection.anchorNode.textContent.length;
     })).toBe(true);
-    await state.app.evaluate(async ({ BrowserWindow }, value) => { await BrowserWindow.getAllWindows()[0].webContents.insertText(value); }, text);
+    await this.nativeInsert(text, page);
   }
 
-  async manualSave() {
+  async manualSave(page) {
     // Invoke the real application's existing File > Save menu item.
     // This exercises its callback/channel and the product save scheduler.
+    if (page) await this.focus(page);
     await this.current.app.evaluate(({ Menu }) => {
       const item = Menu.getApplicationMenu()?.items.find((entry) => entry.label === "File")?.submenu?.items.find((entry) => entry.label === "Save");
       if (!item?.click) throw new Error("The product File > Save menu is missing.");
@@ -224,24 +266,25 @@ class ProductSession {
     });
   }
 
-  async expectSaved(content) {
+  async expectSaved(content, page = this.current.page) {
     await expect.poll(async () => digest(await readFile(this.documentPath))).toBe(digest(Buffer.from(content, "utf8")));
     await expect.poll(async () => {
-      const document = (await this.snapshot()).activeDocument;
+      const document = (await this.snapshot(page)).activeDocument;
       return { content: document?.content, dirty: document?.isDirty };
     }).toEqual({ content, dirty: false });
   }
 
-  async checkpoint(label) {
+  async checkpoint(label, page = this.current.page) {
     const state = this.current;
-    const snapshot = await this.snapshot();
+    const snapshot = await this.snapshot(page);
     const content = await this.disk();
     this.checkpoints.push({ label, launch: state.index, epochMs: Date.now(), snapshot, diskContent: content, diskSha256: digest(content) });
-    await state.page.screenshot({ path: this.testInfo.outputPath(`launch-${state.index}-${label}.png`) });
+    await page.screenshot({ path: this.testInfo.outputPath(`launch-${state.index}-${label}.png`) });
   }
 
   async capture(state) {
     if (state.page && !state.page.isClosed()) state.renderer = await state.page.evaluate(() => window.__rf902Evidence).catch(() => null);
+    state.rendererByWindow = await Promise.all(state.windowPages.map(async (page, index) => ({ windowIndex: index + 1, url: page.url(), closed: page.isClosed(), renderer: page.isClosed() ? null : await page.evaluate(() => window.__rf902Evidence).catch(() => null) })));
     if (state.tracing) {
       await bounded("trace capture", () => state.app.context().tracing.stop({ path: this.testInfo.outputPath(`launch-${state.index}-trace.zip`) }));
       state.tracing = false;
@@ -291,8 +334,8 @@ class ProductSession {
     const state = this.current;
     await this.captureOwnedProcesses(state);
     await this.capture(state);
-    await state.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close());
-    await expect.poll(() => state.page.isClosed()).toBe(true);
+    await state.app.evaluate(({ BrowserWindow }) => { for (const window of BrowserWindow.getAllWindows()) window.close(); });
+    await expect.poll(() => state.app.windows().filter((page) => !page.isClosed()).length).toBe(0);
     // macOS keeps its process alive after the final window closes; request the
     // regular application Quit lifecycle there, without forcing an exit.
     if (process.platform === "darwin") await state.app.evaluate(({ app }) => app.quit());
@@ -307,9 +350,25 @@ class ProductSession {
 
   async assertHealthy(state = this.current) {
     const events = await this.mainEvidence(state);
-    const mainErrors = events.filter((entry) => entry.event.startsWith("main:") || ["save:error", "edit:error"].includes(entry.event) || ["renderer:preload-error", "renderer:process-gone", "renderer:load-failed"].includes(entry.event) || (entry.event === "renderer:console" && ["error", 3].includes(entry.detail.level)));
+    const expectedEvents = new Set();
+    let checkedStderr = state.stderr;
+    for (const expected of this.expectedIpcFailures ?? []) {
+      const failures = events.filter((entry) => entry.event === expected.event && entry.detail.channel === expected.channel && entry.detail.webContentsId === expected.webContentsId && entry.detail.tabId === expected.tabId);
+      expect(failures).toHaveLength(1);
+      expect(failures[0].detail.error.split("\n")[0]).toBe(expected.message);
+      expectedEvents.add(failures[0]);
+      const label = `Error occurred in handler for '${expected.channel}':`;
+      const logs = events.filter((entry) => entry.event === "main:error" && entry.detail.messages?.[0] === label && entry.detail.messages?.[1] === failures[0].detail.error);
+      expect(logs).toHaveLength(1);
+      expectedEvents.add(logs[0]);
+      const exactLine = `${label} ${expected.message}`;
+      expect(checkedStderr.split(/\r?\n/).filter((line) => line === exactLine)).toHaveLength(1);
+      checkedStderr = checkedStderr.replace(exactLine, "");
+    }
+    const mainErrors = events.filter((entry) => !expectedEvents.has(entry) && (entry.event.startsWith("main:") || ["save:error", "edit:error", "flush:error", "detach:error", "watch:error", "snapshot:error"].includes(entry.event) || ["renderer:preload-error", "renderer:process-gone", "renderer:load-failed"].includes(entry.event) || (entry.event === "renderer:console" && ["error", 3].includes(entry.detail.level))));
     const renderer = state.renderer ?? await this.rendererEvidence();
-    expect({ mainErrors, pageErrors: state.pageErrors, rendererErrors: renderer?.events.filter((entry) => ["error", "unhandledrejection"].includes(entry.event)) ?? [], stderrErrors: stderrFailures(state.stderr) }).toEqual({ mainErrors: [], pageErrors: [], rendererErrors: [], stderrErrors: [] });
+    const rendererErrors = state.rendererByWindow ? state.rendererByWindow.flatMap((entry) => entry.renderer?.events.filter((event) => ["error", "unhandledrejection"].includes(event.event)) ?? []) : renderer?.events.filter((entry) => ["error", "unhandledrejection"].includes(entry.event)) ?? [];
+    expect({ mainErrors, pageErrors: state.pageErrors, rendererErrors, stderrErrors: stderrFailures(checkedStderr) }).toEqual({ mainErrors: [], pageErrors: [], rendererErrors: [], stderrErrors: [] });
   }
 
   async finish() {
@@ -358,8 +417,9 @@ class ProductSession {
       documentPath: this.documentPath, profile: this.profile, idleDelayMs: this.idleDelayMs,
       initialContent: this.initialContent, finalDiskContent: await this.disk().catch(() => null),
       provenance: this.provenance, checkpoints: this.checkpoints, idleProof: this.idleProof,
-      recoveryFiles: this.recoveryFiles, recoveryProof: this.recoveryProof,
-      launches: this.launches.map(({ app: _app, page: _page, child: _child, ...state }) => state),
+      recoveryFiles: this.recoveryFiles, recoveryProof: this.recoveryProof, crossWindowProof: this.crossWindowProof,
+      expectedIpcFailures: this.expectedIpcFailures,
+      launches: this.launches.map(({ app: _app, page: _page, child: _child, windowPages: _windowPages, ...state }) => state),
       cleanupErrors: this.cleanupErrors
     };
     await writeFile(this.testInfo.outputPath("product-report.json"), `${JSON.stringify(report, null, 2)}\n`, "utf8");

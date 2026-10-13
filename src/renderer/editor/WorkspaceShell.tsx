@@ -136,6 +136,7 @@ export function WorkspaceShell({
   onEditorCanonicalRestoreChange,
   onEditorTransitionApplied,
   onEditorLoadRevisionApplied,
+  getEditorLoadSelection,
   onEditorBlur,
   onEditorViewModeChange,
   onImportClipboardImage,
@@ -158,10 +159,8 @@ export function WorkspaceShell({
   onSidePanelWidthCommit,
   onTableToolHoverChange,
   onTabActivate,
-  onTabDragEnd,
-  onTabDragOver,
-  onTabDragStart,
-  onTabDrop,
+  onTabReorder,
+  onTabDetach,
   onTitlebarSurfaceRuntimeModeChange,
   onUpdatePreferences,
   onWorkbenchSurfaceRuntimeModeChange
@@ -408,10 +407,8 @@ export function WorkspaceShell({
             isDocumentOpen={isDocumentOpen}
             onTabActivate={onTabActivate}
             onCloseWorkspaceTab={onCloseWorkspaceTab}
-            onTabDragStart={onTabDragStart}
-            onTabDragOver={onTabDragOver}
-            onTabDrop={onTabDrop}
-            onTabDragEnd={onTabDragEnd}
+            onTabReorder={onTabReorder}
+            onTabDetach={onTabDetach}
             workspaceTabs={workspaceTabs}
             activeTabId={activeTabId}
           />
@@ -471,6 +468,7 @@ export function WorkspaceShell({
                         onEditorCanonicalRestoreChange={onEditorCanonicalRestoreChange}
                         onEditorTransitionApplied={onEditorTransitionApplied}
                         onLoadRevisionApplied={onEditorLoadRevisionApplied}
+                        getEditorLoadSelection={getEditorLoadSelection}
                         onBlur={onEditorBlur}
                       />
                     </Suspense>

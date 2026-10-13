@@ -48,6 +48,7 @@ import type { createWorkspaceWindowCloseRequestBroker } from "../workspace-windo
 import type { createWorkspaceOwnerTabActivationRequestBroker } from "../workspace-owner-tab-activation-request-broker";
 import type { createWorkspaceWindowCloseConfirmationHandler } from "../workspace-window-close-confirmation-handler";
 import type { createDocumentRepository } from "../infrastructure/document-repository";
+import { createWorkspaceEditorViewHandoffs } from "../workspace-editor-view-handoffs";
 import { toWorkspaceMoveTabResult, toWorkspaceWindowSnapshot } from "../workspace-ipc-projection";
 import type { IpcRegistration } from "./ipc-lifecycle";
 import type { AuthorizeIpcSender } from "./ipc-sender";
@@ -110,10 +111,12 @@ export function registerWorkspaceCommandHandlers(dependencies: {
   workspaceOwnerTabActivationRequestBroker: ReturnType<typeof createWorkspaceOwnerTabActivationRequestBroker>;
   workspaceWindowCloseRequestBroker: ReturnType<typeof createWorkspaceWindowCloseRequestBroker<WorkspaceWindowCloseConfirmation>>;
   handleWorkspaceWindowCloseConfirmation: ReturnType<typeof createWorkspaceWindowCloseConfirmationHandler>;
+  editorViewHandoffs?: ReturnType<typeof createWorkspaceEditorViewHandoffs>;
 }): void {
   const { ipc, authorize, ensureWindow, workspaceApplication, workspaceState,
     documentRepository, resolveExternalChange, workspaceOwnerTabActivationRequestBroker,
     workspaceWindowCloseRequestBroker, handleWorkspaceWindowCloseConfirmation } = dependencies;
+  const editorViewHandoffs = dependencies.editorViewHandoffs ?? createWorkspaceEditorViewHandoffs({ workspace: workspaceState });
   const register: IpcRegistration["handle"] = (channel, handler) => {
     ipc.handle(channel, async (event, ...args) => {
       const check = authorize(event, ["product", "editor-test"]);
@@ -128,9 +131,9 @@ export function registerWorkspaceCommandHandlers(dependencies: {
     request.noArguments(args);
     const windowId = await ensureWindow(event.sender);
     check();
-    return toWorkspaceWindowSnapshot(requireWorkspaceCommandProjection(
+    return editorViewHandoffs.decorate(toWorkspaceWindowSnapshot(requireWorkspaceCommandProjection(
       await workspaceApplication.getSnapshot({ context: event.sender, windowId })
-    ));
+    )));
   });
   register(
     RESOLVE_EXTERNAL_CHANGE_CHANNEL,
@@ -353,6 +356,7 @@ export function registerWorkspaceCommandHandlers(dependencies: {
       tabId: input.tabId,
       expectedWindowId: windowId
     });
+    editorViewHandoffs.prune();
     return toWorkspaceWindowSnapshot(requireWorkspaceCommandProjection(result));
   });
   register(REORDER_WORKSPACE_TAB_CHANNEL, async (event, ...args) => {
@@ -385,15 +389,20 @@ export function registerWorkspaceCommandHandlers(dependencies: {
       const input = value as MoveWorkspaceTabToWindowInput;
       const windowId = await ensureWindow(event.sender);
       check();
-      return toWorkspaceMoveTabResult(
-        requireWorkspaceCommandProjection(await workspaceApplication.moveTab({
+      const handoffId = editorViewHandoffs.stage(input.tabId, windowId, input.editorView);
+      try {
+        const result = toWorkspaceMoveTabResult(requireWorkspaceCommandProjection(await workspaceApplication.moveTab({
           context: event.sender,
           tabId: input.tabId,
           expectedWindowId: windowId,
           targetWindowId: input.targetWindowId,
           targetIndex: input.targetIndex
-        }))
-      );
+        })));
+        return { ...result, targetWindowSnapshot: editorViewHandoffs.decorate(result.targetWindowSnapshot) };
+      } catch (error) {
+        editorViewHandoffs.abort(input.tabId, handoffId);
+        throw error;
+      }
     }
   );
   register(
@@ -406,14 +415,18 @@ export function registerWorkspaceCommandHandlers(dependencies: {
       const input = value as DetachWorkspaceTabToNewWindowInput;
       const windowId = await ensureWindow(event.sender);
       check();
-      const result = await workspaceApplication.detachTab({
-        context: event.sender,
-        tabId: input.tabId,
-        expectedWindowId: windowId
-      });
-      return toWorkspaceWindowSnapshot(
-        requireWorkspaceCommandProjection(result).sourceWindowSnapshot
-      );
+      const handoffId = editorViewHandoffs.stage(input.tabId, windowId, input.editorView);
+      try {
+        const result = await workspaceApplication.detachTab({
+          context: event.sender,
+          tabId: input.tabId,
+          expectedWindowId: windowId
+        });
+        return toWorkspaceWindowSnapshot(requireWorkspaceCommandProjection(result).sourceWindowSnapshot);
+      } catch (error) {
+        editorViewHandoffs.abort(input.tabId, handoffId);
+        throw error;
+      }
     }
   );
   register(

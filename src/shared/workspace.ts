@@ -35,7 +35,18 @@ export type WorkspaceWindowSnapshot = {
   activeTabId: string | null;
   tabs: WorkspaceTabStripItem[];
   activeDocument: WorkspaceDocumentSnapshot | null;
+  editorViewHandoff?: WorkspaceEditorViewHandoff;
 };
+
+export type WorkspaceEditorSelection = Readonly<{ anchor: number; head: number }>;
+export type WorkspaceTransferEditorView = Readonly<{
+  revision: number;
+  selection: WorkspaceEditorSelection;
+}>;
+export type WorkspaceEditorViewHandoff = WorkspaceTransferEditorView & Readonly<{
+  handoffId: string;
+  tabId: string;
+}>;
 
 export type CreateWorkspaceTabInput = {
   kind: "untitled";
@@ -58,10 +69,12 @@ export type MoveWorkspaceTabToWindowInput = {
   tabId: string;
   targetWindowId: string;
   targetIndex?: number;
+  editorView?: WorkspaceTransferEditorView;
 };
 
 export type DetachWorkspaceTabToNewWindowInput = {
   tabId: string;
+  editorView?: WorkspaceTransferEditorView;
 };
 
 export type ReloadWorkspaceTabFromPathInput = {

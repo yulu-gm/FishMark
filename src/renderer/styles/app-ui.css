@@ -635,6 +635,7 @@
 }
 
 .workspace-tab {
+  touch-action: none;
   flex: 1 1 auto;
   min-width: 0;
   display: inline-flex;
@@ -653,6 +654,11 @@
 
 .workspace-tab[data-active="true"] {
   color: var(--fishmark-text-primary, #171a1f);
+}
+
+.workspace-tab[data-dragging="true"] {
+  cursor: grabbing;
+  opacity: 0.65;
 }
 
 .workspace-tab:focus-visible,

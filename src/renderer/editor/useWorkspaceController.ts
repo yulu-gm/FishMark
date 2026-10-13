@@ -32,6 +32,7 @@ export function useWorkspaceController(input: {
     registerEditorRemotePatch: application.registerEditorRemotePatch.bind(application),
     registerEditorCanonicalRestore: application.registerEditorCanonicalRestore.bind(application),
     acknowledgeEditorLoad: application.acknowledgeEditorLoad.bind(application),
+    getEditorLoadSelection: application.getEditorLoadSelection.bind(application),
     acknowledgeEditorTransition: application.acknowledgeEditorTransition.bind(application),
     runSaveTransaction: application.runSaveTransaction.bind(application),
     runWithActiveEditBarrier: application.runWithActiveEditBarrier.bind(application)

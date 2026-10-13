@@ -1,5 +1,7 @@
 # M9 验收清单与下一批顺序
 
+**跨窗口更新（报告033）：** RF902新增真实点击/排序/分离/取消、Windows离窗释放、pending ACK排空和目标关闭/超时恢复覆盖，并修复光标丢失、Escape仍分离、失败后编辑未重新绑定三项缺陷。已有窗口合并移动仍无用户入口，原生拖到已有窗口保留新建分离窗口行为；不把底层move测试当产品流程验收。完整边界及失败证据见[报告033](../../reports/task-summaries/TASK-RF902-TRANSFER-033.md)。RF902仍IN_PROGRESS，RF901 PAUSED、RF903 PLANNED、M9 0/3。
+
 **后续实施更新（报告032）：** 以下表格保留报告030审查时点的缺口记录。RF902现为唯一IN_PROGRESS源码任务，RF901为PAUSED、RF903仍PLANNED。产品保存重启及真实idle流程已发布`e006460`且CI38374591185四项全绿；随后真实异常退出恢复发现并修复小数文件时间戳校验错误，同协议恢复及继续编辑保存已通过，完整门禁/发布见[报告032](../../reports/task-summaries/TASK-RF902-RECOVERY-032.md)。跨窗口、未确认编辑、断电/写入中断及平台证据仍开放，M9保持0/3。用户后续明确授权无人桌面可由测试接管，因此下文“前台待协调”是历史边界；本恢复批未运行OS IME。
 
 2026-10-13，YULUSTATION。基线为官方 main `3fee9ef20c8d83ce58ebc430e648ae4c74ea4245`，tree `f9f7ac06bb4f523547dcf26d15ce421f0a968043`；本批重新 fetch 核验一致。[CI 38363749630](https://github.com/yulu-gm/FishMark/actions/runs/38363749630) attempt 1 的 Quality、Full regression、Bundle 全部成功。标题/脚注优化及保存关闭锁序、确定性关闭 Save 协议均保留。

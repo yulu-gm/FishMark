@@ -68,6 +68,7 @@ import { createDocumentRepository } from "./infrastructure/document-repository";
 import { createRecoveryService } from "./infrastructure/recovery-service";
 import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator";
 import { createFileIdentityResolver } from "./file-identity-resolver";
+import { createWorkspaceEditorViewHandoffs } from "./workspace-editor-view-handoffs";
 import { createWorkspaceWindowCloseConfirmationHandler } from "./workspace-window-close-confirmation-handler";
 import { createWorkspaceWindowCloseRequestBroker } from "./workspace-window-close-request-broker";
 import { createWindowCloseIntent } from "./window-close-intent";
@@ -258,6 +259,7 @@ app.whenReady().then(async () => {
     platform: process.platform
   });
   const workspaceState = createWorkspaceState({ createTextBuffer: createCodeMirrorTextBuffer });
+  const editorViewHandoffs = createWorkspaceEditorViewHandoffs({ workspace: workspaceState });
   const fileWatchRegistry = createFileWatchRegistry({
     onExternalChange: (path, kind) => {
       markExternalWorkspaceChange(workspaceState, path, kind);
@@ -565,6 +567,7 @@ app.whenReady().then(async () => {
         const heldRelease = heldWorkspaceWindowCloseReleases.get(windowId);
         try {
           workspaceState.unregisterWindow(windowId);
+          editorViewHandoffs.prune();
         } finally {
           heldWorkspaceWindowCloseReleases.delete(windowId);
           heldRelease?.();
@@ -895,7 +898,7 @@ app.whenReady().then(async () => {
   });
   registerWorkspaceCommandHandlers({
     ipc, authorize, ensureWindow: workspaceWindowRegistrationApplication.ensureWindow,
-    workspaceApplication, workspaceState, documentRepository, resolveExternalChange,
+    workspaceApplication, workspaceState, documentRepository, resolveExternalChange, editorViewHandoffs,
     workspaceOwnerTabActivationRequestBroker, workspaceWindowCloseRequestBroker,
     handleWorkspaceWindowCloseConfirmation
   });

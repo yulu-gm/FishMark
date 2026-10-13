@@ -20,6 +20,7 @@ const navigateToOffsetMock = vi.fn<(offset: number) => void>();
 const destroyMock = vi.fn<() => void>();
 const getContentMock = vi.fn<() => string>(() => "# Initial\n");
 const getSelectionMock = vi.fn<() => { anchor: number; head: number }>(() => ({ anchor: 0, head: 0 }));
+const setSelectionMock = vi.fn<(anchor: number, head: number) => void>();
 const prepareFindReplaceMock = vi.fn<() => Promise<void>>(() => Promise.resolve());
 const pressEnterMock = vi.fn<() => void>();
 const pressBackspaceMock = vi.fn<() => void>();
@@ -81,6 +82,7 @@ describe("CodeEditorView", () => {
     navigateToOffsetMock.mockReset();
     getContentMock.mockReset();
     getSelectionMock.mockReset();
+    setSelectionMock.mockReset();
     prepareFindReplaceMock.mockReset();
     prepareFindReplaceMock.mockResolvedValue(undefined);
     pressEnterMock.mockReset();
@@ -94,6 +96,7 @@ describe("CodeEditorView", () => {
     createCodeEditorControllerMock.mockReturnValue({
       getContent: getContentMock,
       getSelection: getSelectionMock,
+      setSelection: setSelectionMock,
       prepareFindReplace: prepareFindReplaceMock,
       setContent: setContentMock,
       replaceDocument: replaceDocumentMock,
@@ -126,6 +129,31 @@ describe("CodeEditorView", () => {
 
     container.remove();
     globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+  });
+
+  it("loads content and applies the transferred selection before acknowledging the editor load", async () => {
+    const timeline: string[] = [];
+    replaceDocumentMock.mockImplementation(() => { timeline.push("content"); });
+    setSelectionMock.mockImplementation(() => { timeline.push("selection"); });
+    const onLoadRevisionApplied = vi.fn(() => { timeline.push("acknowledge"); });
+    const getEditorLoadSelection = vi.fn(() => ({ anchor: 7, head: 3 }));
+    const props = { ...createBindingProps(), initialContent: "0123456789", documentPath: "C:/selection.md", loadRevision: 1, getEditorLoadSelection, onLoadRevisionApplied };
+    await act(async () => { root.render(createElement(CodeEditorView, props)); });
+    expect(timeline).toEqual(["content", "selection", "acknowledge"]);
+    expect(setSelectionMock).toHaveBeenCalledExactlyOnceWith(7, 3);
+    await act(async () => { root.render(createElement(CodeEditorView, { ...props })); });
+    expect(setSelectionMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("includes the selection in a sealed editor snapshot", async () => {
+    getSelectionMock.mockReturnValue({ anchor: 7, head: 3 });
+    const captured: { barrier?: (() => Promise<{ text: string; identity: unknown; selection?: { anchor: number; head: number } }>) | null } = {};
+    await act(async () => { root.render(createElement(CodeEditorView, {
+      ...createBindingProps(), initialContent: "# Initial\n", documentPath: null, loadRevision: 1,
+      onEditorBarrierChange: (next) => { captured.barrier = next; }
+    })); });
+    expect(captured.barrier).toBeTypeOf("function");
+    await expect(captured.barrier!()).resolves.toMatchObject({ text: "# Initial\n", selection: { anchor: 7, head: 3 } });
   });
 
   it("does not replace the editor document when saved content syncs without a new load revision", async () => {

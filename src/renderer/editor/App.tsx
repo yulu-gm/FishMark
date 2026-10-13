@@ -14,7 +14,6 @@ import { useNotificationPresentation } from "./useNotificationPresentation";
 import { useShortcutHintPresentation } from "./useShortcutHintPresentation";
 import { useThemePresentation } from "./useThemePresentation";
 import { useViewContainerPresentation } from "./useViewContainerPresentation";
-import { useWorkspaceTabDrag } from "./useWorkspaceTabDrag";
 
 import type {
   EditorViewMode,
@@ -202,7 +201,6 @@ function EditorShell({
     reorderWorkspaceTab,
     loadInitialWorkspaceSnapshot
   } = workspaceController;
-  const { handleWorkspaceTabDragStart, handleWorkspaceTabDragOver, handleWorkspaceTabDrop, handleWorkspaceTabDragEnd } = useWorkspaceTabDrag({ reorderWorkspaceTab, detachWorkspaceTab: detachWorkspaceTabWorkflow });
   const activeDocumentTabId = activeDocument?.tabId ?? null;
   const documentIdentity = useMemo<EditorLoadIdentity | null>(
     () => activeDocumentTabId === null ? null : {
@@ -806,6 +804,7 @@ function EditorShell({
         onEditorCanonicalRestoreChange={workspaceController.registerEditorCanonicalRestore}
         onEditorTransitionApplied={workspaceController.acknowledgeEditorTransition}
         onEditorLoadRevisionApplied={workspaceController.acknowledgeEditorLoad}
+        getEditorLoadSelection={workspaceController.getEditorLoadSelection}
         onEditorBlur={handleEditorBlurFromShell}
         onEditorViewModeChange={setEditorViewMode}
         onImportClipboardImage={handleImportClipboardImage}
@@ -846,10 +845,8 @@ function EditorShell({
         onTabActivate={(tabId) => {
           void handleActivateWorkspaceTab(tabId);
         }}
-        onTabDragEnd={handleWorkspaceTabDragEnd}
-        onTabDragOver={handleWorkspaceTabDragOver}
-        onTabDragStart={handleWorkspaceTabDragStart}
-        onTabDrop={handleWorkspaceTabDrop}
+        onTabReorder={reorderWorkspaceTab}
+        onTabDetach={detachWorkspaceTabWorkflow}
         onTitlebarSurfaceRuntimeModeChange={handleTitlebarSurfaceRuntimeModeChange}
         onUpdatePreferences={handleUpdatePreferences}
         onWorkbenchSurfaceRuntimeModeChange={handleWorkbenchSurfaceRuntimeModeChange}

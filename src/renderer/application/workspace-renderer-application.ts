@@ -1,7 +1,7 @@
 import { RendererPlatformGateway, type WorkspaceApplicationGateway } from "./renderer-platform-gateway";
 import type { AppNotification } from "../../shared/app-update";
 import type { AppMenuCommand } from "../../shared/menu-command";
-import { RELOAD_WORKSPACE_TAB_FROM_PATH_ERROR_MESSAGES, type MoveWorkspaceTabToWindowInput } from "../../shared/workspace";
+import { RELOAD_WORKSPACE_TAB_FROM_PATH_ERROR_MESSAGES, type MoveWorkspaceTabToWindowInput, type WorkspaceEditorSelection, type WorkspaceTransferEditorView } from "../../shared/workspace";
 import { WorkspaceSaveScheduler } from "./workspace-save-scheduler";
 import type { ExternalMarkdownFileState } from "./editor-shell-state";
 import type { SaveMarkdownFileResult } from "../../shared/save-markdown-file";
@@ -117,6 +117,7 @@ export type WorkspaceRendererTestAdapter = Readonly<{
 type EditorBarrierSnapshot = Readonly<{
   text: string;
   identity: EditorLoadIdentity | null;
+  selection?: WorkspaceEditorSelection;
 }>;
 
 type AcquiredEditBarrier = Readonly<{
@@ -210,6 +211,8 @@ export class WorkspaceRendererApplication {
   private editorBarrier: (() => Promise<EditorBarrierSnapshot>) | null = null;
   private editorRemotePatch: EditorRemotePatch | null = null;
   private editorCanonicalRestore: EditorCanonicalRestore | null = null;
+  private sourceViewRestore: (WorkspaceTransferEditorView & { tabId: string; text: string }) | null = null;
+  private readonly appliedEditorViewHandoffs = new Map<string, string>();
   private conflictDrainScheduled = false;
   private readonly recoveryMaterializationScheduled = new Set<string>();
   private readonly pendingConflictClaims = new Map<number, {
@@ -464,8 +467,8 @@ export class WorkspaceRendererApplication {
   }
 
   moveWorkspaceTab(input: MoveWorkspaceTabToWindowInput): Promise<WorkspaceApplicationOutcome<void>> {
-    return this.removeTabMutation("move", input.tabId, async () => {
-      const result = await this.bridge.moveWorkspaceTabToWindow(input);
+    return this.removeTabMutation("move", input.tabId, async (editorView) => {
+      const result = await this.bridge.moveWorkspaceTabToWindow(editorView ? { ...input, editorView } : input);
       return result.sourceWindowSnapshot;
     });
   }
@@ -546,6 +549,8 @@ export class WorkspaceRendererApplication {
     this.recoveryMaterializationScheduled.clear();
     this.editClient.dispose();
     this.editBindings.clear();
+    this.sourceViewRestore = null;
+    this.appliedEditorViewHandoffs.clear();
     this.listeners.clear();
   }
 
@@ -620,6 +625,24 @@ export class WorkspaceRendererApplication {
     this.ensureEditorEditBinding(identity);
     this.pendingEditorLoadIdentity = null;
     return true;
+  }
+
+  getEditorLoadSelection(identity: EditorLoadIdentity): WorkspaceEditorSelection | null {
+    if (this.disposed || this.pendingEditorLoadIdentity === null ||
+        !isSameEditorLoadIdentity(this.pendingEditorLoadIdentity, identity)) return null;
+    const document = getActiveDocument(this.state);
+    if (document === null || document.tabId !== identity.tabId) return null;
+    const restore = this.sourceViewRestore;
+    if (restore !== null && restore.tabId === document.tabId && restore.revision === document.revision && restore.text === document.content) {
+      this.sourceViewRestore = null;
+      return restore.selection;
+    }
+    const handoff = this.state.workspaceSnapshot?.editorViewHandoff;
+    if (handoff === undefined || handoff.tabId !== document.tabId || handoff.revision !== document.revision ||
+        this.appliedEditorViewHandoffs.get(document.tabId) === handoff.handoffId ||
+        !isSelectionWithinDocument(handoff.selection, document.content.length)) return null;
+    this.appliedEditorViewHandoffs.set(document.tabId, handoff.handoffId);
+    return handoff.selection;
   }
 
   acknowledgeEditorTransition(input: { token: number; readOnly: boolean }): boolean {
@@ -954,8 +977,8 @@ export class WorkspaceRendererApplication {
   }
 
   detachWorkspaceTab(tabId: string): Promise<WorkspaceApplicationOutcome<void>> {
-    return this.removeTabMutation("detach", tabId, () =>
-      this.bridge.detachWorkspaceTabToNewWindow({ tabId })
+    return this.removeTabMutation("detach", tabId, (editorView) =>
+      this.bridge.detachWorkspaceTabToNewWindow(editorView ? { tabId, editorView } : { tabId })
     );
   }
 
@@ -1187,7 +1210,7 @@ export class WorkspaceRendererApplication {
   private async removeTabMutation(
     kind: "close" | "detach" | "move",
     tabId: string,
-    operation: () => Promise<WorkspaceWindowSnapshot>
+    operation: (editorView?: WorkspaceTransferEditorView) => Promise<WorkspaceWindowSnapshot>
   ): Promise<WorkspaceApplicationOutcome<void>> {
     return this.enqueue(kind, async () => {
       const recovery = this.getRecoveryPendingOutcome();
@@ -1211,7 +1234,27 @@ export class WorkspaceRendererApplication {
         }
         await this.drainTab(tabId);
         this.assertActive();
-        const snapshot = await operation();
+        let editorView: WorkspaceTransferEditorView | undefined;
+        if (sealsActiveEditor && kind !== "close" && this.editorBarrier !== null) {
+          const captured = await this.editorBarrier();
+          if (captured.selection !== undefined) {
+            const identity = this.createCurrentEditorLoadIdentity();
+            if (captured.identity === null || identity === null || !isSameEditorLoadIdentity(captured.identity, identity)) {
+              throw new Error("The editor selection belongs to a different document load.");
+            }
+            const canonical = await this.bridge.getWorkspaceSnapshot();
+            this.assertActive();
+            const document = canonical.activeDocument;
+            if (canonical.activeTabId !== tabId || document === null || captured.text !== document.content ||
+                !isSelectionWithinDocument(captured.selection, document.content.length)) {
+              throw new Error("The editor selection does not match the drained document.");
+            }
+            this.recordCanonicalSnapshot(canonical);
+            editorView = { revision: document.revision, selection: captured.selection };
+            this.sourceViewRestore = { tabId, text: document.content, ...editorView };
+          }
+        }
+        const snapshot = await operation(editorView);
         this.assertActive();
         this.recordCanonicalSnapshot(snapshot);
         if (snapshot.tabs.some((tab) => tab.tabId === tabId)) {
@@ -1220,16 +1263,18 @@ export class WorkspaceRendererApplication {
             error: new Error(`${kind} response retained target tab.`)
           };
         }
+        this.sourceViewRestore = null;
         return { kind: "committed", value: undefined };
       } catch (error) {
         if (this.disposed || error instanceof WorkspaceRendererApplicationDisposedError) {
           return { kind: "failed", error: new WorkspaceRendererApplicationDisposedError() };
         }
-        return this.recoverMutationOutcome(error);
+        return await this.recoverMutationOutcome(error);
       } finally {
         if (sealsActiveEditor && this.state.editorTransition !== null) {
           await this.releaseEditor();
         }
+        this.sourceViewRestore = null;
       }
     });
   }
@@ -1362,6 +1407,9 @@ export class WorkspaceRendererApplication {
   ): void {
     this.editClient.bindWindow(snapshot.windowId);
     const liveTabs = new Set(snapshot.tabs.map((tab) => tab.tabId));
+    for (const tabId of this.appliedEditorViewHandoffs.keys()) {
+      if (!liveTabs.has(tabId)) this.appliedEditorViewHandoffs.delete(tabId);
+    }
     for (const [tabId, entry] of this.editBindings) {
       if (!liveTabs.has(tabId)) {
         this.editBindings.delete(tabId);
@@ -2102,6 +2150,10 @@ export class WorkspaceRendererApplication {
       listener();
     }
   }
+}
+
+function isSelectionWithinDocument(selection: WorkspaceEditorSelection, length: number): boolean {
+  return [selection.anchor, selection.head].every((offset) => Number.isSafeInteger(offset) && offset >= 0 && offset <= length);
 }
 
 function createEditorTransitionBarrier(

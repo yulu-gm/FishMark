@@ -144,6 +144,130 @@ async function acknowledgeEditorEditable(application: WorkspaceRendererApplicati
 }
 
 describe("WorkspaceRendererApplication", () => {
+  it("applies a target selection handoff once before its document load acknowledges", () => {
+    const initialSnapshot = { ...createSnapshot({ firstContent: "0123456789" }),
+      editorViewHandoff: { handoffId: "view-1", tabId: "tab-1", revision: 0, selection: { anchor: 7, head: 3 } } };
+    const application = createApplication({ initialSnapshot });
+    const identity = application.getPendingEditorLoadIdentity()!;
+    expect(application.getEditorLoadSelection({ ...identity, epoch: identity.epoch + 1 })).toBeNull();
+    expect(application.getEditorLoadSelection(identity)).toEqual({ anchor: 7, head: 3 });
+    expect(application.getEditorLoadSelection(identity)).toBeNull();
+    expect(application.acknowledgeEditorLoad(identity)).toBe(true);
+    expect(application.getEditorLoadSelection(identity)).toBeNull();
+    application.dispose();
+  });
+
+  it("retains consumed handoffs across repeated snapshots and retires them when an inactive tab disappears", async () => {
+    const transferred = { ...createSnapshot({ firstContent: "0123456789" }),
+      editorViewHandoff: { handoffId: "view-1", tabId: "tab-1", revision: 0, selection: { anchor: 7, head: 3 } } };
+    const otherActive = createSnapshot({ activeTabId: "tab-2", firstContent: "0123456789" });
+    let canonical: WorkspaceWindowSnapshot = transferred;
+    const application = createApplication({ initialSnapshot: transferred, bridge: {
+      getWorkspaceSnapshot: vi.fn(async () => canonical)
+    } });
+    expect(application.getEditorLoadSelection(application.getPendingEditorLoadIdentity()!)).toEqual({ anchor: 7, head: 3 });
+    consumeEditorLoad(application);
+    await application.commands.loadInitialWorkspaceSnapshot();
+    expect(application.getPendingEditorLoadIdentity()).toBeNull();
+
+    canonical = otherActive;
+    await application.commands.loadInitialWorkspaceSnapshot();
+    consumeEditorLoad(application);
+    canonical = transferred;
+    await application.commands.loadInitialWorkspaceSnapshot();
+    expect(application.getEditorLoadSelection(application.getPendingEditorLoadIdentity()!)).toBeNull();
+    consumeEditorLoad(application);
+
+    canonical = otherActive;
+    await application.commands.loadInitialWorkspaceSnapshot();
+    consumeEditorLoad(application);
+    canonical = createSnapshot({ activeTabId: "tab-2", includeFirst: false });
+    await application.commands.loadInitialWorkspaceSnapshot();
+    expect(application.getPendingEditorLoadIdentity()).toBeNull();
+    canonical = transferred;
+    await application.commands.loadInitialWorkspaceSnapshot();
+    expect(application.getEditorLoadSelection(application.getPendingEditorLoadIdentity()!)).toEqual({ anchor: 7, head: 3 });
+    consumeEditorLoad(application);
+    application.dispose();
+  });
+
+  it.each([
+    { handoffId: "wrong-tab", tabId: "tab-2", revision: 0, selection: { anchor: 7, head: 3 } },
+    { handoffId: "stale", tabId: "tab-1", revision: 1, selection: { anchor: 7, head: 3 } },
+    { handoffId: "out-of-range", tabId: "tab-1", revision: 0, selection: { anchor: 11, head: 3 } }
+  ])("does not apply a mismatched target selection: %j", (editorViewHandoff) => {
+    const application = createApplication({ initialSnapshot: { ...createSnapshot({ firstContent: "0123456789" }), editorViewHandoff } });
+    expect(application.getEditorLoadSelection(application.getPendingEditorLoadIdentity()!)).toBeNull();
+    application.dispose();
+  });
+
+  it.each(["detach", "move"] as const)("captures %s selection after sealing and draining the actual source load", async (command) => {
+    const initial = createSnapshot({ firstContent: "0123456789" });
+    const removed = createSnapshot({ activeTabId: "tab-2", includeFirst: false });
+    const detachWorkspaceTabToNewWindow = vi.fn(async () => removed);
+    const moveWorkspaceTabToWindow = vi.fn(async () => ({ sourceWindowSnapshot: removed, targetWindowSnapshot: initial }));
+    const getWorkspaceSnapshot = vi.fn(async () => initial);
+    const application = createApplication({ initialSnapshot: initial, bridge: {
+      getWorkspaceSnapshot, detachWorkspaceTabToNewWindow, moveWorkspaceTabToWindow,
+      flushDocumentEdits: vi.fn(async (input: { throughSequence: number }) => ({ kind: "flushed" as const, acknowledgedSequence: input.throughSequence, revision: 0, savedRevision: 0, isDirty: false }))
+    } });
+    const identity = consumeEditorLoad(application);
+    application.registerEditorBarrier(async () => ({ identity, text: "0123456789", selection: { anchor: 7, head: 3 } }));
+    const operation = command === "detach" ? application.detachWorkspaceTab("tab-1") : application.moveWorkspaceTab({ tabId: "tab-1", targetWindowId: "window-2" });
+    expect(getWorkspaceSnapshot).not.toHaveBeenCalled();
+    await acknowledgeEditorReadOnly(application);
+    await vi.waitFor(() => expect(command === "detach" ? detachWorkspaceTabToNewWindow : moveWorkspaceTabToWindow).toHaveBeenCalledTimes(1));
+    expect(command === "detach" ? detachWorkspaceTabToNewWindow : moveWorkspaceTabToWindow).toHaveBeenCalledWith({ tabId: "tab-1", ...(command === "move" ? { targetWindowId: "window-2" } : {}), editorView: { revision: 0, selection: { anchor: 7, head: 3 } } });
+    await acknowledgeEditorEditable(application);
+    await expect(operation).resolves.toMatchObject({ kind: "committed" });
+    application.dispose();
+  });
+
+  it.each([false, true])("restores a failed detach selection only while the source text and revision match (changed=%s)", async (changed) => {
+    const initial = createSnapshot({ firstContent: "0123456789" });
+    const replacement = createSnapshot({ firstContent: "changed canonical" });
+    if (replacement.activeDocument) {
+      replacement.activeDocument.revision = 1;
+      replacement.activeDocument.savedRevision = 1;
+    }
+    const reconciliation = createDeferred<WorkspaceWindowSnapshot>();
+    const getWorkspaceSnapshot = vi.fn().mockResolvedValueOnce(initial).mockImplementation(() => reconciliation.promise);
+    const applyDocumentEdits = vi.fn(async (input: { clientSequence: number; baseRevision: number }) => ({
+      kind: "applied" as const, acknowledgedSequence: input.clientSequence,
+      revision: input.baseRevision + 1, isDirty: true
+    }));
+    const application = createApplication({ initialSnapshot: initial, bridge: {
+      getWorkspaceSnapshot, applyDocumentEdits,
+      detachWorkspaceTabToNewWindow: vi.fn(async () => { throw new Error("Target readiness failed."); }),
+      flushDocumentEdits: vi.fn(async (input: { throughSequence: number }) => ({ kind: "flushed" as const, acknowledgedSequence: input.throughSequence, revision: 0, savedRevision: 0, isDirty: false }))
+    } });
+    const identity = consumeEditorLoad(application);
+    application.registerEditorBarrier(async () => ({ identity, text: "0123456789", selection: { anchor: 7, head: 3 } }));
+    const operation = application.detachWorkspaceTab("tab-1");
+    await acknowledgeEditorReadOnly(application);
+    await vi.waitFor(() => expect(getWorkspaceSnapshot).toHaveBeenCalledTimes(2));
+    expect(application.getState().editorTransition?.phase).toBe("sealed");
+    expect(application.getPendingEditorLoadIdentity()).toBeNull();
+    reconciliation.resolve(changed ? replacement : initial);
+    await vi.waitFor(() => expect(application.getState().editorTransition?.phase).toBe("releasing"));
+    const rebound = application.getPendingEditorLoadIdentity()!;
+    expect(application.getEditorLoadSelection(rebound)).toEqual(changed ? null : { anchor: 7, head: 3 });
+    expect(application.acknowledgeEditorLoad(rebound)).toBe(true);
+    await acknowledgeEditorEditable(application);
+    await expect(operation).resolves.toMatchObject({ kind: "failed-reconciled" });
+    const baseText = (changed ? replacement : initial).activeDocument!.content;
+    expect(application.recordEditorDocumentChangeFrame({
+      identity: rebound, baseText, resultingText: `${baseText.slice(0, 3)}X${baseText.slice(3)}`,
+      changes: [{ from: 3, to: 3, insert: "X" }]
+    })).toBe(true);
+    await vi.waitFor(() => expect(applyDocumentEdits).toHaveBeenCalledTimes(1));
+    expect(applyDocumentEdits).toHaveBeenCalledWith(expect.objectContaining({
+      tabId: "tab-1", baseRevision: changed ? 1 : 0, clientSequence: 1,
+      changes: [{ from: 3, to: 3, insert: "X" }]
+    }));
+    application.dispose();
+  });
+
   it("retains the acknowledged edit queue across a cancelled close epoch rebind", async () => {
     const applyDocumentEdits = vi.fn(async (input: { clientSequence: number; baseRevision: number }) => ({
       kind: "applied" as const, acknowledgedSequence: input.clientSequence,
