@@ -1,5 +1,11 @@
 # FishMark 进展记录
 
+## 2026-10-13 RF-901：mixed fixture 结构行复用本地候选
+
+前一批编辑体验及报告验证已发布到 main `34ced08c99d3c45b2f0d7873b024d09133b65363`，[CI 38344986718](https://github.com/yulu-gm/FishMark/actions/runs/38344986718) 三项 job 全绿。后续已做真实 mixed20k/确定性派生5k 的 ON/OFF 实测，并针对 selection 重复构建文档语义行做最小复用候选；保持本地 checkpoint，未发布该候选。
+
+同协议 OFF 单组配对，20k selection dispatch p95 36.0→17.4ms，首样本 33.3ms 保留；ON 确认 30 次查询的模型构建 30→1、selection full parse 仍 0。typing 每次全量解析且约两秒，未解决。缓存以不可变 snapshot 身份隔离，覆盖模式/配置切换与新旧文档，共享值冻结；真实内存长期预算未测。证据与完整验证见[本批总结](../reports/task-summaries/TASK-RF901-STRUCTURAL-LINE-REUSE-022.md)。RF-901/M9 仍进行中，RF-902/903 未开始。
+
 ## 2026-10-13 RF-901：编辑体验门禁恢复
 
 后续小批已解决下文九项阻碍：独立裸列表草稿提前渲染和隐藏 padding anchor 的预编辑颜色/光标问题已修复；其余旧显示类名与跨 text-node 测量按已批准规则校准，并补可见性反例和真实几何断言。原 79 项全部通过；严格回归 3552 passed +8 exact known，0 skip/unexpected/errors。仅移除两条已实际修复的旧失败记录。

@@ -29,18 +29,26 @@ export type StructuralLineSeparator = {
 };
 
 export type StructuralLineModel = {
-  getLineRole: (lineNumber: number) => StructuralLineRole;
-  getLineAtOffset: (offset: number) => EditingLine | null;
-  findPreviousEditableLine: (offset: number, goalColumn?: number) => EditingLine | null;
-  findNextEditableLine: (offset: number, goalColumn?: number) => EditingLine | null;
-  findSeparatorAt: (offset: number) => StructuralLineSeparator | null;
-  findSeparatorBeforeLine: (lineStartOffset: number) => StructuralLineSeparator | null;
+  readonly getLineRole: (lineNumber: number) => StructuralLineRole;
+  readonly getLineAtOffset: (offset: number) => Readonly<EditingLine> | null;
+  readonly findPreviousEditableLine: (offset: number, goalColumn?: number) => Readonly<EditingLine> | null;
+  readonly findNextEditableLine: (offset: number, goalColumn?: number) => Readonly<EditingLine> | null;
+  readonly findSeparatorAt: (offset: number) => StructuralLineSeparator | null;
+  readonly findSeparatorBeforeLine: (lineStartOffset: number) => StructuralLineSeparator | null;
 };
+
+// Roles and line indexes belong to one immutable document snapshot, not a selection.
+// Object identity also keeps distinct documents with equal revision numbers separate.
+const modelsBySnapshot = new WeakMap<EditorDerivedSnapshot, StructuralLineModel>();
 
 export function createStructuralLineModel(
   snapshot: EditorDerivedSnapshot
 ): StructuralLineModel {
+  const cached = modelsBySnapshot.get(snapshot);
+  if (cached) return cached;
   const physicalDocument = createSemanticEditingDocument(snapshot.document, snapshot);
+  // Queries expose these lines. Protect the shared values from caller mutation.
+  for (const line of physicalDocument.lines) Object.freeze(line);
   const semanticLines = physicalDocument.semanticLineMap.lines;
   const lineIndexes = new Map(semanticLines.map((line, index) => [line.line.number, index]));
 
@@ -125,14 +133,16 @@ export function createStructuralLineModel(
     return findBodySeparatorOnLine(snapshot, semanticLines[lineIndex - 1] ?? null);
   };
 
-  return {
+  const model: StructuralLineModel = Object.freeze({
     getLineRole,
     getLineAtOffset: physicalDocument.getLineAtOffset,
     findPreviousEditableLine,
     findNextEditableLine,
     findSeparatorAt,
     findSeparatorBeforeLine
-  };
+  });
+  modelsBySnapshot.set(snapshot, model);
+  return model;
 }
 
 export function resolveStructuralLineDeleteRange(

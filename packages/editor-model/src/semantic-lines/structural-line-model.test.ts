@@ -1,5 +1,5 @@
 import { createEditorDerivedSnapshotFromCache } from "../derived/editor-derived-snapshot";
-import { createDocumentStructureCache } from "@fishmark/markdown-engine";
+import { applyIncrementalEdit, createDocumentStructureCache } from "@fishmark/markdown-engine";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -11,6 +11,37 @@ const snapshotOf = (source: string) =>
   createEditorDerivedSnapshotFromCache(createDocumentStructureCache(source));
 
 describe("StructuralLineModel", () => {
+  it("reuses document geometry across queries without sharing mutable lines", () => {
+    const snapshot = snapshotOf("Alpha\n\nBeta");
+    const model = createStructuralLineModel(snapshot);
+    expect(model.findNextEditableLine(0)?.text).toBe("Beta");
+    expect(model.findPreviousEditableLine(snapshot.source.length)?.text).toBe("Alpha");
+    const line = model.getLineAtOffset(0)!;
+    expect(() => Object.assign(line, { text: "corrupted" })).toThrow(TypeError);
+    expect(createStructuralLineModel(snapshot)).toBe(model);
+    expect(model.getLineAtOffset(0)?.text).toBe("Alpha");
+    expect(model.findPreviousEditableLine(0)).toBeNull();
+    expect(model.findNextEditableLine(snapshot.source.length)).toBeNull();
+  });
+
+  it("isolates equal revisions and retains old geometry after a document edit", () => {
+    const cache = createDocumentStructureCache("Alpha\r\n\r\nBeta");
+    const original = createEditorDerivedSnapshotFromCache(cache);
+    const oldModel = createStructuralLineModel(original);
+    const other = snapshotOf("> one\n>\n> two");
+    expect(other.revision).toBe(original.revision);
+    expect(createStructuralLineModel(other)).not.toBe(oldModel);
+    expect(createStructuralLineModel(other).findSeparatorAt(6)?.lineStartOffset).toBe(6);
+    const edited = applyIncrementalEdit(cache, { fromOffset: 0, toOffset: 5, insertedText: "Changed" }).cache;
+    const nextModel = createStructuralLineModel(createEditorDerivedSnapshotFromCache(edited));
+    expect(nextModel).not.toBe(oldModel);
+    expect(nextModel.getLineAtOffset(0)?.text).toBe("Changed");
+    expect(nextModel.findSeparatorAt(9)?.nextBlockStart).toBe(11);
+    expect(oldModel.getLineAtOffset(0)?.text).toBe("Alpha");
+    expect(oldModel.findSeparatorAt(7)?.nextBlockStart).toBe(9);
+    expect(createStructuralLineModel(original)).toBe(oldModel);
+  });
+
   it("classifies the first blank body line between blocks as structural and the next as editable extra blank", () => {
     const source = ["Alpha", "", "", "Beta"].join("\n");
     const model = createStructuralLineModel(snapshotOf(source));

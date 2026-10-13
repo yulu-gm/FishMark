@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 
 import { RangeSet, StateEffect, Transaction } from "@codemirror/state";
 import { readCompositionState, readEditorStructureCache } from "@fishmark/codemirror-adapter";
+import { createEditorDerivedSnapshotFromCache, createStructuralLineModel } from "@fishmark/editor-model";
 import { isolateHistory, redo, redoDepth, undo, undoDepth } from "@codemirror/commands";
 import { EditorView } from "@codemirror/view";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -47,6 +48,45 @@ const getEditorView = (host: HTMLElement) => {
 
   return editorRoot instanceof HTMLElement ? EditorView.findFromDOM(editorRoot) : null;
 };
+
+it("keeps structural geometry document-owned across presentation and configuration changes", () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const source = "> one\n>\n> two";
+  const controller = createCodeEditorController({ parent: host, initialContent: source, onChange: vi.fn() });
+  try {
+    const view = getEditorView(host)!;
+    const readModel = () => createStructuralLineModel(
+      createEditorDerivedSnapshotFromCache(readEditorStructureCache(view.state))
+    );
+    const initial = readModel();
+    const separator = initial.findSeparatorAt(6);
+    expect(separator?.lineStartOffset).toBe(6);
+    for (const reconfigure of [
+      () => controller.setViewMode("source"),
+      () => controller.setViewMode("wysiwym"),
+      () => controller.setHeadingPresentationMode("reading"),
+      () => controller.setHeadingPresentationMode("editing"),
+      () => controller.setReadOnly(true),
+      () => controller.setReadOnly(false),
+      () => controller.setDocumentPath("C:/probe/document.md"),
+      () => view.dispatch({ effects: StateEffect.appendConfig.of(EditorView.theme({ "&": { fontSize: "20px" } })) })
+    ]) {
+      reconfigure();
+      expect(controller.getContent()).toBe(source);
+      expect(readModel()).toBe(initial);
+      expect(readModel().findSeparatorAt(6)).toEqual(separator);
+      expect(readModel().findNextEditableLine(0)?.text).toBe("> two");
+    }
+    controller.replaceDocument("Alpha\n\nBeta");
+    expect(readModel()).not.toBe(initial);
+    expect(readModel().getLineAtOffset(0)?.text).toBe("Alpha");
+    expect(initial.getLineAtOffset(0)?.text).toBe("> one");
+  } finally {
+    controller.destroy();
+    host.remove();
+  }
+});
 
 type DocumentFrame = {
   identity: { tabId: string; epoch: number; loadRevision: number } | null;
