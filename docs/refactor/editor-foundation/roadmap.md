@@ -1775,13 +1775,15 @@ npm.cmd run test:e2e
 
 #### RF-903: Electron security hardening
 
+**Implementation status (2026-10-13):** `IN_PROGRESS` under the user's bounded execution authorization. The [sandbox/preload batch](../../../reports/task-summaries/TASK-RF903-SANDBOX-035.md) enables runtime renderer sandboxing with a single bundled preload, preserves bridge authorization, and verifies Windows OS process sandbox state plus document/image/theme compatibility. CSP and main-granted resource/path authorization remain open; packaging contracts are not an installed-package runtime test. RF902 source work is paused without acceptance; RF901 remains paused; M9 stays 0/3.
+
 **Outcome:** renderer compromise cannot freely expand to filesystem or privileged IPC access.
 
 **Files:** modify runtime window config, renderer CSP, custom asset protocol, IPC registrars, packaging tests.
 
 **Steps:**
 
-- [ ] Enable renderer sandbox and adapt preload to supported sandbox APIs.
+- [x] Enable renderer sandbox and adapt preload to supported sandbox APIs.
 - [ ] Add a restrictive CSP compatible with bundled assets, lazy modules, themes, and required custom protocols.
 - [ ] Restrict preview asset reads to registered document resource roots and registered theme roots.
 - [ ] Validate IPC sender, window, runtime mode, tab ownership, and input bounds.

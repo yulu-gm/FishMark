@@ -1,5 +1,9 @@
 # FishMark 进展记录
 
+## 2026-10-13 RF-903 sandbox 与单文件 preload
+
+从官方 main `ed67eb5` 推进首个安全小批：运行窗口启用 renderer sandbox，preload 使用现有 Vite 构建为唯一 electron 外部依赖的单文件，main/watch 不再覆盖其输出。修前真实 Windows renderer sandboxed=false，修后产品窗口按 PID 核验 OS sandbox，兼容本地图片、主题 CSS/GLSL/纹理与编辑保存重启。完整门禁、失败记录和发布见[报告035](../reports/task-summaries/TASK-RF903-SANDBOX-035.md)。RF903 IN_PROGRESS；CSP、资源根与路径授权仍开放。RF902未验收且本轮暂停源码，RF901 PAUSED，M9 0/3。
+
 ## 2026-10-13 RF-902 恢复故障与离线冲突
 
 基于官方 main `9337ff4`，真实故障注入复现并修复损坏日志丢前缀/覆盖原件、单文档回放失败阻断其他文档，以及离线磁盘冲突缺少操作入口。原始恢复文件成对保全，失败文档链隔离，复用现有冲突横幅。完整16条Windows产品E2E通过，22次启动全部退出、清理错误0；门禁、独立审查、原始失败及精确发布见[报告034](../reports/task-summaries/TASK-RF902-RECOVERY-FAULTS-034.md)。退出后故障注入不等于断电，离线冲突不等于运行中非活动标签冲突。本批未运行OS IME；RF901 PAUSED、RF902 IN_PROGRESS、RF903 PLANNED、M9 0/3。

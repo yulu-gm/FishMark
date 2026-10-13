@@ -1,5 +1,7 @@
 # M9 验收清单与下一批顺序
 
+**RF903首批更新（报告035）：** 用户授权开始sandbox/preload最小加固：单文件preload、独占构建输出、所有runtime窗口sandbox=true，以及真实Windows OS进程指标和文档／图片／主题兼容验证。证据、门禁、精确发布见[报告035](../../reports/task-summaries/TASK-RF903-SANDBOX-035.md)。RF903 IN_PROGRESS；RF902未验收且本轮暂停源码，RF901 PAUSED，M9 0/3。CSP、资源根和路径授权仍开放；没有把renderer提供路径当作可信资源授权，也未修改OS安全设置。下方旧审查表为历史缺口来源，不代表本批之后的sandbox状态。
+
 **恢复故障更新（报告034）：** 本次用户指定的四项恢复故障矩阵已取得真实产品证据并完成最小修复：可信前缀保留、原snapshot/journal成对保全、失败文档链阻断且独立文档继续、离线外改拒写与现有横幅处置。16条Windows E2E通过、22次启动退出、清理错误0，原始基线与辅助失败不删除。完整门禁/独立审查/发布见[报告034](../../reports/task-summaries/TASK-RF902-RECOVERY-FAULTS-034.md)。正式剩余仍包括运行中inactive-tab外改、嵌套编辑源文/选区、平台IME和move项尚无已有窗口合并入口；不在本批添加该入口。实际断电/fsync、全部底层写失败和所有snapshot关系故障为额外建议，不自动扩大本批。RF901 PAUSED、RF902 IN_PROGRESS、RF903 PLANNED、M9 0/3；下文旧表格与状态为其记录时点历史。
 
 **跨窗口更新（报告033）：** RF902新增真实点击/排序/分离/取消、Windows离窗释放、pending ACK排空和目标关闭/超时恢复覆盖，并修复光标丢失、Escape仍分离、失败后编辑未重新绑定三项缺陷。已有窗口合并移动仍无用户入口，原生拖到已有窗口保留新建分离窗口行为；不把底层move测试当产品流程验收。完整边界及失败证据见[报告033](../../reports/task-summaries/TASK-RF902-TRANSFER-033.md)。RF902仍IN_PROGRESS，RF901 PAUSED、RF903 PLANNED、M9 0/3。

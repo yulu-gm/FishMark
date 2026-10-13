@@ -72,17 +72,21 @@ describe("createRuntimeWindowManager", () => {
     expect(harness.loadRenderer).toHaveBeenCalledWith(harness.window, "test-workbench");
   });
 
-  it("keeps preload modules loadable in packaged windows without exposing Node to the renderer", () => {
-    const harness = createWindowHarness("editor");
+  it.each(["product", "editor-test", "test-workbench"] as const)("sandboxes %s windows without exposing Node to the renderer", (mode) => {
+    const harness = createWindowHarness(mode === "test-workbench" ? "test-workbench" : "editor");
 
-    harness.manager.openPrimaryWindow();
+    if (mode === "editor-test") {
+      harness.manager.openEditorWindow({ preloadBridgeMode: mode });
+    } else {
+      harness.manager.openPrimaryWindow();
+    }
 
     expect(harness.createWindow).toHaveBeenCalledWith(
       expect.objectContaining({
         webPreferences: expect.objectContaining({
           contextIsolation: true,
           nodeIntegration: false,
-          sandbox: false
+          sandbox: true
         })
       })
     );

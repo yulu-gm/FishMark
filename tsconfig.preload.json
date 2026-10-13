@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.electron.json",
+  "compilerOptions": {
+    "composite": false,
+    "lib": ["ES2022", "DOM"],
+    "noEmit": true
+  },
+  "include": ["src/preload", "src/shared"]
+}

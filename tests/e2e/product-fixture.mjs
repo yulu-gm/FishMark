@@ -180,24 +180,35 @@ class ProductSession {
       // Electron41 omits preload from getLastWebPreferences. CDP replays
       // executed scripts from the renderer's isolated worlds on Debugger.enable.
       const cdp = await state.app.context().newCDPSession(state.page);
-      state.preloadObservation = { parsedScripts: [] };
-      cdp.on("Debugger.scriptParsed", (script) => state.preloadObservation.parsedScripts.push({ scriptId: script.scriptId, url: script.url }));
+      state.preloadObservation = { parsedScripts: [], contexts: [] };
+      cdp.on("Runtime.executionContextCreated", ({ context }) => state.preloadObservation.contexts.push(context));
+      cdp.on("Debugger.scriptParsed", (script) => state.preloadObservation.parsedScripts.push({ scriptId: script.scriptId, url: script.url, executionContextId: script.executionContextId }));
       try {
+        await cdp.send("Runtime.enable");
         await cdp.send("Debugger.enable");
         const expectedPath = resolve(root, "dist-electron/preload/preload.js");
+        const expectedSource = await readFile(expectedPath, "utf8");
         const isPreload = (script) => {
           try { return resolve(script.url.startsWith("file:") ? fileURLToPath(script.url) : script.url) === expectedPath; }
           catch { return false; }
         };
-        await expect.poll(() => state.preloadObservation.parsedScripts.some(isPreload)).toBe(true);
-        const parsed = state.preloadObservation.parsedScripts.find(isPreload);
-        const { scriptSource } = await cdp.send("Debugger.getScriptSource", { scriptId: parsed.scriptId });
-        const expectedSource = await readFile(expectedPath, "utf8");
-        state.preloadObservation.loaded = { ...parsed, scriptSha256: digest(scriptSource), builtSha256: digest(expectedSource), includesExactBuiltSource: scriptSource.includes(expectedSource) };
-        expect(state.preloadObservation.loaded.includesExactBuiltSource).toBe(true);
+        const matches = [];
+        // Electron's sandbox executes preload inside an anonymous wrapper.
+        // Match its actual executed bytes, retaining the isolated-world proof;
+        // a filename or a working bridge alone does not establish provenance.
+        for (const parsed of state.preloadObservation.parsedScripts.filter((script) => script.url === "" || isPreload(script))) {
+          const { scriptSource } = await cdp.send("Debugger.getScriptSource", { scriptId: parsed.scriptId });
+          if (scriptSource.includes(expectedSource)) matches.push({ ...parsed, scriptSha256: digest(scriptSource),
+            builtSha256: digest(expectedSource), includesExactBuiltSource: true });
+        }
+        expect(matches).toHaveLength(1);
+        state.preloadObservation.loaded = matches[0];
+        const context = state.preloadObservation.contexts.find((entry) => entry.id === matches[0].executionContextId);
+        expect(context?.auxData?.isDefault).toBe(false);
       } finally { await cdp.detach(); }
       expect(state.identity.preferences.contextIsolation).toBe(true);
       expect(state.identity.preferences.nodeIntegration).toBe(false);
+      await this.observeSandbox(state.page);
       await state.page.evaluate(observeRenderer, { idleDelayMs: this.idleDelayMs });
       await this.checkpoint("ready");
       if (dialogHelper) {
@@ -247,6 +258,7 @@ class ProductSession {
       const identity = await owner.evaluate((window) => ({ windowId: String(window.id), webContentsId: window.webContents.id, preferences: window.webContents.getLastWebPreferences() }));
       expect(identity.preferences.contextIsolation).toBe(true);
       expect(identity.preferences.nodeIntegration).toBe(false);
+      await this.observeSandbox(page);
       this.current.additionalWindows ??= [];
       this.current.additionalWindows.push(identity);
       return identity;
@@ -260,6 +272,31 @@ class ProductSession {
     for (const member of identity.members) members.set(`${member.pid}:${member.creationTime}`, member);
     state.ownedProcesses = [...members.values()];
     expect(state.ownedProcesses.some((member) => member.pid === state.mainPid)).toBe(true);
+  }
+
+  async observeSandbox(page) {
+    const owner = await this.current.app.browserWindow(page);
+    let windowId;
+    try { windowId = await owner.evaluate((window) => window.id); }
+    finally { await owner.dispose(); }
+    const observation = await this.current.app.evaluate(({ app, BrowserWindow }, id) => {
+      const window = BrowserWindow.fromId(id);
+      const rendererPid = window.webContents.getOSProcessId();
+      return { windowId: id, rendererPid, preferences: window.webContents.getLastWebPreferences(),
+        metric: app.getAppMetrics().find((entry) => entry.pid === rendererPid), argv: process.argv };
+    }, windowId);
+    observation.page = await page.evaluate(() => ({ require: typeof window.require, process: typeof window.process,
+      ipcRenderer: typeof window.ipcRenderer, testBridge: typeof window.fishmarkTest,
+      productBridge: typeof window.fishmark.getWorkspaceSnapshot }));
+    this.current.sandboxObservations ??= [];
+    this.current.sandboxObservations.push(observation);
+    expect(observation.preferences.sandbox).toBe(true);
+    expect(observation.preferences.contextIsolation).toBe(true);
+    expect(observation.preferences.nodeIntegration).toBe(false);
+    expect(observation.argv).not.toContain("--no-sandbox");
+    if (process.platform === "win32") expect(observation.metric?.sandboxed).toBe(true);
+    expect(observation.page).toEqual({ require: "undefined", process: "undefined", ipcRenderer: "undefined", testBridge: "undefined", productBridge: "function" });
+    return observation;
   }
 
   async verifyOwnedProcessesGone(state) {

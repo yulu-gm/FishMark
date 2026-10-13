@@ -2,6 +2,8 @@
 
 **Program:** `REFACTOR-EDITOR-FOUNDATION`
 
+**当前执行（报告035）：** 用户授权转入 RF903 sandbox/preload 最小批；RF902仍未验收，本轮暂停其源码工作，RF901 PAUSED。单文件preload与实际Windows沙箱、文档图片／主题资源兼容证据见[报告035](../../../reports/task-summaries/TASK-RF903-SANDBOX-035.md)。RF903 IN_PROGRESS，CSP及资源根／路径授权待后续批次；M9 0/3。以下早期实施状态保留其记录时点含义。
+
 **Roadmap:** `docs/refactor/editor-foundation/roadmap.md`
 
 **Created:** 2026-07-11
