@@ -4,6 +4,7 @@ import { fileURLToPath, URL } from "node:url";
 import { readFileSync } from "node:fs";
 
 import { createBundleProvenancePlugin } from "./scripts/vite-bundle-provenance";
+import { createRendererCspPlugin } from "./scripts/vite-renderer-csp";
 
 const devServerPort = Number(process.env.FISHMARK_DEV_SERVER_PORT ?? "5173");
 const packageJson = JSON.parse(
@@ -17,6 +18,7 @@ export default defineConfig({
   },
   plugins: [
     react(),
+    createRendererCspPlugin(),
     createBundleProvenancePlugin()
   ],
   resolve: {

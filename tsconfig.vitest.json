@@ -25,6 +25,7 @@
     "src/shared",
     "packages/**/*.ts",
     "scripts/vite-bundle-provenance.ts",
+    "scripts/vite-renderer-csp.ts",
     "fixtures/editor-behavior/**/*.ts"
   ]
 }

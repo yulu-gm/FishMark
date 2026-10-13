@@ -4,15 +4,15 @@
 // Editing is native input;
 // open/save use the actual application menu channel and close uses BrowserWindow.close.
 const assert = require("node:assert/strict");
-const { mkdirSync, readFileSync, writeFileSync } = require("node:fs");
+const { readFileSync, writeFileSync } = require("node:fs");
 const { join, resolve } = require("node:path");
 const { app, BrowserWindow, dialog, ipcMain } = require("electron");
+const isolation = require("./electron-probe-isolation.cjs").configureProbeIsolation(app);
 const temporaryDirectory = process.env.FISHMARK_SAFETY_TEMP;
 const reportPath = process.env.FISHMARK_SAFETY_REPORT;
 if (!temporaryDirectory || !reportPath) throw new Error("The isolated smoke launcher is required.");
 const targetPath = join(temporaryDirectory, "smoke.md");
-mkdirSync(join(temporaryDirectory, "user-data"), { recursive: true });
-app.setPath("userData", join(temporaryDirectory, "user-data"));
+assert.equal(temporaryDirectory, process.env.FISHMARK_PROBE_ISOLATION_ROOT);
 app.disableHardwareAcceleration();
 delete process.env.VITE_DEV_SERVER_URL;
 delete process.env.FISHMARK_START_MODE;
@@ -93,6 +93,7 @@ async function until(label, check) {
 
 (async () => {
   await app.whenReady();
+  isolation.capture("product-ready");
   const window = await until("real application window", () => BrowserWindow.getAllWindows()[0]);
   const evaluate = (source) => window.webContents.executeJavaScript(source, true);
   await until("editor ready", () => evaluate('!!document.querySelector(".cm-content[contenteditable=true]")'));
@@ -187,6 +188,7 @@ async function until(label, check) {
     finalContent: expected,
     timeline
   }, null, 2) + "\n");
+  isolation.capture("before-exit");
   allowQuit = true;
   app.quit();
 })().catch(async (error) => {

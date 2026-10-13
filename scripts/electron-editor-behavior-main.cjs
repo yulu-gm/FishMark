@@ -1,6 +1,7 @@
 const { mkdirSync, renameSync, writeFileSync } = require("node:fs");
 const { dirname } = require("node:path");
 const { app, BrowserWindow } = require("electron");
+const isolation = require("./electron-probe-isolation.cjs").configureProbeIsolation(app);
 const {
   configurePaintableOffscreenTestApp,
   createPaintableOffscreenTestWindow
@@ -68,6 +69,7 @@ async function main() {
         `duration=${report.timing.durationMs}ms`
       ].join(" ") + "\n"
     );
+    isolation.capture("before-exit");
     window.close();
     app.exit(report.pass ? 0 : 1);
   } finally {

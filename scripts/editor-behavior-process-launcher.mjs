@@ -14,6 +14,8 @@ export function createEditorBehaviorArguments(entryPath, { platform, env }) {
 export async function runEditorBehaviorProcess(input) {
   const processTree = spawnTrackedProcess(input.command, input.args, input.options);
   const { child } = processTree;
+  try { input.onSpawn?.(child); }
+  catch (error) { await processTree.terminate(); throw error; }
 
   return await new Promise((resolveExit, rejectExit) => {
     let settled = false;

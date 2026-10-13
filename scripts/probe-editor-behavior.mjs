@@ -3,7 +3,8 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { createServer } from "vite";
-import { createEditorBehaviorArguments, runEditorBehaviorProcess } from "./editor-behavior-process-launcher.mjs";
+import { createEditorBehaviorArguments } from "./editor-behavior-process-launcher.mjs";
+import { createProbeIsolation, runIsolatedElectronProbe } from "./run-isolated-electron-probe.mjs";
 
 const require = createRequire(import.meta.url);
 const electronBinary = require("electron");
@@ -71,7 +72,8 @@ const server = await createServer({
 
 try {
   await server.listen();
-  const exitCode = await runEditorBehaviorProcess({
+  const exitCode = await runIsolatedElectronProbe({
+    isolation: createProbeIsolation("formal"),
     command: electronBinary,
     args: createEditorBehaviorArguments(
       resolve(projectRoot, "scripts", "electron-editor-behavior-main.cjs"),

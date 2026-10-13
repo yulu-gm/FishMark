@@ -1,5 +1,7 @@
 # M9 验收清单与下一批顺序
 
+**RF903 CSP更新（报告036）：** 生产最早 CSP 与开发精确 React Refresh 哈希/HMR 端口已实现，真实脚本／事件／eval／自定义协议脚本／外部请求拒绝，以及主题、Mermaid、KaTeX字体、data/HTTP图片正例已通过。正式开发证据来自双路径owned的dev03，同文档 HMR、真实编辑保存和主题 CSS通过。dev01/02共享FishMark-dev由源码事后推导、未记录真实getPaths；recent更新确认影响，文件时间不能推断首次创建，无运行前快照/保存IPC，不能排除原会话恢复/自动保存，未删回滚。gates02/03隔离边界保留：02仅产品userData；03产品双路径owned，但旧三个probe未完整隔离。仅补强本批editing/safety/formal的beforeReady配置、多阶段实际路径/身份与退出后guard清理，11unit及真实目标通过；最终gates04九项全部通过，strict3779＋8exactknown/0unexpected，产品20/20、27次实际双路径owned、31sandbox观察、全部退出/cleanup0，三个真实probe也双路径/身份/清理通过。gpt-6.1-sol最终源码/证据和impact审计PASS，最终文档同模型审后按授权普通main发布，精确SHA/CI以本机publication/handoff记录为准，详见[报告036](../../reports/task-summaries/TASK-RF903-CSP-036.md)。RF903 IN_PROGRESS、RF902未验收且源码暂停、RF901 PAUSED、M9 0/3。资源根和路径授权仍开放；下方原审计表及报告035的“CSP开放”是各自记录时点历史，不是本批之后的源码状态。
+
 **RF903首批更新（报告035）：** 用户授权开始sandbox/preload最小加固：单文件preload、独占构建输出、所有runtime窗口sandbox=true，以及真实Windows OS进程指标和文档／图片／主题兼容验证。证据、门禁、精确发布见[报告035](../../reports/task-summaries/TASK-RF903-SANDBOX-035.md)。RF903 IN_PROGRESS；RF902未验收且本轮暂停源码，RF901 PAUSED，M9 0/3。CSP、资源根和路径授权仍开放；没有把renderer提供路径当作可信资源授权，也未修改OS安全设置。下方旧审查表为历史缺口来源，不代表本批之后的sandbox状态。
 
 **恢复故障更新（报告034）：** 本次用户指定的四项恢复故障矩阵已取得真实产品证据并完成最小修复：可信前缀保留、原snapshot/journal成对保全、失败文档链阻断且独立文档继续、离线外改拒写与现有横幅处置。16条Windows E2E通过、22次启动退出、清理错误0，原始基线与辅助失败不删除。完整门禁/独立审查/发布见[报告034](../../reports/task-summaries/TASK-RF902-RECOVERY-FAULTS-034.md)。正式剩余仍包括运行中inactive-tab外改、嵌套编辑源文/选区、平台IME和move项尚无已有窗口合并入口；不在本批添加该入口。实际断电/fsync、全部底层写失败和所有snapshot关系故障为额外建议，不自动扩大本批。RF901 PAUSED、RF902 IN_PROGRESS、RF903 PLANNED、M9 0/3；下文旧表格与状态为其记录时点历史。

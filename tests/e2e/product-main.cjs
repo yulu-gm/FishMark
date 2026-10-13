@@ -13,6 +13,7 @@ if (!profile || !telemetryPath || !documentPath || !stderrTeePath) throw new Err
 mkdirSync(profile, { recursive: true });
 mkdirSync(dirname(telemetryPath), { recursive: true });
 require("./product-stderr-tee.cjs").installStderrTee(process.stderr, stderrTeePath);
+app.setPath("appData", dirname(profile));
 app.setPath("userData", profile);
 delete process.env.VITE_DEV_SERVER_URL;
 delete process.env.FISHMARK_START_MODE;
@@ -63,7 +64,7 @@ app.on("browser-window-created", (_event, window) => {
     window.on(event, () => record(`window:${event}`, { windowId: window.id }));
   }
   contents.on("console-message", (event) => record("renderer:console", {
-    level: event.level, message: event.message, lineNumber: event.lineNumber, sourceId: event.sourceId
+    webContentsId: contents.id, level: event.level, message: event.message, lineNumber: event.lineNumber, sourceId: event.sourceId
   }));
   contents.on("preload-error", (_event, preloadPath, error) => record("renderer:preload-error", { preloadPath, error: describe(error) }));
   contents.on("render-process-gone", (_event, detail) => record("renderer:process-gone", detail));

@@ -1,4 +1,5 @@
 const { app, BrowserWindow } = require("electron");
+const isolation = require("./electron-probe-isolation.cjs").configureProbeIsolation(app);
 const {
   configurePaintableOffscreenTestApp,
   createPaintableOffscreenTestWindow
@@ -23,6 +24,7 @@ async function main() {
   );
 
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  isolation.capture("before-exit");
   window.close();
   app.exit(result.pass ? 0 : 1);
 }

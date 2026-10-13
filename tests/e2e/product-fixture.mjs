@@ -172,10 +172,11 @@ class ProductSession {
       expect(await state.page.evaluate(() => typeof window.fishmarkTest)).toBe("undefined");
       state.identity = await state.app.evaluate(({ app, BrowserWindow }) => {
         const window = BrowserWindow.getAllWindows()[0];
-        return { pid: process.pid, argv: process.argv, userData: app.getPath("userData"), url: window.webContents.getURL(), preferences: window.webContents.getLastWebPreferences(), versions: process.versions };
+        return { pid: process.pid, argv: process.argv, appData: app.getPath("appData"), userData: app.getPath("userData"), url: window.webContents.getURL(), preferences: window.webContents.getLastWebPreferences(), versions: process.versions };
       });
       await this.captureOwnedProcesses(state);
       expect(resolve(state.identity.userData)).toBe(resolve(this.profile));
+      expect(resolve(state.identity.appData)).toBe(resolve(this.directory));
       expect(state.identity.url).toBe(pathToFileURL(resolve(root, "dist/index.html")).href);
       // Electron41 omits preload from getLastWebPreferences. CDP replays
       // executed scripts from the renderer's isolated worlds on Debugger.enable.
@@ -418,6 +419,13 @@ class ProductSession {
   async assertHealthy(state = this.current) {
     const events = await this.mainEvidence(state);
     const expectedEvents = new Set();
+    for (const expected of state.expectedCspErrors ?? []) {
+      const observed = events.filter((entry) => entry.event === "renderer:console" &&
+        ["error", 3].includes(entry.detail.level) && entry.detail.webContentsId === expected.webContentsId &&
+        entry.detail.message === expected.message);
+      expect(observed).toHaveLength(expected.count);
+      for (const entry of observed) expectedEvents.add(entry);
+    }
     state.stderrNode = await readFile(state.stderrTeePath, "utf8");
     let checkedStderr = state.stderr;
     let checkedNodeStderr = state.stderrNode;
@@ -455,6 +463,15 @@ class ProductSession {
     expect({ mainErrors, pageErrors: state.pageErrors, rendererErrors,
       stderrErrors: stderrFailures(checkedStderr), nodeStderrErrors: stderrFailures(checkedNodeStderr) }).toEqual({
       mainErrors: [], pageErrors: [], rendererErrors: [], stderrErrors: [], nodeStderrErrors: [] });
+  }
+
+  async expectCspConsoleError(message, page = this.current.page) {
+    const owner = await this.current.app.browserWindow(page);
+    try {
+      const webContentsId = await owner.evaluate((window) => window.webContents.id);
+      this.current.expectedCspErrors ??= [];
+      this.current.expectedCspErrors.push({ webContentsId, message, count: 1 });
+    } finally { await owner.dispose(); }
   }
 
   async finish() {

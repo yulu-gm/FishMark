@@ -2,7 +2,7 @@
 
 先执行 `npm ci`、`npm run build`，再执行 `npm run test:e2e`。只列用例、不启动 Electron：`npm run test:e2e -- --list`。可用 `--grep "product open"` 或 `--grep "true idle"` 分别执行两条。本套件使用锁定的 `@playwright/test` 和已有 Electron，不需下载 Playwright 浏览器。
 
-Playwright `_electron` 启动 `product-main.cjs`，后者只配置隔离和被动观测，然后加载真实 `dist-electron/main/main.js`。窗口、preload、renderer、保存处理器和关闭协议全部由产品创建。每次测试新建独立临时目录、Markdown 文件和 userData，先于产品单实例锁设置 profile；不使用 `fishmarkTest`、不替换 BrowserWindow、对话框、保存结果或关闭确认。断言 profile 和 `file://` 构建入口；通过 CDP 已执行脚本重放及源码读取验证真实 preload 路径和构建源码，记录 SHA256。Electron41 的 getLastWebPreferences 不返回 preload 字段，不能据其缺字段判定未加载。`chromiumSandbox:true` 无绕过开关；这不改变产品当前的 renderer sandbox 设置，也不构成 RF903 安全验收。
+Playwright `_electron` 启动 `product-main.cjs`，后者只配置隔离和被动观测，然后加载真实 `dist-electron/main/main.js`。窗口、preload、renderer、保存处理器和关闭协议全部由产品创建。每次测试新建独立临时目录、Markdown 文件、appData根与userData profile，先于产品单实例锁设置两条路径；不使用 `fishmarkTest`、不替换 BrowserWindow、对话框、保存结果或关闭确认。记录真实Electron appData/userData并精确断言分别等于owned临时根/profile，另断言 `file://` 构建入口；通过 CDP 已执行脚本重放及源码读取验证真实 preload 路径和构建源码，记录 SHA256。Electron41 的 getLastWebPreferences 不返回 preload 字段，不能据其缺字段判定未加载。`chromiumSandbox:true` 无绕过开关；这不改变产品当前的 renderer sandbox 设置，也不构成 RF903 安全验收。
 
 基础持久化流程：
 
@@ -28,3 +28,21 @@ Windows 恢复提示测试需要现有 `pwsh.exe`（PowerShell 7）和可交互�
 单文档回放失败用例还要求该次启动的精确 `console.warn` 诊断（完整实际 tab ID）与 stderr 同行各出现一次；分类副本只扣除此已证明来源的一行。原始日志保留，同文 `console.error`、重复诊断及其他错误仍失败。它不改变 Vitest 已知失败名单，也不能替代源文/弹窗/保存断言。
 
 实际执行和 CI 目标是 Windows。Linux/macOS、OS IME、运行中 inactive-tab 外改、已有窗口合并移动、实际断电/fsync 耐久性仍未由本套件验收。退出后修改原始文件是明确故障注入，不等于捕捉真实写入中断瞬间；M9 依赖和 RF902 整体状态不因局部覆盖改变。既有 workspace-safety 关闭协议和 Vitest 严格基线不变。
+
+## RF903 sandbox 与 CSP
+
+`sandbox.spec.mjs` 验证真实产品窗口配置、对应 renderer PID 的 Windows OS sandbox metric、隔离桥和精确执行 preload 字节，并覆盖本地文档图片、community 主题 CSS 与 full GLSL/纹理、保存重启。[报告035](../../reports/task-summaries/TASK-RF903-SANDBOX-035.md)记录原始 sandbox=false 基线及本批边界；不能只把 fixture 的 `chromiumSandbox:true` 当作产品 sandbox 已通过。
+
+`csp.spec.mjs` 可用 `--grep "CSP blocks"` 选择。在真实生产 renderer 注入内联脚本、事件属性、预览协议 `.js`、eval、独立本地 HTTP script 和 fetch，逐项核验六条真实 securitypolicyviolation 的 directive/blockedURI/enforce、未执行 marker 和 HTTP server 请求0。eval 用 CDP `allowUnsafeEvalBlockedByCSP:false`，要求实际 EvalError；普通 Playwright evaluate 不作为 eval 拒绝证据。custom-protocol `.js` 必须有明确 CSP violation，不能因既有 MIME 拒绝而通过。测试随后仍执行原生编辑、真实 File > Save、精确字节与正常退出。
+
+预期 CSP console 错误只按本次 launch 的实际 webContentsId、完整实际消息和精确次数1登记，再由健康检查逐条匹配。其他错误仍失败；原始日志保留，没有全局 CSP 错误豁免，也不改 known-failure 名单。旧发布构建的同一内联 canary 实际执行，失败基线保留在 `.artifacts/rf903-csp/`。
+
+`csp-resources.spec.mjs` 可用 `--grep "CSP preserves"` 选择：真实 Mermaid SVG、KaTeX 数学和已加载字体，data 与独立 HTTP fixture 图片的自然尺寸及精确请求，随后编辑保存退出。现有 `--grep "sandbox keeps"` 主题用例也在生产 CSP 下验证本地 CSS、shader、纹理、图片及保存重启。这两条新 CSP 用例属于常规产品 E2E，不用临时脚本代替最终套件。
+
+生产策略只允许 self 脚本；开发 canonical 产品入口额外允许锁定 React 插件的精确受信 preamble SHA256、同源请求和最终端口的 localhost HMR WebSocket，不允许任意内联 hash 或 unsafe-eval。`renderer-csp.test.ts` 检查真实 Vite 转换/构建的最早 meta、策略漂移、恶意 inline 不获授权、5173/5174、Refresh 改动及未知 HMR 端点拒绝；独立 probe HTML 不自动获得产品入口的脚本授权。
+
+本机有界开发补充脚本在 `.artifacts/rf903-csp/dev-proof.mjs`，由协调方串行运行并恢复桌面：保留唯一 runId，隔离 appData 后两次验证产品实际 userData，检查 editor/workbench 的真实精确 WebSocket、同文档 HMR，以及 editor 原生编辑保存与自定义主题 CSS。它不加入常规 suite，不与其他 Electron 或固定端口任务并行。早期 dev01/02 漏 appData 隔离且未记录真实getPaths，共享 FishMark-dev路径由源码事后推导；文件时间变化不能证明首次创建，两个临时seed的recent/lastOpened确认列表更新。没有运行前profile或保存IPC观测，不能排除既有会话恢复或自动保存，未删或回滚。它们不计验收，正式开发证据仅用dev03。gates02产品只断言userData，gates03产品已实际双路径owned但其旧三个probe仍未完整隔离；最终gates04九项全部通过，产品20/20、27次实际双路径owned、全部退出且cleanup0，不混用历史边界。
+
+本批九项门禁实际使用的 editing、workspace-safety、formal 父runner接入 `run-isolated-electron-probe.mjs`/`electron-probe-isolation.cjs`，其他旧probe未扩范围。父创建real临时根下的owned目录与独占registry，child在app ready前官方设置appData/userData，并在配置、ready、loaded、before-exit记录实际路径及main/app metrics PID/creationTime；safety在真实production main加载后再核验。父复用有限时长processlauncher，所有拥有PID退出后才guard realpath/parent/prefix清理成功profile，失败保留profile及外部sidecar。metric PID只观测不杀，PID复用可保守失败；不以unit mock记录替代真实证据，最终汇总仅取三个实际日志引用的精确sidecar。可用 `FISHMARK_PROBE_ISOLATION_EVIDENCE_DIR` 指定这三个真实probe的证据目录，缺协议的child会拒绝启动；不要绕过父runner直接启动它们。11项契约、三真实目标及gates04中相同入口均通过，每实际probe各4真实成员、多阶段实际路径匹配、全部退出并清理成功；全门禁/独审/发布记录见[报告036](../../reports/task-summaries/TASK-RF903-CSP-036.md)。
+
+CSP不授予或撤销文档/主题路径权限。main授予资源根、realpath/symlink边界、生命周期撤销及授权来源仍是后续 RF903 最小批次；本批不宣称已经解决 renderer 提交路径的现有能力，也不改变 RF902 正式剩余清单。

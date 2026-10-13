@@ -1,13 +1,13 @@
 import { createRequire } from "node:module";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { mkdirSync, readFileSync, rmSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { runEditorBehaviorProcess } from "./editor-behavior-process-launcher.mjs";
+import { createProbeIsolation, runIsolatedElectronProbe } from "./run-isolated-electron-probe.mjs";
 
 const require = createRequire(import.meta.url);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const temporaryDirectory = mkdtempSync(join(tmpdir(), "fishmark-workspace-safety-"));
+const isolation = createProbeIsolation("safety");
+const temporaryDirectory = isolation.directory;
 const reportPath = resolve(root, ".artifacts/ci/workspace-safety.json");
 // The isolated headless Linux runner may not support user namespaces. This
 // smoke covers workflow/data safety, not M9's OS sandbox/security acceptance.
@@ -16,7 +16,8 @@ const headlessLinux = process.platform === "linux" &&
 mkdirSync(dirname(reportPath), { recursive: true });
 rmSync(reportPath, { force: true });
 try {
-  const code = await runEditorBehaviorProcess({
+  const code = await runIsolatedElectronProbe({
+    isolation,
     command: require("electron"),
     args: [
       ...(headlessLinux ? ["--no-sandbox"] : []),
@@ -37,6 +38,4 @@ try {
 } catch (error) {
   console.error(error);
   process.exitCode = 1;
-} finally {
-  rmSync(temporaryDirectory, { recursive: true, force: true });
 }

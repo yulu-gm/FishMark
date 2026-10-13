@@ -1775,7 +1775,7 @@ npm.cmd run test:e2e
 
 #### RF-903: Electron security hardening
 
-**Implementation status (2026-10-13):** `IN_PROGRESS` under the user's bounded execution authorization. The [sandbox/preload batch](../../../reports/task-summaries/TASK-RF903-SANDBOX-035.md) enables runtime renderer sandboxing with a single bundled preload, preserves bridge authorization, and verifies Windows OS process sandbox state plus document/image/theme compatibility. CSP and main-granted resource/path authorization remain open; packaging contracts are not an installed-package runtime test. RF902 source work is paused without acceptance; RF901 remains paused; M9 stays 0/3.
+**Implementation status (2026-10-13):** `IN_PROGRESS` under the user's bounded execution authorization. The [sandbox/preload batch](../../../reports/task-summaries/TASK-RF903-SANDBOX-035.md) enables runtime renderer sandboxing with a single bundled preload and preserves bridge authorization. The [CSP batch](../../../reports/task-summaries/TASK-RF903-CSP-036.md) adds production restrictions and narrowly scoped development Refresh/HMR grants, with actual Windows positive/negative resource tests and isolated editor/workbench HMR evidence. Early dev probes lacked recorded actual getPaths; source-derived shared-profile metadata and owned recent-file updates confirm an impact. File times cannot prove first creation; absent before-profile/save-IPC observation, prior-session recovery or automatic saving cannot be excluded. Only corrected dev03 counts as development evidence. Historical gates02/03 isolation limits remain disclosed. The narrow three-probe repair passed 11 unit contracts and actual editing/safety/formal targets; final gates04 passed all nine checks (strict 3779 plus 8 unchanged exact known; E2E 20/20, all 27 launches asserting both actual owned paths; all three real probes asserting paths and verifying process exit before cleanup). gpt-6.1-sol final source/evidence and impact reviews passed. Documentation is reviewed by the same model before the authorized ordinary main publication; exact SHA/CI outcomes belong to local publication/handoff records. Main-granted resource/path authorization remains open; packaging contracts are not an installed-package runtime test. RF902 source work is paused without acceptance; RF901 remains paused; M9 stays 0/3.
 
 **Outcome:** renderer compromise cannot freely expand to filesystem or privileged IPC access.
 
@@ -1784,7 +1784,7 @@ npm.cmd run test:e2e
 **Steps:**
 
 - [x] Enable renderer sandbox and adapt preload to supported sandbox APIs.
-- [ ] Add a restrictive CSP compatible with bundled assets, lazy modules, themes, and required custom protocols.
+- [x] Add a restrictive CSP compatible with bundled assets, lazy modules, themes, and required custom protocols.
 - [ ] Restrict preview asset reads to registered document resource roots and registered theme roots.
 - [ ] Validate IPC sender, window, runtime mode, tab ownership, and input bounds.
 - [ ] Deny navigation/window creation and keep external links protocol-allowlisted.

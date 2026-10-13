@@ -23,6 +23,7 @@
     "packages/**/*.ts",
     "fixtures/editor-behavior/**/*.ts",
     "scripts/vite-bundle-provenance.ts",
+    "scripts/vite-renderer-csp.ts",
     "vite.config.ts"
   ]
 }
