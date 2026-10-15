@@ -21,7 +21,7 @@ import {
 import type { EditorViewMode } from "@fishmark/codemirror-adapter";
 import type { ActiveBlockState } from "@fishmark/editor-model";
 import type { EditorLoadIdentity } from "./application/editor-load-identity";
-import type { WorkspaceEditorSelection } from "../shared/workspace";
+import type { WorkspaceEditorLoadView, WorkspaceEditorSelection } from "../shared/workspace";
 
 export type CodeEditorHandle = {
   getContent: () => string;
@@ -79,6 +79,7 @@ type CodeEditorViewProps = {
     readonly text: string;
     readonly identity: EditorLoadIdentity | null;
     readonly selection?: WorkspaceEditorSelection;
+    readonly readingPosition?: import("../shared/workspace").WorkspaceReadingPosition;
   }>) | null) => void;
   onEditorRemotePatchChange?: (patch: ((input: {
     readonly identity: EditorLoadIdentity;
@@ -95,7 +96,7 @@ type CodeEditorViewProps = {
   }) => ReturnType<CodeEditorController["restoreCanonicalDocument"]>) | null) => void;
   onEditorTransitionApplied: (input: { token: number; readOnly: boolean }) => void;
   onLoadRevisionApplied: (identity: EditorLoadIdentity) => void;
-  getEditorLoadSelection?: (identity: EditorLoadIdentity) => WorkspaceEditorSelection | null;
+  getEditorLoadSelection?: (identity: EditorLoadIdentity) => WorkspaceEditorLoadView | null;
   onBlur?: () => void;
   onActiveBlockChange?: (state: ActiveBlockState) => void;
   importClipboardImage?: (input: { tabId: string }) => Promise<string | null>;
@@ -223,7 +224,8 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
 
       controllerRef.current = controller;
       const viewStates = viewStatesByTabRef.current;
-      handleEditorBarrierChange(async () => ({ ...await controller.sealForBarrier(), selection: controller.getSelection() }));
+      handleEditorBarrierChange(async () => ({ ...await controller.sealForBarrier(), selection: controller.getSelection(),
+        ...(controller.captureReadingPosition ? { readingPosition: controller.captureReadingPosition() } : {}) }));
       handleEditorRemotePatchChange((input) => controller.applyRemoteDocumentPatch(input));
       handleEditorCanonicalRestoreChange((input) => controller.restoreCanonicalDocument(input));
 
@@ -265,7 +267,10 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
       appliedIdentityRef.current = identity;
       if (controller) {
         const selection = handleEditorLoadSelection(identity);
-        if (selection) controller.setSelection(selection.anchor, selection.head);
+        if (selection) {
+          controller.setSelection(selection.anchor, selection.head);
+          if (selection.readingPosition) controller.restoreReadingPosition?.(selection.readingPosition);
+        }
         else if (changedTab) {
           const saved = viewStatesByTabRef.current.get(documentTabId);
           if (saved && !controller.restoreViewState(saved)) viewStatesByTabRef.current.delete(documentTabId);

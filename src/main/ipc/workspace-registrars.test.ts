@@ -33,6 +33,8 @@ const commandRequests: [string, unknown[]][] = [
   ["reload-workspace-tab-from-path", [{ tabId: "tab" }]], ["activate-workspace-tab", [{ tabId: "tab" }]],
   ["close-workspace-tab", [{ tabId: "tab" }]], ["reorder-workspace-tab", [{ tabId: "tab", toIndex: 0 }]],
   ["move-workspace-tab-to-window", [{ tabId: "tab", targetWindowId: "target" }]],
+  ["resolve-workspace-tab-drop", [{ tabId: "tab" }]],
+  ["confirm-workspace-tab-receipt", [{ requestId: "receipt", tabId: "tab", success: true }]],
   ["detach-workspace-tab-to-new-window", [{ tabId: "tab" }]],
   ["handle-dropped-markdown-file", [{ targetPaths: ["/notes/a.md"] }]],
   ["save-markdown-file", [{ tabId: "tab" }]], ["save-markdown-file-as", [{ tabId: "tab" }]],

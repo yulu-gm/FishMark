@@ -8,6 +8,7 @@ import type { KeyedOperationCoordinator } from "./ports";
 export type WorkspaceTabTransferInput = Readonly<{
   tabId: string;
   expectedWindowId: string;
+  expectedRevision?: number;
   targetWindowId: string;
   targetIndex?: number;
   isActive?: () => boolean;
@@ -35,6 +36,9 @@ export function createWorkspaceTabTransfer(dependencies: {
         throw new Error(
           `Workspace tab '${input.tabId}' does not belong to window '${input.expectedWindowId}'.`
         );
+      }
+      if (input.expectedRevision !== undefined && checkpoint.revision !== input.expectedRevision) {
+        throw new Error("The document changed before its transfer could be committed.");
       }
       if (input.isActive?.() === false) {
         throw new Error("Workspace tab transfer is no longer active.");

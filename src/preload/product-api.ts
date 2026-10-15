@@ -1,3 +1,4 @@
+import { RESOLVE_WORKSPACE_TAB_DROP_CHANNEL, REQUEST_WORKSPACE_TAB_RECEIPT_EVENT, CONFIRM_WORKSPACE_TAB_RECEIPT_CHANNEL, COMPLETE_WORKSPACE_TAB_RECEIPT_EVENT, type WorkspaceTabDropResult, type WorkspaceTabReceiptRequest, type WorkspaceTabReceiptComplete } from "../shared/workspace-tab-transfer";
 import {
   APP_NOTIFICATION_EVENT,
   APP_UPDATE_STATE_EVENT,
@@ -177,6 +178,13 @@ export function createProductApi({ ipc, filePath, runtime }: CreateProductApiInp
       ipc.invoke<WorkspaceWindowSnapshot>(REORDER_WORKSPACE_TAB_CHANNEL, input),
     moveWorkspaceTabToWindow: (input: MoveWorkspaceTabToWindowInput) =>
       ipc.invoke<WorkspaceMoveTabResult>(MOVE_WORKSPACE_TAB_TO_WINDOW_CHANNEL, input),
+    resolveWorkspaceTabDrop: (input) => ipc.invoke<WorkspaceTabDropResult>(RESOLVE_WORKSPACE_TAB_DROP_CHANNEL, input),
+    onWorkspaceTabReceiptRequest: (listener) => subscribe<WorkspaceTabReceiptRequest>(REQUEST_WORKSPACE_TAB_RECEIPT_EVENT, (request) => {
+      void Promise.resolve().then(() => listener(request)).catch(() => false).then((success) =>
+        ipc.invoke<void>(CONFIRM_WORKSPACE_TAB_RECEIPT_CHANNEL, { requestId: request.requestId, tabId: request.tabId, success })
+      ).catch(() => { /* Main's bounded receipt lifetime owns transport failure. */ });
+    }),
+    onWorkspaceTabReceiptComplete: (listener) => subscribe<WorkspaceTabReceiptComplete>(COMPLETE_WORKSPACE_TAB_RECEIPT_EVENT, listener),
     detachWorkspaceTabToNewWindow: (input: DetachWorkspaceTabToNewWindowInput) =>
       ipc.invoke<WorkspaceWindowSnapshot>(DETACH_WORKSPACE_TAB_TO_NEW_WINDOW_CHANNEL, input),
     applyDocumentEdits: (input: ApplyDocumentEditsInput) =>

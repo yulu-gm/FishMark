@@ -7,6 +7,7 @@ import {
   type EditorLoadIdentity
 } from "./workspace-renderer-application";
 import type { CodeEditorDocumentChangeFrame } from "../code-editor";
+import type { WorkspaceTabReceiptRequest, WorkspaceTabReceiptComplete } from "../../shared/workspace-tab-transfer";
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
@@ -144,6 +145,98 @@ async function acknowledgeEditorEditable(application: WorkspaceRendererApplicati
 }
 
 describe("WorkspaceRendererApplication", () => {
+  function receiver(expiresAt = Date.now() + 15_000) {
+    let canonical = createSnapshot();
+    const request: WorkspaceTabReceiptRequest = { requestId: "receipt-1", tabId: "imported", targetWindowId: canonical.windowId,
+      expiresAt, document: { ...canonical.activeDocument!, tabId: "imported", path: "C:/incoming.md", content: "unsaved incoming", revision: 1, isDirty: true } };
+    let prepare!: (request: WorkspaceTabReceiptRequest) => Promise<boolean>;
+    let complete!: (result: WorkspaceTabReceiptComplete) => void;
+    const getWorkspaceSnapshot = vi.fn(async () => canonical);
+    const reorderWorkspaceTab = vi.fn(async () => canonical);
+    const flushDocumentEdits = vi.fn(async (input: { throughSequence: number }) => ({ kind: "flushed" as const,
+      acknowledgedSequence: input.throughSequence, revision: 0, savedRevision: 0, isDirty: false }));
+    const application = createApplication({ initialSnapshot: canonical, bridge: { getWorkspaceSnapshot, reorderWorkspaceTab, flushDocumentEdits,
+      onWorkspaceTabReceiptRequest: listener => { prepare = listener; return () => {}; },
+      onWorkspaceTabReceiptComplete: listener => { complete = listener; return () => {}; } } });
+    consumeEditorLoad(application);
+    application.subscribe(() => {
+      const transition = application.getState().editorTransition;
+      if (transition?.phase === "sealing" || transition?.phase === "releasing") queueMicrotask(() =>
+        application.acknowledgeEditorTransition({ token: transition.token, readOnly: transition.readOnly }));
+    });
+    application.start();
+    return { application, request, prepare, complete, getWorkspaceSnapshot, reorderWorkspaceTab, flushDocumentEdits,
+      commit: () => { canonical = { ...canonical, activeTabId: request.tabId, activeDocument: request.document,
+        tabs: [...canonical.tabs, { tabId: request.tabId, path: request.document.path, name: request.document.name, isDirty: true, saveState: "idle" }] }; } };
+  }
+
+  it("stages an incoming exact document read-only, drains target, and releases queued work after commit", async () => {
+    const f = receiver();
+    try {
+      expect(await f.prepare(f.request)).toBe(true);
+      expect(f.flushDocumentEdits).toHaveBeenCalledOnce();
+      expect(f.application.getState().editorTransition?.readOnly).toBe(true);
+      expect(f.application.getActiveTabId()).toBe("tab-1");
+      const queued = f.application.reorderWorkspaceTab("tab-2", 0);
+      await Promise.resolve(); expect(f.reorderWorkspaceTab).not.toHaveBeenCalled();
+      f.commit(); f.complete({ requestId: f.request.requestId, committed: true });
+      await expect(queued).resolves.toMatchObject({ kind: "committed" });
+      expect(f.application.getActiveDocument()).toMatchObject({ tabId: "imported", content: "unsaved incoming", isDirty: true });
+      expect(f.application.getState().editorTransition).toBeNull();
+      expect(f.reorderWorkspaceTab).toHaveBeenCalledOnce();
+    } finally { f.application.dispose(); }
+  });
+
+  it("declines a non-strip drop or an already completed receipt without sealing the target", async () => {
+    const f = receiver();
+    try {
+      expect(await f.prepare({ ...f.request, point: { x: 0, y: 0 } })).toBe(false);
+      f.complete({ requestId: f.request.requestId, committed: false });
+      expect(await f.prepare(f.request)).toBe(false);
+      expect(f.application.getState().editorTransition).toBeNull();
+      expect(f.flushDocumentEdits).not.toHaveBeenCalled();
+    } finally { f.application.dispose(); }
+  });
+
+  it("an aborted receipt restores target editability and the waiting command queue", async () => {
+    const f = receiver();
+    try {
+      expect(await f.prepare(f.request)).toBe(true);
+      const queued = f.application.reorderWorkspaceTab("tab-2", 0);
+      f.complete({ requestId: f.request.requestId, committed: false });
+      await expect(queued).resolves.toMatchObject({ kind: "committed" });
+      expect(f.application.getActiveTabId()).toBe("tab-1");
+      expect(f.application.getState().editorTransition).toBeNull();
+    } finally { f.application.dispose(); }
+  });
+
+  it("a lost completion reconciles the actual committed snapshot and releases its queue", async () => {
+    const f = receiver(Date.now() + 100);
+    try {
+      expect(await f.prepare(f.request)).toBe(true);
+      const queued = f.application.reorderWorkspaceTab("tab-2", 0);
+      f.commit();
+      await expect(queued).resolves.toMatchObject({ kind: "committed" });
+      expect(f.application.getActiveTabId()).toBe("imported");
+      expect(f.application.getState().editorTransition).toBeNull();
+    } finally { f.application.dispose(); }
+  });
+
+  it("does not acknowledge a receipt until the target flush checkpoint settles", async () => {
+    const f = receiver(); const flush = createDeferred<Awaited<ReturnType<typeof f.flushDocumentEdits>>>();
+    f.flushDocumentEdits.mockImplementation(() => flush.promise);
+    try {
+      const accepted = vi.fn(); const preparing = f.prepare(f.request).then(accepted);
+      await vi.waitFor(() => expect(f.flushDocumentEdits).toHaveBeenCalledOnce());
+      expect(accepted).not.toHaveBeenCalled();
+      f.complete({ requestId: f.request.requestId, committed: false });
+      flush.resolve({ kind: "flushed", acknowledgedSequence: 0, revision: 0, savedRevision: 0, isDirty: false });
+      await preparing;
+      expect(accepted).toHaveBeenCalledWith(false);
+      expect(f.application.getState().editorTransition).toBeNull();
+    } finally { f.application.dispose(); }
+  });
+
   it.each(["modified", "deleted"] as const)("refreshes canonical metadata after a disk-version-conflict so the %s conflict is actionable", async (kind) => {
     const conflicted = createSnapshot();
     conflicted.activeDocument = { ...conflicted.activeDocument!, externalChange: { kind } };

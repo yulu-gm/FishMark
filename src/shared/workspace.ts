@@ -39,10 +39,21 @@ export type WorkspaceWindowSnapshot = {
 };
 
 export type WorkspaceEditorSelection = Readonly<{ anchor: number; head: number }>;
+export type WorkspaceReadingPosition = Readonly<{ anchor: number; relativeY: number; scrollLeft: number }>;
+export type WorkspaceEditorLoadView = WorkspaceEditorSelection & Readonly<{ readingPosition?: WorkspaceReadingPosition }>;
 export type WorkspaceTransferEditorView = Readonly<{
   revision: number;
   selection: WorkspaceEditorSelection;
+  readingPosition?: WorkspaceReadingPosition;
 }>;
+
+export function isWorkspaceReadingPosition(value: unknown, length: number): value is WorkspaceReadingPosition {
+  if (!value || typeof value !== "object") return false;
+  const position = value as Record<string, unknown>;
+  return typeof position.anchor === "number" && Number.isSafeInteger(position.anchor) && position.anchor >= 0 && position.anchor <= length &&
+    typeof position.relativeY === "number" && Number.isFinite(position.relativeY) && Math.abs(position.relativeY) <= 10_000_000 &&
+    typeof position.scrollLeft === "number" && Number.isFinite(position.scrollLeft) && position.scrollLeft >= 0 && position.scrollLeft <= 10_000_000;
+}
 export type WorkspaceEditorViewHandoff = WorkspaceTransferEditorView & Readonly<{
   handoffId: string;
   tabId: string;
@@ -69,6 +80,7 @@ export type MoveWorkspaceTabToWindowInput = {
   tabId: string;
   targetWindowId: string;
   targetIndex?: number;
+  dropId?: string;
   editorView?: WorkspaceTransferEditorView;
 };
 

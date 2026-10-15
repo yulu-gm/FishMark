@@ -272,21 +272,30 @@ for (const input of ["browser", ...(process.platform === "win32" ? ["Windows out
     expect(await before.page.evaluate(() => devicePixelRatio)).toBe(1);
     const tab = await before.page.locator('[data-fishmark-region="workspace-tab"][data-active="true"]').boundingBox();
     const start = { x: Math.round(identity.contentBounds.x + tab.x + tab.width / 2), y: Math.round(identity.contentBounds.y + tab.y + tab.height / 2) };
-    const end = { x: existing ? workArea.x + workArea.width - 30 : identity.bounds.x + identity.bounds.width + 30, y: start.y };
+    const end = { x: identity.bounds.x + identity.bounds.width + 30, y: start.y };
+    if (existing) {
+      const strip = await existing.locator('[data-fishmark-region="workspace-tab-strip"]').boundingBox();
+      expect(strip).not.toBeNull();
+      const receiver = await product.current.app.browserWindow(existing);
+      const bounds = await receiver.evaluate(w => w.getContentBounds()); await receiver.dispose();
+      end.x = Math.round(bounds.x + strip.x + strip.width - 30);
+      end.y = Math.round(bounds.y + strip.y + strip.height / 2);
+      product.crossWindowProof.targetStrip = { strip, bounds };
+    }
     product.crossWindowProof.nativePreparation = { workArea, identity, start, end };
     const args = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", fileURLToPath(new URL("./windows-pointer-drag.ps1", import.meta.url)), "-WindowHandle", identity.hwnd, "-OwnerPid", String(product.current.mainPid), "-StartX", String(start.x), "-StartY", String(start.y), "-EndX", String(end.x), "-EndY", String(end.y)];
-    if (existingIdentity) args.push("-EndWindowHandle", existingIdentity.hwnd);
+    if (existingIdentity) args.push("-EndWindowHandle", existingIdentity.hwnd, "-ReleaseDelayMs", "200");
     const native = await new Promise((resolve, reject) => execFile("powershell.exe", args, { windowsHide: true, timeout: 15_000 }, (error, stdout, stderr) => error ? reject(new Error(`${error.message}\n${stdout}\n${stderr}`)) : resolve(JSON.parse(stdout))));
     product.crossWindowProof.nativePointer = { identity, ...native };
     const events = (await product.rendererEvidence(before.page)).events;
     expect(events.filter((entry) => entry.event === "pointerup" && entry.detail.trusted && entry.detail.x > identity.contentBounds.width)).toHaveLength(1);
     expect(events.filter((entry) => entry.event === "dragstart")).toEqual([]);
   }
-  await expect.poll(() => product.current.app.windows().length).toBe(existing ? 3 : 2);
-  const target = product.current.app.windows().find((page) => page !== before.page && page !== existing);
+  await expect.poll(() => product.current.app.windows().length).toBe(2);
+  const target = existing ?? product.current.app.windows().find((page) => page !== before.page);
   if (existing) {
-    expect((await product.snapshot(existing)).tabs).toEqual([]);
-    product.crossWindowProof.existingWindow = { identity: existingIdentity, snapshot: await product.snapshot(existing), behavior: "No pre-existing cross-window drop receiver; dropping there retains detach-to-new-window behavior." };
+    await expect.poll(async () => (await product.snapshot(existing)).activeDocument?.content).toBe(content);
+    product.crossWindowProof.existingWindow = { identity: existingIdentity, snapshot: await product.snapshot(existing), behavior: "A real native hit on the existing empty tab strip receives the document without a third window." };
   }
   const targetIdentity = await product.observeNewWindow(target, content);
   await product.focus(target);

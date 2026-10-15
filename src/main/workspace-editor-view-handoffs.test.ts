@@ -17,6 +17,23 @@ function setup() {
 }
 
 describe("workspace editor view handoffs", () => {
+  it("carries a serializable revision-bound reading anchor only to the new owner", () => {
+    const f = setup();
+    const readingPosition = { anchor: 3, relativeY: -12.5, scrollLeft: 7 };
+    f.handoffs.stage(f.tabId, "source", { ...f.view, readingPosition });
+    f.workspace.moveTabToWindow({ tabId: f.tabId, targetWindowId: "target" });
+    expect(JSON.parse(JSON.stringify(f.handoffs.decorate(f.snapshot("target")))).editorViewHandoff.readingPosition).toEqual(readingPosition);
+    expect(f.handoffs.decorate(f.snapshot("source")).editorViewHandoff).toBeUndefined();
+  });
+  it.each([
+    { anchor: -1, relativeY: 0, scrollLeft: 0 }, { anchor: 11, relativeY: 0, scrollLeft: 0 },
+    { anchor: 0, relativeY: NaN, scrollLeft: 0 }, { anchor: 0, relativeY: Infinity, scrollLeft: 0 },
+    { anchor: 0, relativeY: 0, scrollLeft: -1 }, { anchor: 0, relativeY: 0, scrollLeft: Infinity }
+  ])("rejects malformed reading positions before transfer: %j", readingPosition => {
+    const f = setup();
+    expect(() => f.handoffs.stage(f.tabId, "source", { ...f.view, readingPosition })).toThrow("does not match");
+    expect(f.workspace.getTabSession(f.tabId).windowId).toBe("source");
+  });
   it("stages before readiness, exposes only after ownership moves, and preserves repeated reads without entering persistence", () => {
     const { workspace, tabId, handoffs, snapshot, view } = setup();
     handoffs.stage(tabId, "source", view);

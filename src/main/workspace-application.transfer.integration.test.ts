@@ -59,4 +59,33 @@ describe("workspace tab transfer use case", () => {
     );
     expect(workspace.getTabSession(tabId).windowId).toBe("window-2");
   });
+
+  it.each(["move", "detach"] as const)("rejects %s when the staged revision changes while waiting for the lease", async (kind) => {
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
+    workspace.registerWindow("source");
+    const tabId = workspace.createUntitledTab("source").activeTabId!;
+    workspace.registerWindow("target");
+    const targetTabId = workspace.createUntitledTab("target").activeTabId!;
+    const documentOperations = createKeyedOperationCoordinator<string>();
+    const application = createWorkspaceTabTransfer({ workspace, documentOperations });
+    const lease = await documentOperations.acquireExclusive([tabId]);
+    const transfer = application[kind]({ tabId, expectedWindowId: "source", targetWindowId: "target", expectedRevision: 0 });
+    const rejected = expect(transfer).rejects.toThrow("The document changed before its transfer could be committed.");
+    workspace.updateTabDraft({ tabId, expectedWindowId: "source", content: "new unsaved text after receipt" });
+    lease.release();
+    await rejected;
+    expect(workspace.getTabSession(tabId)).toMatchObject({ windowId: "source", content: "new unsaved text after receipt", revision: 1, isDirty: true });
+    expect(workspace.getWindowProjection("target").tabs.map(tab => tab.tabId)).toEqual([targetTabId]);
+  });
+
+  it("commits a matching staged revision and keeps its dirty text", async () => {
+    const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
+    workspace.registerWindow("source");
+    const tabId = workspace.createUntitledTab("source").activeTabId!;
+    workspace.updateTabDraft({ tabId, expectedWindowId: "source", content: "received dirty text" });
+    workspace.registerWindow("target");
+    const application = createWorkspaceTabTransfer({ workspace, documentOperations: createKeyedOperationCoordinator() });
+    await application.move({ tabId, expectedWindowId: "source", targetWindowId: "target", expectedRevision: 1 });
+    expect(workspace.getTabSession(tabId)).toMatchObject({ windowId: "target", content: "received dirty text", revision: 1, savedRevision: 0, isDirty: true });
+  });
 });

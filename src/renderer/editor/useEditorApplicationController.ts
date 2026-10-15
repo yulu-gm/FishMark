@@ -17,7 +17,7 @@ export function useEditorApplicationController(input: {
     handleEditorBlur: application.handleEditorBlur,
     activateWorkspaceTab: application.commands.activateWorkspaceTab,
     closeWorkspaceTab: application.commands.closeWorkspaceTab,
-    detachWorkspaceTab: application.commands.detachWorkspaceTab
+    detachWorkspaceTab: application.commands.dropWorkspaceTab
   }), [application]);
   return {
     commands: application.commands,

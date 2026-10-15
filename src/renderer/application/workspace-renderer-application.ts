@@ -1,4 +1,6 @@
 import { RendererPlatformGateway, type WorkspaceApplicationGateway } from "./renderer-platform-gateway";
+import type { WorkspaceTabReceiptRequest, WorkspaceTabReceiptComplete } from "../../shared/workspace-tab-transfer";
+import { isWorkspaceReadingPosition, type WorkspaceEditorLoadView, type WorkspaceReadingPosition } from "../../shared/workspace";
 import type { AppNotification } from "../../shared/app-update";
 import type { AppMenuCommand } from "../../shared/menu-command";
 import { RELOAD_WORKSPACE_TAB_FROM_PATH_ERROR_MESSAGES, type MoveWorkspaceTabToWindowInput, type WorkspaceEditorSelection, type WorkspaceTransferEditorView } from "../../shared/workspace";
@@ -76,6 +78,9 @@ export type WorkspaceRendererBridge = Pick<
   | "exportHtmlFile"
   | "onWorkspaceOwnerTabActivationRequest"
   | "onExternalMarkdownFileChanged"
+  | "resolveWorkspaceTabDrop"
+  | "onWorkspaceTabReceiptRequest"
+  | "onWorkspaceTabReceiptComplete"
 >;
 
 export type WorkspaceRendererApplicationState = EditorShellState & Readonly<{
@@ -118,6 +123,7 @@ type EditorBarrierSnapshot = Readonly<{
   text: string;
   identity: EditorLoadIdentity | null;
   selection?: WorkspaceEditorSelection;
+  readingPosition?: WorkspaceReadingPosition;
 }>;
 
 type AcquiredEditBarrier = Readonly<{
@@ -231,6 +237,14 @@ export class WorkspaceRendererApplication {
   } = { showNotification: () => {}, setEditorContentSnapshot: () => {} };
   private detachExternalChange: (() => void) | null = null;
   private detachOwnerActivation: (() => void) | null = null;
+  private detachTabReceipt: (() => void) | null = null;
+  private detachTabReceiptComplete: (() => void) | null = null;
+  private readonly tabDropTarget: (point: Readonly<{ x: number; y: number }>) => boolean;
+  private readonly completedTabReceipts = new Set<string>();
+  private incomingTabReceipt: {
+    request: WorkspaceTabReceiptRequest; gate: Promise<void>; release: () => void;
+    timer: ReturnType<typeof setTimeout>; preparing: boolean; finishing: boolean; completed?: boolean;
+  } | null = null;
   private publishedEditorView: WorkspaceWindowSnapshot | null = null;
   private viewCache: { snapshot: WorkspaceWindowSnapshot; text: string; value: WorkspaceWindowSnapshot } | null = null;
 
@@ -239,8 +253,10 @@ export class WorkspaceRendererApplication {
     bridge: WorkspaceRendererBridge;
     initialSnapshot?: WorkspaceWindowSnapshot | null;
     gateway?: WorkspaceApplicationGateway;
+    tabDropTarget?: (point: Readonly<{ x: number; y: number }>) => boolean;
   }) {
     this.bridge = input.bridge;
+    this.tabDropTarget = input.tabDropTarget ?? (() => false);
     this.gateway = new RendererPlatformGateway(input.gateway ?? input.bridge as WorkspaceRendererBridge & WorkspaceApplicationGateway, (notification) => this.notify(notification), () => this.assertActive(), (delay) => { this.save.setDelay(delay); this.save.scheduleAutosave(delay); });
     this.save = new WorkspaceSaveScheduler({
       getActiveDocument: () => this.getActiveDocument(),
@@ -348,6 +364,15 @@ export class WorkspaceRendererApplication {
       this.save.resetAutosaveRuntime();
       this.notifyFailure(await this.detachWorkspaceTab(tabId));
       this.save.scheduleAutosave();
+    },
+    dropWorkspaceTab: async (tabId: string): Promise<void> => {
+      try {
+        const route = await this.bridge.resolveWorkspaceTabDrop?.({ tabId });
+        if (route?.kind === "cancelled") return;
+        if (getActiveTabId(this.state) !== tabId && !await this.commands.activateWorkspaceTab(tabId)) return;
+        if (route?.kind === "target") await this.commands.moveWorkspaceTab({ tabId, targetWindowId: route.targetWindowId, dropId: route.dropId });
+        else if (route?.kind === "detach" || route === undefined) await this.commands.detachWorkspaceTab(tabId);
+      } catch (error) { this.notify({ kind: "error", message: failureMessage(error) }); }
     },
     moveWorkspaceTab: async (input: MoveWorkspaceTabToWindowInput): Promise<void> => {
       this.save.resetAutosaveRuntime();
@@ -516,6 +541,8 @@ export class WorkspaceRendererApplication {
       }) ?? null;
     }
     if (this.detachOwnerActivation === null) this.detachOwnerActivation = this.bridge.onWorkspaceOwnerTabActivationRequest?.(({ tabId }) => this.commands.activateWorkspaceTab(tabId)) ?? null;
+    if (this.detachTabReceipt === null) this.detachTabReceipt = this.bridge.onWorkspaceTabReceiptRequest?.(request => this.prepareTabReceipt(request)) ?? null;
+    if (this.detachTabReceiptComplete === null) this.detachTabReceiptComplete = this.bridge.onWorkspaceTabReceiptComplete?.(result => this.completeTabReceipt(result)) ?? null;
   }
 
   scheduleDispose(): void {
@@ -544,6 +571,9 @@ export class WorkspaceRendererApplication {
     this.detachExternalChange = null;
     this.detachOwnerActivation?.();
     this.detachOwnerActivation = null;
+    this.detachTabReceipt?.(); this.detachTabReceipt = null;
+    this.detachTabReceiptComplete?.(); this.detachTabReceiptComplete = null;
+    if (this.incomingTabReceipt) { clearTimeout(this.incomingTabReceipt.timer); this.incomingTabReceipt.release(); this.incomingTabReceipt = null; }
     this.lifecycleEpoch += 1;
     this.activationGeneration += 1;
     this.pendingEditorTransitionBarrier?.resolve(false);
@@ -631,7 +661,7 @@ export class WorkspaceRendererApplication {
     return true;
   }
 
-  getEditorLoadSelection(identity: EditorLoadIdentity): WorkspaceEditorSelection | null {
+  getEditorLoadSelection(identity: EditorLoadIdentity): WorkspaceEditorLoadView | null {
     if (this.disposed || this.pendingEditorLoadIdentity === null ||
         !isSameEditorLoadIdentity(this.pendingEditorLoadIdentity, identity)) return null;
     const document = getActiveDocument(this.state);
@@ -639,14 +669,14 @@ export class WorkspaceRendererApplication {
     const restore = this.sourceViewRestore;
     if (restore !== null && restore.tabId === document.tabId && restore.revision === document.revision && restore.text === document.content) {
       this.sourceViewRestore = null;
-      return restore.selection;
+      return { ...restore.selection, ...(restore.readingPosition === undefined ? {} : { readingPosition: restore.readingPosition }) };
     }
     const handoff = this.state.workspaceSnapshot?.editorViewHandoff;
     if (handoff === undefined || handoff.tabId !== document.tabId || handoff.revision !== document.revision ||
         this.appliedEditorViewHandoffs.get(document.tabId) === handoff.handoffId ||
         !isSelectionWithinDocument(handoff.selection, document.content.length)) return null;
     this.appliedEditorViewHandoffs.set(document.tabId, handoff.handoffId);
-    return handoff.selection;
+    return { ...handoff.selection, ...(handoff.readingPosition === undefined ? {} : { readingPosition: handoff.readingPosition }) };
   }
 
   acknowledgeEditorTransition(input: { token: number; readOnly: boolean }): boolean {
@@ -1174,6 +1204,7 @@ export class WorkspaceRendererApplication {
 
   private enqueue<T>(kind: string, operation: () => Promise<T>): Promise<T> {
     return this.coordinator.enqueue(async () => {
+      if (this.incomingTabReceipt !== null) await this.incomingTabReceipt.gate;
       this.pendingOperationKind = kind;
       try {
         return await operation();
@@ -1181,6 +1212,70 @@ export class WorkspaceRendererApplication {
         this.pendingOperationKind = null;
       }
     });
+  }
+
+  private prepareTabReceipt(request: WorkspaceTabReceiptRequest): Promise<boolean> {
+    if (this.incomingTabReceipt !== null) return Promise.resolve(false);
+    return this.enqueue("receiving-tab", async () => {
+      if (this.disposed || this.completedTabReceipts.has(request.requestId) || Date.now() >= request.expiresAt ||
+          (request.point !== undefined && !this.tabDropTarget(request.point))) return false;
+      if (await this.ensureCanonicalKnown() !== null || this.state.workspaceSnapshot?.windowId !== request.targetWindowId ||
+          request.document.tabId !== request.tabId || this.state.workspaceSnapshot.tabs.some(tab => tab.tabId === request.tabId)) return false;
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => { release = resolve; });
+      // This exact revision is a read-only receipt, not an editable tab or a resource grant.
+      const entry = { request: Object.freeze({ ...request, document: Object.freeze({ ...request.document }) }), gate, release,
+        timer: setTimeout(() => this.completeTabReceipt({ requestId: request.requestId, committed: false }), Math.max(0, request.expiresAt - Date.now()) + 500),
+        preparing: true, finishing: false, completed: undefined as boolean | undefined };
+      this.incomingTabReceipt = entry;
+      try {
+        if (getActiveTabId(this.state) !== null) await this.sealEditor("detaching-tab");
+        await this.drainAllDrafts();
+        entry.preparing = false;
+        if (entry.completed !== undefined || Date.now() >= request.expiresAt || this.disposed) {
+          await this.finishTabReceipt(entry); return false;
+        }
+        return true;
+      } catch {
+        entry.preparing = false;
+        await this.finishTabReceipt(entry);
+        return false;
+      }
+    });
+  }
+
+  private completeTabReceipt(result: WorkspaceTabReceiptComplete): void {
+    this.completedTabReceipts.add(result.requestId);
+    if (this.completedTabReceipts.size > 64) this.completedTabReceipts.delete(this.completedTabReceipts.values().next().value!);
+    const entry = this.incomingTabReceipt;
+    if (!entry || entry.request.requestId !== result.requestId) return;
+    entry.completed = result.committed;
+    if (!entry.preparing) void this.finishTabReceipt(entry).catch(error => {
+      if (!this.disposed) this.notify({ kind: "error", message: failureMessage(error) });
+    });
+  }
+
+  private async finishTabReceipt(entry: NonNullable<WorkspaceRendererApplication["incomingTabReceipt"]>): Promise<void> {
+    if (entry.finishing) return;
+    entry.finishing = true;
+    clearTimeout(entry.timer);
+    try {
+      if (!this.disposed) {
+        // Reconcile even on timeout: main may have committed before a completion was lost.
+        const snapshot = await this.bridge.getWorkspaceSnapshot();
+        this.assertActive();
+        this.recordCanonicalSnapshot(snapshot);
+      }
+    } catch (error) {
+      if (!this.disposed) this.markCanonicalUnknown(error);
+    } finally {
+      try { if (!this.disposed && this.state.editorTransition !== null) await this.releaseEditor(); }
+      finally {
+        if (this.incomingTabReceipt === entry) this.incomingTabReceipt = null;
+        entry.release();
+        if (!this.disposed) this.save.scheduleAutosave();
+      }
+    }
   }
 
   private getRecoveryPendingOutcome(): Extract<WorkspaceApplicationOutcome<never>, { kind: "failed" }> | null {
@@ -1257,7 +1352,9 @@ export class WorkspaceRendererApplication {
               throw new Error("The editor selection does not match the drained document.");
             }
             this.recordCanonicalSnapshot(canonical);
-            editorView = { revision: document.revision, selection: captured.selection };
+            if (captured.readingPosition !== undefined && !isWorkspaceReadingPosition(captured.readingPosition, document.content.length)) throw new Error("The editor reading position does not match the drained document.");
+            editorView = { revision: document.revision, selection: captured.selection,
+              ...(captured.readingPosition === undefined ? {} : { readingPosition: captured.readingPosition }) };
             this.sourceViewRestore = { tabId, text: document.content, ...editorView };
           }
         }

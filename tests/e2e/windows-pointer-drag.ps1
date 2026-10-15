@@ -1,4 +1,4 @@
-param([long]$WindowHandle,[int]$OwnerPid,[int]$StartX,[int]$StartY,[int]$EndX,[int]$EndY,[long]$EndWindowHandle=0)
+param([long]$WindowHandle,[int]$OwnerPid,[int]$StartX,[int]$StartY,[int]$EndX,[int]$EndY,[long]$EndWindowHandle=0,[ValidateRange(0,500)][int]$ReleaseDelayMs=0)
 $ErrorActionPreference='Stop'
 Add-Type -TypeDefinition @'
 using System;
@@ -73,6 +73,7 @@ try {
  $endHit=[RF902Pointer]::GetAncestor([RF902Pointer]::WindowFromPoint($endPoint),2).ToInt64()
  if($EndWindowHandle -ne 0 -and $endHit -ne $EndWindowHandle){throw 'Endpoint does not hit the expected existing test window.'}
  [RF902Pointer]::Button(4); $down=$false
+ if($ReleaseDelayMs -gt 0){Start-Sleep -Milliseconds $ReleaseDelayMs}
  @{ method='Windows SetCursorPos + SendInput'; ownerPid=$OwnerPid; hwnd=$WindowHandle; initialForeground=$initialForeground; windowRect=$rect; start=@{x=$StartX;y=$StartY}; end=@{x=$EndX;y=$EndY}; endHit=$endHit; capturePidBeforeExit=$capturePid; capturePidAtRelease=$releaseCapturePid; releasedOutside=$true } | ConvertTo-Json -Depth 5 -Compress
 } finally {
  if($down){[void][RF902Pointer]::SetCursorPos($StartX,$StartY); [RF902Pointer]::Button(4)}

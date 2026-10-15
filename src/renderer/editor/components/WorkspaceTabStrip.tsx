@@ -17,10 +17,11 @@ export function WorkspaceTabStrip({
   const drag = useWorkspaceTabDrag({ reorderWorkspaceTab: onTabReorder, detachWorkspaceTab: onTabDetach });
 
   return (
-    workspaceTabs.length > 0 ? (
+    (
       <nav
         className="workspace-tab-strip"
         data-fishmark-region="workspace-tab-strip"
+        data-empty={workspaceTabs.length === 0 ? "true" : "false"}
         data-visibility={isReadingMode && isDocumentOpen ? "collapsed" : "visible"}
         aria-label="Open documents"
       >
@@ -101,6 +102,6 @@ export function WorkspaceTabStrip({
           })}
         </div>
       </nav>
-    ) : null
+    )
   );
 }

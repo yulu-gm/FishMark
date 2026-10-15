@@ -562,6 +562,10 @@
 }
 
 /* Keep the tab row and viewport stable; hidden controls cannot receive focus. */
+.workspace-tab-strip[data-empty="true"] {
+  min-height: 36px;
+}
+
 .workspace-tab-strip[data-visibility="collapsed"] {
   opacity: 0;
   visibility: hidden;

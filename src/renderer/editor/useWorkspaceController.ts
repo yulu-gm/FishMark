@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { AppNotification } from "../../shared/app-update";
 import type { WorkspaceWindowSnapshot } from "../../shared/workspace";
 import { WorkspaceRendererApplication } from "../application/workspace-renderer-application";
+import { isWorkspaceTabDropTarget } from "../workspace-tab-drop-target";
 
 // React owns subscription and attachment lifetime only; commands and scheduling live in application.
 export function useWorkspaceController(input: {
@@ -11,7 +12,7 @@ export function useWorkspaceController(input: {
   setEditorContentSnapshot?: (content: string) => void;
   autosaveDelayMs?: number;
 }) {
-  const [application] = useState(() => new WorkspaceRendererApplication({ bridge: input.fishmark, gateway: input.fishmark, initialSnapshot: input.initialSnapshot }));
+  const [application] = useState(() => new WorkspaceRendererApplication({ bridge: input.fishmark, gateway: input.fishmark, initialSnapshot: input.initialSnapshot, tabDropTarget: isWorkspaceTabDropTarget }));
   const state = useSyncExternalStore(application.subscribe, application.getState, application.getState);
   const { showNotification, setEditorContentSnapshot, autosaveDelayMs } = input;
   useEffect(() => {

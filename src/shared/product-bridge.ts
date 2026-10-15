@@ -59,6 +59,7 @@ import type {
   FlushDocumentEditsResult
 } from "./document-edit";
 import type { DocumentProjectionEvent } from "./document-projection";
+import type { WorkspaceTabDropResult, WorkspaceTabReceiptRequest, WorkspaceTabReceiptComplete } from "./workspace-tab-transfer";
 
 export interface ProductBridge {
   platform: NodeJS.Platform;
@@ -82,6 +83,9 @@ export interface ProductBridge {
   closeWorkspaceTab: (input: CloseWorkspaceTabInput) => Promise<WorkspaceWindowSnapshot>;
   reorderWorkspaceTab: (input: ReorderWorkspaceTabInput) => Promise<WorkspaceWindowSnapshot>;
   moveWorkspaceTabToWindow: (input: MoveWorkspaceTabToWindowInput) => Promise<WorkspaceMoveTabResult>;
+  resolveWorkspaceTabDrop?: (input: { tabId: string }) => Promise<WorkspaceTabDropResult>;
+  onWorkspaceTabReceiptRequest?: (listener: (request: WorkspaceTabReceiptRequest) => Promise<boolean>) => () => void;
+  onWorkspaceTabReceiptComplete?: (listener: (result: WorkspaceTabReceiptComplete) => void) => () => void;
   detachWorkspaceTabToNewWindow: (
     input: DetachWorkspaceTabToNewWindowInput
   ) => Promise<WorkspaceWindowSnapshot>;

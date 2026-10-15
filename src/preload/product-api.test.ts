@@ -6,6 +6,7 @@ import {
 } from "../shared/document-edit";
 import { DOCUMENT_PROJECTION_EVENT } from "../shared/document-projection";
 import { createProductApi, type ProductIpcPort } from "./product-api";
+import { REQUEST_WORKSPACE_TAB_RECEIPT_EVENT, CONFIRM_WORKSPACE_TAB_RECEIPT_CHANNEL } from "../shared/workspace-tab-transfer";
 
 function createPorts() {
   const invoke = vi.fn(async () => ({ kind: "applied" }));
@@ -25,6 +26,31 @@ function createPorts() {
 }
 
 describe("createProductApi", () => {
+  it("acknowledges the exact receipt only after renderer staging settles and detaches its listener", async () => {
+    const ports = createPorts(), api = createProductApi(ports);
+    let resolve!: (success: boolean) => void;
+    const staged = new Promise<boolean>(settle => { resolve = settle; });
+    const listener = vi.fn(() => staged);
+    const detach = api.onWorkspaceTabReceiptRequest!(listener);
+    const callback = ports.ipc.on.mock.calls[0]![1];
+    const request = { requestId: "target:1", tabId: "tab", targetWindowId: "target", expiresAt: 123,
+      document: { tabId: "tab", content: "unsaved", revision: 2 } };
+    callback({}, request);
+    await Promise.resolve(); expect(listener).toHaveBeenCalledWith(request);
+    expect(ports.invoke).not.toHaveBeenCalled();
+    resolve(true);
+    await vi.waitFor(() => expect(ports.invoke).toHaveBeenCalledExactlyOnceWith(CONFIRM_WORKSPACE_TAB_RECEIPT_CHANNEL,
+      { requestId: "target:1", tabId: "tab", success: true }));
+    detach(); expect(ports.ipc.off).toHaveBeenCalledWith(REQUEST_WORKSPACE_TAB_RECEIPT_EVENT, callback);
+  });
+
+  it("declines a failed renderer receipt instead of acknowledging it", async () => {
+    const ports = createPorts(), api = createProductApi(ports);
+    api.onWorkspaceTabReceiptRequest!(async () => { throw new Error("draft barrier failed"); });
+    ports.ipc.on.mock.calls[0]![1]({}, { requestId: "target:1", tabId: "tab" });
+    await vi.waitFor(() => expect(ports.invoke).toHaveBeenCalledWith(CONFIRM_WORKSPACE_TAB_RECEIPT_CHANNEL,
+      { requestId: "target:1", tabId: "tab", success: false }));
+  });
   it("builds the complete product bridge including revisioned edit methods", () => {
     const ports = createPorts();
     const api = createProductApi(ports);

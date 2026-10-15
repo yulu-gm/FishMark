@@ -1,4 +1,7 @@
 import path from "node:path";
+import { createWorkspaceTabDropRouting } from "./workspace-tab-drop-routing";
+import { createWorkspaceTabReceipts } from "./workspace-tab-receipts";
+import { REQUEST_WORKSPACE_TAB_RECEIPT_EVENT, COMPLETE_WORKSPACE_TAB_RECEIPT_EVENT } from "../shared/workspace-tab-transfer";
 import { randomBytes } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import {
@@ -369,6 +372,13 @@ app.whenReady().then(async () => {
         return () => clearTimeout(timeout);
       }
     });
+  const tabDropRouting = createWorkspaceTabDropRouting({
+    hasCandidate: (sourceId, point) => BrowserWindow.getAllWindows().some(window => {
+      if (String(window.id) === sourceId || window.isDestroyed() || !window.isVisible() || window.isMinimized()) return false;
+      const bounds = window.getBounds();
+      return point.x >= bounds.x && point.x < bounds.x + bounds.width && point.y >= bounds.y && point.y < bounds.y + bounds.height;
+    })
+  });
   const workspaceWindowCloseLeases = new Map<
     string,
     KeyedOperationLease<string>
@@ -557,6 +567,15 @@ app.whenReady().then(async () => {
     windowId: string
   ): void {
     if (!workspaceWindowBindings.has(windowId)) {
+      ownerWindow.webContents.on("before-mouse-event", (_event, mouse) => {
+        tabDropRouting.observe(windowId, mouse);
+        if (mouse.type === "mouseDown") { tabDropRouting.abortWindow(windowId); tabReceipts.abortWindow(windowId); }
+      });
+      const invalidateTransfers = () => { tabDropRouting.abortWindow(windowId); tabReceipts.abortWindow(windowId); };
+      ownerWindow.webContents.on("before-input-event", (_event, key) => { if (key.type === "keyDown") invalidateTransfers(); });
+      ownerWindow.webContents.on("did-start-navigation", (_event, _url, _inPlace, mainFrame) => { if (mainFrame) invalidateTransfers(); });
+      ownerWindow.webContents.on("render-process-gone", invalidateTransfers);
+      ownerWindow.webContents.on("destroyed", invalidateTransfers);
       ownerWindow.on("focus", () => {
         workspaceState.focusWindow(windowId);
       });
@@ -612,6 +631,7 @@ app.whenReady().then(async () => {
       });
       workspaceWindowCloseIntents.set(windowId, closeIntent);
       ownerWindow.on("close", (event) => {
+        invalidateTransfers();
         if (pendingWorkspaceWindowCloseIds.has(windowId)) {
           pendingWorkspaceWindowCloseIds.delete(windowId);
           return;
@@ -909,6 +929,27 @@ app.whenReady().then(async () => {
     save: workspaceFileOperations,
     close: closeWorkspace
   });
+  const tabReceipts = createWorkspaceTabReceipts({
+    workspace: workspaceState,
+    send: (windowId, request) => {
+      const window = getWorkspaceWindowById(windowId);
+      if (!window || window.isDestroyed() || window.webContents.isDestroyed()) throw new Error("The target window is unavailable.");
+      const zoom = window.webContents.getZoomFactor();
+      window.webContents.send(REQUEST_WORKSPACE_TAB_RECEIPT_EVENT, { ...request,
+        ...(request.point === undefined ? {} : { point: { x: request.point.x / zoom, y: request.point.y / zoom } }) });
+    },
+    complete: (windowId, result) => {
+      const window = getWorkspaceWindowById(windowId);
+      if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send(COMPLETE_WORKSPACE_TAB_RECEIPT_EVENT, result);
+    },
+    bindAbort: (windowId, abort) => {
+      const window = getWorkspaceWindowById(windowId);
+      if (!window || window.isDestroyed() || window.webContents.isDestroyed()) { abort(); return () => {}; }
+      // bindWorkspaceWindow owns one set of lifecycle listeners and synchronously
+      // aborts all receipts for this identity, including native close attempts.
+      return () => {};
+    }
+  });
   const resolveExternalChange = createResolveExternalChange<Electron.WebContents>({
     workspace: workspaceState,
     reload: (input) => workspaceApplication.reloadTab(input),
@@ -1003,7 +1044,7 @@ app.whenReady().then(async () => {
     requireOpenPath: pathAuthority.requirePath,
     workspaceApplication, workspaceState, documentRepository, resolveExternalChange, editorViewHandoffs,
     workspaceOwnerTabActivationRequestBroker, workspaceWindowCloseRequestBroker,
-    handleWorkspaceWindowCloseConfirmation
+    handleWorkspaceWindowCloseConfirmation, tabDropRouting, tabReceipts
   });
   registerPreferencesHandlers({ ipc, authorize, service: preferencesService, selectTemporaryDirectory: async (check, sender) => {
     const owner = pathAuthority.capture(sender);

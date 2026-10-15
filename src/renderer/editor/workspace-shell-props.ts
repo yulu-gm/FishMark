@@ -126,7 +126,7 @@ export type WorkspaceShellProps = {
   }) => Promise<import("../code-editor").CodeEditorCanonicalRestoreResult>) | null) => void;
   onEditorTransitionApplied: (input: { token: number; readOnly: boolean }) => void;
   onEditorLoadRevisionApplied: (identity: EditorLoadIdentity) => void;
-  getEditorLoadSelection?: (identity: EditorLoadIdentity) => import("../../shared/workspace").WorkspaceEditorSelection | null;
+  getEditorLoadSelection?: (identity: EditorLoadIdentity) => import("../../shared/workspace").WorkspaceEditorLoadView | null;
   onEditorBlur: () => void;
   onEditorViewModeChange: (mode: EditorViewMode) => void;
   onImportClipboardImage: (input: { tabId: string }) => Promise<string | null>;

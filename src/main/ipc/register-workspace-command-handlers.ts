@@ -1,3 +1,6 @@
+import { RESOLVE_WORKSPACE_TAB_DROP_CHANNEL, CONFIRM_WORKSPACE_TAB_RECEIPT_CHANNEL } from "../../shared/workspace-tab-transfer";
+import type { createWorkspaceTabDropRouting } from "../workspace-tab-drop-routing";
+import type { createWorkspaceTabReceipts } from "../workspace-tab-receipts";
 import {
   HANDLE_DROPPED_MARKDOWN_FILE_CHANNEL,
   type HandleDroppedMarkdownFileInput,
@@ -113,6 +116,8 @@ export function registerWorkspaceCommandHandlers(dependencies: {
   workspaceWindowCloseRequestBroker: ReturnType<typeof createWorkspaceWindowCloseRequestBroker<WorkspaceWindowCloseConfirmation>>;
   handleWorkspaceWindowCloseConfirmation: ReturnType<typeof createWorkspaceWindowCloseConfirmationHandler>;
   editorViewHandoffs?: ReturnType<typeof createWorkspaceEditorViewHandoffs>;
+  tabDropRouting?: ReturnType<typeof createWorkspaceTabDropRouting>;
+  tabReceipts?: ReturnType<typeof createWorkspaceTabReceipts>;
 }): void {
   const { ipc, authorize, ensureWindow, workspaceApplication, workspaceState,
     documentRepository, resolveExternalChange, workspaceOwnerTabActivationRequestBroker,
@@ -127,6 +132,20 @@ export function registerWorkspaceCommandHandlers(dependencies: {
       return result;
     });
   };
+  register(RESOLVE_WORKSPACE_TAB_DROP_CHANNEL, async (event, ...args) => {
+    const check = authorize(event, ["product", "editor-test"]);
+    const value = request.oneArgument(args); request.record(value); request.string(value.tabId);
+    const windowId = await ensureWindow(event.sender); check();
+    if (workspaceState.getTabSession(value.tabId).windowId !== windowId) throw new Error("The tab moved to another window.");
+    return dependencies.tabDropRouting?.resolve(windowId, value.tabId) ?? { kind: "cancelled" };
+  });
+  register(CONFIRM_WORKSPACE_TAB_RECEIPT_CHANNEL, async (event, ...args) => {
+    const value = request.oneArgument(args); request.record(value); request.string(value.requestId); request.string(value.tabId);
+    if (typeof value.success !== "boolean") request.invalidRequest();
+    const check = authorize(event, ["product", "editor-test"]);
+    const windowId = await ensureWindow(event.sender); check();
+    dependencies.tabReceipts?.confirm({ windowId, requestId: value.requestId, tabId: value.tabId, success: value.success as boolean });
+  });
   register(GET_WORKSPACE_SNAPSHOT_CHANNEL, async (event, ...args) => {
     const check = authorize(event, ["product", "editor-test"]);
     request.noArguments(args);
@@ -388,18 +407,26 @@ export function registerWorkspaceCommandHandlers(dependencies: {
       request.string(value.tabId);
       request.string(value.targetWindowId);
       if (value.targetIndex !== undefined) request.index(value.targetIndex);
+      if (value.dropId !== undefined) request.string(value.dropId);
       const input = value as MoveWorkspaceTabToWindowInput;
       const windowId = await ensureWindow(event.sender);
       check();
       const handoffId = editorViewHandoffs.stage(input.tabId, windowId, input.editorView);
       try {
-        const result = toWorkspaceMoveTabResult(requireWorkspaceCommandProjection(await workspaceApplication.moveTab({
+        const point = input.dropId === undefined ? undefined : dependencies.tabDropRouting?.claim(input.dropId, windowId, input.targetWindowId, input.tabId).point;
+        if (input.dropId !== undefined && point === undefined) throw new Error("The tab drop is no longer available.");
+        const moveInput = {
           context: event.sender,
           tabId: input.tabId,
           expectedWindowId: windowId,
           targetWindowId: input.targetWindowId,
           targetIndex: input.targetIndex
-        })));
+        };
+        const moved = dependencies.tabReceipts && windowId !== input.targetWindowId
+          ? await dependencies.tabReceipts.move({ sourceWindowId: windowId, targetWindowId: input.targetWindowId,
+            tabId: input.tabId, targetIndex: input.targetIndex, point, check }, guarded => workspaceApplication.moveTab({ ...guarded, context: event.sender }))
+          : await workspaceApplication.moveTab(moveInput);
+        const result = toWorkspaceMoveTabResult(requireWorkspaceCommandProjection(moved));
         return { ...result, targetWindowSnapshot: editorViewHandoffs.decorate(result.targetWindowSnapshot) };
       } catch (error) {
         editorViewHandoffs.abort(input.tabId, handoffId);

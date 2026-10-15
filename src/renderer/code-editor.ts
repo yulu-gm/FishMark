@@ -39,6 +39,7 @@ import { readCompositionState } from "@fishmark/codemirror-adapter";
 
 import { createPreviewAssetUrl } from "../shared/preview-asset-url";
 import type { DocumentTextChange } from "../shared/document-edit";
+import { isWorkspaceReadingPosition, type WorkspaceReadingPosition } from "../shared/workspace";
 import { isSameEditorLoadIdentity, type EditorLoadIdentity } from "./application/editor-load-identity";
 
 export const internalDocumentTransaction = Annotation.define<true>();
@@ -67,6 +68,8 @@ export type CreateCodeEditorControllerOptions = {
 export type CodeEditorController = {
   getContent: () => string;
   getSelection: () => { anchor: number; head: number };
+  captureReadingPosition: () => WorkspaceReadingPosition;
+  restoreReadingPosition: (position: WorkspaceReadingPosition) => boolean;
   captureViewState: () => CodeEditorViewState;
   restoreViewState: (snapshot: CodeEditorViewState) => boolean;
   prepareFindReplace: () => Promise<void>;
@@ -170,6 +173,8 @@ export function createCodeEditorController(
   let searchRuntime: typeof import("./search-runtime") | null = null;
   let searchRuntimePromise: Promise<typeof import("./search-runtime")> | null = null;
   let isDestroyed = false;
+  let pendingReadingPosition: WorkspaceReadingPosition | null = null;
+  let readingPositionCancelled = false;
   let semanticCommands: SemanticCommandBindings;
   let documentIdentity: EditorLoadIdentity | null = null;
   let pendingDocumentChanges: {
@@ -356,6 +361,10 @@ export function createCodeEditorController(
   };
 
   const observeDocumentUpdate = (update: ViewUpdate) => {
+    if (pendingReadingPosition !== null && update.docChanged) {
+      pendingReadingPosition = { ...pendingReadingPosition, anchor: update.changes.mapPos(pendingReadingPosition.anchor) };
+      readingPositionCancelled = true;
+    }
     if (update.docChanged || update.selectionSet || update.transactions.some(transaction => transaction.effects.length)) {
       notifySearch();
     }
@@ -408,6 +417,17 @@ export function createCodeEditorController(
     EditorState.create({
       doc: content,
       extensions: [
+        EditorView.scrollHandler.of((current, range) => {
+          const position = pendingReadingPosition;
+          if (position === null) return false;
+          if (range.head !== position.anchor) { pendingReadingPosition = null; return false; }
+          pendingReadingPosition = null;
+          if (readingPositionCancelled) return true;
+          const block = current.lineBlockAt(position.anchor);
+          current.scrollDOM.scrollTop = block.top - position.relativeY;
+          current.scrollDOM.scrollLeft = position.scrollLeft;
+          return true;
+        }),
         readOnlyCompartment.of([
           EditorState.readOnly.of(currentReadOnly),
           EditorView.editable.of(!currentReadOnly)
@@ -662,6 +682,7 @@ export function createCodeEditorController(
     }
     // A recovery boundary deliberately starts a fresh editor history.
     pendingUserCompositionBase = null;
+    pendingReadingPosition = null;
     view.setState(createState(input.canonicalText));
     notifySearch();
     semanticCommands.bindSession(view, documentIdentity?.tabId);
@@ -671,6 +692,24 @@ export function createCodeEditorController(
   return {
     getContent: () => view.state.doc.toString(),
     getSelection: () => readEditorSelection(view),
+    captureReadingPosition() {
+      view.lineBlockAtHeight(0);
+      const block = view.lineBlockAtHeight(view.scrollDOM.scrollTop);
+      return { anchor: block.from, relativeY: block.top - view.scrollDOM.scrollTop, scrollLeft: view.scrollDOM.scrollLeft };
+    },
+    restoreReadingPosition(position) {
+      if (isDestroyed || !isWorkspaceReadingPosition(position, view.state.doc.length)) return false;
+      view.lineBlockAtHeight(0);
+      if (!view.inView) return false;
+      pendingReadingPosition = position;
+      readingPositionCancelled = false;
+      view.dispatch({ effects: EditorView.scrollIntoView(position.anchor, { y: "start", x: "nearest" }) });
+      // Settle the public scroll request before a subsequent wheel/edit can
+      // establish a newer intent. Hidden views swallow rather than defer it.
+      view.lineBlockAtHeight(0);
+      readingPositionCancelled = true;
+      return true;
+    },
     captureViewState() {
       // A rapid second switch may precede the previous scroll effect's measure.
       // A public layout read settles that work before snapshotting DOM scroll.
@@ -743,6 +782,7 @@ export function createCodeEditorController(
         emitPendingDocumentChanges();
       }
       pendingUserCompositionBase = null;
+      pendingReadingPosition = null;
       view.setState(createState(nextContent));
       notifySearch();
       semanticCommands.bindSession(view, documentIdentity?.tabId);
@@ -904,6 +944,7 @@ export function createCodeEditorController(
       dispatchEditorKeydown("ArrowDown");
     },
     destroy() {
+      pendingReadingPosition = null;
       isDestroyed = true;
       cancelNavigationMeasure();
       const exactText = view.state.doc.toString();

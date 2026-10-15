@@ -22,6 +22,22 @@ afterAll(() => {
 });
 
 describe("editor view snapshots", () => {
+  it("rejects malformed and invisible cross-window anchors without queuing a late scroll", () => {
+    const host = document.createElement("div");
+    const controller = createCodeEditorController({ parent: host, initialContent: "0123456789", onChange: vi.fn() });
+    const view = EditorView.findFromDOM(host.querySelector(".cm-editor")!)!;
+    const dispatch = vi.spyOn(view, "dispatch");
+    try {
+      expect(controller.restoreReadingPosition({ anchor: 11, relativeY: 0, scrollLeft: 0 })).toBe(false);
+      expect(controller.restoreReadingPosition({ anchor: 0, relativeY: NaN, scrollLeft: 0 })).toBe(false);
+      expect(controller.restoreReadingPosition({ anchor: 0, relativeY: 0, scrollLeft: -1 })).toBe(false);
+      expect(controller.restoreReadingPosition({ anchor: 3, relativeY: -12, scrollLeft: 0 })).toBe(false);
+      expect(dispatch).not.toHaveBeenCalled();
+      controller.replaceDocument("replacement");
+      expect(controller.getContent()).toBe("replacement");
+    } finally { dispatch.mockRestore(); controller.destroy(); }
+    expect(controller.restoreReadingPosition({ anchor: 0, relativeY: 0, scrollLeft: 0 })).toBe(false);
+  });
   it("settles a pending layout before an immediate second capture", () => {
     const host = document.createElement("div");
     document.body.append(host);

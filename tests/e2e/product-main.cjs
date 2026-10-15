@@ -84,6 +84,8 @@ app.on("browser-window-created", (_event, window) => {
   contents.send = (channel, ...args) => {
     if (channel === "fishmark:app-menu-command") record("menu:command", args);
     if (channel === "fishmark:external-markdown-file-changed") record("external:changed", { webContentsId: contents.id, payload: args[0] });
+    if (channel === "fishmark:request-workspace-tab-receipt") record("receipt:request", { webContentsId: contents.id, requestId: args[0].requestId, tabId: args[0].tabId, revision: args[0].document.revision, contentLength: args[0].document.content.length });
+    if (channel === "fishmark:complete-workspace-tab-receipt") record("receipt:complete", { webContentsId: contents.id, ...args[0] });
     return send(channel, ...args);
   };
 });
@@ -107,6 +109,7 @@ async function holdBoundary(kind, detail) {
   if (!current || current.kind !== kind || !["armed", "held"].includes(current.phase)) return;
   if (kind === "edit-ack" && (detail.webContentsId !== current.webContentsId || detail.tabId !== current.tabId || detail.clientSequence !== current.clientSequence)) return;
   if (kind === "clipboard-response" && (detail.webContentsId !== current.webContentsId || detail.tabId !== current.tabId)) return;
+  if (kind === "tab-receipt" && detail.webContentsId !== current.webContentsId) return;
   if (kind === "target-ready" && detail.webContentsId === current.sourceWebContentsId) return;
   if (current.phase === "held") {
     if (kind === "target-ready" && detail.webContentsId === current.detail.webContentsId) {
@@ -128,6 +131,9 @@ ipcMain.handle = (channel, listener) => {
   const prefix = channel === "fishmark:apply-document-edits" ? "edit"
     : channel === "fishmark:flush-document-edits" ? "flush"
       : channel === "fishmark:detach-workspace-tab-to-new-window" ? "detach"
+      : channel === "fishmark:move-workspace-tab-to-window" ? "move"
+      : channel === "fishmark:resolve-workspace-tab-drop" ? "drop"
+      : channel === "fishmark:confirm-workspace-tab-receipt" ? "receipt"
         : channel === "fishmark:get-workspace-snapshot" ? "snapshot"
           : channel === "fishmark:sync-watched-markdown-file" ? "watch"
           : ["fishmark:close-workspace-tab", "fishmark:confirm-workspace-window-close", "fishmark:complete-workspace-window-close"].includes(channel) ? "close"
@@ -142,6 +148,7 @@ ipcMain.handle = (channel, listener) => {
     record(`${prefix}:start`, detail);
     try {
       if (["snapshot", "watch"].includes(prefix)) await holdBoundary("target-ready", detail);
+      if (prefix === "receipt") await holdBoundary("tab-receipt", detail);
       const result = await listener(...args);
       if (prefix === "edit") {
         record("edit:handled", { ...detail, result });

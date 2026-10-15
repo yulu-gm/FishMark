@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { WorkspaceState } from "@fishmark/workspace-domain";
 import type { WorkspaceEditorViewHandoff, WorkspaceWindowSnapshot } from "../shared/workspace";
+import { isWorkspaceReadingPosition } from "../shared/workspace";
 
 type Entry = WorkspaceEditorViewHandoff & { sourceWindowId: string };
 
@@ -31,12 +32,14 @@ export function createWorkspaceEditorViewHandoffs(input: {
       if (!isRecord(value) || !isRecord(value.selection) ||
           !Number.isSafeInteger(value.revision) || value.revision !== document.revision ||
           !isOffset(value.selection.anchor, document.content.length) ||
-          !isOffset(value.selection.head, document.content.length)) {
+          !isOffset(value.selection.head, document.content.length) ||
+          (value.readingPosition !== undefined && !isWorkspaceReadingPosition(value.readingPosition, document.content.length))) {
         throw new Error("The transferred editor selection does not match the document.");
       }
       const handoffId = createId();
       entries.set(tabId, { handoffId, tabId, sourceWindowId, revision: document.revision,
-        selection: { anchor: value.selection.anchor, head: value.selection.head } });
+        selection: { anchor: value.selection.anchor, head: value.selection.head },
+        ...(value.readingPosition === undefined ? {} : { readingPosition: { ...(value.readingPosition as import("../shared/workspace").WorkspaceReadingPosition) } }) });
       return handoffId;
     },
     decorate(snapshot: WorkspaceWindowSnapshot): WorkspaceWindowSnapshot {
@@ -46,7 +49,8 @@ export function createWorkspaceEditorViewHandoffs(input: {
       const entry = entries.get(document.tabId);
       if (entry === undefined || entry.sourceWindowId === snapshot.windowId || entry.revision !== document.revision ||
           input.workspace.getTabSession(document.tabId).windowId !== snapshot.windowId) return snapshot;
-      const editorViewHandoff = { handoffId: entry.handoffId, tabId: entry.tabId, revision: entry.revision, selection: entry.selection };
+      const editorViewHandoff = { handoffId: entry.handoffId, tabId: entry.tabId, revision: entry.revision, selection: entry.selection,
+        ...(entry.readingPosition === undefined ? {} : { readingPosition: entry.readingPosition }) };
       return { ...snapshot, editorViewHandoff };
     },
     abort(tabId: string, handoffId: string | null): void {

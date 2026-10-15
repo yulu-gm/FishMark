@@ -21,6 +21,8 @@ const destroyMock = vi.fn<() => void>();
 const getContentMock = vi.fn<() => string>(() => "# Initial\n");
 const getSelectionMock = vi.fn<() => { anchor: number; head: number }>(() => ({ anchor: 0, head: 0 }));
 const captureViewStateMock = vi.fn();
+const captureReadingPositionMock = vi.fn(() => ({ anchor: 0, relativeY: 0, scrollLeft: 0 }));
+const restoreReadingPositionMock = vi.fn(() => true);
 const restoreViewStateMock = vi.fn(() => true);
 const setSelectionMock = vi.fn<(anchor: number, head: number) => void>();
 const prepareFindReplaceMock = vi.fn<() => Promise<void>>(() => Promise.resolve());
@@ -86,6 +88,8 @@ describe("CodeEditorView", () => {
     getContentMock.mockReset();
     getSelectionMock.mockReset();
     captureViewStateMock.mockReset();
+    captureReadingPositionMock.mockReset().mockReturnValue({ anchor: 0, relativeY: 0, scrollLeft: 0 });
+    restoreReadingPositionMock.mockReset().mockReturnValue(true);
     restoreViewStateMock.mockReset();
     restoreViewStateMock.mockReturnValue(true);
     setSelectionMock.mockReset();
@@ -103,6 +107,8 @@ describe("CodeEditorView", () => {
       getContent: getContentMock,
       getSelection: getSelectionMock,
       captureViewState: captureViewStateMock,
+      captureReadingPosition: captureReadingPositionMock,
+      restoreReadingPosition: restoreReadingPositionMock,
       restoreViewState: restoreViewStateMock,
       setSelection: setSelectionMock,
       prepareFindReplace: prepareFindReplaceMock,
@@ -200,11 +206,14 @@ describe("CodeEditorView", () => {
     const timeline: string[] = [];
     replaceDocumentMock.mockImplementation(() => { timeline.push("content"); });
     setSelectionMock.mockImplementation(() => { timeline.push("selection"); });
+    restoreReadingPositionMock.mockImplementation(() => { timeline.push("reading"); return true; });
     const onLoadRevisionApplied = vi.fn(() => { timeline.push("acknowledge"); });
-    const getEditorLoadSelection = vi.fn(() => ({ anchor: 7, head: 3 }));
+    const readingPosition = { anchor: 3, relativeY: -12.5, scrollLeft: 8 };
+    const getEditorLoadSelection = vi.fn(() => ({ anchor: 7, head: 3, readingPosition }));
     const props = { ...createBindingProps(), initialContent: "0123456789", documentPath: "C:/selection.md", loadRevision: 1, getEditorLoadSelection, onLoadRevisionApplied };
     await act(async () => { root.render(createElement(CodeEditorView, props)); });
-    expect(timeline).toEqual(["content", "selection", "acknowledge"]);
+    expect(timeline).toEqual(["content", "selection", "reading", "acknowledge"]);
+    expect(restoreReadingPositionMock).toHaveBeenCalledExactlyOnceWith(readingPosition);
     expect(setSelectionMock).toHaveBeenCalledExactlyOnceWith(7, 3);
     await act(async () => { root.render(createElement(CodeEditorView, { ...props })); });
     expect(setSelectionMock).toHaveBeenCalledTimes(1);
@@ -218,7 +227,7 @@ describe("CodeEditorView", () => {
       onEditorBarrierChange: (next) => { captured.barrier = next; }
     })); });
     expect(captured.barrier).toBeTypeOf("function");
-    await expect(captured.barrier!()).resolves.toMatchObject({ text: "# Initial\n", selection: { anchor: 7, head: 3 } });
+    await expect(captured.barrier!()).resolves.toMatchObject({ text: "# Initial\n", selection: { anchor: 7, head: 3 }, readingPosition: { anchor: 0, relativeY: 0, scrollLeft: 0 } });
   });
 
   it("does not replace the editor document when saved content syncs without a new load revision", async () => {
