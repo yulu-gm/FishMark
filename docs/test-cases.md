@@ -1,5 +1,12 @@
 # FishMark 测试用例
 
+## TASK-RF901-FIRST-LOAD-051
+
+- 同一controller首次构造的tab/epoch/loadRevision/source完全相同：不立即replace，但identity/session/selection/reading/ACK照常；后续相同文本reload仍replace。空文档→有内容、StrictMode双构造、Activity重连的旧seed/新tab/epoch/source均安全fallback。
+- 临时文件首次打开Ctrl+Z不改内容；编辑/undo/redo/save正常。相同字节外部touch后显式Reload清旧history、内容/dirty/disk准确，继续编辑保存。
+- 删除临时文件使Reload失败，保留冲突、原文本和原生undo；恢复临时文件、保留当前编辑后准确保存。IPC success/error/watch-error/revision-stale/stale与应用resolved/cancelled/error/keep-memory/cancel分支不混淆。
+- 原长文切tab、reading/source、outline/table、dirty保存及完整产品流程保留。实际生产模式次数证据与无插桩六样本分开；六样本只运行一次，保持049协议及500/1500ms预算，失败/未测明确记录。
+
 本文用于开发自检、评审验收和回归覆盖。
 
 ## TC-WATCH-LIFECYCLE-048：窗口监听与异步初始化

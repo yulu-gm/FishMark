@@ -480,10 +480,17 @@ export class WorkspaceRendererApplication {
         this.assertActive();
         const result = await this.bridge.resolveExternalChange({ tabId: target.tabId, command });
         this.assertActive();
-        if (result.kind === "error") return { kind: "failed", error: new Error(result.message) };
+        if (result.kind === "error") {
+          const error = new Error(result.message);
+          // Reload may have committed before watcher synchronization failed.
+          // Reconcile without forcing an equal-text replacement, while still sealed.
+          return command === "reload" ? await this.recoverMutationOutcome(error) : { kind: "failed", error };
+        }
         const snapshot = await this.bridge.getWorkspaceSnapshot();
         this.assertActive();
-        this.recordCanonicalSnapshot(snapshot);
+        this.recordCanonicalSnapshot(snapshot, {
+          forceEditorReload: command === "reload" && result.kind === "resolved" && snapshot.activeDocument?.tabId === target.tabId
+        });
         return result.kind === "cancelled" ? { kind: "cancelled" } : { kind: "committed", value: undefined };
       } catch (error) { return this.recoverMutationOutcome(error); }
       finally {

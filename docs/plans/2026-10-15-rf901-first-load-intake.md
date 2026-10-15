@@ -1,0 +1,11 @@
+# TASK-RF901-FIRST-LOAD-051
+
+Goal: avoid only the redundant replaceDocument immediately following a controller's construction for the exact same first load.
+Baseline: published main2b6e8dff320f086c76d6c1a4b6841ba77ef3bced/tree7ce4f487f0a820f84e63dd7da065d9f364c7b00c,CI38798265982 all4SUCCESS;initial worktree clean.
+Evidence:050 production-mode single20k proves controller1/tab-1/epoch2/loadRevision1 constructs and then replaces identical531783B source,with two nonempty full parses;nested costs are not additive and837.7ms is not a promised saving.049 six samples and050 all files frozen in .artifacts/rf901-first-load-051/baseline.json.
+In scope:CodeEditorView local one-shot construction receipt,focused unit/actual product/count regressions,project records. Actual product regression exposed a baseline equal-text external reload retaining undo. Independently reviewed necessary repair: type the existing reload outcome, map IPC success only for actual success, and use existing forceEditorReload only for successful reload of the still-active target.
+Out of scope:general text cache,controller public API/parser architecture,identity/epoch/session/selection/ACK changes,warning/allowlist/budget changes,cp13/cp16/Library/Mac/IME acceptance.
+Boundary proposal:consume receipt once;skip replace only when controller instance,first-load identity and actual constructed source all match current load. Later reloads (even equal text),doc/tab/epoch transitions retain existing behavior;identity/session binding,view state andACK still execute.Independent boundary review precedes implementation.
+Verification:RED/GREEN first consumption and equal-text reload;actual production first parse count;document switching/reload/dirty/undo/reading/outline;lint/type/build/strict/fullWindowsproduct/foundation/editing/safety/formal/bundle;frozen final production build one049-protocol six-sample comparison only;independent final review;ordinary main push/exactSHA four CI.
+Measurement:final uninstrumented candidate,fixed fixture/sample allocation and endpoints/budgets;one bounded six-sample run,stop isolation/input/correctness/cleanup failure,no retry for speed,no percentile/compositor claim.
+Next:fishmark-task-execution then fishmark-task-acceptance,with execution handoff and alignedbacklog/progress/summary.M9 remains0/3.

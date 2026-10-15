@@ -1,5 +1,11 @@
 # FishMark 进展记录
 
+## 2026-10-15 首次重复构建051（Windows局部修复PASS；首开预算FAIL）
+
+从main2b6e8dff推进一次消费的controller构造receipt，仅跳过相同首次load；后续reload、身份/选区/ACK保持。真实同文本外部reload基线缺陷及失败结果/已提交watch-error对账一并窄修。501定向通过；干净1466文件源码镜像原lint、原位其余八门禁通过，strict3986＋8精确known/0skip、Windows60/60、74启动全部owned退出/cleanup0、formal121/121/2541、gzip1437871/1500000。原位lint受冻结诊断TS阻塞的FAIL保留，不称原位九项全绿。
+
+生产模式原始数据证明同源码非空parse2→1；父计数过滤器因短label后处理FAIL、原guard exit1保留，独审认可离线复核PASS且未重跑。唯一六样本首次fonts+2rAF：5k1414.860→1236.361ms、20k2810.476→1945.669ms，仍超500/1500预算；四暖样本通过，全部正确性/清理通过。[报告051](../reports/task-summaries/TASK-RF901-FIRST-LOAD-051.md)保留六项明细和原始证据。最终独审/精确发布见publication；049/050冻结587文件，M9仍0/3，RF901未验收。
+
 ## 2026-10-15 窗口监听生命周期048（Windows本地验收PASS）
 
 基于60bedefd/CI38791422167四绿，仅修FileWatchRegistry的重复destroyed绑定及初始化异步撤销；25单测和真实产品100快照流程通过。九门禁通过：strict3966＋8精确known、Windows58/58、72启动=67正常exit0+5预期恢复、全部owned退出/profile清理/cleanup0、72启动监听超限warning0；foundation310、editing79、safety7、formal121/121/2541、gzip1437744/1500000。最终独审和普通main精确发布见[报告048](../reports/task-summaries/TASK-WATCH-LIFECYCLE-048.md)及本批publication。047失败不改且不重跑六样本，M9仍0/3。

@@ -59,7 +59,13 @@ import * as request from "./request-validation";
 function mapResolveExternalChangeResult(
   result: import("@fishmark/workspace-application").ResolveExternalChangeResult
 ): import("../../shared/workspace").ResolveExternalChangeResult {
-  if (result.kind === "resolved" || result.kind === "reloaded" || result.kind === "saved-as") {
+  if (result.kind === "reloaded") {
+    const outcome = result.outcome;
+    if (outcome.kind === "success") return { kind: "resolved" };
+    if (outcome.kind === "error" || outcome.kind === "watch-error") return { kind: "error", message: outcome.error.message };
+    return { kind: "error", message: "The document changed before it could be reloaded. Please try again." };
+  }
+  if (result.kind === "resolved" || result.kind === "saved-as") {
     return { kind: "resolved" };
   }
   if (result.kind === "cancelled") {

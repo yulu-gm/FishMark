@@ -1,5 +1,16 @@
 # MVP Backlog
 
+## TASK-RF901-FIRST-LOAD-051：消除首次重复构建（2026-10-15）
+
+状态：**Windows局部修复验收PASS；RF901首次打开预算FAIL**。完整证据见[报告051](reports/task-summaries/TASK-RF901-FIRST-LOAD-051.md)，最终独审及普通main精确SHA四项官方CI见本批publication。M9仍0/3，RF901未验收。
+
+- [x] 按controller、首次tab/epoch/loadRevision和实际构造文本一次消费，保留身份/选区/ACK及后续reload。
+- [x] 独审后修复同文本外部reload未推进revision及IPC失败误报成功，补成功/失败/history/StrictMode/重连测试。
+- [x] 干净源码镜像原lint及原位其余八门禁、实际首次parse次数、最终无插桩049协议六样本一次；失败记录保留。
+- [x] 最终证据独审；普通main精确发布与四项CI终态见本批publication（不替代RF901预算验收）。
+
+见[051 handoff](docs/plans/2026-10-15-rf901-first-load-handoff.md)。049/050原证据冻结；不承诺837.7ms收益，不改预算，不外推p95/compositor/Mac/真实IME。
+
 ## TASK-WATCH-LIFECYCLE-048：窗口监听生命周期（2026-10-15）
 
 状态：**Windows本地验收PASS**。基线main `60bedefd6319373674d65dca6fe1d17472996027`，CI38791422167四绿。发布须最终独审和普通main精确SHA四项CI，以本批publication终态为准。

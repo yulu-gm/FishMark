@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, createElement, createRef, type ComponentProps } from "react";
+import { Activity, StrictMode, act, createElement, createRef, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -145,6 +145,88 @@ describe("CodeEditorView", () => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = false;
   });
 
+  it("consumes only the matching constructed first load while preserving identity selection and acknowledgement", async () => {
+    const timeline: string[] = [];
+    const binding = createBindingProps();
+    setDocumentIdentityMock.mockImplementation(() => { timeline.push("identity"); });
+    setSelectionMock.mockImplementation(() => { timeline.push("selection"); });
+    restoreReadingPositionMock.mockImplementation(() => { timeline.push("reading"); return true; });
+    const identity = { tabId: "tab-1", epoch: 1, loadRevision: 1 };
+    const props = { ...binding, initialContent: "# First\n", documentPath: "C:/first.md", loadRevision: 1,
+      getEditorLoadSelection: () => ({ anchor: 2, head: 2, readingPosition: { anchor: 0, relativeY: 7, scrollLeft: 0 } }),
+      onLoadRevisionApplied: (value: typeof identity) => { expect(value).toEqual(identity); timeline.push("ack"); } };
+    await act(async () => { root.render(createElement(CodeEditorView, props)); });
+    expect(createCodeEditorControllerMock).toHaveBeenCalledTimes(1);
+    expect(createCodeEditorControllerMock.mock.calls[0]![0].initialContent).toBe(props.initialContent);
+    expect(replaceDocumentMock).not.toHaveBeenCalled();
+    expect(setDocumentIdentityMock).toHaveBeenCalledWith(identity);
+    expect(timeline).toEqual(["identity", "selection", "reading", "ack"]);
+    expect(setDocumentPathMock).toHaveBeenLastCalledWith("C:/first.md");
+  });
+
+  it("does not reuse first-load consumption for later equal-text reloads", async () => {
+    const props = { ...createBindingProps(), initialContent: "# Same text\n", documentPath: "C:/same.md" };
+    const render = async (revision: number) => act(async () => {
+      root.render(createElement(CodeEditorView, { ...props, loadRevision: revision }));
+    });
+    await render(1);
+    expect(replaceDocumentMock).not.toHaveBeenCalled();
+    await render(2); await render(3);
+    expect(replaceDocumentMock.mock.calls).toEqual([[props.initialContent], [props.initialContent]]);
+    expect(setDocumentIdentityMock).toHaveBeenLastCalledWith({ tabId: "tab-1", epoch: 1, loadRevision: 3 });
+    expect(props.onLoadRevisionApplied).toHaveBeenCalledTimes(3);
+    expect(createCodeEditorControllerMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("loads real content after an initially constructed empty document", async () => {
+    const props = { ...createBindingProps(), documentPath: null };
+    await act(async () => { root.render(createElement(CodeEditorView, { ...props, initialContent: "", loadRevision: 1 })); });
+    expect(replaceDocumentMock).not.toHaveBeenCalled();
+    await act(async () => { root.render(createElement(CodeEditorView, { ...props, initialContent: "# Opened\n", loadRevision: 2 })); });
+    expect(replaceDocumentMock.mock.calls).toEqual([["# Opened\n"]]);
+  });
+
+  it("keeps an ordinary epoch rebind distinct from a later document reload", async () => {
+    const props = { ...createBindingProps(), initialContent: "# Same\n", documentPath: null, loadRevision: 1 };
+    await act(async () => { root.render(createElement(CodeEditorView, props)); });
+    await act(async () => { root.render(createElement(CodeEditorView, { ...props, editorEpoch: 2 })); });
+    expect(replaceDocumentMock).not.toHaveBeenCalled();
+    expect(setDocumentIdentityMock).toHaveBeenLastCalledWith({ tabId: "tab-1", epoch: 2, loadRevision: 1 });
+    expect(props.onLoadRevisionApplied).toHaveBeenCalledTimes(2);
+  });
+
+  it("consumes each StrictMode controller instance independently", async () => {
+    const base = createCodeEditorControllerMock.getMockImplementation()!();
+    const instances: object[] = [];
+    createCodeEditorControllerMock.mockImplementation(() => { const controller = { ...base }; instances.push(controller); return controller; });
+    const props = { ...createBindingProps(), initialContent: "# Strict\n", documentPath: null, loadRevision: 1 };
+    await act(async () => { root.render(createElement(StrictMode, null, createElement(CodeEditorView, props))); });
+    expect(instances).toHaveLength(2); expect(instances[0]).not.toBe(instances[1]);
+    expect(destroyMock).toHaveBeenCalledTimes(1);
+    expect(replaceDocumentMock).not.toHaveBeenCalled();
+    expect(props.onLoadRevisionApplied).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["source", "epoch", "tab"] as const)("reconnected controller with stale %s seed falls back even when applied revision is unchanged", async changed => {
+    const base = createCodeEditorControllerMock.getMockImplementation()!();
+    createCodeEditorControllerMock.mockImplementation(() => ({ ...base }));
+    const initial = { ...createBindingProps(), initialContent: "# Initial\n", documentPath: null, loadRevision: 1 };
+    const render = async (mode: "visible" | "hidden", next = initial) => act(async () => {
+      root.render(createElement(Activity, { mode, children: createElement(CodeEditorView, next) }));
+    });
+    await render("visible"); await render("hidden");
+    replaceDocumentMock.mockClear();
+    const next = { ...initial,
+      ...(changed === "source" ? { initialContent: "# New optimistic content\n" } : {}),
+      ...(changed === "epoch" ? { editorEpoch: 2 } : {}),
+      ...(changed === "tab" ? { documentTabId: "tab-2", openTabIds: ["tab-2"] } : {}) };
+    await render("hidden", next); await render("visible", next);
+    expect(createCodeEditorControllerMock).toHaveBeenCalledTimes(2);
+    expect(createCodeEditorControllerMock.mock.calls[1]![0].initialContent).toBe(initial.initialContent);
+    expect(replaceDocumentMock.mock.calls).toEqual([[next.initialContent]]);
+    expect(setDocumentIdentityMock).toHaveBeenLastCalledWith({ tabId: next.documentTabId, epoch: next.editorEpoch, loadRevision: 1 });
+  });
+
   it("keeps independent view snapshots per open tab and restores before load acknowledgement", async () => {
     const a = { tag: "A" }, b = { tag: "B" }, newerA = { tag: "newer-A" };
     const timeline: string[] = [];
@@ -204,6 +286,11 @@ describe("CodeEditorView", () => {
 
   it("loads content and applies the transferred selection before acknowledging the editor load", async () => {
     const timeline: string[] = [];
+    const base = createCodeEditorControllerMock.getMockImplementation()!();
+    createCodeEditorControllerMock.mockImplementation(options => {
+      expect(options.initialContent).toBe("0123456789");
+      timeline.push("constructed"); return base;
+    });
     replaceDocumentMock.mockImplementation(() => { timeline.push("content"); });
     setSelectionMock.mockImplementation(() => { timeline.push("selection"); });
     restoreReadingPositionMock.mockImplementation(() => { timeline.push("reading"); return true; });
@@ -212,11 +299,14 @@ describe("CodeEditorView", () => {
     const getEditorLoadSelection = vi.fn(() => ({ anchor: 7, head: 3, readingPosition }));
     const props = { ...createBindingProps(), initialContent: "0123456789", documentPath: "C:/selection.md", loadRevision: 1, getEditorLoadSelection, onLoadRevisionApplied };
     await act(async () => { root.render(createElement(CodeEditorView, props)); });
-    expect(timeline).toEqual(["content", "selection", "reading", "acknowledge"]);
+    expect(timeline).toEqual(["constructed", "selection", "reading", "acknowledge"]);
     expect(restoreReadingPositionMock).toHaveBeenCalledExactlyOnceWith(readingPosition);
     expect(setSelectionMock).toHaveBeenCalledExactlyOnceWith(7, 3);
     await act(async () => { root.render(createElement(CodeEditorView, { ...props })); });
     expect(setSelectionMock).toHaveBeenCalledTimes(1);
+    timeline.length = 0;
+    await act(async () => { root.render(createElement(CodeEditorView, { ...props, loadRevision: 2 })); });
+    expect(timeline).toEqual(["content", "selection", "reading", "acknowledge"]);
   });
 
   it("includes the selection in a sealed editor snapshot", async () => {

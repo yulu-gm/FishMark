@@ -1,5 +1,11 @@
 # FishMark 决策日志
 
+## 2026-10-15：051只消费当前controller的首次构造
+
+050在生产模式定位同一controller同一load的构造及立即replace重复全文解析。用组件本地一次性receipt核对实例/首次身份/实际文本，仅首个完全匹配load跳过replace；即使不匹配也消费。effect重连的新实例可强制fallback，不受保留的applied revision阻止。身份/session/selection/reading/ACK仍照常执行；不做通用文本缓存，不把相同文本当作未来reload的跳过依据。
+
+新真实语义用例发现基线同文本外部reload未推进loadRevision，另独审发现IPC将失败/stale的reload也映射成功。复用已有forceEditorReload，先窄化现有reload outcome类型与成功映射，再仅对实际成功且活动target相同的reload强制刷新；失败/取消/keep-memory不强制清history。reload error在seal/lease仍持有时复用非强制canonical对账，覆盖正文已提交但watch同步失败，同时保留错误通知；相同文本不伪装成功。保留seal/lease/release与销毁保护。049/050冻结，最终性能仅一次原049协议六样本；不从嵌套span承诺837.7ms节省，不放宽500/1500ms或gzip门槛。
+
 ## 2026-10-15：048按target绑定生命周期并让初始化可撤销
 
 同一WebContents重复工作区快照不应重复once(destroyed)，因此用registry内WeakSet记录对象绑定，路径集合清空和初始化失败不清除该记录。预发布desired集合与订阅使销毁清理覆盖pending stat；初始化共享Promise，stat返回及watch创建后检查entry身份与存活订阅，过期失败不能删除替代entry。按路径顺序初始化的现有语义保留，不引入跨路径原子观察承诺。

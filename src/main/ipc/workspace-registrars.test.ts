@@ -70,6 +70,28 @@ describe.each(commandRequests)("workspace %s boundary", (channel, args) => {
   });
 });
 
+describe("external reload result mapping", () => {
+  it.each([
+    { kind: "success", projection: { windowId: "owner", activeTabId: null, tabs: [], activeDocument: null } },
+    { kind: "error", error: { code: "read-failed", message: "Read failed." } },
+    { kind: "watch-error", error: { message: "Watch failed." } },
+    { kind: "revision-stale" },
+    { kind: "stale", reason: "window-changed", projection: null }
+  ])("only maps a successful reload as resolved: $kind", async outcome => {
+    const f = boundary();
+    const service = new Proxy({}, { get: () => vi.fn() });
+    registerWorkspaceCommandHandlers({ ...f, ensureWindow: async () => "owner", requireOpenPath: vi.fn(),
+      workspaceApplication: service, workspaceState: { getTabSession: () => ({ windowId: "owner" }) },
+      documentRepository: service, resolveExternalChange: { resolve: async () => ({ kind: "reloaded", outcome }) },
+      workspaceOwnerTabActivationRequestBroker: service, workspaceWindowCloseRequestBroker: service,
+      handleWorkspaceWindowCloseConfirmation: vi.fn()
+    } as unknown as Parameters<typeof registerWorkspaceCommandHandlers>[0]);
+    const result = await f.invoke("resolve-external-change", [{ tabId: "tab", command: "reload" }]);
+    expect(result).toMatchObject({ kind: outcome.kind === "success" ? "resolved" : "error" });
+    if ("error" in outcome) expect(result).toEqual({ kind: "error", message: outcome.error!.message });
+  });
+});
+
 describe("workspace authorization after awaits", () => {
   it.each(["open-workspace-file-from-path", "handle-dropped-markdown-file"])("rejects unknown %s authority before window registration or workspace I/O", async (channel) => {
     const f = commands();

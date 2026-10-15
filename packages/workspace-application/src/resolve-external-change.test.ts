@@ -54,7 +54,8 @@ describe("createResolveExternalChange", () => {
   it("delegates reload and save-as to the injected ports", async () => {
     const workspace = createWorkspaceState({ createTextBuffer: createStringTextBuffer });
     workspace.registerWindow("window-1");
-    const reload = vi.fn(async () => ({ kind: "success" }));
+    const projection = workspace.getWindowProjection("window-1");
+    const reload = vi.fn(async () => ({ kind: "success" as const, projection }));
     const saveAs = vi.fn(async () => ({
       status: "success" as const,
       document: { path: "x", name: "x", content: "x", encoding: "utf-8" as const }
@@ -64,7 +65,7 @@ describe("createResolveExternalChange", () => {
     await expect(resolve.resolve(
       { context: { id: 1 }, tabId: "tab-1", expectedWindowId: "window-1" },
       { kind: "reload" }
-    )).resolves.toEqual({ kind: "reloaded", outcome: { kind: "success" } });
+    )).resolves.toEqual({ kind: "reloaded", outcome: { kind: "success", projection } });
 
     await expect(resolve.resolve(
       { context: { id: 1 }, tabId: "tab-1", expectedWindowId: "window-1" },

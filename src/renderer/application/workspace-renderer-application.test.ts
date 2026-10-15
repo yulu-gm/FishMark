@@ -2418,6 +2418,71 @@ describe("RF-801 application commands without React", () => {
 });
 
 describe("external conflict command identity and barriers", () => {
+  it.each([false, true])("reconciles a reload error after main committed, without forcing equal text: changed=%s", async changed => {
+    const snapshot = createSnapshot({ firstContent: changed ? "# Committed despite watch failure\n" : "# First\n" });
+    snapshot.activeDocument = { ...snapshot.activeDocument!, revision: 1, savedRevision: 1 };
+    const getWorkspaceSnapshot = vi.fn(async () => snapshot);
+    const notification = vi.fn();
+    const application = createApplication({ bridge: {
+      resolveExternalChange: vi.fn(async () => ({ kind: "error" as const, message: "Watch failed." })),
+      getWorkspaceSnapshot,
+      flushDocumentEdits: vi.fn(async () => ({ kind: "flushed" as const, acknowledgedSequence: 0, revision: 0, savedRevision: 0, isDirty: false }))
+    } });
+    application.updatePresentation({ showNotification: notification });
+    try {
+      const original = consumeEditorLoad(application);
+      const reloading = application.reloadFromDisk();
+      await acknowledgeEditorReadOnly(application);
+      await acknowledgeEditorEditable(application);
+      await reloading;
+      expect(getWorkspaceSnapshot).toHaveBeenCalledOnce();
+      expect(application.getCanonicalStatus()).toBe("known");
+      expect(application.getActiveDocument()).toMatchObject({ content: snapshot.activeDocument!.content, revision: 1, savedRevision: 1, isDirty: false });
+      const loaded = application.getPendingEditorLoadIdentity()!;
+      expect(loaded.loadRevision).toBe(original.loadRevision + (changed ? 1 : 0));
+      expect(application.acknowledgeEditorLoad(loaded)).toBe(true);
+      expect(notification).toHaveBeenCalledWith({ kind: "error", message: "Watch failed." });
+      expect(application.getState().editorTransition).toBeNull();
+    } finally { application.dispose(); }
+  });
+
+  it.each(["resolved", "cancelled", "error"] as const)("only a resolved equal-text external reload advances the document load revision: %s", async (kind) => {
+    const canonical = createSnapshot();
+    const application = createApplication({ bridge: {
+      resolveExternalChange: vi.fn(async () => kind === "error" ? { kind, message: "reload rejected" } : { kind }),
+      getWorkspaceSnapshot: vi.fn(async () => canonical),
+      flushDocumentEdits: vi.fn(async () => ({ kind: "flushed" as const, acknowledgedSequence: 0, revision: 0, savedRevision: 0, isDirty: false }))
+    } });
+    try {
+      const original = consumeEditorLoad(application);
+      const reloading = application.reloadFromDisk();
+      await acknowledgeEditorReadOnly(application);
+      await acknowledgeEditorEditable(application);
+      await reloading;
+      const loaded = application.getPendingEditorLoadIdentity()!;
+      expect(loaded.tabId).toBe(original.tabId);
+      expect(loaded.loadRevision).toBe(original.loadRevision + (kind === "resolved" ? 1 : 0));
+      expect(application.getActiveDocument()?.content).toBe(canonical.activeDocument!.content);
+      expect(application.acknowledgeEditorLoad(original)).toBe(false);
+      expect(application.acknowledgeEditorLoad(loaded)).toBe(true);
+      expect(application.getState().editorTransition).toBeNull();
+    } finally { application.dispose(); }
+  });
+
+  it.each(["keep-memory", "cancel"] as const)("does not reload identical text after the %s external command", async command => {
+    const application = createApplication({ bridge: {
+      resolveExternalChange: vi.fn(async () => ({ kind: "resolved" as const })),
+      getWorkspaceSnapshot: vi.fn(async () => createSnapshot()),
+      flushDocumentEdits: vi.fn(async () => ({ kind: "flushed" as const, acknowledgedSequence: 0, revision: 0, savedRevision: 0, isDirty: false }))
+    } });
+    try {
+      const original = consumeEditorLoad(application);
+      await (command === "keep-memory" ? application.keepMemoryVersion() : application.dismissConflict());
+      expect(application.getState().editorLoadRevision).toBe(original.loadRevision);
+      expect(application.getPendingEditorLoadIdentity()).toBeNull();
+    } finally { application.dispose(); }
+  });
+
   it("does not redirect a queued gesture for tab A after an earlier activation selects tab B", async () => {
     const blocker = createDeferred<WorkspaceWindowSnapshot>();
     const resolveExternalChange = vi.fn();

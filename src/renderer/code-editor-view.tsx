@@ -21,7 +21,7 @@ import {
 } from "./code-editor";
 import type { EditorViewMode } from "@fishmark/codemirror-adapter";
 import type { ActiveBlockState } from "@fishmark/editor-model";
-import type { EditorLoadIdentity } from "./application/editor-load-identity";
+import { isSameEditorLoadIdentity, type EditorLoadIdentity } from "./application/editor-load-identity";
 import type { WorkspaceEditorLoadView, WorkspaceEditorSelection } from "../shared/workspace";
 
 export type CodeEditorHandle = {
@@ -142,6 +142,14 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
     const hostRef = useRef<HTMLDivElement | null>(null);
     const controllerRef = useRef<CodeEditorController | null>(null);
     const initialContentRef = useRef(initialContent);
+    const initialLoadIdentityRef = useRef<EditorLoadIdentity | null>(documentTabId === null ? null : {
+      tabId: documentTabId, epoch: editorEpoch, loadRevision
+    });
+    const constructedLoadRef = useRef<{
+      controller: CodeEditorController;
+      identity: EditorLoadIdentity | null;
+      content: string;
+    } | null>(null);
     const initialViewModeRef = useRef(viewMode);
     const initialHeadingPresentationModeRef = useRef(headingPresentationMode);
     const initialReadOnlyRef = useRef(readOnly);
@@ -230,6 +238,9 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
       });
 
       controllerRef.current = controller;
+      constructedLoadRef.current = {
+        controller, identity: initialLoadIdentityRef.current, content: initialContentRef.current
+      };
       const viewStates = viewStatesByTabRef.current;
       handleEditorBarrierChange(async () => ({ ...await controller.sealForBarrier(), selection: controller.getSelection(),
         ...(controller.captureReadingPosition ? { readingPosition: controller.captureReadingPosition() } : {}) }));
@@ -240,6 +251,7 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
         if (controllerRef.current === controller) {
           controllerRef.current = null;
         }
+        if (constructedLoadRef.current?.controller === controller) constructedLoadRef.current = null;
 
         controller.destroy();
         viewStates.clear();
@@ -255,13 +267,21 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
 
     useEffect(() => {
       const controller = controllerRef.current;
+      // Only this instance's exact construction can consume its first load.
+      // Consume even on mismatch so later equal-text reloads still replace.
+      const constructed = constructedLoadRef.current;
+      constructedLoadRef.current = null;
+      const usesConstructedDocument = constructed !== null && constructed.controller === controller &&
+        constructed.identity !== null && documentTabId !== null &&
+        isSameEditorLoadIdentity(constructed.identity, { tabId: documentTabId, epoch: editorEpoch, loadRevision }) &&
+        constructed.content === latestLoadedContentRef.current;
       const previousTabId = appliedIdentityRef.current?.tabId;
       const changedTab = previousTabId !== documentTabId;
       if (controller && changedTab && previousTabId) {
         viewStatesByTabRef.current.set(previousTabId, controller.captureViewState());
       }
-      if (appliedLoadRevisionRef.current !== loadRevision) {
-        controllerRef.current?.replaceDocument(latestLoadedContentRef.current);
+      if (constructed !== null || appliedLoadRevisionRef.current !== loadRevision) {
+        if (!usesConstructedDocument) controllerRef.current?.replaceDocument(latestLoadedContentRef.current);
         appliedLoadRevisionRef.current = loadRevision;
       }
       if (documentTabId === null) {

@@ -1,0 +1,17 @@
+# TASK-RF901-FIRST-LOAD-051 execution handoff
+
+Baseline: main2b6e8dff320f086c76d6c1a4b6841ba77ef3bced/tree7ce4f487f0a820f84e63dd7da065d9f364c7b00c. Frozen049/050:587 files in `.artifacts/rf901-first-load-051/baseline.json`;047 FAIL/profile unchanged. Independent boundary review preceded implementation and reviewed the necessary reload repair.
+
+CodeEditorView keeps a one-shot receipt for this controller's actual constructor text and original tab/epoch/loadRevision. Only an exact first match skips replaceDocument. Receipt is consumed on mismatch; a reconnected controller forces fallback even if the retained applied revision matches. Later equal-text reloads replace; identity/session/selection/view restoration/ACK continue unchanged. StrictMode and Activity reconnect cases covered; no shared cache, controller/parser API or parsing algorithm changes.
+
+Actual product same-text external reload exposed an existing missing revision advance. Application source unchanged from baseline produced a RED test; original IPC additionally mapped error/stale reloads as success (4RED). Type the existing reload outcome and map only success to resolved. Application uses existing forceEditorReload only for resolved reload whose snapshot active document is the captured tab. Keep-memory/cancel/error, lease/seal/release and disposal handling retained. Source: view, renderer application, IPC mapper and existing resolve-external-change port type; their tests plus tests/e2e/first-load.spec.mjs.
+
+Reload errors also use existing non-forced canonical reconciliation while the seal/lease is still held: main may have committed text before watch synchronization failed. Two additional RED tests verify changed committed text reconciles and equal-text watch-error does not force reload; original error remains visible.
+
+Development: original receipt tests7FAIL/16PASS; focused after receipt439PASS, related five files499PASS before the two reconciliation tests. Guard051-target-01 same-text history failure retained;target02 first-load success and existing12PASS, failure-path undo assertions passed but checkpoint read deleted fixture failed. Target03 exposed an incorrect button label;target04 correctly rejected saving a deleted/recreated file due to changed physical identity. Target05 moves away/back the same owned file instead, both real reload tests PASS. No file-identity protection or product oracle weakening; all original logs retained.
+
+Acceptance: lint/typecheck/build/strict/fullWindowsproduct/perf:baseline/editing/safety/formal; actual production-copy initial count proof; final uninstrumented candidate exactly one049-protocol six-sample batch. Verify identities/source/insert/undo/owned exit/profile cleanup/guard. Freeze input/build hashes, preserve misses and raw evidence, final independent review then ordinary main push and exactSHA four official CI jobs. No retry for speed, threshold/allowlist/warning changes or percentile/compositor claim.
+
+Manual acceptance: use temporary Markdown; open/edit/undo/redo/save, touch same-byte file externally and Reload, Ctrl+Z must not resurrect old edits; delete the temporary file then Reload must report failure and preserve undo. Switch two long documents, reading/source/outline, return to independent viewport and continue exact save.
+
+M9 stays0/3; RF901 PAUSED/unaccepted (this bounded authorized repair does not complete it), RF902/903 IN_PROGRESS. No Mac/strictrealIME/Typora acceptance, cp13/cp16 changes, Library transfer or unrelated program interaction.

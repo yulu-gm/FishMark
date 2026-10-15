@@ -6,6 +6,10 @@ import type {
 
 import type { SaveDocumentInput } from "./save-document";
 import type { SaveDocumentResult } from "./ports";
+import type { WorkspaceReloadResult } from "./reload-document";
+import type { WorkspaceProjectionCommandResult } from "./workspace-application";
+
+type ExternalReloadOutcome = WorkspaceReloadResult | Extract<WorkspaceProjectionCommandResult, { kind: "watch-error" }>;
 
 // Typed command surface for resolving a detected external change. The renderer no longer owns
 // conflict state; it sends one of these decisions and main applies it against the canonical
@@ -23,7 +27,7 @@ export type ResolveExternalChangeResult =
       readonly kind: "stale";
       readonly reason: WorkspaceMutationStaleReason;
     }
-  | { readonly kind: "reloaded"; readonly outcome: unknown }
+  | { readonly kind: "reloaded"; readonly outcome: ExternalReloadOutcome }
   | { readonly kind: "saved-as"; readonly outcome: SaveDocumentResult };
 
 export function createResolveExternalChange<TContext>(dependencies: {
@@ -32,7 +36,7 @@ export function createResolveExternalChange<TContext>(dependencies: {
     readonly context: TContext;
     readonly tabId: string;
     readonly expectedWindowId: string;
-  }) => Promise<unknown>;
+  }) => Promise<ExternalReloadOutcome>;
   saveAs: (input: SaveDocumentInput<TContext>) => Promise<SaveDocumentResult>;
 }) {
   return {

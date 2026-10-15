@@ -1,5 +1,13 @@
 # FishMark 测试报告
 
+## 2026-10-15 TASK-RF901-FIRST-LOAD-051
+
+Windows局部修复验收：**PASS**；RF901首次打开预算：**FAIL**。首构造receipt、同文本成功reload重置history、失败保留history和committed watch-error非force对账均有RED/GREEN。501定向单测；051-final-03干净1466文件逐hash源码镜像原npm lint及原位typecheck/build/strict/Windows产品/foundation/editing/safety/formal通过。原位lint28any来自冻结050及051诊断副本，原始FAIL保留；未改eslint规则/known allowlist。strict3986＋8精确known，0unexpected/errors/skip；Windows60/60无skip/retry/flaky、74启动=69正常exit0+5预期恢复，14native助手九阶段，全部owned退出/profile清理/cleanup0；foundation310、editing79、safety7、formal121/121/2541，gzip1437871/1500000、initial104006/260000。
+
+050与051相同531783B原始源码，非空全文parse2→1、051constructor1/replace0。051-count-01子进程正确性/隔离/清理通过，父过滤器短label使后处理FAIL（guard exit1保留）；新完整label离线审计PASS并获独审认可，没有再次启动诊断。该诊断耗时不计性能收益。
+
+051-six-01一次六样本，最终无插桩main与049计时脚本字节相同：5k fresh/warm1/warm2观察ready=1236.3609000000001/269.2221000000002/262.22399999999993ms；20k=1945.6685/929.6841/924.0536000000002ms。两个fresh仍超500/1500，四warm通过；正文/原盘/offset2插入/精确undo及8owned成员退出、两profile删除、guard输入0全部通过。保留原始全精度、DOM/快照/正确性耗时，见[报告051](../reports/task-summaries/TASK-RF901-FIRST-LOAD-051.md)。无p95/p99/compositor/OS IME外推；M9仍0/3。最终独审/普通main精确SHA四CI另见publication。
+
 ## 2026-10-15 TASK-WATCH-LIFECYCLE-048
 
 Windows本地验收：**PASS**。原实现新增生命周期测试11失败/12通过，修后25/25；WeakSet一次绑定与pending初始化撤销、失败重试、双窗共享、旧失败不删除替代entry、内部写baseline保护均有受控交错覆盖。实际产品100次公开快照destroyed监听4→4，canonical/disk/dirty不变且无warning，正常退出/隔离清理通过。
