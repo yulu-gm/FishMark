@@ -44,6 +44,7 @@ type InternalWrite = {
 // subscriber, so an inactive tab in the same window stays covered.
 type RegistryEntry = {
   readonly path: string;
+  initialization: Promise<void>;
   watcher: FSWatcherLike | null;
   baseline: FileSnapshot | null;
   internalWrite: InternalWrite | null;
@@ -80,6 +81,7 @@ export function createFileWatchRegistry(
   const resolved = { ...defaultDependencies, ...dependencies } as WatchDependencies;
   const entriesByPath = new Map<string, RegistryEntry>();
   const pathsByTarget = new Map<number, Set<string>>();
+  const boundTargets = new WeakSet<WatchedTarget>();
   const destroyedTargets = new WeakSet<WatchedTarget>();
   let nextInternalWriteToken = 0;
 
@@ -94,7 +96,8 @@ export function createFileWatchRegistry(
   }
 
   function bindTargetLifecycle(target: WatchedTarget): void {
-    if (target.once === undefined || destroyedTargets.has(target)) return;
+    if (target.once === undefined || destroyedTargets.has(target) || boundTargets.has(target)) return;
+    boundTargets.add(target);
     target.once("destroyed", () => {
       destroyedTargets.add(target);
       const paths = pathsByTarget.get(target.id);
@@ -127,6 +130,9 @@ export function createFileWatchRegistry(
     }
 
     const previous = pathsByTarget.get(target.id) ?? new Set<string>();
+    // Publish intent before asynchronous setup so destruction and newer syncs
+    // can revoke even a subscriber whose initial stat has not returned yet.
+    pathsByTarget.set(target.id, desired);
     // Unsubscribe paths the target no longer watches.
     for (const oldPath of previous) {
       if (desired.has(oldPath)) continue;
@@ -140,42 +146,50 @@ export function createFileWatchRegistry(
       }
     }
     // Subscribe to every newly desired path, sharing a watcher across targets.
-    const next = new Set<string>();
     for (const path of desired) {
-      next.add(path);
-      if (previous.has(path)) continue;
+      if (!isLive(target) || pathsByTarget.get(target.id) !== desired) return;
       let entry = entriesByPath.get(path);
       if (entry === undefined) {
         entry = {
           path,
+          initialization: Promise.resolve(),
           watcher: null,
           baseline: null,
           internalWrite: null,
-          subscribers: new Set()
+          subscribers: new Set([target])
         };
         entriesByPath.set(path, entry);
-        let baseline: FileSnapshot | null;
-        try {
-          baseline = await readSnapshot(path, resolved.stat);
-        } catch (error) {
-          entriesByPath.delete(path);
-          throw error;
-        }
-        entry.baseline = baseline;
-        let watcher: FSWatcherLike;
-        try {
-          watcher = resolved.watch(path, () => {
-            void handleWatchEvent(entry!).catch(() => undefined);
-          });
-        } catch (error) {
-          entriesByPath.delete(path);
-          throw error;
-        }
-        entry.watcher = watcher;
+        const initializing = entry;
+        entry.initialization = Promise.resolve().then(() => initializeEntry(initializing));
       }
       entry.subscribers.add(target);
+      if (entry.watcher === null) await entry.initialization;
     }
-    pathsByTarget.set(target.id, next);
+  }
+
+  async function initializeEntry(entry: RegistryEntry): Promise<void> {
+    try {
+      if (entriesByPath.get(entry.path) !== entry || entry.subscribers.size === 0) return;
+      const baseline = await readSnapshot(entry.path, resolved.stat);
+      if (entriesByPath.get(entry.path) !== entry || entry.subscribers.size === 0) return;
+      entry.baseline = baseline;
+      entry.watcher = resolved.watch(entry.path, () => {
+        void handleWatchEvent(entry).catch(() => undefined);
+      });
+      if (entriesByPath.get(entry.path) !== entry || entry.subscribers.size === 0) closeEntrySafely(entry);
+    } catch (error) {
+      // An obsolete setup must not erase a new entry for the same path.
+      if (entriesByPath.get(entry.path) === entry) entriesByPath.delete(entry.path);
+      closeEntrySafely(entry);
+      throw error;
+    }
+  }
+
+  async function initializedEntry(target: WatchedTarget, path: string): Promise<RegistryEntry | undefined> {
+    const entry = entriesByPath.get(path);
+    if (entry === undefined || !isLive(target) || !entry.subscribers.has(target)) return;
+    await entry.initialization;
+    if (entriesByPath.get(path) === entry && isLive(target) && entry.subscribers.has(target)) return entry;
   }
 
   async function beginInternalWrite(
@@ -184,8 +198,8 @@ export function createFileWatchRegistry(
   ): Promise<void> {
     const path = normalizedPath(targetPath);
     if (path === null) return;
-    const entry = entriesByPath.get(path);
-    if (entry === undefined || !entry.subscribers.has(target)) return;
+    const entry = await initializedEntry(target, path);
+    if (entry === undefined) return;
     entry.internalWrite = {
       token: ++nextInternalWriteToken,
       path,
@@ -199,7 +213,7 @@ export function createFileWatchRegistry(
   ): Promise<void> {
     const path = normalizedPath(targetPath);
     if (path === null) return;
-    const entry = entriesByPath.get(path);
+    const entry = await initializedEntry(target, path);
     const write = entry?.internalWrite;
     if (entry === undefined || write === undefined || write === null) return;
     if (write.path !== path || !entry.subscribers.has(target)) return;

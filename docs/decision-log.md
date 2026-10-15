@@ -1,5 +1,11 @@
 # FishMark 决策日志
 
+## 2026-10-15：048按target绑定生命周期并让初始化可撤销
+
+同一WebContents重复工作区快照不应重复once(destroyed)，因此用registry内WeakSet记录对象绑定，路径集合清空和初始化失败不清除该记录。预发布desired集合与订阅使销毁清理覆盖pending stat；初始化共享Promise，stat返回及watch创建后检查entry身份与存活订阅，过期失败不能删除替代entry。按路径顺序初始化的现有语义保留，不引入跨路径原子观察承诺。
+
+提前发布订阅后内部写也可能碰到pending初始化，两个写入口必须等待初始化并重新验证target/map/subscriber，避免晚baseline覆盖。仅修生命周期及直接相关交错，不提高EventEmitter上限、不隐藏warning或改allowlist。047失败记录和保留profile冻结，不重跑其性能六样本；cp13/cp16保持隔离。
+
 ## 2026-10-15：046在测量行盒内建立阅读节奏
 
 标题原先无上下独立间距，paragraph-leading1.95又高于既有规范1.86。保持H1–H6字号/字重与基础正文1.85，仅在wysiwym顶层heading增加按层级递减的top .15/1/.85/.7/.55/.55rem及bottom .25rem，段落leading改为1.86并在其第一条物理行加top .45rem。第一物理行不加bottom，避免拆开同段软换行。段前与标题后合计间距明确，不重写空行。

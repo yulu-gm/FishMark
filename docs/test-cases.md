@@ -2,6 +2,12 @@
 
 本文用于开发自检、评审验收和回归覆盖。
 
+## TC-WATCH-LIFECYCLE-048：窗口监听与异步初始化
+
+受控EventEmitter target执行100次同路径sync，应仅有一个registry destroyed监听；路径清空/重订阅和stat/watch初始化失败重试保持一次。两个窗口同路径只共享一个watcher，最后订阅退出才关闭。受控Promise挂起初始stat，销毁/清空/新同步后释放不能复活旧watcher或删除替代entry；另一个存活订阅仍可完成。watch同步销毁需关闭刚返回的watcher。内部写开始等待初始stat并复核身份，结束baseline不可被旧初始化覆盖。外部change stat途中销毁不应发事件。
+
+真实产品连续100次公开getWorkspaceSnapshot，实际WebContents destroyed监听总数保持不变且无MaxListenersExceededWarning，canonical/disk/dirty不变；正常exit0、所属成员退出、双路径隔离与profile清理通过。该流程不改变warning策略或监听上限，不代替047性能六样本或Mac/真实IME验收。
+
 ## TC-READING-RHYTHM-046：排版与导航稳定
 
 用人工中英长文，在1280/900外窗（实际客户区1264/884、DPR1）、浅深主题与编辑/F11阅读下观察分级标题、段落、列表、表格和代码的接续，记录native bounds和DOM行盒，不用截图独自证明几何。标题激活前后相同height/y，source模式不保留新增padding，多物理行同段只在leading前留白；嵌套list/quote标题padding0，结构空行0、额外空行可见。通过真实outline导航到数据节并点击表格，scrollTop差≤1px，canonical/disk及dirty不变。

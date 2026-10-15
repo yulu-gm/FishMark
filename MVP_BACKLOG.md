@@ -1,5 +1,16 @@
 # MVP Backlog
 
+## TASK-WATCH-LIFECYCLE-048：窗口监听生命周期（2026-10-15）
+
+状态：**Windows本地验收PASS**。基线main `60bedefd6319373674d65dca6fe1d17472996027`，CI38791422167四绿。发布须最终独审和普通main精确SHA四项CI，以本批publication终态为准。
+
+- [x] 同target100次sync只贡献一个registry destroyed监听，清空/重订阅/失败重试仍一次。
+- [x] pending stat销毁和新同步撤销旧setup，共享窗口保留存活订阅；内部写等待初始化，25项单测通过。
+- [x] 真实产品100快照监听稳定、无监听超限警告，canonical/disk/dirty不变、正常退出/清理通过。
+- [x] 新鲜九门禁及交接通过：strict3966＋8精确known、Windows58/58、formal121/121/2541；gzip1437744/1500000。
+
+交接见[048 handoff](docs/plans/2026-10-15-watch-lifecycle-handoff.md)。不提高listener上限或隐藏warning；047失败与保留profile冻结，不重跑性能六样本；M9仍0/3，平台IME与Mac未验收。
+
 ## TASK-READING-RHYTHM-046：阅读排版节奏（2026-10-15）
 
 状态：**Windows 本地验收 PASS**，基线main `df16c2f`、CI38785088778四绿。最终独审及发布身份以本批`publication.json`为准。

@@ -1,4 +1,5 @@
 import type { Stats } from "node:fs";
+import { EventEmitter } from "node:events";
 
 import { describe, expect, it, vi } from "vitest";
 
@@ -18,6 +19,181 @@ function createTarget(id = 1) {
     once: vi.fn<(event: "destroyed", listener: () => void) => void>()
   };
 }
+
+function lifecycleTarget(id = 1) {
+  const target = Object.assign(new EventEmitter(), { id, send: vi.fn() });
+  return target;
+}
+
+function pendingSnapshot() {
+  let resolve!: (value: Stats) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<Stats>((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+
+describe("file watcher target lifecycle", () => {
+  it("binds exactly one listener for100 identical target syncs", async () => {
+    const target = lifecycleTarget(), close = vi.fn(), watch = vi.fn(() => ({ close }));
+    const registry = createFileWatchRegistry({ watch, stat: async () => stats(1, 2) });
+    for (let i = 0; i < 100; i++) await registry.syncWindowPaths(target, ["C:/notes/a.md"]);
+    expect(target.listenerCount("destroyed")).toBe(1);
+    expect(watch).toHaveBeenCalledTimes(1);
+    target.emit("destroyed");
+    expect(target.listenerCount("destroyed")).toBe(0);
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("retains one lifecycle binding through empty paths and re-subscription", async () => {
+    const target = lifecycleTarget(), close = vi.fn(), watch = vi.fn(() => ({ close }));
+    const registry = createFileWatchRegistry({ watch, stat: async () => stats(1, 2) });
+    await registry.syncWindowPaths(target, []);
+    await registry.syncWindowPaths(target, ["C:/notes/a.md"]);
+    await registry.syncWindowPaths(target, []);
+    await registry.syncWindowPaths(target, ["C:/notes/a.md"]);
+    expect(target.listenerCount("destroyed")).toBe(1);
+    expect(watch).toHaveBeenCalledTimes(2);
+    expect(close).toHaveBeenCalledTimes(1);
+    target.emit("destroyed");
+    expect(close).toHaveBeenCalledTimes(2);
+    await registry.syncWindowPaths(target, ["C:/notes/a.md"]);
+    expect(target.listenerCount("destroyed")).toBe(0);
+    expect(watch).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["stat", "watch"])("retries failed %s initialization without rebinding lifecycle", async stage => {
+    const failure = new Error("initialization failed"), target = lifecycleTarget(), close = vi.fn();
+    let first = true;
+    const stat = vi.fn(async () => { if (stage === "stat" && first) { first = false; throw failure; } return stats(1, 2); });
+    const watch = vi.fn(() => { if (stage === "watch" && first) { first = false; throw failure; } return { close }; });
+    const registry = createFileWatchRegistry({ watch, stat });
+    await expect(registry.syncWindowPaths(target, ["C:/notes/a.md"])).rejects.toBe(failure);
+    await registry.syncWindowPaths(target, ["C:/notes/a.md"]);
+    expect(target.listenerCount("destroyed")).toBe(1);
+    target.emit("destroyed");
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps one shared watcher until both distinct windows leave", async () => {
+    const a = lifecycleTarget(1), b = lifecycleTarget(2), close = vi.fn(), watch = vi.fn(() => ({ close }));
+    const registry = createFileWatchRegistry({ watch, stat: async () => stats(1, 2) });
+    await registry.syncWindowPaths(a, ["C:/notes/shared.md"]);
+    await registry.syncWindowPaths(b, ["C:/notes/shared.md"]);
+    await registry.syncWindowPaths(a, ["C:/notes/shared.md"]);
+    expect(a.listenerCount("destroyed")).toBe(1); expect(b.listenerCount("destroyed")).toBe(1);
+    a.emit("destroyed"); expect(close).not.toHaveBeenCalled();
+    b.emit("destroyed"); expect(close).toHaveBeenCalledTimes(1);
+    expect(watch).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not create a watcher after destruction during baseline stat", async () => {
+    const target = lifecycleTarget(), pending = pendingSnapshot(), watch = vi.fn(() => ({ close: vi.fn() }));
+    const stat = vi.fn(() => pending.promise), registry = createFileWatchRegistry({ watch, stat });
+    const syncing = registry.syncWindowPaths(target, ["C:/notes/a.md"]);
+    await vi.waitFor(() => expect(stat).toHaveBeenCalledTimes(1));
+    target.emit("destroyed"); pending.resolve(stats(1, 2)); await syncing;
+    expect(watch).not.toHaveBeenCalled(); expect(target.send).not.toHaveBeenCalled();
+    await registry.syncWindowPaths(target, ["C:/notes/a.md"]);
+    expect(watch).not.toHaveBeenCalled(); expect(target.listenerCount("destroyed")).toBe(0);
+  });
+
+  it("does not revive cleared paths or add later stale paths after a pending stat", async () => {
+    const target = lifecycleTarget(), pending = pendingSnapshot(), watch = vi.fn(() => ({ close: vi.fn() }));
+    const stat = vi.fn().mockReturnValueOnce(pending.promise).mockResolvedValue(stats(1, 2));
+    const registry = createFileWatchRegistry({ watch, stat });
+    const syncing = registry.syncWindowPaths(target, ["C:/notes/a.md", "C:/notes/b.md"]);
+    await vi.waitFor(() => expect(stat).toHaveBeenCalledTimes(1));
+    await registry.syncWindowPaths(target, []); pending.resolve(stats(1, 2)); await syncing;
+    expect(watch).not.toHaveBeenCalled(); expect(stat).toHaveBeenCalledTimes(1);
+    await registry.syncWindowPaths(target, ["C:/notes/b.md"]); expect(watch).toHaveBeenCalledTimes(1);
+    target.emit("destroyed");
+  });
+
+  it("finishes a shared initialization for the surviving subscriber only", async () => {
+    const a = lifecycleTarget(1), b = lifecycleTarget(2), pending = pendingSnapshot(), close = vi.fn();
+    const watch = vi.fn(() => ({ close })), stat = vi.fn(() => pending.promise);
+    const registry = createFileWatchRegistry({ watch, stat });
+    const first = registry.syncWindowPaths(a, ["C:/notes/shared.md"]);
+    const second = registry.syncWindowPaths(b, ["C:/notes/shared.md"]);
+    await vi.waitFor(() => expect(stat).toHaveBeenCalledTimes(1));
+    a.emit("destroyed"); pending.resolve(stats(1, 2)); await Promise.all([first, second]);
+    expect(stat).toHaveBeenCalledTimes(1); expect(watch).toHaveBeenCalledTimes(1);
+    expect(close).not.toHaveBeenCalled(); b.emit("destroyed"); expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("shares initialization failure and allows both windows to retry", async () => {
+    const a = lifecycleTarget(1), b = lifecycleTarget(2), pending = pendingSnapshot(), failure = new Error("stat failed"), close = vi.fn();
+    const stat = vi.fn().mockReturnValueOnce(pending.promise).mockResolvedValue(stats(1, 2)), watch = vi.fn(() => ({ close }));
+    const registry = createFileWatchRegistry({ watch, stat });
+    const first = registry.syncWindowPaths(a, ["C:/notes/shared.md"]).catch(error => error);
+    const second = registry.syncWindowPaths(b, ["C:/notes/shared.md"]).catch(error => error);
+    await vi.waitFor(() => expect(stat).toHaveBeenCalledTimes(1));
+    pending.reject(failure); expect(await first).toBe(failure); expect(await second).toBe(failure);
+    await registry.syncWindowPaths(a, ["C:/notes/shared.md"]); await registry.syncWindowPaths(b, ["C:/notes/shared.md"]);
+    a.emit("destroyed"); expect(close).not.toHaveBeenCalled(); b.emit("destroyed"); expect(close).toHaveBeenCalledTimes(1);
+    expect(a.listenerCount("destroyed")).toBe(0); expect(b.listenerCount("destroyed")).toBe(0);
+  });
+
+  it("does not remove a replacement entry when obsolete stat rejects", async () => {
+    const target = lifecycleTarget(), pending = pendingSnapshot(), failure = new Error("obsolete stat"), close = vi.fn();
+    const stat = vi.fn().mockReturnValueOnce(pending.promise).mockResolvedValue(stats(1, 2)), watch = vi.fn(() => ({ close }));
+    const registry = createFileWatchRegistry({ watch, stat });
+    const old = registry.syncWindowPaths(target, ["C:/notes/a.md"]).catch(error => error);
+    await vi.waitFor(() => expect(stat).toHaveBeenCalledTimes(1));
+    await registry.syncWindowPaths(target, []); await registry.syncWindowPaths(target, ["C:/notes/a.md"]);
+    pending.reject(failure); expect(await old).toBe(failure);
+    expect(watch).toHaveBeenCalledTimes(1); expect(close).not.toHaveBeenCalled();
+    target.emit("destroyed"); expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes a just-created watcher if the target is destroyed synchronously during watch setup", async () => {
+    const target = lifecycleTarget(), close = vi.fn();
+    const watch = vi.fn(() => { target.emit("destroyed"); return { close }; });
+    const registry = createFileWatchRegistry({ watch, stat: async () => stats(1, 2) });
+    await registry.syncWindowPaths(target, ["C:/notes/a.md"]);
+    expect(close).toHaveBeenCalledTimes(1);
+    await registry.syncWindowPaths(target, ["C:/notes/a.md"]); expect(watch).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not deliver an in-flight external stat after destruction", async () => {
+    const target = lifecycleTarget(), pending = pendingSnapshot(), close = vi.fn();
+    let callback!: WatchListener;
+    const watch = vi.fn((_path: string, listener: WatchListener) => { callback = listener; return { close }; });
+    const stat = vi.fn().mockResolvedValueOnce(stats(1, 2)).mockReturnValueOnce(pending.promise);
+    const registry = createFileWatchRegistry({ watch, stat });
+    await registry.syncWindowPaths(target, ["C:/notes/a.md"]);
+    callback("change"); target.emit("destroyed"); pending.resolve(stats(2, 3));
+    await Promise.resolve(); await Promise.resolve();
+    expect(target.send).not.toHaveBeenCalled(); expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for initial baseline before internal writes can update it", async () => {
+    const target = lifecycleTarget(), pending = pendingSnapshot();
+    let callback!: WatchListener, began = false;
+    const watch = vi.fn((_path: string, listener: WatchListener) => { callback = listener; return { close: vi.fn() }; });
+    const stat = vi.fn().mockReturnValueOnce(pending.promise).mockResolvedValue(stats(3, 4));
+    const registry = createFileWatchRegistry({ watch, stat });
+    const syncing = registry.syncWindowPaths(target, ["C:/notes/a.md"]);
+    await vi.waitFor(() => expect(stat).toHaveBeenCalledTimes(1));
+    const writing = registry.beginInternalWrite(target, "C:/notes/a.md").then(() => { began = true; });
+    await Promise.resolve(); expect(began).toBe(false);
+    pending.resolve(stats(1, 2)); await Promise.all([syncing, writing]);
+    await registry.completeInternalWrite(target, "C:/notes/a.md");
+    callback("change"); await vi.waitFor(() => expect(stat).toHaveBeenCalledTimes(3));
+    expect(target.send).not.toHaveBeenCalled(); target.emit("destroyed");
+  });
+
+  it("does not resume a pending internal-write hook for a destroyed target", async () => {
+    const target = lifecycleTarget(), pending = pendingSnapshot(), watch = vi.fn(() => ({ close: vi.fn() }));
+    const stat = vi.fn(() => pending.promise), registry = createFileWatchRegistry({ watch, stat });
+    const syncing = registry.syncWindowPaths(target, ["C:/notes/a.md"]);
+    await vi.waitFor(() => expect(stat).toHaveBeenCalledTimes(1));
+    const writing = registry.beginInternalWrite(target, "C:/notes/a.md");
+    target.emit("destroyed"); pending.resolve(stats(1, 2)); await Promise.all([syncing, writing]);
+    await registry.completeInternalWrite(target, "C:/notes/a.md");
+    expect(watch).not.toHaveBeenCalled(); expect(stat).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe("createFileWatchRegistry", () => {
   it("watches every subscribed path, including inactive tabs in one window", async () => {

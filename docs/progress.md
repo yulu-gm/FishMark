@@ -1,5 +1,9 @@
 # FishMark 进展记录
 
+## 2026-10-15 窗口监听生命周期048（Windows本地验收PASS）
+
+基于60bedefd/CI38791422167四绿，仅修FileWatchRegistry的重复destroyed绑定及初始化异步撤销；25单测和真实产品100快照流程通过。九门禁通过：strict3966＋8精确known、Windows58/58、72启动=67正常exit0+5预期恢复、全部owned退出/profile清理/cleanup0、72启动监听超限warning0；foundation310、editing79、safety7、formal121/121/2541、gzip1437744/1500000。最终独审和普通main精确发布见[报告048](../reports/task-summaries/TASK-WATCH-LIFECYCLE-048.md)及本批publication。047失败不改且不重跑六样本，M9仍0/3。
+
 ## 2026-10-15 阅读排版046（Windows本地验收PASS）
 
 在已发布df16c2f/CI38785088778四绿上推进CSS小批：保持字号/主题/宽度，用顶层标题分级上下padding与段落leading1.86及top .45rem建立节奏；源码模式/嵌套容器/空行显隐不接收新增间距。修前/修后8视图矩阵、331单测和7产品定向流程通过；九门禁通过，strict3952＋8精确known、Windows57/57、formal121/121/2541、Windows gzip1437744/1500000。最终独审及普通main发布以本批publication精确身份/CI为准，见[报告046](../reports/task-summaries/TASK-READING-RHYTHM-046.md)。M9仍0/3。

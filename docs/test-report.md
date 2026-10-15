@@ -1,5 +1,13 @@
 # FishMark 测试报告
 
+## 2026-10-15 TASK-WATCH-LIFECYCLE-048
+
+Windows本地验收：**PASS**。原实现新增生命周期测试11失败/12通过，修后25/25；WeakSet一次绑定与pending初始化撤销、失败重试、双窗共享、旧失败不删除替代entry、内部写baseline保护均有受控交错覆盖。实际产品100次公开快照destroyed监听4→4，canonical/disk/dirty不变且无warning，正常退出/隔离清理通过。
+
+048-final-01九门禁通过：strict3966＋8精确known（0unexpected/errors/skip）、Windows58/58、72启动=67正常exit0+5预期恢复且全部owned退出/profile清理/cleanup0；14native助手完整九阶段，四guard无物理输入、三probe隔离通过；foundation310、editing79、safety7、formal121/121/2541（99known、0unexpected/not-run）、Windows gzip1437744/1500000、initial103958/260000。72启动原始日志MaxListenersExceededWarning为0；未修改warning分类、listener上限或allowlist。
+
+独审和普通main精确SHA四项CI见[报告048](../reports/task-summaries/TASK-WATCH-LIFECYCLE-048.md)与publication。047原始FAIL/保留profile冻结且未重跑性能六样本；不外推Mac/真实IME或M9完成，M9仍0/3。
+
 ## 2026-10-15 TASK-READING-RHYTHM-046
 
 Windows本地验收：**PASS**。同一自有中英长文在1280/900外窗、实际1264/884客户区、DPR1、light/dark/edit/F11各8视图进行修前修后截图与DOM/native几何记录。新增3产品用例核验active/inactive heading同height/y、source padding0、多物理行无中间gap、nestedheading0、structural0/extra可见、outline后tableclick scroll≤1px，以及canonical/disk/dirty不变。旧4项Tab viewport和完整nested-editing行内显隐/history模式切换保持。
