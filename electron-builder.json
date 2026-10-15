@@ -27,6 +27,7 @@
     "!fixtures{,/**}",
     "!tmp{,/**}"
   ],
+  "asarUnpack": ["dist/**/*"],
   "publish": [
     {
       "provider": "github",

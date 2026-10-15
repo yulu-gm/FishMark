@@ -49,6 +49,21 @@ it("persists a first-session baseline and only appends for subsequent edits", as
   expect((await restore(directory)).workspace.getTabSession(input.tabId).content).toBe("draft!");
 });
 
+it("queues a fresh metadata checkpoint after an acknowledged edit without truncating accepted work", async () => {
+  const { directory, workspace, recovery, input } = await setup();
+  const realAppend = recovery.recordEditBatch.bind(recovery);
+  let release!: () => void; const gate = new Promise<void>((resolve) => { release = resolve; });
+  const append = vi.spyOn(recovery, "recordEditBatch").mockImplementation(async (batch) => { await gate; await realAppend(batch); });
+  const edits = createRecoverableDocumentEdits({ workspace, recovery });
+  const accepted = edits.applyDocumentEdits(input);
+  await vi.waitFor(() => expect(append).toHaveBeenCalledOnce());
+  const checkpoint = edits.checkpoint(); release(); await Promise.all([accepted, checkpoint]);
+  expect((await restore(directory)).workspace.getTabSession(input.tabId).content).toBe("draft");
+  await expect(edits.checkpoint(() => {}, async () => false)).rejects.toThrow("Checkpoint authority expired");
+  expect((await edits.applyDocumentEdits({ ...input, clientSequence: 2, baseRevision: 1, changes: [{ from: 5, to: 5, insert: "!" }] })).kind).toBe("applied");
+  expect((await restore(directory)).workspace.getTabSession(input.tabId).content).toBe("draft!");
+});
+
 it("refreshes the baseline after a non-journal reload before accepting another edit", async () => {
   const { directory, workspace, recovery, input } = await setup();
   const edits = createRecoverableDocumentEdits({ workspace, recovery });

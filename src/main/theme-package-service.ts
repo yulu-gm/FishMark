@@ -1,5 +1,9 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, realpath } from "node:fs/promises";
 import path from "node:path";
+import { resolveRendererPayloadDirectory } from "./paths";
+import { createFileIdentityResolver } from "./file-identity-resolver";
+import { readPinnedFile } from "./pinned-file-read";
+import { filePathIdentity } from "./file-path";
 
 import {
   normalizeThemePackageManifest,
@@ -11,7 +15,8 @@ type ThemePackageServiceDependencies = {
   readdir: (targetPath: string, options: { withFileTypes: true }) => Promise<
     import("node:fs").Dirent[]
   >;
-  readFile: (targetPath: string, options: { encoding: BufferEncoding }) => Promise<string>;
+  readFile: (targetPath: string, options: { encoding: BufferEncoding }, beforeBody?: () => Promise<void>) => Promise<string>;
+  realpath: (targetPath: string) => Promise<string>;
 };
 
 export type CreateThemePackageServiceInput = {
@@ -27,7 +32,18 @@ type ThemePackageService = {
 
 const defaultDependencies: ThemePackageServiceDependencies = {
   readdir: (targetPath, options) => readdir(targetPath, options),
-  readFile: (targetPath, options) => readFile(targetPath, options)
+  readFile: async (targetPath, options, beforeBody = async () => {}) => {
+    const pinned = await createFileIdentityResolver().resolveExisting(targetPath);
+    if (filePathIdentity(pinned.canonicalPath, process.platform) !== filePathIdentity(targetPath, process.platform)) throw new Error("Manifest path changed.");
+    const bytes = await readPinnedFile({ path: pinned.canonicalPath, physicalIdentity: pinned.identity.object,
+      check: () => {}, beforeBody: async () => {
+        await beforeBody();
+        const current = await createFileIdentityResolver().resolveExisting(targetPath);
+        if (current.identity.object !== pinned.identity.object || current.identity.location !== pinned.identity.location) throw new Error("Manifest object changed.");
+      } });
+    return bytes!.toString(options.encoding);
+  },
+  realpath
 };
 
 type ResolveBuiltinThemePackagesDirInput = {
@@ -41,7 +57,7 @@ export function resolveBuiltinThemePackagesDir(
   const moduleDir = input.moduleDir ?? __dirname;
 
   return input.isPackaged
-    ? path.resolve(moduleDir, "../../dist/theme-packages")
+    ? path.join(resolveRendererPayloadDirectory({ isPackaged: true, appPath: path.resolve(moduleDir, "../.."), moduleDir }), "theme-packages")
     : path.resolve(moduleDir, "../../src/renderer/theme-packages");
 }
 
@@ -70,7 +86,12 @@ async function readManifestState(
   | { kind: "valid"; manifest: ThemePackageManifest }
 > {
   try {
-    const rawManifest = await dependencies.readFile(manifestPath, { encoding: "utf8" });
+    const canonical = await dependencies.realpath(manifestPath);
+    const relative = path.relative(packageRoot, canonical);
+    if (!relative || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) return { kind: "invalid" };
+    const rawManifest = await dependencies.readFile(canonical, { encoding: "utf8" }, async () => {
+      if (await dependencies.realpath(packageRoot) !== packageRoot || await dependencies.realpath(manifestPath) !== canonical) throw new Error("Manifest root changed.");
+    });
     const parsed = JSON.parse(rawManifest);
     const manifest = normalizeThemePackageManifest(parsed, packageRoot);
 
@@ -90,15 +111,21 @@ async function scanThemePackagesInDirectory(
   dependencies: ThemePackageServiceDependencies
 ): Promise<ThemePackageDescriptor[]> {
   const entries = await safeReadDir(themesDir, dependencies);
+  let collectionRoot: string;
+  try { collectionRoot = await dependencies.realpath(themesDir); } catch { return []; }
 
   const packages = await Promise.all(
     entries
       .filter((entry) => entry.isDirectory())
       .map(async (entry) => {
         const packageRoot = path.join(themesDir, entry.name);
+        let canonicalRoot: string;
+        try { canonicalRoot = await dependencies.realpath(packageRoot); } catch { return null; }
+        const relative = path.relative(collectionRoot, canonicalRoot);
+        if (!relative || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) return null;
         const manifestState = await readManifestState(
           path.join(packageRoot, "manifest.json"),
-          packageRoot,
+          canonicalRoot,
           dependencies
         );
 
@@ -107,7 +134,7 @@ async function scanThemePackagesInDirectory(
             id: manifestState.manifest.id,
             kind: "manifest-package" as const,
             source,
-            packageRoot,
+            packageRoot: canonicalRoot,
             manifest: manifestState.manifest
           };
         }
@@ -160,18 +187,28 @@ export function createThemePackageService(input: CreateThemePackageServiceInput)
   const builtinPackagesDir = input.builtinPackagesDir ?? resolveBuiltinThemePackagesDir();
 
   let cache: ThemePackageDescriptor[] | null = null;
+  let generation = 0;
+  let loading: Promise<ThemePackageDescriptor[]> | null = null;
+  function scan() {
+    const revision = ++generation;
+    const pending = scanThemePackages(builtinPackagesDir, input.userDataDir, dependencies).then((packages) => {
+      if (revision === generation) cache = packages;
+      return packages;
+    });
+    loading = pending;
+    return pending;
+  }
 
   return {
     async listThemePackages() {
-      if (!cache) {
-        cache = await scanThemePackages(builtinPackagesDir, input.userDataDir, dependencies);
-      }
+      while (cache === null) await (loading ?? scan());
 
-      return [...cache];
+      return [...(cache ?? [])];
     },
     async refreshThemePackages() {
-      cache = await scanThemePackages(builtinPackagesDir, input.userDataDir, dependencies);
-      return [...cache];
+      cache = null;
+      await scan();
+      return this.listThemePackages();
     }
   };
 }

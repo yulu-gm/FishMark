@@ -1,15 +1,53 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile, realpath, symlink, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   createThemePackageService,
   resolveBuiltinThemePackagesDir
 } from "./theme-package-service";
 
+async function cleanupOwned(root: string, parent: string, prefix: string) {
+  if (path.dirname(await realpath(root)) !== parent || !path.basename(root).startsWith(prefix)) throw new Error("Unsafe cleanup.");
+  await rm(root, { recursive: true, force: true });
+}
+
 describe("createThemePackageService", () => {
+  it("awaits the newest refresh rather than returning cached or late older scans", async () => {
+    const parent = await realpath(tmpdir()); const root = await mkdtemp(path.join(parent, "fishmark-theme-race-"));
+    const builtin = path.join(root, "builtin"); await mkdir(builtin);
+    await mkdir(path.join(root, "themes"));
+    let scans = 0; let finishOld!: () => void; let finishNew!: () => void;
+    const old = new Promise<void>((resolve) => { finishOld = resolve; }); const newest = new Promise<void>((resolve) => { finishNew = resolve; });
+    const service = createThemePackageService({ builtinPackagesDir: builtin, userDataDir: root, dependencies: {
+      readdir: async (target, options) => { if (target === builtin) { scans++; await (scans === 1 ? old : newest); } return readdir(target, options); }
+    } });
+    try {
+      const first = service.listThemePackages(); const refresh = service.refreshThemePackages();
+      let returned = false; const during = service.listThemePackages().then((value) => { returned = true; return value; });
+      finishOld(); await new Promise((resolve) => setTimeout(resolve, 0)); expect(returned).toBe(false);
+      finishNew(); expect(await first).toEqual([]); expect(await refresh).toEqual([]); expect(await during).toEqual([]);
+      expect(scans).toBe(2);
+    } finally {
+      finishOld(); finishNew(); await cleanupOwned(root, parent, "fishmark-theme-race-");
+    }
+  });
+
+  it("does not read a manifest through a real package junction outside its collection", async () => {
+    const parent = await realpath(tmpdir()); const root = await mkdtemp(path.join(parent, "fishmark-theme-escape-"));
+    const themes = path.join(root, "themes"); const outside = path.join(root, "outside"); await mkdir(themes); await mkdir(outside);
+    await writeFile(path.join(outside, "manifest.json"), "private");
+    await symlink(outside, path.join(themes, "escaped"), process.platform === "win32" ? "junction" : "dir");
+    const body = vi.fn(async () => "private");
+    try {
+      const service = createThemePackageService({ builtinPackagesDir: path.join(root, "missing"), userDataDir: root, dependencies: { readFile: body } });
+      expect(await service.listThemePackages()).toEqual([]); expect(body).not.toHaveBeenCalled();
+    } finally {
+      await cleanupOwned(root, parent, "fishmark-theme-escape-");
+    }
+  });
   it("resolves packaged builtin themes from the built dist payload", () => {
     const moduleDir = path.join(
       path.parse(process.cwd()).root,
@@ -27,7 +65,7 @@ describe("createThemePackageService", () => {
         "Applications",
         "FishMark",
         "resources",
-        "app.asar",
+        "app.asar.unpacked",
         "dist",
         "theme-packages"
       )

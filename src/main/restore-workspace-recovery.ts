@@ -5,13 +5,16 @@ import type { RecoveryService } from "./infrastructure/recovery-service";
 // for that document, or prevent independent documents from recovering.
 export async function restoreWorkspaceRecovery(input: {
   workspace: Pick<WorkspaceState, "exportSnapshot" | "restoreSnapshot" | "getTabSession" | "applyDocumentEdits">;
-  recovery: Pick<RecoveryService, "loadRecovery" | "preserveRecovery">;
+  recovery: Pick<RecoveryService, "loadRecovery" | "preserveRecovery"> & Partial<Pick<RecoveryService, "activateImportedImages">>;
 }): Promise<{
   diagnostics: readonly string[];
   notification: { title: "Recovery incomplete" | "Recovery unavailable"; content: string } | null;
 }> {
   const recovery = await input.recovery.loadRecovery();
-  if (recovery.kind === "no-recovery-needed") return { diagnostics: [], notification: null };
+  if (recovery.kind === "no-recovery-needed") {
+    input.recovery.activateImportedImages?.(null);
+    return { diagnostics: [], notification: null };
+  }
   const diagnostics: string[] = [];
   let unavailable = recovery.kind === "corrupt";
   let incomplete = false;
@@ -67,6 +70,7 @@ export async function restoreWorkspaceRecovery(input: {
       }
     }
   }
+  input.recovery.activateImportedImages?.(unavailable ? null : input.workspace.exportSnapshot());
   if (!unavailable && !incomplete) return { diagnostics, notification: null };
   return { diagnostics, notification: {
     title: unavailable ? "Recovery unavailable" : "Recovery incomplete",

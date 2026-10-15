@@ -16,6 +16,12 @@ export function createRecoverableDocumentEdits(dependencies: {
   let persistenceError: Error | null = null;
   let closing = false;
   const durableVersions = new Map<string, { revision: number; savedRevision: number }>();
+  function remember(snapshot: ReturnType<typeof dependencies.workspace.exportSnapshot>) {
+    durableVersions.clear();
+    snapshot.sessions.forEach((session) => durableVersions.set(session.tabId, {
+      revision: session.revision, savedRevision: session.savedRevision
+    }));
+  }
   async function persist(operation: () => Promise<void>): Promise<void> {
     try {
       await operation();
@@ -41,10 +47,7 @@ export function createRecoverableDocumentEdits(dependencies: {
             durable.savedRevision !== checkpoint.projection.savedRevision) {
           const snapshot = dependencies.workspace.exportSnapshot();
           await persist(() => dependencies.recovery.compact(snapshot));
-          durableVersions.clear();
-          snapshot.sessions.forEach((session) => durableVersions.set(session.tabId, {
-            revision: session.revision, savedRevision: session.savedRevision
-          }));
+          remember(snapshot);
         }
         authorize();
         const result = dependencies.workspace.applyDocumentEdits(input);
@@ -60,6 +63,23 @@ export function createRecoverableDocumentEdits(dependencies: {
           durableVersions.set(input.tabId, result.projection);
         }
         return result;
+      });
+    },
+    checkpoint(authorize: () => void = () => {}, persistSnapshot?: (snapshot: ReturnType<typeof dependencies.workspace.exportSnapshot>) => Promise<boolean>): Promise<void> {
+      if (closing) return Promise.reject(new Error("Workspace is shutting down; checkpoint was not accepted."));
+      return enqueue(async () => {
+        if (persistenceError !== null) throw persistenceError;
+        authorize();
+        const snapshot = dependencies.workspace.exportSnapshot();
+        let committed = true;
+        await persist(async () => {
+          if (persistSnapshot) committed = await persistSnapshot(snapshot);
+          else await dependencies.recovery.compact(snapshot);
+        });
+        // Expired authorization is not a disk failure and must not poison future edits.
+        authorize();
+        if (!committed) throw new Error("Checkpoint authority expired.");
+        remember(snapshot);
       });
     },
     shutdown(): Promise<void> {

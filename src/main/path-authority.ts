@@ -190,7 +190,7 @@ export function createClipboardTargetAuthority(input: {
   getTemporaryDirectory(): { path: string; canonicalPath: string };
 }) {
   return async function withTarget<T>(sender: object, tabId: string, authorize: () => void,
-    operation: (target: { documentPath: string | null; temporaryDirectory: string; beforeDirectoryIO(directory: string): Promise<void>; beforeWrite(directory: string): Promise<void> }) => Promise<T>
+    operation: (target: { documentPath: string | null; temporaryDirectory: string; check(): void; beforeDirectoryIO(directory: string): Promise<void>; beforeWrite(directory: string): Promise<void> }) => Promise<T>
   ): Promise<T> {
     const owner = input.paths.capture(sender);
     const tab = (() => { try { return input.workspace.getTabSession(tabId); } catch { return denyPathAuthority(); } })();
@@ -222,7 +222,7 @@ export function createClipboardTargetAuthority(input: {
         }
         check();
       };
-      const result = await operation({ documentPath, temporaryDirectory: temporary?.path ?? "",
+      const result = await operation({ documentPath, temporaryDirectory: temporary?.path ?? "", check,
         beforeDirectoryIO: validateDirectory, beforeWrite: validateDirectory });
       check();
       return result;

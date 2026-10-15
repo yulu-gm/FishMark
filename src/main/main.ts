@@ -33,6 +33,8 @@ import {
   ipcMain,
   Menu,
   protocol,
+  session,
+  nativeTheme,
   shell,
   type MenuItemConstructorOptions
 } from "electron";
@@ -43,10 +45,8 @@ import { resolveMarkdownLaunchPathsFromArgv } from "./launch-open-path";
 import { createLaunchOpenCoordinator } from "./launch-open-coordinator";
 import { registerLaunchOpenHandlers } from "./ipc/register-launch-open-handlers";
 import { openMarkdownFileFromPath, showOpenMarkdownPathDialog } from "./open-markdown-file";
-import {
-  registerPreviewAssetProtocol,
-  registerPreviewAssetScheme
-} from "./preview-asset-protocol";
+import { registerPreviewAssetScheme } from "./preview-asset-protocol";
+import { createWindowResourceProtocol } from "./window-resource-protocol";
 import { showSaveMarkdownPathDialog } from "./save-markdown-file";
 import { showExportHtmlDialog } from "./export-html-file";
 import { createPreferencesService } from "./preferences-service";
@@ -58,7 +58,7 @@ import {
   createThemePackageService,
   resolveBuiltinThemePackagesDir
 } from "./theme-package-service";
-import { resolveRendererEntry } from "./paths";
+import { resolveRendererEntry, resolveRendererPayloadDirectory } from "./paths";
 import { configureMainProcessRuntime, shouldRequestSingleInstanceLock } from "./runtime-environment";
 import { createRuntimeWindowManager, resolveAppRuntimeMode } from "./runtime-windows";
 import { resolveWindowIconPath } from "./window-icon";
@@ -71,6 +71,9 @@ import { createRecoveryService } from "./infrastructure/recovery-service";
 import { restoreWorkspaceRecovery } from "./restore-workspace-recovery";
 import { createKeyedOperationCoordinator } from "./keyed-operation-coordinator";
 import { createFileIdentityResolver } from "./file-identity-resolver";
+import { filePathIdentity } from "./file-path";
+import { createResourceWorkspacePorts } from "./resource-workspace-ports";
+import { resolveResourceThemeSelection } from "./resource-theme-policy";
 import { createPathAuthority, createClipboardTargetAuthority, denyPathAuthority } from "./path-authority";
 import { NATIVE_FILE_TOKEN_ARGUMENT } from "../shared/native-file-path";
 import { registerNativeFileHandlers } from "./ipc/register-native-file-handlers";
@@ -224,7 +227,7 @@ function installApplicationMenu(): void {
 
 function loadRenderer(window: BrowserWindow, runtimeMode: "editor" | "test-workbench"): void {
   const rendererEntry = resolveRendererEntry(
-    path.join(__dirname, "../../dist"),
+    resolveRendererPayloadDirectory({ isPackaged: app.isPackaged, appPath: app.getAppPath(), moduleDir: __dirname }),
     process.env.VITE_DEV_SERVER_URL,
     runtimeMode
   );
@@ -240,7 +243,6 @@ function broadcastToWindows(channel: string, payload: unknown): void {
 
 app.whenReady().then(async () => {
   const runtimeMode = app.isPackaged ? "editor" : resolveAppRuntimeMode(process.env);
-  registerPreviewAssetProtocol({ protocol });
   const preferencesService = createPreferencesService({
     userDataDir: app.getPath("userData"),
     onCorruptRecovery: (backupPath) => {
@@ -286,6 +288,11 @@ app.whenReady().then(async () => {
     completeInternalWrite: fileWatchRegistry.completeInternalWrite
   };
   const workspaceTabOperations = createKeyedOperationCoordinator<string>();
+  const resourceTabEpochs = new Map<string, number>();
+  const advanceResourceTab = (tabId: string) => resourceTabEpochs.set(tabId, (resourceTabEpochs.get(tabId) ?? 0) + 1);
+  function synchronizeSavedImageBindings(tabId: string) {
+    if (recoveryService.getLiveImportedImageTabIds().includes(tabId)) recoveryService.synchronizeLiveImportedImages(workspaceState.exportSnapshot());
+  }
   const workspaceFileLocationOperations =
     createKeyedOperationCoordinator<FileLocationIdentity>();
   const workspaceFileObjectOperations =
@@ -328,7 +335,7 @@ app.whenReady().then(async () => {
     documentOperations: workspaceTabOperations
   });
   const workspaceTabTransferApplication = createWorkspaceTabTransfer({
-    workspace: workspaceState,
+    workspace: createResourceWorkspacePorts(workspaceState, advanceResourceTab, synchronizeSavedImageBindings).transfer,
     documentOperations: workspaceTabOperations
   });
   const workspaceTabReorderApplication = createWorkspaceTabReorder({
@@ -413,6 +420,17 @@ app.whenReady().then(async () => {
   const pendingWorkspaceWindowCloseIds = new Set<string>();
   const heldWorkspaceWindowCloseReleases = new Map<string, () => void>();
   let appUpdaterPromise: Promise<AppUpdaterController> | null = null;
+  let resourceThemeVersion = 0;
+  const currentResourceTheme = async () => {
+    const version = resourceThemeVersion;
+    const preferences = preferencesService.getPreferences();
+    const packages = await themePackageService.listThemePackages();
+    const selection = resolveResourceThemeSelection(preferences.theme, packages, nativeTheme.shouldUseDarkColors);
+    const { descriptor } = selection;
+    return { version, ...selection,
+      collectionRoot: descriptor?.source === "community" ? path.join(app.getPath("userData"), "themes") : resolveBuiltinThemePackagesDir({ isPackaged: app.isPackaged }) };
+  };
+  nativeTheme.on("updated", () => { if (preferencesService.getPreferences().theme.mode === "system") resourceThemeVersion += 1; });
 
   if (initialPreferences.source === "recovered-from-corrupt") {
     console.warn(
@@ -420,7 +438,10 @@ app.whenReady().then(async () => {
     );
   }
 
+  let resourceThemeSelection = preferencesService.getPreferences().theme;
   preferencesService.onChange((preferences) => {
+    if (preferences.theme.mode !== resourceThemeSelection.mode || preferences.theme.selectedId !== resourceThemeSelection.selectedId || preferences.theme.effectsMode !== resourceThemeSelection.effectsMode) resourceThemeVersion += 1;
+    resourceThemeSelection = preferences.theme;
     broadcastToWindows(PREFERENCES_CHANGED_EVENT, preferences);
     void recentFilesService.applyMaxEntries(preferences.recentFiles.maxEntries);
   });
@@ -482,14 +503,27 @@ app.whenReady().then(async () => {
     showStrategy: app.isPackaged ? "immediate" : "ready-to-show",
     createWindow: (input) => {
       const token = randomBytes(32).toString("hex");
+      const resourceSession = session.fromPartition(`fishmark-window-${randomBytes(24).toString("hex")}`);
+      const resourceProtocol = createWindowResourceProtocol({
+        session: resourceSession,
+        distDirectory: resolveRendererPayloadDirectory({ isPackaged: app.isPackaged, appPath: app.getAppPath(), moduleDir: __dirname }),
+        workspace: workspaceState, fileIdentity: fileIdentityResolver,
+        theme: currentResourceTheme, themeVersion: () => resourceThemeVersion,
+        tabEpoch: (tabId) => resourceTabEpochs.get(tabId) ?? 0,
+        importedImages: (tabId, documentPath) => recoveryService.getImportedImages(tabId, documentPath).map((record) => ({
+          canonicalPath: record.path, identity: record.identity, pathKey: record.identity.location,
+          physicalKey: record.identity.object, exists: true
+        }))
+      });
       const window = new BrowserWindow({
         ...input,
-        webPreferences: { ...input.webPreferences, additionalArguments: [
+        webPreferences: { ...input.webPreferences, session: resourceSession, additionalArguments: [
           ...(input.webPreferences?.additionalArguments ?? []), `${NATIVE_FILE_TOKEN_ARGUMENT}${token}`
         ] },
         show: false
       });
       const sender = window.webContents;
+      resourceProtocol.bind(window);
       const startupArgument = input.webPreferences?.additionalArguments?.find((value) => value.startsWith("--fishmark-startup-open-path="));
       if (startupArgument) startupWindowPaths.set(window, decodeURIComponent(startupArgument.slice("--fishmark-startup-open-path=".length)));
       pathAuthority.bind(sender, String(window.id), token);
@@ -498,9 +532,10 @@ app.whenReady().then(async () => {
         if (!mainFrame) return;
         if (initialNavigation) { initialNavigation = false; return; }
         pathAuthority.invalidate(sender);
+        resourceProtocol.invalidate();
       });
-      sender.on("render-process-gone", () => pathAuthority.invalidate(sender));
-      sender.on("destroyed", () => pathAuthority.invalidate(sender, true));
+      sender.on("render-process-gone", () => { pathAuthority.invalidate(sender); resourceProtocol.invalidate(); });
+      sender.on("destroyed", () => { pathAuthority.invalidate(sender, true); resourceProtocol.destroy(); });
       return window;
     },
     getAllWindows: () => BrowserWindow.getAllWindows(),
@@ -777,7 +812,7 @@ app.whenReady().then(async () => {
     recentFiles: { record: recordRecentFilePath }
   });
   const workspaceFileOperations = createSaveDocument({
-    workspace: workspaceState,
+    workspace: createResourceWorkspacePorts(workspaceState, advanceResourceTab, synchronizeSavedImageBindings).save,
     tabOperations: workspaceTabOperations,
     fileLocationOperations: workspaceFileLocationOperations,
     fileObjectOperations: workspaceFileObjectOperations,
@@ -790,7 +825,14 @@ app.whenReady().then(async () => {
       chooseSavePath: showSaveMarkdownPathDialog
     },
     watcher: workspaceWatcher,
-    recentFiles: { record: recordRecentFilePath },
+    recentFiles: { record: async (targetPath) => {
+      const needsCheckpoint = targetPath !== null && recoveryService.getLiveImportedImageTabIds().some((tabId) => {
+        try { const current = workspaceState.getTabSession(tabId).path; return current !== null && filePathIdentity(current, process.platform) === filePathIdentity(targetPath, process.platform); } catch { return false; }
+      });
+      // This callback runs after main's save commit while its tab lease remains held.
+      if (needsCheckpoint) await recoverableEdits.checkpoint();
+      await recordRecentFilePath(targetPath);
+    } },
     cleanupReporter: {
       report: (error) => {
         console.error("[fishmark] workspace file operation cleanup failed.", error);
@@ -914,7 +956,7 @@ app.whenReady().then(async () => {
       const modeRuntime = windowManager.getRuntimeMode(window);
       return mode === undefined || modeRuntime === undefined ? undefined : {
         mode,
-        entryUrl: resolveRendererEntry(path.join(__dirname, "../../dist"), process.env.VITE_DEV_SERVER_URL, modeRuntime)
+        entryUrl: resolveRendererEntry(resolveRendererPayloadDirectory({ isPackaged: app.isPackaged, appPath: app.getAppPath(), moduleDir: __dirname }), process.env.VITE_DEV_SERVER_URL, modeRuntime)
       };
     }
   });
@@ -972,14 +1014,30 @@ app.whenReady().then(async () => {
   } });
   registerRecentFilesHandlers({ ipc, authorize, service: recentFilesService });
   registerFontsHandlers({ ipc, authorize, service: fontCatalogService });
-  registerThemesHandlers({ ipc, authorize, service: themePackageService, openDirectory: () => openThemesDirectory(app.getPath("userData")) });
+  registerThemesHandlers({ ipc, authorize, service: {
+    listThemePackages: themePackageService.listThemePackages,
+    refreshThemePackages: async () => { resourceThemeVersion += 1; return themePackageService.refreshThemePackages(); }
+  }, openDirectory: () => openThemesDirectory(app.getPath("userData")) });
   registerUpdatesHandlers({ ipc, authorize, checkForUpdates: () => runAppUpdateCheck("manual") });
   registerExportHandlers({ ipc, authorize, exportHtml: showExportHtmlDialog });
   registerNativeFileHandlers({ ipc, authorize, paths: pathAuthority });
   registerClipboardHandlers({ ipc, authorize, importImage: (input, sender, check) =>
-    withClipboardTarget(sender, input.tabId, check, (target) => importClipboardImage(
-      { documentPath: target.documentPath }, { clipboard, ...target }
-    )) });
+    withClipboardTarget(sender, input.tabId, check, async (target) => {
+      const result = await importClipboardImage({ documentPath: target.documentPath }, { clipboard, ...target });
+      if (result.status !== "success" || result.storage !== "temporary") return result;
+      await target.beforeWrite(path.dirname(result.filePath));
+      const image = await fileIdentityResolver.resolveExisting(result.filePath);
+      target.check();
+      const approvedDirectory = temporaryDirectories.get(target.temporaryDirectory)?.canonicalPath;
+      if (!approvedDirectory) denyPathAuthority();
+      const relative = path.relative(approvedDirectory, image.canonicalPath);
+      if (!relative || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) denyPathAuthority();
+      if (!/^inode:\d+:[1-9]\d*$/.test(image.identity.object)) denyPathAuthority();
+      await recoverableEdits.checkpoint(target.check, (snapshot) => recoveryService.compactWithImportedImage(snapshot,
+        { path: image.canonicalPath, identity: image.identity, tabId: input.tabId, documentPaths: [] },
+        () => { try { target.check(); return true; } catch { return false; } }, () => workspaceState.exportSnapshot()));
+      target.check(); return result;
+    }) });
   registerExternalHandlers({ ipc, authorize, openExternal: (href) => shell.openExternal(href) });
 
   if (!app.isPackaged && runtimeMode === "test-workbench") {

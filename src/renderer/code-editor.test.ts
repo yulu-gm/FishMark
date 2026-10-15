@@ -956,7 +956,7 @@ describe("createCodeEditorController", () => {
     expect(inactivePreviews).toHaveLength(1);
     expect(inactivePreviews[0]?.dataset.imagePreviewMode).toBe("inactive");
     expect(inactiveImage?.getAttribute("src")).toBe(
-      "fishmark-asset://preview?path=D%3A%2Fnotes%2Fassets%2Fdemo.png"
+      "fishmark-asset://preview/D%3A/notes/assets/demo.png"
     );
     expect(host.textContent).not.toContain(sourceLine);
 
@@ -975,7 +975,7 @@ describe("createCodeEditorController", () => {
     expect(activePreviews).toHaveLength(1);
     expect(activePreviews[0]?.dataset.imagePreviewMode).toBe("active");
     expect(activePreviews[0]?.querySelector("img")?.getAttribute("src")).toBe(
-      "fishmark-asset://preview?path=D%3A%2Fnotes%2Fassets%2Fdemo.png"
+      "fishmark-asset://preview/D%3A/notes/assets/demo.png"
     );
 
     controller.destroy();
@@ -1074,7 +1074,7 @@ describe("createCodeEditorController", () => {
     expect(inactivePreview).toBeDefined();
     expect(inactivePreview?.dataset.imagePreviewMode).toBe("inactive");
     expect(inactiveImage?.getAttribute("src")).toBe(
-      "fishmark-asset://preview?path=D%3A%2FMyAgent%2FFishMark%2FFishMark%2F.worktrees%2Fcodex-image-render%2Fassets%2Fbranding%2Ffishmark_logo_light.svg"
+      "fishmark-asset://preview/D%3A/MyAgent/FishMark/FishMark/.worktrees/codex-image-render/assets/branding/fishmark_logo_light.svg"
     );
     expect(inactiveImage?.style.zoom).toBe("25%");
     expect(host.textContent).not.toContain(sourceLine);
@@ -10257,7 +10257,7 @@ describe("canonical decoration cache invalidation", () => {
       const selection = p.controller.getSelection();
       for (const directory of ["first", "second"]) {
         p.controller.setDocumentPath("D:/" + directory + "/note.md");
-        expect(image()?.getAttribute("src")).toBe("fishmark-asset://preview?path=D%3A%2F" + directory + "%2Fhero.png");
+        expect(image()?.getAttribute("src")).toBe("fishmark-asset://preview/D%3A/" + directory + "/hero.png");
         expect(p.controller.getContent()).toBe(source);
         expect(readEditorStructureCache(p.view.state).tree.root.children[0]!.id).toBe(id);
         expect(p.controller.getSelection()).toEqual(selection);
