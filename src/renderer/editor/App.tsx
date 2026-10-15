@@ -809,6 +809,7 @@ function EditorShell({
         onEditorBlur={handleEditorBlurFromShell}
         onEditorViewModeChange={setEditorViewMode}
         onImportClipboardImage={handleImportClipboardImage}
+        onRequestPlainTextPaste={gateway.requestPlainTextPaste}
         onOpenExternalLink={(href) => {
           void handleOpenExternalLink(href);
         }}

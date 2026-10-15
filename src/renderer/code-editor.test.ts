@@ -51,6 +51,75 @@ const getEditorView = (host: HTMLElement) => {
   return editorRoot instanceof HTMLElement ? EditorView.findFromDOM(editorRoot) : null;
 };
 
+describe("plain text paste intent", () => {
+  function setup() {
+    const host = document.createElement("div"); document.body.append(host);
+    const pending: ((text: string | null) => void)[] = [];
+    const requestPlainTextPaste = vi.fn(() => new Promise<string | null>(resolve => pending.push(resolve)));
+    const controller = createCodeEditorController({ parent: host, initialContent: "0123456789", onChange: vi.fn(), requestPlainTextPaste });
+    controller.setDocumentIdentity({ tabId: "paste", epoch: 1, loadRevision: 0 });
+    controller.focus(); controller.setSelection(7, 3);
+    const view = getEditorView(host)!;
+    const paste = () => {
+      const event = new KeyboardEvent("keydown", { key: "V", code: "KeyV", keyCode: 86, ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true });
+      view.contentDOM.dispatchEvent(event); expect(event.defaultPrevented).toBe(true);
+    };
+    return { host, controller, view, requestPlainTextPaste, pending, paste, clean: () => { controller.destroy(); host.remove(); } };
+  }
+  it("replaces a reverse selection with one isolated paste history event", async () => {
+    const f = setup();
+    try {
+      f.paste(); expect(f.requestPlainTextPaste).toHaveBeenCalledExactlyOnceWith({ tabId: "paste", source: "shortcut" });
+      f.pending[0]!("**plain**\nnext");
+      await vi.waitFor(() => expect(f.controller.getContent()).toBe("012**plain**\nnext789"));
+      expect(f.controller.getSelection()).toEqual({ anchor: 17, head: 17 });
+      expect(undo(f.view)).toBe(true); expect(f.controller.getContent()).toBe("0123456789");
+      expect(f.controller.getSelection()).toEqual({ anchor: 7, head: 3 });
+      expect(redo(f.view)).toBe(true); expect(f.controller.getContent()).toBe("012**plain**\nnext789");
+    } finally { f.clean(); }
+  });
+  it.each(["tab", "selection-roundtrip", "edit-undo", "readonly-roundtrip", "composition", "focus"])("rejects a late response after %s", async change => {
+    const f = setup();
+    try {
+      f.paste();
+      if (change === "tab") f.controller.setDocumentIdentity({ tabId: "other", epoch: 2, loadRevision: 0 });
+      if (change === "selection-roundtrip") { f.controller.setSelection(0); f.controller.setSelection(7, 3); }
+      if (change === "edit-undo") { f.controller.insertText("x"); undo(f.view); }
+      if (change === "readonly-roundtrip") { f.controller.setReadOnly(true); f.controller.setReadOnly(false); }
+      if (change === "composition") { f.view.contentDOM.dispatchEvent(new CompositionEvent("compositionstart")); f.view.contentDOM.dispatchEvent(new CompositionEvent("compositionend")); }
+      if (change === "focus") { const button = document.createElement("button"); f.host.append(button); button.focus(); }
+      const before = f.controller.getContent(); f.pending[0]!("LATE");
+      await Promise.resolve(); await Promise.resolve();
+      expect(f.controller.getContent()).toBe(before);
+    } finally { f.clean(); }
+  });
+  it("keeps only the newest request and ignores empty clipboard text", async () => {
+    const f = setup();
+    try {
+      f.paste(); f.paste(); f.pending[0]!("OLD"); await Promise.resolve();
+      expect(f.controller.getContent()).toBe("0123456789");
+      f.pending[1]!(""); await Promise.resolve(); expect(f.controller.getContent()).toBe("0123456789");
+      expect(f.controller.getSelection()).toEqual({ anchor: 7, head: 3 });
+      expect(undoDepth(f.view.state)).toBe(0);
+    } finally { f.clean(); }
+  });
+  it("captures the same protected intent from the editor context menu", async () => {
+    const f = setup();
+    try {
+      const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true }); f.view.contentDOM.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
+      expect(f.requestPlainTextPaste).toHaveBeenCalledExactlyOnceWith({ tabId: "paste", source: "context-menu" });
+      f.pending[0]!("plain"); await vi.waitFor(() => expect(f.controller.getContent()).toBe("012plain789"));
+    } finally { f.clean(); }
+  });
+  it("does not request or write while readonly, and ignores a response after destruction", async () => {
+    const f = setup();
+    f.controller.setReadOnly(true); f.paste(); expect(f.requestPlainTextPaste).not.toHaveBeenCalled();
+    f.controller.setReadOnly(false); f.paste(); f.clean(); f.pending[0]!("LATE"); await Promise.resolve();
+    expect(f.host.childElementCount).toBe(0);
+  });
+});
+
 it("keeps structural geometry document-owned across presentation and configuration changes", () => {
   const host = document.createElement("div");
   document.body.append(host);

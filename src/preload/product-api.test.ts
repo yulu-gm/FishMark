@@ -26,6 +26,12 @@ function createPorts() {
 }
 
 describe("createProductApi", () => {
+  it("keeps plain-text paste on its narrow channel and preserves cancellation", async () => {
+    const ports = createPorts(), api = createProductApi(ports);
+    ports.invoke.mockResolvedValueOnce(null!);
+    await expect(api.requestPlainTextPaste({ tabId: "a", source: "context-menu" })).resolves.toBeNull();
+    expect(ports.invoke).toHaveBeenCalledExactlyOnceWith("fishmark:request-plain-text-paste", { tabId: "a", source: "context-menu" });
+  });
   it("acknowledges the exact receipt only after renderer staging settles and detaches its listener", async () => {
     const ports = createPorts(), api = createProductApi(ports);
     let resolve!: (success: boolean) => void;

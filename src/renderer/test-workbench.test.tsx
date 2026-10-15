@@ -163,6 +163,7 @@ describe("Test workbench shell", () => {
       selectTemporaryImageDirectory: vi.fn().mockResolvedValue(null),
       checkForUpdates: vi.fn().mockResolvedValue(undefined),
       openExternalLink: vi.fn().mockResolvedValue(undefined),
+      requestPlainTextPaste: vi.fn().mockResolvedValue(null),
       onPreferencesChanged: vi.fn(() => () => {}),
       onRecentFilesChanged: vi.fn(() => () => {}),
       onAppUpdateState: vi.fn(() => () => {}),

@@ -140,6 +140,7 @@ export function WorkspaceShell({
   onEditorBlur,
   onEditorViewModeChange,
   onImportClipboardImage,
+  onRequestPlainTextPaste,
   onInsertTableColumnLeft,
   onInsertTableColumnRight,
   onInsertTableRowAbove,
@@ -456,6 +457,7 @@ export function WorkspaceShell({
                         readOnly={editorTransition?.readOnly ?? false}
                         editorTransitionToken={editorTransition?.token ?? null}
                         importClipboardImage={onImportClipboardImage}
+                        requestPlainTextPaste={onRequestPlainTextPaste}
                         openExternalLink={onOpenExternalLink}
                         viewMode={editorViewMode}
                         headingPresentationMode={shellMode}

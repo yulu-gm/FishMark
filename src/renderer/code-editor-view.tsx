@@ -11,6 +11,7 @@ import {
   createCodeEditorController,
   emptyFindReplaceSnapshot,
   type CodeEditorController,
+  type CreateCodeEditorControllerOptions,
   type CodeEditorViewState,
   type CodeEditorDocumentChangeFrame,
   type CodeEditorDiscardedDocumentText,
@@ -100,6 +101,7 @@ type CodeEditorViewProps = {
   onBlur?: () => void;
   onActiveBlockChange?: (state: ActiveBlockState) => void;
   importClipboardImage?: (input: { tabId: string }) => Promise<string | null>;
+  requestPlainTextPaste?: CreateCodeEditorControllerOptions["requestPlainTextPaste"];
   openExternalLink?: (href: string) => void;
   headingPresentationMode?: "reading" | "editing";
   viewMode?: EditorViewMode;
@@ -130,6 +132,7 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
       onBlur,
       onActiveBlockChange,
       importClipboardImage,
+      requestPlainTextPaste,
       openExternalLink,
       headingPresentationMode = "editing",
       viewMode = "wysiwym"
@@ -196,6 +199,9 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
     const handleImportClipboardImage = useEffectEvent((input: { tabId: string }) =>
       importClipboardImage?.(input) ?? Promise.resolve(null)
     );
+    const handlePlainTextPaste = useEffectEvent((input: Parameters<NonNullable<CreateCodeEditorControllerOptions["requestPlainTextPaste"]>>[0]) =>
+      requestPlainTextPaste?.(input) ?? Promise.resolve(null)
+    );
     const handleOpenExternalLink = useEffectEvent((href: string) => openExternalLink?.(href));
 
     useEffect(() => {
@@ -216,6 +222,7 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
         onBlur: () => handleBlur(),
         onActiveBlockChange: (state) => activeBlockChangeRef.current?.(state),
         importClipboardImage: (input) => handleImportClipboardImage(input),
+        requestPlainTextPaste: input => handlePlainTextPaste(input),
         openExternalLink: (href) => handleOpenExternalLink(href),
         headingPresentationMode: initialHeadingPresentationModeRef.current,
         viewMode: initialViewModeRef.current,

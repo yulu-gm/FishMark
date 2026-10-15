@@ -281,13 +281,31 @@ class ProductSession {
     });
   }
 
+  async preparePlainTextClipboard(payload) {
+    const prepared = await this.prepareImageClipboard();
+    await this.current.app.evaluate(({ clipboard, nativeImage }, payload) => {
+      const state = globalThis.__rf903ClipboardRestore;
+      if (!state || !clipboard.readImage().toPNG().equals(state.fixtureBytes) || clipboard.availableFormats().some(format => format !== "image/png")) throw new Error("Owned clipboard fixture changed before setup.");
+      const data = {};
+      if (payload.text !== undefined) data.text = payload.text;
+      if (payload.html !== undefined) data.html = payload.html;
+      if (payload.image) data.image = nativeImage.createFromBuffer(state.fixtureBytes);
+      clipboard.write(data);
+      state.fixtureExpected = { formats: clipboard.availableFormats().slice().sort(), text: clipboard.readText(), html: clipboard.readHTML(), image: clipboard.readImage().toPNG() };
+    }, payload);
+    return { ...prepared, fixtureKind: "owned artificial plain-text paste payload" };
+  }
+
   async restoreImageClipboard() {
     return this.current.app.evaluate(({ clipboard }) => {
       const state = globalThis.__rf903ClipboardRestore;
       if (!state) return { prepared: false, clipboardWritten: false };
       try {
-        if (!clipboard.readImage().toPNG().equals(state.fixtureBytes) ||
-            clipboard.availableFormats().some((format) => format !== "image/png")) {
+        const expected = state.fixtureExpected;
+        const changed = expected
+          ? JSON.stringify(clipboard.availableFormats().slice().sort()) !== JSON.stringify(expected.formats) || clipboard.readText() !== expected.text || clipboard.readHTML() !== expected.html || !clipboard.readImage().toPNG().equals(expected.image)
+          : !clipboard.readImage().toPNG().equals(state.fixtureBytes) || clipboard.availableFormats().some((format) => format !== "image/png");
+        if (changed) {
           return { concurrentChangeDetected: true, currentClipboardPreserved: true };
         }
         if (state.prior.htmlFormat) clipboard.writeBuffer("HTML Format", state.prior.htmlFormat);

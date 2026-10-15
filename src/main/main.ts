@@ -44,6 +44,7 @@ import {
 import { createApplicationMenuTemplate } from "./application-menu";
 import { activateEditorWindow } from "./activate-editor-window";
 import { importClipboardImage } from "./clipboard-image-import";
+import { createPlainTextPasteRequester } from "./plain-text-paste";
 import { resolveMarkdownLaunchPathsFromArgv } from "./launch-open-path";
 import { createLaunchOpenCoordinator } from "./launch-open-coordinator";
 import { registerLaunchOpenHandlers } from "./ipc/register-launch-open-handlers";
@@ -1062,7 +1063,13 @@ app.whenReady().then(async () => {
   registerUpdatesHandlers({ ipc, authorize, checkForUpdates: () => runAppUpdateCheck("manual") });
   registerExportHandlers({ ipc, authorize, exportHtml: showExportHtmlDialog });
   registerNativeFileHandlers({ ipc, authorize, paths: pathAuthority });
-  registerClipboardHandlers({ ipc, authorize, importImage: (input, sender, check) =>
+  registerClipboardHandlers({ ipc, authorize,
+    requestPlainTextPaste: createPlainTextPasteRequester({
+      resolveWindow: sender => BrowserWindow.fromWebContents(sender),
+      isActiveTab: (windowId, tabId) => workspaceState.getWindowProjectionOrNull(windowId)?.activeTabId === tabId,
+      readText: () => clipboard.readText(), createMenu: template => Menu.buildFromTemplate(template), platform: process.platform
+    }),
+    importImage: (input, sender, check) =>
     withClipboardTarget(sender, input.tabId, check, async (target) => {
       const result = await importClipboardImage({ documentPath: target.documentPath }, { clipboard, ...target });
       if (result.status !== "success" || result.storage !== "temporary") return result;

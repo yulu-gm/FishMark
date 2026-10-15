@@ -1,5 +1,9 @@
 # FishMark 进展记录
 
+## 2026-10-15 仅粘贴文本045（Windows本地验收PASS）
+
+从已发布且四项CI成功的main `6c9d758`继续独立粘贴小批：原生右键菜单与平台快捷键共用窄纯文本请求，CodeMirror异步身份/选区保护和隔离history事务，普通粘贴保留。522项定向测试及九门禁通过：strict3952＋8精确known、产品54/54、68启动=63正常exit0+5预期恢复，全部owned退出/cleanup0；foundation310、editing79、safety7、formal121/121/2541，Windows gzip1437744/1500000。最终独审及普通main发布必须核对精确SHA四项CI；实际身份与终态见[报告045](../reports/task-summaries/TASK-PLAIN-TEXT-PASTE-045.md)对应本机publication。M9保持0/3，Mac/真实IME等边界不变。
+
 ## 2026-10-13 RF-903 sandbox 与单文件 preload
 
 从官方 main `ed67eb5` 推进首个安全小批：运行窗口启用 renderer sandbox，preload 使用现有 Vite 构建为唯一 electron 外部依赖的单文件，main/watch 不再覆盖其输出。修前真实 Windows renderer sandboxed=false，修后产品窗口按 PID 核验 OS sandbox，兼容本地图片、主题 CSS/GLSL/纹理与编辑保存重启。完整门禁、失败记录和发布见[报告035](../reports/task-summaries/TASK-RF903-SANDBOX-035.md)。RF903 IN_PROGRESS；CSP、资源根与路径授权仍开放。RF902未验收且本轮暂停源码，RF901 PAUSED，M9 0/3。

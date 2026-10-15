@@ -32,6 +32,7 @@ import {
 import { OPEN_EXTERNAL_LINK_CHANNEL, type OpenExternalLinkInput } from "../shared/external-link";
 import { LIST_FONT_FAMILIES_CHANNEL } from "../shared/font-families";
 import { APP_MENU_COMMAND_EVENT, type AppMenuCommand } from "../shared/menu-command";
+import { REQUEST_PLAIN_TEXT_PASTE_CHANNEL, type PlainTextPasteInput } from "../shared/plain-text-paste";
 import {
   HANDLE_DROPPED_MARKDOWN_FILE_CHANNEL,
   type HandleDroppedMarkdownFileInput,
@@ -202,6 +203,8 @@ export function createProductApi({ ipc, filePath, runtime }: CreateProductApiInp
     syncWatchedMarkdownFile: () => ipc.invoke<void>(SYNC_WATCHED_MARKDOWN_FILE_CHANNEL),
     importClipboardImage: (input: ImportClipboardImageInput) =>
       ipc.invoke<ImportClipboardImageResult>(IMPORT_CLIPBOARD_IMAGE_CHANNEL, input),
+    requestPlainTextPaste: (input: PlainTextPasteInput) =>
+      ipc.invoke<string | null>(REQUEST_PLAIN_TEXT_PASTE_CHANNEL, input),
     onMenuCommand: (listener: (command: AppMenuCommand) => void) =>
       subscribe(APP_MENU_COMMAND_EVENT, listener),
     onOpenWorkspacePath: (listener) => {

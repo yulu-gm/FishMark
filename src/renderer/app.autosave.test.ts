@@ -1176,6 +1176,7 @@ describe("App autosave", () => {
       }),
       syncWatchedMarkdownFile,
       importClipboardImage,
+      requestPlainTextPaste: vi.fn().mockResolvedValue(null),
       onMenuCommand(listener: MenuCommandListener) {
         menuCommandListener = listener;
         return () => {

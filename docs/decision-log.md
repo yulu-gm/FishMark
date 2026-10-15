@@ -1,5 +1,11 @@
 # FishMark 决策日志
 
+## 2026-10-15：045纯文本粘贴保留应用文档身份
+
+采用窄`requestPlainTextPaste`请求，只在主进程读取`clipboard.readText()`；不向renderer开放通用剪贴板、HTML、图片或文件读取。原生菜单绑定发起窗口，文本读取复查sender与活动tab，菜单关闭一次结算并保留原生错误。renderer复核load身份、文档/选区及变化版本、请求顺序、只读/销毁和DOM焦点后，单次`input.paste`＋history隔离替换选区，空文本不删除选区。普通图片/文本粘贴路径不改。
+
+没有采用仅增加`pasteAndMatchStyle` role的方案：锁定Electron该role调用原生webContents方法，没有暴露本应用load身份与异步返回的关联。快捷键仍采用[Electron41.2平台惯例](https://github.com/electron/electron/blob/v41.2.0/lib/browser/api/menu-item-roles.ts#L88)：Windows/Linux Ctrl+Shift+V，macOS Option+Shift+Cmd+V；Mac本批未实测。测试只写人工混合样例，原剪贴板仅在既有受限恢复机制的main RAM保存，写前拒绝不可恢复格式，恢复前核对样例未被并发替换，不记录原payload。
+
 ## 2026-10-12：TASK-UX-UI-001 辅助界面沿用极简壳层
 
 - 基于最新main真实产品截图统一设置、共享控件和应用绘制的辅助界面，复用现有颜色与排版入口；不改偏好数据、编辑命令或正文几何。

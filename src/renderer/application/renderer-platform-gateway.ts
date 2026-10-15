@@ -2,7 +2,7 @@ import type { AppNotification } from "../../shared/app-update";
 
 export type WorkspaceApplicationGateway = Pick<Window["fishmark"],
   | "clearRecentFile" | "refreshThemePackages" | "updatePreferences"
-  | "importClipboardImage" | "openExternalLink"
+  | "importClipboardImage" | "requestPlainTextPaste" | "openExternalLink"
   | "openThemesDirectory" | "selectTemporaryImageDirectory"
   | "syncWatchedMarkdownFile"
 >;
@@ -51,6 +51,16 @@ export class RendererPlatformGateway {
       if (result.status === "success") return result.markdown;
       this.notify({ kind: "error", message: result.error.message });
       return null;
+    } catch (error) {
+      this.notify({ kind: "error", message: error instanceof Error ? error.message : String(error) });
+      return null;
+    }
+  };
+  requestPlainTextPaste = async (input: Parameters<WorkspaceApplicationGateway["requestPlainTextPaste"]>[0]): Promise<string | null> => {
+    try {
+      this.assertActive();
+      const text = await this.bridge.requestPlainTextPaste(input);
+      this.assertActive(); return text;
     } catch (error) {
       this.notify({ kind: "error", message: error instanceof Error ? error.message : String(error) });
       return null;

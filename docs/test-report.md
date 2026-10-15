@@ -1,5 +1,11 @@
 # FishMark 测试报告
 
+## 2026-10-15 TASK-PLAIN-TEXT-PASTE-045
+
+Windows本地验收：**PASS**。终版522定向测试与九门禁通过：lint/typecheck/build、strict3952＋8精确known且0unexpected/errors/skip、完整产品54/54、foundation310、editing79、safety7、formal121/121/2541（99known、0unexpected/not-run），gzip1437744/1500000、initial103958/260000。68次启动63正常exit0+5预期恢复，owned退出/隔离profile清理/cleanup0，四guard无物理输入。五条新增真实流程验证混合payload纯文本、右键原生菜单UIA、反向选区/history/save/reopen、延迟切tab、image-only不动作与普通PNG粘贴、菜单打开后正常退出。
+
+保留初轮真实3/5及次轮1/2失败、所有原日志和恢复证明；无数据取消复核已窄修、UIA完整名称按实测校准，未放宽产品断言。原剪贴板仅在main RAM受限恢复，不进trace/截图/日志；Mac/真实IME未验收。终版冻结、最终独审、普通main提交/tree及精确四CI终态见[报告045](../reports/task-summaries/TASK-PLAIN-TEXT-PASTE-045.md)与本批publication，不以本地成功替代官方CI。
+
 ## 2026-10-13 TASK-UX-UI-001：极简界面统一验证
 
 结果：**PASS**；本地实现、门禁与astra独立评审通过，不代表发布或完整跨平台验收。

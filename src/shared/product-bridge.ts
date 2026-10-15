@@ -40,6 +40,7 @@ import type {
   ExternalMarkdownFileChangedEvent
 } from "./external-file-change";
 import type { ImportClipboardImageInput, ImportClipboardImageResult } from "./clipboard-image-import";
+import type { PlainTextPasteInput } from "./plain-text-paste";
 import type {
   Preferences,
   PreferencesUpdate,
@@ -99,6 +100,7 @@ export interface ProductBridge {
   exportHtmlFile: (input: ExportHtmlFileInput) => Promise<ExportHtmlFileResult>;
   syncWatchedMarkdownFile: () => Promise<void>;
   importClipboardImage: (input: ImportClipboardImageInput) => Promise<ImportClipboardImageResult>;
+  requestPlainTextPaste: (input: PlainTextPasteInput) => Promise<string | null>;
   onMenuCommand: (listener: (command: AppMenuCommand) => void) => () => void;
   onOpenWorkspacePath: (listener: (payload: OpenWorkspacePathRequest) => void | Promise<void>) => () => void;
   onWorkspaceOwnerTabActivationRequest: (

@@ -41,7 +41,7 @@ function fixture() {
   registerThemesHandlers({ ...common, openDirectory: effect } as unknown as Parameters<typeof registerThemesHandlers>[0]);
   registerUpdatesHandlers({ ipc, authorize, checkForUpdates: effect });
   registerExportHandlers({ ipc, authorize, exportHtml: effect } as unknown as Parameters<typeof registerExportHandlers>[0]);
-  registerClipboardHandlers({ ipc, authorize, importImage: effect } as unknown as Parameters<typeof registerClipboardHandlers>[0]);
+  registerClipboardHandlers({ ipc, authorize, importImage: effect, requestPlainTextPaste: effect } as unknown as Parameters<typeof registerClipboardHandlers>[0]);
   registerExternalHandlers({ ipc, authorize, openExternal: effect });
   const ownsSession = vi.fn(() => true);
   const testInput = {
@@ -68,6 +68,7 @@ const cases: { channel: string; args: unknown[]; mode?: PreloadBridgeMode }[] = 
   { channel: "check-for-app-updates", args: [] },
   { channel: "export-html-file", args: [{ tabId: "tab", currentPath: null, html: "<p>hello</p>" }] },
   { channel: "import-clipboard-image", args: [{ tabId: "paste-tab" }] },
+  { channel: "request-plain-text-paste", args: [{ tabId: "paste-tab", source: "shortcut" }] },
   { channel: "open-external-link", args: [{ href: "https://example.com" }] },
   { channel: "open-editor-test-window", args: [], mode: "test-workbench" },
   { channel: "start-scenario-run", args: [{ scenarioId: "scenario" }], mode: "test-workbench" },
@@ -106,6 +107,24 @@ describe.each(cases)("$channel privileged boundary", ({ channel: suffix, args, m
 });
 
 describe("registrar lifecycle and async authorization", () => {
+  it("allows data-free menu cancellation after owner closure but rejects a late text payload", async () => {
+    const f = fixture();
+    f.effect.mockImplementation(async () => { f.sender.mainFrame = { ...f.frame }; return null!; });
+    await expect(f.invoke("fishmark:request-plain-text-paste", [{ tabId: "a", source: "context-menu" }])).resolves.toBeNull();
+    const g = fixture();
+    g.effect.mockImplementation(async () => { g.sender.mainFrame = { ...g.frame }; return "fixture text" as never; });
+    await expect(g.invoke("fishmark:request-plain-text-paste", [{ tabId: "a", source: "shortcut" }])).rejects.toThrow("Untrusted");
+  });
+  it.each(["image", "plain", "", null])("rejects invalid plain-text paste source %j before clipboard access", async source => {
+    const f = fixture();
+    await expect(f.invoke("fishmark:request-plain-text-paste", [{ tabId: "a", source }])).rejects.toThrow("Invalid paste source");
+    expect(f.effect).not.toHaveBeenCalled();
+  });
+  it("does not grant text clipboard access to the workbench runtime", async () => {
+    const f = fixture(); f.setMode("test-workbench");
+    await expect(f.invoke("fishmark:request-plain-text-paste", [{ tabId: "a", source: "shortcut" }])).rejects.toThrow("not permitted");
+    expect(f.effect).not.toHaveBeenCalled();
+  });
   it("rejects duplicate registration without replacing the original and disposes only owned channels", () => {
     const f = fixture();
     const original = f.handlers.get("fishmark:get-preferences")!;

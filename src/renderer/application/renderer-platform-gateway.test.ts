@@ -3,6 +3,12 @@ import { DEFAULT_PREFERENCES } from "../../shared/preferences";
 import { RendererPlatformGateway, type WorkspaceApplicationGateway } from "./renderer-platform-gateway";
 
 describe("renderer application gateway", () => {
+  it("reports a failed plain-text clipboard request without an insertion", async () => {
+    const notify = vi.fn(), requestPlainTextPaste = vi.fn(async () => { throw new Error("clipboard unavailable"); });
+    const gateway = new RendererPlatformGateway({ requestPlainTextPaste } as unknown as WorkspaceApplicationGateway, notify, () => {}, vi.fn());
+    await expect(gateway.requestPlainTextPaste({ tabId: "a", source: "shortcut" })).resolves.toBeNull();
+    expect(notify).toHaveBeenCalledExactlyOnceWith({ kind: "error", message: "clipboard unavailable" });
+  });
   it("reports a rejected main clipboard authority request and returns no insertion", async () => {
     const notify = vi.fn();
     const importClipboardImage = vi.fn(async () => { throw new Error("Path authority denied."); });

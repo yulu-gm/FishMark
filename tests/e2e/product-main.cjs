@@ -2,7 +2,7 @@
 // registers every IPC handler, and executes the unchanged close protocol.
 const { appendFileSync, mkdirSync } = require("node:fs");
 const { resolve, dirname } = require("node:path");
-const { app, BrowserWindow, ipcMain, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, Menu } = require("electron");
 
 const profile = process.env.FISHMARK_E2E_PROFILE;
 const telemetryPath = process.env.FISHMARK_E2E_TELEMETRY;
@@ -21,6 +21,11 @@ delete process.env.FISHMARK_START_MODE;
 function record(event, detail) {
   appendFileSync(telemetryPath, `${JSON.stringify({ epochMs: Date.now(), event, detail })}\n`, "utf8");
 }
+const nativePopup = Menu.prototype.popup;
+Menu.prototype.popup = function (options) {
+  record("context-menu:show", { windowId: options.window.id, items: this.items.map(item => ({ label: item.label, role: item.role, accelerator: item.accelerator, enabled: item.enabled })) });
+  return nativePopup.call(this, options);
+};
 const showErrorBox = dialog.showErrorBox.bind(dialog);
 const showMessageBox = dialog.showMessageBox.bind(dialog);
 dialog.showMessageBox = async (...args) => {
@@ -161,6 +166,7 @@ async function holdBoundary(kind, detail) {
   if (!current || current.kind !== kind || !["armed", "held"].includes(current.phase)) return;
   if (kind === "edit-ack" && (detail.webContentsId !== current.webContentsId || detail.tabId !== current.tabId || detail.clientSequence !== current.clientSequence)) return;
   if (kind === "clipboard-response" && (detail.webContentsId !== current.webContentsId || detail.tabId !== current.tabId)) return;
+  if (kind === "plain-text-response" && (detail.webContentsId !== current.webContentsId || detail.tabId !== current.tabId)) return;
   if (kind === "tab-receipt" && detail.webContentsId !== current.webContentsId) return;
   if (kind === "target-ready" && detail.webContentsId === current.sourceWebContentsId) return;
   if (current.phase === "held") {
@@ -181,6 +187,7 @@ async function holdBoundary(kind, detail) {
 }
 ipcMain.handle = (channel, listener) => {
   const prefix = channel === "fishmark:apply-document-edits" ? "edit"
+    : channel === "fishmark:request-plain-text-paste" ? "plain-text"
     : channel === "fishmark:flush-document-edits" ? "flush"
       : channel === "fishmark:detach-workspace-tab-to-new-window" ? "detach"
       : channel === "fishmark:move-workspace-tab-to-window" ? "move"
@@ -207,6 +214,7 @@ ipcMain.handle = (channel, listener) => {
         await holdBoundary("edit-ack", detail);
       }
       if (channel === "fishmark:import-clipboard-image") await holdBoundary("clipboard-response", detail);
+      if (channel === "fishmark:request-plain-text-paste") await holdBoundary("plain-text-response", detail);
       record(`${prefix}:end`, { ...detail, status: result?.status,
         ...(["save", "close"].includes(prefix) && result?.status === "error" ? { error: result.error } : {}),
         ...(["edit", "flush"].includes(prefix) ? { kind: result?.kind, acknowledgedSequence: result?.acknowledgedSequence, revision: result?.revision, isDirty: result?.isDirty } : {}),

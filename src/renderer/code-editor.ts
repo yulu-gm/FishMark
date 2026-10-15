@@ -6,7 +6,8 @@ import {
   Transaction,
   type Extension
 } from "@codemirror/state";
-import { EditorView, type ViewUpdate } from "@codemirror/view";
+import { EditorView, keymap, type ViewUpdate } from "@codemirror/view";
+import { isolateHistory } from "@codemirror/commands";
 
 import {
   createFishMarkMarkdownExtensions,
@@ -41,6 +42,7 @@ import { createPreviewAssetUrl } from "../shared/preview-asset-url";
 import type { DocumentTextChange } from "../shared/document-edit";
 import { isWorkspaceReadingPosition, type WorkspaceReadingPosition } from "../shared/workspace";
 import { isSameEditorLoadIdentity, type EditorLoadIdentity } from "./application/editor-load-identity";
+import type { PlainTextPasteInput } from "../shared/plain-text-paste";
 
 export const internalDocumentTransaction = Annotation.define<true>();
 
@@ -59,6 +61,7 @@ export type CreateCodeEditorControllerOptions = {
   onBlur?: () => void;
   onActiveBlockChange?: (state: ActiveBlockState) => void;
   importClipboardImage?: (input: { tabId: string }) => Promise<string | null>;
+  requestPlainTextPaste?: (input: PlainTextPasteInput) => Promise<string | null>;
   openExternalLink?: (href: string) => void;
   headingPresentationMode?: HeadingPresentationMode;
   viewMode?: EditorViewMode;
@@ -177,6 +180,7 @@ export function createCodeEditorController(
   let readingPositionCancelled = false;
   let semanticCommands: SemanticCommandBindings;
   let documentIdentity: EditorLoadIdentity | null = null;
+  let plainPasteRequest = 0, plainPasteVersion = 0;
   let pendingDocumentChanges: {
     identity: EditorLoadIdentity | null;
     baseText: string;
@@ -361,6 +365,7 @@ export function createCodeEditorController(
   };
 
   const observeDocumentUpdate = (update: ViewUpdate) => {
+    if (update.docChanged || update.selectionSet) plainPasteVersion++;
     if (pendingReadingPosition !== null && update.docChanged) {
       pendingReadingPosition = { ...pendingReadingPosition, anchor: update.changes.mapPos(pendingReadingPosition.anchor) };
       readingPositionCancelled = true;
@@ -438,6 +443,10 @@ export function createCodeEditorController(
             : transaction
         ),
         EditorView.updateListener.of(observeDocumentUpdate),
+        keymap.of([{ key: "Mod-Shift-v", mac: "Mod-Alt-Shift-v", run: () => {
+          if (!options.requestPlainTextPaste) return false;
+          void pastePlainText("shortcut"); return true;
+        } }]),
         createFishMarkMarkdownExtensions({
           onSemanticCommands: (commands) => { semanticCommands = commands; },
           onContentChange: (nextContent) => {
@@ -464,7 +473,25 @@ export function createCodeEditorController(
     parent: options.parent
   });
 
+  async function pastePlainText(source: PlainTextPasteInput["source"]): Promise<void> {
+    if (!options.requestPlainTextPaste || isDestroyed || currentReadOnly || view.state.readOnly ||
+        documentIdentity === null || isComposing || readCompositionState(view.state).active) return;
+    const identity = documentIdentity, state = view.state, version = plainPasteVersion, request = ++plainPasteRequest;
+    const text = await options.requestPlainTextPaste({ tabId: identity.tabId, source });
+    if (!text || isDestroyed || currentReadOnly || view.state.readOnly || request !== plainPasteRequest ||
+        version !== plainPasteVersion || view.state.doc !== state.doc || !view.state.selection.eq(state.selection) ||
+        documentIdentity === null || !isSameEditorLoadIdentity(identity, documentIdentity) ||
+        view.root.activeElement !== view.contentDOM || isComposing || readCompositionState(view.state).active) return;
+    view.dispatch({ ...view.state.replaceSelection(text), userEvent: "input.paste", annotations: isolateHistory.of("full"), scrollIntoView: true });
+  }
+  const handleContextMenu = (event: MouseEvent) => {
+    if (!options.requestPlainTextPaste || currentReadOnly || !view.contentDOM.contains(event.target as Node)) return;
+    event.preventDefault(); void pastePlainText("context-menu");
+  };
+  view.contentDOM.addEventListener("contextmenu", handleContextMenu);
+
   const handleCompositionStart = () => {
+    plainPasteVersion++;
     isComposing = true;
   };
 
@@ -788,6 +815,7 @@ export function createCodeEditorController(
       semanticCommands.bindSession(view, documentIdentity?.tabId);
     },
     setDocumentIdentity(nextIdentity: EditorLoadIdentity | null) {
+      plainPasteVersion++;
       cancelNavigationMeasure();
       if (isComposing || compositionCheckpointPending || readCompositionState(view.state).active) {
         discardPendingDocumentChanges();
@@ -840,6 +868,7 @@ export function createCodeEditorController(
         return;
       }
       currentReadOnly = readOnly;
+      plainPasteVersion++;
       view.dispatch({
         effects: readOnlyCompartment.reconfigure([
           EditorState.readOnly.of(readOnly),
@@ -961,6 +990,7 @@ export function createCodeEditorController(
       view.contentDOM.removeEventListener("compositionstart", handleCompositionStart);
       view.contentDOM.removeEventListener("compositionend", handleCompositionEnd);
       view.dom.removeEventListener("paste", handlePaste);
+      view.contentDOM.removeEventListener("contextmenu", handleContextMenu);
       semanticCommands.releaseSession();
       view.destroy();
     }

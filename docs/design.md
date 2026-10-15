@@ -54,6 +54,8 @@ M7 已于 2026-09-22 收口：HTML export 经 `markdown-presentation` 消费 can
 
 ### 当前产品基线
 
+编辑器原生右键菜单“仅粘贴文本”和平台快捷键共用受文档身份/选区保护的单次粘贴事务。主进程只读文本，renderer不会把过期返回写入切换后的文档；空文本保留原选区，普通粘贴继续现有行为。Windows/Linux为Ctrl+Shift+V，macOS采用Option+Shift+Cmd+V；平台实测及剩余边界见[报告045](../reports/task-summaries/TASK-PLAIN-TEXT-PASTE-045.md)。
+
 FishMark 当前基线是单窗口多标签页工作区，而不是单文档窗口。
 
 已交付并应视为稳定架构真相的能力：

@@ -9,6 +9,7 @@ import type {
 } from "@fishmark/codemirror-adapter";
 import type { ActiveBlockState } from "@fishmark/editor-model";
 import type { AppNotification } from "../../shared/app-update";
+import type { PlainTextPasteInput } from "../../shared/plain-text-paste";
 import {
   type Preferences,
   type PreferencesUpdate
@@ -130,6 +131,7 @@ export type WorkspaceShellProps = {
   onEditorBlur: () => void;
   onEditorViewModeChange: (mode: EditorViewMode) => void;
   onImportClipboardImage: (input: { tabId: string }) => Promise<string | null>;
+  onRequestPlainTextPaste?: (input: PlainTextPasteInput) => Promise<string | null>;
   onOpenExternalLink: (href: string) => void;
   onInsertTableColumnLeft: () => void;
   onInsertTableColumnRight: () => void;
