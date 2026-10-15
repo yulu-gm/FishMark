@@ -93,8 +93,8 @@ async function drag(product, source, target, tabId, options = {}) {
     await from.evaluate((w, b) => w.setBounds({ x: b.x, y: b.y }), targetBounds);
     await to.evaluate((w, b) => w.setBounds({ x: b.x, y: b.y }), sourceBounds);
   }
-  const a = await from.evaluate(w => { w.setAlwaysOnTop(true); w.show(); w.focus(); return { hwnd: w.getNativeWindowHandle().readBigUInt64LE().toString(), content: w.getContentBounds(), zoom: w.webContents.getZoomFactor() }; });
-  const b = await to.evaluate(w => { w.setAlwaysOnTop(true); w.showInactive(); w.moveTop(); return { hwnd: w.getNativeWindowHandle().readBigUInt64LE().toString(), content: w.getContentBounds(), zoom: w.webContents.getZoomFactor() }; });
+  const a = await from.evaluate(w => { w.setAlwaysOnTop(true); w.show(); w.focus(); return { id: w.id, hwnd: w.getNativeWindowHandle().readBigUInt64LE().toString(), content: w.getContentBounds(), zoom: w.webContents.getZoomFactor() }; });
+  const b = await to.evaluate(w => { w.setAlwaysOnTop(true); w.showInactive(); w.moveTop(); return { id: w.id, hwnd: w.getNativeWindowHandle().readBigUInt64LE().toString(), content: w.getContentBounds(), zoom: w.webContents.getZoomFactor() }; });
   const coverNative = options.coverId ? await product.current.app.evaluate(({ BrowserWindow }, id) => {
     const cover = BrowserWindow.fromId(id); cover.setAlwaysOnTop(true); cover.showInactive(); cover.moveTop();
     return { hwnd: cover.getNativeWindowHandle().readBigUInt64LE().toString(), bounds: cover.getBounds(), content: cover.getContentBounds() };
@@ -102,18 +102,6 @@ async function drag(product, source, target, tabId, options = {}) {
   // Reset the source's topmost placement after preparing the receiver. Focus
   // alone can leave a different topmost owned window covering the start point.
   await from.evaluate(w => { w.setAlwaysOnTop(false); w.setAlwaysOnTop(true); w.moveTop(); w.focus(); });
-  const stallHook = options.stallMs ? await from.evaluateHandle((w, milliseconds) => {
-    if (milliseconds < 1 || milliseconds > 400) throw new Error("Invalid owned release stall");
-    const contents = w.webContents;
-    const listener = (_event, input) => {
-      if (input.type !== "mouseUp" || input.button !== "left") return;
-      contents.removeListener("before-mouse-event", listener);
-      const until = performance.now() + milliseconds;
-      while (performance.now() < until) { /* Bounded main-loop fault injection, after production's release observer. */ }
-    };
-    contents.on("before-mouse-event", listener);
-    return () => contents.removeListener("before-mouse-event", listener);
-  }, options.stallMs) : null;
   await from.dispose(); await to.dispose();
   const startBox = await tab(source, tabId).boundingBox();
   const endBox = await target.locator('[data-fishmark-region="workspace-tab-strip"]').boundingBox();
@@ -128,17 +116,51 @@ async function drag(product, source, target, tabId, options = {}) {
     expect(end.y).toBeGreaterThanOrEqual(bounds.y); expect(end.y).toBeLessThan(content.y);
   }
   product.crossWindowProof ??= { scope: "real owned Windows pointer drag; production IPC/preload and isolated profiles" };
-  const sequence = await product.current.app.evaluate(() => globalThis.__rf902Control.readNativeMouse().at(-1)?.sequence ?? 0);
+  const readNative = async () => {
+    // The producer appends newline-delimited records. A concurrent read may see
+    // an unfinished final append; retry that tail, but parse every complete line
+    // strictly. The fixture's final evidence read remains strict for the full file.
+    const raw = await readFile(product.current.telemetryPath, "utf8");
+    const complete = raw.slice(0, raw.lastIndexOf("\n") + 1);
+    const records = complete.trim() ? complete.trim().split("\n").map(line => JSON.parse(line)) : [];
+    const batches = records.filter(record => record.event === "native:input-batch").map(record => record.detail);
+    const events = batches.flatMap(batch => { expect(batch.dropped).toBe(0); expect(batch.events[0]?.sequence).toBe(batch.fromSequence); expect(batch.events.at(-1)?.sequence).toBe(batch.throughSequence); return batch.events; });
+    for (let i = 0; i < events.length; i++) expect(events[i].sequence).toBe(i + 1);
+    return { events, stalls: records.filter(record => record.event === "native:stall").map(record => record.detail) };
+  };
+  const sequence = (await readNative()).events.at(-1)?.sequence ?? 0;
   const gesture = { a, b, start, end, options, coverNative }; (product.crossWindowProof.gestures ??= []).push(gesture);
+  if (options.stallMs) gesture.stallId = await product.current.app.evaluate((_electron, { id, milliseconds }) => globalThis.__rf902Control.armNativeReleaseStall(id, milliseconds), { id: a.id, milliseconds: options.stallMs });
+  let primaryError;
   try {
     gesture.proof = await new Promise((resolve, reject) => execFile("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", fileURLToPath(new URL("./windows-pointer-drag.ps1", import.meta.url)), "-WindowHandle", a.hwnd, "-OwnerPid", String(product.current.mainPid), "-StartX", String(start.x), "-StartY", String(start.y), "-EndX", String(end.x), "-EndY", String(end.y), "-EndWindowHandle", options.endHwnd ?? b.hwnd, "-ReleaseDelayMs", "500"], { windowsHide: true, timeout: 15_000 }, (error, stdout, stderr) => error ? reject(new Error(`${error.message}\n${stdout}\n${stderr}`)) : resolve(JSON.parse(stdout))));
-  } finally {
-    try {
-      gesture.nativeInput = await product.current.app.evaluate((_electron, sequence) => globalThis.__rf902Control.readNativeMouse().filter(event => event.sequence > sequence), sequence);
-    } finally {
-      if (stallHook) { try { await stallHook.evaluate(cancel => cancel()); } finally { await stallHook.dispose(); } }
+  } catch (error) { primaryError = error; gesture.primaryError = error.stack ?? String(error); }
+  try {
+    const capture = async () => {
+      const evidence = await readNative();
+      gesture.nativeInput = evidence.events.filter(event => event.sequence > sequence);
+      gesture.stall = evidence.stalls.filter(event => event.id === gesture.stallId);
+      const release = gesture.nativeInput.find(event => event.windowId === a.id && event.type === "mouseUp" && event.button === "left" && Math.abs(event.globalX - end.x) <= 1 && Math.abs(event.globalY - end.y) <= 1);
+      const hit = release && gesture.nativeInput.find(event => event.sequence > release.sequence && event.windowId === b.id && event.type === "mouseMove" && event.button === "none" && Math.abs(event.globalX - end.x) <= 1 && Math.abs(event.globalY - end.y) <= 1);
+      if (hit) gesture.nativeReleasePair = { sourceWindowId: a.id, targetWindowId: b.id, releaseEpochMs: release.epochMs, hitEpochMs: hit.epochMs, delayMs: hit.epochMs - release.epochMs };
+      return !!release && (!options.stallMs || (!!hit && gesture.stall.some(event => event.phase === "finished")));
+    };
+    if (primaryError) await capture();
+    else {
+      await expect.poll(capture, { timeout: 3000, message: "complete owned native input telemetry" }).toBe(true);
+      if (options.stallMs) {
+        expect(gesture.stall.map(event => event.phase)).toEqual(["armed", "fired", "finished"]);
+        expect(gesture.stall.at(-1).durationMs).toBeGreaterThanOrEqual(options.stallMs);
+        expect(gesture.nativeReleasePair.delayMs).toBeGreaterThan(150);
+        expect(gesture.nativeReleasePair.delayMs).toBeLessThanOrEqual(500);
+      }
     }
+  } catch (error) {
+    gesture.observationError = error.stack ?? String(error);
+    if (primaryError) throw new AggregateError([primaryError, error], `Native drag failed: ${primaryError.message}; diagnostic read failed: ${error.message}`, { cause: primaryError });
+    throw error;
   }
+  if (primaryError) throw primaryError;
 }
 
 if (process.platform === "win32") {

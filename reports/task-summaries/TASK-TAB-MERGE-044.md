@@ -44,6 +44,14 @@ Cancel原始proof已匹配PID/HWND、提示全文和按钮，真实点击发生�
 
 按整批持续授权继续原隔离与输入guard，原生关闭/保存/丢弃/重启重复6/6（12次启动）、窄布局遮挡重复6/6通过，无新真实输入事件。随后**从头重跑九项门禁全部通过**，完整产品再次49/49、62次启动=57正常exit0+5预期恢复强退，0失败/跳过/重试/清理错误；strict3916＋8精确known、foundation310、editing79、safety7、formal121/121/2541、gzip1437333/1500000均维持原合同。40项最终输入、36项运行源码/测试及191项构建与逐报告身份/路径/退出核验，详见本机`ci-followup-validation.json`、`ci-followup-final-inputs.json`和`.artifacts/tab-merge-044/ci-followup-final-01/`。旧CI失败及80提交保留；修正提交及其精确官方CI终态以`publication.json`为准，须最终增量独审通过后普通推送并等待全部四项成功，不能只计本机结果。
 
+## 第二次官方CI失败与原生诊断采集
+
+普通修正提交`4dcdbad25b72d3931eb5fc1efdf0eb382415463a`（tree`11fe7055419107017446aca3bdd5d4e02b0b19da`，父80）的官方CI`38771561655`三项通过，Windows **48/49失败**；前次Cancel与遮挡两项均通过。失败发生于stall用例finally中的Node Inspector诊断拉取：`Resulting promise was garbage collected`。官方artifact11991398054的ZIP SHA256与官方digest匹配；原始helper完成精确PID/HWND拖拽，main记录receipt committed:true且无main/renderer/page错误，但后续caret与保存断言未执行，仍算失败，不能宣称完整产品流程通过。
+
+修正仅在两个E2E fixture文件：原生回调只写有界RAM并安排setImmediate，回调外向已有JSONL追加批次；测试进程从文件严格核验全局sequence、批次边界和dropped=0，最多等待3秒。并发读取仅暂缓末尾尚未换行的记录，完整坏行仍失败，最终fixture全文件严格解析不变。stall改由fixture持有、一次触发移除、窗口关闭取消，只在输入前通过Inspector取得整数ID，移除拖拽后Inspector清理调用。主拖拽异常重抛，诊断也失败时AggregateError保留两者，没有catch-ignore或放宽产品断言。实际释放、同点目标事件、250ms停顿及150–500ms时序、caret/保存/退出仍须通过；产品源码和构建未改。
+
+本次修正真实stall6/6及完整merge重复18/18通过；随后`telemetry-final-01`从头九项门禁全过。产品49/49、0失败/跳过/重试，62次启动=57正常exit0+5预期恢复强退，全部owned进程退出、profile删除及cleanup0；四项guard均无物理输入干扰。strict3916＋8精确known且0unexpected/errors/skip，foundation310、editing79、safety7、formal121/121/2541（99known、0unexpected/not-run），Windows gzip1437333/1500000、initial103892/260000。40项最终输入及191项产物身份、各次真实路径/退出核验与独立审查保存在`telemetry-final-01-validation.json`及相关冻结清单。后续普通提交及精确官方四项CI终态以本机`publication.json`为准，本地通过不能代替官方CI；旧47/49与48/49原始证据不覆盖、不重分类。
+
 ## c24 checkpoint当时的门禁与发布阻塞（历史保留）
 
 以下是恢复修正之前的时点记录，不能替代上节最终验证或精确提交CI。

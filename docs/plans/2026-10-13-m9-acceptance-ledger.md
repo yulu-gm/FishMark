@@ -1,5 +1,7 @@
 # M9 验收清单与下一批顺序
 
+**044第二次CI诊断失败：** `4dcdbad`的CI38771561655三项通过、Windows48/49失败，Cancel与遮挡已通过；stall原生助手及receipt提交成功，但finally的Inspector诊断被回收，后续caret/save未执行，不能算产品通过。两个fixture改为回调外JSONL批次与Node严格序列读取、fixture持有一次stall，保留主错误与诊断错误及所有产品断言；原失败产物digest核验保留。修后stall6/6、完整merge重复18/18及从头九门禁通过，产品49/49、62launch=57正常exit0+5预期恢复，全部owned退出/cleanup0；strict3916＋8精确known、foundation310、editing79、safety7、formal121/121/2541、Windows gzip1437333，四guard无物理输入。最终独审/精确CI见报告044和本机publication，不以本地通过代替官方CI。M9仍 **0/3**。
+
 **044官方CI后续修正：** 首次普通推送`80f974e`对应CI38767258787为三项通过、Windows47/49失败，原证据及提交保留。Cancel真实点击后39ms正确返回，助手却因共用发现期限提前13ms判FAIL；改为点击后独立3s观察、外层35s限时。窄桌面遮挡case的源起点实际落第三窗；改固定960布局、cover右移300/showInactive并读回actual bounds核验，精确HWND/捕获保护不变。三个fixture修改后，关闭与重启重复6/6、遮挡6/6，从头重跑九门禁均通过、产品再次49/49；未以本机成功替代新精确HEAD四项官方CI。最终独审、修正提交/tree与CI状态见报告044和本机publication。M9仍 **0/3**，其他UX另批。
 
 **044已有窗口接收tab（2026-10-15恢复验证）：** 保留原`c24de833`及45/48失败证据；原生关联寿命统一500ms，100ms rendezvous、空间/身份/一次性及撤销边界不变；960px fixture修正自有窗口叠放并加强精确源HWND检查。真实stall6/6、zoom6/6、完整矩阵重复18/18；Windows完整产品49/49、九门禁通过：strict3916＋8精确known（0unexpected/errors/skip）、foundation310、editing79、safety7、formal121/121/2541（99known、0unexpected/not-run），gzip1437333/1500000。62次启动含57次正常exit0及5次预期恢复强退，所属进程均退出、独立实际appData/userData匹配、cleanup0。原关闭崩溃在inspector压力下复现并匹配到同构建Node inspector写路径，公开Playwright close收尾通过12压力＋8idle＋6原生提示/重启控制；不外推全部原生关闭路径。源码及运行发布审查、精确commit/tree/CI见[报告044](../../reports/task-summaries/TASK-TAB-MERGE-044.md)和本机恢复批publication；不能用历史checkpoint的BLOCKED或本轮局部通过代替最终发布记录。RF901 PAUSED、RF902/RF903 IN_PROGRESS，M9 **0/3**；纯文本粘贴与排版另批，Mac/真实IME仍开放。

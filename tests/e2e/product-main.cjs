@@ -39,6 +39,30 @@ dialog.showErrorBox = (title, content) => {
 const describe = (value) => value instanceof Error ? value.stack ?? value.message : String(value);
 const nativeMouseEvents = [];
 let nativeMouseSequence = 0;
+let nativeDropped = 0, nativeFlushScheduled = false, nativeStallSequence = 0;
+const nativeStallEvents = [], nativeStalls = new Map();
+function flushNativeEvidence() {
+  nativeFlushScheduled = false;
+  const events = nativeMouseEvents.splice(0), dropped = nativeDropped; nativeDropped = 0;
+  if (events.length || dropped) record("native:input-batch", { fromSequence: events[0]?.sequence, throughSequence: events.at(-1)?.sequence, dropped, events });
+  for (const detail of nativeStallEvents.splice(0)) record("native:stall", detail);
+}
+function scheduleNativeEvidence() {
+  if (nativeFlushScheduled) return;
+  nativeFlushScheduled = true;
+  setImmediate(flushNativeEvidence);
+}
+function queueNativeStall(detail) {
+  nativeStallEvents.push(detail);
+  if (nativeStallEvents.length > 128) { nativeStallEvents.shift(); nativeDropped++; }
+  scheduleNativeEvidence();
+}
+function cancelNativeStall(windowId) {
+  const stall = nativeStalls.get(windowId);
+  if (!stall) return;
+  nativeStalls.delete(windowId); stall.contents.removeListener("before-mouse-event", stall.listener);
+  record("native:stall", { id: stall.id, windowId, phase: "cancelled", epochMs: Date.now() });
+}
 const originalError = console.error.bind(console);
 const originalWarn = console.warn.bind(console);
 console.warn = (...args) => {
@@ -75,11 +99,12 @@ app.on("browser-window-created", (_event, window) => {
   contents.on("before-mouse-event", (_event, input) => {
     nativeMouseEvents.push({ sequence: ++nativeMouseSequence, epochMs: Date.now(), windowId, webContentsId,
       type: input.type, button: input.button, x: input.x, y: input.y, globalX: input.globalX, globalY: input.globalY });
-    if (nativeMouseEvents.length > 128) nativeMouseEvents.shift();
+    if (nativeMouseEvents.length > 128) { nativeMouseEvents.shift(); nativeDropped++; }
+    scheduleNativeEvidence();
   });
   record("window:created", { windowId: window.id, webContentsId: contents.id, preferences: contents.getLastWebPreferences() });
   for (const event of ["focus", "blur", "close", "closed"]) {
-    window.on(event, () => record(`window:${event}`, { windowId: window.id }));
+    window.on(event, () => { if (event === "closed") cancelNativeStall(windowId); record(`window:${event}`, { windowId }); });
   }
   contents.on("console-message", (event) => record("renderer:console", {
     webContentsId: contents.id, level: event.level, message: event.message, lineNumber: event.lineNumber, sourceId: event.sourceId
@@ -104,7 +129,23 @@ const originalHandle = ipcMain.handle.bind(ipcMain);
 // fabricated protocol results and are available only in this test main process.
 let barrier = null;
 globalThis.__rf902Control = {
-  readNativeMouse() { return [...nativeMouseEvents]; },
+  armNativeReleaseStall(windowId, milliseconds) {
+    if (!Number.isInteger(milliseconds) || milliseconds < 1 || milliseconds > 400 || nativeStalls.has(windowId)) throw new Error("Invalid owned release stall");
+    const window = BrowserWindow.fromId(windowId);
+    if (!window) throw new Error("Missing owned stall window");
+    const contents = window.webContents, id = ++nativeStallSequence;
+    const listener = (_event, input) => {
+      if (input.type !== "mouseUp" || input.button !== "left") return;
+      contents.removeListener("before-mouse-event", listener); nativeStalls.delete(windowId);
+      const started = performance.now();
+      queueNativeStall({ id, windowId, phase: "fired", epochMs: Date.now() });
+      while (performance.now() - started < milliseconds) { /* Bounded fault injection after production's release observer. */ }
+      queueNativeStall({ id, windowId, phase: "finished", epochMs: Date.now(), durationMs: performance.now() - started });
+    };
+    nativeStalls.set(windowId, { id, contents, listener }); contents.on("before-mouse-event", listener);
+    record("native:stall", { id, windowId, phase: "armed", milliseconds, epochMs: Date.now() });
+    return id;
+  },
   arm(input) {
     if (barrier) throw new Error("A response barrier is already armed.");
     barrier = { ...input, phase: "armed" };
@@ -179,7 +220,7 @@ ipcMain.handle = (channel, listener) => {
 };
 app.on("before-quit", () => record("app:before-quit"));
 app.on("will-quit", () => record("app:will-quit"));
-app.on("quit", (_event, exitCode) => record("app:quit", { exitCode }));
+app.on("quit", (_event, exitCode) => { flushNativeEvidence(); record("app:quit", { exitCode }); });
 // A runner failure cannot leave this owned product instance alive indefinitely.
 const watchdog = setTimeout(() => {
   record("main:watchdog", { timeoutMs: 90_000 });

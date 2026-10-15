@@ -1,5 +1,7 @@
 # RF902 实际产品持久化 E2E
 
+044原生拖拽诊断由fixture在原生回调外分批写入既有main JSONL，测试进程严格验证sequence连续、批次边界和dropped=0。仅等待尚未换行的末条追加；完整坏行及最终全文件解析仍失败。有界stall由fixture持有并一次移除，避免拖拽后Inspector诊断/清理覆盖原始异常。4dcdbad官方CI48/49失败及未执行的caret/save断言保留；修后stall6/6、完整merge重复18/18及从头九门禁通过，产品49/49包含原caret/save断言。详见[报告044](../../reports/task-summaries/TASK-TAB-MERGE-044.md)；后续提交仍须独审与精确HEAD四项CI通过。
+
 先执行 `npm ci`、`npm run build`，再执行 `npm run test:e2e`。只列用例、不启动 Electron：`npm run test:e2e -- --list`。可用 `--grep "product open"` 或 `--grep "true idle"` 分别执行两条。本套件使用锁定的 `@playwright/test` 和已有 Electron，不需下载 Playwright 浏览器。
 
 Playwright `_electron` 启动 `product-main.cjs`，后者只配置隔离和被动观测，然后加载真实 `dist-electron/main/main.js`。窗口、preload、renderer、保存处理器和关闭协议全部由产品创建。每次测试新建独立临时目录、Markdown 文件、appData根与userData profile，先于产品单实例锁设置两条路径；不使用 `fishmarkTest`、不替换 BrowserWindow、对话框、保存结果或关闭确认。记录真实Electron appData/userData并精确断言分别等于owned临时根/profile，另断言 `file://` 构建入口；通过 CDP 已执行脚本重放及源码读取验证真实 preload 路径和构建源码，记录 SHA256。Electron41 的 getLastWebPreferences 不返回 preload 字段，不能据其缺字段判定未加载。`chromiumSandbox:true` 无绕过开关；这不改变产品当前的 renderer sandbox 设置，也不构成 RF903 安全验收。
