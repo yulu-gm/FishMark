@@ -27,7 +27,15 @@ Windows 恢复提示测试需要现有 `pwsh.exe`（PowerShell 7）和可交互�
 
 单文档回放失败用例还要求该次启动的精确 `console.warn` 诊断（完整实际 tab ID）与 stderr 同行各出现一次；分类副本只扣除此已证明来源的一行。原始日志保留，同文 `console.error`、重复诊断及其他错误仍失败。它不改变 Vitest 已知失败名单，也不能替代源文/弹窗/保存断言。
 
-实际执行和 CI 目标是 Windows。Linux/macOS、OS IME、运行中 inactive-tab 外改、已有窗口合并移动、实际断电/fsync 耐久性仍未由本套件验收。退出后修改原始文件是明确故障注入，不等于捕捉真实写入中断瞬间；M9 依赖和 RF902 整体状态不因局部覆盖改变。既有 workspace-safety 关闭协议和 Vitest 严格基线不变。
+实际执行和 CI 目标是 Windows。Linux/macOS、OS IME、已有窗口合并移动、实际断电/fsync 耐久性仍未由本套件验收。退出后修改原始文件是明确故障注入，不等于捕捉真实写入中断瞬间；M9 依赖和 RF902 整体状态不因局部覆盖改变。既有 workspace-safety 关闭协议和 Vitest 严格基线不变。
+
+## RF902 运行中后台标签外改与原生关闭
+
+`external-changes.spec.mjs` 在同一真实产品窗口打开两个临时文件。File 对象来自 Chromium 原生 file-input 后端，通过合成 drop 事件交给原产品入口；不声称执行了 OS 拖拽。B 活动期间由测试直接改写 A 的磁盘文件，要求真实 watcher 通知发生在切回 A 之前、B 的正文和磁盘不变。干净 A 保留旧文与冲突提示，明确重载后采用外部内容并继续编辑保存。脏 A 必须实际仍为 dirty 且磁盘未被提前 autosave，再验证草稿与外部版本同时保留；真实窗口关闭选 Save 要返回 disk-version-conflict 并保持窗口/编辑器，Cancel 后继续输入，最后明确选择保留当前编辑才允许保存覆盖。
+
+`close-save.spec.mjs` 通过真实 Windows Unsaved Changes 提示覆盖 Cancel→继续编辑→Save→正常退出/重开，以及 Don't Save→原磁盘不变→重开不恢复被丢弃草稿。`windows-close-dialog.ps1` 只读取本次 telemetry，绑定 immediate owned temp profile、活 PID/可执行文件/启动时间和实际提示参数；在同 PID 的唯一 native dialog 中以 UIAutomation 精确核对完整正文，再核验所属 native Button 的标题、可见/可用、父子关系，定向 BM_CLICK。它不替代 Electron dialog，不发送全局键鼠，不修改系统设置。辅助函数同时断言原 showMessageBox 返回的真实 response；缺提示、题文不符、歧义及任何 helper 失败均失败。用例保留平台标记，本机完整 Windows 运行不得 skip。
+
+`product-main.cjs` 仅被动记录原生提示/真实返回值、watcher 通知、close 与 conflict-resolution IPC，全部调用原处理器。普通保存因已知冲突会进入 Save As，因此拒绝原路径覆盖的真实流程由 Close→Save 验证。关闭提示触发的失焦不应启动尾随自动保存；已确认关闭仍保持 editor sealed，迟到保存不得越过关闭决定。已有关闭前保存的 FIFO、安全守卫和其它错误检查保留，Cancel/error 后原自动保存调度恢复。这里验证顺序明确的外部改写，不证明“版本检查至 rename 期间”的外部并发写入具有原子 compare-and-swap 保障，也不替代全部 RF902/M9 验收。
 
 ## RF903 sandbox 与 CSP
 

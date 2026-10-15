@@ -2211,6 +2211,72 @@ describe("WorkspaceRendererApplication", () => {
 });
 
 
+describe("native close dialog autosave boundary", () => {
+  function setup() {
+    const snapshot = createSnapshot();
+    snapshot.activeDocument = { ...snapshot.activeDocument!, revision: 1, savedRevision: 0, isDirty: true };
+    const answer = createDeferred<{ status: "confirmed" | "cancelled" }>();
+    const saveMarkdownFile = vi.fn(async () => ({ status: "cancelled" as const }));
+    const confirmWorkspaceWindowClose = vi.fn(() => answer.promise);
+    const application = createApplication({ initialSnapshot: snapshot, bridge: {
+      confirmWorkspaceWindowClose, saveMarkdownFile,
+      getWorkspaceSnapshot: vi.fn(async () => snapshot),
+      flushDocumentEdits: vi.fn(async (input: { throughSequence: number }) => ({
+        kind: "flushed" as const, acknowledgedSequence: input.throughSequence,
+        revision: 1, savedRevision: 0, isDirty: true
+      }))
+    } });
+    consumeEditorLoad(application);
+    return { application, answer, saveMarkdownFile, confirmWorkspaceWindowClose };
+  }
+
+  it("does not admit a blur autosave from a native prompt during confirmed window close", async () => {
+    const { application, answer, saveMarkdownFile, confirmWorkspaceWindowClose } = setup();
+    try {
+      const closing = application.confirmWorkspaceWindowClose("close-1");
+      await acknowledgeEditorReadOnly(application);
+      await vi.waitFor(() => expect(confirmWorkspaceWindowClose).toHaveBeenCalledTimes(1));
+      application.handleEditorBlur();
+      answer.resolve({ status: "confirmed" });
+      await expect(closing).resolves.toEqual({ kind: "committed", value: true });
+      await application.save.runAutosave();
+      await vi.waitFor(() => expect(application.save.isSaveInFlight()).toBe(false));
+      expect(saveMarkdownFile).not.toHaveBeenCalled();
+    } finally { application.dispose(); }
+  });
+
+  it("supersedes a save queued behind close before the editor is sealed", async () => {
+    const { application, answer, saveMarkdownFile } = setup();
+    try {
+      const closing = application.confirmWorkspaceWindowClose("close-1");
+      const trailing = application.runSaveTransaction({ forceSaveAs: false, hasExternalConflict: false });
+      await acknowledgeEditorReadOnly(application);
+      answer.resolve({ status: "confirmed" });
+      await expect(closing).resolves.toEqual({ kind: "committed", value: true });
+      await expect(trailing).resolves.toEqual({ kind: "superseded" });
+      expect(saveMarkdownFile).not.toHaveBeenCalled();
+    } finally { application.dispose(); }
+  });
+
+  it("allows an ordinary autosave after Cancel releases the editor", async () => {
+    const { application, answer, saveMarkdownFile, confirmWorkspaceWindowClose } = setup();
+    try {
+      const closing = application.confirmWorkspaceWindowClose("close-1");
+      await acknowledgeEditorReadOnly(application);
+      await vi.waitFor(() => expect(confirmWorkspaceWindowClose).toHaveBeenCalledTimes(1));
+      application.handleEditorBlur();
+      answer.resolve({ status: "cancelled" });
+      await acknowledgeEditorEditable(application);
+      consumeEditorLoad(application);
+      await expect(closing).resolves.toEqual({ kind: "committed", value: false });
+      await vi.waitFor(() => expect(application.save.isSaveInFlight()).toBe(false));
+      expect(saveMarkdownFile).not.toHaveBeenCalled();
+      await application.save.runAutosave();
+      expect(saveMarkdownFile).toHaveBeenCalledTimes(1);
+    } finally { application.dispose(); }
+  });
+});
+
 describe("RF-801 application commands without React", () => {
   it("shares conflict-aware manual save policy between test driver and menu", async () => {
     const snapshot = createSnapshot();

@@ -418,7 +418,11 @@ export class WorkspaceRendererApplication {
     this.presentation.setEditorContentSnapshot(frame.resultingText);
     this.save.scheduleAutosave();
   };
-  handleEditorBlur = (): void => { void this.save.runAutosave(); };
+  handleEditorBlur = (): void => {
+    // Native close prompts blur the editor while the close transaction owns saving.
+    if (this.state.editorTransition?.reason === "closing-window") return;
+    void this.save.runAutosave();
+  };
   hasExternalFileConflict = (): boolean => (this.getActiveDocument()?.externalChange ?? null) !== null;
   getExternalFileState = (): ExternalMarkdownFileState => {
     const document = this.getActiveDocument();
@@ -1128,6 +1132,9 @@ export class WorkspaceRendererApplication {
     const tabId = capturedDocument.tabId;
 
     return this.enqueue("save", async () => {
+      // A confirmed close leaves the editor sealed until window destruction.
+      // Earlier saves retain FIFO ordering; trailing saves must not outlive it.
+      if (this.state.editorTransition?.reason === "closing-window") return { kind: "superseded" };
       const recovery = this.getRecoveryPendingOutcome();
       if (recovery !== null) return recovery;
       const known = await this.ensureCanonicalKnown();

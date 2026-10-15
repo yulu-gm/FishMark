@@ -22,6 +22,14 @@ function record(event, detail) {
   appendFileSync(telemetryPath, `${JSON.stringify({ epochMs: Date.now(), event, detail })}\n`, "utf8");
 }
 const showErrorBox = dialog.showErrorBox.bind(dialog);
+const showMessageBox = dialog.showMessageBox.bind(dialog);
+dialog.showMessageBox = async (...args) => {
+  const options = args.at(-1);
+  record("dialog:message-box", { pid: process.pid, options });
+  const result = await showMessageBox(...args);
+  record("dialog:message-box-returned", { pid: process.pid, options, result });
+  return result;
+};
 dialog.showErrorBox = (title, content) => {
   record("dialog:error-box", { pid: process.pid, title, content });
   const result = showErrorBox(title, content);
@@ -75,6 +83,7 @@ app.on("browser-window-created", (_event, window) => {
   const send = contents.send.bind(contents);
   contents.send = (channel, ...args) => {
     if (channel === "fishmark:app-menu-command") record("menu:command", args);
+    if (channel === "fishmark:external-markdown-file-changed") record("external:changed", { webContentsId: contents.id, payload: args[0] });
     return send(channel, ...args);
   };
 });
@@ -121,6 +130,8 @@ ipcMain.handle = (channel, listener) => {
       : channel === "fishmark:detach-workspace-tab-to-new-window" ? "detach"
         : channel === "fishmark:get-workspace-snapshot" ? "snapshot"
           : channel === "fishmark:sync-watched-markdown-file" ? "watch"
+          : ["fishmark:close-workspace-tab", "fishmark:confirm-workspace-window-close", "fishmark:complete-workspace-window-close"].includes(channel) ? "close"
+          : channel === "fishmark:resolve-external-change" ? "resolve"
           : ["fishmark:save-markdown-file", "fishmark:save-markdown-file-as"].includes(channel) ? "save"
             : ["fishmark:open-workspace-file-from-path", "fishmark:handle-dropped-markdown-file", "fishmark:import-clipboard-image", "fishmark:update-preferences"].includes(channel) ? "authority" : null;
   if (prefix === null) return originalHandle(channel, listener);
@@ -138,7 +149,7 @@ ipcMain.handle = (channel, listener) => {
       }
       if (channel === "fishmark:import-clipboard-image") await holdBoundary("clipboard-response", detail);
       record(`${prefix}:end`, { ...detail, status: result?.status,
-        ...(prefix === "save" && result?.status === "error" ? { error: result.error } : {}),
+        ...(["save", "close"].includes(prefix) && result?.status === "error" ? { error: result.error } : {}),
         ...(["edit", "flush"].includes(prefix) ? { kind: result?.kind, acknowledgedSequence: result?.acknowledgedSequence, revision: result?.revision, isDirty: result?.isDirty } : {}),
         ...(prefix === "detach" ? { windowId: result?.windowId, tabs: result?.tabs } : {}) });
       return result;

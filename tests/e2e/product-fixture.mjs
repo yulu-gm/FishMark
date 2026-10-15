@@ -511,7 +511,7 @@ class ProductSession {
       checkedStderr = withoutExactStderrLine(checkedStderr, exactLine);
       checkedNodeStderr = withoutExactStderrLine(checkedNodeStderr, exactLine);
     }
-    const mainErrors = events.filter((entry) => !expectedEvents.has(entry) && (entry.event.startsWith("main:") || ["save:error", "edit:error", "flush:error", "detach:error", "watch:error", "snapshot:error", "authority:error"].includes(entry.event) || ["renderer:preload-error", "renderer:process-gone", "renderer:load-failed"].includes(entry.event) || (entry.event === "renderer:console" && ["error", 3].includes(entry.detail.level))));
+    const mainErrors = events.filter((entry) => !expectedEvents.has(entry) && (entry.event.startsWith("main:") || ["save:error", "edit:error", "flush:error", "detach:error", "watch:error", "snapshot:error", "authority:error", "close:error", "resolve:error"].includes(entry.event) || ["renderer:preload-error", "renderer:process-gone", "renderer:load-failed"].includes(entry.event) || (entry.event === "renderer:console" && ["error", 3].includes(entry.detail.level))));
     const renderer = state.renderer ?? await this.rendererEvidence();
     const rendererErrors = state.rendererByWindow ? state.rendererByWindow.flatMap((entry) => entry.renderer?.events.filter((event) => ["error", "unhandledrejection"].includes(event.event)) ?? []) : renderer?.events.filter((entry) => ["error", "unhandledrejection"].includes(entry.event)) ?? [];
     expect({ mainErrors, pageErrors: state.pageErrors, rendererErrors,
