@@ -456,11 +456,13 @@ class ProductSession {
     const state = this.current;
     await this.captureOwnedProcesses(state);
     await this.capture(state);
-    await state.app.evaluate(({ BrowserWindow }) => { for (const window of BrowserWindow.getAllWindows()) window.close(); });
+    // The public Playwright close requests the real app.quit lifecycle, detaches
+    // its Node inspector transport, then waits for the owned process. Keeping
+    // that transport attached through native teardown can race pending replies.
+    // Nonterminal native Window.close/Cancel remains explicit in its own tests.
+    state.closeProtocol = { entry: "regular application Quit via public ElectronApplication.close", startedEpochMs: Date.now() };
+    await bounded("regular product Quit and inspector teardown", () => state.app.close(), 25_000);
     await expect.poll(() => state.app.windows().filter((page) => !page.isClosed()).length).toBe(0);
-    // macOS keeps its process alive after the final window closes; request the
-    // regular application Quit lifecycle there, without forcing an exit.
-    if (process.platform === "darwin") await state.app.evaluate(({ app }) => app.quit());
     await bounded("normal product process exit", async () => {
       while (state.child.exitCode === null && state.child.signalCode === null) await delay(25);
     }, 15_000);

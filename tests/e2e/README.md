@@ -21,7 +21,9 @@ ACK 故障屏障在真实 edit 处理器完成后暂缓其响应；B 输入仍�
 
 033原基线拖到已有窗口仍会分离出第三窗，历史证据见[报告033](../../reports/task-summaries/TASK-RF902-TRANSFER-033.md)。044新增已有窗口接收流程，原Windows覆盖用例现要求已有空标签栏接收、总窗口数保持2；离窗分离、Escape和捕获丢失的原合同保留。
 
-`tab-merge.spec.mjs` 使用原生SetCursorPos/SendInput及每次HWND/PID/捕获/实际命中核验，覆盖活动/非活动长文、双方未保存稿、离屏caret的准确插入、阅读段落相对y、新滚轮意图、移回原空窗口、同文件唯一owner、资源根200/403随归属往返、目标关闭/原15秒超时/正文区拒收、失败后重拖、待ACK编辑与接收窗1.25倍缩放。遮挡负例只用另一个自有FishMark窗口的标题栏，不能依据被覆盖窗口的bounds授权join。helper在释放后保持200ms再恢复原鼠标位置，明确测试静止释放；不把这项等待解释为全平台时延保证。main原生命中是正向路由证据；bounds仅用于无证据时保守取消，不能授权迁移。044最终套件尚未通过：一次真实命中后取消、960px zoom前置拒绝及既有idle用例关闭native crash均阻塞发布；覆盖意图不等于全部验收，见报告044。
+`tab-merge.spec.mjs` 使用原生SetCursorPos/SendInput及每次精确源HWND/PID/捕获/实际目标命中核验，覆盖活动/非活动长文、双方未保存稿、离屏caret的准确插入、阅读段落相对y、新滚轮意图、移回原空窗口、同文件唯一owner、资源根200/403随归属往返、目标关闭/原15秒超时/正文区拒收、失败后重拖、待ACK编辑与接收窗1.25倍缩放。遮挡负例只用另一个自有FishMark窗口的标题栏，不能依据被覆盖窗口的bounds授权join。helper在释放后保持500ms再恢复原鼠标位置，明确测试静止释放；不把这项等待解释为全平台时延保证。新增真实mouseUp后250ms主线程停顿用例及有限RAM原生日志，不伪造命中或ACK。main原生命中是正向路由证据；bounds仅用于无证据时保守取消，不能授权迁移。044恢复执行已通过Windows完整49/49及矩阵重复18/18，旧45/48及窄窗前置失败仍保留，边界见报告044。
+
+正常收尾使用公开`ElectronApplication.close()`请求真实application Quit，分离Node inspector连接并等待实际进程exit0；没有强退成功兜底。非终态原生Window.close/Cancel与目标关闭仍显式覆盖，Save/Don't Save和磁盘重启断言保留。原0xC0000005通过有界基线/候选压力比较与匹配构建符号定位到Node inspector写路径；此收尾修正不是所有原生崩溃或标题栏退出路径均已验收的声明。
 
 接收屏障只暂缓真实renderer的ACK调用，保留原处理器、正文版本和15秒deadline；关闭的receiver无法送达该ACK，正常退出不伪造补发。目标确认暂存只读正文后，来源才在文档锁内复核revision/isActive并提交；失败保留来源。资源授权只在原epoch迁移后发生。阅读位置跨IPC传严格校验的源码锚点、相对y及横滚，043的opaque scrollSnapshot仍仅在同renderer缓存中。详见[报告044](../../reports/task-summaries/TASK-TAB-MERGE-044.md)。
 

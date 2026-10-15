@@ -20,7 +20,23 @@
 
 旧“上号/误输入”回复在当前任务缺消息ID和时间，不构成本轮新输入干扰证据；没有据此撤销今天11:26的有效许可或否定历史测试。来源核实及更正单独保留，不读取原始会话目录。真实OS输入helper和物理输入guard均继续生效，guard的remote injected input局限保留。
 
-## 当前门禁与本地 checkpoint（发布阻塞）
+## 恢复执行与当前验证
+
+保留本地checkpoint `c24de83341e8fdfdee31b09c001cf61da36be205`及下节原始失败，继续在同一a20官方基线推进。15:02:47 UTC真实输入guard在Electron启动前观察到物理输入（injected0），当即停止自有Node树并暂停前台；此记录与旧无时间戳回复分开。用户15:57 UTC重新确认可接管，随后所有本轮真实拖拽和四项最终guard均未观察到物理输入，remote injected input局限继续保留。
+
+关闭问题先有限比较精确a20独立构建与候选：原收尾idle各8/8，inspector待回包压力下基线6/6、候选5/6，复现实际0xC0000005。原失败和复现的Windows事件均指向同一offset `0x87dff5`；官方Electron41.2.0符号包通过SHASUMS校验，安装EXE CodeView GUID与符号MODULE匹配，地址落在`node::inspector::TcpHolder::WriteRaw`、Node24.14 `inspector_socket.cc:734`。这是故障位置证据，不把监听告警或所有原生崩溃归为同一原因。正常测试收尾改用公开`ElectronApplication.close()`请求真实application Quit、分离Node inspector并等待实际进程退出，保留exit0、所属进程退出及全部健康断言；无app.exit/kill成功兜底。改后压力12/12、idle8/8、原生Cancel→继续编辑→Quit Save/Don't Save及重启6/6，共32次正常启动退出通过。非终态Window.close/Cancel及目标关闭仍显式测试；最终入口是application Quit，不冒充标题栏关闭验收。候选压力首个配置误收集0用例不计通过，原记录保留。
+
+路由增加真实mouseUp后250ms主线程停顿用例。旧150ms候选真实命中目标却取消；修后6/6通过，RAM日志捕获同点目标事件延迟251–252ms，离线纯路由回放c24均拒绝、新规则均接收。原477ms失败没有完整目标时序，不伪称已证明其每个细节。生产只将目标事件关联寿命与既有release freshness统一为500ms；100ms rendezvous、真实目标事件、同坐标±1、按钮状态、首目标/歧义、一次性路由及撤销保持。新350ms接受及501ms/错误坐标/按钮拒绝用例通过，没有放宽整屏授权。
+
+960px模拟布局将自有窗口竖向错开，使目标strip在源矩形外。恢复首轮zoom0/6：原生日志确认起点被另一个同PID窗口遮住，foreground保护拒绝，未算产品通过。receiver改showInactive，来源最后重置topmost叠放；helper起点新增精确顶层HWND校验，原捕获、离源矩形和终点HWND保护均保留。修后1.25倍zoom6/6，完整9项矩阵重复18/18，包含双方dirty、活动/非活动长文、往返、caret/阅读/资源权限、关闭、超时、失败重拖、pending ACK及标题栏遮挡。没有修改OS显示或输入设置。
+
+最终九门禁全部通过：lint/typecheck/build、strict3916＋8精确known（0unexpected/errors/skip）、foundation310、editing79、safety7、formal121/121/2541（99known、0unexpected/not-run）。gzip1437333/1500000、initial103892/260000，预算/known合同未改。**完整Windows产品49/49、0失败/跳过/重试**，62次启动中57次正常exit0、5次预期恢复强退，无失败清理退出；所有所属进程退出、隔离profile清理及错误检查通过。新增merge流程记录12次原生gesture，另保留旧流程原生拖拽覆盖，物理guard无干扰；三个正式probe各4个实际成员，多阶段appData/userData均匹配独立临时根。
+
+type/build/strict/perf沿用恢复批已通过结果，之后仅两个原生E2E fixture调整；38项输入与191项构建/lock/provenance哈希核对，重新lint及完整产品/三个probe。文档收尾只更新四份说明，运行源码不再改变。本机`.artifacts/tab-merge-044-resume/`保留`final-validation.json`、`real-stall-replay.json`、`close-validation-summary.json`、最终冻结清单、独立审查及`publication.json`中的精确提交/tree/官方CI；发布只有在最终独审通过后普通推送main，不强推。源码与运行审查的最终结论以该发布记录为准。
+
+## c24 checkpoint当时的门禁与发布阻塞（历史保留）
+
+以下是恢复修正之前的时点记录，不能替代上节最终验证或精确提交CI。
 
 九门禁已运行，**8项通过、完整产品E2E失败，不能发布**。lint、typecheck、build、strict3915＋8 unchanged exactknown通过（0unexpected/errors/skip）；foundation310、editing79、safety7、formal121/121/2541通过（99known、0unexpected/not-run）。gzip1437333/1500000、initial103892/260000，预算与known名单未改。
 

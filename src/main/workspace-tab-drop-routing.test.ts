@@ -25,6 +25,11 @@ describe("native tab drop routing", () => {
     const f = setup(); f.release(); f.hit();
     expect(await f.routing.resolve("source", "tab")).toMatchObject({ kind: "target" });
   });
+  it("retains the same native hit after a main-loop delay while its release is still fresh", async () => {
+    const f = setup(true); f.release(); f.advance(350); f.hit();
+    const result = f.routing.resolve("source", "tab"); f.expire();
+    expect(await result).toMatchObject({ kind: "target", targetWindowId: "target" });
+  });
   it.each([true, false])("absence of positive hit only detaches outside existing candidate windows (candidate=%s)", async candidate => {
     const f = setup(candidate); f.release();
     const result = f.routing.resolve("source", "tab"); f.expire();
@@ -34,7 +39,8 @@ describe("native tab drop routing", () => {
     const f = setup(true); f.release();
     const result = f.routing.resolve("source", "tab");
     f.routing.observe("target", { type: "mouseMove", button: "none", x: 186, y: 34, globalX: 1854, globalY: 100 });
-    f.advance(151); f.hit(); f.expire();
+    f.routing.observe("target", { type: "mouseMove", button: "left", x: 186, y: 34, globalX: 1854, globalY: 91 });
+    f.advance(501); f.hit(); f.expire();
     expect(await result).toEqual({ kind: "cancelled" });
   });
   it("rejects an unobserved, stale or wrong-source release", async () => {
@@ -79,4 +85,3 @@ describe("native tab drop routing", () => {
     expect(await f.routing.resolve("source", "tab")).toEqual({ kind: "cancelled" });
   });
 });
-

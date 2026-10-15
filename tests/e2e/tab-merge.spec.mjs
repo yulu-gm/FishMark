@@ -43,10 +43,11 @@ async function twoWindows(product, content = "0123456789 transfer", zoom = 1, la
   const targetId = (await product.snapshot(target)).activeTabId;
   const area = await product.current.app.evaluate(({ screen }) => screen.getPrimaryDisplay().workArea);
   expect(area.width).toBeGreaterThanOrEqual(960);
+  expect(area.height).toBeGreaterThanOrEqual(600);
   if (layoutWidth !== undefined) { expect(layoutWidth).toBeLessThanOrEqual(area.width); area.width = layoutWidth; }
   const left = await product.current.app.browserWindow(source), right = await product.current.app.browserWindow(target);
-  await left.evaluate((w, a) => w.setBounds({ x: a.x + (a.width < 1800 ? a.width - 900 : 0), y: a.y, width: 900, height: 700 }), area);
-  await right.evaluate((w, { a, zoom }) => { w.setBounds({ x: a.x + (a.width < 1800 ? 0 : a.width - 900), y: a.y, width: 900, height: 700 }); w.webContents.setZoomFactor(zoom); w.show(); }, { a: area, zoom });
+  await left.evaluate((w, a) => w.setBounds({ x: a.x, y: a.y + (a.width < 1800 ? 300 : 0), width: 900, height: 700 }), area);
+  await right.evaluate((w, { a, zoom }) => { w.setBounds({ x: a.x + a.width - 900, y: a.y, width: 900, height: 700 }); w.webContents.setZoomFactor(zoom); w.show(); }, { a: area, zoom });
   await left.dispose(); await right.dispose();
   await expect.poll(() => target.evaluate(() => window.devicePixelRatio)).toBe(zoom);
   return { source, target, sourceId, targetId, targetPath, imagePath, area };
@@ -84,30 +85,66 @@ async function caret(product, page, offset = 7) {
 
 async function drag(product, source, target, tabId, options = {}) {
   const from = await product.current.app.browserWindow(source), to = await product.current.app.browserWindow(target);
-  // A narrow desktop leaves the receiver's left edge exposed. On a return
-  // drag swap only the two owned window positions so the native release still
-  // leaves the source rectangle, as required by the input helper.
+  // On narrow desktops the receiver's strip (and body rejection point) is above
+  // the source. Swap owned positions for a return drag; horizontal edge gaps can
+  // contain shell gutters rather than the actual strip, particularly at zoom.
   const sourceBounds = await from.evaluate(w => w.getBounds()), targetBounds = await to.evaluate(w => w.getBounds());
-  if (sourceBounds.x < targetBounds.x && sourceBounds.x + sourceBounds.width > targetBounds.x) {
-    await from.evaluate((w, x) => w.setBounds({ x }), targetBounds.x);
-    await to.evaluate((w, x) => w.setBounds({ x }), sourceBounds.x);
+  if (sourceBounds.x < targetBounds.x + targetBounds.width && targetBounds.x < sourceBounds.x + sourceBounds.width && sourceBounds.y < targetBounds.y) {
+    await from.evaluate((w, b) => w.setBounds({ x: b.x, y: b.y }), targetBounds);
+    await to.evaluate((w, b) => w.setBounds({ x: b.x, y: b.y }), sourceBounds);
   }
   const a = await from.evaluate(w => { w.setAlwaysOnTop(true); w.show(); w.focus(); return { hwnd: w.getNativeWindowHandle().readBigUInt64LE().toString(), content: w.getContentBounds(), zoom: w.webContents.getZoomFactor() }; });
-  const b = await to.evaluate(w => { w.setAlwaysOnTop(true); w.show(); w.moveTop(); return { hwnd: w.getNativeWindowHandle().readBigUInt64LE().toString(), content: w.getContentBounds(), zoom: w.webContents.getZoomFactor() }; });
+  const b = await to.evaluate(w => { w.setAlwaysOnTop(true); w.showInactive(); w.moveTop(); return { hwnd: w.getNativeWindowHandle().readBigUInt64LE().toString(), content: w.getContentBounds(), zoom: w.webContents.getZoomFactor() }; });
   if (options.coverId) await product.current.app.evaluate(({ BrowserWindow }, id) => { const cover = BrowserWindow.fromId(id); cover.setAlwaysOnTop(true); cover.show(); cover.moveTop(); }, options.coverId);
-  await from.evaluate(w => { w.moveTop(); w.focus(); });
+  // Reset the source's topmost placement after preparing the receiver. Focus
+  // alone can leave a different topmost owned window covering the start point.
+  await from.evaluate(w => { w.setAlwaysOnTop(false); w.setAlwaysOnTop(true); w.moveTop(); w.focus(); });
+  const stallHook = options.stallMs ? await from.evaluateHandle((w, milliseconds) => {
+    if (milliseconds < 1 || milliseconds > 400) throw new Error("Invalid owned release stall");
+    const contents = w.webContents;
+    const listener = (_event, input) => {
+      if (input.type !== "mouseUp" || input.button !== "left") return;
+      contents.removeListener("before-mouse-event", listener);
+      const until = performance.now() + milliseconds;
+      while (performance.now() < until) { /* Bounded main-loop fault injection, after production's release observer. */ }
+    };
+    contents.on("before-mouse-event", listener);
+    return () => contents.removeListener("before-mouse-event", listener);
+  }, options.stallMs) : null;
   await from.dispose(); await to.dispose();
   const startBox = await tab(source, tabId).boundingBox();
   const endBox = await target.locator('[data-fishmark-region="workspace-tab-strip"]').boundingBox();
   expect(startBox).not.toBeNull(); expect(endBox).not.toBeNull();
   const start = { x: Math.round(a.content.x + (startBox.x + startBox.width / 2) * a.zoom), y: Math.round(a.content.y + (startBox.y + startBox.height / 2) * a.zoom) };
   const end = { x: Math.round(b.content.x + (b.content.x < a.content.x ? endBox.x + 12 : endBox.x + endBox.width - 30) * b.zoom), y: Math.round(b.content.y + (options.body ? 200 : endBox.y + endBox.height / 2) * b.zoom) };
-  const proof = await new Promise((resolve, reject) => execFile("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", fileURLToPath(new URL("./windows-pointer-drag.ps1", import.meta.url)), "-WindowHandle", a.hwnd, "-OwnerPid", String(product.current.mainPid), "-StartX", String(start.x), "-StartY", String(start.y), "-EndX", String(end.x), "-EndY", String(end.y), "-EndWindowHandle", options.endHwnd ?? b.hwnd, "-ReleaseDelayMs", "200"], { windowsHide: true, timeout: 15_000 }, (error, stdout, stderr) => error ? reject(new Error(`${error.message}\n${stdout}\n${stderr}`)) : resolve(JSON.parse(stdout))));
   product.crossWindowProof ??= { scope: "real owned Windows pointer drag; production IPC/preload and isolated profiles" };
-  (product.crossWindowProof.gestures ??= []).push({ a, b, start, end, proof, options });
+  const sequence = await product.current.app.evaluate(() => globalThis.__rf902Control.readNativeMouse().at(-1)?.sequence ?? 0);
+  const gesture = { a, b, start, end, options }; (product.crossWindowProof.gestures ??= []).push(gesture);
+  try {
+    gesture.proof = await new Promise((resolve, reject) => execFile("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", fileURLToPath(new URL("./windows-pointer-drag.ps1", import.meta.url)), "-WindowHandle", a.hwnd, "-OwnerPid", String(product.current.mainPid), "-StartX", String(start.x), "-StartY", String(start.y), "-EndX", String(end.x), "-EndY", String(end.y), "-EndWindowHandle", options.endHwnd ?? b.hwnd, "-ReleaseDelayMs", "500"], { windowsHide: true, timeout: 15_000 }, (error, stdout, stderr) => error ? reject(new Error(`${error.message}\n${stdout}\n${stderr}`)) : resolve(JSON.parse(stdout))));
+  } finally {
+    try {
+      gesture.nativeInput = await product.current.app.evaluate((_electron, sequence) => globalThis.__rf902Control.readNativeMouse().filter(event => event.sequence > sequence), sequence);
+    } finally {
+      if (stallHook) { try { await stallHook.evaluate(cancel => cancel()); } finally { await stallHook.dispose(); } }
+    }
+  }
 }
 
 if (process.platform === "win32") {
+  test("native join retains its release through a bounded main-loop stall", async ({ product }) => {
+    const f = await twoWindows(product, "0123456789 delayed");
+    await caret(product, f.source);
+    await drag(product, f.source, f.target, f.sourceId, { stallMs: 250 });
+    await expect.poll(async () => (await product.snapshot(f.target)).activeDocument?.content).toBe("0123456789 delayed");
+    expect(product.current.app.windows()).toHaveLength(2);
+    expect((await product.snapshot(f.source)).tabs).toEqual([]);
+    await product.focus(f.target); await product.nativeInsert("X", f.target);
+    await expect.poll(async () => (await product.snapshot(f.target)).activeDocument?.content).toBe("0123456X789 delayed");
+    await product.manualSave(f.target); await product.expectSaved("0123456X789 delayed", f.target);
+    await product.normalClose();
+  });
+
   for (const inactive of [false, true]) test(`native join preserves dirty documents reading anchor caret and resource authority (inactive=${inactive})`, async ({ product }) => {
     const f = await twoWindows(product, longText);
     await expect.poll(() => f.source.locator('img[alt="Owned"]').evaluate(image => image.naturalWidth)).toBe(20);

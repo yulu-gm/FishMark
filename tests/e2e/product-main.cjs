@@ -37,6 +37,8 @@ dialog.showErrorBox = (title, content) => {
   return result;
 };
 const describe = (value) => value instanceof Error ? value.stack ?? value.message : String(value);
+const nativeMouseEvents = [];
+let nativeMouseSequence = 0;
 const originalError = console.error.bind(console);
 const originalWarn = console.warn.bind(console);
 console.warn = (...args) => {
@@ -67,6 +69,14 @@ process.on("unhandledRejection", (error) => {
 });
 app.on("browser-window-created", (_event, window) => {
   const contents = window.webContents;
+  const windowId = window.id, webContentsId = contents.id;
+  // Bounded in-memory input evidence; never perform I/O or native queries from
+  // this native callback. Only fixture-owned product windows are observed.
+  contents.on("before-mouse-event", (_event, input) => {
+    nativeMouseEvents.push({ sequence: ++nativeMouseSequence, epochMs: Date.now(), windowId, webContentsId,
+      type: input.type, button: input.button, x: input.x, y: input.y, globalX: input.globalX, globalY: input.globalY });
+    if (nativeMouseEvents.length > 128) nativeMouseEvents.shift();
+  });
   record("window:created", { windowId: window.id, webContentsId: contents.id, preferences: contents.getLastWebPreferences() });
   for (const event of ["focus", "blur", "close", "closed"]) {
     window.on(event, () => record(`window:${event}`, { windowId: window.id }));
@@ -94,6 +104,7 @@ const originalHandle = ipcMain.handle.bind(ipcMain);
 // fabricated protocol results and are available only in this test main process.
 let barrier = null;
 globalThis.__rf902Control = {
+  readNativeMouse() { return [...nativeMouseEvents]; },
   arm(input) {
     if (barrier) throw new Error("A response barrier is already armed.");
     barrier = { ...input, phase: "armed" };

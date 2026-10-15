@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 type Point = Readonly<{ x: number; y: number }>;
 type Route = Readonly<{ sourceWindowId: string; targetWindowId: string; tabId: string; point: Point; expiresAt: number }>;
 type Release = { sourceWindowId: string; point: Point; at: number; used: boolean; candidateAtRelease: boolean; ambiguous: boolean; target?: { windowId: string; point: Point }; notify?: () => void };
+const nativeReleaseLifetimeMs = 500;
 
 // Native input delivery, rather than overlapping window rectangles, determines
 // the receiver after the source releases pointer capture. Renderer input cannot
@@ -37,7 +38,7 @@ export function createWorkspaceTabDropRouting(input: {
           candidateAtRelease: input.hasCandidate(windowId, screenPoint), ambiguous: false };
         previous?.notify?.();
       } else if (release && mouse.type === "mouseMove" && mouse.button === "none" &&
-          windowId !== release.sourceWindowId && now() - release.at <= 150 &&
+          windowId !== release.sourceWindowId && now() - release.at <= nativeReleaseLifetimeMs &&
           Math.abs(screenPoint.x - release.point.x) <= 1 && Math.abs(screenPoint.y - release.point.y) <= 1) {
         if (release.target && release.target.windowId !== windowId) {
           release.ambiguous = true;
@@ -51,7 +52,7 @@ export function createWorkspaceTabDropRouting(input: {
     > {
       prune();
       const captured = release;
-      if (!captured || captured.used || captured.sourceWindowId !== sourceWindowId || now() - captured.at > 500) return { kind: "cancelled" };
+      if (!captured || captured.used || captured.sourceWindowId !== sourceWindowId || now() - captured.at > nativeReleaseLifetimeMs) return { kind: "cancelled" };
       captured.used = true;
       if (!captured.target) await new Promise<void>((resolve) => {
         const cancel = schedule(() => { captured.notify = undefined; resolve(); }, 100);

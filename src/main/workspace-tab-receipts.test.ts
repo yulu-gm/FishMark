@@ -90,4 +90,3 @@ describe("existing-window document receipts", () => {
     expect(f.completions[0]!.committed).toBe(true);
   });
 });
-

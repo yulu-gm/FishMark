@@ -52,8 +52,10 @@ try {
  Start-Sleep -Milliseconds 80
  $point=New-Object RF902Pointer+POINT; $point.x=$StartX; $point.y=$StartY
  [uint32]$hitPid=0
- [void][RF902Pointer]::GetWindowThreadProcessId([RF902Pointer]::WindowFromPoint($point),[ref]$hitPid)
+ $startHit=[RF902Pointer]::WindowFromPoint($point)
+ [void][RF902Pointer]::GetWindowThreadProcessId($startHit,[ref]$hitPid)
  if($hitPid -ne $OwnerPid){throw 'Pointer start does not hit owned window.'}
+ if([RF902Pointer]::GetAncestor($startHit,2) -ne $target){throw 'Pointer start does not hit the exact source window.'}
  [RF902Pointer]::Button(2); $down=$true
  Start-Sleep -Milliseconds 100
  [void][RF902Pointer]::SetCursorPos(($StartX+10),$StartY)

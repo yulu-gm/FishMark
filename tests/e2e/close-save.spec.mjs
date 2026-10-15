@@ -1,7 +1,7 @@
 import { test, expect } from "./product-fixture.mjs";
 import { chooseClosePrompt } from "./close-dialog.mjs";
 
-test("native window Cancel preserves pending edits, continued editing then close Save survives relaunch", async ({ product }) => {
+test("native window Cancel preserves pending edits, continued editing then application Quit Save survives relaunch", async ({ product }) => {
   test.skip(process.platform !== "win32", "Native close prompt interaction requires Windows.");
   const initial = "Native close original 原文";
   await product.seed(initial, 60_000);
@@ -29,7 +29,7 @@ test("native window Cancel preserves pending edits, continued editing then close
   await product.normalClose();
 });
 
-test("native window Don't Save deliberately discards draft without altering disk or restoring it on relaunch", async ({ product }) => {
+test("application Quit Don't Save deliberately discards draft without altering disk or restoring it on relaunch", async ({ product }) => {
   test.skip(process.platform !== "win32", "Native close prompt interaction requires Windows.");
   const initial = "Discard retains original disk 原文";
   await product.seed(initial, 60_000);
