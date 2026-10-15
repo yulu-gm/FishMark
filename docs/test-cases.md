@@ -2,6 +2,12 @@
 
 本文用于开发自检、评审验收和回归覆盖。
 
+## TC-READING-RHYTHM-046：排版与导航稳定
+
+用人工中英长文，在1280/900外窗（实际客户区1264/884、DPR1）、浅深主题与编辑/F11阅读下观察分级标题、段落、列表、表格和代码的接续，记录native bounds和DOM行盒，不用截图独自证明几何。标题激活前后相同height/y，source模式不保留新增padding，多物理行同段只在leading前留白；嵌套list/quote标题padding0，结构空行0、额外空行可见。通过真实outline导航到数据节并点击表格，scrollTop差≤1px，canonical/disk及dirty不变。
+
+完整产品回归包含四条Tab阅读位置用例和nested-editing行内marker/选区/history/source/F11流程；原长文与窄窗表格重挂载的准确锚点不能因排版而放宽。临时双路径profile、真实输入guard与全部owned退出/清理仍须通过。源文、布局算法和主题边界不因截图对照而替换。Mac/真实IME单列未测。
+
 ## TC-PLAIN-TEXT-PASTE-045：仅粘贴文本
 
 在自有临时文档选中正向/反向范围，用Windows/Linux Ctrl+Shift+V或macOS Option+Shift+Cmd+V，以及编辑器右键“仅粘贴文本”分别粘贴人工混合text/HTML/图片样例。只出现text/plain文本，选区被准确替换，不生成图片资源；一次undo恢复原文和选区，redo恢复粘贴，保存/关闭重开字节一致。图片单独或空文本不删除原选区，普通Ctrl/Cmd+V继续原图片导入行为。

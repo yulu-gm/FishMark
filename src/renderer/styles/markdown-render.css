@@ -149,11 +149,39 @@
 }
 
 .document-editor .cm-inactive-paragraph-leading {
-  line-height: 1.95;
+  line-height: 1.86;
 }
 
 .document-editor .cm-active-paragraph-leading {
-  line-height: 1.95;
+  line-height: 1.86;
+}
+
+/* Keep spacing inside measured line boxes, identical before/after activation.
+   Container-owned line boxes and source mode retain their existing geometry.
+   Paragraph-leading marks only the first physical line: never pad its bottom. */
+.document-editor[data-fishmark-editor-view-mode="wysiwym"] .cm-line:is(.cm-active-heading, .cm-inactive-heading):not(.cm-active-list, .cm-inactive-list, .cm-active-list-continuation, .cm-inactive-list-continuation, .cm-inactive-blockquote) {
+  padding-top: var(--fishmark-heading-space-before, 0.85rem);
+  padding-bottom: 0.25rem;
+}
+
+.document-editor .cm-line:is(.cm-active-heading-depth-1, .cm-inactive-heading-depth-1) {
+  --fishmark-heading-space-before: 0.15rem;
+}
+
+.document-editor .cm-line:is(.cm-active-heading-depth-2, .cm-inactive-heading-depth-2) {
+  --fishmark-heading-space-before: 1rem;
+}
+
+.document-editor .cm-line:is(.cm-active-heading-depth-4, .cm-inactive-heading-depth-4) {
+  --fishmark-heading-space-before: 0.7rem;
+}
+
+.document-editor .cm-line:is(.cm-active-heading-depth-5, .cm-inactive-heading-depth-5, .cm-active-heading-depth-6, .cm-inactive-heading-depth-6) {
+  --fishmark-heading-space-before: 0.55rem;
+}
+
+.document-editor[data-fishmark-editor-view-mode="wysiwym"] .cm-line:is(.cm-active-paragraph-leading, .cm-inactive-paragraph-leading):not(.cm-active-list, .cm-inactive-list, .cm-active-list-continuation, .cm-inactive-list-continuation, .cm-inactive-blockquote) {
+  padding-top: 0.45rem;
 }
 
 .document-editor .cm-line.cm-inactive-blank-line {

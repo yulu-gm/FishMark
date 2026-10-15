@@ -1,5 +1,9 @@
 # FishMark 进展记录
 
+## 2026-10-15 阅读排版046（Windows本地验收PASS）
+
+在已发布df16c2f/CI38785088778四绿上推进CSS小批：保持字号/主题/宽度，用顶层标题分级上下padding与段落leading1.86及top .45rem建立节奏；源码模式/嵌套容器/空行显隐不接收新增间距。修前/修后8视图矩阵、331单测和7产品定向流程通过；九门禁通过，strict3952＋8精确known、Windows57/57、formal121/121/2541、Windows gzip1437744/1500000。最终独审及普通main发布以本批publication精确身份/CI为准，见[报告046](../reports/task-summaries/TASK-READING-RHYTHM-046.md)。M9仍0/3。
+
 ## 2026-10-15 仅粘贴文本045（Windows本地验收PASS）
 
 从已发布且四项CI成功的main `6c9d758`继续独立粘贴小批：原生右键菜单与平台快捷键共用窄纯文本请求，CodeMirror异步身份/选区保护和隔离history事务，普通粘贴保留。522项定向测试及九门禁通过：strict3952＋8精确known、产品54/54、68启动=63正常exit0+5预期恢复，全部owned退出/cleanup0；foundation310、editing79、safety7、formal121/121/2541，Windows gzip1437744/1500000。最终独审及普通main发布必须核对精确SHA四项CI；实际身份与终态见[报告045](../reports/task-summaries/TASK-PLAIN-TEXT-PASTE-045.md)对应本机publication。M9保持0/3，Mac/真实IME等边界不变。

@@ -28,6 +28,8 @@ MVP 应当像一个原生桌面写作工具：
 
 ## 3. MVP 约束
 
+阅读排版046：所见模式顶层标题在测量行盒内按层级分配上下留白，active/inactive相同；段落第一物理行使用1.86行高及.45rem段前padding，无段后padding。现有字号层级、普通正文1.85及列表/table/code内部几何保留，文档宽度继续自适应，无新增宽度上限或装饰。嵌套容器及source模式不接收新增padding，空行/显隐仍由原语义控制。数值以`docs/standards/markdown-text-rendering-standard.json`为准。
+
 ### 2026-09-21 编辑器基础重构现状
 
 生产编辑命令已经由 `@fishmark/editor-model` 的纯语义计划统一决定，`@fishmark/codemirror-adapter` 负责 CodeMirror 事务、选择映射、IME/history、decorations、widgets 与浏览器交互。每个 view 的结构缓存与本地 revision 由 adapter 的 StateField 管理；切换文档或重新加载会重建 session generation，旧计划不能修改新文档。renderer 既有 update listener 仍是文档 change frame 的唯一宿主，不建立第二套发送队列。

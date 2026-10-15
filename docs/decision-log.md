@@ -1,5 +1,11 @@
 # FishMark 决策日志
 
+## 2026-10-15：046在测量行盒内建立阅读节奏
+
+标题原先无上下独立间距，paragraph-leading1.95又高于既有规范1.86。保持H1–H6字号/字重与基础正文1.85，仅在wysiwym顶层heading增加按层级递减的top .15/1/.85/.7/.55/.55rem及bottom .25rem，段落leading改为1.86并在其第一条物理行加top .45rem。第一物理行不加bottom，避免拆开同段软换行。段前与标题后合计间距明确，不重写空行。
+
+active/inactive使用同一padding，排除list/continuation/blockquote拥有的linebox；source作用域不受新增padding影响。不用外部margin、viewport:first-child或新布局算法，CodeMirror原测量/滚动恢复继续拥有几何。列表内部、table列宽/单元格、code内部及显隐规则保持；相邻块复用已有块边界和新段落top。标准的body1.85仅同步原editor-source.css既有值，非本批改变body。
+
 ## 2026-10-15：045纯文本粘贴保留应用文档身份
 
 采用窄`requestPlainTextPaste`请求，只在主进程读取`clipboard.readText()`；不向renderer开放通用剪贴板、HTML、图片或文件读取。原生菜单绑定发起窗口，文本读取复查sender与活动tab，菜单关闭一次结算并保留原生错误。renderer复核load身份、文档/选区及变化版本、请求顺序、只读/销毁和DOM焦点后，单次`input.paste`＋history隔离替换选区，空文本不删除选区。普通图片/文本粘贴路径不改。

@@ -1,5 +1,13 @@
 # FishMark 测试报告
 
+## 2026-10-15 TASK-READING-RHYTHM-046
+
+Windows本地验收：**PASS**。同一自有中英长文在1280/900外窗、实际1264/884客户区、DPR1、light/dark/edit/F11各8视图进行修前修后截图与DOM/native几何记录。新增3产品用例核验active/inactive heading同height/y、source padding0、多物理行无中间gap、nestedheading0、structural0/extra可见、outline后tableclick scroll≤1px，以及canonical/disk/dirty不变。旧4项Tab viewport和完整nested-editing行内显隐/history模式切换保持。
+
+331定向单测、7产品定向及`046-final-01`九门禁通过：lint/typecheck/build、strict3952＋8精确known且0unexpected/errors/skip、完整Windows57/57、foundation310、editing79、safety7、formal121/121/2541（99known、0unexpected/not-run），Windows gzip1437744/1500000、initial103958/260000。71启动=66正常exit0+5预期恢复、所属成员退出/profile清理/cleanup0；四guard无物理输入，三probe隔离通过；原14native runner阶段保留。target02 CLI未匹配测试的失败记录保留，未改oracle/known合同求绿。
+
+真实对比图已成功保存Library；不外推Mac/真实IME，M9仍0/3。冻结输入/构建、独审和普通main精确发布见[报告046](../reports/task-summaries/TASK-READING-RHYTHM-046.md)及本批publication。
+
 ## 2026-10-15 TASK-PLAIN-TEXT-PASTE-045
 
 Windows本地验收：**PASS**。终版522定向测试与九门禁通过：lint/typecheck/build、strict3952＋8精确known且0unexpected/errors/skip、完整产品54/54、foundation310、editing79、safety7、formal121/121/2541（99known、0unexpected/not-run），gzip1437744/1500000、initial103958/260000。68次启动63正常exit0+5预期恢复，owned退出/隔离profile清理/cleanup0，四guard无物理输入。五条新增真实流程验证混合payload纯文本、右键原生菜单UIA、反向选区/history/save/reopen、延迟切tab、image-only不动作与普通PNG粘贴、菜单打开后正常退出。

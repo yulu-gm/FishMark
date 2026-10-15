@@ -1,5 +1,20 @@
 # MVP Backlog
 
+## TASK-READING-RHYTHM-046：阅读排版节奏（2026-10-15）
+
+状态：**Windows 本地验收 PASS**，基线main `df16c2f`、CI38785088778四绿。最终独审及发布身份以本批`publication.json`为准。
+
+目标：沿用极简外观与文档宽度自适应，用适度标题层级间距和段落行高/段间距改善长文阅读。保留列表内部、表格单元格、代码内部及源码空行/显隐语义；相邻块通过顶层标题/段落的统一边界接续。
+
+- [x] 同一自有长文在1280/900外窗、light/dark、编辑/F11阅读下记录修前/修后截图及DOM/native几何。
+- [x] 顶层active/inactive一致的CSS measured padding；嵌套容器/source不接收新增间距，规范同步。
+- [x] 331定向单测与7项真实产品定向测试通过：多物理行段落、嵌套/连续标题、空行、outline/table click和Tab阅读位置。
+- [x] 新鲜完整适用门禁及文档交接：strict3952＋8精确known、Windows57/57、formal121/121/2541与预算通过；最终独审后推进发布。
+
+发布门槛：普通推送main并核验精确SHA四项官方CI成功，终态记录本批publication；不以本地门禁替代发布验收。
+
+接单见[046 intake](docs/plans/2026-10-15-reading-rhythm-intake.md)。M9保持0/3；Mac/真实IME、冻结cp13/cp16及既有Library下载阻塞不纳入此批。
+
 ## TASK-PLAIN-TEXT-PASTE-045：仅粘贴文本（2026-10-15）
 
 状态：**Windows 本地验收 PASS**，基线main `6c9d758`；最终独审及普通main发布须核验精确提交CI，发布身份与终态保存在本批`publication.json`。不关闭M9或平台IME。

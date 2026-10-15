@@ -3,7 +3,7 @@
   "id": "fishmark.markdownTextRendering",
   "status": "canonical",
   "title": "FishMark Markdown Text Rendering Standard",
-  "updatedAt": "2026-06-04",
+  "updatedAt": "2026-10-15",
   "owner": "FishMark renderer",
   "appliesTo": [
     "src/renderer/styles/markdown-render.css",
@@ -46,7 +46,7 @@
       "tabSizeSpaces": 2
     },
     "lineHeight": {
-      "body": 1.72,
+      "body": 1.85,
       "paragraph": 1.86,
       "list": 1.84,
       "listContinuation": 1.84,
@@ -77,11 +77,16 @@
     }
   },
   "blockSpacing": {
+    "heading": {
+      "topLevelBeforeRem": { "h1": 0.15, "h2": 1, "h3": 0.85, "h4": 0.7, "h5": 0.55, "h6": 0.55 },
+      "topLevelAfterRem": 0.25,
+      "rule": "WYSIWYM top-level headings use equal active/inactive measured padding, independent of viewport DOM order. Existing heading scale is retained. Nested containers and source mode do not receive this spacing."
+    },
     "paragraph": {
       "lineHeight": "typography.lineHeight.paragraph",
       "betweenAdjacentParagraphsRem": 0.45,
-      "beforeAfterBlockGapRem": 0.35,
-      "rule": "Paragraph spacing is visual only; it must not insert or remove blank Markdown source lines."
+      "beforeAfterBlockGapRem": 0.45,
+      "rule": "WYSIWYM top-level paragraphs own 0.45rem top padding on their leading physical line only; no paragraph bottom padding. This combines with preceding heading/list/table/code spacing. No source blank lines are inserted or removed; nested containers and source mode retain their existing spacing."
     },
     "blankLine": {
       "inactiveCollapsedHeightPx": 0,
