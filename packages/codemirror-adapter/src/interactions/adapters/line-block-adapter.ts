@@ -444,10 +444,8 @@ function resolveCollapsedSeparatorArrowUp(context: StructuralNavigationContext):
     );
   }
 
-  if (isSourceBlankLineOutsideBlock(context, previousLineNumber)) {
-    return context.view.state.doc.line(previousLineNumber).from;
-  }
-
+  // Plain gap rows must follow the semantic planner's visible-line policy.
+  // Returning the immediately preceding raw row can activate a collapsed row.
   return null;
 }
 

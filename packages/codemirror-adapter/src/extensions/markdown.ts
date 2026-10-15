@@ -1302,6 +1302,7 @@ export function createFishMarkMarkdownExtensions(
       {
         key: "ArrowUp",
         run: (view) => {
+          if (getMarkdownEditorViewMode(view.state) === "source") return false;
           const target = resolveArrowUp(view, runtime.activeBlockState);
           const handled = semanticCommands.run(view, target === null ? planSemanticArrow("up") :
             (context) => planPointerSelection(context, target.anchor)) !== "unhandled";
@@ -1316,6 +1317,7 @@ export function createFishMarkMarkdownExtensions(
       {
         key: "ArrowDown",
         run: (view) => {
+          if (getMarkdownEditorViewMode(view.state) === "source") return false;
           const target = resolveArrowDown(view, runtime.activeBlockState);
           const handled = semanticCommands.run(view, target === null ? planSemanticArrow("down") :
             (context) => planPointerSelection(context, target.anchor)) !== "unhandled";

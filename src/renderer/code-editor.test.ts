@@ -5879,6 +5879,28 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("leaves ordinary blank gaps to the semantic arrow planner without activating collapsed rows", async () => {
+    const host = document.createElement("div");
+    const source = "1\n\n\n\n2\n\n\n\n3";
+    const controller = createCodeEditorController({ parent: host, initialContent: source, onChange: vi.fn() });
+    controller.setSelection(source.length);
+    for (const anchor of [8, 6, 3, 1]) {
+      controller.pressArrowUp();
+      await flushMicrotasks();
+      expect(controller.getSelection()).toEqual({ anchor, head: anchor });
+      expect(controller.getContent()).toBe(source);
+      expect(host.querySelectorAll(".cm-inactive-blank-line")).toHaveLength(4);
+    }
+    for (const anchor of [3, 5, 8, 10]) {
+      controller.pressArrowDown();
+      await flushMicrotasks();
+      expect(controller.getSelection()).toEqual({ anchor, head: anchor });
+      expect(controller.getContent()).toBe(source);
+      expect(host.querySelectorAll(".cm-inactive-blank-line")).toHaveLength(4);
+    }
+    controller.destroy();
+  });
+
   it("moves between visible empty paragraphs below an ordered list with one vertical arrow press", async () => {
     const host = document.createElement("div");
     const source = "1. 1\n\n\n\n";

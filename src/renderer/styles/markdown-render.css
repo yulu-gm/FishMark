@@ -163,6 +163,7 @@
   overflow: hidden;
 }
 
+.document-editor[data-fishmark-editor-view-mode="wysiwym"] .cm-line.cm-fm-line-extra-blank:is(.cm-fm-line-empty, .cm-fm-line-whitespace):not(.cm-inactive-blank-line),
 .document-editor .cm-line.cm-fm-line-active.cm-fm-line-empty {
   height: auto;
   min-height: 1.95em;

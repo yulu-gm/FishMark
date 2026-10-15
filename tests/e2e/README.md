@@ -45,6 +45,10 @@ Windows 恢复提示测试需要现有 `pwsh.exe`（PowerShell 7）和可交互�
 
 首次原生 undo 反向选区的断言保持严格。后续 undo→redo→undo 的光标按已安装 CodeMirror commands6.10.3 的历史规则另列，不能假定每次都恢复首次选区。原 baseline01 对第二次 undo 期待原反向范围而失败，正文正确；同版本依赖独立对照（无 FishMark、UI、模式切换）及依赖源码解释后，修正前瞻协议，在 source/F11 切换后直接核验首次 undo 恢复原反向范围，再单独核验重复历史的单点位置。原失败不重标，产品代码未因此修改。证据与边界见[报告040](../../reports/task-summaries/TASK-RF902-NESTED-KEYBOARD-040.md)。
 
+## 多空行导航与编辑
+
+`blank-navigation.spec.mjs` 四组真实Windows产品流程验证原折叠规则下已可见空行在Up/Down、Shift选区和鼠标定位时可达，隐藏行不会因普通导航被意外激活；同时覆盖输入、原paragraph Backspace契约与undo/redo、source逐物理行双向导航、保存重开、CRLF原字节及300段长文档滚动。短样本先要求全部DOM物理行与main canonical一致，再计算anchor/head和准确选中文本；长样本只测可见唯一末段的内容坐标，不将局部DOM当全篇偏移。隐藏行直接定位的既有编辑例外、Enter生成和CRLF归一化均保留。前轮较宽候选已撤回，未覆盖历史Typora oracle或formal校准；原失败与最小方案见[报告042](../../reports/task-summaries/TASK-BLANK-NAVIGATION-042.md)。
+
 ## RF903 sandbox 与 CSP
 
 `sandbox.spec.mjs` 验证真实产品窗口配置、对应 renderer PID 的 Windows OS sandbox metric、隔离桥和精确执行 preload 字节，并覆盖本地文档图片、community 主题 CSS 与 full GLSL/纹理、保存重启。[报告035](../../reports/task-summaries/TASK-RF903-SANDBOX-035.md)记录原始 sandbox=false 基线及本批边界；不能只把 fixture 的 `chromiumSandbox:true` 当作产品 sandbox 已通过。
