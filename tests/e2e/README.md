@@ -1,5 +1,7 @@
 # RF902 实际产品持久化 E2E
 
+两个Windows原生指针入口通过`native-pointer.mjs`保留完整exec元数据和JSONL阶段。输入前预热序列化并用Node绝对25秒准备期限复查；按住阶段无I/O，释放前有3秒合作式检查，外层35秒保留恢复余量。成功需完整九阶段有序、真实HWND/capture证明及全部产品断言；阶段缺失仍失败。ebde938官方48/49失败的旧空stdout/stderr不足以证实冷启动/超时根因，原报告保留。终版pointer-final-01九门禁通过，产品49/49、14次助手完整九阶段及实际后续断言通过；最终发布仍取精确HEAD四项官方CI。
+
 044原生拖拽诊断由fixture在原生回调外分批写入既有main JSONL，测试进程严格验证sequence连续、批次边界和dropped=0。仅等待尚未换行的末条追加；完整坏行及最终全文件解析仍失败。有界stall由fixture持有并一次移除，避免拖拽后Inspector诊断/清理覆盖原始异常。4dcdbad官方CI48/49失败及未执行的caret/save断言保留；修后stall6/6、完整merge重复18/18及从头九门禁通过，产品49/49包含原caret/save断言。详见[报告044](../../reports/task-summaries/TASK-TAB-MERGE-044.md)；后续提交仍须独审与精确HEAD四项CI通过。
 
 先执行 `npm ci`、`npm run build`，再执行 `npm run test:e2e`。只列用例、不启动 Electron：`npm run test:e2e -- --list`。可用 `--grep "product open"` 或 `--grep "true idle"` 分别执行两条。本套件使用锁定的 `@playwright/test` 和已有 Electron，不需下载 Playwright 浏览器。

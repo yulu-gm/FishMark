@@ -52,6 +52,14 @@ Cancel原始proof已匹配PID/HWND、提示全文和按钮，真实点击发生�
 
 本次修正真实stall6/6及完整merge重复18/18通过；随后`telemetry-final-01`从头九项门禁全过。产品49/49、0失败/跳过/重试，62次启动=57正常exit0+5预期恢复强退，全部owned进程退出、profile删除及cleanup0；四项guard均无物理输入干扰。strict3916＋8精确known且0unexpected/errors/skip，foundation310、editing79、safety7、formal121/121/2541（99known、0unexpected/not-run），Windows gzip1437333/1500000、initial103892/260000。40项最终输入及191项产物身份、各次真实路径/退出核验与独立审查保存在`telemetry-final-01-validation.json`及相关冻结清单。后续普通提交及精确官方四项CI终态以本机`publication.json`为准，本地通过不能代替官方CI；旧47/49与48/49原始证据不覆盖、不重分类。
 
+## 第三次官方CI失败与助手阶段边界
+
+普通后续提交`ebde938c52812c4791d71cd8951a2d319baa96f9`（tree`7e229a2e0ef2edea6ca48b57f2ee8722c373a3fb`，父4dc）的CI`38775241917`仍三项通过、Windows **48/49失败**。stall及完整后续断言通过，本次失败在既有Windows outside-window detach原生助手调用；官方artifact11994555228、106284033字节ZIP的SHA256与digest一致。原始记录显示准备后约11秒才产生助手鼠标事件，真实release和detach:end已发生，但stdout/stderr为空、原错误包装丢掉code/signal/killed，后续caret/save未执行；无法单凭此证实超时、冷启动或首次序列化根因，原失败保留。
+
+两个原生调用点复用小型`native-pointer.mjs`，保存spawn/callback时间、完整exec退出元数据和独立JSONL阶段；缺阶段/坏JSON/错误退出明确失败。PowerShell输入前预热JSON序列化，此后新鲜核验原PID/HWND/坐标/捕获。Node发放绝对25秒准备期限，激活、移动与实际按下前复查；按住期间仅记RAM，释放后写入阶段，3秒合作式检查失败则在source取消释放，finally恢复鼠标；35秒外层留收尾余量。正常成功要求完整九阶段有序且真实proof返回。原手势、15秒产品接收超时、60秒用例限制及正文/caret/保存/退出断言均未放宽。新增阶段方案先真实9/9通过，绝对期限和完整阶段校验的最终版本再走正式门禁。冷启动或首次ConvertTo-Json仍只是可能路径，不能倒推旧失败原因。
+
+终版`pointer-final-01`九项门禁通过：strict3916＋8精确known且0unexpected/errors/skip、完整产品49/49、foundation310、editing79、safety7、formal121/121/2541（99known、0unexpected/not-run），包体仍为Windows1437333/1500000、initial103892/260000。产品62次启动=57正常exit0+5预期恢复，14次原生助手code0/signalnull/killedfalse、完整九阶段，全部owned退出/profile清理/cleanup0，四guard均无物理输入。最后静态微调在任何UI前完成，原lint时点不冒充覆盖它；收尾另跑fresh lint，原gate元数据保留。41项最终输入（新增共享helper）与191项产物身份、隔离/退出及最终独审见`pointer-final-01-validation.json`和冻结清单。只在终版独审通过后普通推送，并等待新精确提交四项官方CI；前三次失败均保留。
+
 ## c24 checkpoint当时的门禁与发布阻塞（历史保留）
 
 以下是恢复修正之前的时点记录，不能替代上节最终验证或精确提交CI。

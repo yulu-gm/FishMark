@@ -1,5 +1,7 @@
 # M9 验收清单与下一批顺序
 
+**044第三次CI助手失败：** ebde938的CI38775241917三项成功、Windows48/49失败，stall修正已通过，新失败在既有outside-window detach助手。官方ZIP digest核验，原生日志有release/detach:end，但后续caret/save未执行、exec错误元数据缺失，不能断言旧失败原因。原生入口增加完整退出/阶段证据、输入前序列化预热及绝对准备期限，保留原身份/捕获/产品超时/所有断言。终版pointer-final-01九门禁通过，产品49/49、14次原生助手完整阶段，62launch57正常+5预期，全部owned退出/cleanup0、四guard无物理输入；strict3916＋8精确known、foundation310、editing79、safety7、formal121/121/2541及包体预算保持。最终独审与精确后续CI仍须通过，详见报告044/publication。M9保持 **0/3**。
+
 **044第二次CI诊断失败：** `4dcdbad`的CI38771561655三项通过、Windows48/49失败，Cancel与遮挡已通过；stall原生助手及receipt提交成功，但finally的Inspector诊断被回收，后续caret/save未执行，不能算产品通过。两个fixture改为回调外JSONL批次与Node严格序列读取、fixture持有一次stall，保留主错误与诊断错误及所有产品断言；原失败产物digest核验保留。修后stall6/6、完整merge重复18/18及从头九门禁通过，产品49/49、62launch=57正常exit0+5预期恢复，全部owned退出/cleanup0；strict3916＋8精确known、foundation310、editing79、safety7、formal121/121/2541、Windows gzip1437333，四guard无物理输入。最终独审/精确CI见报告044和本机publication，不以本地通过代替官方CI。M9仍 **0/3**。
 
 **044官方CI后续修正：** 首次普通推送`80f974e`对应CI38767258787为三项通过、Windows47/49失败，原证据及提交保留。Cancel真实点击后39ms正确返回，助手却因共用发现期限提前13ms判FAIL；改为点击后独立3s观察、外层35s限时。窄桌面遮挡case的源起点实际落第三窗；改固定960布局、cover右移300/showInactive并读回actual bounds核验，精确HWND/捕获保护不变。三个fixture修改后，关闭与重启重复6/6、遮挡6/6，从头重跑九门禁均通过、产品再次49/49；未以本机成功替代新精确HEAD四项官方CI。最终独审、修正提交/tree与CI状态见报告044和本机publication。M9仍 **0/3**，其他UX另批。

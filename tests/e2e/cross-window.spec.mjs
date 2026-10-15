@@ -1,6 +1,5 @@
 import { test, expect } from "./product-fixture.mjs";
-import { execFile } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { nativePointer } from "./native-pointer.mjs";
 
 const content = "0123456789 alpha beta gamma";
 const caret = 7;
@@ -283,9 +282,9 @@ for (const input of ["browser", ...(process.platform === "win32" ? ["Windows out
       product.crossWindowProof.targetStrip = { strip, bounds };
     }
     product.crossWindowProof.nativePreparation = { workArea, identity, start, end };
-    const args = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", fileURLToPath(new URL("./windows-pointer-drag.ps1", import.meta.url)), "-WindowHandle", identity.hwnd, "-OwnerPid", String(product.current.mainPid), "-StartX", String(start.x), "-StartY", String(start.y), "-EndX", String(end.x), "-EndY", String(end.y)];
+    const args = ["-WindowHandle", identity.hwnd, "-OwnerPid", String(product.current.mainPid), "-StartX", String(start.x), "-StartY", String(start.y), "-EndX", String(end.x), "-EndY", String(end.y)];
     if (existingIdentity) args.push("-EndWindowHandle", existingIdentity.hwnd, "-ReleaseDelayMs", "200");
-    const native = await new Promise((resolve, reject) => execFile("powershell.exe", args, { windowsHide: true, timeout: 15_000 }, (error, stdout, stderr) => error ? reject(new Error(`${error.message}\n${stdout}\n${stderr}`)) : resolve(JSON.parse(stdout))));
+    const native = await nativePointer(product, args);
     product.crossWindowProof.nativePointer = { identity, ...native };
     const events = (await product.rendererEvidence(before.page)).events;
     expect(events.filter((entry) => entry.event === "pointerup" && entry.detail.trusted && entry.detail.x > identity.contentBounds.width)).toHaveLength(1);

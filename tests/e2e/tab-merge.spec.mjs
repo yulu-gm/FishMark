@@ -1,7 +1,6 @@
-import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { nativePointer } from "./native-pointer.mjs";
 import { test, expect } from "./product-fixture.mjs";
 
 const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="16"><rect width="20" height="16" fill="#228866"/></svg>';
@@ -133,7 +132,7 @@ async function drag(product, source, target, tabId, options = {}) {
   if (options.stallMs) gesture.stallId = await product.current.app.evaluate((_electron, { id, milliseconds }) => globalThis.__rf902Control.armNativeReleaseStall(id, milliseconds), { id: a.id, milliseconds: options.stallMs });
   let primaryError;
   try {
-    gesture.proof = await new Promise((resolve, reject) => execFile("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", fileURLToPath(new URL("./windows-pointer-drag.ps1", import.meta.url)), "-WindowHandle", a.hwnd, "-OwnerPid", String(product.current.mainPid), "-StartX", String(start.x), "-StartY", String(start.y), "-EndX", String(end.x), "-EndY", String(end.y), "-EndWindowHandle", options.endHwnd ?? b.hwnd, "-ReleaseDelayMs", "500"], { windowsHide: true, timeout: 15_000 }, (error, stdout, stderr) => error ? reject(new Error(`${error.message}\n${stdout}\n${stderr}`)) : resolve(JSON.parse(stdout))));
+    gesture.proof = await nativePointer(product, ["-WindowHandle", a.hwnd, "-OwnerPid", String(product.current.mainPid), "-StartX", String(start.x), "-StartY", String(start.y), "-EndX", String(end.x), "-EndY", String(end.y), "-EndWindowHandle", options.endHwnd ?? b.hwnd, "-ReleaseDelayMs", "500"]);
   } catch (error) { primaryError = error; gesture.primaryError = error.stack ?? String(error); }
   try {
     const capture = async () => {
