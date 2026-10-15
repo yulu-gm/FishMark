@@ -450,6 +450,7 @@ export function WorkspaceShell({
                         initialContent={activeDocument.content}
                         documentPath={activeDocument.path}
                         documentTabId={activeDocument.tabId}
+                        openTabIds={workspaceTabs.map(tab => tab.tabId)}
                         editorEpoch={editorEpoch}
                         loadRevision={editorLoadRevision}
                         readOnly={editorTransition?.readOnly ?? false}

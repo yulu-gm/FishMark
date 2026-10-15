@@ -11,6 +11,7 @@ import {
   createCodeEditorController,
   emptyFindReplaceSnapshot,
   type CodeEditorController,
+  type CodeEditorViewState,
   type CodeEditorDocumentChangeFrame,
   type CodeEditorDiscardedDocumentText,
   type FindReplaceQueryInput,
@@ -62,6 +63,7 @@ type CodeEditorViewProps = {
   documentPath: string | null;
   loadRevision: number;
   documentTabId: string | null;
+  openTabIds: readonly string[];
   editorEpoch: number;
   readOnly: boolean;
   editorTransitionToken: number | null;
@@ -109,6 +111,7 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
       documentPath,
       loadRevision,
       documentTabId,
+      openTabIds,
       editorEpoch,
       readOnly,
       editorTransitionToken,
@@ -142,6 +145,7 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
     const appliedIdentityRef = useRef<EditorLoadIdentity | null>(null);
     const appliedLoadRevisionRef = useRef<number | null>(null);
     const transitionGenerationRef = useRef(0);
+    const viewStatesByTabRef = useRef(new Map<string, CodeEditorViewState>());
     const handleChange = useEffectEvent((content: string, identity: EditorLoadIdentity | null) => {
       onChange?.(content, identity);
     });
@@ -218,6 +222,7 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
       });
 
       controllerRef.current = controller;
+      const viewStates = viewStatesByTabRef.current;
       handleEditorBarrierChange(async () => ({ ...await controller.sealForBarrier(), selection: controller.getSelection() }));
       handleEditorRemotePatchChange((input) => controller.applyRemoteDocumentPatch(input));
       handleEditorCanonicalRestoreChange((input) => controller.restoreCanonicalDocument(input));
@@ -228,6 +233,7 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
         }
 
         controller.destroy();
+        viewStates.clear();
         handleEditorBarrierChange(null);
         handleEditorRemotePatchChange(null);
         handleEditorCanonicalRestoreChange(null);
@@ -239,6 +245,12 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
     }, [initialContent]);
 
     useEffect(() => {
+      const controller = controllerRef.current;
+      const previousTabId = appliedIdentityRef.current?.tabId;
+      const changedTab = previousTabId !== documentTabId;
+      if (controller && changedTab && previousTabId) {
+        viewStatesByTabRef.current.set(previousTabId, controller.captureViewState());
+      }
       if (appliedLoadRevisionRef.current !== loadRevision) {
         controllerRef.current?.replaceDocument(latestLoadedContentRef.current);
         appliedLoadRevisionRef.current = loadRevision;
@@ -251,13 +263,24 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
       const identity = { tabId: documentTabId, epoch: editorEpoch, loadRevision };
       controllerRef.current?.setDocumentIdentity(identity);
       appliedIdentityRef.current = identity;
-      const controller = controllerRef.current;
       if (controller) {
         const selection = handleEditorLoadSelection(identity);
         if (selection) controller.setSelection(selection.anchor, selection.head);
+        else if (changedTab) {
+          const saved = viewStatesByTabRef.current.get(documentTabId);
+          if (saved && !controller.restoreViewState(saved)) viewStatesByTabRef.current.delete(documentTabId);
+        }
       }
       handleLoadRevisionApplied(identity);
     }, [documentTabId, editorEpoch, loadRevision]);
+
+    useEffect(() => {
+      // Prune after capture so closing the active tab cannot reinsert its state.
+      const owned = new Set(openTabIds);
+      for (const tabId of viewStatesByTabRef.current.keys()) {
+        if (!owned.has(tabId)) viewStatesByTabRef.current.delete(tabId);
+      }
+    }, [openTabIds]);
 
     useEffect(() => {
       controllerRef.current?.setDocumentPath(documentPath);

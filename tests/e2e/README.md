@@ -49,6 +49,12 @@ Windows 恢复提示测试需要现有 `pwsh.exe`（PowerShell 7）和可交互�
 
 `blank-navigation.spec.mjs` 四组真实Windows产品流程验证原折叠规则下已可见空行在Up/Down、Shift选区和鼠标定位时可达，隐藏行不会因普通导航被意外激活；同时覆盖输入、原paragraph Backspace契约与undo/redo、source逐物理行双向导航、保存重开、CRLF原字节及300段长文档滚动。短样本先要求全部DOM物理行与main canonical一致，再计算anchor/head和准确选中文本；长样本只测可见唯一末段的内容坐标，不将局部DOM当全篇偏移。隐藏行直接定位的既有编辑例外、Enter生成和CRLF归一化均保留。前轮较宽候选已撤回，未覆盖历史Typora oracle或formal校准；原失败与最小方案见[报告042](../../reports/task-summaries/TASK-BLANK-NAVIGATION-042.md)。
 
+## 文档标签阅读位置
+
+`tab-viewport.spec.mjs` 四组产品流程使用临时文档与独立双路径配置：长A→空白B→A；两长文档独立阅读位置、快速往返、source/WYSIWYM及关闭重开；返回后新滚动意图与视口上方延迟图片实际增高；实际最小窗宽下的表格重挂载。最后一组记录原生minimum/bounds/contentSize，等待实际客户区宽度和虚拟化widget挂载后定位；当前Windows外窗900×800、客户区884×735，不把被钳制的760px请求当作真实尺寸。断言可见唯一源码段落及其相对scroller位置，允许1px舍入差，不以scrollTop相同代替阅读位置稳定。canonical与磁盘全文、dirty均单列验证；离屏caret通过实际插入后的准确canonical偏移验证并undo，不拼接虚拟化DOM计算全篇偏移。
+
+图片先确认实际请求、挂载以及相对阅读段落的位置，再在返回后的新滚动位置释放本地HTTP响应，要求自然高度0→900px和阅读锚点稳定；该流程不声称位于视口内部的图片解码不会重排后续正文。资源load/尺寸与六次two-rAF几何采样是本用例的布局证据，不等同compositor或全平台性能。原File New菜单和可信Chromium点击/滚轮用于导航；第二文档通过native-backed File及既有drop入口打开，不冒称Explorer拖放或OS文件关联。controller单测另锁住无frame/timer的立即再次捕获，renderer单测同时覆盖active/inactive关闭后的同key缓存清理。[报告043](../../reports/task-summaries/TASK-TAB-VIEWPORT-043.md)保留原始失败及边界。
+
 ## RF903 sandbox 与 CSP
 
 `sandbox.spec.mjs` 验证真实产品窗口配置、对应 renderer PID 的 Windows OS sandbox metric、隔离桥和精确执行 preload 字节，并覆盖本地文档图片、community 主题 CSS 与 full GLSL/纹理、保存重启。[报告035](../../reports/task-summaries/TASK-RF903-SANDBOX-035.md)记录原始 sandbox=false 基线及本批边界；不能只把 fixture 的 `chromiumSandbox:true` 当作产品 sandbox 已通过。

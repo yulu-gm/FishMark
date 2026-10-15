@@ -10,6 +10,7 @@ FishMark 是一个面向 macOS 和 Windows 的本地优先 Markdown 桌面编辑
 ## 当前能力
 
 - 打开 Markdown 文件
+- 会话内标签切换保留各文档的阅读位置与选区
 - 保存 / 另存为 / 自动保存
 - 基于 CodeMirror 6 的单栏编辑体验
 - 基于块的 Markdown 视图切换

@@ -67,6 +67,8 @@ export type CreateCodeEditorControllerOptions = {
 export type CodeEditorController = {
   getContent: () => string;
   getSelection: () => { anchor: number; head: number };
+  captureViewState: () => CodeEditorViewState;
+  restoreViewState: (snapshot: CodeEditorViewState) => boolean;
   prepareFindReplace: () => Promise<void>;
   updateFindReplaceQuery: (query: FindReplaceQueryInput) => FindReplaceSnapshot;
   findNextMatch: () => FindReplaceSnapshot;
@@ -123,6 +125,14 @@ export type CodeEditorController = {
   pressArrowDown: () => void;
   destroy: () => void;
 };
+
+// Renderer-local, short-lived state for an open tab. Retain the immutable text
+// and scroll anchor, not an EditorState, history, DOM or main-process payload.
+export type CodeEditorViewState = Readonly<{
+  doc: EditorState["doc"];
+  selection: EditorState["selection"];
+  scroll: ReturnType<EditorView["scrollSnapshot"]>;
+}>;
 
 export type FindReplaceQueryInput = {
   search: string;
@@ -661,6 +671,18 @@ export function createCodeEditorController(
   return {
     getContent: () => view.state.doc.toString(),
     getSelection: () => readEditorSelection(view),
+    captureViewState() {
+      // A rapid second switch may precede the previous scroll effect's measure.
+      // A public layout read settles that work before snapshotting DOM scroll.
+      view.lineBlockAtHeight(0);
+      return { doc: view.state.doc, selection: view.state.selection, scroll: view.scrollSnapshot() };
+    },
+    restoreViewState(snapshot) {
+      if (isDestroyed || !snapshot.doc.eq(view.state.doc)) return false;
+      // Selection and scroll only; this does not create a document edit.
+      view.dispatch({ selection: snapshot.selection, effects: snapshot.scroll });
+      return true;
+    },
     async prepareFindReplace() {
       await ensureSearchRuntime();
     },

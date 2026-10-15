@@ -20,6 +20,8 @@ const navigateToOffsetMock = vi.fn<(offset: number) => void>();
 const destroyMock = vi.fn<() => void>();
 const getContentMock = vi.fn<() => string>(() => "# Initial\n");
 const getSelectionMock = vi.fn<() => { anchor: number; head: number }>(() => ({ anchor: 0, head: 0 }));
+const captureViewStateMock = vi.fn();
+const restoreViewStateMock = vi.fn(() => true);
 const setSelectionMock = vi.fn<(anchor: number, head: number) => void>();
 const prepareFindReplaceMock = vi.fn<() => Promise<void>>(() => Promise.resolve());
 const pressEnterMock = vi.fn<() => void>();
@@ -44,6 +46,7 @@ function asSealSnapshot(promise: Promise<void>) {
 function createBindingProps() {
   return {
     documentTabId: "tab-1",
+    openTabIds: ["tab-1"],
     editorEpoch: 1,
     readOnly: false,
     editorTransitionToken: null,
@@ -82,6 +85,9 @@ describe("CodeEditorView", () => {
     navigateToOffsetMock.mockReset();
     getContentMock.mockReset();
     getSelectionMock.mockReset();
+    captureViewStateMock.mockReset();
+    restoreViewStateMock.mockReset();
+    restoreViewStateMock.mockReturnValue(true);
     setSelectionMock.mockReset();
     prepareFindReplaceMock.mockReset();
     prepareFindReplaceMock.mockResolvedValue(undefined);
@@ -96,6 +102,8 @@ describe("CodeEditorView", () => {
     createCodeEditorControllerMock.mockReturnValue({
       getContent: getContentMock,
       getSelection: getSelectionMock,
+      captureViewState: captureViewStateMock,
+      restoreViewState: restoreViewStateMock,
       setSelection: setSelectionMock,
       prepareFindReplace: prepareFindReplaceMock,
       setContent: setContentMock,
@@ -129,6 +137,63 @@ describe("CodeEditorView", () => {
 
     container.remove();
     globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+  });
+
+  it("keeps independent view snapshots per open tab and restores before load acknowledgement", async () => {
+    const a = { tag: "A" }, b = { tag: "B" }, newerA = { tag: "newer-A" };
+    const timeline: string[] = [];
+    const props = { ...createBindingProps(), openTabIds: ["tab-1", "tab-2"], initialContent: "same text", documentPath: null };
+    const render = async (tabId: string, revision: number) => act(async () => {
+      root.render(createElement(CodeEditorView, { ...props, documentTabId: tabId, editorEpoch: revision, loadRevision: revision,
+        openTabIds: revision === 1 ? ["tab-1"] : ["tab-1", "tab-2"],
+        onLoadRevisionApplied: () => { timeline.push("ack"); } }));
+    });
+    await render("tab-1", 1);
+    captureViewStateMock.mockReturnValue(a);
+    await render("tab-2", 2);
+    expect(restoreViewStateMock).not.toHaveBeenCalled();
+    captureViewStateMock.mockReturnValue(b);
+    restoreViewStateMock.mockImplementation(() => { timeline.push("restore"); return true; });
+    timeline.length = 0;
+    await render("tab-1", 3);
+    expect(restoreViewStateMock).toHaveBeenLastCalledWith(a);
+    expect(timeline).toEqual(["restore", "ack"]);
+    captureViewStateMock.mockReturnValue(newerA);
+    await render("tab-2", 4);
+    expect(restoreViewStateMock).toHaveBeenLastCalledWith(b);
+    await render("tab-1", 5);
+    expect(restoreViewStateMock).toHaveBeenLastCalledWith(newerA);
+  });
+
+  it.each(["active", "inactive"])("discards %s closed-tab snapshots and gives explicit handoff selection priority", async closed => {
+    const saved = { tag: "A" };
+    const getEditorLoadSelection = vi.fn<() => { anchor: number; head: number } | null>(() => null);
+    const props = { ...createBindingProps(), initialContent: "same text", documentPath: null, getEditorLoadSelection };
+    const render = async (tabId: string, revision: number, openTabIds: string[]) => act(async () => {
+      root.render(createElement(CodeEditorView, { ...props, documentTabId: tabId, editorEpoch: revision, loadRevision: revision, openTabIds }));
+    });
+    await render("tab-1", 1, ["tab-1", "tab-2"]);
+    captureViewStateMock.mockReturnValue(saved);
+    await render("tab-2", 2, ["tab-1", "tab-2"]);
+    getEditorLoadSelection.mockReturnValueOnce({ anchor: 7, head: 3 });
+    await render("tab-1", 3, ["tab-1", "tab-2"]);
+    expect(setSelectionMock).toHaveBeenLastCalledWith(7, 3);
+    expect(restoreViewStateMock).not.toHaveBeenCalled();
+    if (closed === "inactive") await render("tab-2", 4, ["tab-1", "tab-2"]);
+    // Closing the active A captures it during the switch, then must prune it.
+    await render("tab-2", 4, ["tab-2"]);
+    restoreViewStateMock.mockClear();
+    await render("tab-1", 5, ["tab-1", "tab-2"]);
+    expect(restoreViewStateMock).not.toHaveBeenCalled();
+  });
+
+  it("does not reuse a view snapshot for a same-tab content reload", async () => {
+    const props = { ...createBindingProps(), initialContent: "before", documentPath: null, loadRevision: 1 };
+    await act(async () => { root.render(createElement(CodeEditorView, props)); });
+    await act(async () => { root.render(createElement(CodeEditorView, { ...props, initialContent: "after", editorEpoch: 2, loadRevision: 2 })); });
+    expect(captureViewStateMock).not.toHaveBeenCalled();
+    expect(restoreViewStateMock).not.toHaveBeenCalled();
+    expect(replaceDocumentMock).toHaveBeenLastCalledWith("after");
   });
 
   it("loads content and applies the transferred selection before acknowledging the editor load", async () => {
