@@ -95,7 +95,10 @@ async function drag(product, source, target, tabId, options = {}) {
   }
   const a = await from.evaluate(w => { w.setAlwaysOnTop(true); w.show(); w.focus(); return { hwnd: w.getNativeWindowHandle().readBigUInt64LE().toString(), content: w.getContentBounds(), zoom: w.webContents.getZoomFactor() }; });
   const b = await to.evaluate(w => { w.setAlwaysOnTop(true); w.showInactive(); w.moveTop(); return { hwnd: w.getNativeWindowHandle().readBigUInt64LE().toString(), content: w.getContentBounds(), zoom: w.webContents.getZoomFactor() }; });
-  if (options.coverId) await product.current.app.evaluate(({ BrowserWindow }, id) => { const cover = BrowserWindow.fromId(id); cover.setAlwaysOnTop(true); cover.show(); cover.moveTop(); }, options.coverId);
+  const coverNative = options.coverId ? await product.current.app.evaluate(({ BrowserWindow }, id) => {
+    const cover = BrowserWindow.fromId(id); cover.setAlwaysOnTop(true); cover.showInactive(); cover.moveTop();
+    return { hwnd: cover.getNativeWindowHandle().readBigUInt64LE().toString(), bounds: cover.getBounds(), content: cover.getContentBounds() };
+  }, options.coverId) : null;
   // Reset the source's topmost placement after preparing the receiver. Focus
   // alone can leave a different topmost owned window covering the start point.
   await from.evaluate(w => { w.setAlwaysOnTop(false); w.setAlwaysOnTop(true); w.moveTop(); w.focus(); });
@@ -117,9 +120,16 @@ async function drag(product, source, target, tabId, options = {}) {
   expect(startBox).not.toBeNull(); expect(endBox).not.toBeNull();
   const start = { x: Math.round(a.content.x + (startBox.x + startBox.width / 2) * a.zoom), y: Math.round(a.content.y + (startBox.y + startBox.height / 2) * a.zoom) };
   const end = { x: Math.round(b.content.x + (b.content.x < a.content.x ? endBox.x + 12 : endBox.x + endBox.width - 30) * b.zoom), y: Math.round(b.content.y + (options.body ? 200 : endBox.y + endBox.height / 2) * b.zoom) };
+  if (coverNative) {
+    const { bounds, content } = coverNative;
+    expect(coverNative.hwnd).toBe(options.endHwnd);
+    expect(start.x < bounds.x || start.x >= bounds.x + bounds.width || start.y < bounds.y || start.y >= bounds.y + bounds.height).toBe(true);
+    expect(end.x).toBeGreaterThanOrEqual(bounds.x); expect(end.x).toBeLessThan(bounds.x + bounds.width);
+    expect(end.y).toBeGreaterThanOrEqual(bounds.y); expect(end.y).toBeLessThan(content.y);
+  }
   product.crossWindowProof ??= { scope: "real owned Windows pointer drag; production IPC/preload and isolated profiles" };
   const sequence = await product.current.app.evaluate(() => globalThis.__rf902Control.readNativeMouse().at(-1)?.sequence ?? 0);
-  const gesture = { a, b, start, end, options }; (product.crossWindowProof.gestures ??= []).push(gesture);
+  const gesture = { a, b, start, end, options, coverNative }; (product.crossWindowProof.gestures ??= []).push(gesture);
   try {
     gesture.proof = await new Promise((resolve, reject) => execFile("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", fileURLToPath(new URL("./windows-pointer-drag.ps1", import.meta.url)), "-WindowHandle", a.hwnd, "-OwnerPid", String(product.current.mainPid), "-StartX", String(start.x), "-StartY", String(start.y), "-EndX", String(end.x), "-EndY", String(end.y), "-EndWindowHandle", options.endHwnd ?? b.hwnd, "-ReleaseDelayMs", "500"], { windowsHide: true, timeout: 15_000 }, (error, stdout, stderr) => error ? reject(new Error(`${error.message}\n${stdout}\n${stderr}`)) : resolve(JSON.parse(stdout))));
   } finally {
@@ -290,7 +300,7 @@ if (process.platform === "win32") {
   });
 
   test("native release over an owned occluding titlebar cannot join the covered strip or create a fourth window", async ({ product }) => {
-    const content = "0123456789 transfer", f = await twoWindows(product, content);
+    const content = "0123456789 transfer", f = await twoWindows(product, content, 1, 960);
     await fileMenu(product, "New Window");
     await expect.poll(() => product.current.app.windows().length).toBe(3);
     const coverPage = product.current.app.windows().find(page => page !== f.source && page !== f.target);
@@ -299,7 +309,9 @@ if (process.platform === "win32") {
     const targetWindow = await product.current.app.browserWindow(f.target);
     const targetBounds = await targetWindow.evaluate(w => w.getBounds()); await targetWindow.dispose();
     const cover = await coverWindow.evaluate((w, area) => {
-      w.setBounds({ x: area.x, y: area.y + 50, width: 900, height: 600 });
+      // Cover the receiver's actual release point while leaving the source tab
+      // exposed even on a 960px desktop; topmost order alone is insufficient.
+      w.setBounds({ x: area.x + 300, y: area.y + 50, width: 900, height: 600 });
       return { id: w.id, hwnd: w.getNativeWindowHandle().readBigUInt64LE().toString(), content: w.getContentBounds() };
     }, targetBounds);
     await coverWindow.dispose();

@@ -105,7 +105,11 @@ try{
   $proof.identity=$identity;$proof.prompt=$prompt;$proof.target=@{hwnd=$target.window.ToInt64();buttonHwnd=$target.button.ToInt64();buttonId=[CloseDialog]::GetDlgCtrlID($target.button);title=$target.title;body=$target.body;children=$target.children;automationNodes=$target.automationNodes}
   $proof.clickEpochMs=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds();Save-Proof
   [CloseDialog]::Click($target.button)
-  while([CloseDialog]::IsWindow($target.window) -and [DateTimeOffset]::UtcNow -lt $deadline){Start-Sleep -Milliseconds 25}
+  # Discovery can consume its budget inside a native/UIAutomation query. A
+  # verified real click needs its own bounded asynchronous close observation.
+  $closedDeadline=[DateTimeOffset]::UtcNow.AddSeconds(3)
+  $proof.closeObservationDeadlineEpochMs=$closedDeadline.ToUnixTimeMilliseconds();Save-Proof
+  while([CloseDialog]::IsWindow($target.window) -and [DateTimeOffset]::UtcNow -lt $closedDeadline){Start-Sleep -Milliseconds 25}
   if([CloseDialog]::IsWindow($target.window)){throw 'Owned prompt did not close'}
   $proof.status='passed';break
  }

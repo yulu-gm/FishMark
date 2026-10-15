@@ -25,6 +25,8 @@ ACK 故障屏障在真实 edit 处理器完成后暂缓其响应；B 输入仍�
 
 正常收尾使用公开`ElectronApplication.close()`请求真实application Quit，分离Node inspector连接并等待实际进程exit0；没有强退成功兜底。非终态原生Window.close/Cancel与目标关闭仍显式覆盖，Save/Don't Save和磁盘重启断言保留。原0xC0000005通过有界基线/候选压力比较与匹配构建符号定位到Node inspector写路径；此收尾修正不是所有原生崩溃或标题栏退出路径均已验收的声明。
 
+Windows原生提示助手保留25秒发现循环，真实点击后独立观察关闭最多3秒，Node外层35秒限时；身份、提示全文、按钮和实际响应断言不变。官方CI曾因发现期限在点击前耗尽而提前判FAIL，原39ms正确Cancel响应及失败均保留。标题栏遮挡用例固定960布局，cover右移300/showInactive；实际bounds/content确认起点可达、终点在标题栏，再由原精确HWND/捕获检查裁决。详见报告044的官方CI后续记录。
+
 接收屏障只暂缓真实renderer的ACK调用，保留原处理器、正文版本和15秒deadline；关闭的receiver无法送达该ACK，正常退出不伪造补发。目标确认暂存只读正文后，来源才在文档锁内复核revision/isActive并提交；失败保留来源。资源授权只在原epoch迁移后发生。阅读位置跨IPC传严格校验的源码锚点、相对y及横滚，043的opaque scrollSnapshot仍仅在同renderer缓存中。详见[报告044](../../reports/task-summaries/TASK-TAB-MERGE-044.md)。
 
 `recovery-faults.spec.mjs` 增加四项，可用 `--grep "recovery fault"` 选择：截断尾行、完整坏行、单文档失败后其他文档独立恢复、退出期间原路径被外改。先由产品生成真实 ACK 恢复记录并确认所属进程退出，再只改该临时目录中的数据。前三项确认一次真实恢复通知、源文/dirty、原始 snapshot/journal 成对保全、新编辑保存，以及正常退出后原始对仍未改写；离线外改确认普通保存返回精确冲突且不覆盖磁盘，再点击现有重载按钮并继续编辑保存。详情与失败基线见[报告034](../../reports/task-summaries/TASK-RF902-RECOVERY-FAULTS-034.md)。

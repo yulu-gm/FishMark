@@ -34,6 +34,16 @@
 
 type/build/strict/perf沿用恢复批已通过结果，之后仅两个原生E2E fixture调整；38项输入与191项构建/lock/provenance哈希核对，重新lint及完整产品/三个probe。文档收尾只更新四份说明，运行源码不再改变。本机`.artifacts/tab-merge-044-resume/`保留`final-validation.json`、`real-stall-replay.json`、`close-validation-summary.json`、最终冻结清单、独立审查及`publication.json`中的精确提交/tree/官方CI；发布只有在最终独审通过后普通推送main，不强推。源码与运行审查的最终结论以该发布记录为准。
 
+## 首次官方CI失败与助手修正
+
+上述本地门禁及独审通过后，普通推送`80f974e831e4c0f59694e5e4ef731bcd317be967`（tree`140e7a24c12ef89b980002dcc5c695ad51f5aeb2`，父c24）。官方CI`38767258787`三项通过，Windows产品**47/49失败**，此提交不算发布验收通过。61次实际启动含54次正常exit0、5次预期恢复强退及2次失败清理，所属成员均退出、cleanup0；不能用本机49/49覆盖云端失败。四项原始日志、终态及官方Windows产物ZIP保留，artifact11989563182的SHA256与官方digest匹配。
+
+Cancel原始proof已匹配PID/HWND、提示全文和按钮，真实点击发生于助手启动后25,337ms，共用的25秒发现期限已耗尽。主日志在点击后39ms返回正确`response:2`，比助手宣告FAIL晚13ms；这不是产品Cancel未返回的证据。修正保留25秒发现循环，真实点击后独立观察关闭最多3秒；Node助手外界35秒覆盖启动、发现和关闭阶段，产品用例原60秒限时及身份/正文/响应/磁盘/重启断言均未放宽。
+
+另一失败的原生日志确认`windowId:3`在源起点`194,391`收到mouseMove，精确源HWND保护拒绝了操作。遮挡用例现在固定960布局，cover向右移300并showInactive；读回实际bounds/content，在输入前确认起点在cover外、终点在其标题栏内且HWND一致。原源矩形、捕获和实际终点命中保护保留，没有增加绕过条件。两处修正仅涉及三个fixture文件，产品源码和191项构建产物哈希不变。
+
+按整批持续授权继续原隔离与输入guard，原生关闭/保存/丢弃/重启重复6/6（12次启动）、窄布局遮挡重复6/6通过，无新真实输入事件。随后**从头重跑九项门禁全部通过**，完整产品再次49/49、62次启动=57正常exit0+5预期恢复强退，0失败/跳过/重试/清理错误；strict3916＋8精确known、foundation310、editing79、safety7、formal121/121/2541、gzip1437333/1500000均维持原合同。40项最终输入、36项运行源码/测试及191项构建与逐报告身份/路径/退出核验，详见本机`ci-followup-validation.json`、`ci-followup-final-inputs.json`和`.artifacts/tab-merge-044/ci-followup-final-01/`。旧CI失败及80提交保留；修正提交及其精确官方CI终态以`publication.json`为准，须最终增量独审通过后普通推送并等待全部四项成功，不能只计本机结果。
+
 ## c24 checkpoint当时的门禁与发布阻塞（历史保留）
 
 以下是恢复修正之前的时点记录，不能替代上节最终验证或精确提交CI。

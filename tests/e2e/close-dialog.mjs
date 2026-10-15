@@ -12,7 +12,9 @@ export async function chooseClosePrompt(product, choice, trigger) {
   const done = new Promise(resolveDone => {
     child = execFile("pwsh.exe", ["-NoProfile", "-File", resolve("tests/e2e/windows-close-dialog.ps1"),
       "-TelemetryPath", product.current.telemetryPath, "-OutputPath", output, "-Choice", choice, "-PromptIndex", String(before + 1)],
-    { windowsHide: true, timeout: 30_000 }, (error, stdout, stderr) => resolveDone({ error: error?.message, stdout, stderr }));
+    // Keep the 25s discovery budget plus the helper's separate 3s post-click
+    // observation bounded, including PowerShell startup and evidence writes.
+    { windowsHide: true, timeout: 35_000 }, (error, stdout, stderr) => resolveDone({ error: error?.message, code: error?.code, signal: error?.signal, killed: error?.killed, stdout, stderr }));
   });
   try {
     await trigger();
