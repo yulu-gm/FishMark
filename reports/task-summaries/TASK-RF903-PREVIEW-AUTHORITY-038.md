@@ -1,4 +1,24 @@
-# RF903：窗口预览资源与主题生命周期（本地阶段）
+# RF903：窗口预览资源与主题生命周期
+
+## 2026-10-15 恢复执行与真实验证
+
+原工作副本保留，恢复后首先核对 git status、报告及未确认的交接写入：handoff 当时没有落盘，25项生产/单元源码哈希与此前受测冻结版一致。重新 fetch 后官方 main 仍为 `ab740c15b20bd163b1eb89fc67484389f7a7549c`。先按授权保存原27文件本地 checkpoint `d401c2f65a6a36d92e985a9b103fb2ff51ff67da`，tree `00259bc83aeba70644b5e418462274bda473530c`，保留本地引用，无远端分支。后续生产源码没有改变；新增预览 E2E 和测试夹具的打包路径、HTML剪贴板保全能力。
+
+用户于06:44 UTC明确表示不在电脑前并授权接管。所有产品实例沿既有 before-ready bootstrap 隔离 appData 与 userData，启动后核对实际路径、preload字节、sandbox和main/metrics进程身份，再输入。监测未发现物理用户输入；原生键鼠助手另核验owned HWND/PID或capture。注入的远程用户事件可能与测试注入不可区分，此限制保留。只关闭测试进程；未读取、回滚或修改真实FishMark-dev与真实文档，Crashmon继续暂停。
+
+当前九项门禁组合通过：gates-final-01的lint/typecheck/build，gates-final-02的strict，以及gates-final-03的完整产品、perf baseline、editing、workspace safety、formal。strict **3861 passed＋8 exact known，0 unexpected/collection/hook/unhandled/unresolved/skip**；产品 **25/25**；foundation **310/310**；formal **121/121 cases、2541 targets、99 known-defect、0 unexpected**。首次strict的导出异步等待失败保留，该文件单独5/5、同版本完整strict复测通过；没有修改测试超时或known清单。首次产品24/25由当前HTML剪贴板安全拒写阻断，未写入后才补充仅HTML单格式的原生`HTML Format`字节备份/恢复和精确校验，正文只在main RAM，未知/混合格式仍拒绝，并保全并发改变的剪贴板。原失败均未删。
+
+新增真实产品用例验证：CSS相对`@import`与实际`document.fonts.load`字体解码；切换主题后旧资源403；两窗口真实Session对象不同且非持久、storagePath=null；空白窗口不能读取另一窗口文档图片；UI关闭文档后原图片403。既有用例同时验证bundle/lazy、Mermaid、KaTeX、data/HTTP/本地图片、当前主题CSS与实际纹理shader surface。runtime02/03的测试驱动错误分别为直接关闭IPC未同步renderer、阅读模式隐藏关闭按钮，原记录保留；runtime04两项通过，未为此修改产品。
+
+实际Windows dir包仍逐字节/哈希核对189份unpacked renderer文件，main/preload保持packed且匹配编译产物。额外打包测试将入口显式设为既有隔离`product-main.cjs`及stderr tee，再加载原生产main；**实际FishMark.exe、app.isPackaged=true、app.asar.unpacked/dist入口**下5项资源测试通过。它证明受测生产payload及打包路径的运行兼容，不能称为原始shipping入口、NSIS安装链或Mac验收。开发editor/workbench双端口、同文档HMR、真实保存和主题CSS也通过。
+
+临时导图在开发态provenance11与packaged-01分别通过同协议、各2次正常退出的真实产品启动：untitled原生图片粘贴并解码→真实Windows Save对话框写入owned文档→关闭后403→正常退出/重启→最近文件重开后200且解码。同临时目录的未导入PNG始终403。原生Save助手通过UIA的确切filename host发现HWND，再验证PID/创建时间、子窗口、Edit/Button类、唯一IDOK、目标不存在与文件名回读；仅向owned控件发送WM_SETTEXT/WM_GETTEXT/BM_CLICK，不发送全局键鼠。前10次诊断的语法、剪贴板安全拒写、UIA代理/前台前提/控件定位或跨进程文本读取失败均保留，不能计为通过或产品修复。
+
+**Windows IME严格验收仍失败。** 独占IME01观测到可信start/update，结束事件为trusted=false，且实际`Windows IME fixture\n\n你好\n\n`比期望多一个尾部换行；保存断言尚未执行。窗口布局恢复、进程退出，监测0物理用户输入。原始proof的`syntheticCompositionEvents:false`仅表达runner没有主动dispatch合成composition，不能解释为未观测到不可信事件。新的同引擎/同native助手纯contenteditable对照在默认持久与独立非持久Session中均复现缺少可信end，正常退出；这是有界诊断，不是IME通过、历史baseline对照、换行语义结论或无IME回归证明。
+
+6.1-sol high独审对预览授权源码、全部有界证据与临时导图流程给出bounded PASS；最终冻结身份、签核、普通main发布及对应CI以本机handoff/publication记录为准。仅此预览授权小批进入发布判断，RF903仍IN_PROGRESS，RF902 IME与其他未完成验收保留，RF901 PAUSED，M9 **0/3**。legacy目录外图片授权设计、精确shipping入口/NSIS、Mac与IME不借本批关闭；cp13/cp16及Library保持冻结。
+
+## 2026-10-13 源码实施及断线时点记录
 
 2026-10-13，YULUSTATION / Windows 11 26200 / i7-13700K / 32GB / Node 24.13.0 / Electron 41.2.0。官方 main 基线 `ab740c15b20bd163b1eb89fc67484389f7a7549c`，tree `d7362655925fdd692ce3c8c884eb685b3002336b`；本批开始 fetch 后一致，初始工作区干净。DPR1 来自上一阶段已核验记录，本轮没有接管桌面重新测量。实施与独立审查按用户授权使用 gpt-6.1-sol high。
 
@@ -36,6 +56,6 @@
 
 gpt-6.1-sol high 独审已复核冻结源码、定向测试和后台门禁，并独立重算布局的189份实体文件、当前 dist 与归档 metadata；最终文档及 bounded 签核以本机独审记录为准。
 
-证据根为 `.artifacts/rf903-preview-authority/`，保留 baseline 身份与文件哈希、当前主机基线、冻结源码与仅测试修正、所有首次失败和后续后台门禁、实际包与最终布局核验。**本轮实际 Electron 启动数为0**；没有隐藏模块探针。因此每窗 Session 的实际引擎运行、file 拦截与 bundle/lazy/font/shader 兼容，尤其自定义主题 CSS 字体跨协议 CORS，仍未实测。现有 product/E2E、editing、safety、formal runner 会显示窗口，本轮保持未测；开发 HMR、完整产品流程、真实打包运行、Mac 和 Windows 独占 IME 也不能由单元或布局核验替代。
+证据根为 `.artifacts/rf903-preview-authority/`，保留 baseline 身份与文件哈希、当前主机基线、冻结源码与仅测试修正、所有首次失败和后续后台门禁、实际包与最终布局核验。**截至2026-10-13断线，本阶段实际 Electron 启动数为0**，下列未测判断为该时点记录；2026-10-15新增实际验证以上节为准。当时没有隐藏模块探针，每窗Session、file、bundle/lazy/font/shader/CORS、product/E2E、editing、safety、formal、HMR、打包运行、Mac及独占IME均未实测。
 
-此阶段仅保存本地 checkpoint，不普通 main 推送，也没有新提交的官方 CI 通过结论。前台需要用户再次明确空闲；本轮不要求用户暂停工作。RF903 为 IN_PROGRESS，RF901 PAUSED，RF902 未验收且源码暂停，M9 **0/3**。精确本地提交、最终后台结果与 bounded 独审以同证据根 handoff/checkpoint 记录为准。
+2026-10-13交接仅允许本地checkpoint、没有新官方CI结论，前台等待用户明确空闲。2026-10-15已取得新授权并实际验证，最新发布与验收边界以上节及同证据根handoff/publication为准。RF903 IN_PROGRESS，RF901 PAUSED，RF902未验收，M9 **0/3**。

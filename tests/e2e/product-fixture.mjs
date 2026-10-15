@@ -125,11 +125,19 @@ class ProductSession {
     this.initialContent = content;
   }
 
-  async launch(expectedContent, { openDocument = true, recoveryDialog = false, selectTabId } = {}) {
+  async launch(expectedContent, { openDocument = true, recoveryDialog = false, selectTabId,
+    packagedExecutablePath = process.env.FISHMARK_E2E_PACKAGED_EXECUTABLE } = {}) {
     const index = this.launches.length + 1;
     const state = { index, openDocument, telemetryPath: this.testInfo.outputPath(`launch-${index}-main.jsonl`),
       stderrTeePath: this.testInfo.outputPath(`launch-${index}-stderr-node.log`), stdout: "", stderr: "", pageErrors: [], renderer: null, windowPages: [] };
     this.launches.push(state);
+    if (packagedExecutablePath) {
+      const executable = await realpath(packagedExecutablePath);
+      const allowedRoot = `${await realpath(resolve(root, ".artifacts"))}${process.platform === "win32" ? "\\" : "/"}`;
+      if (!executable.startsWith(allowedRoot)) throw new Error("Packaged fixture must remain inside this task's artifacts.");
+      state.packagedExecutablePath = executable;
+      state.expectedRendererEntry = join(dirname(executable), "resources/app.asar.unpacked/dist/index.html");
+    } else state.expectedRendererEntry = resolve(root, "dist/index.html");
     const env = { ...process.env, FISHMARK_E2E_PROFILE: this.profile, FISHMARK_E2E_TELEMETRY: state.telemetryPath,
       FISHMARK_E2E_STDERR_TEE: state.stderrTeePath, FISHMARK_E2E_DOCUMENT: this.documentPath, FISHMARK_E2E_OPEN_DOCUMENT: openDocument ? "1" : "0" };
     delete env.VITE_DEV_SERVER_URL;
@@ -147,7 +155,8 @@ class ProductSession {
       });
     }
     try {
-      state.app = await electron.launch({ executablePath: require("electron"), args: [resolve(root, "tests/e2e/product-main.cjs")], cwd: root, env, chromiumSandbox: true, timeout: 20_000 });
+      state.app = await electron.launch({ executablePath: state.packagedExecutablePath ?? require("electron"),
+        args: state.packagedExecutablePath ? [] : [resolve(root, "tests/e2e/product-main.cjs")], cwd: root, env, chromiumSandbox: true, timeout: 20_000 });
       state.child = state.app.process();
       state.pid = state.child.pid;
       state.child.stdout?.on("data", (chunk) => { state.stdout += String(chunk); });
@@ -172,12 +181,14 @@ class ProductSession {
       expect(await state.page.evaluate(() => typeof window.fishmarkTest)).toBe("undefined");
       state.identity = await state.app.evaluate(({ app, BrowserWindow }) => {
         const window = BrowserWindow.getAllWindows()[0];
-        return { pid: process.pid, argv: process.argv, appData: app.getPath("appData"), userData: app.getPath("userData"), url: window.webContents.getURL(), preferences: window.webContents.getLastWebPreferences(), versions: process.versions };
+        return { pid: process.pid, argv: process.argv, appData: app.getPath("appData"), userData: app.getPath("userData"), isPackaged: app.isPackaged,
+          appPath: app.getAppPath(), url: window.webContents.getURL(), preferences: window.webContents.getLastWebPreferences(), versions: process.versions };
       });
       await this.captureOwnedProcesses(state);
       expect(resolve(state.identity.userData)).toBe(resolve(this.profile));
       expect(resolve(state.identity.appData)).toBe(resolve(this.directory));
-      expect(state.identity.url).toBe(pathToFileURL(resolve(root, "dist/index.html")).href);
+      expect(state.identity.url).toBe(pathToFileURL(state.expectedRendererEntry).href);
+      expect(state.identity.isPackaged).toBe(!!state.packagedExecutablePath);
       // Electron41 omits preload from getLastWebPreferences. CDP replays
       // executed scripts from the renderer's isolated worlds on Debugger.enable.
       const cdp = await state.app.context().newCDPSession(state.page);
@@ -248,10 +259,53 @@ class ProductSession {
     finally { await owner.dispose(); }
   }
 
+  async prepareImageClipboard() {
+    return this.current.app.evaluate(({ clipboard, nativeImage }) => {
+      const formats = clipboard.availableFormats();
+      const htmlOnly = formats.length === 1 && formats[0] === "text/html";
+      if (!htmlOnly && formats.some((format) => !["text/plain", "image/png"].includes(format))) {
+        throw new Error(`Clipboard snapshot cannot safely restore formats: ${formats.join(", ")}`);
+      }
+      const prior = {};
+      if (htmlOnly) {
+        prior.htmlFormat = clipboard.readBuffer("HTML Format");
+        if (prior.htmlFormat.length === 0) throw new Error("Native HTML clipboard bytes unavailable; refusing write.");
+      }
+      if (formats.includes("text/plain")) prior.text = clipboard.readText();
+      if (formats.includes("image/png")) prior.image = clipboard.readImage();
+      const fixture = nativeImage.createFromBitmap(Buffer.from([0, 128, 255, 255]), { width: 1, height: 1 });
+      if (fixture.isEmpty()) throw new Error("Fixture PNG is empty.");
+      globalThis.__rf903ClipboardRestore = { formats, prior, fixtureBytes: fixture.toPNG() };
+      clipboard.writeImage(fixture);
+      return { formats, fixtureSize: fixture.getSize(), fixturePng: fixture.toPNG().toString("base64"), priorPayloadLogged: false };
+    });
+  }
+
+  async restoreImageClipboard() {
+    return this.current.app.evaluate(({ clipboard }) => {
+      const state = globalThis.__rf903ClipboardRestore;
+      if (!state) return { prepared: false, clipboardWritten: false };
+      try {
+        if (!clipboard.readImage().toPNG().equals(state.fixtureBytes) ||
+            clipboard.availableFormats().some((format) => format !== "image/png")) {
+          return { concurrentChangeDetected: true, currentClipboardPreserved: true };
+        }
+        if (state.prior.htmlFormat) clipboard.writeBuffer("HTML Format", state.prior.htmlFormat);
+        else if (state.formats.length) clipboard.write(state.prior);
+        else clipboard.clear();
+        return { formatsMatch: JSON.stringify(clipboard.availableFormats().slice().sort()) === JSON.stringify(state.formats.slice().sort()),
+          textMatch: state.prior.text === undefined || clipboard.readText() === state.prior.text,
+          imageMatch: state.prior.image === undefined || clipboard.readImage().toPNG().equals(state.prior.image.toPNG()),
+          htmlMatch: state.prior.htmlFormat === undefined || clipboard.readBuffer("HTML Format").equals(state.prior.htmlFormat),
+          priorPayloadLogged: false };
+      } finally { delete globalThis.__rf903ClipboardRestore; }
+    });
+  }
+
   async observeNewWindow(page, expectedContent) {
     await expect(page.locator(".cm-content[contenteditable=true]")).toBeVisible();
     await expect.poll(async () => (await this.snapshot(page)).activeDocument?.content).toBe(expectedContent);
-    expect(page.url()).toBe(pathToFileURL(resolve(root, "dist/index.html")).href);
+    expect(page.url()).toBe(pathToFileURL(this.current.expectedRendererEntry).href);
     expect(await page.evaluate(() => typeof window.fishmarkTest)).toBe("undefined");
     await page.evaluate(observeRenderer, { idleDelayMs: this.idleDelayMs });
     const owner = await this.current.app.browserWindow(page);

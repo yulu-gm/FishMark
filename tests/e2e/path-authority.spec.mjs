@@ -101,7 +101,7 @@ test("path authority preserves a real image paste into the active saved document
   await product.seed(content, 60_000);
   const page = await product.launch(content);
   // Keep existing clipboard payloads exclusively in main-process RAM. Only
-  // formats with supported text/pixel restoration in this pinned API are accepted.
+  // supported text/pixel formats or sole native HTML with exact byte restoration are accepted.
   // Refuse unfamiliar formats before writing anything to the OS clipboard.
   product.current.suppressScreenshots = true;
   product.current.visualEvidencePolicy = "Clipboard case: no trace or screenshots after clipboard setup; disk bytes must match fixture.";
@@ -109,20 +109,7 @@ test("path authority preserves a real image paste into the active saved document
   product.current.tracing = false;
   let prepared, restored;
   try {
-    prepared = await product.current.app.evaluate(({ clipboard, nativeImage }) => {
-    const formats = clipboard.availableFormats();
-    if (formats.some((format) => !["text/plain", "image/png"].includes(format))) {
-      throw new Error(`Clipboard snapshot cannot safely restore formats: ${formats.join(", ")}`);
-    }
-    const prior = {};
-    if (formats.includes("text/plain")) prior.text = clipboard.readText();
-    if (formats.includes("image/png")) prior.image = clipboard.readImage();
-    const fixture = nativeImage.createFromBitmap(Buffer.from([0, 128, 255, 255]), { width: 1, height: 1 });
-    if (fixture.isEmpty()) throw new Error("Fixture PNG is empty.");
-    globalThis.__rf903ClipboardRestore = { formats, prior, fixtureBytes: fixture.toPNG() };
-    clipboard.writeImage(fixture);
-    return { formats, fixtureSize: fixture.getSize(), fixturePng: fixture.toPNG().toString("base64"), priorPayloadLogged: false };
-  });
+    prepared = await product.prepareImageClipboard();
     await page.locator(".cm-content[contenteditable=true]").click();
     await page.keyboard.press("Control+End");
     await page.keyboard.press("Control+V");
@@ -167,24 +154,9 @@ test("path authority preserves a real image paste into the active saved document
       if (held) await product.current.app.evaluate(() => globalThis.__rf902Control.release());
     }
   } finally {
-    restored = await product.current.app.evaluate(({ clipboard }) => {
-      const state = globalThis.__rf903ClipboardRestore;
-      if (!state) return { prepared: false, clipboardWritten: false };
-      try {
-      if (!clipboard.readImage().toPNG().equals(state.fixtureBytes) ||
-          clipboard.availableFormats().some((format) => format !== "image/png")) {
-        // Preserve a concurrent user's newer clipboard rather than clobber it.
-        return { concurrentChangeDetected: true, currentClipboardPreserved: true };
-      }
-      if (state.formats.length) clipboard.write(state.prior); else clipboard.clear();
-      const formatsMatch = JSON.stringify(clipboard.availableFormats().slice().sort()) === JSON.stringify(state.formats.slice().sort());
-      const textMatch = state.prior.text === undefined || clipboard.readText() === state.prior.text;
-      const imageMatch = state.prior.image === undefined || clipboard.readImage().toPNG().equals(state.prior.image.toPNG());
-      return { formatsMatch, textMatch, imageMatch, priorPayloadLogged: false };
-      } finally { delete globalThis.__rf903ClipboardRestore; }
-    });
+    restored = await product.restoreImageClipboard();
     await product.testInfo.attach("clipboard-restoration-proof", { body: JSON.stringify({ prepared, restored }), contentType: "application/json" });
-    if (prepared) expect(restored).toEqual({ formatsMatch: true, textMatch: true, imageMatch: true, priorPayloadLogged: false });
+    if (prepared) expect(restored).toEqual({ formatsMatch: true, textMatch: true, imageMatch: true, htmlMatch: true, priorPayloadLogged: false });
   }
   await product.normalClose();
 });
