@@ -37,6 +37,14 @@ Windows 恢复提示测试需要现有 `pwsh.exe`（PowerShell 7）和可交互�
 
 `product-main.cjs` 仅被动记录原生提示/真实返回值、watcher 通知、close 与 conflict-resolution IPC，全部调用原处理器。普通保存因已知冲突会进入 Save As，因此拒绝原路径覆盖的真实流程由 Close→Save 验证。关闭提示触发的失焦不应启动尾随自动保存；已确认关闭仍保持 editor sealed，迟到保存不得越过关闭决定。已有关闭前保存的 FIFO、安全守卫和其它错误检查保留，Cancel/error 后原自动保存调度恢复。这里验证顺序明确的外部改写，不证明“版本检查至 rename 期间”的外部并发写入具有原子 compare-and-swap 保障，也不替代全部 RF902/M9 验收。
 
+## RF902 嵌套键盘与选区整合
+
+`nested-editing.spec.mjs` 补三条 Windows 产品整合流程，不重复独立 controller 的 formal121/editing79 矩阵：引用内嵌套子树 Tab/Shift+Tab→undo/redo→保存后 undo/redo；三层列表 Enter→空项 Backspace→完整 undo/redo；列表内 strong 开头源码边界、反向选区删除、真实 source/WYSIWYM 与 F11 shell 切换后首次 undo/redo。每组通过原 File Save 保存并重开精确字节。F11 shell 与 editor source/WYSIWYM 是两个独立控制，不将阅读 shell 当作只读。
+
+输入使用 Playwright 的可信 Chromium 键盘事件与真实产品 UI，未直接调用 controller、编辑器 state dispatch 或测试 bridge；不声称物理 OS 键盘/IME 通过。选区设置也走 source mode 的真实键盘，并在切回所见模式后复核。观测仅支持这些短、完整渲染且没有源文替换 widget 的 fixture：每个 checkpoint 必须先将所有 `.cm-line` 文本按物理换行重建并与 main canonical 源文完全一致，再在所属行计算 DOM anchor/head；不能把单行 Range 长度或按键次数当作多行源码位置。编号证明、截图、main ACK、保存结果与正常退出保留；该方法不推广到虚拟化大文档或图片/表格 widget。
+
+首次原生 undo 反向选区的断言保持严格。后续 undo→redo→undo 的光标按已安装 CodeMirror commands6.10.3 的历史规则另列，不能假定每次都恢复首次选区。原 baseline01 对第二次 undo 期待原反向范围而失败，正文正确；同版本依赖独立对照（无 FishMark、UI、模式切换）及依赖源码解释后，修正前瞻协议，在 source/F11 切换后直接核验首次 undo 恢复原反向范围，再单独核验重复历史的单点位置。原失败不重标，产品代码未因此修改。证据与边界见[报告040](../../reports/task-summaries/TASK-RF902-NESTED-KEYBOARD-040.md)。
+
 ## RF903 sandbox 与 CSP
 
 `sandbox.spec.mjs` 验证真实产品窗口配置、对应 renderer PID 的 Windows OS sandbox metric、隔离桥和精确执行 preload 字节，并覆盖本地文档图片、community 主题 CSS 与 full GLSL/纹理、保存重启。[报告035](../../reports/task-summaries/TASK-RF903-SANDBOX-035.md)记录原始 sandbox=false 基线及本批边界；不能只把 fixture 的 `chromiumSandbox:true` 当作产品 sandbox 已通过。
