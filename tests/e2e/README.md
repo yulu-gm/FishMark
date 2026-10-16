@@ -53,11 +53,11 @@ Windows 恢复提示测试需要现有 `pwsh.exe`（PowerShell 7）和可交互�
 
 ## RF902 嵌套键盘与选区整合
 
-`nested-editing.spec.mjs` 补三条 Windows 产品整合流程，不重复独立 controller 的 formal121/editing79 矩阵：引用内嵌套子树 Tab/Shift+Tab→undo/redo→保存后 undo/redo；三层列表 Enter→空项 Backspace→完整 undo/redo；列表内 strong 开头源码边界、反向选区删除、真实 source/WYSIWYM 与 F11 shell 切换后首次 undo/redo。每组通过原 File Save 保存并重开精确字节。F11 shell 与 editor source/WYSIWYM 是两个独立控制，不将阅读 shell 当作只读。
+`nested-editing.spec.mjs` 补三条 Windows 产品整合流程，不重复独立 controller 的 formal121/editing79 矩阵：引用内嵌套子树 Tab/Shift+Tab→undo/redo→保存后 undo/redo；三层列表 Enter→空项 Backspace→完整 undo/redo；列表内 strong 开头源码边界、反向选区删除、真实 source/WYSIWYM 往返及 F11 无布局副作用后首次 undo/redo。每组通过原 File Save 保存并重开精确字节。053已删除阅读布局开关；Tab和底栏常驻，source/WYSIWYM及渐进语法呈现保留。源标记导航以真实输入/undo建立editing前提。
 
 输入使用 Playwright 的可信 Chromium 键盘事件与真实产品 UI，未直接调用 controller、编辑器 state dispatch 或测试 bridge；不声称物理 OS 键盘/IME 通过。选区设置也走 source mode 的真实键盘，并在切回所见模式后复核。观测仅支持这些短、完整渲染且没有源文替换 widget 的 fixture：每个 checkpoint 必须先将所有 `.cm-line` 文本按物理换行重建并与 main canonical 源文完全一致，再在所属行计算 DOM anchor/head；不能把单行 Range 长度或按键次数当作多行源码位置。编号证明、截图、main ACK、保存结果与正常退出保留；该方法不推广到虚拟化大文档或图片/表格 widget。
 
-首次原生 undo 反向选区的断言保持严格。后续 undo→redo→undo 的光标按已安装 CodeMirror commands6.10.3 的历史规则另列，不能假定每次都恢复首次选区。原 baseline01 对第二次 undo 期待原反向范围而失败，正文正确；同版本依赖独立对照（无 FishMark、UI、模式切换）及依赖源码解释后，修正前瞻协议，在 source/F11 切换后直接核验首次 undo 恢复原反向范围，再单独核验重复历史的单点位置。原失败不重标，产品代码未因此修改。证据与边界见[报告040](../../reports/task-summaries/TASK-RF902-NESTED-KEYBOARD-040.md)。
+首次原生 undo 反向选区的断言保持严格。后续 undo→redo→undo 的光标按已安装 CodeMirror commands6.10.3 的历史规则另列，不能假定每次都恢复首次选区。原 baseline01 对第二次 undo 期待原反向范围而失败，正文正确；同版本依赖独立对照（无 FishMark、UI、模式切换）及依赖源码解释后，修正前瞻协议，历史040在 source/F11 切换后直接核验首次 undo 恢复原反向范围，再单独核验重复历史的单点位置。原失败不重标，产品代码未因此修改。证据与边界见[报告040](../../reports/task-summaries/TASK-RF902-NESTED-KEYBOARD-040.md)。
 
 ## 多空行导航与编辑
 

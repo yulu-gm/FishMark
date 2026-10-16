@@ -162,11 +162,11 @@ P2：
 
 当前壳层采用“永久 rail + 单一共享 sidebar + document stage”的桌面编辑器模型：
 
-- 最左侧 rail 始终存在，承担品牌、Search、Outline、设置等一级入口；阅读模式不再折叠 rail，避免模式切换造成横向 chrome 位移。
+- 最左侧 rail 始终存在，承担品牌、Search、Outline、设置等一级入口；文档 Tab 和底部状态/字数栏也常驻，空工作区保留 Tab 行并显示字数 0。阅读布局开关及 F11 入口已删除。
 - Search 与 Outline 是同一块左侧 sidebar 的 view container，共享一份宽度与持久化偏好；rail 图标只负责切换/收起 view container。
 - sidebar 是平面的 docked panel，而不是悬浮玻璃卡片：外层无圆角、阴影或 backdrop blur，与正文之间用单一 1px divider 区分；内部输入框、按钮、outline hover/active 可保留轻微圆角表达交互层级。
 - sidebar 宽度拖拽只在 pointerup 时写入全局偏好；拖动过程实时更新 CSS 变量，收起不写 0，窄窗口 clamp 仅影响显示、不覆盖用户保存的宽度。
-- 正文填充 document stage 的可用宽度，保留阅读边距；窗口或侧栏可用空间变化时允许自然换行。reading/editing切换保持既有正文起点策略，本轮辅助界面统一不修改这些几何规则。
+- 正文填充 document stage 的可用宽度，保留阅读边距；窗口或侧栏可用空间变化时允许自然换行。源码/WYSIWYM 切换仍保留；标题渐进呈现独立于壳层布局，保持初始 reading、实际输入后 editing 的既有标记与焦点语义，inline/block 隐藏与揭示规则不变。主题 ABI 保留 readingMode 字段，产品固定提供 0。
 - sidebar 开合恢复 220ms grid track 动画，使 document stage 平滑水平移动；sidebar 内部 header/body 始终按最终宽度排版，由外层 overflow 裁剪并配合淡入/轻位移，因此 Outline 长标题不会在 0→目标宽度期间反复 reflow。
 - Search 的查询真值仍是 CodeMirror search state；`Ctrl/Cmd+F` 打开并聚焦 Search，已打开时重复快捷键只重新聚焦而不关闭；切换文档 identity 时清掉旧 query/snapshot，避免跨 tab 显示陈旧结果。
 - 设置继续使用独立 overlay/drawer，不参与 sidebar 的共享宽度模型。

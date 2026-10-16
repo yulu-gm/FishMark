@@ -1720,7 +1720,7 @@ describe("App autosave", () => {
     expect(container.textContent).toContain("Untitled.md");
     expect(container.querySelector('[data-fishmark-region="empty-state"]')).toBeNull();
     expect(container.querySelector('[data-testid="mock-code-editor"]')).not.toBeNull();
-    expect(container.querySelector<HTMLElement>(".app-shell")?.dataset.fishmarkShellMode).toBe(
+    expect(container.querySelector<HTMLElement>(".app-shell")?.dataset.fishmarkHeadingPresentation).toBe(
       "reading"
     );
   });
@@ -3587,7 +3587,7 @@ describe("App autosave", () => {
     const workspaceCanvas = container.querySelector<HTMLElement>('[data-fishmark-region="workspace-canvas"]');
     const emptyState = container.querySelector('[data-fishmark-region="empty-state"]');
 
-    expect(appShell?.dataset.fishmarkShellMode).toBe("reading");
+    expect(appShell?.dataset.fishmarkHeadingPresentation).toBe("reading");
     expect(appLayout?.dataset.fishmarkHasDocument).toBe("false");
     expect(appWorkspace?.dataset.fishmarkHasDocument).toBe("false");
     expect(workspaceCanvas?.dataset.fishmarkHasDocument).toBe("false");
@@ -3600,13 +3600,13 @@ describe("App autosave", () => {
     expect(workspaceCanvas?.contains(emptyState)).toBe(true);
   });
 
-  it("keeps the welcome screen in reading mode when settings opens and closes", async () => {
+  it("keeps the welcome screen with reading heading presentation when settings opens and closes", async () => {
     await renderApp();
 
     const appShell = container.querySelector<HTMLElement>(".app-shell");
     const settingsButton = container.querySelector<HTMLButtonElement>(".settings-entry");
 
-    expect(appShell?.dataset.fishmarkShellMode).toBe("reading");
+    expect(appShell?.dataset.fishmarkHeadingPresentation).toBe("reading");
 
     await act(async () => {
       settingsButton?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
@@ -3614,7 +3614,7 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
-    expect(appShell?.dataset.fishmarkShellMode).toBe("reading");
+    expect(appShell?.dataset.fishmarkHeadingPresentation).toBe("reading");
     expect(container.querySelector('[data-fishmark-dialog="settings-drawer"]')).not.toBeNull();
 
     await act(async () => {
@@ -3622,7 +3622,7 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
-    expect(appShell?.dataset.fishmarkShellMode).toBe("reading");
+    expect(appShell?.dataset.fishmarkHeadingPresentation).toBe("reading");
   });
 
   it("renders a fixed app status bar outside the scrolling document flow", async () => {
@@ -3814,63 +3814,80 @@ describe("App autosave", () => {
   });
 
 
-  it("toggles presentation explicitly while ignoring repeats, modifiers, composition and consumed keys", async () => {
-    await renderAndOpenDocument();
-    const mode=()=>container.querySelector<HTMLElement>(".app-shell")?.dataset.fishmarkShellMode;
-    for(const init of [{repeat:true},{isComposing:true},{keyCode:229},{ctrlKey:true},{altKey:true},{shiftKey:true},{metaKey:true}]) { await pressModeKey(init); expect(mode()).toBe("reading"); }
-    await act(async()=>{ window.dispatchEvent(new CompositionEvent("compositionstart",{bubbles:true})); });
-    await pressModeKey(); expect(mode()).toBe("reading");
-    await act(async()=>{ window.dispatchEvent(new CompositionEvent("compositionend",{bubbles:true})); });
-    await act(async()=>{const e=new KeyboardEvent("keydown",{key:"F11",cancelable:true});e.preventDefault();window.dispatchEvent(e);});
-    expect(mode()).toBe("reading");
-    await pressModeKey(); expect(mode()).toBe("editing");
-    await pressModeKey({repeat:true}); expect(mode()).toBe("editing");
-    await pressModeKey(); expect(mode()).toBe("reading");
-    const button=container.querySelector<HTMLButtonElement>('[data-fishmark-command="toggle-reading-mode"]')!;
-    expect(button.getAttribute("aria-keyshortcuts")).toBe("F11");
-    await act(async()=>button.click());expect(mode()).toBe("editing");
-    await act(async()=>button.click());expect(mode()).toBe("reading");
+  it("keeps chrome visible without a reading toggle on empty and open workspaces", async () => {
+    await renderApp();
+    const assertChrome = () => {
+      expect(container.querySelector('[data-fishmark-command="toggle-reading-mode"]')).toBeNull();
+      expect(container.querySelector('[aria-keyshortcuts="F11"]')).toBeNull();
+      expect(container.querySelector('[data-fishmark-shell-mode]')).toBeNull();
+      for (const region of ["workspace-tab-strip", "app-status-bar"]) {
+        expect(container.querySelector<HTMLElement>(`[data-fishmark-region="${region}"]`)?.dataset.visibility).toBe("visible");
+      }
+    };
+    assertChrome();
+    expect(container.querySelector('.document-word-count')?.textContent).toContain("字数 0");
+    await act(async () => { menuCommandListener?.("open-markdown-file"); await Promise.resolve(); });
+    assertChrome();
+    await act(async () => { codeEditorMock.focus(); codeEditorMock.userEdit(); });
+    assertChrome();
+    await act(async () => { codeEditorMock.blur(); });
+    assertChrome();
   });
 
-  it("preserves explicit mode through new/open and blocks F11 while settings are visible", async () => {
-    await renderAndOpenDocument(); await pressModeKey();
-    const mode=()=>container.querySelector<HTMLElement>(".app-shell")?.dataset.fishmarkShellMode;
-    await act(async()=>{menuCommandListener?.("new-markdown-document");await Promise.resolve();});
-    expect(mode()).toBe("editing");
-    await act(async()=>{menuCommandListener?.("open-markdown-file");await Promise.resolve();});
-    expect(mode()).toBe("editing");
-    await act(async()=>container.querySelector<HTMLButtonElement>('.settings-entry')!.click());
-    expect(mode()).toBe("editing");await pressModeKey();expect(mode()).toBe("editing");
-    await act(async()=>window.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true})));
-    await pressModeKey();expect(mode()).toBe("editing");
-    await act(async()=>{vi.advanceTimersByTime(180);await Promise.resolve();});
-    await pressModeKey();expect(mode()).toBe("reading");
+  it("leaves F11 inert without consuming it or changing focus, content or heading presentation", async () => {
+    await renderAndOpenDocument();
+    await act(async () => codeEditorMock.focus());
+    const focused = document.activeElement;
+    const content = getWorkspaceTabContent("tab-1");
+    for (const init of [{}, {repeat:true}, {isComposing:true}, {keyCode:229}, {ctrlKey:true}, {altKey:true}, {shiftKey:true}, {metaKey:true}]) {
+      const event = new KeyboardEvent("keydown", {key:"F11", bubbles:true, cancelable:true, ...init});
+      await act(async () => { window.dispatchEvent(event); });
+      expect(event.defaultPrevented).toBe(false);
+      expect(container.querySelector<HTMLElement>(".app-shell")?.dataset.fishmarkHeadingPresentation).toBe("reading");
+      expect(document.activeElement).toBe(focused);
+      expect(getWorkspaceTabContent("tab-1")).toBe(content);
+      expect(container.querySelector<HTMLElement>('[data-fishmark-region="app-status-bar"]')?.dataset.visibility).toBe("visible");
+    }
   });
 
-  it("enters editing on an accepted body edit and keeps focus until explicit return", async () => {
+  it("keeps permanent chrome through new, open, settings and F11", async () => {
     await renderAndOpenDocument();
-    const mode = () => container.querySelector<HTMLElement>(".app-shell")?.dataset.fishmarkShellMode;
+    await focusEditorInEditingMode();
+    await act(async () => { menuCommandListener?.("new-markdown-document"); await Promise.resolve(); });
+    await act(async () => { menuCommandListener?.("open-markdown-file"); await Promise.resolve(); });
+    await act(async () => container.querySelector<HTMLButtonElement>(".settings-entry")!.click());
+    await pressModeKey();
+    expect(container.querySelector<HTMLElement>(".app-shell")?.dataset.fishmarkHeadingPresentation).toBe("editing");
+    for (const region of ["workspace-tab-strip", "app-status-bar"]) {
+      expect(container.querySelector<HTMLElement>(`[data-fishmark-region="${region}"]`)?.dataset.visibility).toBe("visible");
+    }
+  });
+
+  it("updates heading presentation only on accepted edits without moving focus or folding chrome", async () => {
+    await renderAndOpenDocument();
+    const mode = () => container.querySelector<HTMLElement>(".app-shell")?.dataset.fishmarkHeadingPresentation;
     await act(async () => { codeEditorMock.focus(); });
     const focused = document.activeElement;
-    expect(mode()).toBe("reading");
-    await act(async () => { codeEditorMock.userEdit(); vi.advanceTimersByTime(40); });
-    expect(mode()).toBe("editing");
-    expect(document.activeElement).toBe(focused);
-    await act(async () => { codeEditorMock.blur(); });
-    expect(mode()).toBe("editing");
-    await pressModeKey();
-    expect(mode()).toBe("reading");
     await act(async () => { codeEditorMock.changeContent("Programmatic projection"); });
     expect(mode()).toBe("reading");
     await act(async () => container.querySelector<HTMLButtonElement>(".settings-entry")!.click());
     await act(async () => { codeEditorMock.userEdit(); });
     expect(mode()).toBe("reading");
+    await act(async () => { window.dispatchEvent(new KeyboardEvent("keydown", {key:"Escape", bubbles:true})); vi.advanceTimersByTime(180); });
+    await act(async () => { codeEditorMock.focus(); codeEditorMock.userEdit(); vi.advanceTimersByTime(40); });
+    expect(mode()).toBe("editing");
+    expect(document.activeElement).toBe(focused);
+    await act(async () => { codeEditorMock.blur(); });
+    expect(mode()).toBe("editing");
+    await pressModeKey();
+    expect(mode()).toBe("editing");
+    expect(container.querySelector<HTMLElement>('[data-fishmark-region="app-status-bar"]')?.dataset.visibility).toBe("visible");
   });
 
-  it("opens an existing document in reading mode", async () => {
+  it("opens an existing document with reading heading presentation", async () => {
     await renderAndOpenDocument();
 
-    expect(container.querySelector<HTMLElement>(".app-shell")?.dataset.fishmarkShellMode).toBe(
+    expect(container.querySelector<HTMLElement>(".app-shell")?.dataset.fishmarkHeadingPresentation).toBe(
       "reading"
     );
   });
@@ -3907,7 +3924,7 @@ describe("App autosave", () => {
     });
 
     expect(openWorkspaceFile).toHaveBeenCalledTimes(2);
-    expect(appShell?.dataset.fishmarkShellMode).toBe("reading");
+    expect(appShell?.dataset.fishmarkHeadingPresentation).toBe("reading");
     expect(document.activeElement).not.toBe(editorSurface);
     expect(document.activeElement?.getAttribute("data-testid")).not.toBe("mock-code-editor");
   });
@@ -3950,7 +3967,7 @@ describe("App autosave", () => {
     expect(getWorkspaceTabContent("tab-2")).toBe("# Test\n");
   });
 
-  it("preserves reading mode when the user clicks into the editor body", async () => {
+  it("preserves reading heading presentation when the user clicks into the editor body", async () => {
     await renderAndOpenDocument();
 
     const appShell = container.querySelector<HTMLElement>(".app-shell");
@@ -3963,10 +3980,10 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
-    expect(appShell?.dataset.fishmarkShellMode).toBe("reading");
+    expect(appShell?.dataset.fishmarkHeadingPresentation).toBe("reading");
   });
 
-  it("preserves reading mode from content mousedown even when focus is already stuck on the editor", async () => {
+  it("preserves reading heading presentation from content mousedown even when focus is already stuck on the editor", async () => {
     await renderAndOpenDocument();
 
     const appShell = container.querySelector<HTMLElement>(".app-shell");
@@ -3978,7 +3995,7 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
-    expect(appShell?.dataset.fishmarkShellMode).toBe("reading");
+    expect(appShell?.dataset.fishmarkHeadingPresentation).toBe("reading");
     expect(document.activeElement).toBe(editorSurface);
 
     await act(async () => {
@@ -3987,10 +4004,10 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
-    expect(appShell?.dataset.fishmarkShellMode).toBe("reading");
+    expect(appShell?.dataset.fishmarkHeadingPresentation).toBe("reading");
   });
 
-  it("keeps reading mode when the editor only receives middle-click focus", async () => {
+  it("keeps reading heading presentation when the editor only receives middle-click focus", async () => {
     await renderAndOpenDocument();
 
     const appShell = container.querySelector<HTMLElement>(".app-shell");
@@ -4002,12 +4019,12 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
-    expect(appShell?.dataset.fishmarkShellMode).toBe("reading");
+    expect(appShell?.dataset.fishmarkHeadingPresentation).toBe("reading");
   });
 
-  it("preserves editing mode when Escape is pressed", async () => {
+  it("preserves editing heading presentation when Escape is pressed", async () => {
     await renderAndOpenDocument();
-    await pressModeKey();
+    await focusEditorInEditingMode();
 
     const appShell = container.querySelector<HTMLElement>(".app-shell");
     const editorSurface = container.querySelector<HTMLElement>('[data-testid="mock-code-editor"]');
@@ -4019,19 +4036,19 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
-    expect(appShell?.dataset.fishmarkShellMode).toBe("editing");
+    expect(appShell?.dataset.fishmarkHeadingPresentation).toBe("editing");
 
     await act(async () => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
       await Promise.resolve();
     });
 
-    expect(appShell?.dataset.fishmarkShellMode).toBe("editing");
+    expect(appShell?.dataset.fishmarkHeadingPresentation).toBe("editing");
   });
 
-  it("preserves editing mode when the user clicks the editor blank area", async () => {
+  it("preserves editing heading presentation when the user clicks the editor blank area", async () => {
     await renderAndOpenDocument();
-    await pressModeKey();
+    await focusEditorInEditingMode();
 
     const appShell = container.querySelector<HTMLElement>(".app-shell");
     const editorSurface = container.querySelector<HTMLElement>('[data-testid="mock-code-editor"]');
@@ -4043,17 +4060,17 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
-    expect(appShell?.dataset.fishmarkShellMode).toBe("editing");
+    expect(appShell?.dataset.fishmarkHeadingPresentation).toBe("editing");
 
     await act(async () => {
       editorSurface?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0, clientX: 40 }));
       await Promise.resolve();
     });
 
-    expect(appShell?.dataset.fishmarkShellMode).toBe("editing");
+    expect(appShell?.dataset.fishmarkHeadingPresentation).toBe("editing");
   });
 
-  it("keeps editing mode when the user drags the editor scrollbar", async () => {
+  it("keeps editing heading presentation when the user drags the editor scrollbar", async () => {
     codeEditorMock.setLayout({
       hostLeft: 0,
       hostWidth: 880,
@@ -4074,7 +4091,7 @@ describe("App autosave", () => {
 
     await focusEditorInEditingMode();
 
-    expect(appShell?.dataset.fishmarkShellMode).toBe("editing");
+    expect(appShell?.dataset.fishmarkHeadingPresentation).toBe("editing");
 
     await act(async () => {
       editorScroller?.dispatchEvent(new MouseEvent("mousedown", {
@@ -4086,48 +4103,48 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
-    expect(appShell?.dataset.fishmarkShellMode).toBe("editing");
+    expect(appShell?.dataset.fishmarkHeadingPresentation).toBe("editing");
   });
 
-  it("preserves editing mode when the user clicks workspace-canvas blank area outside the editor", async () => {
+  it("preserves editing heading presentation when the user clicks workspace-canvas blank area outside the editor", async () => {
     await renderAndOpenDocument();
-    await pressModeKey();
+    await focusEditorInEditingMode();
 
     const appShell = container.querySelector<HTMLElement>(".app-shell");
     const workspaceShell = container.querySelector<HTMLElement>(".workspace-shell");
 
     await focusEditorInEditingMode();
 
-    expect(appShell?.dataset.fishmarkShellMode).toBe("editing");
+    expect(appShell?.dataset.fishmarkHeadingPresentation).toBe("editing");
 
     await act(async () => {
       workspaceShell?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0, clientX: 24 }));
       await Promise.resolve();
     });
 
-    expect(appShell?.dataset.fishmarkShellMode).toBe("editing");
+    expect(appShell?.dataset.fishmarkHeadingPresentation).toBe("editing");
   });
 
-  it("preserves editing mode when the user clicks app-workspace blank area outside the canvas", async () => {
+  it("preserves editing heading presentation when the user clicks app-workspace blank area outside the canvas", async () => {
     await renderAndOpenDocument();
-    await pressModeKey();
+    await focusEditorInEditingMode();
 
     const appShell = container.querySelector<HTMLElement>(".app-shell");
     const appWorkspace = container.querySelector<HTMLElement>(".app-workspace");
 
     await focusEditorInEditingMode();
 
-    expect(appShell?.dataset.fishmarkShellMode).toBe("editing");
+    expect(appShell?.dataset.fishmarkHeadingPresentation).toBe("editing");
 
     await act(async () => {
       appWorkspace?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0, clientX: 24 }));
       await Promise.resolve();
     });
 
-    expect(appShell?.dataset.fishmarkShellMode).toBe("editing");
+    expect(appShell?.dataset.fishmarkHeadingPresentation).toBe("editing");
   });
 
-  it("keeps the rail and its shared side panel live in document reading mode while reading mode folds the vertical chrome", async () => {
+  it("keeps tabs, status and side panel live through F11, pointer focus and outline closing", async () => {
     await renderAndOpenDocument();
 
     const appShell = container.querySelector<HTMLElement>(".app-shell");
@@ -4144,7 +4161,7 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
-    expect(appShell?.dataset.fishmarkShellMode).toBe("editing");
+    expect(appShell?.dataset.fishmarkHeadingPresentation).toBe("editing");
     expect(container.querySelector('[data-fishmark-region="side-panel"]')).not.toBeNull();
 
     await act(async () => {
@@ -4152,20 +4169,20 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
-    expect(appShell?.dataset.fishmarkShellMode).toBe("reading");
+    expect(appShell?.dataset.fishmarkHeadingPresentation).toBe("editing");
     expect(rail?.hasAttribute("data-visibility")).toBe(false);
-    expect(tabStrip?.dataset.visibility).toBe("collapsed");
-    expect(statusBar?.dataset.visibility).toBe("collapsed");
+    expect(tabStrip?.dataset.visibility).toBe("visible");
+    expect(statusBar?.dataset.visibility).toBe("visible");
     expect(container.querySelector('[data-fishmark-region="side-panel"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="mock-code-editor"]')).not.toBeNull();
 
-    // The rail button still owns the region while the shell is in reading mode.
+    // The rail button retains ownership of the same side panel.
     await act(async () => {
       outlineButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await Promise.resolve();
     });
 
-    expect(appShell?.dataset.fishmarkShellMode).toBe("reading");
+    expect(appShell?.dataset.fishmarkHeadingPresentation).toBe("editing");
     expect(
       container.querySelector<HTMLElement>('[data-fishmark-region="side-panel"]')?.dataset.state
     ).toBe("closing");
@@ -4182,7 +4199,7 @@ describe("App autosave", () => {
       await Promise.resolve();
     });
 
-    expect(appShell?.dataset.fishmarkShellMode).toBe("reading");
+    expect(appShell?.dataset.fishmarkHeadingPresentation).toBe("editing");
     expect(container.querySelector('[data-fishmark-region="side-panel"]')).not.toBeNull();
 
     await act(async () => {
@@ -4193,7 +4210,7 @@ describe("App autosave", () => {
     });
 
     await pressModeKey();
-    expect(appShell?.dataset.fishmarkShellMode).toBe("editing");
+    expect(appShell?.dataset.fishmarkHeadingPresentation).toBe("editing");
     expect(rail?.hasAttribute("data-visibility")).toBe(false);
     expect(tabStrip?.dataset.visibility).toBe("visible");
     expect(statusBar?.dataset.visibility).toBe("visible");
@@ -5136,61 +5153,19 @@ describe("App autosave", () => {
     expect(container.querySelector('[data-fishmark-region="focus-toggle"]')).toBeNull();
   });
 
-  it("defines animated shell chrome transitions for document reading mode while the rail stays docked", () => {
-    const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8");
-    const railRule = getCssRule(appUiStylesheet, ".app-rail");
-    const readingWorkspaceRule = getCssRule(
-      appUiStylesheet,
-      ".app-workspace"
-    );
-    const tabStripRule = getCssRule(appUiStylesheet, ".workspace-tab-strip");
-    const collapsedTabStripRule = getCssRule(appUiStylesheet, '.workspace-tab-strip[data-visibility="collapsed"]');
-    const statusBarRule = getCssRule(appUiStylesheet, ".app-status-bar");
-    const collapsedStatusBarRule = getCssRule(
-      appUiStylesheet,
-      '.app-status-bar[data-visibility="collapsed"]'
-    );
-
-    // The rail never retracts, so reading mode is expressed by the vertical
-    // chrome only; no rule zeroes the rail column any more.
-    expect(railRule).not.toContain("transform: translateX");
-    expect(railRule).not.toContain("opacity:");
-    expect(appUiStylesheet).not.toContain('.app-rail[data-visibility="collapsed"]');
-    expect(appUiStylesheet).not.toContain(
-      '.app-layout[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"]'
-    );
-    expect(readingWorkspaceRule).toContain("grid-template-rows: auto auto minmax(0, 1fr);");
-    expect(tabStripRule).toContain("transition:");
-    expect(tabStripRule).not.toContain("display var(--fishmark-focus-transition-duration) allow-discrete;");
-    expect(tabStripRule).not.toContain("transition-behavior: allow-discrete;");
-    expect(collapsedTabStripRule).toContain("visibility: hidden;");
-    expect(collapsedTabStripRule).not.toContain("max-height:");
-    expect(statusBarRule).toContain("transition:");
-    expect(statusBarRule).toContain("display var(--fishmark-focus-transition-duration) allow-discrete;");
-    expect(statusBarRule).toContain("transition-behavior: allow-discrete;");
-    expect(collapsedStatusBarRule).toContain("transform:");
-    expect(appUiStylesheet).toContain("@starting-style");
-    expect(appUiStylesheet).toContain('.app-status-bar[data-visibility="visible"]');
+  it("defines permanent chrome without obsolete reading or collapse rules", () => {
+    const css = readFileSync(appUiStylesheetPath, "utf-8");
+    expect(css).not.toContain("data-fishmark-shell-mode");
+    expect(css).not.toContain('.workspace-tab-strip[data-visibility="collapsed"]');
+    expect(css).not.toContain('.app-status-bar[data-visibility="collapsed"]');
+    expect(getCssRule(css, ".app-rail")).not.toContain("transform: translateX");
+    expect(getCssRule(css, ".app-workspace")).toContain("grid-template-rows: auto auto minmax(0, 1fr);");
   });
 
-  it("reserves reading-mode tab space while hidden controls cannot receive input", () => {
-    const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8");
-    const collapsedTabStripRule = getCssRule(appUiStylesheet, '.workspace-tab-strip[data-visibility="collapsed"]');
-    const readingTabStripRule = getCssRule(
-      appUiStylesheet,
-      ".workspace-tab-strip"
-    );
-    const collapsedReadingStatusBarRule = getCssRule(
-      appUiStylesheet,
-      '.app-workspace[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] > .app-status-bar[data-fishmark-region="app-status-bar"][data-visibility="collapsed"]'
-    );
-
-    expect(collapsedTabStripRule).toContain("opacity: 0;");
-    expect(collapsedTabStripRule).toContain("visibility: hidden;");
-    expect(collapsedTabStripRule).toContain("pointer-events: none;");
-    expect(collapsedTabStripRule).not.toContain("max-height:");
-    expect(readingTabStripRule).toContain("grid-row: 2;");
-    expect(collapsedReadingStatusBarRule).toContain("display: none !important;");
+  it("reserves the document tab row even for an empty workspace", () => {
+    const css = readFileSync(appUiStylesheetPath, "utf-8");
+    expect(getCssRule(css, ".workspace-tab-strip")).toContain("grid-row: 2;");
+    expect(getCssRule(css, '.workspace-tab-strip[data-empty="true"]')).toContain("min-height: 36px;");
   });
 
   it("guards app-owned workspace row geometry against legacy theme overrides", () => {
@@ -5454,8 +5429,14 @@ describe("App autosave", () => {
       "5"
     );
     expect(document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.readingMode)).toBe(
-      "1"
+      "0"
     );
+    await act(async () => {
+      window.dispatchEvent(new Event("resize"));
+      codeEditorMock.userEdit();
+      await Promise.resolve();
+    });
+    expect(document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.readingMode)).toBe("0");
     expect(
       document.documentElement.style.getPropertyValue(THEME_RUNTIME_ENV_CSS_VARS.viewportWidth)
     ).toBe(String(window.innerWidth));
@@ -5723,15 +5704,11 @@ describe("App autosave", () => {
     expect(workspaceShellSource).toContain('data-fishmark-command="outline"');
   });
 
-  it("keeps the reading shell full width so the scrollbar stays on the far right", () => {
-    const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8").replace(/\r\n/g, "\n");
-
-    expect(appUiStylesheet).toContain(
-      '.workspace-canvas[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] {\n  grid-row: 3;\n  grid-column: 1;\n  width: 100%;\n  max-width: none;\n  margin: 0;\n}'
-    );
-    expect(appUiStylesheet).toContain(
-      '.workspace-canvas[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] .workspace-shell {\n  width: 100%;\n  max-width: none;\n  margin: 0;\n}'
-    );
+  it("keeps the permanent document canvas full width", () => {
+    const css = readFileSync(appUiStylesheetPath, "utf-8");
+    expect(getCssRule(css, ".workspace-canvas")).toContain("width: 100%;");
+    expect(getCssRule(css, ".workspace-canvas")).toContain("max-width: none;");
+    expect(getCssRule(css, ".workspace-shell")).toContain("grid-area: 1 / 1;");
   });
 
   it("does not keep obsolete workspace header layout styles in the shell stylesheet", () => {
@@ -5799,43 +5776,20 @@ describe("App autosave", () => {
     expect(editorContentRule).not.toContain("max-width: 72ch;");
   });
 
-  it("keeps the reading-mode scroll surface full width so the scrollbar stays pinned right", () => {
-    const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8");
-    const readingCanvasRule = getCssRule(
-      appUiStylesheet,
-      '.workspace-canvas[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"]'
-    );
-    const readingShellRule = getCssRule(
-      appUiStylesheet,
-      '.workspace-canvas[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] .workspace-shell'
-    );
-
-    expect(readingCanvasRule).not.toContain("width: min(100%, var(--fishmark-workspace-max-width));");
-    expect(readingCanvasRule).toContain("grid-column: 1;");
-    expect(readingCanvasRule).not.toContain("margin: 0 auto;");
-    expect(readingShellRule).not.toContain("max-width: min(100%, 960px);");
-    expect(readingShellRule).not.toContain("margin: 0 auto;");
+  it("keeps the scroll surface pinned to the permanent full-width canvas", () => {
+    const css = readFileSync(appUiStylesheetPath, "utf-8");
+    expect(getCssRule(css, ".workspace-canvas")).toContain("margin: 0;");
+    expect(getCssRule(css, ".workspace-shell")).not.toContain("margin: 0 auto;");
   });
 
-  it("keeps editing and reading document columns on the same full-width layout contract", () => {
-    const appUiStylesheet = readFileSync(appUiStylesheetPath, "utf-8");
-    const editingCanvasRule = getCssRule(appUiStylesheet, ".workspace-canvas.is-editor-open");
-    const readingCanvasRule = getCssRule(
-      appUiStylesheet,
-      '.workspace-canvas[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"].is-editor-open'
-    );
-    const shortcutHintShellRule = getCssRule(
-      appUiStylesheet,
-      ".workspace-canvas.is-editor-open > .shortcut-hint-overlay-shell"
-    );
-
-    expect(editingCanvasRule).toContain("grid-template-columns: minmax(0, 1fr);");
-    expect(editingCanvasRule).toContain("padding-inline-end: 0;");
-    expect(readingCanvasRule).toContain("grid-template-columns: minmax(0, 1fr);");
-    expect(readingCanvasRule).toContain("padding-inline-end: 0;");
-    expect(shortcutHintShellRule).toContain("grid-area: 1 / 1;");
-    expect(shortcutHintShellRule).toContain("position: absolute;");
-    expect(shortcutHintShellRule).toContain("inset: 0 auto 0 0;");
+  it("keeps one full-width document column with the shortcut overlay", () => {
+    const css = readFileSync(appUiStylesheetPath, "utf-8");
+    const canvas = getCssRule(css, ".workspace-canvas.is-editor-open");
+    expect(canvas).toContain("grid-template-columns: minmax(0, 1fr);");
+    expect(canvas).toContain("padding-inline-end: 0;");
+    const overlay = getCssRule(css, ".workspace-canvas.is-editor-open > .shortcut-hint-overlay-shell");
+    expect(overlay).toContain("grid-area: 1 / 1;");
+    expect(overlay).toContain("position: absolute;");
   });
 
   it("styles theme surfaces as non-interactive workspace backgrounds", () => {
@@ -6648,7 +6602,7 @@ describe("App autosave", () => {
   }
 
   async function focusEditorInEditingMode(): Promise<void> {
-    if (container.querySelector<HTMLElement>(".app-shell")?.dataset.fishmarkShellMode === "reading") await pressModeKey();
+    await act(async () => { codeEditorMock.userEdit(); });
     const editorSurface = container.querySelector<HTMLElement>('[data-testid="mock-code-editor"]');
 
     await act(async () => {

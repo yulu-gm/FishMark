@@ -11,8 +11,7 @@ const tab = (page, id) => page.locator(`[data-fishmark-region="workspace-tab"][d
 async function start(product, source) {
   await product.seed(source, 60_000);
   const page = await product.launch(source);
-  const exit = page.getByRole("button", { name: "退出阅读模式 (F11)", exact: true });
-  if (await exit.isVisible()) await exit.click();
+
   await product.focus(page);
   await page.keyboard.press("Control+Home");
   return { page, first: (await product.snapshot()).activeTabId };

@@ -8,8 +8,7 @@ const external = "EXTERNAL changed on disk while another tab is active 外部内
 async function tabs(product) {
   await product.seed(initial, 60_000);
   const page = await product.launch(initial);
-  const exitReading = page.getByRole("button", { name: "退出阅读模式 (F11)", exact: true });
-  if (await exitReading.isVisible()) await exitReading.click();
+
   const first = (await product.snapshot()).activeTabId;
   const otherPath = join(product.directory, "documents", "other.md");
   await writeFile(otherPath, "Other tab unchanged", "utf8");

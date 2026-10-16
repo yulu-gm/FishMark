@@ -173,8 +173,7 @@ class ProductSession {
       state.tracing = true;
       await expect(state.page.locator(".cm-content[contenteditable=true]")).toBeVisible();
       if (selectTabId) {
-        const exitReading = state.page.getByRole("button", { name: "退出阅读模式 (F11)", exact: true });
-        if (await exitReading.isVisible()) await exitReading.click();
+
         await state.page.locator(`[data-tab-id="${selectTabId}"]`).click();
       }
       await expect.poll(async () => (await this.snapshot()).activeDocument?.content).toBe(expectedContent);

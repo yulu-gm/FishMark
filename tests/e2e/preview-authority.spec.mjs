@@ -99,8 +99,7 @@ test("preview authority binds real sessions to owned tabs and revokes closed doc
   await product.testInfo.attach("real-session-authority", { body: JSON.stringify(proof, null, 2), contentType: "application/json" });
   expect(await request(page, ownImage)).toEqual({ status: 200, body: svg });
   await product.focus(page);
-  const exitReading = page.getByRole("button", { name: "退出阅读模式 (F11)", exact: true });
-  if (await exitReading.isVisible()) await exitReading.click();
+
   await page.getByRole("button", { name: "Close roundtrip.md", exact: true }).click();
   await expect.poll(async () => (await product.snapshot()).tabs.length).toBe(0);
   await expect(page.locator(".cm-content[contenteditable=true]")).toHaveCount(0);

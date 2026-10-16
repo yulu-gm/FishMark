@@ -158,7 +158,6 @@ export function useThemeController({
   themePackageCatalogState,
   isRefreshingThemePackages,
   currentDocumentWordCount,
-  isDocumentReadingMode,
   controlledTitlebarEnabled,
   workbenchSurfaceRuntimeMode,
   titlebarSurfaceRuntimeMode
@@ -168,7 +167,6 @@ export function useThemeController({
   themePackageCatalogState: "loading" | "loaded" | "failed";
   isRefreshingThemePackages: boolean;
   currentDocumentWordCount: number;
-  isDocumentReadingMode: boolean;
   controlledTitlebarEnabled: boolean;
   workbenchSurfaceRuntimeMode: ThemeSurfaceRuntimeMode | null;
   titlebarSurfaceRuntimeMode: ThemeSurfaceRuntimeMode | null;
@@ -182,11 +180,12 @@ export function useThemeController({
     () =>
       buildThemeRuntimeEnv({
         wordCount: currentDocumentWordCount,
-        isReadingMode: isDocumentReadingMode,
+        // Keep the theme ABI field while the workspace chrome is permanent.
+        isReadingMode: false,
         themeMode: resolvedThemeMode,
         viewport: getWindowViewport()
       }),
-    [currentDocumentWordCount, isDocumentReadingMode, resolvedThemeMode]
+    [currentDocumentWordCount, resolvedThemeMode]
   );
   const activeThemePackages = useMemo(
     () => themePackages.map(normalizeThemePackageDescriptor),
@@ -291,7 +290,7 @@ export function useThemeController({
   function createThemeRuntimeEnv(themeMode: ResolvedThemeMode = resolvedThemeMode): ThemeRuntimeEnv {
     return buildThemeRuntimeEnv({
       wordCount: currentDocumentWordCount,
-      isReadingMode: isDocumentReadingMode,
+      isReadingMode: false,
       themeMode,
       viewport: getWindowViewport()
     });

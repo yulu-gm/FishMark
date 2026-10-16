@@ -77,13 +77,12 @@ function clearThemeDynamicModeFromDocument(root: HTMLElement): void {
 }
 
 
-export function useThemePresentation({ preferences, themePackages, themePackageCatalogState, isRefreshingThemePackages, currentDocumentWordCount, isDocumentReadingMode, controlledTitlebarEnabled, showNotification }: {
+export function useThemePresentation({ preferences, themePackages, themePackageCatalogState, isRefreshingThemePackages, currentDocumentWordCount, controlledTitlebarEnabled, showNotification }: {
   preferences: Preferences;
   themePackages: Awaited<ReturnType<Window["fishmark"]["listThemePackages"]>>;
   themePackageCatalogState: "loading" | "loaded" | "failed";
   isRefreshingThemePackages: boolean;
   currentDocumentWordCount: number;
-  isDocumentReadingMode: boolean;
   controlledTitlebarEnabled: boolean;
   showNotification: (notification: AppNotification) => void;
 }) {
@@ -110,7 +109,6 @@ export function useThemePresentation({ preferences, themePackages, themePackageC
     themePackageCatalogState,
     isRefreshingThemePackages,
     currentDocumentWordCount,
-    isDocumentReadingMode,
     controlledTitlebarEnabled,
     workbenchSurfaceRuntimeMode,
     titlebarSurfaceRuntimeMode
@@ -142,7 +140,7 @@ export function useThemePresentation({ preferences, themePackages, themePackageC
 
   useEffect(() => {
     syncThemeRuntimeEnv(resolvedThemeMode);
-  }, [currentDocumentWordCount, isDocumentReadingMode, resolvedThemeMode]);
+  }, [currentDocumentWordCount, resolvedThemeMode]);
 
   useEffect(() => {
     const themePackageRuntime =

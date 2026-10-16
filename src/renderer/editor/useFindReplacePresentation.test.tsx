@@ -15,7 +15,7 @@ const activeDocument: WorkspaceDocumentSnapshot = {
   tabId: "tab-a", path: "C:/note.md", content: "alpha beta", name: "note.md",
   encoding: "utf-8", revision: 1, savedRevision: 1, isDirty: false, saveState: "idle"
 };
-const setShellMode = vi.fn();
+const setHeadingPresentationMode = vi.fn();
 const noop = () => {};
 let root: Root;
 let container: HTMLDivElement;
@@ -23,7 +23,7 @@ let frames: Map<number, FrameRequestCallback>;
 let nextFrame: number;
 let controller: CodeEditorHandle;
 
-function Harness({ revision = 1, shellMode = "editing", panelReady = true }: { revision?: number; shellMode?: "editing" | "reading"; panelReady?: boolean }) {
+function Harness({ revision = 1, headingPresentationMode = "editing", panelReady = true }: { revision?: number; headingPresentationMode?: "editing" | "reading"; panelReady?: boolean }) {
   const editorRef = useRef(controller);
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const panel = useViewContainerPresentation();
@@ -37,7 +37,7 @@ function Harness({ revision = 1, shellMode = "editing", panelReady = true }: { r
   useEditorFocusPresentation({
     activeDocument, isSettingsOpen: false, isSettingsClosing: false, editorContainerRef,
     editorRef, handleEditorBlur: noop, isDocumentOpen: true,
-    editorLoadRevision: revision, shellMode, setShellMode, setIsEditorFocused: noop
+    editorLoadRevision: revision, headingPresentationMode, setHeadingPresentationMode, setIsEditorFocused: noop
   });
   return <div onKeyDownCapture={search.handleWorkspaceKeyDownCapture}>
     <div ref={editorContainerRef} className="cm-editor"><div className="cm-content" tabIndex={0} aria-label="Markdown editor" /></div>
@@ -119,7 +119,7 @@ it("keeps Search focused when a reload schedules another editor focus frame", as
 });
 
 it("still focuses the editor when entering editing mode without a Search focus", async () => {
-  await render({ shellMode: "reading" });
+  await render({ headingPresentationMode: "reading" });
   expect(frames.size).toBe(0);
   await render();
   await flushFrames();
@@ -138,7 +138,7 @@ it("refocuses Search on repeated Ctrl+F and reopens it after Escape", async () =
   expect(document.activeElement).toBe(original);
   await key(original, "Escape");
   expect(document.activeElement).toBe(editor());
-  expect(setShellMode).not.toHaveBeenCalled();
+  expect(setHeadingPresentationMode).not.toHaveBeenCalled();
   await key(editor(), "f", { ctrlKey: true });
   expect(document.activeElement).toBe(original);
   await key(original, "Escape");
@@ -324,5 +324,5 @@ it.each(["Enter", "Escape"])("does not consume composing %s in Search", async pr
   expect(container.querySelector(".side-panel")?.getAttribute("data-state")).toBe("open");
   expect(controller.findNextMatch).not.toHaveBeenCalled();
   expect(controller.clearFindReplaceQuery).not.toHaveBeenCalled();
-  expect(setShellMode).not.toHaveBeenCalled();
+  expect(setHeadingPresentationMode).not.toHaveBeenCalled();
 });

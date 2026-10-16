@@ -56,8 +56,7 @@ async function selectSource(product, page, anchor, head = anchor) {
 async function setup(product, source) {
   await product.seed(source, 60_000);
   const page = await product.launch(source);
-  const exitReading = page.getByRole("button", { name: "退出阅读模式 (F11)", exact: true });
-  if (await exitReading.isVisible()) await exitReading.click();
+
   await page.evaluate(() => {
     window.__nestedKeys = { events: [] };
     for (const type of ["keydown", "keyup", "beforeinput", "input"]) document.addEventListener(type, e => {
@@ -126,11 +125,19 @@ test("product nested Enter Backspace undo redo retain exact empty-item source ca
   await saveAndReopen(product, page, blank);
 });
 
-test("product inline marker boundaries reverse selection history and source reading roundtrips preserve exact text", async ({ product }) => {
+test("product inline marker boundaries reverse selection history and source roundtrips and inert F11 preserve exact text", async ({ product }) => {
   test.skip(process.platform !== "win32", "This batch verifies Windows product keyboard mappings.");
   const source = "- parent\n  - **alpha** and *beta*";
   const body = source.indexOf("alpha");
   const page = await setup(product, source);
+  // Real accepted input establishes progressive editing presentation. Undo
+  // leaves no applied history before the source-marker navigation checks.
+  await product.append("x");
+  await expect.poll(async () => (await product.snapshot()).activeDocument.content).toBe(source + "x");
+  await page.keyboard.press("Control+z");
+  await expect.poll(async () => (await product.snapshot()).activeDocument.content).toBe(source);
+  await page.keyboard.press("Control+z");
+  await expect.poll(async () => (await product.snapshot()).activeDocument.content).toBe(source);
   await selectSource(product, page, body + 1);
   await press(product, page, "ArrowLeft", "inline-body-opening", source, body);
   await press(product, page, "ArrowLeft", "inline-opening-source-character", source, body - 1);
@@ -148,8 +155,8 @@ test("product inline marker boundaries reverse selection history and source read
   await mode(page, false);
   await checkpoint(product, page, "rendered-mode-history-preserved", changed, body + 1);
   await page.keyboard.press("F11");
-  await expect(page.locator('[data-fishmark-region="app-status-bar"]')).toHaveAttribute("data-visibility", "collapsed");
-  await checkpoint(product, page, "reading-shell-entered", changed, body + 1);
+  await expect(page.locator('[data-fishmark-region="app-status-bar"]')).toHaveAttribute("data-visibility", "visible");
+  await checkpoint(product, page, "f11-keeps-chrome-visible", changed, body + 1);
   await page.keyboard.press("F11");
   await expect(page.locator('[data-fishmark-region="app-status-bar"]')).toHaveAttribute("data-visibility", "visible");
   await press(product, page, "Control+z", "undo-after-view-roundtrips", source, body + 4, body + 1);

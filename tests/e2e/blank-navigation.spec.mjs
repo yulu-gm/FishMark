@@ -6,8 +6,7 @@ test.beforeEach(() => { test.skip(process.platform !== "win32", "This batch veri
 async function start(product, content, canonical = content) {
   await product.seed(content, 60_000);
   const page = await product.launch(canonical);
-  const exit = page.getByRole("button", { name: "退出阅读模式 (F11)", exact: true });
-  if (await exit.isVisible()) await exit.click();
+
   await product.focus(page);
   await page.evaluate(() => {
     window.__blankKeys = [];

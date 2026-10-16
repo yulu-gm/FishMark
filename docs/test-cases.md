@@ -1,5 +1,12 @@
 # FishMark 测试用例
 
+## TC-PERMANENT-CHROME-053
+
+- 空/单/多文档、首次打开、实际输入、失焦、Search/Outline/Settings、宽窄窗口、source往返、重启：Tab及状态/字数始终可见，空workspace字数0；无阅读按钮/aria快捷键/壳层状态属性。F11不消费、不改内容/焦点/呈现。
+- 保留标题初始reading、实际编辑后editing，程序投影与设置期间不误触发；首次输入不重聚焦/重建选区。inline/block/heading标记、source模式、首次反向选区undo/redo及精确保存语义保留。源标记导航测试如需editing，前提由真实输入/undo建立。
+- theme runtime初值、实际输入和resize均为readingMode0，ABI仍支持原字段。实际Preferences/session无壳层模式字段，未知旧式字段不能恢复隐藏布局，不重置有效偏好或WorkspaceReadingPosition。
+- Windows完整产品综合例另覆盖无菜单阅读/F11项、宽窄截图、字数增减、source/undo、outline、新建/关空及同profile重启；原tab-viewport长文/图片/表格锚点和dirty/source保真矩阵保留。用户在线时原生测试须先协调前台。
+
 ## TASK-RF901-FIRST-LOAD-051
 
 - 同一controller首次构造的tab/epoch/loadRevision/source完全相同：不立即replace，但identity/session/selection/reading/ACK照常；后续相同文本reload仍replace。空文档→有内容、StrictMode双构造、Activity重连的旧seed/新tab/epoch/source均安全fallback。

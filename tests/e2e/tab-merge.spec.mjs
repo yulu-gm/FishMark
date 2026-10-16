@@ -10,11 +10,6 @@ const assetUrl = path => `fishmark-asset://preview/${path.replaceAll("\\", "/").
 const resource = (page, path) => page.evaluate(async url => { const response = await fetch(url); return response.status; }, assetUrl(path));
 const fileMenu = (product, label) => product.current.app.evaluate(({ Menu }, label) => Menu.getApplicationMenu().items.find(i => i.label === "File").submenu.items.find(i => i.label === label).click(), label);
 
-async function exitReading(page) {
-  const button = page.getByRole("button", { name: "退出阅读模式 (F11)", exact: true });
-  if (await button.isVisible()) await button.click();
-}
-
 async function openFile(page, path) {
   await page.evaluate(() => { const input = document.createElement("input"); input.type = "file"; input.dataset.mergeFixture = "true"; document.body.append(input); });
   await page.locator("input[data-merge-fixture]").setInputFiles(path);
@@ -29,7 +24,7 @@ async function twoWindows(product, content = "0123456789 transfer", zoom = 1, la
   await product.seed(content, 60_000);
   const imagePath = join(dirname(product.documentPath), "owned.svg");
   await writeFile(imagePath, svg);
-  const source = await product.launch(content); await exitReading(source);
+  const source = await product.launch(content);
   const sourceId = (await product.snapshot(source)).activeTabId;
   await fileMenu(product, "New Window");
   await expect.poll(() => product.current.app.windows().length).toBe(2);
@@ -38,7 +33,7 @@ async function twoWindows(product, content = "0123456789 transfer", zoom = 1, la
   const targetPath = join(product.directory, "target-documents", "target.md");
   await mkdir(dirname(targetPath), { recursive: true }); await writeFile(targetPath, "target original");
   await openFile(target, targetPath);
-  await product.observeNewWindow(target, "target original"); await exitReading(target);
+  await product.observeNewWindow(target, "target original");
   const targetId = (await product.snapshot(target)).activeTabId;
   const area = await product.current.app.evaluate(({ screen }) => screen.getPrimaryDisplay().workArea);
   expect(area.width).toBeGreaterThanOrEqual(960);

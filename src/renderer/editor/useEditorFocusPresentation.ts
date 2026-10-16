@@ -4,21 +4,20 @@ import type { CodeEditorHandle } from "../code-editor-view";
 import { isEditingContentPointerEvent, isEditorScrollbarPointerEvent, isFocusedEditorInteractiveElement, isWorkspaceNonEditorInteractiveTarget } from "./editor-pointer-utils";
 
 type ActiveDocument = WorkspaceWindowSnapshot["activeDocument"];
-/** Shell presentation only. Document commands remain application-owned. */
+/** Editor focus and progressive heading presentation; workspace chrome stays visible. */
 export function useEditorFocusPresentation({
   activeDocument, isSettingsOpen, isSettingsClosing, editorContainerRef, editorRef,
   handleEditorBlur, isDocumentOpen, editorLoadRevision,
-  shellMode, setShellMode, setIsEditorFocused
+  headingPresentationMode, setHeadingPresentationMode, setIsEditorFocused
 }: {
   activeDocument: ActiveDocument;
   isSettingsOpen: boolean; isSettingsClosing: boolean; isDocumentOpen: boolean;
   editorContainerRef: RefObject<HTMLDivElement | null>; editorRef: RefObject<CodeEditorHandle | null>;
   handleEditorBlur: () => void;
-  editorLoadRevision: number; shellMode: "reading" | "editing";
-  setShellMode: (mode: "reading" | "editing") => void;
+  editorLoadRevision: number; headingPresentationMode: "reading" | "editing";
+  setHeadingPresentationMode: (mode: "reading" | "editing") => void;
   setIsEditorFocused: (focused: boolean) => void;
 }) {
-  const composingRef = useRef(false);
   const preserveFocusOnUserEditRef = useRef(false);
   const openingRef = useRef(false);
   const pendingEditorOpenBlurTokenRef = useRef(0);
@@ -92,19 +91,12 @@ export function useEditorFocusPresentation({
     });
   }, [blurFocusedEditorElementWithoutAutosave]);
 
-  const toggleReadingMode = useCallback((): void => {
-    if (!activeDocument || isSettingsOpen || isSettingsClosing || composingRef.current || document.querySelector('[aria-modal="true"]')) return;
-    pendingEditorOpenBlurTokenRef.current += 1;
-    openingRef.current = false;
-    setShellMode(shellMode === "reading" ? "editing" : "reading");
-  }, [activeDocument, isSettingsOpen, isSettingsClosing, shellMode, setShellMode]);
-
   const handleUserDocumentEdit = useCallback(() => {
-    if (!activeDocument || shellMode !== "reading" || isSettingsOpen || isSettingsClosing) return;
+    if (!activeDocument || headingPresentationMode !== "reading" || isSettingsOpen || isSettingsClosing) return;
     // The editor already owns this input. Never refocus or replace its selection.
     preserveFocusOnUserEditRef.current = true;
-    setShellMode("editing");
-  }, [activeDocument, shellMode, isSettingsOpen, isSettingsClosing, setShellMode]);
+    setHeadingPresentationMode("editing");
+  }, [activeDocument, headingPresentationMode, isSettingsOpen, isSettingsClosing, setHeadingPresentationMode]);
 
   const handleAppWorkspaceMouseDownCapture = useCallback(
     (event: React.MouseEvent<HTMLElement>): void => {
@@ -188,7 +180,7 @@ export function useEditorFocusPresentation({
       return;
     }
 
-    if (shellMode !== "editing" && activeDocument?.path !== null) {
+    if (headingPresentationMode !== "editing" && activeDocument?.path !== null) {
       return;
     }
 
@@ -203,7 +195,7 @@ export function useEditorFocusPresentation({
       if (
         openingRef.current || document.querySelector('[aria-modal="true"]') ||
         isFocusedEditorInteractiveElement(editorContainerRef.current) ||
-        (activeElement instanceof Element && activeElement.closest('[data-fishmark-region="search"], [data-fishmark-command="toggle-reading-mode"]'))
+        (activeElement instanceof Element && activeElement.closest('[data-fishmark-region="search"]'))
       ) {
         return;
       }
@@ -212,29 +204,8 @@ export function useEditorFocusPresentation({
     });
 
     return () => cancelAnimationFrame(frame);
-  }, [activeDocument?.path, isDocumentOpen, shellMode, editorLoadRevision, editorContainerRef, editorRef]);
-
-  useEffect(() => {
-    const startComposition = () => { composingRef.current = true; };
-    const endComposition = () => { composingRef.current = false; };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "F11" || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.defaultPrevented) return;
-      event.preventDefault();
-      if (event.repeat || event.isComposing || event.keyCode === 229) return;
-      toggleReadingMode();
-    };
-    window.addEventListener("compositionstart", startComposition, true);
-    window.addEventListener("compositionend", endComposition, true);
-    window.addEventListener("blur", endComposition);
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("compositionstart", startComposition, true);
-      window.removeEventListener("compositionend", endComposition, true);
-      window.removeEventListener("blur", endComposition);
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [toggleReadingMode]);
+  }, [activeDocument?.path, isDocumentOpen, headingPresentationMode, editorLoadRevision, editorContainerRef, editorRef]);
 
   useEffect(() => () => { pendingEditorOpenBlurTokenRef.current += 1; }, []);
-  return { handleUserDocumentEdit, toggleReadingMode, handleEditorBlurFromShell, blurFocusedEditorElementAfterOpen, handleAppWorkspaceMouseDownCapture };
+  return { handleUserDocumentEdit, handleEditorBlurFromShell, blurFocusedEditorElementAfterOpen, handleAppWorkspaceMouseDownCapture };
 }

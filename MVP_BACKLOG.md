@@ -1,5 +1,17 @@
 # MVP Backlog
 
+## TASK-PERMANENT-CHROME-053：常驻文档标签与状态栏（2026-10-16）
+
+状态：**实现完成，验收未完成；未推送**。基线main d4d0604。见[报告053](reports/task-summaries/TASK-PERMANENT-CHROME-053.md)及[handoff](docs/plans/2026-10-16-permanent-chrome-handoff.md)。
+
+- [x] 删除阅读布局状态、按钮、F11处理和折叠CSS；独立保留标题/inline/block呈现、source模式和焦点保护。
+- [x] Tab、状态/字数常驻，空workspace字数0；旧偏好/会话格式无需迁移，阅读位置字段保留；更新定向与产品测试。
+- [x] 后台typecheck/build/strict/bundle-foundation及逐hash源码镜像lint通过，原始证据保留。
+- [ ] 前台协调后运行Windows完整产品/editing/safety/formal及退出清理审计，最终独审通过。
+- [ ] 普通main推送及精确SHA四项官方CI终态核验。
+
+M9仍0/3；性能候选暂停。本轮尚无窗口/真实IME验收结论。
+
 ## TASK-RF901-FIRST-LOAD-051：消除首次重复构建（2026-10-15）
 
 状态：**Windows局部修复验收PASS；RF901首次打开预算FAIL**。完整证据见[报告051](reports/task-summaries/TASK-RF901-FIRST-LOAD-051.md)，最终独审及普通main精确SHA四项官方CI见本批publication。M9仍0/3，RF901未验收。

@@ -1,5 +1,9 @@
 # FishMark 进展记录
 
+## 2026-10-16 永久Tab/状态栏053（实现完成，验收未完成）
+
+取消阅读布局按钮/F11及折叠CSS，拆开壳层与标题渐进呈现；Tab和状态/字数常驻，空workspace字数0，source/标记规则及阅读位置保留。无需持久化迁移。205定向、typecheck/build、strict3987＋8精确known/0unexpected/errors、bundle/foundation310和1468文件逐hash源码镜像原lint通过。独审修正旧测试的首次editing前提；最终定向205、typecheck、strict3987＋8精确known复核及1470文件源码镜像原lint通过，只读代码审查PASS。用户正在输入，053未启动任何Electron窗口或前台输入；完整产品/editing/safety/formal、清理审计及最终独审待协调，未推送。见[报告053](../reports/task-summaries/TASK-PERMANENT-CHROME-053.md)。M9仍0/3，性能工作暂停。
+
 ## 2026-10-15 首次重复构建051（Windows局部修复PASS；首开预算FAIL）
 
 从main2b6e8dff推进一次消费的controller构造receipt，仅跳过相同首次load；后续reload、身份/选区/ACK保持。真实同文本外部reload基线缺陷及失败结果/已提交watch-error对账一并窄修。501定向通过；干净1466文件源码镜像原lint、原位其余八门禁通过，strict3986＋8精确known/0skip、Windows60/60、74启动全部owned退出/cleanup0、formal121/121/2541、gzip1437871/1500000。原位lint受冻结诊断TS阻塞的FAIL保留，不称原位九项全绿。

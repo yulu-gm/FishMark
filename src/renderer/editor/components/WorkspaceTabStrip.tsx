@@ -2,15 +2,13 @@ import type { WorkspaceShellProps } from "../workspace-shell-props";
 import { useWorkspaceTabDrag } from "../useWorkspaceTabDrag";
 
 export function WorkspaceTabStrip({
-  isReadingMode,
-  isDocumentOpen,
   onTabActivate,
   onCloseWorkspaceTab,
   onTabReorder,
   onTabDetach,
   workspaceTabs,
   activeTabId
-}: Pick<WorkspaceShellProps, "isReadingMode" | "isDocumentOpen" | "onTabActivate" | "onCloseWorkspaceTab" | "onTabReorder" | "onTabDetach"> & {
+}: Pick<WorkspaceShellProps, "onTabActivate" | "onCloseWorkspaceTab" | "onTabReorder" | "onTabDetach"> & {
   workspaceTabs: NonNullable<WorkspaceShellProps["workspaceSnapshot"]>["tabs"];
   activeTabId: string | null;
 }) {
@@ -22,7 +20,7 @@ export function WorkspaceTabStrip({
         className="workspace-tab-strip"
         data-fishmark-region="workspace-tab-strip"
         data-empty={workspaceTabs.length === 0 ? "true" : "false"}
-        data-visibility={isReadingMode && isDocumentOpen ? "collapsed" : "visible"}
+        data-visibility="visible"
         aria-label="Open documents"
       >
         <div className="workspace-tab-strip-scroll">

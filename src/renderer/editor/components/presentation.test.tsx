@@ -176,7 +176,7 @@ it("keeps table controls focused across tooltip projection updates and sends one
 async function tabGestureHarness() {
   const reorder = vi.fn(async () => {}), detach = vi.fn(async () => {});
   const activate = vi.fn(), close = vi.fn();
-  await render(<StrictMode><WorkspaceTabStrip workspaceTabs={[{ tabId: "a", path: null, name: "A", isDirty: true, saveState: "idle" }, { tabId: "b", path: null, name: "B", isDirty: false, saveState: "idle" }]} activeTabId="a" isReadingMode={false} isDocumentOpen onTabActivate={activate} onCloseWorkspaceTab={close} onTabReorder={reorder} onTabDetach={detach} /></StrictMode>);
+  await render(<StrictMode><WorkspaceTabStrip workspaceTabs={[{ tabId: "a", path: null, name: "A", isDirty: true, saveState: "idle" }, { tabId: "b", path: null, name: "B", isDirty: false, saveState: "idle" }]} activeTabId="a" onTabActivate={activate} onCloseWorkspaceTab={close} onTabReorder={reorder} onTabDetach={detach} /></StrictMode>);
   const tabs = container.querySelectorAll<HTMLButtonElement>('[data-fishmark-region="workspace-tab"]');
   const captures = new Set<number>();
   for (const tab of tabs) {

@@ -1,5 +1,9 @@
 # FishMark 决策日志
 
+## 2026-10-16：053移除阅读布局，保留渐进语法呈现
+
+用户要求删除阅读模式按钮并常驻文档Tab和状态/字数。原shellMode同时驱动壳层折叠和标题呈现，因此仅删除布局能力，将标题状态独立命名并保持初始reading/实际输入后editing及焦点保护；inline/block规则和source模式不改。删除按钮/F11监听/无效props和CSS，空workspace字数0。保留theme ABI字段，两处构建固定readingMode0。Preferences和恢复会话均无持久化壳层模式字段，不引入虚构迁移或重置有效配置；WorkspaceReadingPosition是阅读锚点，保留。性能候选暂停；前台测试等待用户协调，完整门禁和独审前不推送。
+
 ## 2026-10-15：051只消费当前controller的首次构造
 
 050在生产模式定位同一controller同一load的构造及立即replace重复全文解析。用组件本地一次性receipt核对实例/首次身份/实际文本，仅首个完全匹配load跳过replace；即使不匹配也消费。effect重连的新实例可强制fallback，不受保留的applied revision阻止。身份/session/selection/reading/ACK仍照常执行；不做通用文本缓存，不把相同文本当作未来reload的跳过依据。

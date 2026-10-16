@@ -175,7 +175,7 @@ for (const failure of ["target-close", "readiness-timeout"]) test(`${failure} re
 async function prepare(product) {
   await product.seed(content, 60_000);
   const page = await product.launch(content);
-  await page.getByRole("button", { name: "退出阅读模式 (F11)", exact: true }).click();
+
   await expect(page.locator('[data-fishmark-region="workspace-tab-strip"]')).toBeVisible();
   await product.focus(page);
   await page.keyboard.press(process.platform === "darwin" ? "Meta+ArrowUp" : "Control+Home");

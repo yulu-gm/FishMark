@@ -29,27 +29,24 @@ async function geometry(page) {
           fontSize: c.fontSize, lineHeight: c.lineHeight, paddingTop: c.paddingTop, paddingBottom: c.paddingBottom }; }) };
   });
 }
-for (const mode of ["light", "dark"]) test(`reading rhythm in ${mode} wide narrow and shell modes`, async ({ product }) => {
+for (const mode of ["light", "dark"]) test(`reading rhythm in ${mode} wide and narrow with permanent chrome`, async ({ product }) => {
   test.setTimeout(120_000);
   await product.seed(source, 60_000);
   await writeFile(join(product.profile, "preferences.json"), JSON.stringify({ version: 3, autosave: { idleDelayMs: 60_000 }, theme: { mode, effectsMode: "off" } }));
   const page = await product.launch(source);
-  const exit = page.getByRole("button", { name: "退出阅读模式 (F11)", exact: true });
-  if (await exit.isVisible()) await exit.click();
+
   const owner = await product.current.app.browserWindow(page), proofs = [];
   for (const width of [1280, 900]) {
     const native = await owner.evaluate((window, width) => { window.setSize(width, 1000); return { minimum: window.getMinimumSize(), bounds: window.getBounds(), content: window.getContentSize() }; }, width);
     await expect.poll(() => page.evaluate(() => innerWidth)).toBe(native.content[0]);
     await product.focus(page); await page.keyboard.press("Control+Home");
-    for (const shell of ["edit", "reading"]) {
-      if (shell === "reading") await page.keyboard.press("F11");
-      await settle(page); const proof = await geometry(page);
-      await page.screenshot({ path: product.testInfo.outputPath(`${mode}-${width}-${shell}.png`) });
-      proofs.push({ mode, width, shell, native, ...proof });
-      expect(proof.contentWidth).toBeLessThanOrEqual(proof.width);
-      expect(proof.rows.some(row => row.text.includes("林间手记"))).toBe(true);
-      if (shell === "reading") await page.keyboard.press("F11");
-    }
+    await settle(page); const proof = await geometry(page);
+    await expect(page.locator('[data-fishmark-region="workspace-tab-strip"]')).toBeVisible();
+    await expect(page.locator('[data-fishmark-region="app-status-bar"]')).toBeVisible();
+    await page.screenshot({ path: product.testInfo.outputPath(`${mode}-${width}-permanent-chrome.png`) });
+    proofs.push({ mode, width, native, ...proof });
+    expect(proof.contentWidth).toBeLessThanOrEqual(proof.width);
+    expect(proof.rows.some(row => row.text.includes("林间手记"))).toBe(true);
   }
   await owner.dispose();
   await product.focus(page); await page.keyboard.press("Control+Home");
@@ -84,8 +81,7 @@ test("reading rhythm preserves multiline paragraphs nested headings and source s
     "## Consecutive heading", "### Another heading", "", "- ### Nested list heading", "",
     "> ## Nested quote heading", "", "After containers", "", "", "Last paragraph"].join("\n");
   await product.seed(text, 60_000); const page = await product.launch(text);
-  const exit = page.getByRole("button", { name: "退出阅读模式 (F11)", exact: true });
-  if (await exit.isVisible()) await exit.click();
+
   await product.focus(page); await page.keyboard.press("Control+Home");
   const proof = await geometry(page), first = proof.rows.find(r => r.text.includes("First physical")), second = proof.rows.find(r => r.text.includes("second physical"));
   expect(first.paddingBottom).toBe("0px");

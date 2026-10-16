@@ -131,8 +131,7 @@
   min-height: 0;
   position: relative;
   display: grid;
-  /* The rail column is permanent chrome: reading mode only folds the vertical
-     chrome (tab strip / status bar), never the rail. */
+  /* Rail, document tabs and status bar are permanent workspace chrome. */
   grid-template-columns: var(--fishmark-shell-rail-offset) minmax(0, 1fr);
   transition: grid-template-columns var(--fishmark-focus-transition-duration) var(--fishmark-focus-transition-easing);
 }
@@ -533,10 +532,6 @@
   margin: 0 auto;
 }
 
-.app-workspace[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] > .app-status-bar[data-fishmark-region="app-status-bar"][data-visibility="collapsed"] {
-  display: none !important;
-}
-
 .workspace-tab-strip {
   grid-row: 2;
   display: block;
@@ -561,16 +556,9 @@
     border-color var(--fishmark-focus-transition-duration) ease;
 }
 
-/* Keep the tab row and viewport stable; hidden controls cannot receive focus. */
+/* Reserve the tab row even when no document is open. */
 .workspace-tab-strip[data-empty="true"] {
   min-height: 36px;
-}
-
-.workspace-tab-strip[data-visibility="collapsed"] {
-  opacity: 0;
-  visibility: hidden;
-  border-bottom-color: transparent;
-  pointer-events: none;
 }
 
 .workspace-tab-strip-scroll {
@@ -796,23 +784,6 @@
   padding-inline-end: 0;
 }
 
-.workspace-canvas[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] {
-  grid-row: 3;
-  grid-column: 1;
-  width: 100%;
-  max-width: none;
-  margin: 0;
-}
-
-.workspace-canvas[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"].is-editor-open {
-  grid-template-columns: minmax(0, 1fr);
-  padding-inline-end: 0;
-}
-
-.workspace-canvas[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] .shortcut-hint-overlay-shell {
-  display: none;
-}
-
 .workspace-canvas.is-editor-open > .shortcut-hint-overlay-shell {
   min-width: 0;
   min-height: 0;
@@ -878,12 +849,6 @@
   grid-template-columns: var(--fishmark-side-panel-width) minmax(0, 1fr);
   column-gap: var(--fishmark-side-panel-gap);
   transition: grid-template-columns 220ms var(--fishmark-ease-standard);
-}
-
-.workspace-canvas[data-fishmark-shell-mode="reading"][data-fishmark-has-document="true"] .workspace-shell {
-  width: 100%;
-  max-width: none;
-  margin: 0;
 }
 
 .workspace-shell.is-side-panel-open {
@@ -1436,19 +1401,6 @@
     transform var(--fishmark-focus-transition-duration) var(--fishmark-focus-transition-easing),
     display var(--fishmark-focus-transition-duration) allow-discrete;
   transition-behavior: allow-discrete;
-}
-
-.app-status-bar[data-visibility="collapsed"] {
-  opacity: 0;
-  transform: translateY(14px);
-  pointer-events: none;
-}
-
-@starting-style {
-  .app-status-bar[data-visibility="visible"] {
-    opacity: 0;
-    transform: translateY(14px);
-  }
 }
 
 .app-status-bar [data-fishmark-region="status-strip"] {

@@ -33,7 +33,7 @@ import type { TitlebarLayoutDescriptor } from "./titlebar-layout";
 import type { ResolvedThemeMode, ThemePackageEntry } from "./useThemeController";
 
 
-type ShellMode = "reading" | "editing";
+type HeadingPresentationMode = "reading" | "editing";
 /**
  * The rail switches the shared side panel between view containers; the same
  * container id is what `aria-pressed` on the rail button reports, and `null`
@@ -68,8 +68,6 @@ export type WorkspaceShellProps = {
   fontFamilies: string[];
   headerTitle: string;
   isDocumentOpen: boolean;
-  isReadingMode: boolean;
-  onToggleReadingMode?: () => void;
   isRefreshingThemePackages: boolean;
   isSettingsDrawerVisible: boolean;
   isSettingsOpen: boolean;
@@ -83,7 +81,7 @@ export type WorkspaceShellProps = {
   resolvedThemeMode: ResolvedThemeMode;
   saveStatusLabel: string;
   settingsEntryRef: RefObject<HTMLButtonElement | null>;
-  shellMode: ShellMode;
+  headingPresentationMode: HeadingPresentationMode;
   /**
    * Stored width of the shared side panel region, shared by every view
    * container. `null` means "not set yet" and resolves to the default.

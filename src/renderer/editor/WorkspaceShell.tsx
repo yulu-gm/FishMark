@@ -95,8 +95,6 @@ export function WorkspaceShell({
   fontFamilies,
   headerTitle,
   isDocumentOpen,
-  isReadingMode,
-  onToggleReadingMode,
   isRefreshingThemePackages,
   isSettingsDrawerVisible,
   isSettingsOpen,
@@ -110,7 +108,7 @@ export function WorkspaceShell({
   resolvedThemeMode,
   saveStatusLabel,
   settingsEntryRef,
-  shellMode,
+  headingPresentationMode,
   sidePanelStoredWidth,
   themePackages,
   themeRuntimeEnv,
@@ -229,7 +227,7 @@ export function WorkspaceShell({
   return (
     <main
       className="app-shell"
-      data-fishmark-shell-mode={shellMode}
+      data-fishmark-heading-presentation={headingPresentationMode}
       style={
         {
           "--fishmark-titlebar-height": controlledTitlebarEnabled
@@ -255,7 +253,6 @@ export function WorkspaceShell({
       ) : null}
       <div
         className="app-layout"
-        data-fishmark-shell-mode={shellMode}
         data-fishmark-has-document={isDocumentOpen ? "true" : "false"}
       >
         {activeWorkbenchSurface ? (
@@ -279,22 +276,6 @@ export function WorkspaceShell({
             <p className="app-name">FishMark</p>
             <p className="app-subtitle">Desktop editor</p>
           </div>
-          <button
-            type="button"
-            className="rail-tool-button"
-            data-fishmark-command="toggle-reading-mode"
-            aria-label={isReadingMode ? "退出阅读模式 (F11)" : "进入阅读模式 (F11)"}
-            title={isReadingMode ? "退出阅读模式 (F11)" : "进入阅读模式 (F11)"}
-            aria-keyshortcuts="F11"
-            aria-pressed={isReadingMode}
-            disabled={!isDocumentOpen || isSettingsDrawerVisible}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={onToggleReadingMode}
-          >
-            <svg className="rail-tool-button-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-              <path d="M12 5v15M12 5C9 3 5 3 2 4v15c3-1 7-1 10 1 3-2 7-2 10-1V4c-3-1-7-1-10 1Z" />
-            </svg>
-          </button>
           <div className="app-rail-content">
             <div
               className="app-rail-mode-group app-rail-mode-group-default"
@@ -386,7 +367,6 @@ export function WorkspaceShell({
         <div
           className="app-workspace"
           data-fishmark-layout="workspace"
-          data-fishmark-shell-mode={shellMode}
           data-fishmark-has-document={isDocumentOpen ? "true" : "false"}
           onMouseDownCapture={onAppWorkspaceMouseDownCapture}
           onKeyDownCapture={handleWorkspaceKeyDownCapture}
@@ -404,8 +384,6 @@ export function WorkspaceShell({
             onDismissExternalFileConflict={onDismissExternalFileConflict}
           />
           <WorkspaceTabStrip
-            isReadingMode={isReadingMode}
-            isDocumentOpen={isDocumentOpen}
             onTabActivate={onTabActivate}
             onCloseWorkspaceTab={onCloseWorkspaceTab}
             onTabReorder={onTabReorder}
@@ -416,7 +394,6 @@ export function WorkspaceShell({
           <section
             className={`workspace-canvas ${activeDocument ? "is-editor-open" : ""}`}
             data-fishmark-region="workspace-canvas"
-            data-fishmark-shell-mode={shellMode}
             data-fishmark-has-document={isDocumentOpen ? "true" : "false"}
             style={sidePanelWidthVariables}
           >
@@ -460,7 +437,7 @@ export function WorkspaceShell({
                         requestPlainTextPaste={onRequestPlainTextPaste}
                         openExternalLink={onOpenExternalLink}
                         viewMode={editorViewMode}
-                        headingPresentationMode={shellMode}
+                        headingPresentationMode={headingPresentationMode}
                         onActiveBlockChange={onActiveBlockChange}
                         onDocumentChangeFrame={onDocumentChangeFrame}
                         onUserDocumentEdit={onUserDocumentEdit}
@@ -578,7 +555,6 @@ export function WorkspaceShell({
           </section>
 
           <StatusBar
-            isReadingMode={isReadingMode}
             isDocumentOpen={isDocumentOpen}
             appUpdateStatusLabel={appUpdateStatusLabel}
             saveStatusLabel={saveStatusLabel}

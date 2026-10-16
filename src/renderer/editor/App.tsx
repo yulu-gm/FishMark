@@ -84,7 +84,7 @@ function resolveEditorShortcutGroupId(
     : "default-text";
 }
 
-type ShellMode = "reading" | "editing";
+type HeadingPresentationMode = "reading" | "editing";
 
 function supportsControlledTitlebar(platform: NodeJS.Platform): boolean {
   return platform === "darwin";
@@ -140,7 +140,7 @@ function EditorShell({
 }) {
   const [activeHeadingId, setActiveHeadingId] = useState<string | null>(null);
   const { activeViewContainer, closingViewContainer, toggleViewContainer, closeViewContainer } = useViewContainerPresentation();
-  const [shellMode, setShellMode] = useState<ShellMode>("reading");
+  const [headingPresentationMode, setHeadingPresentationMode] = useState<HeadingPresentationMode>("reading");
   const [editorViewMode, setEditorViewMode] = useState<EditorViewMode>("wysiwym");
   const [preferences, setPreferences] = useState<Preferences>(DEFAULT_PREFERENCES);
   const [recentFiles, setRecentFiles] = useState<RecentFilesSnapshot>(DEFAULT_RECENT_FILES_SNAPSHOT);
@@ -239,12 +239,10 @@ function EditorShell({
     openSettingsDrawer
   } = settingsController;
   const isDocumentOpen = activeDocument !== null;
-  const isReadingMode = shellMode === "reading";
-  const isDocumentReadingMode = isDocumentOpen && isReadingMode;
-  const { handleUserDocumentEdit, toggleReadingMode, handleEditorBlurFromShell, blurFocusedEditorElementAfterOpen, handleAppWorkspaceMouseDownCapture } = useEditorFocusPresentation({
+  const { handleUserDocumentEdit, handleEditorBlurFromShell, blurFocusedEditorElementAfterOpen, handleAppWorkspaceMouseDownCapture } = useEditorFocusPresentation({
     activeDocument, isSettingsOpen, isSettingsClosing, editorContainerRef, editorRef,
     handleEditorBlur, isDocumentOpen, editorLoadRevision: state.editorLoadRevision,
-    shellMode, setShellMode, setIsEditorFocused
+    headingPresentationMode, setHeadingPresentationMode, setIsEditorFocused
   });
   const headerTitle = isDocumentOpen
     ? activeDocument?.name ?? "Untitled"
@@ -269,7 +267,7 @@ function EditorShell({
   const handleWindowBlur = useCallback(() => setIsEditorFocused(false), []);
   const { isShortcutHintVisible } = useShortcutHintPresentation({ platform: fishmark.platform, isDocumentOpen, isEditorFocused, onWindowBlur: handleWindowBlur });
   const controlledTitlebarEnabled = supportsControlledTitlebar(fishmark.platform);
-  const { activeTitlebarSurface, activeWorkbenchSurface, resolvedThemeMode, themeRuntimeEnv, handleWorkbenchSurfaceRuntimeModeChange, handleTitlebarSurfaceRuntimeModeChange } = useThemePresentation({ preferences, themePackages, themePackageCatalogState, isRefreshingThemePackages, currentDocumentWordCount, isDocumentReadingMode, controlledTitlebarEnabled, showNotification });
+  const { activeTitlebarSurface, activeWorkbenchSurface, resolvedThemeMode, themeRuntimeEnv, handleWorkbenchSurfaceRuntimeModeChange, handleTitlebarSurfaceRuntimeModeChange } = useThemePresentation({ preferences, themePackages, themePackageCatalogState, isRefreshingThemePackages, currentDocumentWordCount, controlledTitlebarEnabled, showNotification });
   const titlebarLayout = useMemo(
     () => normalizeTitlebarLayout(resolveDefaultTitlebarLayout(fishmark.platform)),
     [fishmark.platform]
@@ -766,7 +764,6 @@ function EditorShell({
         fontFamilies={fontFamilies}
         headerTitle={headerTitle}
         isDocumentOpen={isDocumentOpen}
-        isReadingMode={isReadingMode}
         isRefreshingThemePackages={isRefreshingThemePackages}
         isSettingsDrawerVisible={isSettingsDrawerVisible}
         isSettingsOpen={isSettingsOpen}
@@ -780,7 +777,7 @@ function EditorShell({
         resolvedThemeMode={resolvedThemeMode}
         saveStatusLabel={saveStatusLabel}
         settingsEntryRef={settingsEntryRef}
-        shellMode={shellMode}
+        headingPresentationMode={headingPresentationMode}
         sidePanelStoredWidth={preferences.ui.sidePanelWidth}
         themePackages={themePackages}
         themeRuntimeEnv={themeRuntimeEnv}
@@ -788,7 +785,6 @@ function EditorShell({
         titlebarLayout={titlebarLayout}
         onActiveBlockChange={handleActiveBlockChange}
         onAppWorkspaceMouseDownCapture={handleAppWorkspaceMouseDownCapture}
-        onToggleReadingMode={toggleReadingMode}
         onCaptureSettingsOpenOrigin={captureSettingsOpenOrigin}
         onCloseViewContainer={closeViewContainer}
         onCloseSettingsDrawer={closeSettingsDrawer}

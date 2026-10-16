@@ -13,8 +13,7 @@ const restoredProof = { formatsMatch: true, textMatch: true, imageMatch: true, h
 async function setup(product) {
   await product.seed(source, 60_000);
   const page = await product.launch(source);
-  const reading = page.getByRole("button", { name: "退出阅读模式 (F11)", exact: true });
-  if (await reading.isVisible()) await reading.click();
+
   product.current.suppressScreenshots = true;
   product.current.visualEvidencePolicy = "Artificial clipboard fixtures only; prior payload remains in main RAM, no trace/screenshots after clipboard setup.";
   await product.current.app.context().tracing.stop({ path: product.testInfo.outputPath("before-clipboard.zip") });

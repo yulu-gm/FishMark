@@ -1,5 +1,9 @@
 # FishMark 测试报告
 
+## 2026-10-16 TASK-PERMANENT-CHROME-053
+
+状态：**实现完成，验收未完成；未推送**。RED新测试在原代码因阅读按钮存在而失败；最小修改后GREEN。4文件205定向及typecheck/build通过；strict3987pass＋8精确known、0unexpected/collection-hook-unhandled错误；bundle/foundation310通过；1468文件逐hash源码镜像原npm lint通过（冻结诊断文件不改，不称原位九门禁全绿）。新增resize断言后定向205、typecheck和strict3987＋8精确known复核通过；最终1470文件源码镜像原lint及只读代码审查PASS。用户正在输入，053没有启动Electron/前台测试；完整Windows产品、editing/safety/formal、截图、退出与清理待协调。不标最终PASS，不推送。原始证据.artifacts/permanent-chrome-053，见[报告053](../reports/task-summaries/TASK-PERMANENT-CHROME-053.md)。M9仍0/3。
+
 ## 2026-10-15 TASK-RF901-FIRST-LOAD-051
 
 Windows局部修复验收：**PASS**；RF901首次打开预算：**FAIL**。首构造receipt、同文本成功reload重置history、失败保留history和committed watch-error非force对账均有RED/GREEN。501定向单测；051-final-03干净1466文件逐hash源码镜像原npm lint及原位typecheck/build/strict/Windows产品/foundation/editing/safety/formal通过。原位lint28any来自冻结050及051诊断副本，原始FAIL保留；未改eslint规则/known allowlist。strict3986＋8精确known，0unexpected/errors/skip；Windows60/60无skip/retry/flaky、74启动=69正常exit0+5预期恢复，14native助手九阶段，全部owned退出/profile清理/cleanup0；foundation310、editing79、safety7、formal121/121/2541，gzip1437871/1500000、initial104006/260000。

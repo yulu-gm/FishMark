@@ -55,8 +55,7 @@ test("path authority accepts native-backed File multi-drop in order and preserve
   const page = await product.launch(content);
   const clipboardFormats = await product.current.app.evaluate(({ clipboard }) => clipboard.availableFormats());
   await product.testInfo.attach("clipboard-format-only-observation", { body: JSON.stringify({ formats: clipboardFormats, payloadRead: false }), contentType: "application/json" });
-  const exitReading = page.getByRole("button", { name: "退出阅读模式 (F11)", exact: true });
-  if (await exitReading.isVisible()) await exitReading.click();
+
   await page.evaluate(() => {
     const input = document.createElement("input");
     input.type = "file"; input.multiple = true; input.dataset.rf903NativeFiles = "true";
@@ -144,8 +143,7 @@ test("path authority preserves a real image paste into the active saved document
       await expect.poll(async () => (await product.mainEvidence()).filter((event) => event.event === "authority:end" && event.detail.channel === "fishmark:import-clipboard-image").length).toBe(2);
       await page.evaluate(() => new Promise((done) => setTimeout(done, 300)));
       expect((await product.snapshot()).activeDocument.content).toBe("");
-      const exitReading = page.getByRole("button", { name: "退出阅读模式 (F11)", exact: true });
-      if (await exitReading.isVisible()) await exitReading.click();
+
       await page.getByRole("button", { name: `Close ${next.activeDocument.name}`, exact: true }).click();
       await expect.poll(async () => (await product.snapshot()).activeDocument?.content).toBe(saved.activeDocument.content);
       await product.testInfo.attach("deferred-image-paste-document-switch", { body: JSON.stringify({ originalTabId: saved.activeTabId, switchedTabId: next.activeTabId, newTabRemainedEmpty: true,

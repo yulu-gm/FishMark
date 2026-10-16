@@ -130,7 +130,7 @@ test("recovery fault one failed tab blocks its chain but recovers another docume
   expect((await product.snapshot()).activeDocument.content).toBe("");
   const notification = await assertRecoveryDialog(product);
   const backup = await preservedPair(product, injected, "preserved-two-tab-before-edit");
-  await product.current.page.getByRole("button", { name: "退出阅读模式 (F11)", exact: true }).click();
+
   await product.current.page.locator(`[data-tab-id="${originalTabId}"]`).click();
   await expect.poll(async () => (await product.snapshot()).activeDocument.content).toBe(initial + suffix);
   expect(await product.disk()).toBe(initial);

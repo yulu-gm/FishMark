@@ -7,8 +7,7 @@ test("first load preserves native undo and a genuine equal-text reload resets it
   const source = "# First load\n\nOriginal 中文 text.";
   await product.seed(source, 60_000);
   const page = await product.launch(source);
-  const exit = page.getByRole("button", { name: "退出阅读模式 (F11)", exact: true });
-  if (await exit.isVisible()) await exit.click();
+
   await product.focus(page);
   await page.keyboard.press("Control+z"); await frames(page);
   expect((await product.snapshot()).activeDocument).toMatchObject({ content: source, isDirty: false });
@@ -41,8 +40,7 @@ test("a failed external reload preserves the saved edit's native undo history", 
   const source = "# Failed reload\n\nOriginal 中文 text.";
   await product.seed(source, 60_000);
   const page = await product.launch(source);
-  const exit = page.getByRole("button", { name: "退出阅读模式 (F11)", exact: true });
-  if (await exit.isVisible()) await exit.click();
+
   await product.append(" saved edit");
   const saved = source + " saved edit";
   await product.manualSave(); await product.expectSaved(saved);
