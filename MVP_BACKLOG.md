@@ -2,15 +2,17 @@
 
 ## TASK-PERMANENT-CHROME-053：常驻文档标签与状态栏（2026-10-16）
 
-状态：**实现完成，验收未完成；未推送**。基线main d4d0604。见[报告053](reports/task-summaries/TASK-PERMANENT-CHROME-053.md)及[handoff](docs/plans/2026-10-16-permanent-chrome-handoff.md)。
+状态：**Windows本地验收PASS**。基线main d4d0604，本地实现检查点5f252f2；最终独审和普通main精确发布/CI终态以本批publication为准。见[报告053](reports/task-summaries/TASK-PERMANENT-CHROME-053.md)及[handoff](docs/plans/2026-10-16-permanent-chrome-handoff.md)。
 
 - [x] 删除阅读布局状态、按钮、F11处理和折叠CSS；独立保留标题/inline/block呈现、source模式和焦点保护。
 - [x] Tab、状态/字数常驻，空workspace字数0；旧偏好/会话格式无需迁移，阅读位置字段保留；更新定向与产品测试。
 - [x] 后台typecheck/build/strict/bundle-foundation及逐hash源码镜像lint通过，原始证据保留。
-- [ ] 前台协调后运行Windows完整产品/editing/safety/formal及退出清理审计，最终独审通过。
-- [ ] 普通main推送及精确SHA四项官方CI终态核验。
+- [x] 用户本次明确授权后，完整Windows61/61、editing79、safety7、formal121/121/2541及76启动/318owned退出清理审计通过；原测试前提失败保留。
+- [x] 最终代码与测试修正独审通过。
 
-M9仍0/3；性能候选暂停。本轮尚无窗口/真实IME验收结论。
+发布按普通main执行；精确SHA四项官方CI与官方Windows制品审计结果另见本批publication。
+
+M9仍0/3；性能候选暂停。前台已于04:51:25UTC释放；Mac/真实IME不在本批新增验收内。
 
 ## TASK-RF901-FIRST-LOAD-051：消除首次重复构建（2026-10-15）
 

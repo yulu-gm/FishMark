@@ -2,7 +2,7 @@
 
 ## 2026-10-16 TASK-PERMANENT-CHROME-053
 
-状态：**实现完成，验收未完成；未推送**。RED新测试在原代码因阅读按钮存在而失败；最小修改后GREEN。4文件205定向及typecheck/build通过；strict3987pass＋8精确known、0unexpected/collection-hook-unhandled错误；bundle/foundation310通过；1468文件逐hash源码镜像原npm lint通过（冻结诊断文件不改，不称原位九门禁全绿）。新增resize断言后定向205、typecheck和strict3987＋8精确known复核通过；最终1470文件源码镜像原lint及只读代码审查PASS。用户正在输入，053没有启动Electron/前台测试；完整Windows产品、editing/safety/formal、截图、退出与清理待协调。不标最终PASS，不推送。原始证据.artifacts/permanent-chrome-053，见[报告053](../reports/task-summaries/TASK-PERMANENT-CHROME-053.md)。M9仍0/3。
+Windows本地验收：**PASS**。新增测试RED→GREEN，205定向、typecheck/build、strict3987＋8精确known/0unexpected/errors/skip、bundle/foundation310及最终1470文件逐hash源码镜像原npm lint通过；不改冻结诊断/规则，不称原位九门禁全绿。用户04:43UTC本次明确授权后，完整Windows61/61无skip/retry/flaky、76启动=71正常exit0+5预期恢复，318owned均退出/profile清理/cleanup0，14native助手九阶段与sidecar匹配；editing79、safety7、formal121/121/2541（99known，0unexpected/not-run）通过。Windows gzip1437457/1500000，initial103592/260000；无新性能采样。四guard无物理输入，product注入28；同PowerShell静态计数在后三probe累计28、增量0，严格last-input检查均通过。target01保留6过1败原始记录：新增例误假定正常Quit恢复干净标签；仅改同profile原FileOpen重开，target02及full通过；失败profile按原fixture已删除，所属进程已退出。宽窄与空页截图保留，前台04:51:25UTC释放，约6分38秒。代码/测试修正独审通过；最终证据独审、普通main精确SHA四项官方CI及官方Windows制品审计终态见本批publication。证据.artifacts/permanent-chrome-053，见[报告053](../reports/task-summaries/TASK-PERMANENT-CHROME-053.md)。M9仍0/3，Mac/真实IME未新增验收。
 
 ## 2026-10-15 TASK-RF901-FIRST-LOAD-051
 

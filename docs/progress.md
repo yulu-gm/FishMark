@@ -1,8 +1,8 @@
 # FishMark 进展记录
 
-## 2026-10-16 永久Tab/状态栏053（实现完成，验收未完成）
+## 2026-10-16 永久Tab/状态栏053（Windows本地验收PASS）
 
-取消阅读布局按钮/F11及折叠CSS，拆开壳层与标题渐进呈现；Tab和状态/字数常驻，空workspace字数0，source/标记规则及阅读位置保留。无需持久化迁移。205定向、typecheck/build、strict3987＋8精确known/0unexpected/errors、bundle/foundation310和1468文件逐hash源码镜像原lint通过。独审修正旧测试的首次editing前提；最终定向205、typecheck、strict3987＋8精确known复核及1470文件源码镜像原lint通过，只读代码审查PASS。用户正在输入，053未启动任何Electron窗口或前台输入；完整产品/editing/safety/formal、清理审计及最终独审待协调，未推送。见[报告053](../reports/task-summaries/TASK-PERMANENT-CHROME-053.md)。M9仍0/3，性能工作暂停。
+取消阅读布局按钮/F11及折叠CSS，独立保留标题渐进呈现；Tab和状态/字数常驻，空workspace字数0，source/标记规则及阅读位置保留，无需持久化迁移。205定向、typecheck/build、strict3987＋8精确known/0unexpected/errors/skip、bundle/foundation310及最终1470文件逐hash源码镜像原lint通过（不称原位九项全绿）。本次明确授权后Windows61/61、editing79、safety7、formal121/121/2541通过，76启动=71正常exit0+5预期恢复，318owned均退出、profile清理/cleanup0；14native助手九阶段与原始sidecar匹配，无监听超限warning。target01六过一败是新测试误假定正常Quit恢复干净标签；修正同profile原FileOpen重开后通过，原失败保留且其profile按fixture已删除。前台04:51:25UTC释放，约6分38秒。代码/测试修正独审通过，最终证据独审及普通main精确SHA四项官方CI/制品审计以本批publication为准。见[报告053](../reports/task-summaries/TASK-PERMANENT-CHROME-053.md)。M9仍0/3，性能工作暂停。
 
 ## 2026-10-15 首次重复构建051（Windows局部修复PASS；首开预算FAIL）
 

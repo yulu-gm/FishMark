@@ -72,7 +72,9 @@ test("permanent chrome survives old preferences, resize, edits, source mode, tab
   await expect.poll(async () => (await product.snapshot()).activeTabId).toBe(firstId);
   await chrome(page);
   await product.normalClose();
-  const reopened = await product.launch(source, { openDocument: false });
+  // Regular Quit closed the clean tab. Reopen through the existing File Open
+  // entry with the same persisted profile rather than assuming session restore.
+  const reopened = await product.launch(source);
   await chrome(reopened);
   const preferences = await reopened.evaluate(() => window.fishmark.getPreferences());
   expect(preferences.ui.sidePanelWidth).toBe(310);
