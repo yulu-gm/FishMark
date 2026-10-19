@@ -1,5 +1,35 @@
 # MVP Backlog
 
+2026-10-19 4.0.0发布阶段：用户14:56 UTC明确直接发布，取消等待原始文档/可见复现的条件。代码审查结论为无具体阻断缺陷，可带已知限制发布；仍须本次版本构建、回归和安装包基本核验。Windows手工两版均未见抽动，视觉效果尚未确认，不能称已修复。后台隔离发布，不运行被安全检测拦截的guard、不注入键鼠、不关闭现有手工窗口；以下旧“等待复现后才发布”状态已由本段更新。
+
+只读安全复核补充：拦截对象是外层输入guard由Add-Type生成的临时s1kfp3zc.0.cs，失败时间只能界定在UTC13:14:17.905之后至13:15:15.723之前（本机UTC+8约21:14–21:15），没有精确单秒日志。本轮默认受限会话读取SecurityCenter2清单和Defender/CodeIntegrity/AppLocker/PowerShell日志均被拒，未提权；检测厂商/名称/规则仍未知，旧窄查询无事件不代表不存在检测。首选下一轮由用户手工操作可核验来源的主干/候选隔离窗口，先做4关键对照，不伪称完整38例或自动逐帧通过；本轮不启动窗口/操作前台，不使用替代注入方式。另可由用户或设备管理员只读查安全软件的相应拦截记录，无需关闭保护或加排除。已另存3份4.0.0版本/发布说明草案并深比较依赖不变，均未应用，项目仍0.2.10；原生/包门禁及正式发布继续阻塞。证据.artifacts/table-scrollbar-054-live4/security-audit-readonly.json、manual-check-plan.md、version-preparation-review.json，旧证据保留。
+
+最新原生/发布阶段：BLOCKED。用户已明确授权继续接管，并于13:04 UTC批准质量通过后提交main及发布4.0.0；授权无需重复索取。13:14:16-17桌面只读预检PASS，但随后既有外层输入guard第8行Add-Type被Windows安全检测阻断（临时cs提示包含病毒或潜在垃圾软件），未执行后续保护启动/Node产品启动。guard目录0文件、E2E run目录不存在，本轮产品启动0/手势helper0/OS输入0/产品profile0。13:15已告知归还键鼠，13:18:33完成结束归档。具体安全产品/规则未知；窄时段Defender日志无匹配事件，不能擅自归因。未重试、改排除、换编译路径或降低安全设置。
+
+新版38计划原生例均未运行，不是产品native FAIL，也没有native PASS；4.0.0正式发布因关键门禁阻塞，未提交/推送/tag/release。版本预检：公共最新版v3.0.0，tag5a882f51b5f89b4ac36dff7512700572a54b01b7是当前main祖先，相差326提交；main、tag源码和锁/说明版本均0.2.10。公开未见4.0.0，未来发布前仍须认证核查已有草稿/标签，不能覆盖。元数据未提前改号，包版本/来源验证及CI/附件发布均未执行。4生产文件＋2测试＋7文档待审查/验收；调试产物均在ignored.artifacts。后台既有4023＋8exactknown、36新契约、headless07的25/25及代码/协议独审仅证明可进入原生，不能代替之。最终证据.artifacts/table-scrollbar-054-live4/blocked-outcome.json，授权/同hash11文件协议/release-plan.json/结束归档/独审均保留，原main524构建、2349历史、053的72证据与candidate03的1476源/524构建hash不变。下一步先由设备安全策略维护者核实该保护器拦截，再以合法允许的原保护协议、新唯一runId恢复验证；不能去掉保护或绕过拦截。以下为此前后台及原生历史。
+
+最终后台检查点candidate03：ViewPlugin.update只排队一次keyed requestMeasure.read，布局读取在专用read阶段完成，generation丢弃已取消的旧请求；测量后维持纵向bar手势比例。headless07仍25/25，max归一误差0.000017507/输入后≤2px；新增两项验证update不读布局及取消后旧read不运行。28测量/生命周期＋8路由=36项定向用例，独立1476源码/524构建原lint/typecheck/build/strict通过（4023PASS＋8exactknown，0unexpected/collection/hook/unhandled errors）。最终只读复审允许进入原生验证，尚不能发布；errors[]只覆盖pageerror，未审计console测量循环警告。新版native、track/page/arrow及任意异步widget尺寸仍未测，前台继续释放，本阶段无可见窗口/OS输入，未提交/推送，HEAD仍7bdf04739415fb0750835da66e1c9d35fe893fe1。最终证据.artifacts/table-scrollbar-054-bg2/background-outcome-03.json；candidate02/headless06与全部失败冻结保留。以下包含02中间检查点及更早历史。
+
+## TASK-TABLE-SCROLLBAR-054：有表格无图片长文滚动条抽动（2026-10-19）
+
+最新后台：已定位CM测量锚点补偿与scrollbar比例定位冲突；新候选34定向、headless25/25及独立快照原lint/typecheck/build/strict通过（4021＋8exactknown/0unexpected/errors）。独审可进入原生验证，尚未达到发布条件；新版native、track/page/arrow及任意异步widget尺寸待测，不称视觉抽动已解。前台仍释放，本阶段0可见窗口/OS输入，未提交/推送，M9仍0/3。candidate02与.artifacts/table-scrollbar-054-bg2冻结，以下保留旧阶段历史。
+
+状态：**IN_PROGRESS，用户抽动原生验收FAIL，前台已释放**。用户解锁后，主干与2文件8行候选各12种真实持续/反向对照已完成；两侧各6种反向跳回、最大均1554px，覆盖上/中/下及cell两状态。候选解除事件消费，但未解决高度变化/抽动。46定向、独立副本四后台门禁通过，未提交/推送。见[报告054](reports/task-summaries/TASK-TABLE-SCROLLBAR-054.md)与[handoff](docs/plans/2026-10-19-table-scrollbar-handoff.md)。
+
+12:26:47.117UTC归还键鼠；解锁后31启动/124产品成员、31helper退出，34临时目录删除、source/disk一致。09原1条Promise回收/cleanup观测错误保留并安全清理，10底部4/4恢复；不能称总cleanup0。native-comparison.json记录精确证据。
+
+最新11:12授权后的04/05预检定位LockApp锁屏占据前台：SetForegroundWindow=false，AttachThreadInput=false/GetLastError5。无OS输入，新增8产品成员+2helper退出、2隔离目录清理，11:15:24.898UTC释放。需用户解锁Windows桌面；主干/候选持续反向及上中下矩阵未执行，证据lockscreen-stage.json。
+
+- [x] 核验clean main7bdf047与本地重复测试进程；任务列表接口错误的跨线程排重限制如实保留。
+- [x] 生成1831行/30表/无图片合成样本和纯文本控制；后台契约RED2/1，既有控制38PASS、typecheckPASS。
+- [x] 独立内部scrollbar helper及四例对照准备；解析/仅编译/发现4例/无授权拒绝/冻结hash预检通过，native未运行。中央1620行/31表合成样本，预计前台6–8分钟。
+- [x] 解锁授权后，主干/候选各12种真实内部scrollbar对比，确认事件消费可解除但高度变化伴随跳回仍存在。
+- [x] 后台修正内容区映射与正文focus测试入口；补前台返回/身份诊断、6策略+5坐标纯测试。host scrollbar策略接入adapter最早capture，8新例+38控制、独立源码副本四后台门禁通过。
+- [ ] 根据证据最小修复并保留Tab/Outline/table点击，完成回归和审查。
+- [ ] 普通main发布并核验精确SHA官方CI。
+
+本轮前台已获授权且于10:58:44.973UTC结束；启动过3个隔离Electron实例，但OS鼠标注入0，候选事件路径仍只有jsdom证据，不冒称原生问题已复现。再占用前台须报告协调。M9仍0/3。
+
 ## TASK-PERMANENT-CHROME-053：常驻文档标签与状态栏（2026-10-16）
 
 状态：**Windows本地验收PASS**。基线main d4d0604，本地实现检查点5f252f2；最终独审和普通main精确发布/CI终态以本批publication为准。见[报告053](reports/task-summaries/TASK-PERMANENT-CHROME-053.md)及[handoff](docs/plans/2026-10-16-permanent-chrome-handoff.md)。

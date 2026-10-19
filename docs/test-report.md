@@ -1,5 +1,35 @@
 # FishMark 测试报告
 
+4.0.0隔离版本门禁已通过：lint/typecheck/build exit0；完整回归4023PASS＋8exactknown，0unexpected/collection/hook/unhandled errors；未放宽allowlist。安装包和提交CI进入下一阶段，视觉效果仍未确认。
+
+2026-10-19 4.0.0发布阶段：用户14:56 UTC明确直接发布，取消等待原始文档/可见复现的条件。代码审查结论为无具体阻断缺陷，可带已知限制发布；仍须本次版本构建、回归和安装包基本核验。Windows手工两版均未见抽动，视觉效果尚未确认，不能称已修复。后台隔离发布，不运行被安全检测拦截的guard、不注入键鼠、不关闭现有手工窗口；以下旧“等待复现后才发布”状态已由本段更新。
+
+只读安全复核补充：拦截对象是外层输入guard由Add-Type生成的临时s1kfp3zc.0.cs，失败时间只能界定在UTC13:14:17.905之后至13:15:15.723之前（本机UTC+8约21:14–21:15），没有精确单秒日志。本轮默认受限会话读取SecurityCenter2清单和Defender/CodeIntegrity/AppLocker/PowerShell日志均被拒，未提权；检测厂商/名称/规则仍未知，旧窄查询无事件不代表不存在检测。首选下一轮由用户手工操作可核验来源的主干/候选隔离窗口，先做4关键对照，不伪称完整38例或自动逐帧通过；本轮不启动窗口/操作前台，不使用替代注入方式。另可由用户或设备管理员只读查安全软件的相应拦截记录，无需关闭保护或加排除。已另存3份4.0.0版本/发布说明草案并深比较依赖不变，均未应用，项目仍0.2.10；原生/包门禁及正式发布继续阻塞。证据.artifacts/table-scrollbar-054-live4/security-audit-readonly.json、manual-check-plan.md、version-preparation-review.json，旧证据保留。
+
+最新原生/发布阶段：BLOCKED。用户已明确授权继续接管，并于13:04 UTC批准质量通过后提交main及发布4.0.0；授权无需重复索取。13:14:16-17桌面只读预检PASS，但随后既有外层输入guard第8行Add-Type被Windows安全检测阻断（临时cs提示包含病毒或潜在垃圾软件），未执行后续保护启动/Node产品启动。guard目录0文件、E2E run目录不存在，本轮产品启动0/手势helper0/OS输入0/产品profile0。13:15已告知归还键鼠，13:18:33完成结束归档。具体安全产品/规则未知；窄时段Defender日志无匹配事件，不能擅自归因。未重试、改排除、换编译路径或降低安全设置。
+
+新版38计划原生例均未运行，不是产品native FAIL，也没有native PASS；4.0.0正式发布因关键门禁阻塞，未提交/推送/tag/release。版本预检：公共最新版v3.0.0，tag5a882f51b5f89b4ac36dff7512700572a54b01b7是当前main祖先，相差326提交；main、tag源码和锁/说明版本均0.2.10。公开未见4.0.0，未来发布前仍须认证核查已有草稿/标签，不能覆盖。元数据未提前改号，包版本/来源验证及CI/附件发布均未执行。4生产文件＋2测试＋7文档待审查/验收；调试产物均在ignored.artifacts。后台既有4023＋8exactknown、36新契约、headless07的25/25及代码/协议独审仅证明可进入原生，不能代替之。最终证据.artifacts/table-scrollbar-054-live4/blocked-outcome.json，授权/同hash11文件协议/release-plan.json/结束归档/独审均保留，原main524构建、2349历史、053的72证据与candidate03的1476源/524构建hash不变。下一步先由设备安全策略维护者核实该保护器拦截，再以合法允许的原保护协议、新唯一runId恢复验证；不能去掉保护或绕过拦截。以下为此前后台及原生历史。
+
+最终后台检查点candidate03：ViewPlugin.update只排队一次keyed requestMeasure.read，布局读取在专用read阶段完成，generation丢弃已取消的旧请求；测量后维持纵向bar手势比例。headless07仍25/25，max归一误差0.000017507/输入后≤2px；新增两项验证update不读布局及取消后旧read不运行。28测量/生命周期＋8路由=36项定向用例，独立1476源码/524构建原lint/typecheck/build/strict通过（4023PASS＋8exactknown，0unexpected/collection/hook/unhandled errors）。最终只读复审允许进入原生验证，尚不能发布；errors[]只覆盖pageerror，未审计console测量循环警告。新版native、track/page/arrow及任意异步widget尺寸仍未测，前台继续释放，本阶段无可见窗口/OS输入，未提交/推送，HEAD仍7bdf04739415fb0750835da66e1c9d35fe893fe1。最终证据.artifacts/table-scrollbar-054-bg2/background-outcome-03.json；candidate02/headless06与全部失败冻结保留。以下包含02中间检查点及更早历史。
+
+2026-10-19 TASK054候选02后台：34定向PASS、headless25/25PASS，最大归一比例误差0.000017507/输入后≤2px、取消组0候选写入、源码均不变。覆盖冷table/plain×上中下×上下行、warm、cell→scroller、wheel/up/effect/font/load/Outline/reading/snapshot。独立1476文件源镜像原npm lint/typecheck/build/strict通过：4021PASS＋8exactknown，0unexpected/collection/hook/unhandled errors，524构建冻结；旧main/candidate01/历史hash不变。Chrome155/headless/980×650与Electron146/native/1084×785分开；合成手势/程序滚动不算native，jsdom不算几何验收。独审可进native但未发布；新版真实拖动、track/page/arrow和任意异步widget尺寸待测。01/03/04原型、unit01失败及09的1条cleanup错误保留，不改allowlist。09上游GC确因未知，fallback清理可证不等于normalQuitPASS；用户报告测试时输入，时段未知，guard仅代表未观测。证据.artifacts/table-scrollbar-054-bg2/background-outcome-02.json；本阶段0可见窗口/OS输入、未提交/推送。以下为旧记录。
+
+## 2026-10-19 TASK-TABLE-SCROLLBAR-054（后台诊断，未验收）
+
+最新原生用户体验验收FAIL：解锁后主干08中部4例真实拖动；相同live2原1831行/30表/无图片，主干09前8+10底部4共12正常完成，候选11的12诊断执行正常完成，全部tracking确认。两侧各6/12有反向跳回、最大均1554px，均向上起步，上中下与active/inactive均出现；active最终事件消费main6/candidate0，局部路由效果不解决高度变化/抽动。当前截图识别thumb起点及48个实测指针点/例，帧级height/scrollTop/选择/焦点与afterTurn事件消费保留；08旧微任务字段名不作最终消费判据。
+
+09另1个底部例已完成拖动，退出捕获Promise回收失败，原1条cleanup错误保留；实际owned退出/profile删除，10四例补测正常。12:26:47.117UTC释放，解锁后31启动/124成员+31helper退出、34临时目录删除、source/disk一致，所有guard无物理输入。native-comparison.json冻结比较/raw路径/hash。未提交/推送，不称M9完成。以下保留先前后台门禁及锁屏尝试历史。
+
+11:12授权后的foreground-main-04/05：冻结main524文件/当前源码身份通过，前台预检BLOCKED。普通SetForegroundWindow返回false；同会话AttachThreadInput返回false、GetLastError5；精确前台PID10328只读核验LockApp/session1，锁屏未解锁。OS输入0；8产品成员+2helper退出、2隔离目录删除、cleanup0、source/disk一致；11:15:24.898UTC释放。候选与真实持续/反向/上中下拖动矩阵未运行，不能认为产品FAIL/PASS。需先解锁Windows。精确raw/log hash见lockscreen-stage.json，以下为历史记录。
+
+后台候选检查PASS：原3例1PASS/2RED→3PASS，扩展8新例+38控制=46PASS；纵/横、active/inactive、null/body fallback及正文/无溢出正控制，selection/focus/content/onChange/history深度断言。6虚拟前台策略+5坐标计算通过（无native API）。独立1474文件快照原lint/typecheck/build/strict通过，3995PASS+8精确known，unexpected/errors/skip均0；524候选构建/10helper及预检hash冻结，原构建不变。生产2文件8行路由候选尚未真实native对照/独审，未提交/推送；没有用户抽动修复或native undo/IME验收结论。此前三次授权失败与原始RED均保留，下文为历史记录。
+
+授权后原生基线执行结果BLOCKED：baseline-01/02/03各首例在按下前失败，其余3例各未运行。01内容区映射校验失败，修正后02/03自有窗口前台检查失败（03target12519314/actual5706778）；没有SetCursorPos/SendInput拖动。实际appData/userData/临时文档隔离核验通过，DPR1；3次before/after top22469/height45587/client650及选择不变，DOM mousedown0/注入0/物理输入0/leftHeld=false。12产品成员、3helper退出，3隔离目录删除、cleanup0，source/disk一致。前台10:58:44.973UTC释放，foreground-attempts.json保留原日志hash。本项不是产品FAIL或复现PASS，真实对照仍未测；以下为先前准备检查。
+
+补充准备检查PASS：PowerShell AST、PowerShell5 C# CompileOnly（无native API调用）、Node语法、Playwright仅发现4例、两个入口无本轮授权时拒绝；916运行时源码/524构建/2349历史/053证据72文件hash不变。中央1620行/31表无图片合成fixture用于50%thumb起点，原样本保留。独立内部track helper的真实输入保护/释放/清理仍待原生验证，预计6–8分钟前台，本轮接管待父线程答复；不能称修复PASS。
+
+HEAD/origin-main7bdf047。新code-editor-scrollbar.test.ts为916/900px scroller gutter建立合成事件契约：inactive1PASS；active2RED，defaultPrevented=true，映射正文时selection31→59和focus离开cell，源文不变。raw background-red-01.log保留，不是原生拖动/视觉几何PASS。既有table-editing、viewport、table-caret-reveal、table-widget四文件38PASS，typecheckPASS。未运行Electron/OS输入或完整门禁。1831行30表无图片及1261行纯文本合成fixture已sha256固定；没有用户原文。当前需本轮前台授权，先原生对照，再判断是否修事件入口或高度/锚点。无生产修复/提交/推送，见[报告054](../reports/task-summaries/TASK-TABLE-SCROLLBAR-054.md)。
+
 ## 2026-10-16 TASK-PERMANENT-CHROME-053
 
 Windows本地验收：**PASS**。新增测试RED→GREEN，205定向、typecheck/build、strict3987＋8精确known/0unexpected/errors/skip、bundle/foundation310及最终1470文件逐hash源码镜像原npm lint通过；不改冻结诊断/规则，不称原位九门禁全绿。用户04:43UTC本次明确授权后，完整Windows61/61无skip/retry/flaky、76启动=71正常exit0+5预期恢复，318owned均退出/profile清理/cleanup0，14native助手九阶段与sidecar匹配；editing79、safety7、formal121/121/2541（99known，0unexpected/not-run）通过。Windows gzip1437457/1500000，initial103592/260000；无新性能采样。四guard无物理输入，product注入28；同PowerShell静态计数在后三probe累计28、增量0，严格last-input检查均通过。target01保留6过1败原始记录：新增例误假定正常Quit恢复干净标签；仅改同profile原FileOpen重开，target02及full通过；失败profile按原fixture已删除，所属进程已退出。宽窄与空页截图保留，前台04:51:25UTC释放，约6分38秒。代码/测试修正独审通过；最终证据独审、普通main精确SHA四项官方CI及官方Windows制品审计终态见本批publication。证据.artifacts/permanent-chrome-053，见[报告053](../reports/task-summaries/TASK-PERMANENT-CHROME-053.md)。M9仍0/3，Mac/真实IME未新增验收。

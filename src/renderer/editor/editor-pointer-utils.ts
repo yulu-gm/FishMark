@@ -45,13 +45,20 @@ export function isEditorScrollbarPointerEvent(
   event: MouseEvent,
   editorContainer: HTMLElement
 ): boolean {
+  return editorScrollbarPointerAxis(event, editorContainer) !== null;
+}
+
+export function editorScrollbarPointerAxis(
+  event: MouseEvent,
+  editorContainer: HTMLElement
+): "vertical" | "horizontal" | null {
   const target = event.target;
   const scrollerElement = target instanceof Element
     ? target.closest<HTMLElement>(".cm-scroller")
     : null;
 
   if (!scrollerElement || !editorContainer.contains(scrollerElement)) {
-    return false;
+    return null;
   }
 
   const rect = scrollerElement.getBoundingClientRect();
@@ -62,18 +69,17 @@ export function isEditorScrollbarPointerEvent(
   const hasHorizontalScrollbar =
     scrollerElement.scrollWidth > scrollerElement.clientWidth && horizontalScrollbarHeight > 0;
 
-  return (
-    (hasVerticalScrollbar &&
+  if (hasVerticalScrollbar &&
       event.clientX >= rect.right - verticalScrollbarWidth &&
       event.clientX <= rect.right &&
       event.clientY >= rect.top &&
-      event.clientY <= rect.bottom) ||
-    (hasHorizontalScrollbar &&
+      event.clientY <= rect.bottom) return "vertical";
+  if (hasHorizontalScrollbar &&
       event.clientY >= rect.bottom - horizontalScrollbarHeight &&
       event.clientY <= rect.bottom &&
       event.clientX >= rect.left &&
-      event.clientX <= rect.right)
-  );
+      event.clientX <= rect.right) return "horizontal";
+  return null;
 }
 
 export function isWorkspaceNonEditorInteractiveTarget(target: Element): boolean {

@@ -105,6 +105,7 @@ import {
 import { resolveArrowUp, resolveArrowDown, resolvePointerSelectionAnchor as resolveBlockPointerSelectionAnchor } from "../interactions";
 import { type EditorRevealIntent } from "../viewport-reveal";
 import { clearTableCaretReveal, noteTableCaretReveal, revealTableCaret } from "../table-caret-reveal";
+import { createScrollbarScrollAnchor } from "../scrollbar-scroll-anchor";
 
 export type CreateFishMarkMarkdownExtensionsOptions = {
   readAcknowledgedRevision?: () => number | null;
@@ -117,6 +118,9 @@ export type CreateFishMarkMarkdownExtensionsOptions = {
   onBlockDecorationsBuilt?: () => void;
   onBlur?: () => void;
   onOpenLink?: (href: string) => void;
+  // Scrollbar geometry belongs to the host; exclude its native gestures before
+  // recording Markdown pointer intent or moving selection/focus.
+  scrollbarPointerAxis?: (event: MouseEvent, editor: HTMLElement) => "vertical" | "horizontal" | null;
   resolveImagePreviewUrl?: (href: string | null) => string | null;
   headingPresentationMode?: HeadingPresentationMode;
   onUserEditIntent?: () => void;
@@ -1021,6 +1025,9 @@ export function createFishMarkMarkdownExtensions(
     };
 
     handleMouseDown = (event: MouseEvent) => {
+      if (options.scrollbarPointerAxis?.(event, this.view.dom)) {
+        return;
+      }
       // CodeMirror focuses before it dispatches the pointer selection. Capture
       // what was visible at hit time, before that focus can reveal old selection.
       const entry = { state: this.view.state, hadFocus: runtime.hasEditorFocus,
@@ -1128,6 +1135,7 @@ export function createFishMarkMarkdownExtensions(
   });
 
   return [
+    ...(options.scrollbarPointerAxis ? [createScrollbarScrollAnchor(options.scrollbarPointerAxis)] : []),
     ...(semanticCommands === null ? [] : [semanticCommands.adapter.extension()]),
     createMarkdownEditorViewModeExtension(options.viewMode),
     createHeadingPresentationExtension(options.headingPresentationMode),

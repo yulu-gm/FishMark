@@ -43,6 +43,7 @@ import type { DocumentTextChange } from "../shared/document-edit";
 import { isWorkspaceReadingPosition, type WorkspaceReadingPosition } from "../shared/workspace";
 import { isSameEditorLoadIdentity, type EditorLoadIdentity } from "./application/editor-load-identity";
 import type { PlainTextPasteInput } from "../shared/plain-text-paste";
+import { editorScrollbarPointerAxis } from "./editor/editor-pointer-utils";
 
 export const internalDocumentTransaction = Annotation.define<true>();
 
@@ -448,6 +449,7 @@ export function createCodeEditorController(
           void pastePlainText("shortcut"); return true;
         } }]),
         createFishMarkMarkdownExtensions({
+          scrollbarPointerAxis: editorScrollbarPointerAxis,
           onSemanticCommands: (commands) => { semanticCommands = commands; },
           onContentChange: (nextContent) => {
             options.onChange(nextContent);

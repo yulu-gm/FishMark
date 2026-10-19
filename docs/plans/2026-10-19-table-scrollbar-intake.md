@@ -1,0 +1,31 @@
+# TASK-TABLE-SCROLLBAR-054 intake
+
+只读安全复核补充：拦截对象是外层输入guard由Add-Type生成的临时s1kfp3zc.0.cs，失败时间只能界定在UTC13:14:17.905之后至13:15:15.723之前（本机UTC+8约21:14–21:15），没有精确单秒日志。本轮默认受限会话读取SecurityCenter2清单和Defender/CodeIntegrity/AppLocker/PowerShell日志均被拒，未提权；检测厂商/名称/规则仍未知，旧窄查询无事件不代表不存在检测。首选下一轮由用户手工操作可核验来源的主干/候选隔离窗口，先做4关键对照，不伪称完整38例或自动逐帧通过；本轮不启动窗口/操作前台，不使用替代注入方式。另可由用户或设备管理员只读查安全软件的相应拦截记录，无需关闭保护或加排除。已另存3份4.0.0版本/发布说明草案并深比较依赖不变，均未应用，项目仍0.2.10；原生/包门禁及正式发布继续阻塞。证据.artifacts/table-scrollbar-054-live4/security-audit-readonly.json、manual-check-plan.md、version-preparation-review.json，旧证据保留。
+
+最新原生/发布阶段：BLOCKED。用户已明确授权继续接管，并于13:04 UTC批准质量通过后提交main及发布4.0.0；授权无需重复索取。13:14:16-17桌面只读预检PASS，但随后既有外层输入guard第8行Add-Type被Windows安全检测阻断（临时cs提示包含病毒或潜在垃圾软件），未执行后续保护启动/Node产品启动。guard目录0文件、E2E run目录不存在，本轮产品启动0/手势helper0/OS输入0/产品profile0。13:15已告知归还键鼠，13:18:33完成结束归档。具体安全产品/规则未知；窄时段Defender日志无匹配事件，不能擅自归因。未重试、改排除、换编译路径或降低安全设置。
+
+新版38计划原生例均未运行，不是产品native FAIL，也没有native PASS；4.0.0正式发布因关键门禁阻塞，未提交/推送/tag/release。版本预检：公共最新版v3.0.0，tag5a882f51b5f89b4ac36dff7512700572a54b01b7是当前main祖先，相差326提交；main、tag源码和锁/说明版本均0.2.10。公开未见4.0.0，未来发布前仍须认证核查已有草稿/标签，不能覆盖。元数据未提前改号，包版本/来源验证及CI/附件发布均未执行。4生产文件＋2测试＋7文档待审查/验收；调试产物均在ignored.artifacts。后台既有4023＋8exactknown、36新契约、headless07的25/25及代码/协议独审仅证明可进入原生，不能代替之。最终证据.artifacts/table-scrollbar-054-live4/blocked-outcome.json，授权/同hash11文件协议/release-plan.json/结束归档/独审均保留，原main524构建、2349历史、053的72证据与candidate03的1476源/524构建hash不变。下一步先由设备安全策略维护者核实该保护器拦截，再以合法允许的原保护协议、新唯一runId恢复验证；不能去掉保护或绕过拦截。以下为此前后台及原生历史。
+
+最终后台检查点candidate03：ViewPlugin.update只排队一次keyed requestMeasure.read，布局读取在专用read阶段完成，generation丢弃已取消的旧请求；测量后维持纵向bar手势比例。headless07仍25/25，max归一误差0.000017507/输入后≤2px；新增两项验证update不读布局及取消后旧read不运行。28测量/生命周期＋8路由=36项定向用例，独立1476源码/524构建原lint/typecheck/build/strict通过（4023PASS＋8exactknown，0unexpected/collection/hook/unhandled errors）。最终只读复审允许进入原生验证，尚不能发布；errors[]只覆盖pageerror，未审计console测量循环警告。新版native、track/page/arrow及任意异步widget尺寸仍未测，前台继续释放，本阶段无可见窗口/OS输入，未提交/推送，HEAD仍7bdf04739415fb0750835da66e1c9d35fe893fe1。最终证据.artifacts/table-scrollbar-054-bg2/background-outcome-03.json；candidate02/headless06与全部失败冻结保留。以下包含02中间检查点及更早历史。
+
+Latest background checkpoint: public CodeMirror measurement hooks preserve vertical scrollbar fraction only during the gesture; explicit transactions/navigation, release/cancel/blur/hidden, ordinary input, resize and font/load end it. Cold/plain/warm evidence isolates anchor compensation without changing estimates or rebuilding DOM. Candidate02 original gates passed (4021 plus8 exact known);34 focused and25 headless cases pass. Independent review permits native validation, not publication. No foreground/native input or commit/push in this phase. New native drag, track/page/arrow and arbitrary async widget geometry remain unvalidated; source/evidence hashes and prior failures are retained in the handoff/report.
+
+Goal: investigate and narrowly fix reported long-document scrollbar jumping, prioritizing tables without images and comparing native thumb drag before/after cell activation.
+
+Baseline: clean existing isolated checkout, HEAD and freshly fetched official origin/main7bdf04739415fb0750835da66e1c9d35fe893fe1. Prior053 published/CI38853294032 evidence remains separate. Local plans stop at053 and no matching node/Electron test process was found; task-list bridge failed, so cross-thread duplication is not fully excluded.
+
+Known user input: “有表格吧 没有图片”. Exact Markdown, viewport and cursor are unavailable. Generated representative fixtures must be labeled synthetic, not the user's original document.
+
+In scope: scrollbar event routing with active table editor; widget measurement/virtual-height/scroll-anchor evidence; preserve body clicks, table clicks, Tab reading position and Outline. Out of scope: speculative table width/font/DOM rewrite, parser/performance experiments, blanket scroll suppression, dependencies/allowlist/system settings, cp13/cp16 or blocked Library access.
+
+Landing: adapter markdown event capture, table-widget measurement and viewport reveal if evidence warrants; focused structural tests and isolated production-window fixture. Do not call static candidates confirmed causes.
+
+Acceptance: native scrollbar drag progresses without discontinuous jumps in the bounded table/no-image sample, both before/after cell focus; native drag remains distinguishable from CDP/synthetic pointer events. Canonical source/disk/dirty/selection safe; ordinary cell click/reveal, Tab and Outline regressions retained. No product fix/push claimed before relevant gates/review and actual reproduction.
+
+Verification: first background jsdom contract reproduction and fixture/hash checks. Then authorized owned native Windows drag with actual appData/userData, current renderer/preload, real input guard and PID/creation-time cleanup. Record scrollTop, scrollHeight, viewport/anchor and focus before/while/after drag; separate native gesture loss from changing height estimates. Baseline and candidate evidence must be preserved.
+
+Foreground: new054 authorization was granted at10:55UTC and ended at10:58:44.973UTC after three protected pre-input failures; no native drag occurred. Current phase is background only: no new windows, activation or OS input. Parent authorized an independent minimal event-routing candidate and background tests, but explicitly prohibited commit/push before native verification. A later no-input foreground preflight still needs new coordination; prior053/this ended054 window cannot be reused.
+
+Update11:12UTC: user explicitly allowed direct takeover and continuation through preflight/main/candidate comparison without another approval pause. Preflight04/05 proved the foreground PID10328 is Windows LockApp/session1: normal activation false, same-session AttachThreadInput false/ACCESS_DENIED5. Stopped without pointer input; all owned processes/profiles cleaned, foreground released11:15:24.898UTC. User must unlock Windows desktop. On unlock feedback, resume the authorized goal with an announced start; no security bypass or reduced HWND/input checks. Native table-state/sustained/reverse/top-middle-bottom matrix remains untested.
+
+Next skill: fishmark-task-execution plus fishmark-text-render-debug. Root cause remains unconfirmed. Update backlog/progress/report consistently when execution advances.
