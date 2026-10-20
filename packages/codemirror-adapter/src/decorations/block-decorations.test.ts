@@ -2560,3 +2560,23 @@ describe("block decoration line helpers", () => {
   });
 });
 
+
+
+it.each(["", "text", "csharp"])("isolates short fenced code metrics from prose with language %j", language => {
+  const source = ["Paragraph", "", "```" + language, "{", "", "}", "```", "", "Tail"].join("\n");
+  for (const head of [0, source.indexOf("{"), source.length]) {
+    const { decorationSet } = createBlockDecorations({
+      source,
+      activeBlockState: createActiveBlockState(snapshotOf(source), { anchor: head, head }),
+      hasEditorFocus: true
+    });
+    const text: string[] = [];
+    decorationSet.between(0, source.length, (from, to, decoration) => {
+      if (decoration.spec.class === "cm-inactive-code-block-text") {
+        expect(to).toBeGreaterThan(from);
+        text.push(source.slice(from, to));
+      }
+    });
+    expect(text).toEqual(["{", "}"]);
+  }
+});

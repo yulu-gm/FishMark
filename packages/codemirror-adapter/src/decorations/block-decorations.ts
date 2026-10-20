@@ -859,6 +859,16 @@ function appendCodeFenceDecorations(
       }).range(line.lineStart)
     );
 
+    // Code lines use different font metrics from prose. Keep their text in a
+    // mark so CodeMirror's plain-text line probe cannot use a short code line
+    // (for example "{") to reset the document-wide height estimate.
+    // This does not replace text, change selection, or alter the line's CSS.
+    if (line.lineEnd > line.contentStart) {
+      ranges.push(Decoration.mark({
+        class: "cm-inactive-code-block-text"
+      }).range(line.contentStart, line.lineEnd));
+    }
+
     if (line.contentStart > line.lineStart) {
       ranges.push(
         Decoration.mark({
