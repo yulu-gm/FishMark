@@ -44,6 +44,7 @@ import { isWorkspaceReadingPosition, type WorkspaceReadingPosition } from "../sh
 import { isSameEditorLoadIdentity, type EditorLoadIdentity } from "./application/editor-load-identity";
 import type { PlainTextPasteInput } from "../shared/plain-text-paste";
 import { editorScrollbarPointerAxis } from "./editor/editor-pointer-utils";
+import { createEditorScrollbars } from "./editor/editor-scrollbars";
 
 export const internalDocumentTransaction = Annotation.define<true>();
 
@@ -423,6 +424,7 @@ export function createCodeEditorController(
     EditorState.create({
       doc: content,
       extensions: [
+        createEditorScrollbars(),
         EditorView.scrollHandler.of((current, range) => {
           const position = pendingReadingPosition;
           if (position === null) return false;

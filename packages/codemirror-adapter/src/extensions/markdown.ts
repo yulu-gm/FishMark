@@ -105,7 +105,6 @@ import {
 import { resolveArrowUp, resolveArrowDown, resolvePointerSelectionAnchor as resolveBlockPointerSelectionAnchor } from "../interactions";
 import { type EditorRevealIntent } from "../viewport-reveal";
 import { clearTableCaretReveal, noteTableCaretReveal, revealTableCaret } from "../table-caret-reveal";
-import { createScrollbarScrollAnchor } from "../scrollbar-scroll-anchor";
 
 export type CreateFishMarkMarkdownExtensionsOptions = {
   readAcknowledgedRevision?: () => number | null;
@@ -1135,7 +1134,6 @@ export function createFishMarkMarkdownExtensions(
   });
 
   return [
-    ...(options.scrollbarPointerAxis ? [createScrollbarScrollAnchor(options.scrollbarPointerAxis)] : []),
     ...(semanticCommands === null ? [] : [semanticCommands.adapter.extension()]),
     createMarkdownEditorViewModeExtension(options.viewMode),
     createHeadingPresentationExtension(options.headingPresentationMode),

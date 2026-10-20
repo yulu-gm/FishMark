@@ -19,6 +19,37 @@
   scrollbar-gutter: stable both-edges;
 }
 
+.document-editor .cm-editor.has-editor-scrollbars { position: relative; }
+.document-editor .has-editor-scrollbars .cm-scroller { scrollbar-width: none; }
+.document-editor .has-editor-scrollbars .cm-scroller::-webkit-scrollbar { display: none; }
+.fishmark-editor-scrollbar {
+  position: absolute;
+  z-index: 3;
+  touch-action: none;
+  user-select: none;
+  cursor: default;
+}
+.fishmark-editor-scrollbar[hidden] { display: none; }
+.fishmark-editor-scrollbar:focus-visible { outline: 1px solid var(--fishmark-focus-ring, #527cf5); outline-offset: -1px; }
+.fishmark-editor-scrollbar-thumb {
+  position: absolute;
+  box-sizing: border-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fishmark-panel-border) 78%, transparent);
+  background-clip: padding-box;
+}
+.fishmark-editor-scrollbar[data-editor-scrollbar-axis="vertical"] .fishmark-editor-scrollbar-thumb { width: 12px; min-height: 24px; }
+.fishmark-editor-scrollbar[data-editor-scrollbar-axis="horizontal"] .fishmark-editor-scrollbar-thumb { height: 12px; min-width: 24px; }
+.fishmark-editor-scrollbar:hover .fishmark-editor-scrollbar-thumb,
+.fishmark-editor-scrollbar[data-paging] .fishmark-editor-scrollbar-thumb,
+.fishmark-editor-scrollbar[data-dragging] .fishmark-editor-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--fishmark-text-secondary) 42%, transparent);
+}
+@media (forced-colors: active) {
+  .fishmark-editor-scrollbar-thumb { background-color: CanvasText; forced-color-adjust: none; }
+}
+
 .document-editor .cm-content,
 .document-editor .cm-line {
   font-family: var(--fishmark-document-font-family, var(--fishmark-editor-font-family));
