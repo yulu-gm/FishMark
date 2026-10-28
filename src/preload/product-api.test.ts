@@ -26,6 +26,26 @@ function createPorts() {
 }
 
 describe("createProductApi", () => {
+  it("只在隔离 preload 消费真实链接手势后发送私有授权凭据", async () => {
+    const ports = createPorts();
+    ports.runtime.argv.push("--fishmark-native-file-token=private-token");
+    const consume = vi.fn(() => true);
+    const api = createProductApi({ ...ports, linkGesture: { consume } });
+    const input = { tabId: "tab", href: "../report.md" };
+    await api.prepareMarkdownLink(input);
+    expect(consume).toHaveBeenCalledExactlyOnceWith(input.href);
+    expect(ports.invoke).toHaveBeenCalledExactlyOnceWith("fishmark:prepare-markdown-link", { ...input, token: "private-token" });
+    consume.mockReturnValue(false); ports.invoke.mockClear();
+    await expect(api.prepareMarkdownLink(input)).rejects.toThrow("单击");
+    expect(ports.invoke).not.toHaveBeenCalled();
+  });
+  it("没有手势监听器或私有凭据时拒绝本地链接，外链保持原接口", async () => {
+    const ports = createPorts(), api = createProductApi(ports);
+    await expect(api.prepareMarkdownLink({ tabId: "tab", href: "../report.md" })).rejects.toThrow("单击");
+    expect(ports.invoke).not.toHaveBeenCalled();
+    await api.openExternalLink("https://example.com");
+    expect(ports.invoke).toHaveBeenCalledExactlyOnceWith("fishmark:open-external-link", { href: "https://example.com" });
+  });
   it("keeps plain-text paste on its narrow channel and preserves cancellation", async () => {
     const ports = createPorts(), api = createProductApi(ports);
     ports.invoke.mockResolvedValueOnce(null!);

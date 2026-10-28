@@ -1147,6 +1147,7 @@ describe("App autosave", () => {
       createWorkspaceTab,
       openWorkspaceFile,
       openWorkspaceFileFromPath,
+      prepareMarkdownLink: vi.fn(async () => "C:/notes/linked.md"),
       activateWorkspaceTab,
       closeWorkspaceTab,
       reorderWorkspaceTab,

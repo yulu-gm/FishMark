@@ -34,6 +34,55 @@ async function removeOwnedTestDirectory(directory: string, parent: string) {
 }
 
 describe("main path sources", () => {
+  function linkFixture() {
+    const f = fixture();
+    f.workspace.openDocument("one", { path: approved, name: "approved.md", content: "[报告](../outside/secret.md)", encoding: "utf-8", fileIdentity: resolved(approved).identity }, null);
+    const tabId = f.workspace.getWindowProjection("one").activeTabId!;
+    return { ...f, tabId, link: { tabId, href: "../outside/secret.md" } };
+  }
+  it("以 main 文档目录解析上级路径，并复用一次性文件身份授权", async () => {
+    const f = linkFixture();
+    const prepared = await f.paths.grantMarkdownLink(f.sender, "secret-one", f.link);
+    expect(prepared.targetPath).toBe(unrelated);
+    expect(() => f.paths.consume(f.other, unrelated)).toThrow("Path authority denied");
+    const permit = f.paths.consume(f.sender, unrelated);
+    await expect(permit.beforeRead(unrelated)).resolves.toBeUndefined();
+    permit.finish();
+    expect(() => f.paths.consume(f.sender, unrelated)).toThrow("Path authority denied");
+  });
+  it.each(["token", "foreign", "inactive", "absolute", "protocol", "extension"])("在文件查询之前拒绝非法链接请求：%s", async reason => {
+    const f = linkFixture();
+    if (reason === "inactive") f.workspace.createUntitledTab("one");
+    const href = reason === "absolute" ? unrelated : reason === "protocol" ? "file:///secret.md" : reason === "extension" ? "../secret.txt" : f.link.href;
+    await expect(f.paths.grantMarkdownLink(reason === "foreign" ? f.other : f.sender, reason === "token" ? "forged" : reason === "foreign" ? "secret-two" : "secret-one", { tabId: f.tabId, href })).rejects.toThrow();
+    expect(f.resolve).not.toHaveBeenCalled();
+  });
+  it("未保存文档不能使用进程工作目录作为链接基准", async () => {
+    const f = fixture();
+    const tabId = f.workspace.createUntitledTab("one").activeTabId!;
+    await expect(f.paths.grantMarkdownLink(f.sender, "secret-one", { tabId, href: "report.md" })).rejects.toThrow("请先保存");
+    expect(f.resolve).not.toHaveBeenCalled();
+  });
+  it.each(["close", "move", "save-as", "inactive", "expired", "reload"])("链接授权在 %s 后不可读目标", async reason => {
+    const f = linkFixture();
+    await f.paths.grantMarkdownLink(f.sender, "secret-one", f.link);
+    const permit = f.paths.consume(f.sender, unrelated);
+    if (reason === "close") f.workspace.closeTab({ tabId: f.tabId, expectedWindowId: "one", expectedRevision: f.workspace.getTabSession(f.tabId).revision });
+    if (reason === "move") f.workspace.moveTabToWindow({ tabId: f.tabId, targetWindowId: "two" });
+    if (reason === "save-as") f.workspace.saveTabDocument({ tabId: f.tabId, expectedWindowId: "one", capturedRevision: f.workspace.getTabSession(f.tabId).revision, document: { path: unrelated, name: "secret.md", content: f.workspace.getTabSession(f.tabId).content, encoding: "utf-8", fileIdentity: resolved(unrelated).identity }, diskVersion: null });
+    if (reason === "inactive") f.workspace.createUntitledTab("one");
+    if (reason === "expired") f.expire();
+    if (reason === "reload") f.paths.invalidate(f.sender);
+    f.resolve.mockClear();
+    await expect(permit.beforeRead(unrelated)).rejects.toThrow();
+    expect(f.resolve).not.toHaveBeenCalled();
+  });
+  it("文件解析期间源标签切换时不留下授权", async () => {
+    const f = linkFixture();
+    f.resolve.mockImplementationOnce(async target => { f.workspace.createUntitledTab("one"); return resolved(target); });
+    await expect(f.paths.grantMarkdownLink(f.sender, "secret-one", f.link)).rejects.toThrow();
+    expect(() => f.paths.consume(f.sender, unrelated)).toThrow();
+  });
   it("rejects arbitrary strings and another window's pending grant before filesystem lookup", async () => {
     const f = fixture();
     expect(() => f.paths.requirePath(f.sender, unrelated)).toThrow("Path authority denied");

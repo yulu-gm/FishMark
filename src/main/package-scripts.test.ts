@@ -212,7 +212,7 @@ describe("package scripts", () => {
     expect(viteConfigSource).toContain('base: "./"');
   });
 
-  it("keeps preload composition limited to shared contracts and the complete product builder", () => {
+  it("keeps preload composition limited to shared contracts, trusted input and the complete product builder", () => {
     const preloadPath = path.join(process.cwd(), "src", "preload", "preload.ts");
     const preloadSource = readFileSync(preloadPath, "utf8");
     const localImports = Array.from(preloadSource.matchAll(/from\s+["']([^"']+)["']/g))
@@ -222,7 +222,7 @@ describe("package scripts", () => {
 
     expect(localImports).not.toContain("./");
     expect(localImports.filter((importPath) => !importPath.startsWith("../shared/"))).toEqual([
-      "./product-api", "./test-api"
+      "./product-api", "./test-api", "./markdown-link-gesture"
     ]);
   });
 

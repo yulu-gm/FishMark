@@ -2,18 +2,19 @@ import path from "node:path";
 import { sameFileIdentity, type WorkspaceState } from "@fishmark/workspace-domain";
 import type { FileIdentityPort, ResolvedFileIdentity, KeyedOperationCoordinator } from "@fishmark/workspace-application";
 import { filePathIdentity } from "./file-path";
+import { isRelativeMarkdownLink, type PrepareMarkdownLinkInput } from "../shared/markdown-link";
 
 export function denyPathAuthority(): never {
   throw new Error("Path authority denied.");
 }
 
 type Owner = { windowId: string; token: string; generation: number; alive: boolean; grants: Map<string, Grant> };
-type Grant = { resolved: ResolvedFileIdentity; active: boolean; consumed: boolean; requestId: string; expiresAt: number };
+type Grant = { resolved: ResolvedFileIdentity; active: boolean; consumed: boolean; requestId: string; expiresAt: number; checkSource(): void };
 
 /** Exact main-owned sources. Lookup is deliberately synchronous and performs no filesystem I/O. */
 export function createPathAuthority(input: {
   fileIdentity: FileIdentityPort;
-  workspace: Pick<WorkspaceState, "getWindowTabIds" | "getTabSession">;
+  workspace: Pick<WorkspaceState, "getWindowTabIds" | "getTabSession" | "getWindowProjectionOrNull">;
   platform?: NodeJS.Platform;
   now?: () => number;
 }) {
@@ -41,6 +42,7 @@ export function createPathAuthority(input: {
     const grant = context.owner.grants.get(lexicalKey);
     if (grant?.active && !grant.consumed && now() < grant.expiresAt) return { ...context, resolved: grant.resolved, grant, checkSource: () => {
       if (!grant.active || now() >= grant.expiresAt) denyPathAuthority();
+      grant.checkSource();
     } };
     const tabIds = (() => { try { return input.workspace.getWindowTabIds(context.windowId); } catch { return []; } })();
     for (const tabId of tabIds) {
@@ -66,12 +68,14 @@ export function createPathAuthority(input: {
     return key(left.canonicalPath) === key(right.canonicalPath) && left.exists === right.exists &&
       (left.identity === null ? right.identity === null : right.identity !== null && sameFileIdentity(left.identity, right.identity));
   }
-  async function grant(sender: object, targetPath: string, requestId: string) {
+  async function grant(sender: object, targetPath: string, requestId: string, checkSource: () => void = () => {}) {
     const context = capture(sender);
+    checkSource();
     const resolved = await input.fileIdentity.resolveProspective(targetPath);
     context.check();
-    const value: Grant = { resolved, active: true, consumed: false, requestId,
-      expiresAt: requestId === "native-drop" ? now() + 60_000 : Number.POSITIVE_INFINITY };
+    checkSource();
+    const value: Grant = { resolved, active: true, consumed: false, requestId, checkSource,
+      expiresAt: requestId === "native-drop" || requestId === "markdown-link" ? now() + 60_000 : Number.POSITIVE_INFINITY };
     const lexicalKey = key(targetPath);
     const previous = context.owner.grants.get(lexicalKey);
     if (previous) previous.active = false;
@@ -96,6 +100,26 @@ export function createPathAuthority(input: {
     capture,
     requirePath(sender: object, targetPath: string) { source(sender, targetPath); },
     grant,
+    async grantMarkdownLink(sender: object, token: string, link: PrepareMarkdownLinkInput) {
+      if (ownerFor(sender).token !== token) denyPathAuthority();
+      const context = capture(sender);
+      if (!isRelativeMarkdownLink(link.href)) throw new Error("仅支持本地 Markdown 相对链接。");
+      const tab = input.workspace.getTabSession(link.tabId);
+      if (tab.windowId !== context.windowId || input.workspace.getWindowProjectionOrNull(context.windowId)?.activeTabId !== link.tabId) denyPathAuthority();
+      if (tab.path === null || tab.fileIdentity === null) throw new Error("请先保存当前文档，再打开相对链接。");
+      const checkSource = () => {
+        context.check();
+        const current = input.workspace.getTabSession(link.tabId);
+        if (current.windowId !== context.windowId || current.path !== tab.path ||
+            !sameFileIdentity(current.fileIdentity, tab.fileIdentity) ||
+            input.workspace.getWindowProjectionOrNull(context.windowId)?.activeTabId !== link.tabId) denyPathAuthority();
+      };
+      // 路径基准只取 main 持有的文档；允许 ../，但不接受绝对路径、协议或非 Markdown 文件。
+      const relative = decodeURIComponent(link.href.trim().split(/[?#]/, 1)[0]!).replace(/\\/g, "/");
+      const targetPath = path.resolve(path.dirname(tab.path), relative);
+      const revoke = await grant(sender, targetPath, "markdown-link", checkSource);
+      return { targetPath, revoke };
+    },
     async grantNative(sender: object, token: string, targetPath: string) {
       if (ownerFor(sender).token !== token) denyPathAuthority();
       return grant(sender, targetPath, "native-drop");

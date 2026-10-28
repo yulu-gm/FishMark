@@ -1,4 +1,5 @@
 import { RendererPlatformGateway, type WorkspaceApplicationGateway } from "./renderer-platform-gateway";
+import { isRelativeMarkdownLink } from "../../shared/markdown-link";
 import type { WorkspaceTabReceiptRequest, WorkspaceTabReceiptComplete } from "../../shared/workspace-tab-transfer";
 import { isWorkspaceReadingPosition, type WorkspaceEditorLoadView, type WorkspaceReadingPosition } from "../../shared/workspace";
 import type { AppNotification } from "../../shared/app-update";
@@ -65,6 +66,7 @@ export type WorkspaceRendererBridge = Pick<
   | "getWorkspaceSnapshot"
   | "openWorkspaceFile"
   | "openWorkspaceFileFromPath"
+  | "prepareMarkdownLink"
   | "reloadWorkspaceTabFromPath"
   | "reorderWorkspaceTab"
   | "saveMarkdownFile"
@@ -306,6 +308,18 @@ export class WorkspaceRendererApplication {
   }
 
   readonly commands = {
+    openDocumentLink: async (href: string): Promise<void> => {
+      if (!isRelativeMarkdownLink(href)) { await this.gateway.openExternalLink(href); return; }
+      try {
+        this.assertActive();
+        const tabId = this.getActiveDocument()?.tabId;
+        if (!tabId) throw new Error("当前没有可用于解析相对链接的文档。");
+        // 必须在点击回调中立即申请授权；实际切换仍走原打开队列及草稿 ACK 屏障。
+        const targetPath = await this.bridge.prepareMarkdownLink({ tabId, href });
+        this.assertActive();
+        await this.commands.openMarkdownFromPath(targetPath);
+      } catch (error) { this.notify({ kind: "error", message: failureMessage(error) }); }
+    },
     dropMarkdownFiles: async (targetPaths: string[]): Promise<boolean> => {
       try {
         this.assertActive();

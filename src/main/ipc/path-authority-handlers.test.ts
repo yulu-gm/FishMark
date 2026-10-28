@@ -25,6 +25,11 @@ function fixture() {
 }
 
 describe("path authority transport", () => {
+  it.each([undefined, {}, { tabId: "tab", href: "../report.md" }, { tabId: "tab", href: "../report.md", token: "wrong" }])("相对链接私有入口拒绝 renderer 伪造请求：%j", async payload => {
+    const f = fixture();
+    await expect(f.invoke("prepare-markdown-link", payload)).rejects.toThrow("Path authority denied");
+    expect(f.resolve).not.toHaveBeenCalled();
+  });
   it.each([undefined, {}, { targetPath: "/arbitrary.md" }, { targetPath: "/arbitrary.md", token: "wrong", source: "native-file" }])("rejects forged private native grants before filesystem I/O: %j", async (payload) => {
     const f = fixture();
     await expect(f.invoke("grant-native-file-path", payload)).rejects.toThrow("Path authority denied");

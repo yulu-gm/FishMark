@@ -116,6 +116,41 @@ function consumeEditorLoad(application: WorkspaceRendererApplication): EditorLoa
   return identity!;
 }
 
+describe("文档链接打开命令", () => {
+  it("在点击栈中申请精确目标授权，再走已有的文档打开队列", async () => {
+    const prepareMarkdownLink = vi.fn(async () => "C:/reports/findings.md");
+    const openWorkspaceFileFromPath = vi.fn(async () => ({ kind: "success" as const, snapshot: createSnapshot({ activeTabId: "tab-2" }) }));
+    const openExternalLink = vi.fn();
+    const application = createApplication({ bridge: { prepareMarkdownLink, openWorkspaceFileFromPath, openExternalLink } });
+    const pending = application.commands.openDocumentLink("../../reports/findings.md");
+    expect(prepareMarkdownLink).toHaveBeenCalledExactlyOnceWith({ tabId: "tab-1", href: "../../reports/findings.md" });
+    await pending;
+    expect(openWorkspaceFileFromPath).toHaveBeenCalledExactlyOnceWith("C:/reports/findings.md");
+    expect(application.getState().workspaceSnapshot?.activeTabId).toBe("tab-2");
+    expect(openExternalLink).not.toHaveBeenCalled();
+    application.dispose();
+  });
+  it("授权失败时保留当前文档并显示错误", async () => {
+    const prepareMarkdownLink = vi.fn(async () => { throw new Error("来源文档已关闭"); });
+    const openWorkspaceFileFromPath = vi.fn(); const notify = vi.fn();
+    const application = createApplication({ bridge: { prepareMarkdownLink, openWorkspaceFileFromPath } });
+    application.updatePresentation({ showNotification: notify });
+    await application.commands.openDocumentLink("../report.md");
+    expect(openWorkspaceFileFromPath).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith({ kind: "error", message: "来源文档已关闭" });
+    expect(application.getState().workspaceSnapshot?.activeTabId).toBe("tab-1");
+    application.dispose();
+  });
+  it.each(["http://example.com/a.md", "https://example.com/a.md", "mailto:author@example.com"])("外部链接 %s 保持原接口", async href => {
+    const openExternalLink = vi.fn(async () => {}), prepareMarkdownLink = vi.fn();
+    const application = createApplication({ bridge: { openExternalLink, prepareMarkdownLink } });
+    await application.commands.openDocumentLink(href);
+    expect(openExternalLink).toHaveBeenCalledExactlyOnceWith(href);
+    expect(prepareMarkdownLink).not.toHaveBeenCalled();
+    application.dispose();
+  });
+});
+
 async function acknowledgeEditorReadOnly(application: WorkspaceRendererApplication): Promise<number> {
   await vi.waitFor(() => {
     expect(application.getState().editorTransition?.phase).toBe("sealing");

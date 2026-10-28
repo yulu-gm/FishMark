@@ -49,6 +49,8 @@ import {
 } from "../shared/preferences";
 import type { ProductBridge } from "../shared/product-bridge";
 import { NATIVE_FILE_PATH_CHANNEL, NATIVE_FILE_TOKEN_ARGUMENT } from "../shared/native-file-path";
+import { PREPARE_MARKDOWN_LINK_CHANNEL } from "../shared/markdown-link";
+import type { MarkdownLinkGesture } from "./markdown-link-gesture";
 import {
   CLEAR_RECENT_FILE_CHANNEL,
   GET_RECENT_FILES_CHANNEL,
@@ -127,6 +129,7 @@ export interface ProductRuntimePort {
 }
 
 export interface CreateProductApiInput {
+  readonly linkGesture?: MarkdownLinkGesture;
   readonly ipc: ProductIpcPort;
   readonly filePath: ProductFilePathPort;
   readonly runtime: ProductRuntimePort;
@@ -135,7 +138,7 @@ export interface CreateProductApiInput {
 const RUNTIME_MODE_ARGUMENT_PREFIX = "--fishmark-runtime-mode=";
 const STARTUP_OPEN_PATH_ARGUMENT_PREFIX = "--fishmark-startup-open-path=";
 
-export function createProductApi({ ipc, filePath, runtime }: CreateProductApiInput): ProductBridge {
+export function createProductApi({ ipc, filePath, runtime, linkGesture }: CreateProductApiInput): ProductBridge {
   const nativeFileToken = runtime.argv.find((argument) => argument.startsWith(NATIVE_FILE_TOKEN_ARGUMENT))?.slice(NATIVE_FILE_TOKEN_ARGUMENT.length);
   let lastLaunch: { requestId: string; result: Promise<boolean> } | null = null;
   const subscribe = <TPayload>(
@@ -167,6 +170,12 @@ export function createProductApi({ ipc, filePath, runtime }: CreateProductApiInp
     createWorkspaceTab: (input: CreateWorkspaceTabInput) =>
       ipc.invoke<WorkspaceWindowSnapshot>(CREATE_WORKSPACE_TAB_CHANNEL, input),
     openWorkspaceFile: () => ipc.invoke<OpenWorkspaceFileResult>(OPEN_WORKSPACE_FILE_CHANNEL),
+    prepareMarkdownLink: async (input) => {
+      if (!nativeFileToken || !linkGesture?.consume(input.href)) {
+        throw new Error("请按住 Ctrl（macOS 为 Command）并单击文档中的本地链接。");
+      }
+      return ipc.invoke<string>(PREPARE_MARKDOWN_LINK_CHANNEL, { ...input, token: nativeFileToken });
+    },
     openWorkspaceFileFromPath: (targetPath: string) =>
       ipc.invoke<OpenWorkspaceFileFromPathResult>(OPEN_WORKSPACE_FILE_FROM_PATH_CHANNEL, { targetPath }),
     reloadWorkspaceTabFromPath: (input: ReloadWorkspaceTabFromPathInput) =>

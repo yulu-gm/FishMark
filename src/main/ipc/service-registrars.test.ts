@@ -107,6 +107,16 @@ describe.each(cases)("$channel privileged boundary", ({ channel: suffix, args, m
 });
 
 describe("registrar lifecycle and async authorization", () => {
+  it.each(["https://example.com/report", "http://localhost:8080/report", "mailto:writer@example.com"])("继续向系统外链接口转发 %s", async href => {
+    const f = fixture();
+    await f.invoke("fishmark:open-external-link", [{ href }]);
+    expect(f.effect).toHaveBeenCalledExactlyOnceWith(new URL(href).toString());
+  });
+  it("复现旧外链接口无法解析用户提供的相对 Markdown 路径", async () => {
+    const f = fixture();
+    await expect(f.invoke("fishmark:open-external-link", [{ href: "../../_trace_analysis/NiagaraDiagnosis_20261026/findings.md" }])).rejects.toThrow("Invalid URL");
+    expect(f.effect).not.toHaveBeenCalled();
+  });
   it("allows data-free menu cancellation after owner closure but rejects a late text payload", async () => {
     const f = fixture();
     f.effect.mockImplementation(async () => { f.sender.mainFrame = { ...f.frame }; return null!; });

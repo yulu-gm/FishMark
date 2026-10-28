@@ -505,7 +505,7 @@ function EditorShell({
   }
 
   async function handleOpenExternalLink(href: string): Promise<void> {
-    await gateway.openExternalLink(href);
+    await editorCommands.openDocumentLink(href);
   }
 
   const editorTestBridge = useMemo(

@@ -77,6 +77,7 @@ export interface ProductBridge {
   createWorkspaceTab: (input: CreateWorkspaceTabInput) => Promise<WorkspaceWindowSnapshot>;
   openWorkspaceFile: () => Promise<OpenWorkspaceFileResult>;
   openWorkspaceFileFromPath: (targetPath: string) => Promise<OpenWorkspaceFileFromPathResult>;
+  prepareMarkdownLink: (input: import("./markdown-link").PrepareMarkdownLinkInput) => Promise<string>;
   reloadWorkspaceTabFromPath: (
     input: ReloadWorkspaceTabFromPathInput
   ) => Promise<ReloadWorkspaceTabFromPathResult>;
