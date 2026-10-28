@@ -241,3 +241,4 @@ if (process.env.FISHMARK_E2E_OPEN_PERFORMANCE === "1") {
   globalThis.__fishmarkOpenPerformance = require("./open-performance-main.cjs").install(documentPath);
 }
 require(resolve(__dirname, "../../dist-electron/main/main.js"));
+globalThis.__fishmarkOpenPerformance?.mark("main-required");

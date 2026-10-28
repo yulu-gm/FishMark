@@ -17,6 +17,7 @@ import { WelcomeWorkspace } from "./components/WelcomeWorkspace";
 import { WorkspaceTabStrip } from "./components/WorkspaceTabStrip";
 import { useFindReplacePresentation } from "./useFindReplacePresentation";
 import { useSidePanelResize } from "./useSidePanelResize";
+import { DeferredCodeEditorView as CodeEditorView } from "./DeferredCodeEditorView";
 import type { WorkspaceShellProps, WorkspaceViewContainerId } from "./workspace-shell-props";
 
 import {
@@ -24,10 +25,6 @@ import {
   SIDE_PANEL_WIDTH_MIN
 } from "../../shared/preferences";
 
-const CodeEditorView = lazy(async () => {
-  const module = await import("../code-editor-view");
-  return { default: module.CodeEditorView };
-});
 
 const ThemeSurfaceHost = lazy(async () => {
   const module = await import("./ThemeSurfaceHost");

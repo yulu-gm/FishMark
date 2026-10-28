@@ -1,4 +1,4 @@
-const { app, Menu, dialog, nativeTheme } = require("electron");
+const { app, Menu, dialog, nativeTheme, ipcMain } = require("electron");
 const { dirname, resolve } = require("node:path");
 const { writeFileSync } = require("node:fs");
 
@@ -11,6 +11,20 @@ module.exports.install = function install(documentPath) {
   const cold = new Promise((resolve, reject) => { finishCold = resolve; failCold = reject; });
   cold.catch(() => {});
   const samples = [];
+  const timeline = [];
+  const diagnosticPath = process.env.FISHMARK_E2E_OPEN_TIMELINE;
+  if (diagnosticPath && process.env.FISHMARK_E2E_OPEN_PROFILE) throw new Error("Timeline and CPU profiling must run separately");
+  const mark = (event, detail = {}) => timeline.push({ event, ms: performance.now() - started, ...detail });
+  if (diagnosticPath) {
+    // 诊断只包裹真实 handler，不修改参数、结果或授权，也不把记录写盘放入计时区间。
+    const originalHandle = ipcMain.handle.bind(ipcMain);
+    ipcMain.handle = (channel, listener) => originalHandle(channel, async (...args) => {
+      const startMs = performance.now() - started;
+      try { return await listener(...args); }
+      finally { mark("ipc", { channel, startMs }); }
+    });
+    app.once("ready", () => mark("app-ready"));
+  }
   async function measure(targetPath, started, kind) {
     await window.webContents.executeJavaScript(`(${async function (target) {
       const deadline = performance.now() + 20000;
@@ -31,6 +45,11 @@ module.exports.install = function install(documentPath) {
         fontFamily: style.fontFamily, fontSize: style.fontSize, lineHeight: style.lineHeight };
     }.toString()})()`);
     const sample = { kind, targetPath, domMs, readyMs: performance.now() - started, presentation };
+    if (kind === "fresh-process" && diagnosticPath) {
+      mark("editor-ready");
+      writeFileSync(diagnosticPath, JSON.stringify(timeline, null, 2), { flag: "wx" });
+      window.webContents.debugger.detach();
+    }
     if (kind === "fresh-process" && profileStarted) {
       await profileStarted;
       const { profile } = await window.webContents.debugger.sendCommand("Profiler.stop");
@@ -44,6 +63,15 @@ module.exports.install = function install(documentPath) {
   }
   app.once("browser-window-created", (_event, created) => {
     window = created;
+    if (diagnosticPath) {
+      mark("window-created");
+      for (const event of ["did-start-loading", "dom-ready", "did-finish-load"]) window.webContents.once(event, () => mark(event));
+      window.webContents.debugger.attach("1.3");
+      window.webContents.debugger.on("message", (_event, method, params) => {
+        if (method === "Debugger.scriptParsed" && params.url.startsWith("file:")) mark("script-parsed", { url: params.url });
+      });
+      void window.webContents.debugger.sendCommand("Debugger.enable").catch(failCold);
+    }
     window.setSize(1280, 900);
     if (process.env.FISHMARK_E2E_OPEN_PROFILE) {
       window.webContents.debugger.attach("1.3");
@@ -55,7 +83,7 @@ module.exports.install = function install(documentPath) {
   });
   const started = performance.now();
   return {
-    cold, samples,
+    cold, samples, mark,
     async open(targetPath) {
       if (dirname(resolve(targetPath)) !== dirname(resolve(documentPath))) throw new Error("Warm fixture must share the owned document directory");
       const item = Menu.getApplicationMenu()?.items.find(entry => entry.label === "File")?.submenu?.items.find(entry => entry.label === "Open...");

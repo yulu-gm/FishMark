@@ -1,5 +1,7 @@
 # RF902 实际产品持久化 E2E
 
+启动分段诊断可在上述性能配置运行时设置 `FISHMARK_E2E_OPEN_TIMELINE` 为不存在的绝对 JSON 路径，记录 main 加载、窗口/页面事件、模块解析事件和真实 IPC handler 起止。该开关与 `FISHMARK_E2E_OPEN_PROFILE` 互斥；一次路径仅用于一个冷进程（例如 `--grep 5000`），诊断运行不作为正式预算样本。详见[报告057](../../reports/task-summaries/TASK-RF901-STARTUP-WAITS-057.md)。
+
 生产冷暖打开测量单独执行 `node node_modules/@playwright/test/cli.js test --config playwright.open-performance.config.mjs`，运行前需要 `npm run build`。每种尺寸一个新进程、两个暖打开样本；计时之后才检查完整内容、编辑、撤销和磁盘。报告 `budgetVerdict` 独立于协议测试结果，测试通过不代表性能达标。关闭其他 Electron 测试以避免干扰，设置唯一 `FISHMARK_E2E_RUN_ID` 保存证据；协议、诊断开关及限制见[报告056](../../reports/task-summaries/TASK-RF901-PRODUCTION-OPEN-056.md)。
 
 `watch-lifecycle.spec.mjs`读取100次实际公开工作区快照，断言同窗口的WebContents destroyed监听总数稳定、无MaxListenersExceededWarning，文档内容/dirty/磁盘不变，随后正常关闭。只做监听计数观测，不改变上限、不抑制warning；沿用本fixture隔离与退出证明。

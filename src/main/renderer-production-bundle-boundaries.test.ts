@@ -83,13 +83,18 @@ describe("renderer production bundle boundaries", () => {
   it("keeps the CodeMirror editor runtime outside the empty-workspace initial graph", () => {
     const appSource = readRendererSource("editor/App.tsx");
     const shellSource = readRendererSource("editor/WorkspaceShell.tsx");
+    const deferredSource = readRendererSource("editor/DeferredCodeEditorView.tsx");
 
     expect(appSource).not.toContain("DEFAULT_TEXT_SHORTCUT_GROUP");
     expect(appSource).not.toContain("TABLE_EDITING_SHORTCUT_GROUP");
     expect(shellSource).not.toContain("DEFAULT_TEXT_SHORTCUT_GROUP");
     expect(shellSource).not.toContain("formatShortcutHintKey");
     expect(shellSource).not.toContain('import { ShortcutHintOverlay } from "./shortcut-hint-overlay";');
-    expect(shellSource).toContain('await import("../code-editor-view")');
+    expect(shellSource).toContain('from "./DeferredCodeEditorView"');
+    expect(shellSource).not.toContain('from "../code-editor-view"');
+    expect(deferredSource).toContain('import type { CodeEditorView } from "../code-editor-view"');
+    expect(deferredSource).toContain('import("../code-editor-view")');
+    expect(deferredSource).not.toContain('import { CodeEditorView }');
     expect(shellSource).toContain('await import("./shortcut-hint-overlay")');
   });
 
