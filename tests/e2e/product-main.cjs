@@ -237,4 +237,7 @@ const watchdog = setTimeout(() => {
 watchdog.unref();
 if (openDocument) process.argv.push(documentPath);
 record("launch", { pid: process.pid, argv: process.argv, profile, documentPath, openDocument, versions: process.versions });
+if (process.env.FISHMARK_E2E_OPEN_PERFORMANCE === "1") {
+  globalThis.__fishmarkOpenPerformance = require("./open-performance-main.cjs").install(documentPath);
+}
 require(resolve(__dirname, "../../dist-electron/main/main.js"));

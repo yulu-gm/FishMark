@@ -1723,6 +1723,8 @@ npm.cmd run build
 
 #### RF-901: Final performance gate
 
+**2026-10-28 生产打开测量：** [报告056](../../../reports/task-summaries/TASK-RF901-PRODUCTION-OPEN-056.md)已完成修改前后同协议测量和结构扫描优化。最终 5k / 20k 冷打开约 1413 / 2138 ms，预算仍失败，暖打开达标；重复测量有波动，尚未证实稳定提速。下一步定位主进程初始化、模块加载与 workspace IPC 的等待时间。M9 保持 0/3。
+
 **2026-10-28 更新：** 按用户要求恢复进行中；[纯文本行内解析优化055](../../../reports/task-summaries/TASK-RF901-PLAIN-INLINE-055.md)通过定向、真实产品及原性能基础检查。只减少普通文字的分词器创建，不代表生产首次打开、输入延迟或内存预算已经达标，RF-901 未验收、M9 仍 0/3。下方 2026-10-13 状态保留其历史时点。
 
 **Outcome:** the completed cache/adapter architecture meets section 8 budgets with reproducible evidence.

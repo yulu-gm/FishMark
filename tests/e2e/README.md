@@ -1,5 +1,7 @@
 # RF902 实际产品持久化 E2E
 
+生产冷暖打开测量单独执行 `node node_modules/@playwright/test/cli.js test --config playwright.open-performance.config.mjs`，运行前需要 `npm run build`。每种尺寸一个新进程、两个暖打开样本；计时之后才检查完整内容、编辑、撤销和磁盘。报告 `budgetVerdict` 独立于协议测试结果，测试通过不代表性能达标。关闭其他 Electron 测试以避免干扰，设置唯一 `FISHMARK_E2E_RUN_ID` 保存证据；协议、诊断开关及限制见[报告056](../../reports/task-summaries/TASK-RF901-PRODUCTION-OPEN-056.md)。
+
 `watch-lifecycle.spec.mjs`读取100次实际公开工作区快照，断言同窗口的WebContents destroyed监听总数稳定、无MaxListenersExceededWarning，文档内容/dirty/磁盘不变，随后正常关闭。只做监听计数观测，不改变上限、不抑制warning；沿用本fixture隔离与退出证明。
 
 两个Windows原生指针入口通过`native-pointer.mjs`保留完整exec元数据和JSONL阶段。输入前预热序列化并用Node绝对25秒准备期限复查；按住阶段无I/O，释放前有3秒合作式检查，外层35秒保留恢复余量。成功需完整九阶段有序、真实HWND/capture证明及全部产品断言；阶段缺失仍失败。ebde938官方48/49失败的旧空stdout/stderr不足以证实冷启动/超时根因，原报告保留。终版pointer-final-01九门禁通过，产品49/49、14次助手完整九阶段及实际后续断言通过；最终发布仍取精确HEAD四项官方CI。

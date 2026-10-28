@@ -45,7 +45,7 @@ export function parseFullDocumentTree(
   options: MarkdownParseOptions = {}
 ): MarkdownDocumentTree {
   const referenceDefinitions = collectReferenceDefinitions(source, options);
-  const events = collectMicromarkEventViews(source, options);
+  const events = collectMicromarkEventViews(source, options, true);
 
   const root: RawContainer = {
     kind: "document",

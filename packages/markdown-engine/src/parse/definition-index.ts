@@ -6,6 +6,7 @@ import type { MarkdownParseOptions } from "../parse-instrumentation";
 import { createLineInfos } from "./leaf-blocks";
 import { trimTrailingCarriageReturn } from "./leaf-nodes";
 import { normalizeReferenceIdentifier, parseInlineAst } from "../parse-inline-ast";
+import { structuralScanExtension } from "./micromark-event-adapter";
 
 // Reference and footnote definition indexes are derived from the raw source and from the
 // top-level leaf blocks of the recursive parse, so no consumer needs a second block scanner.
@@ -29,7 +30,7 @@ export function collectReferenceDefinitions(
     kind: "reference-definitions",
     sourceLength: source.length
   });
-  for (const [phase, token] of postprocess(parse().document().write(preprocess()(source, "utf8", true)))) {
+  for (const [phase, token] of postprocess(parse({ extensions: [structuralScanExtension] }).document().write(preprocess()(source, "utf8", true)))) {
     const tokenType = token.type as string;
 
     if (phase === "enter") {

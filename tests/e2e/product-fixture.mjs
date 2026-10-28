@@ -169,8 +169,12 @@ class ProductSession {
       state.app.on("window", attachPage);
       for (const page of state.app.windows()) attachPage(page);
       state.page = await state.app.firstWindow({ timeout: 15_000 });
-      await state.app.context().tracing.start({ screenshots: true, snapshots: true, sources: true });
-      state.tracing = true;
+      if (process.env.FISHMARK_E2E_OPEN_PERFORMANCE === "1") {
+        state.openPerformance = await state.app.evaluate(() => globalThis.__fishmarkOpenPerformance.cold);
+      } else {
+        await state.app.context().tracing.start({ screenshots: true, snapshots: true, sources: true });
+        state.tracing = true;
+      }
       await expect(state.page.locator(".cm-content[contenteditable=true]")).toBeVisible();
       if (selectTabId) {
 

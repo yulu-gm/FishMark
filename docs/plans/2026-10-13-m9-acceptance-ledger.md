@@ -1,5 +1,7 @@
 # M9 验收清单与下一批顺序
 
+**2026-10-28 生产打开复测：** [报告056](../../reports/task-summaries/TASK-RF901-PRODUCTION-OPEN-056.md)建立同机生产冷暖打开协议，并减少结构扫描的重复行内解析。最终 5k / 20k 冷打开 1413 / 2138 ms，均超过 500 / 1500 ms 预算；暖打开 298–346 / 939–945 ms。优化首批较快，复测存在波动，不能宣称稳定端到端提速。语法树差分、产品链接与长文回归、最终正式编辑行为、build/lint/typecheck/perf:baseline 通过；严格回归仍受原已知失败和 Windows 权限跳过影响。编辑行为中间失败记录保留，详情见报告。RF-901 未验收，M9 仍 **0/3**。
+
 **2026-10-28 当前更新：** 按用户要求继续 M9，RF-901 恢复进行中；本批仅增加单行纯文本行内解析快速路径。28 项新增用例、1200 组差分及规范 2 万行解析树等价验证、产品 5/5、正式编辑行为 121/121、editing、perf:baseline、lint/typecheck/build 通过。完整回归为 4106 PASS、8 exact known、1 个 Windows 权限跳过，严格检查仍失败。详见[报告055](../../reports/task-summaries/TASK-RF901-PLAIN-INLINE-055.md)。生产冷暖首开、输入及内存预算仍待验收；RF-902/903 不借此关闭，M9 仍 **0/3**。以下均保留原时点状态。
 
 **044第三次CI助手失败：** ebde938的CI38775241917三项成功、Windows48/49失败，stall修正已通过，新失败在既有outside-window detach助手。官方ZIP digest核验，原生日志有release/detach:end，但后续caret/save未执行、exec错误元数据缺失，不能断言旧失败原因。原生入口增加完整退出/阶段证据、输入前序列化预热及绝对准备期限，保留原身份/捕获/产品超时/所有断言。终版pointer-final-01九门禁通过，产品49/49、14次原生助手完整阶段，62launch57正常+5预期，全部owned退出/cleanup0、四guard无物理输入；strict3916＋8精确known、foundation310、editing79、safety7、formal121/121/2541及包体预算保持。最终独审与精确后续CI仍须通过，详见报告044/publication。M9保持 **0/3**。
