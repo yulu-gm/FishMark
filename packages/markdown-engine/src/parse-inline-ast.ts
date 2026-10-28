@@ -86,6 +86,13 @@ export function parseInlineAst(
     return root;
   }
 
+  // 只对单行普通文字直接生成文本节点，避免为标题和列表正文反复创建分词器。
+  // 行尾空格由 micromark 的 lineSuffix 处理；语法字符、控制字符等均保留原解析路径。
+  if (!sourceSlice.endsWith(" ") && !/[^\p{L}\p{M}\p{N} .,;:!?()/，。；：！？、（）-]/u.test(sourceSlice)) {
+    root.children.push({ type: "text", startOffset: clampedStartOffset, endOffset: clampedEndOffset, value: sourceSlice });
+    return root;
+  }
+
   const events = postprocess(
     parse({ extensions: [math({ singleDollarTextMath: true }), strikethrough()] })
       .text()

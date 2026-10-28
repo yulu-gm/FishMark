@@ -1723,6 +1723,8 @@ npm.cmd run build
 
 #### RF-901: Final performance gate
 
+**2026-10-28 更新：** 按用户要求恢复进行中；[纯文本行内解析优化055](../../../reports/task-summaries/TASK-RF901-PLAIN-INLINE-055.md)通过定向、真实产品及原性能基础检查。只减少普通文字的分词器创建，不代表生产首次打开、输入延迟或内存预算已经达标，RF-901 未验收、M9 仍 0/3。下方 2026-10-13 状态保留其历史时点。
+
 **Outcome:** the completed cache/adapter architecture meets section 8 budgets with reproducible evidence.
 
 **Status (2026-10-13):** `IN_PROGRESS`, not accepted. The [report-validation batch](../../plans/2026-10-13-rf901-report-validation.md) adds a shared integrity check for the existing schema 2 diagnostic. A valid report is still insufficient for §8: plain-fixture controller dispatch/construction/two-rAF intervals are not mixed-fixture semantic/editor-ready/compositor measurements. The historical withdrawn reuse experiment and frozen cp13/cp16 are not adopted by this batch. RF-902/903 remain planned.

@@ -1,5 +1,7 @@
 # M9 验收清单与下一批顺序
 
+**2026-10-28 当前更新：** 按用户要求继续 M9，RF-901 恢复进行中；本批仅增加单行纯文本行内解析快速路径。28 项新增用例、1200 组差分及规范 2 万行解析树等价验证、产品 5/5、正式编辑行为 121/121、editing、perf:baseline、lint/typecheck/build 通过。完整回归为 4106 PASS、8 exact known、1 个 Windows 权限跳过，严格检查仍失败。详见[报告055](../../reports/task-summaries/TASK-RF901-PLAIN-INLINE-055.md)。生产冷暖首开、输入及内存预算仍待验收；RF-902/903 不借此关闭，M9 仍 **0/3**。以下均保留原时点状态。
+
 **044第三次CI助手失败：** ebde938的CI38775241917三项成功、Windows48/49失败，stall修正已通过，新失败在既有outside-window detach助手。官方ZIP digest核验，原生日志有release/detach:end，但后续caret/save未执行、exec错误元数据缺失，不能断言旧失败原因。原生入口增加完整退出/阶段证据、输入前序列化预热及绝对准备期限，保留原身份/捕获/产品超时/所有断言。终版pointer-final-01九门禁通过，产品49/49、14次原生助手完整阶段，62launch57正常+5预期，全部owned退出/cleanup0、四guard无物理输入；strict3916＋8精确known、foundation310、editing79、safety7、formal121/121/2541及包体预算保持。最终独审与精确后续CI仍须通过，详见报告044/publication。M9保持 **0/3**。
 
 **044第二次CI诊断失败：** `4dcdbad`的CI38771561655三项通过、Windows48/49失败，Cancel与遮挡已通过；stall原生助手及receipt提交成功，但finally的Inspector诊断被回收，后续caret/save未执行，不能算产品通过。两个fixture改为回调外JSONL批次与Node严格序列读取、fixture持有一次stall，保留主错误与诊断错误及所有产品断言；原失败产物digest核验保留。修后stall6/6、完整merge重复18/18及从头九门禁通过，产品49/49、62launch=57正常exit0+5预期恢复，全部owned退出/cleanup0；strict3916＋8精确known、foundation310、editing79、safety7、formal121/121/2541、Windows gzip1437333，四guard无物理输入。最终独审/精确CI见报告044和本机publication，不以本地通过代替官方CI。M9仍 **0/3**。
