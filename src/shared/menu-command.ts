@@ -1,6 +1,9 @@
 export const APP_MENU_COMMAND_EVENT = "fishmark:app-menu-command";
 
 export const APP_MENU_COMMANDS = [
+  "select-all",
+  "undo",
+  "redo",
   "new-markdown-document",
   "open-markdown-file",
   "new-editor-window",

@@ -1,0 +1,87 @@
+import { test, expect } from "./product-fixture.mjs";
+
+const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200"><rect width="400" height="200" fill="coral"/></svg>').toString("base64");
+const initial = `![alt](data:image/svg+xml;base64,${svg} "caption")\n\nTail`;
+
+test("image context resize survives undo, redo, real save and reopen", async ({ product }, testInfo) => {
+  await product.seed(initial, 60_000);
+  await product.launch(initial);
+  const page = product.current.page;
+  const image = page.locator(".cm-markdown-image-preview-image").first();
+  await expect.poll(() => image.evaluate(el => el.naturalWidth)).toBe(400);
+  await image.click({ button: "right" });
+  await expect(page.locator('.cm-image-resize-menu [role="menuitem"]')).toHaveCount(4);
+  await page.screenshot({ path: testInfo.outputPath("image-resize-menu.png") });
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".cm-image-resize-menu")).toHaveCount(0);
+  expect((await product.snapshot()).activeDocument.content).toBe(initial);
+  await image.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "原图 50%" }).click();
+  const resized = (await product.snapshot()).activeDocument.content;
+  expect(resized).toContain('width="200"');
+  expect(resized).toContain('title="caption"');
+  await product.focus();
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+z" : "Control+z");
+  await expect.poll(async () => (await product.snapshot()).activeDocument.content).toBe(initial);
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+Shift+z" : "Control+Shift+z");
+  await expect.poll(async () => (await product.snapshot()).activeDocument.content).toBe(resized);
+  await product.manualSave();
+  await product.expectSaved(resized);
+  const oldTab = (await product.snapshot()).activeTabId;
+  await page.getByRole("button", { name: "Close roundtrip.md", exact: true }).click();
+  await expect.poll(async () => (await product.snapshot()).tabs.length).toBe(0);
+  // Reopen the saved file through the product's native-backed drop path.
+  await page.evaluate(() => { const input = document.createElement("input"); input.type = "file"; input.id = "resize-fixture-file"; document.body.append(input); });
+  await page.locator("#resize-fixture-file").setInputFiles(product.documentPath);
+  await page.evaluate(() => { const input = document.querySelector("#resize-fixture-file");
+    const transfer = new DataTransfer(); transfer.items.add(input.files[0]);
+    window.dispatchEvent(new DragEvent("drop", { dataTransfer: transfer, bubbles: true, cancelable: true })); input.remove(); });
+  await expect.poll(async () => (await product.snapshot()).activeDocument?.content).toBe(resized);
+  expect((await product.snapshot()).activeTabId).not.toBe(oldTab);
+  await product.expectSaved(resized);
+  const reopenedImage = page.locator(".cm-markdown-image-preview-image").first();
+  await expect.poll(() => reopenedImage.evaluate(el => Math.round(el.getBoundingClientRect().width))).toBe(200);
+  await product.assertHealthy();
+});
+
+test("inline resize preserves surrounding text and reference images remain intact after save and reopen", async ({ product }) => {
+  const url = `data:image/svg+xml;base64,${svg}`;
+  const inline = `Before ![alt](${url} "caption") after`;
+  const reference = `![ref][asset]\n\n[asset]: ${url} "reference title"`;
+  const source = `${inline}\n\n${reference}\n\nEnd`;
+  await product.seed(source, 60_000);
+  await product.launch(source);
+  const page = product.current.page;
+  const refImage = page.locator('img.cm-markdown-image-preview-image[alt="ref"]');
+  await expect(refImage).toBeVisible();
+  await refImage.click({ button: "right" });
+  await expect(page.locator(".cm-image-resize-menu")).toHaveCount(0);
+  expect((await product.snapshot()).activeDocument.content).toBe(source);
+  const image = page.locator('img.cm-markdown-image-preview-image[alt="alt"]');
+  await expect.poll(() => image.evaluate(el => el.naturalWidth)).toBe(400);
+  await image.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "原图 50%" }).click();
+  const expected = `Before <img src="${url}" alt="alt" title="caption" width="200" /> after\n\n${reference}\n\nEnd`;
+  await expect.poll(async () => (await product.snapshot()).activeDocument.content).toBe(expected);
+  await product.focus();
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+z" : "Control+z");
+  await expect.poll(async () => (await product.snapshot()).activeDocument.content).toBe(source);
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+Shift+z" : "Control+Shift+z");
+  await expect.poll(async () => (await product.snapshot()).activeDocument.content).toBe(expected);
+  await product.manualSave(); await product.expectSaved(expected);
+  await page.getByRole("button", { name: "Close roundtrip.md", exact: true }).click();
+  await expect.poll(async () => (await product.snapshot()).tabs.length).toBe(0);
+  await page.evaluate(() => { const input = document.createElement("input"); input.type = "file"; input.id = "inline-resize-fixture"; document.body.append(input); });
+  await page.locator("#inline-resize-fixture").setInputFiles(product.documentPath);
+  await page.evaluate(() => { const input = document.querySelector("#inline-resize-fixture"); const transfer = new DataTransfer();
+    transfer.items.add(input.files[0]); window.dispatchEvent(new DragEvent("drop", { dataTransfer: transfer, bubbles: true, cancelable: true })); input.remove(); });
+  await expect.poll(async () => (await product.snapshot()).activeDocument?.content).toBe(expected);
+  await product.expectSaved(expected);
+  // Move away from the paragraph so its rich inline rendering is visible.
+  await page.locator('.cm-content').click({ position: { x: 10, y: 180 } });
+  const reopened = page.locator('img.cm-markdown-image-preview-image[alt="alt"]');
+  await expect(reopened).toHaveAttribute("title", "caption");
+  await expect.poll(() => reopened.evaluate(el => Math.round(el.getBoundingClientRect().width))).toBe(200);
+  await expect(page.locator('img.cm-markdown-image-preview-image[alt="ref"]')).toHaveAttribute("title", "reference title");
+  await product.assertHealthy();
+});

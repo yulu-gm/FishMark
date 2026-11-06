@@ -348,6 +348,14 @@ function EditorShell({
   );
 
   const handleAppMenuCommand = useEffectEvent((command: AppMenuCommand): void => {
+    if (command === "select-all") {
+      if (!editorRef.current?.runSelectAll()) document.execCommand("selectAll");
+      return;
+    }
+    if (command === "undo" || command === "redo") {
+      if (!editorRef.current?.runHistory(command)) document.execCommand(command);
+      return;
+    }
     if (command === "new-markdown-document") {
       void handleNewMarkdown();
       return;

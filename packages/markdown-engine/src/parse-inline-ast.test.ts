@@ -388,3 +388,11 @@ describe("parseInlineAst", () => {
     ]);
   });
 });
+
+it("parses inline HTML images with size metadata and surrounding text", () => {
+  const source = 'before <img src="a.png" alt="alt" title="caption" width="120" /> after';
+  const root = parseInlineAst(source, 0, source.length);
+  const image = root.children.find(node => node.type === "image");
+  expect(image).toMatchObject({ type: "image", href: "a.png", title: "caption", html: { alt: "alt", width: "120" } });
+  expect(root.children.filter(node => node.type === "text").map(node => node.value).join("")).toBe("before  after");
+});

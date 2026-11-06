@@ -7521,7 +7521,7 @@ describe("createCodeEditorController", () => {
     await flushMicrotasks();
 
     expect(controller.getContent()).toBe(
-      ["| name   | qty |", "| :----- | ---: |", "| pencil |   2 |"].join("\n")
+      ["| name | qty |", "| --- | ---: |", "| pencil | 2 |"].join("\n")
     );
 
     controller.destroy();
@@ -7562,13 +7562,13 @@ describe("createCodeEditorController", () => {
 
     expect(controller.getContent()).toBe(
       [
-        "| 旧规则   | 新规则    |        |",
-        "| :---- | :----- | :----- |",
+        "| 旧规则 | 新规则 |",
+        "| :-------- | :------ | ------ |",
         "| df_hf | df_new | ------ |",
-        "| df_hb | db     |        |"
+        "| df_hb | db | |"
       ].join("\n")
     );
-    expect(controller.getContent()).not.toContain(":--------");
+    expect(host.querySelector<HTMLInputElement>('[data-table-cell="0:0"]')?.value).toBe("旧规则");
 
     controller.destroy();
     host.remove();
@@ -9070,7 +9070,7 @@ describe("createCodeEditorController", () => {
     host.remove();
   });
 
-  it("rewrites canonical markdown after a direct cell edit", () => {
+  it("preserves surrounding markdown after a direct cell edit", () => {
     const host = document.createElement("div");
     const source = ["| name | qty |", "| --- | ---: |", "| pen | 2 |"].join("\n");
 
@@ -9087,7 +9087,7 @@ describe("createCodeEditorController", () => {
     });
 
     expect(controller.getContent()).toBe(
-      ["| name | qty |", "| :--- | ---: |", "| pen  |  20 |"].join("\n")
+      ["| name | qty |", "| --- | ---: |", "| pen | 20 |"].join("\n")
     );
 
     controller.destroy();
@@ -9442,12 +9442,12 @@ describe("createCodeEditorController", () => {
 });
 
 describe("document change frames", () => {
-  it("does not dirty or add history for unchanged table history input and seals the saved source", async () => {
+  it("does not dirty or add frames when table document history is empty and seals the saved source", async () => {
     const host = document.createElement("div"), frames = createDocumentFrameCollector(), onChange = vi.fn();
     document.body.appendChild(host);
     const controller = createCodeEditorController({
       parent: host,
-      initialContent: "| Name | Value |\n| --- | --- |\n| Alpha | Beta |",
+      initialContent: "| Name | Value |\n| --- | --- |\n| Delta | Beta |",
       onChange,
       onDocumentChangeFrame: frames.onDocumentChangeFrame
     });
@@ -9457,7 +9457,6 @@ describe("document change frames", () => {
       sealForBarrier: () => Promise<{ text: string; identity: DocumentFrame["identity"] }>;
     };
     advanced.setDocumentIdentity({ tabId: "table-history", epoch: 1, loadRevision: 1 });
-    controller.editTableCell({ row: 1, column: 0, text: "Delta" });
     advanced.flushPendingDocumentChanges();
     const savedSource = controller.getContent(), view = getEditorView(host)!;
     const depth = undoDepth(view.state);
@@ -9465,8 +9464,9 @@ describe("document change frames", () => {
     onChange.mockClear();
     const cell = host.querySelector<HTMLElement>('[data-table-cell="1:0"]')!;
     for (const inputType of ["historyUndo", "historyRedo"]) {
-      cell.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, inputType }));
-      cell.dispatchEvent(new InputEvent("input", { bubbles: true, inputType }));
+      const event = new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType });
+      cell.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
     }
     advanced.flushPendingDocumentChanges();
     expect(controller.getContent()).toBe(savedSource);

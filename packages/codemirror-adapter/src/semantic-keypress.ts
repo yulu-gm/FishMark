@@ -1,5 +1,5 @@
 import type { EditorView } from "@codemirror/view";
-import { StateEffect } from "@codemirror/state";
+import { StateEffect, type Annotation } from "@codemirror/state";
 import {
   createEditorTransactionAdapter,
   readEditorStructureCache,
@@ -28,7 +28,10 @@ export type SemanticCommandPlanner = (
   context: EditorSemanticContext
 ) => EditTransactionPlan | null;
 
-export type SemanticCommandDispatchOptions = { readonly scrollIntoView?: boolean };
+export type SemanticCommandDispatchOptions = {
+  readonly scrollIntoView?: boolean;
+  readonly annotations?: readonly Annotation<unknown>[];
+};
 
 export type SemanticCommandResult =
   | "applied"
@@ -110,7 +113,10 @@ function applyPreparedSemanticCommand(
   if (prepared.kind === "unhandled") {
     return "unhandled";
   }
-  view.dispatch({ ...prepared.transaction, scrollIntoView: options?.scrollIntoView ?? true });
+  const annotations = prepared.transaction.annotations;
+  view.dispatch({ ...prepared.transaction, scrollIntoView: options?.scrollIntoView ?? true,
+    annotations: [...(Array.isArray(annotations) ? annotations : annotations ? [annotations] : []),
+      ...(options?.annotations ?? [])] });
   if (prepared.kind === "unchanged") {
     return "unchanged";
   }

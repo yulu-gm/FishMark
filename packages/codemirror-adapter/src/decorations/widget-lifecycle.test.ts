@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { EditorState } from "@codemirror/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { parseInlineAst, parseMarkdownDocument, type CodeFenceBlock, type InlineImage, type InlineMath } from "@fishmark/markdown-engine";
@@ -32,7 +33,7 @@ afterEach(() => {
 });
 
 type FakeView = {
-  readonly view: WidgetMeasurementTarget & { readonly dom: HTMLDivElement };
+  readonly view: WidgetMeasurementTarget & { readonly dom: HTMLDivElement; readonly state: EditorState };
   readonly requestMeasure: ReturnType<typeof vi.fn>;
 };
 
@@ -42,7 +43,7 @@ const createFakeView = (): FakeView => {
   document.body.appendChild(dom);
   const requestMeasure = vi.fn();
 
-  return { view: { dom, requestMeasure }, requestMeasure };
+  return { view: { dom, requestMeasure, state: EditorState.create({ doc: "![alt](hero.png)" }) }, requestMeasure };
 };
 
 const widgetDom = (decoration: { spec: { widget: unknown } }, view: WidgetMeasurementTarget): HTMLElement => {

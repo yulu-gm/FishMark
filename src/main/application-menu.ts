@@ -47,13 +47,13 @@ export function createApplicationMenuTemplate({
     {
       label: "Edit",
       submenu: [
-        { role: "undo" },
-        { role: "redo" },
+        createCommandItem("Undo", "CmdOrCtrl+Z", "undo", dispatchCommand),
+        createCommandItem("Redo", "Shift+CmdOrCtrl+Z", "redo", dispatchCommand),
         { type: "separator" },
         { role: "cut" },
         { role: "copy" },
         { role: "paste" },
-        { role: "selectAll" }
+        createCommandItem("Select All", "CmdOrCtrl+A", "select-all", dispatchCommand)
       ]
     },
     {

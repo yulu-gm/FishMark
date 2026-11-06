@@ -4,6 +4,7 @@ import type { MarkdownParseInstrumentation } from "./parse-instrumentation";
 import { math } from "micromark-extension-math";
 import type { Token } from "micromark-util-types";
 
+import { parseHtmlImageData } from "./html-image";
 import { strikethrough } from "./extensions/strikethrough";
 import type {
   FootnoteDefinition,
@@ -232,6 +233,15 @@ export function parseInlineAst(
         const value = readSlice(sourceSlice, token);
         if (isInlineHardBreakTag(value)) {
           appendNode(stack, createHardBreakNode(token, clampedStartOffset));
+        } else {
+          const image = parseHtmlImageData(value);
+          if (image) {
+            const node = createImageNode(token, clampedStartOffset);
+            node.href = image.src;
+            node.title = image.title;
+            node.html = { alt: image.alt, width: image.width, height: image.height, zoom: image.zoom };
+            appendNode(stack, node);
+          }
         }
         continue;
       }

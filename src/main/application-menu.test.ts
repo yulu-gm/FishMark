@@ -41,6 +41,18 @@ describe("createApplicationMenuTemplate", () => {
     ]);
   });
 
+  it("routes undo and redo through the editor command bridge", () => {
+    const dispatchCommand = vi.fn();
+    const edit = createApplicationMenuTemplate({ dispatchCommand }).find(item => item.label === "Edit")!;
+    const history = edit.submenu!.slice(0, 2);
+    expect(history.map(item => item.accelerator)).toEqual(["CmdOrCtrl+Z", "Shift+CmdOrCtrl+Z"]);
+    history.forEach(item => item.click?.());
+    expect(dispatchCommand.mock.calls).toEqual([["undo"], ["redo"]]);
+    expect(edit.submenu!.slice(3, 6).map(item => item.role)).toEqual(["cut", "copy", "paste"]);
+    edit.submenu!.at(-1)!.click?.();
+    expect(dispatchCommand).toHaveBeenLastCalledWith("select-all");
+  });
+
   it("adds Check for Updates command in the Help menu", () => {
     const dispatchCommand = vi.fn();
     const template = createApplicationMenuTemplate({ dispatchCommand });

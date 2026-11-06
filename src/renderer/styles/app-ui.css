@@ -3,9 +3,9 @@
   --fishmark-focus-transition-duration: 220ms;
   --fishmark-focus-transition-easing: var(--fishmark-ease-standard);
   --fishmark-shell-rail-offset: var(--fishmark-shell-rail-width);
-  --fishmark-status-bar-left: calc(var(--fishmark-shell-rail-offset) + var(--fishmark-shell-gutter));
-  --fishmark-status-bar-right: var(--fishmark-shell-gutter);
-  --fishmark-status-bar-inline-padding: var(--fishmark-space-5);
+  --fishmark-status-bar-left: calc(var(--fishmark-shell-rail-offset) + 4px);
+  --fishmark-status-bar-right: 4px;
+  --fishmark-status-bar-inline-padding: 0px;
   height: 100dvh;
   position: relative;
   isolation: isolate;
@@ -155,7 +155,7 @@
   z-index: var(--fishmark-z-shell);
   top: 0;
   height: 100%;
-  padding: var(--fishmark-space-6) var(--fishmark-space-3) var(--fishmark-space-5);
+  padding: var(--fishmark-space-3) 4px calc(4px + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -164,8 +164,7 @@
 }
 
 .app-rail-brand {
-  margin-inline: calc(-1 * var(--fishmark-space-3));
-  width: calc(100% + var(--fishmark-space-3) * 2);
+  width: 100%;
   display: grid;
   justify-items: center;
   gap: 2px;
@@ -377,8 +376,8 @@
   position: relative;
   padding:
     var(--fishmark-space-4)
-    var(--fishmark-shell-gutter)
-    calc(var(--fishmark-status-bar-height) + var(--fishmark-space-5) + env(safe-area-inset-bottom));
+    0
+    calc(var(--fishmark-status-bar-height) + 2px + env(safe-area-inset-bottom));
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
   align-content: start;
@@ -397,7 +396,7 @@
   position: fixed !important;
   left: var(--fishmark-status-bar-left) !important;
   right: var(--fishmark-status-bar-right) !important;
-  bottom: calc(var(--fishmark-space-3) + env(safe-area-inset-bottom)) !important;
+  bottom: calc(2px + env(safe-area-inset-bottom)) !important;
   min-height: var(--fishmark-status-bar-height) !important;
   padding: 0 var(--fishmark-status-bar-inline-padding) !important;
   z-index: var(--fishmark-z-overlay) !important;
@@ -537,7 +536,7 @@
   display: block;
   width: 100%;
   min-width: 0;
-  margin: calc(var(--fishmark-space-4) * -1) calc(var(--fishmark-shell-gutter) * -1) 0;
+  margin: calc(var(--fishmark-space-4) * -1) 0 0;
   padding: 0;
   border-bottom: 1px solid
     color-mix(in srgb, var(--fishmark-panel-border, rgba(15, 23, 42, 0.12)) 60%, transparent);
@@ -1375,7 +1374,7 @@
 
 .document-editor {
   width: 100%;
-  border-radius: var(--fishmark-radius-xl);
+  border-radius: 0;
   background: var(--fishmark-editor-bg, transparent);
   overflow: hidden;
 }
@@ -1387,7 +1386,7 @@
   display: block;
   left: var(--fishmark-status-bar-left);
   right: var(--fishmark-status-bar-right);
-  bottom: calc(var(--fishmark-space-3) + env(safe-area-inset-bottom));
+  bottom: calc(2px + env(safe-area-inset-bottom));
   min-height: var(--fishmark-status-bar-height);
   padding: 0 var(--fishmark-status-bar-inline-padding);
   border-radius: var(--fishmark-radius-pill);
@@ -1410,7 +1409,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--fishmark-space-2) var(--fishmark-space-5);
-  padding: 0 var(--fishmark-space-5);
+  padding: 0 4px;
   border-radius: inherit;
   background: transparent;
 }
@@ -1659,12 +1658,12 @@
 
 @media (max-width: 860px) {
   :root {
-    --fishmark-shell-rail-width: 64px;
+    --fishmark-shell-rail-width: 56px;
     --fishmark-shell-gutter: 16px;
   }
 
   .app-shell {
-    --fishmark-status-bar-left: calc(var(--fishmark-shell-rail-width) + var(--fishmark-shell-gutter));
+    --fishmark-status-bar-left: calc(var(--fishmark-shell-rail-width) + 4px);
   }
 
   .app-titlebar[data-compact-when-narrow="true"] [data-fishmark-titlebar-item="dirty-indicator"] {
@@ -1673,10 +1672,6 @@
 
   .app-rail-brand .app-subtitle {
     display: none;
-  }
-
-  .document-editor {
-    border-radius: var(--fishmark-radius-lg);
   }
 
   .empty-inner {
@@ -1703,9 +1698,9 @@
   }
 
   .app-shell {
-    --fishmark-status-bar-left: calc(var(--fishmark-shell-rail-width) + var(--fishmark-shell-gutter));
-    --fishmark-status-bar-right: 12px;
-    --fishmark-status-bar-inline-padding: var(--fishmark-space-3);
+    --fishmark-status-bar-left: calc(var(--fishmark-shell-rail-width) + 4px);
+    --fishmark-status-bar-right: 4px;
+    --fishmark-status-bar-inline-padding: 0px;
   }
 
   .workspace-shell {

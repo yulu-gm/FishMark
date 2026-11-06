@@ -130,6 +130,10 @@ function appendInlineDecorations(
       appendClosingMarkerDecoration(ranges, node, containingElementOptions(node, options));
       return;
     case "image":
+      if (node.html) {
+        if (!options.active) ranges.push(createInactiveImagePreviewDecoration(node, options.resolveImagePreviewUrl));
+        return;
+      }
       if (options.active) {
         for (const child of node.children) appendInlineDecorations(child, ranges, { ...options,
           markerVisible: undefined, elementVisible: undefined, preserveOpeningCaretMetrics: false });

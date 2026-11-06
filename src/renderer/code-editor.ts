@@ -7,11 +7,12 @@ import {
   type Extension
 } from "@codemirror/state";
 import { EditorView, keymap, type ViewUpdate } from "@codemirror/view";
-import { isolateHistory } from "@codemirror/commands";
+import { isolateHistory, undo, redo, selectAll } from "@codemirror/commands";
 
 import {
   createFishMarkMarkdownExtensions,
   readEditorSelection,
+  selectTableCellContents,
   refreshMarkdownDecorations,
   runTableDelete,
   runTableDeleteColumn,
@@ -114,6 +115,8 @@ export type CodeEditorController = {
   setHeadingPresentationMode: (mode: HeadingPresentationMode) => void;
   setReadOnly: (readOnly: boolean) => void;
   focus: () => void;
+  runHistory: (direction: "undo" | "redo") => boolean;
+  runSelectAll: () => boolean;
   navigateToOffset: (offset: number) => void;
   insertText: (text: string) => void;
   setSelection: (anchor: number, head?: number) => void;
@@ -879,6 +882,20 @@ export function createCodeEditorController(
           EditorView.editable.of(!readOnly)
         ])
       });
+    },
+    runSelectAll() {
+      const active = view.dom.ownerDocument.activeElement;
+      if (!view.dom.contains(active)) return false;
+      if (!selectTableCellContents(active)) selectAll(view);
+      return true;
+    },
+    runHistory(direction) {
+      // Search/settings fields keep their own browser editing history.
+      if (!view.dom.contains(view.dom.ownerDocument.activeElement)) return false;
+      if (!currentReadOnly && !isComposing && !compositionCheckpointPending && !readCompositionState(view.state).active) {
+        (direction === "undo" ? undo : redo)(view);
+      }
+      return true;
     },
     focus() {
       view.focus();

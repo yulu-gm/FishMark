@@ -356,3 +356,14 @@ describe("collectReadableStyleSheetText", () => {
     style.remove();
   });
 });
+
+it("exports inline HTML image dimensions, title and neighboring text", () => {
+  const source = 'before <img src="https://example.com/a.png" alt="alt" title="caption" width="120" /> after';
+  const exported = new DOMParser().parseFromString(createFishmarkExportHtml({ markdown: source, title: "inline.md" }), "text/html");
+  const image = exported.querySelector<HTMLImageElement>(".cm-markdown-image-preview-image");
+  expect(image?.getAttribute("title")).toBe("caption");
+  expect(image?.style.width).toBe("120px");
+  expect(image?.closest(".cm-markdown-image-preview")?.getAttribute("data-image-inline")).toBe("true");
+  expect(exported.body.textContent).toContain("before");
+  expect(exported.body.textContent).toContain("after");
+});
