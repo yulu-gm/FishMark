@@ -972,3 +972,8 @@ RF-801 已达到 COMPLETE，M8 为 **1/3**；RF-802、RF-803 与 M9 保持后续
 - Initial 4.1.0 CI: Windows product E2E failed 4/76: Ctrl+Shift+Z did not redo source-mode image or table edits, and the compact layout made a minimum-width table exceed an obsolete fixed 700px width threshold. Other CI jobs passed.
 - Added the application-menu redo chord to the editor keymap; updated the geometry test to check actual scroller containment, wrapped cell content, and stable remount dimensions instead of fixed pre-layout pixel thresholds. The viewport test now uses platform-specific navigation and undo shortcuts.
 - Local macOS validation: 320 editor tests and 16 product tests passed, including the real Ctrl+Shift+Z chord, image save/reopen, viewport remount, and table history. Full regression gate: 4053 passed, 8 exact known parser failures, no new failures. Windows CI must be rerun before release.
+
+### Blank-navigation asynchronous snapshot follow-up
+
+- Windows CI attempt 1 at `10b0bec`: the renderer recorded a trusted `x` input and DOM selection offset 9, but the observed main snapshot still held revision 4. Telemetry shows that snapshot at 07:05:43.636 UTC preceded the queued fifth edit, which was acknowledged at 07:05:43.641 UTC; the DOM already contained `x`. This is evidence of an observation race, not evidence that input was lost.
+- The test now waits for the exact expected canonical content before asserting the unchanged DOM, selection and source contracts. A real Electron controlled-ACK test holds the first acknowledgment, queues a second input, proves the observer remains pending on the older main snapshot, then releases and verifies both edits, trusted input and save. macOS isolated product run passed. Windows CI rerun is required on this revision.
