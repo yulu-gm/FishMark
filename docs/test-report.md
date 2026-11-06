@@ -986,3 +986,9 @@ RF-801 已达到 COMPLETE，M8 为 **1/3**；RF-802、RF-803 与 M9 保持后续
 - 完整 Windows 产品 E2E：74 项通过、6 项失败。图片右键/拖拽缩放、撤销重做、保存重开、紧凑布局、表格历史、相对链接及长文编辑测试通过。失败涉及两项原生跨窗口拖出、原生纯文本粘贴菜单、原生窗口合并回执超时、取消合并与窄窗口表格重挂载；后两项报告 Chromium GPU 错误，另有拖拽终点未命中目标窗口。不能据此声称本机完整 E2E 通过，或将全部失败归因为环境。
 - 证据：`.artifacts/release-4.1.0-regression-host.log`、`.artifacts/ci/vitest-full.gate.json`、`.artifacts/release-4.1.0-bundle.log`、`.artifacts/e2e/release-4-1-0-20261106/playwright-report.json`。发布要求合并提交的四项 CI 检查通过；结果以对应提交的 Actions 为准，不用远端合并前的成功代替。
 - 本次只提供 Windows x64 安装包和自动更新元数据；未更新本机已安装应用，未做安装器交互、物理设备与跨显示器 DPI、屏幕阅读器及合并版本的 macOS 验证。此前冷打开预算未通过的结论不变。
+
+### 发布 CI 的换行夹具修正
+
+- `bbed284` 的质量、完整回归和包体预算 CI 通过：Linux 完整回归 4148 项通过、8 项精确既存失败、0 新失败、0 跳过。Windows 产品 E2E 为 78/80，本机此前的 6 项失败在该 CI 中通过。
+- 两项链接用例在点击之前的启动断言超时：Windows Git 检出的 CRLF 原文被直接用作预期内存文本，而 `open-markdown-file` 的既有解码规则将 CRLF/CR 转为 LF。修正测试的预期内容，并分别运行 LF、CRLF 输入；仍精确核对未编辑磁盘文件不变、草稿、目标路径和链接内容，不修改产品解码、输入授权或测试超时。
+- 补充后的 4 项真实 Electron 链接测试在本机全部通过，证据为 `.artifacts/e2e/release-4-1-0-links-eol-20261106/playwright-report.json`。最终发布提交仍须通过完整 CI；本次测试修正不改变已生成安装包中的产品代码。
