@@ -15,6 +15,7 @@ import {
   getDocumentClientAcknowledgedSequence,
   markExternalChange,
   moveDocumentSession,
+  renameDocumentSession,
   projectDocumentSession,
   replaceDocumentFromDisk,
   replaceDocumentText,
@@ -152,6 +153,13 @@ export interface CommitWorkspaceDocumentInput {
   readonly capturedRevision: DocumentRevision;
   readonly document: WorkspaceDocumentData;
   readonly diskVersion: DiskVersion | null;
+}
+
+export interface RenameWorkspaceDocumentInput {
+  readonly tabId: string;
+  readonly expectedWindowId: string;
+  readonly expectedIdentity: FileIdentity;
+  readonly file: { path: string; name: string; fileIdentity: FileIdentity };
 }
 
 export interface ReplaceWorkspaceDocumentInput {
@@ -293,6 +301,7 @@ export interface WorkspaceState {
   readonly replaceTabDocument: (
     input: ReplaceWorkspaceDocumentInput
   ) => WorkspaceSaveMutationResult;
+  readonly renameTabDocument: (input: RenameWorkspaceDocumentInput) => WorkspaceSaveMutationResult;
   readonly acceptExternalDiskVersion: (
     input: AcceptExternalDiskVersionInput
   ) => WorkspaceMutationResult;
@@ -682,6 +691,20 @@ class CanonicalWorkspaceState implements WorkspaceState {
       }
     }
     return createAppliedMutationResult(this.getWindowProjection(context.windowId));
+  }
+
+  renameTabDocument({ tabId, expectedWindowId, expectedIdentity, file }: RenameWorkspaceDocumentInput): WorkspaceSaveMutationResult {
+    const resolved = this.resolveExpectedTabOwner(tabId, expectedWindowId);
+    if (resolved.kind === "stale") return this.createStaleMutationResult(expectedWindowId, resolved.reason);
+    const session = resolved.context.session;
+    if (!sameFileIdentity(session.fileIdentity, expectedIdentity)) throw new Error("文件位置已改变，请重试。");
+    if (this.hasIdentityConflict(file.fileIdentity, tabId)) {
+      return Object.freeze({ kind: "file-identity-conflict", projection: this.getWindowProjection(expectedWindowId) });
+    }
+    this.tabs.set(tabId, renameDocumentSession(session, file));
+    this.releaseFileIdentity(expectedIdentity, tabId);
+    this.claimFileIdentity(file.fileIdentity, tabId);
+    return createAppliedMutationResult(this.getWindowProjection(expectedWindowId));
   }
 
   replaceTabDocument({

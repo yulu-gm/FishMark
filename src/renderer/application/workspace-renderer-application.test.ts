@@ -9,6 +9,29 @@ import {
 import type { CodeEditorDocumentChangeFrame } from "../code-editor";
 import type { WorkspaceTabReceiptRequest, WorkspaceTabReceiptComplete } from "../../shared/workspace-tab-transfer";
 
+it("保存非活动页签时不切换编辑器，且发送该页签的 ID", async () => {
+  const snapshot = createSnapshot();
+  const saveMarkdownFile = vi.fn(async () => ({ status: "cancelled" as const }));
+  const activateWorkspaceTab = vi.fn();
+  const application = createApplication({ bridge: { saveMarkdownFile, activateWorkspaceTab, getWorkspaceSnapshot: async () => snapshot } });
+  await application.commands.saveWorkspaceTab("tab-2");
+  expect(saveMarkdownFile).toHaveBeenCalledExactlyOnceWith({ tabId: "tab-2" });
+  expect(activateWorkspaceTab).not.toHaveBeenCalled();
+  expect(application.getState().workspaceSnapshot?.activeTabId).toBe("tab-1");
+  application.dispose();
+});
+
+it("重命名返回错误时也刷新主进程状态，并把错误交给菜单显示", async () => {
+  const snapshot = createSnapshot();
+  snapshot.tabs[1]!.name = "renamed.md";
+  const workspaceTabFile = vi.fn(async () => ({ kind: "error" as const, message: "最近文件更新失败" }));
+  const application = createApplication({ bridge: { workspaceTabFile, getWorkspaceSnapshot: async () => snapshot } });
+  await expect(application.commands.workspaceTabFile({ tabId: "tab-2", command: "rename", name: "renamed.md" })).rejects.toThrow("最近文件更新失败");
+  expect(application.getState().workspaceSnapshot?.tabs[1]?.name).toBe("renamed.md");
+  expect(application.getState().workspaceSnapshot?.activeTabId).toBe("tab-1");
+  application.dispose();
+});
+
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (error: unknown) => void;

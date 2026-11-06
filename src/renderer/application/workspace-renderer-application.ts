@@ -5,7 +5,8 @@ import { isWorkspaceReadingPosition, type WorkspaceEditorLoadView, type Workspac
 import type { AppNotification } from "../../shared/app-update";
 import type { AppMenuCommand } from "../../shared/menu-command";
 import { RELOAD_WORKSPACE_TAB_FROM_PATH_ERROR_MESSAGES, type MoveWorkspaceTabToWindowInput, type WorkspaceEditorSelection, type WorkspaceTransferEditorView } from "../../shared/workspace";
-import { WorkspaceSaveScheduler } from "./workspace-save-scheduler";
+import { WorkspaceSaveScheduler, saveNotification } from "./workspace-save-scheduler";
+import type { WorkspaceTabFileInput } from "../../shared/workspace-tab-file";
 import type { ExternalMarkdownFileState } from "./editor-shell-state";
 import type { SaveMarkdownFileResult } from "../../shared/save-markdown-file";
 import type { DocumentTextChange } from "../../shared/document-edit";
@@ -60,6 +61,7 @@ export type WorkspaceRendererBridge = Pick<
   Window["fishmark"],
   | "activateWorkspaceTab"
   | "closeWorkspaceTab"
+  | "workspaceTabFile"
   | "confirmWorkspaceWindowClose"
   | "createWorkspaceTab"
   | "detachWorkspaceTabToNewWindow"
@@ -421,6 +423,30 @@ export class WorkspaceRendererApplication {
     loadInitialWorkspaceSnapshot: async (): Promise<void> => { await this.refreshWorkspaceSnapshot(); },
     saveMarkdown: async (): Promise<void> => { await this.save.runManualSave(); },
     saveMarkdownAs: async (): Promise<void> => { await this.save.runManualSave({ forceSaveAs: true }); },
+    saveWorkspaceTab: async (tabId: string): Promise<void> => {
+      if (tabId === this.getActiveTabId()) { await this.save.runManualSave(); return; }
+      const outcome = await this.runSaveTransaction({ tabId, forceSaveAs: false, hasExternalConflict: false });
+      const notification = saveNotification(outcome, "manual");
+      if (notification) this.notify(notification);
+    },
+    workspaceTabFile: async (input: WorkspaceTabFileInput): Promise<void> => {
+      await this.enqueue("tab-file", async () => {
+        const known = await this.ensureCanonicalKnown();
+        if (known !== null) throw new Error("当前文档状态尚未同步，请重试。");
+        const barrier = await this.acquireEditBarrier(input.tabId);
+        try {
+          this.assertActive();
+          const result = await this.bridge.workspaceTabFile(input);
+          this.assertActive();
+          // 磁盘变更成功后，最近文件或监视器仍可能报错；始终重新读取主进程状态。
+          this.recordCanonicalSnapshot(await this.bridge.getWorkspaceSnapshot());
+          if (result.kind === "error") throw new Error(result.message);
+        } catch (error) {
+          await this.recoverMutationOutcome(error);
+          throw error;
+        } finally { barrier.lease?.release(); }
+      });
+    },
     exportHtml: async (): Promise<void> => {
       if (!this.getActiveDocument()) return;
       try {
@@ -1173,11 +1199,13 @@ export class WorkspaceRendererApplication {
   }
 
   runSaveTransaction(input: {
+    tabId?: string;
     forceSaveAs: boolean;
     hasExternalConflict: boolean;
   }): Promise<WorkspaceSaveOutcome> {
-    const capturedDocument = getActiveDocument(this.state);
-    if (capturedDocument === null) {
+    const capturedDocument = input.tabId === undefined ? getActiveDocument(this.state)
+      : this.state.workspaceSnapshot?.tabs.find(tab => tab.tabId === input.tabId);
+    if (capturedDocument == null) {
       return Promise.resolve({ kind: "no-document" });
     }
     const tabId = capturedDocument.tabId;

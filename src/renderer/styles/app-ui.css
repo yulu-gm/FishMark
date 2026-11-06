@@ -547,7 +547,7 @@
   );
   transform: translateY(0);
   opacity: 1;
-  max-height: 44px;
+  max-height: 31px;
   overflow: hidden;
   transition:
     opacity var(--fishmark-focus-transition-duration) ease,
@@ -557,7 +557,7 @@
 
 /* Reserve the tab row even when no document is open. */
 .workspace-tab-strip[data-empty="true"] {
-  min-height: 36px;
+  min-height: 30px;
 }
 
 .workspace-tab-strip-scroll {
@@ -565,7 +565,7 @@
   align-items: stretch;
   gap: 0;
   min-width: 0;
-  overflow-x: clip;
+  overflow-x: auto;
   scrollbar-width: none;
   padding: 0 var(--fishmark-shell-gutter);
 }
@@ -576,13 +576,13 @@
 
 .workspace-tab-shell {
   position: relative;
-  flex: 0 1 220px;
-  min-width: 96px;
-  max-width: 240px;
+  flex: 0 0 auto;
+  min-width: 76px;
+  max-width: 200px;
   display: inline-flex;
   align-items: stretch;
   gap: 0;
-  height: 36px;
+  height: 30px;
   padding: 0;
   border: 0;
   border-right: 1px solid
@@ -631,14 +631,14 @@
   min-width: 0;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 4px 0 12px;
+  gap: 4px;
+  padding: 0 2px 0 8px;
   border: 0;
   border-radius: 0;
   background: transparent;
   color: var(--fishmark-text-secondary, #31353d);
   font: inherit;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   cursor: pointer;
   text-align: left;
 }
@@ -691,10 +691,10 @@
 
 .workspace-tab-close {
   flex: 0 0 auto;
-  inline-size: 22px;
-  block-size: 22px;
+  inline-size: 20px;
+  block-size: 20px;
   align-self: center;
-  margin-right: 6px;
+  margin-right: 4px;
   display: inline-grid;
   place-items: center;
   padding: 0;
@@ -715,6 +715,65 @@
 .workspace-tab-close:focus-visible {
   opacity: 1;
 }
+
+.workspace-tab-menu,
+.workspace-tab-rename {
+  color: var(--fishmark-text-primary, #171a1f);
+  background: var(--fishmark-ui-surface-bg, #fff);
+  border: 1px solid var(--fishmark-panel-border, #d7dbe2);
+  border-radius: 8px;
+  box-shadow: 0 8px 28px #0003;
+  font: inherit;
+  font-size: 13px;
+}
+
+.workspace-tab-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 192px;
+  max-width: min(300px, calc(100vw - 8px));
+  padding: 4px;
+}
+
+.workspace-tab-menu button {
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.workspace-tab-menu button:enabled:is(:hover, :focus-visible) {
+  background: var(--fishmark-control-bg-hover, #edf1f8);
+  outline: none;
+}
+
+.workspace-tab-menu button:disabled { opacity: 0.4; cursor: default; }
+.workspace-tab-menu [role="separator"] { margin: 4px 8px; border-top: 1px solid var(--fishmark-panel-border, #d7dbe2); }
+.workspace-tab-menu-hint { margin: 6px 12px; color: var(--fishmark-text-muted, #687180); font-size: 11px; }
+.workspace-tab-menu [role="alert"], .workspace-tab-rename [role="alert"] { margin: 8px; color: var(--fishmark-text-danger, #bd3030); }
+.workspace-tab-rename { width: min(380px, calc(100vw - 32px)); padding: 20px; }
+.workspace-tab-rename::backdrop { background: #0005; }
+.workspace-tab-rename h2 { margin: 0 0 16px; font-size: 16px; }
+.workspace-tab-rename label { display: block; margin-bottom: 6px; }
+.workspace-tab-rename input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px;
+  color: inherit;
+  background: var(--fishmark-control-bg, #fff);
+  border: 1px solid var(--fishmark-panel-border, #d7dbe2);
+  border-radius: 4px;
+  font: inherit;
+}
+.workspace-tab-rename-hint { color: var(--fishmark-text-muted, #687180); font-size: 12px; }
+.workspace-tab-rename-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.workspace-tab-rename-actions button { padding: 6px 12px; font: inherit; cursor: pointer; }
 
 .workspace-tab-close:hover {
   background: color-mix(

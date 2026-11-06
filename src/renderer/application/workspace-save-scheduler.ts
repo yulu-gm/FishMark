@@ -76,7 +76,7 @@ export class WorkspaceSaveScheduler {
   }
 }
 
-function saveNotification(outcome: WorkspaceSaveOutcome, origin: "manual" | "autosave"): AppNotification | null {
+export function saveNotification(outcome: WorkspaceSaveOutcome, origin: "manual" | "autosave"): AppNotification | null {
   let message: string;
   if (outcome.kind === "committed") {
     if (outcome.value.status !== "error") return null;

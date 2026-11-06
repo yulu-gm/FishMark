@@ -7,6 +7,7 @@ import { createIpcLifecycle, type IpcHandler } from "./ipc-lifecycle";
 import { createIpcSenderAuthorization } from "./ipc-sender";
 import { registerWorkspaceEditHandlers } from "./register-workspace-edit-handlers";
 import { registerWorkspaceCommandHandlers } from "./register-workspace-command-handlers";
+import { registerWorkspaceTabFileHandlers } from "./register-workspace-tab-file-handlers";
 
 function boundary() {
   const handlers = new Map<string, IpcHandler>();
@@ -24,6 +25,7 @@ function boundary() {
     invoke: (channel: string, args: unknown[]) => Promise.resolve().then(() => handlers.get(`fishmark:${channel}`)!(event, ...args)) };
 }
 const commandRequests: [string, unknown[]][] = [
+  ["workspace-tab-file", [{ tabId: "tab", command: "rename", name: "new.md" }]],
   ["get-workspace-snapshot", []], ["resolve-external-change", [{ tabId: "tab", command: "cancel" }]],
   ["confirm-workspace-owner-tab-activation", [{ requestId: "request", tabId: "tab", success: true }]],
   ["confirm-workspace-window-close", [{ requestId: "request" }]],
@@ -47,6 +49,7 @@ function commands() {
   const service = new Proxy({}, { get: () => effect });
   const ensureWindow = vi.fn(async () => "owner");
   const requireOpenPath = vi.fn();
+  registerWorkspaceTabFileHandlers({ ...f, ensureWindow, execute: vi.fn() });
   registerWorkspaceCommandHandlers({ ...f, ensureWindow, requireOpenPath, workspaceApplication: service, workspaceState: service,
     documentRepository: service, resolveExternalChange: service,
     workspaceOwnerTabActivationRequestBroker: service, workspaceWindowCloseRequestBroker: service,

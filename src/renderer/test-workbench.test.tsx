@@ -123,6 +123,7 @@ describe("Test workbench shell", () => {
       }),
       activateWorkspaceTab: vi.fn().mockResolvedValue(EMPTY_WORKSPACE_SNAPSHOT),
       closeWorkspaceTab: vi.fn().mockResolvedValue(EMPTY_WORKSPACE_SNAPSHOT),
+      workspaceTabFile: vi.fn(),
       reorderWorkspaceTab: vi.fn().mockResolvedValue(EMPTY_WORKSPACE_SNAPSHOT),
       moveWorkspaceTabToWindow: vi.fn().mockResolvedValue({
         sourceWindowSnapshot: EMPTY_WORKSPACE_SNAPSHOT,

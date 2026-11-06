@@ -415,6 +415,17 @@ export function moveDocumentSession(
   return freezeSession({ ...session, windowId });
 }
 
+export function renameDocumentSession(
+  session: DocumentSessionState,
+  file: { path: string; name: string; fileIdentity: FileIdentity }
+): DocumentSessionState {
+  // 重命名只更新文件位置，不能清除草稿、外部变更提示或编辑序号。
+  return freezeSession({
+    ...session, ...file,
+    diskVersion: session.diskVersion === null ? null : copyDiskVersion({ ...session.diskVersion, normalizedPath: file.path.replace(/\\/g, "/") })
+  });
+}
+
 export function projectDocumentSession(
   session: DocumentSessionState
 ): DocumentSessionProjection {

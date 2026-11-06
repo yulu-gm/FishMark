@@ -41,6 +41,7 @@ export {
   type MoveWorkspaceTabInput,
   type OpenWorkspaceDocumentResult,
   type ReplaceWorkspaceDocumentInput,
+  type RenameWorkspaceDocumentInput,
   type ReorderWorkspaceTabInput,
   type UpdateWorkspaceTabDraftInput,
   type WorkspaceDocumentProjection,

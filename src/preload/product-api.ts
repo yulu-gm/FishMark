@@ -184,6 +184,7 @@ export function createProductApi({ ipc, filePath, runtime, linkGesture }: Create
       ipc.invoke<WorkspaceWindowSnapshot>(ACTIVATE_WORKSPACE_TAB_CHANNEL, input),
     closeWorkspaceTab: (input: CloseWorkspaceTabInput) =>
       ipc.invoke<WorkspaceWindowSnapshot>(CLOSE_WORKSPACE_TAB_CHANNEL, input),
+    workspaceTabFile: (input) => ipc.invoke<WorkspaceTabFileResult>(WORKSPACE_TAB_FILE_CHANNEL, input),
     reorderWorkspaceTab: (input: ReorderWorkspaceTabInput) =>
       ipc.invoke<WorkspaceWindowSnapshot>(REORDER_WORKSPACE_TAB_CHANNEL, input),
     moveWorkspaceTabToWindow: (input: MoveWorkspaceTabToWindowInput) =>
@@ -319,3 +320,4 @@ function resolveStartupOpenPathFromArgv(argv: readonly string[]): string | null 
     return encodedPath;
   }
 }
+import { WORKSPACE_TAB_FILE_CHANNEL, type WorkspaceTabFileResult } from "../shared/workspace-tab-file";

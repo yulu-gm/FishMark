@@ -1140,6 +1140,7 @@ describe("App autosave", () => {
       .mockResolvedValue({ status: "confirmed" });
 
     window.fishmark = {
+      workspaceTabFile: vi.fn(),
       platform: "win32",
       runtimeMode: "editor",
       startupOpenPath: null,
@@ -5166,7 +5167,7 @@ describe("App autosave", () => {
   it("reserves the document tab row even for an empty workspace", () => {
     const css = readFileSync(appUiStylesheetPath, "utf-8");
     expect(getCssRule(css, ".workspace-tab-strip")).toContain("grid-row: 2;");
-    expect(getCssRule(css, '.workspace-tab-strip[data-empty="true"]')).toContain("min-height: 36px;");
+    expect(getCssRule(css, '.workspace-tab-strip[data-empty="true"]')).toContain("min-height: 30px;");
   });
 
   it("guards app-owned workspace row geometry against legacy theme overrides", () => {

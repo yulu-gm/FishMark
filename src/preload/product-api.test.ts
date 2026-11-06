@@ -87,6 +87,7 @@ describe("createProductApi", () => {
       flushDocumentEdits: expect.any(Function),
       onDocumentProjection: expect.any(Function),
       saveMarkdownFile: expect.any(Function),
+      workspaceTabFile: expect.any(Function),
       getPreferences: expect.any(Function)
     });
   });

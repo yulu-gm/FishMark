@@ -83,6 +83,7 @@ export interface ProductBridge {
   ) => Promise<ReloadWorkspaceTabFromPathResult>;
   activateWorkspaceTab: (input: ActivateWorkspaceTabInput) => Promise<WorkspaceWindowSnapshot>;
   closeWorkspaceTab: (input: CloseWorkspaceTabInput) => Promise<WorkspaceWindowSnapshot>;
+  workspaceTabFile: (input: import("./workspace-tab-file").WorkspaceTabFileInput) => Promise<import("./workspace-tab-file").WorkspaceTabFileResult>;
   reorderWorkspaceTab: (input: ReorderWorkspaceTabInput) => Promise<WorkspaceWindowSnapshot>;
   moveWorkspaceTabToWindow: (input: MoveWorkspaceTabToWindowInput) => Promise<WorkspaceMoveTabResult>;
   resolveWorkspaceTabDrop?: (input: { tabId: string }) => Promise<WorkspaceTabDropResult>;

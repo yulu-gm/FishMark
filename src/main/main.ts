@@ -91,6 +91,8 @@ import { registerTestHandlers } from "./ipc/register-test-handlers";
 import { createIpcLifecycle } from "./ipc/ipc-lifecycle";
 import { createIpcSenderAuthorization } from "./ipc/ipc-sender";
 import { registerWorkspaceCommandHandlers } from "./ipc/register-workspace-command-handlers";
+import { registerWorkspaceTabFileHandlers } from "./ipc/register-workspace-tab-file-handlers";
+import { createWorkspaceTabFiles } from "./workspace-tab-files";
 import { registerPreferencesHandlers } from "./ipc/register-preferences-handlers";
 import { registerRecentFilesHandlers } from "./ipc/register-recent-files-handlers";
 import { registerFontsHandlers } from "./ipc/register-fonts-handlers";
@@ -1046,6 +1048,19 @@ app.whenReady().then(async () => {
     workspaceApplication, workspaceState, documentRepository, resolveExternalChange, editorViewHandoffs,
     workspaceOwnerTabActivationRequestBroker, workspaceWindowCloseRequestBroker,
     handleWorkspaceWindowCloseConfirmation, tabDropRouting, tabReceipts
+  });
+  registerWorkspaceTabFileHandlers({ ipc, authorize, ensureWindow: workspaceWindowRegistrationApplication.ensureWindow,
+    execute: createWorkspaceTabFiles({ workspace: workspaceState, tabOperations: workspaceTabOperations,
+      locations: workspaceFileLocationOperations, objects: workspaceFileObjectOperations, identity: fileIdentityResolver,
+      watcher: workspaceWatcher, copyPath: value => clipboard.writeText(value), reveal: value => shell.showItemInFolder(value),
+      renamed: async (tabId, oldPath, newPath) => {
+        advanceResourceTab(tabId);
+        synchronizeSavedImageBindings(tabId);
+        await recoverableEdits.checkpoint();
+        await recentFilesService.clearFile(oldPath);
+        await recordRecentFilePath(newPath);
+      }
+    })
   });
   registerPreferencesHandlers({ ipc, authorize, service: preferencesService, selectTemporaryDirectory: async (check, sender) => {
     const owner = pathAuthority.capture(sender);

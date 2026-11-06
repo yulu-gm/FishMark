@@ -853,6 +853,8 @@ function EditorShell({
         }}
         onTabReorder={reorderWorkspaceTab}
         onTabDetach={detachWorkspaceTabWorkflow}
+        onSaveWorkspaceTab={editorCommands.saveWorkspaceTab}
+        onWorkspaceTabFile={editorCommands.workspaceTabFile}
         onTitlebarSurfaceRuntimeModeChange={handleTitlebarSurfaceRuntimeModeChange}
         onUpdatePreferences={handleUpdatePreferences}
         onWorkbenchSurfaceRuntimeModeChange={handleWorkbenchSurfaceRuntimeModeChange}

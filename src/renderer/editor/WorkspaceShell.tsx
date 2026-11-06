@@ -118,6 +118,8 @@ export function WorkspaceShell({
   onCloseViewContainer,
   onCloseSettingsDrawer,
   onCloseWorkspaceTab,
+  onSaveWorkspaceTab,
+  onWorkspaceTabFile,
   onDeleteTable,
   onDeleteTableColumn,
   onDeleteTableRow,
@@ -383,6 +385,9 @@ export function WorkspaceShell({
           <WorkspaceTabStrip
             onTabActivate={onTabActivate}
             onCloseWorkspaceTab={onCloseWorkspaceTab}
+            onSaveWorkspaceTab={onSaveWorkspaceTab}
+            onWorkspaceTabFile={onWorkspaceTabFile}
+            fishmarkPlatform={fishmarkPlatform}
             onTabReorder={onTabReorder}
             onTabDetach={onTabDetach}
             workspaceTabs={workspaceTabs}

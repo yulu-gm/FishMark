@@ -1,18 +1,36 @@
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { WorkspaceShellProps } from "../workspace-shell-props";
 import { useWorkspaceTabDrag } from "../useWorkspaceTabDrag";
+import { WorkspaceTabMenu, type WorkspaceTabMenuTarget } from "./WorkspaceTabMenu";
 
 export function WorkspaceTabStrip({
   onTabActivate,
   onCloseWorkspaceTab,
   onTabReorder,
   onTabDetach,
+  onSaveWorkspaceTab,
+  onWorkspaceTabFile,
+  fishmarkPlatform,
   workspaceTabs,
   activeTabId
-}: Pick<WorkspaceShellProps, "onTabActivate" | "onCloseWorkspaceTab" | "onTabReorder" | "onTabDetach"> & {
+}: Pick<WorkspaceShellProps, "onTabActivate" | "onCloseWorkspaceTab" | "onTabReorder" | "onTabDetach" | "onSaveWorkspaceTab" | "onWorkspaceTabFile" | "fishmarkPlatform"> & {
   workspaceTabs: NonNullable<WorkspaceShellProps["workspaceSnapshot"]>["tabs"];
   activeTabId: string | null;
 }) {
   const drag = useWorkspaceTabDrag({ reorderWorkspaceTab: onTabReorder, detachWorkspaceTab: onTabDetach });
+  const stripRef = useRef<HTMLDivElement>(null);
+  const [menu, setMenu] = useState<WorkspaceTabMenuTarget | null>(null);
+  const dismissMenu = useCallback(() => setMenu(null), []);
+  const menuTab = workspaceTabs.find(tab => tab.tabId === menu?.tabId);
+  useEffect(() => {
+    // 页签过多时可横向滚动；切换后只移动页签栏，不滚动编辑区。
+    const strip = stripRef.current;
+    const active = strip?.querySelector<HTMLElement>('.workspace-tab-shell.is-active');
+    if (!strip || !active) return;
+    const bounds = active.getBoundingClientRect(), viewport = strip.getBoundingClientRect();
+    if (bounds.left < viewport.left) strip.scrollLeft -= viewport.left - bounds.left;
+    else if (bounds.right > viewport.right) strip.scrollLeft += bounds.right - viewport.right;
+  }, [activeTabId, workspaceTabs.length]);
 
   return (
     (
@@ -23,7 +41,9 @@ export function WorkspaceTabStrip({
         data-visibility="visible"
         aria-label="Open documents"
       >
-        <div className="workspace-tab-strip-scroll">
+        <div ref={stripRef} className="workspace-tab-strip-scroll" onWheel={event => {
+          if (event.deltaX === 0) event.currentTarget.scrollLeft += event.deltaY;
+        }}>
           {workspaceTabs.map((tab) => {
             const isActive = tab.tabId === activeTabId;
             const tooltip = tab.path ?? tab.name;
@@ -35,6 +55,12 @@ export function WorkspaceTabStrip({
                 data-fishmark-region="workspace-tab-shell"
                 data-active={isActive ? "true" : "false"}
                 data-dirty={tab.isDirty ? "true" : "false"}
+                onContextMenu={event => {
+                  event.preventDefault(); event.stopPropagation();
+                  const trigger = event.currentTarget.querySelector<HTMLButtonElement>('.workspace-tab')!;
+                  const rect = trigger.getBoundingClientRect();
+                  setMenu({ tabId: tab.tabId, x: event.clientX || rect.left, y: event.clientY || rect.bottom, trigger });
+                }}
               >
                 <button
                   type="button"
@@ -45,6 +71,13 @@ export function WorkspaceTabStrip({
                   data-dirty={tab.isDirty ? "true" : "false"}
                   title={tooltip}
                   draggable={false}
+                  aria-haspopup="menu"
+                  onKeyDown={event => {
+                    if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
+                    event.preventDefault();
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    setMenu({ tabId: tab.tabId, x: rect.left, y: rect.bottom, trigger: event.currentTarget });
+                  }}
                   onClick={(event) => { if (!drag.consumeClick(event)) onTabActivate(tab.tabId); }}
                   onAuxClick={(event) => {
                     if (event.button === 1) {
@@ -99,6 +132,9 @@ export function WorkspaceTabStrip({
             );
           })}
         </div>
+        {menu && menuTab && <WorkspaceTabMenu key={`${menu.tabId}:${menu.x}:${menu.y}`} target={menu} tab={menuTab}
+          platform={fishmarkPlatform} onDismiss={dismissMenu} onClose={onCloseWorkspaceTab}
+          onSave={onSaveWorkspaceTab} onFile={onWorkspaceTabFile} />}
       </nav>
     )
   );
