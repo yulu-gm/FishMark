@@ -585,6 +585,11 @@
   transform: translateY(-50%);
 }
 
+/* Keep the theme's bullet color while cutting a transparent center at alternate depths. */
+.document-editor .cm-inactive-list-unordered.cm-list-marker-hollow .cm-inactive-list-marker::before {
+  mask-image: radial-gradient(circle, transparent 0 30%, #000 38%);
+}
+
 .document-editor .cm-inactive-list-ordered .cm-inactive-list-marker {
   position: absolute;
   top: 0;

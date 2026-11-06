@@ -992,3 +992,21 @@ RF-801 已达到 COMPLETE，M8 为 **1/3**；RF-802、RF-803 与 M9 保持后续
 - `bbed284` 的质量、完整回归和包体预算 CI 通过：Linux 完整回归 4148 项通过、8 项精确既存失败、0 新失败、0 跳过。Windows 产品 E2E 为 78/80，本机此前的 6 项失败在该 CI 中通过。
 - 两项链接用例在点击之前的启动断言超时：Windows Git 检出的 CRLF 原文被直接用作预期内存文本，而 `open-markdown-file` 的既有解码规则将 CRLF/CR 转为 LF。修正测试的预期内容，并分别运行 LF、CRLF 输入；仍精确核对未编辑磁盘文件不变、草稿、目标路径和链接内容，不修改产品解码、输入授权或测试超时。
 - 补充后的 4 项真实 Electron 链接测试在本机全部通过，证据为 `.artifacts/e2e/release-4-1-0-links-eol-20261106/playwright-report.json`。最终发布提交仍须通过完整 CI；本次测试修正不改变已生成安装包中的产品代码。
+
+## 2026-11-06 嵌套列表 Backspace
+
+GitHub 接口确认 main 为 `d16b9bc`，以本地 `2063abc` 的完整源码及远端差异重建快照；远端 104 个变更文件均按 Git blob 哈希核验。该快照 build、lint、typecheck 通过；完整 Vitest 4155 通过、8 项 parse-block-map 失败，恢复原退格命令后相同 8 项仍失败。macOS 实际 Electron 无序、有序、三级列表的 Enter → Tab → 输入/删除 → marker 删除 → undo/redo → 再退格 → 保存、正常退出 4/4 通过。旧版 main 的 macOS 退出逻辑缺少对显式 quit 的处理，最新 main 已修正；产品测试夹具正常退出流程未因此修改。Windows 真实客户端未运行。
+
+无序列表 marker：本地 `2063abc` 源码及最新 `d16b9bc` 的 macOS 退出修复组成的验证构建中，默认亮/暗主题 Electron 截图和 DOM 几何检查通过：实心、空心、实心，以及有序/任务项不变；编辑状态切换前后 marker 位置和尺寸差不超过 2px。导出是独立管线，结构测试验证真实列表树层级、混合列表和不规则缩进；未用实际导出文件做浏览器像素测试。自定义 glyph 主题仍可覆盖 marker 外观，未逐主题验收。build/lint/typecheck 通过，相关测试 148 通过；完整 Vitest 4028 通过、8 项已知 parse-block-map 基线失败。Windows 未验证。原 list-geometry probe 在修改前因找不到 active task marker 失败。
+
+后续验证：完整 Git 主仓库 `fbabfd7249a2809fde2edfd8679452789571d49b` 的列表 worktree 中 build、lint、typecheck 通过；真实 macOS Electron 退格和 marker 深度、亮暗主题、正常退出 5/5 通过。完整 Vitest 4177 通过、9 失败：8 项为既有 parse-block-map 基线，另有 workspace-tab-files 测试将 `/private/var` 的真实路径与 `/var` 路径逐字比较，单独重跑仍失败。Windows 与导出文件像素尚未验证。
+
+后续导出验证：在完整 main `fbabfd7` 的 worktree 中，使用产品 `createFishmarkExportHtml` 和实际应用样式生成独立 HTML 文件，在 Electron 中打开；默认主题实心/空心/实心、有序和任务项、marker 非零几何及截图检查通过。此测试直接调用导出函数并加载文件，不涵盖原生保存对话框。自定义 glyph 主题和 Windows 仍未覆盖。
+
+## 2026-11-06 空首页标签回拖 CI 排查
+
+Windows CI 42215976416 在回拖到已无标签的原窗口时，测试仍等待被 fbabfd7 有意移除的标签栏；产品 `isWorkspaceTabDropTarget` 已明确接受空首页的非交互画布。原生拖放测试现在选择该画布并严格断言页面状态、落点和原有往返语义；有文档时仍使用标签栏，正文拒绝测试不变。macOS 实际 Electron 双窗口空首页落点验证通过（仅几何，非原生跨窗口拖放），接收逻辑/界面 287 项及路由 13 项通过，build/lint/typecheck 通过。完整 Vitest 4177 通过、9 项已知 macOS 基线失败（8 项 parse-block-map、1 项 `/var` 与 `/private/var` 路径比较）。Windows 原生拖放未运行，CI 仍需实际复验，不报告已通过。
+
+### 4.1.1 整合验证
+
+在 `fbabfd7` 基线的独立发布 worktree 中，版本及发布元数据同步为 4.1.1；build、lint、typecheck、906 项针对性测试及 macOS Electron 7/7 通过。默认 macOS 临时路径的 `/var` 与 `/private/var` 别名导致全量门禁新增 1 项路径断言失败；以真实规范路径设置 `TMPDIR` 后全量门禁 PASS：4187 通过、8 项完全匹配既有失败、0 项新增失败。Windows 原生拖放仍以最终提交的 Windows CI 为准。

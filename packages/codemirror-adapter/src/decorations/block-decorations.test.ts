@@ -2135,7 +2135,7 @@ describe("createBlockDecorations", () => {
     ]);
     expectExactRangeClasses(ranges, childItemStart, childItemStart, [
       "cm-inactive-blockquote cm-inactive-blockquote-depth-1",
-      "cm-inactive-list cm-inactive-list-unordered cm-inactive-list-depth-1"
+      "cm-inactive-list cm-inactive-list-unordered cm-inactive-list-depth-1 cm-list-marker-hollow"
     ]);
     expectExactRangeClasses(ranges, secondItemStart, secondItemStart, [
       "cm-inactive-blockquote cm-inactive-blockquote-depth-1 cm-inactive-blockquote-end",

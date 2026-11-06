@@ -3885,12 +3885,10 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("removes an empty nested quote list marker before clearing its indentation on Backspace", () => {
+  it("removes an empty nested quote list marker and its indentation on Backspace", () => {
     const host = document.createElement("div");
     const source = ["> - parent", ">   - "].join("\n");
-    const afterMarkerRemoval = ["> - parent", ">   "].join("\n");
-    const afterFirstIndentRemoval = ["> - parent", ">  "].join("\n");
-    const afterIndentRemoval = ["> - parent", "> "].join("\n");
+    const afterMarkerRemoval = ["> - parent", "> "].join("\n");
 
     const controller = createCodeEditorController({
       parent: host,
@@ -3911,18 +3909,6 @@ describe("createCodeEditorController", () => {
     expect(controller.getContent()).toBe(afterMarkerRemoval);
     expect(view?.state.selection.main.anchor).toBe(afterMarkerRemoval.length);
     expect(view?.state.selection.main.head).toBe(afterMarkerRemoval.length);
-
-    advancedController.pressBackspace();
-
-    expect(controller.getContent()).toBe(afterFirstIndentRemoval);
-    expect(view?.state.selection.main.anchor).toBe(afterFirstIndentRemoval.length);
-    expect(view?.state.selection.main.head).toBe(afterFirstIndentRemoval.length);
-
-    advancedController.pressBackspace();
-
-    expect(controller.getContent()).toBe(afterIndentRemoval);
-    expect(view?.state.selection.main.anchor).toBe(afterIndentRemoval.length);
-    expect(view?.state.selection.main.head).toBe(afterIndentRemoval.length);
 
     controller.destroy();
   });
@@ -6096,12 +6082,10 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("removes an empty nested unordered marker before clearing its indentation on Backspace", () => {
+  it("removes an empty nested unordered marker and its indentation on Backspace", () => {
     const host = document.createElement("div");
     const source = ["- parent", "  - "].join("\n");
-    const afterMarkerRemoval = ["- parent", "  "].join("\n");
-    const afterFirstIndentRemoval = ["- parent", " "].join("\n");
-    const afterIndentRemoval = "- parent\n";
+    const afterMarkerRemoval = "- parent\n";
 
     const controller = createCodeEditorController({
       parent: host,
@@ -6122,28 +6106,14 @@ describe("createCodeEditorController", () => {
     expect(controller.getContent()).toBe(afterMarkerRemoval);
     expect(view?.state.selection.main.anchor).toBe(afterMarkerRemoval.length);
     expect(view?.state.selection.main.head).toBe(afterMarkerRemoval.length);
-
-    advancedController.pressBackspace();
-
-    expect(controller.getContent()).toBe(afterFirstIndentRemoval);
-    expect(view?.state.selection.main.anchor).toBe(afterFirstIndentRemoval.length);
-    expect(view?.state.selection.main.head).toBe(afterFirstIndentRemoval.length);
-
-    advancedController.pressBackspace();
-
-    expect(controller.getContent()).toBe(afterIndentRemoval);
-    expect(view?.state.selection.main.anchor).toBe(afterIndentRemoval.length);
-    expect(view?.state.selection.main.head).toBe(afterIndentRemoval.length);
 
     controller.destroy();
   });
 
-  it("removes an empty nested ordered marker before clearing its indentation on Backspace", () => {
+  it("removes an empty nested ordered marker and its indentation on Backspace", () => {
     const host = document.createElement("div");
     const source = ["1. parent", "  1. "].join("\n");
-    const afterMarkerRemoval = ["1. parent", "  "].join("\n");
-    const afterFirstIndentRemoval = ["1. parent", " "].join("\n");
-    const afterIndentRemoval = "1. parent\n";
+    const afterMarkerRemoval = "1. parent\n";
 
     const controller = createCodeEditorController({
       parent: host,
@@ -6164,18 +6134,6 @@ describe("createCodeEditorController", () => {
     expect(controller.getContent()).toBe(afterMarkerRemoval);
     expect(view?.state.selection.main.anchor).toBe(afterMarkerRemoval.length);
     expect(view?.state.selection.main.head).toBe(afterMarkerRemoval.length);
-
-    advancedController.pressBackspace();
-
-    expect(controller.getContent()).toBe(afterFirstIndentRemoval);
-    expect(view?.state.selection.main.anchor).toBe(afterFirstIndentRemoval.length);
-    expect(view?.state.selection.main.head).toBe(afterFirstIndentRemoval.length);
-
-    advancedController.pressBackspace();
-
-    expect(controller.getContent()).toBe(afterIndentRemoval);
-    expect(view?.state.selection.main.anchor).toBe(afterIndentRemoval.length);
-    expect(view?.state.selection.main.head).toBe(afterIndentRemoval.length);
 
     controller.destroy();
   });

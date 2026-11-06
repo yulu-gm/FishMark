@@ -157,10 +157,11 @@ function renderListBlock(
   block: ListBlock,
   source: string,
   footnoteState: FootnoteRenderState,
-  extraLineClassResolver?: ExtraLineClassResolver
+  extraLineClassResolver?: ExtraLineClassResolver,
+  listDepth = 0
 ): string {
   return block.items
-    .map((item) => renderListItem(item, source, block.ordered, footnoteState, extraLineClassResolver))
+    .map((item) => renderListItem(item, source, block.ordered, footnoteState, extraLineClassResolver, listDepth))
     .join("");
 }
 
@@ -169,18 +170,19 @@ function renderListItem(
   source: string,
   ordered: boolean,
   footnoteState: FootnoteRenderState,
-  extraLineClassResolver?: ExtraLineClassResolver
+  extraLineClassResolver: ExtraLineClassResolver | undefined,
+  listDepth: number
 ): string {
   const contentUpperBound = item.children[0]?.startOffset ?? item.endOffset;
   const lines = createSourceLines(source, item.startOffset, contentUpperBound);
   const chunks = lines.map((line) =>
     line.startOffset === item.startOffset
-      ? renderListItemFirstLine(item, source, line, ordered, footnoteState, extraLineClassResolver)
+      ? renderListItemFirstLine(item, source, line, ordered, footnoteState, extraLineClassResolver, listDepth)
       : renderListItemContinuationLine(item, source, line, ordered, footnoteState, extraLineClassResolver)
   );
 
   for (const child of item.children) {
-    chunks.push(renderListBlock(child, source, footnoteState, extraLineClassResolver));
+    chunks.push(renderListBlock(child, source, footnoteState, extraLineClassResolver, listDepth + 1));
   }
 
   return chunks.filter(Boolean).join("");
@@ -192,10 +194,11 @@ function renderListItemFirstLine(
   line: SourceLine,
   ordered: boolean,
   footnoteState: FootnoteRenderState,
-  extraLineClassResolver?: ExtraLineClassResolver
+  extraLineClassResolver: ExtraLineClassResolver | undefined,
+  listDepth: number
 ): string {
   const contentStartOffset = resolveListItemContentStartOffset(item, source, line.endOffset);
-  const lineAttributes = createListItemLineAttributes(item, source, ordered, "first");
+  const lineAttributes = createListItemLineAttributes(item, source, ordered, "first", null, listDepth);
   const className = mergeLineClassNames(extraLineClassResolver?.(line.startOffset).className, lineAttributes.className);
   const taskHtml = item.task ? renderTaskMarker(item.task.checked) : "";
   const taskStartOffset = item.task?.markerStart ?? contentStartOffset;
@@ -1058,10 +1061,11 @@ function createListItemLineAttributes(
   source: string,
   ordered: boolean,
   lineKind: "first" | "continuation",
-  sourcePrefixLength: number | null = null
+  sourcePrefixLength: number | null = null,
+  markerDepth?: number
 ): { className: string; style: string } {
   const attributes = createListLineAttributes("inactive", item, source, ordered, lineKind,
-    sourcePrefixLength ?? getListItemSourcePrefixLength(item, source));
+    sourcePrefixLength ?? getListItemSourcePrefixLength(item, source), markerDepth);
   return { className: attributes.class, style: attributes.style };
 }
 

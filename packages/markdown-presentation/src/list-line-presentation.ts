@@ -30,7 +30,8 @@ export function createListLineAttributes(
   source: string,
   ordered: boolean,
   lineKind: "first" | "continuation",
-  sourcePrefixLength: number
+  sourcePrefixLength: number,
+  markerDepth = Math.floor(item.indent / 2)
 ): { class: string; style: string } {
   const prefix = `cm-${mode}-list`;
   const classes = [
@@ -38,6 +39,9 @@ export function createListLineAttributes(
     ordered ? `${prefix}-ordered` : `${prefix}-unordered`,
     `${prefix}-depth-${Math.floor(item.indent / 2)}`
   ];
+  if (!ordered && !item.task && markerDepth % 2 === 1) {
+    classes.push("cm-list-marker-hollow");
+  }
   if (item.task) classes.push(`${prefix}-task`,
     item.task.checked ? `${prefix}-task-checked` : `${prefix}-task-unchecked`);
 

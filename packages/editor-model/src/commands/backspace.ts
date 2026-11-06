@@ -280,11 +280,11 @@ export function decideBackspace(context: EditorSemanticContext): BackspaceDecisi
         return { kind: "marker-degrade", plan: createEditTransactionPlan({ context, commandId: "backspace", intent: "structural", edits,
           selection: { anchor: caret, head: caret }, userEventName: "delete.list-marker" }) };
       }
-      return rangeDelete(context, markerStart, line.contentStartOffset, "marker-degrade");
+      return removeListMarker(context, line, prefix, markerStart);
     }
 
     if (offset === markerStart && prefix.markerText.length > 0) {
-      return rangeDelete(context, markerStart, line.contentStartOffset, "marker-degrade");
+      return removeListMarker(context, line, prefix, markerStart);
     }
   }
 
@@ -352,6 +352,32 @@ export function decideBackspace(context: EditorSemanticContext): BackspaceDecisi
   }
 
   return null;
+}
+
+// Empty leaf markers leave an empty line, not invisible structural indentation. Keep
+// indentation for populated items and for items with deeper following content.
+function removeListMarker(
+  context: EditorSemanticContext,
+  line: PhysicalLine,
+  prefix: ReturnType<typeof listItemPrefix>,
+  markerStart: number
+): BackspaceDecision {
+  if (line.contentStartOffset !== line.contentEndOffset || prefix.indentationText.length === 0) {
+    return rangeDelete(context, markerStart, line.contentStartOffset, "marker-degrade");
+  }
+
+  let hasDeeperContent = false;
+  for (const following of context.lines.lines.slice(line.lineNumber)) {
+    const text = context.source.slice(following.range.startOffset, following.contentEndOffset);
+    if (text.trim().length === 0 || (prefix.ancestorText.trim().length > 0 && text.trim() === prefix.ancestorText.trim())) continue;
+    if (text.startsWith(prefix.ancestorText)) {
+      const rest = text.slice(prefix.ancestorText.length);
+      hasDeeperContent = (rest.match(/^[ \t]*/u)?.[0].length ?? 0) > prefix.indentationText.length;
+    }
+    break;
+  }
+  const from = hasDeeperContent ? markerStart : prefix.startOffset;
+  return rangeDelete(context, from, line.contentStartOffset, "marker-degrade");
 }
 
 // The offset the current line's Backspace deletes from. One press removes one separator line, so a

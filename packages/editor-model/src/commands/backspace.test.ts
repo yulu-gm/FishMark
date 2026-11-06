@@ -156,6 +156,27 @@ describe("planBackspace", () => {
     expect(result.text).toBe("> item");
   });
 
+  it.each([
+    ["- parent\n  - ", "- parent\n"],
+    ["1. parent\n  1. ", "1. parent\n"],
+    ["1. parent\n  1. child\n    1. ", "1. parent\n  1. child\n"],
+    ["- parent\n  - child\n    - ", "- parent\n  - child\n"],
+    ["> - parent\n>   - ", "> - parent\n> "],
+    ["- parent\n  - \n  - sibling", "- parent\n\n  - sibling"]
+  ])("removes an empty nested leaf marker and indentation: %s", (source, expected) => {
+    const offset = source.indexOf("\n  - \n") >= 0 ? source.indexOf("\n  - \n") + "\n  - ".length : source.length;
+    const result = applyPlan(source, offset);
+    expect(result.text).toBe(expected);
+    expect(result.cursor).toBe(offset - (source.length - expected.length));
+  });
+
+  it("retains indentation for populated items and empty items with descendants", () => {
+    const populated = "- parent\n  - child";
+    expect(applyPlan(populated, populated.indexOf("child")).text).toBe("- parent\n  child");
+    const parent = "- parent\n  - \n    - leaf";
+    expect(applyPlan(parent, parent.indexOf("\n    -")).text).toBe("- parent\n  \n    - leaf");
+  });
+
   it("degrades one quote level when the cursor is at the content start", () => {
     const source = "> quoted";
     const result = applyPlan(source, "> ".length);

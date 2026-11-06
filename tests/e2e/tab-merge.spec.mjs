@@ -77,6 +77,34 @@ async function caret(product, page, offset = 7) {
   for (let i = 0; i < offset; i++) await page.keyboard.press("ArrowRight");
 }
 
+async function resolveDropPoint(product, target, fromRight, options = {}) {
+  const targetSnapshot = await product.snapshot(target);
+  const emptyHome = targetSnapshot.tabs.length === 0;
+  if (emptyHome) {
+    // Home intentionally has no strip; use its real non-interactive canvas.
+    expect(options.body).not.toBe(true);
+    await expect(target.locator('[data-fishmark-region="workspace-tab-strip"]')).toHaveCount(0);
+    const canvas = target.locator('[data-fishmark-region="workspace-canvas"][data-fishmark-has-document="false"]');
+    await expect(canvas).toBeVisible();
+    const point = await canvas.evaluate((element, fromRight) => {
+      const rect = element.getBoundingClientRect();
+      const x = fromRight ? rect.right - 30 : rect.left + 12;
+      const y = rect.top + 24;
+      const hit = document.elementFromPoint(x, y);
+      return { x, y, inside: !!hit && element.contains(hit),
+        interactive: !!hit?.closest('button, a, input, textarea, select, [role="button"]'),
+        tag: hit?.tagName ?? null };
+    }, fromRight);
+    expect(point.inside).toBe(true);
+    expect(point.interactive).toBe(false);
+    return { emptyHome, point };
+  }
+  const strip = await target.locator('[data-fishmark-region="workspace-tab-strip"]').boundingBox();
+  expect(strip).not.toBeNull();
+  return { emptyHome, point: { x: fromRight ? strip.x + strip.width - 30 : strip.x + 12,
+    y: options.body ? 200 : strip.y + strip.height / 2 } };
+}
+
 async function drag(product, source, target, tabId, options = {}) {
   const from = await product.current.app.browserWindow(source), to = await product.current.app.browserWindow(target);
   // On narrow desktops the receiver's strip (and body rejection point) is above
@@ -98,10 +126,10 @@ async function drag(product, source, target, tabId, options = {}) {
   await from.evaluate(w => { w.setAlwaysOnTop(false); w.setAlwaysOnTop(true); w.moveTop(); w.focus(); });
   await from.dispose(); await to.dispose();
   const startBox = await tab(source, tabId).boundingBox();
-  const endBox = await target.locator('[data-fishmark-region="workspace-tab-strip"]').boundingBox();
-  expect(startBox).not.toBeNull(); expect(endBox).not.toBeNull();
+  expect(startBox).not.toBeNull();
+  const { emptyHome, point: dropPoint } = await resolveDropPoint(product, target, b.content.x >= a.content.x, options);
   const start = { x: Math.round(a.content.x + (startBox.x + startBox.width / 2) * a.zoom), y: Math.round(a.content.y + (startBox.y + startBox.height / 2) * a.zoom) };
-  const end = { x: Math.round(b.content.x + (b.content.x < a.content.x ? endBox.x + 12 : endBox.x + endBox.width - 30) * b.zoom), y: Math.round(b.content.y + (options.body ? 200 : endBox.y + endBox.height / 2) * b.zoom) };
+  const end = { x: Math.round(b.content.x + dropPoint.x * b.zoom), y: Math.round(b.content.y + dropPoint.y * b.zoom) };
   if (coverNative) {
     const { bounds, content } = coverNative;
     expect(coverNative.hwnd).toBe(options.endHwnd);
@@ -123,7 +151,7 @@ async function drag(product, source, target, tabId, options = {}) {
     return { events, stalls: records.filter(record => record.event === "native:stall").map(record => record.detail) };
   };
   const sequence = (await readNative()).events.at(-1)?.sequence ?? 0;
-  const gesture = { a, b, start, end, options, coverNative }; (product.crossWindowProof.gestures ??= []).push(gesture);
+  const gesture = { a, b, start, end, options, coverNative, emptyHome, dropPoint }; (product.crossWindowProof.gestures ??= []).push(gesture);
   if (options.stallMs) gesture.stallId = await product.current.app.evaluate((_electron, { id, milliseconds }) => globalThis.__rf902Control.armNativeReleaseStall(id, milliseconds), { id: a.id, milliseconds: options.stallMs });
   let primaryError;
   try {
@@ -156,6 +184,22 @@ async function drag(product, source, target, tabId, options = {}) {
   }
   if (primaryError) throw primaryError;
 }
+
+test("empty home exposes a non-interactive canvas drop point without a tab strip", async ({ product }) => {
+  const f = await twoWindows(product);
+  await f.target.locator('[data-fishmark-region="workspace-tab-close"]').click();
+  await expect.poll(async () => (await product.snapshot(f.target)).tabs.length).toBe(0);
+  await expect(f.target.locator('.empty-copy')).toBeVisible();
+  const left = await resolveDropPoint(product, f.target, false);
+  const right = await resolveDropPoint(product, f.target, true);
+  expect(left.emptyHome).toBe(true);
+  expect(right.emptyHome).toBe(true);
+  expect(left.point.x).toBeLessThan(right.point.x);
+  expect((await product.snapshot(f.source)).activeDocument.content).toBe("0123456789 transfer");
+  product.crossWindowProof = { scope: "real product home target geometry only; no native drag claimed", left, right };
+  await product.checkpoint("empty-home-drop-points", f.target);
+  await product.normalClose();
+});
 
 if (process.platform === "win32") {
   test("native join retains its release through a bounded main-loop stall", async ({ product }) => {
@@ -211,6 +255,10 @@ if (process.platform === "win32") {
     if (!inactive) {
       await caret(product, f.target); await wheel(f.target, 5000); const back = await position(f.target);
       await drag(product, f.target, f.source, f.sourceId);
+      const returnGesture = product.crossWindowProof.gestures.at(-1);
+      expect(returnGesture.emptyHome).toBe(true);
+      expect(returnGesture.dropPoint.inside).toBe(true);
+      expect(returnGesture.dropPoint.interactive).toBe(false);
       await expect.poll(async () => (await product.snapshot(f.source)).activeDocument?.content).toBe(dirty);
       await expect(f.source.locator(".cm-content")).toHaveAttribute("contenteditable", "true");
       await samePosition(f.source, back);

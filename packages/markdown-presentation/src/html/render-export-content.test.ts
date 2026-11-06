@@ -50,6 +50,30 @@ describe("canonical HTML export presentation", () => {
       .toBe(">            continuationlabel");
   });
 
+  it("alternates unordered marker presentation by actual nesting depth in mixed exports", () => {
+    const source = "- root\n  - child\n    - grandchild\n      - great\n  1. ordered\n    - mixed\n  - [ ] task";
+    const document = new JSDOM(render(source)).window.document;
+    const lines = [...document.querySelectorAll(".cm-inactive-list")];
+    const line = (text: string) => lines.find(candidate => candidate.textContent?.trim().endsWith(text))!;
+    expect(line("root").classList.contains("cm-list-marker-hollow")).toBe(false);
+    expect(line("child").classList.contains("cm-list-marker-hollow")).toBe(true);
+    expect(line("grandchild").classList.contains("cm-list-marker-hollow")).toBe(false);
+    expect(line("great").classList.contains("cm-list-marker-hollow")).toBe(true);
+    expect(line("ordered").classList.contains("cm-list-marker-hollow")).toBe(false);
+    expect(line("mixed").classList.contains("cm-list-marker-hollow")).toBe(false);
+    expect(line("task").classList.contains("cm-list-marker-hollow")).toBe(false);
+  });
+
+  it("uses nesting rather than source spacing for mixed unordered depths", () => {
+    const source = "1. outer\n   - child\n       - grandchild";
+    const document = new JSDOM(render(source)).window.document;
+    const lines = [...document.querySelectorAll(".cm-inactive-list")];
+    const child = lines.find(line => line.textContent?.trim().endsWith("child") && !line.textContent?.includes("grandchild"))!;
+    const grandchild = lines.find(line => line.textContent?.includes("grandchild"))!;
+    expect(child.classList.contains("cm-list-marker-hollow")).toBe(true);
+    expect(grandchild.classList.contains("cm-list-marker-hollow")).toBe(false);
+  });
+
   it("renders nested container leaves from the canonical tree", () => {
     const html = render([
       "> - **item**",

@@ -440,11 +440,11 @@ it("removes an empty ordered list marker while preserving the blank line", () =>
     });
   });
 
-it("removes an empty unordered list marker while preserving its indentation", () => {
+it("removes an empty unordered list marker and its indentation", () => {
     const doc = ["- parent", "  - "].join("\n");
     const context = buildContext(doc, doc.length);
     const result = computeBackspaceEmptyListMarker(context);
-    const expected = ["- parent", "  "].join("\n");
+    const expected = "- parent\n";
 
     expect(applyEdit(doc, result)).toBe(expected);
     expect(result?.selection).toEqual({
@@ -512,10 +512,10 @@ it("removes a quote list marker on Backspace while preserving the quote prefix",
   });
 
 it.each([
-    ["unordered", ["> - parent", ">   - "].join("\n"), ["> - parent", ">   "].join("\n")],
-    ["ordered", ["> 1. parent", ">    1. "].join("\n"), ["> 1. parent", ">    "].join("\n")]
+    ["unordered", ["> - parent", ">   - "].join("\n"), ["> - parent", "> "].join("\n")],
+    ["ordered", ["> 1. parent", ">    1. "].join("\n"), ["> 1. parent", "> "].join("\n")]
   ])(
-    "removes a quoted empty nested %s list marker before indentation backspace",
+    "removes a quoted empty nested %s list marker and its indentation",
     (_kind, doc, expected) => {
       const context = buildContext(doc, doc.length);
       const result = computeBackspaceEmptyListMarker(context);

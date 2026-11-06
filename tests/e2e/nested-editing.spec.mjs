@@ -111,7 +111,7 @@ test("product nested Enter Backspace undo redo retain exact empty-item source ca
   test.skip(process.platform !== "win32", "This batch verifies Windows product keyboard mappings.");
   const source = "- parent\n  - child\n    - grandchild";
   const marker = source + "\n    - ";
-  const blank = source + "\n    ";
+  const blank = source + "\n";
   const page = await setup(product, source);
   await product.focus(page);
   await page.keyboard.press("Control+End");
