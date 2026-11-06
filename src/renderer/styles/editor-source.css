@@ -11,12 +11,8 @@
   overflow: auto;
   /* Keep empty documents pinned to the top across shell-mode transitions. */
   align-items: flex-start !important;
-  /*
-   * Reserve the vertical scrollbar on both edges so the measured text column
-   * keeps its exact symmetric padding whether or not the document currently
-   * overflows, and so the centring maths stay scroll-state independent.
-   */
-  scrollbar-gutter: stable both-edges;
+  /* Overlay controls do not consume a gutter or change the text width. */
+  scrollbar-gutter: auto;
 }
 
 .document-editor .cm-editor.has-editor-scrollbars { position: relative; }
@@ -69,8 +65,8 @@
   min-height: 100%;
   box-sizing: border-box;
   /* Fill the available stage; keep revealed heading syntax inside its gutter. */
-  --fishmark-document-padding-inline: max(var(--fishmark-document-gutter), 6rem);
-  padding: 40px var(--fishmark-document-padding-inline) 56px;
+  --fishmark-document-padding-inline: max(var(--fishmark-document-gutter), 3rem);
+  padding: 24px var(--fishmark-document-padding-inline) 40px;
   caret-color: var(--fishmark-caret-color);
 }
 

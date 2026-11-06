@@ -561,6 +561,7 @@ function renderHtmlImageBlock(block: HtmlImageBlock): string {
     alt: block.alt,
     height: block.height,
     href: block.src,
+    title: block.title,
     mode: "inactive",
     width: block.width,
     zoom: block.zoom
@@ -818,8 +819,13 @@ function renderInlineNode(node: InlineNode, source: string, footnoteState: Footn
     case "image":
       return renderImagePreview({
         align: "center",
-        alt: readInlineText(node.children),
+        alt: node.html?.alt ?? readInlineText(node.children),
         href: node.href,
+        title: node.title,
+        width: node.html?.width,
+        height: node.html?.height,
+        zoom: node.html?.zoom,
+        inline: !!node.html,
         mode: "inactive"
       });
   }
@@ -995,6 +1001,8 @@ function renderImagePreview(input: {
   alt: string;
   height?: string | null;
   href: string | null;
+  inline?: boolean;
+  title?: string | null;
   mode: "inactive";
   width?: string | null;
   zoom?: string | null;
@@ -1002,12 +1010,12 @@ function renderImagePreview(input: {
   const align = input.align ?? "center";
   const imageStyle = createImageStyle(input);
   const imageContent = input.href
-    ? `<img class="cm-markdown-image-preview-image" src="${escapeAttribute(input.href)}" alt="${escapeAttribute(input.alt || "Markdown image")}"${imageStyle ? ` style="${escapeAttribute(imageStyle)}"` : ""}>`
+    ? `<img class="cm-markdown-image-preview-image" src="${escapeAttribute(input.href)}" alt="${escapeAttribute(input.alt || "Markdown image")}"${input.title ? ` title="${escapeAttribute(input.title)}"` : ""}${imageStyle ? ` style="${escapeAttribute(imageStyle)}"` : ""}>`
     : `<span class="cm-markdown-image-preview-fallback">${escapeHtml(input.alt || "Image preview unavailable")}</span>`;
 
   return [
     '<span class="cm-markdown-image-preview"',
-    ` data-image-preview-mode="${input.mode}" data-image-align="${align}">`,
+    ` data-image-preview-mode="${input.mode}" data-image-align="${align}"${input.inline ? ' data-image-inline="true"' : ""}>`,
     imageContent,
     "</span>"
   ].join("");

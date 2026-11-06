@@ -107,6 +107,51 @@ describe("table planners", () => {
     expect(readTableSnapshot(contextAt(text, text.indexOf("42")))?.rows).toEqual([["42", "2"]]);
   });
 
+  it("preserves original table spelling across cell input and its inverse", () => {
+    const source = "|  A\\|B  | C |\n| --- | :---: |\n| x | y |";
+    const edited = applyPlan(source, planTableUpdateCell(contextAt(source, source.indexOf("A")),
+      { row: 0, column: 0, offsetInCell: 4 }, "A|BX"));
+    expect(edited).toBe(source.replace("A\\|B", "A\\|BX"));
+    const restored = applyPlan(edited, planTableUpdateCell(contextAt(edited, edited.indexOf("A")),
+      { row: 0, column: 0, offsetInCell: 3 }, "A|B"));
+    expect(restored).toBe(source);
+  });
+
+  it("escapes a newly typed pipe without changing the delimiter row", () => {
+    const edited = applyPlan(TABLE, planTableUpdateCell(contextAt(TABLE, TABLE.indexOf("a")),
+      { row: 0, column: 0, offsetInCell: 3 }, "a|b"));
+    expect(edited).toBe(TABLE.replace("a |", "a\\|b |"));
+    expect(readTableSnapshot(contextAt(edited, edited.indexOf("a")))?.header[0]).toBe("a|b");
+  });
+
+  it("round-trips literal backslashes and pipes in cell input", () => {
+    const edited = applyPlan(TABLE, planTableUpdateCell(contextAt(TABLE, TABLE.indexOf("a")),
+      { row: 0, column: 0, offsetInCell: 3 }, "a\\|"));
+    expect(readTableSnapshot(contextAt(edited, edited.indexOf("a")))?.header[0]).toBe("a\\|");
+  });
+
+  it.each([
+    ["| a | b |\n| --- | --- | --- |\n| x | y | z |", 0, 2, "| a | b | NEW |\n| --- | --- | --- |\n| x | y | z |"],
+    ["a | b | c\n--- | --- | ---\nx | y", 1, 2, "a | b | c\n--- | --- | ---\nx | y | NEW"],
+    ["| a | b |\n| --- | --- | --- | --- |\n| w | x | y | z |", 0, 3, "| a | b |  | NEW |\n| --- | --- | --- | --- |\n| w | x | y | z |"],
+    ["> | a | b | c |\n> | --- | --- | --- |\n> | x | y |", 1, 2, "> | a | b | c |\n> | --- | --- | --- |\n> | x | y | NEW |"],
+    ["| a | b | c |\r\n| --- | --- | --- |\r\n| x | y |", 1, 2, "| a | b | c |\r\n| --- | --- | --- |\r\n| x | y | NEW |"]
+  ] as const)("materializes only the missing cell separators: %s", (source, row, column, expected) => {
+    const plan = planTableUpdateCell(contextAt(source, source.indexOf("a")), { row, column, offsetInCell: 3 }, "NEW");
+    expect(applyPlan(source, plan)).toBe(expected);
+    expect(plan?.edits).toHaveLength(1);
+    expect(plan?.edits[0]?.from).toBe(plan?.edits[0]?.to);
+  });
+
+  it("preserves escaped siblings and escapes new pipes when materializing a missing cell", () => {
+    const source = "| a | b | c |\n| :---: | ---: | --- |\n|  x\\|q  |  y  |";
+    const target = { row: 1, column: 2, offsetInCell: 3 };
+    const edited = applyPlan(source, planTableUpdateCell(contextAt(source, 0), target, "N|W"));
+    expect(edited).toBe(source + " N\\|W |");
+    expect(readTableSnapshot(contextAt(edited, 0))?.rows[0]).toEqual(["x|q", "y", "N|W"]);
+    expect(planTableUpdateCell(contextAt(source, 0), target, "")?.edits).toEqual([]);
+  });
+
   it("exits below the table, adding a blank line at the document end", () => {
     const plan = planTableExitBelow(contextAt(TABLE, TABLE.indexOf("2")));
 

@@ -9,6 +9,7 @@ import {
 } from "@fishmark/editor-model";
 import type { ActiveBlockState } from "@fishmark/editor-model";
 import { runSemanticCommand, type SemanticCommandPlanner, type SemanticCommandDispatchOptions } from "./semantic-keypress";
+import { tableCellInput, tableCellSelection, tableInputUserEvent } from "./table-history";
 import type { TablePosition } from "./table-context";
 
 // Widget callbacks carry the table's source identity because focus may still be in a neighbouring
@@ -74,11 +75,16 @@ export function runTableDelete(view: EditorView, _state: ActiveBlockState): bool
 }
 export function runTableSelectCell(view: EditorView, _state: ActiveBlockState, target: TablePosition, options?: SemanticCommandDispatchOptions): boolean {
   void _state;
-  return runSemanticCommand(view, context => planTableMoveToCell(contextForTable(context, target), target), options);
+  return runSemanticCommand(view, context => planTableMoveToCell(contextForTable(context, target), target), { ...options,
+    annotations: [...(options?.annotations ?? []), tableCellSelection.of(target)] });
 }
-export function runTableUpdateCell(view: EditorView, _state: ActiveBlockState, target: TablePosition, text: string): boolean {
+export function runTableUpdateCell(view: EditorView, _state: ActiveBlockState, target: TablePosition, text: string, inputType = "insertText"): boolean {
   void _state;
-  return run(view, context => planTableUpdateCell(contextForTable(context, target), target, text));
+  const userEvent = tableInputUserEvent(inputType);
+  return runSemanticCommand(view, context => {
+    const plan = planTableUpdateCell(contextForTable(context, target), target, text);
+    return plan === null ? null : { ...plan, userEventName: userEvent };
+  }, { annotations: [tableCellInput.of({ ...target, userEvent })] });
 }
 export function runTableEnterFromLineAbove(view: EditorView, state: ActiveBlockState): boolean {
   return state.tableCursor?.mode === "adjacent-above" && runTableSelectCell(view, state, state.tableCursor);

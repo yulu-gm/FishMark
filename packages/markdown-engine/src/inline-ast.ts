@@ -78,6 +78,8 @@ export interface InlineLink extends InlineContainerNode {
 
 export interface InlineImage extends InlineContainerNode {
   type: "image";
+  /** Inline HTML image; absent for Markdown image syntax. */
+  html?: { alt: string; width: string | null; height: string | null; zoom: string | null };
   href: string | null;
   title: string | null;
   destinationStartOffset: number | null;

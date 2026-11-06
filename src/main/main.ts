@@ -1192,7 +1192,7 @@ app.whenReady().then(async () => {
 });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin" && (quitRequested || !hasPendingLaunchRequests())) {
+  if (quitRequested || (process.platform !== "darwin" && !hasPendingLaunchRequests())) {
     app.quit();
   }
 });

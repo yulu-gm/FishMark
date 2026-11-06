@@ -56,7 +56,7 @@ test("permanent chrome survives old preferences, resize, edits, source mode, tab
   await page.getByRole("button", { name: "Switch to source mode", exact: true }).click();
   await chrome(page);
   await page.getByRole("button", { name: "Switch to WYSIWYM mode", exact: true }).click();
-  await product.focus(page); await page.keyboard.press("Control+z");
+  await product.focus(page); await page.keyboard.press(process.platform === "darwin" ? "Meta+z" : "Control+z");
   await expect.poll(async () => (await product.snapshot()).activeDocument.content).toBe(source);
   await expect(page.locator(".document-word-count")).toHaveText(originalCount);
   await page.getByRole("button", { name: "Outline", exact: true }).click();

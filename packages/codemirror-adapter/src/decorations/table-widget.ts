@@ -10,13 +10,15 @@ import {
   type TableBlock
 } from "@fishmark/markdown-engine";
 
+import { selectTableCellContents } from "../table-cell-selection";
 import type { TablePosition } from "../table-context";
 import type { WidgetMeasurementTarget } from "./widget-lifecycle";
 import { isWidgetMounted } from "./widget-lifecycle";
 
 export type TableWidgetCallbacks = {
   selectCell: (position: TablePosition, options?: { restoreDomFocus?: boolean }) => void;
-  updateCell: (position: TablePosition, text: string) => void;
+  updateCell: (position: TablePosition, text: string, inputType?: string) => void;
+  history: (direction: "undo" | "redo") => void;
   moveToNextCell: (position: TablePosition) => void;
   moveToPreviousCell: (position: TablePosition) => void;
   moveUp: (position: TablePosition) => void;
@@ -287,14 +289,14 @@ export class TableWidget extends WidgetType {
       // detached, or handed to a newer instance, drops the event instead of writing through the
       // `tableStartOffset` it recorded for a document revision that may no longer exist.
       const isCellLive = () => isCellOwnedByRoot(root, editor);
-      let historyPreviewNodes: Node[] | null = null;
 
-      const commitEditorInput = () => {
+      const commitEditorInput = (inputType?: string) => {
         if (!isCellLive()) {
           return;
         }
 
-        this.callbacks?.updateCell(readCurrentPosition(), readTableCellText(editor));
+        if (inputType) this.callbacks?.updateCell(readCurrentPosition(), readTableCellText(editor), inputType);
+        else this.callbacks?.updateCell(readCurrentPosition(), readTableCellText(editor));
       };
 
       editor.addEventListener("mousedown", () => {
@@ -360,52 +362,25 @@ export class TableWidget extends WidgetType {
 
         delete editor.dataset.tableCellComposing;
         editor.dataset.tableCellPendingCompositionCommit = "true";
-        schedulePendingCompositionCommitFallback(editor, commitEditorInput);
+        schedulePendingCompositionCommitFallback(editor, () => commitEditorInput("insertCompositionText"));
       });
 
+      // The source document owns history, including structure inserted when a
+      // missing cell is first edited. Never apply native DOM history separately.
       editor.addEventListener("beforeinput", (event) => {
-        if (
-          !isCellLive() || !(event instanceof InputEvent) || event.isComposing ||
-          editor.dataset.tableCellComposing === "true" ||
-          (event.inputType !== "historyUndo" && event.inputType !== "historyRedo") ||
-          readTableCellRenderMode(editor) !== "preview"
-        ) {
-          return;
-        }
-        // Chromium can target the last edited cell while another cell has focus.
-        // Give its original editing nodes back before the native command runs.
-        const previewNodes = Array.from(editor.childNodes);
-        if (restoreParkedPlainCellNodes(editor, editor.dataset.tableCellText ?? "")) {
-          historyPreviewNodes = previewNodes;
+        if (!isCellLive() || !(event instanceof InputEvent) || event.isComposing ||
+            editor.dataset.tableCellComposing === "true") return;
+        if (event.inputType === "historyUndo" || event.inputType === "historyRedo") {
+          event.preventDefault();
+          this.callbacks?.history(event.inputType === "historyUndo" ? "undo" : "redo");
         }
       });
 
       editor.addEventListener("input", (event) => {
-        if (!isCellLive()) {
-          return;
-        }
-
-        if (editor.dataset.tableCellComposing === "true") {
-          return;
-        }
-
+        if (!isCellLive() || editor.dataset.tableCellComposing === "true") return;
         delete editor.dataset.tableCellPendingCompositionCommit;
         clearPendingCompositionCommitFallback(editor);
-        const previewNodes = historyPreviewNodes;
-        historyPreviewNodes = null;
-        if (
-          event instanceof InputEvent &&
-          (event.inputType === "historyUndo" || event.inputType === "historyRedo") &&
-          readTableCellText(editor) === editor.dataset.tableCellText
-        ) {
-          if (previewNodes) {
-            parkedPlainCellNodes.set(editor, { text: readTableCellText(editor), nodes: Array.from(editor.childNodes) });
-            editor.replaceChildren(...previewNodes);
-            editor.dataset.tableCellRenderMode = "preview";
-          }
-          return;
-        }
-        commitEditorInput();
+        commitEditorInput(event instanceof InputEvent ? event.inputType : undefined);
       });
 
       editor.addEventListener("keydown", (event) => {
@@ -418,6 +393,21 @@ export class TableWidget extends WidgetType {
         // would otherwise leak into table navigation and tear the caret out
         // of the cell while the IME is still committing characters.
         if (event.isComposing || event.keyCode === 229) {
+          return;
+        }
+
+        if ((event.metaKey || event.ctrlKey) && !event.altKey &&
+            (event.key.toLowerCase() === "z" || (event.ctrlKey && event.key.toLowerCase() === "y"))) {
+          event.preventDefault();
+          event.stopPropagation();
+          this.callbacks?.history(event.shiftKey || event.key.toLowerCase() === "y" ? "redo" : "undo");
+          return;
+        }
+
+        if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "a") {
+          event.preventDefault();
+          event.stopPropagation();
+          selectTableCellContents(editor);
           return;
         }
 
@@ -503,7 +493,8 @@ export class TableWidget extends WidgetType {
               tableStartOffset: resolveWidgetTableStartOffset(editor, this.block.startOffset),
               offsetInCell: from + insert.length
             },
-            `${text.slice(0, from)}${insert}${text.slice(to)}`
+            `${text.slice(0, from)}${insert}${text.slice(to)}`,
+            "insertLineBreak"
           );
           return;
         }
@@ -760,8 +751,7 @@ function syncTableCellEditor(
     editor.dataset.tableCellRenderMode === "plain" &&
     readTableCellText(editor) === text
   ) {
-    // Chromium's editing history refers to the original editable nodes. Preserve
-    // those nodes while rendering an inactive preview, then put them back on focus.
+    // Reuse the plain editing nodes when switching between source and preview.
     parkedPlainCellNodes.set(editor, { text, nodes: Array.from(editor.childNodes) });
   } else if (parked?.text !== text) {
     parkedPlainCellNodes.delete(editor);

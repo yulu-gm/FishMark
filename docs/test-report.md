@@ -934,3 +934,55 @@ RF-801 已达到 COMPLETE，M8 为 **1/3**；RF-802、RF-803 与 M9 保持后续
 | 2026-04-16 | TASK-039 | `npm run lint && npm run typecheck && npm run test && npm run build` | 通过 | 修复 `+++` 与 setext heading 竞争导致的回归后，完整门禁重新通过；保留现有 Vite chunk size warning，但不阻塞本轮交付。 |
 
 | 2026-09-19 | RF506 最终冻结代码父验证 | lint/typecheck/full Vitest/build/formal/editor-experience/parser differential | 行为安全 PASS；整体性能 FAIL | 2671 passed / 1 skipped；0 lint errors / 8 existing warnings；formal 121/121、2541 targets、2434 exact + 107 unchanged known、0 unexpected/not-run；editing pass=true；600 differential edits pass。报告 .artifacts/rf506-parent-stable-*。包体积超原预算；尾随空格几何偏差在 fdddabd 独立复现同值；详见 RF506 summary，未标M5 COMPLETE。 |
+
+
+## 2026-11-06 图片缩放验证
+
+- `npm run lint`、`npm run typecheck`、`npm run build`：通过。
+- `npm run test:regression`：4030 通过，8 项已登记的解析器既存失败，无新增失败，回归门禁通过。
+- 隐藏 Electron：拖拽、比例、组件复用后编辑、撤销隔离、重做、只读、菜单选择与 Escape、键盘调整、窄窗口通过。
+- 产品 Electron：右键 50%、取消、撤销重做、File > Save、关闭标签和通过文件拖放重新打开，检查磁盘内容及渲染宽度通过。首次使用完整退出的现有夹具在 macOS 超时，未验证进程重启；使用关闭并重新打开文档的测试通过。
+- 行内直接链接图片另经真实产品右键、撤销重做、保存与关闭标签重开验证；引用式和复杂样式图片保留原文并不提供缩放。Typora 图片右键菜单有官方资料，但菜单内具体缩放交互未实机核实。
+
+### 2026-11-05 — Compact layout, quit and table input
+
+- PASS: build, lint, typecheck; targeted Vitest: 7 files / 556 tests. Electron 41.2.0 macOS: 7 tests passed covering explicit Quit, compact layout, normal cell typing/undo, permanent chrome and reading rhythm; 3 Windows-only nested-editing cases skipped. Screenshots inspected.
+- Initial limitation (resolved below): implicit-cell undo did not restore original bytes. Physical OS pointer capture, Windows DPI, community themes and screen-reader coverage remain untested.
+
+### Implicit-cell history investigation (superseded by resolution below)
+
+- FAIL (real Electron): typing then undoing an implicit missing header or body cell does not restore the original table bytes. Four future undo/redo cases were initially marked `fixme` in `tests/e2e/table-implicit-history.spec.mjs`.
+- PASS: lint and the seven targeted Vitest files (556 tests) after adding the reproductions. No production change was made in this follow-up; see the compact-layout handoff for the history-ownership blocker.
+
+### Implicit-cell history resolution — 2026-11-05
+
+- PASS: `npm run build`, `npm run lint`, `npm run typecheck`; 77 relevant Vitest files / 1531 tests.
+- PASS: Electron 41.2.0 on macOS, 17 tests / 0 failures; three Windows-only nested-editing tests skipped. The ten table tests cover irregular header/body rows, missing trailing pipes, multiple absent cells, escaped pipes, clear/retype, cross-cell edits and branching, source and menu history, Chromium composition, and Select All deletion. Layout, explicit Quit, permanent chrome and light/dark reading rhythm also passed.
+- Evidence: `.artifacts/e2e/compact-history-complete-20261105/playwright-report.json`. Screenshots from the preceding equivalent layout run were visually inspected in light and dark themes. Native OS pointer capture, Windows DPI, community themes, screen readers and Windows-only tests remain unverified.
+- History now belongs to CodeMirror for table inputs, including menu and keyboard entry points. Minimal cell materialization retains unrelated Markdown bytes; mapped inverse selection effects preserve the focused missing cell. See `docs/plans/2026-11-05-compact-layout-handoff.md`.
+
+## 2026-11-06 图片缩放与紧凑布局整合验证
+
+- 版本候选 4.1.0：build、lint、typecheck 通过；`npm run test:regression` 为 4052 项通过，8 项精确匹配的既存解析器失败，无新增失败。
+- macOS 隔离 Electron 产品测试 19 项全部通过：独立和行内图片的右键、撤销重做、保存与关闭标签重开，引用式图片原文保护；明暗紧凑布局、阅读布局、显式退出、表格单元格和缺失单元格历史。图片拖拽、取消及只读另由隐藏 Electron 测试覆盖。
+- 完整 Windows 产品测试、物理设备及跨显示器 DPI 尚未验证；引用式图片和复杂转义或样式的缩放不支持。Typora 图片菜单中的具体缩放交互未实机核实。
+
+### Windows CI follow-up
+
+- Initial 4.1.0 CI: Windows product E2E failed 4/76: Ctrl+Shift+Z did not redo source-mode image or table edits, and the compact layout made a minimum-width table exceed an obsolete fixed 700px width threshold. Other CI jobs passed.
+- Added the application-menu redo chord to the editor keymap; updated the geometry test to check actual scroller containment, wrapped cell content, and stable remount dimensions instead of fixed pre-layout pixel thresholds. The viewport test now uses platform-specific navigation and undo shortcuts.
+- Local macOS validation: 320 editor tests and 16 product tests passed, including the real Ctrl+Shift+Z chord, image save/reopen, viewport remount, and table history. Full regression gate: 4053 passed, 8 exact known parser failures, no new failures. Windows CI must be rerun before release.
+
+### Blank-navigation asynchronous snapshot follow-up
+
+- Windows CI attempt 1 at `10b0bec`: the renderer recorded a trusted `x` input and DOM selection offset 9, but the observed main snapshot still held revision 4. Telemetry shows that snapshot at 07:05:43.636 UTC preceded the queued fifth edit, which was acknowledged at 07:05:43.641 UTC; the DOM already contained `x`. This is evidence of an observation race, not evidence that input was lost.
+- The test now waits for the exact expected canonical content before asserting the unchanged DOM, selection and source contracts. A real Electron controlled-ACK test holds the first acknowledgment, queues a second input, proves the observer remains pending on the older main snapshot, then releases and verifies both edits, trusted input and save. macOS isolated product run passed. Windows CI rerun is required on this revision.
+
+## 2026-11-06 Windows 4.1.0 发布整合
+
+- 合并远端 `22de456` 的图片缩放、紧凑布局、表格历史与退出修复，以及本地 `24314ce` 至 `601fcbc` 的相对 Markdown 链接和启动、解析优化。保留本地原有锁文件内容，版本统一为 4.1.0。
+- Windows 本机 Node 24.14.0：lint、typecheck、build、包体预算通过；首屏静态依赖 gzip 104189 bytes，全部 JavaScript gzip 1444526 bytes，均在现有预算内。
+- 完整 Vitest：4147 项通过、8 项精确匹配的既存解析器失败、1 项符号链接权限跳过；无收集、hook 或未处理异常。由于不允许该跳过，本地严格回归仍为 FAIL，未修改允许失败或跳过的清单。最初沙箱运行因临时缓存重命名权限失败，随后在主机环境完整重跑，两次日志均保留。
+- 完整 Windows 产品 E2E：74 项通过、6 项失败。图片右键/拖拽缩放、撤销重做、保存重开、紧凑布局、表格历史、相对链接及长文编辑测试通过。失败涉及两项原生跨窗口拖出、原生纯文本粘贴菜单、原生窗口合并回执超时、取消合并与窄窗口表格重挂载；后两项报告 Chromium GPU 错误，另有拖拽终点未命中目标窗口。不能据此声称本机完整 E2E 通过，或将全部失败归因为环境。
+- 证据：`.artifacts/release-4.1.0-regression-host.log`、`.artifacts/ci/vitest-full.gate.json`、`.artifacts/release-4.1.0-bundle.log`、`.artifacts/e2e/release-4-1-0-20261106/playwright-report.json`。发布要求合并提交的四项 CI 检查通过；结果以对应提交的 Actions 为准，不用远端合并前的成功代替。
+- 本次只提供 Windows x64 安装包和自动更新元数据；未更新本机已安装应用，未做安装器交互、物理设备与跨显示器 DPI、屏幕阅读器及合并版本的 macOS 验证。此前冷打开预算未通过的结论不变。

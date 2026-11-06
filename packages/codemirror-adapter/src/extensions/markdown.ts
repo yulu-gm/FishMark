@@ -1,7 +1,9 @@
 import {
   defaultKeymap,
   history,
-  historyKeymap
+  historyKeymap,
+  undo,
+  redo
 } from "@codemirror/commands";
 import {
   Annotation,
@@ -22,6 +24,7 @@ import {
 } from "@codemirror/view";
 
 import { createEditorDerivedSnapshotFromCache, planNormalizeOrderedListScopes, planPointerSelection, planTableUpdateCell, reselectEditorSemanticContext } from "@fishmark/editor-model";
+import { tableHistory, tableCellSelectionField, tableCellInput, tableInputUserEvent } from "../table-history";
 import { createCanonicalSeparatorField } from "../canonical-separators";
 import {
   createMarkdownEditorViewModeExtension,
@@ -191,12 +194,25 @@ export function createFishMarkMarkdownExtensions(
   const readStateSnapshot = (state: EditorState): EditorDerivedSnapshot =>
     createEditorDerivedSnapshotFromCache(readEditorStructureCache(state));
 
-  const createLiveEditorDerivedState = (state: EditorState): EditorDerivedState =>
-    createEditorDerivedState({
-      snapshot: createEditorDerivedSnapshotFromCache(readEditorStructureCache(state)),
-      selection: createSelectionSnapshot(state),
-      previousTableCursor: runtime.activeBlockState.tableCursor
-    });
+  const createLiveEditorDerivedState = (state: EditorState): EditorDerivedState => {
+    const snapshot = createEditorDerivedSnapshotFromCache(readEditorStructureCache(state));
+    const derived = createEditorDerivedState({ snapshot, selection: createSelectionSnapshot(state),
+      previousTableCursor: runtime.activeBlockState.tableCursor });
+    const target = state.field(tableCellSelectionField, false);
+    if (target?.tableStartOffset !== undefined && state.selection.main.empty) {
+      const line = snapshot.lineAt(target.tableStartOffset);
+      const node = line?.nodeId ? snapshot.nodeById(line.nodeId) : null;
+      if (node?.kind === "table" && node.data.kind === "table") {
+        const cell = target.row === 0 ? node.data.header[target.column] : node.data.rows[target.row - 1]?.[target.column];
+        if (cell) {
+          const cursor = { mode: "inside" as const, tableNodeId: node.id, tableStartOffset: target.tableStartOffset,
+            row: target.row, column: target.column, offsetInCell: Math.min(target.offsetInCell ?? 0, cell.text.length) };
+          return { ...derived, tableCursor: cursor, activeBlockState: { ...derived.activeBlockState, tableCursor: cursor } };
+        }
+      }
+    }
+    return derived;
+  };
 
   const createLiveActiveBlockState = (state: EditorState): ActiveBlockState =>
     createLiveEditorDerivedState(state).activeBlockState;
@@ -437,6 +453,11 @@ export function createFishMarkMarkdownExtensions(
   };
 
   const tableWidgetCallbacks: TableWidgetCallbacks = {
+    history(direction) {
+      if (!tableInteractionView || readCompositionState(tableInteractionView.state).active) return;
+      (direction === "undo" ? undo : redo)(tableInteractionView);
+      syncTableInteractionFocus(tableInteractionView, createLiveActiveBlockState(tableInteractionView.state), { force: true });
+    },
     selectCell(position, options) {
       if (!tableInteractionView) {
         return;
@@ -461,7 +482,7 @@ export function createFishMarkMarkdownExtensions(
         });
       }
     },
-    updateCell(position, text) {
+    updateCell(position, text, inputType) {
       if (!tableInteractionView) {
         return;
       }
@@ -477,7 +498,8 @@ export function createFishMarkMarkdownExtensions(
           tableInteractionView,
           createLiveActiveBlockState(tableInteractionView.state),
           position,
-          text
+          text,
+          inputType
         )
       ) {
         focusTableCellEditor(tableInteractionView, position);
@@ -917,7 +939,10 @@ export function createFishMarkMarkdownExtensions(
       this.view.dispatch({
         effects: completion.effects,
         ...(changes.empty ? {} : { changes, selection: finalState.selection,
-          annotations: orderedListNormalizationAnnotation.of(true), userEvent: "input.normalize" }),
+          annotations: [orderedListNormalizationAnnotation.of(true),
+            ...(appliedTable && pendingTable !== null ? [tableCellInput.of({ ...pendingTable.position,
+              userEvent: tableInputUserEvent("insertCompositionText") })] : [])],
+          userEvent: appliedTable ? tableInputUserEvent("insertCompositionText") : "input.normalize" }),
         filter: false
       });
 
@@ -1298,6 +1323,7 @@ export function createFishMarkMarkdownExtensions(
       ];
     }),
     history(),
+    tableHistory,
     keymap.of([
       {
         key: "Mod-Enter",
@@ -1369,6 +1395,9 @@ export function createFishMarkMarkdownExtensions(
       },
       ...groupedShortcutKeymaps.defaultText,
       ...groupedShortcutKeymaps.tableEditing,
+      // The application menu advertises Ctrl+Shift+Z on Windows; CodeMirror's
+      // default history keymap only binds that chord on macOS/Linux.
+      { key: "Ctrl-Shift-z", run: redo, preventDefault: true },
       ...historyKeymap,
       ...defaultKeymap
     ]),
@@ -1426,6 +1455,10 @@ export function createFishMarkMarkdownExtensions(
       recomputeDerivedState(update.view, update.state, {
         reuseMappedDecorations: !update.docChanged && update.selectionSet
       });
+      if (getMarkdownEditorViewMode(update.state) !== "source" &&
+          update.transactions.some(transaction => transaction.isUserEvent("undo") || transaction.isUserEvent("redo"))) {
+        syncTableInteractionFocus(update.view, createLiveActiveBlockState(update.view.state), { force: true });
+      }
     })
   ];
 }

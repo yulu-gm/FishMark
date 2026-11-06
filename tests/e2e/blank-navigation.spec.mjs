@@ -2,7 +2,9 @@ import { writeFile } from "node:fs/promises";
 import { test, expect } from "./product-fixture.mjs";
 
 const source = "1\n\n\n\n2\n\n\n\n3";
-test.beforeEach(() => { test.skip(process.platform !== "win32", "This batch verifies Windows product keyboard navigation."); });
+test.beforeEach(({}, testInfo) => {
+  test.skip(process.platform !== "win32" && !testInfo.title.startsWith("queued edit"), "This batch verifies Windows product keyboard navigation.");
+});
 async function start(product, content, canonical = content) {
   await product.seed(content, 60_000);
   const page = await product.launch(canonical);
@@ -19,6 +21,9 @@ async function start(product, content, canonical = content) {
 
 async function observe(product, page, label, expectedSource, selection) {
   await page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
+  // The renderer can update before its queued edit is acknowledged by main.
+  // Wait for the exact expected canonical content, then keep all DOM/selection checks.
+  await expect.poll(async () => (await product.snapshot(page)).activeDocument?.content).toBe(expectedSource);
   const snapshot = await product.snapshot(page);
   const dom = await page.evaluate(canonical => {
     const content = document.querySelector(".cm-content"), lines = [...content.querySelectorAll(".cm-line")];
@@ -185,4 +190,36 @@ test("long document blank navigation preserves row positions and scroll while tr
     }
   }
   await product.checkpoint("long-blank-scroll-stable"); await product.normalClose();
+});
+
+
+test("queued edit waits for main acknowledgment before observing blank navigation", async ({ product }) => {
+  const page = await start(product, "before");
+  const tabId = (await product.snapshot()).activeTabId;
+  const owner = await product.current.app.browserWindow(page);
+  const webContentsId = await owner.evaluate(window => window.webContents.id);
+  await owner.dispose();
+  await product.current.app.evaluate((_electron, input) => globalThis.__rf902Control.arm(input),
+    { kind: "edit-ack", webContentsId, tabId, clientSequence: 1 });
+  let released = false;
+  try {
+    await page.keyboard.type("A");
+    await expect.poll(() => product.current.app.evaluate(() => globalThis.__rf902Control.read()?.phase)).toBe("held");
+    await page.keyboard.type("B");
+    await expect(page.locator(".cm-content")).toHaveText("ABbefore");
+    expect((await product.snapshot()).activeDocument.content).toBe("Abefore");
+    let settled = false;
+    const observation = observe(product, page, "queued-edit-acknowledged", "ABbefore", { anchor: 2, head: 2 })
+      .then(value => { settled = true; return value; });
+    await page.waitForTimeout(150);
+    expect(settled).toBe(false);
+    await product.current.app.evaluate(() => globalThis.__rf902Control.release());
+    released = true;
+    await observation;
+    await expect.poll(async () => (await product.mainEvidence()).some(event => event.event === "edit:end" && event.detail.clientSequence === 2)).toBe(true);
+    await product.manualSave(); await product.expectSaved("ABbefore");
+    await product.normalClose();
+  } finally {
+    if (!released) await product.current.app.evaluate(() => globalThis.__rf902Control.release());
+  }
 });

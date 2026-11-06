@@ -5191,7 +5191,7 @@ describe("App autosave", () => {
     expect(statusBarGeometryGuardRule).toContain("position: fixed !important;");
     expect(statusBarGeometryGuardRule).toContain("left: var(--fishmark-status-bar-left) !important;");
     expect(statusBarGeometryGuardRule).toContain("right: var(--fishmark-status-bar-right) !important;");
-    expect(statusBarGeometryGuardRule).toContain("bottom: calc(var(--fishmark-space-3) + env(safe-area-inset-bottom)) !important;");
+    expect(statusBarGeometryGuardRule).toContain("bottom: calc(2px + env(safe-area-inset-bottom)) !important;");
     expect(statusBarGeometryGuardRule).toContain("min-height: var(--fishmark-status-bar-height) !important;");
     expect(statusBarGeometryGuardRule).toContain("padding: 0 var(--fishmark-status-bar-inline-padding) !important;");
     expect(statusBarGeometryGuardRule).toContain("z-index: var(--fishmark-z-overlay) !important;");
@@ -5770,9 +5770,9 @@ describe("App autosave", () => {
     expect(editorStylesheet).toContain(".document-editor .cm-content");
     expect(editorContentRule).toContain("width: 100%;");
     expect(editorContentRule).toContain("box-sizing: border-box;");
-    expect(editorContentRule).toContain("--fishmark-document-padding-inline: max(var(--fishmark-document-gutter), 6rem);");
+    expect(editorContentRule).toContain("--fishmark-document-padding-inline: max(var(--fishmark-document-gutter), 3rem);");
     expect(editorStylesheet).not.toContain("--fishmark-document-measure");
-    expect(editorContentRule).toContain("padding: 40px var(--fishmark-document-padding-inline) 56px;");
+    expect(editorContentRule).toContain("padding: 24px var(--fishmark-document-padding-inline) 40px;");
     expect(editorContentRule).not.toContain("12vw");
     expect(editorContentRule).not.toContain("max-width: 72ch;");
   });

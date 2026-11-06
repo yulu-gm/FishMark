@@ -40,6 +40,8 @@ export type CodeEditorHandle = {
   setDocumentPath: (documentPath: string | null) => void;
   setViewMode: (viewMode: EditorViewMode) => void;
   focus: () => void;
+  runHistory: (direction: "undo" | "redo") => boolean;
+  runSelectAll: () => boolean;
   navigateToOffset: (offset: number) => void;
   insertText: (text: string) => void;
   setSelection: (anchor: number, head?: number) => void;
@@ -379,6 +381,8 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
         setViewMode: (nextViewMode: EditorViewMode) => {
           controllerRef.current?.setViewMode(nextViewMode);
         },
+        runSelectAll: () => controllerRef.current?.runSelectAll() ?? false,
+        runHistory: direction => controllerRef.current?.runHistory(direction) ?? false,
         focus: () => {
           controllerRef.current?.focus();
         },

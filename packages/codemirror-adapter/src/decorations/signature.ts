@@ -157,7 +157,7 @@ function createInlineFingerprint(node: InlineASTNode): string {
       )}:${JSON.stringify(node.href)}:${JSON.stringify(node.title)}:${offsetRange(
         node.destinationStartOffset,
         node.destinationEndOffset
-      )}:${node.children.map((child) => createInlineFingerprint(child)).join(",")})`;
+      )}:${node.type === "image" ? JSON.stringify(node.html ?? null) : ""}:${node.children.map((child) => createInlineFingerprint(child)).join(",")})`;
   }
 }
 

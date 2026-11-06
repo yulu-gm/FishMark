@@ -1,4 +1,7 @@
-import { type Range } from "@codemirror/state";
+import { Transaction, type Range } from "@codemirror/state";
+import { isolateHistory } from "@codemirror/commands";
+import { resizeImageSource } from "./image-resize";
+import { closeImageResizeMenu, showImageResizeMenu } from "./image-resize-menu";
 import { Decoration, EditorView, WidgetType } from "@codemirror/view";
 
 import { requestMountedWidgetMeasurement } from "./widget-lifecycle";
@@ -23,6 +26,9 @@ class MarkdownImagePreviewWidget extends WidgetType {
   readonly mode: ImagePreviewMode;
   readonly presentation: ImagePresentation;
   readonly sourceOffset: number;
+  readonly sourceEnd: number;
+  readonly kind: "markdown" | "html";
+  readonly title: string | null;
 
   constructor(input: {
     alt: string;
@@ -31,6 +37,9 @@ class MarkdownImagePreviewWidget extends WidgetType {
     mode: ImagePreviewMode;
     presentation?: ImagePresentation;
     sourceOffset: number;
+    sourceEnd: number;
+    kind: "markdown" | "html";
+    title: string | null;
   }) {
     super();
     this.alt = input.alt;
@@ -39,6 +48,9 @@ class MarkdownImagePreviewWidget extends WidgetType {
     this.mode = input.mode;
     this.presentation = input.presentation ?? {};
     this.sourceOffset = input.sourceOffset;
+    this.sourceEnd = input.sourceEnd;
+    this.kind = input.kind;
+    this.title = input.title;
   }
 
   override eq(other: MarkdownImagePreviewWidget): boolean {
@@ -51,7 +63,8 @@ class MarkdownImagePreviewWidget extends WidgetType {
       this.presentation.height === other.presentation.height &&
       this.presentation.zoom === other.presentation.zoom &&
       this.presentation.align === other.presentation.align &&
-      this.sourceOffset === other.sourceOffset
+      this.sourceOffset === other.sourceOffset && this.sourceEnd === other.sourceEnd &&
+      this.kind === other.kind && this.title === other.title
     );
   }
 
@@ -60,7 +73,13 @@ class MarkdownImagePreviewWidget extends WidgetType {
     container.className = "cm-markdown-image-preview";
     container.dataset.imagePreviewMode = this.mode;
     container.dataset.imageAlign = this.presentation.align ?? "center";
+    if (this.mode === "inactive") {
+      const line = view.state.doc.lineAt(this.sourceOffset);
+      if (this.sourceEnd <= line.to && (view.state.doc.sliceString(line.from, this.sourceOffset).trim() ||
+          view.state.doc.sliceString(this.sourceEnd, line.to).trim())) container.dataset.imageInline = "true";
+    }
     container.addEventListener("mousedown", (event) => {
+      if ((event as MouseEvent).button !== 0) return;
       event.preventDefault();
       event.stopPropagation();
       const selection = {
@@ -88,12 +107,89 @@ class MarkdownImagePreviewWidget extends WidgetType {
       image.className = "cm-markdown-image-preview-image";
       image.setAttribute("src", this.resolvedUrl);
       image.setAttribute("alt", this.alt || "Markdown image");
+      if (this.title !== null) image.setAttribute("title", this.title);
       applyImagePresentation(image, this.presentation);
       // A decoded image changes the widget's height, so CodeMirror has to re-measure it. The guard
       // skips the request when the preview was already replaced or scrolled away.
       image.addEventListener("load", () => requestMountedWidgetMeasurement(view, container), { once: true });
       image.addEventListener("error", () => requestMountedWidgetMeasurement(view, container), { once: true });
-      container.appendChild(image);
+      const frame = document.createElement("span");
+      frame.className = "cm-markdown-image-resize-frame";
+      frame.appendChild(image);
+      const candidate = (width: number, source: string) => resizeImageSource({ source, from: this.sourceOffset, to: this.sourceEnd,
+        kind: this.kind, href: this.href, alt: this.alt, title: this.title, width });
+      const commit = (width: number, source: string) => {
+        const replacement = candidate(width, source);
+        if (replacement === null || view.state.readOnly || view.state.doc.toString() !== source) return;
+        // Separate transactions keep boundaries even if selection normalization rewrites the edit.
+        view.dispatch({ annotations: isolateHistory.of("full") });
+        view.dispatch({ changes: { from: this.sourceOffset, to: this.sourceEnd, insert: replacement },
+          annotations: Transaction.userEvent.of("input.image.resize") });
+        view.dispatch({ annotations: isolateHistory.of("full") });
+      };
+      image.addEventListener("contextmenu", event => {
+        // Do not let unsupported images trigger the editor's paste-on-context-menu handler.
+        event.preventDefault(); event.stopPropagation();
+        const source = view.state.doc.toString();
+        if (view.state.readOnly || !image.naturalWidth || candidate(100, source) === null) return;
+        showImageResizeMenu(container, event.clientX, event.clientY, scale => commit(image.naturalWidth * scale, source));
+      });
+      if (candidate(100, view.state.doc.toString()) !== null) {
+        const handle = document.createElement("button");
+        handle.type = "button";
+        handle.className = "cm-markdown-image-resize-handle";
+        handle.setAttribute("aria-label", "Resize image");
+        handle.addEventListener("keydown", event => {
+          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+          if (view.state.readOnly || !image.naturalWidth) return;
+          event.preventDefault(); event.stopPropagation();
+          const current = image.getBoundingClientRect().width;
+          const next = Math.max(24, Math.min(container.getBoundingClientRect().width,
+            current + (event.key === "ArrowRight" ? 10 : -10)));
+          if (Math.abs(next - current) >= 1) commit(next, view.state.doc.toString());
+        });
+        handle.addEventListener("mousedown", event => { event.preventDefault(); event.stopPropagation(); });
+        handle.addEventListener("pointerdown", event => {
+          if (event.button !== 0 || view.state.readOnly || !image.naturalWidth) return;
+          event.preventDefault(); event.stopPropagation();
+          const source = view.state.doc.toString();
+          if (candidate(100, source) === null) return;
+          const startX = event.clientX;
+          const startWidth = image.getBoundingClientRect().width;
+          const maxWidth = container.getBoundingClientRect().width;
+          const originalStyle = image.getAttribute("style");
+          let width = startWidth;
+          const cleanup = () => {
+            window.removeEventListener("pointermove", move);
+            window.removeEventListener("pointerup", finish);
+            window.removeEventListener("pointercancel", cancel);
+            window.removeEventListener("keydown", keydown);
+            if (originalStyle === null) image.removeAttribute("style"); else image.setAttribute("style", originalStyle);
+            requestMountedWidgetMeasurement(view, container);
+          };
+          const move = (e: PointerEvent) => {
+            if (e.pointerId !== event.pointerId) return;
+            width = Math.max(24, Math.min(maxWidth, startWidth + (e.clientX - startX) * 2));
+            image.style.width = `${width}px`;
+            image.style.height = "auto";
+            image.style.zoom = "1";
+            requestMountedWidgetMeasurement(view, container);
+          };
+          const cancel = (e: PointerEvent) => { if (e.pointerId === event.pointerId) cleanup(); };
+          const keydown = (e: KeyboardEvent) => { if (e.key === "Escape") cleanup(); };
+          const finish = (e: PointerEvent) => {
+            if (e.pointerId !== event.pointerId) return;
+            cleanup();
+            if (Math.abs(width - startWidth) >= 1) commit(width, source);
+          };
+          window.addEventListener("pointermove", move);
+          window.addEventListener("pointerup", finish);
+          window.addEventListener("pointercancel", cancel);
+          window.addEventListener("keydown", keydown);
+        });
+        frame.appendChild(handle);
+      }
+      container.appendChild(frame);
       return container;
     }
 
@@ -102,6 +198,10 @@ class MarkdownImagePreviewWidget extends WidgetType {
     fallback.textContent = this.href ?? this.alt ?? "Image preview unavailable";
     container.appendChild(fallback);
     return container;
+  }
+
+  override destroy(dom: HTMLElement): void {
+    closeImageResizeMenu(dom);
   }
 
   override ignoreEvent(): boolean {
@@ -115,11 +215,12 @@ export function createInactiveImagePreviewDecoration(
 ): Range<Decoration> {
   return Decoration.replace({
     widget: new MarkdownImagePreviewWidget({
-      alt: readInlineText(node.children),
+      alt: node.html?.alt ?? readInlineText(node.children),
       href: node.href,
       resolvedUrl: resolveImagePreviewUrl?.(node.href) ?? null,
       mode: "inactive",
-      sourceOffset: node.startOffset
+      presentation: node.html,
+      sourceOffset: node.startOffset, sourceEnd: node.endOffset, kind: node.html ? "html" : "markdown", title: node.title
     })
   }).range(node.startOffset, node.endOffset);
 }
@@ -141,7 +242,7 @@ export function createInactiveHtmlImagePreviewDecoration(
         zoom: block.zoom,
         align: block.align
       },
-      sourceOffset: block.startOffset
+      sourceOffset: block.startOffset, sourceEnd: block.endOffset, kind: "html", title: block.title
     })
   }).range(block.startOffset, block.endOffset);
 }
@@ -179,7 +280,7 @@ export function createActiveHtmlImagePreviewDecoration(
         zoom: block.zoom,
         align: block.align
       },
-      sourceOffset: block.startOffset
+      sourceOffset: block.startOffset, sourceEnd: block.endOffset, kind: "html", title: block.title
     })
   }).range(findLineEnd(source, block.endOffset));
 }
@@ -210,11 +311,12 @@ function appendActiveInlineImageDecorations(
           block: true,
           side: 1,
           widget: new MarkdownImagePreviewWidget({
-            alt: readInlineText(node.children),
+            alt: node.html?.alt ?? readInlineText(node.children),
             href: node.href,
             resolvedUrl: resolveImagePreviewUrl?.(node.href) ?? null,
             mode: "active",
-            sourceOffset: node.startOffset
+            presentation: node.html,
+            sourceOffset: node.startOffset, sourceEnd: node.endOffset, kind: node.html ? "html" : "markdown", title: node.title
           })
         }).range(findLineEnd(source, node.endOffset))
       );

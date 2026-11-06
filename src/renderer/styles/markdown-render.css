@@ -46,9 +46,9 @@
   --fishmark-table-after-break-margin-top: 0.14rem;
   --fishmark-table-border-width: 1px;
   --fishmark-table-cell-border-width: 1px;
-  --fishmark-table-cell-min-height: 42px;
-  --fishmark-table-cell-padding-block: 10px;
-  --fishmark-table-cell-padding-inline: 12px;
+  --fishmark-table-cell-min-height: 34px;
+  --fishmark-table-cell-padding-block: 5px;
+  --fishmark-table-cell-padding-inline: 8px;
   --fishmark-table-header-font-weight: 620;
 }
 
@@ -1252,7 +1252,7 @@
 
 .document-editor th,
 .document-editor td {
-  padding: 0.55rem 0.75rem;
+  padding: 0.3rem 0.5rem;
   border: 1px solid var(--fishmark-markdown-table-border, rgba(15, 23, 42, 0.12));
 }
 
@@ -1294,4 +1294,71 @@
 .document-editor .cm-inactive-code-block .tok-typeName,
 .document-editor .cm-inactive-code-block .cm-typeName {
   color: var(--fishmark-markdown-code-token-type, #be185d);
+}
+
+.document-editor .cm-markdown-image-resize-frame {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+}
+
+.document-editor .cm-markdown-image-resize-handle {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 2px solid white;
+  border-radius: 50%;
+  background: #3979d5;
+  cursor: nwse-resize;
+  opacity: 0;
+}
+
+.document-editor .cm-markdown-image-resize-frame:hover .cm-markdown-image-resize-handle,
+.document-editor .cm-markdown-image-resize-handle:focus-visible {
+  opacity: 1;
+}
+
+.document-editor .cm-editor:has(.cm-content[contenteditable="false"]) .cm-markdown-image-resize-handle {
+  display: none;
+}
+
+.document-editor .cm-image-resize-menu {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  min-width: 120px;
+  padding: 4px;
+  border: 1px solid var(--fishmark-markdown-table-border, #c8c8c8);
+  border-radius: 6px;
+  background: var(--fishmark-ui-surface-bg, var(--fishmark-workspace-bg, #fff));
+  color: var(--fishmark-text-primary, #171a1f);
+  box-shadow: 0 4px 18px #0003;
+}
+
+.document-editor .cm-image-resize-menu button {
+  border: 0;
+  border-radius: 3px;
+  padding: 6px 10px;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.document-editor .cm-image-resize-menu button:hover,
+.document-editor .cm-image-resize-menu button:focus-visible {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  outline: none;
+}
+
+.document-editor .cm-markdown-image-preview[data-image-inline="true"] {
+  display: inline-flex;
+  width: auto;
+  max-width: 100%;
+  margin: 0;
+  vertical-align: baseline;
 }

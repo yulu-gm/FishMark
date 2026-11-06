@@ -14,8 +14,7 @@ import {
 } from "../transactions/edit-transaction-plan";
 import { lineContainerChain } from "./line-structure";
 
-// Table operations run against the canonical table node, rebuild the canonical spelling, and
-// replace exactly the table's source range. Selection-only moves never rewrite the document.
+// Structural operations rebuild the table; ordinary cell input edits only that cell's source.
 export type TablePlanKind =
   | "cell-move"
   | "row-insert"
@@ -217,6 +216,56 @@ export function planTableUpdateCell(
     return null;
   }
 
+  const data = snapshot.node.data;
+  if (data.kind !== "table") return null;
+  const cells = target.row === 0 ? data.header : data.rows[target.row - (snapshot.hasHeader ? 1 : 0)];
+  const cell = cells?.[target.column];
+  const previous = cells?.[target.column - 1];
+  if (cells === undefined || cell === undefined) return null;
+
+  // Missing cells have no source range. Append only the separators needed to
+  // reach this cell; rewriting the table would also rewrite unrelated escapes.
+  if (cell.source.startOffset === cell.source.endOffset && previous?.source.endOffset === cell.source.startOffset) {
+    const firstMissing = cells.findIndex((candidate, index) => index > 0 &&
+      candidate.source.startOffset === candidate.source.endOffset &&
+      cells[index - 1]!.source.endOffset === candidate.source.startOffset);
+    const end = cells[firstMissing - 1]!.source.endOffset;
+    const hasClosingPipe = context.source[end] === "|";
+    const from = end + (hasClosingPipe ? 1 : 0);
+    const prefix = (hasClosingPipe ? " " : " | ") + " | ".repeat(target.column - firstMissing);
+    const nextText = text.trim();
+    const insert = prefix + nextText.replace(/\|/gu, "\\|") + (hasClosingPipe ? " |" : "");
+    const offset = Math.max(0, Math.min(target.offsetInCell ?? 0, nextText.length));
+    const anchor = from + prefix.length + nextText.slice(0, offset).replace(/\|/gu, "\\|").length;
+    return createEditTransactionPlan({ context, commandId: "table-edit", intent: "edit",
+      edits: nextText === "" ? [] : [{ from, to: from, insert }],
+      selection: nextText === "" ? { anchor: end, head: end } : { anchor, head: anchor } });
+  }
+  {
+    const raw = context.source.slice(cell.content.startOffset, cell.content.endOffset);
+    const contentStart = cell.text === "" && cell.source.endOffset > cell.source.startOffset
+      ? cell.source.startOffset + Math.ceil((cell.source.endOffset - cell.source.startOffset) / 2)
+      : cell.content.startOffset;
+    const offsets = decodedCellOffsets(raw);
+    const nextText = text.trim();
+    if (offsets.text === cell.text) {
+      let start = 0;
+      while (start < cell.text.length && start < nextText.length && cell.text[start] === nextText[start]) start++;
+      let end = 0;
+      while (end < cell.text.length - start && end < nextText.length - start &&
+        cell.text[cell.text.length - 1 - end] === nextText[nextText.length - 1 - end]) end++;
+      const insert = nextText.slice(start, nextText.length - end).replace(/\|/gu, "\\|");
+      const from = contentStart + offsets.raw[start]!;
+      const to = contentStart + offsets.raw[cell.text.length - end]!;
+      const nextRaw = raw.slice(0, offsets.raw[start]) + insert + raw.slice(offsets.raw[cell.text.length - end]);
+      const nextOffsets = decodedCellOffsets(nextRaw);
+      const offset = Math.max(0, Math.min(target.offsetInCell ?? 0, nextOffsets.text.length));
+      const anchor = contentStart + nextOffsets.raw[offset]!;
+      return createEditTransactionPlan({ context, commandId: "table-edit", intent: "edit",
+        edits: [{ from, to, insert }], selection: { anchor, head: anchor } });
+    }
+  }
+
   const header = [...snapshot.header];
   const rows = snapshot.rows.map((row) => [...row]);
 
@@ -233,6 +282,19 @@ export function planTableUpdateCell(
   }
 
   return replaceTable(context, snapshot, { header, rows }, target, "cell-update").plan;
+}
+
+// Table parsing decodes escaped pipes while retaining all other source bytes.
+// Map the visible text offsets back to source so unchanged escapes survive input and undo.
+function decodedCellOffsets(raw: string): { text: string; raw: number[] } {
+  let text = "";
+  const offsets = [0];
+  for (let i = 0; i < raw.length; i++) {
+    if (raw[i] === "\\" && raw[i + 1] === "|") i++;
+    text += raw[i];
+    offsets.push(i + 1);
+  }
+  return { text, raw: offsets };
 }
 
 // Enter at the table boundary leaves the table: the caret moves outside it, and at the end of the

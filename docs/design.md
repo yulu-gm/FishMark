@@ -34,6 +34,8 @@ MVP 应当像一个原生桌面写作工具：
 
 生产编辑命令已经由 `@fishmark/editor-model` 的纯语义计划统一决定，`@fishmark/codemirror-adapter` 负责 CodeMirror 事务、选择映射、IME/history、decorations、widgets 与浏览器交互。每个 view 的结构缓存与本地 revision 由 adapter 的 StateField 管理；切换文档或重新加载会重建 session generation，旧计划不能修改新文档。renderer 既有 update listener 仍是文档 change frame 的唯一宿主，不建立第二套发送队列。
 
+表格历史（2026-11-05）：contenteditable 继续处理普通输入与 IME，但快捷键、beforeinput 历史命令和 Edit 菜单统一调用 CodeMirror 的文档撤销/重做。连续同单元格输入按原生编辑事务分组，切换单元格或输入类型时分隔；缺失单元格只插入必要分隔符，与首次文字同属一个事务，保留原行其他字节。单元格语义选择由可逆 StateEffect 保存，避免多个缺失格共享源码偏移时恢复错误焦点。不维护第二份 Markdown 历史，不根据空值推断撤销步骤。菜单在搜索、设置输入框等文档外控件仍调用其浏览器编辑历史。表格内全选保留当前单元格的焦点与选区，文档外表单仍使用浏览器全选。
+
 M6 / M6.5 已于 2026-09-20 收口：`packages/editor-core/` 已删除，architecture guard 为 7 包 / 13 规则 / `exceptions: []`；canonical snapshot 与共享 render plan 已成为编辑显示主路径，嵌套 list/blockquote 中的 heading、code fence、table、math/Mermaid 等叶子复用同一语义结构。该阶段左侧壳层采用常驻 rail + Search/Outline 共用的 docked sidebar，正文曾采用固定 measure。后续正文已改为按 document stage 自适应，当前布局基线见第10节。
 
 M7 已于 2026-09-22 收口：HTML export 经 `markdown-presentation` 消费 canonical render plan，Outline 与 document metrics 统一消费同一 `EditorDerivedSnapshot` / revision，renderer 不再为这些消费者维护独立 Markdown parser。当前重构剩余重点转为应用组合层与产品级收尾：RF-506/M5 已按原 bundle 预算收口；M8 的 RF-801 已完成非 React 命令与订阅层，RF-802/803 继续清理 React/main/preload 组合层，M9 完成更广泛的性能、真实 Electron E2E 与安全门禁，M10 做兼容/死代码清理和最终验收。
@@ -167,6 +169,8 @@ P2：
 - sidebar 是平面的 docked panel，而不是悬浮玻璃卡片：外层无圆角、阴影或 backdrop blur，与正文之间用单一 1px divider 区分；内部输入框、按钮、outline hover/active 可保留轻微圆角表达交互层级。
 - sidebar 宽度拖拽只在 pointerup 时写入全局偏好；拖动过程实时更新 CSS 变量，收起不写 0，窄窗口 clamp 仅影响显示、不覆盖用户保存的宽度。
 - 正文填充 document stage 的可用宽度，保留阅读边距；窗口或侧栏可用空间变化时允许自然换行。源码/WYSIWYM 切换仍保留；标题渐进呈现独立于壳层布局，保持初始 reading、实际输入后 editing 的既有标记与焦点语义，inline/block 隐藏与揭示规则不变。主题 ABI 保留 readingMode 字段，产品固定提供 0。
+- 工作区与编辑器滚动条贴近窗口边缘；状态栏靠近底边并保留安全区，rail 保留完整按钮和焦点轮廓。正文保留阅读边距，表格采用较紧凑的单元格内边距。
+- 普通表格单元格输入只修改对应源码，保留其余单元格和分隔行；行列结构操作仍可重建表格。缺失源码的隐式单元格目前仍需结构化物化。
 - sidebar 开合恢复 220ms grid track 动画，使 document stage 平滑水平移动；sidebar 内部 header/body 始终按最终宽度排版，由外层 overflow 裁剪并配合淡入/轻位移，因此 Outline 长标题不会在 0→目标宽度期间反复 reflow。
 - Search 的查询真值仍是 CodeMirror search state；`Ctrl/Cmd+F` 打开并聚焦 Search，已打开时重复快捷键只重新聚焦而不关闭；切换文档 identity 时清掉旧 query/snapshot，避免跨 tab 显示陈旧结果。
 - 设置继续使用独立 overlay/drawer，不参与 sidebar 的共享宽度模型。
@@ -222,3 +226,7 @@ main 组合已有 workspace/domain、磁盘、偏好、主题、更新与测试�
 原 `register-workspace-handlers.ts` 保持不变。其外部 edit registrar 将 invocation 的 frame/runtime 检查作为 sender identity 携带，原 queued authorization、held-tab close lease、执行前/ACK/projection 前校验继续运行。workspace move/reload/save/close 的 owner/CAS/lease 仍由原 application 负责，没有新队列或 Markdown owner。
 
 preload 只构造原 product API，并仅在 main 明确传入且无歧义的 editor-test/test-workbench bridge mode 下构造/暴露独立 test API；仅 runtime label、缺失/非法/重复 bridge 参数都降为 product。main 对每个窗口明确传入 product 或 test bridge mode。packaged main 固定 product/editor；test handlers 仅 dev test-workbench 初始化，scenario 管理仅 workbench 可调用，completion 仅绑定该 session 的 editor-test webContents 可调用。此为 RF-803 transport 边界，不宣称 M9 CSP、资源根或 OS sandbox 验收。
+
+### 图片尺寸调整
+
+编辑状态中，可安全转换的独立或行内 Markdown 图片及受支持的 HTML 图片显示缩放手柄。拖拽时保持比例并即时预览，松手后将像素宽度写入 HTML `<img>`，一次操作对应一次撤销；只读状态不允许修改。窄窗口通过最大宽度约束显示，不覆盖已保存尺寸。方向键可调整聚焦的手柄，Escape 可取消拖拽；右键菜单按原图自然宽度提供 25%、50%、75%、100%，与拖拽共享撤销和持久化逻辑。普通 Markdown 图片转换时保留图片目标、纯文本 alt 和标题；引用式、复杂转义及无法安全改写的 HTML 暂不提供手柄，以免破坏源码语义。HTML 改写时保留非尺寸属性和可安全解析的其他样式，移除旧宽高和 zoom。Typora 官方资料确认图片右键菜单及 HTML 尺寸、zoom，但未确认菜单内缩放选项或拖拽交互；本交互为 FishMark 设计。

@@ -27,8 +27,9 @@ type TablePosition = {
 const TABLE_SOURCE = ["| name | qty |", "| --- | ---: |", "| pen | 2 |"].join("\n");
 
 type PositionCallback = (position: TablePosition, options?: { restoreDomFocus?: boolean }) => void;
-type UpdateCallback = (position: TablePosition, text: string) => void;
+type UpdateCallback = (position: TablePosition, text: string, inputType?: string) => void;
 type CallbackSpies = {
+  readonly history: MockedFunction<(direction: "undo" | "redo") => void>;
   readonly selectCell: MockedFunction<PositionCallback>;
   readonly updateCell: MockedFunction<UpdateCallback>;
   readonly moveToNextCell: MockedFunction<PositionCallback>;
@@ -45,6 +46,7 @@ type CallbackSpies = {
 // through without a cast: the test and the widget share one contract.
 function createCallbackSpies(): CallbackSpies {
   return {
+    history: vi.fn(),
     selectCell: vi.fn<PositionCallback>(),
     updateCell: vi.fn<UpdateCallback>(),
     moveToNextCell: vi.fn<PositionCallback>(),
@@ -307,46 +309,56 @@ describe("table cell native history DOM", () => {
     expect(editor.firstChild).not.toBe(original);
   });
 
-  it("restores the native target's original nodes before history input while another cell is active", () => {
-    const spies = createCallbackSpies();
-    const { dom } = createWidget(spies);
-    document.body.appendChild(dom);
-    const editor = readCell(dom, 1, 0), original = editor.firstChild!;
-    createWidget(spies, { activePosition: { row: 1, column: 1 } }).widget.updateDOM(dom);
-    editor.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, inputType: "historyUndo" }));
-    expect(editor.firstChild).toBe(original);
-    original.textContent = "pencil";
-    editor.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "historyUndo" }));
-    expect(spies.updateCell.mock.calls[0]?.[1]).toBe("pencil");
+  it.each(["metaKey", "ctrlKey"])("selects only the focused cell via %s+A", modifier => {
+    const spies = createCallbackSpies(), { dom } = createWidget(spies);
+    document.body.append(dom);
+    const editor = readCell(dom, 1, 0);
+    editor.focus();
+    const event = new KeyboardEvent("keydown", { key: "a", [modifier]: true, bubbles: true, cancelable: true });
+    editor.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(editor);
+    expect(document.getSelection()?.toString()).toBe("pen");
+    expect(spies.updateCell).not.toHaveBeenCalled();
+    dom.remove();
   });
 
-  it("retains rich inactive preview and its parked nodes when native history changes nothing", () => {
+  it.each([
+    [{ key: "z", metaKey: true }, "undo"],
+    [{ key: "z", ctrlKey: true }, "undo"],
+    [{ key: "z", metaKey: true, shiftKey: true }, "redo"],
+    [{ key: "y", ctrlKey: true }, "redo"]
+  ] as const)("routes history shortcuts to the document once: %j", (init, direction) => {
+    const spies = createCallbackSpies(), { dom } = createWidget(spies);
+    document.body.append(dom);
+    const editor = readCell(dom, 1, 0);
+    const event = new KeyboardEvent("keydown", { ...init, bubbles: true, cancelable: true });
+    editor.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(spies.history).toHaveBeenCalledExactlyOnceWith(direction);
+    spies.history.mockClear();
+    editor.dispatchEvent(new KeyboardEvent("keydown", { ...init, isComposing: true, bubbles: true }));
+    expect(spies.history).not.toHaveBeenCalled();
+    dom.remove();
+    editor.dispatchEvent(new KeyboardEvent("keydown", { ...init, bubbles: true }));
+    expect(spies.history).not.toHaveBeenCalled();
+  });
+
+  it.each(["historyUndo", "historyRedo"])("routes %s to document history without mutating inactive preview", (inputType) => {
     const source = TABLE_SOURCE.replace("pen", "**中文**"), spies = createCallbackSpies();
     const { dom } = createWidget(spies, { source, block: parseTableBlock(source) });
     document.body.appendChild(dom);
-    const editor = readCell(dom, 1, 0), original = editor.firstChild;
+    const editor = readCell(dom, 1, 0);
     createWidget(spies, { source, block: parseTableBlock(source), activePosition: { row: 1, column: 1 } }).widget.updateDOM(dom);
     const preview = editor.querySelector(".cm-inactive-inline-strong");
-    editor.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, inputType: "historyUndo" }));
-    editor.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "historyUndo" }));
+    const event = new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType });
+    editor.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(spies.history).toHaveBeenCalledWith(inputType === "historyUndo" ? "undo" : "redo");
     expect(spies.updateCell).not.toHaveBeenCalled();
     expect(editor.querySelector(".cm-inactive-inline-strong")).toBe(preview);
-    createWidget(spies, { source, block: parseTableBlock(source) }).widget.updateDOM(dom);
-    expect(editor.firstChild).toBe(original);
   });
 
-  it.each(["historyUndo", "historyRedo"])("does not commit unchanged %s input, but commits actual text restoration", (inputType) => {
-    const spies = createCallbackSpies();
-    const { dom } = createWidget(spies);
-    document.body.appendChild(dom);
-    const editor = readCell(dom, 1, 0);
-    editor.dispatchEvent(new InputEvent("input", { bubbles: true, inputType }));
-    expect(spies.updateCell).not.toHaveBeenCalled();
-    editor.textContent = "pencil";
-    editor.dispatchEvent(new InputEvent("input", { bubbles: true, inputType }));
-    expect(spies.updateCell).toHaveBeenCalledTimes(1);
-    expect(spies.updateCell.mock.calls[0]?.[1]).toBe("pencil");
-  });
 });
 
 describe("table widget cell dispatch ownership", () => {
@@ -404,7 +416,8 @@ describe("table widget cell dispatch ownership", () => {
         tableStartOffset: 0,
         offsetInCell: "pen".length
       },
-      "pen"
+      "pen",
+      "insertCompositionText"
     );
   });
 
@@ -507,7 +520,8 @@ describe("table widget cell dispatch ownership", () => {
         tableStartOffset: 0,
         offsetInCell: "pen".length
       },
-      "pen"
+      "pen",
+      "insertCompositionText"
     );
   });
 

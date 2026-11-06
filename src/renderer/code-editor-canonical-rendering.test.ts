@@ -132,3 +132,25 @@ describe("canonical nested rendering through the production editor", () => {
     expect(controller.getContent()).toBe(source);
   });
 });
+
+it("renders a sized inline HTML image without losing neighboring text", () => {
+  const source = 'before <img src="https://example.com/a.png" alt="alt" title="caption" width="120" /> after\n\nEnd';
+  const { host, controller } = create(source);
+  controller.setSelection(source.length);
+  const image = host.querySelector<HTMLImageElement>(".cm-markdown-image-preview-image");
+  expect(image?.getAttribute("src")).toBe("https://example.com/a.png");
+  expect(image?.getAttribute("title")).toBe("caption");
+  expect(image?.style.width).toBe("120px");
+  expect(image?.closest(".cm-markdown-image-preview")?.getAttribute("data-image-inline")).toBe("true");
+  expect(host.textContent).toContain("before");
+  expect(host.textContent).toContain("after");
+  expect(controller.getContent()).toBe(source);
+});
+
+it("offers resizing for a direct image inside text", () => {
+  const source = 'Before ![alt](https://example.com/a.png "caption") after\n\nEnd';
+  const { host, controller } = create(source);
+  expect(host.querySelector(".cm-markdown-image-resize-handle")).not.toBeNull();
+  controller.setSelection(source.length);
+  expect(host.querySelector(".cm-markdown-image-resize-handle")).not.toBeNull();
+});
