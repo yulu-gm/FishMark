@@ -966,3 +966,9 @@ RF-801 已达到 COMPLETE，M8 为 **1/3**；RF-802、RF-803 与 M9 保持后续
 - 版本候选 4.1.0：build、lint、typecheck 通过；`npm run test:regression` 为 4052 项通过，8 项精确匹配的既存解析器失败，无新增失败。
 - macOS 隔离 Electron 产品测试 19 项全部通过：独立和行内图片的右键、撤销重做、保存与关闭标签重开，引用式图片原文保护；明暗紧凑布局、阅读布局、显式退出、表格单元格和缺失单元格历史。图片拖拽、取消及只读另由隐藏 Electron 测试覆盖。
 - 完整 Windows 产品测试、物理设备及跨显示器 DPI 尚未验证；引用式图片和复杂转义或样式的缩放不支持。Typora 图片菜单中的具体缩放交互未实机核实。
+
+### Windows CI follow-up
+
+- Initial 4.1.0 CI: Windows product E2E failed 4/76: Ctrl+Shift+Z did not redo source-mode image or table edits, and the compact layout made a minimum-width table exceed an obsolete fixed 700px width threshold. Other CI jobs passed.
+- Added the application-menu redo chord to the editor keymap; updated the geometry test to check actual scroller containment, wrapped cell content, and stable remount dimensions instead of fixed pre-layout pixel thresholds. The viewport test now uses platform-specific navigation and undo shortcuts.
+- Local macOS validation: 320 editor tests and 16 product tests passed, including the real Ctrl+Shift+Z chord, image save/reopen, viewport remount, and table history. Full regression gate: 4053 passed, 8 exact known parser failures, no new failures. Windows CI must be rerun before release.

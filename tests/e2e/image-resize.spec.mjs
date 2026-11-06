@@ -25,6 +25,13 @@ test("image context resize survives undo, redo, real save and reopen", async ({ 
   await expect.poll(async () => (await product.snapshot()).activeDocument.content).toBe(initial);
   await page.keyboard.press(process.platform === "darwin" ? "Meta+Shift+z" : "Control+Shift+z");
   await expect.poll(async () => (await product.snapshot()).activeDocument.content).toBe(resized);
+  // Also exercise the Windows-advertised chord in a real renderer on macOS.
+  if (process.platform === "darwin") {
+    await page.keyboard.press("Meta+z");
+    await expect.poll(async () => (await product.snapshot()).activeDocument.content).toBe(initial);
+    await page.keyboard.press("Control+Shift+z");
+    await expect.poll(async () => (await product.snapshot()).activeDocument.content).toBe(resized);
+  }
   await product.manualSave();
   await product.expectSaved(resized);
   const oldTab = (await product.snapshot()).activeTabId;

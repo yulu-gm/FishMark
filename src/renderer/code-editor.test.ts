@@ -10413,3 +10413,17 @@ describe("canonical decoration cache invalidation", () => {
     } finally { p.destroy(); }
   });
 });
+
+it("redoes source-mode edits with the advertised Ctrl+Shift+Z chord", () => {
+  const host = document.createElement("div"); document.body.append(host);
+  const controller = createCodeEditorController({ parent: host, initialContent: "before", onChange: vi.fn(), viewMode: "source" });
+  try {
+    controller.setSelection(6); controller.insertText("!");
+    const view = getEditorView(host)!;
+    expect(undo(view)).toBe(true);
+    const event = new KeyboardEvent("keydown", { key: "Z", code: "KeyZ", keyCode: 90, ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true });
+    view.contentDOM.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(controller.getContent()).toBe("before!");
+  } finally { controller.destroy(); host.remove(); }
+});

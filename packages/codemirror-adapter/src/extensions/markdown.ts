@@ -1395,6 +1395,9 @@ export function createFishMarkMarkdownExtensions(
       },
       ...groupedShortcutKeymaps.defaultText,
       ...groupedShortcutKeymaps.tableEditing,
+      // The application menu advertises Ctrl+Shift+Z on Windows; CodeMirror's
+      // default history keymap only binds that chord on macOS/Linux.
+      { key: "Ctrl-Shift-z", run: redo, preventDefault: true },
       ...historyKeymap,
       ...defaultKeymap
     ]),

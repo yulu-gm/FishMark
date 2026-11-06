@@ -13,7 +13,7 @@ async function start(product, source) {
   const page = await product.launch(source);
 
   await product.focus(page);
-  await page.keyboard.press("Control+Home");
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+ArrowUp" : "Control+Home");
   return { page, first: (await product.snapshot()).activeTabId };
 }
 
@@ -70,9 +70,14 @@ async function record(product, page, label, settle = true) {
     }));
     const tables = [...document.querySelectorAll(".cm-table-widget-table")].map(table => ({
       width: table.getBoundingClientRect().width, height: table.getBoundingClientRect().height,
+      maxCellLines: Math.max(...[...table.querySelectorAll(".cm-table-widget-input")].map(cell => {
+        const style = getComputedStyle(cell);
+        const contentHeight = cell.getBoundingClientRect().height - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+        return contentHeight / parseFloat(style.lineHeight);
+      })),
       y: table.getBoundingClientRect().top - bounds.top, bottom: table.getBoundingClientRect().bottom - bounds.top
     }));
-    return { scrollTop: scroller.scrollTop, scrollHeight: scroller.scrollHeight,
+    return { scrollTop: scroller.scrollTop, scrollHeight: scroller.scrollHeight, scrollerWidth: bounds.width,
       firstVisible: rows.find(row => row.height > 0 && row.y + row.height > 0 && row.y < bounds.height && /^[AB]-row-/.test(row.text)) ?? null,
       images, tables };
   }, settle));
@@ -100,7 +105,7 @@ async function insertionCanary(product, page, source, offset, marker) {
   await product.nativeInsert(marker, page);
   await expect.poll(async () => (await product.snapshot()).activeDocument.content)
     .toBe(source.slice(0, offset) + marker + source.slice(offset));
-  await page.keyboard.press("Control+z");
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+z" : "Control+z");
   await expect.poll(async () => (await product.snapshot()).activeDocument.content).toBe(source);
   await expect.poll(async () => (await product.snapshot()).activeDocument.isDirty).toBe(false);
 }
@@ -132,7 +137,7 @@ test("two long tabs keep independent positions through rapid switches source mod
   const otherPath = join(product.directory, "documents", "long-b.md");
   await writeFile(otherPath, sourceB, "utf8");
   const second = await openFile(product, page, otherPath);
-  await product.focus(page); await page.keyboard.press("Control+Home");
+  await product.focus(page); await page.keyboard.press(process.platform === "darwin" ? "Meta+ArrowUp" : "Control+Home");
   for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowRight");
   await wheel(page, 4000);
   const b = await record(product, page, "B-independent");
@@ -255,8 +260,10 @@ test("a minimum-width window remounts a wrapping table without losing its readin
   await wheel(page, tableBox.y + tableBox.height - scroller.y - 100);
   const before = await record(product, page, "narrow-table-before");
   expect(before.firstVisible?.text).toBe(paragraph("A", 20));
-  expect(before.tables[0].width).toBeLessThan(700);
-  expect(before.tables[0].height).toBeGreaterThan(300);
+  // Compact layout gives the table more width than the old 700px threshold.
+  // Verify the actual behavior: the table fits its scroller and a cell wraps.
+  expect(before.tables[0].width).toBeLessThanOrEqual(before.scrollerWidth + 1);
+  expect(before.tables[0].maxCellLines).toBeGreaterThan(1.5);
   expect(before.tables[0].bottom).toBeGreaterThan(0);
   expect(before.tables[0].bottom).toBeLessThan(before.firstVisible.y);
   await newTab(product); await activate(product, page, first);
