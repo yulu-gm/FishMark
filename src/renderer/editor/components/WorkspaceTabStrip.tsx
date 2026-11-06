@@ -37,7 +37,6 @@ export function WorkspaceTabStrip({
       <nav
         className="workspace-tab-strip"
         data-fishmark-region="workspace-tab-strip"
-        data-empty={workspaceTabs.length === 0 ? "true" : "false"}
         data-visibility="visible"
         aria-label="Open documents"
       >

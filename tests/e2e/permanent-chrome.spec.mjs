@@ -2,10 +2,11 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test, expect } from "./product-fixture.mjs";
 
-async function chrome(page) {
+async function chrome(page, hasTabs = true) {
   await expect(page.locator('[data-fishmark-command="toggle-reading-mode"], [aria-keyshortcuts="F11"], [data-fishmark-shell-mode]')).toHaveCount(0);
   for (const region of ["workspace-tab-strip", "app-status-bar"]) {
     const element = page.locator(`[data-fishmark-region="${region}"]`);
+    if (region === "workspace-tab-strip" && !hasTabs) { await expect(element).toHaveCount(0); continue; }
     await expect(element).toBeVisible();
     await expect(element).toHaveAttribute("data-visibility", "visible");
     const geometry = await element.evaluate(element => {
@@ -16,6 +17,18 @@ async function chrome(page) {
     expect(geometry.right).toBeLessThanOrEqual(geometry.width + 1);
     expect(geometry.top).toBeGreaterThanOrEqual(0);
     expect(geometry.bottom).toBeLessThanOrEqual(geometry.height + 1);
+    if (region === "workspace-tab-strip") {
+      // Electron 内容区域起点在原生菜单栏下方；页签不应再留一行空隙。
+      const workspaceTop = await page.locator('.app-workspace').evaluate(element => element.getBoundingClientRect().top);
+      expect(Math.abs(geometry.top - workspaceTop)).toBeLessThanOrEqual(1);
+    }
+  }
+  if (!hasTabs) {
+    const top = await page.evaluate(() => ({
+      workspace: document.querySelector('.app-workspace').getBoundingClientRect().top,
+      canvas: document.querySelector('.workspace-canvas').getBoundingClientRect().top
+    }));
+    expect(Math.abs(top.canvas - top.workspace)).toBeLessThanOrEqual(1);
   }
   await expect(page.locator(".document-word-count")).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.style.getPropertyValue("--fishmark-env-reading-mode"))).toBe("0");
@@ -31,6 +44,10 @@ test("permanent chrome survives old preferences, resize, edits, source mode, tab
     version: 3, autosave: { idleDelayMs: 60_000 }, ui: { sidePanelWidth: 310 },
     theme: { mode: "dark", effectsMode: "off" }, readingMode: true, shellMode: "reading"
   }));
+  const home = await product.launch(null, { openDocument: false });
+  await chrome(home, false);
+  await expect(home.locator('[data-fishmark-region="empty-state"]')).toBeVisible();
+  await product.normalClose();
   const page = await product.launch(source);
   await chrome(page);
   const menu = await product.current.app.evaluate(({ Menu }) => {
@@ -81,10 +98,18 @@ test("permanent chrome survives old preferences, resize, edits, source mode, tab
   expect(preferences.theme.mode).toBe("dark");
   await reopened.getByRole("button", { name: "Close roundtrip.md", exact: true }).click();
   await expect.poll(async () => (await product.snapshot()).tabs.length).toBe(0);
-  await chrome(reopened);
+  await chrome(reopened, false);
+  await reopened.screenshot({ path: product.testInfo.outputPath('home-without-tabs.png') });
   await expect(reopened.locator(".document-word-count")).toHaveText("字数 0");
   await expect(reopened.locator('[data-fishmark-region="empty-state"]')).toBeVisible();
   expect(await readFile(product.documentPath, "utf8")).toBe(source);
   await product.checkpoint("permanent-chrome-empty-after-restart");
+  await product.current.app.evaluate(({ Menu }) => Menu.getApplicationMenu().items
+    .find(item => item.label === "File").submenu.items.find(item => item.label === "New").click());
+  await expect.poll(async () => (await product.snapshot()).tabs.length).toBe(1);
+  await chrome(reopened);
+  await reopened.getByRole("button", { name: "Close Untitled.md", exact: true }).click();
+  await expect.poll(async () => (await product.snapshot()).tabs.length).toBe(0);
+  await chrome(reopened, false);
   await product.normalClose();
 });

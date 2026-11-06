@@ -374,15 +374,7 @@ export function WorkspaceShell({
             notification={notification}
             notificationState={notificationState}
           />
-          <ConflictBanner
-            externalFileState={externalFileState}
-            externalFileConflictMessage={externalFileConflictMessage}
-            onReloadExternalFile={onReloadExternalFile}
-            onKeepMemoryVersion={onKeepMemoryVersion}
-            onSaveAs={onSaveAs}
-            onDismissExternalFileConflict={onDismissExternalFileConflict}
-          />
-          <WorkspaceTabStrip
+          {workspaceTabs.length > 0 && <WorkspaceTabStrip
             onTabActivate={onTabActivate}
             onCloseWorkspaceTab={onCloseWorkspaceTab}
             onSaveWorkspaceTab={onSaveWorkspaceTab}
@@ -392,6 +384,14 @@ export function WorkspaceShell({
             onTabDetach={onTabDetach}
             workspaceTabs={workspaceTabs}
             activeTabId={activeTabId}
+          />}
+          <ConflictBanner
+            externalFileState={externalFileState}
+            externalFileConflictMessage={externalFileConflictMessage}
+            onReloadExternalFile={onReloadExternalFile}
+            onKeepMemoryVersion={onKeepMemoryVersion}
+            onSaveAs={onSaveAs}
+            onDismissExternalFileConflict={onDismissExternalFileConflict}
           />
           <section
             className={`workspace-canvas ${activeDocument ? "is-editor-open" : ""}`}

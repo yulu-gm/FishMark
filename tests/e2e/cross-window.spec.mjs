@@ -250,7 +250,9 @@ for (const input of ["browser", ...(process.platform === "win32" ? ["Windows out
     await expect.poll(async () => existing.evaluate(() => !!window.fishmark)).toBe(true);
     const owner = await product.current.app.browserWindow(existing);
     existingIdentity = await owner.evaluate((window, area) => {
-      window.setBounds({ x: area.x + area.width - 900, y: area.y, width: 900, height: 600 }); window.show();
+      window.setBounds({ x: area.x + area.width - 900, y: area.y, width: 900, height: 600 });
+      // 接收窗口也须露在其他桌面应用之上，确保原生落点实际命中本次测试窗口。
+      window.setAlwaysOnTop(true); window.show(); window.moveTop();
       return { windowId: String(window.id), hwnd: window.getNativeWindowHandle().readBigUInt64LE().toString() };
     }, workArea);
     await owner.dispose();
@@ -273,13 +275,14 @@ for (const input of ["browser", ...(process.platform === "win32" ? ["Windows out
     const start = { x: Math.round(identity.contentBounds.x + tab.x + tab.width / 2), y: Math.round(identity.contentBounds.y + tab.y + tab.height / 2) };
     const end = { x: identity.bounds.x + identity.bounds.width + 30, y: start.y };
     if (existing) {
-      const strip = await existing.locator('[data-fishmark-region="workspace-tab-strip"]').boundingBox();
-      expect(strip).not.toBeNull();
+      await expect(existing.locator('[data-fishmark-region="workspace-tab-strip"]')).toHaveCount(0);
+      const canvas = await existing.locator('[data-fishmark-region="workspace-canvas"]').boundingBox();
+      expect(canvas).not.toBeNull();
       const receiver = await product.current.app.browserWindow(existing);
       const bounds = await receiver.evaluate(w => w.getContentBounds()); await receiver.dispose();
-      end.x = Math.round(bounds.x + strip.x + strip.width - 30);
-      end.y = Math.round(bounds.y + strip.y + strip.height / 2);
-      product.crossWindowProof.targetStrip = { strip, bounds };
+      end.x = Math.round(bounds.x + canvas.x + canvas.width - 30);
+      end.y = Math.round(bounds.y + canvas.y + 15);
+      product.crossWindowProof.targetHome = { canvas, bounds };
     }
     product.crossWindowProof.nativePreparation = { workArea, identity, start, end };
     const args = ["-WindowHandle", identity.hwnd, "-OwnerPid", String(product.current.mainPid), "-StartX", String(start.x), "-StartY", String(start.y), "-EndX", String(end.x), "-EndY", String(end.y)];
@@ -294,7 +297,7 @@ for (const input of ["browser", ...(process.platform === "win32" ? ["Windows out
   const target = existing ?? product.current.app.windows().find((page) => page !== before.page);
   if (existing) {
     await expect.poll(async () => (await product.snapshot(existing)).activeDocument?.content).toBe(content);
-    product.crossWindowProof.existingWindow = { identity: existingIdentity, snapshot: await product.snapshot(existing), behavior: "A real native hit on the existing empty tab strip receives the document without a third window." };
+    product.crossWindowProof.existingWindow = { identity: existingIdentity, snapshot: await product.snapshot(existing), behavior: "原生拖放到首页空白区域接收文档，不创建第三个窗口。" };
   }
   const targetIdentity = await product.observeNewWindow(target, content);
   await product.focus(target);

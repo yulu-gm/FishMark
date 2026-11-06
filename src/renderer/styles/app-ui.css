@@ -131,7 +131,7 @@
   min-height: 0;
   position: relative;
   display: grid;
-  /* Rail, document tabs and status bar are permanent workspace chrome. */
+  /* 侧栏和状态栏保持可见；首页不预留文档页签。 */
   grid-template-columns: var(--fishmark-shell-rail-offset) minmax(0, 1fr);
   transition: grid-template-columns var(--fishmark-focus-transition-duration) var(--fishmark-focus-transition-easing);
 }
@@ -375,13 +375,14 @@
   height: 100%;
   position: relative;
   padding:
-    var(--fishmark-space-4)
+    0
     0
     calc(var(--fishmark-status-bar-height) + 2px + env(safe-area-inset-bottom));
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
   align-content: start;
-  gap: var(--fishmark-space-4);
+  /* 未显示的提示行不占间距，页签紧贴窗口内容顶部。 */
+  gap: 0;
   overflow: hidden;
   background: var(--fishmark-workspace-bg, transparent);
 }
@@ -455,10 +456,10 @@
 }
 
 .external-file-conflict-banner {
-  grid-row: 1;
+  grid-row: 2;
   display: grid;
   gap: var(--fishmark-space-2);
-  margin: 0 var(--fishmark-shell-gutter) 16px;
+  margin: var(--fishmark-space-4) var(--fishmark-shell-gutter) 0;
   padding: 12px 14px;
   border: 1px solid color-mix(in srgb, var(--fishmark-banner-warning-border, #d9b75d) 55%, transparent);
   border-radius: var(--fishmark-ui-surface-radius);
@@ -532,11 +533,11 @@
 }
 
 .workspace-tab-strip {
-  grid-row: 2;
+  grid-row: 1;
   display: block;
   width: 100%;
   min-width: 0;
-  margin: calc(var(--fishmark-space-4) * -1) 0 0;
+  margin: 0;
   padding: 0;
   border-bottom: 1px solid
     color-mix(in srgb, var(--fishmark-panel-border, rgba(15, 23, 42, 0.12)) 60%, transparent);
@@ -553,11 +554,6 @@
     opacity var(--fishmark-focus-transition-duration) ease,
     transform var(--fishmark-focus-transition-duration) var(--fishmark-focus-transition-easing),
     border-color var(--fishmark-focus-transition-duration) ease;
-}
-
-/* Reserve the tab row even when no document is open. */
-.workspace-tab-strip[data-empty="true"] {
-  min-height: 30px;
 }
 
 .workspace-tab-strip-scroll {
@@ -803,6 +799,7 @@
   width: 100%;
   max-width: none;
   margin: 0;
+  padding-top: var(--fishmark-space-4);
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -1750,10 +1747,6 @@
 
   .app-titlebar {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1fr);
-  }
-
-  .app-workspace {
-    padding-top: var(--fishmark-space-3);
   }
 
   .app-shell {

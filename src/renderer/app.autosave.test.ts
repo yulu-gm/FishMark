@@ -3816,17 +3816,18 @@ describe("App autosave", () => {
   });
 
 
-  it("keeps chrome visible without a reading toggle on empty and open workspaces", async () => {
+  it("shows document tabs only after opening a document and keeps the status bar visible", async () => {
     await renderApp();
-    const assertChrome = () => {
+    const assertChrome = (hasTabs = true) => {
       expect(container.querySelector('[data-fishmark-command="toggle-reading-mode"]')).toBeNull();
       expect(container.querySelector('[aria-keyshortcuts="F11"]')).toBeNull();
       expect(container.querySelector('[data-fishmark-shell-mode]')).toBeNull();
-      for (const region of ["workspace-tab-strip", "app-status-bar"]) {
-        expect(container.querySelector<HTMLElement>(`[data-fishmark-region="${region}"]`)?.dataset.visibility).toBe("visible");
-      }
+      expect(container.querySelector<HTMLElement>('[data-fishmark-region="app-status-bar"]')?.dataset.visibility).toBe("visible");
+      const tabs = container.querySelector<HTMLElement>('[data-fishmark-region="workspace-tab-strip"]');
+      if (hasTabs) expect(tabs?.dataset.visibility).toBe("visible");
+      else expect(tabs).toBeNull();
     };
-    assertChrome();
+    assertChrome(false);
     expect(container.querySelector('.document-word-count')?.textContent).toContain("字数 0");
     await act(async () => { menuCommandListener?.("open-markdown-file"); await Promise.resolve(); });
     assertChrome();
@@ -5162,12 +5163,6 @@ describe("App autosave", () => {
     expect(css).not.toContain('.app-status-bar[data-visibility="collapsed"]');
     expect(getCssRule(css, ".app-rail")).not.toContain("transform: translateX");
     expect(getCssRule(css, ".app-workspace")).toContain("grid-template-rows: auto auto minmax(0, 1fr);");
-  });
-
-  it("reserves the document tab row even for an empty workspace", () => {
-    const css = readFileSync(appUiStylesheetPath, "utf-8");
-    expect(getCssRule(css, ".workspace-tab-strip")).toContain("grid-row: 2;");
-    expect(getCssRule(css, '.workspace-tab-strip[data-empty="true"]')).toContain("min-height: 30px;");
   });
 
   it("guards app-owned workspace row geometry against legacy theme overrides", () => {

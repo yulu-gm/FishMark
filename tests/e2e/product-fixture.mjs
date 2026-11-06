@@ -175,12 +175,13 @@ class ProductSession {
         await state.app.context().tracing.start({ screenshots: true, snapshots: true, sources: true });
         state.tracing = true;
       }
-      await expect(state.page.locator(".cm-content[contenteditable=true]")).toBeVisible();
+      // null 表示没有文档的首页，空字符串仍表示内容为空的文档。
+      await expect(state.page.locator(expectedContent === null ? '[data-fishmark-region="empty-state"]' : ".cm-content[contenteditable=true]")).toBeVisible();
       if (selectTabId) {
 
         await state.page.locator(`[data-tab-id="${selectTabId}"]`).click();
       }
-      await expect.poll(async () => (await this.snapshot()).activeDocument?.content).toBe(expectedContent);
+      await expect.poll(async () => (await this.snapshot()).activeDocument?.content ?? null).toBe(expectedContent);
       expect(await state.page.evaluate(() => typeof window.fishmarkTest)).toBe("undefined");
       state.identity = await state.app.evaluate(({ app, BrowserWindow }) => {
         const window = BrowserWindow.getAllWindows()[0];

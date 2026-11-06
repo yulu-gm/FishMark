@@ -20,14 +20,16 @@ for (const mode of ["light", "dark"]) test(`compact chrome and table remain usab
     const geometry = await page.evaluate(() => {
       const rect = selector => document.querySelector(selector).getBoundingClientRect();
       const rail = rect('.app-rail'), editor = rect('.document-editor'), bar = rect('.app-status-bar'), track = rect('[data-editor-scrollbar-axis="vertical"]');
+      const workspace = rect('.app-workspace'), tabs = rect('.workspace-tab-strip');
       return { width: innerWidth, height: innerHeight, railRight: rail.right, editorRight: editor.right, editorBottom: editor.bottom,
-        barTop: bar.top, barBottom: bar.bottom, trackRight: track.right };
+        barTop: bar.top, barBottom: bar.bottom, trackRight: track.right, tabsTop: tabs.top, workspaceTop: workspace.top };
     });
     expect(geometry.width - geometry.trackRight).toBeLessThanOrEqual(2);
     expect(Math.abs(geometry.editorRight - geometry.trackRight)).toBeLessThanOrEqual(2);
     expect(geometry.editorBottom).toBeLessThanOrEqual(geometry.barTop + 1);
     expect(geometry.height - geometry.barBottom).toBeLessThanOrEqual(4);
     expect(geometry.railRight).toBeLessThanOrEqual(56);
+    expect(Math.abs(geometry.tabsTop - geometry.workspaceTop)).toBeLessThanOrEqual(1);
     await scrollbar.focus();
     await expect(scrollbar).toBeFocused();
     const before = await page.locator('.cm-scroller').evaluate(el => el.scrollTop);
