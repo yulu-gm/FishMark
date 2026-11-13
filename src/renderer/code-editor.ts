@@ -13,6 +13,8 @@ import {
   createFishMarkMarkdownExtensions,
   readEditorSelection,
   readEditorStructureCache,
+  pairingOptions,
+  type PairingOptions,
   selectTableCellContents,
   refreshMarkdownDecorations,
   runTableDelete,
@@ -36,6 +38,7 @@ import {
   createEditorDerivedSnapshotFromCache,
   createVisibleLine,
   planPrintableInput,
+  planRichTextPaste,
   type ActiveBlockState
 } from "@fishmark/editor-model";
 import { readCompositionState } from "@fishmark/codemirror-adapter";
@@ -70,6 +73,7 @@ export type CreateCodeEditorControllerOptions = {
   headingPresentationMode?: HeadingPresentationMode;
   viewMode?: EditorViewMode;
   readOnly?: boolean;
+  pairing?: PairingOptions;
 };
 
 export type CodeEditorController = {
@@ -115,6 +119,7 @@ export type CodeEditorController = {
   setViewMode: (nextMode: EditorViewMode) => void;
   setHeadingPresentationMode: (mode: HeadingPresentationMode) => void;
   setReadOnly: (readOnly: boolean) => void;
+  setPairingOptions: (options: PairingOptions) => void;
   focus: () => void;
   runHistory: (direction: "undo" | "redo") => boolean;
   runSelectAll: () => boolean;
@@ -177,6 +182,8 @@ export function createCodeEditorController(
   let currentHeadingPresentationMode = options.headingPresentationMode ?? "editing";
   let currentReadOnly = options.readOnly ?? false;
   const readOnlyCompartment = new Compartment();
+  let currentPairing = options.pairing ?? { autoPairBrackets: true, autoPairMarkdown: false };
+  const pairingCompartment = new Compartment();
   const searchCompartment = new Compartment();
   let searchExtension: Extension = [];
   let searchRuntime: typeof import("./search-runtime") | null = null;
@@ -432,6 +439,7 @@ export function createCodeEditorController(
     EditorState.create({
       doc: content,
       extensions: [
+        pairingCompartment.of(pairingOptions.of(currentPairing)),
         createEditorScrollbars(),
         EditorView.scrollHandler.of((current, range) => {
           const position = pendingReadingPosition;
@@ -500,12 +508,22 @@ export function createCodeEditorController(
     return { identity: documentIdentity, state: view.state, version: asyncPasteVersion, request: ++asyncPasteRequest };
   }
 
-  function applyAsyncPaste(paste: NonNullable<ReturnType<typeof beginAsyncPaste>>, text: string | null) {
+  function applyAsyncPaste(paste: NonNullable<ReturnType<typeof beginAsyncPaste>>, text: string | null, plainText?: string) {
     // 即使撤销编辑或移回选区，版本也会保留等待期间发生过的变化。
     if (!text || !canApplyAsyncPaste() || paste.request !== asyncPasteRequest ||
         paste.version !== asyncPasteVersion || view.state.doc !== paste.state.doc ||
         !view.state.selection.eq(paste.state.selection) || documentIdentity === null ||
         !isSameEditorLoadIdentity(paste.identity, documentIdentity)) return;
+    if (plainText !== undefined) {
+      const plan = planRichTextPaste(semanticCommands.adapter.readSemanticContext(view.state), text);
+      if (plan) {
+        semanticCommands.run(view, () => plan, { annotations: [isolateHistory.of("full")] });
+        return;
+      }
+      // 跨结构选区无法保留容器归属时，使用同一次剪贴板事件提供的纯文本。
+      text = plainText;
+      if (!text) return;
+    }
     view.dispatch({ ...view.state.replaceSelection(text), userEvent: "input.paste", annotations: isolateHistory.of("full"), scrollIntoView: true });
   }
 
@@ -559,9 +577,10 @@ export function createCodeEditorController(
       const text = clipboardData?.getData("text/plain") ?? "";
       event.preventDefault();
       // 转换器按需加载；等待期间发生的编辑、失焦或切换文档同样使本次粘贴失效。
-      void import("./html-paste").then(({ convertHtmlPasteToMarkdown }) =>
-        applyAsyncPaste(paste, convertHtmlPasteToMarkdown(html) ?? text)
-      ).catch(() => applyAsyncPaste(paste, text));
+      void import("./html-paste").then(({ convertHtmlPasteToMarkdown }) => {
+        const markdown = convertHtmlPasteToMarkdown(html);
+        applyAsyncPaste(paste, markdown ?? text, markdown === null ? undefined : text);
+      }).catch(() => applyAsyncPaste(paste, text));
       return;
     }
     if (!options.importClipboardImage) return;
@@ -912,6 +931,10 @@ export function createCodeEditorController(
           EditorView.editable.of(!readOnly)
         ])
       });
+    },
+    setPairingOptions(options: PairingOptions) {
+      currentPairing = options;
+      view.dispatch({ effects: pairingCompartment.reconfigure(pairingOptions.of(options)) });
     },
     runSelectAll() {
       const active = view.dom.ownerDocument.activeElement;

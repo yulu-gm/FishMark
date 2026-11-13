@@ -40,10 +40,11 @@ export function registerPreferencesHandlers({ ipc, authorize, service, selectTem
 
 function validatePreferencesPatch(value: unknown): asserts value is PreferencesUpdate {
   request.record(value);
-  const sections: Record<string, Record<string, "number" | "nullable-number" | "nullable-string" | "mode" | "effects" | "parameters">> = {
+  const sections: Record<string, Record<string, "number" | "nullable-number" | "nullable-string" | "mode" | "effects" | "parameters" | "boolean">> = {
     autosave: { idleDelayMs: "number" }, recentFiles: { maxEntries: "number" },
     ui: { fontFamily: "nullable-string", fontSize: "nullable-number", sidePanelWidth: "nullable-number" },
     document: { fontFamily: "nullable-string", cjkFontFamily: "nullable-string", fontSize: "nullable-number" },
+    editing: { autoPairBrackets: "boolean", autoPairMarkdown: "boolean" },
     images: { temporaryDirectory: "nullable-string" },
     theme: { mode: "mode", selectedId: "nullable-string", effectsMode: "effects", parameters: "parameters" }
   };
@@ -60,6 +61,8 @@ function validatePreferencesPatch(value: unknown): asserts value is PreferencesU
           request.record(parameters);
           if (Object.values(parameters).some((number) => typeof number !== "number" || !Number.isFinite(number))) request.invalidRequest();
         }
+      } else if (kind === "boolean") {
+        if (typeof field !== "boolean") request.invalidRequest();
       } else if (kind === "mode") {
         if (!["system", "light", "dark"].includes(field as string)) request.invalidRequest();
       } else if (kind === "effects") {

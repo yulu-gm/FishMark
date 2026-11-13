@@ -47,6 +47,78 @@ function editor(source = "before AFTER") {
 }
 
 describe("HTML 粘贴入口", () => {
+  it.each([
+    {
+      name: "列表惰性续行行首",
+      source: "- parent\ncontinued\n- sibling",
+      html: "<ul><li>A</li><li>B</li></ul>",
+      expected: "- parent\n  \n  -   A\n  -   B\n  \n  continued\n- sibling"
+    },
+    {
+      name: "引用惰性续行行首的围栏",
+      source: "> parent\ncontinued",
+      html: '<pre><code class="language-js">x\n</code></pre>',
+      expected: "> parent\n> \n> ```js\n> x\n> ```\n> \n> continued"
+    },
+    {
+      name: "无间距的空列表标记",
+      source: "-",
+      html: "<ul><li>A</li><li>B</li></ul>",
+      expected: "- -   A\n  -   B"
+    }
+  ])("$name 保留 HTML 结构且一次撤销重做", async ({ source, html, expected }) => {
+    const f = editor(source);
+    const offset = source.includes("continued") ? source.indexOf("continued") : source.length;
+    f.controller.setSelection(offset);
+    const selection = f.controller.getSelection();
+    expect(f.paste(html, "PLAIN FALLBACK").defaultPrevented).toBe(true);
+    await vi.waitFor(() => expect(f.controller.getContent()).toBe(expected));
+    const caret = expected.includes("continued") ? expected.indexOf("continued") : expected.length;
+    expect(f.controller.getSelection()).toEqual({ anchor: caret, head: caret });
+    expect(f.importClipboardImage).not.toHaveBeenCalled();
+    f.controller.runHistory("undo");
+    expect(f.controller.getContent()).toBe(source);
+    expect(f.controller.getSelection()).toEqual(selection);
+    f.controller.runHistory("redo");
+    expect(f.controller.getContent()).toBe(expected);
+  });
+
+  it.each([
+    {
+      name: "列表项中间的多段正文",
+      source: "- before OLD tail\n  - child\n- sibling",
+      html: "<p><strong>one</strong></p><p>two</p>",
+      expected: "- before **one**\n  \n  two tail\n  - child\n- sibling"
+    },
+    {
+      name: "引用内的列表片段",
+      source: "> before OLD tail\n> after",
+      html: "<ul><li>one</li><li>two</li></ul>",
+      expected: "> before \n> \n> -   one\n> -   two\n> \n>  tail\n> after"
+    },
+    {
+      name: "引用列表内的代码片段",
+      caretAfterPrefix: true,
+      source: "> - before OLD tail\n>   - child\n> - sibling",
+      html: '<pre><code class="language-python">if ok:\n    return 1\n</code></pre>',
+      expected: "> - before \n>   \n>   ```python\n>   if ok:\n>       return 1\n>   ```\n>   \n>    tail\n>   - child\n> - sibling"
+    }
+  ])("$name 保留容器、反向选区和一次撤销重做", async ({ source, html, expected, caretAfterPrefix }) => {
+    const f = editor(source);
+    const from = source.indexOf("OLD");
+    f.controller.setSelection(from + 3, from);
+    expect(f.paste(html, "PLAIN FALLBACK").defaultPrevented).toBe(true);
+    await vi.waitFor(() => expect(f.controller.getContent()).toBe(expected));
+    const caret = expected.indexOf(caretAfterPrefix ? "tail" : " tail");
+    expect(f.controller.getSelection()).toEqual({ anchor: caret, head: caret });
+    expect(f.importClipboardImage).not.toHaveBeenCalled();
+    f.controller.runHistory("undo");
+    expect(f.controller.getContent()).toBe(source);
+    expect(f.controller.getSelection()).toEqual({ anchor: from + 3, head: from });
+    f.controller.runHistory("redo");
+    expect(f.controller.getContent()).toBe(expected);
+  });
+
   it("用 Markdown 替换反向选区，一次撤销，不导入混合载荷中的图片", async () => {
     const f = editor();
     f.controller.setSelection(12, 7);

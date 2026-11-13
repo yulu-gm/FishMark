@@ -13,6 +13,57 @@ import {
 } from "./preferences";
 
 describe("normalizePreferences", () => {
+  it("migrates version 3 to version 4 with independent pairing defaults", () => {
+    const result = normalizePreferences({ version: 3, autosave: { idleDelayMs: 2300 } });
+
+    expect(PREFERENCES_SCHEMA_VERSION).toBe(4);
+    expect(result).toEqual({
+      ...DEFAULT_PREFERENCES,
+      autosave: { idleDelayMs: 2300 },
+      editing: { autoPairBrackets: true, autoPairMarkdown: false }
+    });
+  });
+
+  it.each([true, false])("preserves explicit pairing booleans including %s", (enabled) => {
+    expect(normalizePreferences({ editing: {
+      autoPairBrackets: enabled, autoPairMarkdown: enabled
+    } }).editing).toEqual({ autoPairBrackets: enabled, autoPairMarkdown: enabled });
+  });
+
+  it.each([undefined, null, "false", "true", 0, 1, [], {}])(
+    "uses pairing defaults for invalid values %j without coercion",
+    (value) => {
+      expect(normalizePreferences({ editing: {
+        autoPairBrackets: value, autoPairMarkdown: value
+      } }).editing).toEqual(DEFAULT_PREFERENCES.editing);
+    }
+  );
+
+  it.each([undefined, null, false, "enabled", []])("defaults malformed editing groups %j", (editing) => {
+    expect(normalizePreferences({ editing }).editing).toEqual(DEFAULT_PREFERENCES.editing);
+  });
+
+  it("merges pairing patches without resetting the other toggle or unrelated settings", () => {
+    const current = normalizePreferences({
+      editing: { autoPairBrackets: false, autoPairMarkdown: true },
+      ui: { fontSize: 19 }
+    });
+    const result = mergePreferences(current, { editing: { autoPairMarkdown: false } });
+    expect(result).toEqual({ ...current, editing: { autoPairBrackets: false, autoPairMarkdown: false } });
+    expect(mergePreferences(result, { editing: { autoPairBrackets: true } }).editing)
+      .toEqual(DEFAULT_PREFERENCES.editing);
+    expect(mergePreferences(current, { autosave: { idleDelayMs: 2000 } }).editing)
+      .toEqual(current.editing);
+    expect(current.editing).toEqual({ autoPairBrackets: false, autoPairMarkdown: true });
+  });
+
+  it("drops unknown editing fields and fills only missing pairing values", () => {
+    expect(normalizePreferences({ editing: { autoPairBrackets: false, unknown: true } }).editing)
+      .toEqual({ autoPairBrackets: false, autoPairMarkdown: false });
+    expect(normalizePreferences({ editing: { autoPairMarkdown: true } }).editing)
+      .toEqual({ autoPairBrackets: true, autoPairMarkdown: true });
+  });
+
   it("returns defaults when given null, undefined, or a non-object value", () => {
     expect(normalizePreferences(null)).toEqual(DEFAULT_PREFERENCES);
     expect(normalizePreferences(undefined)).toEqual(DEFAULT_PREFERENCES);
@@ -26,8 +77,7 @@ describe("normalizePreferences", () => {
     expect(result.version).toBe(PREFERENCES_SCHEMA_VERSION);
   });
 
-  it("defaults image preferences to no temporary directory on schema version 3", () => {
-    expect(PREFERENCES_SCHEMA_VERSION).toBe(3);
+  it("defaults image preferences to no temporary directory", () => {
     expect(DEFAULT_PREFERENCES.images).toEqual({ temporaryDirectory: null });
     expect(normalizePreferences({}).images).toEqual({ temporaryDirectory: null });
   });
@@ -42,7 +92,7 @@ describe("normalizePreferences", () => {
       theme: { mode: "dark", selectedId: "graphite", effectsMode: "full", parameters: {} }
     });
 
-    expect(result.version).toBe(3);
+    expect(result.version).toBe(PREFERENCES_SCHEMA_VERSION);
     expect(result.images).toEqual({ temporaryDirectory: null });
     expect(result.autosave.idleDelayMs).toBe(2500);
     expect(result.theme.mode).toBe("dark");
@@ -234,6 +284,7 @@ describe("normalizePreferences", () => {
       version: PREFERENCES_SCHEMA_VERSION,
       autosave: { idleDelayMs: 2000 },
       recentFiles: DEFAULT_PREFERENCES.recentFiles,
+      editing: DEFAULT_PREFERENCES.editing,
       ui: { fontFamily: "Segoe UI", fontSize: 18, sidePanelWidth: null },
       document: { fontFamily: "Mono", cjkFontFamily: "Source Han Sans SC", fontSize: null },
       theme: DEFAULT_PREFERENCES.theme,

@@ -1,8 +1,10 @@
 import path from "node:path";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { DEFAULT_PREFERENCES, serializePreferences } from "../shared/preferences";
+import { DEFAULT_PREFERENCES, PREFERENCES_SCHEMA_VERSION, serializePreferences } from "../shared/preferences";
 import { createPreferencesService } from "./preferences-service";
 
 const USER_DATA_DIR = path.join("C:/userData");
@@ -23,6 +25,60 @@ function createDeps(overrides: {
 }
 
 describe("createPreferencesService", () => {
+  it("persists separate pairing updates, notifies listeners, and reloads them after restart", async () => {
+    const userDataDir = await mkdtemp(path.join(tmpdir(), "fishmark-pairing-preferences-"));
+    const filePath = path.join(userDataDir, "preferences.json");
+    try {
+      // 从真实旧版本文件启动，再经现有原子写入路径保存，避免只验证内存合并。
+      await writeFile(filePath, JSON.stringify({ version: 3, autosave: { idleDelayMs: 2700 } }), "utf8");
+      const service = createPreferencesService({ userDataDir });
+      await service.initialize();
+      expect(service.getPreferences().editing).toEqual(DEFAULT_PREFERENCES.editing);
+      const listener = vi.fn();
+      service.onChange(listener);
+
+      expect((await service.updatePreferences({ editing: { autoPairBrackets: false } })).status).toBe("success");
+      expect(JSON.parse(await readFile(filePath, "utf8")).editing)
+        .toEqual({ autoPairBrackets: false, autoPairMarkdown: false });
+      expect((await service.updatePreferences({ editing: { autoPairMarkdown: true } })).status).toBe("success");
+      const persisted = JSON.parse(await readFile(filePath, "utf8"));
+      expect(persisted.version).toBe(PREFERENCES_SCHEMA_VERSION);
+      expect(persisted.editing).toEqual({ autoPairBrackets: false, autoPairMarkdown: true });
+      expect(persisted.autosave.idleDelayMs).toBe(2700);
+      expect(listener).toHaveBeenCalledTimes(2);
+      expect(listener).toHaveBeenLastCalledWith(persisted);
+
+      const restarted = createPreferencesService({ userDataDir });
+      await restarted.initialize();
+      expect(restarted.getPreferences()).toEqual(persisted);
+      expect((await restarted.updatePreferences({ editing: { ...DEFAULT_PREFERENCES.editing } })).status)
+        .toBe("success");
+      expect(JSON.parse(await readFile(filePath, "utf8")).editing).toEqual(DEFAULT_PREFERENCES.editing);
+    } finally {
+      await rm(userDataDir, { recursive: true, force: true });
+    }
+  });
+
+  it.each(["write-failed", "commit-failed"] as const)("keeps pairing settings on %s without broadcasting", async (code) => {
+    const service = createPreferencesService({
+      userDataDir: USER_DATA_DIR,
+      dependencies: createDeps({
+        readFile: vi.fn().mockResolvedValue(serializePreferences(DEFAULT_PREFERENCES)),
+        ...(code === "write-failed"
+          ? { writeFile: vi.fn().mockRejectedValue(new Error("disk full")) }
+          : { rename: vi.fn().mockRejectedValue(new Error("file locked")) })
+      })
+    });
+    await service.initialize();
+    const listener = vi.fn();
+    service.onChange(listener);
+    const result = await service.updatePreferences({ editing: { autoPairBrackets: false, autoPairMarkdown: true } });
+
+    expect(result).toMatchObject({ status: "error", error: { code }, preferences: DEFAULT_PREFERENCES });
+    expect(service.getPreferences().editing).toEqual(DEFAULT_PREFERENCES.editing);
+    expect(listener).not.toHaveBeenCalled();
+  });
+
   it("starts with defaults before initialize() runs", () => {
     const service = createPreferencesService({
       userDataDir: USER_DATA_DIR,

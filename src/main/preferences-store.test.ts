@@ -39,6 +39,32 @@ describe("resolvePreferencesFilePath", () => {
 });
 
 describe("loadPreferencesFromDisk", () => {
+  it("loads legacy version 3 pairing defaults without rewriting on read", async () => {
+    const deps = createDependencies({ readFile: vi.fn().mockResolvedValue(JSON.stringify({
+      version: 3,
+      autosave: { idleDelayMs: 1700 },
+      images: { temporaryDirectory: "C:/images" }
+    })) });
+    const result = await loadPreferencesFromDisk(FILE_PATH, deps);
+
+    expect(result.source).toBe("parsed");
+    expect(result.preferences.version).toBe(PREFERENCES_SCHEMA_VERSION);
+    expect(result.preferences.editing).toEqual({ autoPairBrackets: true, autoPairMarkdown: false });
+    expect(result.preferences.autosave.idleDelayMs).toBe(1700);
+    expect(result.preferences.images.temporaryDirectory).toBe("C:/images");
+    expect(deps.writeFile).not.toHaveBeenCalled();
+    expect(deps.rename).not.toHaveBeenCalled();
+  });
+
+  it("retains saved false values and normalizes malformed pairing values", async () => {
+    const deps = createDependencies({ readFile: vi.fn().mockResolvedValue(JSON.stringify({
+      version: PREFERENCES_SCHEMA_VERSION,
+      editing: { autoPairBrackets: false, autoPairMarkdown: "true" }
+    })) });
+    const result = await loadPreferencesFromDisk(FILE_PATH, deps);
+    expect(result.preferences.editing).toEqual({ autoPairBrackets: false, autoPairMarkdown: false });
+  });
+
   it("returns defaults when the preferences file does not exist", async () => {
     const enoent = Object.assign(new Error("missing"), { code: "ENOENT" });
     const deps = createDependencies({
@@ -89,6 +115,7 @@ describe("loadPreferencesFromDisk", () => {
       ui: { fontFamily: null, fontSize: 18, sidePanelWidth: null },
       document: { fontFamily: "Fira Code", cjkFontFamily: "Source Han Sans SC", fontSize: 16 },
       images: DEFAULT_PREFERENCES.images,
+      editing: DEFAULT_PREFERENCES.editing,
       theme: { mode: "dark", selectedId: "graphite", effectsMode: "auto", parameters: {} }
     });
   });

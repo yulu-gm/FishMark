@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AutosaveSettings } from "./components/AutosaveSettings";
+import { EditingSettings } from "./components/EditingSettings";
 import { ImagesSettings } from "./components/ImagesSettings";
 import { RecentFilesSettings } from "./components/RecentFilesSettings";
 import type { DraftState, FontOption } from "./components/settings-inputs";
@@ -38,7 +39,7 @@ type SettingsViewProps = {
   onClose: () => void;
 };
 
-const DEFAULT_EXPANDED_SETTINGS_CATEGORIES: SettingsCategoryId[] = ["appearance", "file"];
+const DEFAULT_EXPANDED_SETTINGS_CATEGORIES: SettingsCategoryId[] = ["appearance", "editing", "file"];
 const DEFAULT_SETTINGS_SECTION_ID: SettingsSectionId = "theme";
 
 function buildDraft(preferences: Preferences): DraftState {
@@ -125,15 +126,19 @@ export function SettingsView({
     [fontFamilies, draft.documentCjkFontFamily]
   );
   async function applyPatch(patch: PreferencesUpdate): Promise<void> {
-    const result = await onUpdate(patch);
+    try {
+      const result = await onUpdate(patch);
 
-    if (result.status === "error") {
-      setErrorMessage(result.error.message);
-      return;
+      if (result.status === "error") {
+        setErrorMessage(result.error.message);
+        return;
+      }
+
+      setErrorMessage(null);
+      setHasSavedChanges(true);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
     }
-
-    setErrorMessage(null);
-    setHasSavedChanges(true);
   }
 
   function handleToggleCategory(categoryId: SettingsCategoryId): void {
@@ -338,6 +343,7 @@ export function SettingsView({
       },
       autosave: { idleDelayMs: DEFAULT_PREFERENCES.autosave.idleDelayMs },
       recentFiles: { maxEntries: DEFAULT_PREFERENCES.recentFiles.maxEntries },
+      editing: { ...DEFAULT_PREFERENCES.editing },
       images: { temporaryDirectory: DEFAULT_PREFERENCES.images.temporaryDirectory }
     });
   }
@@ -423,6 +429,14 @@ export function SettingsView({
               data-fishmark-settings-section="typography"
             >
               <TypographySettings draft={draft} setDraft={setDraft} uiFontOptions={uiFontOptions} documentFontOptions={documentFontOptions} documentCjkFontOptions={documentCjkFontOptions} handleUiFontPresetChange={handleUiFontPresetChange} handleUiFontSizeCommit={handleUiFontSizeCommit} handleDocumentFontPresetChange={handleDocumentFontPresetChange} handleDocumentCjkFontPresetChange={handleDocumentCjkFontPresetChange} handleDocumentFontSizeCommit={handleDocumentFontSizeCommit} />
+            </div>
+          ) : null}
+          {activeSectionId === "auto-pairing" ? (
+            <div
+              className="settings-groups"
+              data-fishmark-settings-section="auto-pairing"
+            >
+              <EditingSettings editing={preferences.editing} applyPatch={applyPatch} />
             </div>
           ) : null}
           {activeSectionId === "autosave" ? (

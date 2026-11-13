@@ -7,7 +7,7 @@
 
 export const PREFERENCES_FILE_NAME = "preferences.json";
 
-export const PREFERENCES_SCHEMA_VERSION = 3 as const;
+export const PREFERENCES_SCHEMA_VERSION = 4 as const;
 export type PreferencesSchemaVersion = typeof PREFERENCES_SCHEMA_VERSION;
 
 export const GET_PREFERENCES_CHANNEL = "fishmark:get-preferences";
@@ -27,6 +27,13 @@ export type AutosavePreferences = {
 export type RecentFilesPreferences = {
   /** Maximum number of recently opened documents to remember. */
   maxEntries: number;
+};
+
+export type EditingPreferences = {
+  /** 自动补全括号和引号的另一半。 */
+  autoPairBrackets: boolean;
+  /** 自动补全 Markdown 格式符号的另一半。 */
+  autoPairMarkdown: boolean;
 };
 
 export type UiPreferences = {
@@ -75,6 +82,7 @@ export type Preferences = {
   version: PreferencesSchemaVersion;
   autosave: AutosavePreferences;
   recentFiles: RecentFilesPreferences;
+  editing: EditingPreferences;
   ui: UiPreferences;
   document: DocumentPreferences;
   images: ImagePreferences;
@@ -84,6 +92,7 @@ export type Preferences = {
 export type PreferencesUpdate = {
   autosave?: Partial<AutosavePreferences>;
   recentFiles?: Partial<RecentFilesPreferences>;
+  editing?: Partial<EditingPreferences>;
   ui?: Partial<UiPreferences>;
   document?: Partial<DocumentPreferences>;
   images?: Partial<ImagePreferences>;
@@ -110,6 +119,10 @@ export const DEFAULT_PREFERENCES: Preferences = {
   },
   recentFiles: {
     maxEntries: 10
+  },
+  editing: {
+    autoPairBrackets: true,
+    autoPairMarkdown: false
   },
   ui: {
     fontFamily: null,
@@ -357,6 +370,7 @@ export function normalizePreferences(raw: unknown): Preferences {
 
   const autosaveSource = isRecord(source.autosave) ? source.autosave : {};
   const recentFilesSource = isRecord(source.recentFiles) ? source.recentFiles : {};
+  const editingSource = isRecord(source.editing) ? source.editing : {};
   const uiSource = isRecord(source.ui) ? source.ui : {};
   const documentSource = isRecord(source.document) ? source.document : {};
   const imagesSource = isRecord(source.images) ? source.images : {};
@@ -369,6 +383,15 @@ export function normalizePreferences(raw: unknown): Preferences {
     },
     recentFiles: {
       maxEntries: normalizeMaxEntries(recentFilesSource.maxEntries)
+    },
+    // 旧版本缺少 editing 时补默认值；只接受布尔值，避免把字符串 "false" 当作开启。
+    editing: {
+      autoPairBrackets: typeof editingSource.autoPairBrackets === "boolean"
+        ? editingSource.autoPairBrackets
+        : DEFAULT_PREFERENCES.editing.autoPairBrackets,
+      autoPairMarkdown: typeof editingSource.autoPairMarkdown === "boolean"
+        ? editingSource.autoPairMarkdown
+        : DEFAULT_PREFERENCES.editing.autoPairMarkdown
     },
     ui: {
       fontFamily: normalizeFontFamily(uiSource.fontFamily),
@@ -438,6 +461,7 @@ export function mergePreferences(
     version: PREFERENCES_SCHEMA_VERSION,
     autosave: { ...current.autosave, ...patch.autosave },
     recentFiles: { ...current.recentFiles, ...patch.recentFiles },
+    editing: { ...current.editing, ...patch.editing },
     ui: { ...current.ui, ...patch.ui },
     document: { ...current.document, ...patch.document },
     images: { ...current.images, ...patch.images },

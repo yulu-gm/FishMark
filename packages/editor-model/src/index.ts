@@ -69,6 +69,7 @@ export {
   type EnterDecision,
   type EnterPlanKind
 } from "./commands/enter";
+export { planRichTextPaste } from "./commands/paste";
 
 export {
   decideBackspace,

@@ -51,9 +51,17 @@ export function hasMatchingTableCellHardBreaks(editor: HTMLElement, expected: re
 }
 
 export function normalizeTableCellBreakCaret(editor: HTMLElement): void {
+  if (editor.dataset.tableCellComposing === "true") return;
   const selection = editor.ownerDocument.getSelection();
   const node = selection?.focusNode;
   if (!selection?.isCollapsed || !node || !editor.contains(node)) return;
+  // 只有空源码的独立 BR 是占位节点；光标落在其后会让 Chromium 丢失后续 IME 合成区。
+  // 真实 <br> 硬换行带源码标记，不能按空单元格处理；已在前方也不重复触发 selectionchange。
+  if (editor.dataset.tableCellText === "" && editor.childNodes.length === 1 &&
+      editor.firstChild?.nodeName === "BR" && node === editor && selection.focusOffset === 1) {
+    selection.collapse(editor, 0);
+    return;
+  }
   const element = node.nodeType === Node.ELEMENT_NODE ? node as Element : node.parentElement;
   const marker = element?.closest(`${hardBreakSelector} > [hidden]`);
   const wrapper = marker?.parentElement;

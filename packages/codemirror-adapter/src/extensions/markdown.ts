@@ -7,6 +7,7 @@ import {
 } from "@codemirror/commands";
 import {
   Annotation,
+  ChangeSet,
   EditorSelection,
   EditorState,
   findClusterBreak,
@@ -14,6 +15,7 @@ import {
   StateField,
   Transaction,
   type TransactionSpec,
+  type ChangeSpec,
   type Extension
 } from "@codemirror/state";
 import {
@@ -24,9 +26,11 @@ import {
   keymap
 } from "@codemirror/view";
 
-import { createEditorDerivedSnapshotFromCache, planNormalizeOrderedListScopes, planPointerSelection, planTableUpdateCell, reselectEditorSemanticContext } from "@fishmark/editor-model";
-import { tableHistory, tableCellSelectionField, tableCellInput, tableInputUserEvent } from "../table-history";
+import { createEditorDerivedSnapshotFromCache, planNormalizeOrderedListScopes, planPointerSelection, planTableUpdateCell, readTableSnapshot, reselectEditorSemanticContext } from "@fishmark/editor-model";
+import { tableHistory, tableCellSelectionField, tableCellInput, tableCellSelection, tableInputUserEvent } from "../table-history";
 import { createCanonicalSeparatorField } from "../canonical-separators";
+import { createPairedInputExtension, pairedInputSelection, pairedInputTransaction, pairingOptions } from "../paired-input";
+import { deleteBracketPair } from "@codemirror/autocomplete";
 import {
   createMarkdownEditorViewModeExtension,
   getMarkdownEditorViewMode,
@@ -383,7 +387,8 @@ export function createFishMarkMarkdownExtensions(
 
     return {
       node: editor,
-      nodeOffset: editor.childNodes.length
+      // 空单元格没有文本节点；源偏移 0 必须位于占位 BR 前，避免破坏下一次原生 IME 合成区。
+      nodeOffset: offset === 0 ? 0 : editor.childNodes.length
     };
   };
 
@@ -456,8 +461,76 @@ export function createFishMarkMarkdownExtensions(
   };
 
   const tableWidgetCallbacks: TableWidgetCallbacks = {
+    isReadOnly: () => tableInteractionView?.state.readOnly ?? false,
+    pairInput(position, text, selection, input) {
+      // 普通字符直接走原生输入，避免长文每次键入都构造无用投影。
+      if (input !== null && (input.length !== 1 || !"()[]{}\"'_*`$".includes(input))) return null;
+      const view = tableInteractionView;
+      if (!view || view.state.readOnly || view.compositionStarted || readCompositionState(view.state).active) return null;
+      const state = view.state;
+      const options = state.facet(pairingOptions);
+      if (!options.autoPairBrackets && !options.autoPairMarkdown) return null;
+      const context = semanticCommands.adapter.readSemanticContext(state);
+      const offset = position.tableStartOffset;
+      const tableContext = offset === undefined ? context : reselectEditorSemanticContext(context, { anchor: offset, head: offset });
+      const data = readTableSnapshot(tableContext)?.node.data;
+      if (data?.kind !== "table") return null;
+      const cell = position.row === 0 ? data.header[position.column] : data.rows[position.row - 1]?.[position.column];
+      if (!cell || cell.text !== text) return null;
+
+      // 单次投影保留 CM 的闭括号标记，并去掉表格边界和管道转义；不保存第二份文档或历史。
+      const from = cell.content.startOffset, to = cell.content.endOffset;
+      const projectionEdits: ChangeSpec[] = [{ from: 0, to: from }, { from: to, to: state.doc.length }];
+      const raw = state.sliceDoc(from, to);
+      for (let index = 0; index < raw.length - 1; index++) {
+        if (raw[index] === "\\" && raw[index + 1] === "|") {
+          projectionEdits.push({ from: from + index, to: from + index + 1 });
+          index++;
+        }
+      }
+      const projection = state.update({ changes: projectionEdits, selection, filter: false,
+        annotations: Transaction.addToHistory.of(false) }).state;
+      if (projection.doc.toString() !== text) return null;
+      const paired = input === null ? (() => {
+        let result: Transaction | null = null;
+        deleteBracketPair({ state: projection, dispatch: transaction => { result = transaction; } });
+        return result;
+      })() : pairedInputTransaction(projection, input);
+      if (!paired) return null;
+
+      const nextText = paired.newDoc.toString();
+      const nextSelection = paired.newSelection.main;
+      const target = { ...position, offsetInCell: nextSelection.head };
+      // 所有实际内容变化仍由模型建计划，尤其不能直接在缺失格的共享 offset 插入字符。
+      const plan = planTableUpdateCell(tableContext, { ...target, offsetInCell: 0 }, nextText);
+      if (!plan) return null;
+      const changes = state.changes(plan.edits);
+      const nextDoc = changes.apply(state.doc);
+      const start = plan.selection.anchor;
+      const escaped = nextText.replace(/\|/gu, "\\|");
+      const embeddingEdits: ChangeSpec[] = [
+        { from: 0, insert: nextDoc.sliceString(0, start) },
+        { from: nextText.length, insert: nextDoc.sliceString(start + escaped.length) }
+      ];
+      for (let index = 0; index < nextText.length; index++) {
+        if (nextText[index] === "|") embeddingEdits.push({ from: index, insert: "\\" });
+      }
+      const embedding = ChangeSet.of(embeddingEdits, nextText.length);
+      const sourceOffset = (local: number) => start + nextText.slice(0, local).replace(/\|/gu, "\\|").length;
+      const changed = nextDoc.toString() !== state.doc.toString();
+      const userEvent = tableInputUserEvent(input === null ? "deleteContentBackward" : "insertText");
+      view.dispatch({
+        ...(changed ? { changes } : {}),
+        selection: { anchor: sourceOffset(nextSelection.anchor), head: sourceOffset(nextSelection.head) },
+        effects: StateEffect.mapEffects(paired.effects, embedding),
+        annotations: [pairedInputSelection.of(true), changed
+          ? tableCellInput.of({ ...target, userEvent }) : tableCellSelection.of(target)],
+        userEvent: changed ? userEvent : "select"
+      });
+      return { anchor: nextSelection.anchor, head: nextSelection.head };
+    },
     history(direction) {
-      if (!tableInteractionView || readCompositionState(tableInteractionView.state).active) return;
+      if (!tableInteractionView || tableInteractionView.state.readOnly || readCompositionState(tableInteractionView.state).active) return;
       (direction === "undo" ? undo : redo)(tableInteractionView);
       syncTableInteractionFocus(tableInteractionView, createLiveActiveBlockState(tableInteractionView.state), { force: true });
     },
@@ -486,7 +559,7 @@ export function createFishMarkMarkdownExtensions(
       }
     },
     updateCell(position, text, inputType) {
-      if (!tableInteractionView) {
+      if (!tableInteractionView || tableInteractionView.state.readOnly) {
         return;
       }
       if (readCompositionState(tableInteractionView.state).active) {
@@ -509,7 +582,7 @@ export function createFishMarkMarkdownExtensions(
       }
     },
     pasteCells(position, values) {
-      if (!tableInteractionView || readCompositionState(tableInteractionView.state).active) return false;
+      if (!tableInteractionView || tableInteractionView.state.readOnly || readCompositionState(tableInteractionView.state).active) return false;
       if (!selectTablePosition(tableInteractionView, position, false)) return false;
       const changed = runTablePasteCells(tableInteractionView, position, values);
       if (changed) syncTableInteractionFocus(tableInteractionView,
@@ -1211,6 +1284,7 @@ export function createFishMarkMarkdownExtensions(
     createCanonicalSeparatorField(getMarkdownEditorViewMode),
     lifecyclePlugin,
     whitespaceInputHandler,
+    createPairedInputExtension(),
     EditorState.transactionFilter.of((transaction) => {
       if (readCompositionState(transaction.startState).active ||
           transaction.isUserEvent("input.type.compose")) return transaction;
@@ -1495,6 +1569,7 @@ function shouldNormalizeHiddenMarkerSelection(transaction: Transaction): boolean
   return (
     (transaction.docChanged || transaction.selection !== undefined) &&
     !transaction.annotation(hiddenMarkerSelectionNormalizationAnnotation) &&
+    !transaction.annotation(pairedInputSelection) &&
     !isTypingOrCompositionInputTransaction(transaction)
   );
 }
@@ -1502,6 +1577,7 @@ function shouldNormalizeHiddenMarkerSelection(transaction: Transaction): boolean
 function shouldNormalizeStructuralNavigationSelection(transaction: Transaction): boolean {
   return (
     !transaction.docChanged &&
+    !transaction.annotation(pairedInputSelection) &&
     transaction.selection !== undefined &&
     !transaction.annotation(structuralNavigationSelectionNormalizationAnnotation)
   );

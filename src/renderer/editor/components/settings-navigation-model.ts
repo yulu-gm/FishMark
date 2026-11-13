@@ -1,5 +1,5 @@
-export type SettingsSectionId = "theme" | "typography" | "autosave" | "recent-files" | "images";
-export type SettingsCategoryId = "appearance" | "file";
+export type SettingsSectionId = "theme" | "typography" | "auto-pairing" | "autosave" | "recent-files" | "images";
+export type SettingsCategoryId = "appearance" | "editing" | "file";
 
 export type SettingsCategory = {
   id: SettingsCategoryId;
@@ -19,6 +19,14 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     children: [
       { id: "theme", label: "主题" },
       { id: "typography", label: "排版" }
+    ]
+  },
+  {
+    id: "editing",
+    label: "编辑",
+    iconLabel: "E",
+    children: [
+      { id: "auto-pairing", label: "自动配对" }
     ]
   },
   {

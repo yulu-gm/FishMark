@@ -26,6 +26,8 @@ import type { WidgetMeasurementTarget } from "./widget-lifecycle";
 import { isWidgetMounted } from "./widget-lifecycle";
 
 export type TableWidgetCallbacks = {
+  isReadOnly?: () => boolean;
+  pairInput?: (position: TablePosition, text: string, selection: { anchor: number; head: number }, input: string | null) => { anchor: number; head: number } | null;
   pasteCells?: (position: TablePosition, values: readonly (readonly string[])[]) => boolean;
   selectCell: (position: TablePosition, options?: { restoreDomFocus?: boolean }) => void;
   updateCell: (position: TablePosition, text: string, inputType?: string) => void;
@@ -303,12 +305,31 @@ export class TableWidget extends WidgetType {
       const isCellLive = () => isCellOwnedByRoot(root, editor);
 
       const commitEditorInput = (inputType?: string) => {
-        if (!isCellLive()) {
+        if (!isCellLive() || this.callbacks?.isReadOnly?.()) {
           return;
         }
 
         if (inputType) this.callbacks?.updateCell(readCurrentPosition(), readTableCellText(editor), inputType);
         else this.callbacks?.updateCell(readCurrentPosition(), readTableCellText(editor));
+      };
+
+      const applyPairedInput = (input: string | null): boolean => {
+        if (!this.callbacks?.pairInput) return false;
+        const selection = editor.ownerDocument.getSelection();
+        if (!selection?.anchorNode || !selection.focusNode ||
+            !editor.contains(selection.anchorNode) || !editor.contains(selection.focusNode)) return false;
+        const result = this.callbacks.pairInput(readCurrentPosition(), readTableCellText(editor), {
+          anchor: measureRangeTextLength(editor, selection.anchorNode, selection.anchorOffset),
+          head: measureRangeTextLength(editor, selection.focusNode, selection.focusOffset)
+        }, input);
+        if (!result) return false;
+        // 源事务同步刷新单元格后恢复 DOM 方向选区，避免包裹反向选区时变成正向或收起。
+        if (isCellLive()) {
+          const anchor = resolveSelectionTarget(editor, result.anchor);
+          const head = resolveSelectionTarget(editor, result.head);
+          selection.setBaseAndExtent(anchor.node, anchor.offset, head.node, head.offset);
+        }
+        return true;
       };
 
       editor.addEventListener("mousedown", () => {
@@ -383,11 +404,25 @@ export class TableWidget extends WidgetType {
       // The source document owns history, including structure inserted when a
       // missing cell is first edited. Never apply native DOM history separately.
       editor.addEventListener("beforeinput", (event) => {
-        if (!isCellLive() || !(event instanceof InputEvent) || event.isComposing ||
+        if (event.defaultPrevented || !isCellLive() || !(event instanceof InputEvent)) return;
+        if (this.callbacks?.isReadOnly?.()) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        if (event.isComposing ||
             editor.dataset.tableCellComposing === "true") return;
         if (event.inputType === "historyUndo" || event.inputType === "historyRedo") {
           event.preventDefault();
           this.callbacks?.history(event.inputType === "historyUndo" ? "undo" : "redo");
+          return;
+        }
+        // 只处理键入和原生向后删除；粘贴、替换文本与 IME 提交继续走原有 input 路径。
+        if (event.cancelable &&
+            ((event.inputType === "insertText" && event.data?.length === 1 && applyPairedInput(event.data)) ||
+             (event.inputType === "deleteContentBackward" && applyPairedInput(null)))) {
+          event.preventDefault();
+          event.stopPropagation();
         }
       });
 
@@ -396,9 +431,17 @@ export class TableWidget extends WidgetType {
         delete editor.dataset.tableCellPendingCompositionCommit;
         clearPendingCompositionCommitFallback(editor);
         commitEditorInput(event instanceof InputEvent ? event.inputType : undefined);
+        if (event instanceof InputEvent && !event.isComposing && event.inputType.startsWith("delete")) {
+          normalizeTableCellBreakCaret(editor);
+        }
       });
 
       editor.addEventListener("paste", (event) => {
+        if (isCellLive() && this.callbacks?.isReadOnly?.()) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
         if (event.defaultPrevented || !isCellLive() || editor.dataset.tableCellComposing === "true" || !this.callbacks?.pasteCells) return;
         const values = parseTableClipboard(event.clipboardData);
         if (values && this.callbacks.pasteCells(readCurrentPosition(), values)) {
@@ -408,7 +451,7 @@ export class TableWidget extends WidgetType {
       });
 
       editor.addEventListener("keydown", (event) => {
-        if (!isCellLive()) {
+        if (event.defaultPrevented || !isCellLive()) {
           return;
         }
 
@@ -417,6 +460,20 @@ export class TableWidget extends WidgetType {
         // would otherwise leak into table navigation and tear the caret out
         // of the cell while the IME is still committing characters.
         if (event.isComposing || event.keyCode === 229 || editor.dataset.tableCellComposing === "true") {
+          return;
+        }
+
+        if (this.callbacks?.isReadOnly?.() &&
+            (["Backspace", "Delete", "Enter"].includes(event.key) ||
+             ((event.metaKey || event.ctrlKey) && ["z", "y"].includes(event.key.toLowerCase())))) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        if (event.key === "Backspace" && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey &&
+            applyPairedInput(null)) {
+          event.preventDefault();
+          event.stopPropagation();
           return;
         }
 
@@ -1198,7 +1255,8 @@ function resolveSelectionTarget(
 
   return {
     node: editor,
-    offset: editor.childNodes.length
+    // 源偏移 0 在空格占位 BR 前；真实硬换行有源码文本节点，不走此分支。
+    offset: offset === 0 ? 0 : editor.childNodes.length
   };
 }
 

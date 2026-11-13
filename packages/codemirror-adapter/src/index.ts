@@ -212,3 +212,4 @@ export {
 } from "./derived-state/inactive-block-decorations";
 
 export { selectTableCellContents } from "./table-cell-selection";
+export { pairingOptions, type PairingOptions } from "./paired-input";

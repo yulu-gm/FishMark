@@ -426,6 +426,7 @@ export function WorkspaceShell({
                   >
                     <Suspense fallback={null}>
                       <CodeEditorView
+                        pairing={preferences.editing}
                         ref={editorRef}
                         initialContent={activeDocument.content}
                         documentPath={activeDocument.path}

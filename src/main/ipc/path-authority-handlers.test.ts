@@ -25,6 +25,17 @@ function fixture() {
 }
 
 describe("path authority transport", () => {
+  it("传递配对输入的 boolean 更新，拒绝伪布尔值和未知字段", async () => {
+    const f = fixture();
+    const editing = { autoPairBrackets: false, autoPairMarkdown: true };
+    await expect(f.invoke("update-preferences", { editing })).resolves.toMatchObject({ status: "success" });
+    expect(f.updatePreferences).toHaveBeenCalledExactlyOnceWith({ editing });
+    for (const value of ["false", 1, null, {}, []]) {
+      await expect(f.invoke("update-preferences", { editing: { autoPairBrackets: value } })).rejects.toThrow();
+    }
+    await expect(f.invoke("update-preferences", { editing: { unknown: true } })).rejects.toThrow();
+    expect(f.updatePreferences).toHaveBeenCalledTimes(1);
+  });
   it.each([undefined, {}, { tabId: "tab", href: "../report.md" }, { tabId: "tab", href: "../report.md", token: "wrong" }])("相对链接私有入口拒绝 renderer 伪造请求：%j", async payload => {
     const f = fixture();
     await expect(f.invoke("prepare-markdown-link", payload)).rejects.toThrow("Path authority denied");

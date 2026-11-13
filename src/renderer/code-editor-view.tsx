@@ -19,7 +19,7 @@ import {
   type FindReplaceMatch,
   type FindReplaceSnapshot
 } from "./code-editor";
-import type { EditorViewMode } from "@fishmark/codemirror-adapter";
+import type { EditorViewMode, PairingOptions } from "@fishmark/codemirror-adapter";
 import type { ActiveBlockState } from "@fishmark/editor-model";
 import { isSameEditorLoadIdentity, type EditorLoadIdentity } from "./application/editor-load-identity";
 import type { WorkspaceEditorLoadView, WorkspaceEditorSelection } from "../shared/workspace";
@@ -62,6 +62,7 @@ export type CodeEditorHandle = {
 };
 
 type CodeEditorViewProps = {
+  pairing?: PairingOptions;
   initialContent: string;
   documentPath: string | null;
   loadRevision: number;
@@ -137,7 +138,8 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
       requestPlainTextPaste,
       openExternalLink,
       headingPresentationMode = "editing",
-      viewMode = "wysiwym"
+      viewMode = "wysiwym",
+      pairing
     },
     ref
   ) {
@@ -155,6 +157,7 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
     const initialViewModeRef = useRef(viewMode);
     const initialHeadingPresentationModeRef = useRef(headingPresentationMode);
     const initialReadOnlyRef = useRef(readOnly);
+    const initialPairingRef = useRef(pairing);
     const latestLoadedContentRef = useRef(initialContent);
     const appliedIdentityRef = useRef<EditorLoadIdentity | null>(null);
     const appliedLoadRevisionRef = useRef<number | null>(null);
@@ -236,7 +239,8 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
         openExternalLink: (href) => handleOpenExternalLink(href),
         headingPresentationMode: initialHeadingPresentationModeRef.current,
         viewMode: initialViewModeRef.current,
-        readOnly: initialReadOnlyRef.current
+        readOnly: initialReadOnlyRef.current,
+        pairing: initialPairingRef.current
       });
 
       controllerRef.current = controller;
@@ -324,6 +328,9 @@ export const CodeEditorView = forwardRef<CodeEditorHandle, CodeEditorViewProps>(
       controllerRef.current?.setViewMode(viewMode);
     }, [viewMode]);
     useEffect(() => { controllerRef.current?.setHeadingPresentationMode(headingPresentationMode); }, [headingPresentationMode]);
+    useEffect(() => {
+      if (pairing) controllerRef.current?.setPairingOptions(pairing);
+    }, [pairing]);
 
     useEffect(() => {
       const controller = controllerRef.current;
