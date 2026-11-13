@@ -78,6 +78,7 @@ import {
   runTableNextCell,
   runTablePreviousCell,
   runTableSelectCell,
+  runTablePasteCells,
   runTableUpdateCell
 } from "../table-commands";
 import {
@@ -506,6 +507,14 @@ export function createFishMarkMarkdownExtensions(
       ) {
         focusTableCellEditor(tableInteractionView, position);
       }
+    },
+    pasteCells(position, values) {
+      if (!tableInteractionView || readCompositionState(tableInteractionView.state).active) return false;
+      if (!selectTablePosition(tableInteractionView, position, false)) return false;
+      const changed = runTablePasteCells(tableInteractionView, position, values);
+      if (changed) syncTableInteractionFocus(tableInteractionView,
+        createLiveActiveBlockState(tableInteractionView.state), { force: true });
+      return changed;
     },
     moveToNextCell(position) {
       runTableCallbackAction(position, runTableNextCell);

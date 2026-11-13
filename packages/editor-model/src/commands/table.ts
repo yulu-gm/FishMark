@@ -12,7 +12,7 @@ import {
   type EditTransactionPlan,
   type TextEditOperation
 } from "../transactions/edit-transaction-plan";
-import { lineContainerChain } from "./line-structure";
+import { continuationPrefix, lineContainerChain } from "./line-structure";
 
 // Structural operations rebuild the table; ordinary cell input edits only that cell's source.
 export type TablePlanKind =
@@ -282,6 +282,49 @@ export function planTableUpdateCell(
   }
 
   return replaceTable(context, snapshot, { header, rows }, target, "cell-update").plan;
+}
+
+// 矩形粘贴替换目标区域，必要时扩展表格；区域外内容及列对齐保持不变。
+export function planTablePasteCells(
+  context: EditorSemanticContext,
+  target: TablePosition,
+  values: readonly (readonly string[])[]
+): EditTransactionPlan | null {
+  const snapshot = readTableSnapshot(context);
+  if (snapshot === null || values.length === 0 || values.some(row => row.length === 0) ||
+      !Number.isInteger(target.row) || !Number.isInteger(target.column) || target.row < 0 || target.column < 0 ||
+      target.row >= snapshot.rows.length + 1 || target.column >= snapshot.columnCount) return null;
+
+  const pasted = values.map(row => row.map(value => value.replace(/\r\n?|\n/gu, "<br>").replace(/\|/gu, "\\|")));
+  const width = Math.max(snapshot.columnCount, target.column + Math.max(...pasted.map(row => row.length)));
+  const data = snapshot.node.data;
+  if (data.kind !== "table") return null;
+  // 无表头表格同样用 header 保存首行。未覆盖单元格直接取源码，保留转义和行内代码。
+  const rows = [data.header, ...data.rows].map(row => row.map(cell =>
+    context.source.slice(cell.content.startOffset, cell.content.endOffset)));
+  while (rows.length < target.row + pasted.length) rows.push([]);
+  for (const row of rows) while (row.length < width) row.push("");
+  pasted.forEach((row, y) => row.forEach((value, x) => { rows[target.row + y]![target.column + x] = value; }));
+  const alignments = [...snapshot.alignments];
+  while (alignments.length < width) alignments.push("none");
+  const formatted = formatTableMarkdownWithOffsets({ hasHeader: snapshot.hasHeader, rowSeparator: snapshot.rowSeparator,
+    alignments, header: rows[0]!, rows: rows.slice(1) });
+  const lastRow = target.row + pasted.length - 1;
+  const lastColumn = target.column + pasted[pasted.length - 1]!.length - 1;
+  const cell = lastRow === 0 ? formatted.cells.header[lastColumn]
+    : formatted.cells.rows[lastRow - 1]?.[lastColumn];
+  if (cell === undefined) return null;
+  const firstLine = context.lineAt(snapshot.node.source.startOffset);
+  const prefix = firstLine === null ? "" : continuationPrefix(firstLine);
+  const lineBreak = context.source.slice(snapshot.node.source.startOffset, snapshot.node.source.endOffset).includes("\r\n")
+    ? "\r\n" : "\n";
+  // 节点起点之前的首行容器前缀由原文保留；后续行需要恢复引用/列表续行前缀。
+  const insert = formatted.text.replace(/\n/gu, `${lineBreak}${prefix}`);
+  const precedingLines = formatted.text.slice(0, cell.contentEndOffset).split("\n").length - 1;
+  const anchor = snapshot.node.source.startOffset + cell.contentEndOffset + precedingLines * (prefix.length + lineBreak.length - 1);
+  return createEditTransactionPlan({ context, commandId: "table-edit", intent: "structural",
+    edits: [{ from: snapshot.node.source.startOffset, to: snapshot.node.source.endOffset, insert }],
+    selection: { anchor, head: anchor }, userEventName: "input.paste" });
 }
 
 // Table parsing decodes escaped pipes while retaining all other source bytes.

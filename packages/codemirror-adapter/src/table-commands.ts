@@ -1,8 +1,9 @@
 import type { EditorView } from "@codemirror/view";
+import { isolateHistory } from "@codemirror/commands";
 import {
   planTableDelete, planTableDeleteColumn, planTableDeleteRow,
   planTableInsertColumnLeft, planTableInsertColumnRight, planTableInsertRowAbove, planTableInsertRowBelow,
-  planTableNextCell, planTablePreviousCell, planTableMoveToCell, planTableUpdateCell,
+  planTableNextCell, planTablePreviousCell, planTableMoveToCell, planTableUpdateCell, planTablePasteCells,
   planTableMoveVertical, planTableMoveHorizontal, reselectEditorSemanticContext,
   planTableBackspaceFromBelow,
   type EditorSemanticContext
@@ -88,6 +89,16 @@ export function runTableUpdateCell(view: EditorView, _state: ActiveBlockState, t
 }
 export function runTableEnterFromLineAbove(view: EditorView, state: ActiveBlockState): boolean {
   return state.tableCursor?.mode === "adjacent-above" && runTableSelectCell(view, state, state.tableCursor);
+}
+export function runTablePasteCells(view: EditorView, target: TablePosition, values: readonly (readonly string[])[]): boolean {
+  const lastRow = values.at(-1);
+  if (!lastRow?.length) return false;
+  const end = { ...target, row: target.row + values.length - 1, column: target.column + lastRow.length - 1,
+    offsetInCell: lastRow.at(-1)!.replace(/\r\n?|\n/gu, "<br>").length };
+  // 整个矩形是一次用户操作，不能与粘贴前后的单元格输入合并撤销。
+  return runSemanticCommand(view, context => planTablePasteCells(contextForTable(context, target), target, values), {
+    annotations: [tableCellSelection.of(end), isolateHistory.of("full")]
+  });
 }
 export function runTableEnterFromLineBelow(view: EditorView, state: ActiveBlockState): boolean {
   return state.tableCursor?.mode === "adjacent-below" && runTableSelectCell(view, state, state.tableCursor);

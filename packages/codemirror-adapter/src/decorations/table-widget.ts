@@ -12,10 +12,21 @@ import {
 
 import { selectTableCellContents } from "../table-cell-selection";
 import type { TablePosition } from "../table-context";
+import { parseTableClipboard } from "../table-clipboard";
+import {
+  appendTableCellHardBreak,
+  canLeaveTableCellVertically,
+  hasMatchingTableCellHardBreaks,
+  normalizeTableCellBreakCaret,
+  observeTableCellBreakCaret,
+  stopObservingTableCellBreakCaret,
+  tableCellHardBreaks
+} from "./table-cell-vertical-navigation";
 import type { WidgetMeasurementTarget } from "./widget-lifecycle";
 import { isWidgetMounted } from "./widget-lifecycle";
 
 export type TableWidgetCallbacks = {
+  pasteCells?: (position: TablePosition, values: readonly (readonly string[])[]) => boolean;
   selectCell: (position: TablePosition, options?: { restoreDomFocus?: boolean }) => void;
   updateCell: (position: TablePosition, text: string, inputType?: string) => void;
   history: (direction: "undo" | "redo") => void;
@@ -232,6 +243,7 @@ export class TableWidget extends WidgetType {
     const editors = mountedCellEditors.get(dom) ?? readLiveCellEditors(dom);
 
     editors.forEach((editor) => {
+      stopObservingTableCellBreakCaret(editor);
       delete editor.dataset.tableCellPendingCompositionCommit;
       clearPendingCompositionCommitFallback(editor);
     });
@@ -321,6 +333,7 @@ export class TableWidget extends WidgetType {
           return;
         }
 
+        observeTableCellBreakCaret(editor);
         this.callbacks?.selectCell(
           {
             row: cell.rowIndex,
@@ -331,6 +344,8 @@ export class TableWidget extends WidgetType {
           { restoreDomFocus: false }
         );
       });
+
+      editor.addEventListener("blur", () => stopObservingTableCellBreakCaret(editor));
 
       editor.addEventListener("click", () => {
         if (!isCellLive()) {
@@ -383,6 +398,15 @@ export class TableWidget extends WidgetType {
         commitEditorInput(event instanceof InputEvent ? event.inputType : undefined);
       });
 
+      editor.addEventListener("paste", (event) => {
+        if (!isCellLive() || editor.dataset.tableCellComposing === "true" || !this.callbacks?.pasteCells) return;
+        const values = parseTableClipboard(event.clipboardData);
+        if (values && this.callbacks.pasteCells(readCurrentPosition(), values)) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      });
+
       editor.addEventListener("keydown", (event) => {
         if (!isCellLive()) {
           return;
@@ -392,7 +416,7 @@ export class TableWidget extends WidgetType {
         // active. Pressing Arrow/Enter/Tab/Space during candidate selection
         // would otherwise leak into table navigation and tear the caret out
         // of the cell while the IME is still committing characters.
-        if (event.isComposing || event.keyCode === 229) {
+        if (event.isComposing || event.keyCode === 229 || editor.dataset.tableCellComposing === "true") {
           return;
         }
 
@@ -411,29 +435,29 @@ export class TableWidget extends WidgetType {
           return;
         }
 
+        normalizeTableCellBreakCaret(editor);
+        if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+          // 即使保留浏览器默认移动，也不能让外层编辑器再次把同一次按键当作跨格命令。
+          event.stopPropagation();
+          const selection = editor.ownerDocument.getSelection();
+          if (!event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey &&
+              selection && !selection.isCollapsed) {
+            // Chromium 会把行首选区的向上移动带到相邻 contenteditable，先在当前格内收起选区。
+            event.preventDefault();
+            if (event.key === "ArrowUp") selection.collapseToStart();
+            else selection.collapseToEnd();
+            return;
+          }
+          // 格内交给浏览器，保留自动折行、横向目标位置和选区扩展。
+          if (!this.callbacks || !canLeaveTableCellVertically(editor, event)) return;
+          event.preventDefault();
+          const position = readCurrentPosition();
+          if (event.key === "ArrowUp") this.callbacks.moveUp(position);
+          else this.callbacks.moveDown(position);
+          return;
+        }
+
         const selection = readEditableSelection(editor);
-
-        if (event.key === "ArrowUp") {
-          event.preventDefault();
-          this.callbacks?.moveUp({
-            row: cell.rowIndex,
-            column: cell.columnIndex,
-            tableStartOffset: resolveWidgetTableStartOffset(editor, this.block.startOffset),
-            offsetInCell: selection.start
-          });
-          return;
-        }
-
-        if (event.key === "ArrowDown") {
-          event.preventDefault();
-          this.callbacks?.moveDown({
-            row: cell.rowIndex,
-            column: cell.columnIndex,
-            tableStartOffset: resolveWidgetTableStartOffset(editor, this.block.startOffset),
-            offsetInCell: selection.start
-          });
-          return;
-        }
 
         if (event.key === "ArrowLeft" && selection.start === selection.end && selection.start === 0) {
           event.preventDefault();
@@ -611,7 +635,7 @@ function syncTableCellHeightReservation(
   if (previous?.text === text && previous.inline === inline && previous.source === source) return;
   const plain = layout.querySelector<HTMLElement>(".cm-table-widget-height-source")!;
   const preview = layout.querySelector<HTMLElement>(".cm-table-widget-height-preview")!;
-  plain.replaceChildren(buildPlainTextFragment(layout.ownerDocument, text));
+  plain.replaceChildren(buildPlainTextFragment(layout.ownerDocument, text, inline, source));
   preview.replaceChildren(inline ? buildInlinePreviewFragment(layout.ownerDocument, source, inline) :
     buildPlainTextFragment(layout.ownerDocument, text));
   reservedCellContent.set(layout, { text, source, inline });
@@ -731,6 +755,8 @@ function syncTableCellEditor(
     return;
   }
 
+  const breaks = nextRenderMode === "plain" ? tableCellHardBreaks(text, options.inline, options.source) : [];
+
   // If the user just typed into a plain (active) cell, the DOM already reflects
   // the target text. Rebuilding children here would destroy the native caret
   // mid-keystroke, so just refresh the cached snapshot and leave the DOM alone.
@@ -739,7 +765,8 @@ function syncTableCellEditor(
   if (
     nextRenderMode === "plain" &&
     editor.dataset.tableCellRenderMode === "plain" &&
-    (editor.textContent ?? "") === text
+    (editor.textContent ?? "") === text &&
+    hasMatchingTableCellHardBreaks(editor, breaks)
   ) {
     editor.dataset.tableCellText = text;
     return;
@@ -759,7 +786,7 @@ function syncTableCellEditor(
   if (nextRenderMode !== "plain" || !restoreParkedPlainCellNodes(editor, text)) {
     editor.replaceChildren(
       nextRenderMode === "plain"
-        ? buildPlainTextFragment(editor.ownerDocument, text)
+        ? buildPlainTextFragment(editor.ownerDocument, text, options.inline, options.source, breaks)
         : buildInlinePreviewFragment(editor.ownerDocument, options.source ?? "", options.inline)
     );
   }
@@ -823,7 +850,13 @@ function schedulePendingCompositionCommitFallback(
   compositionCommitFallbackTimers.set(editor, timerId);
 }
 
-function buildPlainTextFragment(document: Document, text: string): DocumentFragment {
+function buildPlainTextFragment(
+  document: Document,
+  text: string,
+  inline?: InlineRoot,
+  source?: string,
+  breaks = tableCellHardBreaks(text, inline, source)
+): DocumentFragment {
   const fragment = document.createDocumentFragment();
 
   if (text.length === 0) {
@@ -831,7 +864,15 @@ function buildPlainTextFragment(document: Document, text: string): DocumentFragm
     return fragment;
   }
 
-  fragment.appendChild(document.createTextNode(text));
+  let offset = 0;
+  for (const { from, to } of breaks) {
+    if (from > offset) fragment.append(text.slice(offset, from));
+    appendTableCellHardBreak(fragment, text.slice(from, to));
+    offset = to;
+  }
+  if (offset < text.length) fragment.append(text.slice(offset));
+  // 末尾的 BR 自己占在上一行；加占位 BR 让末尾空行可落光标。
+  else fragment.append(document.createElement("br"));
   return fragment;
 }
 

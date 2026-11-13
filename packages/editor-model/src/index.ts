@@ -135,6 +135,7 @@ export {
   planTableMoveVertical,
   planTableBackspaceFromBelow,
   planTableUpdateCell,
+  planTablePasteCells,
   readTableSnapshot,
   tablePositionAt,
   type TableDecision,
