@@ -1,4 +1,4 @@
-import type { InlineNode, MarkdownLeafNode, MarkdownNode } from "@fishmark/markdown-engine";
+import { parseInlineAst, type InlineNode, type MarkdownLeafNode, type MarkdownNode } from "@fishmark/markdown-engine";
 import type { PhysicalLine } from "../physical-lines/physical-editing-document";
 
 import type { EditorSemanticContext } from "../context/editor-semantic-context";
@@ -213,47 +213,29 @@ export function decideBlockquoteToggle(context: EditorSemanticContext): Formatti
 
 function inlineToggle(
   context: EditorSemanticContext,
-  type: "strong" | "emphasis",
+  type: ToggleStyle,
   marker: string
 ): FormattingDecision | null {
   const selection = context.selectionContext;
 
   if (!selection.empty) {
-    const enclosing = findEnclosingInline(context, type, selection.from, selection.to);
-
-    if (enclosing !== null) {
-      const inner = context.source.slice(enclosing.openMarker.endOffset, enclosing.closeMarker.startOffset);
-
-      return {
-        kind: type,
-        plan: createEditTransactionPlan({
-          context,
-          commandId: "format-inline",
-          intent: "edit",
-          edits: [{ from: enclosing.startOffset, to: enclosing.endOffset, insert: inner }],
-          selection: {
-            anchor: selection.from - marker.length,
-            head: selection.to - marker.length
-          }
-        })
-      };
+    const root = inlineRootAt(context);
+    const affected = root && selection.from >= root.startOffset && selection.to <= root.endOffset
+      ? root.children.filter(isInlineStyle).filter(node => node.startOffset < selection.to && node.endOffset > selection.from)
+      : [];
+    if (root && affected.length) {
+      return rewriteInlineSelection(context, type, marker, root, affected[0]!, affected[affected.length - 1]!);
     }
 
-    const slice = context.source.slice(selection.from, selection.to);
-
-    return {
-      kind: type,
-      plan: createEditTransactionPlan({
-        context,
-        commandId: "format-inline",
-        intent: "edit",
-        edits: [{ from: selection.from, to: selection.to, insert: `${marker}${slice}${marker}` }],
-        selection: {
-          anchor: selection.from + marker.length,
-          head: selection.to + marker.length
-        }
-      })
-    };
+    // 没有切到同一行内树的格式节点时，保留普通包裹行为（含跨段、链接文字和代码选区）。
+    const text = context.source.slice(selection.from, selection.to);
+    const leading = text.length - text.trimStart().length;
+    const trailing = text.length - text.trimEnd().length;
+    if (leading === text.length) return null;
+    const from = selection.from + leading;
+    const to = selection.to - trailing;
+    return inlineDecision(context, type, { from, to, insert: marker + context.source.slice(from, to) + marker },
+      selection.from + (leading ? 0 : marker.length), selection.to + marker.length * (trailing ? 2 : 1));
   }
 
   const cursor = selection.from;
@@ -275,60 +257,189 @@ function inlineToggle(
   };
 }
 
-type EnclosingInline = {
-  readonly startOffset: number;
-  readonly endOffset: number;
-  readonly openMarker: { readonly endOffset: number };
-  readonly closeMarker: { readonly startOffset: number };
+type InlineStyle = Extract<InlineNode, { type: "strong" | "emphasis" | "strikethrough" }>;
+type InlineStyleKind = InlineStyle["type"];
+type ToggleStyle = Exclude<InlineStyleKind, "strikethrough">;
+type StyleMarker = { type: InlineStyleKind; open: string; close: string };
+type InlinePiece = {
+  from: number;
+  to: number;
+  styles: readonly StyleMarker[];
+  // 非格式节点当作一个整体：不能把链接目标或行内代码当成普通文字拆开。
+  atom?: InlineNode["type"];
 };
 
-function findEnclosingInline(
-  context: EditorSemanticContext,
-  type: "strong" | "emphasis",
-  from: number,
-  to: number
-): EnclosingInline | null {
-  const inline = inlineRootAt(context);
-
-  if (inline === undefined || inline === null) {
-    return null;
-  }
-
-  return walkInline(inline.children as readonly InlineNode[], type, from, to);
+function isInlineStyle(node: InlineNode): node is InlineStyle {
+  return node.type === "strong" || node.type === "emphasis" || node.type === "strikethrough";
 }
 
-function walkInline(
-  children: readonly InlineNode[],
-  type: "strong" | "emphasis",
-  from: number,
-  to: number
-): EnclosingInline | null {
-  for (const child of children) {
-    if (!("children" in child) || !("openMarker" in child) || !("closeMarker" in child)) {
-      continue;
+function inlinePieces(
+  source: string, from: number, to: number, nodes: readonly InlineNode[], styles: readonly StyleMarker[] = []
+): InlinePiece[] {
+  const pieces: InlinePiece[] = [];
+  let cursor = from;
+  for (const node of nodes) {
+    if (cursor < node.startOffset) pieces.push({ from: cursor, to: node.startOffset, styles });
+    if (isInlineStyle(node)) {
+      const style = {
+        type: node.type,
+        open: source.slice(node.openMarker.startOffset, node.openMarker.endOffset),
+        close: source.slice(node.closeMarker.startOffset, node.closeMarker.endOffset)
+      };
+      pieces.push(...inlinePieces(source, node.openMarker.endOffset, node.closeMarker.startOffset, node.children, [...styles, style]));
+    } else {
+      pieces.push({ from: node.startOffset, to: node.endOffset, styles,
+        ...(node.type === "text" ? {} : { atom: node.type }) });
     }
+    cursor = node.endOffset;
+  }
+  if (cursor < to) pieces.push({ from: cursor, to, styles });
+  return pieces;
+}
 
-    const container = child as unknown as EnclosingInline & {
-      readonly type: string;
-      readonly children: readonly InlineNode[];
-    };
+function rewriteInlineSelection(
+  context: EditorSemanticContext, type: ToggleStyle, marker: string,
+  root: NonNullable<MarkdownLeafNode["inline"]>, first: InlineStyle, last: InlineStyle
+): FormattingDecision | null {
+  const { source, selectionContext: selection } = context;
+  const from = Math.min(selection.from, first.startOffset);
+  const to = Math.max(selection.to, last.endOffset);
+  const original = inlinePieces(source, root.startOffset, root.endOffset, root.children);
+  const bounds = [selection.from, selection.to];
+  if (original.some(piece => piece.atom && bounds.some(offset => piece.from < offset && offset < piece.to))) return null;
 
-    if (
-      container.type === type &&
-      container.openMarker.endOffset === from &&
-      container.closeMarker.startOffset === to
-    ) {
-      return container;
-    }
+  const pieces = original.flatMap(piece => {
+    const edges = [piece.from, ...bounds.filter(offset => offset > piece.from && offset < piece.to), piece.to];
+    return edges.slice(1).map((end, index) => ({ ...piece, from: edges[index]!, to: end }));
+  });
+  const selected = (piece: InlinePiece) => piece.from >= selection.from && piece.to <= selection.to;
+  const meaningful = pieces.filter(piece => selected(piece) && (piece.atom || /\S/u.test(source.slice(piece.from, piece.to))));
+  if (!meaningful.length) return null;
+  const hasStyle = (piece: InlinePiece) => piece.styles.some(style => style.type === type);
+  const remove = meaningful.every(hasStyle);
+  const within = (piece: InlinePiece) => piece.from >= from && piece.to <= to;
+  const patch = pieces.filter(within);
+  const shared = patch.flatMap(piece => piece.styles).find(style => style.type === type) ?? { type, open: marker, close: marker };
+  const visible = inlineText(root.children, source);
+  const tried = new Set<string>();
 
-    const nested = walkInline(container.children, type, from, to);
+  // 先按原有嵌套顺序写标记；遇到连续星号不能正确闭合时，再尝试把目标样式移入或移出一层。
+  for (const [order, alternate] of [
+    ["original", false], ["inner", false], ["outer", false],
+    ["original", true], ["inner", true], ["outer", true]
+  ] as const) {
+    const changed = patch.map(piece => {
+      const index = piece.styles.findIndex(style => style.type === type);
+      const other = piece.styles.filter(style => style.type !== type);
+      if (remove ? index < 0 || selected(piece) : index < 0 && !selected(piece)) return { ...piece, styles: other };
+      const target = index < 0 ? shared : piece.styles[index]!;
+      const depth = order === "outer" ? 0 : order === "inner" || index < 0 ? other.length : index;
+      return { ...piece, styles: [...other.slice(0, depth), target, ...other.slice(depth)] };
+    });
+    const written = writeInlinePieces(source, changed, selected, alternate ? type : null);
+    if (written.start === undefined || written.end === undefined || tried.has(written.text)) continue;
+    tried.add(written.text);
+    const fragment = source.slice(root.startOffset, from) + written.text + source.slice(to, root.endOffset);
+    const parsed = parseInlineAst(fragment, 0, fragment.length);
+    // 标记能否闭合取决于前后文。只验证这个行内范围，防止插入字面星号或改坏其它样式。
+    const expected = [...pieces.filter(piece => piece.to <= from), ...changed, ...pieces.filter(piece => piece.from >= to)];
+    if (inlineText(parsed.children, fragment) !== visible ||
+        !sameInlinePieces(expected, source, inlinePieces(fragment, 0, fragment.length, parsed.children), fragment)) continue;
+    return inlineDecision(context, type, { from, to, insert: written.text }, from + written.start, from + written.end);
+  }
+  return null;
+}
 
-    if (nested !== null) {
-      return nested;
-    }
+function writeInlinePieces(
+  source: string, pieces: readonly InlinePiece[], selected: (piece: InlinePiece) => boolean, alternate: InlineStyleKind | null
+): { text: string; start?: number; end?: number } {
+  // Markdown 标记不能紧贴内部空白。把样式变化点的空白留在两侧共有的样式中。
+  const runs = pieces.flatMap(piece => {
+    if (piece.atom) return [piece];
+    return Array.from(source.slice(piece.from, piece.to).matchAll(/\s+|\S+/gu), match =>
+      ({ ...piece, from: piece.from + match.index, to: piece.from + match.index + match[0].length }));
+  });
+  const isSpace = (piece: InlinePiece) => !piece.atom && /^\s+$/u.test(source.slice(piece.from, piece.to));
+  for (let i = 0; i < runs.length;) {
+    if (!isSpace(runs[i]!)) { i += 1; continue; }
+    let end = i + 1;
+    while (end < runs.length && isSpace(runs[end]!)) end += 1;
+    const left = runs[i - 1]?.styles ?? [];
+    const right = runs[end]?.styles ?? [];
+    const common = left.slice(0, commonStyleDepth(left, right));
+    for (; i < end; i += 1) runs[i] = { ...runs[i]!, styles: common };
   }
 
-  return null;
+  let text = "";
+  let start: number | undefined;
+  let end: number | undefined;
+  let active: readonly StyleMarker[] = [];
+  const spelling = (style: StyleMarker, side: "open" | "close") => style.type === alternate
+    ? (style[side].startsWith("_") ? "*" : "_").repeat(style[side].length) : style[side];
+  for (const piece of runs) {
+    const depth = commonStyleDepth(active, piece.styles);
+    for (let i = active.length - 1; i >= depth; i -= 1) text += spelling(active[i]!, "close");
+    for (const style of piece.styles.slice(depth)) text += spelling(style, "open");
+    if (selected(piece)) start ??= text.length;
+    text += source.slice(piece.from, piece.to);
+    if (selected(piece)) end = text.length;
+    active = piece.styles;
+  }
+  for (let i = active.length - 1; i >= 0; i -= 1) text += spelling(active[i]!, "close");
+  return { text, ...(start === undefined ? {} : { start }), ...(end === undefined ? {} : { end }) };
+}
+
+function commonStyleDepth(left: readonly StyleMarker[], right: readonly StyleMarker[]): number {
+  let depth = 0;
+  while (depth < left.length && left[depth] === right[depth]) depth += 1;
+  return depth;
+}
+
+function inlineText(nodes: readonly InlineNode[], source: string): string {
+  return nodes.map(node => isInlineStyle(node) ? inlineText(node.children, source) :
+    node.type === "text" ? node.value : source.slice(node.startOffset, node.endOffset)).join("");
+}
+
+function sameInlinePieces(
+  expected: readonly InlinePiece[], source: string, actual: readonly InlinePiece[], fragment: string
+): boolean {
+  const signature = (pieces: readonly InlinePiece[], text: string) => {
+    const parts: { key: string; text: string }[] = [];
+    for (const piece of pieces) {
+      const kinds = [...new Set(piece.styles.map(style => style.type))].sort().join(",");
+      const raw = text.slice(piece.from, piece.to);
+      const chunks = piece.atom ? [raw] : raw.match(/\s+|\S+/gu) ?? [];
+      for (const chunk of chunks) {
+        const key = piece.atom ? `atom:${piece.atom}:${kinds}` : /^\s+$/u.test(chunk) ? "" : kinds;
+        const previous = parts.at(-1);
+        if (!piece.atom && previous?.key === key) previous.text += chunk;
+        else parts.push({ key, text: chunk });
+      }
+    }
+    return parts;
+  };
+  const left = signature(expected, source), right = signature(actual, fragment);
+  return left.length === right.length && left.every((part, index) =>
+    part.key === right[index]?.key && part.text === right[index]?.text);
+}
+
+function inlineDecision(
+  context: EditorSemanticContext, kind: ToggleStyle, edit: TextEditOperation, from: number, to: number
+): FormattingDecision {
+  // 只派发真正不同的源码；原样保留共同前后缀，也保留 anchor/head 的方向。
+  let { from: start, to: end, insert } = edit;
+  let prefix = 0;
+  while (start + prefix < end && prefix < insert.length && context.source[start + prefix] === insert[prefix]) prefix += 1;
+  let suffix = 0;
+  while (end - suffix > start + prefix && insert.length - suffix > prefix &&
+      context.source[end - suffix - 1] === insert[insert.length - suffix - 1]) suffix += 1;
+  start += prefix;
+  end -= suffix;
+  insert = insert.slice(prefix, insert.length - suffix);
+  const backwards = context.selectionContext.selection.anchor > context.selectionContext.selection.head;
+  return { kind, plan: createEditTransactionPlan({ context, commandId: "format-inline", intent: "edit",
+    edits: [{ from: start, to: end, insert }],
+    selection: backwards ? { anchor: to, head: from } : { anchor: from, head: to } }) };
 }
 
 // The canonical inline AST for the selection comes from the deepest leaf on the line that has one.
