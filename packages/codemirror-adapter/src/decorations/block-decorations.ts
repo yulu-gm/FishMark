@@ -30,11 +30,9 @@ import type { TableBlock } from "@fishmark/markdown-engine";
 import { createInactiveBlockMathPreviewDecoration } from "./math-widgets";
 import { createInactiveMermaidPreviewDecoration, isMermaidCodeFence } from "./mermaid-widgets";
 import {
-  createLineInfosInRange,
   resolveLineStartOffset,
   trimTrailingCarriageReturn
 } from "@fishmark/editor-model";
-import { nodeRequiresLeadingStructuralSeparator } from "@fishmark/editor-model";
 import {
   createSemanticEditingDocument as createPhysicalEditingDocument,
   type EditingLine,
@@ -126,8 +124,7 @@ export function createBlockDecorations(
   }
 
   appendInactiveBlankLineDecorations(
-    context.source,
-    childrenOf(context.snapshot.tree.root),
+    context.editingDocument,
     context.activeSelectionLineStart,
     ranges
   );
@@ -1133,144 +1130,15 @@ function createListItemLineAttributes(
 }
 
 function appendInactiveBlankLineDecorations(
-  source: string,
-  blocks: readonly MarkdownNode[],
+  document: PhysicalEditingDocument,
   activeSelectionLineStart: number | null,
   ranges: Range<Decoration>[]
 ): void {
-  let cursor = 0;
-  const hiddenLineStarts = new Set<number>();
-
-  for (const block of blocks) {
-    appendInactiveBlankLineDecorationsInRange(
-      source,
-      cursor,
-      block.source.startOffset,
-      cursor > 0,
-      activeSelectionLineStart,
-      hiddenLineStarts,
-      ranges
-    );
-    appendLeadingBlockSeparatorDecoration(
-      source,
-      block,
-      activeSelectionLineStart,
-      hiddenLineStarts,
-      ranges
-    );
-    cursor = Math.max(cursor, block.source.endOffset);
+  // 空行角色由模型统一决定；渲染只负责折叠，不再独立计算奇偶位置或块前分隔。
+  for (const semantic of document.semanticLineMap.lines) {
+    if (semantic.role !== "structural-separator" || semantic.line.from === activeSelectionLineStart) continue;
+    ranges.push(Decoration.line({ attributes: { class: "cm-inactive-blank-line" } }).range(semantic.line.from));
   }
-
-  appendInactiveBlankLineDecorationsInRange(
-    source,
-    cursor,
-    source.length,
-    cursor > 0,
-    activeSelectionLineStart,
-    hiddenLineStarts,
-    ranges
-  );
-}
-
-function appendInactiveBlankLineDecorationsInRange(
-  source: string,
-  startOffset: number,
-  endOffset: number,
-  skipLeadingLineBreak: boolean,
-  activeSelectionLineStart: number | null,
-  hiddenLineStarts: Set<number>,
-  ranges: Range<Decoration>[]
-): void {
-  const contentStartOffset = skipLeadingLineBreak
-    ? skipSingleLeadingLineBreak(source, startOffset, endOffset)
-    : startOffset;
-  let emptyLineRunIndex = 0;
-
-  for (const line of createLineInfosInRange(source, contentStartOffset, endOffset)) {
-    const lineEndOffset = trimTrailingCarriageReturn(source, line.startOffset, line.endOffset);
-    const lineText = source.slice(line.startOffset, lineEndOffset);
-
-    if (lineText.length > 0) {
-      emptyLineRunIndex = 0;
-      continue;
-    }
-
-    emptyLineRunIndex += 1;
-
-    if (line.startOffset === activeSelectionLineStart) {
-      continue;
-    }
-
-    if (emptyLineRunIndex % 2 === 0) {
-      continue;
-    }
-
-    appendInactiveBlankLineDecoration(line.startOffset, activeSelectionLineStart, hiddenLineStarts, ranges);
-  }
-}
-
-function appendLeadingBlockSeparatorDecoration(
-  source: string,
-  block: MarkdownNode,
-  activeSelectionLineStart: number | null,
-  hiddenLineStarts: Set<number>,
-  ranges: Range<Decoration>[]
-): void {
-  const startOffset = block.source.startOffset;
-
-  if (!nodeRequiresLeadingStructuralSeparator(block) || startOffset <= 0) {
-    return;
-  }
-
-  const previousLineEnd = source[startOffset - 1] === "\n" ? startOffset - 1 : startOffset;
-  const previousLineStart = resolveLineStartOffset(source, previousLineEnd);
-  const contentEnd = trimTrailingCarriageReturn(source, previousLineStart, previousLineEnd);
-
-  if (source.slice(previousLineStart, contentEnd).length !== 0) {
-    return;
-  }
-
-  appendInactiveBlankLineDecoration(previousLineStart, activeSelectionLineStart, hiddenLineStarts, ranges);
-}
-
-function appendInactiveBlankLineDecoration(
-  lineStart: number,
-  activeSelectionLineStart: number | null,
-  hiddenLineStarts: Set<number>,
-  ranges: Range<Decoration>[]
-): void {
-  if (lineStart === activeSelectionLineStart || hiddenLineStarts.has(lineStart)) {
-    return;
-  }
-
-  hiddenLineStarts.add(lineStart);
-  ranges.push(
-    Decoration.line({
-      attributes: {
-        class: "cm-inactive-blank-line"
-      }
-    }).range(lineStart)
-  );
-}
-
-function skipSingleLeadingLineBreak(source: string, startOffset: number, endOffset: number): number {
-  if (startOffset >= endOffset) {
-    return startOffset;
-  }
-
-  if (
-    source[startOffset] === "\r" &&
-    startOffset + 1 < endOffset &&
-    source[startOffset + 1] === "\n"
-  ) {
-    return startOffset + 2;
-  }
-
-  if (source[startOffset] !== "\n") {
-    return startOffset;
-  }
-
-  return startOffset + 1;
 }
 
 function getListItemSourcePrefixLength(item: ListItemBlock, source: string): number {

@@ -40,19 +40,19 @@ type CanonicalBlock = {
 
 /**
  * Resolves every physical line's semantic role from the canonical tree, so line presentation and
- * navigation no longer re-derive block structure from the rich projection. The decision table
- * mirrors the previous projection-based one exactly, and `canonical-semantic-lines.test.ts` pins
- * both implementations together over a shared corpus.
+ * navigation no longer re-derive block structure from the rich projection.
+ * 连续空行的语义在这里统一生成，装饰与光标导航消费相同的角色。
  */
 export function createCanonicalSemanticLineRoles(
   lines: readonly SemanticLineInput[],
   snapshot: EditorDerivedSnapshot
 ): readonly SemanticLineRole[] {
   const blocks = createCanonicalBlocks(snapshot);
-
-  return lines.map((line) =>
-    resolveSemanticLineRole(line, findBlockForLine(blocks, line.number), blocks, lines)
-  );
+  let emptyRunIndex = 0;
+  return lines.map((line) => {
+    emptyRunIndex = line.kind === "empty" ? emptyRunIndex + 1 : 0;
+    return resolveSemanticLineRole(line, findBlockForLine(blocks, line.number), blocks, lines, emptyRunIndex);
+  });
 }
 
 function createCanonicalBlocks(snapshot: EditorDerivedSnapshot): readonly CanonicalBlock[] {
@@ -80,14 +80,15 @@ function resolveSemanticLineRole(
   line: SemanticLineInput,
   block: CanonicalBlock | null,
   blocks: readonly CanonicalBlock[],
-  lines: readonly SemanticLineInput[]
+  lines: readonly SemanticLineInput[],
+  emptyRunIndex: number
 ): SemanticLineRole {
   if (!block) {
     if (line.kind === "text") {
       return "unparsed-text";
     }
 
-    return isStructuralSeparator(line, blocks, lines) ? "structural-separator" : "extra-blank";
+    return isStructuralSeparator(line, blocks, emptyRunIndex) ? "structural-separator" : "extra-blank";
   }
 
   switch (block.node.kind) {
@@ -169,9 +170,10 @@ function isClosedMathBlock(node: MarkdownNode): boolean {
 function isStructuralSeparator(
   line: SemanticLineInput,
   blocks: readonly CanonicalBlock[],
-  lines: readonly SemanticLineInput[]
+  emptyRunIndex: number
 ): boolean {
-  if (line.kind !== "empty" || blocks.length === 0) {
+  // 没有换行符的文末空行是可输入位置；有空格的行也不能作为隐藏分隔。
+  if (line.kind !== "empty" || line.lineBreakTo === line.from) {
     return false;
   }
 
@@ -182,21 +184,8 @@ function isStructuralSeparator(
     return true;
   }
 
-  if (blocks.length < 2) {
-    return false;
-  }
-
-  const previousBlock = blocks[upperBound(blocks, line.from, (block) => block.endOffset) - 1];
-  const hasNextBlock = blocks[blocks.length - 1]!.startOffset >= line.lineBreakTo;
-
-  if (!previousBlock || !hasNextBlock) {
-    return false;
-  }
-
-  const previousLineBreakCount = upperBound(lines, line.from, (candidate) => candidate.lineBreakTo) -
-    upperBound(lines, previousBlock.endOffset, (candidate) => candidate.lineBreakTo);
-
-  return previousLineBreakCount === 1;
+  // 一对换行对应一个段落边界；空行依次交替为结构分隔和可编辑空段落。
+  return emptyRunIndex % 2 === 1;
 }
 
 // Source-ordered blocks and physical lines have monotonic boundaries. Querying them directly

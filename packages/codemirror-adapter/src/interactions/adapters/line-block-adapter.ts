@@ -298,6 +298,11 @@ function resolveAnchorAboveStructuralSeparator(
   context: VerticalInteractionContext,
   separator: StructuralLineSeparator
 ): number | null {
+  // 含空格的可编辑行不是段落分隔；不能越过它直接跳回上一个语法块。
+  if (separator.lineNumber > 1) {
+    const previous = context.view.state.doc.line(separator.lineNumber - 1);
+    if (previous.text.length > 0 && previous.text.trim().length === 0) return previous.to;
+  }
   if (separator.previousBlockEnd === null) {
     return null;
   }

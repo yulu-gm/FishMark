@@ -64,22 +64,20 @@ const corpus: Array<[string, string]> = [
   ["fence with container prefix and blank content", "> ```\n> \n> \n> ```"]
 ];
 
-// Frozen contract. Before the tree port, the same corpus was compared line by line against the
-// projection-based resolver and matched completely; these values pin that behaviour after the
-// projection-based implementation was deleted.
+// 固定各类文档的角色契约。空段落按结构分隔与可编辑行交替，而非只折叠首个空行。
 const expectedRoles: Record<string, string> = {
   "empty": "extra-blank",
-  "single newline": "extra-blank|extra-blank",
+  "single newline": "structural-separator|extra-blank",
   "whitespace only": "extra-blank",
   "paragraph": "paragraph",
   "paragraph with trailing newline": "paragraph|extra-blank",
   "crlf paragraphs": "paragraph|structural-separator|paragraph|extra-blank",
   "heading": "heading|structural-separator|paragraph",
   "heading only": "heading",
-  "structural separator then extra blank": "paragraph|structural-separator|extra-blank|extra-blank|paragraph",
-  "three blank rows": "paragraph|structural-separator|extra-blank|extra-blank|extra-blank|paragraph",
-  "leading blank rows": "extra-blank|extra-blank|paragraph",
-  "trailing blank rows": "paragraph|extra-blank|extra-blank|extra-blank",
+  "structural separator then extra blank": "paragraph|structural-separator|extra-blank|structural-separator|paragraph",
+  "three blank rows": "paragraph|structural-separator|extra-blank|structural-separator|extra-blank|paragraph",
+  "leading blank rows": "structural-separator|extra-blank|paragraph",
+  "trailing blank rows": "paragraph|structural-separator|extra-blank|extra-blank",
   "whitespace line between paragraphs": "paragraph|extra-blank|paragraph",
   "unordered list": "list-item|list-item",
   "nested list": "list-item|list-continuation|list-continuation",

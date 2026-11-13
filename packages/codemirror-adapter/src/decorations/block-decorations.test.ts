@@ -799,7 +799,7 @@ describe("createBlockDecorations", () => {
     expect(physicalRanges.find((range) => range.from === firstSeparatorLineStart)?.className.split(" ").sort()).toEqual([
       "cm-fm-line",
       "cm-fm-line-empty",
-      "cm-fm-line-extra-blank"
+      "cm-fm-line-structural-separator"
     ].sort());
     expect(physicalRanges.find((range) => range.from === firstVisibleEmptyLineStart)?.className.split(" ").sort()).toEqual([
       "cm-fm-line",
@@ -809,7 +809,7 @@ describe("createBlockDecorations", () => {
     expect(physicalRanges.find((range) => range.from === secondSeparatorLineStart)?.className.split(" ").sort()).toEqual([
       "cm-fm-line",
       "cm-fm-line-empty",
-      "cm-fm-line-extra-blank"
+      "cm-fm-line-structural-separator"
     ].sort());
     expect(physicalRanges.find((range) => range.from === finalEmptyLineStart)?.className.split(" ").sort()).toEqual([
       "cm-fm-line",

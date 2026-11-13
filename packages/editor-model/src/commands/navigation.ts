@@ -1,4 +1,4 @@
-import { parseBlockquoteLinePrefix } from "@fishmark/markdown-engine";
+import { createStructuralLineModel } from "../semantic-lines/structural-line-model";
 import type { PhysicalLine } from "../physical-lines/physical-editing-document";
 
 import type { EditorSemanticContext } from "../context/editor-semantic-context";
@@ -92,20 +92,10 @@ export function planVerticalNavigation(
   });
 }
 
-// A line whose content is empty — blank, whitespace-only, or nothing but quote markers — only
-// separates blocks and is never a navigation target.
+// 是否可落光标由共享模型决定；可编辑空段落和含空格的行不能被当作分隔跳过。
 function isStructuralSeparatorLine(context: EditorSemanticContext, line: PhysicalLine): boolean {
-  const prefix = parseBlockquoteLinePrefix(context.source, line.range.startOffset, line.contentEndOffset);
-  const text = context.source.slice(prefix.contentStartOffset, line.contentEndOffset);
-  if (prefix.markers.length > 0) return text.trim().length === 0;
-  if (text.length > 0) return false;
-  let count = 1;
-  for (let index = line.lineNumber - 2; index >= 0; index -= 1) {
-    const previous = context.lines.lines[index]!;
-    if (previous.contentEndOffset !== previous.range.startOffset) break;
-    count += 1;
-  }
-  return count % 2 === 1;
+  const role = createStructuralLineModel(context.snapshot).getLineRole(line.lineNumber);
+  return role === "structural-separator" || role === "hidden-marker-line";
 }
 
 // Printable input only inserts text at the caret: it cannot move structure or normalize syntax.
