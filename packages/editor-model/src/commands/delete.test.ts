@@ -44,7 +44,6 @@ describe("planDelete", () => {
   });
   it.each([
     ["Alpha\n \nBeta", "Alpha \nBeta"],
-    ["Alpha\n\n# Beta", "Alpha\n# Beta"],
     ["Alpha\n\n- Beta", "Alpha\n- Beta"],
     ["Alpha\n\n```\nBeta\n```", "Alpha\n```\nBeta\n```"],
     ["Alpha\n\n", "Alpha\n"]

@@ -9,6 +9,7 @@ import {
 } from "../transactions/edit-transaction-plan";
 import { lineContainerChain, lastOfKind, linePrefixText, listItemPrefix, parentOf } from "./line-structure";
 import { planTableBackspaceFromBelow } from "./table";
+import { blockDeletionBoundary, boundaryNavigation, joinParagraphIntoHeading, listItemHasContinuation } from "./delete";
 import { graphemeDeletionRange } from "./grapheme-deletion";
 
 // Backspace degrades exactly one structural step at a time: first the hidden marker run, then
@@ -239,6 +240,7 @@ export function decideBackspace(context: EditorSemanticContext): BackspaceDecisi
     return bareSeparator;
   }
 
+  const heading = chain.at(-1);
   // 1. Inside a line, an ordinary character delete.
   if (offset > contentStart) {
     if (offset - 1 < line.range.startOffset) {
@@ -247,6 +249,27 @@ export function decideBackspace(context: EditorSemanticContext): BackspaceDecisi
 
     const range = graphemeDeletionRange(context.source, line, offset, "backward");
     return range === null ? null : rangeDelete(context, range.from, range.to, "default");
+  }
+
+  const previous = context.lines.lines[line.lineNumber - 2];
+  if (previous && offset <= contentStart) {
+    // 从第一行代码退格时越过开始围栏，不能把代码写进语言标记。
+    if (line.role === "fence-content" && previous.role === "fence-open" && previous.nodeId === line.nodeId) {
+      const above = context.lines.lines[previous.lineNumber - 2];
+      return { kind: "subtree-join", plan: boundaryNavigation(context, "backward", above?.contentEndOffset ?? offset) };
+    }
+    let preceding = previous;
+    while (preceding.range.startOffset === preceding.contentEndOffset && preceding.lineNumber > 1) {
+      preceding = context.lines.lines[preceding.lineNumber - 2]!;
+    }
+    const block = blockDeletionBoundary(context, preceding, line, "backward");
+    if (block !== null) return { kind: "subtree-join", plan: block };
+    const precedingNode = preceding.nodeId ? context.nodeById(preceding.nodeId) : null;
+    if (heading?.kind === "paragraph" && precedingNode?.kind === "heading" &&
+        !line.segments.length && !preceding.segments.length && line.lineNumber <= preceding.lineNumber + 2 &&
+        /^(?:\r?\n){1,2}$/u.test(context.source.slice(preceding.contentEndOffset, line.range.startOffset))) {
+      return { kind: "subtree-join", plan: joinParagraphIntoHeading(context, preceding, line, precedingNode.content.endOffset, "backward") };
+    }
   }
 
   // 2. At the content start the innermost hidden prefix degrades first: an item marker becomes
@@ -265,6 +288,14 @@ export function decideBackspace(context: EditorSemanticContext): BackspaceDecisi
 
     if (offset === prefix.startOffset && prefix.indentationText.length > 0) {
       return outdentItemSubtree(context, item, prefix.startOffset, prefix.indentationText);
+    }
+
+    if (markerEnd > markerStart && offset >= markerStart && offset <= contentStart &&
+        contentStart < line.contentEndOffset && listItemHasContinuation(context, item)) {
+      // 拆掉父项标记会让后续子项重新归属；这一按先回到上一个可编辑行。
+      const previousText = context.lines.lines.slice(0, line.lineNumber - 1).findLast(
+        candidate => candidate.contentStartOffset < candidate.contentEndOffset);
+      if (previousText) return { kind: "subtree-join", plan: boundaryNavigation(context, "backward", previousText.contentEndOffset) };
     }
 
     if (offset > markerStart && offset <= contentStart && markerEnd > markerStart) {
@@ -312,7 +343,7 @@ export function decideBackspace(context: EditorSemanticContext): BackspaceDecisi
     !isFirstLineOfQuote(context, line)
   ) {
     const previous = context.lines.lines[line.lineNumber - 2]!;
-    const caret = previous.range.endOffset - 1;
+    const caret = previous.contentEndOffset;
 
     return {
       kind: "quote-degrade",
@@ -332,7 +363,18 @@ export function decideBackspace(context: EditorSemanticContext): BackspaceDecisi
     atLeadingRun &&
     line.lineNumber > 1
   ) {
-    return rangeDelete(context, line.range.startOffset - 1, line.range.startOffset, "quote-degrade");
+    const previous = context.lines.lines[line.lineNumber - 2]!;
+    if (previous.range.startOffset === previous.contentEndOffset) {
+      // 分隔行仍在时只删分隔行，避免把引用标记直接拼进正文。
+      return rangeDelete(context, previous.contentEndOffset, line.range.startOffset, "quote-degrade");
+    }
+    const last = quotePrefix.lastMarkerStart;
+    const end = Math.min(last + quotePrefix.markerRunLength, line.contentEndOffset);
+    const remaining = context.lines.lineForNode(lastOfKind(chain, "blockquote") ?? context.snapshot.tree.root);
+    if (remaining.some(candidate => candidate.lineNumber > line.lineNumber)) {
+      return { kind: "quote-degrade", plan: boundaryNavigation(context, "backward", previous.contentEndOffset) };
+    }
+    return rangeDelete(context, last, end, "quote-degrade");
   }
 
   if (quotePrefix !== null && quotePrefix.lastMarkerStart !== null && offset <= contentStart) {
