@@ -4,6 +4,8 @@ import type { PhysicalLine } from "../physical-lines/physical-editing-document";
 import type { EditorSemanticContext } from "../context/editor-semantic-context";
 import { clampSelectionToSource } from "../context/selection-context";
 import { advanceVisibleColumn } from "../physical-lines/prefix-segment";
+import { continuationPrefix, lineContainerChain } from "./line-structure";
+import { planEnter } from "./enter";
 import {
   createEditTransactionPlan,
   type EditTransactionPlan,
@@ -124,9 +126,18 @@ export function planPrintableInput(
   });
 }
 
-// A hard break is an explicit Markdown command, not provisional IME typing.
+// Shift+Enter 在正文中保留同段换行；表格的 Markdown 行承担行列结构，仍使用显式 br。
 export function planHardBreak(context: EditorSemanticContext): EditTransactionPlan {
-  const input = planPrintableInput(context, "<br>");
+  const line = context.lineAt(context.selectionContext.from);
+  const chain = line === null ? [] : lineContainerChain(context, line);
+  if (chain.some((node) => node.kind === "heading")) {
+    // Markdown 标题不能跨物理行，沿用标题拆分规则，避免把后半行误保留为标题。
+    const plan = planEnter(context);
+    if (plan !== null) return plan;
+  }
+  const inTable = chain.some((node) => node.kind === "table");
+  const prefix = line === null ? "" : continuationPrefix(line);
+  const input = planPrintableInput(context, inTable ? "<br>" : `\n${prefix}`);
   return createEditTransactionPlan({ context, commandId: "hard-break", intent: "edit",
     edits: input.edits, selection: input.selection });
 }

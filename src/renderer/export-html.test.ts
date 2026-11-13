@@ -60,6 +60,18 @@ describe("createFishmarkExportHtml", () => {
     expect(html).toContain("height: auto;");
   });
 
+  it("exports a single LF as adjacent text rows and a double LF with a paragraph separator", () => {
+    const html = createFishmarkExportHtml({
+      markdown: "111\n222\n\n333",
+      title: "line-breaks.md"
+    });
+    const exported = new DOMParser().parseFromString(html, "text/html");
+    const rows = Array.from(exported.querySelectorAll(".cm-content > .cm-line"));
+
+    expect(rows.map((row) => row.innerHTML)).toEqual(["111", "222", "<br>", "333"]);
+    expect(rows.map((row) => row.classList.contains("cm-inactive-blank-line"))).toEqual([false, false, true, false]);
+  });
+
   it("marks structural source blank lines with the inactive blank-line reading class", () => {
     const html = createFishmarkExportHtml({
       markdown: ["Paragraph one", "", "Paragraph two"].join("\n"),

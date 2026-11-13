@@ -68,7 +68,8 @@ test("blank navigation keeps extra rows stable through arrows selection editing 
   for (let round = 0; round < 2; round++) {
     await page.keyboard.press("Control+End");
     for (const head of [8, 6, 3, 1]) await stable("ArrowUp", { anchor: head, head });
-    for (const head of [3, 5, 8, 10]) await stable("ArrowDown", { anchor: head, head });
+    // 穿过空行仍保留第一列后的目标横坐标，后续正文不会退回行首。
+    for (const head of [3, 6, 8, 11]) await stable("ArrowDown", { anchor: head, head });
   }
   await stable("End", { anchor: 11, head: 11 });
   await stable("Home", { anchor: 10, head: 10 });

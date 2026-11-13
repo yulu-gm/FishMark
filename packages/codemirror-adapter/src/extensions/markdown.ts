@@ -7,6 +7,7 @@ import {
 } from "@codemirror/commands";
 import {
   Annotation,
+  EditorSelection,
   EditorState,
   findClusterBreak,
   StateEffect,
@@ -106,6 +107,7 @@ import {
   normalizeStructuralBlankSelectionAnchor
 } from "@fishmark/editor-model";
 import { resolveArrowUp, resolveArrowDown, resolvePointerSelectionAnchor as resolveBlockPointerSelectionAnchor } from "../interactions";
+import { readVerticalLayout, structuralCursor } from "../interactions/vertical-navigation";
 import { type EditorRevealIntent } from "../viewport-reveal";
 import { clearTableCaretReveal, noteTableCaretReveal, revealTableCaret } from "../table-caret-reveal";
 
@@ -1158,6 +1160,40 @@ export function createFishMarkMarkdownExtensions(
     }
   });
 
+  const moveVertically = (view: EditorView, forward: boolean): boolean => {
+    if (getMarkdownEditorViewMode(view.state) === "source") return false;
+
+    const selection = view.state.selection.main;
+    if (readCompositionState(view.state).active) {
+      return semanticCommands.run(view, (context) => planPointerSelection(context, selection.head)) !== "unhandled";
+    }
+    if (!selection.empty || view.state.selection.ranges.length !== 1) return false;
+
+    const layout = readVerticalLayout(view, selection, forward);
+    // 折行中的上下移动交给 CodeMirror；只有离开当前源码行才检查块边界。
+    if (layout?.staysInLine) return false;
+
+    const resolveTarget = forward ? resolveArrowDown : resolveArrowUp;
+    const characterWidth = view.defaultCharacterWidth;
+    const characterGoal = layout === null && selection.goalColumn !== undefined && characterWidth > 0
+      ? Math.round(selection.goalColumn / characterWidth) : undefined;
+    const target = resolveTarget(view, runtime.activeBlockState, characterGoal);
+    if (target === null) {
+      // 没有布局时仍可按源码行导航，例如无渲染环境中的编辑器测试。
+      if (layout !== null ||
+          semanticCommands.run(view, planSemanticArrow(forward ? "down" : "up")) === "unhandled") return false;
+    } else {
+      const cursor = layout === null
+        ? EditorSelection.cursor(target.anchor, 0, undefined,
+          target.goalColumn === undefined ? selection.goalColumn : target.goalColumn * characterWidth)
+        : structuralCursor(view, selection, target, layout, forward);
+      // TransactionSpec 只保留 EditorSelection 的目标列；直接传 SelectionRange 会退化为 anchor/head。
+      view.dispatch({ selection: EditorSelection.create([cursor]), scrollIntoView: true, userEvent: "select" });
+    }
+    syncTableInteractionFocus(view, createLiveActiveBlockState(view.state), { force: true });
+    return true;
+  };
+
   return [
     ...(semanticCommands === null ? [] : [semanticCommands.adapter.extension()]),
     createMarkdownEditorViewModeExtension(options.viewMode),
@@ -1290,10 +1326,9 @@ export function createFishMarkMarkdownExtensions(
 
         if (nextAnchor !== effectiveAnchor) {
           followUpTransactions.push({
-            selection: {
-              anchor: nextAnchor,
-              head: nextAnchor
-            },
+            // 落点避开隐藏标记后，下一次上下键仍使用原来的横坐标。
+            selection: EditorSelection.create([EditorSelection.cursor(nextAnchor, 0, undefined, transaction.docChanged
+              ? undefined : transaction.newSelection.main.goalColumn)]),
             annotations: [
               hiddenMarkerSelectionNormalizationAnnotation.of(true),
               structuralNavigationSelectionNormalizationAnnotation.of(true)
@@ -1331,36 +1366,8 @@ export function createFishMarkMarkdownExtensions(
       },
       { key: "ArrowLeft", run: (view) => moveIntoSourceMarker(view, -1), shift: (view) => moveIntoSourceMarker(view, -1, true) },
       { key: "ArrowRight", run: (view) => moveIntoSourceMarker(view, 1), shift: (view) => moveIntoSourceMarker(view, 1, true) },
-      {
-        key: "ArrowUp",
-        run: (view) => {
-          if (getMarkdownEditorViewMode(view.state) === "source") return false;
-          const target = resolveArrowUp(view, runtime.activeBlockState);
-          const handled = semanticCommands.run(view, target === null ? planSemanticArrow("up") :
-            (context) => planPointerSelection(context, target.anchor)) !== "unhandled";
-
-          if (handled) {
-            syncTableInteractionFocus(view, createLiveActiveBlockState(view.state), { force: true });
-          }
-
-          return handled;
-        }
-      },
-      {
-        key: "ArrowDown",
-        run: (view) => {
-          if (getMarkdownEditorViewMode(view.state) === "source") return false;
-          const target = resolveArrowDown(view, runtime.activeBlockState);
-          const handled = semanticCommands.run(view, target === null ? planSemanticArrow("down") :
-            (context) => planPointerSelection(context, target.anchor)) !== "unhandled";
-
-          if (handled) {
-            syncTableInteractionFocus(view, createLiveActiveBlockState(view.state), { force: true });
-          }
-
-          return handled;
-        }
-      },
+      { key: "ArrowUp", run: (view) => moveVertically(view, false) },
+      { key: "ArrowDown", run: (view) => moveVertically(view, true) },
       {
         key: "Backspace",
         run: (view) => revealSourceForBackspace(view) || semanticCommands.run(view, planSemanticBackspace) !== "unhandled"

@@ -96,6 +96,7 @@ export function createVerticalInteractionContext(
       : activeState.snapshot.nodeById(activeState.activeRootNodeId),
     lineStart: line.from,
     lineEnd: line.to,
-    goalColumn: goalColumn ?? selection.goalColumn
+    // 结构适配器用可见字符列；CodeMirror 选区的 goalColumn 是像素。
+    goalColumn
   };
 }

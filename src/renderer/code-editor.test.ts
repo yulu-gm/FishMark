@@ -4125,7 +4125,7 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("inserts an inline hard break on Shift+Enter", () => {
+  it("inserts a paragraph-internal newline on Shift+Enter", () => {
     const host = document.createElement("div");
     const source = "AlphaBeta";
 
@@ -4146,9 +4146,9 @@ describe("createCodeEditorController", () => {
     });
     dispatchEditorKeydown(view, "Enter", { shiftKey: true });
 
-    expect(controller.getContent()).toBe("Alpha<br>Beta");
-    expect(view?.state.selection.main.anchor).toBe("Alpha<br>".length);
-    expect(view?.state.selection.main.head).toBe("Alpha<br>".length);
+    expect(controller.getContent()).toBe("Alpha\nBeta");
+    expect(view?.state.selection.main.anchor).toBe("Alpha\n".length);
+    expect(view?.state.selection.main.head).toBe("Alpha\n".length);
 
     controller.destroy();
   });

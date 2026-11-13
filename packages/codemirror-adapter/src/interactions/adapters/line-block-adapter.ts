@@ -20,7 +20,6 @@ import {
   getCanonicalBlockquoteLineInfos,
   isTableBlockNode,
   resolveBlockEndLine,
-  resolveBlockStartLine,
   resolveVisibleBlockEntryAnchor
 } from "../canonical-blocks";
 import type {
@@ -401,7 +400,7 @@ function findTableAboveVisibleLine(
   return isTableBlockNode(separatorBlock) ? separatorBlock : null;
 }
 
-function resolveCollapsedSeparatorArrowUp(context: StructuralNavigationContext): number | null {
+function resolveCollapsedSeparatorArrowUp(context: StructuralNavigationContext): VerticalNavigationResult | number | null {
   const selection = context.view.state.selection.main;
 
   if (!selection.empty) {
@@ -430,7 +429,7 @@ function resolveCollapsedSeparatorArrowUp(context: StructuralNavigationContext):
 
   const currentBlock = findBlockForLine(context.snapshot, currentLine.number);
 
-  if (!currentBlock || currentLine.number !== resolveBlockStartLine(context.snapshot, currentBlock)) {
+  if (!currentBlock) {
     return null;
   }
 
@@ -438,14 +437,18 @@ function resolveCollapsedSeparatorArrowUp(context: StructuralNavigationContext):
   const previousSeparator = findStructuralSeparatorAtLine(context, previousLineNumber);
 
   if (previousSeparator) {
-    return (
-      resolveVisibleExtraBlankBeforeStructuralSeparator(context, previousLineNumber) ??
-      resolveAnchorAboveStructuralSeparator(context, previousSeparator)
-    );
+    const extraBlank = resolveVisibleExtraBlankBeforeStructuralSeparator(context, previousLineNumber);
+    if (extraBlank !== null) return extraBlank;
+
+    const anchor = resolveAnchorAboveStructuralSeparator(context, previousSeparator);
+    const blockAbove = findBlockAboveStructuralSeparator(context, previousLineNumber);
+    if (anchor === null || blockAbove?.kind !== "paragraph") return anchor;
+
+    // 普通段落隔着折叠空行向上移动时，也应恢复短行之前的目标列。
+    const previousLine = context.view.state.doc.lineAt(anchor);
+    return resolveVisibleColumnTarget(context, currentLine, previousLine);
   }
 
-  // Plain gap rows must follow the semantic planner's visible-line policy.
-  // Returning the immediately preceding raw row can activate a collapsed row.
   return null;
 }
 
@@ -507,22 +510,19 @@ function resolveCollapsedSeparatorArrowDown(context: StructuralNavigationContext
     return nextAnchor;
   }
 
-  const currentVisible = createVisibleLine({
-    snapshot: createEditorDerivedSnapshotFromCache(readEditorStructureCache(context.view.state)),
-    lineStart: currentLine.from,
-    lineEnd: currentLine.to
-  });
-  const nextVisible = createVisibleLine({
-    snapshot: createEditorDerivedSnapshotFromCache(readEditorStructureCache(context.view.state)),
-    lineStart: nextLine.from,
-    lineEnd: nextLine.to
-  });
-  const column = context.goalColumn ?? visibleLineColumn(currentVisible, selection.anchor);
+  return resolveVisibleColumnTarget(context, currentLine, nextLine);
+}
 
-  return {
-    anchor: anchorForVisibleLineColumn(nextVisible, column),
-    goalColumn: column
-  };
+function resolveVisibleColumnTarget(
+  context: VerticalInteractionContext,
+  currentLine: { from: number; to: number },
+  targetLine: { from: number; to: number }
+): VerticalNavigationResult {
+  const snapshot = createEditorDerivedSnapshotFromCache(readEditorStructureCache(context.view.state));
+  const currentVisible = createVisibleLine({ snapshot, lineStart: currentLine.from, lineEnd: currentLine.to });
+  const targetVisible = createVisibleLine({ snapshot, lineStart: targetLine.from, lineEnd: targetLine.to });
+  const column = context.goalColumn ?? visibleLineColumn(currentVisible, context.view.state.selection.main.head);
+  return { anchor: anchorForVisibleLineColumn(targetVisible, column), goalColumn: column };
 }
 
 function resolveFirstLineBelowTableArrowDown(
