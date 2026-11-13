@@ -12,6 +12,7 @@ import { isolateHistory, undo, redo, selectAll } from "@codemirror/commands";
 import {
   createFishMarkMarkdownExtensions,
   readEditorSelection,
+  readEditorStructureCache,
   selectTableCellContents,
   refreshMarkdownDecorations,
   runTableDelete,
@@ -534,7 +535,7 @@ export function createCodeEditorController(
   };
 
   const handlePaste = (event: ClipboardEvent) => {
-    if (!options.importClipboardImage || event.defaultPrevented) {
+    if (event.defaultPrevented) {
       return;
     }
 
@@ -546,6 +547,24 @@ export function createCodeEditorController(
         (clipboardData.getData("text/html").length > 0 || clipboardData.getData("text/plain").length > 0)) {
       return;
     }
+    const html = clipboardData?.getData?.("text/html") ?? "";
+    if (html && !cell && view.contentDOM.contains(event.target as Node)) {
+      const snapshot = createEditorDerivedSnapshotFromCache(readEditorStructureCache(view.state));
+      const selection = view.state.selection.main;
+      // 源码模式和代码块保留剪贴板纯文本；网页格式不能改写正在输入的代码。
+      if (currentViewMode === "source" || [selection.from, selection.to].some(offset =>
+        snapshot.nodeAt(offset)?.kind === "code-fence")) return;
+      const paste = beginAsyncPaste();
+      if (paste === null) return;
+      const text = clipboardData?.getData("text/plain") ?? "";
+      event.preventDefault();
+      // 转换器按需加载；等待期间发生的编辑、失焦或切换文档同样使本次粘贴失效。
+      void import("./html-paste").then(({ convertHtmlPasteToMarkdown }) =>
+        applyAsyncPaste(paste, convertHtmlPasteToMarkdown(html) ?? text)
+      ).catch(() => applyAsyncPaste(paste, text));
+      return;
+    }
+    if (!options.importClipboardImage) return;
     const clipboardItems = Array.from(clipboardData?.items ?? []);
     const hasDomImage = clipboardItems.some((item) => item.type.startsWith("image/"));
 
