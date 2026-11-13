@@ -185,7 +185,8 @@ export function createCodeEditorController(
   let readingPositionCancelled = false;
   let semanticCommands: SemanticCommandBindings;
   let documentIdentity: EditorLoadIdentity | null = null;
-  let plainPasteRequest = 0, plainPasteVersion = 0;
+  let asyncPasteRequest = 0;
+  let asyncPasteVersion = 0;
   let pendingDocumentChanges: {
     identity: EditorLoadIdentity | null;
     baseText: string;
@@ -370,7 +371,10 @@ export function createCodeEditorController(
   };
 
   const observeDocumentUpdate = (update: ViewUpdate) => {
-    if (update.docChanged || update.selectionSet) plainPasteVersion++;
+    if (update.docChanged || update.selectionSet ||
+        (!readCompositionState(update.startState).active && readCompositionState(update.state).active)) {
+      invalidateAsyncPaste();
+    }
     if (pendingReadingPosition !== null && update.docChanged) {
       pendingReadingPosition = { ...pendingReadingPosition, anchor: update.changes.mapPos(pendingReadingPosition.anchor) };
       readingPositionCancelled = true;
@@ -480,16 +484,36 @@ export function createCodeEditorController(
     parent: options.parent
   });
 
-  async function pastePlainText(source: PlainTextPasteInput["source"]): Promise<void> {
-    if (!options.requestPlainTextPaste || isDestroyed || currentReadOnly || view.state.readOnly ||
-        documentIdentity === null || isComposing || readCompositionState(view.state).active) return;
-    const identity = documentIdentity, state = view.state, version = plainPasteVersion, request = ++plainPasteRequest;
-    const text = await options.requestPlainTextPaste({ tabId: identity.tabId, source });
-    if (!text || isDestroyed || currentReadOnly || view.state.readOnly || request !== plainPasteRequest ||
-        version !== plainPasteVersion || view.state.doc !== state.doc || !view.state.selection.eq(state.selection) ||
-        documentIdentity === null || !isSameEditorLoadIdentity(identity, documentIdentity) ||
-        view.root.activeElement !== view.contentDOM || isComposing || readCompositionState(view.state).active) return;
+  function invalidateAsyncPaste() {
+    asyncPasteVersion++;
+  }
+
+  function canApplyAsyncPaste() {
+    return !isDestroyed && !currentReadOnly && !view.state.readOnly &&
+      !isComposing && !compositionCheckpointPending && !readCompositionState(view.state).active;
+  }
+
+  function beginAsyncPaste() {
+    if (documentIdentity === null || !canApplyAsyncPaste()) return null;
+    // 两种异步粘贴共用请求顺序。新请求一发出，旧结果就不能再替换选区。
+    return { identity: documentIdentity, state: view.state, version: asyncPasteVersion, request: ++asyncPasteRequest };
+  }
+
+  function applyAsyncPaste(paste: NonNullable<ReturnType<typeof beginAsyncPaste>>, text: string | null) {
+    // 即使撤销编辑或移回选区，版本也会保留等待期间发生过的变化。
+    if (!text || !canApplyAsyncPaste() || paste.request !== asyncPasteRequest ||
+        paste.version !== asyncPasteVersion || view.state.doc !== paste.state.doc ||
+        !view.state.selection.eq(paste.state.selection) || documentIdentity === null ||
+        !isSameEditorLoadIdentity(paste.identity, documentIdentity)) return;
     view.dispatch({ ...view.state.replaceSelection(text), userEvent: "input.paste", annotations: isolateHistory.of("full"), scrollIntoView: true });
+  }
+
+  async function pastePlainText(source: PlainTextPasteInput["source"]): Promise<void> {
+    if (!options.requestPlainTextPaste) return;
+    const paste = beginAsyncPaste();
+    if (paste === null) return;
+    const text = await options.requestPlainTextPaste({ tabId: paste.identity.tabId, source });
+    if (view.root.activeElement === view.contentDOM) applyAsyncPaste(paste, text);
   }
   const handleContextMenu = (event: MouseEvent) => {
     if (!options.requestPlainTextPaste || currentReadOnly || !view.contentDOM.contains(event.target as Node)) return;
@@ -498,7 +522,7 @@ export function createCodeEditorController(
   view.contentDOM.addEventListener("contextmenu", handleContextMenu);
 
   const handleCompositionStart = () => {
-    plainPasteVersion++;
+    invalidateAsyncPaste();
     isComposing = true;
   };
 
@@ -510,7 +534,7 @@ export function createCodeEditorController(
   };
 
   const handlePaste = (event: ClipboardEvent) => {
-    if (!options.importClipboardImage) {
+    if (!options.importClipboardImage || event.defaultPrevented) {
       return;
     }
 
@@ -524,39 +548,18 @@ export function createCodeEditorController(
 
     event.preventDefault();
 
-    const selection = view.state.selection.main;
-    const identity = documentIdentity;
-    if (identity === null) return;
+    const paste = beginAsyncPaste();
+    if (paste === null) return;
 
-    void options
-      .importClipboardImage({
-        tabId: identity.tabId
-      })
-      .then((markdown) => {
-        if (!markdown || isDestroyed || documentIdentity === null || !isSameEditorLoadIdentity(identity, documentIdentity)) {
-          return;
-        }
-
-        const nextAnchor = selection.from + markdown.length;
-
-        view.dispatch({
-          userEvent: "input.paste",
-          changes: {
-            from: selection.from,
-            to: selection.to,
-            insert: markdown
-          },
-          selection: {
-            anchor: nextAnchor,
-            head: nextAnchor
-          }
-        });
-      });
+    void options.importClipboardImage({ tabId: paste.identity.tabId })
+      .then((markdown) => applyAsyncPaste(paste, markdown));
   };
 
   view.contentDOM.addEventListener("compositionstart", handleCompositionStart);
   view.contentDOM.addEventListener("compositionend", handleCompositionEnd);
-  view.dom.addEventListener("paste", handlePaste);
+  view.contentDOM.addEventListener("blur", invalidateAsyncPaste);
+  // 在 CodeMirror 读取纯文本前拦截图片事件，避免空文本提前删除选区。
+  view.dom.addEventListener("paste", handlePaste, true);
 
   const ensureSearchRuntime = async (): Promise<typeof import("./search-runtime") | null> => {
     if (searchRuntime) {
@@ -808,6 +811,7 @@ export function createCodeEditorController(
       });
     },
     replaceDocument(nextContent: string) {
+      invalidateAsyncPaste();
       cancelNavigationMeasure();
       if (isComposing || compositionCheckpointPending || readCompositionState(view.state).active) {
         discardPendingDocumentChanges();
@@ -822,7 +826,7 @@ export function createCodeEditorController(
       semanticCommands.bindSession(view, documentIdentity?.tabId);
     },
     setDocumentIdentity(nextIdentity: EditorLoadIdentity | null) {
-      plainPasteVersion++;
+      invalidateAsyncPaste();
       cancelNavigationMeasure();
       if (isComposing || compositionCheckpointPending || readCompositionState(view.state).active) {
         discardPendingDocumentChanges();
@@ -875,7 +879,7 @@ export function createCodeEditorController(
         return;
       }
       currentReadOnly = readOnly;
-      plainPasteVersion++;
+      invalidateAsyncPaste();
       view.dispatch({
         effects: readOnlyCompartment.reconfigure([
           EditorState.readOnly.of(readOnly),
@@ -1010,7 +1014,8 @@ export function createCodeEditorController(
       }
       view.contentDOM.removeEventListener("compositionstart", handleCompositionStart);
       view.contentDOM.removeEventListener("compositionend", handleCompositionEnd);
-      view.dom.removeEventListener("paste", handlePaste);
+      view.contentDOM.removeEventListener("blur", invalidateAsyncPaste);
+      view.dom.removeEventListener("paste", handlePaste, true);
       view.contentDOM.removeEventListener("contextmenu", handleContextMenu);
       semanticCommands.releaseSession();
       view.destroy();
