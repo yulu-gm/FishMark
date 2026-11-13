@@ -911,7 +911,8 @@ function appendInlineNode(
       appendDecoratedPlainText(parent, document, node.value);
       return;
     case "hardBreak":
-      parent.appendChild(document.createElement("br"));
+      // 预览也保留不可见的源码标记，让换行后的搜索范围能精确映射到 DOM。
+      appendTableCellHardBreak(parent, source.slice(node.startOffset, node.endOffset));
       return;
     case "footnoteReference":
       appendMarker(parent, document, source.slice(node.openMarker.startOffset, node.openMarker.endOffset));

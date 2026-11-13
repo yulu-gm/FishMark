@@ -25,8 +25,8 @@ export function tableCellHardBreaks(text: string, inline?: InlineRoot, source?: 
   return result;
 }
 
-export function appendTableCellHardBreak(fragment: DocumentFragment, text: string): void {
-  const doc = fragment.ownerDocument;
+export function appendTableCellHardBreak(fragment: Node, text: string): void {
+  const doc = fragment.ownerDocument!;
   const wrapper = doc.createElement("span");
   wrapper.dataset.tableCellHardBreak = "";
   const marker = doc.createElement("span");
@@ -34,7 +34,7 @@ export function appendTableCellHardBreak(fragment: DocumentFragment, text: strin
   marker.textContent = text;
   // 真实 BR 提供浏览器的行布局；隐藏的原标记保留 textContent 及源偏移。
   wrapper.append(doc.createElement("br"), marker);
-  fragment.append(wrapper);
+  fragment.appendChild(wrapper);
 }
 
 export function hasMatchingTableCellHardBreaks(editor: HTMLElement, expected: readonly BreakRange[]): boolean {

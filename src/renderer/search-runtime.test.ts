@@ -116,7 +116,7 @@ describe("table search navigation", () => {
     expect(controller.findNextMatch().currentMatchIndex).toBe(2);
   });
 
-  it("uses the source view and leaves cross-cell matches to source navigation", async () => {
+  it("uses the source view and explains cross-cell matches without selecting unrelated cell text", async () => {
     const { controller, host, input } = await createSearchEditor(source);
     controller.updateFindReplaceQuery({ search: "alpha", replace: "" });
     await flushView();
@@ -128,8 +128,12 @@ describe("table search navigation", () => {
     controller.updateFindReplaceQuery({ search: "alpha | beta", replace: "" });
     await flushView();
     expect(selectedCells(host)).toHaveLength(0);
+    expect(host.querySelector(".cm-table-search-source-match")?.getAttribute("title")).toContain("源码视图");
     expect(document.activeElement).toBe(input);
     expect(controller.getContent()).toBe(source);
+    controller.clearFindReplaceQuery();
+    await flushView();
+    expect(host.querySelector(".cm-table-search-source-match")).toBeNull();
   });
 
   it("selects a result's exact range through the existing table presentation", async () => {
@@ -223,5 +227,50 @@ describe("canonical search results", () => {
     expect(snapshot.matches.every(match => match.snippet.length <= 102)).toBe(true);
     expect(controller.selectFindReplaceMatch(snapshot.matches[5000]!).currentMatchIndex).toBe(5001);
     expect(controller.getSelection()).toEqual({ anchor: 30000, head: 30005 });
+  });
+});
+
+describe("表格内精确搜索高亮", () => {
+  it("区分同格换行前后的命中，清理时保留另一个编辑器的范围", async () => {
+    const registry = new Map<string, Set<Range>>();
+    vi.stubGlobal("Highlight", class extends Set<Range> {
+      constructor(...ranges: Range[]) { super(ranges); }
+    });
+    vi.stubGlobal("CSS", { ...globalThis.CSS, highlights: registry });
+    const geometry = vi.spyOn(Range.prototype, "getClientRects").mockImplementation(() =>
+      [new DOMRect(10, 20, 50, 20)] as unknown as DOMRectList);
+    try {
+      const text = "| 标题 | 值 |\n| --- | --- |\n| 中文<br>中文 | x |\n";
+      const a = await createSearchEditor(text);
+      const b = await createSearchEditor(text);
+      a.controller.updateFindReplaceQuery({ search: "中文", replace: "" });
+      b.controller.updateFindReplaceQuery({ search: "中文", replace: "" });
+      await flushView();
+      expect(selectedCells(a.host)).toHaveLength(1);
+      expect(selectedCells(a.host)[0]?.textContent).toBe("中文<br>中文");
+      const highlights = () => [...(registry.get("fishmark-table-search") ?? [])];
+      expect(highlights()).toHaveLength(2);
+      expect(highlights().map(range => range.toString())).toEqual(["中文", "中文"]);
+      expect(selectedCells(a.host)[0]?.classList.contains("cm-table-search-exact")).toBe(true);
+      const firstNode = highlights().find(range => a.host.contains(range.startContainer))!.startContainer;
+      a.controller.findNextMatch();
+      await flushView();
+      const second = highlights().find(range => a.host.contains(range.startContainer))!;
+      expect(second.startContainer).not.toBe(firstNode);
+      expect(second.toString()).toBe("中文");
+      expect(a.controller.getSelection()).toEqual({ anchor: text.lastIndexOf("中文"), head: text.lastIndexOf("中文") + 2 });
+      expect(document.activeElement).toBe(b.input);
+      a.controller.clearFindReplaceQuery();
+      await flushView();
+      expect(highlights()).toHaveLength(1);
+      expect(b.host.contains(highlights()[0]!.startContainer)).toBe(true);
+      b.controller.clearFindReplaceQuery();
+      await flushView();
+      expect(registry.has("fishmark-table-search")).toBe(false);
+      expect(a.controller.getContent()).toBe(text);
+    } finally {
+      geometry.mockRestore();
+      vi.unstubAllGlobals();
+    }
   });
 });

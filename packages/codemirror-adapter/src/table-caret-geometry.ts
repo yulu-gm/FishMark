@@ -84,27 +84,44 @@ function resolveTableTextBoundary(editor: HTMLElement, offset: number, forward: 
 }
 
 /** Exact text projection only; callers must prove canonical source equals DOM text. */
-export function readTableTextRangeRects(editor: HTMLElement, from: number, to: number): DOMRect[] {
-  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to <= from || to > (editor.textContent?.length ?? 0)) return [];
+function readTableTextRange(editor: HTMLElement, from: number, to: number): Range | null {
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to <= from || to > (editor.textContent?.length ?? 0)) return null;
   const start = resolveTableTextBoundary(editor, from, true);
   const end = resolveTableTextBoundary(editor, to, false);
-  if (!start || !end) return [];
+  if (!start || !end) return null;
   const range = editor.ownerDocument.createRange();
   range.setStart(start.node, start.offset);
   range.setEnd(end.node, end.offset);
-  return Array.from(range.getClientRects()).filter(validRect);
+  return range;
+}
+
+export function readTableTextRangeRects(editor: HTMLElement, from: number, to: number): DOMRect[] {
+  return Array.from(readTableTextRange(editor, from, to)?.getClientRects() ?? []).filter(validRect);
+}
+
+function sourceTextOffsets(editor: HTMLElement, source: string, from: number, to: number): { start: number; end: number } | null {
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to <= from || to > source.length) return null;
+  let start = from, end = to;
+  if (editor.textContent !== source) {
+    const { text, boundaries } = projectTableCellSource(source);
+    if (editor.textContent !== text) return null;
+    start = boundaries.findIndex(boundary => boundary > from) - 1;
+    end = boundaries.findIndex(boundary => boundary >= to);
+  }
+  return { start, end };
+}
+
+// 高亮和滚动使用同一份经过核对的源码投影，不修改浏览器选区或单元格节点。
+export function readTableSourceRange(editor: HTMLElement, source: string, from: number, to: number): Range | null {
+  const offsets = sourceTextOffsets(editor, source, from, to);
+  return offsets ? readTableTextRange(editor, offsets.start, offsets.end) : null;
 }
 
 /** Prove the rendered text projection before using canonical source offsets. */
 export function readTableSourceRangeRects(editor: HTMLElement, source: string, from: number, to: number): DOMRect[] {
-  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to <= from || to > source.length) return [];
-  let start = from, end = to;
-  if (editor.textContent !== source) {
-    const { text, boundaries } = projectTableCellSource(source);
-    if (editor.textContent !== text) return [];
-    start = boundaries.findIndex(boundary => boundary > from) - 1;
-    end = boundaries.findIndex(boundary => boundary >= to);
-  }
+  const offsets = sourceTextOffsets(editor, source, from, to);
+  if (!offsets) return [];
+  const { start, end } = offsets;
   const boxes = readTableTextRangeRects(editor, start, end).filter(box => box.width > 0);
   if (boxes.length) return boxes;
   // Hidden Markdown markers have source coordinates but no visible glyph.

@@ -17,6 +17,7 @@ import {
   getMarkdownEditorViewMode,
   readCompositionState,
   readEditorStructureCache,
+  readTableSourceRange,
   readTableSourceRangeRects,
   revealTableRect
 } from "@fishmark/codemirror-adapter";
@@ -89,7 +90,7 @@ export function createFishmarkSearchExtension() {
   }), tableSearchPresentation, EditorView.scrollHandler.of((view, range) => {
     const selection = view.state.selection.main;
     if (range.from !== selection.from || range.to !== selection.to) return false;
-    const cell = currentTableSearchCell(view);
+    const cell = currentTableSearchTarget(view)?.cell;
     if (!cell) return false;
 
     // 此时 CodeMirror 已挂载滚动目标所在视口；默认源码几何只认识整张替换表格。
@@ -119,7 +120,7 @@ export function createFishmarkSearchExtension() {
   })];
 }
 
-function currentTableSearchCell(view: EditorView): HTMLElement | null {
+function currentTableSearchTarget(view: EditorView): { table: HTMLElement; cell: HTMLElement | null } | null {
   const { state } = view;
   const selection = state.selection.main;
   if (selection.empty || !searchPanelOpen(state) || getMarkdownEditorViewMode(state) === "source" ||
@@ -132,17 +133,24 @@ function currentTableSearchCell(view: EditorView): HTMLElement | null {
   // 每次都从当前规范快照定位。DOM offset 仅作投影查找键，不能代替源码与单元格身份。
   const snapshot = createEditorDerivedSnapshotFromCache(readEditorStructureCache(state));
   const target = snapshot.tableAt(selection.from);
-  if (!target || selection.from < target.cell.content.startOffset || selection.to > target.cell.content.endOffset) return null;
-  const start = snapshot.lineAt(target.node.source.startOffset)?.range.startOffset;
+  const node = target?.node ?? snapshot.nodeAt(selection.from);
+  if (node?.kind !== "table" || selection.to > node.source.endOffset) return null;
+  const start = snapshot.lineAt(node.source.startOffset)?.range.startOffset;
   if (start === undefined) return null;
   const table = view.dom.querySelector<HTMLElement>(`.cm-table-widget[data-table-start-offset="${start}"]`);
-  return table?.querySelector<HTMLElement>(`[data-table-cell="${target.rowIndex}:${target.columnIndex}"]`) ?? null;
+  if (!table) return null;
+  const cell = target && selection.from >= target.cell.content.startOffset && selection.to <= target.cell.content.endOffset
+    ? table.querySelector<HTMLElement>(`[data-table-cell="${target.rowIndex}:${target.columnIndex}"]`) : null;
+  return { table, cell };
 }
 
-const tableSearchClasses = ["cm-table-search-match", "cm-searchMatch", "cm-searchMatch-selected"];
+const tableSearchClasses = ["cm-table-search-match", "cm-table-search-exact", "cm-searchMatch", "cm-searchMatch-selected"];
+const tableSearchHighlight = "fishmark-table-search";
 const tableSearchPresentation = ViewPlugin.fromClass(class {
   private queued = false;
   private destroyed = false;
+  private highlight: { registry: HighlightRegistry; range: Range; value: Highlight } | null = null;
+  private sourceHint: { table: HTMLElement; title: string | null } | null = null;
 
   constructor(private readonly view: EditorView) {
     this.update();
@@ -155,16 +163,60 @@ const tableSearchPresentation = ViewPlugin.fromClass(class {
     queueMicrotask(() => {
       this.queued = false;
       if (this.destroyed) return;
-      const target = currentTableSearchCell(this.view);
+      this.clearHighlight();
+      const match = currentTableSearchTarget(this.view);
+      const target = match?.cell;
       for (const cell of this.view.dom.querySelectorAll<HTMLElement>(".cm-table-search-match")) {
-        if (cell !== target) cell.classList.remove(...tableSearchClasses);
+        cell.classList.remove(...tableSearchClasses);
       }
-      target?.classList.add(...tableSearchClasses);
+      if (!target) {
+        if (match) {
+          // 分隔符或跨格范围没有单一可见文字投影，明确提示查看源码。
+          this.sourceHint = { table: match.table, title: match.table.getAttribute("title") };
+          match.table.classList.add("cm-table-search-source-match");
+          match.table.title = "匹配项包含表格结构，切换源码视图可查看完整范围。";
+        }
+        return;
+      }
+      const { state } = this.view;
+      const cell = createEditorDerivedSnapshotFromCache(readEditorStructureCache(state)).tableAt(state.selection.main.from)?.cell;
+      const win = target.ownerDocument.defaultView as (Window & typeof globalThis) | null;
+      const registry = win?.CSS?.highlights;
+      const range = cell && readTableSourceRange(target, state.sliceDoc(cell.content.startOffset, cell.content.endOffset),
+        state.selection.main.from - cell.content.startOffset, state.selection.main.to - cell.content.startOffset);
+      // 原生高亮只绘制命中的字，不包裹 DOM，也不会抢走搜索框焦点或改变编辑选区。
+      // 隐藏标记和无法证明源码映射的内容，继续使用整格提示。
+      if (range && registry && win.Highlight && Array.from(range.getClientRects()).some(rect => rect.width > 0 && rect.height > 0)) {
+        const value = registry.get(tableSearchHighlight) ?? new win.Highlight();
+        value.add(range);
+        registry.set(tableSearchHighlight, value);
+        this.highlight = { registry, range, value };
+        target.classList.add("cm-table-search-match", "cm-table-search-exact");
+      } else {
+        target.classList.add("cm-table-search-match", "cm-searchMatch", "cm-searchMatch-selected");
+      }
     });
+  }
+
+  private clearHighlight() {
+    if (this.sourceHint) {
+      const { table, title } = this.sourceHint;
+      table.classList.remove("cm-table-search-source-match");
+      if (title === null) table.removeAttribute("title");
+      else table.setAttribute("title", title);
+      this.sourceHint = null;
+    }
+    if (!this.highlight) return;
+    const { registry, range, value } = this.highlight;
+    value.delete(range);
+    // 同一窗口可以挂载多个编辑器，只清理本插件拥有的范围。
+    if (!value.size && registry.get(tableSearchHighlight) === value) registry.delete(tableSearchHighlight);
+    this.highlight = null;
   }
 
   destroy() {
     this.destroyed = true;
+    this.clearHighlight();
     for (const cell of this.view.dom.querySelectorAll<HTMLElement>(".cm-table-search-match")) {
       cell.classList.remove(...tableSearchClasses);
     }

@@ -110,15 +110,25 @@
 }
 
 .document-editor .cm-searchMatch,
-.document-editor .cm-table-widget-input.cm-table-search-match {
+.document-editor .cm-table-widget-input.cm-table-search-match:not(.cm-table-search-exact) {
   background: color-mix(in srgb, var(--fishmark-text-accent, #4f7cff) 22%, transparent);
   outline: 1px solid color-mix(in srgb, var(--fishmark-text-accent, #4f7cff) 32%, transparent);
 }
 
 .document-editor .cm-searchMatch-selected,
-.document-editor .cm-table-widget-input.cm-table-search-match {
+.document-editor .cm-table-widget-input.cm-table-search-match:not(.cm-table-search-exact) {
   background: color-mix(in srgb, var(--fishmark-text-accent, #4f7cff) 34%, transparent);
   outline-color: color-mix(in srgb, var(--fishmark-text-accent, #4f7cff) 58%, transparent);
+}
+
+.document-editor ::highlight(fishmark-table-search) {
+  background-color: color-mix(in srgb, var(--fishmark-text-accent, #4f7cff) 34%, transparent);
+  color: inherit;
+}
+
+.document-editor .cm-table-search-source-match {
+  outline: 1px dashed var(--fishmark-text-accent, #4f7cff);
+  outline-offset: 2px;
 }
 
 .document-editor .cm-gutters {
