@@ -4,6 +4,7 @@ import {
   type EditTransactionPlan
 } from "../transactions/edit-transaction-plan";
 import { graphemeDeletionRange } from "./grapheme-deletion";
+import { lineContainerChain } from "./line-structure";
 
 // Forward delete mirrors Backspace: delete one character, or join the next line by removing its
 // break and its hidden prefix. The joined content lands in the current leaf, and the caller's
@@ -46,6 +47,27 @@ export function decideDelete(context: EditorSemanticContext): DeleteDecision | n
     return null;
   }
 
+  let joinTo = nextLine.contentStartOffset;
+  const chain = lineContainerChain(context, line);
+  if (chain.length === 2 && chain[1]?.kind === "paragraph" &&
+      nextLine.range.startOffset === nextLine.contentEndOffset) {
+    const lines = context.lines.lines;
+    let followingIndex = line.lineNumber;
+    while (followingIndex < lines.length &&
+        lines[followingIndex]!.range.startOffset === lines[followingIndex]!.contentEndOffset) {
+      followingIndex += 1;
+    }
+    const following = lines[followingIndex];
+    const followingChain = following ? lineContainerChain(context, following) : [];
+    // 普通段落之间按完整段落删除：单个分隔合并正文，额外空段落一次移除一对换行。
+    // 含空格的行及列表、引用、围栏等块仍交给各自的结构规则。
+    if (following && followingChain.length === 2 && followingChain[1]?.kind === "paragraph") {
+      const blankCount = followingIndex - line.lineNumber;
+      if (blankCount === 1) joinTo = following.contentStartOffset;
+      else if (blankCount % 2 === 1) joinTo = lines[line.lineNumber + 1]!.range.startOffset;
+    }
+  }
+
   return {
     kind: "line-join",
     plan: createEditTransactionPlan({
@@ -53,7 +75,7 @@ export function decideDelete(context: EditorSemanticContext): DeleteDecision | n
       commandId: "delete",
       intent: "structural",
       // The break plus the next line's hidden prefix disappear, so the tail continues this leaf.
-      edits: [{ from: line.contentEndOffset, to: nextLine.contentStartOffset, insert: "" }],
+      edits: [{ from: line.contentEndOffset, to: joinTo, insert: "" }],
       selection: { anchor: line.contentEndOffset, head: line.contentEndOffset }
     })
   };

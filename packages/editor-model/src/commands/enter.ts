@@ -193,8 +193,10 @@ function resolveParagraphBreak(
   if (offset === line.range.startOffset && line.lineNumber > 1) {
     const previous = context.lines.lines[line.lineNumber - 2] ?? null;
 
-    if (previous !== null && lineTextOf(context, previous).trim().length === 0) {
-      return { insert: defaultInsert, caret: offset + defaultInsert.length };
+    if (previous !== null && previous.nodeId !== null && previous.nodeId === line.nodeId &&
+        lineTextOf(context, previous).trim().length > 0) {
+      // 同段第二物理行的行首与上一行行尾是同一个拆分边界，复用已有换行。
+      return { insert: "\n", caret: offset + 1 };
     }
   }
 

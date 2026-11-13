@@ -34,6 +34,23 @@ function applyPlan(
 }
 
 describe("planDelete", () => {
+  it.each([
+    ["Alpha\n\nBeta", "AlphaBeta"],
+    ["Alpha\n\n\n\nBeta", "Alpha\n\nBeta"],
+    ["Alpha\n\n\nBeta", "Alpha\n\nBeta"],
+    ["Alpha\n\n\n\n\n\nBeta", "Alpha\n\n\n\nBeta"]
+  ])("段尾 Delete 删除完整段落边界：%j", (source, expected) => {
+    expect(applyPlan(source, 5)).toMatchObject({ text: expected, cursor: 5 });
+  });
+  it.each([
+    ["Alpha\n \nBeta", "Alpha \nBeta"],
+    ["Alpha\n\n# Beta", "Alpha\n# Beta"],
+    ["Alpha\n\n- Beta", "Alpha\n- Beta"],
+    ["Alpha\n\n```\nBeta\n```", "Alpha\n```\nBeta\n```"],
+    ["Alpha\n\n", "Alpha\n"]
+  ])("段落合并不越过其他块或有内容的空白行：%j", (source, expected) => {
+    expect(applyPlan(source, 5).text).toBe(expected);
+  });
   it("deletes one ordinary character", () => {
     const source = "Alpha";
     const result = applyPlan(source, 0);

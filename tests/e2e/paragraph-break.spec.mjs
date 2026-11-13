@@ -1,5 +1,22 @@
 import { test, expect } from "./product-fixture.mjs";
 
+test("段内第二行开头 Enter 复用换行，Delete 合并段落并可撤销", async ({ product }) => {
+  await product.seed("111\n222", 60000);
+  const page = await product.launch("111\n222");
+  await product.focus(page);
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+ArrowDown" : "Control+End");
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+ArrowLeft" : "Home");
+  await page.keyboard.press("Enter");
+  await expect.poll(async () => (await product.snapshot()).activeDocument.content).toBe("111\n\n222");
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+ArrowUp" : "Control+Home");
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+ArrowRight" : "End");
+  await page.keyboard.press("Delete");
+  await expect.poll(async () => (await product.snapshot()).activeDocument.content).toBe("111222");
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+z" : "Control+z");
+  await expect.poll(async () => (await product.snapshot()).activeDocument.content).toBe("111\n\n222");
+  await product.normalClose();
+});
+
 async function rows(page) {
   await page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
   return page.locator(".cm-content .cm-line").evaluateAll(lines => lines.map(line => ({

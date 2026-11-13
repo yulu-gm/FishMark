@@ -30,6 +30,10 @@ function applyPlan(source: string, offset: number): { text: string; cursor: numb
 }
 
 describe("planEnter", () => {
+  it("同段换行两侧按 Enter 得到相同段落和光标", () => {
+    expect(applyPlan("111\n222", 4)).toEqual(applyPlan("111\n222", 3));
+    expect(applyPlan("111\n222", 4)).toMatchObject({ text: "111\n\n222", cursor: 5 });
+  });
   it("continues the innermost quote inside a list without cloning its ancestor marker", () => {
     const first = applyPlan("- > alpha", 6);
     expect(first.text).toBe("- > al\n  > \n  > pha");
