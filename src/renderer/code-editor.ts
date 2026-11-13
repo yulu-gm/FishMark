@@ -539,6 +539,13 @@ export function createCodeEditorController(
     }
 
     const clipboardData = event.clipboardData;
+    // 表格单元格优先处理剪贴板文本，避免同一次粘贴又启动图片导入。
+    const cell = event.target instanceof Element ? event.target.closest("[data-table-cell]") : null;
+    if (clipboardData && cell instanceof HTMLElement && cell.contentEditable === "true" &&
+        !view.state.readOnly &&
+        (clipboardData.getData("text/html").length > 0 || clipboardData.getData("text/plain").length > 0)) {
+      return;
+    }
     const clipboardItems = Array.from(clipboardData?.items ?? []);
     const hasDomImage = clipboardItems.some((item) => item.type.startsWith("image/"));
 

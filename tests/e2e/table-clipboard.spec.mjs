@@ -12,8 +12,9 @@ const mod = process.platform === "darwin" ? "Meta" : "Control";
 
 const cases = [
   ["TSV", { text: 'x|y\t"a\r\nb"\r\nz\tw\r\n' }],
-  ["HTML", {
+  ["HTML + PNG", {
     text: "fallback\ttext",
+    image: true,
     html: "<table><tr><td><strong>x|y</strong></td><td>a<br>b</td></tr><tr><td>z</td><td>w</td></tr></table>"
   }]
 ];
@@ -33,10 +34,12 @@ for (const [format, payload] of cases) {
       const clipboardData = new DataTransfer();
       clipboardData.setData("text/plain", payload.text);
       if (payload.html) clipboardData.setData("text/html", payload.html);
+      if (payload.image) clipboardData.items.add(new File(["synthetic PNG payload"], "clipboard.png", { type: "image/png" }));
       return !element.dispatchEvent(new ClipboardEvent("paste", { clipboardData, bubbles: true, cancelable: true }));
     }, payload);
     expect(handled).toBe(true);
     await expect.poll(content).toBe(pasted);
+    expect((await product.mainEvidence()).filter(event => event.detail?.channel === "fishmark:import-clipboard-image")).toEqual([]);
 
     await page.keyboard.press(`${mod}+z`);
     await expect.poll(content).toBe(source);

@@ -1204,7 +1204,7 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("intercepts image paste, imports the clipboard image, and inserts the returned Markdown", async () => {
+  it.each([false, true])("intercepts image paste outside a table and inserts Markdown (with text: %s)", async (withText) => {
     const host = document.createElement("div");
     const importClipboardImage = vi
       .fn<(input: { tabId: string }) => Promise<string | null>>()
@@ -1234,7 +1234,9 @@ describe("createCodeEditorController", () => {
 
     Object.defineProperty(pasteEvent, "clipboardData", {
       value: {
-        items: [{ type: "image/png" }]
+        items: [{ type: "image/png" }],
+        types: withText ? ["image/png", "text/plain"] : ["image/png"],
+        getData: (type: string) => withText && type === "text/plain" ? "copied text" : ""
       }
     });
 
@@ -1250,6 +1252,47 @@ describe("createCodeEditorController", () => {
     expect(controller.getContent()).toBe("Paragraph![today](assets/pasted.png)");
 
     controller.destroy();
+  });
+
+  it.each([
+    ["HTML", "<table><tr><td>X</td><td>Y</td></tr><tr><td>Z</td><td>W</td></tr></table>", "unused\ttext"],
+    ["TSV", "", "X\tY\nZ\tW"],
+    ["image only", "", ""]
+  ])("routes %s with a PNG from an editable table cell", async (_, html, plain) => {
+    const host = document.body.appendChild(document.createElement("div"));
+    const source = "| a | b |\n| --- | --- |\n| 1 | 2 |";
+    const importClipboardImage = vi.fn<(input: { tabId: string }) => Promise<string | null>>()
+      .mockResolvedValue(null);
+    const controller = createCodeEditorController({
+      parent: host, initialContent: source, onChange: vi.fn(), importClipboardImage
+    });
+    try {
+      controller.setDocumentIdentity({ tabId: "paste-tab", epoch: 1, loadRevision: 0 });
+      host.querySelector('[data-table-cell="1:1"]')?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      await flushMicrotasks();
+      const cell = host.querySelector('[data-table-cell="1:1"]');
+      expect(cell).toBe(document.activeElement);
+      const paste = new Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(paste, "clipboardData", {
+        value: {
+          items: [{ type: "image/png" }],
+          types: ["image/png", "text/html", "text/plain"],
+          getData: (type: string) => type === "text/html" ? html : type === "text/plain" ? plain : ""
+        }
+      });
+      cell?.dispatchEvent(paste);
+      expect(paste.defaultPrevented).toBe(true);
+      if (html || plain) {
+        expect(controller.getContent()).toBe("| a | b |   |\n| :--- | :--- | --- |\n| 1 | X | Y |\n|   | Z | W |");
+        expect(importClipboardImage).not.toHaveBeenCalled();
+      } else {
+        expect(importClipboardImage).toHaveBeenCalledExactlyOnceWith({ tabId: "paste-tab" });
+        expect(controller.getContent()).toBe(source);
+      }
+    } finally {
+      controller.destroy();
+      host.remove();
+    }
   });
 
   it("falls back to main clipboard image import when the DOM paste payload has no pasteable text", async () => {

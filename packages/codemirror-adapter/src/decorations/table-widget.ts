@@ -399,7 +399,7 @@ export class TableWidget extends WidgetType {
       });
 
       editor.addEventListener("paste", (event) => {
-        if (!isCellLive() || editor.dataset.tableCellComposing === "true" || !this.callbacks?.pasteCells) return;
+        if (event.defaultPrevented || !isCellLive() || editor.dataset.tableCellComposing === "true" || !this.callbacks?.pasteCells) return;
         const values = parseTableClipboard(event.clipboardData);
         if (values && this.callbacks.pasteCells(readCurrentPosition(), values)) {
           event.preventDefault();
