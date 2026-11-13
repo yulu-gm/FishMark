@@ -196,6 +196,16 @@ describe("planEnter", () => {
     expect(result.text).toBe(["```ts", "const value = 1;", "", "```"].join("\n"));
   });
 
+  it("从模型入口为引用内的列表围栏继承容器前缀和代码缩进", () => {
+    const source = ["> - ```python", ">       return 1", ">   ```"].join("\n");
+    const offset = source.indexOf("\n>   ```");
+    const result = applyPlan(source, offset);
+
+    expect(result.kind).toBe("fence-line");
+    expect(result.text).toBe(source.slice(0, offset) + "\n>       " + source.slice(offset));
+    expect(result.cursor).toBe(offset + "\n>       ".length);
+  });
+
   // The recursive tree stores indented items as flat siblings of one list, so an empty nested
   // item's level is read from its own indentation run rather than from tree ancestry. Enter on it
   // promotes the item one level, keeping the marker so the ordered-list normalizer renumbers it.

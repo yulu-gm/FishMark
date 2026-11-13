@@ -20,7 +20,7 @@ import {
   type EditTransactionPlan,
   type TextEditOperation
 } from "../transactions/edit-transaction-plan";
-import { planFenceDraftEnter } from "./code-fence";
+import { planCodeFenceEnter, planFenceDraftEnter } from "./code-fence";
 
 // Enter is decided from the semantic context alone: line roles, prefix segments, and the
 // recursive tree. No DOM class names, no source rescans, and no CodeMirror state are involved.
@@ -82,10 +82,13 @@ export function decideEnter(context: EditorSemanticContext): EnterDecision | nul
     }
   }
 
-  // 1. Fenced content owns its own lines: Enter only repeats the container prefixes, unless the
-  //    opener was never closed and Enter has to give the fence a body.
+  // 1. 围栏正文继承代码缩进；开围栏补全、闭围栏退出沿用原有规则。
   if (line.role === "fence-open" || line.role === "fence-content" || line.role === "fence-close" ||
       isKind(activeNode, "code-fence") || isKind(activeNode, "block-math")) {
+    if (line.role === "fence-content" && activeNode?.data.kind === "code-fence" && activeNode.data.fence === "fenced") {
+      const content = planCodeFenceEnter(context);
+      if (content !== null) return { kind: "fence-line", plan: content };
+    }
     const draft = planFenceDraftEnter(context);
 
     if (draft !== null) {

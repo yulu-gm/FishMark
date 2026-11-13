@@ -1,11 +1,12 @@
 import type { PhysicalLine } from "../physical-lines/physical-editing-document";
 
 import type { EditorSemanticContext } from "../context/editor-semantic-context";
+import { INDENT_UNIT } from "./indent";
 import {
   createEditTransactionPlan,
   type EditTransactionPlan
 } from "../transactions/edit-transaction-plan";
-import { lineContainerChain, linePrefixText, lastOfKind, quotePrefixEnd } from "./line-structure";
+import { continuationPrefix, lineContainerChain, linePrefixText, lastOfKind, quotePrefixEnd } from "./line-structure";
 
 // Code fences own their lines: Enter inside a fence inserts content, Enter on the closing fence
 // leaves the fence, completion only rewrites the opening info string, and indentation shifts the
@@ -219,12 +220,22 @@ export function planCodeFenceEnter(context: EditorSemanticContext): EditTransact
     });
   }
 
+  // 只继承光标前的行首空白；在缩进中间拆行时，右侧空白仍留在原位置之后。
+  const isFencedContent = line.role === "fence-content" && fence.data.kind === "code-fence" && fence.data.fence === "fenced";
+  const start = isFencedContent
+    ? fenceContentStart(line, context.lines.lineForNode(fence)[0] ?? line)
+    : line.contentStartOffset;
+  const contentPrefix = context.source.slice(line.range.startOffset, start);
+  const indent = isFencedContent
+    ? /^[ \t]*/u.exec(context.source.slice(start, offset))?.[0] ?? ""
+    : "";
+  const insert = `\n${contentPrefix}${indent}`;
   return createEditTransactionPlan({
     context,
     commandId: "enter",
     intent: "edit",
-    edits: [{ from: offset, to: offset, insert: `\n${prefix}` }],
-    selection: { anchor: offset + 1 + prefix.length, head: offset + 1 + prefix.length }
+    edits: [{ from: offset, to: offset, insert }],
+    selection: { anchor: offset + insert.length, head: offset + insert.length }
   });
 }
 
@@ -232,35 +243,43 @@ export function planCodeFenceEnter(context: EditorSemanticContext): EditTransact
 export function planCodeFenceIndent(
   context: EditorSemanticContext,
   direction: "in" | "out",
-  unit = "  "
+  unit = INDENT_UNIT
 ): EditTransactionPlan | null {
   const fence = fenceNodeAt(context);
 
-  if (fence === null) {
+  if (fence?.data.kind !== "code-fence" || fence.data.fence !== "fenced") {
     return null;
   }
 
-  const lines = context.lines
-    .lineForNode(fence)
-    .filter((line) => line.role === "fence-content");
-  const target = context.lineAt(context.selectionContext.activeOffset);
-  const covered = target !== null && lines.some((line) => line.lineNumber === target.lineNumber)
-    ? [target]
-    : lines;
-
-  if (covered.length === 0) {
+  const { from, to, empty, selection } = context.selectionContext;
+  const lines = context.lines.lineForNode(fence);
+  const first = context.lineAt(from);
+  // 选区末端恰好在下一行行首时，不修改那一行。
+  const last = context.lineAt(empty ? to : to - 1);
+  if (first?.role !== "fence-content" || last?.role !== "fence-content" ||
+      !lines.includes(first) || !lines.includes(last)) {
     return null;
   }
 
-  const edits = covered.map((line) =>
-    direction === "in"
-      ? { from: line.contentStartOffset, to: line.contentStartOffset, insert: unit }
-      : {
-          from: line.contentStartOffset,
-          to: line.contentStartOffset + removableIndent(context, line, unit.length),
-          insert: ""
-        }
-  );
+  const opener = lines[0]!;
+  const edits = lines.filter(line => line.lineNumber >= first.lineNumber && line.lineNumber <= last.lineNumber)
+    .flatMap(line => {
+      const start = fenceContentStart(line, opener);
+      if (direction === "in") return [{ from: start, to: start, insert: unit }];
+      const removed = removableIndent(context, start, line.contentEndOffset, unit.length);
+      return removed === 0 ? [] : [{ from: start, to: start + removed, insert: "" }];
+    });
+
+  // 按实际改动映射两个端点，保留反向选区；删除不足一级时不多移动光标。
+  const mapOffset = (offset: number): number => {
+    let delta = 0;
+    for (const edit of edits) {
+      if (offset < edit.from) break;
+      if (offset < edit.to) return edit.from + delta;
+      delta += edit.insert.length - (edit.to - edit.from);
+    }
+    return offset + delta;
+  };
 
   return createEditTransactionPlan({
     context,
@@ -268,17 +287,26 @@ export function planCodeFenceIndent(
     intent: "structural",
     edits,
     selection: {
-      anchor: context.selectionContext.from + (direction === "in" ? unit.length : -unit.length),
-      head: context.selectionContext.to + (direction === "in" ? unit.length : -unit.length)
+      anchor: mapOffset(selection.anchor),
+      head: mapOffset(selection.head)
     }
   });
 }
 
-function removableIndent(context: EditorSemanticContext, line: PhysicalLine, limit: number): number {
+function fenceContentStart(line: PhysicalLine, opener: PhysicalLine): number {
+  const tail = line.segments.at(-1);
+  // 列表续行的物理前缀也包含代码缩进，只保护开围栏所需的容器前缀。
+  return tail?.kind === "indentation"
+    ? Math.min(line.contentStartOffset, Math.max(tail.range.startOffset,
+        line.range.startOffset + continuationPrefix(opener).length))
+    : line.contentStartOffset;
+}
+
+function removableIndent(context: EditorSemanticContext, start: number, end: number, limit: number): number {
   let removed = 0;
 
-  while (removed < limit) {
-    const character = context.source[line.contentStartOffset + removed];
+  while (removed < limit && start + removed < end) {
+    const character = context.source[start + removed];
 
     if (character !== " " && character !== "\t") {
       break;

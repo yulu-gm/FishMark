@@ -8,6 +8,7 @@ import {
 } from "./transaction-adapter";
 import {
   planBackspace,
+  planCodeFenceIndent,
   planDelete,
   planEnter,
   planIndentIn,
@@ -138,11 +139,11 @@ export function planSemanticDelete(context: EditorSemanticContext): EditTransact
 }
 
 export function planSemanticTab(context: EditorSemanticContext): EditTransactionPlan | null {
-  return planTableNextCell(context) ?? planIndentIn(context);
+  return planCodeFenceIndent(context, "in") ?? planTableNextCell(context) ?? planIndentIn(context);
 }
 
 export function planSemanticShiftTab(context: EditorSemanticContext): EditTransactionPlan | null {
-  return planTablePreviousCell(context) ?? planIndentOut(context);
+  return planCodeFenceIndent(context, "out") ?? planTablePreviousCell(context) ?? planIndentOut(context);
 }
 
 export function planSemanticArrow(

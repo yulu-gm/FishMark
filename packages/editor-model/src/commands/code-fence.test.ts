@@ -83,6 +83,68 @@ describe("code fence planners", () => {
     expect(indented).toBe(["```", "    body", "```"].join("\n"));
   });
 
+  it("缩进反向选区覆盖的两行，末端所在行保持不变", () => {
+    const source = ["```python", "alpha", " beta", "gamma", "```"].join("\n");
+    const anchor = source.indexOf("gamma");
+    const head = source.indexOf("alpha") + 2;
+    const plan = planCodeFenceIndent(contextAt(source, anchor, head), "in");
+    const indented = applyPlan(source, plan);
+    expect(indented).toBe(["```python", "  alpha", "   beta", "gamma", "```"].join("\n"));
+    expect(plan?.selection).toEqual({ anchor: anchor + 4, head: head + 2 });
+    const out = planCodeFenceIndent(contextAt(indented, anchor + 4, head + 2), "out");
+    expect(applyPlan(indented, out)).toBe(source);
+    expect(out?.selection).toEqual({ anchor, head });
+  });
+
+  it("反缩进按实际删除量定位，未缩进的行不会移动光标", () => {
+    const source = ["```", " alpha", "beta", "```"].join("\n");
+    const head = source.indexOf("beta");
+    const plan = planCodeFenceIndent(contextAt(source, source.indexOf(" alpha"), head + 1), "out");
+    expect(applyPlan(source, plan)).toBe(source.replace(" alpha", "alpha"));
+    expect(plan?.selection).toEqual({ anchor: source.indexOf(" alpha"), head });
+    expect(planCodeFenceIndent(contextAt(source, head), "out")?.edits).toEqual([]);
+  });
+
+  it.each([
+    ["", "", "    "],
+    ["> ", "> ", "\t "],
+    ["- ", "  ", "    "],
+    ["> - ", ">   ", "    "],
+    ["- > ", "  > ", "    "]
+  ])("在容器 %s 中保留代码缩进并保护容器前缀", (opening, prefix, indent) => {
+    const code = `${prefix}${indent}return 1`;
+    const source = [opening + "```python", code, prefix + "```"].join("\n");
+    const end = source.indexOf("return 1") + "return 1".length;
+    const enter = planCodeFenceEnter(contextAt(source, end));
+    const newLine = "\n" + prefix + indent;
+    expect(applyPlan(source, enter)).toBe(source.slice(0, end) + newLine + source.slice(end));
+    expect(enter?.selection.head).toBe(end + newLine.length);
+    const start = source.indexOf("return 1");
+    const out = planCodeFenceIndent(contextAt(source, start), "out");
+    expect(applyPlan(source, out)).toBe(source.replace(code, prefix + indent.slice(2) + "return 1"));
+  });
+
+  it("从行首缩进中间拆行，只继承光标左侧的空格", () => {
+    const source = ["> - ```python", ">       return 1", ">   ```"].join("\n");
+    const offset = source.indexOf("return 1") - 2;
+    const plan = planCodeFenceEnter(contextAt(source, offset));
+    expect(applyPlan(source, plan)).toBe(["> - ```python", ">     ", ">       return 1", ">   ```"].join("\n"));
+    expect(plan?.selection.head).toBe(offset + "\n>     ".length);
+  });
+
+  it("空代码行可缩进并继承缩进，反缩进只移除容器后的空格", () => {
+    const source = ["> - ```python", ">   ", ">   ```"].join("\n");
+    const offset = source.indexOf("\n", source.indexOf("\n") + 1);
+    expect(planCodeFenceIndent(contextAt(source, offset), "out")?.edits).toEqual([]);
+    const tab = planCodeFenceIndent(contextAt(source, offset), "in");
+    const indented = applyPlan(source, tab);
+    expect(indented).toBe(["> - ```python", ">     ", ">   ```"].join("\n"));
+    const caret = tab!.selection.head;
+    const enter = planCodeFenceEnter(contextAt(indented, caret));
+    expect(applyPlan(indented, enter)).toBe(["> - ```python", ">     ", ">     ", ">   ```"].join("\n"));
+    expect(applyPlan(indented, planCodeFenceIndent(contextAt(indented, caret), "out"))).toBe(source);
+  });
+
   it("returns null outside a fence", () => {
     const source = "Paragraph";
 
