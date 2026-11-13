@@ -22,6 +22,7 @@ export function useSettingsController({
   const openOriginRef = useRef<SettingsOpenOrigin>(null);
   const shouldRestoreEditorFocusRef = useRef(false);
   const pendingFocusRestoreRef = useRef<FocusRestoreTarget | null>(null);
+  const closingFocusOwnerRef = useRef<Element | null>(null);
 
   const clearSettingsCloseTimer = useCallback((): void => {
     if (closeTimerRef.current !== null) {
@@ -44,6 +45,8 @@ export function useSettingsController({
       openOriginRef.current === "editor" ||
       (activeElement instanceof Node ? !!editorContainerRef.current?.contains(activeElement) : false);
     openOriginRef.current = null;
+    pendingFocusRestoreRef.current = null;
+    closingFocusOwnerRef.current = null;
     clearSettingsCloseTimer();
     setIsSettingsClosing(false);
     setIsSettingsOpen(true);
@@ -54,6 +57,7 @@ export function useSettingsController({
 
   const closeSettingsDrawer = useCallback((): void => {
     clearSettingsCloseTimer();
+    closingFocusOwnerRef.current = document.activeElement;
     setIsSettingsOpen(false);
     setIsSettingsClosing(true);
 
@@ -75,13 +79,19 @@ export function useSettingsController({
       return;
     }
 
-    if (pendingFocusRestoreRef.current === "editor") {
+    const target = pendingFocusRestoreRef.current;
+    pendingFocusRestoreRef.current = null;
+    const activeElement = document.activeElement;
+    const closingFocusOwner = closingFocusOwnerRef.current;
+    closingFocusOwnerRef.current = null;
+    // 关闭动画期间用户可能已回到正文或搜索框；延迟恢复不能覆盖这次新的聚焦。
+    if (activeElement && activeElement !== document.body && activeElement !== closingFocusOwner) return;
+
+    if (target === "editor") {
       editorRef.current?.focus();
     } else {
       settingsEntryRef.current?.focus();
     }
-
-    pendingFocusRestoreRef.current = null;
   }, [editorRef, isSettingsClosing, isSettingsOpen, settingsEntryRef]);
 
   useEffect(() => clearSettingsCloseTimer, [clearSettingsCloseTimer]);
