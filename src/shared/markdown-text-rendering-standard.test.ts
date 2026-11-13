@@ -115,12 +115,12 @@ describe("markdown text rendering standard", () => {
     expect(standard.typography.lineHeight.paragraph).toBeGreaterThan(standard.typography.lineHeight.list);
     expect(standard.typography.lineHeight.listContinuation).toBe(standard.typography.lineHeight.list);
     expect(standard.blockSpacing.blankLine.inactiveCollapsedHeightPx).toBe(0);
-    expect(standard.blockSpacing.blankLine.rule).toContain("structural separator is never editable");
+    expect(standard.blockSpacing.blankLine.rule).toContain("结构分隔行不可编辑");
     expect(standard.blockSpacing.blankLine.rule).toContain(
-      "must not enter the structural separator"
+      "光标归一化不得停在结构分隔行内"
     );
-    expect(standard.blockSpacing.blankLine.rule).toContain("Plain paragraph Enter must insert one line break");
-    expect(standard.blockSpacing.blankLine.rule).toContain("caret must move across the separator");
+    expect(standard.blockSpacing.blankLine.rule).toContain("正文 Enter 创建新段落");
+    expect(standard.blockSpacing.blankLine.rule).toContain("光标跨过结构分隔行");
     expect(standard.blocks.table.columnSizing.mode).toBe("content-weighted-fixed-layout");
     expect(standard.blocks.table.columnSizing.minReadableWeight).toBe(8);
     expect(standard.blocks.table.columnSizing.maxContentWeight).toBe(48);

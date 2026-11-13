@@ -79,11 +79,11 @@ describe("planEnter", () => {
     expect(result.cursor).toBe(7);
   });
 
-  it("pushes one extra blank line in before following content", () => {
+  it("reuses an existing line break when splitting before following content", () => {
     const source = ["Alpha", "Beta"].join("\n");
     const result = applyPlan(source, "Alpha".length);
 
-    expect(result.text).toBe("Alpha\n\n\n\nBeta");
+    expect(result.text).toBe("Alpha\n\nBeta");
     expect(result.cursor).toBe(7);
   });
 
@@ -92,7 +92,7 @@ describe("planEnter", () => {
     const result = applyPlan(source, "Alpha\n\n".length);
 
     expect(result.text).toBe("Alpha\n\n\n\nBeta");
-    expect(result.cursor).toBe("Alpha\n\n".length + 1);
+    expect(result.cursor).toBe("Alpha\n\n".length + 2);
   });
 
   it("separates a whitespace-only line with a blank line", () => {

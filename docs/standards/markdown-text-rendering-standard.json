@@ -90,7 +90,7 @@
     },
     "blankLine": {
       "inactiveCollapsedHeightPx": 0,
-      "rule": "Only the first blank source line in a block gap collapses as the structural separator in both inactive reading state and active editing state. Extra blank source lines remain visible and editable. The structural separator is never editable, and cursor normalization must not enter the structural separator. Plain paragraph Enter must insert one line break. When that break forms a structural separator before an existing next block, the caret must move across the separator to the next block start rather than staying before or inside the separator. Blank lines must not be removed from source."
+      "rule": "正文 Enter 创建新段落，段落之间用两个换行符分隔；段尾已有的段内换行参与分隔，不能重复叠加。光标跨过结构分隔行进入后面的段落，结构分隔行不可编辑，光标归一化不得停在结构分隔行内。连续纯空行按结构分隔行和可编辑空段落交替呈现；Backspace 删除一个完整空段落，未配对的额外空行只删除一行。渲染和光标归一化不得删除源码空行。引用、列表、表格和代码块保留各自的结构编辑规则。"
     },
     "list": {
       "betweenItemsRem": 0,

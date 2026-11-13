@@ -1590,7 +1590,7 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("keeps an active empty paragraph block visible while editing", async () => {
+  it("places the caret in the next paragraph instead of a hidden separator after Enter", async () => {
     const host = document.createElement("div");
     const source = ["Paragraph one", "Paragraph two"].join("\n");
     const activeBlankLineStart = "Paragraph one\n\n".length;
@@ -1614,10 +1614,9 @@ describe("createCodeEditorController", () => {
     const blankLines = Array.from(host.querySelectorAll<HTMLElement>(".cm-line")).filter(
       (line) => line.textContent === ""
     );
-    const activeBlankLine = blankLines.find((line) => !line.classList.contains("cm-inactive-blank-line"));
-
-    expect(activeBlankLine).not.toBeNull();
-    expect(activeBlankLine?.classList.contains("cm-inactive-blank-line")).toBe(false);
+    expect(blankLines).toHaveLength(1);
+    expect(blankLines[0]?.classList.contains("cm-inactive-blank-line")).toBe(true);
+    expect(controller.getContent()).toBe("Paragraph one\n\nParagraph two");
     expect(view?.state.selection.main.anchor).toBe(activeBlankLineStart);
 
     controller.destroy();
@@ -4321,7 +4320,7 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("creates a visible active empty paragraph block before an existing next line", () => {
+  it("splits a multiline paragraph without adding an empty paragraph", () => {
     const host = document.createElement("div");
     const source = ["AAAAA", "BBBBB"].join("\n");
     const activeEmptyBlockStartAfterInsert = "AAAAA\n\n".length;
@@ -4342,14 +4341,14 @@ describe("createCodeEditorController", () => {
     advancedController.setSelection("AAAAA".length);
     advancedController.pressEnter();
 
-    expect(controller.getContent()).toBe(["AAAAA", "", "", "", "BBBBB"].join("\n"));
+    expect(controller.getContent()).toBe(["AAAAA", "", "BBBBB"].join("\n"));
     expect(view?.state.selection.main.anchor).toBe(activeEmptyBlockStartAfterInsert);
     expect(view?.state.selection.main.head).toBe(activeEmptyBlockStartAfterInsert);
 
     controller.destroy();
   });
 
-  it("creates an active empty paragraph block on Enter at an existing block start", () => {
+  it("inserts an empty paragraph before a block and keeps the caret at that block start", () => {
     const host = document.createElement("div");
     const source = ["Alpha", "", "Beta"].join("\n");
 
@@ -4370,8 +4369,8 @@ describe("createCodeEditorController", () => {
     advancedController.pressEnter();
 
     expect(controller.getContent()).toBe(["Alpha", "", "", "", "Beta"].join("\n"));
-    expect(view?.state.selection.main.anchor).toBe("Alpha\n\n\n".length);
-    expect(view?.state.selection.main.head).toBe("Alpha\n\n\n".length);
+    expect(view?.state.selection.main.anchor).toBe("Alpha\n\n\n\n".length);
+    expect(view?.state.selection.main.head).toBe("Alpha\n\n\n\n".length);
 
     controller.destroy();
   });

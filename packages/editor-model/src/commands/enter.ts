@@ -177,9 +177,7 @@ function paragraphBreak(
   });
 }
 
-// The legacy paragraph rule: blocks are separated by a blank line, so Enter writes two line
-// breaks and leaves the caret on the new empty line. Adjacent content keeps its distance by
-// pushing one extra blank line in, and a caret already on an empty line just opens a new one.
+// Enter 拆分段落，段落之间用两个换行符分隔；已有的段内换行参与分隔，不能重复叠加。
 function resolveParagraphBreak(
   context: EditorSemanticContext,
   line: PhysicalLine,
@@ -196,7 +194,7 @@ function resolveParagraphBreak(
     const previous = context.lines.lines[line.lineNumber - 2] ?? null;
 
     if (previous !== null && lineTextOf(context, previous).trim().length === 0) {
-      return { insert: defaultInsert, caret: offset + 1 };
+      return { insert: defaultInsert, caret: offset + defaultInsert.length };
     }
   }
 
@@ -204,7 +202,8 @@ function resolveParagraphBreak(
     const next = context.lines.lines[line.lineNumber] ?? null;
 
     if (next !== null && lineTextOf(context, next).trim().length > 0) {
-      return { insert: "\n\n\n", caret: offset + 2 };
+      // 原有换行加上本次插入的换行构成段落分隔，光标进入后面的段落。
+      return { insert: "\n", caret: offset + 2 };
     }
   }
 

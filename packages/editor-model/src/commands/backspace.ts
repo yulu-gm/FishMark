@@ -344,9 +344,8 @@ export function decideBackspace(context: EditorSemanticContext): BackspaceDecisi
     return rangeDelete(context, quotePrefix.lastMarkerStart, removeTo, "quote-degrade");
   }
 
-  // 4. At a line start with no marker to remove, exactly one line break goes away: a run of
-  //    separator lines above collapses one line per press, while a single separator is removed
-  //    together with the break before it so the line joins the visible content above.
+  // 4. 无标记的行首按段落边界合并：成对的纯空行删除一个完整空段落，
+  //    未配对的额外空行删除一行，单个结构分隔行连同两侧换行一起删除。
   if (offset === line.range.startOffset && line.lineNumber > 1) {
     return rangeDelete(context, joinSourceOffset(context, line), offset, "subtree-join");
   }
@@ -380,8 +379,7 @@ function removeListMarker(
   return rangeDelete(context, from, line.contentStartOffset, "marker-degrade");
 }
 
-// The offset the current line's Backspace deletes from. One press removes one separator line, so a
-// run of them needs one press per line; a lone separator goes with the break above it.
+// 一个空段落占两个换行符；完整空段落一次删除，未配对的额外空行只删除一行。
 function joinSourceOffset(context: EditorSemanticContext, line: PhysicalLine): number {
   const lines = context.lines.lines;
   let separatorCount = 0;
@@ -399,9 +397,12 @@ function joinSourceOffset(context: EditorSemanticContext, line: PhysicalLine): n
   }
 
   if (separatorCount === 0 || separatorCount > 1) {
-    // One press removes exactly one line from the run above, so the break right before this line is
-    // what goes; the caret then sits at the start of the line that followed the removed one.
-    return line.range.startOffset - 1;
+    const previous = lines[line.lineNumber - 2]!;
+    const pairedSeparator = separatorCount > 1 && separatorCount % 2 === 1 &&
+      previous.range.startOffset === previous.contentEndOffset &&
+      lines[line.lineNumber - 3]!.range.startOffset === lines[line.lineNumber - 3]!.contentEndOffset;
+    // 仅合并纯空行组成的段落分隔，保留含空格或引用标记的行的原有删除规则。
+    return pairedSeparator ? lines[line.lineNumber - 3]!.contentEndOffset : previous.contentEndOffset;
   }
 
   return previousContentEnd;
