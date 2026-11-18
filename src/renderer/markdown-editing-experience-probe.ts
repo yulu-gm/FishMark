@@ -1328,23 +1328,17 @@ async function runStrictHumanListInputCases(): Promise<CaseResult[]> {
         { kind: "type", text: "child" },
         { kind: "backspace", count: Array.from("child").length },
         { kind: "backspace" },
-        { kind: "backspace" },
-        { kind: "backspace" }
+        { kind: "type", text: "body" }
       ],
       checkpoints: [
         {
           afterAction: 8,
-          expectedContent: "- parent\n  ",
-          name: "child marker deletion preserves child indentation"
-        },
-        {
-          afterAction: 9,
-          expectedContent: "- parent\n ",
-          name: "child indentation deletes one source space at a time"
+          expectedContent: "- parent\n\n",
+          name: "trailing child marker deletion leaves a paragraph separator"
         }
       ],
-      expectedContent: "- parent\n",
-      name: "strict Backspace removes a child marker and indentation in source order"
+      expectedContent: "- parent\n\nbody",
+      name: "strict Backspace exits the trailing child item into standalone body"
     }),
     await runStrictHumanListInputCase({
       actions: [
@@ -1354,8 +1348,8 @@ async function runStrictHumanListInputCases(): Promise<CaseResult[]> {
         { kind: "enter" },
         { kind: "backspace" }
       ],
-      expectedContent: "- item\n",
-      name: "strict Backspace removes an auto-created empty list item"
+      expectedContent: "- item\n\n",
+      name: "strict Backspace exits an auto-created empty list item"
     })
   ];
 }
@@ -3081,7 +3075,7 @@ async function runTopLevelListItemEnterBodyUpgradeCase(): Promise<CaseResult> {
 async function runNestedEmptyListMarkerBackspaceCaretCase(): Promise<CaseResult> {
   const initialContent = ["- parent", "  - child", "    - grandchild"].join("\n");
   const expectedMarkerContent = `${initialContent}\n    - `;
-  const expectedContent = `${initialContent}\n    `;
+  const expectedContent = `${initialContent}\n\n`;
   const expectedSelection = expectedContent.length;
   const harness = setupHarness(initialContent);
 
@@ -3096,7 +3090,7 @@ async function runNestedEmptyListMarkerBackspaceCaretCase(): Promise<CaseResult>
   await settle();
 
   const selectionAfterBackspace = harness.controller.getSelection();
-  const blankLine = findLineByExactText(harness.root, "    ");
+  const blankLine = Array.from(harness.root.querySelectorAll<HTMLElement>(".cm-line")).at(-1) ?? null;
   const blankLineClasses = blankLine?.className ?? "";
   const blankLineRect = blankLine?.getBoundingClientRect() ?? null;
   const caretRect = harness.view.coordsAtPos(selectionAfterBackspace.anchor);
@@ -3123,7 +3117,7 @@ async function runNestedEmptyListMarkerBackspaceCaretCase(): Promise<CaseResult>
     harness.controller.getContent() === expectedContent &&
     selectionAfterBackspace.anchor === expectedSelection &&
     selectionAfterBackspace.head === expectedSelection &&
-    blankLine !== null &&
+    blankLine !== null && blankLine.textContent === "" &&
     !/\bcm-inactive-blank-line\b/u.test(blankLineClasses) &&
     blankLineHasVisibleHeight &&
     caretHasGeometry &&
@@ -3149,7 +3143,7 @@ async function runNestedEmptyListMarkerBackspaceCaretCase(): Promise<CaseResult>
     expectedSelection: { anchor: expectedSelection, head: expectedSelection },
     grammar: "list",
     harness,
-    name: "Backspace from an auto-created nested empty list item leaves a visible indented blank-line caret",
+    name: "Backspace from an auto-created trailing nested item leaves a visible body caret",
     pass
   });
   harness.controller.destroy();

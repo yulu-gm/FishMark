@@ -440,11 +440,11 @@ it("removes an empty ordered list marker while preserving the blank line", () =>
     });
   });
 
-it("removes an empty unordered list marker and its indentation", () => {
+it("removes a trailing empty unordered marker and leaves the caret outside the list", () => {
     const doc = ["- parent", "  - "].join("\n");
     const context = buildContext(doc, doc.length);
     const result = computeBackspaceEmptyListMarker(context);
-    const expected = "- parent\n";
+    const expected = "- parent\n\n";
 
     expect(applyEdit(doc, result)).toBe(expected);
     expect(result?.selection).toEqual({

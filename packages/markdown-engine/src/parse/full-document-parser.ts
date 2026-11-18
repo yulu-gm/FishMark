@@ -125,7 +125,10 @@ export function parseFullDocumentTree(
   }
 
   closeContainerFrame("document", 0, source.length);
-  normalizeListFrames(root, source);
+  // List draft markers and footnote fragments share a lazy parse-local line index.
+  let lineLookup: ReturnType<typeof createLineLookup> | undefined;
+  const lineAt = (offset: number) => (lineLookup ??= createLineLookup(source))(offset);
+  normalizeListFrames(root, source, lineAt);
 
   // Footnote definitions attach to top-level paragraph/definition blocks, so they are derived
   // from the raw top-level leaf blocks before nodes are materialized. Inline parsing of every
@@ -139,9 +142,6 @@ export function parseFullDocumentTree(
     options
   );
 
-  // Paragraph fragments around footnotes share one parse-local line index. Most
-  // documents never need it; do not scan their source just to build unused data.
-  let lineLookup: ReturnType<typeof createLineLookup> | undefined;
   const tree = createMarkdownDocumentTree(
     materializeContainer({
       frame: root,
@@ -150,7 +150,7 @@ export function parseFullDocumentTree(
       referenceDefinitions,
       footnoteDefinitions,
       footnoteCandidates: footnoteData.candidates,
-      lineAt: (offset) => (lineLookup ??= createLineLookup(source))(offset),
+      lineAt,
       options,
       maskedSource: source
     }),

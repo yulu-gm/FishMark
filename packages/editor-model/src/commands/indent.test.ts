@@ -93,6 +93,31 @@ describe("indent planners", () => {
     expect(applyPlan(source, plan)).toBe(["> - parent", ">   - "].join("\n"));
   });
 
+  it("uses the source line break style when separating an empty child from a paragraph", () => {
+    const source = "- - first\r\n- parent\r\n-   \r\n\r\nafter";
+    const caret = source.lastIndexOf("-   ") + 4;
+    const plan = planIndentIn(contextAt(source, caret));
+
+    expect(applyPlan(source, plan)).toBe("- - first\r\n- parent\r\n\r\n  -   \r\n\r\nafter");
+    expect(plan?.selection).toEqual({ anchor: caret + 4, head: caret + 4 });
+  });
+
+  it("protects an empty child after a mixed-indentation root list returns to column zero", () => {
+    const source = "   -  earlier\n       -   child\n- parent\n-   \n\nafter";
+    const caret = source.lastIndexOf("-   ") + 4;
+
+    expect(applyPlan(source, planIndentIn(contextAt(source, caret)))).toBe(
+      "   -  earlier\n       -   child\n- parent\n\n  -   \n\nafter"
+    );
+  });
+
+  it("keeps an existing child dash scope intact when indenting an empty sibling", () => {
+    const source = "- parent\n  - existing child\n-   ";
+    const plan = planIndentIn(contextAt(source, source.length));
+
+    expect(applyPlan(source, plan)).toBe("- parent\n  - existing child\n  -   ");
+  });
+
   it("closes the empty quote lines that hide a sibling before indenting", () => {
     const source = ["> - first", ">", "> - second"].join("\n");
     const context = contextAt(source, source.indexOf("second"));

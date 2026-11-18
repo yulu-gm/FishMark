@@ -34,11 +34,11 @@ function applyPlan(
 }
 
 describe("planBackspace", () => {
-  it("degrades a populated ordered sibling but removes an empty marker completely", () => {
+  it("degrades a populated ordered sibling but exits a trailing empty ordered item", () => {
     const populated = "1. first\n2. second\n3. third";
     expect(applyPlan(populated, populated.indexOf("second")).text).toBe("1. first\n\n2.second\n3. third");
     const empty = "1. first\n2. ";
-    expect(applyPlan(empty, empty.length).text).toBe("1. first\n");
+    expect(applyPlan(empty, empty.length).text).toBe("1. first\n\n");
     expect(applyPlan("Intro\n1. first", "Intro\n1. ".length).text).toBe("Intro\nfirst");
   });
 
@@ -157,10 +157,10 @@ describe("planBackspace", () => {
   });
 
   it.each([
-    ["- parent\n  - ", "- parent\n"],
-    ["1. parent\n  1. ", "1. parent\n"],
-    ["1. parent\n  1. child\n    1. ", "1. parent\n  1. child\n"],
-    ["- parent\n  - child\n    - ", "- parent\n  - child\n"],
+    ["- parent\n  - ", "- parent\n\n"],
+    ["1. parent\n  1. ", "1. parent\n\n"],
+    ["1. parent\n  1. child\n    1. ", "1. parent\n  1. child\n\n"],
+    ["- parent\n  - child\n    - ", "- parent\n  - child\n\n"],
     ["> - parent\n>   - ", "> - parent\n> "],
     ["- parent\n  - \n  - sibling", "- parent\n\n  - sibling"]
   ])("removes an empty nested leaf marker and indentation: %s", (source, expected) => {
@@ -168,6 +168,17 @@ describe("planBackspace", () => {
     const result = applyPlan(source, offset);
     expect(result.text).toBe(expected);
     expect(result.cursor).toBe(offset - (source.length - expected.length));
+  });
+
+  it.each([
+    ["- parent\n- \n", "- parent\n\n"],
+    ["- parent\n\n- ", "- parent\n\n"],
+    ["- parent\r\n- ", "- parent\r\n\r\n"],
+    ["- parent\r\n- \r\n", "- parent\r\n\r\n"]
+  ])("keeps exactly one paragraph separator at a trailing list exit: %s", (source, expected) => {
+    const result = applyPlan(source, source.lastIndexOf("- ") + 2);
+    expect(result.text).toBe(expected);
+    expect(result.cursor).toBe(expected.length);
   });
 
   it("retains indentation for populated items and empty items with descendants", () => {

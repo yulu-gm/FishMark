@@ -311,11 +311,11 @@ export function decideBackspace(context: EditorSemanticContext): BackspaceDecisi
         return { kind: "marker-degrade", plan: createEditTransactionPlan({ context, commandId: "backspace", intent: "structural", edits,
           selection: { anchor: caret, head: caret }, userEventName: "delete.list-marker" }) };
       }
-      return removeListMarker(context, line, prefix, markerStart);
+      return removeListMarker(context, line, chain, prefix, markerStart);
     }
 
     if (offset === markerStart && prefix.markerText.length > 0) {
-      return removeListMarker(context, line, prefix, markerStart);
+      return removeListMarker(context, line, chain, prefix, markerStart);
     }
   }
 
@@ -400,10 +400,39 @@ export function decideBackspace(context: EditorSemanticContext): BackspaceDecisi
 function removeListMarker(
   context: EditorSemanticContext,
   line: PhysicalLine,
+  chain: readonly MarkdownNode[],
   prefix: ReturnType<typeof listItemPrefix>,
   markerStart: number
 ): BackspaceDecision {
-  if (line.contentStartOffset !== line.contentEndOffset || prefix.indentationText.length === 0) {
+  if (line.contentStartOffset !== line.contentEndOffset) {
+    return rangeDelete(context, markerStart, line.contentStartOffset, "marker-degrade");
+  }
+
+  const previous = context.lines.lines[line.lineNumber - 2];
+  const following = context.lines.lines[line.lineNumber];
+  const outerList = chain[1];
+  if (prefix.ancestorText.length === 0 && outerList?.kind === "list" &&
+      outerList.source.endOffset <= line.contentEndOffset &&
+      previous !== undefined && previous.nodeId !== null &&
+      context.nodeById(previous.nodeId)?.kind === "paragraph" &&
+      lastOfKind(lineContainerChain(context, previous), "list-item") !== null) {
+    // Removing the last item at a list boundary must leave a blank between the list
+    // and the new body. Without one, unindented text still continues the last list item.
+    const existingTerminalBreak = following?.range.startOffset === context.source.length;
+    const newline = context.source.slice(previous.contentEndOffset, line.range.startOffset);
+    const followingBlockNeedsSeparator = following !== undefined &&
+      context.source.slice(following.range.startOffset, following.contentEndOffset).trim().length > 0;
+    const insert = existingTerminalBreak ? "" : followingBlockNeedsSeparator ? newline + newline : newline;
+    const caret = line.range.startOffset + (existingTerminalBreak ? line.range.endOffset - line.contentEndOffset : newline.length);
+    return {
+      kind: "marker-degrade",
+      plan: createEditTransactionPlan({ context, commandId: "backspace", intent: "structural",
+        edits: [{ from: line.range.startOffset, to: line.contentEndOffset, insert }],
+        selection: { anchor: caret, head: caret } })
+    };
+  }
+
+  if (prefix.indentationText.length === 0) {
     return rangeDelete(context, markerStart, line.contentStartOffset, "marker-degrade");
   }
 

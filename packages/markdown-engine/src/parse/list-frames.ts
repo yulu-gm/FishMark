@@ -1,16 +1,28 @@
 import { collectBlockquotePrefixSpans } from "../blockquote";
 import type { MarkdownBlock } from "../block-map";
-import { createSourceRange } from "../model/source-range";
+import { createSourceRange, type SourceRange } from "../model/source-range";
 import type { RawChild, RawContainer } from "./full-document-parser";
+import { createBlockFromRange } from "./leaf-blocks";
 import { readListScopes, type ListItemGeometry, type ListScope } from "./list-scopes";
 
 // FishMark lists nest by indentation, including the two-space ordered-list style.
 // Resolve that dialect once while constructing the canonical tree. Keep micromark's
 // non-list containers and typed leaves; only paragraph spans may be split by a newly
 // discovered item boundary.
-export function normalizeListFrames(frame: RawContainer, source: string): void {
-  for (const child of frame.children) {
-    if (child.type === "container") normalizeListFrames(child.container, source);
+export function normalizeListFrames(frame: RawContainer, source: string, lineAt: (offset: number) => number): void {
+  for (let index = 0; index < frame.children.length; index += 1) {
+    const child = frame.children[index]!;
+    if (child.type !== "container") continue;
+    const draft = frame.kind === "list-item" ? readBareInlineOrderedMarker(frame, child.container, source) : null;
+    if (draft === null) {
+      normalizeListFrames(child.container, source, lineAt);
+    } else {
+      const line = lineAt(draft.startOffset);
+      frame.children[index] = {
+        type: "blocks",
+        blocks: [createBlockFromRange("paragraph", draft.startOffset, draft.endOffset, line, line)]
+      };
+    }
   }
   if (frame.kind === "list" || frame.kind === "list-item") return;
 
@@ -37,7 +49,7 @@ export function normalizeListFrames(frame: RawContainer, source: string): void {
     // boundaries already express that nesting; do not reinterpret their markers as
     // belonging to the enclosing list's indentation scope.
     if (leaves.some((leaf) => leaf.type === "container") || run.some((list) => hasInlineNestedList(list, source))) {
-      result.push(...run.map((container): RawChild => ({ type: "container", container })));
+      result.push(...run.map(retainStandardList));
       continue;
     }
     const opaqueRanges = leaves.flatMap((leaf) => leaf.type === "container"
@@ -45,12 +57,32 @@ export function normalizeListFrames(frame: RawContainer, source: string): void {
       : leaf.blocks.filter((block) => block.type !== "paragraph" && block.type !== "heading").map((block) => createSourceRange(block.startOffset, block.endOffset)));
     const scopes = readListScopes(source, createSourceRange(start, end), prefixes, opaqueRanges, true);
     if (scopes === null || scopes.length === 0 || !scopesCoverContent(scopes, run[0]!, end)) {
-      result.push(...run.map((container): RawChild => ({ type: "container", container })));
+      result.push(...run.map(retainStandardList));
     } else {
       result.push(...scopes.map((scope): RawChild => ({ type: "container", container: scopeFrame(scope, run[0]!, leaves) })));
     }
   }
   frame.children = result;
+}
+
+// A lone bare ordered marker on its parent's line is still text (e.g. typing
+// `- 2.` on the way to `- 2.1`). Leave padded, nonempty and multi-item child
+// lists alone. Keep the same structure for list commands and presentation.
+function readBareInlineOrderedMarker(item: RawContainer, list: RawContainer, source: string): SourceRange | null {
+  if (list.data.kind !== "list" || !list.data.ordered || list.children.length !== 1) return null;
+  const child = list.children[0];
+  if (child?.type !== "container" || child.container.children.length !== 0) return null;
+  const marker = child.container.itemGeometry;
+  if (marker === undefined || marker.markerEnd !== list.range.endOffset ||
+      source.lastIndexOf("\n", marker.markerStart - 1) >= item.range.startOffset) return null;
+  return list.range;
+}
+
+function retainStandardList(container: RawContainer): RawChild {
+  if (container.data.kind === "list") {
+    container.data = { ...container.data, usesStandardBoundaries: true };
+  }
+  return { type: "container", container };
 }
 
 // A same-line nested marker is already a recursive micromark container. The

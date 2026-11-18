@@ -33,6 +33,31 @@ describe("parseFullDocumentTree", () => {
       expect(source.slice(paragraph!.content.startOffset, paragraph!.content.endOffset)).toContain("alpha");
     }
   );
+  it.each([
+    ["- Parent\n  - 2.1\n    - 2.1.1\n  - 2.", "2."],
+    ["> - 42)", "42)"],
+    ["2. 3.", "3."],
+    ["- 2.\r\n\r\nNext paragraph", "2."],
+    ["- 2.\n- 3. ", "2."]
+  ])("keeps a solitary unpadded ordered marker as same-line item text: %j", (source, content) => {
+    const nodes = flattenMarkdownTree(parseFullDocumentTree(source));
+    const start = source.lastIndexOf(content);
+    const literal = nodes.find((node) => node.kind === "paragraph" &&
+      node.content.startOffset === start);
+
+    expect(literal).toBeDefined();
+    expect(source.slice(literal?.content.startOffset, literal?.content.endOffset)).toBe(content);
+    expect(nodes.some((node) => node.kind === "list-item" && node.source.startOffset === start)).toBe(false);
+  });
+
+  it.each(["- 2. ", "- 2.\t", "- 2. entry", "- 2)\n     entry", "- 2.\n  3.", "- 2.\n  3. next"])(
+    "retains a same-line ordered child committed by padding, content, or a sibling: %j", (source) => {
+      const nodes = flattenMarkdownTree(parseFullDocumentTree(source));
+
+      expect(nodes.find((node) => node.kind === "list" && node.source.startOffset === 2)?.data)
+        .toMatchObject({ kind: "list", ordered: true, startOrdinal: 2 });
+    }
+  );
   it("builds recursive container nesting from the event stream", () => {
     const tree = parseFullDocumentTree(fixture);
     const kinds = nodeKinds(tree);

@@ -1,0 +1,100 @@
+name: Package FishMark 4.2.1 (Windows)
+
+on:
+  push:
+    branches: [main]
+    paths: [release-metadata/release-notes.json]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    env:
+      FISHMARK_RELEASE_VERSION: '4.2.1'
+      FISHMARK_RELEASE_DIR: release
+
+    steps:
+      - name: Checkout release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Verify release version and commit
+        shell: pwsh
+        run: |
+          if ((git rev-parse HEAD) -ne $env:GITHUB_SHA) {
+            throw 'Checkout does not match the workflow commit.'
+          }
+          node -e 'const version = process.env.FISHMARK_RELEASE_VERSION; const pkg = require("./package.json"); const lock = require("./package-lock.json"); const notes = require("./release-metadata/release-notes.json"); if ([pkg.version, lock.version, lock.packages[""].version, notes.version].some(v => v !== version)) throw new Error("Expected FishMark " + version + " in package, lockfile and release notes");'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows x64 installer
+        run: npm run package:win
+
+      - name: Verify Windows list editing
+        run: npm run test:e2e -- list-backspace.spec.mjs
+
+      - name: Verify installer and update metadata
+        shell: pwsh
+        run: |
+          @'
+          import assert from 'node:assert/strict';
+          import { createHash } from 'node:crypto';
+          import { appendFileSync, readFileSync, statSync } from 'node:fs';
+          import { join } from 'node:path';
+          import { load } from 'js-yaml';
+
+          const version = process.env.FISHMARK_RELEASE_VERSION;
+          const output = process.env.FISHMARK_RELEASE_DIR;
+          const installer = `FishMark-Setup-${version}.exe`;
+          const bytes = readFileSync(join(output, installer));
+          const metadata = load(readFileSync(join(output, 'latest.yml'), 'utf8'));
+          const sha512 = createHash('sha512').update(bytes).digest('base64');
+          const blockmap = statSync(join(output, installer + '.blockmap'));
+
+          assert.equal(bytes.subarray(0, 2).toString('ascii'), 'MZ', 'Installer is missing a Windows executable header');
+          assert.ok(blockmap.isFile() && blockmap.size > 0, 'Blockmap is missing or empty');
+          assert.equal(metadata.version, version);
+          assert.equal(metadata.path, installer);
+          assert.equal(metadata.sha512, sha512);
+          assert.equal(metadata.files.length, 1);
+          assert.equal(metadata.files[0].url, installer);
+          assert.equal(metadata.files[0].size, bytes.length);
+          assert.equal(metadata.files[0].sha512, sha512);
+
+          const sha256 = createHash('sha256').update(bytes).digest('hex');
+          const summary = [
+            `Verified FishMark ${version} Windows x64 package from ${process.env.GITHUB_SHA}`,
+            `Installer: ${installer} (${bytes.length} bytes)`,
+            `SHA-256: ${sha256}`,
+            `SHA-512: ${sha512}`,
+          ].join('\n');
+          console.log(summary);
+          appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary + '\n');
+          '@ | node --input-type=module
+
+      - name: Upload verified release files
+        uses: actions/upload-artifact@v4
+        with:
+          name: fishmark-4.2.1-windows-x64-${{ github.sha }}
+          path: |
+            release/FishMark-Setup-4.2.1.exe
+            release/FishMark-Setup-4.2.1.exe.blockmap
+            release/latest.yml
+          if-no-files-found: error
+          retention-days: 7

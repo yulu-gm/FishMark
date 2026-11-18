@@ -47,6 +47,9 @@ export interface MarkdownListData {
   readonly ordered: boolean;
   readonly startOrdinal: number | null;
   readonly delimiter: "." | ")" | null;
+  // The indentation dialect did not replace this scope. Structural commands must keep its
+  // generated Markdown valid under the original parser boundaries.
+  readonly usesStandardBoundaries?: true;
 }
 
 export interface MarkdownListItemData {

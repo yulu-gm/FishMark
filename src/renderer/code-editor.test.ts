@@ -2293,6 +2293,58 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
+  it("keeps the nested unordered bullet while typing an incomplete decimal and through undo and redo", async () => {
+    const host = document.createElement("div");
+    const source = "- 上级\n  - 2.1\n    - 2.1.1\n  - 2";
+    const controller = createCodeEditorController({ parent: host, initialContent: source, onChange: vi.fn() });
+    const view = getEditorView(host)!;
+    const expectUnorderedItem = async (expected: string) => {
+      await flushMicrotasks();
+      const line = Array.from(host.querySelectorAll(".cm-line")).at(-1);
+      expect(controller.getContent()).toBe(expected);
+      expect(controller.getSelection()).toEqual({ anchor: expected.length, head: expected.length });
+      expect(line?.matches(".cm-active-list-unordered.cm-active-list-depth-1, .cm-inactive-list-unordered.cm-inactive-list-depth-1")).toBe(true);
+      expect(line?.querySelector(".cm-active-list-marker, .cm-inactive-list-marker")?.textContent).toBe("-");
+      expect(line?.textContent).toContain(expected.split("\n").at(-1)?.trim());
+    };
+    try {
+      controller.setSelection(source.length);
+      await expectUnorderedItem(source);
+      controller.insertText(".");
+      await expectUnorderedItem(source + ".");
+      const end = view.state.doc.length;
+      view.dispatch({
+        changes: { from: end, insert: "1" },
+        selection: { anchor: end + 1 },
+        annotations: isolateHistory.of("full"),
+        userEvent: "input.type"
+      });
+      await expectUnorderedItem(source + ".1");
+      expect(undo(view)).toBe(true);
+      await expectUnorderedItem(source + ".");
+      expect(redo(view)).toBe(true);
+      await expectUnorderedItem(source + ".1");
+    } finally {
+      controller.destroy();
+    }
+  });
+
+  it("uses the enclosing unordered list when Enter follows a bare inline ordered marker", () => {
+    const host = document.createElement("div");
+    const source = "- 上级\n  - 2.1\n    - 2.1.1\n  - 2.";
+    const controller = createCodeEditorController({ parent: host, initialContent: source, onChange: vi.fn() });
+    const view = getEditorView(host)!;
+    try {
+      controller.setSelection(source.length);
+      dispatchEditorKeydown(view, "Enter");
+      const expected = source + "\n  - ";
+      expect(controller.getContent()).toBe(expected);
+      expect(controller.getSelection()).toEqual({ anchor: expected.length, head: expected.length });
+    } finally {
+      controller.destroy();
+    }
+  });
+
   it("keeps a bare blockquote marker visually unparsed until text commits it", async () => {
     const host = document.createElement("div");
     const activeBlockTypes: Array<string | null> = [];
@@ -6124,10 +6176,10 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("removes an empty nested unordered marker and its indentation on Backspace", () => {
+  it("leaves the list on Backspace from a trailing empty nested unordered marker", () => {
     const host = document.createElement("div");
     const source = ["- parent", "  - "].join("\n");
-    const afterMarkerRemoval = "- parent\n";
+    const afterMarkerRemoval = "- parent\n\n";
 
     const controller = createCodeEditorController({
       parent: host,
@@ -6152,10 +6204,10 @@ describe("createCodeEditorController", () => {
     controller.destroy();
   });
 
-  it("removes an empty nested ordered marker and its indentation on Backspace", () => {
+  it("leaves the list on Backspace from a trailing empty nested ordered marker", () => {
     const host = document.createElement("div");
     const source = ["1. parent", "  1. "].join("\n");
-    const afterMarkerRemoval = "1. parent\n";
+    const afterMarkerRemoval = "1. parent\n\n";
 
     const controller = createCodeEditorController({
       parent: host,

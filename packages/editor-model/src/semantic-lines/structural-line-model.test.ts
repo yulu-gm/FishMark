@@ -1,6 +1,7 @@
 import { createEditorDerivedSnapshotFromCache } from "../derived/editor-derived-snapshot";
 import { applyIncrementalEdit, createDocumentStructureCache } from "@fishmark/markdown-engine";
 import { describe, expect, it } from "vitest";
+import { normalizeStructuralBlankSelectionAnchor } from "./line-visibility";
 
 import {
   createStructuralLineModel,
@@ -50,6 +51,28 @@ describe("StructuralLineModel", () => {
     expect(model.getLineRole(3)).toBe("extra-blank");
     expect(model.getLineRole(1)).toBe("editable-content");
     expect(model.getLineRole(4)).toBe("editable-content");
+  });
+
+  it.each([
+    { outer: "", blankRole: "editable-empty", whitespaceRole: "editable-empty" },
+    { outer: "- Outer item\n", blankRole: "structural-separator", whitespaceRole: "extra-blank" }
+  ])("distinguishes whitespace rows from a separator after nested lists ($blankRole)", ({ outer, blankRole, whitespaceRole }) => {
+    const preceding = outer + ["   -  Group", "       -   Section", "           -   Last child"].join("\n");
+    const spaces = " ".repeat(11);
+    const source = [preceding, spaces, spaces, "", "- Next list"].join("\n");
+    const snapshot = snapshotOf(source);
+    const model = createStructuralLineModel(snapshot);
+    const first = preceding.length + 1;
+    const second = first + spaces.length + 1;
+    const separator = second + spaces.length + 1;
+
+    for (const offset of [first, second]) {
+      expect(model.getLineRole(snapshot.lineAt(offset)!.lineNumber)).toBe(whitespaceRole);
+      expect(normalizeStructuralBlankSelectionAnchor(snapshot, offset + 5)).toBeNull();
+    }
+    expect(model.getLineRole(snapshot.lineAt(separator)!.lineNumber)).toBe(blankRole);
+    expect(normalizeStructuralBlankSelectionAnchor(snapshot, separator)).toBe(outer ? preceding.length : null);
+    expect(normalizeStructuralBlankSelectionAnchor(snapshot, separator, 1)).toBe(outer ? separator + 1 : null);
   });
 
   it("classifies a bare quote line between quote inner blocks as a structural separator", () => {

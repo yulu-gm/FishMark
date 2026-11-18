@@ -1,5 +1,6 @@
 import { childrenOf, parseBlockquoteLinePrefix, type MarkdownNode } from "@fishmark/markdown-engine";
 import type { PhysicalLine } from "../physical-lines/physical-editing-document";
+import { advanceVisibleColumn } from "../physical-lines/prefix-segment";
 
 import type { EditorSemanticContext } from "../context/editor-semantic-context";
 import {
@@ -8,6 +9,7 @@ import {
   type TextEditOperation
 } from "../transactions/edit-transaction-plan";
 import {
+  continuationPrefix,
   indentationAnchor,
   lastOfKind,
   lineContainerChain,
@@ -95,7 +97,8 @@ export function decideIndentIn(context: EditorSemanticContext): IndentDecision |
     return { kind: "none", plan: null };
   }
 
-  const cursor = context.selectionContext.activeOffset + INDENT_UNIT.length;
+  const separator = emptyDashSeparator(context, line, item);
+  const cursor = context.selectionContext.activeOffset + INDENT_UNIT.length + separator.length;
 
   return {
     kind: "indent-subtree",
@@ -103,7 +106,7 @@ export function decideIndentIn(context: EditorSemanticContext): IndentDecision |
       context,
       commandId: "indent",
       intent: "structural",
-      edits,
+      edits: withSeparatorBeforeLine(edits, line, separator),
       selection: { anchor: cursor, head: cursor }
     })
   };
@@ -175,11 +178,12 @@ function planIndentAcrossQuoteSeparators(
 
   const anchor = indentationAnchor(line);
   const removedLength = line.range.startOffset - firstSeparatorStart;
+  const separator = emptyDashSeparator(context, line, item, previousLine);
   const edits: TextEditOperation[] = [
-    { from: firstSeparatorStart, to: line.range.startOffset, insert: "" },
+    { from: firstSeparatorStart, to: line.range.startOffset, insert: separator },
     { from: anchor, to: anchor, insert: INDENT_UNIT }
   ];
-  const cursor = context.selectionContext.activeOffset - removedLength + INDENT_UNIT.length;
+  const cursor = context.selectionContext.activeOffset - removedLength + separator.length + INDENT_UNIT.length;
 
   return {
     kind: "indent-subtree",
@@ -217,7 +221,8 @@ function planBareMarkerIndent(
     { from: anchor, to: anchor, insert: INDENT_UNIT },
     { from: markerEnd, to: markerEnd, insert: " " }
   ];
-  const cursor = context.selectionContext.activeOffset + INDENT_UNIT.length + 1;
+  const separator = emptyDashSeparator(context, line, item);
+  const cursor = context.selectionContext.activeOffset + INDENT_UNIT.length + 1 + separator.length;
 
   return {
     kind: "indent-subtree",
@@ -225,7 +230,7 @@ function planBareMarkerIndent(
       context,
       commandId: "indent",
       intent: "structural",
-      edits,
+      edits: withSeparatorBeforeLine(edits, line, separator),
       selection: { anchor: cursor, head: cursor }
     })
   };
@@ -366,4 +371,65 @@ function firstItemMarkerReset(
   return { from, to: from + prefix.markerText.length, insert: `1${ordered[2] ?? "."}` };
 }
 
+// A blank separates an empty child from the preceding paragraph. Without it the tabbed
+// dash can be a Setext underline (and changing the character alone gives a lazy continuation).
+function emptyDashSeparator(
+  context: EditorSemanticContext,
+  line: PhysicalLine,
+  item: MarkdownNode,
+  previous = context.lines.lines[line.lineNumber - 2]
+): string {
+  const marker = line.segments.findLast((segment) => segment.kind === "list-marker");
+  if (marker?.text !== "-" || marker.range.startOffset !== item.source.startOffset ||
+      context.source.slice(marker.range.endOffset, line.contentEndOffset).trim() !== "" ||
+      previous === undefined) {
+    return "";
+  }
 
+  const previousChain = lineContainerChain(context, previous);
+  if (previousChain.at(-1)?.kind !== "paragraph") return "";
+  const parent = lastOfKind(previousChain, "list-item");
+  const opening = parent === null ? null : context.lineAt(parent.source.startOffset);
+  if (parent === null || opening === null) return "";
+  const parentMarkerIndex = opening.segments.findIndex((segment) =>
+    segment.kind === "list-marker" && segment.range.startOffset === parent.source.startOffset);
+  if (parentMarkerIndex < 0) return "";
+  const parentMarker = opening.segments[parentMarkerIndex]!;
+  const spacing = opening.segments[parentMarkerIndex + 1];
+  const parentColumn = spacing?.kind === "spacing" ? spacing.endColumn : parentMarker.endColumn + 1;
+  const anchor = indentationAnchor(line);
+  const indentation = context.source.slice(anchor, marker.range.startOffset);
+  const anchorColumn = advanceVisibleColumn(0, context.source.slice(line.range.startOffset, anchor));
+  const markerColumn = advanceVisibleColumn(anchorColumn, INDENT_UNIT + indentation);
+  if (markerColumn < parentColumn || markerColumn > parentColumn + 3 ||
+      !usesStandardListBoundaries(context, item)) {
+    return "";
+  }
+
+  const quote = line.segments.findLast((segment) => segment.kind === "quote-marker");
+  const newline = context.source.slice(previous.contentEndOffset, previous.range.endOffset);
+  return (quote === undefined ? "" : continuationPrefix(line, quote.range.endOffset)) + newline;
+}
+
+// The indentation-based editing dialect already disambiguates an empty dash. Only a
+// scope that retained standard Markdown boundaries needs the separating line.
+function usesStandardListBoundaries(context: EditorSemanticContext, item: MarkdownNode): boolean {
+  for (let node = parentOf(context, item); node !== null; node = parentOf(context, node)) {
+    if (node.kind === "blockquote") return false;
+    if (node.data.kind === "list" && node.data.usesStandardBoundaries) return true;
+  }
+  return false;
+}
+
+function withSeparatorBeforeLine(
+  edits: readonly TextEditOperation[],
+  line: PhysicalLine,
+  separator: string
+): readonly TextEditOperation[] {
+  if (separator === "") return edits;
+  const start = line.range.startOffset;
+  const [first, ...rest] = edits;
+  return first?.from === start
+    ? [{ ...first, insert: separator + first.insert }, ...rest]
+    : [{ from: start, to: start, insert: separator }, ...edits];
+}

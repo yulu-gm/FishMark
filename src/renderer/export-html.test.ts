@@ -8,6 +8,19 @@ import {
 } from "./export-html";
 
 describe("createFishmarkExportHtml", () => {
+  it("exports unpadded same-line ordered text as part of its enclosing list item", () => {
+    const markdown = "- 2.\n- 3. ";
+    const exported = new DOMParser().parseFromString(
+      createFishmarkExportHtml({ markdown, title: "inline-ordered.md" }),
+      "text/html"
+    );
+    const markers = Array.from(exported.querySelectorAll(".cm-inactive-list-marker"))
+      .map((marker) => marker.textContent);
+
+    expect(markers).toEqual(["-", "-", "3."]);
+    expect(exported.querySelector(".cm-inactive-list-unordered")?.textContent).toBe("- 2.");
+  });
+
   it("renders a standalone document with FishMark reading classes and inline CSS", () => {
     const html = createFishmarkExportHtml({
       markdown: [
