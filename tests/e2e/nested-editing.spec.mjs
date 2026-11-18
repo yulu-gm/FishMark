@@ -107,22 +107,26 @@ test("product nested quoted subtree Tab Shift-Tab undo redo preserve source care
   await saveAndReopen(product, page, indented);
 });
 
-test("product nested Enter Backspace undo redo retain exact empty-item source caret and save", async ({ product }) => {
+test("product nested Enter Backspace undo redo retain standalone paragraph boundary and caret", async ({ product }) => {
   test.skip(process.platform !== "win32", "This batch verifies Windows product keyboard mappings.");
   const source = "- parent\n  - child\n    - grandchild";
   const marker = source + "\n    - ";
-  const blank = source + "\n";
+  const blank = source + "\n\n";
   const page = await setup(product, source);
   await product.focus(page);
   await page.keyboard.press("Control+End");
   await checkpoint(product, page, "nested-end", source, source.length);
   await press(product, page, "Enter", "nested-empty-marker", marker, marker.length);
-  await press(product, page, "Backspace", "nested-marker-removed", blank, blank.length);
+  await press(product, page, "Backspace", "nested-marker-exited", blank, blank.length);
   await press(product, page, "Control+z", "backspace-undone", marker, marker.length);
   await press(product, page, "Control+z", "enter-undone", source, source.length);
   await press(product, page, "Control+y", "enter-redone", marker, marker.length);
   await press(product, page, "Control+y", "backspace-redone", blank, blank.length);
-  await saveAndReopen(product, page, blank);
+  const body = blank + "Body";
+  await page.keyboard.type("Body");
+  await checkpoint(product, page, "standalone-body-typed", body, body.length);
+  await expect(page.locator(".cm-line").filter({ hasText: /^Body$/u })).toHaveClass(/cm-(?:active|inactive)-paragraph-leading/u);
+  await saveAndReopen(product, page, body);
 });
 
 test("product inline marker boundaries reverse selection history and source roundtrips and inert F11 preserve exact text", async ({ product }) => {

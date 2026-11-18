@@ -2,6 +2,7 @@ import { test, expect } from "./product-fixture.mjs";
 
 // Same indentation and two whitespace-only rows as the reported case.
 // The preceding outer list item makes the third, truly empty row structural.
+const whitespaceRow = " ".repeat(11);
 const list = [
   "- Outer item",
   "   -  Tables",
@@ -12,8 +13,8 @@ const list = [
   "           -   New item type",
   "       -   Weapons",
   "           -   Move this field to the other table",
-  " ".repeat(11),
-  " ".repeat(11),
+  whitespaceRow,
+  whitespaceRow,
   "",
   "- Next list",
   "  - Next item"
@@ -103,14 +104,16 @@ test("clicking editable rows in a nested-list gap keeps caret and viewport local
 
       const canary = "BLANK-ROW-CARET";
       const from = blankStarts[row - 1];
+      const to = from + whitespaceRow.length;
+      // Typing body text in a whitespace-only row after a detached list
+      // replaces that row's entire padding and leaves all other rows intact.
+      const expected = source.slice(0, from) + canary + source.slice(to);
       await product.nativeInsert(canary, page);
       await expect.poll(async () => (await product.snapshot()).activeDocument.content.includes(canary)).toBe(true);
       const changed = (await product.snapshot()).activeDocument.content;
-      const offset = changed.indexOf(canary);
-      attempt.insertionOffset = offset;
-      expect(offset).toBeGreaterThanOrEqual(from);
-      expect(offset).toBeLessThanOrEqual(from + 11);
-      expect(changed).toBe(source.slice(0, offset) + canary + source.slice(offset));
+      attempt.insertionOffset = changed.indexOf(canary);
+      expect(attempt.insertionOffset).toBe(from);
+      expect(changed).toBe(expected);
 
       await page.keyboard.press(isMac ? "Meta+z" : "Control+z");
       await expect.poll(async () => (await product.snapshot()).activeDocument.content).toBe(source);
