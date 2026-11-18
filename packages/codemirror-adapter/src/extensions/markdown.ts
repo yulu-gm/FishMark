@@ -1039,13 +1039,26 @@ export function createFishMarkMarkdownExtensions(
       if (appliedTable && pendingTable !== null) focusTableCellEditor(this.view, pendingTable.position);
     };
 
-    handleFocusIn = () => {
+    handleFocusIn = (event: FocusEvent) => {
       if (runtime.hasEditorFocus) {
         return;
       }
 
       runtime.hasEditorFocus = true;
-      recomputeDerivedState(this.view, this.view.state, true);
+      if (isTableCellEditor(event.target instanceof Element ? event.target : null)) {
+        // A widget owns its editable subtree. Switch it out of preview before
+        // its native caret is placed, not in a later Markdown host update.
+        recomputeDerivedState(this.view, this.view.state, true);
+        return;
+      }
+      // CodeMirror's own DOM selection update can focus the editing host.
+      // Pointer handling needs the focus flag immediately, but publishing
+      // decorations must wait until that update can no longer be reentered.
+      queueMicrotask(() => {
+        if (!this.destroyed && runtime.hasEditorFocus) {
+          recomputeDerivedState(this.view, this.view.state);
+        }
+      });
     };
 
     handleFocusOut = (event: FocusEvent) => {

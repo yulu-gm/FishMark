@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { EditorState } from "@codemirror/state";
-import { EditorView } from "@codemirror/view";
+import { EditorState, StateEffect } from "@codemirror/state";
+import { EditorView, ViewPlugin } from "@codemirror/view";
 import { undo, redo } from "@codemirror/commands";
 import { describe, expect, it, vi } from "vitest";
 
@@ -768,6 +768,52 @@ describe("createFishMarkMarkdownExtensions", () => {
     expect(getHeadingMarker()).toBeNull();
 
     destroy();
+  });
+
+  it("refreshes focus decorations after a CodeMirror update that focuses the editor", async () => {
+    const source = "# Title\n\nParagraph";
+    const focusDuringUpdate = StateEffect.define<void>();
+    const errors: unknown[] = [];
+    const captureError = (event: ErrorEvent) => {
+      errors.push(event.error);
+      event.preventDefault();
+    };
+    const host = document.body.appendChild(document.createElement("div"));
+    const view = new EditorView({
+      parent: host,
+      state: EditorState.create({
+        doc: source,
+        selection: { anchor: 1 },
+        extensions: [
+          createFishMarkMarkdownExtensions({ onContentChange: vi.fn() }),
+          ViewPlugin.define(() => ({
+            update(update) {
+              if (update.transactions.some(transaction => transaction.effects.some(effect => effect.is(focusDuringUpdate)))) {
+                update.view.contentDOM.focus();
+              }
+            }
+          }))
+        ]
+      })
+    });
+    window.addEventListener("error", captureError);
+
+    try {
+      expect(host.querySelector(".cm-inactive-heading-marker")).not.toBeNull();
+      // Native Chromium may focus the editing host while updating the DOM selection.
+      view.dispatch({ effects: focusDuringUpdate.of(undefined) });
+      expect(view.hasFocus).toBe(true);
+      await flushMicrotasks();
+
+      expect(errors).toEqual([]);
+      expect(host.querySelector(".cm-inactive-heading-marker")).toBeNull();
+      expect(view.state.selection.main.head).toBe(1);
+      expect(view.state.doc.toString()).toBe(source);
+    } finally {
+      window.removeEventListener("error", captureError);
+      view.destroy();
+      host.remove();
+    }
   });
 
   it("opens an inactive link on Mod-click without moving the editor selection", () => {
